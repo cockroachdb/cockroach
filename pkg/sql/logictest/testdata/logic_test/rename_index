@@ -22,7 +22,7 @@ INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 statement ok
 INSERT INTO users_dupe VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -34,7 +34,7 @@ users       users_pkey  false       1             id           id          ASC  
 users       users_pkey  false       2             name         name        N/A        true     false     true     1
 users       users_pkey  false       3             title        title       N/A        true     false     true     1
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users_dupe
 ----
 table_name  index_name       non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -80,7 +80,7 @@ ALTER INDEX IF EXISTS ufooo RENAME TO ufoo
 statement ok
 ALTER INDEX ufoo RENAME TO ufo
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -107,7 +107,7 @@ user testuser
 statement ok
 ALTER INDEX users@bar RENAME TO rar
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility

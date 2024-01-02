@@ -148,10 +148,12 @@ func registerLoadSplits(r registry.Registry) {
 	const numRoachNodes = 3
 
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/uniform/nodes=%d", numRoachNodes),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("splits/load/uniform/nodes=%d", numRoachNodes),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// This number was determined experimentally. Often, but not always,
 			// more splits will happen.
@@ -194,10 +196,12 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/uniform/nodes=%d/obj=cpu", numRoachNodes),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("splits/load/uniform/nodes=%d/obj=cpu", numRoachNodes),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30,               // 10 GB
@@ -214,10 +218,12 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/sequential/nodes=%d", numRoachNodes),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("splits/load/sequential/nodes=%d", numRoachNodes),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30, // 10 GB
@@ -236,10 +242,12 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/sequential/nodes=%d/obj=cpu", numRoachNodes),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("splits/load/sequential/nodes=%d/obj=cpu", numRoachNodes),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30,               // 10 GB
@@ -261,10 +269,12 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/spanning/nodes=%d", numRoachNodes),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("splits/load/spanning/nodes=%d", numRoachNodes),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:       10 << 30, // 10 GB
@@ -280,10 +290,12 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/spanning/nodes=%d/obj=cpu", numRoachNodes),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("splits/load/spanning/nodes=%d/obj=cpu", numRoachNodes),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30,               // 10 GB
@@ -308,10 +320,12 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/ycsb/a/nodes=%d/obj=cpu", numRoachNodes),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("splits/load/ycsb/a/nodes=%d/obj=cpu", numRoachNodes),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30,               // 10 GB
@@ -331,10 +345,12 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/ycsb/b/nodes=%d/obj=cpu", numRoachNodes),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("splits/load/ycsb/b/nodes=%d/obj=cpu", numRoachNodes),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize: 10 << 30, // 10 GB
@@ -353,10 +369,12 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/ycsb/d/nodes=%d/obj=cpu", numRoachNodes),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("splits/load/ycsb/d/nodes=%d/obj=cpu", numRoachNodes),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30,               // 10 GB
@@ -376,10 +394,12 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/ycsb/e/nodes=%d/obj=cpu", numRoachNodes),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("splits/load/ycsb/e/nodes=%d/obj=cpu", numRoachNodes),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30,               // 10 GB
@@ -403,14 +423,23 @@ func registerLoadSplits(r registry.Registry) {
 // conditions defined by the params. It checks whether certain number of
 // splits occur in different workload scenarios.
 func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params splitParams) {
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(4))
+	// Use the last node only for the workload.
+	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
+	workloadNode := c.Node(c.Spec().NodeCount)
+
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
+	// We run this without metamorphic constants as the tests make
+	// incorrect assumptions about the absolute values of QPS.
+	// See: https://github.com/cockroachdb/cockroach/issues/112664
+	// TODO(DarrylWong): enable metamorphic contants once issue is resolved
+	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true")
 	startOpts := option.DefaultStartOptsNoBackups()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 		"--vmodule=split_queue=2,store_rebalancer=2,allocator=2,replicate_queue=2,"+
 			"decider=3,replica_split_load=1",
 	)
-	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
+	c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
 
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
@@ -461,6 +490,9 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 		// range unless split by load.
 		setRangeMaxBytes(params.maxSize)
 
+		require.NoError(t,
+			WaitForReplication(ctx, t, db, 3 /* repicationFactor */, exactlyReplicationFactor))
+
 		// Init the split workload.
 		if err := params.load.init(ctx, t, c); err != nil {
 			t.Fatal(err)
@@ -510,11 +542,16 @@ func registerLargeRange(r registry.Registry) {
 	const size = 32 << 30 // 32 GB
 	const numNodes = 6
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/largerange/size=%s,nodes=%d", bytesStr(size), numNodes),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
-		Timeout: 5 * time.Hour,
+		Name:             fmt.Sprintf("splits/largerange/size=%s,nodes=%d", bytesStr(size), numNodes),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Timeout:          5 * time.Hour,
+		// Never run with runtime assertions as this makes this test take
+		// too long to complete.
+		CockroachBinary: registry.StandardCockroach,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLargeRangeSplits(ctx, t, c, size)
 		},
@@ -552,7 +589,6 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	rows := size / rowEstimate
 	const minBytes = 16 << 20 // 16 MB
 
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 	numNodes := c.Spec().NodeCount
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))

@@ -25,7 +25,6 @@ import (
 )
 
 func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 3))
 
 	db := c.Conn(ctx, t.L(), 1)

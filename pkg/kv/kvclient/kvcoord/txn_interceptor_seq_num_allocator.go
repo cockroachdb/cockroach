@@ -65,17 +65,18 @@ type txnSeqNumAllocator struct {
 	// write operation is encountered.
 	writeSeq enginepb.TxnSeq
 
-	// readSeq is the sequence number at which to perform read-only
-	// operations when steppingModeEnabled is set.
+	// readSeq is the sequence number at which to perform read-only operations.
 	readSeq enginepb.TxnSeq
 
-	// steppingModeEnabled indicates whether to operate in stepping mode
-	// or read-own-writes:
-	// - in read-own-writes, read-only operations read at the latest
-	//   write seqnum.
-	// - when stepping, read-only operations read at a
-	//   fixed readSeq.
-	steppingModeEnabled bool
+	// steppingMode indicates whether to operate in stepping mode or
+	// read-own-writes:
+	// - in read-own-writes, the readSeq is advanced automatically after each
+	//   write operation. All subsequent reads, even those in the same batch,
+	//   will read at the newest sequence number and observe all prior writes.
+	// - when stepping, the readSeq is only advanced when the client calls
+	//   TxnCoordSender.Step. Reads will only observe writes performed before
+	//   the last call to TxnCoordSender.Step.
+	steppingMode kv.SteppingMode
 }
 
 // SendLocked is part of the txnInterceptor interface.
@@ -84,21 +85,29 @@ func (s *txnSeqNumAllocator) SendLocked(
 ) (*kvpb.BatchResponse, *kvpb.Error) {
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
+		oldHeader := req.Header()
 		// Only increment the sequence number generator for requests that
 		// will leave intents or requests that will commit the transaction.
 		// This enables ba.IsCompleteTransaction to work properly.
+		//
+		// Note: requests that perform writes using write intents and the EndTxn
+		// request cannot operate at a past sequence number. This also applies to
+		// combined read/intent-write requests (e.g. CPuts) -- these always read at
+		// the latest write sequence number as well.
+		//
+		// Requests that do not perform intent writes use the read sequence number.
+		// Notably, this includes Get/Scan/ReverseScan requests that acquire
+		// replicated locks, even though they go through raft.
 		if kvpb.IsIntentWrite(req) || req.Method() == kvpb.EndTxn {
 			s.writeSeq++
-		}
-
-		// Note: only read-only requests can operate at a past seqnum.
-		// Combined read/write requests (e.g. CPut) always read at the
-		// latest write seqnum.
-		oldHeader := req.Header()
-		oldHeader.Sequence = s.writeSeq
-		if s.steppingModeEnabled && kvpb.IsReadOnly(req) {
+			if err := s.maybeAutoStepReadSeqLocked(ctx); err != nil {
+				return nil, kvpb.NewError(err)
+			}
+			oldHeader.Sequence = s.writeSeq
+		} else {
 			oldHeader.Sequence = s.readSeq
 		}
+
 		req.SetHeader(oldHeader)
 	}
 
@@ -111,13 +120,13 @@ func (s *txnSeqNumAllocator) setWrapped(wrapped lockedSender) { s.wrapped = wrap
 // populateLeafInputState is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
 	tis.Txn.Sequence = s.writeSeq
-	tis.SteppingModeEnabled = s.steppingModeEnabled
+	tis.SteppingModeEnabled = bool(s.steppingMode)
 	tis.ReadSeqNum = s.readSeq
 }
 
 // initializeLeaf loads the read seqnum for a leaf transaction.
 func (s *txnSeqNumAllocator) initializeLeaf(tis *roachpb.LeafTxnInputState) {
-	s.steppingModeEnabled = tis.SteppingModeEnabled
+	s.steppingMode = kv.SteppingMode(tis.SteppingModeEnabled)
 	s.readSeq = tis.ReadSeqNum
 }
 
@@ -131,15 +140,32 @@ func (s *txnSeqNumAllocator) importLeafFinalState(
 	return nil
 }
 
-// stepLocked bumps the read seqnum to the current write seqnum.
+// manualStepReadSeqLocked bumps the read seqnum to the current write seqnum.
 // Used by the TxnCoordSender's Step() method.
-func (s *txnSeqNumAllocator) stepLocked(ctx context.Context) error {
-	if !s.steppingModeEnabled {
+func (s *txnSeqNumAllocator) manualStepReadSeqLocked(ctx context.Context) error {
+	if s.steppingMode != kv.SteppingEnabled {
 		return errors.AssertionFailedf("stepping mode is not enabled")
 	}
+	return s.stepReadSeqLocked(ctx)
+}
+
+// maybeAutoStepReadSeqLocked bumps the readSeq to the current write seqnum,
+// if manual stepping is disabled and the txnSeqNumAllocator is expected to
+// automatically step the readSeq. Otherwise, the method is a no-op.
+//
+//gcassert:inline
+func (s *txnSeqNumAllocator) maybeAutoStepReadSeqLocked(ctx context.Context) error {
+	if s.steppingMode == kv.SteppingEnabled {
+		return nil // only manual stepping allowed
+	}
+	return s.stepReadSeqLocked(ctx)
+}
+
+// stepReadSeqLocked bumps the read seqnum to the current write seqnum.
+func (s *txnSeqNumAllocator) stepReadSeqLocked(ctx context.Context) error {
 	if s.readSeq > s.writeSeq {
 		return errors.AssertionFailedf(
-			"cannot step() after mistaken initialization (%d,%d)", s.writeSeq, s.readSeq)
+			"cannot stepReadSeqLocked() after mistaken initialization (%d,%d)", s.writeSeq, s.readSeq)
 	}
 	s.readSeq = s.writeSeq
 	return nil
@@ -158,15 +184,9 @@ func (s *txnSeqNumAllocator) stepLocked(ctx context.Context) error {
 func (s *txnSeqNumAllocator) configureSteppingLocked(
 	newMode kv.SteppingMode,
 ) (prevMode kv.SteppingMode) {
-	prevEnabled := s.steppingModeEnabled
-	enabled := newMode == kv.SteppingEnabled
-	s.steppingModeEnabled = enabled
-	if !prevEnabled && enabled {
+	prevMode, s.steppingMode = s.steppingMode, newMode
+	if prevMode == kv.SteppingDisabled && newMode == kv.SteppingEnabled {
 		s.readSeq = s.writeSeq
-	}
-	prevMode = kv.SteppingDisabled
-	if prevEnabled {
-		prevMode = kv.SteppingEnabled
 	}
 	return prevMode
 }

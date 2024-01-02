@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "cockroach-go-testserver-upgrade-to-master_test",
+    size = "enormous",
+    srcs = ["generated_test.go"],
+    data = [
+        "//c-deps:libgeos",  # keep
+        "//pkg/ccl/logictestccl:testdata",  # keep
+        "//pkg/cmd/cockroach-short",  # keep
+        "//pkg/sql/logictest:cockroach_predecessor_version",  # keep
+    ],
+    exec_properties = {"Pool": "large"},
+    shard_count = 1,
+    tags = [
+        "ccl_test",
+        "cpu:2",
+    ],
+    deps = [
+        "//pkg/base",
+        "//pkg/build/bazel",
+        "//pkg/ccl",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/logictest",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+    ],
+)

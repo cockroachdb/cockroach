@@ -150,9 +150,13 @@ type perWorkTokensAux struct {
 	intL0WriteBypassedAccountedBytes  int64
 	intIngestedBypassedAccountedBytes int64
 
-	// The ignored bytes are included in intL0IngestedBytes, and in
-	// intLSMWriteAndIngestedBytes, and may even be higher than that value
-	// because these are from a different source.
+	// These ignored bytes are included in intL0WriteBytes, and may even be
+	// higher than that value because these are from a different source.
+	intL0IgnoredWriteBytes int64
+
+	// These ignored bytes are included in intL0IngestedBytes, and in
+	// intLSMIngestedBytes, and may even be higher than that value because these
+	// are from a different source.
 	intL0IgnoredIngestedBytes int64
 }
 
@@ -180,9 +184,15 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 		return
 	}
 	intL0WriteBytes := int64(l0Metrics.BytesFlushed) - int64(e.cumL0WriteBytes)
+	intL0IgnoredWriteBytes := int64(admissionStats.statsToIgnore.writeBytes) -
+		int64(e.cumStoreAdmissionStats.statsToIgnore.writeBytes)
+	adjustedIntL0WriteBytes := intL0WriteBytes - intL0IgnoredWriteBytes
+	if adjustedIntL0WriteBytes < 0 {
+		adjustedIntL0WriteBytes = 0
+	}
 	intL0IngestedBytes := int64(l0Metrics.BytesIngested) - int64(e.cumL0IngestedBytes)
-	intL0IgnoredIngestedBytes := int64(admissionStats.statsToIgnore.ApproxIngestedIntoL0Bytes) -
-		int64(e.cumStoreAdmissionStats.statsToIgnore.ApproxIngestedIntoL0Bytes)
+	intL0IgnoredIngestedBytes := int64(admissionStats.statsToIgnore.ingestStats.ApproxIngestedIntoL0Bytes) -
+		int64(e.cumStoreAdmissionStats.statsToIgnore.ingestStats.ApproxIngestedIntoL0Bytes)
 	adjustedIntL0IngestedBytes := intL0IngestedBytes - intL0IgnoredIngestedBytes
 	if adjustedIntL0IngestedBytes < 0 {
 		adjustedIntL0IngestedBytes = 0
@@ -196,13 +206,14 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 	intIngestedAccountedBytes := int64(admissionStats.ingestedAccountedBytes) -
 		int64(e.cumStoreAdmissionStats.ingestedAccountedBytes)
 	e.atDoneL0WriteTokensLinearModel.updateModelUsingIntervalStats(
-		intL0WriteAccountedBytes, intL0WriteBytes, intWorkCount)
+		intL0WriteAccountedBytes, adjustedIntL0WriteBytes, intWorkCount)
 	e.atDoneL0IngestTokensLinearModel.updateModelUsingIntervalStats(
 		intIngestedAccountedBytes, adjustedIntL0IngestedBytes, intWorkCount)
 	// Ingest across all levels model.
 	intLSMIngestedBytes := int64(cumLSMIngestedBytes) - int64(e.cumLSMIngestedBytes)
 	intIgnoredIngestedBytes :=
-		int64(admissionStats.statsToIgnore.Bytes) - int64(e.cumStoreAdmissionStats.statsToIgnore.Bytes)
+		int64(admissionStats.statsToIgnore.ingestStats.Bytes) -
+			int64(e.cumStoreAdmissionStats.statsToIgnore.ingestStats.Bytes)
 	adjustedIntLSMIngestedBytes := intLSMIngestedBytes - intIgnoredIngestedBytes
 	if adjustedIntLSMIngestedBytes < 0 {
 		adjustedIntLSMIngestedBytes = 0
@@ -210,14 +221,39 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 	e.atDoneIngestTokensLinearModel.updateModelUsingIntervalStats(
 		intIngestedAccountedBytes, adjustedIntLSMIngestedBytes, intWorkCount)
 
-	intL0TotalBytes := intL0WriteBytes + adjustedIntL0IngestedBytes
-	if intWorkCount > 1 && intL0TotalBytes > 0 {
-		// Update the atAdmissionWorkTokens
-		intAtAdmissionWorkTokens := intL0TotalBytes / intWorkCount
-		const alpha = 0.5
-		e.atAdmissionWorkTokens = int64(alpha*float64(intAtAdmissionWorkTokens) +
-			(1-alpha)*float64(e.atAdmissionWorkTokens))
-		e.atAdmissionWorkTokens = max(1, e.atAdmissionWorkTokens)
+	intL0TotalBytes := adjustedIntL0WriteBytes + adjustedIntL0IngestedBytes
+	intAboveRaftWorkCount := int64(admissionStats.aboveRaftStats.workCount) -
+		int64(e.cumStoreAdmissionStats.aboveRaftStats.workCount)
+	intAboveRaftL0WriteAccountedBytes := int64(admissionStats.aboveRaftStats.writeAccountedBytes) -
+		int64(e.cumStoreAdmissionStats.aboveRaftStats.writeAccountedBytes)
+	intAboveRaftIngestedAccountedBytes := int64(admissionStats.aboveRaftStats.ingestedAccountedBytes) -
+		int64(e.cumStoreAdmissionStats.aboveRaftStats.ingestedAccountedBytes)
+	if intAboveRaftWorkCount > 1 && intL0TotalBytes > 0 {
+		// We don't know how many of the intL0TotalBytes (which is a stat derived
+		// from Pebble stats) are due to above-raft admission. So we simply apply
+		// the linear models to the stats we have and then use the modeled bytes
+		// to apportion part of intL0TotalBytes to above-raft.
+		totalEstimatedBytes :=
+			e.atDoneL0WriteTokensLinearModel.smoothedLinearModel.applyLinearModel(
+				intL0WriteAccountedBytes) +
+				e.atDoneL0IngestTokensLinearModel.smoothedLinearModel.applyLinearModel(
+					intIngestedAccountedBytes)
+		aboveRaftEstimatedBytes :=
+			e.atDoneL0WriteTokensLinearModel.smoothedLinearModel.applyLinearModel(
+				intAboveRaftL0WriteAccountedBytes) +
+				e.atDoneL0IngestTokensLinearModel.smoothedLinearModel.applyLinearModel(
+					intAboveRaftIngestedAccountedBytes)
+		if totalEstimatedBytes > 0 {
+			intL0BytesAboveRaft := int64(float64(intL0TotalBytes) *
+				(float64(aboveRaftEstimatedBytes) / float64(totalEstimatedBytes)))
+			// Update the atAdmissionWorkTokens. NB: this is only used for requests
+			// that don't use replication flow control.
+			intAtAdmissionWorkTokens := intL0BytesAboveRaft / intAboveRaftWorkCount
+			const alpha = 0.5
+			e.atAdmissionWorkTokens = int64(alpha*float64(intAtAdmissionWorkTokens) +
+				(1-alpha)*float64(e.atAdmissionWorkTokens))
+			e.atAdmissionWorkTokens = max(1, e.atAdmissionWorkTokens)
+		}
 	}
 	e.aux = perWorkTokensAux{
 		intWorkCount:              intWorkCount,
@@ -235,6 +271,7 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 			int64(e.cumStoreAdmissionStats.aux.writeBypassedAccountedBytes),
 		intIngestedBypassedAccountedBytes: int64(admissionStats.aux.ingestedBypassedAccountedBytes) -
 			int64(e.cumStoreAdmissionStats.aux.ingestedBypassedAccountedBytes),
+		intL0IgnoredWriteBytes:    intL0IgnoredWriteBytes,
 		intL0IgnoredIngestedBytes: intL0IgnoredIngestedBytes,
 	}
 	// Store the latest cumulative values.
@@ -256,11 +293,4 @@ func (e *storePerWorkTokenEstimator) getModelsAtDone() (
 	return e.atDoneL0WriteTokensLinearModel.smoothedLinearModel,
 		e.atDoneL0IngestTokensLinearModel.smoothedLinearModel,
 		e.atDoneIngestTokensLinearModel.smoothedLinearModel
-}
-
-func max(i, j int64) int64 {
-	if i < j {
-		return j
-	}
-	return i
 }

@@ -221,7 +221,8 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 
 			semaCtx := tree.MakeSemaContext()
 			if _, err := test.c.ResolveAsType(context.Background(), &semaCtx, availType); err != nil {
-				if !strings.Contains(err.Error(), "could not parse") {
+				if !strings.Contains(err.Error(), "could not parse") &&
+					!strings.Contains(err.Error(), "invalid input syntax") {
 					// Parsing errors are permitted for this test, as proper tree.StrVal parsing
 					// is tested in TestStringConstantTypeResolution. Any other error should
 					// throw a failure.
@@ -339,6 +340,16 @@ func mustParseDGeometry(t *testing.T, s string) tree.Datum {
 	}
 	return d
 }
+func mustParseDPGLSN(t *testing.T, s string) tree.Datum {
+	d, err := tree.ParseDPGLSN(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+func mustParseDRefCursor(_ *testing.T, s string) tree.Datum {
+	return tree.NewDRefCursor(s)
+}
 func mustParseDINet(t *testing.T, s string) tree.Datum {
 	d, err := tree.ParseDIPAddrFromINetString(s)
 	if err != nil {
@@ -398,6 +409,8 @@ var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.Geometry:         mustParseDGeometry,
 	types.INet:             mustParseDINet,
 	types.VarBit:           mustParseDVarBit,
+	types.PGLSN:            mustParseDPGLSN,
+	types.RefCursor:        mustParseDRefCursor,
 	types.TSQuery:          mustParseDTSQuery,
 	types.TSVector:         mustParseDTSVector,
 	types.BytesArray:       mustParseDArrayOfType(types.Bytes),
@@ -408,6 +421,8 @@ var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.BoolArray:        mustParseDArrayOfType(types.Bool),
 	types.UUIDArray:        mustParseDArrayOfType(types.Uuid),
 	types.DateArray:        mustParseDArrayOfType(types.Date),
+	types.PGLSNArray:       mustParseDArrayOfType(types.PGLSN),
+	types.RefCursorArray:   mustParseDArrayOfType(types.RefCursor),
 	types.TimeArray:        mustParseDArrayOfType(types.Time),
 	types.TimeTZArray:      mustParseDArrayOfType(types.TimeTZ),
 	types.TimestampArray:   mustParseDArrayOfType(types.Timestamp),
@@ -439,27 +454,32 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 	}{
 		{
 			c:            tree.NewStrVal("abc 世界"),
-			parseOptions: typeSet(types.String, types.Bytes, types.TSVector),
+			parseOptions: typeSet(types.String, types.Bytes, types.TSVector, types.RefCursor),
 		},
 		{
-			c:            tree.NewStrVal("true"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Bool, types.Jsonb, types.TSVector, types.TSQuery),
+			c: tree.NewStrVal("true"),
+			parseOptions: typeSet(types.String, types.Bytes, types.Bool, types.Jsonb, types.TSVector,
+				types.TSQuery, types.RefCursor),
 		},
 		{
-			c:            tree.NewStrVal("2010-09-28"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Date, types.Timestamp, types.TimestampTZ, types.TSVector, types.TSQuery),
+			c: tree.NewStrVal("2010-09-28"),
+			parseOptions: typeSet(types.String, types.Bytes, types.Date, types.Timestamp,
+				types.TimestampTZ, types.TSVector, types.TSQuery, types.RefCursor),
 		},
 		{
-			c:            tree.NewStrVal("2010-09-28 12:00:00.1"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Time, types.TimeTZ, types.Timestamp, types.TimestampTZ, types.Date),
+			c: tree.NewStrVal("2010-09-28 12:00:00.1"),
+			parseOptions: typeSet(types.String, types.Bytes, types.Time, types.TimeTZ, types.Timestamp,
+				types.TimestampTZ, types.Date, types.RefCursor),
 		},
 		{
-			c:            tree.NewStrVal("2006-07-08T00:00:00.000000123Z"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Time, types.TimeTZ, types.Timestamp, types.TimestampTZ, types.Date),
+			c: tree.NewStrVal("2006-07-08T00:00:00.000000123Z"),
+			parseOptions: typeSet(types.String, types.Bytes, types.Time, types.TimeTZ, types.Timestamp,
+				types.TimestampTZ, types.Date, types.RefCursor),
 		},
 		{
-			c:            tree.NewStrVal("PT12H2M"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Interval, types.TSVector, types.TSQuery),
+			c: tree.NewStrVal("PT12H2M"),
+			parseOptions: typeSet(types.String, types.Bytes, types.Interval, types.TSVector,
+				types.TSQuery, types.RefCursor),
 		},
 		{
 			c:            tree.NewBytesStrVal("abc 世界"),
@@ -482,16 +502,19 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
-			c:            tree.NewStrVal("box(0 0, 1 1)"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Box2D, types.TSVector),
+			c: tree.NewStrVal("box(0 0, 1 1)"),
+			parseOptions: typeSet(types.String, types.Bytes, types.Box2D, types.TSVector,
+				types.RefCursor),
 		},
 		{
-			c:            tree.NewStrVal("POINT(-100.59 42.94)"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Geography, types.Geometry, types.TSVector),
+			c: tree.NewStrVal("POINT(-100.59 42.94)"),
+			parseOptions: typeSet(types.String, types.Bytes, types.Geography, types.Geometry,
+				types.TSVector, types.RefCursor),
 		},
 		{
-			c:            tree.NewStrVal("192.168.100.128/25"),
-			parseOptions: typeSet(types.String, types.Bytes, types.INet, types.TSVector, types.TSQuery),
+			c: tree.NewStrVal("192.168.100.128/25"),
+			parseOptions: typeSet(types.String, types.Bytes, types.INet, types.TSVector, types.TSQuery,
+				types.RefCursor),
 		},
 		{
 			c: tree.NewStrVal("111000110101"),
@@ -506,11 +529,17 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.Jsonb,
 				types.TSVector,
 				types.TSQuery,
+				types.RefCursor,
 			),
 		},
 		{
+			c: tree.NewStrVal("A/1"),
+			parseOptions: typeSet(types.String, types.PGLSN, types.Bytes, types.TSQuery, types.TSVector,
+				types.RefCursor),
+		},
+		{
 			c:            tree.NewStrVal(`{"a": 1}`),
-			parseOptions: typeSet(types.String, types.Bytes, types.Jsonb),
+			parseOptions: typeSet(types.String, types.Bytes, types.Jsonb, types.RefCursor),
 		},
 		{
 			c: tree.NewStrVal(`{1,2}`),
@@ -525,6 +554,8 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.IntervalArray,
 				types.TSVector,
 				types.TSQuery,
+				types.RefCursor,
+				types.RefCursorArray,
 			),
 		},
 		{
@@ -539,32 +570,44 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.IntervalArray,
 				types.TSVector,
 				types.TSQuery,
+				types.RefCursor,
+				types.RefCursorArray,
 			),
 		},
 		{
-			c:            tree.NewStrVal(`{a,b}`),
-			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray, types.TSVector, types.TSQuery),
+			c: tree.NewStrVal(`{a,b}`),
+			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
+				types.TSVector, types.TSQuery, types.RefCursor, types.RefCursorArray),
 		},
 		{
 			c:            tree.NewBytesStrVal(string([]byte{0xff, 0xfe, 0xfd})),
 			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
-			c:            tree.NewStrVal(`18e7b17e-4ead-4e27-bfd5-bb6d11261bb6`),
-			parseOptions: typeSet(types.String, types.Bytes, types.Uuid, types.TSVector, types.TSQuery),
+			c: tree.NewStrVal(`18e7b17e-4ead-4e27-bfd5-bb6d11261bb6`),
+			parseOptions: typeSet(types.String, types.Bytes, types.Uuid, types.TSVector, types.TSQuery,
+				types.RefCursor),
 		},
 		{
-			c:            tree.NewStrVal(`{18e7b17e-4ead-4e27-bfd5-bb6d11261bb6, 18e7b17e-4ead-4e27-bfd5-bb6d11261bb7}`),
-			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray, types.UUIDArray, types.TSVector),
+			c: tree.NewStrVal(`{18e7b17e-4ead-4e27-bfd5-bb6d11261bb6, 18e7b17e-4ead-4e27-bfd5-bb6d11261bb7}`),
+			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
+				types.UUIDArray, types.TSVector, types.RefCursor, types.RefCursorArray),
 		},
 		{
-			c:            tree.NewStrVal("{true, false}"),
-			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray, types.BoolArray, types.TSVector),
+			c: tree.NewStrVal("{true, false}"),
+			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
+				types.BoolArray, types.TSVector, types.RefCursor, types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{2010-09-28, 2010-09-29}"),
-			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray, types.DateArray,
-				types.TimestampArray, types.TimestampTZArray, types.TSVector),
+			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
+				types.DateArray, types.TimestampArray, types.TimestampTZArray, types.TSVector,
+				types.RefCursor, types.RefCursorArray),
+		},
+		{
+			c: tree.NewStrVal("{1A/1,2/2A}"),
+			parseOptions: typeSet(types.String, types.PGLSNArray, types.Bytes, types.BytesArray,
+				types.StringArray, types.TSQuery, types.TSVector, types.RefCursor, types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{2010-09-28 12:00:00.1, 2010-09-29 12:00:00.1}"),
@@ -577,7 +620,9 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.TimeTZArray,
 				types.TimestampArray,
 				types.TimestampTZArray,
-				types.DateArray),
+				types.DateArray,
+				types.RefCursor,
+				types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{2006-07-08T00:00:00.000000123Z, 2006-07-10T00:00:00.000000123Z}"),
@@ -590,15 +635,19 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.TimeTZArray,
 				types.TimestampArray,
 				types.TimestampTZArray,
-				types.DateArray),
+				types.DateArray,
+				types.RefCursor,
+				types.RefCursorArray),
 		},
 		{
-			c:            tree.NewStrVal("{PT12H2M, -23:00:00}"),
-			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray, types.IntervalArray),
+			c: tree.NewStrVal("{PT12H2M, -23:00:00}"),
+			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
+				types.IntervalArray, types.RefCursor, types.RefCursorArray),
 		},
 		{
-			c:            tree.NewStrVal("{192.168.100.128, ::ffff:10.4.3.2}"),
-			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray, types.INetArray),
+			c: tree.NewStrVal("{192.168.100.128, ::ffff:10.4.3.2}"),
+			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
+				types.INetArray, types.RefCursor, types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{0101, 11}"),
@@ -613,6 +662,8 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.IntervalArray,
 				types.VarBitArray,
 				types.TSVector,
+				types.RefCursor,
+				types.RefCursorArray,
 			),
 		},
 	}
@@ -620,57 +671,59 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	for i, test := range testCases {
-		t.Log(test.c.String())
-		parseableCount := 0
+		t.Run(test.c.String(), func(t *testing.T) {
+			parseableCount := 0
 
-		// Make sure it can be resolved as each of those types or throws a parsing error.
-		for _, availType := range test.c.AvailableTypes() {
+			// Make sure it can be resolved as each of those types or throws a parsing error.
+			for _, availType := range test.c.AvailableTypes() {
 
-			// The enum value in c.AvailableTypes() is AnyEnum, so we will not be able to
-			// resolve that exact type. In actual execution, the constant would be resolved
-			// as a hydrated enum type instead.
-			if availType.Family() == types.EnumFamily {
-				continue
-			}
-
-			semaCtx := tree.MakeSemaContext()
-			typedExpr, err := test.c.ResolveAsType(context.Background(), &semaCtx, availType)
-			var res tree.Datum
-			if err == nil {
-				res, err = eval.Expr(context.Background(), evalCtx, typedExpr)
-			}
-			if err != nil {
-				if !strings.Contains(err.Error(), "could not parse") &&
-					!strings.Contains(err.Error(), "parsing") &&
-					!strings.Contains(err.Error(), "out of range") &&
-					!strings.Contains(err.Error(), "exceeds supported") {
-					// Parsing errors are permitted for this test, but the number of correctly
-					// parseable types will be verified. Any other error should throw a failure.
-					t.Errorf("%d: expected resolving %v as available type %s would either succeed"+
-						" or throw a parsing error, found %v",
-						i, test.c, availType, err)
+				// The enum value in c.AvailableTypes() is AnyEnum, so we will not be able to
+				// resolve that exact type. In actual execution, the constant would be resolved
+				// as a hydrated enum type instead.
+				if availType.Family() == types.EnumFamily {
+					continue
 				}
-				continue
-			}
-			parseableCount++
 
-			if _, isExpected := test.parseOptions[availType]; !isExpected {
-				t.Errorf("%d: type %s not expected to be resolvable from the tree.StrVal %v, found %v",
-					i, availType, test.c, res)
-			} else {
-				expectedDatum := parseFuncs[availType](t, test.c.RawString())
-				if res.Compare(evalCtx, expectedDatum) != 0 {
-					t.Errorf("%d: type %s expected to be resolved from the tree.StrVal %v to tree.Datum %v"+
-						", found %v",
-						i, availType, test.c, expectedDatum, res)
+				semaCtx := tree.MakeSemaContext()
+				typedExpr, err := test.c.ResolveAsType(context.Background(), &semaCtx, availType)
+				var res tree.Datum
+				if err == nil {
+					res, err = eval.Expr(context.Background(), evalCtx, typedExpr)
+				}
+				if err != nil {
+					if !strings.Contains(err.Error(), "could not parse") &&
+						!strings.Contains(err.Error(), "parsing") &&
+						!strings.Contains(err.Error(), "out of range") &&
+						!strings.Contains(err.Error(), "exceeds supported") &&
+						!strings.Contains(err.Error(), "invalid input syntax") {
+						// Parsing errors are permitted for this test, but the number of correctly
+						// parseable types will be verified. Any other error should throw a failure.
+						t.Errorf("%d: expected resolving %v as available type %s would either succeed"+
+							" or throw a parsing error, found %v",
+							i, test.c, availType, err)
+					}
+					continue
+				}
+				parseableCount++
+
+				if _, isExpected := test.parseOptions[availType]; !isExpected {
+					t.Errorf("%d: type %s not expected to be resolvable from the tree.StrVal %v, found %v",
+						i, availType, test.c, res)
+				} else {
+					expectedDatum := parseFuncs[availType](t, test.c.RawString())
+					if res.Compare(evalCtx, expectedDatum) != 0 {
+						t.Errorf("%d: type %s expected to be resolved from the tree.StrVal %v to tree.Datum %v"+
+							", found %v",
+							i, availType, test.c, expectedDatum, res)
+					}
 				}
 			}
-		}
 
-		// Make sure the expected number of types can be resolved from the tree.StrVal.
-		if expCount := len(test.parseOptions); parseableCount != expCount {
-			t.Errorf("%d: expected %d successfully resolvable types for the tree.StrVal %v, found %d",
-				i, expCount, test.c, parseableCount)
-		}
+			// Make sure the expected number of types can be resolved from the tree.StrVal.
+			if expCount := len(test.parseOptions); parseableCount != expCount {
+				t.Errorf("%d: expected %d successfully resolvable types for the tree.StrVal %v, found %d",
+					i, expCount, test.c, parseableCount)
+			}
+		})
 	}
 }

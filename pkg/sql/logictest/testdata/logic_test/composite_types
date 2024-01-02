@@ -1,4 +1,4 @@
-# LogicTest: default-configs !local-mixed-22.2-23.1
+# LogicTest: default-configs
 
 statement ok
 CREATE TYPE t AS (a INT, b INT)
@@ -178,13 +178,17 @@ CREATE TABLE a (a INT DEFAULT (((1, 'hi')::t).a))
 statement error cannot drop type \"t\" because other objects .* still depend on it
 DROP TYPE t
 
-# Re-enable when #91972 is resolved.
-#statement ok
-#ALTER TABLE a ALTER COLUMN a SET DEFAULT 3
-#
-#statement ok
-#DROP TYPE t;
-#CREATE TYPE t AS (a INT, b TEXT);
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE a ALTER COLUMN a SET DEFAULT 3
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP TYPE t
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TYPE t AS (a INT, b TEXT)
 
 statement ok
 DROP TABLE a;
@@ -193,28 +197,38 @@ CREATE TABLE a (a INT ON UPDATE (((1, 'hi')::t).a))
 statement error cannot drop type \"t\" because other objects .* still depend on it
 DROP TYPE t
 
-# Re-enable when #91972 is resolved.
-#statement ok
-#ALTER TABLE a ALTER COLUMN a SET ON UPDATE 3
-#
-#statement ok
-#DROP TYPE t;
-#CREATE TYPE t AS (a INT, b TEXT);
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE a ALTER COLUMN a SET ON UPDATE 3
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP TYPE t
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TYPE t AS (a INT, b TEXT)
 
 statement ok
-DROP TABLE a;
+DROP TABLE a
+
+statement ok
 CREATE TABLE a (a INT AS (((1, 'hi')::t).a) STORED)
 
 statement error cannot drop type \"t\" because other objects .* still depend on it
 DROP TYPE t
 
-# Re-enable when #91972 is resolved.
-#statement ok
-#ALTER TABLE a ALTER COLUMN a DROP STORED
-#
-#statement ok
-#DROP TYPE t;
-#CREATE TYPE t AS (a INT, b TEXT);
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE a ALTER COLUMN a DROP STORED
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP TYPE t
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TYPE t AS (a INT, b TEXT)
 
 statement ok
 DROP TABLE a;

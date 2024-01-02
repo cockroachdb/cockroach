@@ -266,7 +266,7 @@ func applyReplicaUpdate(
 		// A crude form of the intent resolution process: abort the
 		// transaction by deleting its record.
 		txnKey := keys.TransactionKey(res.Intent.Txn.Key, res.Intent.Txn.ID)
-		if _, err := storage.MVCCDelete(ctx, readWriter, &ms, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil); err != nil {
+		if _, _, err := storage.MVCCDelete(ctx, readWriter, txnKey, hlc.Timestamp{}, storage.MVCCWriteOptions{Stats: &ms}); err != nil {
 			return PrepareReplicaReport{}, err
 		}
 		update := roachpb.LockUpdate{
@@ -274,7 +274,7 @@ func applyReplicaUpdate(
 			Txn:    res.Intent.Txn,
 			Status: roachpb.ABORTED,
 		}
-		if _, _, _, err := storage.MVCCResolveWriteIntent(ctx, readWriter, &ms, update, storage.MVCCResolveWriteIntentOptions{}); err != nil {
+		if _, _, _, _, err := storage.MVCCResolveWriteIntent(ctx, readWriter, &ms, update, storage.MVCCResolveWriteIntentOptions{}); err != nil {
 			return PrepareReplicaReport{}, err
 		}
 		report.AbortedTransaction = true
@@ -293,8 +293,8 @@ func applyReplicaUpdate(
 	newDesc.NextReplicaID = update.NextReplicaID
 
 	if err := storage.MVCCPutProto(
-		ctx, readWriter, &ms, key, clock.Now(),
-		hlc.ClockTimestamp{}, nil /* txn */, &newDesc,
+		ctx, readWriter, key, clock.Now(),
+		&newDesc, storage.MVCCWriteOptions{Stats: &ms},
 	); err != nil {
 		return PrepareReplicaReport{}, err
 	}
@@ -448,8 +448,8 @@ func CheckEnginesVersion(
 	plan loqrecoverypb.ReplicaUpdatePlan,
 	ignoreInternal bool,
 ) error {
-	binaryVersion := clusterversion.ByKey(clusterversion.BinaryVersionKey)
-	binaryMinSupportedVersion := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+	binaryVersion := clusterversion.Latest.Version()
+	binaryMinSupportedVersion := clusterversion.MinSupported.Version()
 	clusterVersion, err := kvstorage.SynthesizeClusterVersionFromEngines(
 		ctx, engines, binaryVersion, binaryMinSupportedVersion,
 	)

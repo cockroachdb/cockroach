@@ -13,6 +13,7 @@ package ccl
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/auditloggingccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/buildccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
@@ -25,6 +26,9 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/oidcccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/pgcryptoccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/plpgsqlccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/securityccl/fipsccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingest"

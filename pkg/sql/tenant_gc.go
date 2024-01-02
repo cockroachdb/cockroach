@@ -33,7 +33,7 @@ import (
 // to take this action.
 func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.TenantInfo) error {
 	const op = "gc"
-	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op, execCfg.Settings); err != nil {
 		return err
 	}
 	if err := rejectIfSystemTenant(info.ID, op); err != nil {
@@ -72,11 +72,7 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.T
 
 		// Clear out all span config records left over by the tenant.
 		tenID := roachpb.MustMakeTenantID(info.ID)
-		tenantPrefix := keys.MakeTenantPrefix(tenID)
-		tenantSpan := roachpb.Span{
-			Key:    tenantPrefix,
-			EndKey: tenantPrefix.PrefixEnd(),
-		}
+		tenantSpan := keys.MakeTenantSpan(tenID)
 
 		systemTarget, err := spanconfig.MakeTenantKeyspaceTarget(tenID, tenID)
 		if err != nil {
@@ -125,33 +121,4 @@ func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.Te
 	})
 
 	return errors.Wrapf(execCfg.DB.Run(ctx, b), "clearing tenant %d data", info.ID)
-}
-
-// GCTenant implements the tree.TenantOperator interface.
-// This is the function used by the crdb_internal.gc_tenant built-in function.
-// It garbage-collects a tenant already in the DROP state.
-//
-// TODO(jeffswenson): Delete crdb_internal.gc_tenant after the DestroyTenant
-// changes are deployed to all Cockroach Cloud serverless hosts.
-func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
-	if !p.extendedEvalCtx.TxnIsSingleStmt {
-		return errors.Errorf("gc_tenant cannot be used inside a multi-statement transaction")
-	}
-	if err := p.RequireAdminRole(ctx, "gc tenant"); err != nil {
-		return err
-	}
-	info, err := GetTenantRecordByID(ctx, p.InternalSQLTxn(), roachpb.MustMakeTenantID(tenID), p.ExecCfg().Settings)
-	if err != nil {
-		return errors.Wrapf(err, "retrieving tenant %d", tenID)
-	}
-
-	// Confirm tenant is ready to be cleared.
-	if info.DataState != mtinfopb.DataStateDrop {
-		return errors.Errorf("tenant %d is not in data state DROP", info.ID)
-	}
-
-	_, err = createGCTenantJob(
-		ctx, p.ExecCfg().JobRegistry, p.InternalSQLTxn(), p.User(), tenID, false, /* synchronous */
-	)
-	return err
 }

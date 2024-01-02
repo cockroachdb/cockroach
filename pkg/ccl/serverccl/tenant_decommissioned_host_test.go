@@ -40,9 +40,8 @@ func TestTenantWithDecommissionedID(t *testing.T) {
 	// as sql connection timeouts.
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		// Disable the default test tenant since we are creating our own.
-		DefaultTestTenant: base.TestTenantDisabled,
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	}})
 	defer tc.Stopper().Stop(ctx)
 
@@ -57,7 +56,7 @@ func TestTenantWithDecommissionedID(t *testing.T) {
 
 	tenantID := serverutils.TestTenantID()
 
-	var tenantSQLServer serverutils.TestTenantInterface
+	var tenantSQLServer serverutils.ApplicationLayerInterface
 	var tenantDB *gosql.DB
 	for instanceID := 1; instanceID <= int(decommissionID); instanceID++ {
 		sqlServer, tenant := serverutils.StartTenant(t, server, base.TestTenantArgs{

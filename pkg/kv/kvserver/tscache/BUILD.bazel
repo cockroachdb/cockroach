@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -16,6 +15,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util",
         "//pkg/util/cache",
+        "//pkg/util/container/list",
         "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/interval",
@@ -37,7 +37,6 @@ go_test(
         "interval_skl_test.go",
         "tree_impl_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":tscache"],
     deps = [
         "//pkg/roachpb",
@@ -53,5 +52,3 @@ go_test(
         "@org_golang_x_sync//errgroup",
     ],
 )
-
-get_x_data(name = "get_x_data")

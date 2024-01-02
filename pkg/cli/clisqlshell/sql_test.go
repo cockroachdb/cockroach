@@ -159,14 +159,13 @@ func Example_sql_config() {
 	// 123
 	// # 1 row
 	// sql --set unknownoption -e select 123 as "123"
-	// ERROR: -e: invalid syntax: \set unknownoption
-	// HINT: Try \? for help.
+	// ERROR: -e: unknown variable name: "unknownoption"
 	// sql --set display_format=invalidvalue -e select 123 as "123"
 	// ERROR: -e: \set display_format=invalidvalue: invalid table display format: invalidvalue
-	// HINT: Possible values: tsv, csv, table, records, ndjson, json, sql, html, raw.
+	// HINT: Possible values: tsv, csv, table, records, ndjson, json, sql, html, unnumbered-html, raw.
 	// sql -e \set display_format=invalidvalue -e select 123 as "123"
 	// ERROR: -e: \set display_format=invalidvalue: invalid table display format: invalidvalue
-	// HINT: Possible values: tsv, csv, table, records, ndjson, json, sql, html, raw.
+	// HINT: Possible values: tsv, csv, table, records, ndjson, json, sql, html, unnumbered-html, raw.
 }
 
 func Example_sql_watch() {
@@ -360,7 +359,7 @@ func Example_sql_lex() {
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard,
 		fmt.Sprintf("postgres://%s@%s/?sslmode=disable",
-			username.RootUser, c.ServingSQLAddr()))
+			username.RootUser, c.Server.AdvSQLAddr()))
 	defer func() {
 		if err := conn.Close(); err != nil {
 			fmt.Printf("error closing connection: %v\n", err)

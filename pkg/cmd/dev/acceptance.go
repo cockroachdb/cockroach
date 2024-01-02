@@ -76,7 +76,7 @@ func (d *dev) acceptance(cmd *cobra.Command, commandLine []string) error {
 	cockroachBin := filepath.Join(workspace, "artifacts", "cockroach-short")
 
 	var args []string
-	args = append(args, "run", "//pkg/acceptance:acceptance_test", "--config=test")
+	args = append(args, "test", "//pkg/acceptance:acceptance_test")
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
@@ -93,6 +93,7 @@ func (d *dev) acceptance(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_arg", "-test.v")
 	}
 	args = append(args, fmt.Sprintf("--test_arg=-l=%s", logDir))
+	args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", logDir))
 	args = append(args, "--test_env=TZ=America/New_York")
 	args = append(args, fmt.Sprintf("--test_arg=-b=%s", cockroachBin))
 	args = append(args, additionalBazelArgs...)

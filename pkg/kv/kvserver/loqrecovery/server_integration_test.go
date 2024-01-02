@@ -30,10 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -68,8 +70,7 @@ func TestReplicaCollection(t *testing.T) {
 	r := tc.ServerConn(0).QueryRow("select count(*) from crdb_internal.ranges_no_leases")
 	var totalRanges int
 	require.NoError(t, r.Scan(&totalRanges), "failed to query range count")
-	adm, err := tc.GetAdminClient(ctx, t, 2)
-	require.NoError(t, err, "failed to get admin client")
+	adm := tc.GetAdminClient(t, 2)
 
 	// Collect and assert replica metadata. For expectMeta case we sometimes have
 	// meta and sometimes doesn't depending on which node holds the lease.
@@ -78,7 +79,7 @@ func TestReplicaCollection(t *testing.T) {
 		var replicas loqrecoverypb.ClusterReplicaInfo
 		var stats loqrecovery.CollectionStats
 
-		replicas, stats, err = loqrecovery.CollectRemoteReplicaInfo(ctx, adm)
+		replicas, stats, err := loqrecovery.CollectRemoteReplicaInfo(ctx, adm)
 		require.NoError(t, err, "failed to retrieve replica info")
 
 		// Check counters on retrieved replica info.
@@ -98,7 +99,7 @@ func TestReplicaCollection(t *testing.T) {
 		}
 		require.NotEqual(t, replicas.ClusterID, uuid.UUID{}.String(), "cluster UUID must not be empty")
 		require.Equal(t, replicas.Version,
-			clusterversion.ByKey(clusterversion.BinaryVersionKey),
+			clusterversion.Latest.Version(),
 			"replica info version must match current binary version")
 	}
 
@@ -144,14 +145,13 @@ func TestStreamRestart(t *testing.T) {
 	r := tc.ServerConn(0).QueryRow("select count(*) from crdb_internal.ranges_no_leases")
 	var totalRanges int
 	require.NoError(t, r.Scan(&totalRanges), "failed to query range count")
-	adm, err := tc.GetAdminClient(ctx, t, 2)
-	require.NoError(t, err, "failed to get admin client")
+	adm := tc.GetAdminClient(t, 2)
 
 	assertReplicas := func(liveNodes int) {
 		var replicas loqrecoverypb.ClusterReplicaInfo
 		var stats loqrecovery.CollectionStats
 
-		replicas, stats, err = loqrecovery.CollectRemoteReplicaInfo(ctx, adm)
+		replicas, stats, err := loqrecovery.CollectRemoteReplicaInfo(ctx, adm)
 		require.NoError(t, err, "failed to retrieve replica info")
 
 		// Check counters on retrieved replica info.
@@ -196,13 +196,10 @@ func TestGetPlanStagingState(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, planStores, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, planStores := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
-	adm, err := tc.GetAdminClient(ctx, t, 0)
-	require.NoError(t, err, "failed to get admin client")
+	adm := tc.GetAdminClient(t, 0)
 
 	resp, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
 	require.NoError(t, err)
@@ -259,13 +256,10 @@ func TestStageRecoveryPlans(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
-	adm, err := tc.GetAdminClient(ctx, t, 0)
-	require.NoError(t, err, "failed to get admin client")
+	adm := tc.GetAdminClient(t, 0)
 
 	resp, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
 	require.NoError(t, err)
@@ -301,23 +295,20 @@ func TestStageBadVersions(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 1)
-	defer lReg.Close()
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 1)
 	defer tc.Stopper().Stop(ctx)
 
-	adm, err := tc.GetAdminClient(ctx, t, 0)
-	require.NoError(t, err, "failed to get admin client")
+	adm := tc.GetAdminClient(t, 0)
 
 	sk := tc.ScratchRange(t)
 	plan := makeTestRecoveryPlan(ctx, t, adm)
 	plan.Updates = []loqrecoverypb.ReplicaUpdate{
 		createRecoveryForRange(t, tc, sk, 1),
 	}
-	plan.Version = clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+	plan.Version = clusterversion.MinSupported.Version()
 	plan.Version.Major -= 1
 
-	_, err = adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
+	_, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
 	require.Error(t, err, "shouldn't stage plan with old version")
 
 	plan.Version.Major += 2
@@ -331,13 +322,10 @@ func TestStageConflictingPlans(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
-	adm, err := tc.GetAdminClient(ctx, t, 0)
-	require.NoError(t, err, "failed to get admin client")
+	adm := tc.GetAdminClient(t, 0)
 
 	resp, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
 	require.NoError(t, err)
@@ -372,13 +360,10 @@ func TestForcePlanUpdate(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
-	adm, err := tc.GetAdminClient(ctx, t, 0)
-	require.NoError(t, err, "failed to get admin client")
+	adm := tc.GetAdminClient(t, 0)
 
 	resV, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
 	require.NoError(t, err)
@@ -415,13 +400,10 @@ func TestNodeDecommissioned(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
-	adm, err := tc.GetAdminClient(ctx, t, 0)
-	require.NoError(t, err, "failed to get admin client")
+	adm := tc.GetAdminClient(t, 0)
 
 	tc.StopServer(2)
 
@@ -449,17 +431,14 @@ func TestRejectDecommissionReachableNode(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
-	adm, err := tc.GetAdminClient(ctx, t, 0)
-	require.NoError(t, err, "failed to get admin client")
+	adm := tc.GetAdminClient(t, 0)
 
 	plan := makeTestRecoveryPlan(ctx, t, adm)
 	plan.DecommissionedNodeIDs = []roachpb.NodeID{roachpb.NodeID(3)}
-	_, err = adm.RecoveryStagePlan(ctx,
+	_, err := adm.RecoveryStagePlan(ctx,
 		&serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
 	require.ErrorContains(t, err, "was planned for decommission, but is present in cluster",
 		"staging plan decommissioning live nodes must not be allowed")
@@ -471,13 +450,10 @@ func TestStageRecoveryPlansToWrongCluster(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
-	adm, err := tc.GetAdminClient(ctx, t, 0)
-	require.NoError(t, err, "failed to get admin client")
+	adm := tc.GetAdminClient(t, 0)
 
 	resp, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
 	require.NoError(t, err)
@@ -502,16 +478,17 @@ func TestRetrieveRangeStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "probable OOM")
+
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 5)
-	defer lReg.Close()
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 5)
 	defer tc.Stopper().Stop(ctx)
 
 	// Use scratch range to ensure we have a range that loses quorum.
 	sk := tc.ScratchRange(t)
-	require.NoError(t, tc.WaitForFullReplication(), "failed to wait for full replication")
+	require.NoError(t, tc.WaitFor5NodeReplication(),
+		"failed to wait for full replication of 5 node cluster")
 	tc.ToggleReplicateQueues(false)
 	tc.SplitRangeOrFatal(t, testutils.MakeKey(sk, []byte{255}))
 
@@ -525,8 +502,7 @@ func TestRetrieveRangeStatus(t *testing.T) {
 	tc.StopServer(int(rs[1].NodeID - 1))
 
 	admServer := int(rs[2].NodeID - 1)
-	adm, err := tc.GetAdminClient(ctx, t, admServer)
-	require.NoError(t, err, "failed to get admin client")
+	adm := tc.GetAdminClient(t, admServer)
 
 	r, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{
 		DecommissionedNodeIDs: []roachpb.NodeID{rs[0].NodeID, rs[1].NodeID},
@@ -559,11 +535,11 @@ func TestRetrieveApplyStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "probable OOM")
+
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 5)
-	defer lReg.Close()
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 5)
 	defer tc.Stopper().Stop(ctx)
 
 	// Use scratch range to ensure we have a range that loses quorum.
@@ -585,8 +561,7 @@ func TestRetrieveApplyStatus(t *testing.T) {
 	tc.StopServer(int(rs[0].NodeID - 1))
 	tc.StopServer(int(rs[1].NodeID - 1))
 
-	adm, err := tc.GetAdminClient(ctx, t, admServer)
-	require.NoError(t, err, "failed to get admin client")
+	adm := tc.GetAdminClient(t, admServer)
 
 	var replicas loqrecoverypb.ClusterReplicaInfo
 	testutils.SucceedsSoon(t, func() error {
@@ -629,14 +604,13 @@ func TestRetrieveApplyStatus(t *testing.T) {
 
 	for _, id := range planDetails.UpdatedNodes {
 		tc.StopServer(int(id.NodeID - 1))
-		lReg.ReopenOrFail(t, int(id.NodeID-1))
 		require.NoError(t, tc.RestartServer(int(id.NodeID-1)), "failed to restart node")
 	}
 
 	// Need to get new client connection as we one we used belonged to killed
 	// server.
-	adm, err = tc.GetAdminClient(ctx, t, admServer)
-	require.NoError(t, err, "failed to get admin client")
+	adm = tc.GetAdminClient(t, admServer)
+
 	r, err = adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{
 		PendingPlanID:         &plan.PlanID,
 		DecommissionedNodeIDs: plan.DecommissionedNodeIDs,
@@ -660,13 +634,10 @@ func TestRejectBadVersionApplication(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, pss, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, pss := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
-	adm, err := tc.GetAdminClient(ctx, t, 0)
-	require.NoError(t, err, "failed to get admin client")
+	adm := tc.GetAdminClient(t, 0)
 
 	var replicas loqrecoverypb.ClusterReplicaInfo
 	testutils.SucceedsSoon(t, func() error {
@@ -681,7 +652,6 @@ func TestRejectBadVersionApplication(t *testing.T) {
 
 	tc.StopServer(1)
 	require.NoError(t, pss[1].SavePlan(plan), "failed to inject plan into storage")
-	lReg.ReopenOrFail(t, 1)
 	require.NoError(t, tc.RestartServer(1), "failed to restart server")
 
 	r, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
@@ -700,27 +670,22 @@ func TestRejectBadVersionApplication(t *testing.T) {
 
 func prepTestCluster(
 	t *testing.T, nodes int,
-) (
-	*testcluster.TestCluster,
-	server.StickyInMemEnginesRegistry,
-	map[int]loqrecovery.PlanStore,
-	testutils.ListenerRegistry,
-) {
+) (*testcluster.TestCluster, server.StickyVFSRegistry, map[int]loqrecovery.PlanStore) {
 	skip.UnderStressRace(t, "cluster frequently fails to start under stress race")
 
-	reg := server.NewStickyInMemEnginesRegistry()
+	reg := server.NewStickyVFSRegistry()
 
-	lReg := testutils.NewListenerRegistry()
+	lReg := listenerutil.NewListenerRegistry()
 
 	args := base.TestClusterArgs{
-		ServerArgsPerNode: make(map[int]base.TestServerArgs),
-		ReusableListeners: true,
+		ServerArgsPerNode:   make(map[int]base.TestServerArgs),
+		ReusableListenerReg: lReg,
 	}
 	for i := 0; i < nodes; i++ {
 		args.ServerArgsPerNode[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: reg,
+					StickyVFSRegistry: reg,
 				},
 				SpanConfig: &spanconfig.TestingKnobs{
 					ConfigureScratchRange: true,
@@ -728,16 +693,16 @@ func prepTestCluster(
 			},
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
-			Listener: lReg.GetOrFail(t, i),
 		}
 	}
 	tc := testcluster.NewTestCluster(t, nodes, args)
 	tc.Start(t)
-	return tc, reg, prepInMemPlanStores(t, args.ServerArgsPerNode), lReg
+	tc.Stopper().AddCloser(stop.CloserFn(lReg.Close))
+	return tc, reg, prepInMemPlanStores(t, args.ServerArgsPerNode)
 }
 
 func prepInMemPlanStores(
@@ -745,10 +710,8 @@ func prepInMemPlanStores(
 ) map[int]loqrecovery.PlanStore {
 	pss := make(map[int]loqrecovery.PlanStore)
 	for id, args := range serverArgs {
-		reg := args.Knobs.Server.(*server.TestingKnobs).StickyEngineRegistry
-		store, err := reg.GetUnderlyingFS(args.StoreSpecs[0])
-		require.NoError(t, err, "can't create loq recovery plan store")
-		pss[id] = loqrecovery.NewPlanStore(".", store)
+		reg := args.Knobs.Server.(*server.TestingKnobs).StickyVFSRegistry
+		pss[id] = loqrecovery.NewPlanStore(".", reg.Get(args.StoreSpecs[0].StickyVFSID))
 	}
 	return pss
 }
@@ -779,6 +742,6 @@ func makeTestRecoveryPlan(
 	return loqrecoverypb.ReplicaUpdatePlan{
 		PlanID:    uuid.MakeV4(),
 		ClusterID: cr.ClusterID,
-		Version:   clusterversion.ByKey(clusterversion.BinaryVersionKey),
+		Version:   clusterversion.Latest.Version(),
 	}
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/security/pprompt"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
@@ -79,6 +80,11 @@ type sqlConn struct {
 	// (re)connects.
 	clusterID           string
 	clusterOrganization string
+
+	// virtualClusterName is the last known virtual cluster name from the
+	// server, used to report any changes upon (re)connects. Empty if no
+	// application VCs have been defined.
+	virtualClusterName string
 
 	// isSystemTenantUnderSecondaryTenants is true if the current
 	// connection is to the system tenant and there are secondary
@@ -160,8 +166,12 @@ func (c *sqlConn) SetMissingPassword(missing bool) {
 }
 
 // SetAlwaysInferResultTypes implements the Conn interface.
-func (c *sqlConn) SetAlwaysInferResultTypes(b bool) {
+func (c *sqlConn) SetAlwaysInferResultTypes(b bool) func() {
+	oldVal := c.alwaysInferResultTypes
 	c.alwaysInferResultTypes = b
+	return func() {
+		c.alwaysInferResultTypes = oldVal
+	}
 }
 
 // EnsureConn (re-)establishes the connection to the server.
@@ -285,6 +295,7 @@ func (c *sqlConn) GetServerMetadata(
 	if err != nil {
 		return 0, "", "", err
 	}
+	foundSecondaryTenants := false
 	// We use toString() instead of casting val[0] to string because we
 	// get either a go string or bool depending on the SQL driver in
 	// use.
@@ -300,6 +311,7 @@ func (c *sqlConn) GetServerMetadata(
 			return 0, "", "", err
 		}
 		c.isSystemTenantUnderSecondaryTenants = toString(val[0])[0] == 't'
+		foundSecondaryTenants = c.isSystemTenantUnderSecondaryTenants
 	}
 
 	// Retrieve the node ID and server build info.
@@ -337,6 +349,17 @@ func (c *sqlConn) GetServerMetadata(
 				return 0, "", "", errors.Wrap(err, "incorrect data while retrieving node id")
 			}
 			nodeID = int32(id)
+		case "VirtualClusterName":
+			vcName := row[2]
+			if vcName == catconstants.SystemTenantName {
+				if !foundSecondaryTenants {
+					// Skip setting the virtual cluster name if the current
+					// connection is to the system VC and there are no
+					// application VCs defined.
+					continue
+				}
+			}
+			c.virtualClusterName = vcName
 
 			// Fields for v1.0 compatibility.
 		case "Distribution":
@@ -490,6 +513,7 @@ func (c *sqlConn) GetServerInfo() ServerInfo {
 		ServerExecutableVersion: c.serverBuild,
 		ClusterID:               c.clusterID,
 		Organization:            c.clusterOrganization,
+		VirtualClusterName:      c.virtualClusterName,
 	}
 }
 

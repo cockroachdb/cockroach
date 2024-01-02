@@ -12,16 +12,21 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"net"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	pgproto3 "github.com/jackc/pgproto3/v2"
 	"github.com/stretchr/testify/require"
 )
@@ -33,13 +38,38 @@ func TestBackendDialTLSInsecure(t *testing.T) {
 	ctx := context.Background()
 	startupMsg := &pgproto3.StartupMessage{ProtocolVersion: pgproto3.ProtocolVersionNumber}
 
-	sql, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	sql := serverutils.StartServerOnly(t, base.TestServerArgs{Insecure: true})
 	defer sql.Stopper().Stop(ctx)
 
-	conn, err := BackendDial(startupMsg, sql.ServingSQLAddr(), &tls.Config{})
+	conn, err := BackendDial(context.Background(), startupMsg, sql.ApplicationLayer().AdvSQLAddr(), &tls.Config{})
 	require.Error(t, err)
 	require.Regexp(t, "target server refused TLS connection", err)
 	require.Nil(t, conn)
+}
+
+func TestBackendDialBlackhole(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	conChannel := make(chan net.Conn, 1)
+	go func() {
+		// accept then ignore the connection
+		conn, err := listener.Accept()
+		require.NoError(t, err)
+		conChannel <- conn
+	}()
+
+	startupMsg := &pgproto3.StartupMessage{ProtocolVersion: pgproto3.ProtocolVersionNumber}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	_, err = BackendDial(ctx, startupMsg, listener.Addr().String(), &tls.Config{})
+	require.Error(t, err)
+	require.ErrorIs(t, err, ctx.Err())
+	(<-conChannel).Close()
 }
 
 func TestBackendDialTLS(t *testing.T) {
@@ -59,23 +89,19 @@ func TestBackendDialTLS(t *testing.T) {
 
 	ctx := context.Background()
 
-	storageServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Insecure: false,
-		// StartServer will sometimes start a tenant. This test requires
-		// storage server to be the system tenant, otherwise the
-		// tenant10ToStorage test will fail, since the storage server will
-		// server tenant 10.
-		DefaultTestTenant: base.TestTenantDisabled,
+	storageServer := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Insecure:          false,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer storageServer.Stopper().Stop(ctx)
 
 	tenant10 := roachpb.MustMakeTenantID(10)
 	sql10, _ := serverutils.StartTenant(t, storageServer, base.TestTenantArgs{TenantID: tenant10})
-	defer sql10.Stopper().Stop(ctx)
+	defer sql10.AppStopper().Stop(ctx)
 
 	tenant11 := roachpb.MustMakeTenantID(11)
 	sql11, _ := serverutils.StartTenant(t, storageServer, base.TestTenantArgs{TenantID: tenant11})
-	defer sql11.Stopper().Stop(ctx)
+	defer sql11.AppStopper().Stop(ctx)
 
 	tests := []struct {
 		name     string
@@ -94,22 +120,22 @@ func TestBackendDialTLS(t *testing.T) {
 		name:     "tenant10To11",
 		addr:     sql11.SQLAddr(),
 		tenantID: 10,
-		errCode:  codeBackendDown,
+		errCode:  codeBackendDialFailed,
 	}, {
 		name:     "tenant11To10",
 		addr:     sql10.SQLAddr(),
 		tenantID: 11,
-		errCode:  codeBackendDown,
+		errCode:  codeBackendDialFailed,
 	}, {
 		name:     "tenant10ToStorage",
-		addr:     storageServer.ServingSQLAddr(),
+		addr:     storageServer.SystemLayer().AdvSQLAddr(),
 		tenantID: 10,
-		errCode:  codeBackendDown,
+		errCode:  codeBackendDialFailed,
 	}, {
 		name:     "tenantWithNodeIDToStoage",
-		addr:     storageServer.ServingSQLAddr(),
+		addr:     storageServer.SystemLayer().AdvSQLAddr(),
 		tenantID: uint64(storageServer.NodeID()),
-		errCode:  codeBackendDown,
+		errCode:  codeBackendDialFailed,
 	}}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -118,7 +144,7 @@ func TestBackendDialTLS(t *testing.T) {
 			tenantConfig, err := tlsConfigForTenant(tenantID, tc.addr, tlsConfig)
 			require.NoError(t, err)
 
-			conn, err := BackendDial(startupMsg, tc.addr, tenantConfig)
+			conn, err := BackendDial(context.Background(), startupMsg, tc.addr, tenantConfig)
 
 			if tc.errCode != codeNone {
 				require.Equal(t, tc.errCode, getErrorCode(err))
@@ -128,4 +154,52 @@ func TestBackendDialTLS(t *testing.T) {
 			}
 		})
 	}
+}
+
+type closeCounter struct {
+	net.Conn
+	closeCount int32
+}
+
+func (n *closeCounter) Close() error {
+	_ = atomic.AddInt32(&n.closeCount, 1)
+	return nil
+}
+
+func (n *closeCounter) CloseCount() int {
+	return int(atomic.LoadInt32(&n.closeCount))
+}
+
+func TestCloseOnCancelCleanupBeforeCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	conn := &closeCounter{}
+	for i := 0; i < 1000; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		cleanup := closeWhenCancelled(ctx, conn)
+		cleanup()
+		cancel()
+	}
+	require.Equal(t, 0, conn.CloseCount())
+}
+
+func TestCloseOnCancelCancelBeforeCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	conn := &closeCounter{}
+	for i := 0; i < 1000; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		cleanup := closeWhenCancelled(ctx, conn)
+		cancel()
+		cleanup()
+	}
+	testutils.SucceedsSoon(t, func() error {
+		count := conn.CloseCount()
+		if count != 1000 {
+			return errors.Newf("expected 1000 closes found %d", count)
+		}
+		return nil
+	})
 }

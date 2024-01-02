@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -21,7 +20,6 @@ go_library(
 go_test(
     name = "jobsauth_test",
     srcs = ["authorization_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":jobsauth",
         "//pkg/ccl/changefeedccl",
@@ -33,9 +31,8 @@ go_test(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
         "//pkg/sql/roleoption",
+        "//pkg/sql/syntheticprivilege",
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//assert",
     ],
 )
-
-get_x_data(name = "get_x_data")

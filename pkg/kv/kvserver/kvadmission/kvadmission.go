@@ -14,11 +14,14 @@ package kvadmission
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -26,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -41,17 +45,35 @@ var elasticCPUDurationPerExportRequest = settings.RegisterDurationSetting(
 	"kvadmission.elastic_cpu.duration_per_export_request",
 	"controls how many CPU tokens are allotted for each export request",
 	admission.MaxElasticCPUDuration,
-	func(duration time.Duration) error {
-		if duration < admission.MinElasticCPUDuration {
-			return fmt.Errorf("minimum CPU duration allowed per export request is %s, got %s",
-				admission.MinElasticCPUDuration, duration)
-		}
-		if duration > admission.MaxElasticCPUDuration {
-			return fmt.Errorf("maximum CPU duration allowed per export request is %s, got %s",
-				admission.MaxElasticCPUDuration, duration)
-		}
-		return nil
-	},
+	settings.DurationInRange(admission.MinElasticCPUDuration, admission.MaxElasticCPUDuration),
+)
+
+// elasticCPUDurationPerInternalLowPriRead controls how many CPU tokens are
+// allotted for each internally submitted low priority read request.
+var elasticCPUDurationPerInternalLowPriRead = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kvadmission.elastic_cpu.duration_per_low_pri_read",
+	"controls how many CPU tokens are allotted for each internally submitted low priority read request",
+	10*time.Millisecond,
+	settings.DurationInRange(admission.MinElasticCPUDuration, admission.MaxElasticCPUDuration),
+)
+
+// internalLowPriReadElasticControlEnabled determines whether internally
+// submitted low pri reads integrate with elastic CPU control.
+var internalLowPriReadElasticControlEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kvadmission.low_pri_read_elastic_control.enabled",
+	"determines whether the internally submitted low priority reads reads integrate with elastic CPU control",
+	true,
+)
+
+// exportRequestElasticControlEnabled determines whether export requests
+// integrate with elastic CPU control.
+var exportRequestElasticControlEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kvadmission.export_request_elastic_control.enabled",
+	"determines whether the export requests integrate with elastic CPU control",
+	true,
 )
 
 // elasticCPUDurationPerRangefeedScanUnit controls how many CPU tokens are
@@ -62,17 +84,7 @@ var elasticCPUDurationPerRangefeedScanUnit = settings.RegisterDurationSetting(
 	"kvadmission.elastic_cpu.duration_per_rangefeed_scan_unit",
 	"controls how many CPU tokens are allotted for each unit of work during rangefeed catchup scans",
 	admission.MaxElasticCPUDuration,
-	func(duration time.Duration) error {
-		if duration < admission.MinElasticCPUDuration {
-			return fmt.Errorf("minimum CPU duration allowed is %s, got %s",
-				admission.MinElasticCPUDuration, duration)
-		}
-		if duration > admission.MaxElasticCPUDuration {
-			return fmt.Errorf("maximum CPU duration allowed is %s, got %s",
-				admission.MaxElasticCPUDuration, duration)
-		}
-		return nil
-	},
+	settings.DurationInRange(admission.MinElasticCPUDuration, admission.MaxElasticCPUDuration),
 )
 
 // rangefeedCatchupScanElasticControlEnabled determines whether rangefeed catch
@@ -90,7 +102,52 @@ var ProvisionedBandwidth = settings.RegisterByteSizeSetting(
 	settings.SystemOnly, "kvadmission.store.provisioned_bandwidth",
 	"if set to a non-zero value, this is used as the provisioned bandwidth (in bytes/s), "+
 		"for each store. It can be over-ridden on a per-store basis using the --store flag",
-	0).WithPublic()
+	0,
+	settings.WithPublic)
+
+// FlowTokenDropInterval determines the frequency at which we check for pending
+// flow token dispatches to nodes we're no longer connected to, in order to drop
+// them.
+var FlowTokenDropInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_token.drop_interval",
+	"the interval at which the raft transport checks for pending flow token dispatches "+
+		"to nodes we're no longer connected to, in order to drop them; set to 0 to disable the mechanism",
+	30*time.Second,
+	settings.NonNegativeDuration,
+)
+
+// FlowTokenDispatchInterval determines the frequency at which we check for
+// pending flow token dispatches from idle connections, in order to deliver
+// them.
+var FlowTokenDispatchInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_token.dispatch_interval",
+	"the interval at which the raft transport checks for pending flow token dispatches "+
+		"from idle connections and delivers them",
+	time.Second,
+	settings.PositiveDuration, settings.NonNegativeDurationWithMaximum(time.Minute),
+)
+
+// FlowTokenDispatchMaxBytes determines the maximum number of bytes of dispatch
+// messages that are annotated onto a single RaftTransport message.
+var FlowTokenDispatchMaxBytes = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_control.dispatch.max_bytes",
+	"limits the size of flow control dispatch messages being attached to a single raft message",
+	64<<20,                         // 64 MB
+	settings.IntWithMinimum(1<<20), // 1 MB
+)
+
+// ConnectedStoreExpiration controls how long the RaftTransport layers considers
+// a stream connected without it having observed any messages from it.
+var ConnectedStoreExpiration = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kvadmission.raft_transport.connected_store_expiration",
+	"the interval at which the raft transport prunes its set of connected stores; set to 0 to disable the mechanism",
+	5*time.Minute,
+	settings.NonNegativeDuration,
+)
 
 // Controller provides admission control for the KV layer.
 type Controller interface {
@@ -112,9 +169,11 @@ type Controller interface {
 	// periodically polled for weights. The stopper should be used to terminate
 	// the periodic polling.
 	SetTenantWeightProvider(TenantWeightProvider, *stop.Stopper)
-	// SnapshotIngested informs admission control about a range snapshot
-	// ingestion.
-	SnapshotIngested(roachpb.StoreID, pebble.IngestOperationStats)
+	// SnapshotIngestedOrWritten informs admission control about a range
+	// snapshot ingestion or a range snapshot written as a normal write.
+	// writeBytes should roughly correspond to the size of the write when
+	// flushed to a sstable.
+	SnapshotIngestedOrWritten(_ roachpb.StoreID, _ pebble.IngestOperationStats, writeBytes uint64)
 	// FollowerStoreWriteBytes informs admission control about writes
 	// replicated to a raft follower, that have not been subject to admission
 	// control.
@@ -147,13 +206,18 @@ type TenantWeightsForStore struct {
 
 // controllerImpl implements Controller interface.
 type controllerImpl struct {
+	nodeID *base.NodeIDContainer
+
 	// Admission control queues and coordinators. All three should be nil or
 	// non-nil.
 	kvAdmissionQ               *admission.WorkQueue
 	storeGrantCoords           *admission.StoreGrantCoordinators
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator
-	settings                   *cluster.Settings
-	every                      log.EveryN
+	kvflowController           kvflowcontrol.Controller
+	kvflowHandles              kvflowcontrol.Handles
+
+	settings *cluster.Settings
+	every    log.EveryN
 }
 
 var _ Controller = &controllerImpl{}
@@ -167,23 +231,43 @@ type Handle struct {
 	tenantID             roachpb.TenantID
 	storeAdmissionQ      *admission.StoreWorkQueue
 	storeWorkHandle      admission.StoreWorkHandle
-	ElasticCPUWorkHandle *admission.ElasticCPUWorkHandle
+	elasticCPUWorkHandle *admission.ElasticCPUWorkHandle
+	raftAdmissionMeta    *kvflowcontrolpb.RaftAdmissionMeta
 
 	callAdmittedWorkDoneOnKVAdmissionQ bool
+	cpuStart                           time.Duration
+}
+
+// AnnotateCtx annotates the given context with request-scoped admission
+// data, plumbed through the KV stack using context.Contexts.
+func (h *Handle) AnnotateCtx(ctx context.Context) context.Context {
+	if h.elasticCPUWorkHandle != nil {
+		ctx = admission.ContextWithElasticCPUWorkHandle(ctx, h.elasticCPUWorkHandle)
+	}
+	if h.raftAdmissionMeta != nil {
+		ctx = kvflowcontrol.ContextWithMeta(ctx, h.raftAdmissionMeta)
+	}
+	return ctx
 }
 
 // MakeController returns a Controller. All three parameters must together be
 // nil or non-nil.
 func MakeController(
+	nodeID *base.NodeIDContainer,
 	kvAdmissionQ *admission.WorkQueue,
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
+	kvflowController kvflowcontrol.Controller,
+	kvflowHandles kvflowcontrol.Handles,
 	settings *cluster.Settings,
 ) Controller {
 	return &controllerImpl{
+		nodeID:                     nodeID,
 		kvAdmissionQ:               kvAdmissionQ,
 		storeGrantCoords:           storeGrantCoords,
 		elasticCPUGrantCoordinator: elasticCPUGrantCoordinator,
+		kvflowController:           kvflowController,
+		kvflowHandles:              kvflowHandles,
 		settings:                   settings,
 		every:                      log.Every(10 * time.Second),
 	}
@@ -238,56 +322,116 @@ func (n *controllerImpl) AdmitKVWork(
 	// to continue even when throttling since there are often significant
 	// number of tokens available.
 	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
-		storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
-		if storeAdmissionQ != nil {
-			storeWorkHandle, err := storeAdmissionQ.Admit(
-				ctx, admission.StoreWriteWorkInfo{WorkInfo: admissionInfo})
+		var admitted bool
+		attemptFlowControl := kvflowcontrol.Enabled.Get(&n.settings.SV) &&
+			n.settings.Version.IsActive(ctx, clusterversion.V23_2_UseACRaftEntryEntryEncodings)
+		if attemptFlowControl && !bypassAdmission {
+			kvflowHandle, found := n.kvflowHandles.Lookup(ba.RangeID)
+			if !found {
+				return Handle{}, nil
+			}
+			var err error
+			admitted, err = kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime))
 			if err != nil {
 				return Handle{}, err
+			} else if admitted {
+				// NB: It's possible for us to be waiting for available flow tokens
+				// for a different set of streams that the ones we'll eventually
+				// deduct tokens from, if the range experiences a split between now
+				// and the point of deduction. That's ok, there's no strong
+				// synchronization needed between these two points.
+				ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
+					AdmissionPriority:   int32(admissionInfo.Priority),
+					AdmissionCreateTime: admissionInfo.CreateTime,
+					AdmissionOriginNode: n.nodeID.Get(),
+				}
 			}
-			admissionEnabled = storeWorkHandle.UseAdmittedWorkDone()
-			if admissionEnabled {
-				defer func() {
-					if retErr != nil {
-						// No bytes were written.
-						_ = storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, admission.StoreWorkDoneInfo{})
-					}
-				}()
-				ah.storeAdmissionQ, ah.storeWorkHandle = storeAdmissionQ, storeWorkHandle
+		}
+		// If flow control is disabled or if work bypasses flow control, we still
+		// subject it above-raft, leaseholder-only IO admission control.
+		if !attemptFlowControl || !admitted {
+			storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
+			if storeAdmissionQ != nil {
+				//  NB: Even though we would know here we're bypassing admission (via
+				//  `bypassAdmission`), we still have to explicitly invoke `.Admit()`.
+				//  We do it for correct token accounting (i.e. we deduct tokens without
+				//  blocking).
+				storeWorkHandle, err := storeAdmissionQ.Admit(
+					ctx, admission.StoreWriteWorkInfo{WorkInfo: admissionInfo})
+				if err != nil {
+					return Handle{}, err
+				}
+				admissionEnabled = storeWorkHandle.UseAdmittedWorkDone()
+				if admissionEnabled {
+					defer func() {
+						if retErr != nil {
+							// No bytes were written.
+							_ = storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, admission.StoreWorkDoneInfo{})
+						}
+					}()
+					ah.storeAdmissionQ, ah.storeWorkHandle = storeAdmissionQ, storeWorkHandle
+				}
 			}
 		}
 	}
 	if admissionEnabled {
-		if ba.IsSingleExportRequest() {
-			// Backups generate batches with single export requests, which we
-			// admit through the elastic CPU work queue. We grant this
-			// CPU-intensive work a set amount of CPU time and expect it to
-			// terminate (cooperatively) once it exceeds its grant. The amount
-			// disbursed is 100ms, which we've experimentally found to be long
-			// enough to do enough useful work per-request while not causing too
-			// much in the way of scheduling delays on individual cores. Within
-			// admission control we have machinery that observes scheduling
-			// latencies periodically and reduces the total amount of CPU time
-			// handed out through this mechanism, as a way to provide latency
-			// isolation to non-elastic ("latency sensitive") work running on
-			// the same machine.
+		// - Backups generate batches with single export requests, which we
+		//   admit through the elastic CPU work queue. We grant this
+		//   CPU-intensive work a set amount of CPU time and expect it to
+		//   terminate (cooperatively) once it exceeds its grant. The amount
+		//   disbursed is 100ms, which we've experimentally found to be long
+		//   enough to do enough useful work per-request while not causing too
+		//   much in the way of scheduling delays on individual cores. Within
+		//   admission control we have machinery that observes scheduling
+		//   latencies periodically and reduces the total amount of CPU time
+		//   handed out through this mechanism, as a way to provide latency
+		//   isolation to non-elastic ("latency sensitive") work running on the
+		//   same machine.
+		// - We do the same for internally submitted low priority reads in
+		//   general (notably, for KV work done on the behalf of row-level TTL
+		//   reads). Everything admissionpb.UserLowPri and above uses the slots
+		//   mechanism.
+		isInternalLowPriRead := ba.IsReadOnly() && admissionInfo.Priority < admissionpb.UserLowPri
+		shouldUseElasticCPU :=
+			(exportRequestElasticControlEnabled.Get(&n.settings.SV) && ba.IsSingleExportRequest()) ||
+				(internalLowPriReadElasticControlEnabled.Get(&n.settings.SV) && isInternalLowPriRead)
+
+		if shouldUseElasticCPU {
+			var admitDuration time.Duration
+			if ba.IsSingleExportRequest() {
+				admitDuration = elasticCPUDurationPerExportRequest.Get(&n.settings.SV)
+			} else { // isInternalLowPriRead
+				admitDuration = elasticCPUDurationPerInternalLowPriRead.Get(&n.settings.SV)
+			}
+
+			// TODO(irfansharif): For export requests it's possible to preempt,
+			// i.e. once the CPU slice is used up we terminate the work. We
+			// don't do this for the general case of low priority internal
+			// reads, so in some sense, the integration is incomplete. This is
+			// probably harmless.
 			elasticWorkHandle, err := n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.Admit(
-				ctx, elasticCPUDurationPerExportRequest.Get(&n.settings.SV), admissionInfo,
+				ctx, admitDuration, admissionInfo,
 			)
 			if err != nil {
 				return Handle{}, err
 			}
-			ah.ElasticCPUWorkHandle = elasticWorkHandle
+			ah.elasticCPUWorkHandle = elasticWorkHandle
 			defer func() {
 				if retErr != nil {
 					// No elastic work was done.
-					n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.ElasticCPUWorkHandle)
+					n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.elasticCPUWorkHandle)
 				}
 			}()
 		} else {
+			// Use the slots-based mechanism for everything else.
 			callAdmittedWorkDoneOnKVAdmissionQ, err := n.kvAdmissionQ.Admit(ctx, admissionInfo)
 			if err != nil {
 				return Handle{}, err
+			}
+			if callAdmittedWorkDoneOnKVAdmissionQ {
+				// We include the time to do other activities like intent resolution,
+				// since it is acceptable to charge them to the tenant.
+				ah.cpuStart = grunning.Time()
 			}
 			ah.callAdmittedWorkDoneOnKVAdmissionQ = callAdmittedWorkDoneOnKVAdmissionQ
 		}
@@ -297,9 +441,17 @@ func (n *controllerImpl) AdmitKVWork(
 
 // AdmittedKVWorkDone implements the Controller interface.
 func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteBytes) {
-	n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.ElasticCPUWorkHandle)
+	n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.elasticCPUWorkHandle)
 	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
-		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID)
+		cpuTime := grunning.Time() - ah.cpuStart
+		if cpuTime < 0 {
+			// See https://github.com/cockroachdb/cockroach/issues/95529. Count 1
+			// nanosecond, arbitrarily.
+			//
+			// TODO(sumeer): remove this hack when that bug is fixed.
+			cpuTime = 1
+		}
+		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID, cpuTime)
 	}
 	if ah.storeAdmissionQ != nil {
 		var doneInfo admission.StoreWorkDoneInfo
@@ -382,15 +534,15 @@ func (n *controllerImpl) SetTenantWeightProvider(
 	}()
 }
 
-// SnapshotIngested implements the Controller interface.
-func (n *controllerImpl) SnapshotIngested(
-	storeID roachpb.StoreID, ingestStats pebble.IngestOperationStats,
+// SnapshotIngestedOrWritten implements the Controller interface.
+func (n *controllerImpl) SnapshotIngestedOrWritten(
+	storeID roachpb.StoreID, ingestStats pebble.IngestOperationStats, writeBytes uint64,
 ) {
 	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
 	if storeAdmissionQ == nil {
 		return
 	}
-	storeAdmissionQ.StatsToIgnore(ingestStats)
+	storeAdmissionQ.StatsToIgnore(ingestStats, writeBytes)
 }
 
 // FollowerStoreWriteBytes implements the Controller interface.
@@ -428,6 +580,21 @@ func (n *controllerImpl) AdmitRaftEntry(
 	if err != nil {
 		log.Errorf(ctx, "unable to decode raft command admission data: %v", err)
 		return
+	}
+
+	if log.V(1) {
+		log.Infof(ctx, "decoded raft admission meta below-raft: pri=%s create-time=%d proposer=n%s receiver=[n%d,s%s] tenant=t%d tokens≈%d sideloaded=%t raft-entry=%d/%d",
+			admissionpb.WorkPriority(meta.AdmissionPriority),
+			meta.AdmissionCreateTime,
+			meta.AdmissionOriginNode,
+			n.nodeID.Get(),
+			storeID,
+			tenantID.ToUint64(),
+			kvflowcontrol.Tokens(len(entry.Data)),
+			typ.IsSideloaded(),
+			entry.Term,
+			entry.Index,
+		)
 	}
 
 	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))

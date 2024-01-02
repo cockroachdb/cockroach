@@ -8,7 +8,7 @@ CREATE TABLE ab (a INT PRIMARY KEY, b INT); INSERT INTO ab (a, b) VALUES (1, 10)
 statement ok
 PREPARE change_index AS SELECT * FROM [EXPLAIN SELECT * FROM ab WHERE b=10]
 
-query T
+query T nosort
 EXECUTE change_index
 ----
 distribution: local
@@ -25,7 +25,7 @@ vectorized: true
 statement ok
 CREATE INDEX bindex ON ab (b)
 
-query T
+query T nosort
 EXECUTE change_index
 ----
 distribution: local
@@ -39,7 +39,7 @@ vectorized: true
 statement ok
 DROP INDEX bindex
 
-query T
+query T nosort
 EXECUTE change_index
 ----
 distribution: local
@@ -60,7 +60,7 @@ CREATE TABLE cd (c INT PRIMARY KEY, d INT)
 statement ok
 PREPARE change_stats AS SELECT * FROM [EXPLAIN SELECT * FROM ab JOIN cd ON a=c]
 
-query T
+query T nosort
 EXECUTE change_stats
 ----
 distribution: local
@@ -87,7 +87,7 @@ CREATE STATISTICS s FROM ab
 # Now that the optimizer knows table ab has one row (and it assumes a much
 # higher number of rows for cd), it should choose lookup join.
 # We allow retry because stat cache invalidation happens asynchronously.
-query T retry
+query T retry,nosort
 EXECUTE change_stats
 ----
 distribution: local
@@ -119,6 +119,9 @@ rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • scan
   nodes: <hidden>
@@ -145,6 +148,9 @@ vectorized: <hidden>
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • scan
   nodes: <hidden>

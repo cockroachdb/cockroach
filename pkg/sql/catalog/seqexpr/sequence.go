@@ -67,7 +67,7 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 		// We have expression sanitization and type checking to make sure functions
 		// exists and type is valid, so here if function is not found, it must be a
 		// user defined function. We don't need to get sequences reference from it.
-		if errors.Is(err, tree.ErrFunctionUndefined) {
+		if errors.Is(err, tree.ErrRoutineUndefined) {
 			return nil, nil
 		}
 		return nil, err

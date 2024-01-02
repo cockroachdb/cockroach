@@ -27,11 +27,12 @@ import (
 // information is collected and passed around, regardless of the value of this
 // setting.
 var FollowerReadsEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
+	settings.SystemVisible, // needed for planning in SQL
 	"kv.closed_timestamp.follower_reads_enabled",
 	"allow (all) replicas to serve consistent historical reads based on closed timestamp information",
 	true,
-).WithPublic()
+	settings.WithName("kv.closed_timestamp.follower_reads.enabled"),
+	settings.WithPublic)
 
 // BatchCanBeEvaluatedOnFollower determines if a batch consists exclusively of
 // requests that can be evaluated on a follower replica, given a sufficiently

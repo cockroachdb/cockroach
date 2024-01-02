@@ -60,16 +60,22 @@ func init() {
 		t opgen.Transition,
 		prePrevStatuses []scpb.Status,
 	) rel.Clauses {
+		descriptorData := MkNodeVars("descriptor-data")
+		var descID rel.Var = "descID"
 		clauses := rel.Clauses{
 			from.Type(el),
 			to.Type(el),
-			from.El.AttrEqVar(screl.DescID, "_"),
+			from.El.AttrEqVar(screl.DescID, descID),
 			from.El.AttrEqVar(rel.Self, to.El),
 			from.Target.AttrEqVar(rel.Self, to.Target),
 			from.Target.AttrEq(screl.TargetStatus, targetStatus.Status()),
 			from.Node.AttrEq(screl.CurrentStatus, t.From()),
 			to.Node.AttrEq(screl.CurrentStatus, t.To()),
 			descriptorIsNotBeingDropped(from.El),
+			// Make sure to join a data element o confirm that data exists.
+			descriptorData.Type((*scpb.TableData)(nil)),
+			descriptorData.JoinTarget(),
+			descriptorData.DescIDEq(descID),
 		}
 		if len(prePrevStatuses) > 0 {
 			clauses = append(clauses,
@@ -90,7 +96,7 @@ func init() {
 			))
 			registerDepRule(
 				ruleName,
-				scgraph.PreviousStagePrecedence,
+				scgraph.PreviousTransactionPrecedence,
 				"prev", "next",
 				func(from, to NodeVars) rel.Clauses {
 					return clausesForTwoVersionEdge(

@@ -1,0 +1,56 @@
+# This test reproduces #106559 in a simpler format, where a (satisfiable) voter
+# constraint will never be satisfied if every existing replica is necessary to
+# satisfy either a voter or non-voter constraint. See the topology below.
+gen_cluster nodes=5
+----
+
+# TODO(kvoli): Update gen_cluster to take in localities for this purpose.
+set_locality node=1 locality=region=a
+----
+
+set_locality node=2 locality=region=a
+----
+
+set_locality node=3 locality=region=b
+----
+
+set_locality node=4 locality=region=b
+----
+
+set_locality node=5 locality=region=b
+----
+
+# Generate 10 ranges, one replica will be placed on each node initially.
+gen_ranges ranges=5 repl_factor=4
+----
+
+# Update the span config to require a non-voter in the `region=a` locality.
+# There should be the following replica localities for voters and non-voters:
+#   voters      [a,b,b]
+#   non_voters  [a]
+set_span_config 
+[0,10000): num_replicas=4 num_voters=3 constraints={'+region=a':2,'+region=b':2} voter_constraints={'+region=a':1,'+region=b':2}
+----
+
+# Switch the span config to require the non-voter be placed in the 'region=b'
+# locality. This will require a swap between one of the voting replicas in b,
+# and the non-voter a.
+set_span_config delay=5m
+[0,10000): num_replicas=4 num_voters=3 constraints={'+region=a':2,'+region=b':2} voter_constraints={'+region=a':2,'+region=b':1}
+----
+
+assertion type=conformance under=0 over=0 unavailable=0 violating=0
+----
+
+eval duration=10m
+----
+OK
+
+topology
+----
+a
+  └── [1 2]
+b
+  └── [3 4 5]
+
+# vim:ft=sh

@@ -25,12 +25,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -44,45 +44,7 @@ const defaultParallelism = 10
 
 func mkReg(t *testing.T) testRegistryImpl {
 	t.Helper()
-	return makeTestRegistry(spec.GCE, "", "", false /* preferSSD */, false /* benchOnly */)
-}
-
-func TestMatchOrSkip(t *testing.T) {
-	testCases := []struct {
-		filter   []string
-		name     string
-		tags     map[string]struct{}
-		expected registry.MatchType
-	}{
-		{nil, "foo", nil, registry.Matched},
-		{nil, "foo", registry.Tags("bar"), registry.Matched},
-		{[]string{"tag:bar"}, "foo", registry.Tags("bar"), registry.Matched},
-		// Partial tag match is not supported
-		{[]string{"tag:b"}, "foo", registry.Tags("bar"), registry.FailedTags},
-		{[]string{"tag:b"}, "foo", nil, registry.FailedTags},
-		{[]string{"tag:f"}, "foo", registry.Tags("bar"), registry.FailedTags},
-		// Specifying no tag filters matches all tags.
-		{[]string{"f"}, "foo", registry.Tags("bar"), registry.Matched},
-		{[]string{"f"}, "bar", registry.Tags("bar"), registry.FailedFilter},
-		{[]string{"f", "tag:bar"}, "foo", registry.Tags("bar"), registry.Matched},
-		{[]string{"f", "tag:b"}, "foo", registry.Tags("bar"), registry.FailedTags},
-		{[]string{"f", "tag:f"}, "foo", registry.Tags("bar"), registry.FailedTags},
-		// Match tests that have both tags 'abc' and 'bar'
-		{[]string{"f", "tag:abc,bar"}, "foo", registry.Tags("abc", "bar"), registry.Matched},
-		{[]string{"f", "tag:abc,bar"}, "foo", registry.Tags("abc"), registry.FailedTags},
-		// Match tests that have tag 'abc' but not 'bar'
-		{[]string{"f", "tag:abc,!bar"}, "foo", registry.Tags("abc"), registry.Matched},
-		{[]string{"f", "tag:abc,!bar"}, "foo", registry.Tags("abc", "bar"), registry.FailedTags},
-	}
-	for _, c := range testCases {
-		t.Run("", func(t *testing.T) {
-			f := registry.NewTestFilter(c.filter, false)
-			spec := &registry.TestSpec{Name: c.name, Owner: OwnerUnitTest, Tags: c.tags}
-			if value := spec.Match(f); c.expected != value {
-				t.Fatalf("expected %v, but found %v", c.expected, value)
-			}
-		})
-	}
+	return makeTestRegistry()
 }
 
 func nilLogger() *logger.Logger {
@@ -97,26 +59,17 @@ func nilLogger() *logger.Logger {
 	return l
 }
 
-func alwaysFailingClusterAllocator(
-	ctx context.Context,
-	t registry.TestSpec,
-	arch vm.CPUArch,
-	alloc *quotapool.IntAlloc,
-	artifactsDir string,
-	wStatus *workerStatus,
-) (*clusterImpl, *vm.CreateOpts, error) {
-	return nil, nil, errors.New("cluster creation failed")
-}
-
 func TestRunnerRun(t *testing.T) {
 	ctx := context.Background()
 
 	r := mkReg(t)
 	r.Add(registry.TestSpec{
-		Name:    "pass",
-		Owner:   OwnerUnitTest,
-		Run:     func(ctx context.Context, t test.Test, c cluster.Cluster) {},
-		Cluster: r.MakeClusterSpec(0),
+		Name:             "pass",
+		Owner:            OwnerUnitTest,
+		Run:              func(ctx context.Context, t test.Test, c cluster.Cluster) {},
+		Cluster:          r.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 	})
 	r.Add(registry.TestSpec{
 		Name:  "fail",
@@ -124,7 +77,9 @@ func TestRunnerRun(t *testing.T) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			t.Fatal("failed")
 		},
-		Cluster: r.MakeClusterSpec(0),
+		Cluster:          r.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 	})
 	r.Add(registry.TestSpec{
 		Name:  "errors",
@@ -133,7 +88,9 @@ func TestRunnerRun(t *testing.T) {
 			t.Errorf("first %s", "error")
 			t.Errorf("second error")
 		},
-		Cluster: r.MakeClusterSpec(0),
+		Cluster:          r.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 	})
 	r.Add(registry.TestSpec{
 		Name:  "panic",
@@ -145,7 +102,9 @@ func TestRunnerRun(t *testing.T) {
 			idx := rand.Intn(2) + 1 // definitely out of bounds
 			t.L().Printf("boom %d", sl[idx])
 		},
-		Cluster: r.MakeClusterSpec(0),
+		Cluster:          r.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 	})
 
 	testCases := []struct {
@@ -166,19 +125,19 @@ func TestRunnerRun(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			rt := setupRunnerTest(t, r, c.filters)
 
-			var clusterAllocator clusterAllocatorFn
-			// run without cluster allocator error injection
-			err := rt.runner.Run(ctx, rt.tests, 1, /* count */
-				defaultParallelism, rt.copt, testOpts{}, rt.lopt, clusterAllocator)
+			const count = 1
+			err := rt.runner.Run(ctx, rt.tests, count, defaultParallelism, rt.copt, testOpts{}, rt.lopt)
 
 			assertTestCompletion(t, rt.tests, c.filters, rt.runner.getCompletedTests(), err, c.expErr)
 
 			// N.B. skip the case of no matching tests
 			if len(rt.tests) > 0 {
 				// run _with_ cluster allocator error injection
-				clusterAllocator = alwaysFailingClusterAllocator
-				err = rt.runner.Run(ctx, rt.tests, 1, /* count */
-					defaultParallelism, rt.copt, testOpts{}, rt.lopt, clusterAllocator)
+				copt := rt.copt
+				copt.preAllocateClusterFn = func(ctx context.Context, t registry.TestSpec, arch vm.CPUArch) error {
+					return errors.New("cluster creation failed")
+				}
+				err = rt.runner.Run(ctx, rt.tests, count, defaultParallelism, copt, testOpts{}, rt.lopt)
 
 				assertTestCompletion(t,
 					rt.tests, c.filters, rt.runner.getCompletedTests(),
@@ -198,10 +157,10 @@ func TestRunnerEncryptionAtRest(t *testing.T) {
 	// Verify that if a test opts into EncryptionMetamorphic, it will
 	// (eventually) get a cluster that has encryption at rest enabled.
 	{
-		prevProb := encryptionProbability
-		encryptionProbability = 0.5 // --metamorphic-encrypt-probability=0.5
+		prevProb := roachtestflags.EncryptionProbability
+		roachtestflags.EncryptionProbability = 0.5 // --metamorphic-encrypt-probability=0.5
 		defer func() {
-			encryptionProbability = prevProb
+			roachtestflags.EncryptionProbability = prevProb
 		}()
 	}
 	r := mkReg(t)
@@ -217,7 +176,9 @@ func TestRunnerEncryptionAtRest(t *testing.T) {
 				atomic.StoreInt32(&sawEncrypted, 1)
 			}
 		},
-		Cluster: r.MakeClusterSpec(0),
+		Cluster:          r.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 	})
 
 	rt := setupRunnerTest(t, r, nil)
@@ -225,7 +186,7 @@ func TestRunnerEncryptionAtRest(t *testing.T) {
 	for i := 0; i < 10000; i++ {
 		require.NoError(t, rt.runner.Run(
 			context.Background(), rt.tests, 1 /* count */, 1, /* parallelism */
-			rt.copt, testOpts{}, rt.lopt, nil, // clusterAllocator
+			rt.copt, testOpts{}, rt.lopt,
 		))
 		if atomic.LoadInt32(&sawEncrypted) == 0 {
 			// NB: since it's a 50% chance, the probability of *not* hitting
@@ -249,7 +210,10 @@ type runnerTest struct {
 func setupRunnerTest(t *testing.T, r testRegistryImpl, testFilters []string) *runnerTest {
 	ctx := context.Background()
 
-	tests := testsToRun(r, registry.NewTestFilter(testFilters, false))
+	tf, err := registry.NewTestFilter(testFilters)
+	require.NoError(t, err)
+
+	tests, _ := testsToRun(r, tf, false, 1.0, true)
 	cr := newClusterRegistry()
 
 	stopper := stop.NewStopper()
@@ -297,17 +261,19 @@ func assertTestCompletion(
 	expectedErr string,
 ) {
 	t.Helper()
-	require.True(t, len(completed) == len(tests))
 
-	for _, info := range completed {
-		if info.test == "pass" {
-			require.True(t, info.pass)
-		} else if info.test == "fail" {
-			require.True(t, !info.pass)
-		}
-	}
 	if !testutils.IsError(actualErr, expectedErr) {
 		t.Fatalf("expected err: %q, but found %v. Filters: %s", expectedErr, actualErr, filters)
+	}
+
+	require.Equal(t, len(tests), len(completed), "len(completed) invalid")
+
+	for i, info := range completed {
+		if info.test == "pass" {
+			require.Truef(t, info.pass, "expected test %s to pass", tests[i].Name)
+		} else if info.test == "fail" {
+			require.Falsef(t, info.pass, "expected test %s to fail", tests[i].Name)
+		}
 	}
 }
 
@@ -350,16 +316,18 @@ func TestRunnerTestTimeout(t *testing.T) {
 		debugMode: NoDebug,
 	}
 	test := registry.TestSpec{
-		Name:    `timeout`,
-		Owner:   OwnerUnitTest,
-		Timeout: 10 * time.Millisecond,
-		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
+		Name:             `timeout`,
+		Owner:            OwnerUnitTest,
+		Timeout:          10 * time.Millisecond,
+		Cluster:          spec.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			<-ctx.Done()
 		},
 	}
 	err := runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
-		defaultParallelism, copt, testOpts{}, lopt, nil /* clusterAllocator */)
+		defaultParallelism, copt, testOpts{}, lopt)
 	if !testutils.IsError(err, "some tests failed") {
 		t.Fatalf("expected error \"some tests failed\", got: %v", err)
 	}
@@ -385,20 +353,24 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}{
 		{
 			registry.TestSpec{
-				Name:    "a",
-				Owner:   OwnerUnitTest,
-				Run:     dummyRun,
-				Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
+				Name:             "a",
+				Owner:            OwnerUnitTest,
+				Run:              dummyRun,
+				Cluster:          spec.MakeClusterSpec(0),
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Nightly),
 			},
 			"",
 			[]string{"a"},
 		},
 		{
 			registry.TestSpec{
-				Name:    "illegal *[]",
-				Owner:   OwnerUnitTest,
-				Run:     dummyRun,
-				Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
+				Name:             "illegal *[]",
+				Owner:            OwnerUnitTest,
+				Run:              dummyRun,
+				Cluster:          spec.MakeClusterSpec(0),
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Nightly),
 			},
 			`illegal \*\[\]: Name must match this regexp: `,
 			nil,
@@ -406,7 +378,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			r := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */, false /* benchOnly */)
+			r := makeTestRegistry()
 			err := r.prepareSpec(&c.spec)
 			if !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected %q, but found %q", c.expectedErr, err.Error())
@@ -431,16 +403,21 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	runner := newUnitTestRunner(cr, stopper)
 	r := mkReg(t)
 	r.Add(registry.TestSpec{
-		Name:    "boom",
-		Owner:   OwnerUnitTest,
-		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
+		Name:             "boom",
+		Owner:            OwnerUnitTest,
+		Cluster:          spec.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if injectedError != nil {
 				t.Fatal(injectedError)
 			}
 		},
 	})
-	tests := testsToRun(r, registry.NewTestFilter(nil, false))
+	tf, err := registry.NewTestFilter(nil)
+	require.NoError(t, err)
+
+	tests, _ := testsToRun(r, tf, false, 1.0, true)
 	lopt := loggingOpt{
 		l:            nilLogger(),
 		tee:          logger.NoTee,
@@ -448,7 +425,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 		stderr:       io.Discard,
 		artifactsDir: "",
 	}
-	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, testOpts{}, lopt, nil /* clusterAllocator */)
+	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, testOpts{}, lopt)
 }
 
 func TestExitCode(t *testing.T) {

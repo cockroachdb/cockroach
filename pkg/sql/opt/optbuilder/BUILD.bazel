@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -29,7 +28,9 @@ go_library(
         "opaque.go",
         "orderby.go",
         "partial_index.go",
+        "plpgsql.go",
         "project.go",
+        "routine.go",
         "scalar.go",
         "scope.go",
         "scope_column.go",
@@ -37,6 +38,7 @@ go_library(
         "show_trace.go",
         "sql_fn.go",
         "srfs.go",
+        "statement_tree.go",
         "subquery.go",
         "union.go",
         "update.go",
@@ -48,6 +50,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/sql/catalog/catpb",
@@ -72,19 +76,23 @@ go_library(
         "//pkg/sql/parser/statements",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/plpgsql",
+        "//pkg/sql/plpgsql/parser:plpgparser",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/asof",
         "//pkg/sql/sem/builtins/builtinsregistry",
         "//pkg/sql/sem/cast",
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",
-        "//pkg/sql/sem/plpgsqltree/utils",
+        "//pkg/sql/sem/plpgsqltree",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/sem/tree/treewindow",
+        "//pkg/sql/sem/volatility",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
+        "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/errorutil",
@@ -103,15 +111,16 @@ go_test(
     srcs = [
         "builder_test.go",
         "name_resolution_test.go",
+        "statement_tree_test.go",
         "union_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":optbuilder"],
     deps = [
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/colinfo/colinfotestutils",
+        "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/testutils",
         "//pkg/sql/opt/testutils/opttester",
@@ -127,5 +136,3 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )
-
-get_x_data(name = "get_x_data")

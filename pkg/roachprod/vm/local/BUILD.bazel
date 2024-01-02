@@ -1,21 +1,33 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "local",
-    srcs = ["local.go"],
+    srcs = [
+        "dns.go",
+        "local.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm/local",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
+        "//pkg/roachprod/lock",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
-        "//pkg/util/intsets",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
         "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_exp//maps",
     ],
 )
 
-get_x_data(name = "get_x_data")
+go_test(
+    name = "local_test",
+    srcs = ["dns_test.go"],
+    embed = [":local"],
+    deps = [
+        "//pkg/roachprod/vm",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -82,6 +82,7 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 		return invalidFlagErr(err, cliflags.ListenHTTPAddr)
 	}
 	cfg.HTTPAddr = net.JoinHostPort(httpHost, httpPort)
+
 	return nil
 }
 

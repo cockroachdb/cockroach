@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "sccomparatortestgen_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest/sccomparatortestgen",
+    visibility = ["//visibility:private"],
+    deps = ["//pkg/build/bazel"],
+)
+
+go_binary(
+    name = "sccomparatortestgen",
+    embed = [":sccomparatortestgen_lib"],
+    visibility = ["//visibility:public"],
+)

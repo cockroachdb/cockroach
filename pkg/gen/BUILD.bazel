@@ -1,6 +1,5 @@
 load(
     ":gen.bzl",
-    "bindata",
     "bnf",
     "diagrams",
     "docs",
@@ -13,9 +12,8 @@ load(
     "parser",
     "schemachanger",
     "stringer",
+    "ui",
 )
-
-bindata()
 
 execgen()
 
@@ -39,6 +37,8 @@ diagrams()
 
 bnf()
 
+ui()
+
 gen(
     name = "gen",
     srcs = [
@@ -50,7 +50,6 @@ gen(
 gen(
     name = "code",
     srcs = [
-        ":bindata",
         ":execgen",
         ":go_proto",
         ":gomock",
@@ -59,5 +58,13 @@ gen(
         ":parser",
         ":schemachanger",
         ":stringer",
+    ],
+)
+
+gen(
+    name = "code_full",
+    srcs = [
+        ":code",
+        ":ui",
     ],
 )

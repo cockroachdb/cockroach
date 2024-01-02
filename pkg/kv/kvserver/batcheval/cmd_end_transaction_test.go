@@ -98,7 +98,7 @@ func TestIsEndTxnTriggeringRetryError(t *testing.T) {
 		name := fmt.Sprintf("iso=%s/wto=%t/pushed=%t/deadline=%t",
 			tt.txnIsoLevel, tt.txnWriteTooOld, tt.txnWriteTimestampPushed, tt.txnExceedingDeadline)
 		t.Run(name, func(t *testing.T) {
-			txn := roachpb.MakeTransaction("test", nil, tt.txnIsoLevel, 0, hlc.Timestamp{WallTime: 10}, 0, 1)
+			txn := roachpb.MakeTransaction("test", nil, tt.txnIsoLevel, 0, hlc.Timestamp{WallTime: 10}, 0, 1, 0, false /* omitInRangefeeds */)
 			if tt.txnWriteTooOld {
 				txn.WriteTooOld = true
 			}
@@ -135,7 +135,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 
 	k, k2 := roachpb.Key("a"), roachpb.Key("b")
 	ts, ts2, ts3 := hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.Timestamp{WallTime: 3}
-	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1)
+	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1, 0, false /* omitInRangefeeds */)
 	writes := []roachpb.SequencedWrite{{Key: k, Sequence: 0}}
 	intents := []roachpb.Span{{Key: k2}}
 
@@ -1098,7 +1098,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// Write the existing transaction record, if necessary.
 			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			if c.existingTxn != nil {
-				if err := storage.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, c.existingTxn); err != nil {
+				if err := storage.MVCCPutProto(ctx, batch, txnKey, hlc.Timestamp{}, c.existingTxn, storage.MVCCWriteOptions{}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -1180,7 +1180,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 	k := roachpb.Key("a")
 	ts := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
-	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1)
+	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1, 0, false /* omitInRangefeeds */)
 	endKey := roachpb.Key("z")
 	desc := roachpb.RangeDescriptor{
 		RangeID:  99,
@@ -1200,13 +1200,13 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		// Write a first value at key.
 		v.SetString("a")
 		txn.Sequence = 1
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
+		if _, err := storage.MVCCPut(ctx, batch, k, ts, v, storage.MVCCWriteOptions{Txn: &txn}); err != nil {
 			t.Fatal(err)
 		}
 		// Write another value.
 		v.SetString("b")
 		txn.Sequence = 2
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
+		if _, err := storage.MVCCPut(ctx, batch, k, ts, v, storage.MVCCWriteOptions{Txn: &txn}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1219,7 +1219,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 		if storeTxnBeforeEndTxn {
 			txnRec := txn.AsRecord()
-			if err := storage.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRec); err != nil {
+			if err := storage.MVCCPutProto(ctx, batch, txnKey, hlc.Timestamp{}, &txnRec, storage.MVCCWriteOptions{}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1330,7 +1330,7 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 
 				now := clock.Now()
 				commitTS := cfg.commitTS(now)
-				txn := roachpb.MakeTransaction("test", desc.StartKey.AsRawKey(), 0, 0, now, 0, 1)
+				txn := roachpb.MakeTransaction("test", desc.StartKey.AsRawKey(), 0, 0, now, 0, 1, 0, false /* omitInRangefeeds */)
 				txn.ReadTimestamp = commitTS
 				txn.WriteTimestamp = commitTS
 
@@ -1470,7 +1470,7 @@ func TestComputeSplitRangeKeyStatsDelta(t *testing.T) {
 
 			tc.expect.LastUpdateNanos = nowNanos
 
-			msDelta, err := computeSplitRangeKeyStatsDelta(engine, lhsDesc, rhsDesc)
+			msDelta, err := computeSplitRangeKeyStatsDelta(context.Background(), engine, lhsDesc, rhsDesc)
 			require.NoError(t, err)
 			msDelta.AgeTo(nowNanos)
 			require.Equal(t, tc.expect, msDelta)
@@ -1644,14 +1644,14 @@ func TestResolveLocalLocks(t *testing.T) {
 			defer batch.Close()
 
 			ts := hlc.Timestamp{WallTime: 1}
-			txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, 0, ts, 0, 1)
+			txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, 0, ts, 0, 1, 0, false /* omitInRangefeeds */)
 			txn.Status = roachpb.COMMITTED
 
 			for i := 0; i < numKeys; i++ {
-				err := storage.MVCCPut(ctx, batch, nil, intToKey(i), ts, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("a"), &txn)
+				_, err := storage.MVCCPut(ctx, batch, intToKey(i), ts, roachpb.MakeValueFromString("a"), storage.MVCCWriteOptions{Txn: &txn})
 				require.NoError(t, err)
 			}
-			resolvedLocks, externalLocks, err := resolveLocalLocksWithPagination(
+			resolvedLocks, releasedReplLocks, externalLocks, err := resolveLocalLocksWithPagination(
 				ctx,
 				batch,
 				(&MockEvalCtx{
@@ -1674,6 +1674,7 @@ func TestResolveLocalLocks(t *testing.T) {
 				require.Equal(t, tc.expectedResolvedLocks[i].Key, lock.Key)
 				require.Equal(t, tc.expectedResolvedLocks[i].EndKey, lock.EndKey)
 			}
+			require.Len(t, releasedReplLocks, 0)
 			require.Equal(t, len(tc.expectedExternalLocks), len(externalLocks))
 			for i, lock := range externalLocks {
 				require.Equal(t, tc.expectedExternalLocks[i].Key, lock.Key)

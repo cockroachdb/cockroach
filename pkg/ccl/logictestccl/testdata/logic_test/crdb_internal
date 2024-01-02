@@ -168,8 +168,6 @@ subtest replication-builtins
 
 user root
 
-query error pq: crdb_internal\.replication_stream_spec\(\): job.*is not a replication stream job
-SELECT crdb_internal.replication_stream_spec(crdb_internal.create_sql_schema_telemetry_job())
 
 query error pq: crdb_internal\.stream_ingestion_stats_json\(\): unimplemented
 SELECT crdb_internal.stream_ingestion_stats_json(1);
@@ -181,7 +179,7 @@ subtest node_tenant_capabilities_cache
 
 user testuser
 
-statement error only users with the admin role are allowed to node_tenant_capabilities_cache
+statement error user testuser does not have VIEWCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.node_tenant_capabilities_cache
 
 user root
@@ -190,21 +188,22 @@ statement ok
 SELECT crdb_internal.create_tenant(5)
 
 # Use retry because source data is eventually consistent.
-query ITT colnames,retry
-SELECT * FROM crdb_internal.node_tenant_capabilities_cache WHERE capability_name = 'can_admin_split'
+query ITT colnames,retry,rowsort
+SELECT * FROM crdb_internal.node_tenant_capabilities_cache WHERE capability_name = 'can_view_node_info'
 ----
-tenant_id  capability_name    capability_value
-1          can_admin_split  true
+tenant_id  capability_name     capability_value
+1          can_view_node_info  true
+5          can_view_node_info  false
 
 statement ok
-ALTER TENANT [5] GRANT CAPABILITY can_admin_split
+ALTER TENANT [5] GRANT CAPABILITY can_view_node_info
 
 # Use retry because source data is eventually consistent.
-query ITT colnames,retry
-SELECT * FROM crdb_internal.node_tenant_capabilities_cache WHERE capability_name = 'can_admin_split'
+query ITT colnames,retry,rowsort
+SELECT * FROM crdb_internal.node_tenant_capabilities_cache WHERE capability_name = 'can_view_node_info'
 ----
-tenant_id  capability_name    capability_value
-1          can_admin_split  true
-5          can_admin_split  true
+tenant_id  capability_name  capability_value
+1          can_view_node_info  true
+5          can_view_node_info  true
 
 subtest end

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -43,10 +44,12 @@ func registerDecommission(r registry.Registry) {
 		duration := time.Hour
 
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(numNodes),
-			Leases:  registry.MetamorphicLeases,
+			Name:             fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(numNodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.IsLocal() {
 					duration = 5 * time.Minute
@@ -60,10 +63,12 @@ func registerDecommission(r registry.Registry) {
 		numNodes := 9
 		duration := 30 * time.Minute
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("drain-and-decommission/nodes=%d", numNodes),
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(numNodes),
-			Leases:  registry.MetamorphicLeases,
+			Name:             fmt.Sprintf("drain-and-decommission/nodes=%d", numNodes),
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(numNodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDrainAndDecommission(ctx, t, c, numNodes, duration)
 			},
@@ -72,10 +77,12 @@ func registerDecommission(r registry.Registry) {
 	{
 		numNodes := 4
 		r.Add(registry.TestSpec{
-			Name:    "decommission/drains",
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(numNodes),
-			Leases:  registry.MetamorphicLeases,
+			Name:             "decommission/drains",
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(numNodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionDrains(ctx, t, c)
 			},
@@ -84,11 +91,13 @@ func registerDecommission(r registry.Registry) {
 	{
 		numNodes := 6
 		r.Add(registry.TestSpec{
-			Name:    "decommission/randomized",
-			Owner:   registry.OwnerKV,
-			Timeout: 10 * time.Minute,
-			Cluster: r.MakeClusterSpec(numNodes),
-			Leases:  registry.MetamorphicLeases,
+			Name:             "decommission/randomized",
+			Owner:            registry.OwnerKV,
+			Timeout:          10 * time.Minute,
+			Cluster:          r.MakeClusterSpec(numNodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionRandomized(ctx, t, c)
 			},
@@ -97,21 +106,25 @@ func registerDecommission(r registry.Registry) {
 	{
 		numNodes := 4
 		r.Add(registry.TestSpec{
-			Name:    "decommission/mixed-versions",
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(numNodes),
+			Name:             "decommission/mixed-versions",
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(numNodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runDecommissionMixedVersions(ctx, t, c, *t.BuildVersion())
+				runDecommissionMixedVersions(ctx, t, c, t.BuildVersion())
 			},
 		})
 	}
 	{
 		numNodes := 6
 		r.Add(registry.TestSpec{
-			Name:    "decommission/slow",
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(numNodes),
-			Leases:  registry.MetamorphicLeases,
+			Name:             "decommission/slow",
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(numNodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionSlow(ctx, t, c)
 			},
@@ -135,11 +148,15 @@ func runDrainAndDecommission(
 		t.Fatal("improper configuration: replication factor greater than number of nodes in the test")
 	}
 	pinnedNode := 1
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	for i := 1; i <= nodes; i++ {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(i))
 	}
-	c.Run(ctx, c.Node(pinnedNode), `./cockroach workload init kv --drop --splits 1000`)
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Run(ctx, c.Node(pinnedNode),
+		fmt.Sprintf(`./cockroach workload init kv --drop --splits 1000 '%s'`, pgurl))
 
 	run := func(stmt string) {
 		db := c.Conn(ctx, t.L(), pinnedNode)
@@ -164,7 +181,7 @@ func runDrainAndDecommission(
 		run(`SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
 
 		// Wait for initial up-replication.
-		err := WaitForReplication(ctx, t, db, defaultReplicationFactor)
+		err := WaitForReplication(ctx, t, db, defaultReplicationFactor, atLeastReplicationFactor)
 		require.NoError(t, err)
 	}
 
@@ -189,7 +206,11 @@ func runDrainAndDecommission(
 		m.Go(func() error {
 			drain := func(id int) error {
 				t.Status(fmt.Sprintf("draining node %d", id))
-				return c.RunE(ctx, c.Node(id), "./cockroach node drain --insecure")
+				pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(id))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return c.RunE(ctx, c.Node(id), fmt.Sprintf("./cockroach node drain --insecure --url=%s", pgurl))
 			}
 			return drain(id)
 		})
@@ -203,7 +224,11 @@ func runDrainAndDecommission(
 		id := nodes - 3
 		decom := func(id int) error {
 			t.Status(fmt.Sprintf("decommissioning node %d", id))
-			return c.RunE(ctx, c.Node(id), "./cockroach node decommission --self --insecure")
+			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(id))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return c.RunE(ctx, c.Node(id), fmt.Sprintf("./cockroach node decommission --self --insecure --url=%s", pgurl))
 		}
 		return decom(id)
 	})
@@ -239,7 +264,6 @@ func runDecommission(
 	// node1 is kept pinned (i.e. not decommissioned/restarted), and is the node
 	// through which we run the workload and other queries.
 	pinnedNode := 1
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(pinnedNode))
 
 	for i := 1; i <= nodes; i++ {
@@ -250,7 +274,8 @@ func runDecommission(
 
 		c.Start(ctx, t.L(), withDecommissionVMod(startOpts), install.MakeClusterSettings(), c.Node(i))
 	}
-	c.Run(ctx, c.Node(pinnedNode), `./workload init kv --drop`)
+	c.Run(ctx, c.Node(pinnedNode),
+		fmt.Sprintf(`./workload init kv --drop {pgurl:%d}`, pinnedNode))
 
 	h := newDecommTestHelper(t, c)
 
@@ -349,13 +374,9 @@ func runDecommission(
 			db := c.Conn(ctx, t.L(), pinnedNode)
 			defer db.Close()
 
-			internalAddrs, err := c.InternalAddr(ctx, t.L(), c.Node(pinnedNode))
-			if err != nil {
-				return err
-			}
 			startOpts := option.DefaultStartSingleNodeOpts()
+			startOpts.RoachprodOpts.JoinTargets = []int{pinnedNode}
 			extraArgs := []string{
-				"--join", internalAddrs[0],
 				fmt.Sprintf("--attrs=node%d", node),
 			}
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, extraArgs...)
@@ -381,7 +402,6 @@ func runDecommission(
 // those operations. We then fully decommission nodes, verifying it's an
 // irreversible operation.
 func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 
@@ -746,7 +766,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 			}
 			// Now stop+wipe them for good to keep the logs simple and the dead node detector happy.
 			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Nodes(targetNodeA, targetNodeB))
-			c.Wipe(ctx, c.Nodes(targetNodeA, targetNodeB))
+			c.Wipe(ctx, false /* preserveCerts */, c.Nodes(targetNodeA, targetNodeB))
 		}
 	}
 
@@ -871,7 +891,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 			t.L().Printf("wiping n%d and adding it back to the cluster as a new node\n", targetNode)
 
 			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(targetNode))
-			c.Wipe(ctx, c.Node(targetNode))
+			c.Wipe(ctx, false /*preserveCerts */, c.Node(targetNode))
 
 			joinNode := h.getRandNode()
 			internalAddrs, err := c.InternalAddr(ctx, t.L(), c.Node(joinNode))
@@ -991,16 +1011,12 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 		decommNodeID = numNodes
 		decommNode   = c.Node(decommNodeID)
 	)
-
-	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
-	require.NoError(t, err)
-
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 	h := newDecommTestHelper(t, c)
 
 	run := func(db *gosql.DB, query string) error {
-		_, err = db.ExecContext(ctx, query)
+		_, err := db.ExecContext(ctx, query)
 		t.L().Printf("run: %s\n", query)
 		return err
 	}
@@ -1010,11 +1026,11 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 		defer db.Close()
 
 		// Increase the speed of decommissioning.
-		err = run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
+		err := run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
 		require.NoError(t, err)
 
 		// Wait for initial up-replication.
-		err := WaitFor3XReplication(ctx, t, db)
+		err = WaitFor3XReplication(ctx, t, db)
 		require.NoError(t, err)
 	}
 
@@ -1085,13 +1101,10 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	var verboseStoreLogRe = regexp.MustCompile("possible decommission stall detected")
 
-	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
-	require.NoError(t, err)
-
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 	run := func(db *gosql.DB, query string) {
-		_, err = db.ExecContext(ctx, query)
+		_, err := db.ExecContext(ctx, query)
 		require.NoError(t, err)
 		t.L().Printf("run: %s\n", query)
 	}
@@ -1108,7 +1121,7 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 		run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
 
 		// Wait for initial up-replication.
-		err := WaitForReplication(ctx, t, db, replicationFactor)
+		err := WaitForReplication(ctx, t, db, replicationFactor, atLeastReplicationFactor)
 		require.NoError(t, err)
 	}
 
@@ -1123,9 +1136,13 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 		m.Go(func(ctx context.Context) error {
 			decom := func(id int) error {
 				t.Status(fmt.Sprintf("decommissioning node %d", id))
+				pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(id))
+				if err != nil {
+					t.Fatal(err)
+				}
 				return c.RunE(ctx,
 					c.Node(id),
-					fmt.Sprintf("./cockroach node decommission %d --insecure --checks=skip", id),
+					fmt.Sprintf("./cockroach node decommission %d --insecure --checks=skip --url=%s", id, pgurl),
 				)
 			}
 			return decom(id)
@@ -1136,7 +1153,7 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.Status("checking for decommissioning replicas report...")
 	testutils.SucceedsWithin(t, func() error {
 		for nodeID := 1; nodeID <= numNodes; nodeID++ {
-			if err = c.RunE(ctx,
+			if err := c.RunE(ctx,
 				c.Node(nodeID),
 				fmt.Sprintf("grep -q '%s' logs/cockroach.log", verboseStoreLogRe),
 			); err == nil {
@@ -1463,7 +1480,11 @@ func execCLI(
 	args := []string{"./cockroach"}
 	args = append(args, extraArgs...)
 	args = append(args, "--insecure")
-	args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(runNode))
+	if err != nil {
+		t.Fatal(err)
+	}
+	args = append(args, fmt.Sprintf("--url=%s", pgurl))
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(runNode), args...)
 	t.L().Printf("%s\n", result.Stdout)
 	return result.Stdout, err
@@ -1472,7 +1493,8 @@ func execCLI(
 // Increase the logging verbosity for decommission tests to make life easier
 // debugging failures.
 const decommissionVModuleStartOpts = `--vmodule=store_rebalancer=5,allocator=5,
-  allocator_scorer=5,replicate_queue=5,replicate=5,split_queue=5`
+  allocator_scorer=5,replicate_queue=5,replicate=6,split_queue=5,
+  replica_command=2,replica_raft=2,replica_proposal=2,replica_application_result=1`
 
 func withDecommissionVMod(startOpts option.StartOpts) option.StartOpts {
 	startOpts.RoachprodOpts.ExtraArgs = append(

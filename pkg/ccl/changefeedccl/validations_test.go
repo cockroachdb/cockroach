@@ -98,10 +98,12 @@ func TestCatchupScanOrdering(t *testing.T) {
 			}
 		})
 	}
-	// Tenant tests skipped because of:
-	// validations_test.go:40: executing ALTER TABLE bank SPLIT AT
-	// VALUES (5): pq: unimplemented: operation is unsupported in
-	// multi-tenancy mode
+	// Tenant tests disabled because ALTER TABLE .. SPLIT is not
+	// supported with cluster virtualization:
+	//
+	// nemeses_test.go:39: pq: unimplemented: operation is unsupported inside virtual clusters
+	//
+	// TODO(knz): This seems incorrect, see issue #109417.
 	cdcTest(t, testFn, feedTestNoTenants)
 }
 

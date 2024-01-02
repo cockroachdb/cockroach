@@ -78,7 +78,7 @@ UPDATE with_no_column_refs SET (a, b, c) = (1, 2, 3)
 statement error cannot write directly to computed column "c"
 UPDATE with_no_column_refs SET (a, b, c) = (SELECT 1, 2, 3)
 
-query I
+query I rowsort
 SELECT c FROM with_no_column_refs
 ----
 3
@@ -106,7 +106,7 @@ x  CREATE TABLE public.x (
    )
 
 query TTBTTTB colnames
-SHOW COLUMNS FROM x
+SELECT * FROM  [SHOW COLUMNS FROM x] ORDER BY column_name
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
 a            INT8       true         3               ·                      {x_pkey}  false

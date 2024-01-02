@@ -1,10 +1,10 @@
-# LogicTest: !3node-tenant-default-configs !local-mixed-22.2-23.1
+# LogicTest: !3node-tenant-default-configs !local-mixed-23.1
 
 query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----
 id  active  length  name
-1   true    10      system
+1   true    12      system
 
 # Create three tenants.
 
@@ -31,6 +31,10 @@ SELECT crdb_internal.create_tenant(10, 'invalid_name')
 query error invalid tenant name
 SELECT crdb_internal.create_tenant(10, 'invalid.name')
 
+# The max tenant ID is less or equal to 18446744073709551614.
+query error out of range
+SELECT crdb_internal.create_tenant('{"id":18446744073709551615}'::jsonb)
+
 query I
 SELECT crdb_internal.create_tenant(10, 'tenant-number-ten')
 ----
@@ -55,7 +59,7 @@ ORDER BY id
 ----
 id  active  name                  data_state  service_mode  deprecated_data_state  dropped_name
 1   true    system                1           2             READY                  ·
-5   true    tenant-5              1           0             READY                  ·
+5   true    cluster-5              1           0             READY                  ·
 10  true    tenant-number-ten     1           0             READY                  ·
 11  true    tenant-number-eleven  1           0             READY                  ·
 
@@ -108,11 +112,6 @@ id  active  name
 10  true    tenant-number-ten
 11  true    tenant-number-eleven
 
-# Garbage collect a non-drop tenant fails.
-
-query error tenant 5 is not in data state DROP
-SELECT crdb_internal.gc_tenant(5)
-
 # Note this just marks the tenant as dropped but does not call GC.
 
 statement ok
@@ -139,10 +138,10 @@ id  active  name                  data_state  service_mode  deprecated_data_stat
 
 # Try to recreate an existing tenant.
 # GC job for tenant 5 has not run yet.
-query error pgcode 42710 a tenant with ID 5 or with name "tenant-5" already exists
+query error pgcode 42710 a tenant with ID 5 or with name "cluster-5" already exists
 SELECT crdb_internal.create_tenant(5)
 
-query error pgcode 42710 a tenant with ID 10 or with name "tenant-10" already exists
+query error pgcode 42710 a tenant with ID 10 or with name "cluster-10" already exists
 SELECT crdb_internal.create_tenant(10)
 
 query error pgcode 42710 a tenant with ID 11 or with name "tenant-number-ten" already exists
@@ -260,17 +259,14 @@ SELECT crdb_internal.update_tenant_resource_limits('tenant-number-ten', 1000, 10
 
 user testuser
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 SELECT crdb_internal.create_tenant(314)
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 SELECT crdb_internal.create_tenant('not-allowed')
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 DROP TENANT [1]
-
-statement error only users with the admin role are allowed to gc tenant
-SELECT crdb_internal.gc_tenant(314)
 
 user root
 
@@ -327,7 +323,7 @@ SELECT id, name, data_state FROM system.tenants ORDER BY id
 1    system             1
 10   tenant-number-ten  1
 12   anothertenant      1
-123  tenant-123         1
+123  cluster-123         1
 124  yetanotherone      1
 
 subtest multiple_tenants_in_txn
@@ -344,9 +340,9 @@ SELECT id, name, data_state FROM system.tenants ORDER BY id
 1    system             1
 10   tenant-number-ten  1
 12   anothertenant      1
-123  tenant-123         1
+123  cluster-123         1
 124  yetanotherone      1
-200  tenant-200         1
+200  cluster-200         1
 201  hello              1
 
 subtest regression_97873
@@ -365,7 +361,7 @@ SELECT crdb_internal.destroy_tenant(97873)
 
 subtest if_not_exists
 
-query error pgcode 42710 a tenant with ID 10 or with name "tenant-10" already exists
+query error pgcode 42710 a tenant with ID 10 or with name "cluster-10" already exists
 SELECT crdb_internal.create_tenant('{"id":10}'::JSONB)
 
 query error pgcode 42710 tenant with name "tenant-number-ten" already exists

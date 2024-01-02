@@ -2,7 +2,7 @@ subtest digest
 
 # NB: CockroachDB currently differs from Postgres, since the shaX functions
 # return a string in CockroachDB, while Postgres returns bytea.
-query BTT
+query BTT nosort
 SELECT
   encode(digest('abc', alg), 'hex') = expected, digest(NULL, alg), digest('abc', NULL)
 FROM
@@ -38,7 +38,7 @@ subtest hmac
 
 # NB: These results were manually confirmed to match the hashed values
 # created by Postgres.
-query T
+query T nosort
 SELECT encode(hmac('abc', 'key', alg), 'hex')
 FROM (VALUES ('md5'), ('sha1'), ('sha224'), ('sha256'), ('sha384'), ('sha512')) v(alg)
 ----
@@ -85,7 +85,7 @@ SELECT char_length(gen_salt('des'))
 ----
 2
 
-query I
+query I nosort
 SELECT char_length(gen_salt('des', rounds))
 FROM (VALUES (0), (25)) AS t (rounds)
 ----
@@ -106,7 +106,7 @@ FROM (SELECT gen_salt('xdes') AS salt)
 ----
 _J9..  9
 
-query TI
+query TI nosort
 SELECT substr(salt, 1, 5), char_length(salt)
 FROM (SELECT gen_salt('xdes', rounds) AS salt FROM (VALUES (0), (1), (16777215)) AS t (rounds))
 ----
@@ -136,7 +136,7 @@ FROM (SELECT gen_salt('md5') AS salt)
 ----
 $1$ 11
 
-query TI
+query TI nosort
 SELECT substr(salt, 1, 3), char_length(salt)
 FROM (SELECT gen_salt('md5', rounds) AS salt FROM (VALUES (0), (1000)) AS t (rounds))
 ----
@@ -151,7 +151,7 @@ subtest end
 
 subtest gen_salt_bf
 
-query TI
+query TI nosort
 SELECT substr(salt, 1, 7), char_length(salt)
 FROM (SELECT gen_salt('bf', rounds) AS salt FROM (VALUES (0), (4), (31)) AS t (rounds))
 ----
@@ -181,7 +181,7 @@ subtest end
 
 subtest crypt_md5
 
-query T
+query T nosort
 SELECT crypt(password, '$1$aRnqRmeP')
 FROM (VALUES
   (''),
@@ -215,7 +215,7 @@ subtest end
 
 subtest crypt_bf
 
-query T
+query T nosort
 SELECT crypt(password, '$2a$06$Ukv6DxN3PpZo4YboQRrIVO')
 FROM (VALUES
   (''),
@@ -252,7 +252,7 @@ FROM (SELECT
 $2a$06$Ukv6DxN3PpZo4YboQRrIVO6UrBIvyPUuhsGQvYZyAvmsIjt02Ze3O  true
 
 # test min and average num rounds (large num rounds take too long to run for a test)
-query T
+query T nosort
 SELECT crypt('password', concat('$2a$', rounds, '$Ukv6DxN3PpZo4YboQRrIVO'))
 FROM (VALUES ('04'), ('10')) AS t (rounds)
 ----
@@ -286,5 +286,46 @@ SELECT crypt('password', '$2a$06AUkv6DxN3PpZo4YboQRrIVO')
 # invalid salt encoding
 statement error pgcode 22023 invalid salt encoding
 SELECT crypt('password', '$2a$06$#kv6DxN3PpZo4YboQRrIVO')
+
+subtest end
+
+subtest ccl_functions
+
+skipif config 3node-tenant-default-configs
+query error pgcode XXC01 encrypt can only be used with a CCL distribution
+SELECT encrypt('abc', 'key', 'aes')
+
+skipif config 3node-tenant-default-configs
+query error pgcode XXC01 encrypt_iv can only be used with a CCL distribution
+SELECT encrypt_iv('abc', 'key', '123', 'aes')
+
+skipif config 3node-tenant-default-configs
+query error pgcode XXC01 decrypt can only be used with a CCL distribution
+SELECT decrypt('\xdb5f149a7caf0cd275ca18c203a212c9', 'key', 'aes')
+
+skipif config 3node-tenant-default-configs
+query error pgcode XXC01 decrypt_iv can only be used with a CCL distribution
+SELECT decrypt_iv('\x91b4ef63852013c8da53829da662b871', 'key', '123', 'aes')
+
+subtest end
+
+subtest gen_random_bytes
+
+statement error pgcode 22023 length 0 is outside the range
+SELECT gen_random_bytes(0)
+
+statement error pgcode 22023 length 1025 is outside the range
+SELECT gen_random_bytes(1025)
+
+query I
+SELECT length(gen_random_bytes(10))
+----
+10
+
+# Basic to make sure the same result isn't returned.
+query B
+SELECT gen_random_bytes(5) = gen_random_bytes(5)
+----
+false
 
 subtest end

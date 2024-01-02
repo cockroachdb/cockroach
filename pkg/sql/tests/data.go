@@ -19,6 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,7 +33,19 @@ func CheckKeyCount(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) {
 	}
 }
 
-// CheckKeyCountE returns an error if the the number of keys in the
+// CheckKeyCountIncludingTombstoned checks that the number of keys (including
+// those whose tombstones are marked but not GC'ed yet) in the provided span
+// matches the expected number.
+func CheckKeyCountIncludingTombstoned(
+	t *testing.T, s serverutils.StorageLayerInterface, span roachpb.Span, expectedNum int,
+) {
+	t.Helper()
+	if err := CheckKeyCountIncludingTombstonedE(t, s, span, expectedNum); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// CheckKeyCountE returns an error if the number of keys in the
 // provided span does not match numKeys.
 func CheckKeyCountE(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) error {
 	t.Helper()
@@ -39,6 +53,45 @@ func CheckKeyCountE(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) e
 		return err
 	} else if l := numKeys; len(kvs) != l {
 		return errors.Newf("expected %d key value pairs, but got %d", l, len(kvs))
+	}
+	return nil
+}
+
+func CheckKeyCountIncludingTombstonedE(
+	t *testing.T, s serverutils.StorageLayerInterface, tableSpan roachpb.Span, expectedNum int,
+) error {
+	// Check key count including tombstoned ones.
+	engines := s.Engines()
+	if len(engines) != 1 {
+		return errors.Errorf("expecting 1 engine from the test server, but found %d", len(engines))
+	}
+
+	keyCount := 0
+	it, err := engines[0].NewMVCCIterator(
+		context.Background(),
+		storage.MVCCKeyIterKind,
+		storage.IterOptions{
+			LowerBound: tableSpan.Key,
+			UpperBound: tableSpan.EndKey,
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	for it.SeekGE(storage.MVCCKey{Key: tableSpan.Key}); ; it.NextKey() {
+		ok, err := it.Valid()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
+		keyCount++
+	}
+	it.Close()
+	if keyCount != expectedNum {
+		return errors.Errorf("expecting %d keys, but found %d", expectedNum, keyCount)
 	}
 	return nil
 }

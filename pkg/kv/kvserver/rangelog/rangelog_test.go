@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
@@ -52,6 +53,7 @@ var encodedRangeLogData []byte
 // implementation would.
 func TestRangeLog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We're going to test that the data we have stored as encoded protobuf
 	// round-trips through the writer, back out through sql as CSV, decodes
@@ -62,7 +64,9 @@ func TestRangeLog(t *testing.T) {
 	))
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
 	defer s.Stopper().Stop(ctx)
 
 	// Inject two tables to write into. The first table will be written into by

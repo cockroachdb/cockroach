@@ -1,0 +1,414 @@
+# LogicTest: !local-mixed-23.1
+
+statement ok
+CREATE PROCEDURE p() LANGUAGE SQL AS 'SELECT 1'
+
+# The isProcedure field of the descriptor should be set to true for a procedure.
+query T
+SELECT d->'function'->'isProcedure' FROM (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) d
+  FROM system.descriptor
+) WHERE d->'function'->'name' = '"p"'
+----
+true
+
+statement ok
+CREATE SEQUENCE s
+
+statement ok
+CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS $$
+  SELECT nextval('s');
+$$
+
+statement ok
+CALL p()
+
+query I
+SELECT currval('s')
+----
+1
+
+statement ok
+CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS $$
+  SELECT 1;
+$$
+
+statement ok
+CALL p()
+
+# Ensure that the memo for the first execution of p was not re-used.
+query I
+SELECT currval('s')
+----
+1
+
+# A procedure can only be used with CALL, unlike a UDF.
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT p()
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+CALL p(p())
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT * FROM (VALUES (1), (2), (3)) LIMIT p()
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT * FROM (VALUES (1), (2), (3)) ORDER BY p()
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT * FROM (VALUES (1), (2), (3)) v(i) WHERE i = p()
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT * FROM (VALUES (1), (2), (3)) v(i) GROUP BY i HAVING i > p()
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT * FROM (VALUES (1), (2)) v(i) JOIN (VALUES (2), (3)) w(j) ON i = p()
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT * FROM generate_series(1, p())
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT * FROM generate_series(1, p())
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT abs(p())
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT nth_value(1, p()) OVER () FROM (VALUES (1), (2))
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT nth_value(1, i) OVER (ORDER BY p()) FROM (VALUES (1), (2)) v(i)
+
+statement ok
+CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS ''
+
+# Same test as above, but with an empty procedure.
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT p()
+
+statement ok
+CREATE OR REPLACE PROCEDURE p(i INT) LANGUAGE SQL AS ''
+
+statement error pgcode 42809 p\(i: int\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT p(1)
+
+# The error message for a non-existent procedure should mention "procedure" not
+# "function".
+statement error pgcode 42883 procedure no_exist does not exist\nHINT: No procedure matches the given name and argument types. You might need to add explicit type casts.
+CALL no_exist()
+
+# The error message for a non-existent function within a procedure call should
+# still mention "function".
+statement error pgcode 42883 unknown function: foo\(\)
+CALL p(foo())
+
+statement ok
+CREATE FUNCTION foo(i INT) RETURNS VOID LANGUAGE SQL AS ''
+
+# This is similar to the test above, but with a non-matching function signature.
+statement error pgcode 42883 unknown signature: public.foo\(\) \(desired <int>\)
+CALL p(foo())
+
+statement error pgcode 42723 function "p" already exists with same argument types
+CREATE FUNCTION p() RETURNS VOID LANGUAGE SQL AS ''
+
+# TODO(mgartner): The error should state "procedure definition" too.
+statement error pgcode 0A000 unimplemented: CALL usage inside a function definition
+CREATE OR REPLACE PROCEDURE p2() LANGUAGE SQL AS $$
+  CALL p();
+$$
+
+statement error pgcode 42883 unknown function: p\(\)
+CREATE FUNCTION err(i INT) RETURNS VOID LANGUAGE SQL AS 'SELECT p()'
+
+statement error pgcode 0A000 unimplemented: CALL usage inside a function definition
+CREATE FUNCTION err(i INT) RETURNS VOID LANGUAGE SQL AS 'CALL p()'
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+CREATE TABLE err (i INT DEFAULT p())
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+CREATE TABLE err (i INT AS (p()) STORED)
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+CREATE TABLE err (i INT, INDEX (p()))
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+CREATE TABLE err (a INT, b INT, INDEX (a, (b + p())))
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+CREATE TABLE err (a INT, INDEX (a) WHERE p() = 1)
+
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  v INT
+);
+INSERT INTO t VALUES (1, 10);
+
+statement ok
+CREATE OR REPLACE PROCEDURE t_update(k_arg INT, v_arg INT) LANGUAGE SQL AS $$
+  UPDATE t SET v = v_arg WHERE k = k_arg;
+$$
+
+statement ok
+CALL t_update(1, 11)
+
+statement ok
+CALL t_update(2, 22)
+
+query II
+SELECT * FROM t
+----
+1  11
+
+statement ok
+CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CALL t_update(one(), 12)
+
+query II
+SELECT * FROM t
+----
+1  12
+
+statement ok
+CALL t_update(one(), one()+12)
+
+query II
+SELECT * FROM t
+----
+1  13
+
+statement ok
+CREATE FUNCTION t_update() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+# The procedure t_update and the function t_update can be disambiguated via the
+# number of arguments.
+query I
+SELECT t_update()
+----
+1
+
+# The procedure t_update and the function t_update can be disambiguated via the
+# number of arguments.
+statement ok
+CALL t_update(1, 110+1)
+
+query II
+SELECT * FROM t
+----
+1  111
+
+statement ok
+CREATE FUNCTION t_update(a STRING, b STRING) RETURNS VOID LANGUAGE SQL AS ''
+
+# The procedure t_update and the function t_update can be disambiguated via the
+# argument types.
+statement ok
+CALL t_update(1, 1111)
+
+query II
+SELECT * FROM t
+----
+1  1111
+
+statement ok
+DROP FUNCTION t_update(STRING, STRING);
+CREATE FUNCTION t_update(a STRING, b STRING) RETURNS SETOF INT LANGUAGE SQL AS 'SELECT 1'
+
+# TODO(mgartner): This should not be an error. It is due to a limitation in
+# several places that require the function class to be known before the function
+# has been resolved to a specific overload.
+statement error ambiguous function class on t_update
+CALL t_update(1, 0)
+
+subtest anonymous_args
+
+statement ok
+CREATE TABLE anon_args(k INT PRIMARY KEY, v STRING)
+
+statement ok
+CREATE PROCEDURE insert_into_anon_args(INT, STRING) LANGUAGE SQL AS $$
+  INSERT INTO anon_args(k, v) VALUES ($1, $2)
+$$
+
+statement ok
+CALL insert_into_anon_args(1, 'a')
+
+query IT
+SELECT * FROM anon_args
+----
+1  a
+
+statement ok
+CREATE PROCEDURE insert_into_anon_args(STRING, INT) LANGUAGE SQL AS $$
+  INSERT INTO anon_args(k, v) VALUES ($2, $1)
+$$
+
+statement ok
+CALL insert_into_anon_args('b', 2)
+
+query IT rowsort
+SELECT * FROM anon_args
+----
+1  a
+2  b
+
+statement ok
+DROP PROCEDURE insert_into_anon_args(INT, STRING);
+DROP PROCEDURE insert_into_anon_args(STRING, INT);
+DROP TABLE anon_args;
+
+subtest end
+
+subtest replace
+
+statement ok
+CREATE TABLE replace(k INT PRIMARY KEY, v STRING)
+
+statement ok
+CREATE PROCEDURE insert_into_replace(k_new INT, v_new STRING) LANGUAGE SQL AS $$
+  INSERT INTO replace(k, v) VALUES (k_new, v_new)
+$$
+
+statement ok
+CALL insert_into_replace(1, 'a')
+
+statement error pgcode 42809 cannot change routine kind\nDETAIL: "insert_into_replace" is a procedure
+CREATE OR REPLACE FUNCTION insert_into_replace(k_new INT, v_new STRING) RETURNS VOID LANGUAGE SQL AS ''
+
+statement ok
+CREATE OR REPLACE PROCEDURE insert_into_replace(k_new INT, v_new STRING) LANGUAGE SQL AS $$
+  INSERT INTO replace(k, v) VALUES (k_new+100, v_new)
+$$
+
+statement ok
+CALL insert_into_replace(1, 'a')
+
+query IT rowsort
+SELECT * FROM replace
+----
+1    a
+101  a
+
+# The procedure should not be replaced if the signature is different.
+statement ok
+CREATE OR REPLACE PROCEDURE insert_into_replace(k_new INT) LANGUAGE SQL AS $$
+  INSERT INTO replace(k, v) VALUES (k_new, 'overload')
+$$
+
+# The procedure should not be replaced if the name is different.
+statement ok
+CREATE OR REPLACE PROCEDURE insert_into_replace_v2(k_new INT, v_new STRING) LANGUAGE SQL AS $$
+  INSERT INTO replace(k, v) VALUES (k_new, v_new||'_v2')
+$$
+
+statement ok
+CALL insert_into_replace(2, 'b');
+CALL insert_into_replace(3);
+CALL insert_into_replace_v2(4, 'b');
+
+query IT rowsort
+SELECT * FROM replace
+----
+1    a
+101  a
+102  b
+3    overload
+4    b_v2
+
+statement ok
+DROP PROCEDURE insert_into_replace(INT, STRING);
+DROP PROCEDURE insert_into_replace(INT);
+DROP PROCEDURE insert_into_replace_v2;
+DROP TABLE replace;
+
+subtest end
+
+subtest replace_func_with_proc
+
+statement ok
+CREATE PROCEDURE rfp(i INT) LANGUAGE SQL AS 'SELECT 0'
+
+statement error pgcode 42809 rfp\(i: int\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT rfp(1)
+
+statement ok
+DROP PROCEDURE rfp
+
+statement ok
+CREATE FUNCTION rfp(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT 100+i'
+
+query I
+SELECT rfp(1)
+----
+101
+
+statement ok
+DROP FUNCTION rfp;
+CREATE PROCEDURE rfp(i INT) LANGUAGE SQL AS 'SELECT 0'
+
+# There error should be the same as the error above before the function was
+# created.
+statement error pgcode 42809 rfp\(i: int\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT rfp(1)
+
+statement ok
+DROP PROCEDURE rfp
+
+subtest end
+
+subtest regression_111021
+
+statement ok
+CREATE PROCEDURE p111021(i INT) LANGUAGE SQL AS 'SELECT i'
+
+# Subqueries are not allowed in arguments to procedures.
+statement error pgcode 0A000 p111021\(\): subqueries are not allowed in CALL argument
+CALL p111021((SELECT 1));
+
+# Subqueries nested within other expressions are not allowed in arguments to
+# procedures.
+statement error pgcode 0A000 p111021\(\): subqueries are not allowed in CALL argument
+CALL p111021(CASE WHEN false THEN 1 ELSE (SELECT 1) END);
+
+# The ALL prefix is allowed as an argument to a procedure, but has no effect.
+statement ok
+CALL p(ALL NULL);
+
+# The ALL prefix is allowed as an argument to a procedure, but has no effect.
+statement ok
+CALL p(ALL 1);
+
+# Calling a built-in function with ALL should not cause an internal error.
+statement error pgcode 42809 family\(val: inet\) is not a procedure
+CALL family(ALL NULL);
+
+subtest end
+
+subtest attributes
+
+statement error pgcode 42P13 volatility attribute not allowed in procedure definition
+CREATE PROCEDURE pv() AS 'SELECT 1' VOLATILE LANGUAGE SQL;
+
+statement error pgcode 42P13 volatility attribute not allowed in procedure definition
+CREATE PROCEDURE pv() AS 'SELECT 1' IMMUTABLE LANGUAGE SQL;
+
+statement error pgcode 42P13 volatility attribute not allowed in procedure definition
+CREATE PROCEDURE pv() AS 'SELECT 1' STABLE LANGUAGE SQL;
+
+statement error pgcode 42P13 leakproof attribute not allowed in procedure definition
+CREATE PROCEDURE pv() AS 'SELECT 1' LEAKPROOF LANGUAGE SQL;
+
+statement error pgcode 42P13 leakproof attribute not allowed in procedure definition
+CREATE PROCEDURE pv() AS 'SELECT 1' NOT LEAKPROOF LANGUAGE SQL;
+
+statement error pgcode 42P13 null input attribute not allowed in procedure definition
+CREATE PROCEDURE pv() AS 'SELECT 1' CALLED ON NULL INPUT LANGUAGE SQL;
+
+statement error pgcode 42P13 null input attribute not allowed in procedure definition
+CREATE PROCEDURE pv() AS 'SELECT 1' STRICT LANGUAGE SQL;
+
+subtest end

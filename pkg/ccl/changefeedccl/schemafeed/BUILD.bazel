@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
@@ -44,7 +43,7 @@ go_library(
 
 go_test(
     name = "schemafeed_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "helpers_test.go",
         "main_test.go",
@@ -52,7 +51,6 @@ go_test(
         "table_event_filter_datadriven_test.go",
         "table_event_filter_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":schemafeed"],
     tags = ["ccl_test"],
@@ -73,7 +71,6 @@ go_test(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
-        "//pkg/sql/pgwire",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
@@ -99,5 +96,3 @@ stringer(
     additional_args = ["--trimprefix=tableEvent"],
     typ = "tableEventType",
 )
-
-get_x_data(name = "get_x_data")

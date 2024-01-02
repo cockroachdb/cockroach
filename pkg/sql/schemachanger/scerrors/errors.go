@@ -178,6 +178,15 @@ func HasSchemaChangerUserError(err error) bool {
 	return errors.HasType(err, (*schemaChangerUserError)(nil))
 }
 
+// UnwrapSchemaChangerUserError returns the cause of a schemaChangerUserError,
+// or nil if the error is not a schemaChangerUserError.
+func UnwrapSchemaChangerUserError(err error) error {
+	if scUserError := (*schemaChangerUserError)(nil); errors.As(err, &scUserError) {
+		return scUserError.err
+	}
+	return nil
+}
+
 func (e *schemaChangerUserError) Error() string {
 	return fmt.Sprintf("schema change operation encountered an error: %s", e.err.Error())
 }

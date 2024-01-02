@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -844,6 +845,54 @@ func TestValidateTypeDesc(t *testing.T) {
 		} else if expectedErr != err.Error() {
 			t.Errorf("#%d expected err: %s but found: %s", i, expectedErr, err)
 		}
+	}
+}
+
+func TestStripDanglingBackReferences(t *testing.T) {
+	type testCase struct {
+		name                  string
+		input, expectedOutput descpb.TypeDescriptor
+		validIDs              catalog.DescriptorIDSet
+	}
+
+	testData := []testCase{
+		{
+			name: "referencing descriptor IDs",
+			input: descpb.TypeDescriptor{
+				Name:                     "foo",
+				ID:                       104,
+				ParentID:                 100,
+				ParentSchemaID:           101,
+				ArrayTypeID:              105,
+				Kind:                     descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE,
+				ReferencingDescriptorIDs: []descpb.ID{12345, 105, 5678},
+			},
+			expectedOutput: descpb.TypeDescriptor{
+				Name:                     "foo",
+				ID:                       104,
+				ParentID:                 100,
+				ParentSchemaID:           101,
+				ArrayTypeID:              105,
+				Kind:                     descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE,
+				ReferencingDescriptorIDs: []descpb.ID{105},
+			},
+			validIDs: catalog.MakeDescriptorIDSet(100, 101, 104, 105),
+		},
+	}
+
+	for _, test := range testData {
+		t.Run(test.name, func(t *testing.T) {
+			b := typedesc.NewBuilder(&test.input)
+			require.NoError(t, b.RunPostDeserializationChanges())
+			out := typedesc.NewBuilder(&test.expectedOutput)
+			require.NoError(t, out.RunPostDeserializationChanges())
+			require.NoError(t, b.StripDanglingBackReferences(test.validIDs.Contains, func(id jobspb.JobID) bool {
+				return false
+			}))
+			desc := b.BuildCreatedMutableType()
+			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingBackReferences))
+			require.Equal(t, out.BuildCreatedMutableType().TypeDesc(), desc.TypeDesc())
+		})
 	}
 }
 

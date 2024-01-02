@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -18,7 +17,6 @@ go_test(
         "disabled_test.go",
         "enabled_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = select({
         "@io_bazel_rules_go//go/platform:aix_ppc64": [
             ":grunning",
@@ -82,18 +80,26 @@ go_test(
         ],
         "@io_bazel_rules_go//go/platform:freebsd_386": [
             ":grunning",
+            "//pkg/testutils/skip",
+            "//pkg/util/syncutil",
             "@com_github_stretchr_testify//require",
         ],
         "@io_bazel_rules_go//go/platform:freebsd_amd64": [
             ":grunning",
+            "//pkg/testutils/skip",
+            "//pkg/util/syncutil",
             "@com_github_stretchr_testify//require",
         ],
         "@io_bazel_rules_go//go/platform:freebsd_arm": [
             ":grunning",
+            "//pkg/testutils/skip",
+            "//pkg/util/syncutil",
             "@com_github_stretchr_testify//require",
         ],
         "@io_bazel_rules_go//go/platform:freebsd_arm64": [
             ":grunning",
+            "//pkg/testutils/skip",
+            "//pkg/util/syncutil",
             "@com_github_stretchr_testify//require",
         ],
         "@io_bazel_rules_go//go/platform:illumos_amd64": [
@@ -280,8 +286,12 @@ go_test(
             "//pkg/util/syncutil",
             "@com_github_stretchr_testify//require",
         ],
+        "@io_bazel_rules_go//go/platform:windows_arm64": [
+            ":grunning",
+            "//pkg/testutils/skip",
+            "//pkg/util/syncutil",
+            "@com_github_stretchr_testify//require",
+        ],
         "//conditions:default": [],
     }),
 )
-
-get_x_data(name = "get_x_data")

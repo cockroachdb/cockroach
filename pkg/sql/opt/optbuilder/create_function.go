@@ -11,6 +11,10 @@
 package optbuilder
 
 import (
+	"context"
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -19,8 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql"
+	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -28,17 +33,22 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (outScope *scope) {
+func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (outScope *scope) {
 	b.DisableMemoReuse = true
-	if cf.FuncName.ExplicitCatalog {
-		if string(cf.FuncName.CatalogName) != b.evalCtx.SessionData().Database {
+	if cf.Name.ExplicitCatalog {
+		if string(cf.Name.CatalogName) != b.evalCtx.SessionData().Database {
 			panic(unimplemented.New("CREATE FUNCTION", "cross-db references not supported"))
 		}
 	}
 
-	sch, resName := b.resolveSchemaForCreateFunction(&cf.FuncName)
+	activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
+	if cf.IsProcedure && !activeVersion.IsActive(clusterversion.V23_2) {
+		panic(unimplemented.New("procedures", "procedures are not yet supported"))
+	}
+
+	sch, resName := b.resolveSchemaForCreateFunction(&cf.Name)
 	schID := b.factory.Metadata().AddSchema(sch)
-	cf.FuncName.ObjectNamePrefix = resName
+	cf.Name.ObjectNamePrefix = resName
 
 	// TODO(chengxiong,mgartner): this is a hack to disallow UDF usage in UDF and
 	// we will need to lift this hack when we plan to allow it.
@@ -49,19 +59,23 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	b.trackSchemaDeps = true
 	// Make sure datasource names are qualified.
 	b.qualifyDataSourceNamesInAST = true
+	oldEvalCtxAnn := b.evalCtx.Annotations
+	oldSemaCtxAnn := b.semaCtx.Annotations
 	defer func() {
 		b.insideFuncDef = false
 		b.trackSchemaDeps = false
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
 		b.qualifyDataSourceNamesInAST = false
+		b.evalCtx.Annotations = oldEvalCtxAnn
+		b.semaCtx.Annotations = oldSemaCtxAnn
 
 		b.semaCtx.FunctionResolver = preFuncResolver
 		switch recErr := recover().(type) {
 		case nil:
 			// No error.
 		case error:
-			if errors.Is(recErr, tree.ErrFunctionUndefined) {
+			if errors.Is(recErr, tree.ErrRoutineUndefined) {
 				panic(
 					errors.WithHint(
 						recErr,
@@ -80,7 +94,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		panic(unimplemented.New("CREATE FUNCTION sql_body", "CREATE FUNCTION...sql_body unimplemented"))
 	}
 
-	if err := tree.ValidateFuncOptions(cf.Options); err != nil {
+	if err := tree.ValidateRoutineOptions(cf.Options, cf.IsProcedure); err != nil {
 		panic(err)
 	}
 
@@ -89,24 +103,18 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	funcBodyFound := false
 	languageFound := false
 	var funcBodyStr string
+	var language tree.RoutineLanguage
 	for _, option := range cf.Options {
 		switch opt := option.(type) {
-		case tree.FunctionBodyStr:
+		case tree.RoutineBodyStr:
 			funcBodyFound = true
 			funcBodyStr = string(opt)
-		case tree.FunctionLanguage:
+		case tree.RoutineLanguage:
 			languageFound = true
+			language = opt
 			// Check the language here, before attempting to parse the function body.
 			if _, err := funcinfo.FunctionLangToProto(opt); err != nil {
 				panic(err)
-			}
-
-			if opt == tree.FunctionLangPLpgSQL {
-				if err := utils.ParseAndCollectTelemetryForPLpgSQLFunc(cf); err != nil {
-					// Until plpgsql is fully implemented DealWithPlpgSQlFunc will always
-					// return an error.
-					panic(err)
-				}
 			}
 		}
 	}
@@ -117,21 +125,55 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	if !languageFound {
 		panic(pgerror.New(pgcode.InvalidFunctionDefinition, "no language specified"))
 	}
+	if language == tree.RoutineLangPLpgSQL {
+		if !activeVersion.IsActive(clusterversion.V23_2) {
+			panic(unimplemented.New("PLpgSQL", "PLpgSQL is not supported until version 23.2"))
+		}
+		if err := plpgsql.CheckClusterSupportsPLpgSQL(b.evalCtx.Settings); err != nil {
+			panic(err)
+		}
+	}
 
 	// Track the dependencies in the arguments, return type, and statements in
 	// the function body.
 	var deps opt.SchemaDeps
 	var typeDeps opt.SchemaTypeDeps
 
+	afterBuildStmt := func() {
+		deps = append(deps, b.schemaDeps...)
+		typeDeps.UnionWith(b.schemaTypeDeps)
+		// Reset the tracked dependencies for next statement.
+		b.schemaDeps = nil
+		b.schemaTypeDeps = intsets.Fast{}
+
+		// Reset the annotations to the original values
+		b.evalCtx.Annotations = oldEvalCtxAnn
+		b.semaCtx.Annotations = oldSemaCtxAnn
+	}
+
 	// bodyScope is the base scope for each statement in the body. We add the
 	// named parameters to the scope so that references to them in the body can
 	// be resolved.
 	bodyScope := b.allocScope()
+	var paramTypes tree.ParamTypes
 	for i := range cf.Params {
 		param := &cf.Params[i]
 		typ, err := tree.ResolveType(b.ctx, param.Type, b.semaCtx.TypeResolver)
 		if err != nil {
 			panic(err)
+		}
+		// The parameter type must be supported by the current cluster version.
+		checkUnsupportedType(b.ctx, b.semaCtx, typ)
+		if types.IsRecordType(typ) {
+			if language == tree.RoutineLangSQL {
+				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
+					"SQL functions cannot have arguments of type record"))
+			} else if language == tree.RoutineLangPLpgSQL {
+				panic(unimplemented.NewWithIssueDetail(105713,
+					"PL/pgSQL functions with RECORD input arguments",
+					"PL/pgSQL functions with RECORD input arguments are not yet supported",
+				))
+			}
 		}
 
 		// Add the parameter to the base scope of the body.
@@ -143,6 +185,14 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		typedesc.GetTypeDescriptorClosure(typ).ForEach(func(id descpb.ID) {
 			typeDeps.Add(int(id))
 		})
+
+		// Collect the parameters for PLpgSQL routines.
+		if language == tree.RoutineLangPLpgSQL {
+			paramTypes = append(paramTypes, tree.ParamType{
+				Name: param.Name.String(),
+				Typ:  typ,
+			})
+		}
 	}
 
 	// Collect the user defined type dependency of the return type.
@@ -154,50 +204,85 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		typeDeps.Add(int(id))
 	})
 
-	// Parse the function body.
-	stmts, err := parser.Parse(funcBodyStr)
-	if err != nil {
-		panic(err)
-	}
+	targetVolatility := tree.GetRoutineVolatility(cf.Options)
+	fmtCtx := tree.NewFmtCtx(tree.FmtSerializable)
 
-	targetVolatility := tree.GetFuncVolatility(cf.Options)
 	// Validate each statement and collect the dependencies.
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	for i, stmt := range stmts {
-		var stmtScope *scope
+	var stmtScope *scope
+	switch language {
+	case tree.RoutineLangSQL:
+		// Parse the function body.
+		stmts, err := parser.Parse(funcBodyStr)
+		if err != nil {
+			panic(err)
+		}
+		for i, stmt := range stmts {
+			// Add statement ast into CreateRoutine node for logging purpose, and set
+			// the annotations for this statement so names can be resolved.
+			cf.BodyStatements = append(cf.BodyStatements, stmt.AST)
+			ann := tree.MakeAnnotations(stmt.NumAnnotations)
+			cf.BodyAnnotations = append(cf.BodyAnnotations, &ann)
+
+			// The defer logic will reset the annotations to the old value.
+			b.semaCtx.Annotations = ann
+			b.evalCtx.Annotations = &ann
+
+			// We need to disable stable function folding because we want to catch the
+			// volatility of stable functions. If folded, we only get a scalar and
+			// lose the volatility.
+			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+				stmtScope = b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+			})
+			checkStmtVolatility(targetVolatility, stmtScope, stmt.AST)
+
+			// Format the statements with qualified datasource names.
+			formatFuncBodyStmt(fmtCtx, stmt.AST, i > 0 /* newLine */)
+			afterBuildStmt()
+		}
+	case tree.RoutineLangPLpgSQL:
+		if cf.ReturnType.SetOf {
+			panic(unimplemented.NewWithIssueDetail(105240,
+				"set-returning PL/pgSQL functions",
+				"set-returning PL/pgSQL functions are not yet supported",
+			))
+		}
+
+		// Parse the function body.
+		stmt, err := plpgsqlparser.Parse(funcBodyStr)
+		if err != nil {
+			panic(err)
+		}
+
 		// We need to disable stable function folding because we want to catch the
 		// volatility of stable functions. If folded, we only get a scalar and lose
 		// the volatility.
 		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
-			stmtScope = b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+			var plBuilder plpgsqlBuilder
+			plBuilder.init(b, nil /* colRefs */, paramTypes, stmt.AST, funcReturnType)
+			stmtScope = plBuilder.build(stmt.AST, bodyScope)
 		})
-		checkStmtVolatility(targetVolatility, stmtScope, stmt.AST)
+		checkStmtVolatility(targetVolatility, stmtScope, stmt)
 
 		// Format the statements with qualified datasource names.
-		formatFuncBodyStmt(fmtCtx, stmt.AST, i > 0 /* newLine */)
-
-		// Validate that the result type of the last statement matches the
-		// return type of the function.
-		if i == len(stmts)-1 {
-			// TODO(mgartner): stmtScope.cols does not describe the result
-			// columns of the statement. We should use physical.Presentation
-			// instead.
-			err := validateReturnType(funcReturnType, stmtScope.cols)
-			if err != nil {
-				panic(err)
-			}
-		}
-
-		deps = append(deps, b.schemaDeps...)
-		typeDeps.UnionWith(b.schemaTypeDeps)
-		// Add statement ast into CreateFunction node for logging purpose.
-		cf.BodyStatements = append(cf.BodyStatements, stmt.AST)
-		// Reset the tracked dependencies for next statement.
-		b.schemaDeps = nil
-		b.schemaTypeDeps = intsets.Fast{}
+		formatFuncBodyStmt(fmtCtx, stmt.AST, false /* newLine */)
+		afterBuildStmt()
+	default:
+		panic(errors.AssertionFailedf("unexpected language: %v", language))
 	}
 
-	if targetVolatility == tree.FunctionImmutable && len(deps) > 0 {
+	if stmtScope != nil {
+		// Validate that the result type of the last statement matches the
+		// return type of the function.
+		// TODO(mgartner): stmtScope.cols does not describe the result
+		// columns of the statement. We should use physical.Presentation
+		// instead.
+		err = validateReturnType(b.ctx, b.semaCtx, funcReturnType, stmtScope.cols)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	if targetVolatility == tree.RoutineImmutable && len(deps) > 0 {
 		panic(
 			pgerror.Newf(
 				pgcode.InvalidParameterValue,
@@ -208,8 +293,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 
 	// Override the function body so that references are fully qualified.
 	for i, option := range cf.Options {
-		if _, ok := option.(tree.FunctionBodyStr); ok {
-			cf.Options[i] = tree.FunctionBodyStr(fmtCtx.String())
+		if _, ok := option.(tree.RoutineBodyStr); ok {
+			cf.Options[i] = tree.RoutineBodyStr(fmtCtx.CloseAndGetString())
 			break
 		}
 	}
@@ -226,7 +311,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	return outScope
 }
 
-func formatFuncBodyStmt(fmtCtx *tree.FmtCtx, ast tree.Statement, newLine bool) {
+func formatFuncBodyStmt(fmtCtx *tree.FmtCtx, ast tree.NodeFormatter, newLine bool) {
 	if newLine {
 		fmtCtx.WriteString("\n")
 	}
@@ -234,7 +319,15 @@ func formatFuncBodyStmt(fmtCtx *tree.FmtCtx, ast tree.Statement, newLine bool) {
 	fmtCtx.WriteString(";")
 }
 
-func validateReturnType(expected *types.T, cols []scopeColumn) error {
+func validateReturnType(
+	ctx context.Context, semaCtx *tree.SemaContext, expected *types.T, cols []scopeColumn,
+) error {
+	// The return type must be supported by the current cluster version.
+	checkUnsupportedType(ctx, semaCtx, expected)
+	for i := range cols {
+		checkUnsupportedType(ctx, semaCtx, cols[i].typ)
+	}
+
 	// If return type is void, any column types are valid.
 	if expected.Equivalent(types.Void) {
 		return nil
@@ -287,7 +380,7 @@ func validateReturnType(expected *types.T, cols []scopeColumn) error {
 			if !typ.Equivalent(cols[i].typ) {
 				return pgerror.WithCandidateCode(
 					errors.WithDetailf(
-						errors.Newf("return type mismatch in function declared to return record"),
+						errors.Newf("return type mismatch in function declared to return %s", expected.Name()),
 						"Final statement returns %s instead of %s at column %d",
 						cols[i].typ.Name(), typ.Name(), i+1,
 					),
@@ -301,7 +394,7 @@ func validateReturnType(expected *types.T, cols []scopeColumn) error {
 		// Ran out of columns from last statement.
 		return pgerror.WithCandidateCode(
 			errors.WithDetailf(
-				errors.New("return type mismatch in function declared to return record"),
+				errors.Newf("return type mismatch in function declared to return %s", expected.Name()),
 				"Final statement returns too few columns",
 			),
 			pgcode.InvalidFunctionDefinition,
@@ -323,19 +416,25 @@ func validateReturnType(expected *types.T, cols []scopeColumn) error {
 }
 
 func checkStmtVolatility(
-	expectedVolatility tree.FunctionVolatility, stmtScope *scope, stmt tree.Statement,
+	expectedVolatility tree.RoutineVolatility, stmtScope *scope, stmt fmt.Stringer,
 ) {
 	switch expectedVolatility {
-	case tree.FunctionImmutable:
+	case tree.RoutineImmutable:
 		if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
 			panic(pgerror.Newf(pgcode.InvalidParameterValue, "volatile statement not allowed in immutable function: %s", stmt.String()))
 		}
 		if stmtScope.expr.Relational().VolatilitySet.HasStable() {
 			panic(pgerror.Newf(pgcode.InvalidParameterValue, "stable statement not allowed in immutable function: %s", stmt.String()))
 		}
-	case tree.FunctionStable:
+	case tree.RoutineStable:
 		if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
 			panic(pgerror.Newf(pgcode.InvalidParameterValue, "volatile statement not allowed in stable function: %s", stmt.String()))
 		}
+	}
+}
+
+func checkUnsupportedType(ctx context.Context, semaCtx *tree.SemaContext, typ *types.T) {
+	if err := tree.CheckUnsupportedType(ctx, semaCtx, typ); err != nil {
+		panic(err)
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
@@ -71,6 +72,11 @@ type Builder struct {
 	// This is used when re-preparing invalidated queries.
 	KeepPlaceholders bool
 
+	// SkipAOST is a control knob: if set, optbuilder will not attempt to
+	// validate AS OF SYSTEM TIME clauses. This is used when re-preparing
+	// a statement during session migration.
+	SkipAOST bool
+
 	// -- Results --
 	//
 	// These fields are set during the building process and can be used after
@@ -93,6 +99,10 @@ type Builder struct {
 	evalCtx    *eval.Context
 	catalog    cat.Catalog
 	scopeAlloc []scope
+
+	// stmtTree tracks the hierarchy of statements to ensure that multiple
+	// modifications to the same table cannot corrupt indexes (see #70731).
+	stmtTree statementTree
 
 	// ctes stores CTEs which may need to be built at the top-level.
 	ctes cteSources
@@ -162,12 +172,6 @@ type Builder struct {
 	// isCorrelated is set to true if we already reported to telemetry that the
 	// query contains a correlated subquery.
 	isCorrelated bool
-
-	// areAllTableMutationsSimpleInserts maps from each table mutated by the
-	// statement to true if all mutations of that table are simple inserts
-	// (without ON CONFLICT) or false otherwise. All mutated tables will have an
-	// entry in the map.
-	areAllTableMutationsSimpleInserts map[cat.StableID]bool
 
 	// subqueryNameIdx helps generate unique subquery names during star
 	// expansion.
@@ -261,10 +265,24 @@ func unimplementedWithIssueDetailf(issue int, detail, format string, args ...int
 // "context". This is used at the top-level of every statement, and inside
 // EXPLAIN, CREATE VIEW, CREATE TABLE AS.
 func (b *Builder) buildStmtAtRoot(stmt tree.Statement, desiredTypes []*types.T) (outScope *scope) {
-	// A "root" statement cannot refer to anything from an enclosing query, so we
-	// always start with an empty scope.
+	// A "root" statement cannot refer to anything from an enclosing query, so
+	// we always start with an empty scope.
 	inScope := b.allocScope()
+	return b.buildStmtAtRootWithScope(stmt, desiredTypes, inScope)
+}
+
+// buildStmtAtRootWithScope is similar to buildStmtAtRoot, but allows a scope to
+// be provided. This is used at the top-level of a statement, that has a new
+// context but can refer to variables that are declared outside the statement,
+// like a statement within a UDF body that can reference UDF parameters.
+func (b *Builder) buildStmtAtRootWithScope(
+	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
+) (outScope *scope) {
 	inScope.atRoot = true
+
+	// Push a new statement onto the statement tree.
+	b.stmtTree.Push()
+	defer b.stmtTree.Pop()
 
 	// Save any CTEs above the boundary.
 	prevCTEs := b.ctes
@@ -286,15 +304,13 @@ func (b *Builder) buildStmtAtRoot(stmt tree.Statement, desiredTypes []*types.T) 
 //	rather than a return value so its scopeColumns can be built up
 //	incrementally across several function calls.
 //
-// inScope   This parameter contains the name bindings that are visible for this
+// inScope - This parameter contains the name bindings that are visible for this
+// statement/expression (e.g., passed in from an enclosing statement).
 //
-//	statement/expression (e.g., passed in from an enclosing statement).
-//
-// outScope  This return value contains the newly bound variables that will be
-//
-//	visible to enclosing statements, as well as a pointer to any
-//	"parent" scope that is still visible. The top-level memo expression
-//	for the built statement/expression is returned in outScope.expr.
+// outScope - This return value contains the newly bound variables that will be
+// visible to enclosing statements, as well as a pointer to any
+// "parent" scope that is still visible. The top-level memo expression
+// for the built statement/expression is returned in outScope.expr.
 func (b *Builder) buildStmt(
 	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
@@ -304,7 +320,7 @@ func (b *Builder) buildStmt(
 		case *tree.Delete, *tree.Insert, *tree.Update, *tree.CreateTable, *tree.CreateView,
 			*tree.Split, *tree.Unsplit, *tree.Relocate, *tree.RelocateRange,
 			*tree.ControlJobs, *tree.ControlSchedules, *tree.CancelQueries, *tree.CancelSessions,
-			*tree.CreateFunction:
+			*tree.CreateRoutine:
 			panic(pgerror.Newf(
 				pgcode.Syntax, "%s cannot be used inside a view definition", stmt.StatementTag(),
 			))
@@ -314,7 +330,12 @@ func (b *Builder) buildStmt(
 	// An allowlist of statements supported for user defined function.
 	if b.insideFuncDef {
 		switch stmt := stmt.(type) {
-		case *tree.Select, tree.SelectStatement, *tree.Insert, *tree.Update, *tree.Delete:
+		case *tree.Select, tree.SelectStatement:
+		case *tree.Insert, *tree.Update, *tree.Delete:
+			activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
+			if !activeVersion.IsActive(clusterversion.V23_2) {
+				panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition is not supported until version 23.2", stmt.StatementTag()))
+			}
 		default:
 			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
 		}
@@ -322,10 +343,10 @@ func (b *Builder) buildStmt(
 
 	switch stmt := stmt.(type) {
 	case *tree.Select:
-		return b.buildSelect(stmt, noRowLocking, desiredTypes, inScope)
+		return b.buildSelect(stmt, noLocking, desiredTypes, inScope)
 
 	case *tree.ParenSelect:
-		return b.buildSelect(stmt.Select, noRowLocking, desiredTypes, inScope)
+		return b.buildSelect(stmt.Select, noLocking, desiredTypes, inScope)
 
 	case *tree.Delete:
 		return b.processWiths(stmt.With, inScope, func(inScope *scope) *scope {
@@ -348,8 +369,11 @@ func (b *Builder) buildStmt(
 	case *tree.CreateView:
 		return b.buildCreateView(stmt, inScope)
 
-	case *tree.CreateFunction:
+	case *tree.CreateRoutine:
 		return b.buildCreateFunction(stmt, inScope)
+
+	case *tree.Call:
+		return b.buildProcedure(stmt, inScope)
 
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)
@@ -411,7 +435,13 @@ func (b *Builder) buildStmt(
 	default:
 		// See if this statement can be rewritten to another statement using the
 		// delegate functionality.
-		newStmt, err := delegate.TryDelegate(b.ctx, b.catalog, b.evalCtx, stmt)
+		newStmt, err := delegate.TryDelegate(
+			b.ctx,
+			b.catalog,
+			b.evalCtx,
+			stmt,
+			b.qualifyDataSourceNamesInAST,
+		)
 		if err != nil {
 			panic(err)
 		}

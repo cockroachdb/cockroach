@@ -17,7 +17,7 @@ import {
   SqlStatsSortType,
   DEFAULT_STATS_REQ_OPTIONS,
 } from "src/api/statementsApi";
-import { ViewMode } from "../../databaseDetailsPage";
+import { ViewMode } from "src/databaseDetailsPage/databaseDetailsPage";
 
 type SortSetting = {
   ascending: boolean;
@@ -38,6 +38,7 @@ export enum LocalStorageKeys {
   DB_DETAILS_TABLES_PAGE_SEARCH = "search/DatabasesDetailsTablesPage",
   DB_DETAILS_GRANTS_PAGE_SORT = "sortSetting/DatabasesDetailsGrantsPage",
   DB_DETAILS_VIEW_MODE = "viewMode/DatabasesDetailsPage",
+  ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED = "isAutoRefreshEnabled/ActiveExecutions",
 }
 
 export type LocalStorageState = {
@@ -63,6 +64,8 @@ export type LocalStorageState = {
   "sortSetting/InsightsPage": SortSetting;
   "sortSetting/SchemaInsightsPage": SortSetting;
   [LocalStorageKeys.DB_SORT]: SortSetting;
+  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SORT]: SortSetting;
+  [LocalStorageKeys.DB_DETAILS_GRANTS_PAGE_SORT]: SortSetting;
   "filters/ActiveStatementsPage": Filters;
   "filters/ActiveTransactionsPage": Filters;
   "filters/StatementsPage": Filters;
@@ -71,17 +74,18 @@ export type LocalStorageState = {
   "filters/SessionsPage": Filters;
   "filters/InsightsPage": WorkloadInsightEventFilters;
   "filters/SchemaInsightsPage": Filters;
+  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_FILTERS]: Filters;
   "search/StatementsPage": string;
   "search/TransactionsPage": string;
   [LocalStorageKeys.DB_SEARCH]: string;
+  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SEARCH]: string;
   "typeSetting/JobsPage": number;
   "statusSetting/JobsPage": string;
   "showSetting/JobsPage": string;
-  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SORT]: SortSetting;
-  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_FILTERS]: Filters;
-  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SEARCH]: string;
-  [LocalStorageKeys.DB_DETAILS_GRANTS_PAGE_SORT]: SortSetting;
   [LocalStorageKeys.DB_DETAILS_VIEW_MODE]: ViewMode;
+  [LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED]: boolean;
+  "requestTime/StatementsPage": moment.Moment;
+  "requestTime/TransactionsPage": moment.Moment;
 };
 
 type Payload = {
@@ -150,6 +154,8 @@ const defaultJobStatusSetting = "";
 const defaultJobShowSetting = "0";
 
 const defaultJobTypeSetting = 0;
+
+const defaultIsAutoRefreshEnabledSetting = true;
 
 // TODO (koorosh): initial state should be restored from preserved keys in LocalStorage
 const initialState: LocalStorageState = {
@@ -273,6 +279,14 @@ const initialState: LocalStorageState = {
   [LocalStorageKeys.DB_DETAILS_VIEW_MODE]:
     JSON.parse(localStorage.getItem(LocalStorageKeys.DB_DETAILS_VIEW_MODE)) ||
     defaultDatabaseDetailsViewMode,
+  [LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED]:
+    JSON.parse(
+      localStorage.getItem(
+        LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED,
+      ),
+    ) || defaultIsAutoRefreshEnabledSetting,
+  "requestTime/StatementsPage": null,
+  "requestTime/TransactionsPage": null,
 };
 
 const localStorageSlice = createSlice({

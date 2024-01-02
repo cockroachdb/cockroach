@@ -23,6 +23,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -45,8 +46,10 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// This test becomes flaky when the machine/cluster is under significant
-	// background load, so it should only be run manually.
-	skip.IgnoreLint(t, "intended to be manually run as a sanity test")
+	// background load, so we disable running it under stress and/or race.
+	skip.UnderStress(t)
+	skip.UnderRace(t)
+	skip.WithIssue(t, 109179, "this test is flaky due to background activity when run during CI")
 
 	ctx := context.Background()
 
@@ -62,7 +65,7 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 
 	params := base.TestServerArgs{
 		Settings:          st,
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	}
 
 	s, mainDB, _ := serverutils.StartServer(t, params)
@@ -73,8 +76,15 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 	tenant1, tenantDB1 := serverutils.StartTenant(t, s, base.TestTenantArgs{
 		TenantID: tenantID,
 		Settings: st,
+		TestingKnobs: base.TestingKnobs{
+			SQLEvalContext: &eval.TestingKnobs{
+				// We disable the randomization of some batch sizes because with
+				// some low values the test takes much longer.
+				ForceProductionValues: true,
+			},
+		},
 	})
-	defer tenant1.Stopper().Stop(ctx)
+	defer tenant1.AppStopper().Stop(ctx)
 	defer tenantDB1.Close()
 	tdb := sqlutils.MakeSQLRunner(tenantDB1)
 	tdb.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false")
@@ -86,7 +96,7 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 	}
 	testCases := []testCase{
 		{ // Insert statement
-			sql:   "INSERT INTO abcd (SELECT t%2, t%3, t, -t FROM generate_series(1,50000) g(t))",
+			sql:   "INSERT INTO abcd (SELECT t%2, t%3, t, -t FROM generate_series(1,20000) g(t))",
 			count: 1,
 		},
 		{ // Point query
@@ -121,14 +131,18 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 			sql:   "SELECT 'deadbeef' FROM generate_series(1, 50000)",
 			count: 10,
 		},
+		{ // Delete (this also ensures that two runs work with the same dataset)
+			sql:   "DELETE FROM abcd WHERE true",
+			count: 1,
+		},
 	}
 
 	var err error
-	var tenantEstimatedRUs int
+	var tenantEstimatedRUs float64
 	for _, tc := range testCases {
 		for i := 0; i < tc.count; i++ {
 			output := tdb.QueryStr(t, "EXPLAIN ANALYZE "+tc.sql)
-			var estimatedRU int
+			var estimatedRU float64
 			for _, row := range output {
 				if len(row) != 1 {
 					t.Fatalf("expected one column")
@@ -138,7 +152,7 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 					substr := strings.Split(val, " ")
 					require.Equalf(t, 4, len(substr), "expected RU consumption message to have four words")
 					ruCountStr := strings.Replace(strings.TrimSpace(substr[3]), ",", "", -1)
-					estimatedRU, err = strconv.Atoi(ruCountStr)
+					estimatedRU, err = strconv.ParseFloat(ruCountStr, 64)
 					require.NoError(t, err, "failed to retrieve estimated RUs")
 					break
 				}

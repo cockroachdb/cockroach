@@ -27,6 +27,7 @@ RUN apt-get update \
     python3 \
     python3.8-venv \
     unzip \
+    zip \
  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10 \
  && apt-get clean
@@ -49,6 +50,7 @@ RUN case ${TARGETPLATFORM} in \
 # git - Upgrade to a more modern version
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
+    apt-get clean && \
     curl -fsSL https://github.com/git/git/archive/v2.29.2.zip -o "git-2.29.2.zip" && \
     unzip "git-2.29.2.zip" && \
     cd git-2.29.2 && \
@@ -61,9 +63,14 @@ RUN apt-get update && \
 
 RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
  && echo 'deb https://packages.cloud.google.com/apt cloud-sdk main' | tee /etc/apt/sources.list.d/gcloud.list \
+ && curl -fsLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | apt-key add - \
+ && echo "deb https://packages.microsoft.com/repos/azure-cli/ focal main" > /etc/apt/sources.list.d/azure-cli.list \
  && apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    google-cloud-sdk
+    azure-cli \
+    google-cloud-sdk \
+    google-cloud-cli-gke-gcloud-auth-plugin \
+    && apt-get clean
 
 # chrome is needed for UI tests. Unfortunately it is only distributed for x86_64
 # and not for ARM. Chrome shouldn't need to be installed when we migrate away
@@ -85,12 +92,11 @@ RUN apt-get purge -y \
 
 # awscli - roachtests
 # NB: we don't use apt-get because we need an up to date version of awscli
-# If you update the below, you should probably also update build/builder/Dockerfile.
 RUN case ${TARGETPLATFORM} in \
-    "linux/amd64") ARCH=x86_64; SHASUM=7ee475f22c1b35cc9e53affbf96a9ffce91706e154a9441d0d39cbf8366b718e ;; \
-    "linux/arm64") ARCH=aarch64; SHASUM=624ebb04705d4909eb0d56d467fe6b8b5c53a8c59375ed520e70236120125077 ;; \
+    "linux/amd64") ARCH=x86_64; SHASUM=e679933eec90b0e5a75d485be6c2fae0f89a3f9ccdcb1748be69f8f456e9a85f ;; \
+    "linux/arm64") ARCH=aarch64; SHASUM=7d6460f795712ebdac7e3c60d4800dde682d136d909810402aac164f2789b860 ;; \
   esac && \
- curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$ARCH-2.0.30.zip" -o "awscliv2.zip" && \
+ curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$ARCH-2.13.9.zip" -o "awscliv2.zip" && \
  echo "$SHASUM awscliv2.zip" | sha256sum -c - && \
  unzip awscliv2.zip && \
  ./aws/install && \

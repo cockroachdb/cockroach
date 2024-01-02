@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // Expr represents an expression.
@@ -488,8 +489,10 @@ func MemoizeComparisonExprOp(node *ComparisonExpr) {
 
 	fn, ok := CmpOps[fOp.Symbol].LookupImpl(leftRet, rightRet)
 	if !ok {
-		panic(errors.AssertionFailedf("lookup for ComparisonExpr %s's CmpOp failed",
-			AsStringWithFlags(node, FmtShowTypes)))
+		panic(errors.AssertionFailedf("lookup for ComparisonExpr %s's CmpOp failed (%s(%s,%s))",
+			AsStringWithFlags(node, FmtShowTypes), redact.Safe(fOp.String()),
+			leftRet.SQLStringForError(), rightRet.SQLStringForError(),
+		))
 	}
 	node.Op = fn
 }
@@ -800,11 +803,19 @@ func NewPlaceholder(name string) (*Placeholder, error) {
 
 // Format implements the NodeFormatter interface.
 func (node *Placeholder) Format(ctx *FmtCtx) {
-	if ctx.placeholderFormat != nil {
-		ctx.placeholderFormat(ctx, node)
-		return
+	if ctx.HasFlags(FmtHideConstants) {
+		if ctx.placeholderFormat != nil {
+			ctx.placeholderFormat(ctx, node)
+			return
+		}
+		ctx.Printf("$%d", node.Idx+1)
+	} else {
+		if ctx.placeholderFormat != nil {
+			ctx.placeholderFormat(ctx, node)
+			return
+		}
+		ctx.Printf("$%d", node.Idx+1)
 	}
-	ctx.Printf("$%d", node.Idx+1)
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -1103,8 +1114,10 @@ func (node *BinaryExpr) memoizeOp() {
 	leftRet, rightRet := node.Left.(TypedExpr).ResolvedType(), node.Right.(TypedExpr).ResolvedType()
 	fn, ok := BinOps[node.Operator.Symbol].LookupImpl(leftRet, rightRet)
 	if !ok {
-		panic(errors.AssertionFailedf("lookup for BinaryExpr %s's BinOp failed",
-			AsStringWithFlags(node, FmtShowTypes)))
+		panic(errors.AssertionFailedf("lookup for BinaryExpr %s's BinOp failed (%s(%s,%s))",
+			AsStringWithFlags(node, FmtShowTypes), redact.Safe(node.Operator.String()),
+			leftRet.SQLStringForError(), rightRet.SQLStringForError(),
+		))
 	}
 	node.Op = fn
 }
@@ -1267,6 +1280,9 @@ type FuncExpr struct {
 	// is used for any type of aggregation.
 	OrderBy OrderBy
 
+	// InCall is true when the FuncExpr is part of a CALL statement.
+	InCall bool
+
 	typeAnnotation
 	fnProps *FunctionProperties
 	fn      *Overload
@@ -1366,11 +1382,13 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 		typ = funcTypeName[node.Type] + " "
 	}
 
-	// We need to remove name anonymization/redaction for the function name in
-	// particular. Do this by overriding the flags.
-	// TODO(thomas): when function names are correctly typed as FunctionDefinition
-	// remove FmtMarkRedactionNode from being overridden.
-	ctx.WithFlags(ctx.flags&^FmtAnonymize&^FmtMarkRedactionNode|FmtBareIdentifiers, func() {
+	// We let anonymization and redaction flags pass through, which will cause
+	// built-in functions to be redacted if we have not resolved them. This is
+	// because we cannot distinguish between built-in functions and UDFs before
+	// they are resolved. We conservatively redact function names if requested.
+	// TODO(111385): Investigate ways to identify built-in functions before
+	// type-checking.
+	ctx.WithFlags(ctx.flags|FmtBareIdentifiers, func() {
 		ctx.FormatNode(&node.Func)
 	})
 
@@ -1726,6 +1744,7 @@ func (node *DTimeTZ) String() string          { return AsString(node) }
 func (node *DDecimal) String() string         { return AsString(node) }
 func (node *DFloat) String() string           { return AsString(node) }
 func (node *DBox2D) String() string           { return AsString(node) }
+func (node *DPGLSN) String() string           { return AsString(node) }
 func (node *DGeography) String() string       { return AsString(node) }
 func (node *DGeometry) String() string        { return AsString(node) }
 func (node *DInt) String() string             { return AsString(node) }

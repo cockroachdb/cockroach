@@ -166,7 +166,7 @@ query I
 query error pgcode 42601 multiple ORDER BY clauses not allowed
 ((SELECT a FROM t ORDER BY a)) ORDER BY a
 
-query error expected c to be of type int, found type bool
+query error expected b to be of type bool, found type int
 SELECT CASE a WHEN 1 THEN b ELSE c END as val FROM t ORDER BY val
 
 query error pgcode 42P10 ORDER BY position 0 is not in select list
@@ -357,7 +357,7 @@ CREATE TABLE unrelated(x INT); SELECT * FROM unrelated ORDER BY PRIMARY KEY kv
 statement ok
 PREPARE a AS (TABLE kv) ORDER BY PRIMARY KEY kv
 
-statement error ORDER BY INDEX in window definition is not supported
+statement error pq: at or near "primary": syntax error
 SELECT avg(k) OVER (ORDER BY PRIMARY KEY kv) FROM kv
 
 statement ok
@@ -603,3 +603,22 @@ NULL   2
 
 statement ok
 RESET null_ordered_last
+
+# Regression test for #106678.
+statement ok
+CREATE TABLE t106678 (a INT, b INT);
+INSERT INTO t106678 VALUES (2, 0), (1, 100), (2, 0), (3, 20), (1, -1);
+
+# The results should be ordered by (a, b), not just by (a).
+query II
+SELECT a, b FROM (SELECT a, b FROM t106678 ORDER BY a LIMIT 3) ORDER BY a, b;
+----
+1  -1
+1  100
+2  0
+
+# Should return the (1, -1) row, not the (1, 100) row.
+query II
+SELECT a, b FROM (SELECT a, b FROM t106678 ORDER BY a LIMIT 3) ORDER BY a, b LIMIT 1
+----
+1  -1

@@ -77,13 +77,12 @@ end_test
 
 start_test "Check that the log flag is properly recognized for non-server commands"
 send "$argv debug reset-quorum 123 --log='sinks: {stderr: {format: json }}'\r"
-eexpect "\"severity\":\"ERROR\""
 eexpect "connection to server failed"
 eexpect ":/# "
 end_test
 
 start_test "Check that by default, cockroach demo shows the fatal errors"
-send "$argv demo --no-line-editor --empty\r"
+send "$argv demo --no-line-editor --empty --log-dir=logs \r"
 eexpect "Welcome"
 eexpect "root@"
 eexpect "defaultdb>"

@@ -116,6 +116,20 @@ func NewWindowAggregatorOperator(
 				agg:                  agg.(slidingWindowAggregateFunc),
 			}
 		}
+	case execinfrapb.BoolAnd, execinfrapb.BoolOr:
+		if WindowFrameCanShrink(frame, ordering) {
+			// TODO(drewk): add optimized implementations that can handle a shrinking
+			// window by tracking counts of true, false, null values instead of just
+			// the final aggregate value.
+			windower = &windowAggregator{windowAggregatorBase: base, agg: agg}
+		} else {
+			// These aggregates can only be used in a sliding-window context if the
+			// window does not shrink.
+			windower = &slidingWindowAggregator{
+				windowAggregatorBase: base,
+				agg:                  agg.(slidingWindowAggregateFunc),
+			}
+		}
 	default:
 		if slidingWindowAgg, ok := agg.(slidingWindowAggregateFunc); ok {
 			windower = &slidingWindowAggregator{windowAggregatorBase: base, agg: slidingWindowAgg}
@@ -129,7 +143,8 @@ func NewWindowAggregatorOperator(
 type windowAggregatorBase struct {
 	partitionSeekerBase
 	colexecop.CloserHelper
-	allocator *colmem.Allocator
+	allocator     *colmem.Allocator
+	cancelChecker colexecutils.CancelChecker
 
 	outputColIdx int
 	inputIdxs    []uint32
@@ -173,6 +188,7 @@ func (a *windowAggregatorBase) startNewPartition() {
 // Init implements the bufferedWindower interface.
 func (a *windowAggregatorBase) Init(ctx context.Context) {
 	a.InitHelper.Init(ctx)
+	a.cancelChecker.Init(a.Ctx)
 }
 
 // Close implements the bufferedWindower interface.
@@ -246,6 +262,7 @@ func aggregateOverIntervals(intervals []windowInterval, removeRows bool) {
 		start, end := interval.start, interval.end
 		intervalLen := interval.end - interval.start
 		for intervalLen > 0 {
+			a.cancelChecker.Check()
 			for j, idx := range a.inputIdxs {
 				a.vecs[j], start, end = a.buffer.GetVecWithTuple(a.Ctx, int(idx), intervalIdx)
 			}

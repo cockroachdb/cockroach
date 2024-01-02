@@ -41,6 +41,10 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: oid[], elem: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_append"></a><code>array_append(array: pg_lsn[], elem: pg_lsn) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_append"></a><code>array_append(array: refcursor[], elem: refcursor) &rarr; refcursor[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: timetz[], elem: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: tuple[], elem: tuple) &rarr; tuple[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
@@ -85,6 +89,10 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_cat"></a><code>array_cat(left: oid[], right: oid[]) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_cat"></a><code>array_cat(left: pg_lsn[], right: pg_lsn[]) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_cat"></a><code>array_cat(left: refcursor[], right: refcursor[]) &rarr; refcursor[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_cat"></a><code>array_cat(left: timetz[], right: timetz[]) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_cat"></a><code>array_cat(left: tuple[], right: tuple[]) &rarr; tuple[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
@@ -97,47 +105,99 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: <a href="bool.html">bool</a>[], elem: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: <a href="bool.html">bool</a>[], elem: <a href="bool.html">bool</a>, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: <a href="bytes.html">bytes</a>[], elem: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: <a href="bytes.html">bytes</a>[], elem: <a href="bytes.html">bytes</a>, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: <a href="date.html">date</a>[], elem: <a href="date.html">date</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: <a href="date.html">date</a>[], elem: <a href="date.html">date</a>, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: <a href="decimal.html">decimal</a>[], elem: <a href="decimal.html">decimal</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: <a href="decimal.html">decimal</a>[], elem: <a href="decimal.html">decimal</a>, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: <a href="float.html">float</a>[], elem: <a href="float.html">float</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: <a href="float.html">float</a>[], elem: <a href="float.html">float</a>, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: <a href="inet.html">inet</a>[], elem: <a href="inet.html">inet</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: <a href="inet.html">inet</a>[], elem: <a href="inet.html">inet</a>, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: <a href="int.html">int</a>[], elem: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: <a href="int.html">int</a>[], elem: <a href="int.html">int</a>, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: <a href="interval.html">interval</a>[], elem: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: <a href="interval.html">interval</a>[], elem: <a href="interval.html">interval</a>, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: <a href="string.html">string</a>[], elem: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: <a href="string.html">string</a>[], elem: <a href="string.html">string</a>, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: <a href="time.html">time</a>[], elem: <a href="time.html">time</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: <a href="time.html">time</a>[], elem: <a href="time.html">time</a>, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: <a href="timestamp.html">timestamp</a>[], elem: <a href="timestamp.html">timestamp</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: <a href="timestamp.html">timestamp</a>[], elem: <a href="timestamp.html">timestamp</a>, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: <a href="timestamp.html">timestamptz</a>[], elem: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: <a href="timestamp.html">timestamptz</a>[], elem: <a href="timestamp.html">timestamptz</a>, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: <a href="uuid.html">uuid</a>[], elem: <a href="uuid.html">uuid</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: <a href="uuid.html">uuid</a>[], elem: <a href="uuid.html">uuid</a>, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: anyenum[], elem: anyenum) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: anyenum[], elem: anyenum, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: box2d[], elem: box2d) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: box2d[], elem: box2d, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: geography[], elem: geography) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: geography[], elem: geography, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: geometry[], elem: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: geometry[], elem: geometry, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: jsonb[], elem: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: jsonb[], elem: jsonb, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: oid[], elem: oid) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: oid[], elem: oid, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: pg_lsn[], elem: pg_lsn) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: pg_lsn[], elem: pg_lsn, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: refcursor[], elem: refcursor) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: refcursor[], elem: refcursor, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: timetz[], elem: timetz) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: timetz[], elem: timetz, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: tuple[], elem: tuple) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: tuple[], elem: tuple, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: varbit[], elem: varbit) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: varbit[], elem: varbit, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: <a href="bool.html">bool</a>[], elem: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
@@ -176,6 +236,10 @@
 <tr><td><a name="array_positions"></a><code>array_positions(array: jsonb[], elem: jsonb) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: oid[], elem: oid) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_positions"></a><code>array_positions(array: pg_lsn[], elem: pg_lsn) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_positions"></a><code>array_positions(array: refcursor[], elem: refcursor) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: timetz[], elem: timetz) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
@@ -221,6 +285,10 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: oid, array: oid[]) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_prepend"></a><code>array_prepend(elem: pg_lsn, array: pg_lsn[]) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_prepend"></a><code>array_prepend(elem: refcursor, array: refcursor[]) &rarr; refcursor[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: timetz, array: timetz[]) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: tuple, array: tuple[]) &rarr; tuple[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
@@ -264,6 +332,10 @@
 <tr><td><a name="array_remove"></a><code>array_remove(array: jsonb[], elem: jsonb) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: oid[], elem: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_remove"></a><code>array_remove(array: pg_lsn[], elem: pg_lsn) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_remove"></a><code>array_remove(array: refcursor[], elem: refcursor) &rarr; refcursor[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: timetz[], elem: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td><td>Immutable</td></tr>
@@ -309,6 +381,10 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: oid[], toreplace: oid, replacewith: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_replace"></a><code>array_replace(array: pg_lsn[], toreplace: pg_lsn, replacewith: pg_lsn) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_replace"></a><code>array_replace(array: refcursor[], toreplace: refcursor, replacewith: refcursor) &rarr; refcursor[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: timetz[], toreplace: timetz, replacewith: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: tuple[], toreplace: tuple, replacewith: tuple) &rarr; tuple[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
@@ -323,11 +399,7 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="cardinality"></a><code>cardinality(input: anyelement[]) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of elements contained in <code>input</code></p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.merge_statement_stats"></a><code>crdb_internal.merge_statement_stats(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of appstatspb.StatementStatistics into a single JSONB object</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.merge_stats_metadata"></a><code>crdb_internal.merge_stats_metadata(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of StmtStatsMetadata into a single JSONB object</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.merge_transaction_stats"></a><code>crdb_internal.merge_transaction_stats(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of appstatspb.TransactionStatistics into a single JSONB object</p>
+<tr><td><a name="jsonb_array_to_string_array"></a><code>jsonb_array_to_string_array(input: jsonb) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Convert a JSONB array into a string array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="string_to_array"></a><code>string_to_array(str: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Split a string into components on a delimiter.</p>
 </span></td><td>Immutable</td></tr>
@@ -380,10 +452,48 @@
 <tbody>
 <tr><td><a name="crypt"></a><code>crypt(password: <a href="string.html">string</a>, salt: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Generates a hash based on a password and salt. The hash algorithm and number of rounds if applicable are encoded in the salt.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="decrypt"></a><code>decrypt(data: <a href="bytes.html">bytes</a>, key: <a href="bytes.html">bytes</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Decrypt <code>data</code> with <code>key</code> using the cipher method specified by <code>type</code>.</p>
+<p>The cipher type must have the format <code>&lt;algorithm&gt;[-&lt;mode&gt;][/pad:&lt;padding&gt;]</code> where:</p>
+<ul>
+<li><code>&lt;algorithm&gt;</code> is <code>aes</code></li>
+<li><code>&lt;mode&gt;</code> is <code>cbc</code> (default)</li>
+<li><code>&lt;padding&gt;</code> is <code>pkcs</code> (default) or <code>none</code></li>
+</ul>
+<p>This function requires an enterprise license on a CCL distribution.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="decrypt_iv"></a><code>decrypt_iv(data: <a href="bytes.html">bytes</a>, key: <a href="bytes.html">bytes</a>, iv: <a href="bytes.html">bytes</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Decrypt <code>data</code> with <code>key</code> using the cipher method specified by <code>type</code>. If the mode is CBC, the provided <code>iv</code> will be used. Otherwise, it will be ignored.</p>
+<p>The cipher type must have the format <code>&lt;algorithm&gt;[-&lt;mode&gt;][/pad:&lt;padding&gt;]</code> where:</p>
+<ul>
+<li><code>&lt;algorithm&gt;</code> is <code>aes</code></li>
+<li><code>&lt;mode&gt;</code> is <code>cbc</code> (default)</li>
+<li><code>&lt;padding&gt;</code> is <code>pkcs</code> (default) or <code>none</code></li>
+</ul>
+<p>This function requires an enterprise license on a CCL distribution.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="digest"></a><code>digest(data: <a href="bytes.html">bytes</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Computes a binary hash of the given <code>data</code>. <code>type</code> is the algorithm to use (md5, sha1, sha224, sha256, sha384, or sha512).</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="digest"></a><code>digest(data: <a href="string.html">string</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Computes a binary hash of the given <code>data</code>. <code>type</code> is the algorithm to use (md5, sha1, sha224, sha256, sha384, or sha512).</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="encrypt"></a><code>encrypt(data: <a href="bytes.html">bytes</a>, key: <a href="bytes.html">bytes</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Encrypt <code>data</code> with <code>key</code> using the cipher method specified by <code>type</code>.</p>
+<p>The cipher type must have the format <code>&lt;algorithm&gt;[-&lt;mode&gt;][/pad:&lt;padding&gt;]</code> where:</p>
+<ul>
+<li><code>&lt;algorithm&gt;</code> is <code>aes</code></li>
+<li><code>&lt;mode&gt;</code> is <code>cbc</code> (default)</li>
+<li><code>&lt;padding&gt;</code> is <code>pkcs</code> (default) or <code>none</code></li>
+</ul>
+<p>This function requires an enterprise license on a CCL distribution.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="encrypt_iv"></a><code>encrypt_iv(data: <a href="bytes.html">bytes</a>, key: <a href="bytes.html">bytes</a>, iv: <a href="bytes.html">bytes</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Encrypt <code>data</code> with <code>key</code> using the cipher method specified by <code>type</code>. If the mode is CBC, the provided <code>iv</code> will be used. Otherwise, it will be ignored.</p>
+<p>The cipher type must have the format <code>&lt;algorithm&gt;[-&lt;mode&gt;][/pad:&lt;padding&gt;]</code> where:</p>
+<ul>
+<li><code>&lt;algorithm&gt;</code> is <code>aes</code></li>
+<li><code>&lt;mode&gt;</code> is <code>cbc</code> (default)</li>
+<li><code>&lt;padding&gt;</code> is <code>pkcs</code> (default) or <code>none</code></li>
+</ul>
+<p>This function requires an enterprise license on a CCL distribution.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="gen_random_bytes"></a><code>gen_random_bytes(count: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns <code>count</code> cryptographically strong random bytes. At most 1024 bytes can be extracted at a time.</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="gen_salt"></a><code>gen_salt(type: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Generates a salt for input into the <code>crypt</code> function using the default number of rounds.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="gen_salt"></a><code>gen_salt(type: <a href="string.html">string</a>, iter_count: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Generates a salt for input into the <code>crypt</code> function using <code>iter_count</code> number of rounds.</p>
@@ -513,6 +623,11 @@ significant than <code>element</code> to zero (or one, for day and month)</p>
 <p>Compatible elements: millennium, century, decade, year, quarter, month,
 week, day, hour, minute, second, millisecond, microsecond.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="date_trunc"></a><code>date_trunc(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamptz</a>, timezone: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Truncates <code>input</code> to precision <code>element</code> in the specified <code>timezone</code>.  Sets all fields that are less
+significant than <code>element</code> to zero (or one, for day and month)</p>
+<p>Compatible elements: millennium, century, decade, year, quarter, month,
+week, day, hour, minute, second, millisecond, microsecond.</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="experimental_follower_read_timestamp"></a><code>experimental_follower_read_timestamp() &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Same as follower_read_timestamp. This name is deprecated.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="experimental_strftime"></a><code>experimental_strftime(input: <a href="date.html">date</a>, extract_format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>From <code>input</code>, extracts and formats the time as identified in <code>extract_format</code> using standard <code>strftime</code> notation (though not all formatting is supported).</p>
@@ -596,6 +711,14 @@ has no relationship with the commit order of concurrent transactions.</p>
 <p>The value is based on a timestamp picked when the transaction starts
 and which stays constant throughout the transaction. This timestamp
 has no relationship with the commit order of concurrent transactions.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="make_date"></a><code>make_date(year: <a href="int.html">int</a>, month: <a href="int.html">int</a>, day: <a href="int.html">int</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Create date (formatted according to ISO 8601) from year, month, and day fields (negative years signify BC).</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="make_timestamp"></a><code>make_timestamp(year: <a href="int.html">int</a>, month: <a href="int.html">int</a>, day: <a href="int.html">int</a>, hour: <a href="int.html">int</a>, min: <a href="int.html">int</a>, sec: <a href="float.html">float</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Create timestamp (formatted according to ISO 8601) from year, month, day, hour, minute, and seconds fields (negative years signify BC).</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="make_timestamptz"></a><code>make_timestamptz(year: <a href="int.html">int</a>, month: <a href="int.html">int</a>, day: <a href="int.html">int</a>, hour: <a href="int.html">int</a>, min: <a href="int.html">int</a>, sec: <a href="float.html">float</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Create timestamp (formatted according to ISO 8601) with time zone from year, month, day, hour, minute and seconds fields (negative years signify BC). If timezone is not specified, the current time zone is used.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="make_timestamptz"></a><code>make_timestamptz(year: <a href="int.html">int</a>, month: <a href="int.html">int</a>, day: <a href="int.html">int</a>, hour: <a href="int.html">int</a>, min: <a href="int.html">int</a>, sec: <a href="float.html">float</a>, timezone: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Create timestamp (formatted according to ISO 8601) with time zone from year, month, day, hour, minute and seconds fields (negative years signify BC). If timezone is not specified, the current time zone is used.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="now"></a><code>now() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts
@@ -944,7 +1067,7 @@ available replica will error.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="unique_rowid"></a><code>unique_rowid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a unique ID used by CockroachDB to generate unique row IDs if a Primary Key isn’t defined for the table. The value is a combination of the insert timestamp and the ID of the node executing the statement, which guarantees this combination is globally unique. However, there can be gaps and the order is not completely guaranteed.</p>
 </span></td><td>Volatile</td></tr>
-<tr><td><a name="unordered_unique_rowid"></a><code>unordered_unique_rowid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a unique ID. The value is a combination of the insert timestamp and the ID of the node executing the statement, which guarantees this combination is globally unique. The way it is generated there is no ordering</p>
+<tr><td><a name="unordered_unique_rowid"></a><code>unordered_unique_rowid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a unique ID. The value is a combination of the insert timestamp (bit-reversed) and the ID of the node executing the statement, which guarantees this combination is globally unique. The way it is generated is statistically likely to not have any ordering relative to previously generated values.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="uuid_generate_v1"></a><code>uuid_generate_v1() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a version 1 UUID, and returns it as a value of UUID type. To avoid exposing the server’s real MAC address, this uses a random MAC address and a timestamp. Essentially, this is an alias for uuid_generate_v1mc.</p>
 </span></td><td>Volatile</td></tr>
@@ -1047,16 +1170,6 @@ available replica will error.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="array_to_json"></a><code>array_to_json(array: anyelement[], pretty_bool: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the array as JSON or JSONB.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.job_payload_type"></a><code>crdb_internal.job_payload_type(data: <a href="bytes.html">bytes</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Reads the type from the jobspb.Payload protocol message.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.json_to_pb"></a><code>crdb_internal.json_to_pb(pbname: <a href="string.html">string</a>, json: jsonb) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Convert JSONB data to protocol message bytes</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.pb_to_json"></a><code>crdb_internal.pb_to_json(pbname: <a href="string.html">string</a>, data: <a href="bytes.html">bytes</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Converts protocol message to its JSONB representation.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.pb_to_json"></a><code>crdb_internal.pb_to_json(pbname: <a href="string.html">string</a>, data: <a href="bytes.html">bytes</a>, emit_defaults: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Converts protocol message to its JSONB representation.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.pb_to_json"></a><code>crdb_internal.pb_to_json(pbname: <a href="string.html">string</a>, data: <a href="bytes.html">bytes</a>, emit_defaults: <a href="bool.html">bool</a>, emit_redacted: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Converts protocol message to its JSONB representation.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="json_array_elements"></a><code>json_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_array_elements_text"></a><code>json_array_elements_text(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
@@ -1150,24 +1263,6 @@ available replica will error.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
 <tbody>
-<tr><td><a name="crdb_internal.filter_multiregion_fields_from_zone_config_sql"></a><code>crdb_internal.filter_multiregion_fields_from_zone_config_sql(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Takes in a CONFIGURE ZONE SQL statement and returns a modified
-SQL statement omitting multi-region related zone configuration fields.
-If the CONFIGURE ZONE statement can be inferred by the database’s or
-table’s zone configuration this will return NULL.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.reset_multi_region_zone_configs_for_database"></a><code>crdb_internal.reset_multi_region_zone_configs_for_database(id: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Resets the zone configuration for a multi-region database to
-match its original state. No-ops if the given database ID is not multi-region
-enabled.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.reset_multi_region_zone_configs_for_table"></a><code>crdb_internal.reset_multi_region_zone_configs_for_table(id: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Resets the zone configuration for a multi-region table to
-match its original state. No-ops if the given table ID is not a multi-region
-table.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.validate_multi_region_zone_configs"></a><code>crdb_internal.validate_multi_region_zone_configs() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Validates all multi-region zone configurations are correctly setup
-for the current database, including all tables, indexes and partitions underneath.
-Returns an error if validation fails. This builtin uses un-leased versions of the
-each descriptor, requiring extra round trips.</p>
-</span></td><td>Volatile</td></tr>
 <tr><td><a name="default_to_database_primary_region"></a><code>default_to_database_primary_region(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the given region if the region has been added to the current database.
 Otherwise, this will return the primary region of the current database.
 This will error if the current database is not a multi-region database.</p>
@@ -1293,21 +1388,6 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tbody>
 <tr><td><a name="aclexplode"></a><code>aclexplode(aclitems: <a href="string.html">string</a>[]) &rarr; tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing aclitem stuff (returns no rows as this feature is unsupported in CockroachDB)</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.scan"></a><code>crdb_internal.scan(span: <a href="bytes.html">bytes</a>[]) &rarr; tuple{bytes AS key, bytes AS value, string AS ts}</code></td><td><span class="funcdesc"><p>Returns the raw keys and values from the specified span</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.scan"></a><code>crdb_internal.scan(start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{bytes AS key, bytes AS value, string AS ts}</code></td><td><span class="funcdesc"><p>Returns the raw keys and values with their timestamp from the specified span</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.tenant_span_stats"></a><code>crdb_internal.tenant_span_stats() &rarr; tuple{int AS database_id, int AS table_id, int AS range_count, int AS approximate_disk_<a href="bytes.html">bytes</a>, int AS live_<a href="bytes.html">bytes</a>, int AS total_<a href="bytes.html">bytes</a>, float AS live_percentage}</code></td><td><span class="funcdesc"><p>Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for all of the tenant’s tables.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.tenant_span_stats"></a><code>crdb_internal.tenant_span_stats(database_id: <a href="int.html">int</a>) &rarr; tuple{int AS database_id, int AS table_id, int AS range_count, int AS approximate_disk_<a href="bytes.html">bytes</a>, int AS live_<a href="bytes.html">bytes</a>, int AS total_<a href="bytes.html">bytes</a>, float AS live_percentage}</code></td><td><span class="funcdesc"><p>Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for tables of the provided database id.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.tenant_span_stats"></a><code>crdb_internal.tenant_span_stats(database_id: <a href="int.html">int</a>, table_id: <a href="int.html">int</a>) &rarr; tuple{int AS database_id, int AS table_id, int AS range_count, int AS approximate_disk_<a href="bytes.html">bytes</a>, int AS live_<a href="bytes.html">bytes</a>, int AS total_<a href="bytes.html">bytes</a>, float AS live_percentage}</code></td><td><span class="funcdesc"><p>Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for the provided table id.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.testing_callback"></a><code>crdb_internal.testing_callback(name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>For internal CRDB testing only. The function calls a callback identified by <code>name</code> registered with the server by the test.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.unary_table"></a><code>crdb_internal.unary_table() &rarr; tuple</code></td><td><span class="funcdesc"><p>Produces a virtual table containing a single row with no values.</p>
-<p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
 <tr><td><a name="generate_series"></a><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="generate_series"></a><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>, step: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>
@@ -1418,6 +1498,10 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tr><td><a name="unnest"></a><code>unnest(anyelement[], anyelement[], anyelement[]...) &rarr; tuple{anyelement AS unnest, anyelement AS unnest, anyelement AS unnest}</code></td><td><span class="funcdesc"><p>Returns the input arrays as a set of rows</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="unnest"></a><code>unnest(input: anyelement[]) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="workload_index_recs"></a><code>workload_index_recs() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns set of index recommendations</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="workload_index_recs"></a><code>workload_index_recs(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns set of index recommendations</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 
@@ -1719,6 +1803,29 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_askml"></a><code>st_askml(geometry_str: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the KML representation of a given Geometry.</p>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_asmvtgeom"></a><code>st_asmvtgeom(geometry: geometry, bbox: box2d) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds.
+Uses 256 as the buffer size in tile coordinate space for geometry clipping.
+Uses 4096 as the tile extent size in tile coordinate space.</p>
+<p>The geometry must be in the coordinate system of the target map.
+The function attempts to preserve geometry validity, and corrects it if needed. This may cause the result geometry to collapse to a lower dimension.
+The rectangular bounds of the tile in the target map coordinate space must be provided, so the geometry will be clipped can be transformed.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_asmvtgeom"></a><code>st_asmvtgeom(geometry: geometry, bbox: box2d, extent: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds.
+Uses 256 as the buffer size in tile coordinate space for geometry clipping.</p>
+<p>The geometry must be in the coordinate system of the target map.
+The function attempts to preserve geometry validity, and corrects it if needed. This may cause the result geometry to collapse to a lower dimension.
+The rectangular bounds of the tile in the target map coordinate space must be provided, so the geometry will be clipped can be transformed.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_asmvtgeom"></a><code>st_asmvtgeom(geometry: geometry, bbox: box2d, extent: <a href="int.html">int</a>, buffer: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds.</p>
+<p>The geometry must be in the coordinate system of the target map.
+The function attempts to preserve geometry validity, and corrects it if needed. This may cause the result geometry to collapse to a lower dimension.
+The rectangular bounds of the tile in the target map coordinate space must be provided, so the geometry will be clipped can be transformed.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_asmvtgeom"></a><code>st_asmvtgeom(geometry: geometry, bbox: box2d, extent: <a href="int.html">int</a>, buffer: <a href="int.html">int</a>, clip: <a href="bool.html">bool</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds if required.</p>
+<p>The geometry must be in the coordinate system of the target map.
+The function attempts to preserve geometry validity, and corrects it if needed. This may cause the result geometry to collapse to a lower dimension.
+The rectangular bounds of the tile in the target map coordinate space must be provided, so the geometry can be transformed, and clipped if required.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_astext"></a><code>st_astext(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geography. A default of 15 decimal digits is used.</p>
 </span></td><td>Immutable</td></tr>
@@ -2610,6 +2717,18 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 <tr><td><a name="st_symmetricdifference"></a><code>st_symmetricdifference(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the symmetric difference of both geometries.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="st_tileenvelope"></a><code>st_tileenvelope(tileZoom: int4, tileX: int4, tileY: int4) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a rectangular Polygon giving the extent of a tile in the XYZ tile system.
+The tile is specifed by the zoom level Z and the XY index of the tile in the grid at that level.
+Can be used to define the tile bounds required by ST_AsMVTGeom to convert geometry into the MVT tile coordinate space.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_tileenvelope"></a><code>st_tileenvelope(tileZoom: int4, tileX: int4, tileY: int4, bounds: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a rectangular Polygon giving the extent of a tile in the XYZ tile system.
+The tile is specifed by the zoom level Z and the XY index of the tile in the grid at that level.
+Can be used to define the tile bounds required by ST_AsMVTGeom to convert geometry into the MVT tile coordinate space.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_tileenvelope"></a><code>st_tileenvelope(tileZoom: int4, tileX: int4, tileY: int4, bounds: geometry, margin: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a rectangular Polygon giving the extent of a tile in the XYZ tile system.
+The tile is specifed by the zoom level Z and the XY index of the tile in the grid at that level.
+Can be used to define the tile bounds required by ST_AsMVTGeom to convert geometry into the MVT tile coordinate space.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="st_touches"></a><code>st_touches(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if the only points in common between geometry_a and geometry_b are on the boundary. Note points do not touch other points.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>
@@ -2687,11 +2806,39 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 <tbody>
 <tr><td><a name="ascii"></a><code>ascii(val: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the character code of the first character in <code>val</code>. Despite the name, the function supports Unicode too.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="bit_count"></a><code>bit_count(val: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits set used to represent <code>val</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bit_count"></a><code>bit_count(val: varbit) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits set used to represent <code>val</code>.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="bit_length"></a><code>bit_length(val: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits used to represent <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="bit_length"></a><code>bit_length(val: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits used to represent <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="bit_length"></a><code>bit_length(val: varbit) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits used to represent <code>val</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_and"></a><code>bitmask_and(a: <a href="string.html">string</a>, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_and"></a><code>bitmask_and(a: <a href="string.html">string</a>, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_and"></a><code>bitmask_and(a: varbit, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_and"></a><code>bitmask_and(a: varbit, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_or"></a><code>bitmask_or(a: <a href="string.html">string</a>, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_or"></a><code>bitmask_or(a: <a href="string.html">string</a>, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_or"></a><code>bitmask_or(a: varbit, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_or"></a><code>bitmask_or(a: varbit, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_xor"></a><code>bitmask_xor(a: <a href="string.html">string</a>, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise XOR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_xor"></a><code>bitmask_xor(a: <a href="string.html">string</a>, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise XOR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_xor"></a><code>bitmask_xor(a: varbit, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise XOR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_xor"></a><code>bitmask_xor(a: varbit, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise XOR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="btrim"></a><code>btrim(input: <a href="string.html">string</a>, trim_chars: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes any characters included in <code>trim_chars</code> from the beginning or end of <code>input</code> (applies recursively).</p>
 <p>For example, <code>btrim('doggie', 'eod')</code> returns <code>ggi</code>.</p>
@@ -2719,57 +2866,11 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="convert_to"></a><code>convert_to(str: <a href="string.html">string</a>, enc: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Encode the string <code>str</code> as a byte array using encoding <code>enc</code>. Supports encodings ‘UTF8’ and ‘LATIN1’.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.decode_external_plan_gist"></a><code>crdb_internal.decode_external_plan_gist(gist: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of output similar to EXPLAIN from a gist such as those found in planGists element of the statistics column of the statement_statistics table without attempting to resolve tables or indexes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.decode_plan_gist"></a><code>crdb_internal.decode_plan_gist(gist: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of output similar to EXPLAIN from a gist such as those found in planGists element of the statistics column of the statement_statistics table.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.gen_rand_ident"></a><code>crdb_internal.gen_rand_ident(name_pattern: <a href="string.html">string</a>, count: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns random SQL identifiers.</p>
-<p>gen_rand_ident(pattern, count) is an alias for gen_rand_ident(pattern, count, ‘’).
-See the documentation of the other gen_rand_ident overload for details.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.gen_rand_ident"></a><code>crdb_internal.gen_rand_ident(name_pattern: <a href="string.html">string</a>, count: <a href="int.html">int</a>, parameters: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns count random SQL identifiers that resemble the name_pattern.</p>
-<p>The last argument is a JSONB object containing the following optional fields:</p>
-<ul>
-<li>“seed”: the seed to use for the pseudo-random generator (default: random).</li>
-<li>“number”: whether to add a number to the generated names (default true).
-When enabled, occurrences of the character ‘#’ in the name pattern are
-replaced by the number. If ‘#’ is not present, the number is added at the end.</li>
-<li>“noise”: whether to add noise to the generated names (default true).
-It adds a non-zero probability for each of the probability options below left to zero.
-(To enable noise generally but disable one type of noise, set its probability to -1.)</li>
-<li>“punctuate”: probability of adding punctuation.</li>
-<li>“fmt”: probability of adding random Go/C formatting directives.</li>
-<li>“escapes”: probability of adding random escape sequences.</li>
-<li>“quote”: probabiltiy of adding single or double quotes.</li>
-<li>“emote”: probability of adding emojis.</li>
-<li>“space”: probability of adding simple spaces.</li>
-<li>“whitespace”: probability of adding complex whitespace.</li>
-<li>“capitals”: probability of using capital letters.
-Note: the name pattern must contain ASCII letters already for capital letters to be used.</li>
-<li>“diacritics”: probability of adding diacritics.</li>
-<li>“diacritic_depth”: max number of diacritics to add at a time (default 1).</li>
-<li>“zalgo”: special option that overrides diacritics and diacritic_depth (default false).</li>
-</ul>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.show_create_all_schemas"></a><code>crdb_internal.show_create_all_schemas(database_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of CREATE schema statements.
-The output can be used to recreate a database.’</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.show_create_all_tables"></a><code>crdb_internal.show_create_all_tables(database_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of CREATE table statements followed by
-ALTER table statements that add table constraints. The rows are ordered
-by dependencies. All foreign keys are added after the creation of the table
-in the alter statements.
-It is not recommended to perform this operation on a database with many
-tables.
-The output can be used to recreate a database.’</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.show_create_all_types"></a><code>crdb_internal.show_create_all_types(database_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of CREATE type statements.
-The output can be used to recreate a database.’</p>
-</span></td><td>Volatile</td></tr>
 <tr><td><a name="decode"></a><code>decode(text: <a href="string.html">string</a>, format: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Decodes <code>data</code> using <code>format</code> (<code>hex</code> / <code>escape</code> / <code>base64</code>).</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="decompress"></a><code>decompress(data: <a href="bytes.html">bytes</a>, codec: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Decompress <code>data</code> with the specified <code>codec</code> (<code>gzip</code>, ‘lz4’, ‘snappy’, 'zstd).</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="difference"></a><code>difference(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert two strings to their Soundex codes and then reports the number of matching code positions.</p>
+<tr><td><a name="difference"></a><code>difference(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Convert two strings to their Soundex codes and then reports the number of matching code positions.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="encode"></a><code>encode(data: <a href="bytes.html">bytes</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Encodes <code>data</code> using <code>format</code> (<code>hex</code> / <code>escape</code> / <code>base64</code>).</p>
 </span></td><td>Immutable</td></tr>
@@ -3075,207 +3176,7 @@ Case mode values range between 0 - 1, representing lower casing and upper casing
 a CockroachDB HLC in decimal form.</p>
 <p>Note that uses of this function disable server-side optimizations and
 may increase either contention or retry errors, or both.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.active_version"></a><code>crdb_internal.active_version() &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the current active cluster version.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.approximate_timestamp"></a><code>crdb_internal.approximate_timestamp(timestamp: <a href="decimal.html">decimal</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Converts the crdb_internal_mvcc_timestamp column into an approximate timestamp.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.assignment_cast"></a><code>crdb_internal.assignment_cast(val: anyelement, type: anyelement) &rarr; anyelement</code></td><td><span class="funcdesc"><p>This function is used internally to perform assignment casts during mutations.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.check_consistency"></a><code>crdb_internal.check_consistency(stats_only: <a href="bool.html">bool</a>, start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{int AS range_id, bytes AS start_key, string AS start_key_pretty, string AS status, string AS detail, interval AS duration}</code></td><td><span class="funcdesc"><p>Runs a consistency check on ranges touching the specified key range. an empty start or end key is treated as the minimum and maximum possible, respectively. stats_only should only be set to false when targeting a small number of ranges to avoid overloading the cluster. Each returned row contains the range ID, the status (a roachpb.CheckConsistencyResponse_Status), and verbose detail.</p>
-<p>Example usage:</p>
-<p><code>SELECT * FROM crdb_internal.check_consistency(true, b'\x02', b'\x04')</code></p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.check_password_hash_format"></a><code>crdb_internal.check_password_hash_format(password: <a href="bytes.html">bytes</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function checks whether a string is a precomputed password hash. Returns the hash algorithm.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.cluster_id"></a><code>crdb_internal.cluster_id() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns the logical cluster ID for this tenant.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.cluster_name"></a><code>crdb_internal.cluster_name() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the cluster name.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.cluster_setting_encoded_default"></a><code>crdb_internal.cluster_setting_encoded_default(setting: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the encoded default value of the given cluster setting.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.create_join_token"></a><code>crdb_internal.create_join_token() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Creates a join token for use when adding a new node to a secure cluster.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.create_session_revival_token"></a><code>crdb_internal.create_session_revival_token() &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generate a token that can be used to create a new session for the current user.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.create_sql_schema_telemetry_job"></a><code>crdb_internal.create_sql_schema_telemetry_job() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used to create a schema telemetry job instance.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.decode_cluster_setting"></a><code>crdb_internal.decode_cluster_setting(setting: <a href="string.html">string</a>, value: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Decodes the given encoded value for a cluster setting.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.deserialize_session"></a><code>crdb_internal.deserialize_session(session: <a href="bytes.html">bytes</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function deserializes the serialized variables into the current session.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.encode_key"></a><code>crdb_internal.encode_key(table_id: <a href="int.html">int</a>, index_id: <a href="int.html">int</a>, row_tuple: anyelement) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generate the key for a row on a particular table and index.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.fingerprint"></a><code>crdb_internal.fingerprint(span: <a href="bytes.html">bytes</a>[], start_time: <a href="timestamp.html">timestamptz</a>, all_revisions: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.fingerprint"></a><code>crdb_internal.fingerprint(span: <a href="bytes.html">bytes</a>[], stripped: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.force_assertion_error"></a><code>crdb_internal.force_assertion_error(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.force_error"></a><code>crdb_internal.force_error(errorCode: <a href="string.html">string</a>, msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.force_log_fatal"></a><code>crdb_internal.force_log_fatal(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.force_panic"></a><code>crdb_internal.force_panic(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.force_retry"></a><code>crdb_internal.force_retry(val: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.generate_test_objects"></a><code>crdb_internal.generate_test_objects(names: <a href="string.html">string</a>, counts: <a href="int.html">int</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Generates a number of objects whose name follow the provided pattern.</p>
-<p>generate_test_objects(pat, counts) is an alias for
-generate_test_objects(’{“names”:pat, “counts”:counts}’::jsonb)</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.generate_test_objects"></a><code>crdb_internal.generate_test_objects(names: <a href="string.html">string</a>, number: <a href="int.html">int</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Generates a number of objects whose name follow the provided pattern.</p>
-<p>generate_test_objects(pat, num) is an alias for
-generate_test_objects(’{“names”:pat, “counts”:[num]}’::jsonb)</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.generate_test_objects"></a><code>crdb_internal.generate_test_objects(parameters: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Generates a number of objects whose name follow the provided pattern.</p>
-<p>Parameters:</p>
-<ul>
-<li>“names”: pattern to use to name the generated objects (default:
-“test”).</li>
-<li>“counts”: counts of generated objects (default: [10]).</li>
-<li>“dry_run”: prepare the schema but do not actually write it
-(default: false).</li>
-<li>“seed”: random seed to use (default: auto).</li>
-<li>“randomize_columns”: whether to randomize the column names on tables
-(default: true).</li>
-<li>“table_templates”: table templates to use.
-If the last part of “names” is “_”, the name of the template
-will be used as base pattern during name generation for tables.
-Otherwise, the last part of “names” will be used as pattern.
-If no table templates are specified, a simple template is used.</li>
-<li>“name_gen”: configuration for the name generation, see below.</li>
-</ul>
-<p>Name generation options:</p>
-<ul>
-<li>“number”: whether to add a number to the generated names (default true).
-When enabled, occurrences of the character ‘#’ in the name pattern are
-replaced by the number. If ‘#’ is not present, the number is added at the end.</li>
-<li>“noise”: whether to add noise to the generated names (default true).
-It adds a non-zero probability for each of the probability options below left to zero.
-(To enable noise generally but disable one type of noise, set its probability to -1.)</li>
-<li>“punctuate”: probability of adding punctuation.</li>
-<li>“fmt”: probability of adding random Go/C formatting directives.</li>
-<li>“escapes”: probability of adding random escape sequences.</li>
-<li>“quote”: probabiltiy of adding single or double quotes.</li>
-<li>“emote”: probability of adding emojis.</li>
-<li>“space”: probability of adding simple spaces.</li>
-<li>“whitespace”: probability of adding complex whitespace.</li>
-<li>“capitals”: probability of using capital letters.
-Note: the name pattern must contain ASCII letters already for capital letters to be used.</li>
-<li>“diacritics”: probability of adding diacritics.</li>
-<li>“diacritic_depth”: max number of diacritics to add at a time (default 1).</li>
-<li>“zalgo”: special option that overrides diacritics and diacritic_depth (default false).</li>
-</ul>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.get_database_id"></a><code>crdb_internal.get_database_id(name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.get_namespace_id"></a><code>crdb_internal.get_namespace_id(parent_id: <a href="int.html">int</a>, name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.get_namespace_id"></a><code>crdb_internal.get_namespace_id(parent_id: <a href="int.html">int</a>, parent_schema_id: <a href="int.html">int</a>, name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.get_vmodule"></a><code>crdb_internal.get_vmodule() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the vmodule configuration on the gateway node processing this request.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.get_zone_config"></a><code>crdb_internal.get_zone_config(namespace_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.has_role_option"></a><code>crdb_internal.has_role_option(option: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the current user has the specified role option</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.index_span"></a><code>crdb_internal.index_span(table_id: <a href="int.html">int</a>, index_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a>[]</code></td><td><span class="funcdesc"><p>This function returns the span that contains the keys for the given index.</p>
-</span></td><td>Leakproof</td></tr>
-<tr><td><a name="crdb_internal.is_admin"></a><code>crdb_internal.is_admin() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Retrieves the current user’s admin status.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.is_at_least_version"></a><code>crdb_internal.is_at_least_version(version: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if the cluster version is not older than the argument.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.is_constraint_active"></a><code>crdb_internal.is_constraint_active(table_name: <a href="string.html">string</a>, constraint_name: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to determine if a given constraint is currently.
-active for the current transaction.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.job_execution_details"></a><code>crdb_internal.job_execution_details(job_id: <a href="int.html">int</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Output a JSONB version of the specified job’s execution details. The execution details are collectedand persisted during the lifetime of the job and provide more observability into the job’s execution</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.lease_holder"></a><code>crdb_internal.lease_holder(key: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used to fetch the leaseholder corresponding to a request key</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.list_sql_keys_in_range"></a><code>crdb_internal.list_sql_keys_in_range(range_id: <a href="int.html">int</a>) &rarr; tuple{string AS key, string AS value, string AS ts}</code></td><td><span class="funcdesc"><p>Returns all SQL K/V pairs within the requested range.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.locality_value"></a><code>crdb_internal.locality_value(key: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the value of the specified locality key.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.node_executable_version"></a><code>crdb_internal.node_executable_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the version of CockroachDB this node is running.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.node_id"></a><code>crdb_internal.node_id() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the node ID.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.notice"></a><code>crdb_internal.notice(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.notice"></a><code>crdb_internal.notice(severity: <a href="string.html">string</a>, msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.num_geo_inverted_index_entries"></a><code>crdb_internal.num_geo_inverted_index_entries(table_id: <a href="int.html">int</a>, index_id: <a href="int.html">int</a>, val: geography) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.num_geo_inverted_index_entries"></a><code>crdb_internal.num_geo_inverted_index_entries(table_id: <a href="int.html">int</a>, index_id: <a href="int.html">int</a>, val: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: <a href="string.html">string</a>, version: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: anyelement[]) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: anyelement[], version: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: jsonb, version: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: tsvector, version: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.payloads_for_span"></a><code>crdb_internal.payloads_for_span(span_id: <a href="int.html">int</a>) &rarr; tuple{string AS payload_type, jsonb AS payload_jsonb}</code></td><td><span class="funcdesc"><p>Returns the payload(s) of the requested span and all its children.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.payloads_for_trace"></a><code>crdb_internal.payloads_for_trace(trace_id: <a href="int.html">int</a>) &rarr; tuple{int AS span_id, string AS payload_type, jsonb AS payload_jsonb}</code></td><td><span class="funcdesc"><p>Returns the payload(s) of the requested trace.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.pretty_key"></a><code>crdb_internal.pretty_key(raw_key: <a href="bytes.html">bytes</a>, skip_fields: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.pretty_span"></a><code>crdb_internal.pretty_span(raw_key_start: <a href="bytes.html">bytes</a>, raw_key_end: <a href="bytes.html">bytes</a>, skip_fields: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.pretty_value"></a><code>crdb_internal.pretty_value(raw_value: <a href="bytes.html">bytes</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.range_stats"></a><code>crdb_internal.range_stats(key: <a href="bytes.html">bytes</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This function is used to retrieve range statistics information as a JSON object.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.read_file"></a><code>crdb_internal.read_file(uri: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Read the content of the file at the supplied external storage URI</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.repair_ttl_table_scheduled_job"></a><code>crdb_internal.repair_ttl_table_scheduled_job(oid: oid) &rarr; void</code></td><td><span class="funcdesc"><p>Repairs the scheduled job for a TTL table if it is missing.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.request_statement_bundle"></a><code>crdb_internal.request_statement_bundle(stmtFingerprint: <a href="string.html">string</a>, samplingProbability: <a href="float.html">float</a>, minExecutionLatency: <a href="interval.html">interval</a>, expiresAfter: <a href="interval.html">interval</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Used to request statement bundle for a given statement fingerprint
-that has execution latency greater than the ‘minExecutionLatency’. If the
-‘expiresAfter’ argument is empty, then the statement bundle request never
-expires until the statement bundle is collected</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.reset_index_usage_stats"></a><code>crdb_internal.reset_index_usage_stats() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to clear the collected index usage statistics.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.reset_sql_stats"></a><code>crdb_internal.reset_sql_stats() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to clear the collected SQL statistics.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.revalidate_unique_constraint"></a><code>crdb_internal.revalidate_unique_constraint(table_name: <a href="string.html">string</a>, constraint_name: <a href="string.html">string</a>) &rarr; void</code></td><td><span class="funcdesc"><p>This function is used to revalidate the given unique constraint in the given
-table. Returns an error if validation fails.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.revalidate_unique_constraints_in_all_tables"></a><code>crdb_internal.revalidate_unique_constraints_in_all_tables() &rarr; void</code></td><td><span class="funcdesc"><p>This function is used to revalidate all unique constraints in tables
-in the current database. Returns an error if validation fails.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.revalidate_unique_constraints_in_table"></a><code>crdb_internal.revalidate_unique_constraints_in_table(table_name: <a href="string.html">string</a>) &rarr; void</code></td><td><span class="funcdesc"><p>This function is used to revalidate all unique constraints in the given
-table. Returns an error if validation fails.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.round_decimal_values"></a><code>crdb_internal.round_decimal_values(val: <a href="decimal.html">decimal</a>, scale: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>This function is used internally to round decimal values during mutations.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.round_decimal_values"></a><code>crdb_internal.round_decimal_values(val: <a href="decimal.html">decimal</a>[], scale: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a>[]</code></td><td><span class="funcdesc"><p>This function is used internally to round decimal array values during mutations.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.schedule_sql_stats_compaction"></a><code>crdb_internal.schedule_sql_stats_compaction() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to start a SQL stats compaction job.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.serialize_session"></a><code>crdb_internal.serialize_session() &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>This function serializes the variables in the current session.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.set_trace_verbose"></a><code>crdb_internal.set_trace_verbose(trace_id: <a href="int.html">int</a>, verbosity: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if root span was found and verbosity was set, false otherwise.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.set_vmodule"></a><code>crdb_internal.set_vmodule(vmodule_string: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Set the equivalent of the <code>--vmodule</code> flag on the gateway node processing this request; it affords control over the logging verbosity of different files. Example syntax: <code>crdb_internal.set_vmodule('recordio=2,file=1,gfs*=3')</code>. Reset with: <code>crdb_internal.set_vmodule('')</code>. Raising the verbosity can severely affect performance.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.table_span"></a><code>crdb_internal.table_span(table_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a>[]</code></td><td><span class="funcdesc"><p>This function returns the span that contains the keys for the given table.</p>
-</span></td><td>Leakproof</td></tr>
-<tr><td><a name="crdb_internal.trace_id"></a><code>crdb_internal.trace_id() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the current trace ID or an error if no trace is open.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.unsafe_clear_gossip_info"></a><code>crdb_internal.unsafe_clear_gossip_info(key: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.validate_session_revival_token"></a><code>crdb_internal.validate_session_revival_token(token: <a href="bytes.html">bytes</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Validate a token that was created by create_session_revival_token. Intended for testing.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.validate_ttl_scheduled_jobs"></a><code>crdb_internal.validate_ttl_scheduled_jobs() &rarr; void</code></td><td><span class="funcdesc"><p>Validate all TTL tables have a valid scheduled job attached.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.void_func"></a><code>crdb_internal.void_func() &rarr; void</code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.write_file"></a><code>crdb_internal.write_file(data: <a href="bytes.html">bytes</a>, uri: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Write the content passed to a file at the supplied external storage URI</p>
+<p>Returns an error if run in a transaction with an isolation level weaker than SERIALIZABLE.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="current_database"></a><code>current_database() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current database.</p>
 </span></td><td>Stable</td></tr>
@@ -3300,15 +3201,6 @@ table. Returns an error if validation fails.</p>
 <tr><td><a name="to_regtype"></a><code>to_regtype(text: <a href="string.html">string</a>) &rarr; regtype</code></td><td><span class="funcdesc"><p>Translates a textual type name to its OID</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="version"></a><code>version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the node’s version of CockroachDB.</p>
-</span></td><td>Volatile</td></tr></tbody>
-</table>
-
-### System repair functions
-
-<table>
-<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
-<tbody>
-<tr><td><a name="crdb_internal.force_delete_table_data"></a><code>crdb_internal.force_delete_table_data(id: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function can be used to clear the data belonging to a table, when the table cannot be dropped.</p>
 </span></td><td>Volatile</td></tr></tbody>
 </table>
 
@@ -3536,9 +3428,13 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="information_schema._pg_numeric_scale"></a><code>information_schema._pg_numeric_scale(typid: oid, typmod: int4) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the scale of the given type with type modifier</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="nameconcatoid"></a><code>nameconcatoid(name: <a href="string.html">string</a>, oid: oid) &rarr; name</code></td><td><span class="funcdesc"><p>Used in the information_schema to produce specific_name columns, which are supposed to be unique per schema. The result is the same as ($1::text || ‘_’ || $2::text)::name except that, if it would not fit in 63 characters, we make it do so by truncating the name input (not the oid).</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="obj_description"></a><code>obj_description(object_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a database object specified by its OID alone. This is deprecated since there is no guarantee that OIDs are unique across different system catalogs; therefore, the wrong comment might be returned.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="obj_description"></a><code>obj_description(object_oid: oid, catalog_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a database object specified by its OID and the name of the containing system catalog. For example, obj_description(123456, ‘pg_class’) would retrieve the comment for the table with OID 123456.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="oidvectortypes"></a><code>oidvectortypes(vector: oidvector) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Generates a comma seperated string of type names from an oidvector.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_backend_pid"></a><code>pg_backend_pid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a numerical ID attached to this session. This ID is part of the query cancellation key used by the wire protocol. This function was only added for compatibility, and unlike in Postgres, the returned value does not correspond to a real process ID.</p>
 </span></td><td>Stable</td></tr>
@@ -3549,6 +3445,8 @@ table. Returns an error if validation fails.</p>
 <tr><td><a name="pg_column_size"></a><code>pg_column_size(anyelement...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return size in bytes of the column provided as an argument</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="pg_function_is_visible"></a><code>pg_function_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the function with the given OID belongs to one of the schemas on the search path.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_function_arg_default"></a><code>pg_get_function_arg_default(func_oid: oid, arg_num: int4) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Get textual representation of a function argument’s default value. The second argument of this function is the argument number among all arguments (i.e. proallargtypes, <em>not</em> proargtypes), starting with 1, because that’s how information_schema.sql uses it. Currently, this always returns NULL, since CockroachDB does not support default values.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_function_arguments"></a><code>pg_get_function_arguments(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the argument list (with defaults) necessary to identify a function, in the form it would need to appear in within CREATE FUNCTION.</p>
 </span></td><td>Stable</td></tr>
@@ -3586,6 +3484,8 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_relation_is_updatable"></a><code>pg_relation_is_updatable(reloid: oid, include_triggers: <a href="bool.html">bool</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Returns the update events the relation supports.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="pg_sequence_last_value"></a><code>pg_sequence_last_value(sequence_oid: oid) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the last value generated by a sequence, or NULL if the sequence has not been used yet.</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="pg_sleep"></a><code>pg_sleep(seconds: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>pg_sleep makes the current session’s process sleep until seconds seconds have elapsed. seconds is a value of type double precision, so fractional-second delays can be specified.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="pg_table_is_visible"></a><code>pg_table_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the table with the given OID belongs to one of the schemas on the search path.</p>

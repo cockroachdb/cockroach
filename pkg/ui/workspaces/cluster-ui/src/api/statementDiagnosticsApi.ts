@@ -11,9 +11,12 @@
 import moment from "moment-timezone";
 import { Duration } from "src/util/format";
 import {
+  createSqlExecutionRequest,
   executeInternalSql,
+  executeInternalSqlHelper,
   SqlExecutionRequest,
-  sqlResultsAreEmpty,
+  SqlTxnResult,
+  txnResultSetIsEmpty,
 } from "src/api";
 
 export type StatementDiagnosticsReport = {
@@ -28,11 +31,20 @@ export type StatementDiagnosticsReport = {
 
 export type StatementDiagnosticsResponse = StatementDiagnosticsReport[];
 
-export function getStatementDiagnosticsReports(): Promise<StatementDiagnosticsResponse> {
-  const req: SqlExecutionRequest = {
-    statements: [
-      {
-        sql: `SELECT
+export async function getStatementDiagnosticsReports(): Promise<StatementDiagnosticsResponse> {
+  let result: StatementDiagnosticsResponse = [];
+
+  const createReq = () => {
+    let offset = "";
+    const args = [];
+    if (result.length > 0) {
+      // Using the id is more performant and reliable than offset.
+      // Schema is PRIMARY KEY (id) with INT8 DEFAULT unique_rowid() NOT NULL.
+      offset = " AND (id::STRING < $1) ";
+      const last = result[result.length - 1];
+      args.push(last.id);
+    }
+    const query = `SELECT
       id::STRING,
       statement_fingerprint,
       completed,
@@ -41,26 +53,43 @@ export function getStatementDiagnosticsReports(): Promise<StatementDiagnosticsRe
       min_execution_latency,
       expires_at
     FROM
-      system.statement_diagnostics_requests
+      system.statement_diagnostics_requests 
     WHERE
-      expires_at > now() OR expires_at IS NULL OR completed = true`,
+     (expires_at > now() OR expires_at IS NULL OR completed = true) ${offset}
+     order by id desc`;
+
+    return createSqlExecutionRequest(undefined, [
+      {
+        sql: query,
+        arguments: args,
       },
-    ],
-    execute: true,
+    ]);
   };
 
-  return executeInternalSql<StatementDiagnosticsReport>(req).then(res => {
-    // If request succeeded but query failed, throw error (caught by saga/cacheDataReducer).
-    if (res.error) {
-      throw res.error;
-    }
+  const err = await executeInternalSqlHelper<StatementDiagnosticsReport>(
+    createReq,
+    (response: SqlTxnResult<StatementDiagnosticsReport>[]) => {
+      if (!response) {
+        return;
+      }
 
-    if (sqlResultsAreEmpty(res)) {
-      return [];
-    }
+      if (txnResultSetIsEmpty(response)) {
+        return;
+      }
 
-    return res.execution.txn_results[0].rows;
-  });
+      response.forEach(x => {
+        if (x.rows && x.rows.length > 0) {
+          result = result.concat(x.rows);
+        }
+      });
+    },
+  );
+
+  if (err) {
+    throw err;
+  }
+
+  return result;
 }
 
 type CheckPendingStmtDiagnosticRow = {
@@ -72,6 +101,7 @@ export type InsertStmtDiagnosticRequest = {
   samplingProbability?: number;
   minExecutionLatencySeconds?: number;
   expiresAfterSeconds?: number;
+  planGist: string;
 };
 
 export type InsertStmtDiagnosticResponse = {
@@ -83,8 +113,15 @@ export function createStatementDiagnosticsReport({
   samplingProbability,
   minExecutionLatencySeconds,
   expiresAfterSeconds,
+  planGist,
 }: InsertStmtDiagnosticRequest): Promise<InsertStmtDiagnosticResponse> {
   const args: any = [stmtFingerprint];
+  let query = `SELECT crdb_internal.request_statement_bundle($1, $2, $3::INTERVAL, $4::INTERVAL) as req_resp`;
+
+  if (planGist) {
+    args.push(planGist);
+    query = `SELECT crdb_internal.request_statement_bundle($1, $2, $3, $4::INTERVAL, $5::INTERVAL) as req_resp`;
+  }
 
   if (samplingProbability) {
     args.push(samplingProbability);
@@ -103,7 +140,7 @@ export function createStatementDiagnosticsReport({
   }
 
   const createStmtDiag = {
-    sql: `SELECT crdb_internal.request_statement_bundle($1, $2, $3::INTERVAL, $4::INTERVAL) as req_resp`,
+    sql: query,
     arguments: args,
   };
 
@@ -136,9 +173,9 @@ function checkExistingDiagRequest(stmtFingerprint: string): Promise<void> {
   const checkPendingStmtDiag = {
     sql: `SELECT count(1) FROM system.statement_diagnostics_requests
         WHERE
-          completed = false AND
-          statement_fingerprint = $1 AND
-          (expires_at IS NULL OR expires_at > now())`,
+        completed = false AND
+        statement_fingerprint = $1 AND
+      (expires_at IS NULL OR expires_at > now())`,
     arguments: [stmtFingerprint],
   };
 

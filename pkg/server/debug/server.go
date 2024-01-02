@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
@@ -53,14 +54,11 @@ func init() {
 // Endpoint is the entry point under which the debug tools are housed.
 const Endpoint = "/debug/"
 
-var _ = func() *settings.StringSetting {
-	// This setting definition still exists so as to not break
-	// deployment scripts that set it unconditionally.
-	v := settings.RegisterStringSetting(
-		settings.TenantWritable, "server.remote_debugging.mode", "unused", "local")
-	v.SetRetired()
-	return v
-}()
+// This setting definition still exists so as to not break
+// deployment scripts that set it unconditionally.
+var _ = settings.RegisterStringSetting(
+	settings.ApplicationLevel, "server.remote_debugging.mode", "unused", "local",
+	settings.Retired)
 
 // Server serves the /debug/* family of tools.
 type Server struct {
@@ -70,7 +68,79 @@ type Server struct {
 	spy        logSpy
 }
 
-type serverTickleFn = func(ctx context.Context, name roachpb.TenantName) error
+func setupProcessWideRoutes(
+	mux *http.ServeMux,
+	st *cluster.Settings,
+	tenantID roachpb.TenantID,
+	authorizer tenantcapabilities.Authorizer,
+	vsrv *vmoduleServer,
+	profiler pprofui.Profiler,
+) {
+	authzCheck := func(w http.ResponseWriter, r *http.Request) bool {
+		if err := authorizer.HasProcessDebugCapability(r.Context(), tenantID); err != nil {
+			http.Error(w, "tenant does not have capability to debug the running process", http.StatusForbidden)
+			return false
+		}
+		return true
+	}
+
+	authzFunc := func(origHandler http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if authzCheck(w, r) {
+				origHandler(w, r)
+			}
+		}
+	}
+
+	// Cribbed straight from pprof's `init()` method. See:
+	// https://golang.org/src/net/http/pprof/pprof.go
+	mux.HandleFunc("/debug/pprof/", authzFunc(pprof.Index))
+	mux.HandleFunc("/debug/pprof/cmdline", authzFunc(pprof.Cmdline))
+	mux.HandleFunc("/debug/pprof/profile", authzFunc(func(w http.ResponseWriter, r *http.Request) {
+		CPUProfileHandler(st, w, r)
+	}))
+	mux.HandleFunc("/debug/pprof/symbol", authzFunc(pprof.Symbol))
+	mux.HandleFunc("/debug/pprof/trace", authzFunc(pprof.Trace))
+
+	// Cribbed straight from trace's `init()` method. See:
+	// https://github.com/golang/net/blob/master/trace/trace.go
+	mux.HandleFunc("/debug/requests", authzFunc(trace.Traces))
+	mux.HandleFunc("/debug/events", authzFunc(trace.Events))
+
+	// This registers a superset of the variables exposed through the
+	// /debug/vars endpoint onto the /debug/metrics endpoint. It includes all
+	// expvars registered globally and all metrics registered on the
+	// DefaultRegistry.
+	mux.HandleFunc("/debug/metrics", authzFunc(exp.ExpHandler(metrics.DefaultRegistry).ServeHTTP))
+	// Also register /debug/vars (even though /debug/metrics is better).
+	mux.HandleFunc("/debug/vars", authzFunc(expvar.Handler().ServeHTTP))
+
+	// Register the stopper endpoint, which lists all active tasks.
+	mux.HandleFunc("/debug/stopper", authzFunc(stop.HandleDebug))
+
+	// Set up the vmodule endpoint.
+	mux.HandleFunc("/debug/vmodule", authzFunc(vsrv.vmoduleHandleDebug))
+
+	ps := pprofui.NewServer(pprofui.NewMemStorage(pprofui.ProfileConcurrency, pprofui.ProfileExpiry), profiler)
+	mux.Handle("/debug/pprof/ui/", authzFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.StripPrefix("/debug/pprof/ui", ps).ServeHTTP(w, r)
+	}))
+
+	mux.HandleFunc("/debug/pprof/goroutineui/", authzFunc(func(w http.ResponseWriter, req *http.Request) {
+		dump := goroutineui.NewDump()
+
+		_ = req.ParseForm()
+		switch req.Form.Get("sort") {
+		case "count":
+			dump.SortCountDesc()
+		case "wait":
+			dump.SortWaitDesc()
+		default:
+		}
+		_ = dump.HTML(w)
+	}))
+
+}
 
 // NewServer sets up a debug server.
 func NewServer(
@@ -78,57 +148,23 @@ func NewServer(
 	st *cluster.Settings,
 	hbaConfDebugFn http.HandlerFunc,
 	profiler pprofui.Profiler,
-	serverTickleFn serverTickleFn,
+	tenantID roachpb.TenantID,
+	authorizer tenantcapabilities.Authorizer,
 ) *Server {
 	mux := http.NewServeMux()
 
 	// Install a redirect to the UI's collection of debug tools.
 	mux.HandleFunc(Endpoint, handleLanding)
 
-	// Cribbed straight from pprof's `init()` method. See:
-	// https://golang.org/src/net/http/pprof/pprof.go
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", func(w http.ResponseWriter, r *http.Request) {
-		CPUProfileHandler(st, w, r)
-	})
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-
-	// Cribbed straight from trace's `init()` method. See:
-	// https://github.com/golang/net/blob/master/trace/trace.go
-	mux.HandleFunc("/debug/requests", trace.Traces)
-	mux.HandleFunc("/debug/events", trace.Events)
-
-	// This registers a superset of the variables exposed through the
-	// /debug/vars endpoint onto the /debug/metrics endpoint. It includes all
-	// expvars registered globally and all metrics registered on the
-	// DefaultRegistry.
-	mux.Handle("/debug/metrics", exp.ExpHandler(metrics.DefaultRegistry))
-	// Also register /debug/vars (even though /debug/metrics is better).
-	mux.Handle("/debug/vars", expvar.Handler())
+	// Debug routes that retrieve process-wide state.
+	vsrv := &vmoduleServer{}
+	setupProcessWideRoutes(mux, st, tenantID, authorizer, vsrv, profiler)
 
 	if hbaConfDebugFn != nil {
 		// Expose the processed HBA configuration through the debug
 		// interface for inspection during troubleshooting.
 		mux.HandleFunc("/debug/hba_conf", hbaConfDebugFn)
 	}
-
-	// Register the stopper endpoint, which lists all active tasks.
-	mux.HandleFunc("/debug/stopper", stop.HandleDebug)
-
-	if serverTickleFn != nil {
-		// Register the server tickling function.
-		//
-		// TODO(knz): This can be removed once
-		// https://github.com/cockroachdb/cockroach/issues/84585 is
-		// implemented.
-		mux.Handle("/debug/tickle", handleTickle(serverTickleFn))
-	}
-
-	// Set up the vmodule endpoint.
-	vsrv := &vmoduleServer{}
-	mux.HandleFunc("/debug/vmodule", vsrv.vmoduleHandleDebug)
 
 	// Set up the log spy, a tool that allows inspecting filtered logs at high
 	// verbosity. We require the tenant ID from the ambientCtx to set the logSpy
@@ -148,23 +184,6 @@ func NewServer(
 	spy.tenantID = roachpb.MustMakeTenantID(parsed)
 
 	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
-
-	ps := pprofui.NewServer(pprofui.NewMemStorage(pprofui.ProfileConcurrency, pprofui.ProfileExpiry), profiler)
-	mux.Handle("/debug/pprof/ui/", http.StripPrefix("/debug/pprof/ui", ps))
-
-	mux.HandleFunc("/debug/pprof/goroutineui/", func(w http.ResponseWriter, req *http.Request) {
-		dump := goroutineui.NewDump()
-
-		_ = req.ParseForm()
-		switch req.Form.Get("sort") {
-		case "count":
-			dump.SortCountDesc()
-		case "wait":
-			dump.SortWaitDesc()
-		default:
-		}
-		_ = dump.HTML(w)
-	})
 
 	return &Server{
 		ambientCtx: ambientContext,
@@ -298,26 +317,4 @@ If you are not redirected automatically, follow this <a href='/#/debug'>link</a>
 </body>
 </html>
 `)
-}
-
-type handleTickle serverTickleFn
-
-func (h handleTickle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	opts := r.URL.Query()
-	var name string
-	if n := opts["name"]; len(n) > 0 {
-		name = n[0]
-	}
-	w.Header().Add("Content-type", "text/plain")
-	if name == "" {
-		fmt.Fprint(w, "no name specified")
-		return
-	}
-	ctx := r.Context()
-	err := serverTickleFn(h)(ctx, roachpb.TenantName(name))
-	if err != nil {
-		fmt.Fprint(w, err)
-		return
-	}
-	fmt.Fprintf(w, "server for tenant %q was tickled", name)
 }

@@ -144,6 +144,11 @@ func ParseZoneConfig(t testing.TB, s string) zonepb.ZoneConfig {
 			part = strings.TrimPrefix(part, "voter_constraints=")
 			require.NoError(t, yaml.UnmarshalStrict([]byte(part), &cl))
 			config.VoterConstraints = cl.Constraints
+		case strings.HasPrefix(part, "lease_preferences="):
+			cl := []zonepb.LeasePreference{}
+			part = strings.TrimPrefix(part, "lease_preferences=")
+			require.NoError(t, yaml.UnmarshalStrict([]byte(part), &cl))
+			config.LeasePreferences = cl
 		default:
 			t.Fatalf("unrecognized suffix for %s, expected 'num_replicas=', 'num_voters=', 'constraints=', or 'voter_constraints='", part)
 		}
@@ -645,7 +650,7 @@ func PrintSpanConfigDiffedAgainstDefaults(conf roachpb.SpanConfig) string {
 		diffs = append(diffs, fmt.Sprintf("voter_constraints=%v", conf.VoterConstraints))
 	}
 	if !reflect.DeepEqual(conf.LeasePreferences, defaultConf.LeasePreferences) {
-		diffs = append(diffs, fmt.Sprintf("lease_preferences=%v", conf.VoterConstraints))
+		diffs = append(diffs, fmt.Sprintf("lease_preferences=%v", conf.LeasePreferences))
 	}
 	if !reflect.DeepEqual(conf.GCPolicy.ProtectionPolicies, defaultConf.GCPolicy.ProtectionPolicies) {
 		sort.Slice(conf.GCPolicy.ProtectionPolicies, func(i, j int) bool {

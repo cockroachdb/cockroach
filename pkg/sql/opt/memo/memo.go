@@ -14,6 +14,7 @@ package memo
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -167,6 +168,17 @@ type Memo struct {
 	alwaysUseHistograms                        bool
 	hoistUncorrelatedEqualitySubqueries        bool
 	useImprovedComputedColumnFiltersDerivation bool
+	useImprovedJoinElimination                 bool
+	implicitFKLockingForSerializable           bool
+	durableLockingForSerializable              bool
+	sharedLockingForSerializable               bool
+	useLockOpForSerializable                   bool
+	useProvidedOrderingFix                     bool
+
+	// txnIsoLevel is the isolation level under which the plan was created. This
+	// affects the planning of some locking operations, so it must be included in
+	// memo staleness calculation.
+	txnIsoLevel isolation.Level
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -228,6 +240,13 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		alwaysUseHistograms:                        evalCtx.SessionData().OptimizerAlwaysUseHistograms,
 		hoistUncorrelatedEqualitySubqueries:        evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries,
 		useImprovedComputedColumnFiltersDerivation: evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation,
+		useImprovedJoinElimination:                 evalCtx.SessionData().OptimizerUseImprovedJoinElimination,
+		implicitFKLockingForSerializable:           evalCtx.SessionData().ImplicitFKLockingForSerializable,
+		durableLockingForSerializable:              evalCtx.SessionData().DurableLockingForSerializable,
+		sharedLockingForSerializable:               evalCtx.SessionData().SharedLockingForSerializable,
+		useLockOpForSerializable:                   evalCtx.SessionData().OptimizerUseLockOpForSerializable,
+		useProvidedOrderingFix:                     evalCtx.SessionData().OptimizerUseProvidedOrderingFix,
+		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(ctx, evalCtx, m)
@@ -302,12 +321,6 @@ func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 	}
 }
 
-// SetScalarRoot stores the root memo expression when it is a scalar expression.
-// Used only for testing.
-func (m *Memo) SetScalarRoot(scalar opt.ScalarExpr) {
-	m.rootExpr = scalar
-}
-
 // HasPlaceholders returns true if the memo contains at least one placeholder
 // operator.
 func (m *Memo) HasPlaceholders() bool {
@@ -372,7 +385,14 @@ func (m *Memo) IsStale(
 		m.useImprovedSplitDisjunctionForJoins != evalCtx.SessionData().OptimizerUseImprovedSplitDisjunctionForJoins ||
 		m.alwaysUseHistograms != evalCtx.SessionData().OptimizerAlwaysUseHistograms ||
 		m.hoistUncorrelatedEqualitySubqueries != evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries ||
-		m.useImprovedComputedColumnFiltersDerivation != evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation {
+		m.useImprovedComputedColumnFiltersDerivation != evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation ||
+		m.useImprovedJoinElimination != evalCtx.SessionData().OptimizerUseImprovedJoinElimination ||
+		m.implicitFKLockingForSerializable != evalCtx.SessionData().ImplicitFKLockingForSerializable ||
+		m.durableLockingForSerializable != evalCtx.SessionData().DurableLockingForSerializable ||
+		m.sharedLockingForSerializable != evalCtx.SessionData().SharedLockingForSerializable ||
+		m.useLockOpForSerializable != evalCtx.SessionData().OptimizerUseLockOpForSerializable ||
+		m.useProvidedOrderingFix != evalCtx.SessionData().OptimizerUseProvidedOrderingFix ||
+		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
 
@@ -562,4 +582,19 @@ func (l *LiteralValuesExpr) ColList() opt.ColList {
 // Len implements the ValuesContainer interface.
 func (l *LiteralValuesExpr) Len() int {
 	return l.Rows.Rows.NumRows()
+}
+
+// GetLookupJoinLookupTableDistribution returns the Distribution of a lookup
+// table in a lookup join if that distribution can be statically determined.
+var GetLookupJoinLookupTableDistribution func(
+	lookupJoin *LookupJoinExpr,
+	required *physical.Required,
+	optimizer interface{},
+) (physicalDistribution physical.Distribution)
+
+// CopyGroup helps us create a mock LookupJoinExpr in execbuilder during
+// building of LockExpr. Unlike setGroup this does *not* add the LookupJoinExpr
+// to the group.
+func (e *LookupJoinExpr) CopyGroup(expr RelExpr) {
+	e.grp = expr.group()
 }

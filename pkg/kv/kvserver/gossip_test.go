@@ -42,25 +42,26 @@ func TestGossipFirstRange(t *testing.T) {
 
 	errors := make(chan error, 1)
 	descs := make(chan *roachpb.RangeDescriptor)
-	unregister := tc.Servers[0].Gossip().RegisterCallback(gossip.KeyFirstRangeDescriptor,
-		func(_ string, content roachpb.Value) {
-			var desc roachpb.RangeDescriptor
-			if err := content.GetProto(&desc); err != nil {
-				select {
-				case errors <- err:
-				default:
+	unregister := tc.Servers[0].GossipI().(*gossip.Gossip).
+		RegisterCallback(gossip.KeyFirstRangeDescriptor,
+			func(_ string, content roachpb.Value) {
+				var desc roachpb.RangeDescriptor
+				if err := content.GetProto(&desc); err != nil {
+					select {
+					case errors <- err:
+					default:
+					}
+				} else {
+					select {
+					case descs <- &desc:
+					case <-time.After(45 * time.Second):
+						t.Logf("had to drop descriptor %+v", desc)
+					}
 				}
-			} else {
-				select {
-				case descs <- &desc:
-				case <-time.After(45 * time.Second):
-					t.Logf("had to drop descriptor %+v", desc)
-				}
-			}
-		},
-		// Redundant callbacks are required by this test.
-		gossip.Redundant,
-	)
+			},
+			// Redundant callbacks are required by this test.
+			gossip.Redundant,
+		)
 	// Unregister the callback before attempting to stop the stopper to prevent
 	// deadlock. This is still flaky in theory since a callback can fire between
 	// the last read from the channels and this unregister, but testing has
@@ -159,8 +160,8 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 			MaxBackoff:     50 * time.Millisecond,
 		},
 	}
-	serverArgs.RaftTickInterval = 50 * time.Millisecond
-	serverArgs.RaftElectionTimeoutTicks = 10
+	serverArgs.RaftConfig.RaftTickInterval = 50 * time.Millisecond
+	serverArgs.RaftConfig.RaftElectionTimeoutTicks = 10
 
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
@@ -171,10 +172,10 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	// Take down the first node and replace it with a new one.
 	oldNodeIdx := 0
 	newServerArgs := serverArgs
-	newServerArgs.Addr = tc.Servers[oldNodeIdx].ServingRPCAddr()
-	newServerArgs.SQLAddr = tc.Servers[oldNodeIdx].ServingSQLAddr()
+	newServerArgs.Addr = tc.Servers[oldNodeIdx].AdvRPCAddr()
+	newServerArgs.SQLAddr = tc.Servers[oldNodeIdx].AdvSQLAddr()
 	newServerArgs.PartOfCluster = true
-	newServerArgs.JoinAddr = tc.Servers[1].ServingRPCAddr()
+	newServerArgs.JoinAddr = tc.Servers[1].AdvRPCAddr()
 	log.Infof(ctx, "stopping server %d", oldNodeIdx)
 	tc.StopServer(oldNodeIdx)
 	// We are re-using a hard-coded port. Other processes on the system may by now

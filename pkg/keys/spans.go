@@ -16,6 +16,10 @@ var (
 	// EverythingSpan is a span that covers everything.
 	EverythingSpan = roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}
 
+	// ExcludeFromBackupSpan is a span that covers the keyspace that we exclude
+	// from full cluster backup and do not place protected timestamps on.
+	ExcludeFromBackupSpan = roachpb.Span{Key: roachpb.KeyMin, EndKey: TableDataMin}
+
 	// Meta1Span holds all first level addressing records.
 	Meta1Span = roachpb.Span{Key: roachpb.KeyMin, EndKey: Meta2Prefix}
 
@@ -39,6 +43,10 @@ var (
 
 	// TimeseriesSpan holds all the timeseries data in the cluster.
 	TimeseriesSpan = roachpb.Span{Key: TimeseriesPrefix, EndKey: TimeseriesKeyMax}
+
+	// ScratchSpan is used in tests to write arbitrary data without
+	// 	overlapping with meta, system or tenant ranges.
+	ScratchSpan = roachpb.Span{Key: ScratchRangeMin, EndKey: ScratchRangeMax}
 
 	// SystemSpanConfigSpan is part of the system keyspace that is used to carve
 	// out spans for system span configurations. No data is stored in these spans,

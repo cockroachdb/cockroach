@@ -29,8 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	// Imported to allow locality-related table mutations
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl" // allow locality-related mutations
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -58,11 +57,17 @@ import (
 
 var testSinkFlushFrequency = 100 * time.Millisecond
 
-// disableDeclarativeSchemaChangesForTest tests that are disabled due to differences
-// in changefeed behaviour and are tracked by issue #80545.
-func disableDeclarativeSchemaChangesForTest(t testing.TB, sqlDB *sqlutils.SQLRunner) {
-	sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
-	sqlDB.Exec(t, "SET CLUSTER SETTING  sql.defaults.use_declarative_schema_changer='off'")
+// maybeDisableDeclarativeSchemaChangesForTest will disable the declarative
+// schema changer with a probability of 10% using the provided SQL DB
+// connection. This returns true if the declarative schema changer is disabled.
+func maybeDisableDeclarativeSchemaChangesForTest(t testing.TB, sqlDB *sqlutils.SQLRunner) bool {
+	disable := rand.Float32() < 0.1
+	if disable {
+		t.Log("using legacy schema changer")
+		sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
+		sqlDB.Exec(t, "SET CLUSTER SETTING  sql.defaults.use_declarative_schema_changer='off'")
+	}
+	return disable
 }
 
 func waitForSchemaChange(
@@ -94,8 +99,7 @@ func readNextMessages(
 			return nil, ctx.Err()
 		}
 		if log.V(1) {
-			log.Infof(context.Background(), "About to read a message (%d out of %d) from %v (%T)",
-				len(actual), numMessages, f, f)
+			log.Infof(context.Background(), "About to read a message (%d out of %d)", len(actual), numMessages)
 		}
 		m, err := f.Next()
 		if log.V(1) {
@@ -377,6 +381,12 @@ SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
 SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
 SET CLUSTER SETTING sql.defaults.vectorize=on;
+ALTER TENANT ALL SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
+ALTER TENANT ALL SET CLUSTER SETTING sql.defaults.vectorize=on;
+CREATE DATABASE d;
+`
+
+var tenantSetupStatements = `
 CREATE DATABASE d;
 `
 
@@ -395,7 +405,7 @@ func startTestFullServer(
 		Knobs: knobs,
 		// This test suite is already probabilistically running with
 		// tenants. No need for the test tenant.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		UseDatabase:       `d`,
 		ExternalIODir:     options.externalIODir,
 		Settings:          options.settings,
@@ -473,7 +483,7 @@ func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB
 }
 
 func waitForTenantPodsActive(
-	t testing.TB, tenantServer serverutils.TestTenantInterface, numPods int,
+	t testing.TB, tenantServer serverutils.ApplicationLayerInterface, numPods int,
 ) {
 	testutils.SucceedsWithin(t, func() error {
 		status := tenantServer.StatusServer().(serverpb.SQLStatusServer)
@@ -491,7 +501,7 @@ func waitForTenantPodsActive(
 
 func startTestTenant(
 	t testing.TB, systemServer serverutils.TestServerInterface, options feedTestOptions,
-) (roachpb.TenantID, serverutils.TestTenantInterface, *gosql.DB, func()) {
+) (roachpb.TenantID, serverutils.ApplicationLayerInterface, *gosql.DB, func()) {
 	knobs := base.TestingKnobs{
 		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -514,12 +524,12 @@ func startTestTenant(
 	tenantServer, tenantDB := serverutils.StartTenant(t, systemServer, tenantArgs)
 	// Re-run setup on the tenant as well
 	tenantRunner := sqlutils.MakeSQLRunner(tenantDB)
-	tenantRunner.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
+	tenantRunner.ExecMultiple(t, strings.Split(tenantSetupStatements, ";")...)
 
 	waitForTenantPodsActive(t, tenantServer, 1)
 	resetRetry := testingUseFastRetry()
 	return tenantID, tenantServer, tenantDB, func() {
-		tenantServer.Stopper().Stop(context.Background())
+		tenantServer.AppStopper().Stop(context.Background())
 		resetRetry()
 	}
 }
@@ -595,14 +605,6 @@ func withArgsFn(fn updateArgsFn) feedTestOption {
 	return func(opts *feedTestOptions) { opts.argsFn = fn }
 }
 
-// withSettingsFn arranges for a feed option to set the settings for
-// both system and test tenant.
-func withSettings(st *cluster.Settings) feedTestOption {
-	return func(opts *feedTestOptions) {
-		opts.settings = st
-	}
-}
-
 // withKnobsFn is a feedTestOption that allows the caller to modify
 // the testing knobs used by the test server.  For multi-tenant
 // testing, these knobs are applied to both the kv and sql nodes.
@@ -633,6 +635,8 @@ func makeOptions(opts ...feedTestOption) feedTestOptions {
 		// future to ensure we can handle that. Always chooses an integer number of
 		// seconds for easier debugging and so that 0 is a possibility.
 		offset := int64(rand.Intn(6)) * time.Second.Nanoseconds()
+		// TODO(#105053): Remove this line
+		_ = offset
 		oldKnobsFn := options.knobsFn
 		options.knobsFn = func(knobs *base.TestingKnobs) {
 			if oldKnobsFn != nil {
@@ -640,7 +644,12 @@ func makeOptions(opts ...feedTestOption) feedTestOptions {
 			}
 			knobs.DistSQL.(*execinfra.TestingKnobs).
 				Changefeed.(*TestingKnobs).FeedKnobs.ModifyTimestamps = func(t *hlc.Timestamp) {
-				t.Add(offset, 0)
+				// NOTE(ricky): This line of code should be uncommented.
+				// It used to be just t.Add(offset, 0), but t.Add() has no side
+				// effects so this was a no-op. *t = t.Add(offset, 0) is correct,
+				// but causes test failures.
+				// TODO(#105053): Uncomment and fix test failures
+				//*t = t.Add(offset, 0)
 				t.Synthetic = true
 			}
 		}
@@ -660,7 +669,9 @@ func serverArgsRegion(args base.TestServerArgs) string {
 // expectNotice creates a pretty crude database connection that doesn't involve
 // a lot of cdc test framework, use with caution. Driver-agnostic tools don't
 // have clean ways of inspecting incoming notices.
-func expectNotice(t *testing.T, s serverutils.TestTenantInterface, sql string, expected string) {
+func expectNotice(
+	t *testing.T, s serverutils.ApplicationLayerInterface, sql string, expected string,
+) {
 	url, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	base, err := pq.NewConnector(url.String())
@@ -679,6 +690,19 @@ func expectNotice(t *testing.T, s serverutils.TestTenantInterface, sql string, e
 	sqlDB.Exec(t, sql)
 
 	require.Equal(t, expected, actual)
+}
+
+func loadProgress(
+	t *testing.T, jobFeed cdctest.EnterpriseTestFeed, jobRegistry *jobs.Registry,
+) jobspb.Progress {
+	t.Helper()
+	jobID := jobFeed.JobID()
+	job, err := jobRegistry.LoadJob(context.Background(), jobID)
+	require.NoError(t, err)
+	if job.Status().Terminal() {
+		t.Errorf("tried to load progress for job %v but it has reached terminal status %s with error %s", job, job.Status(), jobFeed.FetchTerminalJobErr())
+	}
+	return job.Progress()
 }
 
 func feed(
@@ -743,7 +767,7 @@ func closeFeedIgnoreError(t testing.TB, f cdctest.TestFeed) {
 // of a test running as the system tenant or a secondary tenant
 type TestServer struct {
 	DB           *gosql.DB
-	Server       serverutils.TestTenantInterface
+	Server       serverutils.ApplicationLayerInterface
 	Codec        keys.SQLCodec
 	TestingKnobs base.TestingKnobs
 }
@@ -775,7 +799,7 @@ func makeSystemServerWithOptions(
 			TestServer: TestServer{
 				DB:           systemDB,
 				Server:       systemServer,
-				TestingKnobs: systemServer.(*server.TestServer).Cfg.TestingKnobs,
+				TestingKnobs: *systemServer.SystemLayer().TestingKnobs(),
 				Codec:        keys.SystemSQLCodec,
 			},
 			SystemServer: systemServer,
@@ -801,7 +825,7 @@ func makeTenantServerWithOptions(
 			TestServer: TestServer{
 				DB:           tenantDB,
 				Server:       tenantServer,
-				TestingKnobs: tenantServer.(*server.TestTenant).Cfg.TestingKnobs,
+				TestingKnobs: *tenantServer.TestingKnobs(),
 				Codec:        keys.MakeSQLCodec(tenantID),
 			},
 			SystemDB:     systemDB,
@@ -890,7 +914,7 @@ func addCloudStorageOptions(t *testing.T, options *feedTestOptions) (cleanup fun
 func makeFeedFactory(
 	t *testing.T,
 	sinkType string,
-	s serverutils.TestTenantInterface,
+	s serverutils.ApplicationLayerInterface,
 	db *gosql.DB,
 	testOpts ...feedTestOption,
 ) (factory cdctest.TestFeedFactory, sinkCleanup func()) {
@@ -902,9 +926,9 @@ func makeFeedFactoryWithOptions(
 	t *testing.T, sinkType string, srvOrCluster interface{}, db *gosql.DB, options feedTestOptions,
 ) (factory cdctest.TestFeedFactory, sinkCleanup func()) {
 	t.Logf("making %s feed factory", sinkType)
-	s := func() serverutils.TestTenantInterface {
+	s := func() serverutils.ApplicationLayerInterface {
 		switch s := srvOrCluster.(type) {
-		case serverutils.TestTenantInterface:
+		case serverutils.ApplicationLayerInterface:
 			return s
 		case serverutils.TestClusterInterface:
 			return s.Server(0)
@@ -985,7 +1009,7 @@ func makeFeedFactoryWithOptions(
 }
 
 func getInitialDBForEnterpriseFactory(
-	t *testing.T, s serverutils.TestTenantInterface, rootDB *gosql.DB, opts feedTestOptions,
+	t *testing.T, s serverutils.ApplicationLayerInterface, rootDB *gosql.DB, opts feedTestOptions,
 ) (*gosql.DB, func()) {
 	// Instead of creating enterprise changefeeds on the root connection, we may
 	// choose to create them on a test user connection. This user should have the
@@ -1072,6 +1096,7 @@ func cdcTestNamedWithSystem(
 	t.Helper()
 	options := makeOptions(testOpts...)
 	cleanupCloudStorage := addCloudStorageOptions(t, &options)
+	TestingClearSchemaRegistrySingleton()
 
 	sinkType := randomSinkTypeWithOptions(options)
 	if sinkType == "skip" {
@@ -1145,7 +1170,7 @@ var cmLogRe = regexp.MustCompile(`event_log\.go`)
 func checkStructuredLogs(t *testing.T, eventType string, startTime int64) []string {
 	var matchingEntries []string
 	testutils.SucceedsSoon(t, func() error {
-		log.Flush()
+		log.FlushFiles()
 		entries, err := log.FetchEntriesFromFiles(startTime,
 			math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
 		if err != nil {
@@ -1191,7 +1216,7 @@ func checkContinuousChangefeedLogs(t *testing.T, startTime int64) []eventpb.Chan
 // after startTime for a particular job and asserts that at least one message has positive emitted bytes.
 // This function also asserts the LoggingInterval and Closing fields of
 // each message.
-func verifyLogsWithEmittedBytes(
+func verifyLogsWithEmittedBytesAndMessages(
 	t *testing.T, jobID jobspb.JobID, startTime int64, interval int64, closing bool,
 ) {
 	testutils.SucceedsSoon(t, func() error {
@@ -1199,22 +1224,24 @@ func verifyLogsWithEmittedBytes(
 		if len(emittedBytesLogs) == 0 {
 			return errors.New("no logs found")
 		}
-		emittedBytes := false
+		var emittedBytes int64 = 0
+		var emittedMessages int64 = 0
 		for _, msg := range emittedBytesLogs {
 			if msg.JobId != int64(jobID) {
 				continue
 			}
 
-			if msg.EmittedBytes > 0 {
-				emittedBytes = true
-			}
+			emittedBytes += msg.EmittedBytes
+			emittedMessages += msg.EmittedMessages
 			require.Equal(t, interval, msg.LoggingInterval)
 			if closing {
 				require.Equal(t, true, msg.Closing)
 			}
 		}
-		if !emittedBytes {
-			return errors.New("expected emitted bytes in log messages, but found 0")
+		if emittedBytes == 0 || emittedMessages == 0 {
+			return errors.Newf(
+				"expected some emitted messages and bytes in log messages, but found %d messages and %d bytes",
+				emittedMessages, emittedBytes)
 		}
 		return nil
 	})

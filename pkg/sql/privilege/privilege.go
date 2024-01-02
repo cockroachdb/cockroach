@@ -23,56 +23,6 @@ import (
 	"github.com/cockroachdb/redact/interfaces"
 )
 
-//go:generate stringer -type=Kind -linecomment
-
-// Kind defines a privilege. This is output by the parser,
-// and used to generate the privilege bitfields in the PrivilegeDescriptor.
-type Kind uint32
-
-var _ redact.SafeValue = Kind(0)
-
-// SafeValue makes Kind a redact.SafeValue.
-func (k Kind) SafeValue() {}
-
-// List of privileges. ALL is specifically encoded so that it will automatically
-// pick up new privileges.
-// Do not change values of privileges. These correspond to the position
-// of the privilege in a bit field and are expected to stay constant.
-const (
-	ALL    Kind = 1
-	CREATE Kind = 2
-	DROP   Kind = 3
-	// DEPRECATEDGRANT is a placeholder to make sure that 4 is not reused.
-	// It was previously used for the GRANT privilege that has been replaced with the more granular Privilege.GrantOption.
-	DEPRECATEDGRANT          Kind = 4 // GRANT
-	SELECT                   Kind = 5
-	INSERT                   Kind = 6
-	DELETE                   Kind = 7
-	UPDATE                   Kind = 8
-	USAGE                    Kind = 9
-	ZONECONFIG               Kind = 10
-	CONNECT                  Kind = 11
-	RULE                     Kind = 12
-	MODIFYCLUSTERSETTING     Kind = 13
-	EXTERNALCONNECTION       Kind = 14
-	VIEWACTIVITY             Kind = 15
-	VIEWACTIVITYREDACTED     Kind = 16
-	VIEWCLUSTERSETTING       Kind = 17
-	CANCELQUERY              Kind = 18
-	NOSQLLOGIN               Kind = 19
-	EXECUTE                  Kind = 20
-	VIEWCLUSTERMETADATA      Kind = 21
-	VIEWDEBUG                Kind = 22
-	BACKUP                   Kind = 23
-	RESTORE                  Kind = 24
-	EXTERNALIOIMPLICITACCESS Kind = 25
-	CHANGEFEED               Kind = 26
-	VIEWJOB                  Kind = 27
-	MODIFYSQLCLUSTERSETTING  Kind = 28
-	REPLICATION              Kind = 29
-	MANAGETENANT             Kind = 30
-)
-
 // Privilege represents a privilege parsed from an Access Privilege Inquiry
 // Function's privilege string argument.
 type Privilege struct {
@@ -87,7 +37,7 @@ type Privilege struct {
 var _ redact.SafeFormatter = Privilege{}
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (k Privilege) SafeFormat(s interfaces.SafePrinter, _ rune) {
+func (k Privilege) SafeFormat(s redact.SafePrinter, _ rune) {
 	s.Printf("[kind=%s grantOption=%t]", k.Kind, k.GrantOption)
 }
 
@@ -112,8 +62,8 @@ const (
 	Type ObjectType = "type"
 	// Sequence represents a sequence object.
 	Sequence ObjectType = "sequence"
-	// Function represent a function object.
-	Function ObjectType = "function"
+	// Routine represents a function or procedure object.
+	Routine ObjectType = "routine"
 	// Global represents global privileges.
 	Global ObjectType = "global"
 	// VirtualTable represents a virtual table object.
@@ -128,7 +78,7 @@ var isDescriptorBacked = map[ObjectType]bool{
 	Table:              true,
 	Type:               true,
 	Sequence:           true,
-	Function:           true,
+	Routine:            true,
 	Global:             false,
 	VirtualTable:       false,
 	ExternalConnection: false,
@@ -136,7 +86,8 @@ var isDescriptorBacked = map[ObjectType]bool{
 
 // Predefined sets of privileges.
 var (
-	AllPrivileges         = List{ALL, CHANGEFEED, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, EXECUTE, BACKUP, RESTORE, EXTERNALIOIMPLICITACCESS, VIEWJOB}
+	// AllPrivileges is populated during init.
+	AllPrivileges         List
 	ReadData              = List{SELECT}
 	ReadWriteData         = List{SELECT, INSERT, DELETE, UPDATE}
 	ReadWriteSequenceData = List{SELECT, UPDATE, USAGE}
@@ -144,13 +95,18 @@ var (
 	TablePrivileges       = List{ALL, BACKUP, CHANGEFEED, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
 	SchemaPrivileges      = List{ALL, CREATE, USAGE}
 	TypePrivileges        = List{ALL, USAGE}
-	FunctionPrivileges    = List{ALL, EXECUTE}
+	RoutinePrivileges     = List{ALL, EXECUTE}
 	// SequencePrivileges is appended with TablePrivileges as well. This is because
 	// before v22.2 we treated Sequences the same as Tables. This is to avoid making
 	// certain privileges unavailable after upgrade migration.
 	// Note that "CREATE, CHANGEFEED, INSERT, DELETE, ZONECONFIG" are no-op privileges on sequences.
-	SequencePrivileges           = List{ALL, USAGE, SELECT, UPDATE, CREATE, CHANGEFEED, DROP, INSERT, DELETE, ZONECONFIG}
-	GlobalPrivileges             = List{ALL, BACKUP, RESTORE, MODIFYCLUSTERSETTING, EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING, CANCELQUERY, NOSQLLOGIN, VIEWCLUSTERMETADATA, VIEWDEBUG, EXTERNALIOIMPLICITACCESS, VIEWJOB, MODIFYSQLCLUSTERSETTING, REPLICATION, MANAGETENANT}
+	SequencePrivileges = List{ALL, USAGE, SELECT, UPDATE, CREATE, CHANGEFEED, DROP, INSERT, DELETE, ZONECONFIG}
+	GlobalPrivileges   = List{
+		ALL, BACKUP, RESTORE, MODIFYCLUSTERSETTING, EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED,
+		VIEWCLUSTERSETTING, CANCELQUERY, NOSQLLOGIN, VIEWCLUSTERMETADATA, VIEWDEBUG, EXTERNALIOIMPLICITACCESS, VIEWJOB,
+		MODIFYSQLCLUSTERSETTING, REPLICATION, MANAGEVIRTUALCLUSTER, VIEWSYSTEMTABLE, CREATEROLE, CREATELOGIN, CREATEDB, CONTROLJOB,
+		REPAIRCLUSTERMETADATA,
+	}
 	VirtualTablePrivileges       = List{ALL, SELECT}
 	ExternalConnectionPrivileges = List{ALL, USAGE, DROP}
 )
@@ -165,39 +121,6 @@ func (k Kind) IsSetIn(bits uint64) bool {
 	return bits&k.Mask() != 0
 }
 
-// ByName is a map of string -> kind value.
-var ByName = map[string]Kind{
-	"ALL":                      ALL,
-	"CHANGEFEED":               CHANGEFEED,
-	"CONNECT":                  CONNECT,
-	"CREATE":                   CREATE,
-	"DROP":                     DROP,
-	"SELECT":                   SELECT,
-	"INSERT":                   INSERT,
-	"DELETE":                   DELETE,
-	"UPDATE":                   UPDATE,
-	"ZONECONFIG":               ZONECONFIG,
-	"USAGE":                    USAGE,
-	"RULE":                     RULE,
-	"MODIFYCLUSTERSETTING":     MODIFYCLUSTERSETTING,
-	"EXTERNALCONNECTION":       EXTERNALCONNECTION,
-	"VIEWACTIVITY":             VIEWACTIVITY,
-	"VIEWACTIVITYREDACTED":     VIEWACTIVITYREDACTED,
-	"VIEWCLUSTERSETTING":       VIEWCLUSTERSETTING,
-	"CANCELQUERY":              CANCELQUERY,
-	"NOSQLLOGIN":               NOSQLLOGIN,
-	"EXECUTE":                  EXECUTE,
-	"VIEWCLUSTERMETADATA":      VIEWCLUSTERMETADATA,
-	"VIEWDEBUG":                VIEWDEBUG,
-	"BACKUP":                   BACKUP,
-	"RESTORE":                  RESTORE,
-	"EXTERNALIOIMPLICITACCESS": EXTERNALIOIMPLICITACCESS,
-	"VIEWJOB":                  VIEWJOB,
-	"MODIFYSQLCLUSTERSETTING":  MODIFYSQLCLUSTERSETTING,
-	"REPLICATION":              REPLICATION,
-	"MANAGETENANT":             MANAGETENANT,
-}
-
 // List is a list of privileges.
 type List []Kind
 
@@ -205,14 +128,18 @@ var _ redact.SafeFormatter = List{}
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (pl List) SafeFormat(s interfaces.SafePrinter, _ rune) {
-	s.SafeString("[")
+	if s.Flag('+') {
+		s.SafeString("[")
+	}
 	for i, p := range pl {
 		if i > 0 {
-			s.SafeString(",")
+			s.SafeString(", ")
 		}
 		s.Print(p)
 	}
-	s.SafeString("]")
+	if s.Flag('+') {
+		s.SafeString("]")
+	}
 }
 
 // Len, Swap, and Less implement the Sort interface.
@@ -233,41 +160,46 @@ func (pl List) Less(i, j int) bool {
 func (pl List) names() []string {
 	ret := make([]string, len(pl))
 	for i, p := range pl {
-		ret[i] = p.String()
+		ret[i] = string(p.DisplayName())
 	}
 	return ret
 }
 
-// Format prints out the list in a buffer.
+// keys returns a list of privilege storage keys in the same
+// order as "pl".
+func (pl List) keys() []string {
+	ret := make([]string, len(pl))
+	for i, p := range pl {
+		ret[i] = string(p.InternalKey())
+	}
+	return ret
+}
+
+// FormatNames prints out the list of display names in a buffer.
 // This keeps the existing order and uses ", " as separator.
-func (pl List) Format(buf *bytes.Buffer) {
+func (pl List) FormatNames(buf *bytes.Buffer) {
 	for i, p := range pl {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(p.String())
+		buf.WriteString(string(p.DisplayName()))
 	}
 }
 
-// String implements the Stringer interface.
-// This keeps the existing order and uses ", " as separator.
-func (pl List) String() string {
-	return strings.Join(pl.names(), ", ")
-}
-
-// SortedString is similar to String() but returns
-// privileges sorted by name and uses "," as separator.
-func (pl List) SortedString() string {
-	names := pl.SortedNames()
-	return strings.Join(names, ",")
-}
-
-// SortedNames returns a list of privilege names
+// SortedDisplayNames returns a list of privilege display names
 // in sorted order.
-func (pl List) SortedNames() []string {
+func (pl List) SortedDisplayNames() []string {
 	names := pl.names()
 	sort.Strings(names)
 	return names
+}
+
+// SortedKeys returns a list of privilege internal keys
+// in sorted order.
+func (pl List) SortedKeys() []string {
+	keys := pl.keys()
+	sort.Strings(keys)
+	return keys
 }
 
 // ToBitField returns the bitfield representation of
@@ -331,18 +263,47 @@ func PrivilegesFromBitFields(
 	return ret, nil
 }
 
-// ListFromStrings takes a list of strings and attempts to build a list of Kind.
-// We convert each string to uppercase and search for it in the ByName map.
-// If an entry is not found in ByName, it is ignored.
-func ListFromStrings(strs []string) (List, error) {
+// Origin indicates the origin of the privileges being parsed in
+// ListFromStrings.
+type Origin bool
+
+const (
+	// OriginFromUserInput indicates that the privilege name came from user
+	// input and should be validated to make sure it refers to a real privilege.
+	OriginFromUserInput Origin = false
+
+	// OriginFromSystemTable indicates that the privilege name came from a
+	// system table and should be ignored if it does not refer to a real
+	// privilege.
+	OriginFromSystemTable Origin = true
+)
+
+// ListFromStrings takes a list of internal storage keys and attempts to build a
+// list of Kind. Each string is converted to uppercase and is searched for
+// either in ByInternalKey or in ByDisplayName maps, depending on the origin. If
+// an entry is not found, it is either ignored or an error is raised (also
+// depending on the origin).
+func ListFromStrings(strs []string, origin Origin) (List, error) {
 	ret := make(List, len(strs))
 	for i, s := range strs {
-		k, ok := ByName[strings.ToUpper(s)]
-		if !ok {
-			// Ignore an unknown privilege name. This is so that it is possible to
-			// backport new privileges onto older release branches, without causing
-			// mixed-version compatibility issues.
-			continue
+		var k Kind
+		switch origin {
+		case OriginFromSystemTable:
+			var ok bool
+			k, ok = ByInternalKey[KindInternalKey(strings.ToUpper(s))]
+			if !ok {
+				// Ignore an unknown privilege name if it came from a system table. This
+				// is so that it is possible to backport new privileges onto older release
+				// branches, without causing mixed-version compatibility issues.
+				continue
+			}
+
+		case OriginFromUserInput:
+			var ok bool
+			k, ok = ByDisplayName[KindDisplayName(strings.ToUpper(s))]
+			if !ok {
+				return nil, errors.Errorf("not a valid privilege: %q", s)
+			}
 		}
 		ret[i] = k
 	}
@@ -359,7 +320,7 @@ func ValidatePrivileges(privileges List, objectType ObjectType) error {
 	for _, priv := range privileges {
 		if validPrivs.ToBitField()&priv.Mask() == 0 {
 			return pgerror.Newf(pgcode.InvalidGrantOperation,
-				"invalid privilege type %s for %s", priv.String(), objectType)
+				"invalid privilege type %s for %s", priv.DisplayName(), objectType)
 		}
 	}
 
@@ -382,8 +343,8 @@ func GetValidPrivilegesForObject(objectType ObjectType) (List, error) {
 		return SequencePrivileges, nil
 	case Any:
 		return AllPrivileges, nil
-	case Function:
-		return FunctionPrivileges, nil
+	case Routine:
+		return RoutinePrivileges, nil
 	case Global:
 		return GlobalPrivileges, nil
 	case VirtualTable:
@@ -434,7 +395,7 @@ func (pl List) ListToACL(grantOptions List, objectType ObjectType) (string, erro
 	chars := make([]string, len(privileges))
 	for _, privilege := range orderedPrivs {
 		if _, ok := privToACL[privilege]; !ok {
-			return "", errors.AssertionFailedf("unknown privilege type %s", privilege.String())
+			return "", errors.AssertionFailedf("unknown privilege type %s", privilege.DisplayName())
 		}
 		if privileges.Contains(privilege) {
 			chars = append(chars, privToACL[privilege])
@@ -460,6 +421,13 @@ func (o ObjectType) IsDescriptorBacked() bool {
 type Object interface {
 	// GetObjectType returns the privilege.ObjectType of the Object.
 	GetObjectType() ObjectType
+	// GetObjectTypeString returns a human-readable representation of the
+	// privilege.ObjectType.
+	// NOTE: It may not match the privilege.ObjectType directly because it may
+	// be more specific for some object types. For example, for functions and
+	// procedures it will return "function" and "procedure", respectively,
+	// instead of the more generic term "routine".
+	GetObjectTypeString() string
 	// GetName returns the name of the object. For example, the name of a
 	// table, schema or database.
 	GetName() string

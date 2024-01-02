@@ -1,5 +1,5 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
-load("@build_bazel_rules_nodejs//nodejs:toolchain.bzl", "node_toolchain")
+load("@rules_nodejs//nodejs:toolchain.bzl", "node_toolchain")
 
 # We define a number of toolchains, each of which has a name of the form:
 #     cross_HOST_TARGET_toolchain
@@ -31,6 +31,11 @@ platform(
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
     ],
+    exec_properties = {
+        "container-image": "docker://cockroachdb/bazel@sha256:b46188e6376c291d23fe57befd806a13f68c7d596979ab0b3edb9eb3c329ba00",
+        "dockerReuse": "True",
+        "Pool": "default",
+    },
 )
 
 toolchain(
@@ -131,6 +136,11 @@ platform(
         "@platforms//os:linux",
         "@platforms//cpu:arm64",
     ],
+    exec_properties = {
+        "container-image": "docker://cockroachdb/bazel@sha256:c992a22b54a8667686d9ed65a48d10af10fe9210ef18b18421016cac95dc0983",
+        "dockerReuse": "True",
+        "Pool": "default",
+    },
 )
 
 platform(
@@ -260,20 +270,6 @@ toolchain(
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
 )
 
-toolchain(
-    name = "node_freebsd_toolchain",
-    exec_compatible_with = [
-        "@platforms//os:freebsd",
-    ],
-    toolchain = ":node_freebsd_local_toolchain",
-    toolchain_type = "@rules_nodejs//nodejs:toolchain_type",
-)
-
-node_toolchain(
-    name = "node_freebsd_local_toolchain",
-    target_tool_path = "/usr/local/bin/node",
-)
-
 # There are aliases for each of these flags defined in .bazelrc; for example,
 # --crdb_test instead of --//build/toolchains:crdb_test_flag.
 #
@@ -317,6 +313,19 @@ config_setting(
 )
 
 bool_flag(
+    name = "bazel_code_coverage_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "bazel_code_coverage",
+    flag_values = {
+        ":bazel_code_coverage_flag": "true",
+    },
+)
+
+bool_flag(
     name = "cross_flag",
     build_setting_default = False,
     visibility = ["//visibility:public"],
@@ -347,6 +356,17 @@ config_setting(
     flag_values = {
         ":dev_flag": "true",
         ":cross_flag": "false",
+    },
+)
+
+config_setting(
+    name = "is_non_dev_macos_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:aarch64",
+    ],
+    flag_values = {
+        ":dev_flag": "false",
     },
 )
 
@@ -390,13 +410,6 @@ config_setting(
     ],
     flag_values = {
         ":cross_flag": "true",
-    },
-)
-
-config_setting(
-    name = "opt",
-    values = {
-        "compilation_mode": "opt",
     },
 )
 
@@ -509,8 +522,108 @@ config_setting(
 )
 
 config_setting(
-    name = "use_ci_timeouts",
-    values = {
-        "define": "use_ci_timeouts=true",
+    name = "is_linux_amd64_no_force_build_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {
+        ":force_build_cdeps_flag": "false",
     },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+config_setting(
+    name = "is_linux_arm64_no_force_build_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+        "@platforms//cpu:arm64",
+    ],
+    flag_values = {
+        ":force_build_cdeps_flag": "false",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+config_setting(
+    name = "is_darwin_amd64_no_force_build_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {
+        ":force_build_cdeps_flag": "false",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+config_setting(
+    name = "is_darwin_arm64_no_force_build_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:arm64",
+    ],
+    flag_values = {
+        ":force_build_cdeps_flag": "false",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+config_setting(
+    name = "is_windows_amd64_no_force_build_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:windows",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {
+        ":force_build_cdeps_flag": "false",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+config_setting(
+    name = "is_linux_amd64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "is_linux_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+config_setting(
+    name = "is_darwin_amd64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "is_darwin_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:arm64",
+    ],
 )

@@ -10,12 +10,13 @@ with t=A
   put         ts=1 k=k v=v
 ----
 >> put ts=1 k=k v=v t=A
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+56 live_count=+1 live_bytes=+70 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=+98
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,1 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+56 live_count=+1 live_bytes=+70 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+98
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,1 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,1 min=0,0 seq=0} ts=2.000000000,1 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,1 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,1 min=0,0 seq=0} ts=2.000000000,1 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/2.000000000,1 -> /BYTES/v
-stats: key_count=1 key_bytes=14 val_count=1 val_bytes=56 live_count=1 live_bytes=70 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=98
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=56 live_count=1 live_bytes=70 intent_count=1 intent_bytes=18 lock_count=1 lock_age=98
 
 # Put operation with earlier wall time. Will NOT be ignored.
 run stats ok
@@ -25,12 +26,13 @@ with t=A
   put         ts=1 k=k v=v2
 ----
 >> put ts=1 k=k v=v2 t=A
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,1 min=0,0 seq=1 Replicated Intent []}
 stats: val_bytes=+13 live_bytes=+13 intent_bytes=+1
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,1 min=0,0 seq=1} ts=2.000000000,1 del=false klen=12 vlen=7 ih={{0 /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,1 min=0,0 seq=1} ts=2.000000000,1 del=false klen=12 vlen=7 ih={{0 /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/2.000000000,1 -> /BYTES/v2
-stats: key_count=1 key_bytes=14 val_count=1 val_bytes=69 live_count=1 live_bytes=83 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=98
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=69 live_count=1 live_bytes=83 intent_count=1 intent_bytes=19 lock_count=1 lock_age=98
 
 # We're expecting v2 here.
 
@@ -48,12 +50,13 @@ with t=A
   put ts=1 k=k v=v2
 ----
 >> put ts=1 k=k v=v2 t=A
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,1 min=0,0 seq=2 Replicated Intent []}
 stats: val_bytes=+13 live_bytes=+13
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,1 min=0,0 seq=2} ts=2.000000000,1 del=false klen=12 vlen=7 ih={{0 /BYTES/v}{1 /BYTES/v2}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,1 min=0,0 seq=2} ts=2.000000000,1 del=false klen=12 vlen=7 ih={{0 /BYTES/v}{1 /BYTES/v2}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/2.000000000,1 -> /BYTES/v2
-stats: key_count=1 key_bytes=14 val_count=1 val_bytes=82 live_count=1 live_bytes=96 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=98
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=82 live_count=1 live_bytes=96 intent_count=1 intent_bytes=19 lock_count=1 lock_age=98
 
 # We're expecting v2 here.
 

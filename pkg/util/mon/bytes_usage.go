@@ -329,7 +329,7 @@ func (mm *BytesMonitor) traverseTree(level int, monitorStateCb func(MonitorState
 		Name:             string(mm.name),
 		ID:               int64(id),
 		ParentID:         int64(parentID),
-		Used:             mm.mu.curBudget.used,
+		Used:             mm.mu.curAllocated,
 		ReservedUsed:     reservedUsed,
 		ReservedReserved: reservedReserved,
 	}
@@ -497,14 +497,16 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 	if pool != nil {
 		// If we have a "parent" monitor, then register mm as its child by
 		// making it the head of the doubly-linked list.
-		pool.mu.Lock()
-		if s := pool.mu.head; s != nil {
-			s.parentMu.prevSibling = mm
-			mm.parentMu.nextSibling = s
-		}
-		pool.mu.head = mm
-		pool.mu.numChildren++
-		pool.mu.Unlock()
+		func() {
+			pool.mu.Lock()
+			defer pool.mu.Unlock()
+			if s := pool.mu.head; s != nil {
+				s.parentMu.prevSibling = mm
+				mm.parentMu.nextSibling = s
+			}
+			pool.mu.head = mm
+			pool.mu.numChildren++
+		}()
 		effectiveLimit = pool.limit
 	}
 
@@ -593,7 +595,7 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 			ctx, &mm.settings.SV,
 			"%s: unexpected %d leftover bytes",
 			mm.name, mm.mu.curAllocated)
-		mm.releaseBytes(ctx, mm.mu.curAllocated)
+		mm.releaseBytesLocked(ctx, mm.mu.curAllocated)
 	}
 
 	mm.releaseBudget(ctx)
@@ -609,19 +611,21 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	if parent := mm.mu.curBudget.mon; parent != nil {
 		// If we have a "parent" monitor, then unregister mm from the list of
 		// the parent's children.
-		parent.mu.Lock()
-		prev, next := mm.parentMu.prevSibling, mm.parentMu.nextSibling
-		if parent.mu.head == mm {
-			parent.mu.head = next
-		}
-		if prev != nil {
-			prev.parentMu.nextSibling = next
-		}
-		if next != nil {
-			next.parentMu.prevSibling = prev
-		}
-		parent.mu.numChildren--
-		parent.mu.Unlock()
+		func() {
+			parent.mu.Lock()
+			defer parent.mu.Unlock()
+			prev, next := mm.parentMu.prevSibling, mm.parentMu.nextSibling
+			if parent.mu.head == mm {
+				parent.mu.head = next
+			}
+			if prev != nil {
+				prev.parentMu.nextSibling = next
+			}
+			if next != nil {
+				next.parentMu.prevSibling = prev
+			}
+			parent.mu.numChildren--
+		}()
 	}
 
 	// Disable the pool for further allocations, so that further
@@ -1026,6 +1030,13 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
+	mm.releaseBytesLocked(ctx, sz)
+}
+
+// releaseBytesLocked is similar to releaseBytes but requires that mm.mu has
+// already been locked.
+func (mm *BytesMonitor) releaseBytesLocked(ctx context.Context, sz int64) {
+	mm.mu.AssertHeld()
 	if mm.mu.curAllocated < sz {
 		logcrash.ReportOrPanic(ctx, &mm.settings.SV,
 			"%s: no bytes to release, current %d, free %d",

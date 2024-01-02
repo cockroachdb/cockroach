@@ -36,11 +36,11 @@ type StatsProfiler struct {
 	profiler
 }
 
-// StatsFileNamePrefix is the prefix of memory stats dumps.
-const StatsFileNamePrefix = "memstats"
+// statsFileNamePrefix is the prefix of memory stats dumps.
+const statsFileNamePrefix = "memstats"
 
-// StatsFileNameSuffix is the suffix of memory stats dumps.
-const StatsFileNameSuffix = ".txt"
+// statsFileNameSuffix is the suffix of memory stats dumps.
+const statsFileNameSuffix = ".txt"
 
 // NewStatsProfiler creates a StatsProfiler. dir is the
 // directory in which profiles are to be stored.
@@ -55,7 +55,7 @@ func NewStatsProfiler(
 
 	hp := &StatsProfiler{
 		profiler: makeProfiler(
-			newProfileStore(dumpStore, StatsFileNamePrefix, StatsFileNameSuffix, st),
+			newProfileStore(dumpStore, statsFileNamePrefix, statsFileNameSuffix, st),
 			zeroFloor,
 			envMemprofInterval,
 		),
@@ -70,7 +70,7 @@ func NewStatsProfiler(
 func (o *StatsProfiler) MaybeTakeProfile(
 	ctx context.Context, curRSS int64, ms *status.GoMemStats, cs *status.CGoMemStats,
 ) {
-	o.maybeTakeProfile(ctx, curRSS, func(ctx context.Context, path string) bool { return saveStats(ctx, path, ms, cs) })
+	o.maybeTakeProfile(ctx, curRSS, func(ctx context.Context, path string, _ ...interface{}) bool { return saveStats(ctx, path, ms, cs) })
 }
 
 func saveStats(

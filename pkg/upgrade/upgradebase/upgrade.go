@@ -56,4 +56,6 @@ type Upgrade interface {
 	// startupmigration corresponding to this permanent upgrade. Calling this on
 	// non-permanent upgrades panics.
 	V22_2StartupMigrationName() string
+
+	RestoreBehavior() string
 }

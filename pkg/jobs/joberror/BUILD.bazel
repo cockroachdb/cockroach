@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -9,10 +8,11 @@ go_library(
     deps = [
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/sql/flowinfra",
+        "//pkg/sql/sqlerrors",
+        "//pkg/sql/sqlinstance",
         "//pkg/util/circuit",
         "//pkg/util/grpcutil",
         "//pkg/util/sysutil",
-        "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -20,15 +20,11 @@ go_library(
 go_test(
     name = "joberror_test",
     srcs = ["errors_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":joberror"],
     deps = [
         "//pkg/util/circuit",
-        "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

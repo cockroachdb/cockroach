@@ -432,6 +432,11 @@ func (s *ColIndexJoin) GetConsumedRU() uint64 {
 	return s.tenantConsumptionListener.ConsumedRU
 }
 
+// UsedStreamer is part of the colexecop.KVReader interface.
+func (s *ColIndexJoin) UsedStreamer() bool {
+	return s.usesStreamer
+}
+
 // inputBatchSizeLimit is a batch size limit for the number of input rows that
 // will be used to form lookup spans for each scan. This is used as a proxy for
 // result batch size in order to prevent OOMs, because index joins do not limit
@@ -464,7 +469,7 @@ const productionIndexJoinUsingStreamerBatchSize = 8 << 20 /* 8MiB */
 // construct a single lookup KV batch by the ColIndexJoin when it is using the
 // Streamer API.
 var IndexJoinStreamerBatchSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.index_join_streamer.batch_size",
 	"size limit on the input rows to construct a single lookup KV batch "+
 		"(by the ColIndexJoin operator when using the Streamer API)",
@@ -493,9 +498,6 @@ func getIndexJoinBatchSize(
 }
 
 // NewColIndexJoin creates a new ColIndexJoin operator.
-//
-// If spec.MaintainOrdering is true, then the diskMonitor argument must be
-// non-nil.
 func NewColIndexJoin(
 	ctx context.Context,
 	allocator *colmem.Allocator,
@@ -542,25 +544,36 @@ func NewColIndexJoin(
 		if streamerBudgetAcc == nil {
 			return nil, errors.AssertionFailedf("streamer budget account is nil when the Streamer API is desired")
 		}
-		if spec.MaintainOrdering && diskMonitor == nil {
-			return nil, errors.AssertionFailedf("diskMonitor is nil when ordering needs to be maintained")
-		}
 		// Keep 1/16th of the memory limit for the output batch of the cFetcher,
 		// another 1/16th of the limit for the input tuples buffered by the index
 		// joiner, and we'll give the remaining memory to the streamer budget
 		// below.
 		cFetcherMemoryLimit = int64(math.Ceil(float64(totalMemoryLimit) / 16.0))
 		streamerBudgetLimit := 14 * cFetcherMemoryLimit
+		// When we have SplitFamilyIDs with more than one family ID, then it's
+		// possible for a single lookup span to be split into multiple "family"
+		// spans, and in order to preserve the invariant that all KVs for a
+		// single SQL row are contiguous we must ask the streamer to preserve
+		// the ordering. See #113013 for an example.
+		maintainOrdering := spec.MaintainOrdering || len(spec.SplitFamilyIDs) > 1
+		if flowCtx.EvalCtx.SessionData().StreamerAlwaysMaintainOrdering {
+			maintainOrdering = true
+		}
+		if maintainOrdering && diskMonitor == nil {
+			return nil, errors.AssertionFailedf("diskMonitor is nil when ordering needs to be maintained")
+		}
 		kvFetcher = row.NewStreamingKVFetcher(
 			flowCtx.Cfg.DistSender,
 			flowCtx.Stopper(),
 			txn,
 			flowCtx.EvalCtx.Settings,
+			flowCtx.EvalCtx.SessionData(),
 			spec.LockingWaitPolicy,
 			spec.LockingStrength,
+			spec.LockingDurability,
 			streamerBudgetLimit,
 			streamerBudgetAcc,
-			spec.MaintainOrdering,
+			maintainOrdering,
 			true, /* singleRowLookup */
 			int(spec.FetchSpec.MaxKeysPerRow),
 			rowcontainer.NewKVStreamerResultDiskBuffer(
@@ -575,6 +588,7 @@ func NewColIndexJoin(
 			false, /* reverse */
 			spec.LockingStrength,
 			spec.LockingWaitPolicy,
+			spec.LockingDurability,
 			flowCtx.EvalCtx.SessionData().LockTimeout,
 			kvFetcherMemAcc,
 			flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,

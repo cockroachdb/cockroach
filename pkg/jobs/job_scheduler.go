@@ -103,7 +103,10 @@ func (s scheduledJobStorageTxn) loadCandidateScheduleForExecution(
 
 // lookupNumRunningJobs returns the number of running jobs for the specified schedule.
 func lookupNumRunningJobs(
-	ctx context.Context, scheduleID int64, env scheduledjobs.JobSchedulerEnv, txn isql.Txn,
+	ctx context.Context,
+	scheduleID jobspb.ScheduleID,
+	env scheduledjobs.JobSchedulerEnv,
+	txn isql.Txn,
 ) (int64, error) {
 	lookupStmt := fmt.Sprintf(
 		"SELECT count(*) FROM %s WHERE created_by_type = '%s' AND created_by_id = %d AND status IN %s",
@@ -362,10 +365,10 @@ func newCancelWhenDisabled(sv *settings.Values) *syncCancelFunc {
 	schedulerEnabledSetting.SetOnChange(sv, func(ctx context.Context) {
 		if !schedulerEnabledSetting.Get(sv) {
 			sf.Lock()
+			defer sf.Unlock()
 			if sf.CancelFunc != nil {
 				sf.CancelFunc()
 			}
-			sf.Unlock()
 		}
 	})
 	return sf
@@ -384,6 +387,7 @@ func (sf *syncCancelFunc) withCancelOnDisabled(
 		sf.CancelFunc = cancel
 
 		if !schedulerEnabledSetting.Get(sv) {
+			log.Warning(ctx, "scheduled job system disabled by setting, cancelling execution")
 			cancel()
 		}
 
@@ -419,6 +423,7 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 				return
 			case <-timer.C:
 				if !schedulerEnabledSetting.Get(&s.Settings.SV) {
+					log.Warning(ctx, "scheduled job system disabled by setting")
 					continue
 				}
 
@@ -434,28 +439,28 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 }
 
 var schedulerEnabledSetting = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"jobs.scheduler.enabled",
 	"enable/disable job scheduler",
 	true,
 )
 
 var schedulerPaceSetting = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"jobs.scheduler.pace",
 	"how often to scan system.scheduled_jobs table",
 	time.Minute,
 )
 
 var schedulerMaxJobsPerIterationSetting = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"jobs.scheduler.max_jobs_per_iteration",
 	"how many schedules to start per iteration; setting to 0 turns off this limit",
 	5,
 )
 
 var schedulerScheduleExecutionTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"jobs.scheduler.schedule_execution.timeout",
 	"sets a timeout on for schedule execution; 0 disables timeout",
 	30*time.Second,

@@ -30,7 +30,7 @@ func CommentOnDatabase(b BuildCtx, n *tree.CommentOnDatabase) {
 	dbElements := b.ResolveDatabase(n.Name, commentResolveParams)
 
 	if n.Comment == nil {
-		dbElements.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		dbElements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 			switch e.(type) {
 			case *scpb.DatabaseComment:
 				b.Drop(e)
@@ -41,7 +41,7 @@ func CommentOnDatabase(b BuildCtx, n *tree.CommentOnDatabase) {
 		dc := &scpb.DatabaseComment{
 			Comment: *n.Comment,
 		}
-		dbElements.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		dbElements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 			switch t := e.(type) {
 			case *scpb.Database:
 				dc.DatabaseID = t.DatabaseID
@@ -57,7 +57,7 @@ func CommentOnSchema(b BuildCtx, n *tree.CommentOnSchema) {
 	schemaElements := b.ResolveSchema(n.Name, commentResolveParams)
 
 	if n.Comment == nil {
-		schemaElements.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		schemaElements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 			switch e.(type) {
 			case *scpb.SchemaComment:
 				b.Drop(e)
@@ -68,7 +68,7 @@ func CommentOnSchema(b BuildCtx, n *tree.CommentOnSchema) {
 		sc := &scpb.SchemaComment{
 			Comment: *n.Comment,
 		}
-		schemaElements.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		schemaElements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 			switch t := e.(type) {
 			case *scpb.Schema:
 				sc.SchemaID = t.SchemaID
@@ -118,7 +118,7 @@ func CommentOnColumn(b BuildCtx, n *tree.CommentOnColumn) {
 	columnElements := b.ResolveColumn(table.TableID, n.ColumnItem.ColumnName, commentResolveParams)
 
 	if n.Comment == nil {
-		columnElements.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		columnElements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 			switch e.(type) {
 			case *scpb.ColumnComment:
 				b.Drop(e)
@@ -130,7 +130,7 @@ func CommentOnColumn(b BuildCtx, n *tree.CommentOnColumn) {
 			TableID: table.TableID,
 			Comment: *n.Comment,
 		}
-		columnElements.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		columnElements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 			switch t := e.(type) {
 			case *scpb.Column:
 				cc.ColumnID = t.ColumnID
@@ -146,7 +146,7 @@ func CommentOnColumn(b BuildCtx, n *tree.CommentOnColumn) {
 func CommentOnIndex(b BuildCtx, n *tree.CommentOnIndex) {
 	var tableID catid.DescID
 	indexElements := b.ResolveIndexByName(&n.Index, commentResolveParams)
-	indexElements.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+	indexElements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch e.(type) {
 		case *scpb.PrimaryIndex, *scpb.SecondaryIndex:
 			tableID = screl.GetDescID(e)
@@ -154,7 +154,7 @@ func CommentOnIndex(b BuildCtx, n *tree.CommentOnIndex) {
 	})
 
 	if n.Comment == nil {
-		indexElements.ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		indexElements.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 			switch e.(type) {
 			case *scpb.IndexComment:
 				b.Drop(e)
@@ -166,7 +166,7 @@ func CommentOnIndex(b BuildCtx, n *tree.CommentOnIndex) {
 			TableID: tableID,
 			Comment: *n.Comment,
 		}
-		indexElements.ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		indexElements.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 			switch e.(type) {
 			case *scpb.PrimaryIndex, *scpb.SecondaryIndex:
 				id, _ := screl.Schema.GetAttribute(screl.IndexID, e)
@@ -186,7 +186,7 @@ func CommentOnConstraint(b BuildCtx, n *tree.CommentOnConstraint) {
 	constraintElements := b.ResolveConstraint(table.TableID, n.Constraint, commentResolveParams)
 
 	if n.Comment == nil {
-		constraintElements.ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		constraintElements.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 			switch e.(type) {
 			case *scpb.ConstraintComment:
 				b.Drop(e)
@@ -198,7 +198,7 @@ func CommentOnConstraint(b BuildCtx, n *tree.CommentOnConstraint) {
 			Comment: *n.Comment,
 			TableID: table.TableID,
 		}
-		constraintElements.ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		constraintElements.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 			switch e.(type) {
 			case *scpb.CheckConstraint, *scpb.ForeignKeyConstraint, *scpb.UniqueWithoutIndexConstraint,
 				*scpb.PrimaryIndex, *scpb.SecondaryIndex:

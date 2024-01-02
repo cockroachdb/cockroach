@@ -201,7 +201,7 @@ func getDescriptorsByID(
 		if flags.layerFilters.withoutStorage {
 			// Some descriptors are still missing and there's nowhere left to get
 			// them from.
-			return catalog.ErrDescriptorNotFound
+			return errors.Wrapf(catalog.ErrDescriptorNotFound, "looking up descriptor(s) %v", readIDs)
 		}
 		const isDescriptorRequired = true
 		read, err := tc.cr.GetByIDs(ctx, txn, readIDs.Ordered(), isDescriptorRequired, catalog.Any)
@@ -235,7 +235,7 @@ func getDescriptorsByID(
 func filterDescriptor(desc catalog.Descriptor, flags getterFlags) error {
 	if expected := flags.descFilters.maybeParentID; expected != descpb.InvalidID {
 		if actual := desc.GetParentID(); actual != descpb.InvalidID && actual != expected {
-			return catalog.ErrDescriptorNotFound
+			return errors.Wrapf(catalog.ErrDescriptorNotFound, "expected %d, got %d", expected, actual)
 		}
 	}
 	if flags.descFilters.withoutDropped {
@@ -289,14 +289,14 @@ func (q *byIDLookupContext) lookupVirtual(
 	// TODO(postamar): get rid of descriptorless public schemas
 	if id == keys.PublicSchemaID {
 		if q.flags.isMutable {
-			err := catalog.NewMutableAccessToVirtualSchemaError(schemadesc.GetPublicSchema())
+			err := catalog.NewMutableAccessToDescriptorlessSchemaError(schemadesc.GetPublicSchema())
 			return nil, catalog.NoValidation, err
 		}
 		return schemadesc.GetPublicSchema(), validate.Write, nil
 	}
 	if vs := q.tc.virtual.getSchemaByID(id); vs != nil {
 		if q.flags.isMutable {
-			err := catalog.NewMutableAccessToVirtualSchemaError(vs.Desc())
+			err := catalog.NewMutableAccessToDescriptorlessSchemaError(vs.Desc())
 			return nil, catalog.NoValidation, err
 		}
 		return vs.Desc(), validate.Write, nil
@@ -320,7 +320,7 @@ func (q *byIDLookupContext) lookupTemporary(
 		return nil, catalog.NoValidation, nil
 	}
 	if q.flags.isMutable {
-		err := catalog.NewMutableAccessToVirtualSchemaError(schemadesc.GetPublicSchema())
+		err := catalog.NewMutableAccessToDescriptorlessSchemaError(td)
 		return nil, catalog.NoValidation, err
 	}
 	return td, validate.Write, nil
@@ -371,7 +371,7 @@ func (q *byIDLookupContext) lookupLeased(
 	// If we have already read all of the descriptors, use it as a negative
 	// cache to short-circuit a lookup we know will be doomed to fail.
 	if q.tc.cr.IsDescIDKnownToNotExist(id, q.flags.descFilters.maybeParentID) {
-		return nil, catalog.NoValidation, catalog.ErrDescriptorNotFound
+		return nil, catalog.NoValidation, catalog.NewDescriptorNotFoundError(id)
 	}
 	desc, shouldReadFromStore, err := q.tc.leased.getByID(q.ctx, q.tc.deadlineHolder(q.txn), id)
 	if err != nil || shouldReadFromStore {
@@ -423,7 +423,13 @@ func getDescriptorByName(
 			return nil, err
 		}
 		// In all other cases, having an ID should imply having a descriptor.
-		return nil, errors.WithAssertionFailure(err)
+		return nil, errors.Wrapf(
+			err,
+			"resolved %s to %d but found no descriptor with id %d",
+			name,
+			id,
+			id,
+		)
 	}
 	return nil, err
 }
@@ -453,7 +459,7 @@ func (tc *Collection) getVirtualDescriptorByName(
 	case catalog.Schema:
 		if vs := tc.virtual.getSchemaByName(name); vs != nil {
 			if isMutableRequired {
-				return haltLookups, nil, catalog.NewMutableAccessToVirtualSchemaError(vs)
+				return haltLookups, nil, catalog.NewMutableAccessToDescriptorlessSchemaError(vs)
 			}
 			return haltLookups, vs, nil
 		}
@@ -481,7 +487,7 @@ func (tc *Collection) getVirtualDescriptorByName(
 // getNonVirtualDescriptorID looks up a non-virtual descriptor ID by name by
 // going through layers in sequence.
 //
-// All flags except AvoidLeased, RequireMutable and AvoidSynthetic are ignored.
+// All flags except AssertNotLeased, RequireMutable and AvoidSynthetic are ignored.
 func (tc *Collection) getNonVirtualDescriptorID(
 	ctx context.Context,
 	txn *kv.Txn,

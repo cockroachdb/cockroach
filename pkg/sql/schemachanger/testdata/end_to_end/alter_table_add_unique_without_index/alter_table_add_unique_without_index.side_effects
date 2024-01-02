@@ -1,0 +1,214 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+SET experimental_enable_unique_without_index_constraints = true;
+INSERT INTO t(i, j) VALUES(-1, -1), (-2, -2), (-3, -3);
+----
+...
++object {100 101 t} -> 104
+
+/* test */
+ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.add_constraint
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 104
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹unique_j› UNIQUE WITHOUT INDEX (‹j›)
+    tag: ALTER TABLE
+    user: root
+  tableName: defaultdb.public.t
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #104
+  ...
+     id: 104
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check: {}
+  +      constraintType: UNIQUE_WITHOUT_INDEX
+  +      foreignKey: {}
+  +      name: crdb_internal_constraint_2_name_placeholder
+  +      uniqueWithoutIndexConstraint:
+  +        columnIds:
+  +        - 2
+  +        constraintId: 2
+  +        name: unique_j
+  +        tableId: 104
+  +        validity: Validating
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  -  nextConstraintId: 2
+  +  nextConstraintId: 3
+     nextFamilyId: 1
+     nextIndexId: 2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 4 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": j
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      constraints:
+  +        "2": unique_j
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "1": t_pkey
+  +      name: t
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹unique_j› UNIQUE WITHOUT INDEX (‹j›)
+  +        statement: ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j)
+  +        statementTag: ALTER TABLE
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     id: 104
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check: {}
+  +      constraintType: UNIQUE_WITHOUT_INDEX
+  +      foreignKey: {}
+  +      name: crdb_internal_constraint_2_name_placeholder
+  +      uniqueWithoutIndexConstraint:
+  +        columnIds:
+  +        - 2
+  +        constraintId: 2
+  +        name: unique_j
+  +        tableId: 104
+  +        validity: Validating
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  -  nextConstraintId: 2
+  +  nextConstraintId: 3
+     nextFamilyId: 1
+     nextIndexId: 2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t ADD CONSTRAINT unique_j UNIQUE WITHOUT INDEX (j)"
+  descriptor IDs: [104]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 2 with 1 ValidationType op
+validate UNIQUE WITHOUT INDEX constraint unique_j in table #104
+commit transaction #3
+begin transaction #4
+## PostCommitPhase stage 2 of 2 with 3 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": j
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      constraints:
+  -        "2": unique_j
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "1": t_pkey
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹unique_j› UNIQUE WITHOUT INDEX (‹j›)
+  -        statement: ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j)
+  -        statementTag: ALTER TABLE
+  -    revertible: true
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     id: 104
+     modificationTime: {}
+  -  mutations:
+  -  - constraint:
+  -      check: {}
+  -      constraintType: UNIQUE_WITHOUT_INDEX
+  -      foreignKey: {}
+  -      name: crdb_internal_constraint_2_name_placeholder
+  -      uniqueWithoutIndexConstraint:
+  -        columnIds:
+  -        - 2
+  -        constraintId: 2
+  -        name: unique_j
+  -        tableId: 104
+  -        validity: Validating
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  uniqueWithoutIndexConstraints:
+  +  - columnIds:
+  +    - 2
+  +    constraintId: 2
+  +    name: unique_j
+  +    tableId: 104
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+commit transaction #4
+# end PostCommitPhase

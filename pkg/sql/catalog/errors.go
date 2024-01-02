@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ValidateName validates a name.
@@ -89,9 +90,17 @@ func HasInactiveDescriptorError(err error) bool {
 // found with the given id.
 var ErrDescriptorNotFound = errors.New("descriptor not found")
 
+func NewDescriptorNotFoundError(id descpb.ID) error {
+	return errors.Wrapf(ErrDescriptorNotFound, "looking up ID %d", errors.Safe(id))
+}
+
 // ErrReferencedDescriptorNotFound is like ErrDescriptorNotFound but for
 // descriptors referenced within another descriptor.
 var ErrReferencedDescriptorNotFound = errors.New("referenced descriptor not found")
+
+func NewReferencedDescriptorNotFoundError(descType string, id descpb.ID) error {
+	return errors.Wrapf(ErrReferencedDescriptorNotFound, "referenced %s ID %d", redact.SafeString(descType), errors.Safe(id))
+}
 
 // ErrDescriptorWrongType is returned to signal that a descriptor was found but
 // that it wasn't of the expected type.
@@ -198,9 +207,12 @@ func WrapFunctionDescRefErr(id descpb.ID, err error) error {
 	return errors.Wrapf(err, "referenced function ID %d", errors.Safe(id))
 }
 
-// NewMutableAccessToVirtualSchemaError is returned when trying to mutably
-// access a virtual schema object.
-func NewMutableAccessToVirtualSchemaError(schema SchemaDescriptor) error {
+// NewMutableAccessToDescriptorlessSchemaError is returned when trying to mutably
+// access a descriptorless schema object, including
+// - descriptorless public schemas (deprecated),
+// - temporary schemas,
+// - virtual schemas (pg_catalog, pg_extension, information_schema, and crdb_internal)
+func NewMutableAccessToDescriptorlessSchemaError(schema SchemaDescriptor) error {
 	switch schema.SchemaKind() {
 	case SchemaPublic:
 		return pgerror.New(pgcode.InsufficientPrivilege,

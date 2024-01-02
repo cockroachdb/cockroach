@@ -540,7 +540,7 @@ vectorized: true
 └── • lookup join
     │ estimated row count: 3
     │ table: metric_values@metric_values_pkey
-    │ equality: (metric_id, time) = (metric_id,time)
+    │ equality: (metric_id, time) = (metric_id, time)
     │ equality cols are key
     │
     └── • lookup join
@@ -585,7 +585,7 @@ vectorized: true
     └── • lookup join
         │ estimated row count: 0
         │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id,time)
+        │ equality: (metric_id, time) = (metric_id, time)
         │ equality cols are key
         │
         └── • lookup join
@@ -626,7 +626,7 @@ vectorized: true
     └── • lookup join
         │ estimated row count: 0
         │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id,time)
+        │ equality: (metric_id, time) = (metric_id, time)
         │ equality cols are key
         │
         └── • lookup join
@@ -667,7 +667,7 @@ vectorized: true
     └── • lookup join
         │ estimated row count: 0
         │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id,time)
+        │ equality: (metric_id, time) = (metric_id, time)
         │ equality cols are key
         │
         └── • lookup join
@@ -709,7 +709,7 @@ vectorized: true
     └── • lookup join
         │ estimated row count: 0
         │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id,time)
+        │ equality: (metric_id, time) = (metric_id, time)
         │ equality cols are key
         │
         └── • lookup join
@@ -750,7 +750,7 @@ vectorized: true
     └── • lookup join
         │ estimated row count: 0
         │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id,time)
+        │ equality: (metric_id, time) = (metric_id, time)
         │ equality cols are key
         │
         └── • lookup join
@@ -786,7 +786,7 @@ vectorized: true
 └── • lookup join
     │ estimated row count: 3
     │ table: metric_values@metric_values_pkey
-    │ equality: (metric_id, time) = (metric_id,time)
+    │ equality: (metric_id, time) = (metric_id, time)
     │ equality cols are key
     │
     └── • lookup join
@@ -833,7 +833,7 @@ vectorized: true
     └── • lookup join
         │ estimated row count: 0
         │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id,time)
+        │ equality: (metric_id, time) = (metric_id, time)
         │ equality cols are key
         │
         └── • lookup join
@@ -870,7 +870,7 @@ vectorized: true
 └── • lookup join
     │ estimated row count: 33
     │ table: metric_values@metric_values_pkey
-    │ equality: (metric_id, time) = (metric_id,time)
+    │ equality: (metric_id, time) = (metric_id, time)
     │ equality cols are key
     │
     └── • lookup join
@@ -909,7 +909,7 @@ vectorized: true
 └── • lookup join
     │ estimated row count: 33
     │ table: metric_values@metric_values_pkey
-    │ equality: (metric_id, time) = (metric_id,time)
+    │ equality: (metric_id, time) = (metric_id, time)
     │ equality cols are key
     │
     └── • lookup join
@@ -948,7 +948,7 @@ vectorized: true
 └── • lookup join
     │ estimated row count: 33
     │ table: metric_values@metric_values_pkey
-    │ equality: (metric_id, time) = (metric_id,time)
+    │ equality: (metric_id, time) = (metric_id, time)
     │ equality cols are key
     │
     └── • lookup join
@@ -988,7 +988,7 @@ vectorized: true
 └── • lookup join
     │ estimated row count: 33
     │ table: metric_values@metric_values_pkey
-    │ equality: (metric_id, time) = (metric_id,time)
+    │ equality: (metric_id, time) = (metric_id, time)
     │ equality cols are key
     │
     └── • lookup join
@@ -1027,7 +1027,7 @@ vectorized: true
 └── • lookup join
     │ estimated row count: 33
     │ table: metric_values@metric_values_pkey
-    │ equality: (metric_id, time) = (metric_id,time)
+    │ equality: (metric_id, time) = (metric_id, time)
     │ equality cols are key
     │
     └── • lookup join

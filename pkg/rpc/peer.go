@@ -60,18 +60,6 @@ type peer struct {
 	// active - it is the heartbeat loop and manages `mu.c.` (including
 	// recreating it after the connection fails and has to be redialed).
 	//
-	// NB: at the time of writing, we don't use the breaking capabilities,
-	// i.e. we don't check the circuit breaker in `Connect`. We will do that
-	// once the circuit breaker is mature, and then retire the breakers
-	// returned by Context.getBreaker.
-	//
-	// Currently what will happen when a peer is down is that `c` will be
-	// recreated (blocking new callers to `Connect()`), a connection attempt
-	// will be made, and callers will see the failure to this attempt.
-	//
-	// With the breaker, callers would be turned away eagerly until there
-	// is a known-healthy connection.
-	//
 	// mu must *NOT* be held while operating on `b`. This is because the async
 	// probe will sometimes have to synchronously acquire mu before spawning off.
 	b                  *circuit.Breaker
@@ -184,8 +172,8 @@ func (rpcCtx *Context) newPeer(k peerKey) *peer {
 		dial: func(ctx context.Context, target string, class ConnectionClass) (*grpc.ClientConn, error) {
 			return rpcCtx.grpcDialRaw(ctx, target, class, rpcCtx.testingDialOpts...)
 		},
-		heartbeatInterval: rpcCtx.heartbeatInterval,
-		heartbeatTimeout:  rpcCtx.heartbeatTimeout,
+		heartbeatInterval: rpcCtx.RPCHeartbeatInterval,
+		heartbeatTimeout:  rpcCtx.RPCHeartbeatTimeout,
 	}
 	var b *circuit.Breaker
 
@@ -240,19 +228,15 @@ func (p *peer) launch(ctx context.Context, report func(error), done func()) {
 	if err := p.opts.Stopper.RunAsyncTask(ctx, taskName, func(ctx context.Context) {
 		p.run(ctx, report, done)
 	}); err != nil {
-		// Stopper draining. Since we're trying to launch a probe, we know the
-		// breaker is tripped. We overwrite the error since we want errQuiescing
-		// (which has a gRPC status), not kvpb.NodeUnavailableError.
-		err = errQuiescing
-		report(err)
-		// We also need to resolve connFuture because a caller may be waiting on
-		// (*Connection).ConnectNoBreaker, and they need to be signaled as well
-		// but aren't listening to the stopper.
-		p.mu.c.connFuture.Resolve(nil, errQuiescing)
+		p.onQuiesce(report)
 		done()
 	}
 }
 
+// run synchronously runs the probe.
+//
+// INVARIANT: p.mu.c is a "fresh" connection (i.e. unresolved connFuture)
+// whenever `run` is invoked.
 func (p *peer) run(ctx context.Context, report func(error), done func()) {
 	var t timeutil.Timer
 	defer t.Stop()
@@ -266,14 +250,9 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 			return
 		}
 
-		// NB: we don't need to close initialHeartbeatDone in these error cases.
-		// Connect() is cancellation-sensitive as well.
 		select {
 		case <-ctx.Done():
-			// Stopper quiescing, node shutting down. Mirroring what breakerProbe.launch
-			// does when it can't launch an async task: leave the broken connection around,
-			// no need to close initialHeartbeatDone, just report errQuiescing and quit.
-			report(errQuiescing)
+			p.onQuiesce(report)
 			return
 		case <-t.C:
 			t.Read = true
@@ -309,9 +288,11 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 			return
 		}
 
-		p.mu.Lock()
-		p.mu.c = newConnectionToNodeID(p.k, p.mu.c.breakerSignalFn)
-		p.mu.Unlock()
+		func() {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			p.mu.c = newConnectionToNodeID(p.k, p.mu.c.breakerSignalFn)
+		}()
 
 		if p.snap().deleteAfter != 0 {
 			// Peer is in inactive mode, and we just finished up a probe, so
@@ -379,10 +360,10 @@ func runSingleHeartbeat(
 	// heartbeat to heartbeat: we compute a new .Offset at the end of
 	// the current heartbeat as input to the next one.
 	request := &PingRequest{
-		OriginAddr:      opts.Config.AdvertiseAddr,
+		OriginAddr:      opts.AdvertiseAddr,
 		TargetNodeID:    k.NodeID,
-		ServerVersion:   opts.Settings.Version.BinaryVersion(),
-		LocalityAddress: opts.Config.LocalityAddresses,
+		ServerVersion:   opts.Settings.Version.LatestVersion(),
+		LocalityAddress: opts.LocalityAddresses,
 		ClusterID:       &clusterID,
 		OriginNodeID:    opts.NodeID.Get(),
 		NeedsDialback:   preferredDialback,
@@ -423,9 +404,9 @@ func runSingleHeartbeat(
 	// new node in a cluster and mistakenly joins the wrong
 	// cluster gets a chance to see the error message on their
 	// management console.
-	if !opts.Config.DisableClusterNameVerification && !response.DisableClusterNameVerification {
+	if !opts.DisableClusterNameVerification && !response.DisableClusterNameVerification {
 		err = errors.Wrap(
-			checkClusterName(opts.Config.ClusterName, response.ClusterName),
+			checkClusterName(opts.ClusterName, response.ClusterName),
 			"cluster name check failed on ping response")
 		if err != nil {
 			return err
@@ -700,6 +681,17 @@ func (p *peer) onHeartbeatFailed(
 	p.ConnectionFailures.Inc(1)
 }
 
+// onQuiesce is called when the probe exits or refuses to start due to
+// quiescing.
+func (p *peer) onQuiesce(report func(error)) {
+	// Stopper quiescing, node shutting down.
+	report(errQuiescing)
+	// NB: it's important that connFuture is resolved, or a caller sitting on
+	// `c.ConnectNoBreaker` would never be unblocked; after all, the probe won't
+	// start again in the future.
+	p.snap().c.connFuture.Resolve(nil, errQuiescing)
+}
+
 func (p PeerSnap) deletable(now time.Time) bool {
 	if p.deleteAfter == 0 {
 		return false
@@ -803,14 +795,16 @@ func (peers *peerMap) shouldDeleteAfter(myKey peerKey, err error) time.Duration 
 }
 
 func touchOldPeers(peers *peerMap, now time.Time) {
-	var sigs []circuit.Signal
-	peers.mu.RLock()
-	for _, p := range peers.mu.m {
-		if p.snap().deletable(now) {
-			sigs = append(sigs, p.b.Signal())
+	sigs := func() (sigs []circuit.Signal) {
+		peers.mu.RLock()
+		defer peers.mu.RUnlock()
+		for _, p := range peers.mu.m {
+			if p.snap().deletable(now) {
+				sigs = append(sigs, p.b.Signal())
+			}
 		}
-	}
-	peers.mu.RUnlock()
+		return sigs
+	}()
 
 	// Now, outside of the lock, query all of the collected Signals which will tip
 	// off the respective probes, which will perform self-removal from the map. To
@@ -844,26 +838,21 @@ func (p *peer) maybeDelete(ctx context.Context, now time.Time) {
 
 	log.VEventf(ctx, 1, "deleting peer")
 
-	// Lock order: map, then peer. But here we can do better and
-	// not hold both mutexes at the same time.
+	// Lock order: map, then peer. We need to lock both because we want
+	// to atomically release the metrics while removing from the map[1][2].
 	//
-	// Release metrics in the same critical section as p.deleted=true
-	// to make sure the metrics are not updated after release, since that
-	// causes the aggregate metrics to drift.
-	//
-	// We delete from the map first, then mark the peer as deleted. The converse
-	// works too, but it makes for flakier tests because it's possible to see the
-	// metrics change but the peer still being in the map.
-
+	// [1]: see https://github.com/cockroachdb/cockroach/issues/105335
+	// [2]: Releasing in one critical section with p.deleted=true ensures
+	//      that the metrics are not updated after release, which would
+	//      otherwise cause the aggregate metrics to drift away from zero
+	//      permanently.
 	p.peers.mu.Lock()
+	defer p.peers.mu.Unlock()
 	delete(p.peers.mu.m, p.k)
-	p.peers.mu.Unlock()
-
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.mu.deleted = true
 	p.peerMetrics.release()
-	p.mu.Unlock()
-
 }
 
 func launchConnStateWatcher(

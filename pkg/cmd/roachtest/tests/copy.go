@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/errors"
@@ -46,9 +47,21 @@ func registerCopy(r registry.Registry) {
 		const rowOverheadEstimate = 160
 		const rowEstimate = rowOverheadEstimate + payload
 
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		// We run this without metamorphic constants as kv-batch-size = 1 makes
+		// this test take far too long to complete.
+		// TODO(DarrylWong): Use a metamorphic constants exclusion list instead.
+		// See: https://github.com/cockroachdb/cockroach/issues/113164
+		settings := install.MakeClusterSettings()
+		settings.Env = append(settings.Env, "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true")
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.All())
+
+		// Make sure the copy commands have sufficient time to finish when
+		// runtime assertions are enabled.
+		copyTimeout := 10 * time.Minute
+		if UsingRuntimeAssertions(t) {
+			copyTimeout = 20 * time.Minute
+		}
 
 		m := c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
@@ -99,7 +112,7 @@ func registerCopy(r registry.Registry) {
 				QueryRowContext(ctx context.Context, query string, args ...interface{}) *gosql.Row
 			}
 			runCopy := func(ctx context.Context, qu querier) error {
-				ctx, cancel := context.WithTimeout(ctx, 10*time.Minute) // avoid infinite internal retries
+				ctx, cancel := context.WithTimeout(ctx, copyTimeout) // avoid infinite internal retries
 				defer cancel()
 
 				for lastID := -1; lastID+1 < rows; {
@@ -179,11 +192,16 @@ func registerCopy(r registry.Registry) {
 	for _, tc := range testcases {
 		tc := tc
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", tc.rows, tc.nodes, tc.txn),
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(tc.nodes),
-			Leases:  registry.MetamorphicLeases,
+			Name:             fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", tc.rows, tc.nodes, tc.txn),
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(tc.nodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.Cloud() != spec.GCE && !c.IsLocal() {
+					t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
+				}
 				runCopy(ctx, t, c, tc.rows, tc.txn)
 			},
 		})

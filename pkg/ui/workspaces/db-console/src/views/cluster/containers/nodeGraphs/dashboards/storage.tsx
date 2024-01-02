@@ -43,8 +43,10 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Capacity"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={<CapacityGraphTooltip tooltipSelection={tooltipSelection} />}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
         <Metric name="cr.store.capacity" title="Max" />
@@ -59,6 +61,7 @@ export default function (props: GraphDashboardProps) {
       sources={storeSources}
       tenantSource={tenantSource}
       tooltip={<LiveBytesGraphTooltip tooltipSelection={tooltipSelection} />}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="live bytes">
         <Metric name="cr.store.livebytes" title="Live" />
@@ -69,9 +72,11 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Log Commit Latency: 99th Percentile"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The 99th %ile latency for commits to the Raft Log.
-        This measures essentially an fdatasync to the storage engine's write-ahead log.`}
+      tooltip={`The 99th %ile latency for commits to the Raft Log. This measures
+          essentially an fdatasync to the storage engine's write-ahead log.`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, nid => (
@@ -88,9 +93,11 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Log Commit Latency: 50th Percentile"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The 50th %ile latency for commits to the Raft Log.
-        This measures essentially an fdatasync to the storage engine's write-ahead log.`}
+      tooltip={`The 50th %ile latency for commits to the Raft Log. This measures
+          essentially an fdatasync to the storage engine's write-ahead log.`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, nid => (
@@ -107,10 +114,12 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Command Commit Latency: 99th Percentile"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The 99th %ile latency for commits of Raft commands.
-        This measures applying a batch to the storage engine
-        (including writes to the write-ahead log), but no fsync.`}
+      tooltip={`The 99th %ile latency for commits of Raft commands. This measures
+          applying a batch to the storage engine (including writes to the
+          write-ahead log), but no fsync.`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, nid => (
@@ -127,10 +136,12 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Command Commit Latency: 50th Percentile"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The 50th %ile latency for commits of Raft commands.
-        This measures applying a batch to the storage engine
-        (including writes to the write-ahead log), but no fsync.`}
+      tooltip={`The 50th %ile latency for commits of Raft commands. This measures
+          applying a batch to the storage engine (including writes to the
+          write-ahead log), but no fsync.`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, nid => (
@@ -147,8 +158,11 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Read Amplification"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The average number of real read operations executed per logical read operation ${tooltipSelection}.`}
+      tooltip={`The average number of real read operations executed per logical read
+          operation ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="factor">
         {_.map(nodeIDs, nid => (
@@ -165,8 +179,10 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="SSTables"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`The number of SSTables in use ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="sstables">
         {_.map(nodeIDs, nid => (
@@ -183,9 +199,11 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="File Descriptors"
       sources={nodeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The number of open file descriptors ${tooltipSelection}, compared with the
-          file descriptor limit.`}
+      tooltip={`The number of open file descriptors ${tooltipSelection}, compared with
+          the file descriptor limit.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="descriptors">
         <Metric name="cr.node.sys.fd.open" title="Open" />
@@ -196,8 +214,10 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Flushes"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`Bytes written by memtable flushes ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
         {_.map(nodeIDs, nid => (
@@ -213,10 +233,33 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="WAL Bytes Written"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={`Bytes written to WAL files ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Bytes} label="written bytes">
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.storage.wal.bytes_written"
+            title={getNodeNameById(nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Compactions"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`Bytes written by compactions ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
         {_.map(nodeIDs, nid => (
@@ -234,8 +277,10 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Ingestions"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`Bytes written by sstable ingestions ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
         {_.map(nodeIDs, nid => (
@@ -253,9 +298,12 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Write Stalls"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The number of intentional write stalls per second ${tooltipSelection}. Write stalls
-        are used to backpressure incoming writes during periods of heavy write traffic.`}
+      tooltip={`The number of intentional write stalls per second ${tooltipSelection}.
+          Write stalls are used to backpressure incoming writes during periods
+          of heavy write traffic.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="count">
         <Metric
@@ -269,9 +317,11 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Time Series Writes"
       sources={nodeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The number of successfully written time series samples, and number of errors attempting
-        to write time series, per second ${tooltipSelection}.`}
+      tooltip={`The number of successfully written time series samples, and number of
+          errors attempting to write time series, per second ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="count">
         <Metric
@@ -290,6 +340,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Time Series Bytes Written"
       sources={nodeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={
         <div>
@@ -305,6 +356,7 @@ export default function (props: GraphDashboardProps) {
           data.
         </div>
       }
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes}>
         <Metric

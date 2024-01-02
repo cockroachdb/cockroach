@@ -133,15 +133,18 @@ func (b *Breaker) Report(err error) {
 	// When the error changes, we have to replace errAndCh wholesale (that's the
 	// contract, we can't mutate err once it's not nil) so we make a new channel
 	// that is then promptly closed.
-	b.mu.Lock()
-	prevErr := b.mu.errAndCh.err
-	if prevErr != nil {
-		b.mu.errAndCh = b.newErrAndCh()
-	}
-	// We get to write the error since we have exclusive access via b.mu.
-	b.mu.errAndCh.err = storeErr
-	close(b.mu.errAndCh.ch)
-	b.mu.Unlock()
+	var prevErr error
+	func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		prevErr = b.mu.errAndCh.err
+		if prevErr != nil {
+			b.mu.errAndCh = b.newErrAndCh()
+		}
+		// We get to write the error since we have exclusive access via b.mu.
+		b.mu.errAndCh.err = storeErr
+		close(b.mu.errAndCh.ch)
+	}()
 
 	opts := b.Opts()
 	opts.EventHandler.OnTrip(b, prevErr, storeErr)

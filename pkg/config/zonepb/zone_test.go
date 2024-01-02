@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1034,7 +1035,7 @@ func TestZoneSpecifiers(t *testing.T) {
 	}
 	resolveID := func(id uint32) (parentID, parentSchemaID uint32, name string, err error) {
 		if id == keys.PublicSchemaID {
-			return 0, 0, string(tree.PublicSchemaName), nil
+			return 0, 0, string(catconstants.PublicSchemaName), nil
 		}
 		for entry, entryID := range namespace {
 			if id == entryID {
@@ -1124,7 +1125,7 @@ func tableSpecifier(
 ) tree.ZoneSpecifier {
 	return tree.ZoneSpecifier{
 		TableOrIndex: tree.TableIndexName{
-			Table: tree.MakeTableNameWithSchema(db, tree.PublicSchemaName, tbl),
+			Table: tree.MakeTableNameWithSchema(db, catconstants.PublicSchemaName, tbl),
 			Index: idx,
 		},
 		Partition: partition,

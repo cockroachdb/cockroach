@@ -22,17 +22,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,7 +47,7 @@ func TestInternalExecutor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -131,7 +130,7 @@ func TestInternalFullTableScan(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -154,9 +153,9 @@ func TestInternalFullTableScan(t *testing.T) {
 		err.Error())
 
 	mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
-	mon.StartNoReserved(ctx, s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor())
+	mon.StartNoReserved(ctx, s.SQLServer().(*sql.Server).GetBytesMonitor())
 	ie := sql.MakeInternalExecutor(
-		s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
+		s.SQLServer().(*sql.Server), sql.MemoryMetrics{}, mon,
 	)
 	ie.SetSessionData(
 		&sessiondata.SessionData{
@@ -182,7 +181,7 @@ func TestInternalStmtFingerprintLimit(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -193,120 +192,12 @@ func TestInternalStmtFingerprintLimit(t *testing.T) {
 	require.NoError(t, err)
 
 	mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
-	mon.StartNoReserved(ctx, s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor())
+	mon.StartNoReserved(ctx, s.SQLServer().(*sql.Server).GetBytesMonitor())
 	ie := sql.MakeInternalExecutor(
-		s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
+		s.SQLServer().(*sql.Server), sql.MemoryMetrics{}, mon,
 	)
 	_, err = ie.Exec(ctx, "stmt-exceeds-fingerprint-limit", nil, "SELECT 1")
 	require.NoError(t, err)
-}
-
-func TestQueryIsAdminWithNoTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-
-	if _, err := db.Exec("create user testuser"); err != nil {
-		t.Fatal(err)
-	}
-
-	ie := s.InternalExecutor().(*sql.InternalExecutor)
-
-	testData := []struct {
-		user     username.SQLUsername
-		expAdmin bool
-	}{
-		{username.NodeUserName(), true},
-		{username.RootUserName(), true},
-		{username.TestUserName(), false},
-	}
-
-	for _, tc := range testData {
-		t.Run(tc.user.Normalized(), func(t *testing.T) {
-			row, cols, err := ie.QueryRowExWithCols(ctx, "test", nil, /* txn */
-				sessiondata.InternalExecutorOverride{User: tc.user},
-				"SELECT crdb_internal.is_admin()")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if row == nil || len(cols) != 1 {
-				numRows := 0
-				if row != nil {
-					numRows = 1
-				}
-				t.Fatalf("unexpected result shape %d, %d", numRows, len(cols))
-			}
-			isAdmin := bool(*row[0].(*tree.DBool))
-			if isAdmin != tc.expAdmin {
-				t.Fatalf("expected %q admin %v, got %v", tc.user, tc.expAdmin, isAdmin)
-			}
-		})
-	}
-}
-
-func TestQueryHasRoleOptionWithNoTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-
-	stmts := `
-CREATE USER testuser VIEWACTIVITY;
-CREATE USER testuserredacted VIEWACTIVITYREDACTED;
-CREATE USER testadmin;
-GRANT admin TO testadmin`
-	if _, err := db.Exec(stmts); err != nil {
-		t.Fatal(err)
-	}
-	ie := s.InternalExecutor().(*sql.InternalExecutor)
-
-	for _, tc := range []struct {
-		user        string
-		option      string
-		expected    bool
-		expectedErr string
-	}{
-		{"testuser", roleoption.VIEWACTIVITY.String(), true, ""},
-		{"testuser", roleoption.CREATEROLE.String(), false, ""},
-		{"testuser", "nonexistent", false, "unrecognized role option"},
-		{"testuserredacted", roleoption.VIEWACTIVITYREDACTED.String(), true, ""},
-		{"testuserredacted", roleoption.CREATEROLE.String(), false, ""},
-		{"testuserredacted", "nonexistent", false, "unrecognized role option"},
-		{"testadmin", roleoption.VIEWACTIVITY.String(), true, ""},
-		{"testadmin", roleoption.CREATEROLE.String(), true, ""},
-		{"testadmin", "nonexistent", false, "unrecognized role option"},
-	} {
-		username := username.MakeSQLUsernameFromPreNormalizedString(tc.user)
-		row, cols, err := ie.QueryRowExWithCols(ctx, "test", nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: username},
-			"SELECT crdb_internal.has_role_option($1)", tc.option)
-		if tc.expectedErr != "" {
-			if !testutils.IsError(err, tc.expectedErr) {
-				t.Fatalf("expected error %q, got %q", tc.expectedErr, err)
-			}
-			continue
-		}
-		if row == nil || len(cols) != 1 {
-			numRows := 0
-			if row != nil {
-				numRows = 1
-			}
-			t.Fatalf("unexpected result shape %d, %d", numRows, len(cols))
-		}
-		hasRoleOption := bool(*row[0].(*tree.DBool))
-		if hasRoleOption != tc.expected {
-			t.Fatalf(
-				"expected %q has_role_option('%s') %v, got %v", tc.user, tc.option, tc.expected,
-				hasRoleOption)
-		}
-	}
 }
 
 func TestSessionBoundInternalExecutor(t *testing.T) {
@@ -314,7 +205,7 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -324,9 +215,9 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 
 	expDB := "foo"
 	mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
-	mon.StartNoReserved(ctx, s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor())
+	mon.StartNoReserved(ctx, s.SQLServer().(*sql.Server).GetBytesMonitor())
 	ie := sql.MakeInternalExecutor(
-		s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
+		s.SQLServer().(*sql.Server), sql.MemoryMetrics{}, mon,
 	)
 	ie.SetSessionData(
 		&sessiondata.SessionData{
@@ -361,7 +252,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Insecure = true
 
 	// sem will be fired every time pg_sleep(1337666) is called.
@@ -375,7 +266,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 	}
 
 	t.Run("root internal exec", func(t *testing.T) {
-		s, _, _ := serverutils.StartServer(t, params)
+		s := serverutils.StartServerOnly(t, params)
 		defer s.Stopper().Stop(context.Background())
 
 		testInternalExecutorAppNameInitialization(
@@ -387,13 +278,13 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 	// We are running the second test with a new server so
 	// as to reset the statement statistics properly.
 	t.Run("session bound exec", func(t *testing.T) {
-		s, _, _ := serverutils.StartServer(t, params)
+		s := serverutils.StartServerOnly(t, params)
 		defer s.Stopper().Stop(context.Background())
 
 		mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
-		mon.StartNoReserved(context.Background(), s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor())
+		mon.StartNoReserved(context.Background(), s.SQLServer().(*sql.Server).GetBytesMonitor())
 		ie := sql.MakeInternalExecutor(
-			s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
+			s.SQLServer().(*sql.Server), sql.MemoryMetrics{}, mon,
 		)
 		ie.SetSessionData(
 			&sessiondata.SessionData{
@@ -540,10 +431,9 @@ func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 			tt.serializable, tt.pushed, tt.refreshable)
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
-			params, _ := tests.CreateTestServerParams()
-			si, _, db := serverutils.StartServer(t, params)
-			defer si.Stopper().Stop(ctx)
-			s := si.(*server.TestServer)
+			params, _ := createTestServerParams()
+			s, _, db := serverutils.StartServer(t, params)
+			defer s.Stopper().Stop(ctx)
 
 			// Setup a txn.
 			txn := db.NewTxn(ctx, "test")
@@ -561,7 +451,8 @@ func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 			}
 			if tt.serializable && !tt.refreshable {
 				// Fix the txn's timestamp to prevent refreshes.
-				txn.CommitTimestamp()
+				_, err := txn.CommitTimestamp()
+				require.NoError(t, err)
 			}
 
 			// Are txn.IsSerializablePushAndRefreshNotPossible() and the connExecutor
@@ -613,7 +504,7 @@ func TestInternalExecutorWithDefinedQoSOverrideDoesNotPanic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
@@ -631,7 +522,7 @@ func TestInternalExecutorWithUndefinedQoSOverridePanics(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
@@ -654,7 +545,7 @@ func TestInternalDBWithOverrides(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	idb1 := s.InternalDB().(*sql.InternalDB)
@@ -727,9 +618,10 @@ func TestInternalExecutorEncountersRetry(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, db, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	params, _ := createTestServerParams()
+	srv, db, kvDB := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	if _, err := db.Exec("CREATE DATABASE test; CREATE TABLE test.t (c) AS SELECT 1"); err != nil {
 		t.Fatal(err)
@@ -795,8 +687,96 @@ func TestInternalExecutorEncountersRetry(t *testing.T) {
 		}
 	})
 
+	// This test case verifies that ExecEx stops retrying once the limit on the
+	// number of retries is reached.
+	t.Run("ExecEx retry limit reached in implicit txn", func(t *testing.T) {
+		// This number must be less than the number of errors injected (which is
+		// determined by sql.numTxnRetryErrors = 3).
+		if _, err := db.Exec("SET CLUSTER SETTING sql.internal_executor.rows_affected_retry_limit = 1;"); err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if _, err := db.Exec("RESET CLUSTER SETTING sql.internal_executor.rows_affected_retry_limit;"); err != nil {
+				t.Fatal(err)
+			}
+		}()
+		_, err := ie.ExecEx(ctx, "read rows", nil /* txn */, ieo, rowsStmt)
+		if err == nil {
+			t.Fatal("expected to get an injected retriable error")
+		}
+	})
+
 	// TODO(yuzefovich): add a test for when a schema change is done in-between
 	// the retries.
+}
+
+// TestInternalExecutorSyntheticDesc injects a synthetic descriptor
+// into a new transaction and confirms that existing descriptors are
+// replaced for both new and old transactions
+// (using isql.WithSyntheticDescriptors).
+func TestInternalExecutorSyntheticDesc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := createTestServerParams()
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := db.Exec("CREATE DATABASE test; CREATE TABLE test.t (c) AS SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
+	idb := s.InternalDB().(*sql.InternalDB)
+	// Modify the existing descriptor for test, so that the column c is now known
+	// as blah.
+	syntheticDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, s.Codec(), "test", "t")
+	syntheticDesc.Columns[0].Name = "blah"
+	syntheticDesc.PrimaryIndex.StoreColumnNames[0] = "blah"
+	syntheticDesc.Families[0].ColumnNames[0] = "blah"
+	// Specify a nil txn, so that the internal executor layer creates
+	// a new transaction.
+	t.Run("inject synthetic descriptor in new txn",
+		func(t *testing.T) {
+			exec := idb.Executor()
+			require.NoError(t, exec.WithSyntheticDescriptors(catalog.Descriptors{syntheticDesc}, func() error {
+				row, err := exec.QueryRow(ctx, "query-column-name", nil, "SELECT create_statement FROM [SHOW CREATE TABLE test.t]")
+				require.NoError(t, err)
+				createStatement := row[0].(*tree.DString)
+				require.Equal(t,
+					`CREATE TABLE public.t (
+	blah INT8 NULL,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+)`,
+					string(*createStatement))
+				return nil
+			}))
+		})
+
+	// Start a new txn and pass that into the internal executor, and
+	// confirm the synthetic descriptor is picked up.
+	t.Run("inject synthetic descriptor in existing txn",
+		func(t *testing.T) {
+			require.NoError(t,
+				idb.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					exec := idb.Executor()
+					return exec.WithSyntheticDescriptors(catalog.Descriptors{syntheticDesc}, func() error {
+						row, err := exec.QueryRow(ctx, "query-column-name", txn, "SELECT create_statement FROM [SHOW CREATE TABLE test.t]")
+						require.NoError(t, err)
+						createStatement := row[0].(*tree.DString)
+						require.Equal(t,
+							`CREATE TABLE public.t (
+	blah INT8 NULL,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+)`,
+							string(*createStatement))
+						return nil
+					})
+				}),
+			)
+		})
 }
 
 // TODO(andrei): Test that descriptor leases are released by the

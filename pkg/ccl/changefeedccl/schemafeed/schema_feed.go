@@ -246,8 +246,6 @@ func (tf *schemaFeed) init() error {
 		return errors.AssertionFailedf("SchemaFeed started more than once")
 	}
 	tf.mu.started = true
-	tf.mu.allTableVersions1 = make(map[descpb.ID]descpb.DescriptorVersion)
-	tf.mu.allTableVersions2 = make(map[descpb.ID]descpb.DescriptorVersion)
 	return nil
 }
 
@@ -280,9 +278,7 @@ func (tf *schemaFeed) Run(ctx context.Context) error {
 }
 
 func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
-	tf.mu.Lock()
-	initialTableDescTs := tf.mu.highWater
-	tf.mu.Unlock()
+	initialTableDescTs := tf.highWater()
 	var initialDescs []catalog.Descriptor
 
 	initialTableDescsFn := func(
@@ -308,13 +304,15 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		return err
 	}
 
-	tf.mu.Lock()
-	// Register all types used by the initial set of tables.
-	for _, desc := range initialDescs {
-		tbl := desc.(catalog.TableDescriptor)
-		tf.mu.typeDeps.ingestTable(tbl)
-	}
-	tf.mu.Unlock()
+	func() {
+		tf.mu.Lock()
+		defer tf.mu.Unlock()
+		// Register all types used by the initial set of tables.
+		for _, desc := range initialDescs {
+			tbl := desc.(catalog.TableDescriptor)
+			tf.mu.typeDeps.ingestTable(tbl)
+		}
+	}()
 
 	return tf.ingestDescriptors(ctx, hlc.Timestamp{}, initialTableDescTs, initialDescs, tf.validateDescriptor)
 }
@@ -483,6 +481,11 @@ func (tf *schemaFeed) pauseOrResumePolling(
 		return atOrBefore, nil
 	}
 
+	if tf.mu.allTableVersions1 == nil {
+		tf.mu.allTableVersions1 = make(map[descpb.ID]descpb.DescriptorVersion)
+		tf.mu.allTableVersions2 = make(map[descpb.ID]descpb.DescriptorVersion)
+	}
+
 	// Always start with a stance to resume polling until we've proved otherwise.
 	tf.mu.pollingPaused = false
 	if ok, err := areAllLeasedTablesSchemaLockedAt(tf.mu.highWater, tf.mu.allTableVersions1); err != nil || !ok {
@@ -506,8 +509,8 @@ func (tf *schemaFeed) pauseOrResumePolling(
 // highWater returns the current high-water timestamp.
 func (tf *schemaFeed) highWater() hlc.Timestamp {
 	tf.mu.Lock()
+	defer tf.mu.Unlock()
 	highWater := tf.mu.highWater
-	tf.mu.Unlock()
 	return highWater
 }
 
@@ -520,26 +523,16 @@ func (tf *schemaFeed) highWater() hlc.Timestamp {
 // `validateFn` is deterministic and the ingested descriptors are read
 // transactionally).
 func (tf *schemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
-	var errCh chan error
+	waitCh, feedErr := tf.tryWaitForTS(ts)
+	if feedErr != nil {
+		return feedErr
+	}
 
-	tf.mu.Lock()
-	highWater := tf.mu.highWater
-	var err error
-	if !tf.mu.errTS.IsEmpty() && tf.mu.errTS.LessEq(ts) {
-		err = tf.mu.err
-	}
-	fastPath := err != nil || ts.LessEq(highWater)
-	if !fastPath {
-		// non-fastPath is when we need to prove the invariant holds from [`high_water`, `ts].
-		errCh = make(chan error, 1)
-		tf.mu.waiters = append(tf.mu.waiters, tableHistoryWaiter{ts: ts, errCh: errCh})
-	}
-	tf.mu.Unlock()
-	if fastPath {
+	if waitCh == nil {
 		if log.V(1) {
-			log.Infof(ctx, "fastpath for %s: %v", ts, err)
+			log.Infof(ctx, "fastpath for %s", ts)
 		}
-		return err
+		return nil
 	}
 
 	if log.V(1) {
@@ -549,7 +542,7 @@ func (tf *schemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case err := <-errCh:
+	case err := <-waitCh:
 		if log.V(1) {
 			log.Infof(ctx, "waited %s for %s highwater: err=%v", timeutil.Since(start), ts, err)
 		}
@@ -558,6 +551,27 @@ func (tf *schemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
 		}
 		return err
 	}
+}
+
+// tryWaitForTS is a fast path for waitForTS.  Returns non-nil channel
+// if the fast path not available.
+func (tf *schemaFeed) tryWaitForTS(ts hlc.Timestamp) (chan error, error) {
+	tf.mu.Lock()
+	defer tf.mu.Unlock()
+
+	if !tf.mu.errTS.IsEmpty() && tf.mu.errTS.LessEq(ts) {
+		// Schema feed error occurred.
+		return nil, tf.mu.err
+	}
+
+	if ts.LessEq(tf.mu.highWater) {
+		return nil, nil // Fast path.
+	}
+
+	// non-fastPath is when we need to prove the invariant holds from [`high_water`, `ts].
+	waitCh := make(chan error, 1)
+	tf.mu.waiters = append(tf.mu.waiters, tableHistoryWaiter{ts: ts, errCh: waitCh})
+	return waitCh, nil
 }
 
 // descLess orders descriptors by (modificationTime, id).
@@ -655,7 +669,14 @@ func (tf *schemaFeed) validateDescriptor(
 		}
 		// If a interesting type changed, then we just want to force the lease
 		// manager to acquire the freshest version of the type.
-		return tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID())
+		if err := tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID()); err != nil {
+			err = errors.Wrapf(err, "could not acquire type descriptor %d lease", desc.GetID())
+			if errors.Is(err, catalog.ErrDescriptorDropped) { // That's pretty fatal.
+				err = changefeedbase.WithTerminalError(err)
+			}
+			return err
+		}
+		return nil
 	case catalog.TableDescriptor:
 		if err := changefeedvalidators.ValidateTable(tf.targets, desc, tf.tolerances); err != nil {
 			return err
@@ -714,11 +735,11 @@ func (tf *schemaFeed) validateDescriptor(
 }
 
 var highPriorityAfter = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.schema_feed.read_with_priority_after",
 	"retry with high priority if we were not able to read descriptors for too long; 0 disables",
 	time.Minute,
-).WithPublic()
+	settings.WithPublic)
 
 // sendExportRequestWithPriorityOverride uses KV API Export() to dump all kv pairs
 // whose key falls under `span` and whose mvcc timestamp falls within [startTs, endTS].
@@ -847,12 +868,19 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 					if err != nil {
 						return err
 					}
-					if unsafeValue == nil {
+
+					if len(unsafeValue) == 0 {
+						if isType {
+							return changefeedbase.WithTerminalError(
+								errors.Wrapf(catalog.ErrDescriptorDropped, "type descriptor %d dropped", id))
+						}
+
 						name := origName
 						if name == "" {
 							name = changefeedbase.StatementTimeName(fmt.Sprintf("desc(%d)", id))
 						}
-						return errors.Errorf(`"%v" was dropped or truncated`, name)
+						return changefeedbase.WithTerminalError(
+							errors.Wrapf(catalog.ErrDescriptorDropped, `table "%v"[%d] was dropped or truncated`, name, id))
 					}
 
 					// Unmarshal the descriptor.

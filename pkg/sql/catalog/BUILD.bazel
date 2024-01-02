@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
@@ -23,7 +22,8 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/config/zonepb",
-        "//pkg/geo/geoindex",
+        "//pkg/geo/geopb",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",
@@ -58,9 +58,7 @@ go_test(
         "table_col_map_test.go",
         "table_col_set_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":catalog"],
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/dbdesc",
@@ -83,5 +81,3 @@ disallowed_imports_test(
         "//pkg/sql/sem/eval",
     ],
 )
-
-get_x_data(name = "get_x_data")

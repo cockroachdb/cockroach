@@ -15,13 +15,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -39,7 +45,7 @@ func (sc testStreamClient) Dial(_ context.Context) error {
 
 // Create implements the Client interface.
 func (sc testStreamClient) Create(
-	_ context.Context, _ roachpb.TenantName,
+	_ context.Context, _ roachpb.TenantName, _ streampb.ReplicationProducerRequest,
 ) (streampb.ReplicationProducerSpec, error) {
 	return streampb.ReplicationProducerSpec{
 		StreamID:             streampb.StreamID(1),
@@ -128,13 +134,58 @@ func TestGetFirstActiveClientEmpty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var streamAddresses []string
-	activeClient, err := GetFirstActiveClient(context.Background(), streamAddresses)
-	require.ErrorContains(t, err, "failed to connect, no partition addresses")
+	activeClient, err := GetFirstActiveClient(context.Background(), streamAddresses, nil)
+	require.ErrorContains(t, err, "failed to connect, no addresses")
 	require.Nil(t, activeClient)
+
+	activeSpanConfigClient, err := GetFirstActiveSpanConfigClient(context.Background(), streamAddresses, nil)
+	require.ErrorContains(t, err, "failed to connect, no addresses")
+	require.Nil(t, activeSpanConfigClient)
+
+}
+
+func TestExternalConnectionClient(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly})
+	defer srv.Stopper().Stop(ctx)
+
+	sql := sqlutils.MakeSQLRunner(db)
+	pgURL, cleanupSinkCert := sqlutils.PGUrl(t, srv.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanupSinkCert()
+
+	externalConnection := "replication-source-addr"
+	sql.Exec(t, fmt.Sprintf(`CREATE EXTERNAL CONNECTION "%s" AS "%s"`,
+		externalConnection, pgURL.String()))
+	nonExistentConnection := "i-dont-exist"
+	address := streamingccl.StreamAddress(fmt.Sprintf("external://%s", externalConnection))
+	dontExistAddress := streamingccl.StreamAddress(fmt.Sprintf("external://%s", nonExistentConnection))
+
+	isqlDB := srv.InternalDB().(isql.DB)
+	client, err := NewStreamClient(ctx, address, isqlDB)
+	require.NoError(t, err)
+	require.NoError(t, client.Dial(ctx))
+	_, err = NewStreamClient(ctx, dontExistAddress, isqlDB)
+	require.Contains(t, err.Error(), "failed to load external connection object")
+
+	externalConnURL, err := address.URL()
+	require.NoError(t, err)
+	spanCfgClient, err := NewSpanConfigStreamClient(ctx, externalConnURL, isqlDB)
+	require.NoError(t, err)
+	require.NoError(t, spanCfgClient.Dial(ctx))
+	dontExistURL, err := dontExistAddress.URL()
+	require.NoError(t, err)
+	_, err = NewSpanConfigStreamClient(ctx, dontExistURL, isqlDB)
+	require.Contains(t, err.Error(), "failed to load external connection object")
 }
 
 func TestGetFirstActiveClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	client := GetRandomStreamClientSingletonForTesting()
 	defer func() {
@@ -165,7 +216,7 @@ func TestGetFirstActiveClient(t *testing.T) {
 		return nil
 	})
 
-	activeClient, err := GetFirstActiveClient(context.Background(), streamAddresses)
+	activeClient, err := GetFirstActiveClient(context.Background(), streamAddresses, nil)
 	require.NoError(t, err)
 
 	// Should've dialed the valid schemes up to the 5th one where it should've
@@ -191,7 +242,7 @@ func ExampleClient() {
 		_ = client.Close(ctx)
 	}()
 
-	prs, err := client.Create(ctx, "system")
+	prs, err := client.Create(ctx, "system", streampb.ReplicationProducerRequest{})
 	if err != nil {
 		panic(err)
 	}

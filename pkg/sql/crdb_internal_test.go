@@ -22,19 +22,23 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -55,7 +59,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -84,7 +87,7 @@ func TestGetAllNamesInternal(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, _ /* sqlDB */, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -167,8 +170,9 @@ func TestRangeLocalityBasedOnNodeIDs(t *testing.T) {
 func TestGossipAlertsTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
-	s, _, _ := serverutils.StartServer(t, params)
+
+	params, _ := createTestServerParams()
+	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
 
@@ -212,7 +216,7 @@ func TestOldBitColumnMetadata(t *testing.T) {
 	defer lease.TestingDisableTableLeases()()
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -433,7 +437,7 @@ func TestInvalidObjects(t *testing.T) {
 	defer lease.TestingDisableTableLeases()()
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		Store: &kvserver.StoreTestingKnobs{
 			DisableMergeQueue: true,
@@ -479,16 +483,13 @@ SELECT
 		crdb_internal.json_to_pb(
 			'cockroach.sql.sqlbase.Descriptor',
 			json_set(
-				crdb_internal.pb_to_json(
-					'cockroach.sql.sqlbase.Descriptor',
-					descriptor,
-					false
+				json_set(
+					crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false),
+					ARRAY['table', 'mutationJobs'],
+					jsonb_build_array(jsonb_build_object('job_id', 123456, 'mutation_id', 1))
 				),
-				ARRAY['table', 'mutationJobs'],
-				jsonb_build_array(
-					jsonb_build_object('job_id', 123456)
-				),
-				true
+				ARRAY['table', 'mutations'],
+				jsonb_build_array(jsonb_build_object('mutation_id', 1))
 			)
 		),
 		true
@@ -518,15 +519,15 @@ UPDATE system.namespace SET id = %d WHERE id = %d;
 				tableTblID, tableFkTblID, tableFkTblID),
 		},
 		{fmt.Sprintf("%d", tableNoJobID), "defaultdb", "public", "nojob",
-			fmt.Sprintf(`relation "nojob" (%d): unknown mutation ID 0 associated with job ID 123456`, tableNoJobID),
+			fmt.Sprintf(`relation "nojob" (%d): mutation in state UNKNOWN, direction NONE, and no column/index descriptor`, tableNoJobID),
 		},
 		{fmt.Sprintf("%d", tableNoJobID), "defaultdb", "public", "nojob", `mutation job 123456: job not found`},
 		{fmt.Sprintf("%d", schemaID), fmt.Sprintf("[%d]", databaseID), "public", "",
 			fmt.Sprintf(`schema "public" (%d): referenced database ID %d: referenced descriptor not found`, schemaID, databaseID),
 		},
-		{fmt.Sprintf("%d", databaseID), "t", "", "", `referenced descriptor not found`},
-		{fmt.Sprintf("%d", tableFkTblID), "defaultdb", "public", "fktbl", `referenced descriptor not found`},
-		{fmt.Sprintf("%d", fakeID), fmt.Sprintf("[%d]", databaseID), "public", "test", `referenced descriptor not found`},
+		{fmt.Sprintf("%d", databaseID), "t", "", "", `referenced schema ID 104: referenced descriptor not found`},
+		{fmt.Sprintf("%d", tableFkTblID), "defaultdb", "public", "fktbl", `referenced schema ID 107: referenced descriptor not found`},
+		{fmt.Sprintf("%d", fakeID), fmt.Sprintf("[%d]", databaseID), "public", "test", `referenced schema ID 12345: referenced descriptor not found`},
 	})
 }
 
@@ -573,7 +574,7 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs:      params,
 	})
@@ -638,15 +639,11 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 	const clusterScope = "cluster"
 	const nodeScope = "node"
 	getNum := func(db *sqlutils.SQLRunner, scope string) int {
-		querySuffix := fmt.Sprintf("FROM crdb_internal.%s_distsql_flows", scope)
-		// Check that all remote flows (if any) correspond to the expected
-		// statement.
-		stmts := db.QueryStr(t, "SELECT stmt "+querySuffix)
-		for _, stmt := range stmts {
-			require.Equal(t, query, stmt[0])
-		}
+		// Count the number of flows matching our target query. Note that there
+		// could be other flows in the table for the internal operations.
+		countQuery := fmt.Sprintf("SELECT count(*) FROM crdb_internal.%s_distsql_flows WHERE stmt = '%s'", scope, query)
 		var num int
-		db.QueryRow(t, "SELECT count(*) "+querySuffix).Scan(&num)
+		db.QueryRow(t, countQuery).Scan(&num)
 		return num
 	}
 	for nodeID := 0; nodeID < numNodes; nodeID++ {
@@ -781,7 +778,12 @@ func TestClusterInflightTracesVirtualTable(t *testing.T) {
 			},
 		}
 		var rowIdx int
-		rows := sqlDB.Query(t, `SELECT trace_id, node_id, trace_str, jaeger_json from crdb_internal.cluster_inflight_traces WHERE trace_id=$1`, traceID)
+		rows := sqlDB.Query(t, `
+                  SELECT trace_id, node_id, trace_str, jaeger_json
+                  FROM crdb_internal.cluster_inflight_traces
+                  WHERE trace_id = $1
+                  ORDER BY node_id;`, // sort by node_id in case instances are returned out of order
+			traceID)
 		defer rows.Close()
 		for rows.Next() {
 			var traceID, nodeID int
@@ -874,14 +876,10 @@ func TestIsAtLeastVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Settings: cluster.MakeTestingClusterSettings(),
-		},
-	})
-	defer tc.Stopper().Stop(context.Background())
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	db := sqlutils.MakeSQLRunner(conn)
 	for _, tc := range []struct {
 		version  string
 		expected string
@@ -904,15 +902,12 @@ func TestTxnContentionEventsTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Start the cluster. (One node is sufficient; the outliers system
+	// Start the server. (One node is sufficient; the outliers system
 	// is currently in-memory only.)
 	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
-	tc := testcluster.StartTestCluster(t, 1, args)
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.ServerConn(0)
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 	testTxnContentionEventsTableHelper(t, ctx, conn, sqlDB)
 	testTxnContentionEventsTableWithDroppedInfo(t, ctx, conn, sqlDB)
 }
@@ -922,16 +917,13 @@ func TestTxnContentionEventsTableWithRangeDescriptor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
-	tc := testcluster.StartTestCluster(t, 1, args)
-	defer tc.Stopper().Stop(ctx)
-	sqlDB := tc.ServerConn(0)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.contention.event_store.resolution_interval = '10ms'")
 	require.NoError(t, err)
 	rangeKey := "/Local/Range/Table/106/1/-1704619207610523008/RangeDescriptor"
 	rangeKeyEscaped := fmt.Sprintf("\"%s\"", rangeKey)
-	tc.Server(0).SQLServer().(*sql.Server).GetExecutorConfig().ContentionRegistry.AddContentionEvent(contentionpb.ExtendedContentionEvent{
+	s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry.AddContentionEvent(contentionpb.ExtendedContentionEvent{
 		BlockingEvent: kvpb.ContentionEvent{
 			Key: roachpb.Key(rangeKey),
 			TxnMeta: enginepb.TxnMeta{
@@ -946,6 +938,7 @@ func TestTxnContentionEventsTableWithRangeDescriptor(t *testing.T) {
 		WaitingTxnFingerprintID:  9002,
 		WaitingStmtID:            clusterunique.ID{Uint128: uint128.Uint128{Lo: 9003, Hi: 1004}},
 		WaitingStmtFingerprintID: 9004,
+		ContentionType:           contentionpb.ContentionType_LOCK_WAIT,
 	})
 
 	// Contention flush can take some time to flush
@@ -977,25 +970,13 @@ func TestTxnContentionEventsTableMultiTenant(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1,
-		base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				// Test is designed to run with explicit tenants. No need to
-				// implicitly create a tenant.
-				DefaultTestTenant: base.TestTenantDisabled,
-			},
-		})
-	defer tc.Stopper().Stop(ctx)
-	_, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
-		TenantID: roachpb.MustMakeTenantID(10),
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestTenantAlwaysEnabled,
 	})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	conn, err := tSQL.Conn(ctx)
-	require.NoError(t, err)
-	sqlDB := sqlutils.MakeSQLRunner(conn)
-	defer tSQL.Close()
-
-	testTxnContentionEventsTableHelper(t, ctx, tSQL, sqlDB)
+	testTxnContentionEventsTableHelper(t, ctx, db, sqlDB)
 }
 
 func causeContention(
@@ -1038,7 +1019,7 @@ func causeContention(
 		ctx, fmt.Sprintf("UPDATE %s SET s = $1 where id = 'test';", table), updateValue)
 	require.NoError(t, errUpdate)
 	end := timeutil.Now()
-	require.GreaterOrEqual(t, end.Sub(start), 500*time.Millisecond)
+	require.GreaterOrEqual(t, end.Sub(start), 499*time.Millisecond)
 
 	wgTxnDone.Wait()
 }
@@ -1271,18 +1252,18 @@ func TestExecutionInsights(t *testing.T) {
 
 	// Start the cluster.
 	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
-	tc := testcluster.StartTestCluster(t, 1, args)
-	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	// We'll check both the cluster-wide table and the node-local one.
-	virtualTables := []interface{}{
+	virtualTables := []string{
 		"cluster_execution_insights",
 		"node_execution_insights",
 	}
-	testutils.RunValues(t, "table", virtualTables, func(t *testing.T, table interface{}) {
+	testutils.RunValues(t, "table", virtualTables, func(t *testing.T, table string) {
 		testCases := []struct {
 			option  string
 			granted bool
@@ -1301,17 +1282,10 @@ func TestExecutionInsights(t *testing.T) {
 				}()
 
 				// Connect to the cluster as the test user.
-				pgUrl, cleanup := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(),
-					fmt.Sprintf("TestExecutionInsights-%s-%s", table, testCase.option),
-					url.User("testuser"),
-				)
-				defer cleanup()
-				db, err := gosql.Open("postgres", pgUrl.String())
-				require.NoError(t, err)
-				defer func() { _ = db.Close() }()
+				tdb := s.SQLConn(t, serverutils.User("testuser"))
 
 				// Try to read the virtual table, and see that we can or cannot as expected.
-				rows, err := db.Query(fmt.Sprintf("SELECT count(*) FROM crdb_internal.%s", table))
+				rows, err := tdb.Query(fmt.Sprintf("SELECT count(*) FROM crdb_internal.%s", table))
 				defer func() {
 					if rows != nil {
 						_ = rows.Close()
@@ -1341,6 +1315,10 @@ func (*fakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
 // Resume implements the jobs.Resumer interface.
 func (*fakeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}, jobErr error) error {
 	return jobErr
+}
+
+func (*fakeResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
 }
 
 // TestInternalSystemJobsTableMirrorsSystemJobsTable asserts that
@@ -1418,47 +1396,6 @@ func TestInternalSystemJobsTableMirrorsSystemJobsTable(t *testing.T) {
 	// TODO(adityamaru): add checks for payload and progress
 }
 
-// TestInternalSystemJobsTableWorksWithVersionPreV23_1BackfillTypeColumnInJobsTable
-// tests that crdb_internal.system_jobs and crdb_internal.jobs work when
-// the server has a version pre-V23_1AddTypeColumnToJobsTable. In this version,
-// the job_type column was added to the system.jobs table.
-func TestInternalSystemJobsTableWorksWithVersionPreV23_1BackfillTypeColumnInJobsTable(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride: clusterversion.ByKey(
-					clusterversion.V23_1BackfillTypeColumnInJobsTable - 1),
-			},
-		},
-	})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	tdb := sqlutils.MakeSQLRunner(db)
-
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.jobs",
-	)
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs",
-	)
-	// Exercise indexes.
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs WHERE job_type = 'CHANGEFEED'",
-	)
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs WHERE id = 0",
-	)
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs WHERE status = 'running'",
-	)
-}
-
 // TestCorruptPayloadError asserts that we can an error
 // with the correct hint when we fail to decode a payload.
 func TestCorruptPayloadError(t *testing.T) {
@@ -1518,7 +1455,7 @@ func TestInternalSystemJobsAccess(t *testing.T) {
 	// do not disable background job creation nor job adoption. This is because creating
 	// users requires jobs to be created and run. Thus, this test only creates jobs of type
 	// jobspb.TypeImport and overrides the import resumer.
-	registry := s.JobRegistry().(*jobs.Registry)
+	registry := s.ApplicationLayer().JobRegistry().(*jobs.Registry)
 	registry.TestingWrapResumerConstructor(jobspb.TypeImport, func(r jobs.Resumer) jobs.Resumer {
 		return &fakeResumer{}
 	})
@@ -1527,7 +1464,7 @@ func TestInternalSystemJobsAccess(t *testing.T) {
 		pgURL := url.URL{
 			Scheme: "postgres",
 			User:   url.UserPassword(user, "test"),
-			Host:   s.SQLAddr(),
+			Host:   s.AdvSQLAddr(),
 		}
 		db2, err := gosql.Open("postgres", pgURL.String())
 		assert.NoError(t, err)
@@ -1610,21 +1547,22 @@ func TestVirtualTableDoesntHangOnQueryCanceledError(t *testing.T) {
 	var addCallback atomic.Bool
 	var numCallbacksAdded atomic.Int32
 	err := cancelchecker.QueryCanceledError
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
+					DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 						if !addCallback.Load() || strings.HasPrefix(query, sql.SystemJobsAndJobInfoBaseQuery) {
 							return nil
 						}
 						numCallbacksAdded.Add(1)
-						return func(_ rowenc.EncDatumRow, _ coldata.Batch, meta *execinfrapb.ProducerMetadata) {
+						return func(row rowenc.EncDatumRow, batch coldata.Batch, meta *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 							if meta != nil {
 								*meta = execinfrapb.ProducerMetadata{}
 								meta.Err = err
 							}
+							return row, batch, meta
 						}
 					},
 				},
@@ -1646,4 +1584,283 @@ func TestVirtualTableDoesntHangOnQueryCanceledError(t *testing.T) {
 
 	// Sanity check that the callback was added at least once.
 	require.Greater(t, numCallbacksAdded.Load(), int32(0))
+}
+
+// systemPTSTableRow is a struct representing a row in system.protected_ts_records.
+type systemPTSTableRow struct {
+	id       string
+	ts       string
+	metaType string
+	meta     []byte
+	numSpans int
+	spans    []byte
+	verified bool
+	target   []byte
+}
+
+// systemPTSTableRow is a struct representing a row in
+// crdb_internal.kv_protected_ts_records.
+type virtualPTSTableRow struct {
+	systemPTSTableRow
+	decodedMeta    []byte
+	decodedTargets []byte
+	internalMeta   []byte
+	numRanges      int
+	lastUpdated    string
+}
+
+func protect(
+	t *testing.T, ctx context.Context, internalDB isql.DB, ptm *ptstorage.Manager, rec *ptpb.Record,
+) {
+	err := internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return ptm.WithTxn(txn).Protect(ctx, rec)
+	})
+	require.NoError(t, err)
+}
+
+// Reads a row from the system PTS table and the virtual PTS table and returns them.
+// Asserts the common columns match before returning.
+func scanRecord(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, recID uuid.Bytes,
+) (systemPTSTableRow, virtualPTSTableRow) {
+	systemRow := sqlDB.QueryRow(t, "SELECT * FROM system.protected_ts_records WHERE id = $1", recID.String())
+	virtualRow := sqlDB.QueryRow(t, "SELECT * FROM crdb_internal.kv_protected_ts_records WHERE id = $1",
+		recID.String())
+
+	var systemRowData systemPTSTableRow
+	systemRow.Scan(&systemRowData.id, &systemRowData.ts, &systemRowData.metaType, &systemRowData.meta,
+		&systemRowData.numSpans, &systemRowData.spans, &systemRowData.verified, &systemRowData.target)
+
+	var virtualRowData virtualPTSTableRow
+	virtualRow.Scan(&virtualRowData.id, &virtualRowData.ts, &virtualRowData.metaType, &virtualRowData.meta,
+		&virtualRowData.numSpans, &virtualRowData.spans, &virtualRowData.verified, &virtualRowData.target,
+		&virtualRowData.decodedMeta, &virtualRowData.decodedTargets, &virtualRowData.internalMeta,
+		&virtualRowData.numRanges, &virtualRowData.lastUpdated)
+
+	require.Equal(t, systemRowData.id, virtualRowData.id)
+	require.Equal(t, systemRowData.ts, virtualRowData.ts)
+	require.Equal(t, systemRowData.metaType, virtualRowData.metaType)
+	require.Equal(t, systemRowData.meta, virtualRowData.meta)
+	require.Equal(t, systemRowData.numSpans, virtualRowData.numSpans)
+	require.Equal(t, systemRowData.spans, virtualRowData.spans)
+	require.Equal(t, systemRowData.verified, virtualRowData.verified)
+	require.Equal(t, systemRowData.target, virtualRowData.target)
+
+	return systemRowData, virtualRowData
+}
+
+func TestVirtualPTSTableDeprecated(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx2 := context.Background()
+
+	var testServerArgs base.TestServerArgs
+	ptsKnobs := &protectedts.TestingKnobs{}
+	ptsKnobs.DisableProtectedTimestampForMultiTenant = true
+	testServerArgs.Knobs.ProtectedTS = ptsKnobs
+	srv, conn, _ := serverutils.StartServer(t, testServerArgs)
+	defer srv.Stopper().Stop(ctx2)
+	s := srv.ApplicationLayer()
+
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	internalDB := s.InternalDB().(isql.DB)
+	ptm := ptstorage.New(s.ClusterSettings(), ptsKnobs)
+
+	t.Run("nil-targets", func(t *testing.T) {
+		rec := &ptpb.Record{
+			ID:        uuid.MakeV4().GetBytes(),
+			Timestamp: s.Clock().Now(),
+			Mode:      ptpb.PROTECT_AFTER,
+			DeprecatedSpans: []roachpb.Span{
+				{
+					Key:    keys.SystemSQLCodec.TablePrefix(42),
+					EndKey: keys.SystemSQLCodec.TablePrefix(42).PrefixEnd(),
+				},
+			},
+			MetaType: "foo",
+		}
+
+		protect(t, ctx2, internalDB, ptm, rec)
+		_, virtualRow := scanRecord(t, sqlDB, rec.ID)
+		require.Equal(t, []byte(nil), virtualRow.decodedMeta)
+		require.Equal(t, []byte(nil), virtualRow.internalMeta)
+		require.Equal(t, []byte(nil), virtualRow.decodedTargets)
+		require.Equal(t, -1, virtualRow.numRanges)
+	})
+}
+
+// TestVirtualPTSTable asserts the behavior of
+// crdb_internal.kv_protected_ts_records, which includes showing records from
+// the underlying system table and decoding them.
+func TestVirtualPTSTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx2 := context.Background()
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx2)
+	s := srv.ApplicationLayer()
+
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	internalDB := s.InternalDB().(isql.DB)
+	ptm := ptstorage.New(s.ClusterSettings(), nil)
+
+	tableTargets := func(ids ...uint32) *ptpb.Target {
+		var tableIDs []descpb.ID
+		for _, id := range ids {
+			tableIDs = append(tableIDs, descpb.ID(id))
+		}
+		return ptpb.MakeSchemaObjectsTarget(tableIDs)
+	}
+
+	// Assert the columns expected in the system table and the columns expected in the virtual table.
+	systemRows := sqlDB.Query(t, "SELECT * FROM system.protected_ts_records")
+	internalRows := sqlDB.Query(t, "SELECT * FROM crdb_internal.kv_protected_ts_records")
+	systemCols, err := systemRows.Columns()
+	require.NoError(t, err)
+	internalCols, err := internalRows.Columns()
+	require.NoError(t, err)
+	require.Equal(t, systemCols, []string{"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified", "target"},
+		"unexpected column in PTS system.protected_ts_records. make sure to add this column to "+
+			" crdb_internal.kv_protected_ts_records as well")
+	require.Equal(t, internalCols, []string{
+		"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified", "target", "decoded_meta", "decoded_target",
+		"internal_meta", "num_ranges", "last_updated",
+	})
+
+	// Assert the job metadata that is extracted when the PTS record meta type is jobsprotectedts.Jobs.
+	t.Run("meta-type-is-jobs", func(t *testing.T) {
+		// Create a dummy job. We need the job ID to reference a real job because the virtual table
+		// looks up job metadata via the job registry.
+		jobRec := jobs.Record{
+			Details:  jobspb.BackupDetails{},
+			Progress: jobspb.BackupProgress{},
+			Username: username.TestUserName(),
+		}
+
+		reg := s.JobRegistry().(*jobs.Registry)
+		jobID := reg.MakeJobID()
+
+		job, err := reg.CreateJobWithTxn(ctx2, jobRec, jobID, nil /* txn */)
+		require.NoError(t, err)
+
+		rec := jobsprotectedts.MakeRecord(
+			uuid.MakeV4(),
+			int64(job.ID()),
+			s.Clock().Now(),
+			[]roachpb.Span{},
+			jobsprotectedts.Jobs,
+			tableTargets(),
+		)
+		protect(t, ctx2, internalDB, ptm, rec)
+
+		_, virtualRow := scanRecord(t, sqlDB, rec.ID)
+		require.Equal(t, []byte(fmt.Sprintf(`{"jobID": %d}`, jobID)), virtualRow.decodedMeta)
+		require.Equal(t, []byte(fmt.Sprintf(`{"jobUsername": "%s"}`, username.TestUserName().Normalized())),
+			virtualRow.internalMeta)
+		require.Equal(t, []byte(`{"schemaObjects": {}}`), virtualRow.decodedTargets)
+		require.Equal(t, 0, virtualRow.numRanges)
+	})
+
+	t.Run("table-covers-all-meta-types", func(t *testing.T) {
+		require.Equal(t, "", jobsprotectedts.GetMetaType(3),
+			"expected there to only be two meta types, but found more. if a new meta type was added, "+
+				"please add support for it in the `crdb_internal.kv_protected_ts_records table and update this test. "+
+				"alternatively, file an issue and leave a todo")
+	})
+
+	// Assert the schedule metadata that is extracted when the PTS record meta type is jobsprotectedts.Schedules.
+	t.Run("meta-type-is-schedules", func(t *testing.T) {
+		// No reason to use JobSchedulerTestEnv, which lets one manipulate time,
+		// the PTS table, and executors.
+		schedEnv := scheduledjobs.ProdJobSchedulerEnv
+
+		sj := jobs.NewScheduledJob(schedEnv)
+		sj.SetOwner(username.TestUserName())
+		sj.SetScheduleLabel("test-schedule")
+		sj.SetExecutionDetails(tree.ScheduledBackupExecutor.InternalName(), jobspb.ExecutionArguments{})
+		sj.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{}))
+
+		err := internalDB.Txn(ctx2, func(ctx3 context.Context, txn isql.Txn) error {
+			err2 := jobs.ScheduledJobTxn(txn).Create(ctx3, sj)
+			require.NoError(t, err2)
+			return nil
+		})
+		require.NoError(t, err)
+
+		rec := jobsprotectedts.MakeRecord(
+			uuid.MakeV4(),
+			int64(sj.ScheduleID()),
+			s.Clock().Now(),
+			[]roachpb.Span{},
+			jobsprotectedts.Schedules,
+			tableTargets(),
+		)
+		protect(t, ctx2, internalDB, ptm, rec)
+
+		_, virtualRow := scanRecord(t, sqlDB, rec.ID)
+		require.Equal(t, []byte(fmt.Sprintf(`{"scheduleID": %d}`, sj.ScheduleID())), virtualRow.decodedMeta)
+		require.Equal(t, []byte(fmt.Sprintf(`{"scheduleLabel": "%s", "scheduleOwner": "%s"}`,
+			"test-schedule", username.TestUserName().Normalized())), virtualRow.internalMeta)
+		require.Equal(t, []byte(`{"schemaObjects": {}}`), virtualRow.decodedTargets)
+		require.Equal(t, 0, virtualRow.numRanges)
+	})
+
+	// Assert that the table descriptor ids are correctly decoded and the number of ranges calculation is
+	// accurate.
+	t.Run("table-desc-ids-and-num-ranges", func(t *testing.T) {
+		// Create two tables with 101 and 201 ranges respectively.
+		sqlDB.ExecMultiple(t,
+			`CREATE TABLE foo (i INT PRIMARY KEY)`,
+			`INSERT INTO foo (i) SELECT * FROM generate_series(1, 200);`,
+			`ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 200, 2));`,
+
+			`CREATE TABLE foo2 (i INT PRIMARY KEY)`,
+			`INSERT INTO foo2 (i) SELECT * FROM generate_series(1, 200);`,
+			`ALTER TABLE foo2 SPLIT AT (SELECT * FROM generate_series(1, 200, 1));`,
+		)
+		var tableID1 uint32
+		var tableID2 uint32
+		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables`+
+			` WHERE name = 'foo' AND database_name = current_database()`).Scan(&tableID1)
+		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables`+
+			` WHERE name = 'foo2' AND database_name = current_database()`).Scan(&tableID2)
+
+		rec := ptpb.Record{
+			ID:        uuid.MakeV4().GetBytes(),
+			Timestamp: s.Clock().Now(),
+			Mode:      ptpb.PROTECT_AFTER,
+			MetaType:  "foo",
+			Meta:      []byte("bar"),
+			Target:    tableTargets(tableID1, tableID2),
+		}
+		protect(t, ctx2, internalDB, ptm, &rec)
+
+		_, virtualRow := scanRecord(t, sqlDB, rec.ID)
+		require.Equal(t, []byte(nil), virtualRow.decodedMeta)
+		require.Equal(t, []byte(nil), virtualRow.internalMeta)
+		require.Equal(t, []byte(fmt.Sprintf(`{"schemaObjects": {"ids": [%d, %d]}}`, tableID1, tableID2)), virtualRow.decodedTargets)
+		require.Equal(t, 302, virtualRow.numRanges)
+	})
+
+	// Assert that the `last_updated` column shows the right timestamp.
+	t.Run("last-updated", func(t *testing.T) {
+		rec := ptpb.Record{
+			ID:        uuid.MakeV4().GetBytes(),
+			Timestamp: s.Clock().Now(),
+			Mode:      ptpb.PROTECT_AFTER,
+			MetaType:  "foo",
+			Meta:      []byte("bar"),
+			Target:    tableTargets(),
+		}
+		protect(t, ctx2, internalDB, ptm, &rec)
+
+		var ts string
+		sqlDB.QueryRow(t, `SELECT crdb_internal_mvcc_timestamp FROM system.protected_ts_records`+
+			` WHERE id = $1`, rec.ID.String()).Scan(&ts)
+		_, virtualRow := scanRecord(t, sqlDB, rec.ID)
+		require.Equal(t, ts, virtualRow.lastUpdated)
+	})
 }

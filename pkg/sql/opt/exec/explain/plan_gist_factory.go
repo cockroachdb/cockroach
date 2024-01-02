@@ -16,7 +16,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -36,7 +36,7 @@ import (
 )
 
 func init() {
-	if numOperators != 61 {
+	if numOperators != 62 {
 		// This error occurs when an operator has been added or removed in
 		// pkg/sql/opt/exec/explain/factory.opt. If an operator is added at the
 		// end of factory.opt, simply adjust the hardcoded value above. If an
@@ -248,6 +248,9 @@ func (f *PlanGistFactory) decodeOp() execOperator {
 
 func (f *PlanGistFactory) popChild() *Node {
 	l := len(f.nodeStack)
+	if l == 0 {
+		return nil
+	}
 	n := f.nodeStack[l-1]
 	f.nodeStack = f.nodeStack[:l-1]
 
@@ -617,6 +620,11 @@ func (u *unknownTable) GetDatabaseID() descpb.ID {
 	return 0
 }
 
+// IsHypothetical is part of the cat.Table interface.
+func (u *unknownTable) IsHypothetical() bool {
+	return false
+}
+
 var _ cat.Table = &unknownTable{}
 
 // unknownTable implements the cat.Index interface and is used to represent
@@ -718,8 +726,8 @@ func (u *unknownIndex) ImplicitPartitioningColumnCount() int {
 	return 0
 }
 
-func (u *unknownIndex) GeoConfig() geoindex.Config {
-	return geoindex.Config{}
+func (u *unknownIndex) GeoConfig() geopb.Config {
+	return geopb.Config{}
 }
 
 func (u *unknownIndex) Version() descpb.IndexDescriptorVersion {

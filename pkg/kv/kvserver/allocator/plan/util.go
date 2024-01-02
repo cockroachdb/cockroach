@@ -11,15 +11,14 @@
 package plan
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3"
 )
 
@@ -36,6 +35,7 @@ func ReplicationChangesForRebalance(
 	addTarget, removeTarget roachpb.ReplicationTarget,
 	rebalanceTargetType allocatorimpl.TargetReplicaType,
 ) (chgs []kvpb.ReplicationChange, performingSwap bool, err error) {
+	rdesc, found := desc.GetReplicaDescriptor(addTarget.StoreID)
 	if rebalanceTargetType == allocatorimpl.VoterTarget && numExistingVoters == 1 {
 		// If there's only one replica, the removal target is the
 		// leaseholder and this is unsupported and will fail. However,
@@ -58,14 +58,29 @@ func ReplicationChangesForRebalance(
 		// when we know it's necessary, picking the smaller of two evils.
 		//
 		// See https://github.com/cockroachdb/cockroach/issues/40333.
-		chgs = []kvpb.ReplicationChange{
-			{ChangeType: roachpb.ADD_VOTER, Target: addTarget},
-		}
 		log.KvDistribution.Infof(ctx, "can't swap replica due to lease; falling back to add")
+
+		// Even when there is only 1 existing voter, there may be other replica
+		// types in the range. Check if the add target already has a replica, if so
+		// it must be a non-voter or the rebalance is invalid.
+		if found && rdesc.Type == roachpb.NON_VOTER {
+			// The receiving store already has a non-voting replica. Instead of just
+			// adding a voter to the receiving store, we *must* promote the non-voting
+			// replica to a voter.
+			chgs = kvpb.ReplicationChangesForPromotion(addTarget)
+		} else if !found {
+			chgs = []kvpb.ReplicationChange{
+				{ChangeType: roachpb.ADD_VOTER, Target: addTarget},
+			}
+		} else {
+			return nil, false, errors.AssertionFailedf(
+				"invalid rebalancing decision: trying to"+
+					" move voter to a store that already has a replica %s for the range", rdesc,
+			)
+		}
 		return chgs, false, err
 	}
 
-	rdesc, found := desc.GetReplicaDescriptor(addTarget.StoreID)
 	switch rebalanceTargetType {
 	case allocatorimpl.VoterTarget:
 		// Check if the target being added already has a non-voting replica.
@@ -123,28 +138,30 @@ func ReplicationChangesForRebalance(
 
 // rangeRaftStatus pretty-prints the Raft progress (i.e. Raft log position) of
 // the replicas.
-func rangeRaftProgress(raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor) string {
+func rangeRaftProgress(
+	raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor,
+) redact.RedactableString {
 	if raftStatus == nil {
 		return "[no raft status]"
 	} else if len(raftStatus.Progress) == 0 {
 		return "[no raft progress]"
 	}
-	var buf bytes.Buffer
-	buf.WriteString("[")
+	var buf redact.StringBuilder
+	buf.SafeRune('[')
 	for i, r := range replicas {
 		if i > 0 {
-			buf.WriteString(", ")
+			buf.Printf(", ")
 		}
-		fmt.Fprintf(&buf, "%d", r.ReplicaID)
+		buf.Print(r.ReplicaID)
 		if uint64(r.ReplicaID) == raftStatus.Lead {
-			buf.WriteString("*")
+			buf.SafeRune('*')
 		}
 		if progress, ok := raftStatus.Progress[uint64(r.ReplicaID)]; ok {
-			fmt.Fprintf(&buf, ":%d", progress.Match)
+			buf.Printf(":%d", progress.Match)
 		} else {
-			buf.WriteString(":?")
+			buf.Printf(":?")
 		}
 	}
-	buf.WriteString("]")
-	return buf.String()
+	buf.SafeRune(']')
+	return buf.RedactableString()
 }

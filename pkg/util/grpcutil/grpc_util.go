@@ -15,7 +15,6 @@ import (
 	"io"
 	"strings"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
@@ -150,26 +149,20 @@ func IsWaitingForInit(err error) bool {
 	return ok && s.Code() == codes.Unavailable && strings.Contains(err.Error(), "node waiting for init")
 }
 
-// RequestDidNotStart returns true if the given error from gRPC
-// means that the request definitely could not have started on the
-// remote server.
+// RequestDidNotStart returns true if the given RPC error means that the request
+// definitely could not have started on the remote server.
 func RequestDidNotStart(err error) bool {
-	if errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) ||
-		errors.Is(err, circuit.ErrBreakerOpen) ||
-		IsConnectionRejected(err) ||
-		IsWaitingForInit(err) {
-		return true
-	}
-	_, ok := status.FromError(errors.Cause(err))
-	if !ok {
-		// This is a non-gRPC error; assume nothing.
-		return false
-	}
-	// This is where you'd hope to treat some gRPC errors as unambiguous.
-	// Unfortunately, gRPC provides no good way to distinguish ambiguous from
-	// unambiguous failures.
+	// NB: gRPC doesn't provide a way to distinguish unambiguous failures, but
+	// InitialHeartbeatFailedError serves mostly the same purpose. See also
+	// https://github.com/grpc/grpc-go/issues/1443.
 	//
-	// https://github.com/grpc/grpc-go/issues/1443
-	// https://github.com/cockroachave hdb/cockroach/issues/19708#issuecomment-343891640
-	return false
+	// NB: We specifically don't check circuit.ErrBreakerOpen. These are returned
+	// both by the RPC circuit breakers and also the Raft replica circuit
+	// breakers, and the latter don't guarantee that the request won't go through
+	// (e.g. they can be broken on a proposal that's actively being reproposed and
+	// will eventually succeed). The RPC circuit breakers will result in an
+	// InitialHeartbeatFailedError.
+	return errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) ||
+		IsConnectionRejected(err) ||
+		IsWaitingForInit(err)
 }

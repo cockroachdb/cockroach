@@ -17,12 +17,29 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/olekukonko/tablewriter"
 )
+
+// ConfigureRoleBasedAuditClusterSettings is a noop global var injected by CCL hook.
+// See corresponding ConfigureRoleBasedAuditClusterSettings in auditloggingccl.
+var ConfigureRoleBasedAuditClusterSettings = func(ctx context.Context, acl *AuditConfigLock, st *cluster.Settings, sv *settings.Values) {
+}
+
+// UserAuditEnabled is a noop global var injected by CCL hook.
+var UserAuditEnabled = func(st *cluster.Settings) bool {
+	return false
+}
+
+// UserAuditReducedConfigEnabled is a noop global var injected by CCL hook.
+var UserAuditReducedConfigEnabled = func(sv *settings.Values) bool {
+	return false
+}
 
 // Auditor is an interface used to check and build different audit events.
 type Auditor interface {
@@ -74,16 +91,16 @@ func (cl *AuditConfigLock) GetMatchingAuditSetting(
 
 // AuditConfig is a parsed configuration.
 type AuditConfig struct {
-	// settings are the collection of AuditSettings that make up the AuditConfig.
-	settings []AuditSetting
-	// allRoleAuditSettingIdx is an index corresponding to an AuditSetting in settings that applies to all
+	// Settings are the collection of AuditSettings that make up the AuditConfig.
+	Settings []AuditSetting
+	// allRoleAuditSettingIdx is an index corresponding to an AuditSetting in Settings that applies to all
 	// users, if it exists. Default value -1 (defaultAllAuditSettingIdx).
 	allRoleAuditSettingIdx int
 }
 
 const defaultAllAuditSettingIdx = -1
 
-// EmptyAuditConfig returns an audit configuration with no audit settings.
+// EmptyAuditConfig returns an audit configuration with no audit Settings.
 func EmptyAuditConfig() *AuditConfig {
 	return &AuditConfig{
 		allRoleAuditSettingIdx: defaultAllAuditSettingIdx,
@@ -96,7 +113,7 @@ func (c AuditConfig) getMatchingAuditSetting(
 	userRoles map[username.SQLUsername]bool, name username.SQLUsername,
 ) *AuditSetting {
 	// If the user matches any Setting, return the corresponding filter.
-	for idx, filter := range c.settings {
+	for idx, filter := range c.Settings {
 		// If we have matched an audit setting by role, return the audit setting.
 		_, exists := userRoles[filter.Role]
 		if exists {
@@ -116,13 +133,13 @@ func (c AuditConfig) getMatchingAuditSetting(
 }
 
 func (c AuditConfig) String() string {
-	if len(c.settings) == 0 {
+	if len(c.Settings) == 0 {
 		return "# (empty configuration)\n"
 	}
 
 	var sb strings.Builder
 	sb.WriteString("# Original configuration:\n")
-	for _, setting := range c.settings {
+	for _, setting := range c.Settings {
 		fmt.Fprintf(&sb, "# %s\n", setting.input)
 	}
 	sb.WriteString("#\n# Interpreted configuration:\n")
@@ -138,7 +155,7 @@ func (c AuditConfig) String() string {
 
 	row := []string{"# ROLE", "STATEMENT_FILTER"}
 	table.Append(row)
-	for _, setting := range c.settings {
+	for _, setting := range c.Settings {
 		row[0] = setting.Role.Normalized()
 		row[1] = writeStatementFilter(setting.IncludeStatements)
 		table.Append(row)
@@ -167,5 +184,5 @@ type AuditSetting struct {
 }
 
 func (s AuditSetting) String() string {
-	return AuditConfig{settings: []AuditSetting{s}}.String()
+	return AuditConfig{Settings: []AuditSetting{s}}.String()
 }

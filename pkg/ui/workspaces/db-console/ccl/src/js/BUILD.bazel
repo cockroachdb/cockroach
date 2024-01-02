@@ -1,5 +1,9 @@
+load("@aspect_rules_js//js:defs.bzl", "js_library")
+load("@aspect_rules_js//npm:defs.bzl", "npm_package")
 load("@//pkg/ui/workspaces/db-console/src/js:defs.bzl", "protobufjs_library")
-load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+
+npm_link_all_packages(name = "node_modules")
 
 protobufjs_library(
     name = "crdb-protobuf-client-ccl__proto",
@@ -12,11 +16,26 @@ protobufjs_library(
 )
 
 js_library(
-    name = "crdb-protobuf-client-ccl",
-    package_name = "@cockroachlabs/crdb-protobuf-client-ccl",
+    name = "crdb-protobuf-client-ccl-lib",
     srcs = [
         "package.json",
     ],
     visibility = ["//visibility:public"],
     deps = [":crdb-protobuf-client-ccl__proto"],
+)
+
+npm_package(
+    name = "crdb-protobuf-client-ccl",
+    srcs = [
+        "package.json",
+        ":crdb-protobuf-client-ccl-lib",
+    ],
+    package = "@cockroachlabs/crdb-protobuf-client-ccl",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "js",
+    actual = ":crdb-protobuf-client-ccl",
+    visibility = ["//visibility:public"],
 )

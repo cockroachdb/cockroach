@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -45,7 +46,7 @@ func TestTenantReport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rt := startReporterTest(t, base.TestTenantDisabled)
+	rt := startReporterTest(t, base.TestControlsTenantsExplicitly)
 	defer rt.Close()
 
 	tenantArgs := base.TestTenantArgs{
@@ -84,7 +85,7 @@ func TestTenantReport(t *testing.T) {
 	require.NotZero(t, len(last.FeatureUsage))
 
 	// Call PeriodicallyReportDiagnostics and ensure it sends out a report.
-	reporter.PeriodicallyReportDiagnostics(ctx, tenant.Stopper())
+	reporter.PeriodicallyReportDiagnostics(ctx, tenant.AppStopper())
 	testutils.SucceedsSoon(t, func() error {
 		if rt.diagServer.NumRequests() != 2 {
 			return errors.Errorf("did not receive a diagnostics report")
@@ -99,8 +100,7 @@ func TestServerReport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var defaultTestTenant base.DefaultTestTenantOptions
-	rt := startReporterTest(t, defaultTestTenant)
+	rt := startReporterTest(t, base.TestIsSpecificToStorageLayerAndNeedsASystemTenant)
 	defer rt.Close()
 
 	ctx := context.Background()
@@ -198,14 +198,16 @@ func TestServerReport(t *testing.T) {
 	// 3 + 3 = 6: set 3 initially and org is set mid-test for 3 altered settings,
 	// plus version, reporting and secret settings are set in startup
 	// migrations.
-	expected, actual := 6, len(last.AlteredSettings)
+	expected, actual := 7, len(last.AlteredSettings)
 	require.Equal(t, expected, actual, "expected %d changed settings, got %d: %v", expected, actual, last.AlteredSettings)
 
 	for key, expected := range map[string]string{
+		// Note: this uses setting _keys_, not setting names.
 		"cluster.organization":                     "<redacted>",
+		"cluster.label":                            "<redacted>",
 		"diagnostics.reporting.send_crash_reports": "false",
 		"server.time_until_store_dead":             "1m30s",
-		"version":                                  clusterversion.TestingBinaryVersion.String(),
+		"version":                                  clusterversion.Latest.String(),
 		"cluster.secret":                           "<redacted>",
 	} {
 		got, ok := last.AlteredSettings[key]
@@ -284,12 +286,10 @@ func TestUsageQuantization(t *testing.T) {
 	r := diagutils.NewServer()
 	defer r.Close()
 
-	st := cluster.MakeTestingClusterSettings()
 	ctx := context.Background()
 
 	url := r.URL()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Settings: st,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DiagnosticsTestingKnobs: diagnostics.TestingKnobs{
@@ -299,7 +299,6 @@ func TestUsageQuantization(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(ctx)
-	ts := s.(*server.TestServer)
 
 	// Disable periodic reporting so it doesn't interfere with the test.
 	if _, err := db.Exec(`SET CLUSTER SETTING diagnostics.reporting.enabled = false`); err != nil {
@@ -331,6 +330,8 @@ func TestUsageQuantization(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	ts := s.ApplicationLayer()
+
 	// Flush the SQL stat pool.
 	ts.SQLServer().(*sql.Server).GetSQLStatsController().ResetLocalSQLStats(ctx)
 
@@ -340,7 +341,7 @@ func TestUsageQuantization(t *testing.T) {
 	// The stats "hide" the application name by hashing it. To find the
 	// test app name, we need to hash the ref string too prior to the
 	// comparison.
-	clusterSecret := sql.ClusterSecret.Get(&st.SV)
+	clusterSecret := sql.ClusterSecret.Get(&ts.ClusterSettings().SV)
 	hashedAppName := sql.HashForReporting(clusterSecret, "test")
 	require.NotEqual(t, sql.FailedHashedValue, hashedAppName, "expected hashedAppName to not be 'unknown'")
 
@@ -435,6 +436,13 @@ func startReporterTest(
 	// Make sure the test's generated activity is the only activity we measure.
 	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
+	// Ensure the org contains "Cockroach Labs" so the telemetry report
+	// is marked as "internal".
+	_, err := rt.server.SystemLayer().InternalExecutor().(isql.Executor).Exec(
+		context.Background(), "set-org", nil,
+		`SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - test'`)
+	require.NoError(t, err)
+
 	return rt
 }
 
@@ -446,14 +454,13 @@ func setupCluster(t *testing.T, db *gosql.DB) {
 	_, err = db.Exec(`SET CLUSTER SETTING diagnostics.reporting.enabled = true`)
 	require.NoError(t, err)
 
-	_, err = db.Exec(`SET CLUSTER SETTING diagnostics.reporting.send_crash_reports = false`)
+	_, err = db.Exec(`SET CLUSTER SETTING diagnostics.reporting.send_crash_reports.enabled = false`)
 	require.NoError(t, err)
 
 	_, err = db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, elemName))
 	require.NoError(t, err)
 
-	// Set cluster to an internal testing cluster
-	q := `SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing'`
+	q := `SET CLUSTER SETTING cluster.label = 'Some String'`
 	_, err = db.Exec(q)
 	require.NoError(t, err)
 }

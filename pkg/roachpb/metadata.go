@@ -44,6 +44,17 @@ func (s NodeIDSlice) Len() int           { return len(s) }
 func (s NodeIDSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s NodeIDSlice) Less(i, j int) bool { return s[i] < s[j] }
 
+func (s NodeIDSlice) String() string {
+	var sb strings.Builder
+	for i, ni := range s {
+		if i > 0 {
+			sb.WriteRune(',')
+		}
+		fmt.Fprintf(&sb, "n%d", ni)
+	}
+	return sb.String()
+}
+
 // StoreID is a custom type for a cockroach store ID.
 type StoreID int32
 
@@ -53,6 +64,20 @@ type StoreIDSlice []StoreID
 func (s StoreIDSlice) Len() int           { return len(s) }
 func (s StoreIDSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s StoreIDSlice) Less(i, j int) bool { return s[i] < s[j] }
+
+func (s StoreIDSlice) String() string {
+	var sb strings.Builder
+	for i, st := range s {
+		if i > 0 {
+			sb.WriteRune(',')
+		}
+		fmt.Fprintf(&sb, "s%d", st)
+	}
+	return sb.String()
+}
+
+// SafeValue implements the redact.SafeValue interface.
+func (s StoreIDSlice) SafeValue() {}
 
 // String implements the fmt.Stringer interface.
 // It is used to format the ID for use in Gossip keys.
@@ -617,20 +642,90 @@ func (l Locality) Matches(filter Locality) (bool, Tier) {
 	return true, Tier{}
 }
 
-// IsCrossRegion checks if both this and passed locality has a tier with "region"
-// as the key. If either locality does not have a region tier, it returns
-// (false, error). Otherwise, it compares their region values and returns (true,
-// nil) if they are different, and (false, nil) otherwise.
-func (l Locality) IsCrossRegion(other Locality) (bool, error) {
-	// It is unfortunate that the "region" tier key is hardcoded here. Ideally, we
-	// would prefer a more robust way to determine node locality regions.
-	region, hasRegion := l.Find("region")
-	otherRegion, hasRegionInOther := other.Find("region")
-
-	if hasRegion && hasRegionInOther {
-		return region != otherRegion, nil
+// getFirstRegionFirstZone iterates through the locality tiers and returns
+// multiple values containing:
+// 1. The value of the first encountered "region" tier.
+// 2. A boolean indicating whether the "region" tier key was found.
+// 3,4. The key and the value of the first encountered "zone" tier.
+// 5. A boolean indicating whether the "zone" tier key was found.
+func (l Locality) getFirstRegionFirstZone() (
+	firstRegionValue string,
+	hasRegion bool,
+	firstZoneKey string,
+	firstZoneValue string,
+	hasZone bool,
+) {
+	for _, tier := range l.Tiers {
+		if hasRegion && hasZone {
+			break
+		}
+		switch tier.Key {
+		case "region":
+			if !hasRegion {
+				firstRegionValue = tier.Value
+				hasRegion = true
+			}
+		case "zone", "availability-zone", "az":
+			if !hasZone {
+				firstZoneKey, firstZoneValue = tier.Key, tier.Value
+				hasZone = true
+			}
+		}
 	}
-	return false, errors.Errorf("locality must have a region tier key for cross-region comparison")
+	return firstRegionValue, hasRegion, firstZoneKey, firstZoneValue, hasZone
+}
+
+// CompareWithLocality returns the comparison result between this and the
+// provided other locality along with any lookup errors. Possible errors include
+// 1. if either locality does not have a "region" tier key. 2. if either
+// locality does not have a "zone" tier key or if the first "zone" tier keys
+// used by two localities are different.
+//
+// Limitation:
+// - It is unfortunate that the tier key is hardcoded here. Ideally, we would
+// prefer a more robust way to look up node locality regions and zones.
+// - Although it is technically possible for users to use  “az”, “zone”,
+// “availability-zone” as tier keys within a single locality, it can cause
+// confusion when choosing the zone tier values for cross-zone comparison. In
+// such cases, we would want to return an error. Ideally, both localities would
+// be checked thoroughly for duplicate zone tier keys and key mismatches.
+// However, due to frequent invocation of this function, we prefer to terminate
+// the check after examining the first encountered zone tier key-value pairs.
+//
+// Note: it is intentional here to perform multiple locality tiers comparison in
+// a single function to avoid overhead. If you are adding additional locality
+// tiers comparisons, it is recommended to handle them within one tier list
+// iteration.
+func (l Locality) CompareWithLocality(
+	other Locality,
+) (_ LocalityComparisonType, regionValid bool, zoneValid bool) {
+	firstRegionValue, hasRegion, firstZoneKey, firstZone, hasZone := l.getFirstRegionFirstZone()
+	firstRegionValueOther, hasRegionOther, firstZoneKeyOther, firstZoneOther, hasZoneOther := other.getFirstRegionFirstZone()
+
+	isCrossRegion := firstRegionValue != firstRegionValueOther
+	isCrossZone := firstZone != firstZoneOther
+
+	if !hasRegion || !hasRegionOther {
+		isCrossRegion = false
+	} else {
+		regionValid = true
+	}
+
+	if (!hasZone || !hasZoneOther) || (firstZoneKey != firstZoneKeyOther) {
+		isCrossZone = false
+	} else {
+		zoneValid = true
+	}
+
+	if isCrossRegion {
+		return LocalityComparisonType_CROSS_REGION, regionValid, zoneValid
+	} else {
+		if isCrossZone {
+			return LocalityComparisonType_SAME_REGION_CROSS_ZONE, regionValid, zoneValid
+		} else {
+			return LocalityComparisonType_SAME_REGION_SAME_ZONE, regionValid, zoneValid
+		}
+	}
 }
 
 // SharedPrefix returns the number of this locality's tiers which match those of
@@ -823,24 +918,41 @@ func (l Locality) AddTier(tier Tier) Locality {
 
 // IsEmpty returns true if hint contains no data.
 func (h *GCHint) IsEmpty() bool {
-	return h.LatestRangeDeleteTimestamp.IsEmpty()
+	return h.LatestRangeDeleteTimestamp.IsEmpty() && h.GCTimestamp.IsEmpty()
 }
 
-// Merge combines GC hints of two ranges. The result is either a hint that
-// covers both ranges or empty hint if it is not possible to merge hints.
-// leftEmpty and rightEmpty arguments are set based on MVCCStats.HasNoUserData
-// of receiver hint (leftEmpty) and argument hint (rightEmpty).
-// Returns true if receiver state was changed.
+// Merge combines GC hints of two adjacent ranges. Updates the receiver to be a
+// GCHint that covers both ranges, and so can be carried by the merged range.
+// Returns true iff the receiver was updated.
+//
+// The leftEmpty and rightEmpty arguments correspond to MVCCStats.HasNoUserData
+// of the receiver hint and the argument RHS hint respectively. These are used
+// by a heuristic, to stop carrying the LatestRangeDeleteTimestamp field of the
+// hint it the range is likely not covered by MVCC range tombstones (anymore).
+//
+// Merge is commutative in a sense that the merged hint does not change if the
+// order of the LHS and RHS hints (and leftEmpty/rightEmpty, correspondingly) is
+// swapped.
 func (h *GCHint) Merge(rhs *GCHint, leftEmpty, rightEmpty bool) bool {
-	// If either side has data but no hint, merged range can't have a hint.
+	updated := h.ScheduleGCFor(rhs.GCTimestamp)
+	// NB: don't swap the operands, we need the side effect of the method call.
+	updated = h.ScheduleGCFor(rhs.GCTimestampNext) || updated
+
+	// If LHS or RHS has data but no LatestRangeDeleteTimestamp hint, then this
+	// side is not known to be covered by range tombstones. Correspondingly, the
+	// union of the two is not too. If so, clear the hint.
 	if (rhs.LatestRangeDeleteTimestamp.IsEmpty() && !rightEmpty) ||
 		(h.LatestRangeDeleteTimestamp.IsEmpty() && !leftEmpty) {
-		updated := h.LatestRangeDeleteTimestamp.IsSet()
+		updated = updated || h.LatestRangeDeleteTimestamp.IsSet()
 		h.LatestRangeDeleteTimestamp = hlc.Timestamp{}
 		return updated
 	}
-	// Otherwise, use the newest hint.
-	return h.ForwardLatestRangeDeleteTimestamp(rhs.LatestRangeDeleteTimestamp)
+	// TODO(pavelkalinnikov): handle the case when some side has a hint (i.e. is
+	// covered by range tombstones), but is not empty. It means that there is data
+	// on top of the range tombstones, so the ClearRange optimization may not be
+	// effective. For now, live with the false positive because this is unlikely.
+
+	return h.ForwardLatestRangeDeleteTimestamp(rhs.LatestRangeDeleteTimestamp) || updated
 }
 
 // ForwardLatestRangeDeleteTimestamp bumps LatestDeleteRangeTimestamp in GC hint
@@ -853,7 +965,56 @@ func (h *GCHint) ForwardLatestRangeDeleteTimestamp(ts hlc.Timestamp) bool {
 	return false
 }
 
-// ResetLatestRangeDeleteTimestamp resets delete range timestamp.
-func (h *GCHint) ResetLatestRangeDeleteTimestamp() {
-	h.LatestRangeDeleteTimestamp = hlc.Timestamp{}
+// ScheduleGCFor updates the hint to schedule eager GC for data up to the given
+// timestamp. When this timestamp falls below the GC threshold/TTL, it will be
+// eagerly enqueued for GC when considered by the MVCC GC queue.
+//
+// Returns true iff the hint was updated.
+func (h *GCHint) ScheduleGCFor(ts hlc.Timestamp) bool {
+	if ts.IsEmpty() {
+		return false
+	}
+	if h.GCTimestamp.IsEmpty() {
+		h.GCTimestamp = ts
+	} else if cmp := h.GCTimestamp.Compare(ts); cmp > 0 {
+		if h.GCTimestampNext.IsEmpty() {
+			h.GCTimestampNext = h.GCTimestamp
+		}
+		h.GCTimestamp = ts
+	} else if cmp == 0 {
+		return false
+	} else if h.GCTimestampNext.IsEmpty() {
+		h.GCTimestampNext = ts
+	} else if ts.LessEq(h.GCTimestampNext) {
+		return false
+	} else {
+		h.GCTimestampNext = ts
+	}
+	return true
+}
+
+// UpdateAfterGC updates the GCHint according to the threshold, up to which the
+// data has been garbage collected. Returns true iff the hint has been updated.
+func (h *GCHint) UpdateAfterGC(gcThreshold hlc.Timestamp) bool {
+	updated := h.advanceGCTimestamp(gcThreshold)
+	if t := h.LatestRangeDeleteTimestamp; t.IsSet() && t.LessEq(gcThreshold) {
+		h.LatestRangeDeleteTimestamp = hlc.Timestamp{}
+		return true
+	}
+	return updated
+}
+
+func (h *GCHint) advanceGCTimestamp(gcThreshold hlc.Timestamp) bool {
+	// If GC threshold is below the minimum, leave the hint intact.
+	if t := h.GCTimestamp; t.IsEmpty() || gcThreshold.Less(t) {
+		return false
+	}
+	// If min <= threshold < max, erase the min and set it to match the max.
+	if t := h.GCTimestampNext; t.IsEmpty() || gcThreshold.Less(t) {
+		h.GCTimestamp, h.GCTimestampNext = h.GCTimestampNext, hlc.Timestamp{}
+		return true
+	}
+	// If threshold >= max, erase both min and max.
+	h.GCTimestamp, h.GCTimestampNext = hlc.Timestamp{}, hlc.Timestamp{}
+	return true
 }

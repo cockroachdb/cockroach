@@ -174,7 +174,7 @@ EXECUTE i(4.3::int)
 ----
 5
 
-query I colnames
+query I colnames,rowsort
 EXECUTE s
 ----
 a
@@ -247,7 +247,7 @@ ALTER TABLE f ADD COLUMN t int
 statement error cached plan must not change result type
 EXECUTE y (3, 4)
 
-query III
+query III rowsort
 SELECT * FROM f
 ----
 1 2 NULL
@@ -378,7 +378,7 @@ hello
 # because it doesn't propagate immediately.
 
 statement ok
-PREPARE sets(string) AS SET CLUSTER SETTING cluster.organization = $1
+PREPARE sets(string) AS SET CLUSTER SETTING cluster.label = $1
 
 statement ok
 EXECUTE sets('hello')
@@ -436,7 +436,7 @@ EXECUTE x21701a(NULL)
 statement ok
 PREPARE x21701b AS SELECT * FROM kv WHERE k IS DISTINCT FROM $1
 
-query II
+query II rowsort
 EXECUTE x21701b(NULL)
 ----
 1  1
@@ -1146,7 +1146,7 @@ PREPARE b AS OPT PLAN '
   (OrderingChoice "+str")
 )'
 
-query IT
+query IT nosort
 EXECUTE b
 ----
 5  five
@@ -1176,7 +1176,7 @@ PREPARE e AS OPT PLAN '
   (NoOrdering)
 )'
 
-query T
+query T nosort
 EXECUTE e
 ----
 select
@@ -1301,7 +1301,7 @@ PREPARE a1 AS SELECT * FROM t3 FOR UPDATE
 statement ok
 BEGIN READ ONLY
 
-statement error cannot execute FOR UPDATE in a read-only transaction
+statement error cannot execute SELECT FOR UPDATE in a read-only transaction
 EXECUTE a1
 
 statement ok
@@ -1316,7 +1316,7 @@ PREPARE a1 AS SELECT * FROM t3 FOR NO KEY UPDATE
 statement ok
 BEGIN READ ONLY
 
-statement error cannot execute FOR NO KEY UPDATE in a read-only transaction
+statement error cannot execute SELECT FOR NO KEY UPDATE in a read-only transaction
 EXECUTE a1
 
 statement ok
@@ -1331,7 +1331,7 @@ PREPARE a1 AS SELECT * FROM t3 FOR SHARE
 statement ok
 BEGIN READ ONLY
 
-statement error cannot execute FOR SHARE in a read-only transaction
+statement error cannot execute SELECT FOR SHARE in a read-only transaction
 EXECUTE a1
 
 statement ok
@@ -1346,7 +1346,7 @@ PREPARE a1 AS SELECT * FROM t3 FOR KEY SHARE
 statement ok
 BEGIN READ ONLY
 
-statement error cannot execute FOR KEY SHARE in a read-only transaction
+statement error cannot execute SELECT FOR KEY SHARE in a read-only transaction
 EXECUTE a1
 
 statement ok
@@ -1469,7 +1469,7 @@ statement ok
 EXECUTE args_deduce_type(1,2,3,4);
 EXECUTE args_deduce_type('1','2',3,'4');
 
-query ITI
+query ITI rowsort
 SELECT * FROM t;
 ----
 1  2  3
@@ -1664,3 +1664,49 @@ DEALLOCATE ALL
 
 statement ok
 RESET prepared_statements_cache_size
+
+statement error EXPLAIN ANALYZE can only be used as a top-level statement
+PREPARE p AS EXPLAIN ANALYZE SELECT 1
+
+# Regression test for #114867 to make sure that a statement that uses an enum
+# can be re-prepared after a schema change.
+subtest reprepare_statement_with_enum
+
+statement ok
+CREATE TYPE color AS ENUM ('red', 'blue', 'green');
+CREATE TABLE test_114867 (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    colors color[] DEFAULT ARRAY[]::color[]
+)
+
+statement ok
+PREPARE s_114867 AS INSERT INTO test_114867(colors) VALUES (ARRAY[$1::text]::color[]);
+EXECUTE s_114867('red')
+
+statement ok
+TRUNCATE TABLE test_114867 CASCADE
+
+statement ok
+EXECUTE s_114867('red')
+
+query T
+SELECT colors FROM test_114867
+----
+{red}
+
+subtest prepare_call
+
+# CALL statements cannot be prepared.
+statement ok
+CREATE PROCEDURE foo(x INT) LANGUAGE SQL AS $$
+  SELECT 1;
+  SELECT 2;
+$$;
+
+statement error pgcode 42601 syntax error
+PREPARE bar AS CALL foo(0);
+
+statement error pgcode 42601 syntax error
+PREPARE bar AS CALL foo($1);
+
+subtest end

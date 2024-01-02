@@ -628,6 +628,23 @@ func (f *FuncDepSet) ReduceCols(cols opt.ColSet) opt.ColSet {
 	var removed opt.ColSet
 	cols = cols.Copy()
 	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
+		// First check if the column is present in any "to" set of a dependency.
+		// If not, then it is not redundant and must remain in the set. This is
+		// a fast-path to avoid the more expensive functional-dependency-closure
+		// test below, when possible.
+		inToSet := false
+		for j := range f.deps {
+			if f.deps[j].to.Contains(i) {
+				inToSet = true
+				break
+			}
+		}
+		if !inToSet {
+			continue
+		}
+
+		// Determine if the column is functionally determined by the other
+		// columns.
 		cols.Remove(i)
 		removed.Add(i)
 		if !f.inClosureOf(removed, cols, true /* strict */) {
@@ -890,6 +907,7 @@ func (f *FuncDepSet) AddEquivalency(a, b opt.ColumnID) {
 	equiv.Add(a)
 	equiv.Add(b)
 	f.addEquivalency(equiv)
+	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
 
 // AddConstants adds a strict FD to the set that declares each given column as
@@ -902,6 +920,13 @@ func (f *FuncDepSet) AddEquivalency(a, b opt.ColumnID) {
 // Since it is a constant, any set of determinant columns (including the empty
 // set) trivially determines the value of "a".
 func (f *FuncDepSet) AddConstants(cols opt.ColSet) {
+	f.addConstantsNoKeyReduction(cols)
+	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
+}
+
+// addConstantsNoKeyReduction adds constant FDs to the set. It does not attempt
+// to reduce the key. See AddConstants.
+func (f *FuncDepSet) addConstantsNoKeyReduction(cols opt.ColSet) {
 	if cols.Empty() {
 		return
 	}
@@ -951,8 +976,6 @@ func (f *FuncDepSet) AddConstants(cols opt.ColSet) {
 		n++
 	}
 	f.deps = f.deps[:n]
-
-	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
 
 // AddSynthesizedCol adds an FD to the set that is derived from a synthesized
@@ -1135,6 +1158,7 @@ func (f *FuncDepSet) AddFrom(fdset *FuncDepSet) {
 		fd := &fdset.deps[i]
 		f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
 	}
+	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
 
 // AddEquivFrom is similar to AddFrom, except that it only adds equivalence
@@ -1146,6 +1170,7 @@ func (f *FuncDepSet) AddEquivFrom(fdset *FuncDepSet) {
 			f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
 		}
 	}
+	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
 
 // MakeProduct modifies the FD set to reflect the impact of a cartesian product
@@ -1804,7 +1829,7 @@ func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict, equiv bool) {
 		if !strict {
 			panic(errors.AssertionFailedf("expected constant FD to be strict: %s", redact.Safe(f)))
 		}
-		f.AddConstants(to)
+		f.addConstantsNoKeyReduction(to)
 		return
 	}
 
@@ -1862,13 +1887,15 @@ func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict, equiv bool) {
 	}
 }
 
+// addEquivalency adds a new equivalency into the set.
+// NOTE: The given equiv column set may be mutated.
 func (f *FuncDepSet) addEquivalency(equiv opt.ColSet) {
 	var addConst bool
 	var found opt.ColSet
 
 	// Start by finding complete set of all columns that are equivalent to the
 	// given set.
-	equiv = f.ComputeEquivClosure(equiv)
+	equiv = f.ComputeEquivClosureNoCopy(equiv)
 
 	n := 0
 	for i := 0; i < len(f.deps); i++ {
@@ -1905,7 +1932,7 @@ func (f *FuncDepSet) addEquivalency(equiv opt.ColSet) {
 
 	if addConst {
 		// Ensure that all equivalent columns are marked as constant.
-		f.AddConstants(equiv)
+		f.addConstantsNoKeyReduction(equiv)
 	}
 
 	if !equiv.SubsetOf(found) {
@@ -1922,8 +1949,6 @@ func (f *FuncDepSet) addEquivalency(equiv opt.ColSet) {
 		}
 		f.deps = deps
 	}
-
-	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
 
 // setKey updates the key that the set is currently maintaining.

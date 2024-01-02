@@ -605,6 +605,10 @@ func (r *cancellableImportResumer) OnFailOrCancel(context.Context, interface{}, 
 	return errors.New("bail out")
 }
 
+func (r *cancellableImportResumer) CollectProfile(context.Context, interface{}) error {
+	return nil
+}
+
 func setImportReaderParallelism(parallelism int32) func() {
 	factory := rowexec.NewReadImportDataProcessor
 	rowexec.NewReadImportDataProcessor = func(
@@ -692,7 +696,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 		base.TestServerArgs{
 			// Hangs when run from a test tenant. More investigation is
 			// required here. Tracked with #76378.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
@@ -799,7 +803,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 		base.TestServerArgs{
 			// Test hangs when run within a test tenant. More investigation
 			// is required here. Tracked with #76378.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{

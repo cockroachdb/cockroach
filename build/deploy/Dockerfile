@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi8/ubi-minimal
+FROM registry.access.redhat.com/ubi9/ubi-minimal
 ARG fips_enabled
 
 # For deployment, we need the following additionally installed:
@@ -17,7 +17,7 @@ RUN microdnf update -y \
 RUN if [ "$fips_enabled" == "1" ]; then \
     microdnf install -y openssl && \
     rpm -qa | sort > /before.txt && \
-    microdnf install crypto-policies-scripts && \
+    microdnf install -y crypto-policies-scripts && \
     fips-mode-setup --enable --no-bootcfg && \
     rpm -qa | sort > /after.txt && \
     microdnf remove -y $(comm -13 /before.txt /after.txt) && \

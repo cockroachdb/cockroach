@@ -1,13 +1,39 @@
+diff --git a/src/runtime/extern.go b/src/runtime/extern.go
+index 26dcf0bd52..75865d2868 100644
+--- a/src/runtime/extern.go
++++ b/src/runtime/extern.go
+@@ -85,6 +85,10 @@ It is a comma-separated list of name=val pairs setting these named variables:
+ 	making every garbage collection a stop-the-world event. Setting gcstoptheworld=2
+ 	also disables concurrent sweeping after the garbage collection finishes.
+ 
++	gcnoassist: setting gcnoassist=1 disables garbage collection assist, minimizing
++	garbage collection overhead for user goroutines at the expense of a higher risk
++	of out-of-memory failures with high allocation rates.
++
+ 	gctrace: setting gctrace=1 causes the garbage collector to emit a single line to standard
+ 	error at each collection, summarizing the amount of memory collected and the
+ 	length of the pause. The format of this line is subject to change. Included in
+diff --git a/src/runtime/malloc.go b/src/runtime/malloc.go
+index 44479cc2be..a24ce64a24 100644
+--- a/src/runtime/malloc.go
++++ b/src/runtime/malloc.go
+@@ -1270,7 +1270,7 @@ func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
+ // Returns the G for which the assist credit was accounted.
+ func deductAssistCredit(size uintptr) *g {
+ 	var assistG *g
+-	if gcBlackenEnabled != 0 {
++	if debug.gcnoassist == 0 && gcBlackenEnabled != 0 {
+ 		// Charge the current user G for this allocation.
+ 		assistG = getg()
+ 		if assistG.m.curg != nil {
 diff --git a/src/runtime/proc.go b/src/runtime/proc.go
-index 3991a48b10..4a50ae650d 100644
+index 554a60d747..8d64ee31c8 100644
 --- a/src/runtime/proc.go
 +++ b/src/runtime/proc.go
-@@ -994,8 +994,19 @@ func casgstatus(gp *g, oldval, newval uint32) {
+@@ -1027,7 +1027,18 @@ func casgstatus(gp *g, oldval, newval uint32) {
  		}
  	}
  
--	// Handle tracking for scheduling latencies.
-+	// Handle tracking for scheduling and running latencies.
 +	now := nanotime()
 +	if newval == _Grunning {
 +		// We're transitioning into the running state, record the timestamp for
@@ -20,26 +46,40 @@ index 3991a48b10..4a50ae650d 100644
 +		// state.
 +		gp.runningnanos += now - gp.lastsched
 +
- 		// Track every 8th time a goroutine transitions out of running.
- 		if gp.trackingSeq%gTrackingPeriod == 0 {
+ 		// Track every gTrackingPeriod time a goroutine transitions out of running.
+ 		if casgstatusAlwaysTrack || gp.trackingSeq%gTrackingPeriod == 0 {
  			gp.tracking = true
-@@ -1007,14 +1018,12 @@ func casgstatus(gp *g, oldval, newval uint32) {
- 			// We transitioned out of runnable, so measure how much
- 			// time we spent in this state and add it to
- 			// runnableTime.
--			now := nanotime()
- 			gp.runnableTime += now - gp.runnableStamp
- 			gp.runnableStamp = 0
+@@ -1048,7 +1059,6 @@ func casgstatus(gp *g, oldval, newval uint32) {
+ 		// We transitioned out of runnable, so measure how much
+ 		// time we spent in this state and add it to
+ 		// runnableTime.
+-		now := nanotime()
+ 		gp.runnableTime += now - gp.trackingStamp
+ 		gp.trackingStamp = 0
+ 	case _Gwaiting:
+@@ -1061,7 +1071,6 @@ func casgstatus(gp *g, oldval, newval uint32) {
+ 		// a more representative estimate of the absolute value.
+ 		// gTrackingPeriod also represents an accurate sampling period
+ 		// because we can only enter this state from _Grunning.
+-		now := nanotime()
+ 		sched.totalMutexWaitTime.Add((now - gp.trackingStamp) * gTrackingPeriod)
+ 		gp.trackingStamp = 0
+ 	}
+@@ -1072,12 +1081,10 @@ func casgstatus(gp *g, oldval, newval uint32) {
+ 			break
  		}
- 		if newval == _Grunnable {
- 			// We just transitioned into runnable, so record what
- 			// time that happened.
--			now := nanotime()
- 			gp.runnableStamp = now
- 		} else if newval == _Grunning {
- 			// We're transitioning into running, so turn off
-@@ -3258,6 +3267,14 @@ func dropg() {
- 	setGNoWB(&_g_.m.curg, nil)
+ 		// Blocking on a lock. Write down the timestamp.
+-		now := nanotime()
+ 		gp.trackingStamp = now
+ 	case _Grunnable:
+ 		// We just transitioned into runnable, so record what
+ 		// time that happened.
+-		now := nanotime()
+ 		gp.trackingStamp = now
+ 	case _Grunning:
+ 		// We're transitioning into running, so turn off
+@@ -3412,6 +3419,14 @@ func dropg() {
+ 	setGNoWB(&gp.m.curg, nil)
  }
  
 +// grunningnanos returns the wall time spent by current g in the running state.
@@ -53,7 +93,7 @@ index 3991a48b10..4a50ae650d 100644
  // checkTimers runs any timers for the P that are ready.
  // If now is not 0 it is the current time.
  // It returns the passed time or the current time if now was passed as 0.
-@@ -3491,6 +3508,8 @@ func goexit0(gp *g) {
+@@ -3646,6 +3661,8 @@ func goexit0(gp *g) {
  	gp.param = nil
  	gp.labels = nil
  	gp.timer = nil
@@ -62,38 +102,138 @@ index 3991a48b10..4a50ae650d 100644
  
  	if gcBlackenEnabled != 0 && gp.gcAssistBytes > 0 {
  		// Flush assist credit to the global pool. This gives
+diff --git a/src/runtime/runtime1.go b/src/runtime/runtime1.go
+index 92a7e021ee..2796baf922 100644
+--- a/src/runtime/runtime1.go
++++ b/src/runtime/runtime1.go
+@@ -315,6 +315,7 @@ var debug struct {
+ 	gcpacertrace       int32
+ 	gcshrinkstackoff   int32
+ 	gcstoptheworld     int32
++	gcnoassist         int32
+ 	gctrace            int32
+ 	invalidptr         int32
+ 	madvdontneed       int32 // for Linux; issue 28466
+@@ -348,6 +349,7 @@ var dbgvars = []*dbgVar{
+ 	{name: "gcpacertrace", value: &debug.gcpacertrace},
+ 	{name: "gcshrinkstackoff", value: &debug.gcshrinkstackoff},
+ 	{name: "gcstoptheworld", value: &debug.gcstoptheworld},
++	{name: "gcnoassist", value: &debug.gcnoassist},
+ 	{name: "gctrace", value: &debug.gctrace},
+ 	{name: "invalidptr", value: &debug.invalidptr},
+ 	{name: "madvdontneed", value: &debug.madvdontneed},
 diff --git a/src/runtime/runtime2.go b/src/runtime/runtime2.go
-index e1788223e7..5ed1fb40ba 100644
+index f4c76abd1c..57672bd8c5 100644
 --- a/src/runtime/runtime2.go
 +++ b/src/runtime/runtime2.go
-@@ -474,7 +474,6 @@ type g struct {
- 	traceseq       uint64   // trace event sequencer
- 	tracelastp     puintptr // last P emitted an event for this goroutine
- 	lockedm        muintptr
--	sig            uint32
- 	writebuf       []byte
- 	sigcode0       uintptr
- 	sigcode1       uintptr
-@@ -488,6 +487,9 @@ type g struct {
- 	labels         unsafe.Pointer // profiler labels
- 	timer          *timer         // cached timer for time.Sleep
- 	selectDone     uint32         // are we participating in a select and did someone win the race?
-+	sig            uint32
-+	lastsched      int64 // timestamp when the G last started running
-+	runningnanos   int64 // wall time spent in the running state
+@@ -477,7 +477,6 @@ type g struct {
+ 	trackingStamp int64 // timestamp of when the G last started being tracked
+ 	runnableTime  int64 // the amount of time spent runnable, cleared when running, only used when tracking
+ 	lockedm       muintptr
+-	sig           uint32
+ 	writebuf      []byte
+ 	sigcode0      uintptr
+ 	sigcode1      uintptr
+@@ -492,6 +491,9 @@ type g struct {
+ 	labels        unsafe.Pointer // profiler labels
+ 	timer         *timer         // cached timer for time.Sleep
+ 	selectDone    atomic.Uint32  // are we participating in a select and did someone win the race?
++	sig           uint32
++	lastsched     int64 // timestamp when the G last started running
++	runningnanos  int64 // wall time spent in the running state
  
  	// goroutineProfiled indicates the status of this goroutine's stack for the
  	// current in-progress goroutine profile
 diff --git a/src/runtime/sizeof_test.go b/src/runtime/sizeof_test.go
-index 9ce0a3afcd..bfb5d6e33e 100644
+index fb9195481a..55e37287c2 100644
 --- a/src/runtime/sizeof_test.go
 +++ b/src/runtime/sizeof_test.go
-@@ -21,7 +21,7 @@ func TestSizeof(t *testing.T) {
+@@ -21,6 +21,6 @@ func TestSizeof(t *testing.T) {
  		_32bit uintptr // size on 32bit platforms
  		_64bit uintptr // size on 64bit platforms
  	}{
--		{runtime.G{}, 240, 392},   // g, but exported for testing
-+		{runtime.G{}, 248, 400},   // g, but exported for testing
+-		{runtime.G{}, 252, 408},   // g, but exported for testing
++		{runtime.G{}, 260, 416},   // g, but exported for testing
  		{runtime.Sudog{}, 56, 88}, // sudog, but exported for testing
  	}
+diff -ru a/src/context/context.go b/src/context/context.go
+--- a/src/context/context.go
++++ b/src/context/context.go
+@@ -472,17 +472,7 @@
  
+ 	if p, ok := parentCancelCtx(parent); ok {
+ 		// parent is a *cancelCtx, or derives from one.
+-		p.mu.Lock()
+-		if p.err != nil {
+-			// parent has already been canceled
+-			child.cancel(false, p.err, p.cause)
+-		} else {
+-			if p.children == nil {
+-				p.children = make(map[canceler]struct{})
+-			}
+-			p.children[child] = struct{}{}
+-		}
+-		p.mu.Unlock()
++		p.addChild(child)
+ 		return
+ 	}
+ 
+@@ -510,6 +500,22 @@
+ 	}()
+ }
+ 
++// addChild adds child to the list of children.
++// NB: CockroachDB runtime patch.
++func (c *cancelCtx) addChild(child canceler) {
++	c.mu.Lock()
++	if c.err != nil {
++		// parent has already been canceled
++		child.cancel(false, c.err, c.cause)
++	} else {
++		if c.children == nil {
++			c.children = make(map[canceler]struct{})
++		}
++		c.children[child] = struct{}{}
++	}
++	c.mu.Unlock()
++}
++
+ type stringer interface {
+ 	String() string
+ }
+@@ -781,5 +787,35 @@
+ 		default:
+ 			return c.Value(key)
+ 		}
++	}
++}
++
++// CockroachDB runtime patch.
++// cancelerAdapter invokes f when cancel context completes.
++type cancelerAdapter struct {
++	*cancelCtx
++	f func()
++}
++
++func (c *cancelerAdapter) cancel(removeFromParent bool, err, cause error) {
++	if removeFromParent {
++		removeChild(c.cancelCtx, c)
+ 	}
++	c.f()
+ }
++
++// PropagateCancel arranges for f to be invoked when parent is done.
++// Parent must be one of the cancelable contexts.
++// Returns true if cancellation will be propagated, false if the parent
++// is not cancelable.
++// This is similar to AfterFunc(), but does not spin up goroutine, and instead
++// invokes f on whatever goroutine completed parent context.
++func PropagateCancel(parent Context, f func()) bool {
++	p, ok := parent.Value(&cancelCtxKey).(*cancelCtx)
++	if !ok {
++		return false
++	}
++	a := cancelerAdapter{cancelCtx: p, f: f}
++	p.addChild(&a)
++	return true
++}

@@ -17,9 +17,14 @@ import (
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/cockroachdb/cmux"
+	"github.com/cockroachdb/cockroach/pkg/inspectz"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
+	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -62,7 +67,7 @@ func newHTTPServer(
 // server. These instruct a valid user agent to use HTTPS *only*
 // for all future connections to this host.
 var HSTSEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.hsts.enabled",
 	"if true, HSTS headers will be sent along with all HTTP "+
 		"requests. The headers will contain a max-age setting of one "+
@@ -70,7 +75,7 @@ var HSTSEnabled = settings.RegisterBoolSetting(
 		"access the DB Console. Ensure that TLS is correctly configured "+
 		"prior to enabling.",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 const hstsHeaderKey = "Strict-Transport-Security"
 
@@ -88,18 +93,19 @@ func (s *httpServer) handleHealth(healthHandler http.Handler) {
 
 func (s *httpServer) setupRoutes(
 	ctx context.Context,
-	authnServer *authenticationServer,
-	adminAuthzCheck *adminPrivilegeChecker,
+	authnServer authserver.Server,
+	adminAuthzCheck privchecker.CheckerForRPCHandlers,
 	metricSource metricMarshaler,
 	runtimeStatSampler *status.RuntimeStatSampler,
 	handleRequestsUnauthenticated http.Handler,
 	handleDebugUnauthenticated http.Handler,
+	handleInspectzUnauthenticated http.Handler,
 	apiServer http.Handler,
 	flags serverpb.FeatureFlags,
 ) error {
 	// OIDC Configuration must happen prior to the UI Handler being defined below so that we have
 	// the system settings initialized for it to pick up from the oidcAuthenticationServer.
-	oidc, err := ConfigureOIDC(
+	oidc, err := authserver.ConfigureOIDC(
 		ctx, s.cfg.Settings, s.cfg.Locality,
 		s.mux.Handle, authnServer.UserLoginFromSSO, s.cfg.AmbientCtx, s.cfg.ClusterIDContainer.Get(),
 	)
@@ -113,7 +119,7 @@ func (s *httpServer) setupRoutes(
 		NodeID:   s.cfg.IDContainer,
 		OIDC:     oidc,
 		GetUser: func(ctx context.Context) *string {
-			if user, ok := maybeUserFromHTTPAuthInfoContext(ctx); ok {
+			if user, ok := authserver.MaybeUserFromHTTPAuthInfoContext(ctx); ok {
 				ustring := user.Normalized()
 				return &ustring
 			}
@@ -126,59 +132,64 @@ func (s *httpServer) setupRoutes(
 	// assets are served up whether or not there is a session. If there is a session, the mux
 	// adds it to the context, and it is templated into index.html so that the UI can show
 	// the username of the currently-logged-in user.
-	authenticatedUIHandler := newAuthenticationMuxAllowAnonymous(
-		authnServer, assetHandler)
+	authenticatedUIHandler := authserver.NewMux(
+		authnServer, assetHandler, true /* allowAnonymous */)
 	s.mux.Handle("/", authenticatedUIHandler)
 
 	// Add HTTP authentication to the gRPC-gateway endpoints used by the UI,
 	// if not disabled by configuration.
 	var authenticatedHandler = handleRequestsUnauthenticated
 	if !s.cfg.InsecureWebAccess() {
-		authenticatedHandler = newAuthenticationMux(authnServer, authenticatedHandler)
+		authenticatedHandler = authserver.NewMux(authnServer, authenticatedHandler, false /* allowAnonymous */)
 	}
 
 	// Login and logout paths.
 	// The /login endpoint is, by definition, available pre-authentication.
-	s.mux.Handle(loginPath, handleRequestsUnauthenticated)
-	s.mux.Handle(logoutPath, authenticatedHandler)
+	s.mux.Handle(authserver.LoginPath, handleRequestsUnauthenticated)
+	s.mux.Handle(authserver.LogoutPath, authenticatedHandler)
 	// The login path for 'cockroach demo', if we're currently running
 	// that.
 	if s.cfg.EnableDemoLoginEndpoint {
-		s.mux.Handle(DemoLoginPath, http.HandlerFunc(authnServer.demoLogin))
+		s.mux.Handle(authserver.DemoLoginPath, http.HandlerFunc(authnServer.DemoLogin))
 	}
 
 	// Admin/Status servers. These are used by the UI via RPC-over-HTTP.
-	s.mux.Handle(statusPrefix, authenticatedHandler)
-	s.mux.Handle(adminPrefix, authenticatedHandler)
+	s.mux.Handle(apiconstants.StatusPrefix, authenticatedHandler)
+	s.mux.Handle(apiconstants.AdminPrefix, authenticatedHandler)
 
 	// The timeseries endpoint, used to produce graphs.
 	s.mux.Handle(ts.URLPrefix, authenticatedHandler)
 
 	// Exempt the 2nd health check endpoint from authentication.
 	// (This simply mirrors /health and exists for backward compatibility.)
-	s.mux.Handle(adminHealth, handleRequestsUnauthenticated)
+	s.mux.Handle(apiconstants.AdminHealth, handleRequestsUnauthenticated)
 	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
-	s.mux.Handle(statusVars, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings}.handleVars))
+	s.mux.Handle(apiconstants.StatusVars, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings}.handleVars))
 	// Same for /_status/load.
 	le, err := newLoadEndpoint(runtimeStatSampler, metricSource)
 	if err != nil {
 		return err
 	}
-	s.mux.Handle(loadStatusVars, le)
+	s.mux.Handle(apiconstants.LoadStatusVars, le)
 
 	if apiServer != nil {
 		// The new "v2" HTTP API tree.
-		s.mux.Handle(apiV2Path, apiServer)
+		s.mux.Handle(apiconstants.APIV2Path, apiServer)
 	}
 
 	// Register debugging endpoints.
 	handleDebugAuthenticated := handleDebugUnauthenticated
+	handleInspectzAuthenticated := handleInspectzUnauthenticated
 	if !s.cfg.InsecureWebAccess() {
 		// Mandate both authentication and admin authorization.
 		handleDebugAuthenticated = makeAdminAuthzCheckHandler(adminAuthzCheck, handleDebugAuthenticated)
-		handleDebugAuthenticated = newAuthenticationMux(authnServer, handleDebugAuthenticated)
+		handleDebugAuthenticated = authserver.NewMux(authnServer, handleDebugAuthenticated, false /* allowAnonymous */)
+
+		handleInspectzAuthenticated = makeAdminAuthzCheckHandler(adminAuthzCheck, handleInspectzAuthenticated)
+		handleInspectzAuthenticated = authserver.NewMux(authnServer, handleInspectzAuthenticated, false /* allowAnonymous */)
 	}
 	s.mux.Handle(debug.Endpoint, handleDebugAuthenticated)
+	s.mux.Handle(inspectz.URLPrefix, handleInspectzAuthenticated)
 
 	log.Event(ctx, "added http endpoints")
 
@@ -186,15 +197,15 @@ func (s *httpServer) setupRoutes(
 }
 
 func makeAdminAuthzCheckHandler(
-	adminAuthzCheck *adminPrivilegeChecker, handler http.Handler,
+	adminAuthzCheck privchecker.CheckerForRPCHandlers, handler http.Handler,
 ) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Retrieve the username embedded in the grpc metadata, if any.
 		// This will be provided by the authenticationMux.
-		md := translateHTTPAuthInfoToGRPCMetadata(req.Context(), req)
+		md := authserver.TranslateHTTPAuthInfoToGRPCMetadata(req.Context(), req)
 		authCtx := metadata.NewIncomingContext(req.Context(), md)
 		// Check the privileges of the requester.
-		err := adminAuthzCheck.requireViewDebugPermission(authCtx)
+		err := adminAuthzCheck.RequireViewDebugPermission(authCtx)
 		if err != nil {
 			http.Error(w, "admin privilege or VIEWDEBUG global privilege required", http.StatusUnauthorized)
 			return
@@ -309,7 +320,7 @@ func (s *httpServer) baseHandler(w http.ResponseWriter, r *http.Request) {
 			// Note: use of a background context here so we can log even with the absence of a client.
 			// Assumes appropriate timeouts are used.
 			logcrash.ReportPanic(context.Background(), &s.cfg.Settings.SV, p, 1 /* depth */)
-			http.Error(w, errAPIInternalErrorString, http.StatusInternalServerError)
+			http.Error(w, srverrors.ErrAPIInternalErrorString, http.StatusInternalServerError)
 		}
 	}()
 

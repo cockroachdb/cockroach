@@ -13,6 +13,7 @@ package issues
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -20,7 +21,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/datadriven"
@@ -37,26 +37,45 @@ func TestPost(t *testing.T) {
 		issueNumber = 30      // issue # returned in select test cases
 	)
 
-	opts := Options{
-		Token:       "intentionally-unset",
-		Org:         "cockroachdb",
-		Repo:        "cockroach",
-		SHA:         "abcd123",
-		BuildTypeID: "nightly123",
-		BuildID:     "8008135",
-		ServerURL:   "https://teamcity.example.com",
-		Branch:      "release-0.1",
-		Tags:        "deadlock",
-		Goflags:     "race",
+	tcOpts := &Options{
+		Token:  "intentionally-unset",
+		Org:    "cockroachdb",
+		Repo:   "cockroach",
+		Branch: "release-0.1",
+		SHA:    "abcd123",
+		TeamCityOptions: &TeamCityOptions{
+			BuildTypeID: "nightly123",
+			BuildID:     "8008135",
+			ServerURL:   "https://teamcity.example.com",
+			Tags:        "deadlock",
+			Goflags:     "race",
+		},
+	}
+	engflowOpts := &Options{
+		Token:  "intentionally-unset",
+		Org:    "cockroachdb",
+		Repo:   "cockroach",
+		Branch: "release-0.1",
+		SHA:    "abcd123",
+		EngFlowOptions: &EngFlowOptions{
+			Attempt:      1,
+			Label:        "//the/fake/label:label_test",
+			Run:          2,
+			ServerURL:    "https://fake.cluster.engflow.com",
+			Shard:        3,
+			InvocationID: "fake-invocation-id",
+		},
 	}
 
 	type testCase struct {
 		name                 string
 		packageName          string
 		testName             string
+		topLevelNotes        []string
 		message              string
 		artifacts            string
 		reproCmd             string
+		skipTestFailure      bool
 		reproTitle, reproURL string
 	}
 
@@ -144,12 +163,21 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 			reproCmd: "make test TESTS=TestRandomSyntaxSQLSmith PKG=./pkg/sql/tests 2>&1",
 		},
 		{
-			name:        "failure-with-url",
-			packageName: "github.com/cockroachdb/cockroach/pkg/cmd/roachtest",
-			testName:    "some-roachtest",
-			message:     "boom",
-			reproURL:    "https://github.com/cockroachdb/cockroach",
-			reproTitle:  "FooBar README",
+			name:          "failure-with-url",
+			packageName:   "github.com/cockroachdb/cockroach/pkg/cmd/roachtest",
+			testName:      "some-roachtest",
+			topLevelNotes: []string{"first note", "second note"},
+			message:       "boom",
+			reproURL:      "https://github.com/cockroachdb/cockroach",
+			reproTitle:    "FooBar README",
+		},
+		{
+			name:            "infrastructure-flake",
+			topLevelNotes:   []string{"This is a special type of run that you should know about."},
+			packageName:     "roachtest",
+			testName:        "TestCDC",
+			message:         "Something went wrong",
+			skipTestFailure: true,
 		},
 	}
 
@@ -185,7 +213,7 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 						issueNum = *base.Number
 					}
 					return github.Issue{
-						Title:  github.String(fmt.Sprintf("%s: %s%s failed", packageName, testName, suffix)),
+						Title:  github.String(fmt.Sprintf("%s: %s%s failed [failure reason]", packageName, testName, suffix)),
 						Number: &issueNum,
 						Labels: base.Labels,
 					}
@@ -213,7 +241,7 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 	relatedIssue := github.Issue{
 		// Title is generated during the test using the test case's
 		// package and test names
-		Number: github.Int(issueNumber + 1),
+		Number: github.Int(issueNumber + 10),
 		Labels: []github.Label{{
 			Name: github.String("C-test-failure"),
 			URL:  github.String("fake"),
@@ -257,7 +285,12 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 	re := regexp.MustCompile(`^(.+?)-(` + strings.Join(sKeys, "|") + `)\.txt$`)
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "post"), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			var engflowTestCase bool
 			basename := filepath.Base(path)
+			if strings.Contains(basename, "-engflow") {
+				engflowTestCase = true
+				basename = strings.ReplaceAll(basename, "-engflow", "")
+			}
 			sl := re.FindStringSubmatch(basename)
 			require.Len(t, sl, 3, "%s couldn't be interpreted as a test case", basename)
 			name, foundIssue := sl[1], sl[2]
@@ -266,18 +299,21 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 			require.True(t, ok, "missing issue scenario %s", foundIssue)
 
 			var buf strings.Builder
-			opts := opts // play it safe since we're mutating it below
-			opts.getLatestTag = func() (string, error) {
-				const tag = "v3.3.0"
-				_, _ = fmt.Fprintf(&buf, "getLatestTag: result %s\n", tag)
-				return tag, nil
+			var opts Options
+			if engflowTestCase {
+				opts = *engflowOpts
+			} else {
+				opts = *tcOpts
+			}
+			opts.GetBinaryVersion = func() string {
+				const v = "v3.3.0"
+				_, _ = fmt.Fprintf(&buf, "getBinaryVersion: result %s\n", v)
+				return v
 			}
 
-			l, err := logger.RootLogger("", false)
-			require.NoError(t, err)
 			p := &poster{
 				Options: &opts,
-				l:       l,
+				l:       log.Default(),
 			}
 
 			createdIssue := false
@@ -357,12 +393,16 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 			req := PostRequest{
 				PackageName:     c.packageName,
 				TestName:        c.testName,
+				TopLevelNotes:   c.topLevelNotes,
 				Message:         c.message,
 				Artifacts:       c.artifacts,
 				MentionOnCreate: []string{"@cockroachdb/idonotexistbecausethisisatest"},
 				HelpCommand:     repro,
-				ExtraLabels:     []string{"release-blocker"},
 				ExtraParams:     map[string]string{"ROACHTEST_cloud": "gce"},
+			}
+			if c.skipTestFailure {
+				// Override the default.
+				req.Labels = []string{}
 			}
 			require.NoError(t, p.post(context.Background(), UnitTestFormatter, req))
 
@@ -404,6 +444,8 @@ func TestPostEndToEnd(t *testing.T) {
 	unset := setEnv(env)
 	defer unset()
 
+	opts := DefaultOptionsFromEnv()
+
 	params := map[string]string{
 		"GOFLAGS":         "-race_test",
 		"ROACHTEST_cloud": "test",
@@ -414,15 +456,11 @@ func TestPostEndToEnd(t *testing.T) {
 		PackageName: "github.com/cockroachdb/cockroach/pkg/foo/bar",
 		TestName:    "TestFooBarBaz",
 		Message:     "I'm a message",
-		ExtraLabels: []string{"release-blocker"},
 		ExtraParams: params,
 		HelpCommand: UnitTestHelpCommand(""),
 	}
 
-	l, err := logger.RootLogger("", false)
-	require.NoError(t, err)
-
-	require.NoError(t, Post(context.Background(), l, UnitTestFormatter, req))
+	require.NoError(t, Post(context.Background(), log.Default(), UnitTestFormatter, req, opts))
 }
 
 // setEnv overrides the env variables corresponding to the input map. The
@@ -464,4 +502,26 @@ func ghURL(t *testing.T, title, body string) string {
 	q.Add("body", body)
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+func TestDataDriven(t *testing.T) {
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "issues"), func(t *testing.T, d *datadriven.TestData) string {
+		switch d.Cmd {
+		case "build-issue-queries":
+			var req PostRequest
+			if arg, ok := d.Arg("labels"); ok {
+				req.Labels = arg.Vals
+			}
+			if arg, ok := d.Arg("label-match-set"); ok {
+				req.AdoptIssueLabelMatchSet = arg.Vals
+			}
+			existing, related := buildIssueQueries("repo", "org", "master", "foo: bar failed", req)
+			return fmt.Sprintf("Existing issue query:\n  %s\nRelated issues query:\n  %s", existing, related)
+
+		default:
+			t.Fatalf("unknown command %q", d.Cmd)
+			return ""
+		}
+	})
+
 }

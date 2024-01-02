@@ -40,7 +40,7 @@ type TestingKnobs struct {
 	PubsubClientSkipClientCreation bool
 	// FilterSpanWithMutation is a filter returning true if the resolved span event should
 	// be skipped. This method takes a pointer in case resolved spans need to be mutated.
-	FilterSpanWithMutation func(resolved *jobspb.ResolvedSpan) bool
+	FilterSpanWithMutation func(resolved *jobspb.ResolvedSpan) (bool, error)
 	// FeedKnobs are kvfeed testing knobs.
 	FeedKnobs kvfeed.TestingKnobs
 	// NullSinkIsExternalIOAccounted controls whether we record
@@ -50,11 +50,14 @@ type TestingKnobs struct {
 	NullSinkIsExternalIOAccounted bool
 	// OnDistflowSpec is called when specs for distflow planning have been created
 	OnDistflowSpec func(aggregatorSpecs []*execinfrapb.ChangeAggregatorSpec, frontierSpec *execinfrapb.ChangeFrontierSpec)
-	// ShouldReplan is used to see if a replan for a changefeed should be triggered
-	ShouldReplan func(ctx context.Context, oldPlan, newPlan *sql.PhysicalPlan) bool
 	// RaiseRetryableError is a knob used to possibly return an error.
 	RaiseRetryableError func() error
-
+	// StartDistChangefeedInitialHighwater is called when starting the dist changefeed with the initial highwater
+	// of the changefeed. Note that this will be called when the changefeed starts and subsequently when the changefeed
+	// is retried.
+	StartDistChangefeedInitialHighwater func(ctx context.Context, initialHighwater hlc.Timestamp)
+	// LoadJobErr is called when the changefeed loads the job record during a retry to check for progress updates.
+	LoadJobErr func() error
 	// This is currently used to test negative timestamp in cursor i.e of the form
 	// "-3us". Check TestChangefeedCursor for more info. This function needs to be in the
 	// knobs as current statement time will only be available once the create changefeed statement
@@ -74,6 +77,10 @@ type TestingKnobs struct {
 
 	// OnDrain returns the channel to select on to detect node drain
 	OnDrain func() <-chan struct{}
+
+	// SpanPartitionsCallback is called with the span partition
+	// when the changefeed is planned.
+	SpanPartitionsCallback func([]sql.SpanPartition)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

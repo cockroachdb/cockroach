@@ -142,7 +142,7 @@ x y
 statement ok
 BEGIN TRANSACTION
 
-statement error there is already a transaction in progress
+statement error pgcode 25001 there is already a transaction in progress
 BEGIN TRANSACTION
 
 statement ok
@@ -156,10 +156,10 @@ BEGIN TRANSACTION
 statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
-statement error there is already a transaction in progress
+statement error pgcode 25001 there is already a transaction in progress
 BEGIN TRANSACTION
 
-statement error current transaction is aborted, commands ignored until end of transaction block
+statement error pgcode 25P02 current transaction is aborted, commands ignored until end of transaction block
 SELECT * FROM kv
 
 statement ok
@@ -176,15 +176,15 @@ BEGIN; END
 
 # COMMIT/ROLLBACK without a transaction are errors.
 
-statement error there is no transaction in progress
+statement error pgcode 25P01 there is no transaction in progress
 COMMIT TRANSACTION
 
-statement error there is no transaction in progress
+statement error pgcode 25P01 there is no transaction in progress
 ROLLBACK TRANSACTION
 
 # Set isolation level without a transaction is an error.
 
-statement error there is no transaction in progress
+statement error pgcode 25P01 there is no transaction in progress
 SET TRANSACTION ISOLATION LEVEL SNAPSHOT
 
 statement ok
@@ -208,12 +208,15 @@ BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL READ COMMITTED; COMMIT
 # It is an error to change the isolation level of a running transaction.
 
 statement ok
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
+
+statement ok
 BEGIN TRANSACTION
 
 statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED
 
@@ -226,12 +229,15 @@ BEGIN TRANSACTION
 statement ok
 SELECT * FROM kv LIMIT 1
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET transaction_isolation = 'READ COMMITTED'
 
 statement ok
 ROLLBACK
+
+statement ok
+RESET CLUSTER SETTING sql.txn.read_committed_isolation.enabled
 
 # Transactions default to serializable.
 
@@ -245,6 +251,15 @@ serializable
 
 query T
 SHOW transaction_isolation
+----
+serializable
+
+# READ COMMITTED is mapped to serializable by default.
+statement ok
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
 ----
 serializable
 
@@ -265,6 +280,35 @@ serializable
 statement ok
 COMMIT
 
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+serializable
+
+statement ok
+COMMIT
+
+# Since read_committed_isolation.enabled is true, setting isolation level
+# to REPEATABLE READ should map to SNAPSHOT.
+statement ok
+SET default_transaction_isolation = 'read committed'
+
+query T
+SHOW default_transaction_isolation
+----
+serializable
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+query T
+SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+serializable
+
 # SNAPSHOT can be used with a hidden cluster setting
 statement ok
 SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
@@ -275,25 +319,25 @@ BEGIN
 statement ok
 SET TRANSACTION ISOLATION LEVEL SNAPSHOT
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 snapshot
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW transaction_isolation
 ----
 snapshot
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 serializable
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1
 query T
 SHOW transaction_isolation
 ----
@@ -303,7 +347,7 @@ statement ok
 COMMIT
 
 # We can't set isolation level to an unsupported one.
-statement error invalid value for parameter "transaction_isolation": "this is made up"\n.*Available values: serializable,snapshot,read committed
+statement error invalid value for parameter "transaction_isolation": "this is made up"\n.*Available values: serializable,snapshot
 SET transaction_isolation = 'this is made up'
 
 # We can explicitly start a transaction with isolation level specified.
@@ -311,13 +355,13 @@ SET transaction_isolation = 'this is made up'
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 snapshot
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -338,15 +382,18 @@ statement ok
 SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = false
 
 statement ok
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
+
+statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 read committed
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -364,25 +411,25 @@ serializable
 statement ok
 SET transaction_isolation = 'READ COMMITTED'
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 read committed
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 serializable
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW transaction_isolation
 ----
 read committed
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1
 query T
 SHOW transaction_isolation
 ----
@@ -393,7 +440,7 @@ COMMIT
 
 # User priority.
 
-statement error there is no transaction in progress
+statement error pgcode 25P01 there is no transaction in progress
 SET TRANSACTION PRIORITY LOW
 
 statement ok
@@ -685,7 +732,7 @@ SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -764,7 +811,7 @@ SHOW DEFAULT_TRANSACTION_ISOLATION
 read committed
 
 # SHOW without a transaction should create an auto-transaction with the new default level
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -854,7 +901,7 @@ COMMIT
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -1523,3 +1570,20 @@ regular
 statement error pq: SET CLUSTER SETTING cannot be used inside a multi-statement transaction
 SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'on';
 SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SELECT cluster_logical_timestamp();
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+
+skipif config local-mixed-23.1
+statement error pq: cluster_logical_timestamp\(\): unsupported in READ COMMITTED isolation
+SELECT cluster_logical_timestamp();
+
+statement ok
+ROLLBACK

@@ -144,12 +144,47 @@ export function Percentage(
 }
 
 /**
+ * PercentageCustom creates a string representation of a fraction as a percentage.
+ * Accepts a precision parameter as optional indicating how many digits
+ * after the decimal point are desired. (e.g. precision 2 returns 8.37 %)
+ * If the number is zero or grater than 1, it works the same way as the Percentage
+ * function above, if is between 0 and 1, it looks for the first non-zero
+ * decimal number, up to 10 decimal points, otherwise shows ~0.0%
+ */
+export function PercentageCustom(
+  numerator: number,
+  denominator: number,
+  precision?: number,
+): string {
+  if (denominator === 0) {
+    return "--%";
+  }
+  const pct = (numerator / denominator) * 100;
+  if (pct <= 0 || pct >= 1) {
+    return Percentage(numerator, denominator, precision);
+  }
+  const pctString = pct.toFixed(10);
+  let finalPct = "0.";
+  let found = false;
+  for (let index = 2; index < pctString.length && !found; index++) {
+    finalPct = `${finalPct}${pctString[index]}`;
+    if (pctString[index] !== "0") {
+      found = true;
+    }
+  }
+  if (found) {
+    return finalPct + " %";
+  }
+  return "~0.0 %";
+}
+
+/**
  * ComputeDurationScale calculates an appropriate scale factor and unit to use
  * to display a given duration value, without actually converting the value.
  */
 export function ComputeDurationScale(ns: number): UnitValue {
   return durationUnitsDescending.find(
-    ({ value }) => ns / value >= 1 || value == 1,
+    ({ value }) => ns / value >= 1 || value === 1,
   );
 }
 
@@ -171,7 +206,7 @@ export function Duration(nanoseconds: number): string {
  * If the value is 0, return "no samples".
  */
 export function DurationCheckSample(nanoseconds: number): string {
-  if (nanoseconds == 0) {
+  if (nanoseconds === 0) {
     return "no samples";
   }
   return Duration(nanoseconds);
@@ -198,10 +233,10 @@ export function FormatWithTimezone(
 }
 
 export function RenderCount(yesCount: Long, totalCount: Long): string {
-  if (longToInt(yesCount) == 0) {
+  if (longToInt(yesCount) === 0) {
     return "No";
   }
-  if (longToInt(yesCount) == longToInt(totalCount)) {
+  if (longToInt(yesCount) === longToInt(totalCount)) {
     return "Yes";
   }
   const noCount = longToInt(totalCount) - longToInt(yesCount);
@@ -240,17 +275,17 @@ export const limitText = (text: string, limit: number): string => {
 
 // limitStringArray returns a shortened form of text that surpasses a given limit
 export const limitStringArray = (arr: string[], limit: number): string => {
-  if (!arr || arr.length == 0) {
+  if (!arr || arr.length === 0) {
     return "";
   }
 
   // Remove null and undefined entries in the array.
   arr = arr.filter(n => n);
-  if (arr.length == 0) {
+  if (arr.length === 0) {
     return "";
   }
 
-  if (arr.length == 1 || arr[0]?.length > limit) {
+  if (arr.length === 1 || arr[0]?.length > limit) {
     return limitText(arr[0], limit);
   }
 
@@ -394,7 +429,7 @@ function breakLongLine(line: string, limit: number): string {
     return line;
   }
   const idxComma = line.indexOf(",", limit);
-  if (idxComma == -1) {
+  if (idxComma === -1) {
     return line;
   }
 

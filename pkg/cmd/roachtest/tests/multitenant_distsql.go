@@ -13,7 +13,6 @@ package tests
 import (
 	"archive/zip"
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"io"
 	"strconv"
@@ -37,11 +36,12 @@ func registerMultiTenantDistSQL(r registry.Registry) {
 			b := bundle
 			to := timeout
 			r.Add(registry.TestSpec{
-				Skip:    "the test is skipped until #100260 is resolved",
-				Name:    fmt.Sprintf("multitenant/distsql/instances=%d/bundle=%s/timeout=%d", numInstances, b, to),
-				Owner:   registry.OwnerSQLQueries,
-				Cluster: r.MakeClusterSpec(4),
-				Leases:  registry.MetamorphicLeases,
+				Name:             fmt.Sprintf("multitenant/distsql/instances=%d/bundle=%s/timeout=%d", numInstances, b, to),
+				Owner:            registry.OwnerSQLQueries,
+				Cluster:          r.MakeClusterSpec(4),
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Nightly),
+				Leases:           registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runMultiTenantDistSQL(ctx, t, c, numInstances, b == "on", to)
 				},
@@ -58,7 +58,6 @@ func runMultiTenantDistSQL(
 	bundle bool,
 	timeoutMillis int,
 ) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	// This test sets a smaller default range size than the default due to
 	// performance and resource limitations. We set the minimum range max bytes to
 	// 1 byte to bypass the guardrails.
@@ -67,63 +66,33 @@ func runMultiTenantDistSQL(
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(1))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(2))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(3))
+	storageNodes := c.Range(1, 3)
 
-	const (
-		tenantID           = 11
-		tenantBaseHTTPPort = 8081
-		tenantBaseSQLPort  = 26259
-	)
-
-	tenantHTTPPort := func(offset int) int {
-		if c.IsLocal() || numInstances > c.Spec().NodeCount {
-			return tenantBaseHTTPPort + offset
-		}
-		return tenantBaseHTTPPort
-	}
-	tenantSQLPort := func(offset int) int {
-		if c.IsLocal() || numInstances > c.Spec().NodeCount {
-			return tenantBaseSQLPort + offset
-		}
-		return tenantBaseSQLPort
-	}
-
-	storConn := c.Conn(ctx, t.L(), 1)
-	_, err := storConn.Exec(`SELECT crdb_internal.create_tenant($1::INT)`, tenantID)
-	require.NoError(t, err)
-
-	instances := make([]*tenantNode, 0, numInstances)
-	instance1 := createTenantNode(ctx, t, c, c.Node(1), tenantID, 2 /* node */, tenantHTTPPort(0), tenantSQLPort(0),
-		createTenantCertNodes(c.All()))
-	instances = append(instances, instance1)
-	defer instance1.stop(ctx, t, c)
-	instance1.start(ctx, t, c, "./cockroach")
-
-	// Open things up so we can configure range sizes below.
-	_, err = storConn.Exec(`ALTER TENANT [$1] SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true`, tenantID)
-	require.NoError(t, err)
-
-	// Create numInstances sql pods and spread them evenly across the machines.
+	tenantName := "test-tenant"
 	var nodes intsets.Fast
-	nodes.Add(1)
-	for i := 1; i < numInstances; i++ {
-		node := ((i + 1) % c.Spec().NodeCount) + 1
-		inst, err := newTenantInstance(ctx, instance1, t, c, node, tenantHTTPPort(i), tenantSQLPort(i))
-		instances = append(instances, inst)
-		require.NoError(t, err)
-		defer inst.stop(ctx, t, c)
-		inst.start(ctx, t, c, "./cockroach")
+	for i := 0; i < numInstances; i++ {
+		node := (i % c.Spec().NodeCount) + 1
+		sqlInstance := i / c.Spec().NodeCount
+		instStartOps := option.DefaultStartVirtualClusterOpts(tenantName, sqlInstance)
+		t.L().Printf("Starting instance %d on node %d", i, node)
+		c.StartServiceForVirtualCluster(ctx, t.L(), c.Node(node), instStartOps, settings, storageNodes)
 		nodes.Add(i + 1)
 	}
 
+	storConn := c.Conn(ctx, t.L(), 1)
+	// Open things up, so we can configure range sizes below.
+	_, err := storConn.Exec(`ALTER TENANT $1 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true`, tenantName)
+	require.NoError(t, err)
+
 	m := c.NewMonitor(ctx, c.Nodes(1, 2, 3))
 
-	inst1Conn, err := gosql.Open("postgres", instance1.pgURL)
+	inst1Conn, err := c.ConnE(ctx, t.L(), 1, option.TenantName(tenantName))
 	require.NoError(t, err)
 	_, err = inst1Conn.Exec("CREATE TABLE t(n INT, i INT,s STRING, PRIMARY KEY(n,i))")
 	require.NoError(t, err)
 
 	// DistSQL needs at least a range per node to distribute query everywhere
-	// and test takes too long and too much resources with default range sizes
+	// and test takes too long and too many resources with default range sizes
 	// so make them much smaller.
 	_, err = inst1Conn.Exec(`ALTER TABLE t CONFIGURE ZONE USING range_min_bytes = 1000,range_max_bytes = 100000`)
 	require.NoError(t, err)
@@ -131,11 +100,12 @@ func runMultiTenantDistSQL(
 	insertCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	for i, inst := range instances {
-		url := inst.pgURL
+	for i := 0; i < numInstances; i++ {
 		li := i
 		m.Go(func(ctx context.Context) error {
-			dbi, err := gosql.Open("postgres", url)
+			node := (li % c.Spec().NodeCount) + 1
+			sqlInstance := li / c.Spec().NodeCount
+			dbi, err := c.ConnE(ctx, t.L(), node, option.TenantName(tenantName), option.SQLInstance(sqlInstance))
 			require.NoError(t, err)
 			iter := 0
 			for {
@@ -145,7 +115,7 @@ func runMultiTenantDistSQL(
 					t.L().Printf("worker %d done:%v", li, insertCtx.Err())
 					return nil
 				default:
-					// procede to report error
+					// proceed to report error
 				}
 				require.NoError(t, err, "instance idx = %d, iter = %d", li, iter)
 				iter++
@@ -185,7 +155,6 @@ func runMultiTenantDistSQL(
 		} else {
 			t.L().Printf("Only %d nodes present: %v", nodesInPlan.Len(), nodesInPlan)
 		}
-
 	}
 	m.Wait()
 
@@ -229,7 +198,9 @@ func runMultiTenantDistSQL(
 		if bundle {
 			// Open bundle and verify its contents
 			sqlConnCtx := clisqlclient.Context{}
-			conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, instance1.pgURL)
+			pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(1), tenantName, 0)
+			require.NoError(t, err)
+			conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, pgURL[0])
 			bundles, err := clisqlclient.StmtDiagListBundles(ctx, conn)
 			require.NoError(t, err)
 

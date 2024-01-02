@@ -40,6 +40,10 @@ import (
 // [1]: Co-locating the SQL pod and the workload generator is a bit funky, but
 // it works fine enough as written and saves us from using another 4 nodes
 // per test.
+//
+// TODO(sumeer): Now that we are counting actual CPU for inter-tenant
+// fairness, alter the read-heavy workloads to perform different sized work,
+// and evaluate fairness.
 func registerMultiTenantFairness(r registry.Registry) {
 	specs := []multiTenantFairnessSpec{
 		{
@@ -92,7 +96,8 @@ func registerMultiTenantFairness(r registry.Registry) {
 			Owner:             registry.OwnerAdmissionControl,
 			Benchmark:         true,
 			Leases:            registry.MetamorphicLeases,
-			Tags:              registry.Tags(`weekly`),
+			CompatibleClouds:  registry.AllExceptAWS,
+			Suites:            registry.Suites(registry.Weekly),
 			NonReleaseBlocker: false,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runMultiTenantFairness(ctx, t, c, s)
@@ -138,7 +143,6 @@ func runMultiTenantFairness(
 	}
 
 	t.L().Printf("starting cockroach securely (<%s)", time.Minute)
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(),
 		option.DefaultStartOptsNoBackups(),
 		install.MakeClusterSettings(install.SecureOption(true)),
@@ -203,11 +207,6 @@ func runMultiTenantFairness(
 
 	// Create the tenants.
 	t.L().Printf("initializing %d tenants (<%s)", numTenants, 5*time.Minute)
-	tenantIDs := make([]int, 0, numTenants)
-	for i := 0; i < numTenants; i++ {
-		tenantIDs = append(tenantIDs, tenantID(i))
-	}
-
 	tenants := make([]*tenantNode, numTenants)
 	for i := 0; i < numTenants; i++ {
 		if !t.SkipInit() {
@@ -216,8 +215,7 @@ func runMultiTenantFairness(
 		}
 
 		tenant := createTenantNode(ctx, t, c,
-			crdbNode, tenantID(i), tenantNodeID(i), tenantHTTPPort(i), tenantSQLPort(i),
-			createTenantOtherTenantIDs(tenantIDs))
+			crdbNode, tenantID(i), tenantNodeID(i), tenantHTTPPort(i), tenantSQLPort(i))
 		defer tenant.stop(ctx, t, c)
 
 		tenants[i] = tenant

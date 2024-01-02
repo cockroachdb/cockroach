@@ -65,19 +65,20 @@ const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
 export type StatementInsightsViewStateProps = {
+  useObsService: boolean;
+  filters: WorkloadInsightEventFilters;
+  insightTypes: string[];
   isDataValid: boolean;
   lastUpdated: moment.Moment;
+  selectedColumnNames: string[];
+  sortSetting: SortSetting;
   statements: StmtInsightEvent[];
   statementsError: Error | null;
-  insightTypes: string[];
-  filters: WorkloadInsightEventFilters;
-  sortSetting: SortSetting;
-  selectedColumnNames: string[];
-  isLoading?: boolean;
   dropDownSelect?: React.ReactElement;
-  timeScale?: TimeScale;
-  maxSizeApiReached?: boolean;
+  isLoading?: boolean;
   isTenant?: boolean;
+  maxSizeApiReached?: boolean;
+  timeScale?: TimeScale;
 };
 
 export type StatementInsightsViewDispatchProps = {
@@ -112,7 +113,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
   selectedColumnNames,
   dropDownSelect,
   maxSizeApiReached,
-  isTenant,
+  useObsService,
 }: StatementInsightsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
@@ -124,9 +125,14 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
   );
 
   const refresh = useCallback(() => {
-    const req = timeScaleRangeToObj(timeScale);
+    const ts = timeScaleRangeToObj(timeScale);
+    const req = {
+      start: ts.start,
+      end: ts.end,
+      useObsService: useObsService,
+    };
     refreshStatementInsights(req);
-  }, [refreshStatementInsights, timeScale]);
+  }, [refreshStatementInsights, timeScale, useObsService]);
 
   const shouldPoll = timeScale.key !== "Custom";
   const [refetch, clearPolling] = useScheduleFunction(

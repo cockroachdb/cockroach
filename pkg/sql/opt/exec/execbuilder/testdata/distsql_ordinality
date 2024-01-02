@@ -25,7 +25,7 @@ SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE x
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  …/1/2         {1}       1
+<before:/Table/65>  …/1/2         {1}       1
 …/1/2               …/1/4         {2}       2
 …/1/4               …/1/6         {3}       3
 …/1/6               …/1/7         {4}       4
@@ -60,4 +60,4 @@ vectorized: true
       table: xyz@xyz_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkF9ro0AUxd_3UwznaRdmScyjTxuSLB2wMVWhLY2UqXMJUuPYmRHU4HcvKv0LLenjPXfOOb-5J9inAj42N7tgKbbs91rESXwV_GHxJtisEtZw1nLWcbaHNiovZZG7dg_2PwovWdN27FokFyyM1mK7DERyC45SK9rKI1n4d_CQclRGZ2StNoN0Gh8I1cCfc-RlVbtBTjkybQj-CS53BcFHIh8KikgqMrM5OBQ5mRdjbNN2_5q2u68eqQXHShf1sbT-Cy444koOwl-kPYeu3VuNdfJA8L2en48Svv595n0g-Sp98ZP0iGylS0tnJc_7lIPUgaZjWl2bjHZGZ2PNNIajbxQUWTdtvWkQ5bQaAN-bvW_Ni0_mtP_1HAAA__-nXrpf
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUNFq2zAUfd9XiPO0gULtPupppcmYIE262LCN1RTNus1EFcuTZGon-N-H7aXrylbS-yC4516dc-45IPy0EFh8uV5eyBV7O5dZnn1avmPZYrm4zFnLWcfZnrMbOK9NpayJ3Q3Yh836irXdnn2W-Ue23szl6mIp86_gqJymldpRgPiGFAVH7V1JITg_QIdxQeoWIuEwVd3EAS44SucJ4oBooiUI5Oq7pQ0pTf4sAYemqIwdadtu_77t9rf1PXXguHS22VVBHO2CI6vVAMxQ9ByuiX9kQlRbgkif-JJziKTnp1tbP2Zxlv7l7H9q58_U0teobSjUrgp0klLyTGmW9gUH6S1N6QfX-JKuvSvH3aldj0QjoCnEaZpOjayOoxA9qd1jWE-Z0heZzl9iKjjurHu4NRoCye-a_eM5FoYPahuGiLIf7mGkzbt6OPBO2UAcV-qe5hTJ70xlQjQlRPQN9f2bXwEAAP__T3HyCQ==

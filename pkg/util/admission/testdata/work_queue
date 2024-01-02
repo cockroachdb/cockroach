@@ -47,7 +47,7 @@ admit id=4 tenant=71 priority=-128 create-time-millis=4 bypass=false
 admit id=5 tenant=71 priority=0 create-time-millis=5 bypass=false
 ----
 
-# Tenant 71 is the top of the heap since not using any slots.
+# Tenant 71 is the top of the heap since has not used any cpu time.
 print
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 71
@@ -60,8 +60,8 @@ continueGrantChain 5
 id 5: admit succeeded
 granted: returned 1
 
-# Both tenants are using 1 slot. The tie is broken arbitrarily in favor of
-# tenant 71.
+# Both tenants have used 1 cpu nano time. The tie is broken arbitrarily in
+# favor of tenant 71.
 print
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 71
@@ -79,12 +79,12 @@ closed epoch: 0 tenantHeap len: 2 top tenant: 71
  tenant-id: 53 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 3, epoch: 0, qt: 100]
  tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
-# The work admitted for tenant 53 is done.
-work-done id=1
+# The work admitted for tenant 53 is done and consumed no cpu-time
+work-done id=1 cpu-time=0
 ----
 returnGrant 1
 
-# Tenant 53 now using fewer slots so it becomes the top of the heap.
+# Tenant 53 has used no cpu, so it becomes the top of the heap.
 print
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 53
@@ -105,11 +105,63 @@ closed epoch: 0 tenantHeap len: 2 top tenant: 53
  tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 3, epoch: 0, qt: 100]
  tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
+# The system tenant work is done and consumed 10 cpu nanos.
+work-done id=6 cpu-time=10
+----
+returnGrant 1
+
+print
+----
+closed epoch: 0 tenantHeap len: 2 top tenant: 53
+ tenant-id: 1 used: 10, w: 1, fifo: -128
+ tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 3, epoch: 0, qt: 100]
+ tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
+
+# Another request from tenant 53, which is behind the existing request in the heap.
+admit id=7 tenant=53 priority=0 create-time-millis=5 bypass=false
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 2 top tenant: 53
+ tenant-id: 1 used: 10, w: 1, fifo: -128
+ tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 3, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 5, epoch: 0, qt: 100]
+ tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
+
 granted chain-id=7
 ----
 continueGrantChain 7
 id 2: admit succeeded
 granted: returned 1
+
+# Both tenants have used 1 cpu nano time. The tie is broken arbitrarily in
+# favor of tenant 53.
+print
+----
+closed epoch: 0 tenantHeap len: 2 top tenant: 53
+ tenant-id: 1 used: 10, w: 1, fifo: -128
+ tenant-id: 53 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 5, epoch: 0, qt: 100]
+ tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
+
+# The work admitted for tenant 53 is done and has consumed 20 cpu nanos, so
+# tenant 71 moves to the top of the heap.
+work-done id=2 cpu-time=20
+----
+returnGrant 1
+
+print
+----
+closed epoch: 0 tenantHeap len: 2 top tenant: 71
+ tenant-id: 1 used: 10, w: 1, fifo: -128
+ tenant-id: 53 used: 20, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 5, epoch: 0, qt: 100]
+ tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
+
+gc-tenants-and-reset-used
+----
+closed epoch: 0 tenantHeap len: 2 top tenant: 71
+ tenant-id: 1 used: 0, w: 1, fifo: -128
+ tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 5, epoch: 0, qt: 100]
+ tenant-id: 71 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
 granted chain-id=9
 ----
@@ -117,13 +169,39 @@ continueGrantChain 9
 id 4: admit succeeded
 granted: returned 1
 
+# Tenant 71 has used 1 cpu nano.
+print
+----
+closed epoch: 0 tenantHeap len: 1 top tenant: 53
+ tenant-id: 1 used: 0, w: 1, fifo: -128
+ tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 5, epoch: 0, qt: 100]
+ tenant-id: 71 used: 1, w: 1, fifo: -128
+
+# Try to return more cpu than used, to check that there is no overflow.
+work-done id=4 cpu-time=-5
+----
+returnGrant 1
+
+print
+----
+closed epoch: 0 tenantHeap len: 1 top tenant: 53
+ tenant-id: 1 used: 0, w: 1, fifo: -128
+ tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 5, epoch: 0, qt: 100]
+ tenant-id: 71 used: 0, w: 1, fifo: -128
+
+granted chain-id=10
+----
+continueGrantChain 10
+id 7: admit succeeded
+granted: returned 1
+
 # No more waiting requests.
 print
 ----
 closed epoch: 0 tenantHeap len: 0
- tenant-id: 1 used: 1, w: 1, fifo: -128
+ tenant-id: 1 used: 0, w: 1, fifo: -128
  tenant-id: 53 used: 1, w: 1, fifo: -128
- tenant-id: 71 used: 2, w: 1, fifo: -128
+ tenant-id: 71 used: 0, w: 1, fifo: -128
 
 # Granted returns false.
 granted chain-id=10
@@ -133,9 +211,9 @@ granted: returned 0
 print
 ----
 closed epoch: 0 tenantHeap len: 0
- tenant-id: 1 used: 1, w: 1, fifo: -128
+ tenant-id: 1 used: 0, w: 1, fifo: -128
  tenant-id: 53 used: 1, w: 1, fifo: -128
- tenant-id: 71 used: 2, w: 1, fifo: -128
+ tenant-id: 71 used: 0, w: 1, fifo: -128
 
 init
 ----

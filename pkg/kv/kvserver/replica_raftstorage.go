@@ -21,10 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,10 +35,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/raftpb"
 )
+
+var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kv.snapshot.ingest_as_write_threshold",
+	"size below which a range snapshot ingestion will be performed as a normal write",
+	func() int64 {
+		return int64(util.ConstantWithMetamorphicTestChoice(
+			"kv.snapshot.ingest_as_write_threshold",
+			100<<10, /* default value is 100KiB */
+			1<<30,   /* 1GiB causes everything to be a normal write */
+			0,       /* 0B causes everything to be an ingest */
+		).(int))
+	}())
 
 // replicaRaftStorage implements the raft.Storage interface.
 type replicaRaftStorage Replica
@@ -66,6 +83,9 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 	hs, err := r.mu.stateLoader.LoadHardState(ctx, r.store.TODOEngine())
 	// For uninitialized ranges, membership is unknown at this point.
 	if raft.IsEmptyHardState(hs) || err != nil {
+		if err != nil {
+			r.reportRaftStorageError(err)
+		}
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
 	cs := r.mu.state.Desc.Replicas().ConfState()
@@ -80,7 +100,11 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 //
 // Entries can return log entries that are not yet stable in durable storage.
 func (r *replicaRaftStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.Entry, error) {
-	return r.TypedEntries(kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes)
+	entries, err := r.TypedEntries(kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes)
+	if err != nil {
+		r.reportRaftStorageError(err)
+	}
+	return entries, err
 }
 
 func (r *replicaRaftStorage) TypedEntries(
@@ -111,6 +135,9 @@ const invalidLastTerm = 0
 // Term implements the raft.Storage interface.
 func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	term, err := r.TypedTerm(kvpb.RaftIndex(i))
+	if err != nil {
+		r.reportRaftStorageError(err)
+	}
 	return uint64(term), err
 }
 
@@ -149,6 +176,9 @@ func (r *Replica) raftLastIndexRLocked() kvpb.RaftIndex {
 // LastIndex requires that r.mu is held for reading.
 func (r *replicaRaftStorage) LastIndex() (uint64, error) {
 	index, err := r.TypedLastIndex()
+	if err != nil {
+		r.reportRaftStorageError(err)
+	}
 	return uint64(index), err
 }
 
@@ -173,6 +203,9 @@ func (r *Replica) raftFirstIndexRLocked() kvpb.RaftIndex {
 // FirstIndex requires that r.mu is held for reading.
 func (r *replicaRaftStorage) FirstIndex() (uint64, error) {
 	index, err := r.TypedFirstIndex()
+	if err != nil {
+		r.reportRaftStorageError(err)
+	}
 	return uint64(index), err
 }
 
@@ -220,6 +253,15 @@ func (r *replicaRaftStorage) Snapshot() (raftpb.Snapshot, error) {
 	}, nil
 }
 
+var raftStorageErrorLogger = log.Every(30 * time.Second)
+
+func (r *replicaRaftStorage) reportRaftStorageError(err error) {
+	if raftStorageErrorLogger.ShouldLog() {
+		log.Errorf(r.raftCtx, "error in raft.Storage %v", err)
+	}
+	r.store.metrics.RaftStorageError.Inc(1)
+}
+
 // raftSnapshotLocked requires that r.mu is held for writing.
 func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
 	return (*replicaRaftStorage)(r).Snapshot()
@@ -229,13 +271,33 @@ func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
 // replica. If this method returns without error, callers must eventually call
 // OutgoingSnapshot.Close.
 func (r *Replica) GetSnapshot(
-	ctx context.Context, snapType kvserverpb.SnapshotRequest_Type, snapUUID uuid.UUID,
+	ctx context.Context, snapUUID uuid.UUID,
 ) (_ *OutgoingSnapshot, err error) {
 	// Get a snapshot while holding raftMu to make sure we're not seeing "half
 	// an AddSSTable" (i.e. a state in which an SSTable has been linked in, but
 	// the corresponding Raft command not applied yet).
+	var snap storage.Reader
+	var startKey roachpb.RKey
 	r.raftMu.Lock()
-	snap := r.store.TODOEngine().NewSnapshot()
+	if r.store.cfg.SharedStorageEnabled || storage.ShouldUseEFOS(&r.ClusterSettings().SV) {
+		var ss *spanset.SpanSet
+		r.mu.RLock()
+		spans := rditer.MakeAllKeySpans(r.mu.state.Desc) // needs unreplicated to access Raft state
+		startKey = r.mu.state.Desc.StartKey
+		if util.RaceEnabled {
+			ss = rditer.MakeAllKeySpanSet(r.mu.state.Desc)
+			defer ss.Release()
+		}
+		r.mu.RUnlock()
+		efos := r.store.TODOEngine().NewEventuallyFileOnlySnapshot(spans)
+		if util.RaceEnabled {
+			snap = spanset.NewEventuallyFileOnlySnapshot(efos, ss)
+		} else {
+			snap = efos
+		}
+	} else {
+		snap = r.store.TODOEngine().NewSnapshot()
+	}
 	r.raftMu.Unlock()
 
 	defer func() {
@@ -247,8 +309,10 @@ func (r *Replica) GetSnapshot(
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	rangeID := r.RangeID
+	if startKey == nil {
+		startKey = r.mu.state.Desc.StartKey
+	}
 
-	startKey := r.mu.state.Desc.StartKey
 	ctx, sp := r.AnnotateCtxWithSpan(ctx, "snapshot")
 	defer sp.Finish()
 
@@ -261,7 +325,7 @@ func (r *Replica) GetSnapshot(
 	// NB: We have Replica.mu read-locked, but we need it write-locked in order
 	// to use Replica.mu.stateLoader. This call is not performance sensitive, so
 	// create a new state loader.
-	snapData, err := snapshot(ctx, snapUUID, stateloader.Make(rangeID), snapType, snap, startKey)
+	snapData, err := snapshot(ctx, snapUUID, stateloader.Make(rangeID), snap, startKey)
 	if err != nil {
 		log.Errorf(ctx, "error generating snapshot: %+v", err)
 		return nil, err
@@ -279,9 +343,9 @@ type OutgoingSnapshot struct {
 	// The Pebble snapshot that will be streamed from.
 	EngineSnap storage.Reader
 	// The replica state within the snapshot.
-	State    kvserverpb.ReplicaState
-	snapType kvserverpb.SnapshotRequest_Type
-	onClose  func()
+	State          kvserverpb.ReplicaState
+	sharedBackings []objstorage.RemoteObjectBackingHandle
+	onClose        func()
 }
 
 func (s OutgoingSnapshot) String() string {
@@ -290,13 +354,16 @@ func (s OutgoingSnapshot) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (s OutgoingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("%s snapshot %s at applied index %d",
-		s.snapType, redact.Safe(s.SnapUUID.Short()), s.State.RaftAppliedIndex)
+	w.Printf("snapshot %s at applied index %d",
+		redact.Safe(s.SnapUUID.Short()), s.State.RaftAppliedIndex)
 }
 
 // Close releases the resources associated with the snapshot.
 func (s *OutgoingSnapshot) Close() {
 	s.EngineSnap.Close()
+	for i := range s.sharedBackings {
+		s.sharedBackings[i].Close()
+	}
 	if s.onClose != nil {
 		s.onClose()
 	}
@@ -309,11 +376,21 @@ type IncomingSnapshot struct {
 	SSTStorageScratch *SSTSnapshotStorageScratch
 	FromReplica       roachpb.ReplicaDescriptor
 	// The descriptor in the snapshot, never nil.
-	Desc             *roachpb.RangeDescriptor
-	DataSize         int64
-	snapType         kvserverpb.SnapshotRequest_Type
+	Desc *roachpb.RangeDescriptor
+	// Size of the key-value pairs.
+	DataSize int64
+	// Size of the ssts containing these key-value pairs.
+	SSTSize          int64
+	SharedSize       int64
 	placeholder      *ReplicaPlaceholder
-	raftAppliedIndex kvpb.RaftIndex // logging only
+	raftAppliedIndex kvpb.RaftIndex      // logging only
+	msgAppRespCh     chan raftpb.Message // receives MsgAppResp if/when snap is applied
+	sharedSSTs       []pebble.SharedSSTMeta
+	doExcise         bool
+	// clearedSpans represents the key spans in the existing store that will be
+	// cleared by doing the Ingest*. This is tracked so that we can convert the
+	// ssts into a WriteBatch if the total size of the ssts is small.
+	clearedSpans []roachpb.Span
 }
 
 func (s IncomingSnapshot) String() string {
@@ -322,8 +399,8 @@ func (s IncomingSnapshot) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (s IncomingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("%s snapshot %s from %s at applied index %d",
-		s.snapType, redact.Safe(s.SnapUUID.Short()), s.FromReplica, s.raftAppliedIndex)
+	w.Printf("snapshot %s from %s at applied index %d",
+		redact.Safe(s.SnapUUID.Short()), s.FromReplica, s.raftAppliedIndex)
 }
 
 // snapshot creates an OutgoingSnapshot containing a pebble snapshot for the
@@ -332,7 +409,6 @@ func snapshot(
 	ctx context.Context,
 	snapUUID uuid.UUID,
 	rsl stateloader.StateLoader,
-	snapType kvserverpb.SnapshotRequest_Type,
 	snap storage.Reader,
 	startKey roachpb.RKey,
 ) (OutgoingSnapshot, error) {
@@ -341,7 +417,8 @@ func snapshot(
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
 	ok, err := storage.MVCCGetProto(ctx, snap, keys.RangeDescriptorKey(startKey),
-		hlc.MaxTimestamp, &desc, storage.MVCCGetOptions{Inconsistent: true})
+		hlc.MaxTimestamp, &desc, storage.MVCCGetOptions{
+			Inconsistent: true, ReadCategory: storage.RangeSnapshotReadCategory})
 	if err != nil {
 		return OutgoingSnapshot{}, errors.Wrap(err, "failed to get desc")
 	}
@@ -367,7 +444,6 @@ func snapshot(
 				ConfState: desc.Replicas().ConfState(),
 			},
 		},
-		snapType: snapType,
 	}, nil
 }
 
@@ -399,7 +475,11 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 		return errors.Wrapf(err, "%s: failed to lookup span config", r)
 	}
 
-	r.SetSpanConfig(conf)
+	changed := r.SetSpanConfig(conf)
+	if changed {
+		r.MaybeQueue(ctx, r.store.cfg.Clock.NowAsClockTimestamp())
+	}
+
 	return nil
 }
 
@@ -501,6 +581,7 @@ func (r *Replica) applySnapshot(
 		ingestion time.Time
 	}
 	log.KvDistribution.Infof(ctx, "applying %s", inSnap)
+	appliedAsWrite := false
 	defer func(start time.Time) {
 		var logDetails redact.StringBuilder
 		logDetails.Printf("total=%0.0fms", timeutil.Since(start).Seconds()*1000)
@@ -509,23 +590,33 @@ func (r *Replica) applySnapshot(
 			logDetails.Printf(" subsumedReplicas=%d@%0.0fms",
 				len(subsumedRepls), stats.subsumedReplicas.Sub(start).Seconds()*1000)
 		}
+		if len(inSnap.sharedSSTs) > 0 {
+			logDetails.Printf(" shared=%d sharedSize=%s", len(inSnap.sharedSSTs), humanizeutil.IBytes(inSnap.SharedSize))
+		}
+		if inSnap.doExcise {
+			logDetails.Printf(" excise=true")
+		}
 		logDetails.Printf(" ingestion=%d@%0.0fms", len(inSnap.SSTStorageScratch.SSTs()),
 			stats.ingestion.Sub(stats.subsumedReplicas).Seconds()*1000)
-		log.Infof(ctx, "applied %s (%s)", inSnap, logDetails)
+		var appliedAsWriteStr string
+		if appliedAsWrite {
+			appliedAsWriteStr = "as write "
+		}
+		log.Infof(ctx, "applied %s %s(%s)", inSnap, appliedAsWriteStr, logDetails)
 	}(timeutil.Now())
 
-	unreplicatedSSTFile, nonempty, err := writeUnreplicatedSST(
+	clearedSpans := inSnap.clearedSpans
+	unreplicatedSSTFile, clearedSpan, err := writeUnreplicatedSST(
 		ctx, r.ID(), r.ClusterSettings(), nonemptySnap.Metadata, hs, &r.raftMu.stateLoader.StateLoader,
 	)
 	if err != nil {
 		return err
 	}
-	if nonempty {
-		// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
-		// buffering in a MemObject first.
-		if err := inSnap.SSTStorageScratch.WriteSST(ctx, unreplicatedSSTFile.Data()); err != nil {
-			return err
-		}
+	clearedSpans = append(clearedSpans, clearedSpan)
+	// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
+	// buffering in a MemObject first.
+	if err := inSnap.SSTStorageScratch.WriteSST(ctx, unreplicatedSSTFile.Data()); err != nil {
+		return err
 	}
 	// Update Raft entries.
 	r.store.raftEntryCache.Drop(r.RangeID)
@@ -557,31 +648,59 @@ func (r *Replica) applySnapshot(
 	// problematic, as it would prevent this store from ever having a new replica
 	// of the removed range. In this case, however, it's copacetic, as subsumed
 	// ranges _can't_ have new replicas.
-	if err := clearSubsumedReplicaDiskData(
+	clearedSubsumedSpans, err := clearSubsumedReplicaDiskData(
 		// TODO(sep-raft-log): needs access to both engines.
 		ctx, r.store.ClusterSettings(), r.store.TODOEngine(), inSnap.SSTStorageScratch.WriteSST,
 		desc, subsumedDescs, mergedTombstoneReplicaID,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
+	clearedSpans = append(clearedSpans, clearedSubsumedSpans...)
 	stats.subsumedReplicas = timeutil.Now()
 
 	// Ingest all SSTs atomically.
 	if fn := r.store.cfg.TestingKnobs.BeforeSnapshotSSTIngestion; fn != nil {
-		if err := fn(inSnap, inSnap.snapType, inSnap.SSTStorageScratch.SSTs()); err != nil {
+		if err := fn(inSnap, inSnap.SSTStorageScratch.SSTs()); err != nil {
 			return err
 		}
 	}
 	var ingestStats pebble.IngestOperationStats
-	if ingestStats, err =
-		// TODO: separate ingestions for log and statemachine engine. See:
-		//
-		// https://github.com/cockroachdb/cockroach/issues/93251
-		r.store.TODOEngine().IngestExternalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
-		return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
+	var writeBytes uint64
+	// TODO: separate ingestions for log and statemachine engine. See:
+	//
+	// https://github.com/cockroachdb/cockroach/issues/93251
+	if inSnap.doExcise {
+		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
+		if ingestStats, err =
+			r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, exciseSpan); err != nil {
+			return errors.Wrapf(err, "while ingesting %s and excising %s-%s", inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
+		}
+	} else {
+		if inSnap.SSTSize > snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) {
+			if ingestStats, err =
+				r.store.TODOEngine().IngestLocalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
+				return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
+			}
+		} else {
+			appliedAsWrite = true
+			err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
+				ctx, inSnap.SSTStorageScratch.SSTs(), clearedSpans)
+			if err != nil {
+				return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
+			}
+			// Admission control wants the writeBytes to be roughly equivalent to
+			// the bytes in the SST when these writes are eventually flushed. We use
+			// the SST size of the incoming snapshot as that approximation. We've
+			// written additional SSTs to clear some data earlier in this method,
+			// but we ignore those since the bulk of the data is in the incoming
+			// snapshot.
+			writeBytes = uint64(inSnap.SSTSize)
+		}
 	}
 	if r.store.cfg.KVAdmissionController != nil {
-		r.store.cfg.KVAdmissionController.SnapshotIngested(r.store.StoreID(), ingestStats)
+		r.store.cfg.KVAdmissionController.SnapshotIngestedOrWritten(
+			r.store.StoreID(), ingestStats, writeBytes)
 	}
 	stats.ingestion = timeutil.Now()
 
@@ -642,8 +761,10 @@ func (r *Replica) applySnapshot(
 	if isInitialSnap {
 		// NB: this will also call setDescLockedRaftMuLocked.
 		if err := r.initFromSnapshotLockedRaftMuLocked(ctx, desc); err != nil {
+			r.mu.Unlock()
 			log.Fatalf(ctx, "unable to initialize replica while applying snapshot: %+v", err)
 		} else if err := r.store.markReplicaInitializedLockedReplLocked(ctx, r); err != nil {
+			r.mu.Unlock()
 			log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
 		}
 	} else {
@@ -730,9 +851,6 @@ func (r *Replica) applySnapshot(
 // covers the RangeID-unreplicated keyspace. A range tombstone is
 // laid down and the Raft state provided by the arguments is overlaid
 // onto it.
-//
-// TODO(sep-raft-log): when is `nonempty` ever false? We always
-// perform a number of writes to this SST.
 func writeUnreplicatedSST(
 	ctx context.Context,
 	id storage.FullReplicaID,
@@ -740,7 +858,7 @@ func writeUnreplicatedSST(
 	meta raftpb.SnapshotMetadata,
 	hs raftpb.HardState,
 	sl *logstore.StateLoader,
-) (_ *storage.MemObject, nonempty bool, _ error) {
+) (_ *storage.MemObject, clearedSpan roachpb.Span, _ error) {
 	unreplicatedSSTFile := &storage.MemObject{}
 	unreplicatedSST := storage.MakeIngestionSSTWriter(
 		ctx, st, unreplicatedSSTFile,
@@ -754,21 +872,22 @@ func writeUnreplicatedSST(
 	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(id.RangeID)
 	unreplicatedStart := unreplicatedPrefixKey
 	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
+	clearedSpan = roachpb.Span{Key: unreplicatedStart, EndKey: unreplicatedEnd}
 	if err := unreplicatedSST.ClearRawRange(
 		unreplicatedStart, unreplicatedEnd, true /* pointKeys */, false, /* rangeKeys */
 	); err != nil {
-		return nil, false, errors.Wrapf(err, "error clearing range of unreplicated SST writer")
+		return nil, roachpb.Span{}, errors.Wrapf(err, "error clearing range of unreplicated SST writer")
 	}
 
 	// Update HardState.
 	if err := sl.SetHardState(ctx, &unreplicatedSST, hs); err != nil {
-		return nil, false, errors.Wrapf(err, "unable to write HardState to unreplicated SST writer")
+		return nil, roachpb.Span{}, errors.Wrapf(err, "unable to write HardState to unreplicated SST writer")
 	}
 	// We've cleared all the raft state above, so we are forced to write the
 	// RaftReplicaID again here.
 	if err := sl.SetRaftReplicaID(
 		ctx, &unreplicatedSST, id.ReplicaID); err != nil {
-		return nil, false, errors.Wrapf(err, "unable to write RaftReplicaID to unreplicated SST writer")
+		return nil, roachpb.Span{}, errors.Wrapf(err, "unable to write RaftReplicaID to unreplicated SST writer")
 	}
 
 	if err := sl.SetRaftTruncatedState(
@@ -778,13 +897,13 @@ func writeUnreplicatedSST(
 			Term:  kvpb.RaftTerm(meta.Term),
 		},
 	); err != nil {
-		return nil, false, errors.Wrapf(err, "unable to write TruncatedState to unreplicated SST writer")
+		return nil, roachpb.Span{}, errors.Wrapf(err, "unable to write TruncatedState to unreplicated SST writer")
 	}
 
 	if err := unreplicatedSST.Finish(); err != nil {
-		return nil, false, err
+		return nil, roachpb.Span{}, err
 	}
-	return unreplicatedSSTFile, unreplicatedSST.DataSize > 0, nil
+	return unreplicatedSSTFile, clearedSpan, nil
 }
 
 // clearSubsumedReplicaDiskData clears the on disk data of the subsumed
@@ -802,7 +921,7 @@ func clearSubsumedReplicaDiskData(
 	desc *roachpb.RangeDescriptor,
 	subsumedDescs []*roachpb.RangeDescriptor,
 	subsumedNextReplicaID roachpb.ReplicaID,
-) error {
+) (clearedSpans []roachpb.Span, _ error) {
 	// NB: we don't clear RangeID local key spans here. That happens
 	// via the call to preDestroyRaftMuLocked.
 	getKeySpans := func(d *roachpb.RangeDescriptor) []roachpb.Span {
@@ -827,18 +946,23 @@ func clearSubsumedReplicaDiskData(
 			ClearUnreplicatedByRangeID: true,
 			MustUseClearRange:          true,
 		}
+		subsumedClearedSpans := rditer.Select(subDesc.RangeID, rditer.SelectOpts{
+			ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
+			UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
+		})
+		clearedSpans = append(clearedSpans, subsumedClearedSpans...)
 		if err := kvstorage.DestroyReplica(ctx, subDesc.RangeID, reader, &subsumedReplSST, subsumedNextReplicaID, opts); err != nil {
 			subsumedReplSST.Close()
-			return err
+			return nil, err
 		}
 		if err := subsumedReplSST.Finish(); err != nil {
-			return err
+			return nil, err
 		}
 		if subsumedReplSST.DataSize > 0 {
 			// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
 			// buffering in a MemObject first.
 			if err := writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
-				return err
+				return nil, err
 			}
 		}
 
@@ -876,6 +1000,7 @@ func clearSubsumedReplicaDiskData(
 			)
 			defer subsumedReplSST.Close()
 			if err := storage.ClearRangeWithHeuristic(
+				ctx,
 				reader,
 				&subsumedReplSST,
 				keySpans[i].EndKey,
@@ -884,16 +1009,18 @@ func clearSubsumedReplicaDiskData(
 				kvstorage.ClearRangeThresholdRangeKeys,
 			); err != nil {
 				subsumedReplSST.Close()
-				return err
+				return nil, err
 			}
+			clearedSpans = append(clearedSpans,
+				roachpb.Span{Key: keySpans[i].EndKey, EndKey: totalKeySpans[i].EndKey})
 			if err := subsumedReplSST.Finish(); err != nil {
-				return err
+				return nil, err
 			}
 			if subsumedReplSST.DataSize > 0 {
 				// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
 				// buffering in a MemObject first.
 				if err := writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
-					return err
+					return nil, err
 				}
 			}
 		}
@@ -908,7 +1035,7 @@ func clearSubsumedReplicaDiskData(
 				keySpans[i], totalKeySpans[i])
 		}
 	}
-	return nil
+	return clearedSpans, nil
 }
 
 // clearSubsumedReplicaInMemoryData clears the in-memory data of the subsumed

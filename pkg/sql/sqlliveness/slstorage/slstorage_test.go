@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
@@ -55,8 +54,9 @@ func TestStorage(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 
@@ -69,7 +69,7 @@ func TestStorage(t *testing.T) {
 		settings := cluster.MakeTestingClusterSettings()
 		stopper := stop.NewStopper(stop.WithTracer(s.TracerI().(*tracing.Tracer)))
 		var ambientCtx log.AmbientContext
-		storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+		storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, s.Codec(), settings,
 			s.SettingsWatcher().(*settingswatcher.SettingsWatcher), table, timeSource.NewTimer)
 		return clock, timeSource, settings, stopper, storage
 	}
@@ -314,8 +314,9 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 
@@ -328,7 +329,7 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
 	var ambientCtx log.AmbientContext
-	storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+	storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, s.Codec(), settings,
 		s.SettingsWatcher().(*settingswatcher.SettingsWatcher), table, timeSource.NewTimer)
 	storage.Start(ctx)
 	reader := storage.BlockingReader()
@@ -462,7 +463,7 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 	type filterFunc = func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error
 	var requestFilter atomic.Value
 	requestFilter.Store(filterFunc(nil))
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
@@ -474,7 +475,8 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 
@@ -487,13 +489,13 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
 	var ambientCtx log.AmbientContext
-	storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+	storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, s.Codec(), settings,
 		s.SettingsWatcher().(*settingswatcher.SettingsWatcher), table, timeSource.NewTimer)
 	storage.Start(ctx)
 
 	// Synchronize reading from the store with the blocked channel by detecting
 	// a Get to the table.
-	prefix := keys.SystemSQLCodec.TablePrefix(uint32(table.GetID()))
+	prefix := s.Codec().TablePrefix(uint32(table.GetID()))
 	var blockChannel atomic.Value
 	var blocked int64
 	resetBlockedChannel := func() { blockChannel.Store(make(chan struct{})) }
@@ -655,7 +657,7 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 	type filterFunc = func(context.Context, *kvpb.BatchRequest, *kvpb.BatchResponse) *kvpb.Error
 	var respFilter atomic.Value
 	respFilter.Store(filterFunc(nil))
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(
@@ -669,7 +671,8 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Set up a fake storage implementation using a separate table.
@@ -677,7 +680,7 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 
 	storage := slstorage.NewTestingStorage(
 		s.DB().AmbientContext,
-		s.Stopper(), s.Clock(), kvDB, keys.SystemSQLCodec, s.ClusterSettings(),
+		s.AppStopper(), s.Clock(), kvDB, s.Codec(), s.ClusterSettings(),
 		s.SettingsWatcher().(*settingswatcher.SettingsWatcher), table, timeutil.DefaultTimeSource{}.NewTimer,
 	)
 
@@ -693,7 +696,7 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 	) *kvpb.Error {
 		if get, ok := request.GetArg(kvpb.Get); !ok || !bytes.HasPrefix(
 			get.(*kvpb.GetRequest).Key,
-			keys.SystemSQLCodec.TablePrefix(uint32(table.GetID())),
+			s.Codec().TablePrefix(uint32(table.GetID())),
 		) {
 			return nil
 		}
@@ -733,7 +736,7 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 }
 
 func newSqllivenessTable(
-	t *testing.T, db *sqlutils.SQLRunner, s serverutils.TestServerInterface,
+	t *testing.T, db *sqlutils.SQLRunner, s serverutils.ApplicationLayerInterface,
 ) (tableID catalog.TableDescriptor) {
 	t.Helper()
 	db.Exec(t, fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS "%s"`, t.Name()))

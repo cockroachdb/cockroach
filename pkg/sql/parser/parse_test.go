@@ -11,17 +11,14 @@
 package parser_test
 
 import (
-	"bytes"
 	"fmt"
 	"go/constant"
 	"reflect"
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,8 +34,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var issueLinkRE = regexp.MustCompile("https://go.crdb.dev/issue-v/([0-9]+)/.*")
-
 // TestParseDataDriven verifies that we can parse the supplied SQL and regenerate the SQL
 // string from the syntax tree.
 func TestParseDatadriven(t *testing.T) {
@@ -46,67 +41,10 @@ func TestParseDatadriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "parse":
-				// Check parse.
-				stmts, err := parser.Parse(d.Input)
-				if err != nil {
-					d.Fatalf(t, "unexpected parse error: %v", err)
-				}
-
-				// Check pretty-print roundtrip via the sqlfmt logic.
-				sqlutils.VerifyStatementPrettyRoundtrip(t, d.Input)
-
-				ref := stmts.String()
-				note := ""
-				if ref != d.Input {
-					note = " -- normalized!"
-				}
-
-				// Check roundtrip and formatting with flags.
-				var buf bytes.Buffer
-				fmt.Fprintf(&buf, "%s%s\n", ref, note)
-				fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtAlwaysGroupExprs), "-- fully parenthesized")
-				constantsHidden := stmts.StringWithFlags(tree.FmtHideConstants)
-				fmt.Fprintln(&buf, constantsHidden, "-- literals removed")
-
-				// As of this writing, the SQL statement stats proceed as follows:
-				// first the literals are removed from statement to form a stat key,
-				// then the stat key is re-parsed, to undergo the anonymization stage.
-				// We also want to check the re-parsing is fine.
-				reparsedStmts, err := parser.Parse(constantsHidden)
-				if err != nil {
-					d.Fatalf(t, "unexpected error when reparsing without literals: %+v", err)
-				} else {
-					reparsedStmtsS := reparsedStmts.String()
-					if reparsedStmtsS != constantsHidden {
-						d.Fatalf(t,
-							"mismatched AST when reparsing without literals:\noriginal: %s\nexpected: %s\nactual:   %s",
-							d.Input, constantsHidden, reparsedStmtsS,
-						)
-					}
-				}
-
-				fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtAnonymize), "-- identifiers removed")
-				if strings.Contains(ref, tree.PasswordSubstitution) {
-					fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtShowPasswords), "-- passwords exposed")
-				}
-
-				return buf.String()
-
+				return sqlutils.VerifyParseFormat(t, d.Input, false /* plpgsql */)
 			case "error":
 				_, err := parser.Parse(d.Input)
-				if err == nil {
-					return ""
-				}
-				pgerr := pgerror.Flatten(err)
-				msg := pgerr.Message
-				if pgerr.Detail != "" {
-					msg += "\nDETAIL: " + pgerr.Detail
-				}
-				if pgerr.Hint != "" {
-					msg += "\nHINT: " + pgerr.Hint
-				}
-				msg = issueLinkRE.ReplaceAllString(msg, "https://go.crdb.dev/issue-v/$1/")
-				return msg
+				return sqlutils.VerifyParseError(err)
 			}
 			d.Fatalf(t, "unsupported command: %s", d.Cmd)
 			return ""
@@ -424,9 +362,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`ALTER AGGREGATE a`, 74775, `alter aggregate`, ``},
 
-		{`CALL foo`, 17511, `call procedure`, ``},
-		{`CREATE PROCEDURE a`, 17511, `create procedure`, ``},
-
 		{`CREATE AGGREGATE a`, 74775, `create aggregate`, ``},
 		{`CREATE CAST a`, 0, `create cast`, ``},
 		{`CREATE CONSTRAINT TRIGGER a`, 28296, `create constraint`, ``},
@@ -558,7 +493,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b MACADDR8)`, 45813, `macaddr8`, ``},
 		{`CREATE TABLE a(b MONEY)`, 41578, `money`, ``},
 		{`CREATE TABLE a(b PATH)`, 21286, `path`, ``},
-		{`CREATE TABLE a(b PG_LSN)`, 0, `pg_lsn`, ``},
 		{`CREATE TABLE a(b POINT)`, 21286, `point`, ``},
 		{`CREATE TABLE a(b POLYGON)`, 21286, `polygon`, ``},
 		{`CREATE TABLE a(b TXID_SNAPSHOT)`, 0, `txid_snapshot`, ``},
@@ -583,6 +517,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
 
 		{`SELECT 1 OPERATOR(public.+) 2`, 65017, ``, ``},
+
+		{`SELECT percentile_disc ( 0.50 ) WITHIN GROUP ( ORDER BY PRIMARY KEY tbl ) FROM tbl;`, 109847, `order by index`, ``},
+		{`SELECT percentile_disc ( 0.50 ) WITHIN GROUP ( ORDER BY INDEX_AFTER_ORDER_BY_BEFORE_AT INT . LIKE @ FAMILY );`, 109847, `order by index`, ``},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
@@ -737,7 +674,7 @@ func BenchmarkParse(b *testing.B) {
 		},
 		{
 			"tpcc-delivery",
-			`SELECT no_o_id FROM new_order WHERE no_w_id = $1 AND no_d_id = $2 ORDER BY no_o_id ASC LIMIT 1`,
+			`SELECT no_o_id FROM new_order WHERE no_w_id = $1 AND no_d_id = $2 ORDER BY no_o_id ASC LIMIT 1 FOR UPDATE`,
 		},
 		{
 			"account",

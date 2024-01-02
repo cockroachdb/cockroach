@@ -1,9 +1,9 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "regions",
     srcs = [
+        "cached_db_regions.go",
         "db_regions.go",
         "region_provider.go",
     ],
@@ -15,6 +15,7 @@ go_library(
         "//pkg/server/serverpb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/lease",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -22,7 +23,6 @@ go_library(
 go_test(
     name = "regions_test",
     srcs = ["region_provider_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":regions",
         "//pkg/keys",
@@ -41,5 +41,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -14,8 +14,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,10 +34,8 @@ func TestShowCreateRedactableValues(t *testing.T) {
 	rng, seed := randutil.NewTestRand()
 	t.Log("seed:", seed)
 
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	defer sqlDB.Close()
 
 	// To check for PII leaks, we inject a single unlikely string into some of the
 	// query constants produced by SQLSmith, and then search the redacted SHOW
@@ -78,7 +76,7 @@ func TestShowCreateRedactableValues(t *testing.T) {
 
 	// Perform a few random initial CREATE TABLEs and check for PII leaks.
 	setup := sqlsmith.RandTablesPrefixStringConsts(rng, pii)
-	setup = append(setup, "SET statement_timeout = '5s';")
+	setup = append(setup, "SET statement_timeout = '30s';")
 	for _, stmt := range setup {
 		t.Log(stmt)
 		if _, err := sqlDB.ExecContext(ctx, stmt); err != nil {

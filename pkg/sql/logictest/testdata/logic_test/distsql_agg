@@ -26,7 +26,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE d
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  …/1/1         {1}       1
+<before:/Table/65>  …/1/1         {1}       1
 …/1/1               …/1/2         {2}       2
 …/1/2               …/1/3         {3}       3
 …/1/3               …/1/4         {4}       4
@@ -402,7 +402,7 @@ SELECT sum(a+b), sum(a+b) FILTER (WHERE a < d), sum_int(a+b) FILTER (WHERE a < d
 650  650   650  65
 650  650   650  65
 
-query IIRT
+query IIRT nosort
 VALUES (1, 2, 1.0, 'string1'), (4, 3, 2.3, 'string2')
 ----
 1 2 1.0 string1
@@ -718,3 +718,80 @@ SELECT count(*), sum_int(length(blob)) FROM table74736 WHERE (k >= 1 AND k <= 90
 
 statement ok
 SET DISTSQL = ON
+
+# Regression test for skipping the evaluation of the render expression that
+# results in an error (#108901).
+statement ok
+CREATE TABLE t108901 AS SELECT g::FLOAT8 AS _float8 FROM generate_series(1, 5) AS g;
+ALTER TABLE t108901 SPLIT AT VALUES (1), (2), (3);
+ALTER TABLE t108901 RELOCATE VOTERS VALUES (ARRAY[1], 1), (ARRAY[2], 2), (ARRAY[3], 3);
+SET testing_optimizer_random_seed = 1613845022891698972;
+SET testing_optimizer_disable_rule_probability = 0.500000;
+
+statement error integer out of range
+SELECT 1 FROM t108901 WHERE
+  EXISTS(
+    SELECT regr_slope(1.2345678901234562e+27:::FLOAT8::INT8,0.968018273253753:::FLOAT8::DECIMAL) OVER ()::FLOAT8
+    FROM t108901
+  );
+
+statement ok
+RESET testing_optimizer_random_seed;
+RESET testing_optimizer_disable_rule_probability;
+
+subtest 109334_regr
+
+# Regression test for #109334
+
+statement ok
+CREATE TABLE IF NOT EXISTS t109334 AS
+        SELECT
+                1.7976931348623157e+308::FLOAT8 AS _float8,
+                1::FLOAT8 AS grouping_col
+        FROM
+                generate_series(1, 1) AS g;
+
+statement ok
+ALTER TABLE t109334 SPLIT AT VALUES (1), (10);
+
+statement ok
+ALTER TABLE t109334 SCATTER;
+
+# Check that var_pop applied to a single value never overflows.
+query FFI
+SELECT
+        _float8,
+        var_pop(_float8::FLOAT8)::FLOAT8,
+        count(*)
+FROM
+        t109334
+GROUP BY
+        _float8;
+----
+1.7976931348623157e+308  0  1
+
+statement ok
+INSERT INTO t109334 SELECT g*1.23456789, 2::FLOAT8 FROM generate_series(1, 50) AS g;
+
+statement ok
+ALTER TABLE t109334 SPLIT AT VALUES (1), (10), (100), (100000), (1000000), (10000000000), (100000000000);
+
+statement ok
+ALTER TABLE t109334 SCATTER;
+
+# Check that applying operations in the calculation of single pass squared
+# difference in a different order results in the same value as before,
+# though this may not be the case for all data sets. Slight precision
+# differences are expected in floating point calculations due to different
+# orders of evaluation.
+query FI rowsort
+SELECT
+        var_pop(_float8::FLOAT8)::FLOAT8,
+        count(*)
+FROM
+        t109334
+GROUP BY
+        grouping_col;
+----
+317.40587747271735  50
+0                   1

@@ -46,19 +46,22 @@ func TestSetupLogging(t *testing.T) {
 		`exit-on-error: false, ` +
 		`buffering: {max-staleness: 5s, ` +
 		`flush-trigger-size: 1.0MiB, ` +
-		`max-buffer-size: 50MiB}}`
+		`max-buffer-size: 50MiB, ` +
+		`format: newline}}`
 	const defaultHTTPConfig = `http-defaults: {` +
 		`method: POST, ` +
 		`unsafe-tls: false, ` +
-		`timeout: 0s, ` +
+		`timeout: 2s, ` +
 		`disable-keep-alives: false, ` +
+		`compression: gzip, ` +
 		`filter: INFO, ` +
 		`format: json-compact, ` +
 		`redactable: true, ` +
 		`exit-on-error: false, ` +
 		`buffering: {max-staleness: 5s, ` +
 		`flush-trigger-size: 1.0MiB, ` +
-		`max-buffer-size: 50MiB}}`
+		`max-buffer-size: 50MiB, ` +
+		`format: newline}}`
 	stdFileDefaultsRe := regexp.MustCompile(
 		`file-defaults: \{` +
 			`dir: (?P<path>[^,]+), ` +

@@ -1,0 +1,9 @@
+/* setup */
+
+/* test */
+CREATE SCHEMA sc;
+DROP SCHEMA sc;
+EXPLAIN (DDL, SHAPE) CREATE SCHEMA sc;
+----
+Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc›; following CREATE SCHEMA ‹defaultdb›.‹sc›; DROP SCHEMA ‹""›.‹sc›;
+ └── execute 1 system table mutations transaction

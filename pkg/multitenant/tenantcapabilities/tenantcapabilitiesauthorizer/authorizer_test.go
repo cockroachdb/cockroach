@@ -171,7 +171,7 @@ func TestAllBatchCapsAreBoolean(t *testing.T) {
 			// One of the special values.
 			continue
 		}
-		caps := tenantcapabilities.DefaultCapabilities()
+		caps := &tenantcapabilitiespb.TenantCapabilities{}
 		var v *tenantcapabilities.BoolValue
 		require.Implements(t, v, tenantcapabilities.MustGetValueByID(caps, capID))
 	}

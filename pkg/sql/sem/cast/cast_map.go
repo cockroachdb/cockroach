@@ -65,6 +65,13 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_varchar: {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_text:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 	},
+	oid.T_pg_lsn: {
+		oid.T_bpchar:  {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_char:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_name:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_varchar: {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_text:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+	},
 	oid.T_bpchar: {
 		oid.T_bpchar:  {MaxContext: ContextImplicit, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
 		oid.T_char:    {MaxContext: ContextAssignment, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
@@ -75,6 +82,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_bit:      {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_bool:     {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oidext.T_box2d: {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_pg_lsn:   {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_bytea:    {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_date: {
 			MaxContext:     ContextExplicit,
@@ -100,6 +108,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_numeric:      {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_oid:          {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_record:       {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
+		oid.T_refcursor:    {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_regclass:     {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
 		oid.T_regnamespace: {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
 		oid.T_regproc:      {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
@@ -160,6 +169,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_bit:      {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_bool:     {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oidext.T_box2d: {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_pg_lsn:   {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_bytea:    {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_date: {
 			MaxContext:     ContextExplicit,
@@ -184,6 +194,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_numeric:      {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_oid:          {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_record:       {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
+		oid.T_refcursor:    {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_regclass:     {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
 		oid.T_regnamespace: {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
 		oid.T_regproc:      {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
@@ -478,6 +489,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_bit:      {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_bool:     {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oidext.T_box2d: {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_pg_lsn:   {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_bytea:    {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_date: {
 			MaxContext:     ContextExplicit,
@@ -503,6 +515,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_numeric:      {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_oid:          {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_record:       {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
+		oid.T_refcursor:    {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_regclass:     {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
 		oid.T_regnamespace: {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
 		oid.T_regproc:      {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
@@ -580,6 +593,17 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_name:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
 		oid.T_text:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
 		oid.T_varchar: {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
+	},
+	oid.T_refcursor: {
+		// The REFCURSOR data type has no casts in the pg_cast table; all of its
+		// casts are the I/O casts for string types.
+		//
+		// Automatic I/O conversions to string types.
+		oid.T_bpchar:  {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_char:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_name:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Leakproof},
+		oid.T_text:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_varchar: {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 	},
 	oid.T_regclass: {
 		// TODO(mgartner): Casts to INT2 should not be allowed.
@@ -712,6 +736,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_bit:      {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_bool:     {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oidext.T_box2d: {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_pg_lsn:   {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_bytea:    {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_date: {
 			MaxContext:     ContextExplicit,
@@ -736,6 +761,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_numeric:      {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_oid:          {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_record:       {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
+		oid.T_refcursor:    {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_regnamespace: {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
 		oid.T_regproc:      {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
 		oid.T_regprocedure: {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
@@ -943,6 +969,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_bit:      {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_bool:     {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oidext.T_box2d: {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_pg_lsn:   {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_bytea:    {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_date: {
 			MaxContext:     ContextExplicit,
@@ -968,6 +995,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_numeric:      {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_oid:          {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_record:       {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
+		oid.T_refcursor:    {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_regnamespace: {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
 		oid.T_regproc:      {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},
 		oid.T_regprocedure: {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Stable},

@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -10,12 +9,12 @@ go_library(
         "data.go",
         "index_usage_stats.go",
         "internal.go",
+        "leaseinfo.go",
         "merge_spans.go",
         "metadata.go",
         "metadata_replicas.go",
         "span_config.go",
         "span_group.go",
-        "span_stats.go",
         "tenant.go",
         "version.go",
     ],
@@ -29,10 +28,11 @@ go_library(
         "//pkg/kv/kvserver/allocator/load",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
-        "//pkg/settings",
         "//pkg/storage/enginepb",
         "//pkg/util",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/bitarray",
+        "//pkg/util/buildutil",
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
@@ -63,14 +63,13 @@ go_test(
         "metadata_replicas_test.go",
         "metadata_test.go",
         "span_config_conformance_report_test.go",
+        "span_config_test.go",
         "span_group_test.go",
         "string_test.go",
         "tenant_test.go",
         "version_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":roachpb"],
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/cli/exit",
         "//pkg/keys",
@@ -154,5 +153,3 @@ disallowed_imports_test(
     "roachpb",
     disallow_cdeps = True,
 )
-
-get_x_data(name = "get_x_data")

@@ -92,15 +92,20 @@ func EnableDeprecatedBehavior(
 	return useDeprecatedBehavior
 }
 
-// ShowRangesDeprecatedBehaviorSetting is the setting that controls the behavior. Exported for use in tests.
+// ShowRangesDeprecatedBehaviorSettingName is the name of the cluster
+// setting that controls the behavior.
+const ShowRangesDeprecatedBehaviorSettingName = "sql.show_ranges_deprecated_behavior.enabled"
+
+// ShowRangesDeprecatedBehaviorSetting is the setting that controls
+// the behavior. Exported for use in tests.
 var ShowRangesDeprecatedBehaviorSetting = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	`sql.show_ranges_deprecated_behavior.enabled`,
+	settings.ApplicationLevel,
+	ShowRangesDeprecatedBehaviorSettingName,
 	"if set, SHOW RANGES and crdb_internal.ranges{_no_leases} behave with deprecated pre-v23.1 semantics."+
 		" NB: the new SHOW RANGES interface has richer WITH options "+
 		"than pre-v23.1 SHOW RANGES.",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 const envVarName = "COCKROACH_FORCE_DEPRECATED_SHOW_RANGE_BEHAVIOR"
 

@@ -16,7 +16,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"net/url"
 	"regexp"
 	"testing"
 
@@ -32,7 +31,7 @@ func TestRouteToNode(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 2, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	routesToTest := []struct {
@@ -154,11 +153,9 @@ func TestRouteToNode(t *testing.T) {
 				client.Jar, err = cookiejar.New(&cookiejar.Options{})
 				require.NoError(t, err)
 			}
-			adminURL, err := url.Parse(s.AdminURL())
-			require.NoError(t, err)
-			client.Jar.SetCookies(adminURL, []*http.Cookie{{Name: RemoteNodeID, Value: rt.nodeIDRequestedInCookie}})
+			client.Jar.SetCookies(s.AdminURL().URL, []*http.Cookie{{Name: RemoteNodeID, Value: rt.nodeIDRequestedInCookie}})
 
-			requestPath := s.AdminURL() + rt.path
+			requestPath := s.AdminURL().WithPath(rt.path).String()
 			if rt.nodeIDRequestedInQueryParam != "" {
 				requestPath += fmt.Sprintf("?%s=%s", RemoteNodeID, rt.nodeIDRequestedInQueryParam)
 			}
@@ -191,7 +188,7 @@ func TestRouteToNode(t *testing.T) {
 		client, err := s.GetUnauthenticatedHTTPClient()
 		require.NoError(t, err)
 
-		resp, err := client.Get(s.AdminURL() + fmt.Sprintf("/_status/vars?%s=%s", RemoteNodeID, "2"))
+		resp, err := client.Get(s.AdminURL().WithPath(fmt.Sprintf("/_status/vars?%s=%s", RemoteNodeID, "2")).String())
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		// We expect some error here. It's difficult to know what

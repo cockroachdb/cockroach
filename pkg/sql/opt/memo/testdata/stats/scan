@@ -2643,7 +2643,7 @@ project
       │    │    └── crdb_internal_a_shard_8:2 IN (0, 1, 2, 3, 4, 5, 6, 7) [type=bool, outer=(2), constraints=(/2: [/0 - /0] [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5] [/6 - /6] [/7 - /7]; tight)]
       │    ├── computed column expressions
       │    │    └── crdb_internal_a_shard_8:2
-      │    │         └── mod(fnv32(crdb_internal.datums_to_bytes(i:1)), 8) [type=int]
+      │    │         └── mod(fnv32(crdb_internal.datums_to_bytes(i:1)), 8)::INT4 [type=int4]
       │    ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(2)=8, null(2)=0]
       │    │   histogram(2)=  0 125 0 125 0 125 0 125 0 125 0 125 0 125 0 125
       │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7

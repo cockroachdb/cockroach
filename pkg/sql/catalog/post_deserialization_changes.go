@@ -31,6 +31,11 @@ func (c *PostDeserializationChanges) Add(change PostDeserializationChangeType) {
 	c.s.Add(int(change))
 }
 
+// Len returns length of the set of changes.
+func (c PostDeserializationChanges) Len() int {
+	return c.s.Len()
+}
+
 // ForEach calls f for every change in the set of changes.
 func (c PostDeserializationChanges) ForEach(f func(change PostDeserializationChangeType)) {
 	c.s.ForEach(func(i int) { f(PostDeserializationChangeType(i)) })
@@ -109,9 +114,26 @@ const (
 
 	// UpgradedDeclarativeSchemaChangerState indicates the declarative schema changer
 	// state was modified.
-	UpgradedDeclarativeSchemaChangerState = 15
+	UpgradedDeclarativeSchemaChangerState
 
 	// SetIndexInvisibility indicates that the invisibility of at least one index
 	// descriptor was updated to a non-zero value.
 	SetIndexInvisibility
+
+	// StrippedDanglingBackReferences indicates that at least one dangling
+	// back-reference was removed from the descriptor.
+	StrippedDanglingBackReferences
+
+	// StrippedDanglingSelfBackReferences indicates that at least one dangling
+	// back-reference to something within the descriptor itself was removed
+	// from the descriptor.
+	StrippedDanglingSelfBackReferences
+
+	// FixSecondaryIndexEncodingType indicates that a secondary index had its
+	// encoding type fixed, so it is not incorrectly marked as a primary index.
+	FixSecondaryIndexEncodingType
+
+	// GrantExecuteOnFunctionToPublicRole indicates that EXECUTE was granted
+	// to the public role for a function.
+	GrantExecuteOnFunctionToPublicRole
 )

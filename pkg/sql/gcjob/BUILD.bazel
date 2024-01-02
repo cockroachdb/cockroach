@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -39,9 +38,10 @@ go_library(
         "//pkg/sql/isql",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/regions",
         "//pkg/sql/sqlerrors",
-        "//pkg/storage",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/timeutil",
@@ -58,7 +58,6 @@ go_test(
         "main_test.go",
         "table_garbage_collection_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":gcjob"],
     deps = [
         "//pkg/base",
@@ -69,6 +68,7 @@ go_test(
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -77,6 +77,8 @@ go_test(
         "//pkg/sql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
@@ -89,5 +91,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

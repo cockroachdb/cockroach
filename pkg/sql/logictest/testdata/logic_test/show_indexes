@@ -11,7 +11,7 @@ CREATE TABLE t1 (
 )
 
 query TTBITTTBBBF colnames
-SHOW INDEXES from t1
+SELECT * FROM [SHOW INDEXES from t1] ORDER BY index_name, seq_in_index
 ----
 table_name  index_name  non_unique  seq_in_index  column_name             definition  direction  storing  implicit  visible  visibility
 t1          c_idx       true        1             c                       c           ASC        false    false     true     1
@@ -43,7 +43,7 @@ CREATE TABLE t2 (
   INDEX d_idx (d ASC)
 )
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES from t2
 ----
 table_name  index_name   non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility

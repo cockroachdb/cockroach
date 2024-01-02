@@ -114,7 +114,7 @@ func TestAlterTenantPauseResume(t *testing.T) {
 	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
 	require.Equal(t, cutoverTime, cutoverOutput.GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	cleanupTenant := c.CreateDestTenantSQL(ctx)
+	cleanupTenant := c.StartDestTenant(ctx, nil, 0)
 	defer func() {
 		require.NoError(t, cleanupTenant())
 	}()
@@ -133,13 +133,12 @@ func TestAlterTenantPauseResume(t *testing.T) {
 
 	t.Run("pause-resume-in-readonly-txn", func(t *testing.T) {
 		c.DestSysSQL.Exec(t, `set default_transaction_read_only = on;`)
-		c.DestSysSQL.ExpectErr(t, "cannot execute ALTER TENANT REPLICATION in a read-only transaction", `ALTER TENANT $1 PAUSE REPLICATION`, "foo")
-		c.DestSysSQL.ExpectErr(t, "cannot execute ALTER TENANT REPLICATION in a read-only transaction", `ALTER TENANT $1 RESUME REPLICATION`, "foo")
+		c.DestSysSQL.ExpectErr(t, "cannot execute ALTER VIRTUAL CLUSTER REPLICATION in a read-only transaction", `ALTER TENANT $1 PAUSE REPLICATION`, "foo")
+		c.DestSysSQL.ExpectErr(t, "cannot execute ALTER VIRTUAL CLUSTER REPLICATION in a read-only transaction", `ALTER TENANT $1 RESUME REPLICATION`, "foo")
 		c.DestSysSQL.Exec(t, `set default_transaction_read_only = off;`)
 	})
 
 	t.Run("pause-resume-as-non-system-tenant", func(t *testing.T) {
-		c.DestTenantSQL.Exec(t, `SET CLUSTER SETTING cross_cluster_replication.enabled = true`)
 		c.DestTenantSQL.ExpectErr(t, "only the system tenant can alter tenant", `ALTER TENANT $1 PAUSE REPLICATION`, "foo")
 		c.DestTenantSQL.ExpectErr(t, "only the system tenant can alter tenant", `ALTER TENANT $1 RESUME REPLICATION`, "foo")
 	})
@@ -288,6 +287,10 @@ func (br *blockingResumer) OnFailOrCancel(context.Context, interface{}, error) e
 	panic("unimplemented")
 }
 
+func (br *blockingResumer) CollectProfile(context.Context, interface{}) error {
+	panic("unimplemented")
+}
+
 // TestTenantStatusWithFutureCutoverTime verifies we go through the tenants
 // states, including the state that the tenant is waiting for a future cutover.
 func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
@@ -303,7 +306,7 @@ func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
 	waitBeforeCh := make(chan struct{})
 	waitAfterCh := make(chan struct{})
 	registry := c.DestSysServer.JobRegistry().(*jobs.Registry)
-	registry.TestingWrapResumerConstructor(jobspb.TypeStreamIngestion,
+	registry.TestingWrapResumerConstructor(jobspb.TypeReplicationStreamIngestion,
 		func(raw jobs.Resumer) jobs.Resumer {
 			r := blockingResumer{
 				orig:       raw,
@@ -358,11 +361,12 @@ func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
 	// Cutover to a time far in the future, to make sure we see the pending-cutover state.
 	var cutoverTime time.Time
 	c.DestSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
-	cutoverTime.Add(time.Hour * 24)
+	cutoverTime = cutoverTime.Add(time.Hour * 24)
 	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
 		args.DestTenantName, cutoverTime)
 
 	require.Equal(c.T, "replication pending cutover", getTenantStatus())
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`, args.DestTenantName)
 	unblockResumerExit()
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 	require.Equal(c.T, "ready", getTenantStatus())
@@ -390,7 +394,7 @@ func TestTenantStatusWithLatestCutoverTime(t *testing.T) {
 	waitBeforeCh := make(chan struct{})
 	waitAfterCh := make(chan struct{})
 	registry := c.DestSysServer.JobRegistry().(*jobs.Registry)
-	registry.TestingWrapResumerConstructor(jobspb.TypeStreamIngestion,
+	registry.TestingWrapResumerConstructor(jobspb.TypeReplicationStreamIngestion,
 		func(raw jobs.Resumer) jobs.Resumer {
 			r := blockingResumer{
 				orig:       raw,

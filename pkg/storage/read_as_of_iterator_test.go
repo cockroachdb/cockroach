@@ -35,7 +35,8 @@ func TestReadAsOfIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pebble, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
+	pebble, err := Open(context.Background(), InMemory(),
+		cluster.MakeTestingClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
 	require.NoError(t, err)
 	defer pebble.Close()
 
@@ -85,7 +86,8 @@ func TestReadAsOfIterator(t *testing.T) {
 			batch := pebble.NewBatch()
 			defer batch.Close()
 			populateBatch(t, batch, test.input)
-			iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+			iter, err := batch.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+			require.NoError(t, err)
 			defer iter.Close()
 
 			subtests := []iterSubtest{
@@ -109,7 +111,8 @@ func TestReadAsOfIteratorSeek(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pebble, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
+	pebble, err := Open(context.Background(), InMemory(),
+		cluster.MakeTestingClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
 	require.NoError(t, err)
 	defer pebble.Close()
 
@@ -157,7 +160,8 @@ func TestReadAsOfIteratorSeek(t *testing.T) {
 			batch := pebble.NewBatch()
 			defer batch.Close()
 			populateBatch(t, batch, test.input)
-			iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+			iter, err := batch.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+			require.NoError(t, err)
 			defer iter.Close()
 
 			asOf := hlc.Timestamp{}

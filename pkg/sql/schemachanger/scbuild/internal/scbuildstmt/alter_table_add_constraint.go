@@ -77,7 +77,7 @@ func alterTableAddPrimaryKey(
 
 	d := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
 	// Ensure that there is a default rowid column.
-	oldPrimaryIndex := mustRetrievePrimaryIndexElement(b, tbl.TableID)
+	oldPrimaryIndex := mustRetrieveCurrentPrimaryIndexElement(b, tbl.TableID)
 	if getPrimaryIndexDefaultRowIDColumn(
 		b, tbl.TableID, oldPrimaryIndex.IndexID,
 	) == nil {
@@ -176,7 +176,7 @@ func alterTableAddCheck(
 // contain backfilled values for the new column and hence would mistakenly
 // allow the validation query to succeed).
 func getIndexIDForValidationForConstraint(b BuildCtx, tableID catid.DescID) (ret catid.IndexID) {
-	b.QueryByID(tableID).ForEachElementStatus(func(
+	b.QueryByID(tableID).ForEach(func(
 		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 	) {
 		if pie, ok := e.(*scpb.PrimaryIndex); ok &&
@@ -203,7 +203,7 @@ func alterTableAddForeignKey(
 	// any of the originColumns has an `ON UPDATE expr`, panic with error.
 	if fkDef.Actions.Update != tree.NoAction && fkDef.Actions.Update != tree.Restrict {
 		for _, colName := range fkDef.FromCols {
-			colID := mustGetColumnIDFromColumnName(b, tbl.TableID, colName)
+			colID := getColumnIDFromColumnName(b, tbl.TableID, colName, true /* required */)
 			colHasOnUpdate := retrieveColumnOnUpdateExpressionElem(b, tbl.TableID, colID) != nil
 			if colHasOnUpdate {
 				panic(pgerror.Newf(
@@ -219,7 +219,7 @@ func alterTableAddForeignKey(
 	// the originColumns is NOT NULL, then panic with error.
 	if fkDef.Actions.Delete == tree.SetNull || fkDef.Actions.Update == tree.SetNull {
 		for i, colName := range fkDef.FromCols {
-			colID := mustGetColumnIDFromColumnName(b, tbl.TableID, colName)
+			colID := getColumnIDFromColumnName(b, tbl.TableID, colName, true /* required */)
 			if isColNotNull(b, tbl.TableID, colID) {
 				panic(pgerror.Newf(pgcode.InvalidForeignKey,
 					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint", fromColsFRNames[i],
@@ -234,7 +234,7 @@ func alterTableAddForeignKey(
 	// with error.
 	if fkDef.Actions.Delete == tree.SetDefault || fkDef.Actions.Update == tree.SetDefault {
 		for i, colName := range fkDef.FromCols {
-			colID := mustGetColumnIDFromColumnName(b, tbl.TableID, colName)
+			colID := getColumnIDFromColumnName(b, tbl.TableID, colName, true /* required */)
 			colHasDefault := retrieveColumnDefaultExpressionElem(b, tbl.TableID, colID) != nil
 			colIsNotNull := isColNotNull(b, tbl.TableID, colID)
 			if !colHasDefault && colIsNotNull {
@@ -251,7 +251,7 @@ func alterTableAddForeignKey(
 	var originColIDs []catid.ColumnID
 	var originColSet catalog.TableColSet
 	for i, colName := range fkDef.FromCols {
-		colID := mustGetColumnIDFromColumnName(b, tbl.TableID, colName)
+		colID := getColumnIDFromColumnName(b, tbl.TableID, colName, true /* required */)
 		ensureColCanBeUsedInOutboundFK(b, tbl.TableID, colID)
 		if originColSet.Contains(colID) {
 			panic(pgerror.Newf(pgcode.InvalidForeignKey,
@@ -303,7 +303,7 @@ func alterTableAddForeignKey(
 		if primaryIndexPartitioningElemInReferencedTable != nil {
 			numImplicitCols = int(primaryIndexPartitioningElemInReferencedTable.NumImplicitColumns)
 		}
-		keyColIDsOfPrimaryIndexInReferencedTable, _, _ := getSortedColumnIDsInIndex(b, referencedTableID, primaryIndexIDInReferencedTable)
+		keyColIDsOfPrimaryIndexInReferencedTable, _, _ := getSortedColumnIDsInIndexByKind(b, referencedTableID, primaryIndexIDInReferencedTable)
 		for i := numImplicitCols; i < len(keyColIDsOfPrimaryIndexInReferencedTable); i++ {
 			fkDef.ToCols = append(
 				fkDef.ToCols,
@@ -317,7 +317,7 @@ func alterTableAddForeignKey(
 	// to the length of originColumns.
 	var referencedColIDs []catid.ColumnID
 	for _, colName := range fkDef.ToCols {
-		colID := mustGetColumnIDFromColumnName(b, referencedTableID, colName)
+		colID := getColumnIDFromColumnName(b, referencedTableID, colName, true /*required */)
 		ensureColCanBeUsedInInboundFK(b, referencedTableID, colID)
 		referencedColIDs = append(referencedColIDs, colID)
 	}
@@ -443,7 +443,7 @@ func alterTableAddUniqueWithoutIndex(
 			"partitioned unique constraints without an index are not supported",
 		))
 	}
-	if d.Invisibility != 0.0 {
+	if d.Invisibility.Value != 0.0 {
 		// Theoretically, this should never happen because this is not supported by
 		// the parser. This is just a safe check.
 		panic(pgerror.Newf(pgcode.FeatureNotSupported,
@@ -456,7 +456,7 @@ func alterTableAddUniqueWithoutIndex(
 	var colIDs []catid.ColumnID
 	var colNames []string
 	for _, col := range d.Columns {
-		colID := getColumnIDFromColumnName(b, tbl.TableID, col.Column)
+		colID := getColumnIDFromColumnName(b, tbl.TableID, col.Column, true /*required*/)
 		if colSet.Contains(colID) {
 			panic(pgerror.Newf(pgcode.DuplicateColumn,
 				"column %q appears twice in unique constraint", col.Column))
@@ -556,7 +556,7 @@ func getFullyResolvedColNames(
 
 // areColsUniqueInTable ensures uniqueness on columns is guaranteed on this table.
 func areColsUniqueInTable(b BuildCtx, tableID catid.DescID, columnIDs []catid.ColumnID) (ret bool) {
-	b.QueryByID(tableID).ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+	b.QueryByID(tableID).ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		if ret {
 			return
 		}
@@ -649,7 +649,7 @@ func getNonDropResultColumns(b BuildCtx, tableID catid.DescID) (ret colinfo.Resu
 func columnLookupFn(
 	b BuildCtx, tableID catid.DescID, columnName tree.Name,
 ) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
-	columnID := getColumnIDFromColumnName(b, tableID, columnName)
+	columnID := getColumnIDFromColumnName(b, tableID, columnName, false /* required */)
 	if columnID == 0 {
 		return false, false, 0, nil
 	}
@@ -860,7 +860,7 @@ func maybeRetrieveIndexPartitioningElem(
 }
 
 func getCurrentPrimaryIndexID(b BuildCtx, tableID catid.DescID) (ret catid.IndexID) {
-	b.QueryByID(tableID).ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+	b.QueryByID(tableID).ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		if pie, ok := e.(*scpb.PrimaryIndex); ok && current == scpb.Status_PUBLIC {
 			ret = pie.IndexID
 		}

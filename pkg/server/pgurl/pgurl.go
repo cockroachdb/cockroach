@@ -304,6 +304,20 @@ func (u *URL) GetAuthnPassword() (authnPwdEnabled bool, hasPassword bool, passwo
 		u.password
 }
 
+// Clone returns a deep copy of a URL.
+func (u *URL) Clone() *URL {
+	if u == nil {
+		return nil
+	}
+
+	u2 := *u
+	u2.extraOptions = make(url.Values, len(u.extraOptions))
+	for k, v := range u.extraOptions {
+		u2.extraOptions[k] = append(u2.extraOptions[k], v...)
+	}
+	return &u2
+}
+
 // AuthnClientCert creates an option to use TLS client cert authn.
 func AuthnClientCert(clientCertPath, clientKeyPath string) AuthnOption {
 	return AuthnOption(func(u *URL) *URL {

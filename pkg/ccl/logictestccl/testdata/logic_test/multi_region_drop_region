@@ -1,7 +1,6 @@
-# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
 
-query TTTTT
+query TTTTT rowsort
 SHOW REGIONS
 ----
 ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}  {}  {}
@@ -39,14 +38,14 @@ DROP TABLE kv
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY ROW
 
-query TTTTT
+query TTTTT rowsort
 SHOW REGIONS
 ----
 ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {mr}  {}    {}
 ca-central-1    {ca-az1,ca-az2,ca-az3}  {mr}  {mr}  {}
 us-east-1       {us-az1,us-az2,us-az3}  {mr}  {}    {}
 
-query TTBBT colnames
+query TTBBT colnames,rowsort
 SHOW REGIONS FROM DATABASE mr
 ----
 database  region          primary  secondary  zones

@@ -37,8 +37,10 @@ func TestGetResumeSpan(t *testing.T) {
 
 	// This has a size of 11 bytes.
 	_, err := Put(ctx, db, CommandArgs{
-		EvalCtx: (&MockEvalCtx{}).EvalContext(),
-		Header:  kvpb.Header{TargetBytes: -1},
+		EvalCtx: (&MockEvalCtx{
+			ClusterSettings: cluster.MakeTestingClusterSettings(),
+		}).EvalContext(),
+		Header: kvpb.Header{TargetBytes: -1},
 		Args: &kvpb.PutRequest{
 			RequestHeader: kvpb.RequestHeader{
 				Key: key,

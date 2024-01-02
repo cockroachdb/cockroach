@@ -14,7 +14,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  <after:/Max>  {1}       1
+<before:/Table/65>  <after:/Max>  {1}       1
 
 statement ok
 ALTER TABLE t SPLIT AT VALUES (1), (10)
@@ -24,7 +24,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  …/1/1         {1}       1
+<before:/Table/65>  …/1/1         {1}       1
 …/1/1               …/1/10        {1}       1
 …/1/10              <after:/Max>  {1}       1
 
@@ -39,7 +39,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  …/1/1         {1}       1
+<before:/Table/65>  …/1/1         {1}       1
 …/1/1               …/1/10        {4}       4
 …/1/10              <after:/Max>  {1}       1
 
@@ -51,7 +51,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  …/1/1         {1}       1
+<before:/Table/65>  …/1/1         {1}       1
 …/1/1               …/1/5/1       {4}       4
 …/1/10              <after:/Max>  {1}       1
 …/1/5/1             …/1/5/2       {4}       4
@@ -72,7 +72,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  …/1/1         {1}       1
+<before:/Table/65>  …/1/1         {1}       1
 …/1/1               …/1/5/1       {3,4}     3
 …/1/10              <after:/Max>  {1}       1
 …/1/5/1             …/1/5/2       {1,2,3}   1
@@ -159,7 +159,7 @@ ALTER INDEX d.c@c_i_idx SPLIT AT VALUES (0)
 
 # Hex encode start_key, end_key so that text is UTF-8 compatible.
 # Non-UTF-8 characters cause git to treat this as a binary file and prevent diff from working.
-query TTTTTI colnames
+query TTTTTI colnames,rowsort
 SELECT encode(start_key, 'hex'), start_pretty, encode(end_key, 'hex'), end_pretty, replicas, crdb_internal.lease_holder(start_key) FROM crdb_internal.ranges_no_leases;
 ----
 encode                  start_pretty             encode                  end_pretty               replicas  crdb_internal.lease_holder
@@ -174,7 +174,8 @@ encode                  start_pretty             encode                  end_pre
 8d                      /Table/5                 8e                      /Table/6                 {1}       1
 8e                      /Table/6                 8f                      /Table/7                 {1}       1
 8f                      /Table/7                 90                      /Table/8                 {1}       1
-90                      /Table/8                 93                      /Table/11                {1}       1
+90                      /Table/8                 91                      /Table/9                 {1}       1
+91                      /Table/9                 93                      /Table/11                {1}       1
 93                      /Table/11                94                      /Table/12                {1}       1
 94                      /Table/12                95                      /Table/13                {1}       1
 95                      /Table/13                96                      /Table/14                {1}       1
@@ -225,7 +226,10 @@ c2                      /Table/58                c3                      /Table/
 c3                      /Table/59                c4                      /Table/60                {1}       1
 c4                      /Table/60                c5                      /Table/61                {1}       1
 c5                      /Table/61                c6                      /Table/62                {1}       1
-c6                      /Table/62                f28989                  /Table/106/1/1           {1}       1
+c6                      /Table/62                c7                      /Table/63                {1}       1
+c7                      /Table/63                c8                      /Table/64                {1}       1
+c8                      /Table/64                c9                      /Table/65                {1}       1
+c9                      /Table/65                f28989                  /Table/106/1/1           {1}       1
 f28989                  /Table/106/1/1           f2898d89                /Table/106/1/5/1         {3,4}     3
 f2898d89                /Table/106/1/5/1         f2898d8a                /Table/106/1/5/2         {1,2,3}   1
 f2898d8a                /Table/106/1/5/2         f2898d8b                /Table/106/1/5/3         {2,3,5}   5
@@ -241,7 +245,7 @@ f67189f67b              /Table/113/1/123         f6718a                  /Table/
 f6718a                  /Table/113/2             f6718a88                /Table/113/2/0           {1}       1
 f6718a88                /Table/113/2/0           ffff                    /Max                     {1}       1
 
-query TTTTTI colnames
+query TTTTTI colnames,rowsort
 SELECT encode(start_key, 'hex'), start_pretty, encode(end_key, 'hex'), end_pretty, replicas, lease_holder FROM crdb_internal.ranges
 ----
 encode                  start_pretty             encode                  end_pretty               replicas  lease_holder
@@ -256,7 +260,8 @@ encode                  start_pretty             encode                  end_pre
 8d                      /Table/5                 8e                      /Table/6                 {1}       1
 8e                      /Table/6                 8f                      /Table/7                 {1}       1
 8f                      /Table/7                 90                      /Table/8                 {1}       1
-90                      /Table/8                 93                      /Table/11                {1}       1
+90                      /Table/8                 91                      /Table/9                 {1}       1
+91                      /Table/9                 93                      /Table/11                {1}       1
 93                      /Table/11                94                      /Table/12                {1}       1
 94                      /Table/12                95                      /Table/13                {1}       1
 95                      /Table/13                96                      /Table/14                {1}       1
@@ -307,7 +312,10 @@ c2                      /Table/58                c3                      /Table/
 c3                      /Table/59                c4                      /Table/60                {1}       1
 c4                      /Table/60                c5                      /Table/61                {1}       1
 c5                      /Table/61                c6                      /Table/62                {1}       1
-c6                      /Table/62                f28989                  /Table/106/1/1           {1}       1
+c6                      /Table/62                c7                      /Table/63                {1}       1
+c7                      /Table/63                c8                      /Table/64                {1}       1
+c8                      /Table/64                c9                      /Table/65                {1}       1
+c9                      /Table/65                f28989                  /Table/106/1/1           {1}       1
 f28989                  /Table/106/1/1           f2898d89                /Table/106/1/5/1         {3,4}     3
 f2898d89                /Table/106/1/5/1         f2898d8a                /Table/106/1/5/2         {1,2,3}   1
 f2898d8a                /Table/106/1/5/2         f2898d8b                /Table/106/1/5/3         {2,3,5}   5

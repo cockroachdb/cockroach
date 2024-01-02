@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -26,7 +27,9 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(kvpb.RefreshRange, DefaultDeclareKeys, RefreshRange)
+	// Depending on the cluster version, Refresh requests  may or may not declare locks.
+	// See DeclareKeysForRefresh for details.
+	RegisterReadOnlyCommand(kvpb.RefreshRange, DeclareKeysForRefresh, RefreshRange)
 }
 
 // RefreshRange checks whether the key range specified has any values written in
@@ -56,7 +59,7 @@ func RefreshRange(
 	}
 
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), refreshFrom, refreshTo)
-	return result.Result{}, refreshRange(reader, args.Span(), refreshFrom, refreshTo, h.Txn.ID)
+	return result.Result{}, refreshRange(ctx, reader, args.Span(), refreshFrom, refreshTo, h.Txn.ID, h.WaitPolicy)
 }
 
 // refreshRange iterates over the specified key span until it discovers a value
@@ -68,19 +71,28 @@ func RefreshRange(
 // If such a conflict is found, the function returns an error. Otherwise, no
 // error is returned.
 func refreshRange(
-	reader storage.Reader, span roachpb.Span, refreshFrom, refreshTo hlc.Timestamp, txnID uuid.UUID,
+	ctx context.Context,
+	reader storage.Reader,
+	span roachpb.Span,
+	refreshFrom, refreshTo hlc.Timestamp,
+	txnID uuid.UUID,
+	wp lock.WaitPolicy,
 ) error {
 	// Construct an incremental iterator with the desired time bounds. Incremental
 	// iterators will emit MVCC tombstones by default and will emit intents when
 	// configured to do so (see IntentPolicy).
-	iter := storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
+	iter, err := storage.NewMVCCIncrementalIterator(ctx, reader, storage.MVCCIncrementalIterOptions{
 		KeyTypes:     storage.IterKeyTypePointsAndRanges,
 		StartKey:     span.Key,
 		EndKey:       span.EndKey,
 		StartTime:    refreshFrom, // exclusive
 		EndTime:      refreshTo,   // inclusive
 		IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
+		ReadCategory: storage.BatchEvalReadCategory,
 	})
+	if err != nil {
+		return err
+	}
 	defer iter.Close()
 
 	var meta enginepb.MVCCMetadata
@@ -94,8 +106,7 @@ func refreshRange(
 		key := iter.UnsafeKey().Clone()
 
 		if _, hasRange := iter.HasPointAndRange(); hasRange {
-			return kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_COMMITTED_VALUE,
-				key.Key, iter.RangeKeys().Versions[0].Timestamp)
+			return kvpb.NewRefreshFailedError(ctx, kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, key.Key, iter.RangeKeys().Versions[0].Timestamp)
 		}
 
 		if !key.IsValue() {
@@ -129,13 +140,18 @@ func refreshRange(
 				}
 				continue
 			}
-			return kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_INTENT,
-				key.Key, meta.Txn.WriteTimestamp)
+			// TODO(mira): Remove after V23_2_RemoveLockTableWaiterTouchPush is deleted.
+			if wp == lock.WaitPolicy_Error {
+				// Return a LockConflictError, which will be handled by
+				// the concurrency manager's HandleLockConflictError.
+				return &kvpb.LockConflictError{Locks: []roachpb.Lock{roachpb.MakeLock(meta.Txn, key.Key, lock.Intent)}}
+			} else {
+				return kvpb.NewRefreshFailedError(ctx, kvpb.RefreshFailedError_REASON_INTENT, key.Key, meta.Txn.WriteTimestamp, kvpb.WithConflictingTxn(meta.Txn))
+			}
 		}
 
 		// If a committed value is found, return an error.
-		return kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_COMMITTED_VALUE,
-			key.Key, key.Timestamp)
+		return kvpb.NewRefreshFailedError(ctx, kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, key.Key, key.Timestamp)
 	}
 	return nil
 }

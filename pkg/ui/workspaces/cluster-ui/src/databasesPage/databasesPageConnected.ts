@@ -30,7 +30,13 @@ import { selectIsTenant } from "../store/uiConfig";
 import { Dispatch } from "redux";
 import { actions as clusterSettingsActions } from "../store/clusterSettings";
 import { actions as databasesListActions } from "../store/databasesList";
-import { actions as databaseDetailsActions } from "../store/databaseDetails";
+import {
+  databaseDetailsReducer,
+  databaseDetailsSpanStatsReducer,
+} from "../store/databaseDetails";
+const databaseDetailsActions = databaseDetailsReducer.actions;
+const databaseDetailsSpanStatsActions = databaseDetailsSpanStatsReducer.actions;
+
 import {
   actions as localStorageActions,
   LocalStorageKeys,
@@ -39,21 +45,24 @@ import { Filters } from "../queryFilter";
 import { actions as analyticsActions } from "../store/analytics";
 import {
   selectAutomaticStatsCollectionEnabled,
+  selectDropUnusedIndexDuration,
   selectIndexRecommendationsEnabled,
 } from "../store/clusterSettings/clusterSettings.selectors";
 import { deriveDatabaseDetailsMemoized } from "../databases";
 
-export const mapStateToProps = (state: AppState): DatabasesPageData => {
+const mapStateToProps = (state: AppState): DatabasesPageData => {
   const databasesListState = databasesListSelector(state);
   const nodeRegions = nodeRegionsByIDSelector(state);
   const isTenant = selectIsTenant(state);
   return {
-    loading: databasesListState.inFlight,
-    loaded: databasesListState.valid,
-    lastError: databasesListState.lastError,
+    loading: !!databasesListState?.inFlight,
+    loaded: !!databasesListState?.valid,
+    requestError: databasesListState?.lastError,
+    queryError: databasesListState?.data?.error,
     databases: deriveDatabaseDetailsMemoized({
-      dbListResp: databasesListState.data,
+      dbListResp: databasesListState?.data,
       databaseDetails: state.adminUI?.databaseDetails,
+      spanStats: state.adminUI?.databaseDetailsSpanStats,
       nodeRegions,
       isTenant,
     }),
@@ -67,17 +76,21 @@ export const mapStateToProps = (state: AppState): DatabasesPageData => {
     // Do not show node/regions columns for serverless.
     indexRecommendationsEnabled: selectIndexRecommendationsEnabled(state),
     showNodeRegionsColumn: Object.keys(nodeRegions).length > 1 && !isTenant,
+    csIndexUnusedDuration: selectDropUnusedIndexDuration(state),
   };
 };
 
-export const mapDispatchToProps = (
-  dispatch: Dispatch,
-): DatabasesPageActions => ({
+const mapDispatchToProps = (dispatch: Dispatch): DatabasesPageActions => ({
   refreshDatabases: () => {
     dispatch(databasesListActions.refresh());
   },
-  refreshDatabaseDetails: (database: string) => {
-    dispatch(databaseDetailsActions.refresh(database));
+  refreshDatabaseDetails: (database: string, csIndexUnusedDuration: string) => {
+    dispatch(
+      databaseDetailsActions.refresh({ database, csIndexUnusedDuration }),
+    );
+  },
+  refreshDatabaseSpanStats: (database: string) => {
+    dispatch(databaseDetailsSpanStatsActions.refresh({ database }));
   },
   refreshSettings: () => {
     dispatch(clusterSettingsActions.refresh());

@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
@@ -8,10 +7,10 @@ go_test(
         "gc_job_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    exec_properties = {"Pool": "large"},
+    shard_count = 2,
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
@@ -34,12 +33,9 @@ go_test(
         "//pkg/sql/gcjob",
         "//pkg/sql/isql",
         "//pkg/sql/sem/catid",
-        "//pkg/sql/tests",
-        "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
@@ -50,5 +46,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -11,7 +10,10 @@ go_library(
         "processor.go",
         "registry.go",
         "resolved_timestamp.go",
+        "scheduled_processor.go",
+        "scheduler.go",
         "task.go",
+        "testutil.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed",
     visibility = ["//visibility:public"],
@@ -19,12 +21,16 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/concurrency/isolation",
+        "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/admission",
         "//pkg/util/bufalloc",
+        "//pkg/util/buildutil",
+        "//pkg/util/container/heap",
         "//pkg/util/envutil",
         "//pkg/util/future",
         "//pkg/util/hlc",
@@ -46,15 +52,16 @@ go_test(
     name = "rangefeed_test",
     size = "large",
     srcs = [
+        "bench_test.go",
         "budget_test.go",
         "catchup_scan_bench_test.go",
         "catchup_scan_test.go",
         "processor_test.go",
         "registry_test.go",
         "resolved_timestamp_test.go",
+        "scheduler_test.go",
         "task_test.go",
     ],
-    args = ["-test.timeout=895s"],
     embed = [":rangefeed"],
     deps = [
         "//pkg/base",
@@ -62,6 +69,7 @@ go_test(
         "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/concurrency/isolation",
+        "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
@@ -85,7 +93,6 @@ go_test(
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//slices",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
@@ -37,6 +38,7 @@ import (
 // interrupt the function.
 func TestRunGenerativeSplitAndScatterContextCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
 	const localFoo = "nodelocal://1/foo"
@@ -54,8 +56,8 @@ func TestRunGenerativeSplitAndScatterContextCancel(t *testing.T) {
 
 	// Set up the test so that the test context is canceled after the first entry
 	// has been processed by the generative split and scatterer.
-	s0 := tc.Server(0)
-	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
+	s0 := tc.ApplicationLayer(0)
+	registry := s0.JobRegistry().(*jobs.Registry)
 	execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
@@ -85,7 +87,7 @@ func TestRunGenerativeSplitAndScatterContextCancel(t *testing.T) {
 	uri := localFoo + "/" + backups[0][0]
 
 	codec := keys.MakeSQLCodec(s0.RPCContext().TenantID)
-	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Servers[0].DB(), codec, "data", "bank")
+	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(s0.DB(), codec, "data", "bank")
 	backupStartKey := backupTableDesc.PrimaryIndexSpan(codec).Key
 
 	spec := makeTestingGenerativeSplitAndScatterSpec(
@@ -129,23 +131,27 @@ func TestRunGenerativeSplitAndScatterContextCancel(t *testing.T) {
 // that we've already seen before.
 func TestRunGenerativeSplitAndScatterRandomizedDestOnFailScatter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
 	const localFoo = "nodelocal://0/foo"
 	ctx := context.Background()
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts,
-		InitManualReplication)
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			}})
 	defer cleanupFn()
 
+	s0 := tc.SystemLayer(0)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	evalCtx.NodeID = base.NewSQLIDContainerForNode(tc.Server(0).RPCContext().NodeID)
+	evalCtx.NodeID = base.NewSQLIDContainerForNode(s0.RPCContext().NodeID)
 
 	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer testDiskMonitor.Stop(ctx)
 
-	s0 := tc.Server(0)
-	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
+	registry := s0.JobRegistry().(*jobs.Registry)
 	execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
@@ -168,7 +174,7 @@ func TestRunGenerativeSplitAndScatterRandomizedDestOnFailScatter(t *testing.T) {
 	uri := localFoo + "/" + backups[0][0]
 
 	codec := keys.MakeSQLCodec(s0.RPCContext().TenantID)
-	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Servers[0].DB(), codec, "data", "bank")
+	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(s0.DB(), codec, "data", "bank")
 	backupStartKey := backupTableDesc.PrimaryIndexSpan(codec).Key
 
 	spec := makeTestingGenerativeSplitAndScatterSpec(
@@ -246,19 +252,18 @@ func makeTestingGenerativeSplitAndScatterSpec(
 	backupURIs []string, requiredSpans []roachpb.Span,
 ) execinfrapb.GenerativeSplitAndScatterSpec {
 	return execinfrapb.GenerativeSplitAndScatterSpec{
-		ValidateOnly:         false,
-		URIs:                 backupURIs,
-		Encryption:           nil,
-		EndTime:              hlc.Timestamp{},
-		Spans:                requiredSpans,
-		BackupLocalityInfo:   nil,
-		HighWater:            nil,
-		UserProto:            "",
-		ChunkSize:            1,
-		TargetSize:           1,
-		NumEntries:           1,
-		NumNodes:             1,
-		JobID:                0,
-		UseSimpleImportSpans: false,
+		ValidateOnly:       false,
+		URIs:               backupURIs,
+		Encryption:         nil,
+		EndTime:            hlc.Timestamp{},
+		Spans:              requiredSpans,
+		BackupLocalityInfo: nil,
+		HighWater:          nil,
+		UserProto:          "",
+		ChunkSize:          1,
+		TargetSize:         1,
+		NumEntries:         1,
+		NumNodes:           1,
+		JobID:              0,
 	}
 }

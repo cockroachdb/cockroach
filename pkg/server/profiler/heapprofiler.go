@@ -33,11 +33,11 @@ type HeapProfiler struct {
 	profiler
 }
 
-// HeapFileNamePrefix is the prefix of files containing pprof data.
-const HeapFileNamePrefix = "memprof"
+// heapFileNamePrefix is the prefix of files containing pprof data.
+const heapFileNamePrefix = "memprof"
 
-// HeapFileNameSuffix is the suffix of files containing pprof data.
-const HeapFileNameSuffix = ".pprof"
+// heapFileNameSuffix is the suffix of files containing pprof data.
+const heapFileNameSuffix = ".pprof"
 
 // NewHeapProfiler creates a HeapProfiler. dir is the directory in which
 // profiles are to be stored.
@@ -50,7 +50,7 @@ func NewHeapProfiler(ctx context.Context, dir string, st *cluster.Settings) (*He
 
 	hp := &HeapProfiler{
 		profiler: makeProfiler(
-			newProfileStore(dumpStore, HeapFileNamePrefix, HeapFileNameSuffix, st),
+			newProfileStore(dumpStore, heapFileNamePrefix, heapFileNameSuffix, st),
 			zeroFloor,
 			envMemprofInterval,
 		),
@@ -69,7 +69,7 @@ func (o *HeapProfiler) MaybeTakeProfile(ctx context.Context, curHeap int64) {
 
 // takeHeapProfile returns true if and only if the profile dump was
 // taken successfully.
-func takeHeapProfile(ctx context.Context, path string) (success bool) {
+func takeHeapProfile(ctx context.Context, path string, _ ...interface{}) (success bool) {
 	// Try writing a go heap profile.
 	f, err := os.Create(path)
 	if err != nil {

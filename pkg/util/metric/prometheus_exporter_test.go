@@ -14,7 +14,9 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -122,7 +124,7 @@ func TestPrometheusExporter(t *testing.T) {
 	// Test ScrapeAndPrintAsText
 	var buf bytes.Buffer
 	pe = MakePrometheusExporter()
-	err = pe.ScrapeAndPrintAsText(&buf, func(exporter *PrometheusExporter) {
+	err = pe.ScrapeAndPrintAsText(&buf, expfmt.FmtText, func(exporter *PrometheusExporter) {
 		exporter.ScrapeRegistry(r1, true)
 	})
 	require.NoError(t, err)
@@ -130,4 +132,38 @@ func TestPrometheusExporter(t *testing.T) {
 	require.Regexp(t, "one_gauge 0", output)
 	require.Regexp(t, "shared_counter{counter=\"one\"}", output)
 	require.Len(t, strings.Split(output, "\n"), 7)
+}
+
+func TestPrometheusExporterNativeHistogram(t *testing.T) {
+	defer func(enabled bool) {
+		nativeHistogramsEnabled = enabled
+	}(nativeHistogramsEnabled)
+	nativeHistogramsEnabled = true
+	r := NewRegistry()
+
+	r.AddMetric(NewHistogram(HistogramOptions{
+		Duration: time.Second,
+		Mode:     HistogramModePrometheus,
+		Metadata: Metadata{
+			Name: "histogram",
+		},
+		BucketConfig: staticBucketConfig{
+			distribution: Exponential,
+			min:          10e3, // 10µs
+			max:          10e9, // 10s
+			count:        60,
+		},
+	}))
+
+	var buf bytes.Buffer
+	pe := MakePrometheusExporter()
+	// Print metrics as proto text, since native histograms aren't yet supported.
+	// in the prometheus text exposition format.
+	err := pe.ScrapeAndPrintAsText(&buf, expfmt.FmtProtoText, func(exporter *PrometheusExporter) {
+		exporter.ScrapeRegistry(r, false)
+	})
+	require.NoError(t, err)
+	output := buf.String()
+	// Assert that output contains the native histogram schema.
+	require.Regexp(t, "schema: 3", output)
 }

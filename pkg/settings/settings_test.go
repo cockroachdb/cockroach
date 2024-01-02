@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	proto "github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,9 +37,20 @@ type dummyVersion struct {
 	growsbyone string
 }
 
+func init() {
+	proto.RegisterType((*dummyVersion)(nil), "cockroach.dummyVersion")
+}
+
 var _ settings.ClusterVersionImpl = &dummyVersion{}
 
-func (d *dummyVersion) ClusterVersionImpl() {}
+// Encode is part of the ClusterVersionImpl interface.
+func (d *dummyVersion) Encode() []byte {
+	encoded, err := d.Marshal()
+	if err != nil {
+		panic(err)
+	}
+	return encoded
+}
 
 // Unmarshal is part of the protoutil.Message interface.
 func (d *dummyVersion) Unmarshal(data []byte) error {
@@ -145,20 +157,22 @@ var changes = struct {
 	duA      int
 	eA       int
 	byteSize int
+	pA       int
 }{}
 
 var boolTA = settings.RegisterBoolSetting(settings.SystemOnly, "bool.t", "desc", true)
-var boolFA = settings.RegisterBoolSetting(settings.TenantReadOnly, "bool.f", "desc", false)
-var strFooA = settings.RegisterStringSetting(settings.TenantWritable, "str.foo", "desc", "")
+var boolFA = settings.RegisterBoolSetting(settings.SystemVisible, "bool.f", "desc", false)
+var strFooA = settings.RegisterStringSetting(settings.ApplicationLevel, "str.foo", "desc", "")
 var strBarA = settings.RegisterStringSetting(settings.SystemOnly, "str.bar", "desc", "bar")
-var i1A = settings.RegisterIntSetting(settings.TenantWritable, "i.1", "desc", 0)
-var i2A = settings.RegisterIntSetting(settings.TenantWritable, "i.2", "desc", 5)
-var fA = settings.RegisterFloatSetting(settings.TenantReadOnly, "f", "desc", 5.4)
-var dA = settings.RegisterDurationSetting(settings.TenantWritable, "d", "desc", time.Second)
-var duA = settings.RegisterPublicDurationSettingWithExplicitUnit(settings.TenantWritable, "d_with_explicit_unit", "desc", time.Second, settings.NonNegativeDuration)
-var _ = settings.RegisterDurationSetting(settings.TenantWritable, "d_with_maximum", "desc", time.Second, settings.NonNegativeDurationWithMaximum(time.Hour))
+var i1A = settings.RegisterIntSetting(settings.ApplicationLevel, "i.1", "desc", 0)
+var i2A = settings.RegisterIntSetting(settings.ApplicationLevel, "i.2", "desc", 5)
+var fA = settings.RegisterFloatSetting(settings.SystemVisible, "f", "desc", 5.4)
+var dA = settings.RegisterDurationSetting(settings.ApplicationLevel, "d", "desc", time.Second)
+var duA = settings.RegisterDurationSettingWithExplicitUnit(settings.ApplicationLevel, "d_with_explicit_unit", "desc", time.Second, settings.NonNegativeDuration, settings.WithPublic)
+var pA = settings.RegisterProtobufSetting(settings.ApplicationLevel, "p", "desc", &dummyVersion{msg1: "foo"})
+var _ = settings.RegisterDurationSetting(settings.ApplicationLevel, "d_with_maximum", "desc", time.Second, settings.NonNegativeDurationWithMaximum(time.Hour))
 var eA = settings.RegisterEnumSetting(settings.SystemOnly, "e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
-var byteSize = settings.RegisterByteSizeSetting(settings.TenantWritable, "zzz", "desc", mb)
+var byteSize = settings.RegisterByteSizeSetting(settings.ApplicationLevel, "zzz", "desc", mb)
 var mA = func() *settings.VersionSetting {
 	s := settings.MakeVersionSetting(&dummyVersionSettingImpl{})
 	settings.RegisterVersionSetting(settings.SystemOnly, "v.1", "desc", &s)
@@ -166,39 +180,32 @@ var mA = func() *settings.VersionSetting {
 }()
 
 func init() {
-	settings.RegisterBoolSetting(settings.SystemOnly, "sekretz", "desc", false).SetReportable(false)
-	settings.RegisterBoolSetting(settings.SystemOnly, "rezervedz", "desc", false).SetVisibility(settings.Reserved)
+	_ = settings.RegisterBoolSetting(settings.SystemOnly, "sekretz", "desc", false, settings.WithReportable(false))
+	_ = settings.RegisterBoolSetting(settings.SystemOnly, "rezervedz", "desc", false, settings.WithVisibility(settings.Reserved))
 }
 
-var strVal = settings.RegisterValidatedStringSetting(settings.SystemOnly,
-	"str.val", "desc", "", func(sv *settings.Values, v string) error {
+var strVal = settings.RegisterStringSetting(settings.SystemOnly,
+	"str.val", "desc", "", settings.WithValidateString(func(sv *settings.Values, v string) error {
 		for _, c := range v {
 			if !unicode.IsLetter(c) {
 				return errors.Errorf("not all runes of %s are letters: %c", v, c)
 			}
 		}
 		return nil
-	})
+	}))
 var dVal = settings.RegisterDurationSetting(settings.SystemOnly, "dVal", "desc", time.Second, settings.NonNegativeDuration)
 var fVal = settings.RegisterFloatSetting(settings.SystemOnly, "fVal", "desc", 5.4, settings.NonNegativeFloat)
 var byteSizeVal = settings.RegisterByteSizeSetting(settings.SystemOnly, "byteSize.Val", "desc", mb)
 var iVal = settings.RegisterIntSetting(settings.SystemOnly,
-	"i.Val", "desc", 0, func(v int64) error {
+	"i.Val", "desc", 0, settings.WithValidateInt(func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("int cannot be negative")
 		}
 		return nil
-	})
-
-func TestNonNegativeDurationWithMinimum(t *testing.T) {
-	validator := settings.NonNegativeDurationWithMinimum(time.Minute)
-	require.NoError(t, validator(time.Minute))
-	require.NoError(t, validator(2*time.Minute))
-	require.Error(t, validator(59*time.Second))
-	require.Error(t, validator(-1*time.Second))
-}
+	}))
 
 func TestValidation(t *testing.T) {
+	defer settings.TestingSaveRegistry()()
 	ctx := context.Background()
 	sv := &settings.Values{}
 	sv.Init(ctx, settings.TestOpaque)
@@ -221,7 +228,8 @@ func TestValidation(t *testing.T) {
 
 func TestIntrospection(t *testing.T) {
 	require.Equal(t, "b", boolTA.Typ())
-	require.Equal(t, "bool.t", boolTA.Key())
+	require.Equal(t, settings.InternalKey("bool.t"), boolTA.InternalKey())
+	require.Equal(t, settings.SettingName("bool.t"), boolTA.Name())
 	require.Equal(t, "desc", boolTA.Description())
 	require.Equal(t, settings.Reserved, boolTA.Visibility())
 	require.Equal(t, settings.SystemOnly, boolTA.Class())
@@ -229,6 +237,7 @@ func TestIntrospection(t *testing.T) {
 }
 
 func TestCache(t *testing.T) {
+	defer settings.TestingSaveRegistry()()
 	ctx := context.Background()
 	sv := &settings.Values{}
 	sv.Init(ctx, settings.TestOpaque)
@@ -240,6 +249,7 @@ func TestCache(t *testing.T) {
 	dA.SetOnChange(sv, func(context.Context) { changes.dA++ })
 	duA.SetOnChange(sv, func(context.Context) { changes.duA++ })
 	eA.SetOnChange(sv, func(context.Context) { changes.eA++ })
+	pA.SetOnChange(sv, func(context.Context) { changes.pA++ })
 	byteSize.SetOnChange(sv, func(context.Context) { changes.byteSize++ })
 
 	t.Run("VersionSetting", func(t *testing.T) {
@@ -345,15 +355,19 @@ func TestCache(t *testing.T) {
 		if expected, actual := int64(1), eA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
+		{
+			expected, actual := (&dummyVersion{msg1: "foo"}), pA.Get(sv)
+			require.Equal(t, expected, actual)
+		}
 		// Note that we don't test the state-machine setting for a default, since it
 		// doesn't have one and it would crash.
 	})
 
 	t.Run("lookup-system", func(t *testing.T) {
 		for _, s := range []settings.Setting{i1A, iVal, fA, fVal, dA, dVal, eA, mA, duA} {
-			result, ok := settings.LookupForLocalAccess(s.Key(), settings.ForSystemTenant)
+			result, ok, _ := settings.LookupForLocalAccess(s.Name(), settings.ForSystemTenant)
 			if !ok {
-				t.Fatalf("lookup(%s) failed", s.Key())
+				t.Fatalf("lookup(%s) failed", s.Name())
 			}
 			if result != s {
 				t.Fatalf("expected %v, got %v", s, result)
@@ -362,9 +376,9 @@ func TestCache(t *testing.T) {
 	})
 	t.Run("lookup-tenant", func(t *testing.T) {
 		for _, s := range []settings.Setting{i1A, fA, dA, duA} {
-			result, ok := settings.LookupForLocalAccess(s.Key(), false /* forSystemTenant */)
+			result, ok, _ := settings.LookupForLocalAccess(s.Name(), false /* forSystemTenant */)
 			if !ok {
-				t.Fatalf("lookup(%s) failed", s.Key())
+				t.Fatalf("lookup(%s) failed", s.Name())
 			}
 			if result != s {
 				t.Fatalf("expected %v, got %v", s, result)
@@ -373,9 +387,9 @@ func TestCache(t *testing.T) {
 	})
 	t.Run("lookup-tenant-fail", func(t *testing.T) {
 		for _, s := range []settings.Setting{iVal, fVal, dVal, eA, mA} {
-			_, ok := settings.LookupForLocalAccess(s.Key(), false /* forSystemTenant */)
+			_, ok, _ := settings.LookupForLocalAccess(s.Name(), false /* forSystemTenant */)
 			if ok {
-				t.Fatalf("lookup(%s) should have failed", s.Key())
+				t.Fatalf("lookup(%s) should have failed", s.Name())
 			}
 		}
 	})
@@ -467,6 +481,20 @@ func TestCache(t *testing.T) {
 			u.Set(ctx, "e", v("notAValidValue", "e")); !testutils.IsError(err, expected) {
 			t.Fatalf("expected '%s' != actual error '%s'", expected, err)
 		}
+
+		if expected, actual := 0, changes.pA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
+		testVal := &dummyVersion{msg1: "bar"}
+		encoded, err := testVal.Marshal()
+		require.NoError(t, err)
+		if err := u.Set(ctx, "p", v(string(encoded), "p")); err != nil {
+			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.pA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
+
 		defaultDummyV := dummyVersion{msg1: "default", growsbyone: "AB"}
 		if err := setDummyVersion(defaultDummyV, mA, sv); err != nil {
 			t.Fatal(err)
@@ -514,6 +542,10 @@ func TestCache(t *testing.T) {
 		}
 		if expected, actual := "default.AB", mA.Encoded(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		{
+			expected, actual := (&dummyVersion{msg1: "bar"}), pA.Get(sv)
+			require.Equal(t, expected, actual)
 		}
 
 		// We didn't change this one, so should still see the default.
@@ -688,12 +720,12 @@ func TestCache(t *testing.T) {
 }
 
 func TestIsReportable(t *testing.T) {
-	if v, ok := settings.LookupForLocalAccess(
+	if v, ok, _ := settings.LookupForLocalAccess(
 		"bool.t", settings.ForSystemTenant,
 	); !ok || !settings.TestingIsReportable(v) {
 		t.Errorf("expected 'bool.t' to be marked as isReportable() = true")
 	}
-	if v, ok := settings.LookupForLocalAccess(
+	if v, ok, _ := settings.LookupForLocalAccess(
 		"sekretz", settings.ForSystemTenant,
 	); !ok || settings.TestingIsReportable(v) {
 		t.Errorf("expected 'sekretz' to be marked as isReportable() = false")
@@ -701,9 +733,10 @@ func TestIsReportable(t *testing.T) {
 }
 
 func TestOnChangeWithMaxSettings(t *testing.T) {
+	defer settings.TestingSaveRegistry()()
 	ctx := context.Background()
 	// Register MaxSettings settings to ensure that no errors occur.
-	maxName, err := batchRegisterSettings(t, t.Name(), settings.MaxSettings-settings.NumRegisteredSettings())
+	maxKey, maxName, err := batchRegisterSettings(t, t.Name(), settings.MaxSettings-settings.NumRegisteredSettings())
 	if err != nil {
 		t.Fatalf("expected no error to register %d settings, but get error: %v", settings.MaxSettings, err)
 	}
@@ -712,7 +745,7 @@ func TestOnChangeWithMaxSettings(t *testing.T) {
 	sv := &settings.Values{}
 	sv.Init(ctx, settings.TestOpaque)
 	var changes int
-	s, ok := settings.LookupForLocalAccess(maxName, settings.ForSystemTenant)
+	s, ok, _ := settings.LookupForLocalAccess(maxName, settings.ForSystemTenant)
 	if !ok {
 		t.Fatalf("expected lookup of %s to succeed", maxName)
 	}
@@ -723,7 +756,7 @@ func TestOnChangeWithMaxSettings(t *testing.T) {
 	intSetting.SetOnChange(sv, func(ctx context.Context) { changes++ })
 
 	u := settings.NewUpdater(sv)
-	if err := u.Set(ctx, maxName, v(settings.EncodeInt(9), "i")); err != nil {
+	if err := u.Set(ctx, maxKey, v(settings.EncodeInt(9), "i")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -736,7 +769,7 @@ func TestMaxSettingsPanics(t *testing.T) {
 	defer settings.TestingSaveRegistry()()
 
 	// Register too many settings which will cause a panic which is caught and converted to an error.
-	_, err := batchRegisterSettings(t, t.Name(),
+	_, _, err := batchRegisterSettings(t, t.Name(),
 		settings.MaxSettings-settings.NumRegisteredSettings()+1)
 	expectedErr := "too many settings; increase MaxSettings"
 	if !testutils.IsError(err, expectedErr) {
@@ -745,7 +778,9 @@ func TestMaxSettingsPanics(t *testing.T) {
 
 }
 
-func batchRegisterSettings(t *testing.T, keyPrefix string, count int) (name string, err error) {
+func batchRegisterSettings(
+	t *testing.T, keyPrefix string, count int,
+) (key settings.InternalKey, name settings.SettingName, err error) {
 	defer func() {
 		// Catch panic and convert it to an error.
 		if r := recover(); r != nil {
@@ -757,29 +792,42 @@ func batchRegisterSettings(t *testing.T, keyPrefix string, count int) (name stri
 		}
 	}()
 	for i := 0; i < count; i++ {
-		name = fmt.Sprintf("%s_%3d", keyPrefix, i)
-		settings.RegisterIntSetting(settings.SystemOnly, name, "desc", 0)
+		key = settings.InternalKey(fmt.Sprintf("%s_%3d", keyPrefix, i))
+		s := settings.RegisterIntSetting(settings.SystemOnly, key, "desc", 0)
+		name = s.Name()
 	}
-	return name, err
+	return key, name, err
 }
 
 var overrideBool = settings.RegisterBoolSetting(settings.SystemOnly, "override.bool", "desc", true)
-var overrideInt = settings.RegisterIntSetting(settings.TenantReadOnly, "override.int", "desc", 0)
-var overrideDuration = settings.RegisterDurationSetting(settings.TenantWritable, "override.duration", "desc", time.Second)
-var overrideFloat = settings.RegisterFloatSetting(settings.TenantWritable, "override.float", "desc", 1.0)
+var overrideInt = settings.RegisterIntSetting(settings.SystemVisible, "override.int", "desc", 0)
+var overrideDuration = settings.RegisterDurationSetting(settings.ApplicationLevel, "override.duration", "desc", time.Second)
+var overrideFloat = settings.RegisterFloatSetting(settings.ApplicationLevel, "override.float", "desc", 1.0)
+var overrideString = settings.RegisterStringSetting(settings.ApplicationLevel, "override.string", "desc", "foo")
+var overrideProto = settings.RegisterProtobufSetting(settings.ApplicationLevel, "override.proto", "desc", &dummyVersion{msg1: "foo"})
 
 func TestOverride(t *testing.T) {
 	ctx := context.Background()
 	sv := &settings.Values{}
 	sv.Init(ctx, settings.TestOpaque)
 
+	// Check the origin before an override.
+	require.Equal(t, settings.OriginDefault, overrideBool.ValueOrigin(ctx, sv))
+
 	// Test override for bool setting.
 	require.Equal(t, true, overrideBool.Get(sv))
 	overrideBool.Override(ctx, sv, false)
 	require.Equal(t, false, overrideBool.Get(sv))
+
+	// Override changes the origin.
+	require.Equal(t, settings.OriginOverride, overrideBool.ValueOrigin(ctx, sv))
+
 	u := settings.NewUpdater(sv)
 	u.ResetRemaining(ctx)
 	require.Equal(t, false, overrideBool.Get(sv))
+
+	// ResetRemaining does not change the origin for overridden settings.
+	require.Equal(t, settings.OriginOverride, overrideBool.ValueOrigin(ctx, sv))
 
 	// Test override for int setting.
 	require.Equal(t, int64(0), overrideInt.Get(sv))
@@ -801,15 +849,30 @@ func TestOverride(t *testing.T) {
 	require.Equal(t, 42.0, overrideFloat.Get(sv))
 	u.ResetRemaining(ctx)
 	require.Equal(t, 42.0, overrideFloat.Get(sv))
+
+	// Test override for string setting.
+	require.Equal(t, "foo", overrideString.Get(sv))
+	overrideString.Override(ctx, sv, "bar")
+	require.Equal(t, "bar", overrideString.Get(sv))
+	u.ResetRemaining(ctx)
+	require.Equal(t, "bar", overrideString.Get(sv))
+
+	// Test override for proto setting.
+	require.Equal(t, &dummyVersion{msg1: "foo"}, overrideProto.Get(sv))
+	overrideProto.Override(ctx, sv, &dummyVersion{msg1: "bar"})
+	require.Equal(t, &dummyVersion{msg1: "bar"}, overrideProto.Get(sv))
+	u.ResetRemaining(ctx)
+	require.Equal(t, &dummyVersion{msg1: "bar"}, overrideProto.Get(sv))
+
 }
 
-func TestSystemOnlyDisallowedOnTenant(t *testing.T) {
+func TestSystemOnlyDisallowedOnVirtualCluster(t *testing.T) {
 	skip.UnderNonTestBuild(t)
 
 	ctx := context.Background()
 	sv := &settings.Values{}
 	sv.Init(ctx, settings.TestOpaque)
-	sv.SetNonSystemTenant()
+	sv.SpecializeForVirtualCluster()
 
 	// Check that we can still read non-SystemOnly settings.
 	if expected, actual := "", strFooA.Get(sv); expected != actual {
@@ -820,7 +883,7 @@ func TestSystemOnlyDisallowedOnTenant(t *testing.T) {
 		defer func() {
 			if r := recover(); r == nil {
 				t.Error("Get did not panic")
-			} else if !strings.Contains(fmt.Sprint(r), "attempted to set forbidden setting") {
+			} else if !strings.Contains(fmt.Sprint(r), "invalid access to SystemOnly") {
 				t.Errorf("received unexpected panic: %v", r)
 			}
 		}()
@@ -831,12 +894,8 @@ func TestSystemOnlyDisallowedOnTenant(t *testing.T) {
 func setDummyVersion(dv dummyVersion, vs *settings.VersionSetting, sv *settings.Values) error {
 	// This is a bit round about because the VersionSetting doesn't get updated
 	// through the updater, like most other settings. In order to set it, we set
-	// the internal encoded state by hand.
-	encoded, err := protoutil.Marshal(&dv)
-	if err != nil {
-		return err
-	}
-	vs.SetInternal(context.Background(), sv, encoded)
+	// the internal state by hand.
+	vs.SetInternal(context.Background(), sv, &dv)
 	return nil
 }
 

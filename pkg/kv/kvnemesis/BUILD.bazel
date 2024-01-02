@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -28,7 +27,10 @@ go_library(
         "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/batcheval",
+        "//pkg/kv/kvserver/concurrency",
         "//pkg/kv/kvserver/concurrency/isolation",
+        "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/liveness",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
@@ -57,7 +59,7 @@ go_library(
 
 go_test(
     name = "kvnemesis_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "applier_test.go",
         "engine_test.go",
@@ -67,7 +69,6 @@ go_test(
         "operations_test.go",
         "validator_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":kvnemesis"],
     deps = [
@@ -98,6 +99,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "//pkg/util/syncutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
@@ -136,5 +138,3 @@ go_proto_library(
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
-
-get_x_data(name = "get_x_data")

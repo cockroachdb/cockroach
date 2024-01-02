@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/tokenbucket"
 )
 
 // Limit defines a rate in terms of quota per second.
@@ -43,9 +44,9 @@ type RateLimiter struct {
 // If rate == Inf() then any bursts are allowed, and acquisition does not block.
 func NewRateLimiter(name string, rate Limit, burst int64, options ...Option) *RateLimiter {
 	rl := &RateLimiter{}
-	tb := &TokenBucket{}
+	tb := &tokenbucket.TokenBucket{}
 	rl.qp = New(name, tb, options...)
-	tb.Init(TokensPerSecond(rate), Tokens(burst), rl.qp.timeSource)
+	tb.InitWithNowFn(tokenbucket.TokensPerSecond(rate), tokenbucket.Tokens(burst), rl.qp.timeSource.Now)
 	rl.isInf.Set(math.IsInf(float64(rate), 1))
 	return rl
 }
@@ -99,8 +100,8 @@ func (rl *RateLimiter) AdmitN(n int64) bool {
 func (rl *RateLimiter) UpdateLimit(rate Limit, burst int64) {
 	rl.qp.Update(func(res Resource) (shouldNotify bool) {
 		rl.isInf.Set(math.IsInf(float64(rate), 1))
-		tb := res.(*TokenBucket)
-		tb.UpdateConfig(TokensPerSecond(rate), Tokens(burst))
+		tb := res.(*tokenbucket.TokenBucket)
+		tb.UpdateConfig(tokenbucket.TokensPerSecond(rate), tokenbucket.Tokens(burst))
 		return true
 	})
 }
@@ -116,8 +117,8 @@ type RateAlloc struct {
 // methods on the RateAlloc after this call.
 func (ra *RateAlloc) Return() {
 	ra.rl.qp.Update(func(res Resource) (shouldNotify bool) {
-		tb := res.(*TokenBucket)
-		tb.Adjust(Tokens(ra.alloc))
+		tb := res.(*tokenbucket.TokenBucket)
+		tb.Adjust(tokenbucket.Tokens(ra.alloc))
 		return true
 	})
 	ra.rl.putRateAlloc((*rateAlloc)(ra))
@@ -156,8 +157,8 @@ func (rl *RateLimiter) putRateRequest(r *rateRequest) {
 func (i *rateRequest) Acquire(
 	ctx context.Context, res Resource,
 ) (fulfilled bool, tryAgainAfter time.Duration) {
-	tb := res.(*TokenBucket)
-	return tb.TryToFulfill(Tokens(i.want))
+	tb := res.(*tokenbucket.TokenBucket)
+	return tb.TryToFulfill(tokenbucket.Tokens(i.want))
 }
 
 func (i *rateRequest) ShouldWait() bool {

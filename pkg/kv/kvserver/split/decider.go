@@ -518,10 +518,3 @@ func (t *maxStatTracker) windowWidth() time.Duration {
 	// NB: -1 because during a rotation, only len(t.windows)-1 windows survive.
 	return t.minRetention / time.Duration(len(t.windows)-1)
 }
-
-func max(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
-}

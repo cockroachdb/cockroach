@@ -11,51 +11,20 @@
 package grpcutil_test
 
 import (
-	"context"
 	"fmt"
-	"net"
-	"strings"
 	"testing"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/status"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
-
-// Implement the grpc health check interface (just because it's the
-// simplest predefined RPC service I could find that seems unlikely to
-// change out from under us) with an implementation that shuts itself
-// down whenever anything calls it. This lets us distinguish errors
-// caused by server shutdowns during the request from those when the
-// server was already down.
-type healthServer struct {
-	grpcServer *grpc.Server
-}
-
-func (hs healthServer) Check(
-	ctx context.Context, req *healthpb.HealthCheckRequest,
-) (*healthpb.HealthCheckResponse, error) {
-	hs.grpcServer.Stop()
-
-	// Wait for the shutdown to happen before returning from this
-	// method.
-	<-ctx.Done()
-	return nil, errors.New("no one should see this")
-}
-
-func (hs healthServer) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
-	panic("not implemented")
-}
 
 func TestIsWaitingForInit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -76,75 +45,6 @@ func TestIsWaitingForInit(t *testing.T) {
 	}
 }
 
-func TestRequestDidNotStart(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	skip.WithIssue(t, 19708)
-
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		_ = lis.Close()
-	}()
-
-	server := grpc.NewServer()
-	hs := healthServer{server}
-	healthpb.RegisterHealthServer(server, hs)
-	go func() {
-		_ = server.Serve(lis)
-	}()
-	//lint:ignore SA1019 grpc.WithInsecure is deprecated
-	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		_ = conn.Close() // nolint:grpcconnclose
-	}()
-	client := healthpb.NewHealthClient(conn)
-
-	// The first time, the request will start and we'll get a
-	// "connection is closing" message.
-	_, err = client.Check(context.Background(), &healthpb.HealthCheckRequest{})
-	if err == nil {
-		t.Fatal("did not get expected error")
-	} else if grpcutil.RequestDidNotStart(err) {
-		t.Fatalf("request should have started, but got %s", err)
-	} else if !strings.Contains(err.Error(), "is closing") {
-		// This assertion is not essential to this test, but since this
-		// logic is sensitive to grpc error handling details it's safer to
-		// make the test fail when anything changes. This error could be
-		// either "transport is closing" or "connection is closing"
-		t.Fatalf("expected 'is closing' error but got %s", err)
-	}
-
-	// Afterwards, the request will fail immediately without being sent.
-	// But if we try too soon, there's a chance the transport hasn't
-	// been put in the "transient failure" state yet and we get a
-	// different error.
-	testutils.SucceedsSoon(t, func() error {
-		_, err = client.Check(context.Background(), &healthpb.HealthCheckRequest{})
-		if err == nil {
-			return errors.New("did not get expected error")
-		} else if !grpcutil.RequestDidNotStart(err) {
-			return errors.Wrap(err, "request should not have started, but got error")
-		}
-		return nil
-	})
-
-	// Once the transport is in the "transient failure" state it should
-	// stay that way, and every subsequent request will fail
-	// immediately.
-	_, err = client.Check(context.Background(), &healthpb.HealthCheckRequest{})
-	if err == nil {
-		t.Fatal("did not get expected error")
-	} else if !grpcutil.RequestDidNotStart(err) {
-		t.Fatalf("request should not have started, but got %s", err)
-	}
-}
-
 func TestRequestDidNotStart_Errors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -153,13 +53,19 @@ func TestRequestDidNotStart_Errors(t *testing.T) {
 		err    error
 		expect bool
 	}{
-		"breaker":          {errors.Wrapf(circuit.ErrBreakerOpen, "unable to dial n%d", 42), true},
-		"waiting for init": {errors.Wrapf(server.NewWaitingForInitError("foo"), "failed"), true},
-		"plain":            {errors.New("foo"), false},
+		"failed heartbeat":    {&netutil.InitialHeartbeatFailedError{}, true},
+		"waiting for init":    {server.NewWaitingForInitError("foo"), true},
+		"unauthenticated":     {status.Error(codes.Unauthenticated, "unauthenticated"), true},
+		"permission denied":   {status.Error(codes.PermissionDenied, "permission denied"), true},
+		"failed precondition": {status.Error(codes.FailedPrecondition, "failed precondition"), true},
+		"circuit breaker":     {circuit.ErrBreakerOpen, false},
+		"plain":               {errors.New("foo"), false},
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
+			// Make sure the error is properly detected both bare and wrapped.
 			require.Equal(t, tc.expect, grpcutil.RequestDidNotStart(tc.err))
+			require.Equal(t, tc.expect, grpcutil.RequestDidNotStart(errors.Wrap(tc.err, "wrapped")))
 		})
 	}
 }

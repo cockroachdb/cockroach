@@ -1,0 +1,19 @@
+/* setup */
+CREATE TABLE defaultdb.t (id INT PRIMARY KEY, name VARCHAR(256), money INT);
+
+/* test */
+EXPLAIN (DDL, SHAPE) CREATE INDEX idx
+  ON defaultdb.t (id, name)
+  STORING (money)
+  PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1));
+----
+Schema change plan for CREATE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹id›, ‹name›) STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›));
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey in relation t
+ │    └── into idx+ (id, name; money)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[3] into idx+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index idx+ in relation t
+ └── execute 1 system table mutations transaction

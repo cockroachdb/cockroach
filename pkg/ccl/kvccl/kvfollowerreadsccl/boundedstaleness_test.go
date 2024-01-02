@@ -263,11 +263,15 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderStress(t, "1μs staleness reads may actually succeed due to the slow environment")
+	skip.UnderRace(t, "probable OOM")
 	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 
 	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TODOTestTenantDisabled,
+		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{},
 	}
 	const numNodes = 3
@@ -275,7 +279,6 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		i := i
 		clusterArgs.ServerArgsPerNode[i] = base.TestServerArgs{
-			DefaultTestTenant: base.TestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					WithStatementTrace: func(trace tracingpb.Recording, stmt string) {

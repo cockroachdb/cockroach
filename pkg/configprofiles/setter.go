@@ -87,7 +87,7 @@ func (ps *profileSetter) Set(v string) error {
 var endProfileTask = autoconfigpb.Task{
 	TaskID:      autoconfigpb.TaskID(math.MaxUint64),
 	Description: "end of configuration profile",
-	MinVersion:  clusterversion.ByKey(clusterversion.BinaryVersionKey),
+	MinVersion:  clusterversion.Latest.Version(),
 	Payload: &autoconfigpb.Task_SimpleSQL{
 		SimpleSQL: &autoconfigpb.SimpleSQL{},
 	},
@@ -106,6 +106,9 @@ var profileHelp = func() string {
 		}
 		if _, ok := staticProfiles[a.aliasTarget]; !ok {
 			panic(errors.AssertionFailedf("alias %q refers to non-existent profile %q", name, a.aliasTarget))
+		}
+		if a.hidden {
+			continue
 		}
 		allNames = append(allNames, name)
 	}

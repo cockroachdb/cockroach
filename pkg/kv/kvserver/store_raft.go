@@ -183,7 +183,8 @@ func (s *Store) HandleDelegatedSnapshot(
 	}
 
 	// Pass the request to the sender replica.
-	if err := sender.followerSendSnapshot(ctx, req.RecipientReplica, req); err != nil {
+	msgAppResp, err := sender.followerSendSnapshot(ctx, req.RecipientReplica, req)
+	if err != nil {
 		// If an error occurred during snapshot sending, send an error response.
 		return &kvserverpb.DelegateSnapshotResponse{
 			Status:         kvserverpb.DelegateSnapshotResponse_ERROR,
@@ -195,6 +196,7 @@ func (s *Store) HandleDelegatedSnapshot(
 	return &kvserverpb.DelegateSnapshotResponse{
 		Status:         kvserverpb.DelegateSnapshotResponse_APPLIED,
 		CollectedSpans: sp.GetConfiguredRecording(),
+		MsgAppResp:     msgAppResp,
 	}
 }
 
@@ -203,12 +205,22 @@ func (s *Store) HandleDelegatedSnapshot(
 func (s *Store) HandleSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header, stream SnapshotResponseStream,
 ) error {
+	if fn := s.cfg.TestingKnobs.HandleSnapshotDone; fn != nil {
+		defer fn()
+	}
 	ctx = s.AnnotateCtx(ctx)
 	const name = "storage.Store: handle snapshot"
 	return s.stopper.RunTaskWithErr(ctx, name, func(ctx context.Context) error {
 		s.metrics.RaftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
-		return s.receiveSnapshot(ctx, header, stream)
+		err := s.receiveSnapshot(ctx, header, stream)
+		if err != nil && ctx.Err() != nil {
+			// Log trace of incoming snapshot on context cancellation (e.g.
+			// times out or caller goes away).
+			log.Infof(ctx, "incoming snapshot stream failed with error: %v\ntrace:\n%v",
+				err, tracing.SpanFromContext(ctx).GetConfiguredRecording())
+		}
+		return err
 	})
 }
 
@@ -269,9 +281,11 @@ func (s *Store) uncoalesceBeats(
 func (s *Store) HandleRaftRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *kvpb.Error {
-	// NB: unlike the other two RaftMessageHandler methods implemented by Store,
-	// this one doesn't need to directly run through a Stopper task because it
-	// delegates all work through a raftScheduler, whose workers' lifetimes are
+	comparisonResult := s.getLocalityComparison(ctx, req.FromReplica.NodeID, req.ToReplica.NodeID)
+	s.metrics.updateCrossLocalityMetricsOnIncomingRaftMsg(comparisonResult, int64(req.Size()))
+	// NB: unlike the other two IncomingRaftMessageHandler methods implemented by
+	// Store, this one doesn't need to directly run through a Stopper task because
+	// it delegates all work through a raftScheduler, whose workers' lifetimes are
 	// already tied to the Store's Stopper.
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
 		if req.RangeID != 0 {
@@ -318,6 +332,18 @@ func (s *Store) HandleRaftUncoalescedRequest(
 		return false
 	}
 	return enqueue
+}
+
+// HandleRaftRequestSent is called to capture outgoing Raft messages just prior
+// to their transmission to the raftSendQueue. Note that the message might not
+// be successfully queued if it gets dropped by SendAsync due to a full outgoing
+// queue. Currently, this is only used for metrics update which is why it only
+// takes specific properties of the request as arguments.
+func (s *Store) HandleRaftRequestSent(
+	ctx context.Context, fromNodeID roachpb.NodeID, toNodeID roachpb.NodeID, msgSize int64,
+) {
+	comparisonResult := s.getLocalityComparison(ctx, fromNodeID, toNodeID)
+	s.metrics.updateCrossLocalityMetricsOnOutgoingRaftMsg(comparisonResult, msgSize)
 }
 
 // withReplicaForRequest calls the supplied function with the (lazily
@@ -402,8 +428,9 @@ func (s *Store) processRaftRequestWithReplica(
 // will have been removed.
 func (s *Store) processRaftSnapshotRequest(
 	ctx context.Context, snapHeader *kvserverpb.SnapshotRequest_Header, inSnap IncomingSnapshot,
-) *kvpb.Error {
-	return s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest, func(
+) (*raftpb.Message, *kvpb.Error) {
+	var msgAppResp *raftpb.Message
+	pErr := s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest, func(
 		ctx context.Context, r *Replica,
 	) (pErr *kvpb.Error) {
 		ctx = r.AnnotateCtx(ctx)
@@ -472,14 +499,30 @@ func (s *Store) processRaftSnapshotRequest(
 			log.Infof(ctx, "ignored stale snapshot at index %d", snapHeader.RaftMessageRequest.Message.Snapshot.Metadata.Index)
 			s.metrics.RangeSnapshotRecvUnusable.Inc(1)
 		}
+		// If the snapshot was applied and acked with an MsgAppResp, return that
+		// message up the stack. We're using msgAppRespCh as a shortcut to avoid
+		// plumbing return parameters through an additional few layers of raft
+		// handling.
+		//
+		// NB: in practice there's always an MsgAppResp here, but it is better not
+		// to rely on what is essentially discretionary raft behavior.
+		select {
+		case msg := <-inSnap.msgAppRespCh:
+			msgAppResp = &msg
+		default:
+		}
 		return nil
 	})
+	if pErr != nil {
+		return nil, pErr
+	}
+	return msgAppResp, nil
 }
 
-// HandleRaftResponse implements the RaftMessageHandler interface. Per the
-// interface specification, an error is returned if and only if the underlying
-// Raft connection should be closed.
-// It requires that s.mu is not held.
+// HandleRaftResponse implements the IncomingRaftMessageHandler interface. Per
+// the interface specification, an error is returned if and only if the
+// underlying Raft connection should be closed. It requires that s.mu is not
+// held.
 func (s *Store) HandleRaftResponse(
 	ctx context.Context, resp *kvserverpb.RaftMessageResponse,
 ) error {
@@ -697,6 +740,7 @@ func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 // down. Those instances should be rare, however, and we expect the newly live
 // node to eventually unquiesce the range.
 func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
+	ctx := context.TODO()
 	s.updateLivenessMap()
 
 	s.mu.replicasByRangeID.Range(func(r *Replica) {
@@ -705,7 +749,7 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 		lagging := r.mu.laggingFollowersOnQuiesce
 		r.mu.RUnlock()
 		if quiescent && lagging.MemberStale(l) {
-			r.maybeUnquiesce()
+			r.maybeUnquiesce(ctx, false /* wakeLeader */, false /* mayCampaign */) // already leader
 		}
 	})
 }
@@ -720,7 +764,8 @@ func (s *Store) processRaft(ctx context.Context) {
 	_ = s.stopper.RunAsyncTask(ctx, "sched-tick-loop", s.raftTickLoop)
 	_ = s.stopper.RunAsyncTask(ctx, "coalesced-hb-loop", s.coalescedHeartbeatsLoop)
 	s.stopper.AddCloser(stop.CloserFn(func() {
-		s.cfg.Transport.Stop(s.StoreID())
+		s.cfg.Transport.StopIncomingRaftMessages(s.StoreID())
+		s.cfg.Transport.StopOutgoingMessage(s.StoreID())
 	}))
 
 	s.syncWaiter.Start(ctx, s.stopper)
@@ -735,10 +780,8 @@ func (s *Store) processRaft(ctx context.Context) {
 				delete(r.mu.proposals, k)
 				prop.finishApplication(
 					context.Background(),
-					proposalResult{
-						Err: kvpb.NewError(kvpb.NewAmbiguousResultErrorf("store is stopping")),
-					},
-				)
+					makeProposalResultErr(
+						kvpb.NewAmbiguousResultErrorf("store is stopping")))
 			}
 			r.mu.Unlock()
 			return true
@@ -811,14 +854,13 @@ func (s *Store) updateLivenessMap() {
 		// that this policy is different from the one governing the releasing of
 		// proposal quota; see comments over there.
 		//
-		// NB: This has false negatives. If a node doesn't have a conn open to it
-		// when ConnHealth is called, then ConnHealth will return
-		// rpc.ErrNotHeartbeated regardless of whether the node is up or not. That
-		// said, for the nodes that matter, we're likely talking to them via the
-		// Raft transport, so ConnHealth should usually indicate a real problem if
-		// it gives us an error back. The check can also have false positives if the
-		// node goes down after populating the map, but that matters even less.
-		entry.IsLive = (s.cfg.NodeDialer.ConnHealth(nodeID, rpc.SystemClass) == nil)
+		// NB: This has false negatives when we haven't attempted to connect to the
+		// node yet, where it will return rpc.ErrNotHeartbeated regardless of
+		// whether the node is up or not. Once connected, the RPC circuit breakers
+		// will continually probe the connection. The check can also have false
+		// positives if the node goes down after populating the map, but that
+		// matters even less.
+		entry.IsLive = s.cfg.NodeDialer.ConnHealth(nodeID, rpc.SystemClass) == nil
 		nextMap[nodeID] = entry
 	}
 	s.livenessMap.Store(nextMap)

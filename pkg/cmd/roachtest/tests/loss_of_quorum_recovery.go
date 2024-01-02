@@ -72,7 +72,8 @@ func registerLOQRecovery(r registry.Registry) {
 			Name:                s.testName(""),
 			Owner:               registry.OwnerReplication,
 			Benchmark:           true,
-			Tags:                registry.Tags(`default`),
+			CompatibleClouds:    registry.AllExceptAWS,
+			Suites:              registry.Suites(registry.Nightly),
 			Cluster:             spec,
 			Leases:              registry.MetamorphicLeases,
 			SkipPostValidations: registry.PostValidationInvalidDescriptors | registry.PostValidationNoDeadNodes,
@@ -85,7 +86,8 @@ func registerLOQRecovery(r registry.Registry) {
 			Name:                s.testName("half-online"),
 			Owner:               registry.OwnerReplication,
 			Benchmark:           true,
-			Tags:                registry.Tags(`default`),
+			CompatibleClouds:    registry.AllExceptAWS,
+			Suites:              registry.Suites(registry.Nightly),
 			Cluster:             spec,
 			Leases:              registry.MetamorphicLeases,
 			SkipPostValidations: registry.PostValidationInvalidDescriptors | registry.PostValidationNoDeadNodes,
@@ -170,7 +172,6 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 	dbName := "test_db"
 	workloadHistogramFile := "restored.json"
 
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	settings := install.MakeClusterSettings(install.EnvOption([]string{
 		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
 	}))
@@ -388,7 +389,6 @@ func runHalfOnlineRecoverLossOfQuorum(
 	dbName := "test_db"
 	workloadHistogramFile := "restored.json"
 
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	settings := install.MakeClusterSettings(install.EnvOption([]string{
 		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
 	}))

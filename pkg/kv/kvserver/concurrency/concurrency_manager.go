@@ -69,7 +69,7 @@ var MaxLockWaitQueueLength = settings.RegisterIntSetting(
 		"wait-queue is already equal to or exceeding this length, requests will be rejected "+
 		"eagerly instead of entering the queue and waiting. Set to 0 to disable.",
 	0,
-	func(v int64) error {
+	settings.WithValidateInt(func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("cannot be set to a negative value: %d", v)
 		}
@@ -83,24 +83,38 @@ var MaxLockWaitQueueLength = settings.RegisterIntSetting(
 			return errors.Errorf("cannot be set below %d: %d", minSafeMaxLength, v)
 		}
 		return nil
-	},
+	}),
 )
 
-// DiscoveredLocksThresholdToConsultFinalizedTxnCache sets a threshold as
-// mentioned in the description string. The default of 200 is somewhat
-// arbitrary but should suffice for small OLTP transactions. Given the default
+// DiscoveredLocksThresholdToConsultTxnStatusCache sets a threshold as mentioned
+// in the description string. The default of 200 is somewhat arbitrary but
+// should suffice for small OLTP transactions. Given the default
 // 10,000 lock capacity of the lock table, 200 is small enough to not matter
 // much against the capacity, which is desirable. We have seen examples with
 // discoveredCount > 100,000, caused by stats collection, where we definitely
 // want to avoid adding these locks to the lock table, if possible.
-var DiscoveredLocksThresholdToConsultFinalizedTxnCache = settings.RegisterIntSetting(
+var DiscoveredLocksThresholdToConsultTxnStatusCache = settings.RegisterIntSetting(
 	settings.SystemOnly,
+	// NOTE: the name of this setting mentions "finalized" for historical reasons.
 	"kv.lock_table.discovered_locks_threshold_for_consulting_finalized_txn_cache",
-	"the maximum number of discovered locks by a waiter, above which the finalized txn cache"+
+	"the maximum number of discovered locks by a waiter, above which the txn status cache"+
 		"is consulted and resolvable locks are not added to the lock table -- this should be a small"+
 		"fraction of the maximum number of locks in the lock table",
 	200,
 	settings.NonNegativeInt,
+)
+
+// BatchPushedLockResolution controls whether the lock table should allow
+// non-locking readers to defer and batch the resolution of conflicting locks
+// whose holder is known to be pending and have been pushed above the reader's
+// timestamp.
+var BatchPushedLockResolution = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lock_table.batch_pushed_lock_resolution.enabled",
+	"whether the lock table should allow non-locking readers to defer and batch the resolution of "+
+		"conflicting locks whose holder is known to be pending and have been pushed above the reader's "+
+		"timestamp",
+	true,
 )
 
 // managerImpl implements the Manager interface.
@@ -146,7 +160,9 @@ func (c *Config) initDefaults() {
 func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
 	m := new(managerImpl)
-	lt := newLockTable(cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, cfg.Clock)
+	lt := maybeWrapInVerifyingLockTable(
+		newLockTable(cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, cfg.Clock, cfg.Settings),
+	)
 	*m = managerImpl{
 		st: cfg.Settings,
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
@@ -318,7 +334,10 @@ func (m *managerImpl) sequenceReqWithGuard(
 		} else {
 			// Scan for conflicting locks.
 			log.Event(ctx, "scanning lock table for conflicting locks")
-			g.ltg = m.lt.ScanAndEnqueue(g.Req, g.ltg)
+			g.ltg, err = m.lt.ScanAndEnqueue(g.Req, g.ltg)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// Wait on conflicting locks, if necessary. Note that this will never be
@@ -347,7 +366,7 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 		// If necessary, wait in the txnWaitQueue for the pushee transaction to
 		// expire or to move to a finalized state.
 		t := req.Requests[0].GetPushTxn()
-		resp, err := m.twq.MaybeWaitForPush(ctx, t)
+		resp, err := m.twq.MaybeWaitForPush(ctx, t, req.WaitPolicy)
 		if err != nil {
 			return nil, err
 		} else if resp != nil {
@@ -436,12 +455,12 @@ func (m *managerImpl) FinishReq(g *Guard) {
 	releaseGuard(g)
 }
 
-// HandleWriterIntentError implements the ContentionHandler interface.
-func (m *managerImpl) HandleWriterIntentError(
-	ctx context.Context, g *Guard, seq roachpb.LeaseSequence, t *kvpb.WriteIntentError,
+// HandleLockConflictError implements the ContentionHandler interface.
+func (m *managerImpl) HandleLockConflictError(
+	ctx context.Context, g *Guard, seq roachpb.LeaseSequence, t *kvpb.LockConflictError,
 ) (*Guard, *Error) {
 	if g.ltg == nil {
-		log.Fatalf(ctx, "cannot handle WriteIntentError %v for request without "+
+		log.Fatalf(ctx, "cannot handle LockConflictError %v for request without "+
 			"lockTableGuard; were lock spans declared for this request?", t)
 	}
 
@@ -458,25 +477,25 @@ func (m *managerImpl) HandleWriterIntentError(
 	//    wait in the new leaseholder's lock table.
 	// 2) if the request can be served on this follower replica according to the
 	//    closed timestamp then it will likely re-encounter the same intent on its
-	//    next evaluation attempt. The WriteIntentError will then be mapped to an
+	//    next evaluation attempt. The LockConflictError will then be mapped to an
 	//    InvalidLeaseError in maybeAttachLease, which will indicate that the
 	//    request cannot be served as a follower read after all and cause the
 	//    request to be redirected to the leaseholder.
 	//
 	// Either way, there is no possibility of the request entering an infinite
 	// loop without making progress.
-	consultFinalizedTxnCache :=
-		int64(len(t.Intents)) > DiscoveredLocksThresholdToConsultFinalizedTxnCache.Get(&m.st.SV)
-	for i := range t.Intents {
-		intent := &t.Intents[i]
-		added, err := m.lt.AddDiscoveredLock(intent, seq, consultFinalizedTxnCache, g.ltg)
+	consultTxnStatusCache :=
+		int64(len(t.Locks)) > DiscoveredLocksThresholdToConsultTxnStatusCache.Get(&m.st.SV)
+	for i := range t.Locks {
+		foundLock := &t.Locks[i]
+		added, err := m.lt.AddDiscoveredLock(foundLock, seq, consultTxnStatusCache, g.ltg)
 		if err != nil {
 			log.Fatalf(ctx, "%v", err)
 		}
 		if !added {
 			log.VEventf(ctx, 2,
 				"intent on %s discovered but not added to disabled lock table",
-				intent.Key.String())
+				foundLock.Key.String())
 		}
 	}
 
@@ -489,7 +508,7 @@ func (m *managerImpl) HandleWriterIntentError(
 	// If the discovery process collected a set of intents to resolve before the
 	// next evaluation attempt, do so.
 	if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
-		if err := m.ltw.ResolveDeferredIntents(ctx, toResolve); err != nil {
+		if err := m.ltw.ResolveDeferredIntents(ctx, g.Req.AdmissionHeader, toResolve); err != nil {
 			m.FinishReq(g)
 			return nil, err
 		}
@@ -598,7 +617,7 @@ func (m *managerImpl) OnReplicaSnapshotApplied() {
 	// through LockManager listener methods. If there's a chance it missed a
 	// state transition, it is safer to simply clear the lockTable and rebuild
 	// it from persistent intent state by allowing requests to discover locks
-	// and inform the manager through calls to HandleWriterIntentError.
+	// and inform the manager through calls to HandleLockConflictError.
 	//
 	// A range only maintains locks in the lockTable of its leaseholder replica
 	// even thought it runs a concurrency manager on all replicas. Because of
@@ -631,14 +650,7 @@ func (m *managerImpl) TestingTxnWaitQueue() *txnwait.Queue {
 
 // TestingSetMaxLocks implements the TestingAccessor interface.
 func (m *managerImpl) TestingSetMaxLocks(maxLocks int64) {
-	m.lt.(*lockTableImpl).setMaxLocks(maxLocks)
-}
-
-func (r *Request) txnMeta() *enginepb.TxnMeta {
-	if r.Txn == nil {
-		return nil
-	}
-	return &r.Txn.TxnMeta
+	m.lt.TestingSetMaxLocks(maxLocks)
 }
 
 func (r *Request) isSingle(m kvpb.Method) bool {
@@ -713,16 +725,33 @@ func (g *Guard) AssertNoLatches() {
 // before the request can evaluate at that later timestamp.
 func (g *Guard) IsolatedAtLaterTimestamps() bool {
 	// If the request acquired any read latches with bounded (MVCC) timestamps
-	// then it can not trivially bump its timestamp without dropping and
-	// re-acquiring those latches. Doing so could allow the request to read at an
-	// unprotected timestamp. We only look at global latch spans because local
+	// then it cannot trivially bump its timestamp without dropping and
+	// re-acquiring those latches. Doing so could allow the request to read at
+	// an unprotected timestamp. We only look at global latch spans because local
 	// latch spans always use unbounded (NonMVCC) timestamps.
-	return len(g.Req.LatchSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal)) == 0 &&
-		// Similarly, if the request intends to perform any non-locking reads, it
-		// cannot trivially bump its timestamp and expect to be isolated at the
-		// higher timestamp. Bumping its timestamp could cause the request to
-		// conflict with locks that it previously did not conflict with. It must
-		// drop its lockTableGuard and re-scan the lockTable.
+	//
+	// Even still, the existence of read only global latch spans is not enough for
+	// us to determine that the request is not isolated at higher timestamps -- we
+	// must check the timestamps at which the latches are declared as well. That's
+	// because if a read latch is declared at hlc.MaxTimestamp, it is isolated at
+	// higher timestamps; shared locking requests do exactly this.
+	readLatchesIsolatedAtHigherTimestamp := true
+	for _, l := range g.Req.LatchSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal) {
+		if !l.Timestamp.Equal(hlc.MaxTimestamp) {
+			readLatchesIsolatedAtHigherTimestamp = false
+			break
+		}
+	}
+	// If read latches are isolated at higher timestamps then the request can
+	// trivially bump its timestamp without dropping and re-acquiring those
+	// latches. There's no need to check write latches, as they're always isolated
+	// at higher timestamps.
+	return readLatchesIsolatedAtHigherTimestamp &&
+		// If the request intends to perform any non-locking reads, it cannot
+		// trivially bump its timestamp and expect to be isolated at the higher
+		// timestamp. Bumping its timestamp could cause the request to conflict with
+		// locks that it previously did not conflict with. It must drop its
+		// lockTableGuard and re-scan the lockTable.
 		len(g.Req.LockSpans.GetSpans(lock.None)) == 0
 }
 
@@ -760,25 +789,23 @@ func (g *Guard) CheckOptimisticNoLatchConflicts() (ok bool) {
 	return g.lm.CheckOptimisticNoConflicts(g.lg, g.Req.LatchSpans)
 }
 
-// IsKeyLockedByConflictingTxn returns whether the specified key is claimed
-// (see claimantTxn()) by a conflicting transaction in the lockTableGuard's
-// snapshot of the lock table, given the caller's own desired locking
-// strength. If so, true is returned. If the key is locked, the lock holder is
-// also returned. Otherwise, if the key was claimed by a concurrent request
-// still sequencing through the lock table, but the lock isn't held (yet), nil
-// is also returned.
+// IsKeyLockedByConflictingTxn returns whether the specified key is locked by
+// a conflicting transaction in the lockTableGuard's snapshot of the lock
+// table, given the caller's own desired locking strength. If so, true is
+// returned and so is the lock holder. If the lock is held by the transaction
+// itself, there's no conflict to speak of, so false is returned.
 //
-// If the lock has been claimed (held or otherwise) by the transaction itself,
-// there's no conflict to speak of, so false is returned. In cases where the
-// lock isn't held, but the lock has been claimed by the transaction itself,
-// we do not make a distinction about which request claimed the key -- it
-// could either be the request itself, or a different concurrent request from
-// the same transaction; The specifics do not affect the caller.
 // This method is used by requests in conjunction with the SkipLocked wait
 // policy to determine which keys they should skip over during evaluation.
+//
+// If the supplied lock strength is locking (!= lock.None), then any queued
+// locking requests that came before the lockTableGuard will also be checked
+// for conflicts. This helps prevent a stream of locking SKIP LOCKED requests
+// from starving out regular locking requests. In such cases, true is
+// returned, but so is nil.
 func (g *Guard) IsKeyLockedByConflictingTxn(
 	key roachpb.Key, strength lock.Strength,
-) (bool, *enginepb.TxnMeta) {
+) (bool, *enginepb.TxnMeta, error) {
 	return g.ltg.IsKeyLockedByConflictingTxn(key, strength)
 }
 

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -106,6 +107,7 @@ var (
 		"columns":         memo.ExprFmtHideColumns,
 		"all":             memo.ExprFmtHideAll,
 		"notvisibleindex": memo.ExprFmtHideNotVisibleIndexInfo,
+		"fastpathchecks":  memo.ExprFmtHideFastPathChecks,
 	}
 )
 
@@ -258,6 +260,9 @@ type Flags struct {
 	// RoundFloatsInStringsSigFigs specifies the number of significant figures
 	// to round floats embedded in strings to where zero means do not round.
 	RoundFloatsInStringsSigFigs int
+
+	// TxnIsoLevel is the isolation level to plan for.
+	TxnIsoLevel isolation.Level
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -301,6 +306,8 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().OptimizerAlwaysUseHistograms = true
 	ot.evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries = true
 	ot.evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation = true
+	ot.evalCtx.SessionData().OptimizerUseImprovedJoinElimination = true
+	ot.evalCtx.SessionData().OptimizerUseProvidedOrderingFix = true
 
 	return ot
 }
@@ -559,6 +566,8 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //   - statement-bundle file=<path>
 //     Load the schema and stats from a statement bundle, file can be either a
 //     full path or a relative path to testdata.
+//
+//   - isolation: sets the isolation level to plan for.
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
@@ -580,6 +589,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	ot.evalCtx.Locality = ot.Flags.Locality
 	ot.evalCtx.OriginalLocality = ot.Flags.Locality
 	ot.evalCtx.Placeholders = nil
+	ot.evalCtx.TxnIsoLevel = ot.Flags.TxnIsoLevel
 
 	switch d.Cmd {
 	case "exec-ddl":
@@ -1137,6 +1147,15 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 	case "skip-race":
 		f.SkipRace = true
+
+	case "isolation":
+		level, ok := isolation.Level_value[arg.Vals[0]]
+		if !ok {
+			return fmt.Errorf(
+				"invalid isolation level (must be found in %v): %v", isolation.Level_value, arg.Vals[0],
+			)
+		}
+		f.TxnIsoLevel = isolation.Level(level)
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)

@@ -26,8 +26,9 @@ type Provider interface {
 	// initial event immediately.
 	EnvUpdate() <-chan struct{}
 
-	// ActiveEnvironments returns the IDs of environments that have
-	// tasks available for execution.
+	// ActiveEnvironments returns the IDs of environments that
+	// have tasks available for execution. A nil or empty array is
+	// returned when there are no more tasks to run.
 	ActiveEnvironments() []autoconfigpb.EnvironmentID
 
 	// Peek will block waiting for the first task the provider believes

@@ -14,7 +14,6 @@ package scgraph
 
 import (
 	"reflect"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -54,14 +53,6 @@ type Graph struct {
 	// opToOpEdge maps from an operation back to the
 	// opEdge that generated it as an index.
 	opToOpEdge map[scop.Op]*OpEdge
-
-	// noOpOpEdges that are marked optimized out, and will not generate
-	// any operations.
-	//
-	// Deprecated.
-	//
-	// TODO(postamar): remove once release_22_2 ruleset is also removed
-	noOpOpEdges map[*OpEdge]map[RuleName]struct{}
 
 	entities *rel.Database
 }
@@ -127,23 +118,79 @@ func New(cs scpb.CurrentState) (*Graph, error) {
 		targetIdxMap: map[*scpb.Target]targetIdx{},
 		opEdgesFrom:  map[*screl.Node]*OpEdge{},
 		opEdgesTo:    map[*screl.Node]*OpEdge{},
-		noOpOpEdges:  map[*OpEdge]map[RuleName]struct{}{},
 		opToOpEdge:   map[scop.Op]*OpEdge{},
 		entities:     db,
 	}
 	g.depEdges = makeDepEdges(func(n *screl.Node) targetIdx {
 		return g.targetIdxMap[n.Target]
 	})
-	for i, status := range cs.Initial {
+	for i := range cs.Targets {
 		t := &cs.Targets[i]
+		var src scpb.Status
+		{
+			// Determine the status of the source node of the op-edge path
+			// which leads to the present target node.
+			if initial, current := cs.Initial[i], cs.Current[i]; initial == current {
+				// This is the straightforward case, which applies in all phases except
+				// the statement phase.
+				src = current
+			} else {
+				// Here we are in the statement phase and the plan include a pre-commit
+				// phase in which the element is transitioned from its current status
+				// back to its initial status and then onward to the target status.
+				// Those 3 corresponding nodes therefore need to be present in the
+				// graph. The source node therefore needs to be either the current or
+				// the initial status, depending on which is furthest from the target.
+				//
+				// Typically, that would be the initial status, however there are
+				// legitimate cases where the initial status is also the target status
+				// and in that case we need to pick the current status instead. This
+				// happens in explicit transactions where a DDL statement effectively
+				// undoes an earlier DDL statement in that transaction:
+				//
+				//     BEGIN;
+				//     CREATE SCHEMA sc;
+				//     DROP SCHEMA sc;
+				//
+				// In this example when building the plan while executing the last
+				// statement, the Schema element will have:
+				//   - an ABSENT target status, because we want to get rid of the
+				//     newly-added schema,
+				//   - an ABSENT initial status, because the schema didn't exist prior
+				//     to this transaction,
+				//   - a DESCRIPTOR_ADDING current status, because the previous
+				//     statement has already executed its statement phase operations,
+				//     in order to make the side-effects of the schema creation
+				//     visible.
+				//
+				// The initial status has the convenient property in that it's either
+				// PUBLIC or ABSENT, because we don't allow concurrent schema changes.
+				// For this reason, we set the source node status based on whether
+				// the target is a no-op or not.
+				if initial == scpb.AsTargetStatus(t.TargetStatus).InitialStatus() {
+					// In this case, either the initial status is PUBLIC and the target
+					// is ABSENT, or the initial status is ABSENT and the target is
+					// PUBLIC or TRANSIENT_ABSENT. This is the straightforward sub-case
+					// where the current status is somewhere in between the initial
+					// and target statuses on the op-edge path.
+					src = initial
+				} else {
+					// This is the less straightforward sub-case where the target is a
+					// no-op with respect to the initial status. However, since we're in
+					// the statement phase, we still need to transition the element away
+					// from its current status.
+					src = current
+				}
+			}
+		}
 		if existing, ok := g.targetIdxMap[t]; ok {
 			return nil, errors.Errorf("invalid initial state contains duplicate target: %v and %v", *t, cs.Targets[existing])
 		}
 		idx := len(g.targets)
 		g.targetIdxMap[t] = targetIdx(idx)
 		g.targets = append(g.targets, t)
-		n := &screl.Node{Target: t, CurrentStatus: status}
-		g.targetNodes = append(g.targetNodes, map[scpb.Status]*screl.Node{status: n})
+		n := &screl.Node{Target: t, CurrentStatus: src}
+		g.targetNodes = append(g.targetNodes, map[scpb.Status]*screl.Node{src: n})
 		if err := g.entities.Insert(n); err != nil {
 			return nil, err
 		}
@@ -165,11 +212,6 @@ func (g *Graph) ShallowClone() *Graph {
 		opEdges:      g.opEdges,
 		opToOpEdge:   g.opToOpEdge,
 		entities:     g.entities,
-		noOpOpEdges:  make(map[*OpEdge]map[RuleName]struct{}),
-	}
-	// Any decorations for mutations will be copied.
-	for edge, noop := range g.noOpOpEdges {
-		clone.noOpOpEdges[edge] = noop
 	}
 	return clone
 }
@@ -299,52 +341,6 @@ func (g *Graph) AddDepEdge(
 	}
 	return g.depEdges.insertOrUpdate(rule, kind, from, to)
 
-}
-
-// MarkAsNoOp marks an edge as no-op, so that no operations are emitted from
-// this edge during planning.
-//
-// Deprecated.
-//
-// TODO(postamar): remove once release_22_2 ruleset is also removed
-func (g *Graph) MarkAsNoOp(edge *OpEdge, rule ...RuleName) {
-	m := make(map[RuleName]struct{})
-	for _, r := range rule {
-		m[r] = struct{}{}
-	}
-	g.noOpOpEdges[edge] = m
-}
-
-// IsNoOp checks if an edge is marked as an edge that should emit no operations.
-//
-// Deprecated.
-//
-// TODO(postamar): remove once release_22_2 ruleset is also removed
-func (g *Graph) IsNoOp(edge *OpEdge) bool {
-	if len(edge.op) == 0 {
-		return true
-	}
-	_, isNoOp := g.noOpOpEdges[edge]
-	return isNoOp
-}
-
-// NoOpRules returns the rules which caused the edge to not emit any operations.
-//
-// Deprecated.
-//
-// TODO(postamar): remove once release_22_2 ruleset is also removed
-func (g *Graph) NoOpRules(edge *OpEdge) (rules []RuleName) {
-	if !g.IsNoOp(edge) {
-		return nil
-	}
-	m := g.noOpOpEdges[edge]
-	for rule := range m {
-		rules = append(rules, rule)
-	}
-	sort.Slice(rules, func(i, j int) bool {
-		return rules[i] < rules[j]
-	})
-	return rules
 }
 
 // Order returns the number of nodes in this graph.

@@ -14,9 +14,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,19 +31,13 @@ func TestStatements(t *testing.T) {
 
 	ctx := context.Background()
 
-	params, _ := tests.CreateTestServerParams()
-	testServer, db, _ := serverutils.StartServer(t, params)
+	testServer, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer testServer.Stopper().Stop(ctx)
 
-	conn, err := testServer.RPCContext().GRPCDialNode(
-		testServer.RPCAddr(), testServer.NodeID(), rpc.DefaultClass,
-	).Connect(ctx)
-	require.NoError(t, err)
-
-	client := serverpb.NewStatusClient(conn)
+	client := testServer.GetStatusClient(t)
 
 	testQuery := "CREATE TABLE foo (id INT8)"
-	_, err = db.Exec(testQuery)
+	_, err := db.Exec(testQuery)
 	require.NoError(t, err)
 
 	resp, err := client.Statements(ctx, &serverpb.StatementsRequest{NodeID: "local"})
@@ -65,19 +58,13 @@ func TestStatementsExcludeStats(t *testing.T) {
 
 	ctx := context.Background()
 
-	params, _ := tests.CreateTestServerParams()
-	testServer, db, _ := serverutils.StartServer(t, params)
+	testServer, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer testServer.Stopper().Stop(ctx)
 
-	conn, err := testServer.RPCContext().GRPCDialNode(
-		testServer.RPCAddr(), testServer.NodeID(), rpc.DefaultClass,
-	).Connect(ctx)
-	require.NoError(t, err)
-
-	client := serverpb.NewStatusClient(conn)
+	client := testServer.GetStatusClient(t)
 
 	testQuery := "CREATE TABLE foo (id INT8)"
-	_, err = db.Exec(testQuery)
+	_, err := db.Exec(testQuery)
 	require.NoError(t, err)
 
 	t.Run("exclude-statements", func(t *testing.T) {

@@ -40,6 +40,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       tooltip={<div>CPU usage for the CRDB nodes {tooltipSelection}</div>}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Percentage} label="CPU">
         {nodeIDs.map(nid => (
@@ -57,6 +58,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       tooltip={<div>Machine-wide CPU usage {tooltipSelection}</div>}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Percentage} label="CPU">
         {nodeIDs.map(nid => (
@@ -74,6 +76,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       tooltip={<div>Memory in use {tooltipSelection}</div>}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="memory usage">
         {nodeIDs.map(nid => (
@@ -90,6 +93,7 @@ export default function (props: GraphDashboardProps) {
       title="Disk Read MiB/s"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
         {nodeIDs.map(nid => (
@@ -107,6 +111,7 @@ export default function (props: GraphDashboardProps) {
       title="Disk Write MiB/s"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
         {nodeIDs.map(nid => (
@@ -124,6 +129,7 @@ export default function (props: GraphDashboardProps) {
       title="Disk Read IOPS"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="IOPS">
         {nodeIDs.map(nid => (
@@ -141,6 +147,7 @@ export default function (props: GraphDashboardProps) {
       title="Disk Write IOPS"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="IOPS">
         {nodeIDs.map(nid => (
@@ -158,6 +165,7 @@ export default function (props: GraphDashboardProps) {
       title="Disk Ops In Progress"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="Ops">
         {nodeIDs.map(nid => (
@@ -175,6 +183,7 @@ export default function (props: GraphDashboardProps) {
       sources={storeSources}
       tenantSource={tenantSource}
       tooltip={<AvailableDiscCapacityGraphTooltip />}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
         {nodeIDs.map(nid => (
@@ -182,40 +191,6 @@ export default function (props: GraphDashboardProps) {
             name="cr.store.capacity.available"
             sources={storeIDsForNode(storeIDsByNodeID, nid)}
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-          />
-        ))}
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Network Bytes Received"
-      sources={nodeSources}
-      tenantSource={tenantSource}
-    >
-      <Axis units={AxisUnits.Bytes} label="bytes">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.host.net.recv.bytes"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            nonNegativeRate
-          />
-        ))}
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Network Bytes Sent"
-      sources={nodeSources}
-      tenantSource={tenantSource}
-    >
-      <Axis units={AxisUnits.Bytes} label="bytes">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.host.net.send.bytes"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            nonNegativeRate
           />
         ))}
       </Axis>

@@ -20,9 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
@@ -44,7 +43,7 @@ func TestFingerprint(t *testing.T) {
 	var mu syncutil.Mutex
 	var numExportResponses int
 	var numSSTsInExportResponses int
-	serv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
+	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
@@ -62,6 +61,7 @@ func TestFingerprint(t *testing.T) {
 			},
 		},
 	})
+	defer s.Stopper().Stop(ctx)
 
 	resetVars := func() {
 		mu.Lock()
@@ -89,10 +89,11 @@ func TestFingerprint(t *testing.T) {
 	}
 
 	fingerprint := func(t *testing.T, startKey, endKey string, startTime, endTime hlc.Timestamp, allRevisions bool) int64 {
-		decimal := eval.TimestampToDecimal(endTime)
+		aost := endTime.AsOfSystemTime()
 		var fingerprint int64
-		query := fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint(ARRAY[$1::BYTES, $2::BYTES], $3, $4) AS OF SYSTEM TIME %s`, decimal.String())
-		require.NoError(t, sqlDB.QueryRow(query, roachpb.Key(startKey), roachpb.Key(endKey), startTime.GoTime(), allRevisions).Scan(&fingerprint))
+		query := fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint(ARRAY[$1::BYTES, $2::BYTES],$3::DECIMAL, $4) AS OF SYSTEM TIME '%s'`, aost)
+		require.NoError(t, sqlDB.QueryRow(query, roachpb.Key(startKey), roachpb.Key(endKey),
+			startTime.AsOfSystemTime(), allRevisions).Scan(&fingerprint))
 		return fingerprint
 	}
 
@@ -108,10 +109,7 @@ func TestFingerprint(t *testing.T) {
 		require.Zero(t, fingerprint)
 	})
 
-	s := serv.(*server.TestServer)
-	defer s.Stopper().Stop(ctx)
-
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	eng := store.TODOEngine()
 
@@ -288,9 +286,9 @@ func TestFingerprintStripped(t *testing.T) {
 	// Create the same sql rows in a different table, committed at a different timestamp.
 	db.Exec(t, "CREATE TABLE test.test2 (k PRIMARY KEY) AS SELECT generate_series(1, 10)")
 
-	strippedFingerprint := func(tableName string) int {
-		tableID := sqlutils.QueryTableID(t, sqlDB, "test", "public", tableName)
-		return sqlutils.FingerprintTable(t, db, tableID)
-	}
-	require.Equal(t, strippedFingerprint("test"), strippedFingerprint("test2"))
+	fingerprints, err := fingerprintutils.FingerprintDatabase(ctx, sqlDB, "test",
+		fingerprintutils.Stripped())
+	require.NoError(t, err)
+
+	require.Equal(t, fingerprints["test"], fingerprints["test2"])
 }

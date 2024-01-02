@@ -20,9 +20,13 @@ type TestInstrumentation interface {
 type TestEventType int
 
 const (
+	// MainLoopStarted indicates that the main loop has finished initializing the
+	// controller and is waiting for work.
+	MainLoopStarted TestEventType = 1 + iota
+
 	// TickProcessed indicates that the main loop completed the processing of a
 	// tick.
-	TickProcessed TestEventType = 1 + iota
+	TickProcessed
 
 	// LowRUNotification indicates that the main loop handled a "low RU"
 	// notification from the token bucket.

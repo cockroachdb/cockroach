@@ -21,10 +21,11 @@ $$;
 ops
 DROP FUNCTION f;
 ----
-StatementPhase stage 1 of 1 with 11 MutationType ops
+StatementPhase stage 1 of 1 with 12 MutationType ops
   transitions:
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 109, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Function:{DescID: 109}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
@@ -72,11 +73,15 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
       User: admin
     *scop.RemoveUserPrivileges
       DescriptorID: 109
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 109
       User: root
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Owner:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 109, Name: public}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Function:{DescID: 109}, ABSENT], DROPPED] -> PUBLIC
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
@@ -88,10 +93,11 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 18 MutationType ops
+PreCommitPhase stage 2 of 2 with 19 MutationType ops
   transitions:
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 109, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Function:{DescID: 109}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
@@ -137,6 +143,9 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 109
       User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 109
+      User: public
     *scop.RemoveUserPrivileges
       DescriptorID: 109
       User: root

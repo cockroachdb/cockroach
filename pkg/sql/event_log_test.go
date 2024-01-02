@@ -82,7 +82,7 @@ func TestStructuredEventLogging(t *testing.T) {
 	}
 
 	// Ensure that the entries hit the OS so they can be read back below.
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
 		math.MaxInt64, 10000, execLogRe, log.WithMarkedSensitiveData)
@@ -159,7 +159,7 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `INSERT INTO t VALUES (1, pg_sleep(0.256), 'x')`,
 			errRe:       `duplicate key`,
-			logRe:       `"EventType":"slow_query","Statement":"INSERT INTO .*‹t› VALUES \(‹1›, pg_sleep\(‹0.256›\), ‹'x'›\)","Tag":"INSERT","User":"root"`,
+			logRe:       `"EventType":"slow_query","Statement":"INSERT INTO .*‹t› VALUES \(‹1›, ‹pg_sleep›\(‹0.256›\), ‹'x'›\)","Tag":"INSERT","User":"root"`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
@@ -736,12 +736,15 @@ func TestPerfLogging(t *testing.T) {
 		}
 
 		var logRe = regexp.MustCompile(tc.logRe)
-		log.Flush()
+		log.FlushFiles()
 		entries, err := log.FetchEntriesFromFiles(
 			start, math.MaxInt64, 1000, logRe, log.WithMarkedSensitiveData,
 		)
 		if err != nil {
 			t.Fatal(err)
+		}
+		for _, l := range entries {
+			log.Infof(context.Background(), "%s", l.Message)
 		}
 
 		if (len(entries) > 0) != tc.logExpected {

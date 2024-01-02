@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -121,11 +123,17 @@ type CatalogBuiltins interface {
 	// redacts its expressions, and re-encodes it.
 	RedactDescriptor(ctx context.Context, encodedDescriptor []byte) ([]byte, error)
 
-	// DescriptorWithPostDeserializationChanges expects an encoded protobuf
-	// descriptor, decodes it, puts it into a catalog.DescriptorBuilder,
-	// calls RunPostDeserializationChanges, and re-encodes it.
-	DescriptorWithPostDeserializationChanges(
-		ctx context.Context, encodedDescriptor []byte,
+	// RepairedDescriptor expects an encoded protobuf descriptor,
+	// decodes it,
+	// puts it into a catalog.DescriptorBuilder,
+	// calls RunPostDeserializationChanges,
+	// calls StripDanglingBackReferences,
+	// and re-encodes it.
+	RepairedDescriptor(
+		ctx context.Context,
+		encodedDescriptor []byte,
+		descIDMightExist func(id descpb.ID) bool,
+		nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
 	) ([]byte, error)
 }
 
@@ -158,7 +166,7 @@ type HasPrivilegeSpecifier struct {
 	ColumnName   *tree.Name
 	ColumnAttNum *uint32
 
-	// Function privilege
+	// Routine privilege
 	// This needs to be a user-defined function OID. Builtin function OIDs won't
 	// work since they're not descriptors based.
 	FunctionOID *oid.Oid
@@ -340,6 +348,12 @@ type Planner interface {
 	// it is invalid.
 	RepairTTLScheduledJobForTable(ctx context.Context, tableID int64) error
 
+	// FingerprintSpan calculates a fingerprint for the given span. If a
+	// startTime is passed and allRevisions is true, then the fingerprint
+	// includes the MVCC history between startTime and the read timestamp of
+	// the transaction.
+	FingerprintSpan(ctx context.Context, span roachpb.Span, startTime hlc.Timestamp, allRevisions bool, stripped bool) (uint64, error)
+
 	// QueryRowEx executes the supplied SQL statement and returns a single row, or
 	// nil if no row is found, or an error if more that one row is returned.
 	//
@@ -393,6 +407,28 @@ type Planner interface {
 	// less than numAnnotations entries. If updated, the annotations in the eval
 	// context held in the planner is also updated.
 	MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx)
+
+	// Optimizer returns the optimizer associated with this Planner, if any.
+	Optimizer() interface{}
+
+	// GenUniqueCursorName returns a name that is guaranteed to be unique among
+	// the current list of cursors and portals. It is used to implement PLpgSQL
+	// OPEN statements when used with an unnamed cursor.
+	GenUniqueCursorName() tree.Name
+
+	// PLpgSQLCloseCursor closes the cursor with the given name, returning an
+	// error if the cursor doesn't exist. It is used to implement the PLpgSQL
+	// CLOSE statement.
+	PLpgSQLCloseCursor(cursorName tree.Name) error
+
+	// PLpgSQLFetchCursor returns the next row from the cursor with the given
+	// name, if any. It returns nil if no such row exists. Used to implement the
+	// PLpgSQL FETCH statement.
+	PLpgSQLFetchCursor(ctx context.Context, cursor *tree.CursorStmt) (res tree.Datums, err error)
+
+	// AutoCommit indicates whether the Planner has flagged the current statement
+	// as eligible for transaction auto-commit.
+	AutoCommit() bool
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -431,6 +467,19 @@ type CompactEngineSpanFunc func(
 	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
 ) error
 
+// GetTableMetrics is used to retrieve sstable metrics on a key span
+// (end-exclusive) at the given (nodeID, storeID).
+type GetTableMetricsFunc func(
+	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
+) ([]enginepb.SSTableMetricsInfo, error)
+
+// ScanStorageInternalKeysFunc is used to retrieve pebble metrics on a key span
+// (end-exclusive) at the given (nodeID, storeID).
+// megabytesPerSecond is used to specify the maximmum number of bytes read per second.
+type ScanStorageInternalKeysFunc func(
+	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte, megabytesPerSecond int64,
+) ([]enginepb.StorageInternalKeysMetrics, error)
+
 // SetCompactionConcurrencyFunc is used to change the compaction concurrency of a
 // store.
 type SetCompactionConcurrencyFunc func(
@@ -461,7 +510,7 @@ type SessionAccessor interface {
 
 	// HasViewActivityOrViewActivityRedactedRole returns true iff the current session user has the
 	// VIEWACTIVITY or VIEWACTIVITYREDACTED permission.
-	HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, error)
+	HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, bool, error)
 }
 
 // PreparedStatementState is a limited interface that exposes metadata about
@@ -485,6 +534,19 @@ type ClientNoticeSender interface {
 	// BufferClientNotice buffers the notice to send to the client.
 	// This is flushed before the connection is closed.
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
+	// SendClientNotice immediately flushes the notice to the client. This is used
+	// to implement PLpgSQL RAISE statements; most cases should use
+	// BufferClientNotice.
+	SendClientNotice(ctx context.Context, notice pgnotice.Notice) error
+}
+
+// DeferredRoutineSender allows a nested routine to send the information needed
+// for its own evaluation to a parent routine. This is used to defer execution
+// for tail-call optimization. It can only be used during local execution.
+type DeferredRoutineSender interface {
+	// SendDeferredRoutine sends a local nested routine and its arguments to its
+	// parent routine.
+	SendDeferredRoutine(expr *tree.RoutineExpr, args tree.Datums)
 }
 
 // PrivilegedAccessor gives access to certain queries that would otherwise
@@ -504,6 +566,9 @@ type PrivilegedAccessor interface {
 	// Returns the config byte array, a bool representing whether the namespace exists,
 	// and an error if there is one.
 	LookupZoneConfigByNamespaceID(ctx context.Context, id int64) (tree.DBytes, bool, error)
+
+	// IsSystemTable returns if a given descriptor ID is a system table.s
+	IsSystemTable(ctx context.Context, id int64) (bool, error)
 }
 
 // RegionOperator gives access to the current region, validation for all
@@ -554,6 +619,11 @@ type SequenceOperators interface {
 	// `newVal + seqOpts.Increment`.
 	// Takes in a sequence ID rather than a name, unlike SetSequenceValue.
 	SetSequenceValueByID(ctx context.Context, seqID uint32, newVal int64, isCalled bool) error
+
+	// GetLastSequenceValueByID returns the last value returned by the sequence,
+	// not specific to any session. It also returns a flag to indicate if the
+	// sequence has been called before.
+	GetLastSequenceValueByID(ctx context.Context, seqID uint32) (value int64, wasCalled bool, err error)
 }
 
 // ChangefeedState is used to track progress and checkpointing for sinkless/core changefeeds.
@@ -578,11 +648,6 @@ type TenantOperator interface {
 	// It returns an error if the tenant does not exist. If synchronous is true
 	// the gc job will not wait for a GC ttl.
 	DropTenantByID(ctx context.Context, tenantID uint64, synchronous, ignoreServiceMode bool) error
-
-	// GCTenant attempts to garbage collect a DROP tenant from the system. Upon
-	// success it also removes the tenant record.
-	// It returns an error if the tenant does not exist.
-	GCTenant(ctx context.Context, tenantID uint64) error
 
 	// LookupTenantID returns the ID for the given tenant name.o
 	LookupTenantID(ctx context.Context, tenantName roachpb.TenantName) (roachpb.TenantID, error)
@@ -624,6 +689,8 @@ type GossipOperator interface {
 // to avoid circular dependency.
 type SQLStatsController interface {
 	ResetClusterSQLStats(ctx context.Context) error
+	ResetActivityTables(ctx context.Context) error
+	ResetInsightsTables(ctx context.Context) error
 	CreateSQLStatsCompactionSchedule(ctx context.Context) error
 }
 
@@ -647,6 +714,8 @@ type IndexUsageStatsController interface {
 type StmtDiagnosticsRequestInsertFunc func(
 	ctx context.Context,
 	stmtFingerprint string,
+	planGist string,
+	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,

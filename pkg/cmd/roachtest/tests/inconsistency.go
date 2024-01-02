@@ -24,17 +24,18 @@ import (
 
 func registerInconsistency(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "inconsistency",
-		Owner:   registry.OwnerReplication,
-		Cluster: r.MakeClusterSpec(3),
-		Leases:  registry.MetamorphicLeases,
-		Run:     runInconsistency,
+		Name:             "inconsistency",
+		Owner:            registry.OwnerReplication,
+		Cluster:          r.MakeClusterSpec(3),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Run:              runInconsistency,
 	})
 }
 
 func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	nodes := c.Range(1, 3)
-	c.Put(ctx, t.Cockroach(), "./cockroach", nodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), nodes)
 
 	{
@@ -160,5 +161,5 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// roachtest checks that no nodes are down when the test finishes, but in this
 	// case we have a down node that we can't restart. Remove the data dir, which
 	// tells roachtest to ignore this node.
-	c.Wipe(ctx, c.Node(1))
+	c.Wipe(ctx, false /* preserveCerts */, c.Node(1))
 }

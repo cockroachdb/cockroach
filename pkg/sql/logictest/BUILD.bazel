@@ -1,5 +1,12 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load(
+    ":REPOSITORIES.bzl",
+    "CONFIG_DARWIN_AMD64",
+    "CONFIG_DARWIN_ARM64",
+    "CONFIG_LINUX_AMD64",
+    "CONFIG_LINUX_ARM64",
+    "target",
+)
 
 filegroup(
     name = "testdata",
@@ -16,6 +23,22 @@ filegroup(
         "//pkg/ccl/logictestccl:__subpackages__",
         "//pkg/cmd/generate-logictest:__pkg__",
         "//pkg/sql/logictest:__subpackages__",
+        "//pkg/sql/schemachanger:__pkg__",
+    ],
+)
+
+filegroup(
+    name = "cockroach_predecessor_version",
+    srcs = select({
+        "//build/toolchains:is_linux_amd64": [target(CONFIG_LINUX_AMD64)],
+        "//build/toolchains:is_linux_arm64": [target(CONFIG_LINUX_ARM64)],
+        "//build/toolchains:is_darwin_amd64": [target(CONFIG_DARWIN_AMD64)],
+        "//build/toolchains:is_darwin_arm64": [target(CONFIG_DARWIN_ARM64)],
+        "//conditions:default": [],
+    }),
+    visibility = [
+        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-upgrade-to-master:__pkg__",
+        "//pkg/sql/logictest/tests/cockroach-go-testserver-upgrade-to-master:__pkg__",
     ],
 )
 
@@ -49,20 +72,20 @@ go_library(
         "//pkg/sql/rowinfra",
         "//pkg/sql/schemachanger/corpus",
         "//pkg/sql/schemachanger/scexec",
-        "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlstats",
         "//pkg/sql/stats",
+        "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/floatcmp",
         "//pkg/testutils/physicalplanutils",
+        "//pkg/testutils/release",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/util",
-        "//pkg/util/binfetcher",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/randutil",
@@ -85,9 +108,9 @@ go_test(
         "main_test.go",
         "parallel_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = [":testdata"],
     embed = [":logictest"],
+    exec_properties = {"Pool": "large"},
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",
@@ -109,10 +132,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
-        "//pkg/util/stop",
         "@com_github_gogo_protobuf//proto",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
-
-get_x_data(name = "get_x_data")

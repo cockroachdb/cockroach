@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -37,7 +36,7 @@ func TestAsOfTime(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs.GCJob = &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error {
 		<-ctx.Done()
 		return nil
@@ -133,18 +132,13 @@ func TestAsOfTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Future queries shouldn't work if not marked as synthetic.
-	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '2200-01-01'").Scan(&i); !testutils.IsError(err, "pq: AS OF SYSTEM TIME: cannot specify timestamp in the future") {
-		t.Fatal(err)
-	}
-
 	// Future queries shouldn't work if too far in the future.
-	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '+10h?'").Scan(&i); !testutils.IsError(err, "pq: request timestamp .* too far in future") {
+	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '+10h'").Scan(&i); !testutils.IsError(err, "pq: request timestamp .* too far in future") {
 		t.Fatal(err)
 	}
 
-	// Future queries work if marked as synthetic and only slightly in future.
-	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '+10ms?'").Scan(&i); err != nil {
+	// Future queries work if only slightly in the future.
+	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '+10ms'").Scan(&i); err != nil {
 		t.Fatal(err)
 	}
 
@@ -274,7 +268,7 @@ func TestAsOfRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, cmdFilters := tests.CreateTestServerParams()
+	params, cmdFilters := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 

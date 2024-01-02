@@ -87,15 +87,15 @@ ALTER TABLE t ADD CHECK (i > 0)
 ----
 - from: [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, ABSENT]
   to:   [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   rule: CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY
 - from: [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, VALIDATED]
   to:   [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   rule: CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC
 - from: [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, WRITE_ONLY]
   to:   [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, VALIDATED]
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   rule: CheckConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED
 - from: [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, WRITE_ONLY]
   to:   [ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}, PUBLIC]

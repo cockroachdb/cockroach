@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -56,6 +57,7 @@ func newTxnKVFetcher(
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockDurability descpb.ScanLockingDurability,
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
@@ -93,19 +95,18 @@ func newTxnKVFetcher(
 		reverse:                    reverse,
 		lockStrength:               lockStrength,
 		lockWaitPolicy:             lockWaitPolicy,
+		lockDurability:             lockDurability,
 		lockTimeout:                lockTimeout,
 		acc:                        acc,
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
 		kvPairsRead:                new(int64),
 		batchRequestsIssued:        &batchRequestsIssued,
 	}
-	if txn != nil {
-		// In most cases, the txn is non-nil; however, in some code paths (e.g.
-		// when executing EXPLAIN (VEC)) it might be nil, so we need to have
-		// this check.
-		fetcherArgs.requestAdmissionHeader = txn.AdmissionHeader()
-		fetcherArgs.responseAdmissionQ = txn.DB().SQLKVResponseAdmissionQ
-	}
+	fetcherArgs.admission.requestHeader = txn.AdmissionHeader()
+	fetcherArgs.admission.responseQ = txn.DB().SQLKVResponseAdmissionQ
+	fetcherArgs.admission.pacerFactory = txn.DB().AdmissionPacerFactory
+	fetcherArgs.admission.settingsValues = txn.DB().SettingsValues
+
 	return newTxnKVFetcherInternal(fetcherArgs)
 }
 
@@ -124,12 +125,13 @@ func NewDirectKVBatchFetcher(
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockDurability descpb.ScanLockingDurability,
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 ) KVBatchFetcher {
 	f := newTxnKVFetcher(
-		txn, bsHeader, reverse, lockStrength, lockWaitPolicy,
+		txn, bsHeader, reverse, lockStrength, lockWaitPolicy, lockDurability,
 		lockTimeout, acc, forceProductionKVBatchSize,
 	)
 	f.scanFormat = kvpb.COL_BATCH_RESPONSE
@@ -149,12 +151,13 @@ func NewKVFetcher(
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockDurability descpb.ScanLockingDurability,
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 ) *KVFetcher {
 	return newKVFetcher(newTxnKVFetcher(
-		txn, bsHeader, reverse, lockStrength, lockWaitPolicy,
+		txn, bsHeader, reverse, lockStrength, lockWaitPolicy, lockDurability,
 		lockTimeout, acc, forceProductionKVBatchSize,
 	))
 }
@@ -168,8 +171,10 @@ func NewStreamingKVFetcher(
 	stopper *stop.Stopper,
 	txn *kv.Txn,
 	st *cluster.Settings,
+	sd *sessiondata.SessionData,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockStrength descpb.ScanLockingStrength,
+	lockDurability descpb.ScanLockingDurability,
 	streamerBudgetLimit int64,
 	streamerBudgetAcc *mon.BoundAccount,
 	maintainOrdering bool,
@@ -185,12 +190,14 @@ func NewStreamingKVFetcher(
 		stopper,
 		txn,
 		st,
-		getWaitPolicy(lockWaitPolicy),
+		sd,
+		GetWaitPolicy(lockWaitPolicy),
 		streamerBudgetLimit,
 		streamerBudgetAcc,
 		&kvPairsRead,
 		&batchRequestsIssued,
 		GetKeyLockingStrength(lockStrength),
+		GetKeyLockingDurability(lockDurability),
 	)
 	mode := kvstreamer.OutOfOrder
 	if maintainOrdering {
@@ -205,7 +212,7 @@ func NewStreamingKVFetcher(
 		maxKeysPerRow,
 		diskBuffer,
 	)
-	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, kvFetcherMemAcc, &kvPairsRead, &batchRequestsIssued))
+	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, lockDurability, kvFetcherMemAcc, &kvPairsRead, &batchRequestsIssued))
 }
 
 func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {
@@ -336,6 +343,10 @@ func (f *KVFetcher) SetupNextFetch(
 	return f.KVBatchFetcher.SetupNextFetch(
 		ctx, spans, spanIDs, batchBytesLimit, firstBatchKeyLimit, spansCanOverlap,
 	)
+}
+
+func (f *KVFetcher) reset(b KVBatchFetcher) {
+	*f = KVFetcher{KVBatchFetcher: b}
 }
 
 // KVProvider is a KVBatchFetcher that returns a set slice of kvs.

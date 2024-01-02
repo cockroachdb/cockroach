@@ -59,7 +59,7 @@ func BuildChildPhysicalProps(
 
 	// ScalarExprs don't support required physical properties; don't build
 	// physical properties for them.
-	if _, ok := parent.Child(nth).(opt.ScalarExpr); ok {
+	if opt.IsScalarOp(parent.Child(nth)) {
 		return mem.InternPhysicalProps(&childProps)
 	}
 
@@ -108,7 +108,7 @@ func BuildChildPhysicalProps(
 			}
 		}
 
-	case opt.IndexJoinOp:
+	case opt.IndexJoinOp, opt.LockOp:
 		// For an index join, every input row results in exactly one output row.
 		childProps.LimitHint = parentProps.LimitHint
 
@@ -297,4 +297,27 @@ func BuildChildPhysicalPropsScalar(mem *memo.Memo, parent opt.Expr, nth int) *ph
 		childProps.Distribution = mem.RootProps().Distribution
 	}
 	return mem.InternPhysicalProps(&childProps)
+}
+
+func init() {
+	memo.GetLookupJoinLookupTableDistribution = func(
+		lookupJoin *memo.LookupJoinExpr,
+		required *physical.Required,
+		optimizer interface{},
+	) (physicalDistribution physical.Distribution) {
+		if optimizer == nil {
+			return physicalDistribution
+		}
+		o, ok := optimizer.(*Optimizer)
+		if !ok {
+			return physicalDistribution
+		}
+		if o.evalCtx == nil {
+			return physicalDistribution
+		}
+		_, physicalDistribution = distribution.BuildLookupJoinLookupTableDistribution(
+			o.ctx, o.evalCtx, lookupJoin, required, o.MaybeGetBestCostRelation,
+		)
+		return physicalDistribution
+	}
 }

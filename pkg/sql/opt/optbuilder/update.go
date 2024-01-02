@@ -77,6 +77,12 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	// Find which table we're working on, check the permissions.
 	tab, depName, alias, refColumns := b.resolveTableForMutation(upd.Table, privilege.UPDATE)
 
+	if tab.IsVirtualTable() {
+		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot update view \"%s\"", tab.Name(),
+		))
+	}
+
 	if refColumns != nil {
 		panic(pgerror.Newf(pgcode.Syntax,
 			"cannot specify a list of column IDs with UPDATE"))
@@ -86,7 +92,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	b.checkPrivilege(depName, tab, privilege.SELECT)
 
 	// Check if this table has already been mutated in another subquery.
-	b.checkMultipleMutations(tab, false /* simpleInsert */)
+	b.checkMultipleMutations(tab, generalMutation)
 
 	var mb mutationBuilder
 	mb.init(b, "update", tab, alias)
@@ -142,7 +148,7 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 				for i := range desiredTypes {
 					desiredTypes[i] = mb.md.ColumnMeta(mb.targetColList[targetIdx+i]).Type
 				}
-				outScope := mb.b.buildSelectStmt(t.Select, noRowLocking, desiredTypes, mb.outScope)
+				outScope := mb.b.buildSelectStmt(t.Select, noLocking, desiredTypes, mb.outScope)
 				mb.subqueries = append(mb.subqueries, outScope)
 				n = len(outScope.cols)
 

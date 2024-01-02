@@ -1,9 +1,11 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "asof",
-    srcs = ["as_of.go"],
+    srcs = [
+        "as_of.go",
+        "type_check.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/asof",
     visibility = ["//visibility:public"],
     deps = [
@@ -19,5 +21,3 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
-
-get_x_data(name = "get_x_data")

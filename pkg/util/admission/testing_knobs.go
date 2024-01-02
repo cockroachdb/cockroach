@@ -18,6 +18,9 @@ import (
 
 // TestingKnobs provide fine-grained control over the various admission control
 // components for testing.
+//
+// TODO(irfansharif): Consolidate the various other testing-knob like things (in
+// admission.Options, for example) into this one struct.
 type TestingKnobs struct {
 	// AdmittedReplicatedWorkInterceptor is invoked whenever replicated work is
 	// admitted.
@@ -28,6 +31,17 @@ type TestingKnobs struct {
 		originalTokens int64,
 		createTime int64,
 	)
+
+	// DisableWorkQueueFastPath disables the fast-path in work queues.
+	DisableWorkQueueFastPath bool
+
+	// DisableWorkQueueGranting disables the work queue from granting admission
+	// to waiting work.
+	DisableWorkQueueGranting func() bool
+
+	// AlwaysTryGrantWhenAdmitted causes the granter to unconditionally try
+	// admitting another request when admitting one.
+	AlwaysTryGrantWhenAdmitted bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

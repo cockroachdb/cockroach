@@ -85,7 +85,7 @@ func (r *Reader) Start(ctx context.Context, self sqlinstance.InstanceInfo) {
 	// Make sure that the reader shuts down gracefully.
 	ctx, cancel := r.stopper.WithCancelOnQuiesce(ctx)
 	err := r.stopper.RunAsyncTask(ctx, "start-instance-reader", func(ctx context.Context) {
-		cache, err := r.storage.newInstanceCache(ctx, r.stopper)
+		cache, err := r.storage.newInstanceCache(ctx)
 		if err != nil {
 			r.setInitialScanDone(err)
 			return

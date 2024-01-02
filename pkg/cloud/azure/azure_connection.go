@@ -30,12 +30,13 @@ func validateAzureConnectionURI(
 }
 
 func init() {
-	externalconn.RegisterConnectionDetailsFromURIFactory(
-		deprecatedExternalConnectionScheme,
-		connectionpb.ConnectionProvider_azure_storage,
-		externalconn.SimpleURIFactory,
-	)
+	for _, s := range []string{scheme, deprecatedScheme, deprecatedExternalConnectionScheme} {
+		externalconn.RegisterConnectionDetailsFromURIFactory(
+			s,
+			connectionpb.ConnectionProvider_azure_storage,
+			externalconn.SimpleURIFactory,
+		)
 
-	externalconn.RegisterDefaultValidation(deprecatedExternalConnectionScheme, validateAzureConnectionURI)
-
+		externalconn.RegisterDefaultValidation(s, validateAzureConnectionURI)
+	}
 }

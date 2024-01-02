@@ -48,7 +48,7 @@ var _ chunkBackfiller = &columnBackfiller{}
 // Each function retains a reference to its corresponding TxnCoordSender, so we
 // need to be careful not to accumulate an unbounded number of these functions.
 var backfillerMaxCommitWaitFns = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"schemachanger.backfiller.max_commit_wait_fns",
 	"the maximum number of commit-wait functions that the columnBackfiller will accumulate before consuming them to reclaim memory",
 	128,

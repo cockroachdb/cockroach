@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // InterceptWith diverts log traffic to the given interceptor `fn`.
@@ -71,6 +73,9 @@ func (l *loggingT) newInterceptorSinkInfo() *sinkInfo {
 // formatInterceptor converts the raw logpb.Entry to JSON.
 type formatInterceptor struct{}
 
+func (formatInterceptor) setOption(k string, _ string) error {
+	return errors.Newf("unknown option: %q", redact.Safe(k))
+}
 func (formatInterceptor) formatterName() string { return "json-intercept" }
 func (formatInterceptor) doc() string           { return "internal only" }
 func (formatInterceptor) contentType() string   { return "application/json" }

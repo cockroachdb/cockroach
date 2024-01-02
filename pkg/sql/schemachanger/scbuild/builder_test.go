@@ -22,8 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -36,9 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -51,24 +52,24 @@ import (
 func TestBuildDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
+	defer ccl.TestingEnableEnterprise()() // allow usage of partitions and zone configs
 
 	ctx := context.Background()
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		for _, depsType := range []struct {
 			name                string
-			dependenciesWrapper func(*testing.T, serverutils.TestServerInterface, *sqlutils.SQLRunner, func(scbuild.Dependencies))
+			dependenciesWrapper func(*testing.T, serverutils.ApplicationLayerInterface, roachpb.NodeID, *sqlutils.SQLRunner, func(scbuild.Dependencies))
 		}{
 			{
 				name: "sql_dependencies",
-				dependenciesWrapper: func(t *testing.T, s serverutils.TestServerInterface, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
-					sctestutils.WithBuilderDependenciesFromTestServer(s, fn)
+				dependenciesWrapper: func(t *testing.T, s serverutils.ApplicationLayerInterface, nodeID roachpb.NodeID, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
+					sctestutils.WithBuilderDependenciesFromTestServer(s, nodeID, fn)
 				},
 			},
 			{
 				name: "test_dependencies",
-				dependenciesWrapper: func(t *testing.T, s serverutils.TestServerInterface, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
+				dependenciesWrapper: func(t *testing.T, s serverutils.ApplicationLayerInterface, nodeID roachpb.NodeID, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
 					// Create test dependencies and execute the schema changer.
 					// The schema changer test dependencies do not hold any reference to the
 					// test cluster, here the SQLRunner is only used to populate the mocked
@@ -79,13 +80,14 @@ func TestBuildDataDriven(t *testing.T) {
 					// dependency resolution.
 					execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 					refFactory, cleanup := sql.NewReferenceProviderFactoryForTest(
-						ctx, "test" /* opName */, kv.NewTxn(context.Background(), s.DB(), s.NodeID()), username.RootUserName(), &execCfg, "defaultdb",
+						ctx, "test" /* opName */, kv.NewTxn(context.Background(), s.DB(), nodeID), username.RootUserName(), &execCfg, "defaultdb",
 					)
 					defer cleanup()
 
 					fn(
 						sctestdeps.NewTestDependencies(
 							sctestdeps.WithDescriptors(descriptorCatalog),
+							sctestdeps.WithSystemDatabaseDescriptor(),
 							sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
 							sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
 							sctestdeps.WithSessionData(
@@ -115,13 +117,12 @@ func TestBuildDataDriven(t *testing.T) {
 			},
 		} {
 			t.Run(depsType.name, func(t *testing.T) {
-				s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-					DefaultTestTenant: base.TestTenantDisabled,
-				})
+				s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 				defer s.Stopper().Stop(ctx)
+				tt := s.ApplicationLayer()
 				tdb := sqlutils.MakeSQLRunner(sqlDB)
 				datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-					return run(ctx, t, depsType.name, d, s, tdb, depsType.dependenciesWrapper)
+					return run(ctx, t, depsType.name, d, tt, s.NodeID(), tdb, depsType.dependenciesWrapper)
 				})
 			})
 		}
@@ -133,9 +134,10 @@ func run(
 	t *testing.T,
 	depsTypeName string,
 	d *datadriven.TestData,
-	s serverutils.TestServerInterface,
+	s serverutils.ApplicationLayerInterface,
+	nodeID roachpb.NodeID,
 	tdb *sqlutils.SQLRunner,
-	withDependencies func(*testing.T, serverutils.TestServerInterface, *sqlutils.SQLRunner, func(scbuild.Dependencies)),
+	withDependencies func(*testing.T, serverutils.ApplicationLayerInterface, roachpb.NodeID, *sqlutils.SQLRunner, func(scbuild.Dependencies)),
 ) string {
 	sqlutils.VerifyStatementPrettyRoundtrip(t, d.Input)
 	switch d.Cmd {
@@ -164,7 +166,7 @@ func run(
 			}
 		}
 		var output scpb.CurrentState
-		withDependencies(t, s, tdb, func(deps scbuild.Dependencies) {
+		withDependencies(t, s, nodeID, tdb, func(deps scbuild.Dependencies) {
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
 			for i := range stmts {
@@ -175,7 +177,7 @@ func run(
 		return marshalState(t, output)
 
 	case "unimplemented":
-		withDependencies(t, s, tdb, func(deps scbuild.Dependencies) {
+		withDependencies(t, s, nodeID, tdb, func(deps scbuild.Dependencies) {
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
 			require.NotEmpty(t, stmts)
@@ -287,10 +289,23 @@ func walkYaml(root *yaml.Node, f func(node *yaml.Node)) {
 // take up a lot of memory for certain DDL statement (e.g. dropping a
 // database with tens of thousands of tables in it).
 func TestBuildIsMemoryMonitored(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDeadlock(t, "takes too long")
+
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SpanConfig: &spanconfig.TestingKnobs{
+				LimiterLimitOverride: func() int64 {
+					return math.MaxInt64
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
 	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, `use defaultdb;`)
 	tdb.Exec(t, `select crdb_internal.generate_test_objects('test',  5000);`)
@@ -303,15 +318,14 @@ func TestBuildIsMemoryMonitored(t *testing.T) {
 		nil,           /* maxHist */
 		-1,            /* increment */
 		math.MaxInt64, /* noteworthy */
-		cluster.MakeTestingClusterSettings(),
+		s.ClusterSettings(),
 	)
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(5*1024*1024 /* 5MiB */))
 	memAcc := monitor.MakeBoundAccount()
-	sctestutils.WithBuilderDependenciesFromTestServer(s, func(dependencies scbuild.Dependencies) {
+	sctestutils.WithBuilderDependenciesFromTestServer(s.ApplicationLayer(), s.NodeID(), func(dependencies scbuild.Dependencies) {
 		stmt, err := parser.ParseOne(`DROP DATABASE defaultdb CASCADE`)
 		require.NoError(t, err)
 		_, err = scbuild.Build(ctx, dependencies, scpb.CurrentState{}, stmt.AST, &memAcc)
 		require.ErrorContainsf(t, err, `test-sc-build-mon: memory budget exceeded:`, "got a memory usage of: %d", memAcc.Allocated())
 	})
-
 }

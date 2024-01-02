@@ -321,6 +321,22 @@ func NewParquetColumn(typ *types.T, name string, nullable bool) (ParquetColumn, 
 			}
 			return tree.NewDEnum(e), nil
 		}
+	case types.PGLSNFamily:
+		populateLogicalStringCol(schemaEl)
+		col.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return []byte(d.(*tree.DPGLSN).LSN.String()), nil
+		}
+		col.DecodeFn = func(x interface{}) (tree.Datum, error) {
+			return tree.ParseDPGLSN(string(x.([]byte)))
+		}
+	case types.RefCursorFamily:
+		populateLogicalStringCol(schemaEl)
+		col.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return []byte(tree.MustBeDString(d)), nil
+		}
+		col.DecodeFn = func(x interface{}) (tree.Datum, error) {
+			return tree.NewDRefCursor(string(x.([]byte))), nil
+		}
 	case types.Box2DFamily:
 		populateLogicalStringCol(schemaEl)
 		col.encodeFn = func(d tree.Datum) (interface{}, error) {
@@ -618,6 +634,14 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 	ctx, span := tracing.ChildSpan(ctx, "parquetWriter")
 	defer span.Finish()
 
+	knobs := sp.testingKnobsOrNil()
+	mon := sp.flowCtx.Mon
+	if knobs != nil && knobs.MemoryMonitor != nil {
+		mon = knobs.MemoryMonitor
+	}
+	memAcc := mon.MakeBoundAccount()
+	defer memAcc.Close(ctx)
+
 	instanceID := sp.flowCtx.EvalCtx.NodeID.SQLInstanceID()
 	uniqueID := builtins.GenerateUniqueInt(builtins.ProcessUniqueID(instanceID))
 
@@ -654,11 +678,11 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 		for {
 			var rows int64
 			buf.Reset()
-			// TODO(#104329): Add memory monitoring.
-			writer, err := newWriter(sch, &buf, compression, sp.flowCtx.TestingKnobs())
+			writer, err := crlparquet.NewWriter(sch, &buf, crlparquet.WithCompressionCodec(compression))
 			if err != nil {
 				return err
 			}
+			cummulativeAllocSize := int64(0)
 			for {
 				// If the bytes.Buffer sink exceeds the target size of a Parquet file, we
 				// flush before exporting any additional rows.
@@ -679,6 +703,14 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 				rows++
 				datumRowAlloc = datumRowAlloc[:0]
 				for i, ed := range row {
+					// Make a best-effort attempt to capture the memory used by the parquet writer
+					// when encoding datums to write to files. In many cases, the datum will be
+					// encoded to bytes and these bytes will be buffered until the file is closed.
+					datumAllocSize := int64(float64(ed.Size()) * eventMemoryMultipier.Get(&sp.flowCtx.EvalCtx.Settings.SV))
+					cummulativeAllocSize += datumAllocSize
+					if err := memAcc.Grow(ctx, datumAllocSize); err != nil {
+						return err
+					}
 					if !ed.IsNull() {
 						if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
 							return err
@@ -701,6 +733,7 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 			if err := writer.Close(); err != nil {
 				return errors.Wrap(err, "failed to close parquet writer")
 			}
+			memAcc.Shrink(ctx, cummulativeAllocSize)
 
 			conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
 			if err != nil {
@@ -763,20 +796,12 @@ func (sp *parquetWriterProcessor) Resume(output execinfra.RowReceiver) {
 	panic("not implemented")
 }
 
-func newWriter(
-	sch *crlparquet.SchemaDefinition,
-	buf *bytes.Buffer,
-	compression crlparquet.CompressionCodec,
-	knobs execinfra.TestingKnobs,
-) (*crlparquet.Writer, error) {
-	if knobs.Export != nil &&
-		knobs.Export.(*ExportTestingKnobs).EnableParquetTestMetadata {
-		// In tests, configure the writer to add metadata to allow CRDB datums
-		// to be reconstructed after being written to parquet files.
-		return crlparquet.NewWriterWithReaderMeta(sch, buf, crlparquet.WithCompressionCodec(compression))
-	} else {
-		return crlparquet.NewWriter(sch, buf, crlparquet.WithCompressionCodec(compression))
+// Resume is part of the execinfra.Processor interface.
+func (sp *parquetWriterProcessor) testingKnobsOrNil() *ExportTestingKnobs {
+	if sp.flowCtx.TestingKnobs().Export == nil {
+		return nil
 	}
+	return sp.flowCtx.TestingKnobs().Export.(*ExportTestingKnobs)
 }
 
 func init() {

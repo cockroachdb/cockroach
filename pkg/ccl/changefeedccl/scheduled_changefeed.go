@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -217,7 +218,7 @@ func extractChangefeedStatement(sj *jobs.ScheduledJob) (*annotatedChangefeedStat
 			CreateChangefeed: stmt,
 			CreatedByInfo: &jobs.CreatedByInfo{
 				Name: jobs.CreatedByScheduledJobs,
-				ID:   sj.ScheduleID(),
+				ID:   int64(sj.ScheduleID()),
 			},
 		}, nil
 	}
@@ -321,7 +322,7 @@ func makeScheduledChangefeedSpec(
 	}
 
 	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(),
+		p.ExecCfg().Settings,
 		opName)
 
 	if !(enterpriseCheckErr == nil) {
@@ -392,7 +393,7 @@ func makeChangefeedSchedule(
 func dryRunCreateChangefeed(
 	ctx context.Context,
 	p sql.PlanHookState,
-	scheduleID int64,
+	scheduleID jobspb.ScheduleID,
 	createChangefeedNode *tree.CreateChangefeed,
 ) error {
 	sp, err := p.ExtendedEvalContext().Txn.CreateSavepoint(ctx)
@@ -405,7 +406,7 @@ func dryRunCreateChangefeed(
 			CreateChangefeed: createChangefeedNode,
 			CreatedByInfo: &jobs.CreatedByInfo{
 				Name: jobs.CreatedByScheduledJobs,
-				ID:   scheduleID,
+				ID:   int64(scheduleID),
 			},
 		}
 		changefeedFn, err := planCreateChangefeed(ctx, p, annotated)
@@ -461,7 +462,10 @@ func invokeCreateChangefeed(ctx context.Context, createChangefeedFn sql.PlanHook
 	return g.Wait()
 }
 
-func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error) {
+// TODO(msbutler): move this function into scheduleBase and remove duplicate function in scheduled backups.
+func makeScheduleDetails(
+	opts map[string]string, clusterID uuid.UUID, version clusterversion.ClusterVersion,
+) (jobspb.ScheduleDetails, error) {
 	var details jobspb.ScheduleDetails
 	if v, ok := opts[optOnExecFailure]; ok {
 		if err := schedulebase.ParseOnError(v, &details); err != nil {
@@ -474,6 +478,8 @@ func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error)
 			return details, err
 		}
 	}
+	details.ClusterID = clusterID
+	details.CreationClusterVersion = version
 	return details, nil
 }
 
@@ -600,7 +606,7 @@ func doCreateChangefeedSchedule(
 		return err
 	}
 
-	details, err := makeScheduleDetails(spec.scheduleOpts)
+	details, err := makeScheduleDetails(spec.scheduleOpts, evalCtx.ClusterID, p.ExecCfg().Settings.Version.ActiveVersion(ctx))
 	if err != nil {
 		return err
 	}
@@ -678,15 +684,6 @@ func createChangefeedScheduleTypeCheck(
 	schedule, ok := stmt.(*tree.ScheduledChangefeed)
 	if !ok {
 		return false, nil, nil
-	}
-
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_1ScheduledChangefeeds) {
-		return false, nil,
-			pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"cannot use scheduled changefeeds until cluster is upgraded to %s",
-				clusterversion.V23_1ScheduledChangefeeds.String,
-			)
 	}
 
 	changefeedStmt := schedule.CreateChangefeed

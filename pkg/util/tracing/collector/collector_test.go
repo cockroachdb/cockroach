@@ -14,20 +14,17 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -120,6 +117,7 @@ func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, tracingpb.TraceID, 
 
 func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -127,39 +125,39 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 2 /* nodes */, args)
 	defer tc.Stopper().Stop(ctx)
 
-	localTracer := tc.Server(0).TracerI().(*tracing.Tracer)
-	remoteTracer := tc.Server(1).TracerI().(*tracing.Tracer)
+	s0 := tc.Server(0).ApplicationLayer()
+	s1 := tc.Server(1).ApplicationLayer()
+
+	localTracer := s0.TracerI().(*tracing.Tracer)
+	remoteTracer := s1.TracerI().(*tracing.Tracer)
 
 	traceCollector := collector.New(
 		localTracer,
-		func(ctx context.Context) ([]roachpb.NodeID, error) {
-			nodeIDs := make([]roachpb.NodeID, len(tc.Servers))
+		func(ctx context.Context) ([]sqlinstance.InstanceInfo, error) {
+			instanceIDs := make([]sqlinstance.InstanceInfo, len(tc.Servers))
 			for i := range tc.Servers {
-				nodeIDs[i] = tc.Server(i).NodeID()
+				instanceIDs[i].InstanceID = tc.Server(i).ApplicationLayer().SQLInstanceID()
 			}
-			return nodeIDs, nil
+			return instanceIDs, nil
 		},
-		tc.Server(0).NodeDialer().(*nodedialer.Dialer))
+		s0.NodeDialer().(*nodedialer.Dialer))
 	localTraceID, remoteTraceID, cleanup := setupTraces(localTracer, remoteTracer)
 	defer cleanup()
 
-	getSpansFromAllNodes := func(traceID tracingpb.TraceID) map[roachpb.NodeID][]tracingpb.Recording {
-		res := make(map[roachpb.NodeID][]tracingpb.Recording)
-
-		var iter *collector.Iterator
-		var err error
-		for iter, err = traceCollector.StartIter(ctx, traceID); err == nil && iter.Valid(); iter.Next(ctx) {
-			nodeID, recording := iter.Value()
-			res[nodeID] = append(res[nodeID], recording)
-		}
+	getSpansFromAllInstances := func(traceID tracingpb.TraceID) map[base.SQLInstanceID][]tracingpb.Recording {
+		res := make(map[base.SQLInstanceID][]tracingpb.Recording)
+		iter, err := traceCollector.StartIter(ctx, traceID)
 		require.NoError(t, err)
-		require.NoError(t, iter.Error())
+		for ; iter.Valid(); iter.Next(ctx) {
+			instanceID, recording := iter.Value()
+			res[instanceID] = append(res[instanceID], recording)
+		}
 		return res
 	}
 
 	t.Run("fetch-local-recordings", func(t *testing.T) {
-		nodeRecordings := getSpansFromAllNodes(localTraceID)
-		node1Recordings := nodeRecordings[roachpb.NodeID(1)]
+		nodeRecordings := getSpansFromAllInstances(localTraceID)
+		node1Recordings := nodeRecordings[s0.SQLInstanceID()]
 		require.Equal(t, 1, len(node1Recordings))
 		require.NoError(t, tracing.CheckRecordedSpans(node1Recordings[0], `
 				span: root
@@ -170,7 +168,7 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 						span: root.child.remotechilddone
 							tags: _verbose=1
 	`))
-		node2Recordings := nodeRecordings[roachpb.NodeID(2)]
+		node2Recordings := nodeRecordings[s1.SQLInstanceID()]
 		require.Equal(t, 1, len(node2Recordings))
 		require.NoError(t, tracing.CheckRecordedSpans(node2Recordings[0], `
 				span: root.child.remotechild
@@ -182,8 +180,8 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	// The traceCollector is running on node 1, so most of the recordings for this
 	// subtest will be passed back by node 2 over RPC.
 	t.Run("fetch-remote-recordings", func(t *testing.T) {
-		nodeRecordings := getSpansFromAllNodes(remoteTraceID)
-		node1Recordings := nodeRecordings[roachpb.NodeID(1)]
+		nodeRecordings := getSpansFromAllInstances(remoteTraceID)
+		node1Recordings := nodeRecordings[s0.SQLInstanceID()]
 		require.Equal(t, 2, len(node1Recordings))
 		require.NoError(t, tracing.CheckRecordedSpans(node1Recordings[0], `
 				span: root2.child.remotechild
@@ -194,7 +192,7 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 					tags: _unfinished=1 _verbose=1
 	`))
 
-		node2Recordings := nodeRecordings[roachpb.NodeID(2)]
+		node2Recordings := nodeRecordings[s1.SQLInstanceID()]
 		require.Equal(t, 1, len(node2Recordings))
 		require.NoError(t, tracing.CheckRecordedSpans(node2Recordings[0], `
 				span: root2
@@ -210,101 +208,145 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 // mixed nodes.
 func TestClusterInflightTraces(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ccl.TestingEnableEnterprise() // We'll create tenants.
-	defer ccl.TestingDisableEnterprise()
+	defer log.Scope(t).Close(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// We'll create our own tenants, to ensure they exist as opposed to them
-			// being created randomly.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		},
 	}
 
-	testutils.RunTrueAndFalse(t, "tenant", func(t *testing.T, tenant bool) {
-		tc := testcluster.StartTestCluster(t, 2 /* nodes */, args)
-		defer tc.Stopper().Stop(ctx)
+	for _, config := range []string{
+		"single-tenant",
+		"shared-process",
+		"separate-process",
+	} {
+		t.Run(config, func(t *testing.T) {
+			tc := testcluster.StartTestCluster(t, 2 /* nodes */, args)
+			defer tc.Stopper().Stop(ctx)
 
-		type testCase struct {
-			servers []serverutils.TestTenantInterface
-			// otherServers, if set, represents the servers corresponding to other
-			// tenants (or to the system tenant) than the ones being tested.
-			otherServers []serverutils.TestTenantInterface
-		}
-		var testCases []testCase
-		if tenant {
-			tenantID := roachpb.MustMakeTenantID(10)
-			tenants := make([]serverutils.TestTenantInterface, len(tc.Servers))
-			for i := range tc.Servers {
-				tenant, err := tc.Servers[i].StartTenant(ctx, base.TestTenantArgs{TenantID: tenantID})
-				require.NoError(t, err)
-				tenants[i] = tenant
+			systemServers := []serverutils.ApplicationLayerInterface{
+				tc.SystemLayer(0),
+				tc.SystemLayer(1),
 			}
-			testCases = []testCase{
-				{
-					servers:      tenants,
-					otherServers: []serverutils.TestTenantInterface{tc.Servers[0], tc.Servers[1]},
-				},
-				{
-					servers:      []serverutils.TestTenantInterface{tc.Servers[0], tc.Servers[1]},
-					otherServers: tenants,
-				},
-			}
-		} else {
-			testCases = []testCase{{
-				servers: []serverutils.TestTenantInterface{tc.Servers[0], tc.Servers[1]},
-			}}
-		}
-
-		for _, tc := range testCases {
-			// Setup the traces we're going to look for.
-			localTraceID, _, cleanup := setupTraces(tc.servers[0].Tracer(), tc.servers[1].Tracer())
-			defer cleanup()
-
-			// Create some other spans on tc.otherServers, that we don't expect to
-			// find.
-			const otherServerSpanName = "other-server-span"
-			for _, s := range tc.otherServers {
-				sp := s.Tracer().StartSpan(otherServerSpanName)
-				defer sp.Finish()
+			systemDBs := make([]*gosql.DB, len(tc.Servers))
+			for i, s := range tc.Servers {
+				systemDBs[i] = s.SQLConn(t)
 			}
 
-			// We're going to query the cluster_inflight_traces through every node.
-			for _, s := range tc.servers {
-				pgURL, cleanupPGUrl := sqlutils.PGUrl(t, s.SQLAddr(), "Tenant", url.User(username.RootUser))
-				defer cleanupPGUrl()
-				db, err := gosql.Open("postgres", pgURL.String())
-				defer func() {
-					require.NoError(t, db.Close())
-				}()
-				require.NoError(t, err)
+			type testCase struct {
+				name    string
+				servers []serverutils.ApplicationLayerInterface
+				dbs     []*gosql.DB
+				// otherServers, if set, represents the servers corresponding to
+				// other tenants (or to the system tenant) than the ones being
+				// tested.
+				otherServers []serverutils.ApplicationLayerInterface
+			}
+			var testCases []testCase
+			switch config {
+			case "single-tenant":
+				testCases = []testCase{{
+					name:    "system-tenant",
+					servers: []serverutils.ApplicationLayerInterface{tc.Servers[0], tc.Servers[1]},
+					dbs:     systemDBs,
+				}}
 
-				rows, err := db.Query(
-					"SELECT node_id, trace_str FROM crdb_internal.cluster_inflight_traces "+
-						"WHERE trace_id=$1 ORDER BY node_id",
-					localTraceID)
-				require.NoError(t, err)
-
-				expSpans := map[int][]string{
-					1: {"root", "root.child", "root.child.remotechilddone"},
-					2: {"root.child.remotechild"},
+			case "shared-process":
+				tenants := make([]serverutils.ApplicationLayerInterface, len(tc.Servers))
+				dbs := make([]*gosql.DB, len(tc.Servers))
+				for i, s := range tc.Servers {
+					tenant, db, err := s.TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{TenantName: "app"})
+					require.NoError(t, err)
+					tenants[i] = tenant
+					dbs[i] = db
 				}
-				for rows.Next() {
-					var nodeID int
-					var trace string
-					require.NoError(t, rows.Scan(&nodeID, &trace))
-					exp, ok := expSpans[nodeID]
-					require.True(t, ok)
-					delete(expSpans, nodeID) // Consume this entry; we'll check that they were all consumed.
-					for _, span := range exp {
-						require.Contains(t, trace, "=== operation:"+span)
+				testCases = []testCase{
+					{
+						name:         "application-tenant",
+						servers:      tenants,
+						dbs:          dbs,
+						otherServers: systemServers,
+					},
+					{
+						name:         "system-tenant",
+						servers:      systemServers,
+						dbs:          systemDBs,
+						otherServers: tenants,
+					},
+				}
+
+			case "separate-process":
+				tenantID := roachpb.MustMakeTenantID(10)
+				tenants := make([]serverutils.ApplicationLayerInterface, len(tc.Servers))
+				dbs := make([]*gosql.DB, len(tc.Servers))
+				for i := range tc.Servers {
+					tenant, err := tc.Servers[i].TenantController().StartTenant(ctx, base.TestTenantArgs{TenantID: tenantID})
+					require.NoError(t, err)
+					tenants[i] = tenant
+					dbs[i] = tenant.SQLConn(t)
+				}
+				testCases = []testCase{
+					{
+						name:         "application-tenant",
+						servers:      tenants,
+						dbs:          dbs,
+						otherServers: systemServers,
+					},
+					{
+						name:         "system-tenant",
+						servers:      systemServers,
+						dbs:          systemDBs,
+						otherServers: tenants,
+					},
+				}
+			}
+
+			for _, tc := range testCases {
+				t.Run(tc.name, func(t *testing.T) {
+					// Set up the traces we're going to look for.
+					localTraceID, _, cleanup := setupTraces(tc.servers[0].Tracer(), tc.servers[1].Tracer())
+					defer cleanup()
+
+					// Create some other spans on tc.otherServers, that we don't
+					// expect to find.
+					const otherServerSpanName = "other-server-span"
+					for _, s := range tc.otherServers {
+						sp := s.Tracer().StartSpan(otherServerSpanName)
+						defer sp.Finish()
 					}
-					require.NotContains(t, trace, "=== operation:"+otherServerSpanName)
-				}
-				require.Len(t, expSpans, 0)
+
+					// We're going to query the cluster_inflight_traces through
+					// every SQL instance.
+					for _, db := range tc.dbs {
+						rows, err := db.Query(
+							"SELECT node_id, trace_str FROM crdb_internal.cluster_inflight_traces "+
+								"WHERE trace_id=$1 ORDER BY node_id",
+							localTraceID)
+						require.NoError(t, err)
+
+						expSpans := map[int][]string{
+							1: {"root", "root.child", "root.child.remotechilddone"},
+							2: {"root.child.remotechild"},
+						}
+						for rows.Next() {
+							var nodeID int
+							var trace string
+							require.NoError(t, rows.Scan(&nodeID, &trace))
+							exp, ok := expSpans[nodeID]
+							require.True(t, ok)
+							delete(expSpans, nodeID) // Consume this entry; we'll check that they were all consumed.
+							for _, span := range exp {
+								require.Contains(t, trace, "=== operation:"+span)
+							}
+							require.NotContains(t, trace, "=== operation:"+otherServerSpanName)
+						}
+						require.Len(t, expSpans, 0)
+					}
+				})
 			}
-		}
-	})
+		})
+	}
 }

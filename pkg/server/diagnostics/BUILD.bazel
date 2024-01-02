@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
@@ -55,12 +54,11 @@ go_test(
     size = "medium",
     srcs = [
         "main_test.go",
+        "reporter_test.go",
         "update_checker_test.go",
     ],
-    args = ["-test.timeout=295s"],
-    tags = ["no-remote-exec"],
+    embed = [":diagnostics"],
     deps = [
-        ":diagnostics",
         "//pkg/base",
         "//pkg/build",
         "//pkg/security/securityassets",
@@ -71,6 +69,7 @@ go_test(
         "//pkg/util/cloudinfo",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "@com_github_mitchellh_reflectwalk//:reflectwalk",
         "@com_github_stretchr_testify//require",
     ],
 )
@@ -80,5 +79,3 @@ disallowed_imports_test(
     # TODO(#81378): This should be flipped to "true".
     disallow_cdeps = False,
 )
-
-get_x_data(name = "get_x_data")

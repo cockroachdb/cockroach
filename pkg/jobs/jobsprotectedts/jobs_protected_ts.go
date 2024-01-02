@@ -66,8 +66,7 @@ func MakeStatusFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc
 			if err != nil {
 				return false, err
 			}
-			isTerminal := j.WithTxn(txn).CheckTerminalStatus(ctx)
-			return isTerminal, nil
+			return j.Status().Terminal(), nil
 		}
 	case Schedules:
 		return func(ctx context.Context, txn isql.Txn, meta []byte) (shouldRemove bool, _ error) {
@@ -76,7 +75,7 @@ func MakeStatusFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc
 				return false, err
 			}
 			_, err = jobs.ScheduledJobTxn(txn).
-				Load(ctx, scheduledjobs.ProdJobSchedulerEnv, scheduleID)
+				Load(ctx, scheduledjobs.ProdJobSchedulerEnv, jobspb.ScheduleID(scheduleID))
 			if jobs.HasScheduledJobNotFoundError(err) {
 				return true, nil
 			}
@@ -93,7 +92,7 @@ func MakeStatusFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc
 // will stop protecting key spans.
 func MakeRecord(
 	recordID uuid.UUID,
-	metaID int64,
+	metaID int64, /* jobID or scheduleID, matching the MetaType */
 	tsToProtect hlc.Timestamp,
 	deprecatedSpans []roachpb.Span,
 	metaType MetaType,

@@ -35,13 +35,11 @@ define CreateView {
 
 [Private]
 define CreateViewPrivate {
+    # Syntax is the CREATE VIEW AST node.
+    Syntax TreeCreateView
+
     # Schema is the ID of the catalog schema into which the new table goes.
     Schema SchemaID
-    ViewName TableName
-    Persistence Persistence
-    IfNotExists bool
-    Replace bool
-    Materialized bool
 
     # ViewQuery contains the query for the view; data sources are always fully
     # qualified.
@@ -74,7 +72,7 @@ define CreateFunctionPrivate {
     Schema SchemaID
 
     # Syntax is the CREATE FUNCTION AST node.
-    Syntax CreateFunction
+    Syntax CreateRoutine
 
     # Deps contains the data source dependencies of the view.
     Deps SchemaDeps
@@ -356,4 +354,10 @@ define AlterRangeRelocatePrivate {
 
     # Props stores the required physical properties for the input expression.
     Props PhysProps
+}
+
+[Relational]
+define Call {
+    # Proc is the procedure being invoked. It is a UDFCallExpr.
+    Proc ScalarExpr
 }

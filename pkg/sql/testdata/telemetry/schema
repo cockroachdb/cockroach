@@ -46,6 +46,7 @@ CREATE TABLE y (a SERIAL2)
 sql.schema.create_table
 sql.schema.new_column.qualification.default_expr
 sql.schema.new_column_type.int8
+sql.schema.schema_changer_mode.legacy
 sql.schema.serial.rowid.int2
 
 feature-usage
@@ -55,8 +56,8 @@ sql.schema.alter_table
 sql.schema.alter_table.add_column
 sql.schema.alter_table.add_column.references
 sql.schema.alter_table.add_constraint
-sql.schema.get_virtual_table.pg_catalog.pg_attribute
 sql.schema.new_column_type.int8
+sql.schema.schema_changer_mode.declarative
 
 schema
 ----
@@ -78,27 +79,19 @@ table:_
       ├── _:int default: _
       └── _:int
 
-feature-allowlist
-sql.schema.create_unlogged_table
-----
-
 feature-usage
 CREATE UNLOGGED TABLE unlogged_tbl(col int PRIMARY KEY)
 ----
+sql.schema.create_table
 sql.schema.create_unlogged_table
-
-feature-allowlist
-sql.schema.create_or_replace_view
-----
+sql.schema.new_column_type.int8
+sql.schema.schema_changer_mode.legacy
 
 feature-usage
 CREATE OR REPLACE VIEW cor_view AS SELECT 1
 ----
 sql.schema.create_or_replace_view
-
-feature-allowlist
-sql.schema.*
-----
+sql.schema.schema_changer_mode.legacy
 
 feature-usage
 CREATE TABLE on_update_t (a INT PRIMARY KEY, b INT8 DEFAULT 1 ON UPDATE 2)
@@ -107,19 +100,118 @@ sql.schema.create_table
 sql.schema.new_column.qualification.default_expr
 sql.schema.new_column.qualification.on_update
 sql.schema.new_column_type.int8
+sql.schema.schema_changer_mode.legacy
 
 feature-usage
 ALTER TABLE on_update_t ADD COLUMN c INT DEFAULT 1 ON UPDATE 2;
 ----
 sql.schema.alter_table
 sql.schema.alter_table.add_column
-sql.schema.get_virtual_table.pg_catalog.pg_attribute
 sql.schema.new_column.qualification.default_expr
 sql.schema.new_column.qualification.on_update
 sql.schema.new_column_type.int8
+sql.schema.schema_changer_mode.declarative
 
 feature-usage
 ALTER TABLE on_update_t ALTER COLUMN b SET ON UPDATE 3
 ----
 sql.schema.alter_table
 sql.schema.alter_table.set_on_update
+sql.schema.schema_changer_mode.legacy
+
+feature-usage
+CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE SQL IMMUTABLE
+----
+sql.schema.create_function
+sql.schema.schema_changer_mode.declarative
+
+feature-usage
+ALTER FUNCTION f() OWNER TO admin
+----
+sql.schema.alter_function
+sql.schema.schema_changer_mode.legacy
+
+feature-usage
+ALTER FUNCTION f() SET SCHEMA public
+----
+sql.schema.alter_function
+sql.schema.schema_changer_mode.legacy
+
+feature-usage
+ALTER FUNCTION f() VOLATILE
+----
+sql.schema.alter_function
+sql.schema.schema_changer_mode.legacy
+
+feature-usage
+ALTER FUNCTION f() RENAME TO g
+----
+sql.schema.alter_function
+sql.schema.schema_changer_mode.legacy
+
+feature-usage
+CREATE SCHEMA a
+----
+sql.schema.schema_changer_mode.legacy
+
+feature-usage
+CREATE INDEX ON t(b)
+----
+sql.schema.create_index
+sql.schema.schema_changer_mode.declarative
+
+feature-usage
+CREATE TYPE enum_typ AS ENUM ('a', 'b')
+----
+sql.schema.create_type
+sql.schema.schema_changer_mode.legacy
+
+feature-usage
+CREATE TYPE composite_typ AS (a int, b int)
+----
+sql.schema.create_type
+sql.schema.schema_changer_mode.legacy
+
+exec
+BEGIN;
+SELECT 1;
+DROP INDEX t_b_idx;
+SELECT 1/0;
+----
+error: pq: division by zero
+
+feature-usage
+ROLLBACK;
+----
+sql.schema.transaction.mixed_ddl_dml.failure
+
+exec
+BEGIN;
+DROP INDEX t_b_idx;
+----
+
+feature-usage
+ROLLBACK;
+----
+sql.schema.transaction.ddl_only.failure
+
+feature-usage
+BEGIN;
+SELECT 1;
+DROP INDEX t_b_idx;
+COMMIT;
+----
+sql.schema.change_in_explicit_txn
+sql.schema.drop_index
+sql.schema.schema_changer_mode.legacy
+sql.schema.transaction.mixed_ddl_dml.success
+
+feature-usage
+BEGIN;
+CREATE INDEX ON t(b);
+COMMIT;
+----
+sql.schema.change_in_explicit_txn
+sql.schema.create_index
+sql.schema.schema_changer_mode.legacy
+sql.schema.transaction.ddl_only.success

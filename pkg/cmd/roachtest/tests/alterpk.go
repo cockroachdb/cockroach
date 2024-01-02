@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -30,7 +31,6 @@ func registerAlterPK(r registry.Registry) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		loadNode := c.Node(c.Spec().NodeCount)
 		t.Status("copying binaries")
-		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 
 		t.Status("starting cockroach nodes")
@@ -105,10 +105,14 @@ func registerAlterPK(r registry.Registry) {
 		const duration = 10 * time.Minute
 
 		roachNodes, loadNode := setupTest(ctx, t, c)
-
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1))
+		if err != nil {
+			t.Fatal(err)
+		}
 		cmd := fmt.Sprintf(
-			"./cockroach workload fixtures import tpcc --warehouses=%d --db=tpcc",
+			"./cockroach workload fixtures import tpcc --warehouses=%d --db=tpcc '%s'",
 			warehouses,
+			pgurl,
 		)
 		if err := c.RunE(ctx, c.Node(roachNodes[0]), cmd); err != nil {
 			t.Fatal(err)
@@ -182,17 +186,21 @@ func registerAlterPK(r registry.Registry) {
 		Owner: registry.OwnerSQLFoundations,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
-		Cluster: r.MakeClusterSpec(4),
-		Leases:  registry.MetamorphicLeases,
-		Run:     runAlterPKBank,
+		Cluster:          r.MakeClusterSpec(4),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Run:              runAlterPKBank,
 	})
 	r.Add(registry.TestSpec{
 		Name:  "alterpk-tpcc-250",
 		Owner: registry.OwnerSQLFoundations,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
-		Cluster: r.MakeClusterSpec(4, spec.CPU(32)),
-		Leases:  registry.MetamorphicLeases,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(32)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAlterPKTPCC(ctx, t, c, 250 /* warehouses */, true /* expensiveChecks */)
 		},
@@ -202,8 +210,10 @@ func registerAlterPK(r registry.Registry) {
 		Owner: registry.OwnerSQLFoundations,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
-		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
-		Leases:  registry.MetamorphicLeases,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAlterPKTPCC(ctx, t, c, 500 /* warehouses */, false /* expensiveChecks */)
 		},

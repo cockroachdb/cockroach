@@ -298,7 +298,6 @@ vectorized: true
 ·
 • sort
 │ columns: (k, u, w)
-│ ordering: +u
 │ estimated row count: 2
 │ order: +column1
 │
@@ -402,7 +401,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (pktable_cat, update_rule, delete_rule, deferrability, nspname, relname, attname, nspname, relname, attname, conname, generate_series, relname)
-    │ ordering: +nspname,+relname,+conname,+generate_series
     │ estimated row count: 110,908 (missing stats)
     │ order: +nspname,+relname,+conname,+generate_series
     │
@@ -543,18 +541,11 @@ EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cu
 distribution: local
 vectorized: true
 ·
-• merge join
-│ equality: (cust) = (id)
-│ right cols are key
-│
-├── • scan
-│     missing stats
-│     table: cards@cards_cust_idx
-│     spans: FULL SCAN
+• render
 │
 └── • scan
       missing stats
-      table: customers@customers_pkey
+      table: cards@cards_pkey
       spans: FULL SCAN
 
 # Tests for filter propagation through joins.
@@ -946,32 +937,30 @@ vectorized: true
           spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b, c)
+EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b)
 ----
 distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c, d, d)
+│ columns: (a, b, c, d, c, d)
 │
 └── • merge join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
-    │ estimated row count: 1 (missing stats)
-    │ equality: (b, a, c) = (b, a, c)
-    │ left cols are key
-    │ right cols are key
-    │ merge ordering: +"(b=b)",+"(a=a)",+"(c=c)"
+    │ estimated row count: 100 (missing stats)
+    │ equality: (b, a) = (b, a)
+    │ merge ordering: +"(b=b)",+"(a=a)"
     │
     ├── • scan
     │     columns: (a, b, c, d)
-    │     ordering: +b,+a,+c
+    │     ordering: +b,+a
     │     estimated row count: 1,000 (missing stats)
     │     table: pkbac@pkbac_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, b, c, d)
-          ordering: +b,+a,+c
+          ordering: +b,+a
           estimated row count: 1,000 (missing stats)
           table: pkbac@pkbac_pkey
           spans: FULL SCAN
@@ -2126,6 +2115,10 @@ vectorized: true
           table: zigzag2@a_b_idx
           spans: [/1/2 - /1/2]
 
+# Reset zigzag joins to its default setting.
+statement ok
+RESET enable_zigzag_join
+
 # Test that we can force a merge join.
 query T
 EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn USING(x)
@@ -2220,16 +2213,9 @@ EXPLAIN SELECT * FROM cards LEFT OUTER HASH JOIN customers ON customers.id = car
 distribution: local
 vectorized: true
 ·
-• hash join
-│ equality: (cust) = (id)
-│ right cols are key
-│
-├── • scan
-│     missing stats
-│     table: cards@cards_pkey
-│     spans: FULL SCAN
+• render
 │
 └── • scan
       missing stats
-      table: customers@customers_pkey
+      table: cards@cards_pkey
       spans: FULL SCAN

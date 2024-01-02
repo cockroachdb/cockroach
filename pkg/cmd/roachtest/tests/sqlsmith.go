@@ -21,10 +21,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
@@ -37,7 +39,7 @@ func registerSQLSmith(r registry.Registry) {
 		sqlsmith.RandTableSetupName: sqlsmith.Setups[sqlsmith.RandTableSetupName],
 		"tpch-sf1": func(r *rand.Rand) []string {
 			return []string{`
-RESTORE TABLE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup?AUTH=implicit'
+RESTORE TABLE tpch.* FROM 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup?AUTH=implicit'
 WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 `}
 		},
@@ -58,7 +60,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 				stmts = append(
 					stmts,
 					fmt.Sprintf(`
-RESTORE TABLE tpcc.%s FROM 'gs://cockroach-fixtures/workload/tpcc/%[2]s/%[1]s?AUTH=implicit'
+RESTORE TABLE tpcc.%s FROM 'gs://cockroach-fixtures-us-east1/workload/tpcc/%[2]s/%[1]s?AUTH=implicit'
 WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 `,
 						t, version,
@@ -98,9 +100,8 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		rng, seed := randutil.NewTestRand()
 		t.L().Printf("seed: %d", seed)
 
-		// With 50% chance use the cockroach-short binary that was compiled with
-		// --crdb_test build tag.
-		maybeUseBuildWithEnabledAssertions(ctx, t, c, rng, 0.5 /* eaProb */)
+		c.SetRandomSeed(rng.Int63())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 		setupFunc, ok := setups[setupName]
 		if !ok {
@@ -123,7 +124,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
 		for _, stmt := range setup {
 			if _, err := conn.Exec(stmt); err != nil {
-				t.Fatal(err)
+				t.Fatalf("error: %s\nstatement: %s", err.Error(), stmt)
 			} else {
 				logStmt(stmt)
 			}
@@ -161,8 +162,18 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		}
 		logStmt(injectVectorizePanicsStmt)
 		injectOptimizerPanicsStmt := "SET testing_optimizer_inject_panics=true;"
-		if _, err := conn.Exec(injectOptimizerPanicsStmt); err != nil {
-			t.Fatal(err)
+		// Because we've already enabled the vectorized panic injection,
+		// enabling the optimizer panic injection might fail due to the injected
+		// vectorized panic. To go around this, we will retry this statement at
+		// most 100 times.
+		const maxRetries = 100
+		for attempt := 1; ; attempt++ {
+			if _, err = conn.Exec(injectOptimizerPanicsStmt); err == nil {
+				break
+			}
+			if attempt == maxRetries {
+				t.Fatalf("failed to enable optimizer panic injection with %d retries: %v", maxRetries, err)
+			}
 		}
 		logStmt(injectOptimizerPanicsStmt)
 
@@ -184,7 +195,8 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			stmt := ""
 			err := func() error {
 				done := make(chan error, 1)
-				go func(context.Context) {
+				m := c.NewMonitor(ctx, c.Node(1))
+				m.Go(func(context.Context) error {
 					// Generate can potentially panic in bad cases, so
 					// to avoid Go routines from dying we are going
 					// catch that here, and only pass the error into
@@ -200,7 +212,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 					if stmt == "" {
 						// If an empty statement is generated, then ignore it.
 						done <- errors.Newf("Empty statement returned by generate")
-						return
+						return nil
 					}
 
 					// TODO(yuzefovich): investigate why using the context with
@@ -215,7 +227,9 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 						}
 					}
 					done <- err
-				}(ctx)
+					return nil
+				})
+				defer m.Wait()
 				select {
 				case <-time.After(timeout * 2):
 					// SQLSmith generates queries that either perform full table scans of
@@ -237,9 +251,6 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 					for _, exp := range []string{
 						// Optimizer panic-injection surfaces as an internal error.
 						"injected panic in optimizer",
-						// TODO(yuzefovich): we temporarily ignore internal errors
-						// that are because of #40929.
-						"could not parse \"0E-2019\" as type decimal",
 					} {
 						expectedError = expectedError || strings.Contains(es, exp)
 					}
@@ -297,18 +308,24 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			clusterSpec = r.MakeClusterSpec(numNodes)
 		}
 		r.Add(registry.TestSpec{
-			Name:            fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
-			Owner:           registry.OwnerSQLQueries,
-			Cluster:         clusterSpec,
-			Leases:          registry.MetamorphicLeases,
-			NativeLibs:      registry.LibGEOS,
-			Timeout:         time.Minute * 20,
-			RequiresLicense: true,
+			Name:             fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
+			Owner:            registry.OwnerSQLQueries,
+			Cluster:          clusterSpec,
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
+			NativeLibs:       registry.LibGEOS,
+			Timeout:          time.Minute * 20,
+			RequiresLicense:  true,
 			// NB: sqlsmith failures should never block a release.
 			NonReleaseBlocker: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.Cloud() != spec.GCE && !c.IsLocal() {
+					t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
+				}
 				runSQLSmith(ctx, t, c, setup, setting)
 			},
+			ExtraLabels: []string{"O-rsg"},
 		})
 	}
 

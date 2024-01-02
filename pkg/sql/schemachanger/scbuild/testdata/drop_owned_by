@@ -34,6 +34,10 @@ DROP OWNED BY r
   {parentDatabaseId: 100, schemaId: 105}
 - [[UserPrivileges:{DescID: 104, Name: r}, ABSENT], PUBLIC]
   {descriptorId: 104, privileges: "2", userName: r}
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 - [[Namespace:{DescID: 106, Name: sq, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 106, name: sq, schemaId: 101}
 - [[Owner:{DescID: 106}, ABSENT], PUBLIC]

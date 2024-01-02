@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
@@ -25,7 +24,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/geo/geoindex:geoindex_proto",
+        "//pkg/geo/geopb:geopb_proto",
         "//pkg/sql/catalog/catenumpb:catenumpb_proto",
         "//pkg/sql/types:types_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
@@ -39,11 +38,9 @@ go_proto_library(
     proto = ":fetchpb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/geo/geoindex",
+        "//pkg/geo/geopb",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/types",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
-
-get_x_data(name = "get_x_data")

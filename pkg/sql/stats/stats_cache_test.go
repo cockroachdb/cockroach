@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -217,8 +217,9 @@ func TestCacheBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	db := s.InternalDB().(descs.DB)
 	expectedStats, err := initTestData(ctx, db.Executor())
 	if err != nil {
@@ -237,7 +238,7 @@ func TestCacheBasic(t *testing.T) {
 	// will result in the cache getting populated. When the stats cache size is
 	// exceeded, entries should be evicted according to the LRU policy.
 	sc := NewTableStatisticsCache(2 /* cacheSize */, s.ClusterSettings(), db)
-	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
 	}
@@ -323,8 +324,9 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 
 	sqlRunner.Exec(t, `CREATE DATABASE t;`)
@@ -338,8 +340,8 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 
 	// Make a stats cache.
 	sc := NewTableStatisticsCache(1, s.ClusterSettings(), insqlDB)
-	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
-	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
+	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
+	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
 	// for tt properly hydrates the user defined type t before access.
 	stats, err := sc.GetTableStats(ctx, tbl)
@@ -373,8 +375,9 @@ func TestCacheWait(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	db := s.InternalDB().(descs.DB)
 
 	expectedStats, err := initTestData(ctx, db.Executor())
@@ -390,7 +393,7 @@ func TestCacheWait(t *testing.T) {
 	}
 	sort.Sort(tableIDs)
 	sc := NewTableStatisticsCache(len(tableIDs) /* cacheSize */, s.ClusterSettings(), db)
-	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
 	}
@@ -433,24 +436,26 @@ func TestCacheAutoRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "probable OOM")
+
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
-	s := tc.Server(0)
+	s := tc.ApplicationLayer(0)
 	sc := NewTableStatisticsCache(
 		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 	)
-	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
 
-	sr0 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sr0 := sqlutils.MakeSQLRunner(s.SQLConn(t))
 	sr0.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
 	sr0.Exec(t, "CREATE DATABASE test")
 	sr0.Exec(t, "CREATE TABLE test.t (k INT PRIMARY KEY, v INT)")
 	sr0.Exec(t, "INSERT INTO test.t VALUES (1, 1), (2, 2), (3, 3)")
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", "t")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "test", "t")
 
 	expectNStats := func(n int) error {
 		stats, err := sc.GetTableStats(ctx, tableDesc)
@@ -466,14 +471,14 @@ func TestCacheAutoRefresh(t *testing.T) {
 	if err := expectNStats(0); err != nil {
 		t.Fatal(err)
 	}
-	sr1 := sqlutils.MakeSQLRunner(tc.ServerConn(1))
+	sr1 := sqlutils.MakeSQLRunner(tc.ApplicationLayer(1).SQLConn(t))
 	sr1.Exec(t, "CREATE STATISTICS k ON k FROM test.t")
 
 	testutils.SucceedsSoon(t, func() error {
 		return expectNStats(1)
 	})
 
-	sr2 := sqlutils.MakeSQLRunner(tc.ServerConn(2))
+	sr2 := sqlutils.MakeSQLRunner(tc.ApplicationLayer(2).SQLConn(t))
 	sr2.Exec(t, "CREATE STATISTICS v ON v FROM test.t")
 
 	testutils.SucceedsSoon(t, func() error {

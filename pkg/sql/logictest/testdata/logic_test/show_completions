@@ -1,6 +1,6 @@
 subtest stmt_source_equiv
 
-query TTTII
+query TTTII nosort
 SHOW COMPLETIONS AT OFFSET 5 FOR 'creat'
 ----
 CREATE       keyword  reserved    0  5
@@ -9,7 +9,7 @@ CREATELOGIN  keyword  unreserved  0  5
 CREATEROLE   keyword  unreserved  0  5
 
 query TTTII
-SELECT * FROM [SHOW COMPLETIONS AT OFFSET 5 FOR 'creat']
+SELECT * FROM [SHOW COMPLETIONS AT OFFSET 5 FOR 'creat'] ORDER BY completion
 ----
 CREATE       keyword  reserved    0  5
 CREATEDB     keyword  unreserved  0  5
@@ -21,7 +21,7 @@ subtest end
 subtest case_insensitivity
 
 query T
-SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 5 FOR 'creat']
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 5 FOR 'creat'] ORDER BY completion
 ----
 CREATE
 CREATEDB
@@ -29,7 +29,7 @@ CREATELOGIN
 CREATEROLE
 
 query T
-SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 5 FOR 'CREAT']
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 5 FOR 'CREAT'] ORDER BY completion
 ----
 CREATE
 CREATEDB
@@ -37,7 +37,7 @@ CREATELOGIN
 CREATEROLE
 
 query T
-SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 10 FOR 'SHOW CREAT']
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 10 FOR 'SHOW CREAT'] ORDER BY completion
 ----
 CREATE
 CREATEDB
@@ -45,7 +45,7 @@ CREATELOGIN
 CREATEROLE
 
 query T
-SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 10 FOR 'show creat']
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 10 FOR 'show creat'] ORDER BY completion
 ----
 CREATE
 CREATEDB
@@ -75,7 +75,7 @@ subtest end
 subtest complete_before_suffix
 
 query T
-SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 3 FOR 'create ta']
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 3 FOR 'create ta'] ORDER BY completion
 ----
 CREATE
 CREATEDB

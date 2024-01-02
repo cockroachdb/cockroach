@@ -46,6 +46,9 @@ rows decoded from KV: 2,001 (16 KiB, 4,002 KVs, 2,001 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • scan
   nodes: <hidden>
@@ -62,7 +65,7 @@ regions: <hidden>
   table: a@a_pkey
   spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkc9q3DAQxu99imFOLahEDqUHnUpNCiFNE5yQSzFlVhq2JrLkasZ0l8WP1RfokxVbzSGUQG-e7_t5_ug7ofyI6PDu4vNFew8En7qbayA0mHLgLzSyoPuKDfYGp5I9i-SySqcNuAwHdNbgkKZZV7k36HNhdCfUQSOjw3vaRe6YApcziwYDKw1xa0sf6Nv0yEc02OY4j0ncNvtuovXzLRq8egAdRnZgf_-SWvuclJMOOf1jlfxTILDPgYODc2NtU43dUVmgMAUHzXu4Gj5Wfd_dtuApRnmGTzSUJ_ydsfYcDV4_tC2I8gQ-z0nhNR_0bEj6xoHdDqsA8-NLwEgHGHnM5QgUY_ak65YW1l12pP47C-RZp1kdrPx2zZNQt-sXg1X5-9qitGd0zWL-P5GOZcpJ-FkYL3W2S2-Qw55r6pLn4vm2ZL-NqeXN9t8mBBatblOLy1StpV9e_QkAAP__SmDEtw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUsFqGzEQvfcrxJxakIk2lB50Kt2kYFI3wTa5lCWMpYkjrJW20iy2MftZ_YF-WdlVDE3bQOew7Lz3NPNGoxPk7x40rK6_XNdrgeLz8nYhECSEaOkrtpRBf4MKGgldioZyjmmETpNgbg-glQQXup5HuJFgYiLQJ2DHnkDDGjeeloSW0oUCCZYYnZ_K4kd86HZ0BAl19H0bsp56rzocf2cg4eZesGtJC_XzRy65iYEpsIvhLyrFfRaWTLRktbiUSlWF2ByZskiEVovqg7hxnwq-Xd7VwqD3-YW8Q5fO8vdSqUuQsLiva5GZOmFiH1i8pQNfuMDvtFDTYEVAtHtN0OJBtNTGdBTofTTIo0slRi8bZPNEWcSeu561GPXTNGeguGsGCQV5vu3MuCXQ1W_rmV-BVoP8_w0tKXcxZHqxnNc6qT86zaqhkUB2S-VZ5NgnQ3cpmklb0tup0ARYylzYqiTzcKYyJ8K22G8kPPq4f3AWNKjnmP3jcw4YD-A2j4OtnuJ-Krs-dqOtR_SZJCxwR1fElFoXXGZnQHPqaRje_AoAAP__MxfzJg==
 
 query T
 EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c JOIN d ON d.b = c.b
@@ -75,8 +78,11 @@ rows decoded from KV: 3 (24 B, 6 KVs, 3 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
-• lookup join
+• lookup join (streamer)
 │ nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
@@ -105,7 +111,7 @@ regions: <hidden>
       table: c@sec
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0U-FqE00U_f89xeX--oQx3V1EZEAIhgqpbVLS0j8SZDJziWtm564zs5gQ8li-gE8mM9NKa6yo6M9z5tx7z57D7jF8tCjx6vT8dHINeqTg9WJ-ARrO5tMZGJjPwIxW8BL0aIUCHRuaqY4CyrdY41Jg71lTCOwTtc-CqdmirAS2rh9iopcCNXtCucfYRkso8VqtLC1IGfInFQo0FFVr81o9DqRR4ITt0LkgQQlIt696ldBTFPjmBmLbkYTqy-dQsGYXycWW3dGT508BDGk2ZCQ0hVztIgXwpIyE-jm8Kux6cTkBrawN34S9av2d8BkKvLiZTCBE6kHz4CL8T9t40rr4REKVP6UIiDaPCTq1hY469jtQ1rJWMfmqsoeVivo9BeAh9kOUkPTZ_x3R4PIgsKDbbENUa0JZH8Sv53_GrbuNv34Yvxmbd_2GdijwnHkz9PCBWwfsJIyb-7WkTubJ0jhtyMdy1CW5gkNU1h4V8sfd1cfdvfhRdfVxdc1fqY62pIdjo_-o0eZ3Gl1Q6NkFetDmY5urw1IgmTWVvzbw4DVdetb5TIHzPJcJQyGW17qAqStPyeD94fqnw813w8vDf18DAAD__xqpcEE=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k9FqGzsQhu_PUwxzdQpKsruUUgQFUycFp0kcnJCbYoIsTRzVWmkrabGN8WP1BfpkRSs7OHES2tLqYmFm_v1nNN_uCsM3gxyvTs5O-tcgDwV8Gg3PQcLpcHABCoYXoA4n8AHk4QQZWqfoQtQUkH_BEscMG-8kheB8Sq06wUAtkBcMtW3amNJjhtJ5Qr7CqKMh5HgtJoZGJBT5owIZKopCm85W9gJJZNh3pq1t4CAYpN5XjUjRATL8fANR18Sh-PE95Fg6G8lG7exeybt5AEXSKVIcqpycLCMF8CQUh_IdfMzZ6eiyD1IYEx6EjdB-K3yLDM9v-n0IkRqQrrUR_qdFPNI2vuFQdFfJAqLZS4JaLKCm2vklCGOcFDHNVXQzTESU9xTAtbFpI4ek7-bfJiocrxnmaLPbEMWUkJc7MAbHyIs1-3Uep07bDY7yMQ7VU7fNjJbI8My5WdvAV6ctOMuhV-1iSoyGacRecuiadavPm8xxiMKYPUB_zLLcZ_n-OZTlPsrqr6BsAykI0ZOoySNDWpBs9wf_R8SrJ8TL3yE-otA4G-gR7Zc6FU86HZTrMUNSU8q_fXCtl3Tpney0ORx2Rl1CUYi5WuZgYLelvL2HD3bXqXzVqXrNaczwzrj5rVbIsdicg2ce24PpBTENaUVX927e2V4vm3TBO2ECMTwXMzqmSL7WVoeoJfLoW1qv__sZAAD__9uqrY8=
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
@@ -156,6 +162,9 @@ rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • merge join
 │ nodes: <hidden>
@@ -195,7 +204,7 @@ regions: <hidden>
       table: d@d_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsk89uEzEQxu88xWhOrTDt7hZxsFQpIgoohSTVtuoFRcixh-0qXntre0WiKI_FC_BkaG0KpOkfFXHk5vnm-5zxb7Ib9DcaOV6MPo6GlyCPBLwrZxOQMJ5ORyVMRuX7EZzNxlNQMJtGwymoowUyNFbRVDTkkX_CHOcMW2cleW9dL22iYaxWyDOGtWm70MtzhtI6Qr7BUAdNyPFSLDSVJBS54wwZKgqi1vFaOZCf2yWtkeHQ6q4xnoNAhhet6I-vkOGHKwh1Qxyy7998qqU1gUyordlrOfvVgyJpFSkORRIX60AeHAnFIX8Db5NaledDkEJr_8vYitrdGl8jw8nVcAg-UAvSdibAAa3CcW3CIYcsPiUZiJYPGRqxgoYa69YgtLZShH6uLM6wEEFekwfbhbYLHHp_nP9WKHC-ZZiqn2x9EBUhz7fs7_jnu_zVQO3xX_zn_yT_4kH-v7F3xjpFjtQO8nmffMpyzxIn5Co6s7Uhd1zsLlHTl3AwyF8enrq6uk5HZDjrnzDoF04rkt3-uh5j0_f8jYZATQuq9kvovKjoH6A7ec5ftyTfWuPpLsJ7b856bqQqSnvwtnOSzp2V8WdSOYu5KCjyIXWLVIxNbMVv689w_oxwcTdcPBo-2Qln2_n2xY8AAAD__yYe1DU=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsU81OIzkQvu9TlOoEWgPdzWoPlpCiDdlRmEmCAuIyipBjF40Vt93YbpEI5bHmBebJRu4GhoQ_MZrj-NByVX3-qvx97jsMNwY5ng2-DPrnIPcF_D-djEDCcDweTGE0mH4awMlkOAYFk3ELOAK1P0eG1ikai4oC8q-Y44xh7Z2kEJxPqbsWMFRL5BlDbesmpvSMoXSekN9h1NEQcjwXc0NTEor8QYYMFUWhTUsre_KyXtAKGfadaSobOAhkeFaLtN1Dhp8vIOqKOGTfv4Uuls5GslE7-6zk3W0ARdIpUhyKLjlfRQrgSSgO-b_wX5ctp6d9kMKY8AishfYPwH-Q4eii34cQqQbpGhthh5bxQNu4yyFrr9IBiBavASqxhIoq51cgjHFSxDRX1s4wF1FeUwDXxLqJHBK-nf8hUeBszbCL7rUNUZSEPH9ixvAYebZmv-ZHvumH6qlnfsz_-PGuH8WWH_mrfvy0obHOK_KkNiyYpZPvQV4wdUS-pBOnLfmDYtNUQ1dxp5f_vXvkdXndbZHhJF2plx4ALUk2z-17S6tUCzcGIlU1KB0W0ARR0m-Q8nBLyuIjT3tKoXY20LakL3bKtjrt5UlYUiV1RgXXeEmn3skW24WTlqhNKAqxqxZdMLRtKU8dPInq8c98ypR_gKl4ypRvMxVvMh1uMGWbM80YXhl3e6kVcszu194Ln4eF6YAoQxL77NrdtrTnqzpJdSVMIIYjsaBjiuQrbXWIWiKPvqH1-q8fAQAA__9OjRUr
 
 statement ok
 RESET vectorize; RESET distsql
@@ -244,7 +253,7 @@ querying next range at /Table/109/1/0/0
 === SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/109/1/10/0
 
-# Regression test for #46123 (rowexec.TableReader not implementing
+# Used to be a regression test for #46123 (rowexec.TableReader not implementing
 # execopnode.OpNode interface).
 statement ok
 CREATE TABLE t46123(c0 INT)
@@ -256,8 +265,9 @@ EXPLAIN (VEC) SELECT stddev(0) FROM t46123 WHERE ('' COLLATE en)::BOOL
 └ Node 1
   └ *colexec.orderedAggregator
     └ *colexecbase.constInt64Op
-      └ *rowexec.filtererProcessor
-        └ *colfetcher.ColBatchScan
+      └ *colexecbase.castDatumBoolOp
+        └ *colexecbase.constDatumOp
+          └ *colfetcher.ColBatchScan
 
 # Regression test for #46122.
 statement ok

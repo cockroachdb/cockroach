@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 	mysql "vitess.io/vitess/go/vt/sqlparser"
 )
 
@@ -135,7 +136,7 @@ func readMysqlCreateFrom(
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Test relies on descriptor validation, which doesn't seem to be
 		// supported within secondary tenants. Tracked with #76378.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		Settings:          cluster.MakeTestingClusterSettings(),
 	})
 	ctx := context.Background()
@@ -356,6 +357,8 @@ func TestMysqlValueToDatum(t *testing.T) {
 		}
 		return d
 	}
+	asdfCS, err := tree.NewDCollatedString("Asdf", "en_US", &tree.CollationEnvironment{})
+	require.NoError(t, err)
 	tests := []struct {
 		raw  mysql.Expr
 		typ  *types.T
@@ -363,6 +366,7 @@ func TestMysqlValueToDatum(t *testing.T) {
 	}{
 		{raw: mysql.NewStrLiteral([]byte("0000-00-00")), typ: types.Date, want: tree.DNull},
 		{raw: mysql.NewStrLiteral([]byte("2010-01-01")), typ: types.Date, want: date("2010-01-01")},
+		{raw: mysql.NewStrLiteral([]byte("Asdf")), typ: types.MakeCollatedString(types.String, "en_US"), want: asdfCS},
 		{raw: mysql.NewStrLiteral([]byte("0000-00-00 00:00:00")), typ: types.Timestamp, want: tree.DNull},
 		{raw: mysql.NewStrLiteral([]byte("2010-01-01 00:00:00")), typ: types.Timestamp, want: ts("2010-01-01 00:00:00")},
 	}
@@ -370,7 +374,7 @@ func TestMysqlValueToDatum(t *testing.T) {
 	evalContext := eval.NewTestingEvalContext(st)
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("%v", tc.raw), func(t *testing.T) {
-			got, err := mysqlValueToDatum(context.Background(), tc.raw, tc.typ, evalContext)
+			got, err := mysqlValueToDatum(context.Background(), tc.raw, tc.typ, evalContext, nil /* semaCtx */)
 			if err != nil {
 				t.Fatal(err)
 			}

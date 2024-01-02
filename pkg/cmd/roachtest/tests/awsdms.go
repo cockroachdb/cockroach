@@ -188,12 +188,13 @@ func dmsDescribeTasksInput(
 
 func registerAWSDMS(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "awsdms",
-		Owner:   registry.OwnerSQLFoundations, // TODO(otan): add a migrations OWNERS team
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `awsdms`, `aws`),
-		Run:     runAWSDMS,
+		Name:             "awsdms",
+		Owner:            registry.OwnerMigrations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Weekly),
+		Run:              runAWSDMS,
 	})
 }
 
@@ -208,7 +209,7 @@ func runAWSDMS(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal("cannot be run in local mode")
 	}
 	// We may not have the requisite certificates to start DMS/RDS on non-AWS invocations.
-	if cloud := c.Spec().Cloud; cloud != spec.AWS {
+	if cloud := c.Cloud(); cloud != spec.AWS {
 		t.Skipf("skipping test on cloud %s", cloud)
 		return
 	}
@@ -561,7 +562,6 @@ func setupAWSDMS(
 func setupCockroachDBCluster(ctx context.Context, t test.Test, c cluster.Cluster) func() error {
 	return func() error {
 		t.L().Printf("setting up cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		db := c.Conn(ctx, t.L(), 1)
@@ -871,7 +871,8 @@ func setupDMSEndpointsAndTask(
 			return err
 		}
 		t.L().Printf("waiting for replication task to be ready")
-		if err := dms.NewReplicationTaskReadyWaiter(dmsCli).Wait(ctx, dmsDescribeTasksInput(t.BuildVersion(), task.tableName), awsdmsWaitTimeLimit); err != nil {
+		input := dmsDescribeTasksInput(t.BuildVersion(), task.tableName)
+		if err = dmsTaskStatusChecker(ctx, dmsCli, input, "ready"); err != nil {
 			return err
 		}
 
@@ -899,12 +900,41 @@ func setupDMSEndpointsAndTask(
 		}
 
 		t.L().Printf("waiting for replication task to be running")
-		if err := dms.NewReplicationTaskRunningWaiter(dmsCli).Wait(
-			ctx,
-			dmsDescribeTasksInput(t.BuildVersion(), task.tableName),
-			awsdmsWaitTimeLimit,
-		); err != nil {
+		if err = dmsTaskStatusChecker(ctx, dmsCli, input, "running"); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func dmsTaskStatusChecker(
+	ctx context.Context, dmsCli *dms.Client, input *dms.DescribeReplicationTasksInput, status string,
+) error {
+	closer := make(chan struct{})
+	r := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: 10 * time.Second,
+		MaxBackoff:     30 * time.Second,
+		Closer:         closer,
+	})
+	timeout := time.After(awsdmsWaitTimeLimit)
+	for r.Next() {
+		select {
+		case <-timeout:
+			close(closer)
+			// Since we only ever have a unique task returned per filter,
+			// it should be safe to direct index for the task name.
+			return errors.Newf("exceeded time limit waiting for %s to transition to %s", input.Filters[0].Values[0], status)
+		default:
+			dmsTasks, err := dmsCli.DescribeReplicationTasks(ctx, input)
+			if err != nil {
+				return err
+			}
+			for _, task := range dmsTasks.ReplicationTasks {
+				// If we match the status we want, close the retry and exit.
+				if *task.Status == status {
+					close(closer)
+				}
+			}
 		}
 	}
 	return nil

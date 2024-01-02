@@ -240,7 +240,7 @@ func (s *Server) Query(
 	// dead. This is a conservatively long span, but gives us a good indication of
 	// when a gap likely indicates an outage (and thus missing values should not
 	// be interpolated).
-	interpolationLimit := liveness.TimeUntilStoreDead.Get(&s.db.st.SV).Nanoseconds()
+	interpolationLimit := liveness.TimeUntilNodeDead.Get(&s.db.st.SV).Nanoseconds()
 
 	// Get the estimated number of nodes on the cluster, used to compute more
 	// accurate memory usage estimates. Set a minimum of 1 in order to avoid
@@ -315,6 +315,7 @@ func (s *Server) Query(
 							BudgetBytes:             s.queryMemoryMax / int64(s.queryWorkerMax),
 							EstimatedSources:        estimatedSourceCount,
 							InterpolationLimitNanos: interpolationLimit,
+							Columnar:                s.db.WriteColumnar(),
 						},
 					)
 
@@ -378,7 +379,7 @@ func (s *Server) Query(
 // set up a KV store and write some keys into it (`MakeDataKey`) to do so without
 // setting up a `*Server`.
 func (s *Server) Dump(req *tspb.DumpRequest, stream tspb.TimeSeries_DumpServer) error {
-	d := defaultDumper{stream}.Dump
+	d := DefaultDumper{stream.Send}.Dump
 	return dumpImpl(stream.Context(), s.db.db, req, d)
 
 }
@@ -420,11 +421,12 @@ func dumpImpl(
 	return nil
 }
 
-type defaultDumper struct {
-	stream tspb.TimeSeries_DumpServer
+// DefaultDumper translates *roachpb.KeyValue into TimeSeriesData.
+type DefaultDumper struct {
+	Send func(*tspb.TimeSeriesData) error
 }
 
-func (dd defaultDumper) Dump(kv *roachpb.KeyValue) error {
+func (dd DefaultDumper) Dump(kv *roachpb.KeyValue) error {
 	name, source, _, _, err := DecodeDataKey(kv.Key)
 	if err != nil {
 		return err
@@ -448,7 +450,7 @@ func (dd defaultDumper) Dump(kv *roachpb.KeyValue) error {
 			tsdata.Datapoints[i].Value = idata.Samples[i].Sum
 		}
 	}
-	return dd.stream.Send(tsdata)
+	return dd.Send(tsdata)
 }
 
 type rawDumper struct {
@@ -488,7 +490,7 @@ func dumpTimeseriesAllSources(
 
 	for span != nil {
 		b := &kv.Batch{}
-		scan := kvpb.NewScan(span.Key, span.EndKey, false /* forUpdate */)
+		scan := kvpb.NewScan(span.Key, span.EndKey)
 		b.AddRawRequest(scan)
 		b.Header.MaxSpanRequestKeys = dumpBatchSize
 		err := db.Run(ctx, b)

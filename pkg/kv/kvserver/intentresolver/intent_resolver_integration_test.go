@@ -335,7 +335,7 @@ func TestSyncIntentResolution_ByteSizePagination(t *testing.T) {
 
 func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
 	for _, s := range tc.Servers {
-		err = s.Stores().VisitStores(func(store *kvserver.Store) error {
+		err = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			return store.ForceReplicationScanAndProcess()
 		})
 	}
@@ -363,6 +363,14 @@ func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
 // the intent for t1 and intent resolution is clogged up on the store
 // containing t1, unless the intent resolution for the "unavailable" t2 times
 // out.
+//
+// TODO(sumeer): this test clogs up batched intent resolution via an inflight
+// backpressure limit, which by default in no longer limited. But an inflight
+// backpressure limit does exist for GC of txn records. This test should
+// continue to exist until we have production experience with no inflight
+// backpressure for intent resolution. And after that we should create an
+// equivalent test for inflight backpressure for GC of txn records and remove
+// this test.
 func TestIntentResolutionUnavailableRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

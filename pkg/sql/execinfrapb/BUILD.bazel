@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -55,7 +54,6 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
-        "//pkg/util/timeutil",
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
@@ -76,11 +74,11 @@ go_test(
         "flow_diagram_external_test.go",
         "flow_diagram_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":execinfrapb"],
     deps = [
         "//pkg/base",
         "//pkg/keys",
+        "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql",
@@ -165,5 +163,3 @@ disallowed_imports_test(
     "execinfrapb",
     ["//pkg/sql/sem/builtins"],
 )
-
-get_x_data(name = "get_x_data")

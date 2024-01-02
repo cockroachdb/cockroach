@@ -242,6 +242,7 @@ func TestPrettyPrint(t *testing.T) {
 		{keys.StoreLossOfQuorumRecoveryCleanupActionsKey(), "/Local/Store/lossOfQuorumRecovery/cleanup", revertSupportUnknown},
 
 		{keys.AbortSpanKey(roachpb.RangeID(1000001), txnID), fmt.Sprintf(`/Local/RangeID/1000001/r/AbortSpan/%q`, txnID), revertSupportUnknown},
+		{keys.ReplicatedSharedLocksTransactionLatchingKey(roachpb.RangeID(1000001), txnID), fmt.Sprintf(`/Local/RangeID/1000001/r/ReplicatedSharedLocksTransactionLatch/%q`, txnID), revertSupportUnknown},
 		{keys.RangeAppliedStateKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RangeAppliedState", revertSupportUnknown},
 		{keys.RaftTruncatedStateKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/u/RaftTruncatedState", revertSupportUnknown},
 		{keys.RangeLeaseKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RangeLease", revertSupportUnknown},
@@ -260,16 +261,16 @@ func TestPrettyPrint(t *testing.T) {
 		{keys.TransactionKey(tenSysCodec.TablePrefix(42), txnID), fmt.Sprintf(`/Local/Range/Table/42/Transaction/%q`, txnID), revertSupportUnknown},
 		{keys.RangeProbeKey(roachpb.RKey(tenSysCodec.TablePrefix(42))), `/Local/Range/Table/42/RangeProbe`, revertSupportUnknown},
 		{keys.QueueLastProcessedKey(roachpb.RKey(tenSysCodec.TablePrefix(42)), "foo"), `/Local/Range/Table/42/QueueLastProcessed/"foo"`, revertSupportUnknown},
-		{lockTableKey(keys.RangeDescriptorKey(roachpb.RKey(tenSysCodec.TablePrefix(42)))), `/Local/Lock/Intent/Local/Range/Table/42/RangeDescriptor`, revertSupportUnknown},
-		{lockTableKey(tenSysCodec.TablePrefix(111)), "/Local/Lock/Intent/Table/111", revertSupportUnknown},
+		{lockTableKey(keys.RangeDescriptorKey(roachpb.RKey(tenSysCodec.TablePrefix(42)))), `/Local/Lock/Local/Range/Table/42/RangeDescriptor`, revertSupportUnknown},
+		{lockTableKey(tenSysCodec.TablePrefix(111)), "/Local/Lock/Table/111", revertSupportUnknown},
 
 		{keys.MakeRangeKeyPrefix(roachpb.RKey(ten5Codec.TenantPrefix())), `/Local/Range/Tenant/5`, revertSupportUnknown},
 		{keys.MakeRangeKeyPrefix(roachpb.RKey(ten5Codec.TablePrefix(42))), `/Local/Range/Tenant/5/Table/42`, revertSupportUnknown},
 		{keys.RangeDescriptorKey(roachpb.RKey(ten5Codec.TablePrefix(42))), `/Local/Range/Tenant/5/Table/42/RangeDescriptor`, revertSupportUnknown},
 		{keys.TransactionKey(ten5Codec.TablePrefix(42), txnID), fmt.Sprintf(`/Local/Range/Tenant/5/Table/42/Transaction/%q`, txnID), revertSupportUnknown},
 		{keys.QueueLastProcessedKey(roachpb.RKey(ten5Codec.TablePrefix(42)), "foo"), `/Local/Range/Tenant/5/Table/42/QueueLastProcessed/"foo"`, revertSupportUnknown},
-		{lockTableKey(keys.RangeDescriptorKey(roachpb.RKey(ten5Codec.TablePrefix(42)))), `/Local/Lock/Intent/Local/Range/Tenant/5/Table/42/RangeDescriptor`, revertSupportUnknown},
-		{lockTableKey(ten5Codec.TablePrefix(111)), "/Local/Lock/Intent/Tenant/5/Table/111", revertSupportUnknown},
+		{lockTableKey(keys.RangeDescriptorKey(roachpb.RKey(ten5Codec.TablePrefix(42)))), `/Local/Lock/Local/Range/Tenant/5/Table/42/RangeDescriptor`, revertSupportUnknown},
+		{lockTableKey(ten5Codec.TablePrefix(111)), "/Local/Lock/Tenant/5/Table/111", revertSupportUnknown},
 
 		{keys.LocalMax, `/Meta1/""`, revertSupportUnknown}, // LocalMax == Meta1Prefix
 
@@ -483,7 +484,7 @@ exp:    %s
 				t.Errorf("%d: from string expected %s, got %s", i, exp, test.key.String())
 			}
 
-			scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
+			scanner := keysutil.MakePrettyScanner(nil /* tableParser */, nil /* tenantParser */)
 			parsed, err := scanner.Scan(keyInfo)
 			if err != nil {
 				if !errors.HasType(err, (*keys.ErrUglifyUnsupported)(nil)) {
@@ -637,4 +638,29 @@ func TestFormatHexKey(t *testing.T) {
 
 func makeKey(keys ...[]byte) []byte {
 	return bytes.Join(keys, nil)
+}
+
+func FuzzPrettyPrint(f *testing.F) {
+	f.Add([]byte(nil), []byte(nil))
+
+	byteSliceToValDirs := func(s []byte) (dir []encoding.Direction) {
+		for _, b := range s {
+			dir = append(dir, encoding.Direction(b))
+			if len(dir) > 5 { // Arbitrary limit on values direction as fuzzer can generate huge arrays.
+				break
+			}
+		}
+		return dir
+	}
+
+	f.Fuzz(func(t *testing.T, valsDirs, key []byte) {
+		s := keys.PrettyPrint(byteSliceToValDirs(valsDirs), key)
+		// Arbitrary limit.  Some inputs generate bit arrays (and those tend to be long
+		// in string form), but we want to make
+		// sure that pretty printer doesn't do something super silly and allocate
+		// excessive amount of memory when the key is small.
+		if len(s) > 1<<19 {
+			t.Fatalf("pretty string is %d bytes, while key is only %d with valDirs len %d", len(s), len(key), len(valsDirs))
+		}
+	})
 }

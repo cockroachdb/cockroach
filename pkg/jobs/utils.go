@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -33,10 +34,6 @@ func RunningJobExists(
 	cv clusterversion.Handle,
 	jobTypes ...jobspb.Type,
 ) (exists bool, retErr error) {
-	if !cv.IsActive(ctx, clusterversion.V23_1BackfillTypeColumnInJobsTable) {
-		return legacyRunningJobExists(ctx, ignoreJobID, txn, jobTypes...)
-	}
-
 	var typeStrs string
 	switch len(jobTypes) {
 	case 0:
@@ -55,15 +52,21 @@ func RunningJobExists(
 		typeStrs = s.String()
 	}
 
+	orderBy := " ORDER BY created"
+	if ignoreJobID == jobspb.InvalidJobID {
+		// There is no need to order by the created column if there is no job to
+		// ignore.
+		orderBy = ""
+	}
+
 	stmt := `
 SELECT
   id
 FROM
-  system.jobs
+  system.jobs@jobs_status_created_idx
 WHERE
 	job_type IN ` + typeStrs + ` AND
-  status IN ` + NonTerminalStatusTupleString + `
-ORDER BY created
+  status IN ` + NonTerminalStatusTupleString + orderBy + `
 LIMIT 1`
 	it, err := txn.QueryIterator(
 		ctx,
@@ -89,54 +92,32 @@ LIMIT 1`
 	return ok && jobspb.JobID(*it.Cur()[0].(*tree.DInt)) != ignoreJobID, nil
 }
 
-func legacyRunningJobExists(
-	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, jobTypes ...jobspb.Type,
-) (exists bool, retErr error) {
-	const stmt = `
-SELECT
-  id, payload
-FROM
-  crdb_internal.system_jobs
-WHERE
-  status IN ` + NonTerminalStatusTupleString + `
-ORDER BY created`
-
-	it, err := txn.QueryIterator(
-		ctx,
-		"get-jobs",
-		txn.KV(),
-		stmt,
-	)
+// JobExists returns true if there is a row corresponding to jobID in the
+// system.jobs table.
+func JobExists(
+	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, ex isql.Executor,
+) (bool, error) {
+	row, err := ex.QueryRow(ctx, "check-for-job", txn, `SELECT id FROM system.jobs WHERE id = $1`, jobID)
 	if err != nil {
-		return false /* exists */, err
+		return false, err
 	}
-	// We have to make sure to close the iterator since we might return from the
-	// for loop early (before Next() returns false).
-	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
+	return row != nil, nil
+}
 
-	var ok bool
-	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		row := it.Cur()
-		payload, err := UnmarshalPayload(row[1])
-		if err != nil {
-			return false /* exists */, err
-		}
-
-		isTyp := false
-		for _, typ := range jobTypes {
-			if payload.Type() == typ {
-				isTyp = true
-				break
-			}
-		}
-		if isTyp {
-			id := jobspb.JobID(*row[0].(*tree.DInt))
-			if id == jobID {
-				break
-			}
-
-			return true /* exists */, nil /* retErr */
-		}
+// JobCoordinatorID returns the coordinator node ID of the job.
+func JobCoordinatorID(
+	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, ex isql.Executor,
+) (int32, error) {
+	row, err := ex.QueryRow(ctx, "fetch-job-coordinator", txn, `SELECT claim_instance_id FROM system.jobs WHERE id = $1`, jobID)
+	if err != nil {
+		return 0, err
 	}
-	return false /* exists */, err
+	if row == nil {
+		return 0, errors.Errorf("coordinator not found for job %d", jobID)
+	}
+	coordinatorID, ok := tree.AsDInt(row[0])
+	if !ok {
+		return 0, errors.AssertionFailedf("expected coordinator ID to be an int, got %T", row[0])
+	}
+	return int32(coordinatorID), nil
 }

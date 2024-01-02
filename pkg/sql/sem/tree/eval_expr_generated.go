@@ -217,6 +217,11 @@ func (node *DOidWrapper) Eval(ctx context.Context, v ExprEvaluator) (Datum, erro
 }
 
 // Eval is part of the TypedExpr interface.
+func (node *DPGLSN) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return node, nil
+}
+
+// Eval is part of the TypedExpr interface.
 func (node *DString) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }

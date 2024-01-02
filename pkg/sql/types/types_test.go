@@ -364,6 +364,10 @@ func TestTypes(t *testing.T) {
 		{Oid, MakeScalar(OidFamily, oid.T_oid, 0, 0, emptyLocale)},
 		{RegClass, MakeScalar(OidFamily, oid.T_regclass, 0, 0, emptyLocale)},
 
+		{RefCursor, &T{InternalType: InternalType{
+			Family: RefCursorFamily, Oid: oid.T_refcursor, Locale: &emptyLocale}}},
+		{RefCursor, MakeScalar(RefCursorFamily, oid.T_refcursor, 0, 0, emptyLocale)},
+
 		// STRING
 		{MakeString(0), String},
 		{MakeString(0), &T{InternalType: InternalType{
@@ -645,6 +649,94 @@ func TestEquivalent(t *testing.T) {
 	}
 }
 
+func TestIdentical(t *testing.T) {
+	testCases := []struct {
+		typ1      *T
+		typ2      *T
+		identical bool
+	}{
+		// ARRAY
+		{IntArray, IntArray, true},
+		{Int2Vector, Int2Vector, true},
+		{Int2Vector, IntArray, false},
+		{OidVector, MakeArray(Oid), false},
+		{MakeArray(Int), MakeArray(Int), true},
+		{MakeArray(Int), IntArray, true},
+		{MakeArray(Int), MakeArray(Int4), false},
+		{MakeArray(String), MakeArray(String), true},
+		{MakeArray(String), MakeArray(MakeChar(10)), false},
+		{MakeArray(String), MakeArray(MakeArray(String)), false},
+		{MakeArray(IntArray), IntArray, false},
+
+		// BIT
+		{MakeBit(1), MakeBit(1), true},
+		{MakeBit(1), MakeBit(2), false},
+		{MakeBit(1), MakeVarBit(1), false},
+		{MakeVarBit(10), Any, false},
+		{VarBit, Bytes, false},
+
+		// COLLATEDSTRING
+		{MakeCollatedString(String, "en"), MakeCollatedString(String, "en"), true},
+		{MakeCollatedString(String, "en_us"), MakeCollatedString(String, "en_US"), true},
+		{MakeCollatedString(String, "en_us"), MakeCollatedString(String, "en-US"), true},
+		{MakeCollatedString(String, "en_us"), MakeCollatedString(String, "de"), false},
+		{MakeCollatedString(String, "en"), MakeCollatedString(MakeVarChar(10), "en"), false},
+		{MakeCollatedString(String, "en"), String, false},
+		{MakeCollatedString(String, "en"), AnyCollatedString, false},
+		{AnyCollatedString, MakeCollatedString(String, "en"), false},
+		{MakeCollatedString(String, "en"), MakeCollatedString(String, "de"), false},
+
+		// DECIMAL
+		{Decimal, Decimal, true},
+		{Decimal, MakeDecimal(3, 2), false},
+		{MakeDecimal(3, 2), MakeDecimal(3, 2), true},
+		{MakeDecimal(3, 2), MakeDecimal(3, 0), false},
+		{Any, MakeDecimal(10, 0), false},
+		{Decimal, Float, false},
+
+		// INT
+		{Int2, Int2, true},
+		{Int4, Int4, true},
+		{Int2, Int4, false},
+		{Int4, Int, false},
+		{Int, Any, false},
+		{Int, IntArray, false},
+
+		// TUPLE
+		{MakeTuple([]*T{}), MakeTuple([]*T{}), true},
+		{MakeTuple([]*T{Int4, String}), MakeTuple([]*T{Int4, String}), true},
+		{MakeTuple([]*T{Int, String}), MakeTuple([]*T{Int4, String}), false},
+		{MakeTuple([]*T{Int, String}), AnyTuple, false},
+		{AnyTuple, MakeTuple([]*T{Int, String}), false},
+		{MakeLabeledTuple([]*T{Int4, String}, []string{"label1", "label2"}),
+			MakeLabeledTuple([]*T{Int4, String}, []string{"label1", "label2"}), true},
+		{MakeLabeledTuple([]*T{Int4, String}, []string{"label1", "label2"}),
+			MakeLabeledTuple([]*T{Int4, String}, []string{"label1", "label4"}), false},
+		{MakeTuple([]*T{String, Int}), MakeTuple([]*T{Int, String}), false},
+
+		// ENUM
+		{MakeEnum(15210, 15213), MakeEnum(15210, 15213), true},
+		{MakeEnum(15210, 15213), MakeEnum(15150, 15213), false},
+
+		// UNKNOWN
+		{Unknown, &T{InternalType: InternalType{
+			Family: UnknownFamily, Oid: oid.T_unknown, Locale: &emptyLocale}}, true},
+		{Any, Unknown, false},
+		{Unknown, Int, false},
+	}
+
+	for _, tc := range testCases {
+		if tc.identical && !tc.typ1.Identical(tc.typ2) {
+			t.Errorf("expected <%v> to be identical to <%v>",
+				tc.typ1.DebugString(), tc.typ2.DebugString())
+		}
+		if !tc.identical && tc.typ1.Identical(tc.typ2) {
+			t.Errorf("expected <%v> to not be identical to <%v>",
+				tc.typ1.DebugString(), tc.typ2.DebugString())
+		}
+	}
+}
+
 // TestMarshalCompat tests backwards-compatibility during marshal.
 func TestMarshalCompat(t *testing.T) {
 	intElemType := IntFamily
@@ -680,6 +772,9 @@ func TestMarshalCompat(t *testing.T) {
 		// FLOAT
 		{Float, InternalType{Family: FloatFamily, Oid: oid.T_float8, Width: 64}},
 		{Float4, InternalType{Family: FloatFamily, Oid: oid.T_float4, Width: 32, VisibleType: visibleREAL}},
+
+		// REFCURSOR
+		{RefCursor, InternalType{Family: RefCursorFamily, Oid: oid.T_refcursor}},
 
 		// STRING
 		{MakeString(10), InternalType{Family: StringFamily, Oid: oid.T_text, Width: 10}},
@@ -743,6 +838,9 @@ func TestUnmarshalCompat(t *testing.T) {
 		{InternalType{Family: IntFamily, VisibleType: visibleBIT}, Int},
 		{InternalType{Family: IntFamily, Width: 20}, Int},
 		{InternalType{Family: IntFamily}, Int},
+
+		// REFCURSOR
+		{InternalType{Family: RefCursorFamily, Oid: oid.T_refcursor}, RefCursor},
 
 		// STRING
 		{InternalType{Family: StringFamily}, String},
@@ -1025,6 +1123,7 @@ func TestWithoutTypeModifiers(t *testing.T) {
 		{Jsonb, Jsonb},
 		{Name, Name},
 		{Uuid, Uuid},
+		{RefCursor, RefCursor},
 	}
 
 	for _, tc := range testCases {
@@ -1054,6 +1153,7 @@ func TestDelimiter(t *testing.T) {
 		{VarChar, ","},
 		{QChar, ","},
 		{Name, ","},
+		{RefCursor, ","},
 		{Bytes, ","},
 		{Date, ","},
 		{Time, ","},

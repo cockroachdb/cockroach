@@ -1,0 +1,37 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+SET experimental_enable_unique_without_index_constraints = true;
+INSERT INTO t(i, j) VALUES(-1, -1), (-2, -2), (-3, -3);
+----
+
+#For rollback testing intentionally inject an error.
+stage-exec phase=PreCommitPhase stage=1 schemaChangeExecErrorForRollback=(.*could not create unique constraint "unique_j".*)
+UPDATE t SET j=-3 WHERE i = -1;
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=2: rollback=true
+INSERT INTO t(i) VALUES(-$stageKey);
+INSERT INTO t(i) VALUES(-$stageKey - 1);
+----
+
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t (i, j) VALUES($stageKey, $stageKey);
+INSERT INTO t (i, j) VALUES($stageKey + 1, $stageKey +1);
+----
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t (i, j) VALUES($stageKey +2, $stageKey)
+----
+duplicate key value violates unique constraint "unique_j"
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=($successfulStageCount*2)+3 FROM t;
+----
+true
+
+test
+ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
+----

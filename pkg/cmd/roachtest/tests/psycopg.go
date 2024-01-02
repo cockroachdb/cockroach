@@ -39,8 +39,7 @@ func registerPsycopg(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -113,7 +112,7 @@ func registerPsycopg(r registry.Registry) {
 			`cd /mnt/data1/psycopg/ &&
 			export PSYCOPG2_TESTDB=defaultdb &&
 			export PSYCOPG2_TESTDB_USER=root &&
-			export PSYCOPG2_TESTDB_PORT=26257 &&
+			export PSYCOPG2_TESTDB_PORT={pgport:1} &&
 			export PSYCOPG2_TESTDB_HOST=localhost &&
 			make check PYTHON_VERSION=3`,
 		)
@@ -140,11 +139,12 @@ func registerPsycopg(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "psycopg",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `driver`),
+		Name:             "psycopg",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.Driver),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPsycopg(ctx, t, c)
 		},

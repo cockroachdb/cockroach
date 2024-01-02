@@ -12,13 +12,12 @@ package testutils
 
 import (
 	"context"
-	gosql "database/sql"
-	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/stretchr/testify/require"
@@ -60,16 +59,9 @@ func (h *Handle) SetSQLDBForUser(tenantID roachpb.TenantID, user string) func() 
 		return resetToRootUser
 	}
 
-	pgURL, cleanup := sqlutils.PGUrl(h.t, h.tc.Server(0).ServingSQLAddr(),
-		"TestBackupRestoreDataDriven", url.User(user))
-	userSQLDB, err := gosql.Open("postgres", pgURL.String())
-	require.NoError(h.t, err)
+	userSQLDB := tenantState.ApplicationLayerInterface.SQLConn(h.t, serverutils.User(user))
 	tenantState.curDB = sqlutils.MakeSQLRunner(userSQLDB)
 	tenantState.userToDB[user] = tenantState.curDB
-	tenantState.cleanupFns = append(tenantState.cleanupFns, func() {
-		require.NoError(h.t, userSQLDB.Close())
-		cleanup()
-	})
 
 	return resetToRootUser
 }
@@ -80,35 +72,21 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) {
 	testServer := h.tc.Server(0)
 	tenantState := &Tenant{t: h.t, userToDB: make(map[string]*sqlutils.SQLRunner)}
 	if tenID == roachpb.SystemTenantID {
-		tenantState.TestTenantInterface = testServer
-		pgURL, cleanupPGUrl := sqlutils.PGUrl(h.t, tenantState.SQLAddr(), "System",
-			url.User(username.RootUser))
-		userSQLDB, err := gosql.Open("postgres", pgURL.String())
-		require.NoError(h.t, err)
+		tenantState.ApplicationLayerInterface = testServer.SystemLayer()
+		userSQLDB := tenantState.ApplicationLayerInterface.SQLConn(h.t)
 		tenantState.curDB = sqlutils.MakeSQLRunner(userSQLDB)
 		tenantState.userToDB[username.RootUserName().Normalized()] = tenantState.curDB
-		tenantState.cleanupFns = append(tenantState.cleanupFns, func() {
-			require.NoError(h.t, userSQLDB.Close())
-			cleanupPGUrl()
-		})
 	} else {
 		tenantArgs := base.TestTenantArgs{
 			TenantID: tenID,
 		}
 		var err error
-		tenantState.TestTenantInterface, err = testServer.StartTenant(ctx, tenantArgs)
+		tenantState.ApplicationLayerInterface, err = testServer.TenantController().StartTenant(ctx, tenantArgs)
 		require.NoError(h.t, err)
 
-		pgURL, cleanupPGUrl := sqlutils.PGUrl(h.t, tenantState.SQLAddr(), "Tenant", url.User(username.RootUser))
-		tenantSQLDB, err := gosql.Open("postgres", pgURL.String())
-		require.NoError(h.t, err)
-
+		tenantSQLDB := tenantState.ApplicationLayerInterface.SQLConn(h.t)
 		tenantState.curDB = sqlutils.MakeSQLRunner(tenantSQLDB)
 		tenantState.userToDB[username.RootUserName().Normalized()] = tenantState.curDB
-		tenantState.cleanupFns = append(tenantState.cleanupFns, func() {
-			require.NoError(h.t, tenantSQLDB.Close())
-			cleanupPGUrl()
-		})
 	}
 
 	h.ts[tenID] = tenantState

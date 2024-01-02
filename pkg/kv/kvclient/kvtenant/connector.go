@@ -26,6 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -36,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -67,6 +69,10 @@ func init() {
 type Connector interface {
 	// Start starts the connector.
 	Start(context.Context) error
+
+	// TenantInfo retrieves current metadata about the tenant record and
+	// an update channel to track changes
+	TenantInfo() (tenantcapabilities.Entry, <-chan struct{})
 
 	// NodeDescStore provides information on each of the KV nodes in the cluster
 	// in the form of NodeDescriptors and StoreDescriptors. This obviates the
@@ -160,6 +166,11 @@ type connector struct {
 	defaultZoneCfg  *zonepb.ZoneConfig
 	addrs           []string
 
+	earlyShutdownIfMissingTenantRecord bool
+
+	startCh  chan struct{} // closed when connector has started up
+	startErr error
+
 	mu struct {
 		syncutil.RWMutex
 		client               *client
@@ -172,9 +183,38 @@ type connector struct {
 	settingsMu struct {
 		syncutil.Mutex
 
-		allTenantOverrides map[string]settings.EncodedValue
-		specificOverrides  map[string]settings.EncodedValue
-		// notifyCh receives an event when there are changes to overrides.
+		// receivedFirstAllTenantOverrides is set to true when the first batch of
+		// all-tenant overrides has been received.
+		receivedFirstAllTenantOverrides bool
+		allTenantOverrides              map[settings.InternalKey]settings.EncodedValue
+
+		// receivedFirstSpecificOverrides is set to true when the first batch of
+		// tenant-specific overrides has been received.
+		receivedFirstSpecificOverrides bool
+		specificOverrides              map[settings.InternalKey]settings.EncodedValue
+
+		// notifyCh is closed when there are changes to overrides.
+		notifyCh chan struct{}
+	}
+
+	// testingEmulateOldVersionSettingsClient is set to true when the
+	// connector should emulate the version where it processed all
+	// events as settings events. Used only for testing.
+	testingEmulateOldVersionSettingsClient bool
+
+	metadataMu struct {
+		syncutil.Mutex
+
+		// receivedFirstMetadata is set to true when the first batch of
+		// metadata bits has been received.
+		receivedFirstMetadata bool
+
+		tenantName   roachpb.TenantName
+		dataState    mtinfopb.TenantDataState
+		serviceMode  mtinfopb.TenantServiceMode
+		capabilities *tenantcapabilitiespb.TenantCapabilities
+
+		// notifyCh is closed when there are changes to the metadata.
 		notifyCh chan struct{}
 	}
 }
@@ -240,13 +280,17 @@ func NewConnector(cfg ConnectorConfig, addrs []string) Connector {
 		rpcRetryOptions: cfg.RPCRetryOptions,
 		defaultZoneCfg:  cfg.DefaultZoneConfig,
 		addrs:           addrs,
+
+		earlyShutdownIfMissingTenantRecord: cfg.ShutdownTenantConnectorEarlyIfNoRecordPresent,
 	}
 
 	c.mu.nodeDescs = make(map[roachpb.NodeID]*roachpb.NodeDescriptor)
 	c.mu.storeDescs = make(map[roachpb.StoreID]*roachpb.StoreDescriptor)
 	c.mu.systemConfigChannels = make(map[chan<- struct{}]struct{})
-	c.settingsMu.allTenantOverrides = make(map[string]settings.EncodedValue)
-	c.settingsMu.specificOverrides = make(map[string]settings.EncodedValue)
+	c.settingsMu.allTenantOverrides = make(map[settings.InternalKey]settings.EncodedValue)
+	c.settingsMu.specificOverrides = make(map[settings.InternalKey]settings.EncodedValue)
+	c.settingsMu.notifyCh = make(chan struct{})
+	c.metadataMu.notifyCh = make(chan struct{})
 	return c
 }
 
@@ -268,12 +312,38 @@ func (connectorFactory) NewConnector(
 	return NewConnector(cfg, []string{addressConfig.LoopbackAddress}), nil
 }
 
+// WaitForStart waits until the connector has started.
+func (c *connector) WaitForStart(ctx context.Context) error {
+	// Fast path check.
+	select {
+	case <-c.startCh:
+		return c.startErr
+	default:
+	}
+	if c.startCh == nil {
+		return errors.AssertionFailedf("Start() was not yet called")
+	}
+	select {
+	case <-c.startCh:
+		return c.startErr
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // Start launches the connector's worker thread and waits for it to successfully
 // connect to a KV node. Start returns once the connector has determined the
 // cluster's ID and set connector.rpcContext.ClusterID.
 func (c *connector) Start(ctx context.Context) error {
+	c.startCh = make(chan struct{})
+	c.startErr = c.internalStart(ctx)
+	close(c.startCh)
+	return c.startErr
+}
+
+func (c *connector) internalStart(ctx context.Context) error {
 	gossipStartupCh := make(chan struct{})
-	settingsStartupCh := make(chan struct{})
+	settingsStartupCh := make(chan error)
 	bgCtx := c.AnnotateCtx(context.Background())
 
 	if err := c.rpcContext.Stopper.RunAsyncTask(bgCtx, "connector-gossip", func(ctx context.Context) {
@@ -301,9 +371,13 @@ func (c *connector) Start(ctx context.Context) error {
 		case <-gossipStartupCh:
 			log.Infof(ctx, "kv connector gossip subscription started")
 			gossipStartupCh = nil
-		case <-settingsStartupCh:
-			log.Infof(ctx, "kv connector tenant settings started")
+		case err := <-settingsStartupCh:
 			settingsStartupCh = nil
+			if err != nil {
+				log.Infof(ctx, "kv connector initialization error: %v", err)
+				return err
+			}
+			log.Infof(ctx, "kv connector tenant settings started")
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-c.rpcContext.Stopper.ShouldQuiesce():
@@ -442,7 +516,7 @@ func (c *connector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescr
 	defer c.mu.RUnlock()
 	desc, ok := c.mu.nodeDescs[nodeID]
 	if !ok {
-		return nil, errorutil.NewNodeNotFoundError(nodeID)
+		return nil, kvpb.NewNodeDescNotFoundError(nodeID)
 	}
 	return desc, nil
 }
@@ -460,7 +534,7 @@ func (c *connector) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreD
 	defer c.mu.RUnlock()
 	desc, ok := c.mu.storeDescs[storeID]
 	if !ok {
-		return nil, errorutil.NewStoreNotFoundError(storeID)
+		return nil, kvpb.NewStoreDescNotFoundError(storeID)
 	}
 	return desc, nil
 }
@@ -799,6 +873,24 @@ func (c *connector) HotRangesV2(
 	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
 		var err error
 		resp, err = c.HotRangesV2(ctx, &r)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+// DownloadSpan implements the serverpb.TenantStatusServer interface
+func (c *connector) DownloadSpan(
+	ctx context.Context, req *serverpb.DownloadSpanRequest,
+) (*serverpb.DownloadSpanResponse, error) {
+	if !roachpb.IsSystemTenantID(c.tenantID.InternalValue) {
+		return nil, status.Errorf(codes.PermissionDenied, "only the system tenant can issue download span requests")
+	}
+	var resp *serverpb.DownloadSpanResponse
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		var err error
+		resp, err = c.DownloadSpan(ctx, req)
 		return err
 	}); err != nil {
 		return nil, err

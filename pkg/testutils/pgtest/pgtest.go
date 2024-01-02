@@ -200,9 +200,11 @@ func (p *PGTest) Until(
 			if typ != typErrorResponse {
 				return nil, errors.Errorf("waiting for %T, got %#v", typs[0], errmsg)
 			}
-			var message string
+			var message, detail, hint string
 			if keepErrMsg {
 				message = errmsg.Message
+				detail = errmsg.Detail
+				hint = errmsg.Hint
 			}
 			// ErrorResponse doesn't encode/decode correctly, so
 			// manually append it here.
@@ -210,6 +212,8 @@ func (p *PGTest) Until(
 				Code:           errmsg.Code,
 				Message:        message,
 				ConstraintName: errmsg.ConstraintName,
+				Detail:         detail,
+				Hint:           hint,
 			})
 			typs = typs[1:]
 			continue
@@ -239,6 +243,13 @@ func (p *PGTest) Until(
 			return nil, err
 		}
 		msg := x.Interface().(pgproto3.BackendMessage)
+		if notice, ok := msg.(*pgproto3.NoticeResponse); ok {
+			// The line number can change frequently, so to reduce churn, we always
+			// ignore it.
+			notice.Line = 0
+			msgs = append(msgs, notice)
+			continue
+		}
 		msgs = append(msgs, msg)
 	}
 	return msgs, nil

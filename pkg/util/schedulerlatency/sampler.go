@@ -34,29 +34,29 @@ import (
 // requests in work queues as part of this tick). Might be worth checking for
 // grantees more frequently independent of this sample period.
 var samplePeriod = settings.RegisterDurationSetting(
-	settings.SystemOnly,
+	settings.ApplicationLevel, // used in virtual clusters
 	"scheduler_latency.sample_period",
 	"controls the duration between consecutive scheduler latency samples",
 	100*time.Millisecond,
-	func(period time.Duration) error {
+	settings.WithValidateDuration(func(period time.Duration) error {
 		if period < time.Millisecond {
 			return fmt.Errorf("minimum sample period is %s, got %s", time.Millisecond, period)
 		}
 		return nil
-	},
+	}),
 )
 
 var sampleDuration = settings.RegisterDurationSetting(
-	settings.SystemOnly,
+	settings.ApplicationLevel, // used in virtual clusters
 	"scheduler_latency.sample_duration",
 	"controls the duration over which each scheduler latency sample is a measurement over",
 	2500*time.Millisecond,
-	func(duration time.Duration) error {
+	settings.WithValidateDuration(func(duration time.Duration) error {
 		if duration < 100*time.Millisecond {
 			return fmt.Errorf("minimum sample duration is %s, got %s", 100*time.Millisecond, duration)
 		}
 		return nil
-	},
+	}),
 )
 
 var schedulerLatency = metric.Metadata{
@@ -74,6 +74,7 @@ func StartSampler(
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	statsInterval time.Duration,
+	listener LatencyObserver,
 ) error {
 	return stopper.RunAsyncTask(ctx, "scheduler-latency-sampler", func(ctx context.Context) {
 		settingsValuesMu := struct {
@@ -84,7 +85,7 @@ func StartSampler(
 		settingsValuesMu.period = samplePeriod.Get(&st.SV)
 		settingsValuesMu.duration = sampleDuration.Get(&st.SV)
 
-		s := newSampler(settingsValuesMu.period, settingsValuesMu.duration)
+		s := newSampler(settingsValuesMu.period, settingsValuesMu.duration, listener)
 		_ = stopper.RunAsyncTask(ctx, "export-scheduler-stats", func(ctx context.Context) {
 			// cpuSchedulerLatencyBuckets are prometheus histogram buckets
 			// suitable for a histogram that records a (second-denominated)
@@ -146,9 +147,11 @@ func StartSampler(
 			case <-stopper.ShouldQuiesce():
 				return
 			case <-ticker.C:
-				settingsValuesMu.Lock()
-				period := settingsValuesMu.period
-				settingsValuesMu.Unlock()
+				period := func() time.Duration {
+					settingsValuesMu.Lock()
+					defer settingsValuesMu.Unlock()
+					return settingsValuesMu.period
+				}()
 				s.sampleOnTickAndInvokeCallbacks(period)
 			}
 		}
@@ -157,15 +160,16 @@ func StartSampler(
 
 // sampler contains the local state maintained across scheduler latency samples.
 type sampler struct {
-	mu struct {
+	listener LatencyObserver
+	mu       struct {
 		syncutil.Mutex
 		ringBuffer            ring.Buffer[*metrics.Float64Histogram]
 		lastIntervalHistogram *metrics.Float64Histogram
 	}
 }
 
-func newSampler(period, duration time.Duration) *sampler {
-	s := &sampler{}
+func newSampler(period, duration time.Duration, listener LatencyObserver) *sampler {
+	s := &sampler{listener: listener}
 	s.mu.ringBuffer = ring.MakeBuffer(([]*metrics.Float64Histogram)(nil))
 	s.setPeriodAndDuration(period, duration)
 	return s
@@ -173,6 +177,7 @@ func newSampler(period, duration time.Duration) *sampler {
 
 func (s *sampler) setPeriodAndDuration(period, duration time.Duration) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.mu.ringBuffer.Discard()
 	numSamples := int(duration / period)
 	if numSamples < 1 {
@@ -180,7 +185,6 @@ func (s *sampler) setPeriodAndDuration(period, duration time.Duration) {
 	}
 	s.mu.ringBuffer.Resize(numSamples)
 	s.mu.lastIntervalHistogram = nil
-	s.mu.Unlock()
 }
 
 // sampleOnTickAndInvokeCallbacks samples scheduler latency stats as the ticker
@@ -197,11 +201,9 @@ func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
 	s.mu.lastIntervalHistogram = sub(latestCumulative, oldestCumulative)
 	p99 := time.Duration(int64(percentile(s.mu.lastIntervalHistogram, 0.99) * float64(time.Second.Nanoseconds())))
 
-	globallyRegisteredCallbacks.mu.Lock()
-	defer globallyRegisteredCallbacks.mu.Unlock()
-	cbs := globallyRegisteredCallbacks.mu.callbacks
-	for i := range cbs {
-		cbs[i].cb(p99, period)
+	// Perform the callback if there's a listener.
+	if s.listener != nil {
+		s.listener.SchedulerLatency(p99, period)
 	}
 }
 

@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"testing"
 
@@ -33,13 +32,6 @@ func TestFormatRedaction(t *testing.T) {
 
 	sc := ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
-
-	// Make the test below deterministic.
-	formatNames := make([]string, 0, len(formatters))
-	for n := range formatters {
-		formatNames = append(formatNames, n)
-	}
-	sort.Strings(formatNames)
 
 	ctx := context.Background()
 	ctx = logtags.AddTag(ctx, "a", "secret1")
@@ -79,7 +71,7 @@ func TestFormatRedaction(t *testing.T) {
 							defer cleanupFn()
 
 							Infof(ctx, "safe2 %s", "secret3")
-							Flush()
+							FlushFiles()
 
 							contents, err := os.ReadFile(getDebugLogFileName(t))
 							require.NoError(t, err)

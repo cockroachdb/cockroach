@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -14,9 +13,6 @@ go_test(
     name = "zerofields_test",
     size = "small",
     srcs = ["no_zero_field_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":zerofields"],
     deps = ["@com_github_cockroachdb_errors//:errors"],
 )
-
-get_x_data(name = "get_x_data")

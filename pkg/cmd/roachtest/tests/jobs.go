@@ -12,7 +12,9 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -21,15 +23,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-type jobStarter func(c cluster.Cluster, t test.Test) (string, error)
+type jobStarter func(c cluster.Cluster, l *logger.Logger) (jobspb.JobID, error)
 
 // jobSurvivesNodeShutdown is a helper that tests that a given job,
 // running on the specified gatewayNode will still complete successfully
@@ -48,56 +51,66 @@ func jobSurvivesNodeShutdown(
 	ctx context.Context, t test.Test, c cluster.Cluster, nodeToShutdown int, startJob jobStarter,
 ) {
 	cfg := nodeShutdownConfig{
-		shutdownNode: nodeToShutdown,
-		watcherNode:  1 + (nodeToShutdown)%c.Spec().NodeCount,
-		crdbNodes:    c.All(),
+		shutdownNode:         nodeToShutdown,
+		watcherNode:          1 + (nodeToShutdown)%c.Spec().NodeCount,
+		crdbNodes:            c.All(),
+		waitFor3XReplication: true,
+		sleepBeforeShutdown:  30 * time.Second,
 	}
-	executeNodeShutdown(ctx, t, c, cfg, startJob)
+	require.NoError(t, executeNodeShutdown(ctx, t, c, cfg, startJob))
 }
 
 type nodeShutdownConfig struct {
-	shutdownNode    int
-	watcherNode     int
-	crdbNodes       option.NodeListOption
-	restartSettings []install.ClusterSettingOption
+	shutdownNode         int
+	watcherNode          int
+	crdbNodes            option.NodeListOption
+	restartSettings      []install.ClusterSettingOption
+	waitFor3XReplication bool
+	sleepBeforeShutdown  time.Duration
+	rng                  *rand.Rand
 }
 
+// executeNodeShutdown executes a node shutdown and returns all errors back to the caller.
+//
+// TODO(msbutler): ideally, t.L() is only passed to this function instead of t,
+// but WaitFor3xReplication requires t. Once this function only has a logger, we
+// can guarantee that all errors return to the caller.
 func executeNodeShutdown(
 	ctx context.Context, t test.Test, c cluster.Cluster, cfg nodeShutdownConfig, startJob jobStarter,
-) {
+) error {
 	target := c.Node(cfg.shutdownNode)
 	t.L().Printf("test has chosen shutdown target node %d, and watcher node %d",
 		cfg.shutdownNode, cfg.watcherNode)
 
-	jobIDCh := make(chan string, 1)
+	watcherDB := c.Conn(ctx, t.L(), cfg.watcherNode)
+	defer watcherDB.Close()
 
-	m := c.NewMonitor(ctx, cfg.crdbNodes)
-	m.Go(func(ctx context.Context) error {
-		defer close(jobIDCh)
-
-		watcherDB := c.Conn(ctx, t.L(), cfg.watcherNode)
-		defer watcherDB.Close()
-
+	if cfg.waitFor3XReplication {
 		// Wait for 3x replication to ensure that the cluster
 		// is in a healthy state before we start bringing any
 		// nodes down.
 		t.Status("waiting for cluster to be 3x replicated")
 		err := WaitFor3XReplication(ctx, t, watcherDB)
-		require.NoError(t, err)
-
-		t.Status("running job")
-		var jobID string
-		jobID, err = startJob(c, t)
 		if err != nil {
-			return errors.Wrap(err, "starting the job")
+			return err
 		}
-		t.L().Printf("started running job with ID %s", jobID)
-		jobIDCh <- jobID
+	}
 
-		pollInterval := 5 * time.Second
-		ticker := time.NewTicker(pollInterval)
+	t.Status("running job")
+	jobID, err := startJob(c, t.L())
+	if err != nil {
+		return err
+	}
+	t.L().Printf("started running job with ID %s", jobID)
+	if err := WaitForRunning(ctx, watcherDB, jobID, time.Minute); err != nil {
+		return err
+	}
+
+	m := c.NewMonitor(ctx, cfg.crdbNodes)
+	m.ExpectDeath()
+	m.Go(func(ctx context.Context) error {
+		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
-
 		var status string
 		for {
 			select {
@@ -112,7 +125,7 @@ func executeNodeShutdown(
 					t.Status("job completed")
 					return nil
 				case jobs.StatusRunning:
-					t.L().Printf("job %s still running, waiting to succeed", jobID)
+					t.L().Printf("job %d still running, waiting to succeed", jobID)
 				default:
 					// Waiting for job to complete.
 					return errors.Newf("unexpectedly found job %s in state %s", jobID, status)
@@ -122,69 +135,28 @@ func executeNodeShutdown(
 			}
 		}
 	})
-
-	m.Go(func(ctx context.Context) error {
-		jobID, ok := <-jobIDCh
-		if !ok {
-			return errors.New("job never created")
-		}
-
-		// Check once a second to see if the job has started running.
-		watcherDB := c.Conn(ctx, t.L(), cfg.watcherNode)
-		defer watcherDB.Close()
-		timeToWait := time.Second
-		timer := timeutil.Timer{}
-		jobRunning := false
-		for {
-			var status string
-			err := watcherDB.QueryRowContext(ctx, `SELECT status FROM [SHOW JOBS] WHERE job_id=$1`, jobID).Scan(&status)
-			if err != nil {
-				return errors.Wrap(err, "getting the job status")
-			}
-			switch jobs.Status(status) {
-			case jobs.StatusPending:
-			case jobs.StatusRunning:
-				jobRunning = true
-			default:
-				return errors.Newf("job too fast! job got to state %s before the target node could be shutdown",
-					status)
-			}
-			t.L().Printf(`status %s`, status)
-			timer.Reset(timeToWait)
-			select {
-			case <-ctx.Done():
-				return errors.Wrapf(ctx.Err(), "stopping test, did not shutdown node")
-			case <-timer.C:
-				timer.Read = true
-			}
-			// Break a second after confirming the job is running to ensure the node shutdown
-			// "in the middle" of running the job, right after the job began running.
-			if jobRunning {
-				break
-			}
-		}
-
+	time.Sleep(cfg.sleepBeforeShutdown)
+	if cfg.rng == nil {
 		rng, _ := randutil.NewTestRand()
-		shouldUseSigKill := rng.Float64() > 0.5
-		if shouldUseSigKill {
-			t.L().Printf(`stopping node (using SIGKILL) %s`, target)
-			if err := c.StopE(ctx, t.L(), option.DefaultStopOpts(), target); err != nil {
-				return errors.Wrapf(err, "could not stop node %s", target)
-			}
-		} else {
-			t.L().Printf(`stopping node gracefully %s`, target)
-			if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), cfg.shutdownNode); err != nil {
-				return errors.Wrapf(err, "could not stop node %s", target)
-			}
+		cfg.rng = rng
+	}
+	shouldUseSigKill := cfg.rng.Float64() > 0.5
+	if shouldUseSigKill {
+		t.L().Printf(`stopping node (using SIGKILL) %s`, target)
+		if err := c.StopE(ctx, t.L(), option.DefaultStopOpts(), target); err != nil {
+			return errors.Wrapf(err, "could not stop node %s", target)
 		}
-		t.L().Printf("stopped node %s", target)
+	} else {
+		t.L().Printf(`stopping node gracefully %s`, target)
+		if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), cfg.shutdownNode); err != nil {
+			return errors.Wrapf(err, "could not stop node %s", target)
+		}
+	}
+	t.L().Printf("stopped node %s", target)
 
-		return nil
-	})
-
-	m.ExpectDeath()
-	m.Wait()
-
+	if err := m.WaitE(); err != nil {
+		return err
+	}
 	// NB: the roachtest harness checks that at the end of the test, all nodes
 	// that have data also have a running process.
 	t.Status(fmt.Sprintf("restarting %s (node restart test is done)\n", target))
@@ -192,8 +164,28 @@ func executeNodeShutdown(
 	// set or disallowed the automatic backup schedule.
 	if err := c.StartE(ctx, t.L(), option.DefaultStartOptsNoBackups(),
 		install.MakeClusterSettings(cfg.restartSettings...), target); err != nil {
-		t.Fatal(errors.Wrapf(err, "could not restart node %s", target))
+		return errors.Wrapf(err, "could not restart node %s", target)
 	}
+	return nil
+}
+
+func WaitForRunning(
+	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
+) error {
+	return testutils.SucceedsWithinError(func() error {
+		var status jobs.Status
+		if err := db.QueryRowContext(ctx, "SELECT status FROM crdb_internal.system_jobs WHERE id = $1", jobID).Scan(&status); err != nil {
+			return err
+		}
+		switch status {
+		case jobs.StatusPending:
+		case jobs.StatusRunning:
+		default:
+			return errors.Newf("job too fast! job got to state %s before the target node could be shutdown",
+				status)
+		}
+		return nil
+	}, maxWait)
 }
 
 func getJobProgress(t test.Test, db *sqlutils.SQLRunner, jobID jobspb.JobID) *jobspb.Progress {

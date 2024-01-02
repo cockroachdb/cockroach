@@ -19,9 +19,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -124,35 +123,20 @@ func TestMaxDiskSpillUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testClusterArgs := base.TestClusterArgs{
-		ReplicationMode: base.ReplicationAuto,
-	}
-	distSQLKnobs := &execinfra.TestingKnobs{}
-	distSQLKnobs.ForceDiskSpill = true
-	testClusterArgs.ServerArgs.Knobs.DistSQL = distSQLKnobs
-	testClusterArgs.ServerArgs.Insecure = true
-	serverutils.InitTestServerFactory(server.TestServerFactory)
-	tc := testcluster.StartTestCluster(t, 1, testClusterArgs)
 	ctx := context.Background()
-	defer tc.Stopper().Stop(ctx)
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 
-	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, "CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 10) AS g(i)")
 
-	_, err := conn.ExecContext(ctx, `
-CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 10) AS g(i)
-`)
-	assert.NoError(t, err)
 	maxDiskUsageRE := regexp.MustCompile(`max sql temp disk usage: (\d+)`)
-
 	queryMatchRE := func(query string, re *regexp.Regexp) bool {
 		rows, err := conn.QueryContext(ctx, query)
 		assert.NoError(t, err)
 		for rows.Next() {
 			var res string
 			assert.NoError(t, rows.Scan(&res))
-			var sb strings.Builder
-			sb.WriteString(res)
-			sb.WriteByte('\n')
 			if matches := re.FindStringSubmatch(res); len(matches) > 0 {
 				return true
 			}
@@ -160,7 +144,8 @@ CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 10) AS 
 		return false
 	}
 
-	// We are expecting disk spilling to show up because we enabled ForceDiskSpill
+	// Use very low workmem limit so that the disk spilling happens.
+	sqlDB.Exec(t, "SET distsql_workmem = '2B';")
 	// knob above.
 	assert.True(t, queryMatchRE(`EXPLAIN ANALYZE (VERBOSE, DISTSQL) select * from t join t AS x on t.b=x.a`, maxDiskUsageRE), "didn't find max sql temp disk usage: in explain")
 	assert.False(t, queryMatchRE(`EXPLAIN ANALYZE (VERBOSE, DISTSQL) select * from t `, maxDiskUsageRE), "found unexpected max sql temp disk usage: in explain")
@@ -178,19 +163,19 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 		return
 	}
 
-	testClusterArgs := base.TestClusterArgs{
-		ReplicationMode: base.ReplicationAuto,
-	}
-	distSQLKnobs := &execinfra.TestingKnobs{}
-	distSQLKnobs.ForceDiskSpill = true
-	testClusterArgs.ServerArgs.Knobs.DistSQL = distSQLKnobs
-	testClusterArgs.ServerArgs.Insecure = true
 	const numNodes = 3
-
-	serverutils.InitTestServerFactory(server.TestServerFactory)
-	tc := testcluster.StartTestCluster(t, numNodes, testClusterArgs)
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
+
+	if srv := tc.Server(0); srv.TenantController().StartedDefaultTestTenant() {
+		systemSqlDB := srv.SystemLayer().SQLConn(t, serverutils.DBName("system"))
+		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
+		require.NoError(t, err)
+		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanAdminRelocateRange: "true",
+		}, "")
+	}
 
 	db := sqlutils.MakeSQLRunner(tc.Conns[0])
 
@@ -244,4 +229,124 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 	runQuery("SELECT * FROM (SELECT * FROM t WHERE x > 2000 AND x < 3000) s1 JOIN t ON s1.x = t.x", false /* hideCPU */)
 	runQuery("SELECT * FROM (VALUES (1), (2), (3)) v(a) INNER LOOKUP JOIN t ON a = x", false /* hideCPU */)
 	runQuery("SELECT count(*) FROM generate_series(1, 100000)", false /* hideCPU */)
+}
+
+// TestContentionTimeOnWrites verifies that the contention encountered during a
+// mutation is reported on EXPLAIN ANALYZE output.
+func TestContentionTimeOnWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, "CREATE TABLE t (k INT PRIMARY KEY, v INT)")
+
+	// The test involves three goroutines:
+	// - the main goroutine acts as the coordinator. It first waits for worker 1
+	//   to perform its mutation in an open txn, then blocks until worker 2
+	//   begins executing its mutation, then unblocks worker 1 and waits for
+	//   both workers to exit.
+	// - worker 1 goroutine performs a mutation without committing a txn. It
+	//   notifies the main goroutine by closing 'sem' once the mutation has been
+	//   performed. It then blocks until 'commitCh' is closed by the main
+	//   goroutine which allows worker 2 to experience contention.
+	// - worker 2 goroutine performs a mutation via EXPLAIN ANALYZE. This query
+	//   will be blocked until worker 1 commits its txn, so it should see
+	//   contention time reported in the output.
+
+	sem := make(chan struct{})
+	errCh := make(chan error, 1)
+	commitCh := make(chan struct{})
+	go func() {
+		defer close(errCh)
+		// Ensure that sem is always closed (in case we encounter an error
+		// before the mutation is performed).
+		var closedSem bool
+		defer func() {
+			if !closedSem {
+				close(sem)
+			}
+		}()
+		txn, err := conn.Begin()
+		if err != nil {
+			errCh <- err
+			return
+		}
+		_, err = txn.Exec("INSERT INTO t VALUES (1, 1)")
+		if err != nil {
+			errCh <- err
+			return
+		}
+		// Notify the main goroutine that the mutation has been performed.
+		close(sem)
+		closedSem = true
+		// Block until the main goroutine tells us that we're good to commit.
+		<-commitCh
+		if err = txn.Commit(); err != nil {
+			errCh <- err
+			return
+		}
+	}()
+
+	// Block until the mutation of worker 1 is done.
+	<-sem
+	// Check that no error was encountered before that.
+	select {
+	case err := <-errCh:
+		t.Fatal(err)
+	default:
+	}
+
+	var foundContention bool
+	errCh2 := make(chan error, 1)
+	go func() {
+		defer close(errCh2)
+		// Execute the mutation via EXPLAIN ANALYZE and check whether the
+		// contention is reported.
+		contentionRE := regexp.MustCompile(`cumulative time spent due to contention.*`)
+		rows := runner.Query(t, "EXPLAIN ANALYZE UPSERT INTO t VALUES (1, 2)")
+		for rows.Next() {
+			var line string
+			if err := rows.Scan(&line); err != nil {
+				errCh2 <- err
+				return
+			}
+			if contentionRE.MatchString(line) {
+				foundContention = true
+			}
+		}
+	}()
+
+	// Continuously poll the cluster queries until we see that the query that
+	// should be experiencing contention has started executing.
+	for {
+		row := runner.QueryRow(t, "SELECT count(*) FROM [SHOW CLUSTER QUERIES] WHERE query LIKE '%EXPLAIN ANALYZE UPSERT%'")
+		var count int
+		row.Scan(&count)
+		// Sleep for non-trivial amount of time to allow for worker 2 to start
+		// (if it hasn't already) and to experience the contention (if it has
+		// started).
+		time.Sleep(time.Second)
+		if count == 2 {
+			// We stop polling once we see 2 queries matching the LIKE pattern:
+			// the mutation query from worker 2 and the polling query itself.
+			break
+		}
+	}
+
+	// Allow worker 1 to commit which should unblock both workers.
+	close(commitCh)
+
+	// Wait for both workers to exit. Also perform sanity checks that the
+	// workers didn't run into any errors.
+	err := <-errCh
+	require.NoError(t, err)
+	err = <-errCh2
+	require.NoError(t, err)
+
+	// Meat of the test - verify that the contention was reported.
+	require.True(t, foundContention)
 }

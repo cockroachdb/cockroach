@@ -37,13 +37,14 @@ func declareKeysSubsume(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	// Subsume must not run concurrently with any other command. It declares a
 	// non-MVCC write over every addressable key in the range; this guarantees
 	// that it conflicts with any other command because every command must
 	// declare at least one addressable key. It does not, in fact, write any
 	// keys.
 	declareAllKeys(latchSpans)
+	return nil
 }
 
 // Subsume freezes a range for merging with its left-hand neighbor. When called
@@ -103,7 +104,7 @@ func Subsume(
 	// regardless of what timestamp it is written at.
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 	intentRes, err := storage.MVCCGet(ctx, readWriter, descKey, hlc.MaxTimestamp,
-		storage.MVCCGetOptions{Inconsistent: true})
+		storage.MVCCGetOptions{Inconsistent: true, ReadCategory: storage.BatchEvalReadCategory})
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "fetching local range descriptor")
 	} else if intentRes.Intent == nil {
@@ -147,7 +148,7 @@ func Subsume(
 	// rather than introducing additional synchronization complexity.
 	ridPrefix := keys.MakeRangeIDReplicatedPrefix(desc.RangeID)
 	reply.RangeIDLocalMVCCStats, err = storage.ComputeStats(
-		readWriter, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
+		ctx, readWriter, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 	if err != nil {
 		return result.Result{}, err
 	}

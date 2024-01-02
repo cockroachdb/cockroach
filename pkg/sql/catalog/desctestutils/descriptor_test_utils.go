@@ -165,7 +165,7 @@ func TestingGetPublicTypeDescriptor(
 	return TestingGetTypeDescriptor(kvDB, codec, database, "public", object)
 }
 
-func TestGetFunctionDescriptor(
+func TestingGetFunctionDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, schema string, fName string,
 ) catalog.FunctionDescriptor {
 	db := TestingGetDatabaseDescriptor(kvDB, codec, database)

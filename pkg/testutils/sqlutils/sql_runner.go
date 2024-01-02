@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -31,6 +32,7 @@ import (
 type SQLRunner struct {
 	DB                   DBHandle
 	SucceedsSoonDuration time.Duration // defaults to testutils.DefaultSucceedsSoonDuration
+	MaxTxnRetries        int           // defaults to 0 for unlimited retries
 }
 
 // DBHandle is an interface that applies to *gosql.DB, *gosql.Conn, and
@@ -73,12 +75,27 @@ type Fataler interface {
 	Fatalf(string, ...interface{})
 }
 
+func fmtMessage(message string) string {
+	if message != "" {
+		message = "[" + message + "] "
+	}
+	return message
+}
+
 // Exec is a wrapper around gosql.Exec that kills the test on error.
 func (sr *SQLRunner) Exec(t Fataler, query string, args ...interface{}) gosql.Result {
+	return sr.ExecWithMessage(t, "", query, args...)
+}
+
+// ExecWithMessage works similarly to Exec, but allows the caller to add
+// additional context to the error message.
+func (sr *SQLRunner) ExecWithMessage(
+	t Fataler, message string, query string, args ...interface{},
+) gosql.Result {
 	helperOrNoop(t)()
 	r, err := sr.DB.ExecContext(context.Background(), query, args...)
 	if err != nil {
-		t.Fatalf("error executing '%s': %s", query, err)
+		t.Fatalf("%serror executing query=%q args=%q: %s", fmtMessage(message), query, args, err)
 	}
 	return r
 }
@@ -131,14 +148,22 @@ func (sr *SQLRunner) ExecSucceedsSoon(t Fataler, query string, args ...interface
 func (sr *SQLRunner) ExecRowsAffected(
 	t Fataler, expRowsAffected int, query string, args ...interface{},
 ) {
+	sr.ExecRowsAffectedWithMessage(t, expRowsAffected, "", query, args...)
+}
+
+// ExecRowsAffectedWithMessage works similarly to ExecRowsAffected, but allows
+// the caller to add additional context to the error message.
+func (sr *SQLRunner) ExecRowsAffectedWithMessage(
+	t Fataler, expRowsAffected int, message string, query string, args ...interface{},
+) {
 	helperOrNoop(t)()
-	r := sr.Exec(t, query, args...)
+	r := sr.ExecWithMessage(t, message, query, args...)
 	numRows, err := r.RowsAffected()
 	if err != nil {
-		t.Fatalf("%v", err)
+		t.Fatalf("%s%v", fmtMessage(message), err)
 	}
 	if numRows != int64(expRowsAffected) {
-		t.Fatalf("expected %d affected rows, got %d on '%s'", expRowsAffected, numRows, query)
+		t.Fatalf("%sexpected %d affected rows, got %d on query=%q args=%q", fmtMessage(message), expRowsAffected, numRows, query, args)
 	}
 }
 
@@ -147,17 +172,26 @@ func (sr *SQLRunner) ExecRowsAffected(
 func (sr *SQLRunner) ExpectErr(t Fataler, errRE string, query string, args ...interface{}) {
 	helperOrNoop(t)()
 	_, err := sr.DB.ExecContext(context.Background(), query, args...)
-	sr.expectErr(t, err, errRE)
+	sr.expectErr(t, query, err, errRE)
 }
 
-func (sr *SQLRunner) expectErr(t Fataler, err error, errRE string) {
+// ExpectNonNilErr runs the given statement and verifies that it returns an error.
+func (sr *SQLRunner) ExpectNonNilErr(t Fataler, query string, args ...interface{}) {
+	helperOrNoop(t)()
+	_, err := sr.DB.ExecContext(context.Background(), query, args...)
+	if err == nil {
+		t.Fatalf("expected query '%s' to return a non-nil error", query)
+	}
+}
+
+func (sr *SQLRunner) expectErr(t Fataler, query string, err error, errRE string) {
 	helperOrNoop(t)()
 	if !testutils.IsError(err, errRE) {
 		s := "nil"
 		if err != nil {
 			s = pgerror.FullError(err)
 		}
-		t.Fatalf("expected error '%s', got: %s", errRE, s)
+		t.Fatalf("expected query '%s' error '%s', got: %s", query, errRE, s)
 	}
 }
 
@@ -169,7 +203,7 @@ func (sr *SQLRunner) ExpectErrWithHint(
 	helperOrNoop(t)()
 	_, err := sr.DB.ExecContext(context.Background(), query, args...)
 
-	sr.expectErr(t, err, errRE)
+	sr.expectErr(t, query, err, errRE)
 
 	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
 		matched, merr := regexp.MatchString(hintRE, pqErr.Hint)
@@ -193,6 +227,29 @@ func (sr *SQLRunner) ExpectErrSucceedsSoon(
 		}
 		return nil
 	})
+}
+
+// ExpectErrWithTimeout wraps ExpectErr with a timeout.
+func (sr *SQLRunner) ExpectErrWithTimeout(
+	t Fataler, errRE string, query string, args ...interface{},
+) {
+	helperOrNoop(t)()
+	d := sr.SucceedsSoonDuration
+	if d == 0 {
+		d = testutils.DefaultSucceedsSoonDuration
+	}
+	err := timeutil.RunWithTimeout(context.Background(), "expect-err", d, func(ctx context.Context) error {
+		_, err := sr.DB.ExecContext(ctx, query, args...)
+		if !testutils.IsError(err, errRE) {
+			return errors.Newf("expected error '%s', got: %s", errRE, pgerror.FullError(err))
+		}
+		return nil
+	})
+
+	// Fail the test on unexpected error message OR execution timeout
+	if err != nil {
+		t.Fatalf("failed assert error: %s", err)
+	}
 }
 
 // Query is a wrapper around gosql.Query that kills the test on error.
@@ -317,6 +374,78 @@ func (sr *SQLRunner) CheckQueryResultsRetry(t Fataler, query string, expected []
 		}
 		return nil
 	})
+}
+
+type beginner interface {
+	Begin() (*gosql.Tx, error)
+}
+
+// Begin starts a new transaction. It fails if the underlying DBHandle
+// doesn't support starting transactions or if starting the
+// transaction fails.
+func (sr *SQLRunner) Begin(t Fataler) *gosql.Tx {
+	helperOrNoop(t)()
+	b, ok := sr.DB.(beginner)
+	if !ok {
+		t.Fatalf("Begin() not supported by this SQLRunner")
+	}
+
+	txn, err := b.Begin()
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	return txn
+}
+
+// RunWithRetriableTxn starts a transaction and runs the given
+// function in the context of that transaction. The transaction is
+// commited when the given fuction returns and is automatically
+// retried if it hits a retriable error.
+func (sr *SQLRunner) RunWithRetriableTxn(t Fataler, fn func(*gosql.Tx) error) {
+	if err := sr.runWithRetriableTxnImpl(t, fn); err != nil {
+		t.Fatalf("%v", err)
+	}
+}
+
+const retryTxnErrorSubstring = "restart transaction"
+
+func (sr *SQLRunner) runWithRetriableTxnImpl(t Fataler, fn func(*gosql.Tx) error) (err error) {
+	txn := sr.Begin(t)
+	defer func() {
+		if err != nil {
+			_ = txn.Rollback()
+		}
+
+	}()
+	_, err = txn.Exec("SAVEPOINT cockroach_restart")
+	if err != nil {
+		return err
+	}
+
+	retryCount := 0
+	for {
+		err = fn(txn)
+		if err == nil {
+			_, err = txn.Exec("RELEASE SAVEPOINT cockroach_restart")
+			if err == nil {
+				return txn.Commit()
+			}
+		}
+
+		if !strings.Contains(err.Error(), retryTxnErrorSubstring) {
+			return err
+		}
+
+		_, rollbackErr := txn.Exec("ROLLBACK TO SAVEPOINT cockroach_restart")
+		if rollbackErr != nil {
+			return errors.CombineErrors(rollbackErr, err)
+		}
+
+		retryCount++
+		if sr.MaxTxnRetries > 0 && retryCount > sr.MaxTxnRetries {
+			return errors.Wrapf(err, "%d retries exhausted", sr.MaxTxnRetries)
+		}
+	}
 }
 
 // RoundRobinDBHandle aggregates multiple DBHandles into a single one; each time

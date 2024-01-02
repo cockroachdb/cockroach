@@ -140,6 +140,24 @@ func ExternalConnectionFromURI(
 	return parseAndValidateFn.parseAndValidateURI(ctx, env, externalConnectionURI, defaultValidation)
 }
 
+// ProviderForURI returns the provider associated with the scheme of a given URI,
+// or UNKNOWN if none found.
+// This is useful for testing.
+func ProviderForURI(uri string) connectionpb.ConnectionProvider {
+	externalConnectionURI, err := url.Parse(uri)
+	if err != nil {
+		return connectionpb.ConnectionProvider_Unknown
+	}
+
+	// Find the parseAndValidateFn method for the ExternalConnection provider.
+	parseAndValidateFn, registered := parseAndValidateFns[externalConnectionURI.Scheme]
+	if !registered {
+		return connectionpb.ConnectionProvider_Unknown
+	}
+
+	return parseAndValidateFn.ConnectionProvider
+}
+
 // ExternalConnEnv contains parameters to be used to validate an external
 // connection.
 type ExternalConnEnv struct {

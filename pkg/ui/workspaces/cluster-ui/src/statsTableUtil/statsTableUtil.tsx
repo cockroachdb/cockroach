@@ -10,7 +10,6 @@
 
 import React from "react";
 import { Anchor } from "src/anchor";
-import moment from "moment-timezone";
 
 import { Tooltip } from "@cockroachlabs/ui-components";
 import {
@@ -25,8 +24,6 @@ import {
 } from "src/util";
 import { Timezone } from "src/timestamp";
 
-export type NodeNames = { [nodeId: string]: string };
-
 // Single place for column names. Used in table columns and in columns selector.
 export const statisticsColumnLabels = {
   actions: "Actions",
@@ -34,7 +31,7 @@ export const statisticsColumnLabels = {
   bytesRead: "Bytes Read",
   clientAddress: "Client IP Address",
   contention: "Contention Time",
-  cpu: "CPU Time",
+  cpu: "SQL CPU Time",
   database: "Database",
   diagnostics: "Diagnostics",
   executionCount: "Execution Count",
@@ -653,8 +650,9 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         content={
           <>
             <p>
-              Average CPU time spent executing within the specified time
-              interval. The gray bar indicates mean CPU time. The blue bar
+              Average SQL CPU time spent executing within the specified time
+              interval. It does not include SQL planning time nor KV execution
+              time. The gray bar indicates mean SQL CPU time. The blue bar
               indicates one standard deviation from the mean.
             </p>
           </>
@@ -917,7 +915,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         style="tableTitle"
         content={
           <p>
-            The highest latency value in the sampled {contentModifier}
+            The highest latency value for all {contentModifier}
             executions with this fingerprint.
           </p>
         }
@@ -943,8 +941,8 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         style="tableTitle"
         content={
           <p>
-            The lowest latency value in the sampled {contentModifier} executions
-            with this fingerprint.
+            The lowest latency value for all {contentModifier} executions with
+            this fingerprint.
           </p>
         }
       >
@@ -969,8 +967,8 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         style="tableTitle"
         content={
           <p>
-            The 50th latency percentile for {contentModifier} executions with
-            this fingerprint.
+            The 50th latency percentile for sampled {contentModifier} executions
+            with this fingerprint.
           </p>
         }
       >
@@ -995,8 +993,8 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         style="tableTitle"
         content={
           <p>
-            The 90th latency percentile for {contentModifier} executions with
-            this fingerprint.
+            The 90th latency percentile for sampled {contentModifier} executions
+            with this fingerprint.
           </p>
         }
       >
@@ -1021,8 +1019,8 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         style="tableTitle"
         content={
           <p>
-            The 99th latency percentile for {contentModifier} executions with
-            this fingerprint.
+            The 99th latency percentile for sampled {contentModifier} executions
+            with this fingerprint.
           </p>
         }
       >

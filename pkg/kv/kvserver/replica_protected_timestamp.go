@@ -148,8 +148,8 @@ func (r *Replica) checkProtectedTimestampsForGC(
 	}
 
 	if read.readAt.Less(lease.Start.ToTimestamp()) {
-		log.VEventf(ctx, 1, "not gc'ing replica %v because current lease %v started after record was read %v",
-			r, lease, read.readAt)
+		log.VEventf(ctx, 1, "not gc'ing replica %v because current lease %v started after record was"+
+			" read %v", r, lease, read.readAt)
 		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil
 	}
 

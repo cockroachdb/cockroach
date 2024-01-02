@@ -15,12 +15,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -123,10 +123,16 @@ func TestReplicaLeaseStatus(t *testing.T) {
 			wantErr: "node liveness info for n1 is stale"},
 	} {
 		t.Run("", func(t *testing.T) {
+			cache :=
+				liveness.NewCache(
+					gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry()),
+					clock,
+					cluster.MakeTestingClusterSettings(),
+					nil,
+				)
 			l := liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
 				Clock: clock,
-				Gossip: gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry(),
-					zonepb.DefaultZoneConfigRef()),
+				Cache: cache,
 			})
 			r := Replica{store: &Store{
 				Ident: &roachpb.StoreIdent{StoreID: 1, NodeID: 1},

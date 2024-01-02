@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -17,7 +16,6 @@ go_test(
     name = "yacc_test",
     size = "small",
     srcs = ["parse_test.go"],
-    args = ["-test.timeout=55s"],
     data = ["//pkg/sql/parser:sql.y"],
     embed = [":yacc"],
     deps = [
@@ -25,5 +23,3 @@ go_test(
         "//pkg/util/log",
     ],
 )
-
-get_x_data(name = "get_x_data")

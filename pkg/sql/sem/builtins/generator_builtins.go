@@ -15,6 +15,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,16 +23,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/workloadindexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -53,17 +59,23 @@ var _ eval.ValueGenerator = &seriesValueGenerator{}
 var _ eval.ValueGenerator = &arrayValueGenerator{}
 
 func init() {
-	// Add all windows to the builtins map after a few sanity checks.
 	for k, v := range generators {
-		for _, g := range v.overloads {
-			if g.Class != tree.GeneratorClass {
-				panic(errors.AssertionFailedf("generator functions should be marked with the tree.GeneratorClass "+
-					"function class, found %v", v))
-			}
-		}
-		registerBuiltin(k, v)
+		const enforceClass = true
+		registerBuiltin(k, v, tree.GeneratorClass, enforceClass)
 	}
 }
+
+const DefaultSpanStatsSpanLimit = 1000
+
+// SpanStatsBatchLimit registers the maximum number of spans allowed in a
+// span stats request payload.
+var SpanStatsBatchLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"server.span_stats.span_batch_limit",
+	"the maximum number of spans allowed in a request payload for span statistics",
+	DefaultSpanStatsSpanLimit,
+	settings.PositiveInt,
+)
 
 func genProps() tree.FunctionProperties {
 	return tree.FunctionProperties{
@@ -278,12 +290,29 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
+	"workload_index_recs": makeBuiltin(genProps(),
+		makeGeneratorOverload(
+			tree.ParamTypes{},
+			types.String,
+			makeWorkloadIndexRecsGeneratorFactory(false /* hasTimestamp */),
+			"Returns set of index recommendations",
+			volatility.Immutable,
+		),
+		makeGeneratorOverload(
+			tree.ParamTypes{{Name: "timestamptz", Typ: types.TimestampTZ}},
+			types.String,
+			makeWorkloadIndexRecsGeneratorFactory(true /* hasTimestamp */),
+			"Returns set of index recommendations",
+			volatility.Immutable,
+		),
+	),
+
 	"unnest": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-array.html
 		makeGeneratorOverloadWithReturnType(
 			tree.ParamTypes{{Name: "input", Typ: types.AnyArray}},
 			func(args []tree.TypedExpr) *types.T {
-				if len(args) == 0 || args[0].ResolvedType().Family() == types.UnknownFamily {
+				if len(args) == 0 || args[0].ResolvedType().Family() != types.ArrayFamily {
 					return tree.UnknownReturnType
 				}
 				return args[0].ResolvedType().ArrayContents()
@@ -303,7 +332,7 @@ var generators = map[string]builtinDefinition{
 				returnTypes := make([]*types.T, len(args))
 				labels := make([]string, len(args))
 				for i, arg := range args {
-					if arg.ResolvedType().Family() == types.UnknownFamily {
+					if arg.ResolvedType().Family() != types.ArrayFamily {
 						return tree.UnknownReturnType
 					}
 					returnTypes[i] = arg.ResolvedType().ArrayContents()
@@ -321,7 +350,7 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverloadWithReturnType(
 			tree.ParamTypes{{Name: "input", Typ: types.AnyArray}},
 			func(args []tree.TypedExpr) *types.T {
-				if len(args) == 0 || args[0].ResolvedType().Family() == types.UnknownFamily {
+				if len(args) == 0 || args[0].ResolvedType().Family() != types.ArrayFamily {
 					return tree.UnknownReturnType
 				}
 				t := args[0].ResolvedType().ArrayContents()
@@ -576,7 +605,11 @@ The last argument is a JSONB object containing the following optional fields:
 		),
 	),
 	"crdb_internal.tenant_span_stats": makeBuiltin(genProps(),
-		// Tenant overload
+		// This overload defines a built-in that returns the range count,
+		// approximate disk size, live range bytes, total range bytes,
+		// and live range byte percentage for all tables that belong to the
+		// tenant executing the statement. It is invoked without arguments.
+		// e.g. `SELECT * FROM crdb_internal.tenant_span_stats();`
 		makeGeneratorOverload(
 			tree.ParamTypes{},
 			tableSpanStatsGeneratorType,
@@ -584,7 +617,11 @@ The last argument is a JSONB object containing the following optional fields:
 			"Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for all of the tenant's tables.",
 			volatility.Stable,
 		),
-		// Database overload
+		// This overload defines a built-in that returns the range count,
+		// approximate disk size, live range bytes, total range bytes,
+		// and live range byte percentage for all tables that belong to the
+		// database specified. The database is specified by its descriptor id.
+		// e.g. `SELECT * FROM crdb_internal.tenant_span_stats(104);`
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "database_id", Typ: types.Int},
@@ -594,7 +631,12 @@ The last argument is a JSONB object containing the following optional fields:
 			"Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for tables of the provided database id.",
 			volatility.Stable,
 		),
-		// Table overload
+		// This overload defines a built-in that returns the range count,
+		// approximate disk size, live range bytes, total range bytes,
+		// and live range byte percentage for all tables that belong to the
+		// database and table specified. The database and table are specified
+		// by their descriptor ids.
+		// e.g. `SELECT * FROM crdb_internal.tenant_span_stats(104, 106);`
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "database_id", Typ: types.Int},
@@ -604,6 +646,65 @@ The last argument is a JSONB object containing the following optional fields:
 			makeTableSpanStatsGenerator,
 			"Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for the provided table id.",
 			volatility.Stable,
+		),
+		// This overload defines a built-in that returns roachpb.SpanStats for
+		// the spans provided.
+		// e.g. `SELECT * FROM crdb_internal.tenant_span_stats(ARRAY(SELECT('\xfe8a'::bytes, '\xfe8b'::bytes)));`
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "spans", Typ: types.AnyTupleArray},
+			},
+			spanStatsGeneratorType,
+			makeSpanStatsGenerator,
+			"Returns SpanStats for the provided spans.",
+			volatility.Stable,
+		),
+	),
+	"crdb_internal.sstable_metrics": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "node_id", Typ: types.Int},
+				{Name: "store_id", Typ: types.Int},
+				{Name: "start_key", Typ: types.Bytes},
+				{Name: "end_key", Typ: types.Bytes},
+			},
+			tableMetricsGeneratorType,
+			makeTableMetricsGenerator,
+			"Returns statistics for the sstables containing keys in the range start_key and end_key for the provided node id.",
+			volatility.Stable,
+		),
+	),
+	"crdb_internal.scan_storage_internal_keys": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "node_id", Typ: types.Int},
+				{Name: "store_id", Typ: types.Int},
+				{Name: "start_key", Typ: types.Bytes},
+				{Name: "end_key", Typ: types.Bytes},
+			},
+			storageInternalKeysGeneratorType,
+			makeStorageInternalKeysGenerator,
+			"Scans a store's storage engine, computing statistics describing the internal keys within the span [start_key, end_key). This function is rate limited to 10 megabytes per second.",
+			volatility.Volatile,
+		),
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "node_id", Typ: types.Int},
+				{Name: "store_id", Typ: types.Int},
+				{Name: "start_key", Typ: types.Bytes},
+				{Name: "end_key", Typ: types.Bytes},
+				{Name: "mb_per_second", Typ: types.Int4},
+			},
+			storageInternalKeysGeneratorType,
+			makeStorageInternalKeysGenerator,
+			"Scans a store's storage engine, computing statistics describing the internal keys within the span [start_key, end_key).",
+			volatility.Volatile,
 		),
 	),
 }
@@ -1029,8 +1130,8 @@ func makeVariadicUnnestGenerator(
 	return g, nil
 }
 
-// multipleArrayValueGenerator is a value generator that returns each element of a
-// list of arrays.
+// multipleArrayValueGenerator is a value generator that returns each element of
+// a list of arrays.
 type multipleArrayValueGenerator struct {
 	arrays    []*tree.DArray
 	nextIndex int
@@ -1080,6 +1181,36 @@ func (s *multipleArrayValueGenerator) Values() (tree.Datums, error) {
 		}
 	}
 	return s.datums, nil
+}
+
+// makeWorkloadIndexRecsGeneratorFactory uses the arrayValueGenerator to return
+// all the index recommendations as an array of strings. The hasTimestamp
+// represents whether there is a timestamp filter.
+func makeWorkloadIndexRecsGeneratorFactory(hasTimestamp bool) eval.GeneratorOverload {
+	return func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+		var ts tree.DTimestampTZ
+		var err error
+
+		if hasTimestamp {
+			ts = tree.MustBeDTimestampTZ(args[0])
+		} else {
+			ts = tree.DTimestampTZ{Time: tree.MinSupportedTime}
+		}
+
+		var indexRecs []string
+		indexRecs, err = workloadindexrec.FindWorkloadRecs(ctx, evalCtx, &ts)
+		if err != nil {
+			return &arrayValueGenerator{}, err
+		}
+
+		arr := tree.NewDArray(types.String)
+		for _, indexRec := range indexRecs {
+			if err = arr.Append(tree.NewDString(indexRec)); err != nil {
+				return nil, err
+			}
+		}
+		return &arrayValueGenerator{array: arr}, nil
+	}
 }
 
 func makeArrayGenerator(
@@ -1735,10 +1866,12 @@ func (j *jsonPopulateRecordGenerator) Next(ctx context.Context) (bool, error) {
 
 // Values is part of the tree.ValueGenerator interface.
 func (j jsonPopulateRecordGenerator) Values() (tree.Datums, error) {
-	if err := eval.PopulateRecordWithJSON(j.ctx, j.evalCtx, j.target, j.input.ResolvedType(), j.input); err != nil {
+	output := tree.NewDTupleWithLen(j.input.ResolvedType(), j.input.D.Len())
+	copy(output.D, j.input.D)
+	if err := eval.PopulateRecordWithJSON(j.ctx, j.evalCtx, j.target, j.input.ResolvedType(), output); err != nil {
 		return nil, err
 	}
-	return j.input.D, nil
+	return output.D, nil
 }
 
 func makeJSONPopulateRecordSetGenerator(
@@ -1969,12 +2102,10 @@ var _ eval.ValueGenerator = &checkConsistencyGenerator{}
 func makeCheckConsistencyGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+	); err != nil {
 		return nil, err
-	}
-	if !isAdmin {
-		return nil, pgerror.New(pgcode.InsufficientPrivilege, "crdb_internal.check_consistency requires admin privileges")
 	}
 
 	keyFrom := roachpb.Key(*args[1].(*tree.DBytes))
@@ -2340,16 +2471,10 @@ type payloadsForSpanGenerator struct {
 func makePayloadsForSpanGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	// The user must be an admin to use this builtin.
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA,
+	); err != nil {
 		return nil, err
-	}
-	if !isAdmin {
-		return nil, pgerror.Newf(
-			pgcode.InsufficientPrivilege,
-			"only users with the admin role are allowed to use crdb_internal.payloads_for_span",
-		)
 	}
 	spanID := tracingpb.SpanID(*(args[0].(*tree.DInt)))
 	span := evalCtx.Tracer.GetActiveSpanByID(spanID)
@@ -2443,16 +2568,10 @@ type payloadsForTraceGenerator struct {
 func makePayloadsForTraceGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	// The user must be an admin to use this builtin.
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA,
+	); err != nil {
 		return nil, err
-	}
-	if !isAdmin {
-		return nil, pgerror.Newf(
-			pgcode.InsufficientPrivilege,
-			"only users with the admin role are allowed to use crdb_internal.payloads_for_trace",
-		)
 	}
 	traceID := uint64(*(args[0].(*tree.DInt)))
 	return &payloadsForTraceGenerator{traceID: traceID, planner: evalCtx.Planner}, nil
@@ -3078,6 +3197,213 @@ func (tssi *tableSpanStatsIterator) ResolvedType() *types.T {
 	return tableSpanStatsGeneratorType
 }
 
+var tableMetricsGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Int, types.Int, types.Int, types.Int, types.Int, types.Json},
+	[]string{"node_id", "store_id", "level", "file_num", "approximate_span_bytes", "metrics"},
+)
+
+// tableMetricsIterator implements tree.ValueGenerator; it returns a set of
+// SSTable metrics (one per row).
+type tableMetricsIterator struct {
+	metrics []enginepb.SSTableMetricsInfo
+	evalCtx *eval.Context
+
+	iterIdx int
+	nodeID  int32
+	storeID int32
+	start   []byte
+	end     []byte
+}
+
+var _ eval.ValueGenerator = (*tableMetricsIterator)(nil)
+
+func newTableMetricsIterator(
+	evalCtx *eval.Context, nodeID, storeID int32, start, end []byte,
+) *tableMetricsIterator {
+	return &tableMetricsIterator{evalCtx: evalCtx, nodeID: nodeID, storeID: storeID, start: start, end: end}
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (tmi *tableMetricsIterator) Start(ctx context.Context, _ *kv.Txn) error {
+	var err error
+	tmi.metrics, err = tmi.evalCtx.GetTableMetrics(ctx, tmi.nodeID, tmi.storeID, tmi.start, tmi.end)
+	if err != nil {
+		err = errors.Wrapf(err, "getting table metrics for node %d store %d", tmi.nodeID, tmi.storeID)
+	}
+
+	sort.SliceStable(tmi.metrics, func(i, j int) bool {
+		a, b := tmi.metrics[i], tmi.metrics[j]
+		return a.Level < b.Level || (a.Level == b.Level && a.TableID < b.TableID)
+	})
+
+	return err
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (tmi *tableMetricsIterator) Next(_ context.Context) (bool, error) {
+	tmi.iterIdx++
+	return tmi.iterIdx <= len(tmi.metrics), nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (tmi *tableMetricsIterator) Values() (tree.Datums, error) {
+	metricsInfo := tmi.metrics[tmi.iterIdx-1]
+
+	metricsJson, err := tree.ParseDJSON(string(metricsInfo.TableInfoJSON))
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.Datums{
+		tree.NewDInt(tree.DInt(tmi.nodeID)),
+		tree.NewDInt(tree.DInt(tmi.storeID)),
+		tree.NewDInt(tree.DInt(metricsInfo.Level)),
+		tree.NewDInt(tree.DInt(metricsInfo.TableID)),
+		tree.NewDInt(tree.DInt(metricsInfo.ApproximateSpanBytes)),
+		metricsJson,
+	}, nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (tmi *tableMetricsIterator) Close(_ context.Context) {}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (tmi *tableMetricsIterator) ResolvedType() *types.T {
+	return tableMetricsGeneratorType
+}
+
+func makeTableMetricsGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin {
+		return nil, errInsufficientPriv
+	}
+	nodeID := int32(tree.MustBeDInt(args[0]))
+	storeID := int32(tree.MustBeDInt(args[1]))
+	start := []byte(tree.MustBeDBytes(args[2]))
+	end := []byte(tree.MustBeDBytes(args[3]))
+
+	return newTableMetricsIterator(evalCtx, nodeID, storeID, start, end), nil
+}
+
+type storageInternalKeysIterator struct {
+	metrics []enginepb.StorageInternalKeysMetrics
+	evalCtx *eval.Context
+
+	iterIdx            int
+	nodeID             int32
+	storeID            int32
+	megabytesPerSecond int64
+	start              []byte
+	end                []byte
+}
+
+var storageInternalKeysGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int,
+		types.Int, types.Int, types.Int, types.Int},
+	[]string{
+		"level",
+		"node_id",
+		"store_id",
+		"snapshot_pinned_keys",
+		"snapshot_pinned_keys_bytes",
+		"point_key_delete_is_latest_count",
+		"point_key_delete_count",
+		"point_key_set_is_latest_count",
+		"point_key_set_count",
+		"range_delete_count",
+		"range_key_set_count",
+		"range_key_delete_count",
+	},
+)
+
+var _ eval.ValueGenerator = (*storageInternalKeysIterator)(nil)
+
+func newStorageInternalKeysGenerator(
+	evalCtx *eval.Context, nodeID, storeID int32, start, end []byte, megaBytesPerSecond int64,
+) *storageInternalKeysIterator {
+	return &storageInternalKeysIterator{evalCtx: evalCtx, nodeID: nodeID, storeID: storeID, start: start, end: end, megabytesPerSecond: megaBytesPerSecond}
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (s *storageInternalKeysIterator) Start(ctx context.Context, _ *kv.Txn) error {
+	var err error
+	s.metrics, err = s.evalCtx.ScanStorageInternalKeys(ctx, s.nodeID, s.storeID, s.start, s.end, s.megabytesPerSecond)
+	if err != nil {
+		err = errors.Wrapf(err, "getting table metrics for node %d store %d", s.nodeID, s.storeID)
+	}
+
+	return err
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (s *storageInternalKeysIterator) Next(_ context.Context) (bool, error) {
+	s.iterIdx++
+	return s.iterIdx <= len(s.metrics), nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (s *storageInternalKeysIterator) Values() (tree.Datums, error) {
+	metricsInfo := s.metrics[s.iterIdx-1]
+	levelDatum := tree.DNull
+
+	if metricsInfo.Level != -1 {
+		levelDatum = tree.NewDInt(tree.DInt(metricsInfo.Level))
+	}
+
+	return tree.Datums{
+		levelDatum,
+		tree.NewDInt(tree.DInt(s.nodeID)),
+		tree.NewDInt(tree.DInt(s.storeID)),
+		tree.NewDInt(tree.DInt(metricsInfo.SnapshotPinnedKeys)),
+		tree.NewDInt(tree.DInt(metricsInfo.SnapshotPinnedKeysBytes)),
+		tree.NewDInt(tree.DInt(metricsInfo.PointKeyDeleteIsLatestCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.PointKeyDeleteCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.PointKeySetIsLatestCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.PointKeySetCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.RangeDeleteCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.RangeKeySetCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.RangeKeyDeleteCount)),
+	}, nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (tmi *storageInternalKeysIterator) Close(_ context.Context) {}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (tmi *storageInternalKeysIterator) ResolvedType() *types.T {
+	return storageInternalKeysGeneratorType
+}
+
+func makeStorageInternalKeysGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin {
+		return nil, errInsufficientPriv
+	}
+	nodeID := int32(tree.MustBeDInt(args[0]))
+	storeID := int32(tree.MustBeDInt(args[1]))
+	start := []byte(tree.MustBeDBytes(args[2]))
+	end := []byte(tree.MustBeDBytes(args[3]))
+
+	var megabytesPerSecond int64
+	if len(args) > 4 {
+		megabytesPerSecond = int64(tree.MustBeDInt(args[4]))
+	} else {
+		megabytesPerSecond = int64(10)
+	}
+
+	return newStorageInternalKeysGenerator(evalCtx, nodeID, storeID, start, end, megabytesPerSecond), nil
+}
+
 var tableSpanStatsGeneratorType = types.MakeLabeledTuple(
 	[]*types.T{types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Float},
 	[]string{"database_id", "table_id", "range_count", "approximate_disk_bytes", "live_bytes", "total_bytes", "live_percentage"},
@@ -3087,7 +3413,7 @@ func makeTableSpanStatsGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	// The user must have ADMIN role or VIEWACTIVITY/VIEWACTIVITYREDACTED permission to use this builtin.
-	hasViewActivity, err := evalCtx.SessionAccessor.HasViewActivityOrViewActivityRedactedRole(ctx)
+	hasViewActivity, _, err := evalCtx.SessionAccessor.HasViewActivityOrViewActivityRedactedRole(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3109,6 +3435,82 @@ func makeTableSpanStatsGenerator(
 		}
 	}
 
-	spanBatchLimit := roachpb.SpanStatsBatchLimit.Get(&evalCtx.Settings.SV)
-	return newTableSpanStatsIterator(evalCtx, dbId, tableId, int(spanBatchLimit)), nil
+	spanBatchLimit := SpanStatsBatchLimit.Get(&evalCtx.Settings.SV)
+	return newTableSpanStatsIterator(evalCtx, dbId, tableId,
+		int(spanBatchLimit)), nil
+}
+
+var spanStatsGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Bytes, types.Bytes, types.Json},
+	[]string{"start_key", "end_key", "stats"},
+)
+
+type spanStatsValueGenerator struct {
+	spans     roachpb.Spans // spans are provided as an argument.
+	res       *roachpb.SpanStatsResponse
+	currStats *roachpb.SpanStats
+	currSpan  roachpb.Span
+	idx       int
+	p         eval.Planner
+}
+
+func (s *spanStatsValueGenerator) ResolvedType() *types.T {
+	return spanStatsGeneratorType
+}
+
+func (s *spanStatsValueGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+	res, err := s.p.SpanStats(ctx, s.spans)
+	s.res = res
+	return err
+}
+
+func (s *spanStatsValueGenerator) Next(ctx context.Context) (bool, error) {
+	// We must stop iterating after emitting values for all spans.
+	if s.idx == len(s.spans) {
+		return false, nil
+	}
+	sp := s.spans[s.idx]
+	s.currStats = s.res.SpanToStats[sp.String()]
+	s.currSpan = sp
+	s.idx++
+	return true, nil
+}
+
+func (s *spanStatsValueGenerator) Values() (tree.Datums, error) {
+	jsonStr, err := gojson.Marshal(s.currStats)
+	if err != nil {
+		return nil, err
+	}
+	jsonDatum, err := tree.ParseDJSON(string(jsonStr))
+	if err != nil {
+		return nil, err
+	}
+	return []tree.Datum{
+		tree.NewDBytes(tree.DBytes(s.currSpan.Key)),
+		tree.NewDBytes(tree.DBytes(s.currSpan.EndKey)),
+		jsonDatum,
+	}, nil
+}
+
+func (s *spanStatsValueGenerator) Close(ctx context.Context) {}
+
+func makeSpanStatsGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	argSpans := tree.MustBeDArray(args[0])
+	spans := make([]roachpb.Span, 0, argSpans.Len())
+	for _, span := range argSpans.Array {
+		s := tree.MustBeDTuple(span)
+		if len(s.D) != 2 || s.D[0] == tree.DNull || s.D[1] == tree.DNull {
+			continue
+		}
+		startKey := roachpb.Key(tree.MustBeDBytes(s.D[0]))
+		endKey := roachpb.Key(tree.MustBeDBytes(s.D[1]))
+		spans = append(spans, roachpb.Span{
+			Key:    startKey,
+			EndKey: endKey,
+		})
+	}
+
+	return &spanStatsValueGenerator{p: evalCtx.Planner, spans: spans}, nil
 }

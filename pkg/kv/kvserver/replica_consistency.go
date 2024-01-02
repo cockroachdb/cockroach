@@ -23,15 +23,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -43,22 +47,6 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// fatalOnStatsMismatch, if true, turns stats mismatches into fatal errors. A
-// stats mismatch is the event in which
-//   - the consistency checker finds that all replicas are consistent
-//     (i.e. byte-by-byte identical)
-//   - the (identical) stats tracked in them do not correspond to a recomputation
-//     via the data, i.e. the stats were incorrect
-//   - ContainsEstimates==false, i.e. the stats claimed they were correct.
-//
-// Before issuing the fatal error, the cluster bootstrap version is verified.
-// Note that on clusters that originally got bootstrapped on older releases
-// (definitely 19.1, and likely also more recent ones) we know of the existence
-// of stats bugs, so it has to be expected to see the assertion fire there.
-//
-// This env var is intended solely for use in Cockroach Labs testing.
-var fatalOnStatsMismatch = envutil.EnvOrDefaultBool("COCKROACH_ENFORCE_CONSISTENT_STATS", false)
-
 // replicaChecksum contains progress on a replica checksum computation.
 type replicaChecksum struct {
 	// started is closed when the checksum computation has started. If the start
@@ -69,6 +57,15 @@ type replicaChecksum struct {
 	// INVARIANT: result is written to or closed only if started is closed.
 	result chan CollectChecksumResponse
 }
+
+// TestingFastEFOSAcquisition speeds up EFOS WaitForFileOnly() to speed up
+// node-wide replica consistency check calls in roachtests.
+var TestingFastEFOSAcquisition = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.consistency_queue.testing_fast_efos_acquisition.enabled",
+	"set to true to speed up EventuallyFileOnlySnapshot acquisition/transition for tests at the expense of excessive flushes",
+	false, /* defaultValue */
+	settings.WithPublic)
 
 // CheckConsistency runs a consistency check on the range. It first applies a
 // ComputeChecksum through Raft and then issues CollectChecksum commands to the
@@ -218,11 +215,6 @@ func (r *Replica) checkConsistencyImpl(
 		// If there's no delta, there's nothing else to do.
 		if !haveDelta {
 			return resp, nil
-		}
-		if delta.ContainsEstimates <= 0 && fatalOnStatsMismatch {
-			// We just found out that the recomputation doesn't match the persisted stats,
-			// so ContainsEstimates should have been strictly positive.
-			log.Fatalf(ctx, "found a delta of %+v", redact.Safe(delta))
 		}
 
 		// We've found that there's something to correct; send an RecomputeStatsRequest. Note that this
@@ -498,6 +490,7 @@ func CalcReplicaDigest(
 	snap storage.Reader,
 	mode kvpb.ChecksumMode,
 	limiter *quotapool.RateLimiter,
+	settings *cluster.Settings,
 ) (*ReplicaDigest, error) {
 	statsOnly := mode == kvpb.ChecksumMode_CHECK_STATS
 
@@ -505,7 +498,30 @@ func CalcReplicaDigest(
 	var intBuf [8]byte
 	var legacyTimestamp hlc.LegacyTimestamp
 	var timestampBuf []byte
+	var uuidBuf [uuid.Size]byte
 	hasher := sha512.New()
+
+	if efos, ok := snap.(storage.EventuallyFileOnlyReader); ok {
+		// We start off by waiting for this snapshot to become a file-only snapshot.
+		// This is preferable as it reduces the amount of in-memory tables
+		// (memtables) pinned for the iterations below, and reduces errors later on
+		// in checksum computation. A wait here is safe as we're running
+		// asynchronously and not blocking other computation requests. Other checksum
+		// computation requests can run concurrently and start computation while
+		// we're waiting for this EFOS to transition to a file-only snapshot, however
+		// both requests are likely sharing the same `limiter` so if too many
+		// requests run concurrently, some of them could time out due to a
+		// combination of this wait and the limiter-induced wait.
+		efosWait := storage.MaxEFOSWait
+		if settings != nil && TestingFastEFOSAcquisition.Get(&settings.SV) {
+			if efosWait > 10*time.Millisecond {
+				efosWait = 10 * time.Millisecond
+			}
+		}
+		if err := efos.WaitForFileOnly(ctx, efosWait); err != nil {
+			return nil, err
+		}
+	}
 
 	// Request quota from the limiter in chunks of at least targetBatchSize, to
 	// amortize the overhead of the limiter when reading many small KVs.
@@ -520,7 +536,9 @@ func CalcReplicaDigest(
 		return limiter.WaitN(ctx, tokens)
 	}
 
-	pointKeyVisitor := func(unsafeKey storage.MVCCKey, unsafeValue []byte) error {
+	var visitors storage.ComputeStatsVisitors
+
+	visitors.PointKey = func(unsafeKey storage.MVCCKey, unsafeValue []byte) error {
 		// Rate limit the scan through the range.
 		if err := wait(int64(len(unsafeKey.Key) + len(unsafeValue))); err != nil {
 			return err
@@ -534,6 +552,7 @@ func CalcReplicaDigest(
 		if _, err := hasher.Write(intBuf[:]); err != nil {
 			return err
 		}
+		// Encode the key.
 		if _, err := hasher.Write(unsafeKey.Key); err != nil {
 			return err
 		}
@@ -543,17 +562,18 @@ func CalcReplicaDigest(
 		} else {
 			timestampBuf = timestampBuf[:size]
 		}
-		if _, err := protoutil.MarshalTo(&legacyTimestamp, timestampBuf); err != nil {
+		if _, err := protoutil.MarshalToSizedBuffer(&legacyTimestamp, timestampBuf); err != nil {
 			return err
 		}
 		if _, err := hasher.Write(timestampBuf); err != nil {
 			return err
 		}
+		// Encode the value.
 		_, err := hasher.Write(unsafeValue)
 		return err
 	}
 
-	rangeKeyVisitor := func(rangeKV storage.MVCCRangeKeyValue) error {
+	visitors.RangeKey = func(rangeKV storage.MVCCRangeKeyValue) error {
 		// Rate limit the scan through the range.
 		err := wait(
 			int64(len(rangeKV.RangeKey.StartKey) + len(rangeKV.RangeKey.EndKey) + len(rangeKV.Value)))
@@ -573,6 +593,7 @@ func CalcReplicaDigest(
 		if _, err := hasher.Write(intBuf[:]); err != nil {
 			return err
 		}
+		// Encode the key.
 		if _, err := hasher.Write(rangeKV.RangeKey.StartKey); err != nil {
 			return err
 		}
@@ -585,13 +606,53 @@ func CalcReplicaDigest(
 		} else {
 			timestampBuf = timestampBuf[:size]
 		}
-		if _, err := protoutil.MarshalTo(&legacyTimestamp, timestampBuf); err != nil {
+		if _, err := protoutil.MarshalToSizedBuffer(&legacyTimestamp, timestampBuf); err != nil {
 			return err
 		}
 		if _, err := hasher.Write(timestampBuf); err != nil {
 			return err
 		}
+		// Encode the value.
 		_, err = hasher.Write(rangeKV.Value)
+		return err
+	}
+
+	visitors.LockTableKey = func(unsafeKey storage.LockTableKey, unsafeValue []byte) error {
+		// Assert that the lock is not an intent. Intents are handled by the
+		// PointKey visitor function, not by the LockTableKey visitor function.
+		if unsafeKey.Strength == lock.Intent {
+			return errors.AssertionFailedf("unexpected intent lock in LockTableKey visitor: %s", unsafeKey)
+		}
+		// Rate limit the scan through the lock table.
+		if err := wait(int64(len(unsafeKey.Key) + len(unsafeValue))); err != nil {
+			return err
+		}
+		// Encode the length of the key and value.
+		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeKey.Key)))
+		if _, err := hasher.Write(intBuf[:]); err != nil {
+			return err
+		}
+		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeValue)))
+		if _, err := hasher.Write(intBuf[:]); err != nil {
+			return err
+		}
+		// Encode the key.
+		if _, err := hasher.Write(unsafeKey.Key); err != nil {
+			return err
+		}
+		// NOTE: this is not the same strength encoding that the actual lock
+		// table version uses. For that, see getByteForReplicatedLockStrength.
+		strengthBuf := intBuf[:1]
+		strengthBuf[0] = byte(unsafeKey.Strength)
+		if _, err := hasher.Write(strengthBuf); err != nil {
+			return err
+		}
+		copy(uuidBuf[:], unsafeKey.TxnUUID.GetBytes())
+		if _, err := hasher.Write(uuidBuf[:]); err != nil {
+			return err
+		}
+		// Encode the value.
+		_, err := hasher.Write(unsafeValue)
 		return err
 	}
 
@@ -599,8 +660,8 @@ func CalcReplicaDigest(
 	// all of the replicated key space.
 	var result ReplicaDigest
 	if !statsOnly {
-		ms, err := rditer.ComputeStatsForRangeWithVisitors(&desc, snap, 0, /* nowNanos */
-			pointKeyVisitor, rangeKeyVisitor)
+		ms, err := rditer.ComputeStatsForRangeWithVisitors(
+			ctx, &desc, snap, 0 /* nowNanos */, visitors)
 		// Consume the remaining quota borrowed in the visitors. Do it even on
 		// iteration error, but prioritize returning the latter if it occurs.
 		if wErr := limiter.WaitN(ctx, batchSize); wErr != nil && err == nil {
@@ -657,7 +718,20 @@ func (r *Replica) computeChecksumPostApply(
 
 	// Caller is holding raftMu, so an engine snapshot is automatically
 	// Raft-consistent (i.e. not in the middle of an AddSSTable).
-	snap := r.store.TODOEngine().NewSnapshot()
+	spans := rditer.MakeReplicatedKeySpans(&desc)
+	var snap storage.Reader
+	if r.store.cfg.SharedStorageEnabled || storage.ShouldUseEFOS(&r.ClusterSettings().SV) {
+		efos := r.store.TODOEngine().NewEventuallyFileOnlySnapshot(spans)
+		if util.RaceEnabled {
+			ss := rditer.MakeReplicatedKeySpanSet(&desc)
+			defer ss.Release()
+			snap = spanset.NewEventuallyFileOnlySnapshot(efos, ss)
+		} else {
+			snap = efos
+		}
+	} else {
+		snap = r.store.TODOEngine().NewSnapshot()
+	}
 	if cc.Checkpoint {
 		sl := stateloader.Make(r.RangeID)
 		as, err := sl.LoadRangeAppliedState(ctx, snap)
@@ -717,7 +791,7 @@ func (r *Replica) computeChecksumPostApply(
 		); err != nil {
 			log.Errorf(ctx, "checksum collection did not join: %v", err)
 		} else {
-			result, err := CalcReplicaDigest(ctx, desc, snap, cc.Mode, r.store.consistencyLimiter)
+			result, err := CalcReplicaDigest(ctx, desc, snap, cc.Mode, r.store.consistencyLimiter, r.ClusterSettings())
 			if err != nil {
 				log.Errorf(ctx, "checksum computation failed: %v", err)
 				result = nil

@@ -189,7 +189,7 @@ anotherrole ALL
 thirddrole  NONE
 # Detail:
 &auditlogging.AuditConfig{
-    settings: {
+    Settings: {
         {
             input:             "test_role ALL",
             Role:              username.SQLUsername{u:"test_role"},
@@ -231,7 +231,7 @@ all         ALL
 thirddrole  ALL
 # Detail:
 &auditlogging.AuditConfig{
-    settings: {
+    Settings: {
         {
             input:             "test_role NONE",
             Role:              username.SQLUsername{u:"test_role"},

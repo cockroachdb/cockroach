@@ -48,9 +48,9 @@ import (
 //	roachprod start local
 //	# If the version is v1.0.7 then you need to enable enterprise with the
 //	# enterprise.enabled cluster setting.
-//	roachprod sql local:1 -- -e "$(cat pkg/ccl/backupccl/testdata/restore_old_versions/create.sql)"
+//	roachprod sql local:1 -- -e "$(cat pkg/ccl/backupccl/testdata/restore_old_versions/cluster/create.sql)"
 //	# Create an S3 bucket to store the backup.
-//	roachprod sql local:1 -- -e "BACKUP DATABASE test TO 's3://<bucket-name>/${VERSION}?AWS_ACCESS_KEY_ID=<...>&AWS_SECRET_ACCESS_KEY=<...>'"
+//	roachprod sql local:1 -- -e "BACKUP INTO 's3://<bucket-name>/${VERSION}?AWS_ACCESS_KEY_ID=<...>&AWS_SECRET_ACCESS_KEY=<...>'"
 //	# Then download the backup from s3 and plop the files into the appropriate
 //	# testdata directory.
 func TestRestoreOldVersions(t *testing.T) {
@@ -144,7 +144,7 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				// Disabling the test tenant due to test failures. More
 				// investigation is required. Tracked with #76378.
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TODOTestTenantDisabled,
 				ExternalIODir:     externalDir,
 			},
 		})
@@ -162,11 +162,11 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 		// option to ensure the restore is successful on development branches. This
 		// is because, while the backups were generated on release branches and have
 		// versions such as 22.2 in their manifest, the development branch will have
-		// a BinaryMinSupportedVersion offset by the clusterversion.DevOffset
-		// described in `pkg/clusterversion/cockroach_versions.go`. This will mean
-		// that the manifest version is always less than the
-		// BinaryMinSupportedVersion which will in turn fail the restore unless we
-		// pass in the specified option to elide the compatability check.
+		// a MinSupportedVersion offset by the clusterversion.DevOffset described in
+		// `pkg/clusterversion/cockroach_versions.go`. This will mean that the
+		// manifest version is always less than the MinSupportedVersion which will
+		// in turn fail the restore unless we pass in the specified option to elide
+		// the compatibility check.
 		sqlDB.Exec(t, `RESTORE FROM LATEST IN $1 WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION`, localFoo)
 
 		sqlDB.CheckQueryResults(t, "SHOW DATABASES", [][]string{
@@ -177,10 +177,10 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 		})
 
 		sqlDB.CheckQueryResults(t, "SHOW SCHEMAS", [][]string{
-			{"crdb_internal", "NULL"},
-			{"information_schema", "NULL"},
-			{"pg_catalog", "NULL"},
-			{"pg_extension", "NULL"},
+			{"crdb_internal", "node"},
+			{"information_schema", "node"},
+			{"pg_catalog", "node"},
+			{"pg_extension", "node"},
 			{"public", "admin"},
 		})
 
@@ -242,6 +242,17 @@ ORDER BY
 				sqlDB.Exec(t, fmt.Sprintf("SELECT * FROM system.%s", systemTableName))
 			}
 		}
+
+		// The "craig" user should be able to use the function because the
+		// EXECUTE privilege is added to the public role.
+		sqlDB.Exec(t, "SET ROLE = craig")
+		sqlDB.CheckQueryResults(t, "SELECT add(10, 3)", [][]string{{"13"}})
+
+		sqlDB.CheckQueryResults(t, "SHOW GRANTS ON FUNCTION add", [][]string{
+			{"data", "public", "100129", "add(int8, int8)", "admin", "ALL", "true"},
+			{"data", "public", "100129", "add(int8, int8)", "public", "EXECUTE", "false"},
+			{"data", "public", "100129", "add(int8, int8)", "root", "ALL", "true"},
+		})
 	}
 }
 
@@ -265,7 +276,7 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 		// reference a nil pointer below where we're expecting a database
 		// descriptor to exist. More investigation is required.
 		// Tracked with #76378.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, args)
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
@@ -285,7 +296,7 @@ DROP SCHEMA bar;
 	tdb.CheckQueryResults(t, query, [][]string{{restoredDBName}})
 
 	// Read descriptor without validation.
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 	hasSameNameSchema := func(dbName string) (exists bool) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			// Using this method to avoid validation.
@@ -332,11 +343,11 @@ func fullClusterRestoreSystemRoleMembersWithoutIDs(exportDir string) func(t *tes
 		// option to ensure the restore is successful on development branches. This
 		// is because, while the backups were generated on release branches and have
 		// versions such as 22.2 in their manifest, the development branch will have
-		// a BinaryMinSupportedVersion offset by the clusterversion.DevOffset
-		// described in `pkg/clusterversion/cockroach_versions.go`. This will mean
-		// that the manifest version is always less than the
-		// BinaryMinSupportedVersion which will in turn fail the restore unless we
-		// pass in the specified option to elide the compatability check.
+		// a MinSupportedVersion offset by the clusterversion.DevOffset described in
+		// `pkg/clusterversion/cockroach_versions.go`. This will mean that the
+		// manifest version is always less than the MinSupportedVersion which will
+		// in turn fail the restore unless we pass in the specified option to elide
+		// the compatibility check.
 		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
 
 		sqlDB.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
@@ -367,11 +378,11 @@ func fullClusterRestoreSystemPrivilegesWithoutIDs(exportDir string) func(t *test
 		// option to ensure the restore is successful on development branches. This
 		// is because, while the backups were generated on release branches and have
 		// versions such as 22.2 in their manifest, the development branch will have
-		// a BinaryMinSupportedVersion offset by the clusterversion.DevOffset
-		// described in `pkg/clusterversion/cockroach_versions.go`. This will mean
-		// that the manifest version is always less than the
-		// BinaryMinSupportedVersion which will in turn fail the restore unless we
-		// pass in the specified option to elide the compatability check.
+		// a MinSupportedVersion offset by the clusterversion.DevOffset described in
+		// `pkg/clusterversion/cockroach_versions.go`. This will mean that the
+		// manifest version is always less than the MinSupportedVersion which will
+		// in turn fail the restore unless we pass in the specified option to elide
+		// the compatibility check.
 		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
 
 		sqlDB.CheckQueryResults(t, "SELECT * FROM system.privileges", [][]string{
@@ -402,11 +413,11 @@ func fullClusterRestoreSystemDatabaseRoleSettingsWithoutIDs(exportDir string) fu
 		// option to ensure the restore is successful on development branches. This
 		// is because, while the backups were generated on release branches and have
 		// versions such as 22.2 in their manifest, the development branch will have
-		// a BinaryMinSupportedVersion offset by the clusterversion.DevOffset
-		// described in `pkg/clusterversion/cockroach_versions.go`. This will mean
-		// that the manifest version is always less than the
-		// BinaryMinSupportedVersion which will in turn fail the restore unless we
-		// pass in the specified option to elide the compatability check.
+		// a MinSupportedVersion offset by the clusterversion.DevOffset described in
+		// `pkg/clusterversion/cockroach_versions.go`. This will mean that the
+		// manifest version is always less than the MinSupportedVersion which will
+		// in turn fail the restore unless we pass in the specified option to elide
+		// the compatibility check.
 		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
 
 		sqlDB.CheckQueryResults(t, "SELECT * FROM system.database_role_settings", [][]string{
@@ -437,11 +448,11 @@ func fullClusterRestoreSystemExternalConnectionsWithoutIDs(exportDir string) fun
 		// option to ensure the restore is successful on development branches. This
 		// is because, while the backups were generated on release branches and have
 		// versions such as 22.2 in their manifest, the development branch will have
-		// a BinaryMinSupportedVersion offset by the clusterversion.DevOffset
-		// described in `pkg/clusterversion/cockroach_versions.go`. This will mean
-		// that the manifest version is always less than the
-		// BinaryMinSupportedVersion which will in turn fail the restore unless we
-		// pass in the specified option to elide the compatability check.
+		// a MinSupportedVersion offset by the clusterversion.DevOffset described in
+		// `pkg/clusterversion/cockroach_versions.go`. This will mean that the
+		// manifest version is always less than the MinSupportedVersion which will
+		// in turn fail the restore unless we pass in the specified option to elide
+		// the compatibility check.
 		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
 
 		sqlDB.CheckQueryResults(t, "SELECT * FROM system.external_connections", [][]string{
@@ -461,6 +472,7 @@ func fullClusterRestoreWithTenants(exportDir string) func(t *testing.T) {
 		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
 			InitManualReplication, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
+					DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 					Knobs: base.TestingKnobs{
 						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 					},
@@ -471,11 +483,11 @@ func fullClusterRestoreWithTenants(exportDir string) func(t *testing.T) {
 		sqlDB.CheckQueryResults(t, fmt.Sprintf("SELECT count(*) FROM [SHOW BACKUP LATEST IN '%s'] WHERE object_type = 'TENANT'", localFoo), [][]string{
 			{"2"},
 		})
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM LATEST IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION, include_all_secondary_tenants", localFoo))
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM LATEST IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION, include_all_virtual_clusters", localFoo))
 		sqlDB.CheckQueryResults(t, "SHOW TENANTS", [][]string{
 			{"1", "system", "ready", "shared"},
-			{"5", "tenant-5", "ready", "none"},
-			{"6", "tenant-6", "ready", "none"},
+			{"5", "cluster-5", "ready", "none"},
+			{"6", "cluster-6", "ready", "none"},
 		})
 	}
 }

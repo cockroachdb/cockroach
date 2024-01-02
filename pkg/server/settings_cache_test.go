@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -64,25 +67,26 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	stickyEngineRegistry := NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	stickyVFSRegistry := NewStickyVFSRegistry()
 
 	serverArgs := base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		StoreSpecs: []base.StoreSpec{
-			{InMemory: true, StickyInMemoryEngineID: "1"},
+			{InMemory: true, StickyVFSID: "1"},
 		},
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
-				StickyEngineRegistry: stickyEngineRegistry,
+				StickyVFSRegistry: stickyVFSRegistry,
 			},
 		},
 	}
 	var settingsCache []roachpb.KeyValue
-	testServer, _, _ := serverutils.StartServer(t, serverArgs)
-	closedts.TargetDuration.Override(ctx, &testServer.ClusterSettings().SV, 10*time.Millisecond)
-	closedts.SideTransportCloseInterval.Override(ctx, &testServer.ClusterSettings().SV, 10*time.Millisecond)
+	ts := serverutils.StartServerOnly(t, serverArgs)
+	closedts.TargetDuration.Override(ctx, &ts.ClusterSettings().SV, 10*time.Millisecond)
+	closedts.SideTransportCloseInterval.Override(ctx, &ts.ClusterSettings().SV, 10*time.Millisecond)
+	kvserver.RangeFeedRefreshInterval.Override(ctx, &ts.ClusterSettings().SV, 10*time.Millisecond)
 	testutils.SucceedsSoon(t, func() error {
-		store, err := testServer.GetStores().(*kvserver.Stores).GetStore(1)
+		store, err := ts.GetStores().(*kvserver.Stores).GetStore(1)
 		if err != nil {
 			return err
 		}
@@ -96,30 +100,29 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 		settingsCache = settings
 		return nil
 	})
-	testServer.Stopper().Stop(context.Background())
+	ts.Stopper().Stop(context.Background())
 
-	ts, err := serverutils.NewServer(serverArgs)
+	s, err := serverutils.NewServer(serverArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := ts.(*TestServer)
-	defer srv.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(context.Background())
 
-	s := srv.Server
 	var initServer *initServer
 	{
-		getDialOpts := s.rpcContext.GRPCDialOptions
+		getDialOpts := s.RPCContext().GRPCDialOptions
 
-		initConfig := newInitServerConfig(ctx, s.cfg, getDialOpts)
+		cfg := s.SystemLayer().(*testServer).topLevelServer.cfg
+		initConfig := newInitServerConfig(ctx, cfg, getDialOpts)
 		inspectState, err := inspectEngines(
 			context.Background(),
-			s.engines,
-			s.cfg.Settings.Version.BinaryVersion(),
-			s.cfg.Settings.Version.BinaryMinSupportedVersion(),
+			s.Engines(),
+			s.ClusterSettings().Version.LatestVersion(),
+			s.ClusterSettings().Version.MinSupportedVersion(),
 		)
 		require.NoError(t, err)
 
-		initServer = newInitServer(s.cfg.AmbientCtx, inspectState, initConfig)
+		initServer = newInitServer(s.AmbientCtx(), inspectState, initConfig)
 	}
 
 	// ServeAndWait should return immediately since the server is already initialized
@@ -128,8 +131,8 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		state, initialBoot, err := initServer.ServeAndWait(
 			context.Background(),
-			s.stopper,
-			&s.cfg.Settings.SV,
+			s.Stopper(),
+			&s.ClusterSettings().SV,
 		)
 		if err != nil {
 			return err
@@ -142,6 +145,74 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 Expected: %+v
 Actual:   %+v
 `, settingsCache, state.initialSettingsKVs)
+		}
+		return nil
+	})
+}
+
+func TestCachedSettingDeletionIsPersisted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	hasKey := func(kvs []roachpb.KeyValue, key string) bool {
+		for _, kv := range kvs {
+			if strings.Contains(string(kv.Key), key) {
+				return true
+			}
+		}
+		return false
+	}
+
+	ctx := context.Background()
+
+	ts, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer ts.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Make the test faster.
+	st := ts.ClusterSettings()
+	factor := 1
+	if util.RaceEnabled {
+		// Under race, all the goroutines are generally slower. If we
+		// accelerate the rangefeeds and the closed ts framework too much,
+		// it can start overwhelming the scheduler and starve everything
+		// of CPU time. So give everything some breathing time in that
+		// case.
+		//
+		// TODO(knz): Replace this by the change in #111753.
+		factor = 4
+	}
+	closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond*time.Duration(factor))
+	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 10*time.Millisecond*time.Duration(factor))
+	kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond*time.Duration(factor))
+
+	// Customize a setting.
+	db.Exec(t, `SET CLUSTER SETTING ui.display_timezone = 'America/New_York'`)
+	// The setting won't propagate to the store until the setting watcher caches
+	// up with the rangefeed, which might take a while.
+	testutils.SucceedsSoon(t, func() error {
+		store, err := ts.GetStores().(*kvserver.Stores).GetStore(1)
+		require.NoError(t, err)
+		settings, err := loadCachedSettingsKVs(context.Background(), store.TODOEngine())
+		require.NoError(t, err)
+		if !hasKey(settings, `ui.display_timezone`) {
+			return errors.New("cached setting not found")
+		}
+		return nil
+	})
+
+	// Reset the setting.
+	db.Exec(t, `RESET CLUSTER SETTING ui.display_timezone`)
+	// Check that the setting is eventually deleted from the store.
+	testutils.SucceedsSoon(t, func() error {
+		store, err := ts.GetStores().(*kvserver.Stores).GetStore(1)
+		require.NoError(t, err)
+		settings, err := loadCachedSettingsKVs(context.Background(), store.TODOEngine())
+		require.NoError(t, err)
+		if hasKey(settings, `ui.display_timezone`) {
+			return errors.New("cached setting was still found")
 		}
 		return nil
 	})

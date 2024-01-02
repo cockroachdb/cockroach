@@ -1,0 +1,69 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require "~styl/base/palette.styl"
+@require "~src/components/core/index.styl"
+
+.jwt-auth-token
+  display flex
+  align-items center
+  justify-content center
+  height 100%
+  width 100%
+  position absolute
+  background-color $colors--neutral-1
+  background-image url("../../../assets/login-background.png")
+  background-position bottom
+  background-size cover
+  background-repeat no-repeat
+
+  &__container
+    width 920px
+    display flex
+    flex-direction column
+
+  .content
+    display flex
+    margin-top 27px
+
+  &__connection-params
+    background-color $colors--neutral-0
+    width 50%
+    padding 40px
+    box-shadow 0px 0px 1px rgba(67, 90, 111, 0.415)
+    border-radius 5px
+
+  &__documentation
+    width 50%
+    padding 24px
+    margin-top 60px
+
+  .connection-params-container
+    display flex
+    flex-direction column
+    height 100%
+    justify-content: space-between
+
+  &__error
+    @extend $text--body-strong
+    padding 14px 20px
+    background $colors--neutral-0
+    box-shadow 0px 0px 1px rgba(67, 90, 111, 0.415)
+    border-radius 3px
+    border-left 4px solid $colors--functional-red-3
+    letter-spacing 0.1px
+    color $colors--neutral-8
+    margin-bottom 18px
+    img
+      margin-right 16px
+
+  .submit-button
+    width 100%
+

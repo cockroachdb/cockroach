@@ -41,13 +41,13 @@ import (
 // It works by writing a lot of data and waiting for the GC heuristic to allow
 // for GC. Because of this, it's very slow and expensive. It should
 // potentially be made cheaper by injecting hooks to force GC.
+// TODO(pavelkalinnikov): use the GCHint for this.
 //
 // Probably this test should always be skipped until it is made cheaper,
 // nevertheless it's a useful test.
 func TestProtectedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 93497, "flaky test")
 	ctx := context.Background()
 
 	// This test is too slow to run with race.
@@ -59,7 +59,7 @@ func TestProtectedTimestamps(t *testing.T) {
 		DisableGCQueue:            true,
 		DisableLastProcessedCheck: true,
 	}
-	tc := testcluster.StartTestCluster(t, 3, args)
+	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 	s0 := tc.Server(0)
 
@@ -73,7 +73,13 @@ func TestProtectedTimestamps(t *testing.T) {
 	_, err = conn.Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
 	require.NoError(t, err)
 
-	const tableRangeMaxBytes = 1 << 18
+	_, err = conn.Exec("SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'") // speeds up the test
+	require.NoError(t, err)
+
+	_, err = conn.Exec("SET CLUSTER SETTING kv.enqueue_in_replicate_queue_on_span_config_update.enabled = true") // speeds up the test
+	require.NoError(t, err)
+
+	const tableRangeMaxBytes = 64 << 20
 	_, err = conn.Exec("ALTER TABLE foo CONFIGURE ZONE USING "+
 		"gc.ttlseconds = 1, range_max_bytes = $1, range_min_bytes = 1<<10;", tableRangeMaxBytes)
 	require.NoError(t, err)
@@ -126,19 +132,15 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 
 	getStoreAndReplica := func() (*kvserver.Store, *kvserver.Replica) {
 		startKey := getTableStartKey()
-		// Okay great now we have a key and can go find replicas and stores and what not.
-		r := tc.LookupRangeOrFatal(t, startKey)
-		l, _, err := tc.FindRangeLease(r, nil)
-		require.NoError(t, err)
-
-		lhServer := tc.Server(int(l.Replica.NodeID) - 1)
-		return getFirstStoreReplica(t, lhServer, startKey)
+		// There's only one server, so there's no point searching for which server
+		// the leaseholder is on, it could only be on s0.
+		return getFirstStoreReplica(t, s0, startKey)
 	}
 
 	waitForRangeMaxBytes := func(maxBytes int64) {
 		testutils.SucceedsSoon(t, func() error {
 			_, r := getStoreAndReplica()
-			if r.GetMaxBytes() != maxBytes {
+			if r.GetMaxBytes(ctx) != maxBytes {
 				return errors.New("waiting for range_max_bytes to be applied")
 			}
 			return nil
@@ -182,6 +184,12 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 		Target:    ptpb.MakeSchemaObjectsTarget([]descpb.ID{getTableID()}),
 	}
 	require.NoError(t, ptsWithDB.Protect(ctx, &ptsRec))
+	// Verify that the record did indeed make its way down into KV where the
+	// replica can read it from.
+	ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
+	ptutil.TestingWaitForProtectedTimestampToExistOnSpans(
+		ctx, t, s0, ptsReader, ptsRec.Timestamp, ptsRec.DeprecatedSpans,
+	)
 	upsertUntilBackpressure()
 	// We need to be careful choosing a time. We're a little limited because the
 	// ttl is defined in seconds and we need to wait for the threshold to be
@@ -204,16 +212,6 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 	thresh := thresholdFromTrace(trace)
 	require.Truef(t, thresh.Less(ptsRec.Timestamp), "threshold: %v, protected %v %q", thresh, ptsRec.Timestamp, trace)
 
-	// Verify that the record did indeed make its way down into KV where the
-	// replica can read it from.
-	ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
-	require.NoError(
-		t,
-		ptutil.TestingVerifyProtectionTimestampExistsOnSpans(
-			ctx, t, s0, ptsReader, ptsRec.Timestamp, ptsRec.DeprecatedSpans,
-		),
-	)
-
 	// Make a new record that is doomed to fail.
 	failedRec := ptsRec
 	failedRec.ID = uuid.MakeV4().GetBytes()
@@ -226,11 +224,8 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 	// Verify that the record did indeed make its way down into KV where the
 	// replica can read it from. We then verify (below) that the failed record
 	// does not affect the ability to GC.
-	require.NoError(
-		t,
-		ptutil.TestingVerifyProtectionTimestampExistsOnSpans(
-			ctx, t, s0, ptsReader, failedRec.Timestamp, failedRec.DeprecatedSpans,
-		),
+	ptutil.TestingWaitForProtectedTimestampToExistOnSpans(
+		ctx, t, s0, ptsReader, failedRec.Timestamp, failedRec.DeprecatedSpans,
 	)
 
 	// Add a new record that is after the old record.
@@ -239,11 +234,8 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 	laterRec.Timestamp = afterWrites
 	laterRec.Timestamp.Logical = 0
 	require.NoError(t, ptsWithDB.Protect(ctx, &laterRec))
-	require.NoError(
-		t,
-		ptutil.TestingVerifyProtectionTimestampExistsOnSpans(
-			ctx, t, s0, ptsReader, laterRec.Timestamp, laterRec.DeprecatedSpans,
-		),
+	ptutil.TestingWaitForProtectedTimestampToExistOnSpans(
+		ctx, t, s0, ptsReader, laterRec.Timestamp, laterRec.DeprecatedSpans,
 	)
 
 	// Release the record that had succeeded and ensure that GC eventually

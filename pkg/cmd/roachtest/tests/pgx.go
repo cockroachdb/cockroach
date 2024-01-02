@@ -25,6 +25,9 @@ import (
 )
 
 var pgxReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+
+// WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
+// This is used by docs automation to produce a list of supported versions for ORM's.
 var supportedPGXTag = "v5.3.1"
 
 // This test runs pgx's full test suite against a single cockroach node.
@@ -40,8 +43,7 @@ func registerPgx(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -81,6 +83,11 @@ func registerPgx(r registry.Registry) {
 		); err != nil {
 			t.Fatal(err)
 		}
+		// It's safer to clean up dependencies this way than it is to give the cluster
+		// wipe root access.
+		defer func() {
+			c.Run(ctx, c.All(), "go clean -modcache")
+		}()
 
 		RunningStatus := fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 			version, "pgxBlocklist", "pgxIgnorelist")
@@ -110,7 +117,7 @@ func registerPgx(r registry.Registry) {
 			ctx, c, t, node,
 			"run pgx test suite",
 			"cd /mnt/data1/pgx && "+
-				"PGX_TEST_DATABASE='postgresql://root:@localhost:26257/pgx_test' go test -v 2>&1 | "+
+				"PGX_TEST_DATABASE='postgresql://root:@localhost:{pgport:1}/pgx_test' go test -v 2>&1 | "+
 				"`go env GOPATH`/bin/go-junit-report",
 		)
 
@@ -131,11 +138,12 @@ func registerPgx(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "pgx",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `driver`),
+		Name:             "pgx",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.Driver),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPgx(ctx, t, c)
 		},

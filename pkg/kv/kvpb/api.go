@@ -13,6 +13,8 @@ package kvpb
 import (
 	"context"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	_ "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil" // see RequestHeader
@@ -91,8 +93,8 @@ var flagExclusions = map[flag][]flag{
 
 // IsReadOnly returns true iff the request is read-only. A request is
 // read-only if it does not go through raft, meaning that it cannot
-// change any replicated state. However, read-only requests may still
-// acquire locks with an unreplicated durability level; see IsLocking.
+// change any replicated state. However, read-only requests may still acquire
+// locks, but only with unreplicated durability.
 func IsReadOnly(args Request) bool {
 	flags := args.flags()
 	return (flags&isRead) != 0 && (flags&isWrite) == 0
@@ -192,32 +194,112 @@ type Request interface {
 	flags() flag
 }
 
+// SafeFormatterRequest is an optional extension interface used to allow request to do custom formatting.
+type SafeFormatterRequest interface {
+	Request
+	redact.SafeFormatter
+}
+
+var _ SafeFormatterRequest = (*GetRequest)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (gr *GetRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Print(gr.Method())
+	if gr.KeyLockingStrength == lock.None {
+		return
+	}
+	s.Printf("(%s,%s)", gr.KeyLockingStrength, gr.KeyLockingDurability)
+}
+
+var _ SafeFormatterRequest = (*ScanRequest)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (sr *ScanRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Print(sr.Method())
+	if sr.KeyLockingStrength == lock.None {
+		return
+	}
+	s.Printf("(%s,%s)", sr.KeyLockingStrength, sr.KeyLockingDurability)
+}
+
+var _ SafeFormatterRequest = (*ReverseScanRequest)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rsr *ReverseScanRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Print(rsr.Method())
+	if rsr.KeyLockingStrength == lock.None {
+		return
+	}
+	s.Printf("(%s,%s)", rsr.KeyLockingStrength, rsr.KeyLockingDurability)
+}
+
+var _ SafeFormatterRequest = (*EndTxnRequest)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (etr *EndTxnRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Printf("%s(", etr.Method())
+	if etr.Commit {
+		if etr.IsParallelCommit() {
+			s.Printf("parallel commit")
+		} else {
+			s.Printf("commit")
+		}
+	} else {
+		s.Printf("abort")
+	}
+	if etr.InternalCommitTrigger != nil {
+		s.Printf(" %s", etr.InternalCommitTrigger.Kind())
+	}
+	s.Printf(")")
+}
+
+var _ SafeFormatterRequest = (*RecoverTxnRequest)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rtr *RecoverTxnRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Printf("%s(%s, ", rtr.Method(), rtr.Txn.Short())
+	if rtr.ImplicitlyCommitted {
+		s.Printf("commit")
+	} else {
+		s.Printf("abort")
+	}
+	s.Printf(")")
+}
+
+var _ SafeFormatterRequest = (*PushTxnRequest)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (ptr *PushTxnRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Printf("PushTxn(%s,%s->%s)",
+		ptr.PushType, ptr.PusherTxn.Short(), ptr.PusheeTxn.Short())
+}
+
 // LockingReadRequest is an interface used to expose the key-level locking
 // strength of a read-only request.
 type LockingReadRequest interface {
 	Request
-	KeyLockingStrength() lock.Strength
+	KeyLocking() (lock.Strength, lock.Durability)
 }
 
 var _ LockingReadRequest = (*GetRequest)(nil)
 
-// KeyLockingStrength implements the LockingReadRequest interface.
-func (gr *GetRequest) KeyLockingStrength() lock.Strength {
-	return gr.KeyLocking
+// KeyLocking implements the LockingReadRequest interface.
+func (gr *GetRequest) KeyLocking() (lock.Strength, lock.Durability) {
+	return gr.KeyLockingStrength, gr.KeyLockingDurability
 }
 
 var _ LockingReadRequest = (*ScanRequest)(nil)
 
-// KeyLockingStrength implements the LockingReadRequest interface.
-func (sr *ScanRequest) KeyLockingStrength() lock.Strength {
-	return sr.KeyLocking
+// KeyLocking implements the LockingReadRequest interface.
+func (sr *ScanRequest) KeyLocking() (lock.Strength, lock.Durability) {
+	return sr.KeyLockingStrength, sr.KeyLockingDurability
 }
 
 var _ LockingReadRequest = (*ReverseScanRequest)(nil)
 
-// KeyLockingStrength implements the LockingReadRequest interface.
-func (rsr *ReverseScanRequest) KeyLockingStrength() lock.Strength {
-	return rsr.KeyLocking
+// KeyLocking implements the LockingReadRequest interface.
+func (rsr *ReverseScanRequest) KeyLocking() (lock.Strength, lock.Durability) {
+	return rsr.KeyLockingStrength, rsr.KeyLockingDurability
 }
 
 // SizedWriteRequest is an interface used to expose the number of bytes a
@@ -713,6 +795,46 @@ func (sr *ReverseScanResponse) Verify(req Request) error {
 	return nil
 }
 
+// TruncatedRequestsString formats a slice of RequestUnions for printing,
+// limited to maxBytes bytes.
+func TruncatedRequestsString(reqs []RequestUnion, maxBytes int) string {
+	if maxBytes < len("<nil>") {
+		panic(errors.AssertionFailedf("maxBytes too low: %d", maxBytes))
+	}
+	if reqs == nil {
+		return "<nil>"
+	}
+	if len(reqs) == 0 {
+		return "[]"
+	}
+	var b strings.Builder
+	b.WriteRune('[')
+	b.WriteString(reqs[0].String())
+	for i := 1; i < len(reqs); i++ {
+		if b.Len() > maxBytes {
+			break
+		}
+		b.WriteRune(' ')
+		b.WriteString(reqs[i].String())
+	}
+	b.WriteRune(']')
+	str := b.String()
+	if len(str) > maxBytes {
+		str = str[:maxBytes-len("…]")]
+		// Check whether we truncated in the middle of a rune.
+		for len(str) > 1 {
+			if r, _ := utf8.DecodeLastRuneInString(str); r == utf8.RuneError {
+				// Shave off another byte and check again.
+				str = str[:len(str)-1]
+			} else {
+				break
+			}
+		}
+		return str + "…]"
+	}
+	return str
+}
+
 // Method implements the Request interface.
 func (*GetRequest) Method() Method { return Get }
 
@@ -1147,15 +1269,29 @@ func (r *IsSpanEmptyRequest) ShallowCopy() Request {
 	return &shallowCopy
 }
 
-// NewGet returns a Request initialized to get the value at key. If
-// forUpdate is true, an unreplicated, exclusive lock is acquired on on
-// the key, if it exists.
-func NewGet(key roachpb.Key, forUpdate bool) Request {
+// NewLockingGet returns a Request initialized to get the value at key. A lock
+// corresponding to the supplied lock strength and durability is acquired on the
+// key, if it exists.
+func NewLockingGet(
+	key roachpb.Key, str KeyLockingStrengthType, dur KeyLockingDurabilityType,
+) Request {
 	return &GetRequest{
 		RequestHeader: RequestHeader{
 			Key: key,
 		},
-		KeyLocking: scanLockStrength(forUpdate),
+		KeyLockingStrength:   scanLockStrength(str),
+		KeyLockingDurability: scanLockDurability(dur),
+	}
+}
+
+// NewGet returns a Request initialized to get the value at key. No lock is
+// acquired on the key, even if it exists.
+func NewGet(key roachpb.Key) Request {
+	return &GetRequest{
+		RequestHeader: RequestHeader{
+			Key: key,
+		},
+		KeyLockingStrength: lock.None,
 	}
 }
 
@@ -1272,37 +1408,138 @@ func NewDeleteRange(startKey, endKey roachpb.Key, returnKeys bool) Request {
 	}
 }
 
-// NewScan returns a Request initialized to scan from start to end keys.
-// If forUpdate is true, unreplicated, exclusive locks are acquired on
-// each of the resulting keys.
-func NewScan(key, endKey roachpb.Key, forUpdate bool) Request {
+// NewLockingScan returns a Request initialized to scan from start to end keys.
+// A lock corresponding to the supplied lock strength and durability will be
+// acquired on each of the resulting keys.
+func NewLockingScan(
+	key, endKey roachpb.Key, str KeyLockingStrengthType, dur KeyLockingDurabilityType,
+) Request {
 	return &ScanRequest{
 		RequestHeader: RequestHeader{
 			Key:    key,
 			EndKey: endKey,
 		},
-		KeyLocking: scanLockStrength(forUpdate),
+		KeyLockingStrength:   scanLockStrength(str),
+		KeyLockingDurability: scanLockDurability(dur),
 	}
 }
 
-// NewReverseScan returns a Request initialized to reverse scan from end.
-// If forUpdate is true, unreplicated, exclusive locks are acquired on
-// each of the resulting keys.
-func NewReverseScan(key, endKey roachpb.Key, forUpdate bool) Request {
+// NewScan returns a Request initialized to scan from start to end keys. No
+// locks will be acquired on the resulting keys.
+func NewScan(key, endKey roachpb.Key) Request {
+	return &ScanRequest{
+		RequestHeader: RequestHeader{
+			Key:    key,
+			EndKey: endKey,
+		},
+		KeyLockingStrength: lock.None,
+	}
+}
+
+// NewLockingReverseScan returns a Request initialized to reverse scan from end.
+// A lock corresponding to the supplied lock strength and durability will be
+// acquired on each of the resulting keys.
+func NewLockingReverseScan(
+	key, endKey roachpb.Key, str KeyLockingStrengthType, dur KeyLockingDurabilityType,
+) Request {
 	return &ReverseScanRequest{
 		RequestHeader: RequestHeader{
 			Key:    key,
 			EndKey: endKey,
 		},
-		KeyLocking: scanLockStrength(forUpdate),
+		KeyLockingStrength:   scanLockStrength(str),
+		KeyLockingDurability: scanLockDurability(dur),
 	}
 }
 
-func scanLockStrength(forUpdate bool) lock.Strength {
-	if forUpdate {
-		return lock.Exclusive
+// NewReverseScan returns a Request initialized to reverse scan from end. No
+// locks will be acquired on each of the resulting keys.
+func NewReverseScan(key, endKey roachpb.Key) Request {
+	return &ReverseScanRequest{
+		RequestHeader: RequestHeader{
+			Key:    key,
+			EndKey: endKey,
+		},
+		KeyLockingStrength: lock.None,
 	}
-	return lock.None
+}
+
+// KeyLockingStrengthType is used to describe per-key locking strengths
+// associated with Get, Scan, and ReverseScan requests.
+type KeyLockingStrengthType int8
+
+const (
+	_ KeyLockingStrengthType = iota
+	// NonLocking indicates any keys returned will not be locked.
+	NonLocking
+	// ForShare indicates any keys returned will be locked for share; this means
+	// concurrent requests will be able to read the key or lock it ForShare
+	// themselves. Requests will not be allowed to write to the key. The semantics
+	// here correspond to acquiring a Read lock for a ReadWrite mutex.
+	ForShare
+	// ForUpdate indicates any keys returned will be locked for update; the
+	// transaction that holds the lock will have exclusive write access to the
+	// key. No other transaction is able to acquire a lock on the key; note that
+	// locking a key ForUpdate does not impact concurrent non-locking requests.
+	// The semantics here correspond to acquiring a Write lock in a ReadWrite
+	// mutex.
+	ForUpdate
+)
+
+// KeyLockingDurabilityType is used to describe the durability goals of per-key
+// locks acquired by locking Get, Scan, and ReverseScan requests.
+type KeyLockingDurabilityType int8
+
+const (
+	// Invalid is meant to be used in places where supplying lock durability does
+	// not make sense. Notably, it's used by non-locking requests.
+	Invalid KeyLockingDurabilityType = iota
+	// BestEffort makes a best-effort attempt to hold any locks acquired until
+	// commit time. Locks are held in-memory on the leaseholder of the locked key;
+	// locks may be lost because of things like lease transfers, node restarts,
+	// range splits, and range merges. However, the unreplicated nature of these
+	// locks makes lock acquisition fast, making this a great choice for
+	// transactions that do not require locks for correctness -- serializable
+	// transactions.
+	BestEffort
+	// GuaranteedDurability guarantees that if the transaction commits then any
+	// locks acquired by it will be held until commit time. On commit, once the
+	// locks are released, no subsequent writers will be able to write at or below
+	// the transaction's commit timestamp -- regardless of the timestamp at which
+	// the lock was acquired. Simply put, once acquired, locks are guaranteed to
+	// provide protection until commit time.
+	//
+	// To provide this guarantee, locks are replicated -- which means they come
+	// with the performance penalties of doing so. They're attractive choices for
+	// transactions that require locks for correctness (read: read-committed,
+	// snapshot isolation).
+	GuaranteedDurability
+)
+
+func scanLockStrength(str KeyLockingStrengthType) lock.Strength {
+	switch str {
+	case NonLocking:
+		panic(fmt.Sprintf("unexpected strength %d", str))
+	case ForShare:
+		return lock.Shared
+	case ForUpdate:
+		return lock.Exclusive
+	default:
+		panic(fmt.Sprintf("unknown strength type: %d", str))
+	}
+}
+
+func scanLockDurability(dur KeyLockingDurabilityType) lock.Durability {
+	switch dur {
+	case Invalid:
+		panic("invalid lock durability")
+	case BestEffort:
+		return lock.Unreplicated
+	case GuaranteedDurability:
+		return lock.Replicated
+	default:
+		panic(fmt.Sprintf("unknown durability type: %d", dur))
+	}
 }
 
 func flagForLockStrength(l lock.Strength) flag {
@@ -1312,9 +1549,17 @@ func flagForLockStrength(l lock.Strength) flag {
 	return 0
 }
 
+func flagForLockDurability(d lock.Durability) flag {
+	if d == lock.Replicated {
+		return isWrite
+	}
+	return 0
+}
+
 func (gr *GetRequest) flags() flag {
-	maybeLocking := flagForLockStrength(gr.KeyLocking)
-	return isRead | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
+	maybeLocking := flagForLockStrength(gr.KeyLockingStrength)
+	maybeWrite := flagForLockDurability(gr.KeyLockingDurability)
+	return isRead | maybeWrite | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 func (*PutRequest) flags() flag {
@@ -1403,13 +1648,15 @@ func (*RevertRangeRequest) flags() flag {
 }
 
 func (sr *ScanRequest) flags() flag {
-	maybeLocking := flagForLockStrength(sr.KeyLocking)
-	return isRead | isRange | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
+	maybeLocking := flagForLockStrength(sr.KeyLockingStrength)
+	maybeWrite := flagForLockDurability(sr.KeyLockingDurability)
+	return isRead | maybeWrite | isRange | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 func (rsr *ReverseScanRequest) flags() flag {
-	maybeLocking := flagForLockStrength(rsr.KeyLocking)
-	return isRead | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
+	maybeLocking := flagForLockStrength(rsr.KeyLockingStrength)
+	maybeWrite := flagForLockDurability(rsr.KeyLockingDurability)
+	return isRead | maybeWrite | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 // EndTxn updates the timestamp cache to prevent replays.
@@ -1455,8 +1702,8 @@ func (*QueryIntentRequest) flags() flag {
 	return isRead | isPrefix | updatesTSCache | updatesTSCacheOnErr
 }
 func (*QueryLocksRequest) flags() flag         { return isRead | isRange }
-func (*ResolveIntentRequest) flags() flag      { return isWrite }
-func (*ResolveIntentRangeRequest) flags() flag { return isWrite | isRange }
+func (*ResolveIntentRequest) flags() flag      { return isWrite | updatesTSCache }
+func (*ResolveIntentRangeRequest) flags() flag { return isWrite | isRange | updatesTSCache }
 func (*TruncateLogRequest) flags() flag        { return isWrite }
 func (*MergeRequest) flags() flag              { return isWrite | canBackpressure }
 func (*RequestLeaseRequest) flags() flag {
@@ -1766,6 +2013,7 @@ func (c *TenantConsumption) Add(other *TenantConsumption) {
 	c.PGWireEgressBytes += other.PGWireEgressBytes
 	c.ExternalIOIngressBytes += other.ExternalIOIngressBytes
 	c.ExternalIOEgressBytes += other.ExternalIOEgressBytes
+	c.CrossRegionNetworkRU += other.CrossRegionNetworkRU
 }
 
 // Sub subtracts consumption, making sure no fields become negative.
@@ -1841,33 +2089,46 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 	} else {
 		c.ExternalIOIngressBytes -= other.ExternalIOIngressBytes
 	}
+
+	if c.CrossRegionNetworkRU < other.CrossRegionNetworkRU {
+		c.CrossRegionNetworkRU = 0
+	} else {
+		c.CrossRegionNetworkRU -= other.CrossRegionNetworkRU
+	}
 }
 
-func humanizePointCount(n uint64) redact.SafeString {
-	return redact.SafeString(humanize.SI(float64(n), ""))
+func humanizeCount(n uint64) redact.SafeString {
+	value, prefix := humanize.ComputeSI(float64(n))
+	return redact.SafeString(humanize.Ftoa(value) + prefix)
 }
 
 // SafeFormat implements redact.SafeFormatter.
 func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("scan stats: stepped %d times (%d internal); seeked %d times (%d internal); "+
+	w.Printf("scan stats: stepped %s times (%s internal); seeked %s times (%s internal); "+
 		"block-bytes: (total %s, cached %s); "+
 		"points: (count %s, key-bytes %s, value-bytes %s, tombstoned: %s) "+
 		"ranges: (count %s), (contained-points %s, skipped-points %s) "+
-		"evaluated requests: %d gets, %d scans, %d reverse scans",
-		s.NumInterfaceSteps, s.NumInternalSteps, s.NumInterfaceSeeks, s.NumInternalSeeks,
+		"evaluated requests: %s gets, %s scans, %s reverse scans",
+		humanizeCount(s.NumInterfaceSteps),
+		humanizeCount(s.NumInternalSteps),
+		humanizeCount(s.NumInterfaceSeeks),
+		humanizeCount(s.NumInternalSeeks),
 		humanizeutil.IBytes(int64(s.BlockBytes)),
 		humanizeutil.IBytes(int64(s.BlockBytesInCache)),
-		humanizePointCount(s.PointCount),
+		humanizeCount(s.PointCount),
 		humanizeutil.IBytes(int64(s.KeyBytes)),
 		humanizeutil.IBytes(int64(s.ValueBytes)),
-		humanizePointCount(s.PointsCoveredByRangeTombstones),
-		humanizePointCount(s.RangeKeyCount),
-		humanizePointCount(s.RangeKeyContainedPoints),
-		humanizePointCount(s.RangeKeySkippedPoints),
-		s.NumGets, s.NumScans, s.NumReverseScans)
+		humanizeCount(s.PointsCoveredByRangeTombstones),
+		humanizeCount(s.RangeKeyCount),
+		humanizeCount(s.RangeKeyContainedPoints),
+		humanizeCount(s.RangeKeySkippedPoints),
+		humanizeCount(s.NumGets),
+		humanizeCount(s.NumScans),
+		humanizeCount(s.NumReverseScans),
+	)
 	if s.SeparatedPointCount != 0 {
 		w.Printf(" separated: (count: %s, bytes: %s, bytes-fetched: %s)",
-			humanizePointCount(s.SeparatedPointCount),
+			humanizeCount(s.SeparatedPointCount),
 			humanizeutil.IBytes(int64(s.SeparatedPointValueBytes)),
 			humanizeutil.IBytes(int64(s.SeparatedPointValueBytesFetched)))
 	}
@@ -1877,22 +2138,6 @@ func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
 func (s *ScanStats) String() string {
 	return redact.StringWithoutMarkers(s)
 }
-
-// TenantSettingsPrecedence identifies the precedence of a set of setting
-// overrides. It is used by the TenantSettings API which supports passing
-// multiple overrides for the same setting.
-type TenantSettingsPrecedence uint32
-
-const (
-	// SpecificTenantOverrides is the high precedence for tenant setting overrides.
-	// These overrides take precedence over AllTenantsOverrides.
-	SpecificTenantOverrides TenantSettingsPrecedence = 1 + iota
-
-	// AllTenantsOverrides is the low precedence for tenant setting overrides.
-	// These overrides are only effectual for a tenant if there is no override
-	// with the SpecificTenantOverrides precedence..
-	AllTenantsOverrides
-)
 
 // RangeFeedEventSink is an interface for sending a single rangefeed event.
 type RangeFeedEventSink interface {
@@ -1907,3 +2152,6 @@ type RangeFeedEventProducer interface {
 	// range needs to be restarted.
 	Recv() (*RangeFeedEvent, error)
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (PushTxnType) SafeValue() {}

@@ -11,9 +11,7 @@ GIT_GREP="git $CONFIGS grep"
 
 EXISTING_GO_GENERATE_COMMENTS="
 pkg/config/field.go://go:generate stringer --type=Field --linecomment
-pkg/roachprod/vm/aws/config.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg aws -o embedded.go config.json old.json
-pkg/roachprod/vm/aws/config.go://go:generate gofmt -s -w embedded.go
-pkg/roachprod/vm/aws/config.go://go:generate goimports -w embedded.go
+pkg/rpc/context.go://go:generate mockgen -destination=mocks_generated_test.go --package=. Dialbacker
 pkg/roachprod/vm/aws/config.go://go:generate terraformgen -o terraform/main.tf
 pkg/roachprod/prometheus/prometheus.go://go:generate mockgen -package=prometheus -destination=mocks_generated_test.go . Cluster
 pkg/cmd/roachtest/clusterstats/collector.go://go:generate mockgen -package=clusterstats -destination mocks_generated_test.go github.com/cockroachdb/cockroach/pkg/roachprod/prometheus Client
@@ -21,15 +19,11 @@ pkg/cmd/roachtest/tests/drt.go://go:generate mockgen -package tests -destination
 pkg/kv/kvclient/kvcoord/transport.go://go:generate mockgen -package=kvcoord -destination=mocks_generated_test.go . Transport
 pkg/kv/kvclient/rangecache/range_cache.go://go:generate mockgen -package=rangecachemock -destination=rangecachemock/mocks_generated.go . RangeDescriptorDB
 pkg/kv/kvclient/rangefeed/rangefeed.go://go:generate mockgen -destination=mocks_generated_test.go --package=rangefeed . DB
-pkg/kv/kvserver/concurrency/lock_table.go://go:generate ../../../util/interval/generic/gen.sh *lockState concurrency
+pkg/kv/kvserver/concurrency/lock_table.go://go:generate ../../../util/interval/generic/gen.sh *keyLocks concurrency
 pkg/kv/kvserver/spanlatch/manager.go://go:generate ../../../util/interval/generic/gen.sh *latch spanlatch
 pkg/kv/kvpb/api.go://go:generate mockgen -package=kvpbmock -destination=kvpbmock/mocks_generated.go . InternalClient,Internal_RangeFeedClient,Internal_MuxRangeFeedClient
 pkg/kv/kvpb/batch.go://go:generate go run gen/main.go --filename batch_generated.go *.pb.go
 pkg/security/certmgr/cert.go://go:generate mockgen -package=certmgr -destination=mocks_generated_test.go . Cert
-pkg/security/securitytest/securitytest.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg securitytest -o embedded.go -ignore README.md -ignore regenerate.sh test_certs
-pkg/security/securitytest/securitytest.go://go:generate gofmt -s -w embedded.go
-pkg/security/securitytest/securitytest.go://go:generate goimports -w embedded.go
-pkg/server/api_v2.go://-go:generate swagger generate spec -w . -o ../../docs/generated/swagger/spec.json --scan-models
 pkg/spanconfig/spanconfigstore/span_store.go://go:generate ../../util/interval/generic/gen.sh *entry spanconfigstore
 pkg/sql/conn_fsm.go://go:generate ../util/fsm/gen/reports.sh TxnStateTransitions stateNoTxn
 pkg/sql/opt/optgen/lang/gen.go://go:generate langgen -out expr.og.go exprs lang.opt
@@ -49,11 +43,9 @@ pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto log_ch
 pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto logging.md ../../../docs/generated/logging.md
 pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto severity.go severity/severity_generated.go
 pkg/util/log/sinks.go://go:generate mockgen -package=log -destination=mocks_generated_test.go --mock_names=TestingLogSink=MockLogSink . TestingLogSink
+pkg/util/span/frontier.go://go:generate ../interval/generic/gen.sh *frontierEntry span
 pkg/util/timeutil/zoneinfo.go://go:generate go run gen/main.go
-"
-
-EXISTING_BROKEN_TESTS_IN_BAZEL="
-pkg/cmd/prereqs/BUILD.bazel
+pkg/internal/team/team.go://go:generate cp ../../../TEAMS.yaml TEAMS.yaml
 "
 
 EXISTING_CRDB_TEST_BUILD_CONSTRAINTS="
@@ -93,16 +85,6 @@ $GIT_GREP '//go:generate' 'pkg/**/*.go' | grep -v stringer | grep -v 'add-leakte
     echo 'present in the Bazel build as well, then add the line to the'
     echo 'EXISTING_GO_GENERATE_COMMENTS in build/bazelutil/check.sh.'
     echo 'Also see https://cockroachlabs.atlassian.net/wiki/spaces/CRDB/pages/1380090083/How+to+ensure+your+code+builds+with+Bazel'
-    exit 1
-done
-
-$GIT_GREP 'broken_in_bazel' pkg | grep BUILD.bazel: | grep -v pkg/BUILD.bazel | grep -v pkg/cli/BUILD.bazel | grep -v generate-bazel-extra | cut -d: -f1 | while read LINE; do
-    if [[ "$EXISTING_BROKEN_TESTS_IN_BAZEL" == *"$LINE"* ]]; then
-	# Grandfathered.
-	continue
-    fi
-    echo "A new broken test in Bazel was added in $LINE"
-    echo 'Ensure the test runs with Bazel, then remove the broken_in_bazel tag.'
     exit 1
 done
 

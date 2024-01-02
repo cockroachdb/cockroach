@@ -8,9 +8,6 @@
     "DatatypeMismatches": 0
   },
   "diffs": {
-    "routines": {
-      "scope_schema": null
-    },
     "schemata": {
       "default_character_set_catalog": null,
       "default_character_set_schema": null,

@@ -56,28 +56,21 @@ where phoneregis0_.phone_id=1;
 project
  ├── columns: phone_id1_2_0_:1!null person_i2_2_0_:2!null formula159_0_:17 id1_1_1_:5!null number2_1_1_:6 since3_1_1_:7 type4_1_1_:8
  ├── key: (5)
- ├── fd: ()-->(1), (5)-->(6-8), (2)==(5), (5)==(2), (2)-->(17)
- ├── inner-join (lookup phone [as=a10])
- │    ├── columns: phone_id:1!null person_id:2!null unidirecti1_.id:5!null unidirecti1_.number:6 unidirecti1_.since:7 unidirecti1_.type:8 a10.id:11!null a10.since:13
- │    ├── key columns: [2] = [11]
+ ├── fd: ()-->(1), (5)-->(6-8), (2)==(5), (5)==(2), (7)==(17), (17)==(7)
+ ├── inner-join (lookup phone [as=unidirecti1_])
+ │    ├── columns: phone_id:1!null person_id:2!null unidirecti1_.id:5!null unidirecti1_.number:6 unidirecti1_.since:7 unidirecti1_.type:8
+ │    ├── key columns: [2] = [5]
  │    ├── lookup columns are key
- │    ├── key: (11)
- │    ├── fd: ()-->(1), (5)-->(6-8), (2)==(5,11), (5)==(2,11), (11)-->(13), (11)==(2,5)
- │    ├── inner-join (lookup phone [as=unidirecti1_])
- │    │    ├── columns: phone_id:1!null person_id:2!null unidirecti1_.id:5!null unidirecti1_.number:6 unidirecti1_.since:7 unidirecti1_.type:8
- │    │    ├── key columns: [2] = [5]
- │    │    ├── lookup columns are key
- │    │    ├── key: (5)
- │    │    ├── fd: ()-->(1), (5)-->(6-8), (2)==(5), (5)==(2)
- │    │    ├── scan phone_register [as=phoneregis0_]
- │    │    │    ├── columns: phone_id:1!null person_id:2!null
- │    │    │    ├── constraint: /1/2: [/1 - /1]
- │    │    │    ├── key: (2)
- │    │    │    └── fd: ()-->(1)
- │    │    └── filters (true)
+ │    ├── key: (5)
+ │    ├── fd: ()-->(1), (5)-->(6-8), (2)==(5), (5)==(2)
+ │    ├── scan phone_register [as=phoneregis0_]
+ │    │    ├── columns: phone_id:1!null person_id:2!null
+ │    │    ├── constraint: /1/2: [/1 - /1]
+ │    │    ├── key: (2)
+ │    │    └── fd: ()-->(1)
  │    └── filters (true)
  └── projections
-      └── a10.since:13 [as=formula159_0_:17, outer=(13)]
+      └── unidirecti1_.since:7 [as=formula159_0_:17, outer=(7)]
 
 exec-ddl
 drop table phone_register, Person, Phone;

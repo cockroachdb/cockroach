@@ -11,9 +11,11 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -21,6 +23,8 @@ import (
 
 // DropDatabase implements DROP DATABASE.
 func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
+	fallBackIfMRSystemDatabase(b, n)
+
 	elts := b.ResolveDatabase(n.Name, ResolveParams{
 		IsExistenceOptional: n.IfExists,
 		RequiredPrivilege:   privilege.DROP,
@@ -46,7 +50,7 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 	}
 	// Implicitly DROP RESTRICT the public schema as well.
 	var publicSchemaID catid.DescID
-	b.BackReferences(db.DatabaseID).ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+	b.BackReferences(db.DatabaseID).ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch t := e.(type) {
 		case *scpb.Schema:
 			if t.IsPublic {
@@ -67,4 +71,12 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 	}
 	panic(pgerror.DangerousStatementf(
 		"DROP DATABASE on non-empty database without explicit CASCADE"))
+}
+
+func fallBackIfMRSystemDatabase(b BuildCtx, t *tree.DropDatabase) {
+	// TODO(jeffswenson): delete once region_livess is implemented (#107966)
+	_, _, dbRegionConfig := scpb.FindDatabaseRegionConfig(b.QueryByID(keys.SystemDatabaseID))
+	if dbRegionConfig != nil {
+		panic(scerrors.NotImplementedErrorf(t, "drop database not implemented when the system database is multi-region"))
+	}
 }

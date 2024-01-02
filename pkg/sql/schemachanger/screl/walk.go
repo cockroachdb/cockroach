@@ -55,6 +55,12 @@ func WalkConstraintIDs(e scpb.Element, f func(id *catid.ConstraintID) error) err
 	})
 }
 
+func WalkIndexIDs(e scpb.Element, f func(id *catid.IndexID) error) error {
+	return walk(reflect.TypeOf((*catid.IndexID)(nil)), e, func(i interface{}) error {
+		return f(i.(*catid.IndexID))
+	})
+}
+
 // walk will use reflection to find all values which are either scalars
 // types or pointers types and pass them to f as pointers. The
 // expectation is that the input is a pointer to some structure so that

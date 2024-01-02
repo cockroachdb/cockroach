@@ -56,16 +56,16 @@ type Reader interface {
 	// as ordering, through IteratorOptions argument. StatementVisitor can return
 	// error, if an error is returned after the execution of the visitor, the
 	// iteration is aborted.
-	IterateStatementStats(context.Context, *IteratorOptions, StatementVisitor) error
+	IterateStatementStats(context.Context, IteratorOptions, StatementVisitor) error
 
 	// IterateTransactionStats iterates through all the collected transaction
 	// statistics by using TransactionVisitor. It behaves similarly to
 	// IterateStatementStats.
-	IterateTransactionStats(context.Context, *IteratorOptions, TransactionVisitor) error
+	IterateTransactionStats(context.Context, IteratorOptions, TransactionVisitor) error
 
 	// IterateAggregatedTransactionStats iterates through all the collected app-level
 	// transactions statistics. It behaves similarly to IterateStatementStats.
-	IterateAggregatedTransactionStats(context.Context, *IteratorOptions, AggregatedTransactionVisitor) error
+	IterateAggregatedTransactionStats(context.Context, IteratorOptions, AggregatedTransactionVisitor) error
 }
 
 // ApplicationStats is an interface to read from or write to the statistics
@@ -93,6 +93,10 @@ type ApplicationStats interface {
 		ctx context.Context,
 		other ApplicationStats,
 	) uint64
+
+	// MaybeLogDiscardMessage is used to possibly log a message when statistics
+	// are being discarded because of memory limits.
+	MaybeLogDiscardMessage(ctx context.Context)
 
 	// NewApplicationStatsWithInheritedOptions returns a new ApplicationStats
 	// interface that inherits all memory limits of the existing
@@ -209,7 +213,6 @@ type RecordedStmtStats struct {
 	RowsRead             int64
 	RowsWritten          int64
 	Nodes                []int64
-	Regions              []string
 	StatementType        tree.StatementType
 	Plan                 *appstatspb.ExplainTreePlanNode
 	PlanGist             string
@@ -248,4 +251,5 @@ type RecordedTxnStats struct {
 	BytesRead               int64
 	Priority                roachpb.UserPriority
 	SessionData             *sessiondata.SessionData
+	TxnErr                  error
 }

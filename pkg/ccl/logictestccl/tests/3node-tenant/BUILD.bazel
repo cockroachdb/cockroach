@@ -1,26 +1,23 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "3node-tenant_test",
     size = "enormous",
     srcs = ["generated_test.go"],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
     data = [
         "//c-deps:libgeos",  # keep
         "//pkg/ccl/logictestccl:testdata",  # keep
         "//pkg/sql/logictest:testdata",  # keep
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep
     ],
+    exec_properties = {"Pool": "large"},
     shard_count = 48,
     tags = [
         "ccl_test",
         "cpu:2",
     ],
     deps = [
+        "//pkg/base",
         "//pkg/build/bazel",
         "//pkg/ccl",
         "//pkg/security/securityassets",
@@ -35,5 +32,3 @@ go_test(
         "//pkg/util/randutil",
     ],
 )
-
-get_x_data(name = "get_x_data")

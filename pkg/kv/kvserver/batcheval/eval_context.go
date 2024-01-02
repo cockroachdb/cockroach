@@ -103,7 +103,7 @@ type EvalContext interface {
 	GetMaxSplitCPU(context.Context) (float64, bool)
 
 	GetGCThreshold() hlc.Timestamp
-	ExcludeDataFromBackup() bool
+	ExcludeDataFromBackup(ctx context.Context) bool
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
 	GetLease() (roachpb.Lease, roachpb.Lease)
 	GetRangeInfo(context.Context) roachpb.RangeInfo
@@ -130,7 +130,7 @@ type EvalContext interface {
 	// as an unlimited account).
 	GetResponseMemoryAccount() *mon.BoundAccount
 
-	GetMaxBytes() int64
+	GetMaxBytes(context.Context) int64
 
 	// GetEngineCapacity returns the store's underlying engine capacity; other
 	// StoreCapacity fields not related to engine capacity are not populated.
@@ -145,6 +145,9 @@ type EvalContext interface {
 	// calling RevokeLease or WatchForMerge) to freeze further progression of the
 	// closed timestamp before calling this method.
 	GetCurrentClosedTimestamp(ctx context.Context) hlc.Timestamp
+
+	// AdmissionHeader returns the AdmissionHeader specified for the batch.
+	AdmissionHeader() kvpb.AdmissionHeader
 
 	// Release returns the memory allocated by the EvalContext implementation to a
 	// sync.Pool.
@@ -273,7 +276,7 @@ func (m *mockEvalCtxImpl) MinTxnCommitTS(
 func (m *mockEvalCtxImpl) GetGCThreshold() hlc.Timestamp {
 	return m.GCThreshold
 }
-func (m *mockEvalCtxImpl) ExcludeDataFromBackup() bool {
+func (m *mockEvalCtxImpl) ExcludeDataFromBackup(context.Context) bool {
 	return false
 }
 func (m *mockEvalCtxImpl) GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error) {
@@ -305,7 +308,7 @@ func (m *mockEvalCtxImpl) GetResponseMemoryAccount() *mon.BoundAccount {
 	// No limits.
 	return nil
 }
-func (m *mockEvalCtxImpl) GetMaxBytes() int64 {
+func (m *mockEvalCtxImpl) GetMaxBytes(context.Context) int64 {
 	if m.MaxBytes != 0 {
 		return m.MaxBytes
 	}
@@ -317,4 +320,9 @@ func (m *mockEvalCtxImpl) GetEngineCapacity() (roachpb.StoreCapacity, error) {
 func (m *mockEvalCtxImpl) GetApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
 	return m.ApproxDiskBytes, nil
 }
+
+func (m *mockEvalCtxImpl) AdmissionHeader() kvpb.AdmissionHeader {
+	return kvpb.AdmissionHeader{}
+}
+
 func (m *mockEvalCtxImpl) Release() {}

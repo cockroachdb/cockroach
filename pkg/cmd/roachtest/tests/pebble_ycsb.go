@@ -38,25 +38,25 @@ func registerPebbleYCSB(r registry.Registry) {
 			// which creates a well-known directory structure that is in-turn
 			// relied-upon by the javascript on the Pebble Benchmarks webpage.
 			name := fmt.Sprintf("pebble/ycsb/size=%d", size)
-			tag := "pebble_nightly_ycsb"
+			suites := registry.Suites(registry.PebbleNightlyYCSB)
 
 			// For the shorter benchmark runs, we append a suffix to the name to avoid
 			// a name collision. This is safe to do as these tests are not executed as
-			// part of the nightly benchmark runs (see the tag used to filter, found
-			// in build/teamcity-nightly-pebble.sh).
+			// part of the nightly benchmark runs.
 			if dur != 90 {
-				tag = "pebble"
+				suites = registry.Suites(registry.Pebble)
 				name += fmt.Sprintf("/duration=%d", dur)
 			}
 
 			d := dur
 			r.Add(registry.TestSpec{
-				Name:      name,
-				Owner:     registry.OwnerStorage,
-				Benchmark: true,
-				Timeout:   12 * time.Hour,
-				Cluster:   r.MakeClusterSpec(5, spec.CPU(16)),
-				Tags:      registry.Tags(tag),
+				Name:             name,
+				Owner:            registry.OwnerStorage,
+				Benchmark:        true,
+				Timeout:          12 * time.Hour,
+				Cluster:          r.MakeClusterSpec(5, spec.CPU(16)),
+				CompatibleClouds: registry.AllClouds,
+				Suites:           suites,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runPebbleYCSB(ctx, t, c, size, pebble, d, nil, true /* artifacts */)
 				},
@@ -66,13 +66,14 @@ func registerPebbleYCSB(r registry.Registry) {
 
 	// Add the race build.
 	r.Add(registry.TestSpec{
-		Name:      "pebble/ycsb/A/race/duration=30",
-		Owner:     registry.OwnerStorage,
-		Benchmark: true,
-		Timeout:   12 * time.Hour,
-		Cluster:   r.MakeClusterSpec(5, spec.CPU(16)),
-		Leases:    registry.MetamorphicLeases,
-		Tags:      registry.Tags("pebble_nightly_ycsb_race"),
+		Name:             "pebble/ycsb/A/race/duration=30",
+		Owner:            registry.OwnerStorage,
+		Benchmark:        true,
+		Timeout:          12 * time.Hour,
+		Cluster:          r.MakeClusterSpec(5, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.PebbleNightlyYCSBRace),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPebbleYCSB(ctx, t, c, 64, pebble, 30, []string{"A"}, false /* artifacts */)
 		},

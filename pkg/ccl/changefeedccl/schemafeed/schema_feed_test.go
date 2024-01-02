@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -55,6 +54,20 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 			t.Fatalf(`expected empty channel got %v`, err)
 		default:
 		}
+	}
+	requireWaitingFor := func(t *testing.T, sf *schemaFeed, ts hlc.Timestamp) {
+		t.Helper()
+		testutils.SucceedsSoon(t, func() error {
+			sf.mu.Lock()
+			defer sf.mu.Unlock()
+
+			for _, w := range sf.mu.waiters {
+				if w.ts == ts {
+					return nil
+				}
+			}
+			return errors.Newf("expected to find waiter for ts=%s", ts)
+		})
 	}
 
 	m := schemaFeed{}
@@ -98,6 +111,8 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	errCh7 := make(chan error, 1)
 	go func() { errCh7 <- m.waitForTS(ctx, ts(7)) }()
 	go func() { errCh6 <- m.waitForTS(ctx, ts(6)) }()
+	requireWaitingFor(t, &m, ts(7))
+	requireWaitingFor(t, &m, ts(6))
 	requireChannelEmpty(t, errCh6)
 	requireChannelEmpty(t, errCh7)
 
@@ -110,6 +125,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.NoError(t, m.ingestDescriptors(ctx, ts(5), ts(6), nil, validateFn))
 	require.NoError(t, <-errCh6)
 	requireChannelEmpty(t, errCh7)
+	requireWaitingFor(t, &m, ts(7))
 
 	// high-water advances again, unblocks errCh7
 	require.NoError(t, m.ingestDescriptors(ctx, ts(6), ts(7), nil, validateFn))
@@ -119,6 +135,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	errCh8 := make(chan error, 1)
 	ctxTS8, cancelTS8 := context.WithCancel(ctx)
 	go func() { errCh8 <- m.waitForTS(ctxTS8, ts(8)) }()
+	requireWaitingFor(t, &m, ts(8))
 	requireChannelEmpty(t, errCh8)
 	cancelTS8()
 	require.EqualError(t, <-errCh8, `context canceled`)
@@ -137,6 +154,8 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	errCh9 := make(chan error, 1)
 	go func() { errCh8 <- m.waitForTS(ctx, ts(8)) }()
 	go func() { errCh9 <- m.waitForTS(ctx, ts(9)) }()
+	requireWaitingFor(t, &m, ts(8))
+	requireWaitingFor(t, &m, ts(9))
 	requireChannelEmpty(t, errCh8)
 	requireChannelEmpty(t, errCh9)
 
@@ -148,9 +167,10 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.EqualError(t, <-errCh9, `descriptor: oh no!`)
 
 	// ts 8 is still unknown
+	requireWaitingFor(t, &m, ts(8))
 	requireChannelEmpty(t, errCh8)
 
-	// always return the earlist error seen (so waiting for ts 10 immediately
+	// always return the earliest error seen (so waiting for ts 10 immediately
 	// returns the 9 error now, it returned the ts 10 error above)
 	require.EqualError(t, m.waitForTS(ctx, ts(9)), `descriptor: oh no!`)
 
@@ -165,8 +185,9 @@ func TestIssuesHighPriorityReadsIfBlocked(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Lay down an intent on system.descriptors table.
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -177,7 +198,7 @@ func TestIssuesHighPriorityReadsIfBlocked(t *testing.T) {
 	highPriorityAfter.Override(ctx, &s.ClusterSettings().SV, priorityAfter)
 	var responseFiles []kvpb.ExportResponse_File
 	testutils.SucceedsWithin(t, func() error {
-		span := roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)}
+		span := roachpb.Span{Key: s.Codec().TablePrefix(keys.DescriptorTableID)}
 		span.EndKey = span.Key.PrefixEnd()
 		resp, err := sendExportRequestWithPriorityOverride(ctx, s.ClusterSettings(),
 			kvDB.NonTransactionalSender(), span, hlc.Timestamp{}, s.Clock().Now())
@@ -197,7 +218,7 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 	ctx := context.Background()
 	var numRequests int
 	first := true
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 			TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
 				for _, ru := range request.Requests {
@@ -220,11 +241,9 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 			},
 		}},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	sqlServer := s.SQLServer().(*sql.Server)
-	if len(s.TestTenants()) != 0 {
-		sqlServer = s.TestTenants()[0].PGServer().(*pgwire.Server).SQLServer
-	}
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	beforeCreate := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
@@ -263,4 +282,58 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, desc, 2)
 	require.Equal(t, 2, numRequests)
+}
+
+func TestSchemaFeedHandlesCascadeDatabaseDrop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	sqlServer := s.SQLServer().(*sql.Server)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	beforeCreate := s.Clock().Now()
+
+	// Create a database, containing user defined type along with table using that type.
+	sqlDB.ExecMultiple(t,
+		`CREATE DATABASE test`,
+		`USE test`,
+		`CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`,
+		`CREATE TABLE foo(a INT, t status DEFAULT 'open')`,
+		`USE defaultdb`,
+	)
+
+	var targets changefeedbase.Targets
+	var tableID descpb.ID
+	sqlDB.QueryRow(t, "SELECT 'test.foo'::regclass::int").Scan(&tableID)
+	targets.Add(changefeedbase.Target{
+		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+		TableID:           tableID,
+		FamilyName:        "primary",
+		StatementTimeName: "foo",
+	})
+	sf := New(ctx, &sqlServer.GetExecutorConfig().DistSQLSrv.ServerConfig,
+		TestingAllEventFilter, targets, s.Clock().Now(), nil, changefeedbase.CanHandle{
+			MultipleColumnFamilies: true,
+			VirtualColumns:         true,
+		}).(*schemaFeed)
+
+	// initialize type dependencies in schema feed.
+	require.NoError(t, sf.primeInitialTableDescs(ctx))
+
+	// DROP database with cascade to cause the type along with the table to be dropped.
+	// Dropped tables are marked as being dropped (i.e. there is an MVCC version of the
+	// descriptor that has a state indicating that the table is being dropped).
+	// However, dependent UDTs are simply deleted so, there is an MVCC tombstone for that type.
+	sqlDB.Exec(t, `DROP DATABASE test CASCADE;`)
+
+	// Fetching descriptor versions from before the initial create statement
+	// up until the current time should result in a catalog.ErrDescriptorDropped error.
+	_, err := sf.fetchDescriptorVersions(ctx, beforeCreate, s.Clock().Now())
+	require.True(t, errors.Is(err, catalog.ErrDescriptorDropped),
+		"expected dropped descriptor error, found: %v", err)
 }

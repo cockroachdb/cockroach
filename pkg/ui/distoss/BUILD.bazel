@@ -2,20 +2,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 genrule(
     name = "genassets",
-    srcs = select({
-        "//pkg/ui:with_ui": ["//pkg/ui/workspaces/db-console:db-console-oss"],
-        "//conditions:default": ["//pkg/ui:gen-empty-index.html"],
-    }),
+    srcs = ["//pkg/ui/workspaces/db-console:db-console-oss"],
     outs = ["assets.tar.gz"],
-    cmd = """
-if [ -d $< ]
-then
-  $(location //pkg/util/targz/gen) $</assets $@
-else
-  $(location //pkg/util/targz/gen) $< $@
-fi
-""",
+    cmd = """$(location //pkg/util/targz/gen) $@ $(SRCS)""",
     exec_tools = ["//pkg/util/targz/gen"],
+    visibility = ["//pkg/gen:__subpackages__"],
 )
 
 go_library(

@@ -23,11 +23,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1254,8 +1256,6 @@ func TestFlagUsage(t *testing.T) {
 Available Commands:
   start             start a node in a multi-node cluster
   start-single-node start a single-node cluster
-  connect           Create certificates for securely connecting with clusters
-
   init              initialize a cluster
   cert              create ca, node, and client certs
   sql               open a sql shell
@@ -1400,21 +1400,251 @@ func TestSQLPodStorageDefaults(t *testing.T) {
 	}
 
 	for _, td := range []struct {
-		args      []string
-		storePath string
-	}{{[]string{"mt", "start-sql", "--tenant-id", "9"}, expectedDefaultDir},
-		{[]string{"mt", "start-sql", "--tenant-id", "9", "--store", "/tmp/data"}, "/tmp/data"},
+		args        []string
+		storePath   string
+		expectedErr string
+	}{
+		{
+			args:      []string{"mt", "start-sql", "--tenant-id", "9"},
+			storePath: expectedDefaultDir,
+		},
+		{
+			args:      []string{"mt", "start-sql", "--tenant-id", "9", "--store", "/tmp/data"},
+			storePath: "/tmp/data",
+		},
+		{
+			args:      []string{"mt", "start-sql", "--tenant-id-file", "foo", "--store", "/tmp/data"},
+			storePath: "/tmp/data",
+		},
+		{
+			args:        []string{"mt", "start-sql", "--tenant-id-file", "foo"},
+			expectedErr: "--store must be explicitly supplied when using --tenant-id-file",
+		},
 	} {
 		t.Run(strings.Join(td.args, ","), func(t *testing.T) {
 			initCLIDefaults()
 			f := mtStartSQLCmd.Flags()
 			require.NoError(t, f.Parse(td.args))
-			require.NoError(t, mtStartSQLCmd.PersistentPreRunE(mtStartSQLCmd, td.args))
-			assert.Equal(t, td.storePath, serverCfg.Stores.Specs[0].Path)
-			for _, s := range serverCfg.Stores.Specs {
-				assert.Zero(t, s.BallastSize.InBytes)
-				assert.Zero(t, s.BallastSize.Percent)
+			err := mtStartSQLCmd.PersistentPreRunE(mtStartSQLCmd, td.args)
+			if td.expectedErr == "" {
+				require.NoError(t, err)
+				assert.Equal(t, td.storePath, serverCfg.Stores.Specs[0].Path)
+				for _, s := range serverCfg.Stores.Specs {
+					assert.Zero(t, s.BallastSize.InBytes)
+					assert.Zero(t, s.BallastSize.Percent)
+				}
+			} else {
+				require.EqualError(t, err, td.expectedErr)
 			}
 		})
 	}
+}
+
+func TestTenantID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		name        string
+		arg         string
+		errContains string
+	}{
+		{"empty tenant id text", "", "invalid tenant ID: strconv.ParseUint"},
+		{"tenant id text not integer", "abc", "invalid tenant ID: strconv.ParseUint"},
+		{"tenant id is 0", "0", "invalid tenant ID"},
+		{"tenant id is valid", "2", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfgTenantID, err := tenantID(tt.arg)
+			if tt.errContains == "" {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.arg, cfgTenantID.String())
+			} else {
+				assert.ErrorContains(t, err, tt.errContains)
+				assert.Equal(t, roachpb.TenantID{}, cfgTenantID)
+			}
+		})
+	}
+}
+
+func TestTenantIDFromFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	createTempFileWithData := func(t *testing.T, data string) *os.File {
+		t.Helper()
+		// Put the file in a nested directory within the root temp directory.
+		// That way, we don't end up using the default root temp directory as
+		// the directory to watch as there will be lots of files created during
+		// a stress test, and this will slow down the watcher.
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		file, err := os.CreateTemp(tmpDir, "")
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(file.Name(), []byte(data), 0777))
+		t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+		return file
+	}
+
+	writeFile := func(t *testing.T, filename, data string) {
+		t.Helper()
+		file, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0777)
+		require.NoError(t, err)
+		defer file.Close()
+		_, err = file.WriteString(data)
+		require.NoError(t, err)
+	}
+
+	t.Run("unrelated files do not trigger a read",
+		func(t *testing.T) {
+			tmpDir, err := os.MkdirTemp("", "")
+			require.NoError(t, err)
+			defer func() { _ = os.RemoveAll(tmpDir) }()
+			// Two unrelated files, and one file of concern.
+			file1 := filepath.Join(tmpDir, "file1")
+			file2 := filepath.Join(tmpDir, "file2")
+			filename := filepath.Join(tmpDir, "TENANT_ID_FILE")
+
+			watcherWaitCount := atomic.Uint32{}
+			watcherEventCount := atomic.Uint32{}
+			watcherReadCount := atomic.Uint32{}
+			runSuccessfuly := atomic.Bool{}
+			go func() {
+				cfgTenantID, err := tenantIDFromFile(ctx, filename, &watcherWaitCount, &watcherEventCount, &watcherReadCount)
+				require.NoError(t, err)
+				require.EqualValues(t, 123, cfgTenantID.ToUint64())
+				runSuccessfuly.Store(true)
+			}()
+			require.Eventually(t, func() bool { return watcherWaitCount.Load() == 1 }, 10*time.Second, 10*time.Millisecond)
+			require.EqualValues(t, 0, watcherEventCount.Load())
+			require.Equal(t, false, runSuccessfuly.Load())
+
+			// Create a temporary file, which we will swap into file3.
+			var tmpFile3, tmpTenantFile string
+			func() {
+				f := createTempFileWithData(t, "test contents\n")
+				defer f.Close()
+				tmpFile3 = f.Name()
+
+				tenantFile := createTempFileWithData(t, "123\n")
+				defer tenantFile.Close()
+				tmpTenantFile = tenantFile.Name()
+			}()
+
+			// Write to file1, file2, and file3.
+			writeFile(t, file1, "foo")
+			require.NoError(t, os.Rename(tmpFile3, filepath.Join(tmpDir, "file3")))
+			writeFile(t, file1, "bar")
+			writeFile(t, file2, "testing\n")
+			writeFile(t, file1, "\n")
+
+			// The watcher events may be in any order, so we'll make sure all
+			// the events for files 1-3 are received before writing the actual
+			// file which stops the watcher.
+			require.Eventually(t, func() bool { return watcherEventCount.Load() >= 3 }, 10*time.Second, 10*time.Millisecond)
+
+			// Finally, write to the actual file.
+			require.NoError(t, os.Rename(tmpTenantFile, filename))
+
+			// Check that there are at least 4 events, one for each file,
+			// and only two reads (one initial, and another during the CREATE
+			// event).
+			require.Eventually(t, func() bool { return watcherEventCount.Load() >= 4 }, 10*time.Second, 10*time.Millisecond)
+			require.Eventually(t, func() bool { return runSuccessfuly.Load() }, 10*time.Second, 10*time.Millisecond)
+			require.EqualValues(t, 2, watcherReadCount.Load())
+		})
+
+	t.Run("file does not exists, has incomplete first row, waits for it to complete and after completion reads valid tenant id",
+		func(t *testing.T) {
+			tmpDir, err := os.MkdirTemp("", "")
+			require.NoError(t, err)
+			defer func() { _ = os.RemoveAll(tmpDir) }()
+			filename := filepath.Join(tmpDir, "TENANT_ID_FILE")
+
+			watcherWaitCount := atomic.Uint32{}
+			watcherEventCount := atomic.Uint32{}
+			runSuccessfuly := atomic.Bool{}
+			go func() {
+				cfgTenantID, err := tenantIDFromFile(ctx, filename, &watcherWaitCount, &watcherEventCount, nil)
+				require.NoError(t, err)
+				require.EqualValues(t, 123, cfgTenantID.ToUint64())
+				runSuccessfuly.Store(true)
+			}()
+			require.Eventually(t, func() bool { return watcherWaitCount.Load() == 1 }, 10*time.Second, 10*time.Millisecond)
+			require.EqualValues(t, 0, watcherEventCount.Load())
+			require.Equal(t, false, runSuccessfuly.Load())
+
+			// Write a file partially.
+			writeFile(t, filename, "12")
+			require.Eventually(t, func() bool { return watcherWaitCount.Load() >= 2 }, 10*time.Second, 10*time.Millisecond)
+			require.Eventually(t, func() bool { return watcherEventCount.Load() >= 1 }, 10*time.Second, 10*time.Millisecond)
+
+			// Complete the remaining of the file.
+			writeFile(t, filename, "3\n")
+			require.Eventually(t, func() bool { return watcherEventCount.Load() >= 2 }, 10*time.Second, 10*time.Millisecond)
+			require.Eventually(t, func() bool { return runSuccessfuly.Load() }, 10*time.Second, 10*time.Millisecond)
+		})
+
+	t.Run("file exists, has complete first row, but the value is an invalid tenant id",
+		func(t *testing.T) {
+			file := createTempFileWithData(t, "abc\n")
+			defer file.Close()
+			cfgTenantID, err := tenantIDFromFile(ctx, file.Name(), nil, nil, nil)
+			require.ErrorContains(t, err, "invalid tenant ID: strconv.ParseUint")
+			require.Equal(t, roachpb.TenantID{}, cfgTenantID)
+		})
+
+	t.Run("file exists, has incomplete first row, waits for it to complete and after completion with invalid tenant id fails",
+		func(t *testing.T) {
+			file := createTempFileWithData(t, "abc")
+			defer file.Close()
+			watcherWaitCount := atomic.Uint32{}
+			watcherEventCount := atomic.Uint32{}
+			generatedError := atomic.Bool{}
+			go func() {
+				cfgTenantID, err := tenantIDFromFile(ctx, file.Name(), &watcherWaitCount, &watcherEventCount, nil)
+				require.ErrorContains(t, err, "invalid tenant ID: strconv.ParseUint")
+				require.Equal(t, roachpb.TenantID{}, cfgTenantID)
+				generatedError.Store(true)
+			}()
+			require.Eventually(t, func() bool { return watcherWaitCount.Load() == 1 }, 10*time.Second, 10*time.Millisecond)
+			require.EqualValues(t, 0, watcherEventCount.Load())
+			require.Equal(t, false, generatedError.Load())
+			require.NoError(t, os.WriteFile(file.Name(), []byte("abc\n"), 0777))
+			require.Eventually(t, func() bool { return watcherEventCount.Load() > 0 }, 10*time.Second, 10*time.Millisecond)
+			require.Eventually(t, func() bool { return generatedError.Load() }, 10*time.Second, 10*time.Millisecond)
+		})
+
+	t.Run("file exists, has complete first row, it has tenant id and it is set to valid value",
+		func(t *testing.T) {
+			file := createTempFileWithData(t, "123\n")
+			defer file.Close()
+			cfgTenantID, err := tenantIDFromFile(ctx, file.Name(), nil, nil, nil)
+			require.NoError(t, err)
+			require.EqualValues(t, 123, cfgTenantID.ToUint64())
+		})
+
+	t.Run("file exists, has incomplete first row, waits for it to complete and after completion reads valid tenant id",
+		func(t *testing.T) {
+			file := createTempFileWithData(t, "abc")
+			defer file.Close()
+			watcherWaitCount := atomic.Uint32{}
+			watcherEventCount := atomic.Uint32{}
+			runSuccessfuly := atomic.Bool{}
+			go func() {
+				cfgTenantID, err := tenantIDFromFile(ctx, file.Name(), &watcherWaitCount, &watcherEventCount, nil)
+				require.NoError(t, err)
+				require.EqualValues(t, 123, cfgTenantID.ToUint64())
+				runSuccessfuly.Store(true)
+			}()
+			require.Eventually(t, func() bool { return watcherWaitCount.Load() == 1 }, 10*time.Second, 10*time.Millisecond)
+			require.EqualValues(t, 0, watcherEventCount.Load())
+			require.Equal(t, false, runSuccessfuly.Load())
+			require.NoError(t, os.WriteFile(file.Name(), []byte("123\n"), 0777))
+			require.Eventually(t, func() bool { return watcherEventCount.Load() > 0 }, 10*time.Second, 10*time.Millisecond)
+			require.Eventually(t, func() bool { return runSuccessfuly.Load() }, 10*time.Second, 10*time.Millisecond)
+		})
 }

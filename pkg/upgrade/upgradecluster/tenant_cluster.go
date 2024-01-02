@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"google.golang.org/grpc"
 )
 
 // TenantCluster represents the set of sql nodes running in a secondary tenant.
@@ -65,11 +66,11 @@ import (
 //     running at cluster version 20.1 (which is necessary when a 20.1 cluster is
 //     upgraded to 20.2).
 //
-//     BinaryMinSupportedVersion                        BinaryVersion
+//     MinSupportedVersion                         LatestVersion
 //     |                                           |
 //     v...........................................v
-//     (possible range of active
-//     cluster versions)
+//     possible range of active
+//     cluster versions
 //
 // Versions are used in many checks to prevent issues due to operator error. The
 // main one of interest here is that RPC connections between nodes (including
@@ -228,24 +229,39 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 		grp.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			conn, err := t.Dialer.Dial(ctx, roachpb.NodeID(instance.InstanceID), rpc.DefaultClass)
-			if err != nil {
-				if errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) {
-					if errors.Is(err, rpc.VersionCompatError) {
-						return errors.WithHint(errors.Newf("upgrade failed due to active SQL servers with incompatible binary version(s)"),
-							"upgrade the binary versions of all SQL servers before re-attempting the tenant upgrade")
-					} else {
-						return errors.WithHint(errors.Newf("upgrade failed due to transient SQL servers"),
-							"retry upgrade when the SQL servers for the given tenant are in a stable state (i.e. not starting/stopping)")
-					}
-				}
+			var conn *grpc.ClientConn
+			retryOpts := retry.Options{
+				InitialBackoff: 1 * time.Millisecond,
+				MaxRetries:     20,
+				MaxBackoff:     100 * time.Millisecond,
+			}
+			// This retry was added to benefit our tests (not users) by reducing the chance of
+			// test flakes due to network issues.
+			if err := retry.WithMaxAttempts(ctx, retryOpts, retryOpts.MaxRetries+1, func() error {
+				var err error
+				conn, err = t.Dialer.Dial(ctx, roachpb.NodeID(instance.InstanceID), rpc.DefaultClass)
 				return err
+			}); err != nil {
+				return annotateDialError(err)
 			}
 			client := serverpb.NewMigrationClient(conn)
 			return fn(ctx, client)
 		})
 	}
 	return grp.Wait()
+}
+
+func annotateDialError(err error) error {
+	if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) {
+		return err
+	}
+	if errors.Is(err, rpc.VersionCompatError) {
+		err = errors.Wrap(err,
+			"upgrade failed due to active SQL servers with incompatible binary version(s)")
+		return errors.WithHint(err, "upgrade the binary versions of all SQL servers before re-attempting the tenant upgrade")
+	}
+	err = errors.Wrapf(err, "upgrade failed due to transient SQL servers")
+	return errors.WithHint(err, "retry upgrade when the SQL servers for the given tenant are in a stable state (i.e. not starting/stopping)")
 }
 
 // UntilClusterStable is part of the upgrade.Cluster interface.
@@ -316,14 +332,14 @@ func (inconsistentSQLServersError) Error() string {
 
 var InconsistentSQLServersError = inconsistentSQLServersError{}
 
-func (t *TenantCluster) ValidateAfterUpdateSystemVersion(ctx context.Context) error {
+func (t *TenantCluster) ValidateAfterUpdateSystemVersion(ctx context.Context, txn *kv.Txn) error {
 	if len(t.instancesAtBump) == 0 {
 		// We should never get here with an empty slice, since bump must be
 		// called before validation.
 		return errors.AssertionFailedf("call to validate with empty instances slice")
 	}
 
-	instances, err := t.InstanceReader.GetAllInstancesNoCache(ctx)
+	instances, err := t.InstanceReader.GetAllInstancesUsingTxn(ctx, txn)
 	if err != nil {
 		return err
 	}

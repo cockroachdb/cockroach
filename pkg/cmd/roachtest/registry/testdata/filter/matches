@@ -1,0 +1,27 @@
+test-matches cloud=aws test=component_foo/test_foo-cdc-local,gce,azure
+component_foo/
+----
+component_foo/test_foo-cdc-local,gce,azure is not compatible with "aws"
+
+test-matches cloud=gce suite=nightly test=component_foo/test_foo-cdc-local,gce,azure
+component_foo/
+----
+component_foo/test_foo-cdc-local,gce,azure is not part of the "nightly" suite
+
+test-matches cloud=aws test=component_bar/test_foo-cdc-local,gce,azure
+component_foo/
+----
+component_bar/test_foo-cdc-local,gce,azure does not match regex "component_foo/" and is not compatible with "aws"
+
+test-matches cloud=aws test=component_bar/test_foo-kv-nightly-local,gce,aws,azure
+component_foo/
+----
+component_bar/test_foo-kv-nightly-local,gce,aws,azure does not match regex "component_foo/"
+
+test-matches cloud=aws suite=weekly owner=cdc test=component_foo/test_foo-kv-local,gce,azure
+----
+component_foo/test_foo-kv-local,gce,azure does not have owner "cdc", is not part of the "weekly" suite, and is not compatible with "aws"
+
+test-matches cloud=gce benchmarks test=component_foo/test_foo-cdc-local,gce,azure
+----
+component_foo/test_foo-cdc-local,gce,azure is not a benchmark

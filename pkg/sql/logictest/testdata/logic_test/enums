@@ -148,7 +148,7 @@ SELECT enum_first(null::dbs)
 ----
 postgres
 
-query T
+query T rowsort
 SELECT enum_first(val) FROM unnest(array_append(enum_range(null::dbs),null)) val
 ----
 postgres
@@ -1164,7 +1164,7 @@ statement ok
 ROLLBACK
 
 query TTTT colnames
-SHOW ENUMS
+SELECT * FROM [SHOW ENUMS] ORDER BY name
 ----
 schema  name        values                              owner
 public  _collision  NULL                                root
@@ -1179,7 +1179,7 @@ public  int         {Z,"S of int"}                      root
 public  notbad      {dup,DUP}                           root
 public  t           NULL                                root
 
-query TTT colnames
+query TTT colnames,rowsort
 SHOW TYPES
 ----
 schema  name        owner
@@ -1200,7 +1200,7 @@ CREATE SCHEMA uds;
 CREATE TYPE uds.typ AS ENUM ('schema')
 
 query TTTT colnames
-SHOW ENUMS
+SELECT * FROM [SHOW ENUMS] ORDER BY name
 ----
 schema  name        values                              owner
 public  _collision  NULL                                root
@@ -1318,7 +1318,7 @@ public  greeting  {hi}    root
 statement ok
 USE test_57196
 
-query TTTT colnames
+query TTTT colnames,rowsort
 SHOW ENUMS
 ----
 schema  name      values   owner
@@ -1733,7 +1733,7 @@ statement ok
 ALTER TYPE greeting ADD VALUE 'salud' AFTER 'hello'
 
 # The insert should fail but with awareness that 'salud' is an enum type.
-statement error pq: enum value "salud" is not yet public
+statement error pq: cannot use enum value \"salud\": enum value is not yet public
 INSERT INTO tab2 VALUES ('salud')
 
 statement ok

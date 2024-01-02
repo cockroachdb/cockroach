@@ -1,7 +1,6 @@
-# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 # LogicTest: multiregion-15node-5region-3azs
 
-query TTTTT colnames
+query TTTTT colnames,rowsort
 SHOW REGIONS
 ----
 region          zones                      database_names  primary_region_of  secondary_region_of
@@ -469,6 +468,9 @@ ALTER DATABASE mr3 ADD SUPER REGION "test1" VALUES "us-east-1", "us-west-1"
 statement ok
 ALTER DATABASE mr3 ADD SUPER REGION "test2" VALUES "us-central-1", "ca-central-1"
 
+statement error pgcode 42710 pq: duplicate region us-central-1 found in super region test3
+ALTER DATABASE mr3 ADD SUPER REGION "test3" VALUES "us-central-1", "ca-central-1", "us-central-1"
+
 statement error pq: the secondary region must be in the same super region as the current primary region
 ALTER DATABASE mr3 SET SECONDARY REGION "us-east-1"
 
@@ -480,7 +482,7 @@ ALTER DATABASE mr3 SET SECONDARY REGION "us-central-1"
 statement error pq: the secondary region must be in the same super region as the current primary region
 ALTER DATABASE mr1 ALTER SUPER REGION "test1" VALUES "us-east-1"
 
-query TTTTT colnames
+query TTTTT colnames,rowsort
 SHOW REGIONS
 ----
 region          zones                      database_names            primary_region_of  secondary_region_of
@@ -490,7 +492,7 @@ us-central-1    {usc-az1,usc-az2,usc-az3}  {mr1,mr2,mr3}             {}         
 us-east-1       {us-az1,us-az2,us-az3}     {db,mr1,mr2,mr3}          {mr1}              {}
 us-west-1       {usw-az1,usw-az2,usw-az3}  {mr1,mr2,mr3}             {}                 {mr1}
 
-query TTBBT colnames
+query TTBBT colnames,rowsort
 SHOW REGIONS FROM DATABASE mr1
 ----
 database  region          primary  secondary  zones
@@ -500,7 +502,7 @@ mr1       ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
 mr1       ca-central-1    false    false      {ca-az1,ca-az2,ca-az3}
 mr1       us-central-1    false    false      {usc-az1,usc-az2,usc-az3}
 
-query TTBBT colnames
+query TTBBT colnames,rowsort
 SHOW REGIONS FROM DATABASE mr2
 ----
 database  region          primary  secondary  zones
@@ -510,7 +512,7 @@ mr2       us-central-1    false    false      {usc-az1,usc-az2,usc-az3}
 mr2       us-east-1       false    false      {us-az1,us-az2,us-az3}
 mr2       us-west-1       false    false      {usw-az1,usw-az2,usw-az3}
 
-query TTBBT colnames
+query TTBBT colnames,rowsort
 SHOW REGIONS FROM DATABASE mr3
 ----
 database  region          primary  secondary  zones
@@ -520,7 +522,7 @@ mr3       ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
 mr3       us-east-1       false    false      {us-az1,us-az2,us-az3}
 mr3       us-west-1       false    false      {usw-az1,usw-az2,usw-az3}
 
-query TTTT colnames
+query TTTT colnames,rowsort
 SHOW REGIONS FROM ALL DATABASES
 ----
 database_name  regions                                                         primary_region  secondary_region

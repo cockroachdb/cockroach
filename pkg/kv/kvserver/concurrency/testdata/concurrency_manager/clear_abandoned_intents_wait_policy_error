@@ -1,0 +1,109 @@
+# -------------------------------------------------------------
+# A scan finds 10 abandoned intents from same txn
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+on-txn-updated txn=txn2 status=aborted
+----
+[-] update txn: aborting txn2
+
+new-request name=req1 txn=txn1 ts=10,1 wait-policy=error
+  scan key=a endkey=z
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn2 key=a
+  lock txn=txn2 key=b
+  lock txn=txn2 key=c
+  lock txn=txn2 key=d
+  lock txn=txn2 key=e
+  lock txn=txn2 key=f
+  lock txn=txn2 key=g
+  lock txn=txn2 key=h
+  lock txn=txn2 key=i
+  lock txn=txn2 key=j
+----
+[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
+
+debug-lock-table
+----
+num=10
+ lock: "a"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "c"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "d"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "e"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "f"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "g"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "h"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "i"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "j"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+
+# ------------------------------------------------------------------------------
+# txn1 is the distinguished waiter on key "a". It will push txn2, notice that it
+# is aborted, and then resolve key "a". Once txn2 is in the txnStatusCache,
+# txn1 will create a batch to resolve all other keys together.
+# ------------------------------------------------------------------------------
+
+on-txn-updated txn=txn2 status=aborted
+----
+[-] update txn: aborting txn2
+
+sequence req=req1
+----
+[3] sequence req1: re-sequencing request
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: waiting in lock wait-queues
+[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 0, queuedReaders: 1)
+[3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = true
+[3] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
+[3] sequence req1: resolving intent ‹"a"› for txn 00000002 with ABORTED status
+[3] sequence req1: lock wait-queue event: done waiting
+[3] sequence req1: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[3] sequence req1: resolving a batch of 9 intent(s)
+[3] sequence req1: resolving intent ‹"b"› for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent ‹"c"› for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent ‹"d"› for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent ‹"e"› for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent ‹"f"› for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent ‹"g"› for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent ‹"h"› for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent ‹"i"› for txn 00000002 with ABORTED status
+[3] sequence req1: resolving intent ‹"j"› for txn 00000002 with ABORTED status
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: sequencing complete, returned guard
+
+debug-lock-table
+----
+num=0
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+reset namespace
+----

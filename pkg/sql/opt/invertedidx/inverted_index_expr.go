@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -35,7 +35,7 @@ func NewDatumsToInvertedExpr(
 	evalCtx *eval.Context,
 	colTypes []*types.T,
 	expr tree.TypedExpr,
-	geoConfig geoindex.Config,
+	geoConfig geopb.Config,
 ) (invertedexpr.DatumsToInvertedExpr, error) {
 	if !geoConfig.IsEmpty() {
 		return NewGeoDatumsToInvertedExpr(ctx, evalCtx, colTypes, expr, geoConfig)
@@ -78,6 +78,7 @@ func TryFilterInvertedIndex(
 	tabID opt.TableID,
 	index cat.Index,
 	computedColumns map[opt.ColumnID]opt.ScalarExpr,
+	checkCancellation func(),
 ) (
 	spanExpr *inverted.SpanExpression,
 	constraint *constraint.Constraint,
@@ -88,7 +89,7 @@ func TryFilterInvertedIndex(
 	// Attempt to constrain the prefix columns, if there are any. If they cannot
 	// be constrained to single values, the index cannot be used.
 	constraint, filters, ok = constrainPrefixColumns(
-		evalCtx, factory, filters, optionalFilters, tabID, index,
+		evalCtx, factory, filters, optionalFilters, tabID, index, checkCancellation,
 	)
 	if !ok {
 		return nil, nil, nil, nil, false
@@ -390,6 +391,7 @@ func constrainPrefixColumns(
 	optionalFilters memo.FiltersExpr,
 	tabID opt.TableID,
 	index cat.Index,
+	checkCancellation func(),
 ) (constraint *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	tabMeta := factory.Metadata().TableMeta(tabID)
 	prefixColumnCount := index.NonInvertedPrefixColumnCount()
@@ -435,7 +437,7 @@ func constrainPrefixColumns(
 		prefixColumns, notNullCols, tabMeta.ComputedCols,
 		tabMeta.ColsInComputedColsExpressions,
 		false, /* consolidate */
-		evalCtx, factory, ps,
+		evalCtx, factory, ps, checkCancellation,
 	)
 	constraint = ic.UnconsolidatedConstraint()
 	if constraint.Prefix(evalCtx) < prefixColumnCount {

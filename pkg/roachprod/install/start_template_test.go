@@ -23,11 +23,12 @@ func TestExecStartTemplate(t *testing.T) {
 		LogDir: "./path with spaces/logs/$THIS_DOES_NOT_EVER_GET_EXPANDED",
 		KeyCmd: `echo foo && \
 echo bar $HOME`,
-		EnvVars:   []string{"ROACHPROD=1/tigtag", "COCKROACH=foo", "ROCKCOACH=17%"},
-		Binary:    "./cockroach",
-		Args:      []string{`start`, `--log`, `file-defaults: {dir: '/path with spaces/logs', exit-on-error: false}`},
-		MemoryMax: "81%",
-		Local:     true,
+		EnvVars:             []string{"ROACHPROD=1/tigtag", "COCKROACH=foo", "ROCKCOACH=17%"},
+		Binary:              "./cockroach",
+		Args:                []string{`start`, `--log`, `file-defaults: {dir: '/path with spaces/logs', exit-on-error: false}`},
+		MemoryMax:           "81%",
+		VirtualClusterLabel: "cockroach-system",
+		Local:               true,
 	}
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "start"), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {

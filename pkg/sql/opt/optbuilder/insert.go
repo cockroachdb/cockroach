@@ -184,6 +184,12 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	// Find which table we're working on, check the permissions.
 	tab, depName, alias, refColumns := b.resolveTableForMutation(ins.Table, privilege.INSERT)
 
+	if tab.IsVirtualTable() {
+		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot insert into view \"%s\"", tab.Name(),
+		))
+	}
+
 	// It is possible to insert into specific columns using table reference
 	// syntax:
 	// INSERT INTO [<table_id>(<col1_id>,<col2_id>) AS <alias>] ...
@@ -214,7 +220,11 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	}
 
 	// Check if this table has already been mutated in another subquery.
-	b.checkMultipleMutations(tab, ins.OnConflict == nil /* simpleInsert */)
+	mutType := generalMutation
+	if ins.OnConflict == nil {
+		mutType = simpleInsert
+	}
+	b.checkMultipleMutations(tab, mutType)
 
 	var mb mutationBuilder
 	if ins.OnConflict != nil && ins.OnConflict.IsUpsertAlias() {
@@ -450,7 +460,7 @@ func (mb *mutationBuilder) checkPrimaryKeyForInsert() {
 			continue
 		}
 
-		panic(pgerror.Newf(pgcode.InvalidForeignKey,
+		panic(pgerror.Newf(pgcode.NotNullViolation,
 			"missing %q primary key column", col.ColName()))
 	}
 }
@@ -562,10 +572,8 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 	// Handle DEFAULT VALUES case by creating a single empty row as input.
 	if inputRows == nil {
 		mb.outScope = inScope.push()
-		mb.outScope.expr = mb.b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
-			Cols: opt.ColList{},
-			ID:   mb.md.NextUniqueID(),
-		})
+		mb.outScope.expr = mb.b.factory.ConstructNoColsRow()
+		mb.inputForInsertExpr = mb.outScope.expr
 		return
 	}
 
@@ -640,6 +648,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 
 	// Add assignment casts for insert columns.
 	mb.addAssignmentCasts(mb.insertColIDs)
+	mb.inputForInsertExpr = mb.outScope.expr
 }
 
 // addSynthesizedColsForInsert wraps an Insert input expression with a Project
@@ -686,7 +695,7 @@ func (mb *mutationBuilder) buildInsert(returning *tree.ReturningExprs) {
 
 	private := mb.makeMutationPrivate(returning != nil)
 	mb.outScope.expr = mb.b.factory.ConstructInsert(
-		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
+		mb.outScope.expr, mb.uniqueChecks, mb.fastPathUniqueChecks, mb.fkChecks, private,
 	)
 
 	mb.buildReturning(returning)
@@ -707,14 +716,18 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 	mb.outScope.ordering = nil
 
 	// Create an anti-join for each arbiter.
-	mb.arbiters.ForEach(func(name string, conflictOrds intsets.Fast, pred tree.Expr, canaryOrd int) {
-		mb.buildAntiJoinForDoNothingArbiter(inScope, conflictOrds, pred)
+	mb.arbiters.ForEach(func(
+		name string, conflictOrds intsets.Fast, pred tree.Expr, canaryOrd int, uniqueWithoutIndex bool, uniqueOrd int,
+	) {
+		mb.buildAntiJoinForDoNothingArbiter(inScope, conflictOrds, pred, uniqueWithoutIndex, uniqueOrd)
 	})
 
 	// Create an UpsertDistinctOn for each arbiter. This must happen after all
 	// conflicting rows are removed with the anti-joins created above, to avoid
 	// removing valid rows (see #59125).
-	mb.arbiters.ForEach(func(name string, conflictOrds intsets.Fast, pred tree.Expr, canaryOrd int) {
+	mb.arbiters.ForEach(func(
+		name string, conflictOrds intsets.Fast, pred tree.Expr, canaryOrd int, uniqueWithoutIndex bool, uniqueOrd int,
+	) {
 		// If the arbiter has a partial predicate, project a new column that
 		// allows the UpsertDistinctOn to only de-duplicate insert rows that
 		// satisfy the predicate. See projectPartialArbiterDistinctColumn for
@@ -760,7 +773,9 @@ func (mb *mutationBuilder) buildInputForUpsert(
 
 	// Create an UpsertDistinctOn and a left-join for the single arbiter.
 	var canaryCol *scopeColumn
-	mb.arbiters.ForEach(func(name string, conflictOrds intsets.Fast, pred tree.Expr, canaryOrd int) {
+	mb.arbiters.ForEach(func(
+		name string, conflictOrds intsets.Fast, pred tree.Expr, canaryOrd int, uniqueWithoutIndex bool, uniqueOrd int,
+	) {
 		// If the arbiter has a partial predicate, project a new column that
 		// allows the UpsertDistinctOn to only de-duplicate insert rows that
 		// satisfy the predicate. See projectPartialArbiterDistinctColumn for
@@ -790,7 +805,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 
 		// Create a left-join for the arbiter.
 		mb.buildLeftJoinForUpsertArbiter(
-			inScope, conflictOrds, pred,
+			inScope, conflictOrds, pred, uniqueWithoutIndex, uniqueOrd,
 		)
 
 		// Record a not-null "canary" column. After the left-join, this will be

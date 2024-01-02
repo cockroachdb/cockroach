@@ -28,7 +28,7 @@ import (
 
 var (
 	maxProfiles = settings.RegisterIntSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"server.mem_profile.max_profiles",
 		"maximum number of profiles to be kept per ramp-up of memory usage. "+
 			"A ramp-up is defined as a sequence of profiles with increasing usage.",
@@ -36,26 +36,26 @@ var (
 	)
 
 	maxCombinedFileSize = settings.RegisterByteSizeSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"server.mem_profile.total_dump_size_limit",
 		"maximum combined disk size of preserved memory profiles",
-		128<<20, // 128MiB
+		256<<20, // 256MiB
 	)
 )
 
 func init() {
-	s := settings.RegisterIntSetting(
-		settings.TenantWritable,
-		"server.heap_profile.max_profiles", "use server.mem_profile.max_profiles instead", 5)
-	s.SetRetired()
+	_ = settings.RegisterIntSetting(
+		settings.ApplicationLevel,
+		"server.heap_profile.max_profiles", "use server.mem_profile.max_profiles instead", 5,
+		settings.Retired)
 
-	b := settings.RegisterByteSizeSetting(
-		settings.TenantWritable,
+	_ = settings.RegisterByteSizeSetting(
+		settings.ApplicationLevel,
 		"server.heap_profile.total_dump_size_limit",
 		"use server.mem_profile.total_dump_size_limit instead",
-		128<<20, // 128MiB
+		256<<20, // 256MiB
+		settings.Retired,
 	)
-	b.SetRetired()
 }
 
 // profileStore represents the directory where heap profiles are stored.

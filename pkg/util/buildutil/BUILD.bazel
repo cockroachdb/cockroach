@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 # gazelle:exclude gen-crdb_test_off.go
@@ -34,12 +33,9 @@ genrule(
 go_test(
     name = "buildutil_test",
     srcs = ["crdb_test_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":buildutil"],  # keep
     deps = [
         "//pkg/build/bazel",
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

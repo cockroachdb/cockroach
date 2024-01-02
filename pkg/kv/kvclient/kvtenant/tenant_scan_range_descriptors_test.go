@@ -21,16 +21,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/stretchr/testify/require"
 )
 
 func setup(
 	t *testing.T, ctx context.Context,
-) (*testcluster.TestCluster, serverutils.TestTenantInterface, rangedesc.IteratorFactory) {
+) (*testcluster.TestCluster, serverutils.ApplicationLayerInterface, rangedesc.IteratorFactory) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestTenantDisabled, // we're going to manually add tenants
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					DisableMergeQueue: true,
@@ -40,7 +41,7 @@ func setup(
 	})
 
 	ten2ID := roachpb.MustMakeTenantID(2)
-	tenant2, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{
+	tenant2, err := tc.Server(0).TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: ten2ID,
 	})
 	require.NoError(t, err)
@@ -51,6 +52,7 @@ func setup(
 // scan range descriptors iff they correspond to tenant owned ranges.
 func TestScanRangeDescriptors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc, tenant2, iteratorFactory := setup(t, ctx)
@@ -63,7 +65,7 @@ func TestScanRangeDescriptors(t *testing.T) {
 	{
 		tc.SplitRangeOrFatal(t, ten2Split1)
 		tc.SplitRangeOrFatal(t, ten2Split2)
-		tc.SplitRangeOrFatal(t, ten2Codec.TenantPrefix().PrefixEnd()) // Last range
+		tc.SplitRangeOrFatal(t, ten2Codec.TenantEndKey()) // Last range
 	}
 
 	iter, err := iteratorFactory.NewIterator(ctx, ten2Codec.TenantSpan())
@@ -117,13 +119,14 @@ func TestScanRangeDescriptors(t *testing.T) {
 	// Last range we created above.
 	require.Equal(
 		t,
-		keys.MustAddr(ten2Codec.TenantPrefix().PrefixEnd()),
+		keys.MustAddr(ten2Codec.TenantEndKey()),
 		rangeDescs[numRanges-1].StartKey,
 	)
 }
 
 func TestScanRangeDescriptorsOutsideTenantKeyspace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc, _, iteratorFactory := setup(t, ctx)

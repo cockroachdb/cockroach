@@ -66,7 +66,7 @@ func IsANSIDML(stmt tree.Statement) bool {
 // Statements is a list of parsed statements.
 type Statements []Statement[tree.Statement]
 
-type PLpgStatement Statement[*plpgsqltree.PLpgSQLStmtBlock]
+type PLpgStatement Statement[*plpgsqltree.Block]
 
 // String returns the AST formatted as a string.
 func (stmts Statements) String() string {
@@ -95,3 +95,11 @@ func (stmt PLpgStatement) StringWithFlags(flags tree.FmtFlags) string {
 	stmt.AST.Format(ctx)
 	return ctx.CloseAndGetString()
 }
+
+type ParsedStmts interface {
+	String() string
+	StringWithFlags(flags tree.FmtFlags) string
+}
+
+var _ ParsedStmts = Statements{}
+var _ ParsedStmts = PLpgStatement{}

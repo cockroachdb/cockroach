@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _, { get, isString } from "lodash";
+import { get, isString } from "lodash";
 import { track } from "./trackTableSort";
 
 describe("trackTableSort", () => {

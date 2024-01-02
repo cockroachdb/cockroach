@@ -52,6 +52,9 @@ export class CachedDataReducerState<TResponseMessage> {
 
 // KeyedCachedDataReducerState is used to track the state of the cached data
 // that is associated with a key.
+// This error is a false positive because we do use 'TResponseMessage' to type
+// CachedDataReducerState. We'll suppress the error to make the linter happy.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export class KeyedCachedDataReducerState<TResponseMessage> {
   [id: string]: CachedDataReducerState<TResponseMessage>;
 }
@@ -323,7 +326,11 @@ export class CachedDataReducer<
               maybeClearTenantCookie();
               // TODO(couchand): This is an unpleasant dependency snuck in here...
               const { location } = createHashHistory();
-              if (location && !location.pathname.startsWith("/login")) {
+              if (
+                location &&
+                !location.pathname.startsWith("/login") &&
+                !location.pathname.startsWith("/jwt")
+              ) {
                 dispatch(push(getLoginPage(location)));
               }
             }
@@ -635,7 +642,11 @@ export class PaginatedCachedDataReducer<
           if (error.message === "Unauthorized") {
             // TODO(couchand): This is an unpleasant dependency snuck in here...
             const { location } = createHashHistory();
-            if (location && !location.pathname.startsWith("/login")) {
+            if (
+              location &&
+              !location.pathname.startsWith("/login") &&
+              !location.pathname.startsWith("/jwt")
+            ) {
               dispatch(push(getLoginPage(location)));
             }
           }

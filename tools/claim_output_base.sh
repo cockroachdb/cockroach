@@ -20,27 +20,33 @@ if [ ! -z "${BAZEL_OUTPUT_BASE-}" ]; then
   return
 fi
 
-
-# If we're not on macOS/haven't enabled multi-bases, just run bazel normally.
-OUTPUT_BASES="/private/var/tmp/_bazel_${USER}/bases/"
-if [ ! -d "${OUTPUT_BASES}" ]; then 
+if [ -d "${HOME}/.cache/bazel/_bazel_${USER}" ]; then
+  SUFFIX="$(pwd | md5sum | head -c6)"
+  OUTPUT_ROOT="${HOME}/.cache/bazel/_bazel_${USER}"
+elif [ -d "/private/var/tmp/_bazel_${USER}" ]; then
+  SUFFIX="$(pwd | md5 | head -c6)"
+  OUTPUT_ROOT="/private/var/tmp/_bazel_${USER}"
+else
+  # the known places for output_bases don't exist so just let bazel figure it out.
   return
 fi
 
-# We need to use a unique output base for each workspace; if we weren't manually
-# specifying bazel would resolve the workspace root then hash it. Rather than 
-# resolve the root, we're going to pretend we're only run from the root, and if
-# we're run elsewhere, just make a separate base for that location. 
-SUFFIX="$(pwd | md5 | head -c6)"
+# If we haven't enabled multi-bases, just run bazel normally.
+if [ ! -d "${OUTPUT_ROOT}/bases" ]; then 
+  return
+fi
+
+OUTPUT_BASES="${OUTPUT_ROOT}/bases/${SUFFIX}"
+
 
 # Make creating the claim pidfile atomic.
 set -o noclobber
 
 # Find and claim an available base.
 for i in {1..4}; do
-  BASE="${OUTPUT_BASES}${i}"
+  BASE="${OUTPUT_BASES}/${i}"
   mkdir -p "${BASE}"
-  PIDFILE="${BASE}/inuse"
+  PIDFILE="${BASE}.inuse"
 
   # Check for and move orphaned PID files out of the way.
   if [ -f "$PIDFILE" ]; then
@@ -55,7 +61,7 @@ for i in {1..4}; do
   # Claim and use this base if able (atomic thanks to noclobber above).
   if echo "$$" 2> /dev/null > "${PIDFILE}"; then
     trap "rm \"$PIDFILE\"" EXIT
-    export BAZEL_OUTPUT_BASE="${BASE}/${SUFFIX}"
+    export BAZEL_OUTPUT_BASE="${BASE}"
     break
   fi
 done

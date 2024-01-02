@@ -107,7 +107,7 @@ func TestTelemetryLogRegions(t *testing.T) {
 		sqlDB.Exec(t, tc.query)
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -172,7 +172,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 
 	dir, dirCleanupFn := testutils.TempDir(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				EventLog: &sql.EventLogTestingKnobs{
@@ -234,7 +234,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 			query: fmt.Sprintf(`IMPORT INTO a CSV DATA ('%s') WITH detached`, srv.URL),
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "import",
-				stmt:      fmt.Sprintf(`IMPORT INTO defaultdb.public.a CSV DATA ('%s') WITH detached`, srv.URL),
+				stmt:      fmt.Sprintf(`IMPORT INTO defaultdb.public.a CSV DATA ('%s') WITH OPTIONS (detached)`, srv.URL),
 			},
 			recoveryEvent: expectedRecoveryEvent{
 				numRows:      3,
@@ -258,7 +258,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 			query: fmt.Sprintf(`BACKUP DATABASE mydb INTO '%s' WITH detached`, nodelocal.MakeLocalStorageURI("test1")),
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "backup",
-				stmt:      fmt.Sprintf(`BACKUP DATABASE mydb INTO '%s' WITH detached`, nodelocal.MakeLocalStorageURI("test1")),
+				stmt:      fmt.Sprintf(`BACKUP DATABASE mydb INTO '%s' WITH OPTIONS (detached)`, nodelocal.MakeLocalStorageURI("test1")),
 			},
 			recoveryEvent: expectedRecoveryEvent{
 				numRows:      3,
@@ -282,7 +282,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 			query: fmt.Sprintf(`RESTORE DATABASE mydb FROM LATEST IN '%s' WITH detached`, nodelocal.MakeLocalStorageURI("test1")),
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "restore",
-				stmt:      fmt.Sprintf(`RESTORE DATABASE mydb FROM 'latest' IN '%s' WITH detached`, nodelocal.MakeLocalStorageURI("test1")),
+				stmt:      fmt.Sprintf(`RESTORE DATABASE mydb FROM 'latest' IN '%s' WITH OPTIONS (detached)`, nodelocal.MakeLocalStorageURI("test1")),
 			},
 			recoveryEvent: expectedRecoveryEvent{
 				numRows:      3,
@@ -291,7 +291,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 		},
 	}
 
-	sql.TelemetryMaxEventFrequency.Override(context.Background(), &testCluster.Server(0).ClusterSettings().SV, 10)
+	sql.TelemetryMaxStatementEventFrequency.Override(context.Background(), &testCluster.Server(0).ApplicationLayer().ClusterSettings().SV, 10)
 
 	// Run all the queries, one after the previous one is finished.
 	var jobID int
@@ -322,7 +322,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 		execTimestamp++
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	var filteredSampleQueries []logpb.Entry
 	testutils.SucceedsSoon(t, func() error {

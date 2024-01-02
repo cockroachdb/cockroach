@@ -76,6 +76,53 @@ capture-stray-errors:
   dir: /default-dir
   max-group-size: 100MiB
 
+# Check that default format propagates.
+yaml
+file-defaults:
+  format: crdb-v1
+sinks:
+  file-groups:
+    custom:
+      channels: DEV
+----
+sinks:
+  file-groups:
+    custom:
+      channels: {INFO: all}
+      filter: INFO
+      format: crdb-v1
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that default format options propagate.
+yaml
+file-defaults:
+  format-options: {foo: bar}
+sinks:
+  file-groups:
+    custom:
+      channels: DEV
+----
+sinks:
+  file-groups:
+    custom:
+      channels: {INFO: all}
+      filter: INFO
+      format-options:
+        foo: bar
+  stderr:
+    filter: NONE
+    format-options:
+      foo: bar
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
 # Check that fluent default network is filled.
 yaml
 sinks:
@@ -103,6 +150,7 @@ sinks:
         max-staleness: 5s
         flush-trigger-size: 1.0MiB
         max-buffer-size: 50MiB
+        format: newline
   stderr:
     filter: NONE
 capture-stray-errors:
@@ -178,6 +226,7 @@ sinks:
         max-staleness: 5s
         flush-trigger-size: 1.0MiB
         max-buffer-size: 50MiB
+        format: newline
   stderr:
     filter: NONE
 capture-stray-errors:
@@ -192,6 +241,93 @@ sinks:
       channels: DEV
       exit-on-error: false
       auditable: true
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that file-defaults format options are transferred to stderr if using a crdb-v2 format.
+yaml
+file-defaults:
+  format: crdb-v2
+  format-options: {timezone: america/new_york}
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+      format-options:
+        timezone: america/new_york
+  stderr:
+    filter: NONE
+    format-options:
+      timezone: america/new_york
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that file-defaults format options are NOT transferred to stderr if NOT using a crdb-v2 format.
+yaml
+file-defaults:
+  format: json
+  format-options: {datetime-format: rfc3339, datetime-timezone: America/New_York}
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+      format: json
+      format-options:
+        datetime-format: rfc3339
+        datetime-timezone: America/New_York
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that file-defaults format options do NOT overwrite format-options if explicitly defined in stderr.
+yaml
+file-defaults:
+  format: crdb-v2
+  format-options: {timezone: america/new_york}
+sinks:
+  stderr:
+    format-options: {timezone: america/chicago}
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+      format-options:
+        timezone: america/new_york
+  stderr:
+    filter: NONE
+    format-options:
+      timezone: america/chicago
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that stderr always uses crdb-v2-tty format, even if we try to set it to an invalid format
+yaml
+sinks:
+  stderr:
+    format: crdb-v1-tty
 ----
 sinks:
   file-groups:
@@ -296,8 +432,7 @@ sinks:
       channels: {INFO: [STORAGE]}
       filter: INFO
     default:
-      channels: {INFO: [DEV, OPS, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS,
-          SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]}
+      channels: {INFO: [DEV, OPS, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]}
       filter: INFO
   stderr:
     filter: NONE
@@ -324,8 +459,7 @@ sinks:
       channels: {INFO: [HEALTH]}
       filter: INFO
     default:
-      channels: {INFO: [DEV, OPS, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES,
-          SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]}
+      channels: {INFO: [DEV, OPS, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]}
       filter: INFO
   stderr:
     filter: NONE
@@ -346,9 +480,7 @@ sinks:
 sinks:
   file-groups:
     custom:
-      channels: {WARNING: [DEV], ERROR: [OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA,
-          USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF,
-          TELEMETRY, KV_DISTRIBUTION]}
+      channels: {WARNING: [DEV], ERROR: [OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]}
       filter: ERROR
   stderr:
     filter: NONE
@@ -401,8 +533,7 @@ sinks:
 sinks:
   file-groups:
     custom1:
-      channels: {ERROR: [DEV, OPS, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES,
-          SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]}
+      channels: {ERROR: [DEV, OPS, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]}
       filter: ERROR
     custom2:
       channels: {WARNING: [DEV]}
@@ -435,9 +566,7 @@ sinks:
       channels: {INFO: [STORAGE]}
       filter: INFO
     default:
-      channels: {WARNING: [HEALTH], ERROR: [DEV, OPS, SESSIONS, SQL_SCHEMA, USER_ADMIN,
-          PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY,
-          KV_DISTRIBUTION]}
+      channels: {WARNING: [HEALTH], ERROR: [DEV, OPS, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]}
       filter: ERROR
   stderr:
     filter: NONE
@@ -453,6 +582,7 @@ fluent-defaults:
     max-staleness: 15s
     flush-trigger-size: 10KiB
     max-buffer-size: 2MiB
+    format: json-array
 sinks:
   fluent-servers:
     a:
@@ -460,6 +590,7 @@ sinks:
       channels: STORAGE
       buffering:
         max-staleness: 10s
+        format: newline
     b:
       address: b
       channels: OPS
@@ -494,6 +625,7 @@ sinks:
         max-staleness: 10s
         flush-trigger-size: 10KiB
         max-buffer-size: 2.0MiB
+        format: newline
     b:
       channels: {INFO: [OPS]}
       net: tcp
@@ -507,6 +639,7 @@ sinks:
         max-staleness: 15s
         flush-trigger-size: 5.0KiB
         max-buffer-size: 2.0MiB
+        format: json-array
     c:
       channels: {INFO: [HEALTH]}
       net: tcp
@@ -520,6 +653,7 @@ sinks:
         max-staleness: 15s
         flush-trigger-size: 10KiB
         max-buffer-size: 3.0MiB
+        format: json-array
     d:
       channels: {INFO: [SESSIONS]}
       net: tcp
@@ -529,6 +663,129 @@ sinks:
       redact: false
       redactable: true
       exit-on-error: false
+      buffering: NONE
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that each component of buffering struct propagates to http-sinks
+# Ensure servers have gzip compression on by default and headers if set
+yaml
+http-defaults:
+  buffering:
+    max-staleness: 15s
+    flush-trigger-size: 10KiB
+    max-buffer-size: 2MiB
+sinks:
+  http-servers:
+    a:
+      address: a
+      channels: STORAGE
+      headers: {X-CRDB-HEADER: header-value-a}
+      file-based-headers: {X-CRDB-FILE-HEADER: /a/path/to/file}
+      buffering:
+        max-staleness: 10s
+    b:
+      address: b
+      channels: OPS
+      headers: {X-CRDB-HEADER: header-value-b, X-ANOTHER-HEADER: zz-yy-bb}
+      file-based-headers: {X-ANOTHER-FILE-HEADER: /other/path/to/file, X-CRDB-FILE-HEADER: /some/path/to/file}
+      buffering:
+        flush-trigger-size: 5.0KiB
+    c:
+      address: c
+      channels: HEALTH
+      buffering:
+        max-buffer-size: 3MiB
+    d:
+      address: d
+      channels: SESSIONS
+      buffering: NONE
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  http-servers:
+    a:
+      channels: {INFO: [STORAGE]}
+      address: a
+      method: POST
+      unsafe-tls: false
+      timeout: 2s
+      disable-keep-alives: false
+      headers: {X-CRDB-HEADER: header-value-a}
+      file-based-headers: {X-CRDB-FILE-HEADER: /a/path/to/file}
+      compression: gzip
+      filter: INFO
+      format: json-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
+      auditable: false
+      buffering:
+        max-staleness: 10s
+        flush-trigger-size: 10KiB
+        max-buffer-size: 2.0MiB
+        format: newline
+    b:
+      channels: {INFO: [OPS]}
+      address: b
+      method: POST
+      unsafe-tls: false
+      timeout: 2s
+      disable-keep-alives: false
+      headers: {X-ANOTHER-HEADER: zz-yy-bb, X-CRDB-HEADER: header-value-b}
+      file-based-headers: {X-ANOTHER-FILE-HEADER: /other/path/to/file, X-CRDB-FILE-HEADER: /some/path/to/file}
+      compression: gzip
+      filter: INFO
+      format: json-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
+      auditable: false
+      buffering:
+        max-staleness: 15s
+        flush-trigger-size: 5.0KiB
+        max-buffer-size: 2.0MiB
+        format: newline
+    c:
+      channels: {INFO: [HEALTH]}
+      address: c
+      method: POST
+      unsafe-tls: false
+      timeout: 2s
+      disable-keep-alives: false
+      compression: gzip
+      filter: INFO
+      format: json-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
+      auditable: false
+      buffering:
+        max-staleness: 15s
+        flush-trigger-size: 10KiB
+        max-buffer-size: 3.0MiB
+        format: newline
+    d:
+      channels: {INFO: [SESSIONS]}
+      address: d
+      method: POST
+      unsafe-tls: false
+      timeout: 2s
+      disable-keep-alives: false
+      compression: gzip
+      filter: INFO
+      format: json-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
+      auditable: false
       buffering: NONE
   stderr:
     filter: NONE

@@ -23,8 +23,6 @@ import (
 )
 
 func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
-
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
 
 	const tenantID = 123

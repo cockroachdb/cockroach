@@ -14,8 +14,10 @@ import (
 	"bytes"
 	"context"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3/raftpb"
@@ -60,12 +63,10 @@ func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIden
 	if err := storage.MVCCPutProto(
 		ctx,
 		batch,
-		nil,
 		keys.StoreIdentKey(),
 		hlc.Timestamp{},
-		hlc.ClockTimestamp{},
-		nil,
 		&ident,
+		storage.MVCCWriteOptions{},
 	); err != nil {
 		batch.Close()
 		return err
@@ -100,10 +101,13 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	//
 	// We use an EngineIterator to ensure that there are no keys that cannot be
 	// parsed as MVCCKeys (e.g. lock table keys) in the engine.
-	iter := eng.NewEngineIterator(storage.IterOptions{
+	iter, err := eng.NewEngineIterator(ctx, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		UpperBound: roachpb.KeyMax,
 	})
+	if err != nil {
+		return err
+	}
 	defer iter.Close()
 	valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
 	if err != nil {
@@ -162,9 +166,12 @@ func IterateIDPrefixKeys(
 ) error {
 	rangeID := roachpb.RangeID(1)
 	// NB: Range-ID local keys have no versions and no intents.
-	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	iter, err := reader.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 		UpperBound: keys.LocalRangeIDPrefix.PrefixEnd().AsRawKey(),
 	})
+	if err != nil {
+		return err
+	}
 	defer iter.Close()
 
 	for {
@@ -245,7 +252,7 @@ func ReadStoreIdent(ctx context.Context, eng storage.Engine) (roachpb.StoreIdent
 func IterateRangeDescriptorsFromDisk(
 	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
 ) error {
-	log.Event(ctx, "beginning range descriptor iteration")
+	log.Info(ctx, "beginning range descriptor iteration")
 	// MVCCIterator over all range-local key-based data.
 	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
@@ -253,7 +260,25 @@ func IterateRangeDescriptorsFromDisk(
 	allCount := 0
 	matchCount := 0
 	bySuffix := make(map[redact.RedactableString]int)
+
+	var scanStats kvpb.ScanStats
+	opts := storage.MVCCScanOptions{
+		Inconsistent: true,
+		ScanStats:    &scanStats,
+	}
+	lastReportTime := timeutil.Now()
 	kvToDesc := func(kv roachpb.KeyValue) error {
+		const reportPeriod = 10 * time.Second
+		if timeutil.Since(lastReportTime) >= reportPeriod {
+			// Note: MVCCIterate scans and buffers 1000 keys at a time which could
+			// make the scan stats confusing. However, because this callback can't
+			// take a long time, it's very unlikely that we will log twice for the
+			// same batch of keys.
+			log.Infof(ctx, "range descriptor iteration in progress: %d keys, %d range descriptors (by suffix: %v); %v",
+				allCount, matchCount, bySuffix, &scanStats)
+			lastReportTime = timeutil.Now()
+		}
+
 		allCount++
 		// Only consider range metadata entries; ignore others.
 		startKey, suffix, _, err := keys.DecodeRangeKey(kv.Key)
@@ -268,7 +293,7 @@ func IterateRangeDescriptorsFromDisk(
 		if err := kv.Value.GetProto(&desc); err != nil {
 			return err
 		}
-		// Descriptor for range `[a,z)` must be found at `/rdsc/a`.
+		// Descriptor for range `[a,z)` must be found at `/Local/Range/a/RangeDescriptor`.
 		if !startKey.Equal(desc.StartKey.AsRawKey()) {
 			return errors.AssertionFailedf("descriptor stored at %s but has StartKey %s",
 				kv.Key, desc.StartKey)
@@ -287,10 +312,9 @@ func IterateRangeDescriptorsFromDisk(
 		return err
 	}
 
-	_, err := storage.MVCCIterate(ctx, reader, start, end, hlc.MaxTimestamp,
-		storage.MVCCScanOptions{Inconsistent: true}, kvToDesc)
-	log.Eventf(ctx, "iterated over %d keys to find %d range descriptors (by suffix: %v)",
-		allCount, matchCount, bySuffix)
+	_, err := storage.MVCCIterate(ctx, reader, start, end, hlc.MaxTimestamp, opts, kvToDesc)
+	log.Infof(ctx, "range descriptor iteration done: %d keys, %d range descriptors (by suffix: %v); %s",
+		allCount, matchCount, bySuffix, &scanStats)
 	return err
 }
 
@@ -409,25 +433,39 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	// This leads to the general desire to validate the internal consistency of the
 	// entire raft state (i.e. HardState, TruncatedState, Log).
 	{
+		logEvery := log.Every(10 * time.Second)
+		var i int
 		var msg kvserverpb.RaftReplicaID
 		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
 			return keys.RaftReplicaIDKey(rangeID)
 		}, &msg, func(rangeID roachpb.RangeID) error {
+			if logEvery.ShouldLog() && i > 0 { // only log if slow
+				log.Infof(ctx, "loaded replica ID for %d/%d replicas", i, len(s))
+			}
+			i++
 			s.setReplicaID(rangeID, msg.ReplicaID)
 			return nil
 		}); err != nil {
 			return nil, err
 		}
+		log.Infof(ctx, "loaded replica ID for %d/%d replicas", len(s), len(s))
 
+		logEvery = log.Every(10 * time.Second)
+		i = 0
 		var hs raftpb.HardState
 		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
 			return keys.RaftHardStateKey(rangeID)
 		}, &hs, func(rangeID roachpb.RangeID) error {
+			if logEvery.ShouldLog() && i > 0 { // only log if slow
+				log.Infof(ctx, "loaded Raft state for %d/%d replicas", i, len(s))
+			}
+			i++
 			s.setHardState(rangeID, hs)
 			return nil
 		}); err != nil {
 			return nil, err
 		}
+		log.Infof(ctx, "loaded Raft state for %d/%d replicas", len(s), len(s))
 	}
 	sl := make([]Replica, 0, len(s))
 	for _, repl := range s {
@@ -454,12 +492,20 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 	if err != nil {
 		return nil, err
 	}
+	log.Infof(ctx, "loaded %d replicas", len(sl))
 
 	// Check invariants.
 	//
 	// Migrate into RaftReplicaID for all replicas that need it.
+	logEvery := log.Every(10 * time.Second)
 	var newIdx int
-	for _, repl := range sl {
+	for i, repl := range sl {
+		// Log progress regularly, but not for the first replica (we only want to
+		// log when this is slow). The last replica is logged after iteration.
+		if logEvery.ShouldLog() && i > 0 {
+			log.Infof(ctx, "verified %d/%d replicas", i, len(sl))
+		}
+
 		var descReplicaID roachpb.ReplicaID
 		if repl.Desc != nil {
 			// INVARIANT: a Replica's RangeDescriptor always contains the local Store,
@@ -482,7 +528,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 		}
 
 		// Migrate into RaftReplicaID. This migration can be removed once the
-		// BinaryMinSupportedVersion is >= 23.1, and we can assert that
+		// MinSupportedVersion is >= 23.1, and we can assert that
 		// repl.ReplicaID != 0 always holds.
 
 		if descReplicaID != 0 {
@@ -504,13 +550,14 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 			// TODO(tbg): if clearRangeData were in this package we could destroy more
 			// effectively even if for some reason we had in the past written state
 			// other than the HardState here (not supposed to happen, but still).
-			if err := eng.ClearUnversioned(logstore.NewStateLoader(repl.RangeID).RaftHardStateKey()); err != nil {
+			if err := eng.ClearUnversioned(logstore.NewStateLoader(repl.RangeID).RaftHardStateKey(), storage.ClearOptions{}); err != nil {
 				return nil, errors.Wrapf(err, "removing HardState for r%d", repl.RangeID)
 			}
 			log.Eventf(ctx, "removed legacy uninitialized replica for r%s", repl.RangeID)
 			// NB: removed from `sl` since we're not incrementing `newIdx`.
 		}
 	}
+	log.Infof(ctx, "verified %d/%d replicas", len(sl), len(sl))
 
 	return sl[:newIdx], nil
 }

@@ -21,10 +21,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/pmezard/go-difflib/difflib"
+	"github.com/stretchr/testify/require"
 )
 
 // Renumber lines so they're stable no matter what changes above. (We
@@ -85,7 +87,7 @@ Error types: (1) *runtime.TypeAssertionError`,
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -107,7 +109,7 @@ Error types: (1) *withstack.withStack (2) *errutil.withPrefix (3) *runtime.TypeA
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -139,7 +141,7 @@ Error types: (1) *safedetails.withSafeDetails (2) *runtime.TypeAssertionError`,
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -159,7 +161,7 @@ Error types: (1) *withstack.withStack (2) *errutil.leafError`,
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -195,7 +197,7 @@ Error types: (1) *os.LinkError (2) *safedetails.withSafeDetails (3) logcrash.lea
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -208,7 +210,7 @@ Wraps: (3) attached stack trace
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -227,7 +229,7 @@ Wraps: (7) attached stack trace
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -260,7 +262,7 @@ Error types: (1) *net.OpError (2) logcrash.leafErr`,
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -276,7 +278,7 @@ Wraps: (2) secondary error attachment
   |   | 	...crash_reporting_test.go:NN
   |   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   |   | 	...crash_reporting_test.go:NN
-  |   | runtime.doInit
+  |   | runtime.doInit1
   |   | 	...proc.go:NN
   |   | runtime.doInit
   |   | 	...proc.go:NN
@@ -295,7 +297,7 @@ Wraps: (2) secondary error attachment
   |   | 	...crash_reporting_test.go:NN
   |   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   |   | 	...crash_reporting_test.go:NN
-  |   | runtime.doInit
+  |   | runtime.doInit1
   |   | 	...proc.go:NN
   |   | runtime.doInit
   |   | 	...proc.go:NN
@@ -376,6 +378,25 @@ func TestUptimeTag(t *testing.T) {
 		if a, e := uptimeTag(tc.crashTime), tc.expected; a != e {
 			t.Errorf("uptimeTag(%v) got %v, want %v)", tc.crashTime, a, e)
 		}
+	}
+}
+
+func TestGetTagsFromEnvironment(t *testing.T) {
+	testCases := []struct {
+		envTags      string
+		expectedTags map[string]string
+	}{
+		{"", map[string]string{}},
+		{"a=b", map[string]string{"a": "b"}},
+		{"a=123", map[string]string{"a": "123"}},
+		{"a=123;b=FOOBAR", map[string]string{"a": "123", "b": "FOOBAR"}},
+		{"a=123;b=FOOBAR;", map[string]string{"a": "123", "b": "FOOBAR"}},
+	}
+	for _, tc := range testCases {
+		func() {
+			defer envutil.TestSetEnv(t, "COCKROACH_CRASH_REPORT_TAGS", tc.envTags)()
+			require.Equal(t, tc.expectedTags, getTagsFromEnvironment())
+		}()
 	}
 }
 

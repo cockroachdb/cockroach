@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -109,7 +110,18 @@ type KVBatchFetcherResponse struct {
 
 // KVBatchFetcher abstracts the logic of fetching KVs in batches.
 type KVBatchFetcher interface {
-	// SetupNextFetch prepares the fetch of the next set of spans.
+	// SetupNextFetch prepares the fetch of the next set of spans. Can be called
+	// multiple times.
+	//
+	// The fetcher takes ownership of the spans slice, will perform the memory
+	// accounting for it, and might modify it. The caller is only allowed to
+	// reuse the spans slice after all rows have been fetched (i.e. NextBatch()
+	// returned KVBatchFetcherResponse.MoreKVs=false) or the fetcher has been
+	// closed.
+	//
+	// The fetcher can also modify the spanIDs slice but will **not** perform
+	// memory accounting for it. If spanIDs is non-nil, then it must be of the
+	// same length as spans.
 	//
 	// spansCanOverlap indicates whether spans might be unordered and
 	// overlapping. If true, then spanIDs must be non-nil.
@@ -276,6 +288,10 @@ func (rf *Fetcher) Close(ctx context.Context) {
 	}
 }
 
+// TraceKVVerbosity is the verbosity level at which pretty printed KVs
+// are logged.
+const TraceKVVerbosity = 2
+
 // FetcherInitArgs contains arguments for Fetcher.Init.
 type FetcherInitArgs struct {
 	// StreamingKVFetcher, if non-nil, contains the KVFetcher that uses the
@@ -299,6 +315,8 @@ type FetcherInitArgs struct {
 	// LockWaitPolicy represents the policy to be used for handling conflicting
 	// locks held by other active transactions.
 	LockWaitPolicy descpb.ScanLockingWaitPolicy
+	// LockDurability represents the row-level locking durability to use.
+	LockDurability descpb.ScanLockingDurability
 	// LockTimeout specifies the maximum amount of time that the fetcher will
 	// wait while attempting to acquire a lock on a key or while blocking on an
 	// existing lock in order to perform a non-locking read on a key.
@@ -308,7 +326,10 @@ type FetcherInitArgs struct {
 	MemMonitor *mon.BytesMonitor
 	Spec       *fetchpb.IndexFetchSpec
 	// TraceKV indicates whether or not session tracing is enabled.
-	TraceKV                    bool
+	TraceKV bool
+	// TraceKVEvery controls how often KVs are sampled for logging with traceKV
+	// enabled.
+	TraceKVEvery               *util.EveryN
 	ForceProductionKVBatchSize bool
 	// SpansCanOverlap indicates whether the spans in a given batch can overlap
 	// with one another. If it is true, spans that correspond to the same row must
@@ -440,6 +461,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			reverse:                    args.Reverse,
 			lockStrength:               args.LockStrength,
 			lockWaitPolicy:             args.LockWaitPolicy,
+			lockDurability:             args.LockDurability,
 			lockTimeout:                args.LockTimeout,
 			acc:                        rf.kvFetcherMemAcc,
 			forceProductionKVBatchSize: args.ForceProductionKVBatchSize,
@@ -448,8 +470,10 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 		}
 		if args.Txn != nil {
 			fetcherArgs.sendFn = makeTxnKVFetcherDefaultSendFunc(args.Txn, &batchRequestsIssued)
-			fetcherArgs.requestAdmissionHeader = args.Txn.AdmissionHeader()
-			fetcherArgs.responseAdmissionQ = args.Txn.DB().SQLKVResponseAdmissionQ
+			fetcherArgs.admission.requestHeader = args.Txn.AdmissionHeader()
+			fetcherArgs.admission.responseQ = args.Txn.DB().SQLKVResponseAdmissionQ
+			fetcherArgs.admission.pacerFactory = args.Txn.DB().AdmissionPacerFactory
+			fetcherArgs.admission.settingsValues = args.Txn.DB().SettingsValues
 		}
 		rf.kvFetcher = newKVFetcher(newTxnKVFetcherInternal(fetcherArgs))
 	}
@@ -671,10 +695,13 @@ func (rf *Fetcher) ConsumeKVProvider(ctx context.Context, f *KVProvider) error {
 	if !rf.args.WillUseKVProvider {
 		return errors.AssertionFailedf("ConsumeKVProvider is called instead of StartScan")
 	}
-	if rf.kvFetcher != nil {
+	if rf.kvFetcher == nil {
+		rf.kvFetcher = newKVFetcher(f)
+	} else {
 		rf.kvFetcher.Close(ctx)
+		rf.kvFetcher.reset(f)
 	}
-	rf.kvFetcher = newKVFetcher(f)
+
 	return rf.startScan(ctx)
 }
 
@@ -1110,8 +1137,12 @@ func (rf *Fetcher) NextRow(ctx context.Context) (row rowenc.EncDatumRow, spanID 
 		if err != nil {
 			return nil, 0, err
 		}
-		if rf.args.TraceKV {
-			log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
+		// TraceKVEvery is a util.EveryN and not a log.EveryN because
+		// log.EveryN will always print under verbosity level 2.
+		// The caller may choose to set it to avoid logging
+		// too many rows. If unset, we log every KV.
+		if rf.args.TraceKV && (rf.args.TraceKVEvery == nil || rf.args.TraceKVEvery.ShouldProcess(timeutil.Now())) {
+			log.VEventf(ctx, TraceKVVerbosity, "fetched: %s -> %s", prettyKey, prettyVal)
 		}
 
 		rowDone, spanID, err := rf.nextKey(ctx)

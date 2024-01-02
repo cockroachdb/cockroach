@@ -24,7 +24,7 @@ function docsURLNoVersion(pageName: string): string {
 }
 
 export let adminUILoginNoVersion = docsURLNoVersion(
-  "ui-overview.html#db-console-security",
+  "ui-overview.html#db-console-security-considerations",
 );
 export let startFlags: string;
 export let pauseJob: string;
@@ -59,6 +59,7 @@ export let reviewOfCockroachTerminology: string;
 export let privileges: string;
 export let showSessions: string;
 export let sessionsTable: string;
+export let upgradeTroubleshooting: string;
 // Note that these explicitly don't use the current version, since we want to
 // link to the most up-to-date documentation available.
 export const upgradeCockroachVersion =
@@ -76,7 +77,7 @@ export let readsAndWritesOverviewPage: string;
 
 export const recomputeDocsURLs = () => {
   adminUILoginNoVersion = docsURLNoVersion(
-    "ui-overview.html#db-console-security",
+    "ui-overview.html#db-console-security-considerations",
   );
   startFlags = docsURL("start-a-node.html#flags");
   pauseJob = docsURL("pause-job.html");
@@ -132,6 +133,9 @@ export const recomputeDocsURLs = () => {
   uiDebugPages = docsURL("ui-debug-pages.html");
   readsAndWritesOverviewPage = docsURLNoVersion(
     "architecture/reads-and-writes-overview.html#important-concepts",
+  );
+  upgradeTroubleshooting = docsURL(
+    "upgrade-cockroach-version.html#troubleshooting",
   );
 };
 

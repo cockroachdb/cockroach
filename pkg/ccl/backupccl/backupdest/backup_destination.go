@@ -59,12 +59,12 @@ var backupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupbase
 // specified subdirectory if no backup already exists at that subdirectory. As
 // of 22.1, this feature is default disabled, and will be totally disabled by 22.2.
 var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.backup.deprecated_full_backup_with_subdir.enabled",
 	"when true, a backup command with a user specified subdirectory will create a full backup at"+
-		" the subdirectory if no backup already exists at that subdirectory.",
+		" the subdirectory if no backup already exists at that subdirectory",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 // TODO(adityamaru): Move this to the soon to be `backupinfo` package.
 func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
@@ -197,7 +197,7 @@ func ResolveDest(
 						"Or, to take a full backup at a specific subdirectory, "+
 						"enable the deprecated syntax by switching the %q cluster setting to true; "+
 						"however, note this deprecated syntax will not be available in a future release.",
-						chosenSuffix, featureFullBackupUserSubdir.Key())
+						chosenSuffix, featureFullBackupUserSubdir.Name())
 			}
 		}
 		// There's no full backup in the resolved subdirectory; therefore, we're conducting a full backup.
@@ -311,9 +311,16 @@ func FindLatestFile(
 	// in the base directory if the first attempt fails.
 
 	// We name files such that the most recent latest file will always
-	// be at the top, so just grab the first filename.
+	// be at the top, so just grab the first filename _unless_ it's the
+	// empty object with a trailing '/'. The latter is never created by our code
+	// but can be created by other tools, e.g., AWS DataSync to transfer an existing backup to
+	// another bucket. (See https://github.com/cockroachdb/cockroach/issues/106070.)
 	err := exportStore.List(ctx, backupbase.LatestHistoryDirectory, "", func(p string) error {
 		p = strings.TrimPrefix(p, "/")
+		if p == "" {
+			// N.B. skip the empty object with a trailing '/', created by a third-party tool.
+			return nil
+		}
 		latestFile = p
 		latestFileFound = true
 		// We only want the first latest file so return an error that it is
@@ -533,7 +540,7 @@ func ResolveBackupManifests(
 			mem.Shrink(ctx, ownedMemSize)
 		}
 	}()
-	baseManifest, memSize, err := backupinfo.ReadBackupManifestFromStore(ctx, mem, baseStores[0],
+	baseManifest, memSize, err := backupinfo.ReadBackupManifestFromStore(ctx, mem, baseStores[0], fullyResolvedBaseDirectory[0],
 		encryption, kmsEnv)
 	if err != nil {
 		return nil, nil, nil, 0, err
@@ -685,7 +692,7 @@ func DeprecatedResolveBackupManifestsExplicitIncrementals(
 
 		var memSize int64
 		mainBackupManifests[i], memSize, err = backupinfo.ReadBackupManifestFromStore(ctx, mem,
-			stores[0], encryption, kmsEnv)
+			stores[0], uris[0], encryption, kmsEnv)
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}

@@ -34,12 +34,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-var defaultNumSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 50)
+var defaultNumSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 100)
 
-func testClusterArgs(tr *SeqTracker) base.TestClusterArgs {
+func (cfg kvnemesisTestCfg) testClusterArgs(tr *SeqTracker) base.TestClusterArgs {
 	storeKnobs := &kvserver.StoreTestingKnobs{
 		// Drop the clock MaxOffset to reduce commit-wait time for
 		// transactions that write to global_read ranges.
@@ -52,6 +54,77 @@ func testClusterArgs(tr *SeqTracker) base.TestClusterArgs {
 				tr.Add(key, endKey, ts, seq)
 			}
 		},
+	}
+
+	isOurCommand := func(ba *kvpb.BatchRequest) (string, uint64, bool) {
+		key := ba.Requests[0].GetInner().Header().Key
+		n, err := fkE(string(key))
+		if err != nil {
+			return "", 0, false
+		}
+		return string(key), n, true
+	}
+
+	shouldInject := func(baseProb float64, key uint64, attempt int) bool {
+		// Example: baseProb = 0.8
+		// On attempt 1, 0.8/1 = 80% chance of catching retry.
+		// On attempt 2, 0.8/2 = 40%.
+		// On attempt 3, 0.8/3 = 27%.
+		// And so on.
+		thresh := baseProb / float64(attempt)
+		// NB: it's important to include "attempt" in here so that a write to a key
+		// that is unlucky enough to map to, say, 1E-9, eventually gets to
+		// successfully go through.
+		return rand.New(rand.NewSource(int64(attempt)+int64(key))).Float64() < thresh
+	}
+
+	storeKnobs.LeaseIndexFilter = nil
+	storeKnobs.InjectReproposalError = nil
+
+	if p := cfg.injectReproposalErrorProb; p > 0 {
+		var mu syncutil.Mutex
+		seen := map[string]int{}
+		storeKnobs.InjectReproposalError = func(pd *kvserver.ProposalData) error {
+			key, n, ok := isOurCommand(pd.Request)
+			if !ok {
+				return nil
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			seen[key]++
+			if !shouldInject(p, n, seen[key]) {
+				return nil
+			}
+			log.Infof(context.Background(), "inserting reproposal error for %s (seen %d times)", roachpb.Key(key), seen[key])
+			err := errInjected // special error that kvnemesis accepts
+			return errors.Wrapf(err, "on %s at %s", pd.Request.Summary(), roachpb.Key(key))
+		}
+	}
+
+	if p := cfg.invalidLeaseAppliedIndexProb; p > 0 {
+		var mu syncutil.Mutex
+		seen := map[string]int{}
+		storeKnobs.LeaseIndexFilter = func(pd *kvserver.ProposalData) kvpb.LeaseAppliedIndex {
+			key, n, ok := isOurCommand(pd.Request)
+			if !ok {
+				return 0
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			seen[key]++
+			if !shouldInject(p, n, seen[key]) {
+				return 0
+			}
+			log.Infof(context.Background(), "inserting illegal lease index for %s (seen %d times)", roachpb.Key(key), seen[key])
+			// LAI 1 is always going to fail because the LAI is initialized when the lease
+			// comes into existence. (It's important that we pick one here that reliably
+			// fails because otherwise we may accidentally regress the closed timestamp[^1].
+			//
+			// [^1]: https://github.com/cockroachdb/cockroach/issues/70894#issuecomment-1433244880
+			return 1
+		}
 	}
 
 	return base.TestClusterArgs{
@@ -139,6 +212,18 @@ type kvnemesisTestCfg struct {
 	numSteps     int
 	concurrency  int
 	seedOverride int64
+	// The two knobs below inject illegal lease index errors and, for the
+	// resulting reproposals, reproposal errors. The injection is stateful and
+	// remembers the keys on which the commands operated, and, per key, the
+	// probability is scaled down linearly based on the number of times we've
+	// injected an error. In other words, this can be set to 1.0 and some amount
+	// of progress would still be made.
+	//
+	// NB: to at least directionally preserve determinism, the rand for each dice
+	// roll is seeded from the uint64 represented by the key, so this shouldn't be
+	// considered truly random, but is random enough for the desired purpose.
+	invalidLeaseAppliedIndexProb float64 // [0,1)
+	injectReproposalErrorProb    float64 // [0,1)
 }
 
 func TestKVNemesisSingleNode(t *testing.T) {
@@ -146,10 +231,26 @@ func TestKVNemesisSingleNode(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testKVNemesisImpl(t, kvnemesisTestCfg{
-		numNodes:     1,
-		numSteps:     defaultNumSteps,
-		concurrency:  5,
-		seedOverride: 0,
+		numNodes:                     1,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+	})
+}
+
+func TestKVNemesisSingleNode_ReproposalChaos(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     1,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.9,
+		injectReproposalErrorProb:    0.5,
 	})
 }
 
@@ -158,10 +259,12 @@ func TestKVNemesisMultiNode(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testKVNemesisImpl(t, kvnemesisTestCfg{
-		numNodes:     4,
-		numSteps:     defaultNumSteps,
-		concurrency:  5,
-		seedOverride: 0,
+		numNodes:                     4,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
 	})
 }
 
@@ -182,7 +285,7 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 	// 4 nodes so we have somewhere to move 3x replicated ranges to.
 	ctx := context.Background()
 	tr := &SeqTracker{}
-	tc := testcluster.StartTestCluster(t, cfg.numNodes, testClusterArgs(tr))
+	tc := testcluster.StartTestCluster(t, cfg.numNodes, cfg.testClusterArgs(tr))
 	defer tc.Stopper().Stop(ctx)
 	dbs, sqlDBs := make([]*kv.DB, cfg.numNodes), make([]*gosql.DB, cfg.numNodes)
 	for i := 0; i < cfg.numNodes; i++ {
@@ -192,7 +295,7 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	// Turn net/trace on, which results in real trace spans created throughout.
 	// This gives kvnemesis a chance to hit NPEs related to tracing.
-	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING trace.debug.enable = true`)
+	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING trace.debug_http_endpoint.enabled = true`)
 
 	config := NewDefaultConfig()
 	config.NumNodes = cfg.numNodes
@@ -203,6 +306,16 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 	logger := newTBridge(t)
 	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger}
 	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, dbs...)
+
+	for i := 0; i < cfg.numNodes; i++ {
+		t.Logf("[%d] proposed: %d", i,
+			tc.GetFirstStoreFromServer(t, i).Metrics().RaftCommandsProposed.Count())
+		t.Logf("[%d] reproposed unchanged: %d", i,
+			tc.GetFirstStoreFromServer(t, i).Metrics().RaftCommandsReproposed.Count())
+		t.Logf("[%d] reproposed with new LAI: %d", i,
+			tc.GetFirstStoreFromServer(t, i).Metrics().RaftCommandsReproposedLAI.Count())
+	}
+
 	require.NoError(t, err, `%+v`, err)
 	require.Zero(t, len(failures), "kvnemesis detected failures") // they've been logged already
 }

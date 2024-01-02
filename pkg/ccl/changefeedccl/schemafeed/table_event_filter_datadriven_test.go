@@ -64,13 +64,12 @@ func TestDataDriven(t *testing.T) {
 	testData := datapathutils.TestDataPath(t, "")
 	datadriven.Walk(t, testData, func(t *testing.T, path string) {
 		ctx := context.Background()
-		ts, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-			// TODO(ajwerner): Otherwise the test gets skipped due to some CCL warning.
-			DefaultTestTenant: base.TestTenantDisabled,
-		})
+		srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
+		ts := srv.ApplicationLayer()
+
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
-		defer ts.Stopper().Stop(ctx)
-		ctx, cancel := ts.Stopper().WithCancelOnQuiesce(ctx)
+		ctx, cancel := ts.AppStopper().WithCancelOnQuiesce(ctx)
 		defer cancel()
 		schemaFeeds := map[int]schemafeed.SchemaFeed{}
 		parseTargets := func(t *testing.T, in string) (targets changefeedbase.Targets) {

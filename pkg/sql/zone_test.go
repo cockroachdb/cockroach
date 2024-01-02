@@ -17,10 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -33,23 +31,23 @@ func TestValidSetShowZones(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE DATABASE d; USE d; CREATE TABLE t ();`)
 
-	yamlDefault := fmt.Sprintf("gc: {ttlseconds: %d}", s.(*server.TestServer).Cfg.DefaultZoneConfig.GC.TTLSeconds)
+	yamlDefault := fmt.Sprintf("gc: {ttlseconds: %d}", s.DefaultZoneConfig().GC.TTLSeconds)
 	yamlOverride := "gc: {ttlseconds: 42}"
-	zoneOverride := s.(*server.TestServer).Cfg.DefaultZoneConfig
+	zoneOverride := s.DefaultZoneConfig()
 	zoneOverride.GC = &zonepb.GCPolicy{TTLSeconds: 42}
 	partialZoneOverride := *zonepb.NewZoneConfig()
 	partialZoneOverride.GC = &zonepb.GCPolicy{TTLSeconds: 42}
 
 	defaultRow := sqlutils.ZoneRow{
 		ID:     keys.RootNamespaceID,
-		Config: s.(*server.TestServer).Cfg.DefaultZoneConfig,
+		Config: s.DefaultZoneConfig(),
 	}
 	defaultOverrideRow := sqlutils.ZoneRow{
 		ID:     keys.RootNamespaceID,
@@ -236,7 +234,7 @@ func TestZoneInheritField(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -246,12 +244,12 @@ func TestZoneInheritField(t *testing.T) {
 
 	defaultRow := sqlutils.ZoneRow{
 		ID:     keys.RootNamespaceID,
-		Config: s.(*server.TestServer).Cfg.DefaultZoneConfig,
+		Config: s.DefaultZoneConfig(),
 	}
 
 	newReplicationFactor := 10
 	tableID := sqlutils.QueryTableID(t, db, "d", "public", "t")
-	newDefCfg := s.(*server.TestServer).Cfg.DefaultZoneConfig
+	newDefCfg := s.DefaultZoneConfig()
 	newDefCfg.NumReplicas = proto.Int32(int32(newReplicationFactor))
 
 	newDefaultRow := sqlutils.ZoneRow{
@@ -261,7 +259,7 @@ func TestZoneInheritField(t *testing.T) {
 
 	newTableRow := sqlutils.ZoneRow{
 		ID:     tableID,
-		Config: s.(*server.TestServer).Cfg.DefaultZoneConfig,
+		Config: s.DefaultZoneConfig(),
 	}
 
 	// Doesn't have any values of its own.
@@ -283,7 +281,7 @@ func TestInvalidSetShowZones(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 

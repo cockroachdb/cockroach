@@ -617,6 +617,12 @@ UPDATE abcde SET b=1 ORDER BY c
 ----
 error (42601): UPDATE statement requires LIMIT when ORDER BY is used
 
+# Aggregate functions are not allowed in ORDER BY.
+build
+UPDATE abcde SET b=1 ORDER BY sum(c) LIMIT 1
+----
+error (42803): sum(): aggregate functions are not allowed in ORDER BY in UPDATE
+
 # ------------------------------------------------------------------------------
 # Test RETURNING.
 # ------------------------------------------------------------------------------
@@ -805,7 +811,7 @@ error (42803): sum(): aggregate functions are not allowed in RETURNING
 build
 UPDATE abcde SET c=1 RETURNING generate_series(1, 10)
 ----
-error (0A000): generate_series(): generator functions are not allowed in RETURNING
+error (0A000): generate_series(): set-returning functions are not allowed in RETURNING
 
 # ------------------------------------------------------------------------------
 # Test DEFAULT values.
@@ -1697,6 +1703,188 @@ update checks
            ├── abcde.b:14 < checks.d:10 [as=check1:22]
            └── abcde.a:13 > 0 [as=check2:23]
 
+# Test multi-column-family checks under read committed. If a check constraint
+# contains multiple column families but only some of them are updated, the
+# query should fail under read committed.
+
+exec-ddl
+CREATE TABLE multi_col_fam_checks (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  FAMILY (a),
+  FAMILY (b, d),
+  FAMILY (c, e),
+  CHECK (a < b),
+  CHECK (c != d)
+)
+----
+
+# Only a is updated, but b must be read to check the constraint. Should fail
+# under read committed.
+build isolation=ReadCommitted
+UPDATE multi_col_fam_checks SET a = 5
+----
+error (0A000): unimplemented: multi-column-family check constraints are not yet supported under read committed isolation
+
+# The same query should succeed under serializable isolation.
+build isolation=Serializable
+UPDATE multi_col_fam_checks SET a = 5
+----
+update multi_col_fam_checks
+ ├── columns: <none>
+ ├── fetch columns: a:8 b:9 c:10 d:11 e:12
+ ├── update-mapping:
+ │    └── a_new:15 => a:1
+ ├── check columns: check1:16
+ └── project
+      ├── columns: check1:16 check2:17 a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14 a_new:15!null
+      ├── project
+      │    ├── columns: a_new:15!null a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    ├── scan multi_col_fam_checks
+      │    │    └── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    └── projections
+      │         └── 5 [as=a_new:15]
+      └── projections
+           ├── a_new:15 < b:9 [as=check1:16]
+           └── c:10 != d:11 [as=check2:17]
+
+# Only a is updated, but b is read. Should fail under read committed.
+build isolation=ReadCommitted
+UPDATE multi_col_fam_checks SET a = 5 WHERE b = 6 AND c = 3
+----
+error (0A000): unimplemented: multi-column-family check constraints are not yet supported under read committed isolation
+
+# The same query should succeed under serializable isolation.
+build isolation=Serializable
+UPDATE multi_col_fam_checks SET a = 5 WHERE b = 6 AND c = 3
+----
+update multi_col_fam_checks
+ ├── columns: <none>
+ ├── fetch columns: a:8 b:9 c:10 d:11 e:12
+ ├── update-mapping:
+ │    └── a_new:15 => a:1
+ ├── check columns: check1:16
+ └── project
+      ├── columns: check1:16!null check2:17 a:8!null b:9!null c:10!null d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14 a_new:15!null
+      ├── project
+      │    ├── columns: a_new:15!null a:8!null b:9!null c:10!null d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    ├── select
+      │    │    ├── columns: a:8!null b:9!null c:10!null d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── scan multi_col_fam_checks
+      │    │    │    └── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    └── filters
+      │    │         └── (b:9 = 6) AND (c:10 = 3)
+      │    └── projections
+      │         └── 5 [as=a_new:15]
+      └── projections
+           ├── a_new:15 < b:9 [as=check1:16]
+           └── c:10 != d:11 [as=check2:17]
+
+# Both a and b are updated, so this should succeed.
+build isolation=ReadCommitted
+UPDATE multi_col_fam_checks SET a = 5, b = 6
+----
+update multi_col_fam_checks
+ ├── columns: <none>
+ ├── fetch columns: a:8 b:9 c:10 d:11 e:12
+ ├── update-mapping:
+ │    ├── a_new:15 => a:1
+ │    └── b_new:16 => b:2
+ ├── check columns: check1:17
+ └── project
+      ├── columns: check1:17!null check2:18 a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14 a_new:15!null b_new:16!null
+      ├── project
+      │    ├── columns: a_new:15!null b_new:16!null a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    ├── scan multi_col_fam_checks
+      │    │    └── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    └── projections
+      │         ├── 5 [as=a_new:15]
+      │         └── 6 [as=b_new:16]
+      └── projections
+           ├── a_new:15 < b_new:16 [as=check1:17]
+           └── c:10 != d:11 [as=check2:18]
+
+# Both a and b are updated, so this should succeed.
+build isolation=ReadCommitted
+UPDATE multi_col_fam_checks SET a = 5, b = 6, e = 3
+----
+update multi_col_fam_checks
+ ├── columns: <none>
+ ├── fetch columns: a:8 b:9 c:10 d:11 e:12
+ ├── update-mapping:
+ │    ├── a_new:15 => a:1
+ │    ├── b_new:16 => b:2
+ │    └── e_new:17 => e:5
+ ├── check columns: check1:18
+ └── project
+      ├── columns: check1:18!null check2:19 a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14 a_new:15!null b_new:16!null e_new:17!null
+      ├── project
+      │    ├── columns: a_new:15!null b_new:16!null e_new:17!null a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    ├── scan multi_col_fam_checks
+      │    │    └── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    └── projections
+      │         ├── 5 [as=a_new:15]
+      │         ├── 6 [as=b_new:16]
+      │         └── 3 [as=e_new:17]
+      └── projections
+           ├── a_new:15 < b_new:16 [as=check1:18]
+           └── c:10 != d:11 [as=check2:19]
+
+# Neither a nor b is updated, so this should succeed.
+build isolation=ReadCommitted
+UPDATE multi_col_fam_checks SET e = 3 WHERE a = 5
+----
+update multi_col_fam_checks
+ ├── columns: <none>
+ ├── fetch columns: a:8 b:9 c:10 d:11 e:12
+ ├── update-mapping:
+ │    └── e_new:15 => e:5
+ └── project
+      ├── columns: check1:16 check2:17 a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14 e_new:15!null
+      ├── project
+      │    ├── columns: e_new:15!null a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    ├── select
+      │    │    ├── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── scan multi_col_fam_checks
+      │    │    │    └── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    └── filters
+      │    │         └── a:8 = 5
+      │    └── projections
+      │         └── 3 [as=e_new:15]
+      └── projections
+           ├── a:8 < b:9 [as=check1:16]
+           └── c:10 != d:11 [as=check2:17]
+
+# Neither a nor b is updated, so this should succeed.
+build isolation=ReadCommitted
+UPDATE multi_col_fam_checks SET e = 3
+----
+update multi_col_fam_checks
+ ├── columns: <none>
+ ├── fetch columns: a:8 b:9 c:10 d:11 e:12
+ ├── update-mapping:
+ │    └── e_new:15 => e:5
+ └── project
+      ├── columns: check1:16 check2:17 a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14 e_new:15!null
+      ├── project
+      │    ├── columns: e_new:15!null a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    ├── scan multi_col_fam_checks
+      │    │    └── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    └── projections
+      │         └── 3 [as=e_new:15]
+      └── projections
+           ├── a:8 < b:9 [as=check1:16]
+           └── c:10 != d:11 [as=check2:17]
+
+# Test failure due to a different constraint on c and d.
+build isolation=ReadCommitted
+UPDATE multi_col_fam_checks SET d = 4, e = 5
+----
+error (0A000): unimplemented: multi-column-family check constraints are not yet supported under read committed isolation
+
 # ------------------------------------------------------------------------------
 # Test assignment casts.
 # ------------------------------------------------------------------------------
@@ -1727,7 +1915,7 @@ update decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:10
-      │    │    │    │    │              └── a:7 + c:9
+      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:13]
       │    │    │    │         └── ARRAY[0.95, NULL, 15::DECIMAL(10,2)] [as=b_new:14]
@@ -1772,7 +1960,7 @@ update decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:10
-      │    │    │    │    │              └── a:7 + c:9
+      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:13]
       │    │    │    │         └── ARRAY[0.95,NULL,15.00] [as=b_new:14]
@@ -1812,7 +2000,7 @@ update assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    └── computed column expressions
       │    │    │         └── d_comp:15
-      │    │    │              └── d:14 + 10.0
+      │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    └── projections
       │    │         ├── ' ' [as=c_new:19]
       │    │         ├── 'foo' [as=qc_new:20]
@@ -1849,7 +2037,7 @@ update assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    └── computed column expressions
       │    │    │         └── d_comp:15
-      │    │    │              └── d:14 + 10.0
+      │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    └── projections
       │    │         ├── ' ' [as=c_new:19]
       │    │         ├── 'foo' [as=qc_new:20]
@@ -1881,7 +2069,7 @@ update assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    └── computed column expressions
       │    │    │         └── d_comp:15
-      │    │    │              └── d:14 + 10.0
+      │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    └── projections
       │    │         └── 10::INT2 [as=i_new:19]
       │    └── projections
@@ -1913,7 +2101,7 @@ update assn_cast
       │    │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d_comp:15
-      │    │    │    │              └── d:14 + 10.0
+      │    │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    │    └── projections
       │    │    │         └── 1.45::DECIMAL(10,2) [as=d_new:19]
       │    │    └── projections
@@ -1948,7 +2136,7 @@ update assn_cast
       │    │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d_comp:15
-      │    │    │    │              └── d:14 + 10.0
+      │    │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    │    └── projections
       │    │    │         └── 1.45 [as=d_new:19]
       │    │    └── projections
@@ -1986,7 +2174,7 @@ update decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:10
-      │    │    │    │    │              └── a:7 + c:9
+      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:13]
       │    │    │    │         └── ARRAY[0.95, NULL, 15::DECIMAL(10,2)] [as=b_new:14]
@@ -2030,7 +2218,7 @@ update decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:10
-      │    │    │    │    │              └── a:7 + c:9
+      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:13]
       │    │    │    │         └── ARRAY[0.95,NULL,15.00] [as=b_new:14]
@@ -2068,7 +2256,7 @@ update assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    └── computed column expressions
       │    │    │         └── d_comp:15
-      │    │    │              └── d:14 + 10.0
+      │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    └── projections
       │    │         ├── ' ' [as=c_new:19]
       │    │         └── 10::INT2 [as=i_new:20]
@@ -2100,7 +2288,7 @@ update assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    └── computed column expressions
       │    │    │         └── d_comp:15
-      │    │    │              └── d:14 + 10.0
+      │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    └── projections
       │    │         ├── ' ' [as=c_new:19]
       │    │         └── 10::INT2 [as=i_new:20]
@@ -2137,7 +2325,7 @@ update decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:10
-      │    │    │    │    │              └── a:7 + c:9
+      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
       │    │    │    │    ├── max1-row
       │    │    │    │    │    ├── columns: n:13!null
       │    │    │    │    │    └── project
@@ -2185,7 +2373,7 @@ update decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 decimals.crdb_internal_mvcc_timestamp:11 decimals.tableoid:12
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:10
-      │    │    │    │    │              └── a:7 + c:9
+      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
       │    │    │    │    ├── max1-row
       │    │    │    │    │    ├── columns: u:13!null "?column?":18!null
       │    │    │    │    │    └── project
@@ -2236,7 +2424,7 @@ update assn_cast
       │    │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 assn_cast.rowid:16!null assn_cast.crdb_internal_mvcc_timestamp:17 assn_cast.tableoid:18
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d_comp:15
-      │    │    │    │              └── d:14 + 10.0
+      │    │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    │    ├── max1-row
       │    │    │    │    ├── columns: "?column?":24!null "?column?":25!null
       │    │    │    │    └── project
@@ -2283,7 +2471,7 @@ update assn_cast_on_update
       │    │    │    │    ├── columns: i:10 i2:11 d:12 d2:13 d_comp:14 b:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d_comp:14
-      │    │    │    │              └── d:12
+      │    │    │    │              └── d:12::DECIMAL(10)
       │    │    │    └── projections
       │    │    │         ├── 1 [as=i_new:19]
       │    │    │         └── true [as=b_new:20]

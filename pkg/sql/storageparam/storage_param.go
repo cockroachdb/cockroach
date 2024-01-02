@@ -65,6 +65,11 @@ func Set(
 		// Cast these as strings.
 		expr := paramparse.UnresolvedNameToStrVal(sp.Value)
 
+		// Storage params handle their own scalar arguments, with no help from the
+		// optimizer. As such, they cannot contain subqueries.
+		defer semaCtx.Properties.Restore(semaCtx.Properties)
+		semaCtx.Properties.Require("table storage parameters", tree.RejectSubqueries)
+
 		// Convert the expressions to a datum.
 		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.Any)
 		if err != nil {

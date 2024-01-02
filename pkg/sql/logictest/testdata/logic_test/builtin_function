@@ -41,6 +41,18 @@ SELECT bit_length('Hello'), bit_length('世界'), bit_length(b'世界')
 ----
 40 48 48
 
+statement ok
+CREATE TABLE bit_count_test (a BIT(3), b varbit, c bytea)
+
+statement ok
+INSERT INTO bit_count_test VALUES (B'101', B'00', '\x10'), (B'100', B'101', '\x10A2')
+
+query TTTIII rowsort
+SELECT a, b, encode(c, 'hex'), bit_count(a), bit_count(b), bit_count(c) FROM bit_count_test
+----
+101  00   10    2  0  1
+100  101  10a2  1  2  4
+
 query TTTTTTTT
 SELECT quote_ident('abc'), quote_ident('ab.c'), quote_ident('ab"c'), quote_ident('世界'),
        quote_ident('array'), -- reserved keyword
@@ -103,7 +115,7 @@ SELECT upper('roacH7')
 upper
 ROACH7
 
-query T
+query T rowsort
 SELECT unaccent(str) FROM ( VALUES
    ('no_special_CHARACTERS1!'),
    ('Żółć'),
@@ -1253,7 +1265,7 @@ SELECT trunc(-0.0), trunc(0.0), trunc(1.9), trunc(19.5678::decimal)
 ----
 0 0 1 19
 
-query RRRRRRR
+query RRRRRRR rowsort
 WITH v(x) AS
   (VALUES('0'::numeric),('1'::numeric),('-1'::numeric),('4.2'::numeric),
     ('-7.777'::numeric),('9127.777'::numeric),('inf'::numeric),('-inf'::numeric),('nan'::numeric))
@@ -1668,7 +1680,7 @@ SELECT current_schemas(false)
 
 # Force the function to be evaluated at execution time and verify it doesn't
 # break when distsql is on.
-query T
+query T rowsort
 SELECT current_schemas(x) FROM (VALUES (true), (false)) AS t(x);
 ----
 {pg_catalog,pg_extension,public}
@@ -2021,7 +2033,7 @@ SELECT pg_catalog.pg_typeof(sign(1:::decimal))
 ----
 numeric
 
-query T
+query T rowsort
 VALUES (pg_typeof(1:::int)),
        (pg_typeof('a':::string)),
        (pg_typeof(true)),
@@ -2042,7 +2054,7 @@ timestamp with time zone
 bytea
 bigint[]
 
-query T
+query T rowsort
 VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('bit'::regtype, -1)),
        (format_type('bool'::regtype, -1)),
@@ -2133,7 +2145,7 @@ character varying[]
 integer
 smallint
 
-query T
+query T rowsort
 VALUES (format_type('anyelement'::regtype, NULL)),
        (format_type('bool'::regtype, NULL)),
        (format_type('bytea'::regtype, NULL)),
@@ -2426,7 +2438,7 @@ SELECT oid(-2147483649)
 query error OID out of range: 4294967296
 SELECT oid(4294967296)
 
-query T
+query T rowsort
 SELECT to_english(i) FROM (VALUES (1), (13), (617), (-2), (-9223372036854775808)) AS a(i)
 ----
 one
@@ -2452,7 +2464,7 @@ true false true false true false true true true
 
 # The hash functions should be stable, so verify that the following hashes
 # don't change.
-query T
+query T rowsort
 SELECT i FROM (VALUES
   (sha512(true::string)),
   (sha512(false::string)),
@@ -2989,19 +3001,19 @@ select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_interna
 ----
 true
 
-query error pq: crdb_internal.json_to_pb\(\): invalid proto JSON: unmarshaling json to cockroach.sql.sqlbase.Descriptor: unknown field "__redacted__" in descpb.Descriptor
+query error pq: crdb_internal.json_to_pb\(\): invalid proto JSON: unmarshaling to cockroach.sql.sqlbase.Descriptor json: .+ unknown field "__redacted__" in descpb.Descriptor
 select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, true, true)) = descriptor from system.descriptor where id = 1
 
 subtest regexp_split
 
-query T
+query T nosort
 SELECT regexp_split_to_table('3aa0AAa1', 'a+')
 ----
 3
 0AA
 1
 
-query T
+query T nosort
 SELECT regexp_split_to_table('3aa0AAa1', 'a+', 'i')
 ----
 3
@@ -3038,7 +3050,7 @@ subtest crdb_internal.payloads_for_span
 # switch users -- this one has no permissions so expect errors
 user testuser
 
-query error pq: only users with the admin role are allowed to use crdb_internal.payloads_for_span
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.payloads_for_span(0)
 
 user root
@@ -3054,7 +3066,7 @@ subtest crdb_internal.payloads_for_trace
 # switch users -- this one has no permissions so expect errors
 user testuser
 
-query error pq: only users with the admin role are allowed to use crdb_internal.payloads_for_span
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.payloads_for_span(0)
 
 user root
@@ -3082,7 +3094,7 @@ WHERE false
 statement ok
 SET timezone = 'Europe/Berlin'
 
-query T
+query T nosort
 select generate_series('2021-07-05'::timestamptz, '2021-07-06'::timestamptz, '1day'::interval)
 ----
 2021-07-05 00:00:00 +0200 CEST
@@ -3095,7 +3107,7 @@ statement ok
 set timezone = 'Europe/Bucharest';
 
 # the following two queries should provide the same output
-query T
+query T nosort
 select '2020-10-25 00:00'::TIMESTAMPTZ + (i::text || ' hour')::interval from generate_series(0, 24) AS g(i);
 ----
 2020-10-25 00:00:00 +0300 EEST
@@ -3124,7 +3136,7 @@ select '2020-10-25 00:00'::TIMESTAMPTZ + (i::text || ' hour')::interval from gen
 2020-10-25 22:00:00 +0200 EET
 2020-10-25 23:00:00 +0200 EET
 
-query T
+query T nosort
 select generate_series('2020-10-25 00:00'::TIMESTAMPTZ, '2020-10-25 23:00'::TIMESTAMPTZ, '1 hour');
 ----
 2020-10-25 00:00:00 +0300 EEST
@@ -3785,7 +3797,7 @@ SELECT crdb_internal.hide_sql_constants(create_statement) from crdb_internal.cre
 CREATE TABLE public.foo (a INT8 NULL, rowid INT8 NOT NULL NOT VISIBLE DEFAULT unique_rowid(), CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC))
 
 # More tests are in parse_ident_builtin_test.go.
-query T
+query T rowsort
 SELECT parse_ident(str) FROM ( VALUES
   ('a.b.c'),
   ('"YesCaps".NoCaps'),
@@ -3822,7 +3834,7 @@ NULL
 query T
 SELECT crdb_internal.redactable_sql_constants('')
 ----
-‹›
+·
 
 query T
 SELECT crdb_internal.redactable_sql_constants('SELECT 1, 2, 3')
@@ -3855,7 +3867,7 @@ SELECT crdb_internal.redactable_sql_constants(ARRAY[]::string[])
 query T
 SELECT crdb_internal.redactable_sql_constants(ARRAY[''])
 ----
-{‹›}
+{""}
 
 query T
 SELECT crdb_internal.redactable_sql_constants(ARRAY[NULL])
@@ -3870,7 +3882,7 @@ SELECT crdb_internal.redactable_sql_constants(ARRAY['banana'])
 query T
 SELECT crdb_internal.redactable_sql_constants(ARRAY['SELECT 1', NULL, 'SELECT ''hello''', ''])
 ----
-{"SELECT ‹1›",NULL,"SELECT ‹'hello'›",‹›}
+{"SELECT ‹1›",NULL,"SELECT ‹'hello'›",""}
 
 query T
 SELECT crdb_internal.redactable_sql_constants('SELECT ''yes'' IN (''no'', ''maybe'', ''yes'')')
@@ -3984,7 +3996,7 @@ SELECT ‹×›, ‹×›, ‹×›
 query T
 SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(ARRAY['SELECT 1', NULL, 'SELECT ''hello''', '']))
 ----
-{"SELECT ‹×›",NULL,"SELECT ‹×›",‹×›}
+{"SELECT ‹×›",NULL,"SELECT ‹×›",""}
 
 subtest check_consistency
 
@@ -4005,7 +4017,9 @@ FROM crdb_internal.check_consistency(true, crdb_internal.tenant_span()[1], crdb_
 ORDER BY range_id
 LIMIT 1
 ----
-RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: IntentAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: SeparatedIntentCount: RangeKeyCount: RangeKeyBytes: RangeValCount: RangeValBytes: SysBytes: SysCount: AbortSpanBytes:}
+RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: LockAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: LockBytes: LockCount: RangeKeyCount: RangeKeyBytes: RangeValCount: RangeValBytes: SysBytes: SysCount: AbortSpanBytes:}
+
+
 
 # Fill a table with consistency check results. This used to panic.
 # See: https://github.com/cockroachdb/cockroach/issues/88222
@@ -4013,3 +4027,203 @@ statement ok
 CREATE TABLE conscheckresult AS (SELECT * FROM crdb_internal.check_consistency(false, '', ''));
 
 subtest end
+
+subtest merge_aggregated_stmts_metadata
+
+query T
+SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{ "db": [ "defaultdb", "movr" ], "distSQLCount": 1, "failedCount": 2, "fullScanCount": 0, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 33, "vecCount": 0 }'::JSON, '{ "db": ["tpcc"], "distSQLCount": 1, "failedCount": 2, "fullScanCount": 0, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 85, "vecCount": 2 }'::JSON ])
+----
+{"appNames": [], "db": ["defaultdb", "movr", "tpcc"], "distSQLCount": 2, "failedCount": 4, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 0, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 118, "vecCount": 2}
+
+query T
+SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[])
+----
+{"appNames": [], "db": [], "distSQLCount": 0, "failedCount": 0, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 0, "implicitTxn": false, "query": "", "querySummary": "", "stmtType": "", "totalCount": 0, "vecCount": 0}
+
+query T
+SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{ "db": [ "defaultdb", "tpcc" ], "distSQLCount": 1, "failedCount": 2, "fullScanCount": 0, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 33, "vecCount": 0 }'::JSON, '{ "db": ["tpcc"], "distSQLCount": 23, "failedCount": 0, "fullScanCount": 99, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 3, "vecCount": 2 }'::JSON, '{"hello": "world"}'::JSON ])
+----
+{"appNames": [], "db": ["defaultdb", "tpcc"], "distSQLCount": 47, "failedCount": 2, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 198, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 39, "vecCount": 4}
+
+query T
+SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{"aMalformedMetadaObj": 123}'::JSON, '{"key": "value"}'::JSON ])
+----
+{"appNames": [], "db": [], "distSQLCount": 0, "failedCount": 0, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 0, "implicitTxn": false, "query": "", "querySummary": "", "stmtType": "", "totalCount": 0, "vecCount": 0}
+
+subtest end
+
+# Test bitmask_or function for string and varbit data
+query T
+SELECT bitmask_or('1010010', '0101');
+----
+1010111
+
+query T
+SELECT bitmask_or('1010010'::bit(7), '0101'::bit(4));
+----
+1010111
+
+query T
+SELECT bitmask_or('1010010'::bit(7), '0101');
+----
+1010111
+
+query T
+SELECT bitmask_or('1010010', '0101'::bit(4));
+----
+1010111
+
+query T
+SELECT bitmask_or('1010010'::varbit, '0101'::varbit);
+----
+1010111
+
+# Test bitmask_and function for string and varbit data
+query T
+SELECT bitmask_and('1010010', '0101');
+----
+0000000
+
+query T
+SELECT bitmask_and('1010010'::bit(7), '0101'::bit(4));
+----
+0000000
+
+query T
+SELECT bitmask_and('1010010'::bit(7), '0101');
+----
+0000000
+
+query T
+SELECT bitmask_and('1010010', '0101'::bit(4));
+----
+0000000
+
+query T
+SELECT bitmask_and('1010010'::varbit, '0101'::varbit);
+----
+0000000
+
+# Test bitmask_xor function for string and varbit data
+query T
+SELECT bitmask_xor('1010010', '0101');
+----
+1010111
+
+query T
+SELECT bitmask_xor('1010010'::bit(7), '0101'::bit(4));
+----
+1010111
+
+query T
+SELECT bitmask_xor('1010010'::bit(7), '0101');
+----
+1010111
+
+query T
+SELECT bitmask_xor('1010010', '0101'::bit(4));
+----
+1010111
+
+query T
+SELECT bitmask_xor('1010010'::varbit, '0101'::varbit);
+----
+1010111
+
+# Test for invalid inputs.
+statement error pgcode 22P02 could not parse string as bit array: "n" is not a valid binary digit
+SELECT bitmask_or('not binary', '111')
+
+statement error pgcode 22P02 could not parse string as bit array: "n" is not a valid binary digit
+SELECT bitmask_or('111', 'not binary')
+
+statement error pgcode 22P02 could not parse string as bit array: "n" is not a valid binary digit
+SELECT bitmask_and('not binary', '111')
+
+statement error pgcode 22P02 could not parse string as bit array: "n" is not a valid binary digit
+SELECT bitmask_and('111', 'not binary')
+
+statement error pgcode 22P02 could not parse string as bit array: "n" is not a valid binary digit
+SELECT bitmask_xor('not binary', '111')
+
+statement error pgcode 22P02 could not parse string as bit array: "n" is not a valid binary digit
+SELECT bitmask_xor('111', 'not binary')
+
+# Accept hex as well as binary inputs.
+query T
+SELECT bitmask_or('xfe8c', '1111');
+----
+1111111010001111
+
+query T
+SELECT bitmask_and('1111', 'xfe8c');
+----
+0000000000001100
+
+query T
+SELECT bitmask_xor('xfe8c', '1111');
+----
+1111111010000011
+
+# Test on a large (>64 bit) input.
+query T
+SELECT bitmask_or('xffffffffffffffffff', '010');
+----
+111111111111111111111111111111111111111111111111111111111111111111111111
+
+query T
+SELECT bitmask_and('xffffffffffffffffff', '010');
+----
+000000000000000000000000000000000000000000000000000000000000000000000010
+
+query T
+SELECT bitmask_xor('xffffffffffffffffff', '010');
+----
+111111111111111111111111111111111111111111111111111111111111111111111101
+
+# Regression test for mixed-type arguments (#108976).
+query T
+SELECT bitmask_or('101'::STRING, B'001'::VARBIT);
+----
+101
+
+query T
+SELECT bitmask_or(B'001'::VARBIT, '101'::STRING);
+----
+101
+
+query T
+SELECT bitmask_and('101'::STRING, B'001'::VARBIT);
+----
+001
+
+query T
+SELECT bitmask_and(B'001'::VARBIT, '101'::STRING);
+----
+001
+
+query T
+SELECT bitmask_xor('101'::STRING, B'001'::VARBIT);
+----
+100
+
+query T
+SELECT bitmask_xor(B'001'::VARBIT, '101'::STRING);
+----
+100
+
+# Query `percentile_disc_impl(arg1: float, arg2: bool) -> bool` from pg_proc
+query T rowsort
+SELECT oidvectortypes(proargtypes) FROM pg_proc WHERE oid=263
+----
+float, bool
+
+# Query a custom type and function.
+statement ok
+CREATE TYPE custom_typ AS ENUM ('good', 'bad');
+CREATE OR REPLACE FUNCTION custom_fn(c custom_typ) RETURNS custom_typ AS 'SELECT c' LANGUAGE SQL;
+
+query T rowsort
+SELECT oidvectortypes(proargtypes) FROM pg_proc WHERE proname='custom_fn'
+----
+custom_typ

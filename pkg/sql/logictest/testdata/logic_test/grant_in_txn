@@ -6,60 +6,170 @@ SET statement_timeout = '10s';
 
 statement ok
 CREATE DATABASE IF NOT EXISTS db1;
+
+statement ok
 CREATE DATABASE IF NOT EXISTS db2;
+
+statement ok
 BEGIN;
+
+statement ok
 CREATE TABLE IF NOT EXISTS db1.t ();
+
+statement ok
 CREATE TABLE IF NOT EXISTS db2.t ();
+
+statement ok
 CREATE USER user1;
+
+statement ok
 CREATE USER user2;
+
+statement ok
 CREATE USER user3;
+
+statement ok
 CREATE USER user4;
+
+statement ok
 CREATE USER user5;
+
+statement ok
 CREATE USER user6;
+
+statement ok
 CREATE USER user7;
+
+statement ok
 CREATE ROLE role1;
+
+statement ok
 CREATE ROLE role2;
+
+statement ok
 CREATE ROLE role3;
+
+statement ok
 CREATE ROLE role4;
+
+statement ok
 CREATE ROLE role5;
+
+statement ok
 CREATE ROLE role6;
+
+statement ok
 CREATE ROLE role7;
+
+statement ok
 CREATE ROLE role8;
+
+statement ok
 GRANT CREATE ON DATABASE db1 TO role1;
+
+statement ok
 GRANT CREATE ON TABLE db1.* TO role1;
+
+statement ok
 GRANT CREATE ON DATABASE db2 TO role1;
+
+statement ok
 GRANT select, insert, delete, update ON TABLE db2.* TO role1;
+
+statement ok
 GRANT role1 TO user5;
+
+statement ok
 GRANT role2 TO user7;
+
+statement ok
 GRANT CREATE ON DATABASE db1 TO role3;
+
+statement ok
 GRANT SELECT, INSERT, DELETE, UPDATE ON TABLE db1.* TO role3;
+
+statement ok
 GRANT ALL ON DATABASE db1 TO role4;
+
+statement ok
 GRANT ALL ON TABLE db1.* TO role4;
+
+statement ok
 GRANT ALL ON DATABASE db1 TO role5;
+
+statement ok
 GRANT ALL ON TABLE db1.* TO role5;
+
+statement ok
 GRANT role5 TO user1;
+
+statement ok
 GRANT CREATE ON DATABASE db2 TO role6;
+
+statement ok
 GRANT SELECT, INSERT, DELETE, UPDATE ON TABLE db2.* TO role6;
+
+statement ok
 GRANT ALL ON DATABASE db2 TO role7;
+
+statement ok
 GRANT ALL ON TABLE db2.* TO role7;
+
+statement ok
 GRANT ALL ON DATABASE db2 TO role8;
+
+statement ok
 GRANT ALL ON TABLE db2.* TO role8;
+
+statement ok
 GRANT admin TO user2;
+
+statement ok
 GRANT admin TO user4;
+
+statement ok
 GRANT admin TO role2;
+
+statement ok
 CREATE ROLE role9;
+
+statement ok
 GRANT role3 TO role9;
+
+statement ok
 GRANT role6 TO role9;
+
+statement ok
 GRANT role9 TO user1;
+
+statement ok
 CREATE ROLE role10;
+
+statement ok
 GRANT role4 TO role10;
+
+statement ok
 GRANT role7 TO role10;
+
+statement ok
 CREATE ROLE role11;
+
+statement ok
 GRANT role5 TO role11;
+
+statement ok
 GRANT role8 TO role11;
+
+statement ok
 GRANT role11 TO user6;
+
+statement ok
 DROP TABLE db1.t;
+
+statement ok
 DROP TABLE db2.t;
+
+statement ok
 COMMIT;
 
 # Ensure that we can inspect information_schema.applicable_roles inside of a
@@ -100,7 +210,7 @@ SAVEPOINT before_invalid_grant
 # This grant should fail as testuser no longer has right to this grant
 # via role_foo.
 
-statement error testuser is not a superuser or role admin for role role_bar
+statement error testuser must have CREATEROLE or have admin option on role \"role_bar\"
 GRANT role_bar TO testuser;
 
 statement ok

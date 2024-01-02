@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -108,6 +109,12 @@ func (s *TestState) IncrementSchemaChangeAlterCounter(counterType string, extra 
 // interface.
 func (s *TestState) IncrementSchemaChangeDropCounter(counterType string) {
 	s.LogSideEffectf("increment telemetry for sql.schema.drop_%s", counterType)
+}
+
+// IncrementSchemaChangeCreateCounter implements the scbuild.Dependencies
+// interface.
+func (s *TestState) IncrementSchemaChangeCreateCounter(counterType string) {
+	s.LogSideEffectf("increment telemetry for sql.schema.create_%s", counterType)
 }
 
 // IncrementSchemaChangeAddColumnTypeCounter  implements the scbuild.Dependencies
@@ -280,13 +287,10 @@ func (s *TestState) MayResolveSchema(
 	return db, sc
 }
 
-func (s *TestState) MustResolvePrefix(
+func (s *TestState) MayResolvePrefix(
 	ctx context.Context, name tree.ObjectNamePrefix,
 ) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor) {
 	db, sc := s.mayResolvePrefix(name)
-	if sc == nil {
-		panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
-	}
 	return db.(catalog.DatabaseDescriptor), sc.(catalog.SchemaDescriptor)
 }
 
@@ -563,12 +567,12 @@ func (s *TestState) getQualifiedObjectNameByID(id descpb.ID) (*tree.TableName, e
 
 func (s *TestState) GetQualifiedFunctionNameByID(
 	ctx context.Context, id int64,
-) (*tree.FunctionName, error) {
+) (*tree.RoutineName, error) {
 	prefix, obj, err := s.getQualifiedNameComponentsByID(descpb.ID(id))
 	if err != nil {
 		return nil, err
 	}
-	fn := tree.MakeQualifiedFunctionName(string(prefix.CatalogName), string(prefix.SchemaName), string(obj))
+	fn := tree.MakeQualifiedRoutineName(string(prefix.CatalogName), string(prefix.SchemaName), string(obj))
 	return &fn, nil
 }
 
@@ -704,7 +708,7 @@ func (s *TestState) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (st
 	}
 	scName := ""
 	if obj.GetParentSchemaID() != descpb.InvalidID {
-		scName = tree.PublicSchema
+		scName = catconstants.PublicSchemaName
 		if obj.GetParentSchemaID() != keys.PublicSchemaID {
 			sc, err := s.mustReadImmutableDescriptor(obj.GetParentSchemaID())
 			if err != nil {
@@ -947,11 +951,6 @@ func (s *TestState) CheckPausepoint(name string) error {
 	return nil
 }
 
-// UseLegacyGCJob is false.
-func (s *TestState) UseLegacyGCJob(ctx context.Context) bool {
-	return false
-}
-
 // UpdateSchemaChangeJob implements the scexec.TransactionalJobRegistry interface.
 func (s *TestState) UpdateSchemaChangeJob(
 	ctx context.Context, id jobspb.JobID, fn scexec.JobUpdateCallback,
@@ -1176,8 +1175,14 @@ func (s *TestState) DeleteDatabaseRoleSettings(_ context.Context, dbID descpb.ID
 }
 
 // DeleteSchedule implements scexec.DescriptorMetadataUpdater
-func (s *TestState) DeleteSchedule(ctx context.Context, id int64) error {
+func (s *TestState) DeleteSchedule(ctx context.Context, id jobspb.ScheduleID) error {
 	s.LogSideEffectf("delete job schedule #%d", id)
+	return nil
+}
+
+// UpdateTTLScheduleLabel implements scexec.DescriptorMetadataUpdater
+func (s *TestState) UpdateTTLScheduleLabel(ctx context.Context, tbl *tabledesc.Mutable) error {
+	s.LogSideEffectf("update ttl schedule label #%d", tbl.ID)
 	return nil
 }
 
@@ -1227,9 +1232,9 @@ func (s *TestState) AddTableForStatsRefresh(id descpb.ID) {
 
 // ResolveFunction implements the scbuild.CatalogReader interface.
 func (s *TestState) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	fnName, err := name.ToFunctionName()
+	fnName, err := name.UnresolvedName().ToRoutineName()
 	if err != nil {
 		return nil, err
 	}
@@ -1248,7 +1253,7 @@ func (s *TestState) ResolveFunction(
 	}
 	fd, found := scDesc.GetResolvedFuncDefinition(fnName.Object())
 	if !found {
-		return nil, tree.ErrFunctionUndefined
+		return nil, tree.ErrRoutineUndefined
 	}
 	return fd, nil
 }
@@ -1256,13 +1261,13 @@ func (s *TestState) ResolveFunction(
 // ResolveFunctionByOID implements the scbuild.CatalogReader interface.
 func (s *TestState) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (*tree.FunctionName, *tree.Overload, error) {
+) (*tree.RoutineName, *tree.Overload, error) {
 	if !funcdesc.IsOIDUserDefinedFunc(oid) {
 		qol, ok := tree.OidToQualifiedBuiltinOverload[oid]
 		if !ok {
 			return nil, nil, errors.Newf("function %d not found", oid)
 		}
-		name := tree.MakeQualifiedFunctionName(s.CurrentDatabase(), qol.Schema, tree.OidToBuiltinName[oid])
+		name := tree.MakeQualifiedRoutineName(s.CurrentDatabase(), qol.Schema, tree.OidToBuiltinName[oid])
 		return &name, qol.Overload, nil
 	}
 
@@ -1287,7 +1292,7 @@ func (s *TestState) ResolveFunctionByOID(
 	if err != nil {
 		return nil, nil, err
 	}
-	name := tree.MakeQualifiedFunctionName(dbDesc.GetName(), scDesc.GetName(), fnDesc.GetName())
+	name := tree.MakeQualifiedRoutineName(dbDesc.GetName(), scDesc.GetName(), fnDesc.GetName())
 	return &name, ol, nil
 }
 
@@ -1367,4 +1372,9 @@ func getNameEntryDescriptorType(parentID, parentSchemaID descpb.ID) string {
 		}
 	}
 	return ret
+}
+
+// InitializeSequence is part of the scexec.Catalog interface.
+func (s *TestState) InitializeSequence(id descpb.ID, startVal int64) {
+	s.LogSideEffectf("initializing sequence %d with starting value of %d", id, startVal)
 }

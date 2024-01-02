@@ -18,7 +18,7 @@ SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE d
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  …/1/1         {1}       1
+<before:/Table/65>  …/1/1         {1}       1
 …/1/1               …/1/2         {2}       2
 …/1/2               …/1/3         {3}       3
 …/1/3               …/1/4         {4}       4
@@ -128,7 +128,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, b, c, d)
-│ ordering: +b,+a
 │ estimated row count: 100 (missing stats)
 │ order: +b,+a
 │
@@ -171,7 +170,7 @@ vectorized: true
           table: data@data_pkey
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lt9v2j4QwN-_f4V1T_CtUbATfkWqRNcyjaqDDvqwaUJTIF5BozFLgrSq4n-fEspaEvDFCeFlk4M_8Z3vc728QPB7CTb0vt7fXfUHpHLTHz-Mv9xVSWXcu-tdP5D_ycfR8PO_pUPJdPvEdUKHXI3j_1mV3A4j_HXXjBI3vYuT4eimNyIfvsUbqmQ4IBWHXJJZlVwNbkhlSi7jx7tdU0qcKlDwpCsGzpMIwP4ODChwoGACBQsoNGBCYeXLmQgC6UdbXmKg7_4Bu05h4a3WYfR4QmEmfQH2C4SLcCnAhgdnuhQj4bjCN-pAwRWhs1jGx0QBd6N_fqx-iWegcC2X6ycvsOMrAArjlROtagYjjucSRmQ4Fz5MNhTkOnw98-2o6TOZO8F8_5Auo10Ok82EQhA6jwJstqH5wm9kDT-6-tLC50fDf3vV2pO-K3zh7r1sEpHYlgN38MkJ5rdy4QnfYIkSLsXPsBLHWL30F4_z3QIoDNehTeIV7Zq0ayXyfkvI1KnHWPphFEeiFl1-Qbvs4ugZVoZLO3Qf7158IJiBrMmVwevJWz4YQmMvBJZdO5avawxWM3h5faORQDNf35w8AX40gXN0Diu7c5CK7DqnWaRzePaq85za8pphlqetRgKtnNqeOgF-NIFzaMvL1hapyE7bVhFtzexVN3Nqa9YMqzxtNRJo59T21AnwowmcQ1uzbG2Riuy0bRfR1spedSuntlbNaJSnrUYCnZzanjoBfjSBc2hrla0tUpGdtp1TfV4fOGMkgpX0ApHpq7ke3ZhwH8W2AoFc-zNx78tZfMx2OYy5-APIFUG4_ZVvF31v-1MUYHa4VQRmrBDdKER31DTTuDOuB7eKwIk706UbheiOmuZJuv6eNvfgehI2lbClrpalhDlTH90o0h9qGOkPNYz1B0Ij_YHQSH80i_SHGkb6Qw1j_YHQSH8gNNIfLaWlbbWk7SL90SliuBpGDFfDmOEIjRiO0NgE0Bmb6b-kOnNTl0aHgNbk1MYRzVlqiuypyrhadKYeI4jpLDVHdFRHaMR1hMZkx3DEdgzHdE_NUC3d1TSmu5pGdUdwTHcEx3RPDdJ93ZuI7qmZoqV7aqZo6a6mMd3VNKo7gmO6Izime2qeaumupjHd1TSqO4JjuiM4pntqqu5_a9fVuvPUbFHqPtn89zcAAP__E9_OUg==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8l99v4kYQx9_7V6zmKfQWwa5tfliKRHqkKqccXCEPrSp0WvAmWEdsahtdo4j_vbIJl9iL5zxOIA9EBvuzOzPfj2w_QfzvGly4_uvLzdVozC6Go9nt7M-bBruYXd9cf7xlv7Lfp5PPPw4VZ4v9N55KFLuaZf9Fg32apJc_n7XkzDPPkmwyHV5P2W9_Zyc02GTMLhS7ZMsGuxoP2cWCXWZfH85acKYawCEIPT1WDzoG9x8QwEECBws42MDBgTmHTRQudRyHUXrKU3bByPsP3DYHP9hsk_TrOYdlGGlwnyDxk7UGF27VYq2nWnk6arWBg6cT5a-zZdIND9KPr5tv-hE4fAzX24cgdrMWAIfZRqVHzZZgKvCYYGGy0hHMdxzCbfK85stSi0e2UvEqv8hA8IGE-W7OIU7UvQZXvKplNAS3veP1ynGqlpOO4mTlyEI5Tmk5L-htEEaejrSXg8_TK392ypGe_KHi1afQD3TUEoURr_VdcpHtuXEZ-ferwwFwmGwTl2VHfGDxgV3ow0uBVqFAQRrYLIySdGOFYQ3kBz4QH0oXtYuLVmnrsY69WunI7sZhM9y0ZLs4h6N7cgp7kvlGiOrJFfVEbIlmS55SRVG3oE49Fd-9oKKMndKCziGjOIOMpJEdZOy8UcZ8W2X1nMiawZfNlnXK4Mu6BXVrBv-9CyoGv1ta0DmCL88QfNLIDsHvvjH4-bZa1XNi1Qy-1WzZpwy-VbegXs3gv3dBxeD3Sgs6R_CtMwSfNLJD8HtvDH6-rXb1nNg1g283W84pg2_XLahfM_jvXVAx-P3Sgs4RfPsMwSeN7BD8_huD36e87Ex1vAmDWFd6nWgXlmqKtMnau9f7ocXhNlrqL1G4zM7dH04yUBZnT8fJ_le5PxgFh5_iJNLq4cfLdXVSt5wkiCghylmSynLKWRaV1S9n2QZLEBovX6McGqlbThJEVKHxOZakspxylkVl9ctZtsGSRVb7NcvKodq5xhsztFCUXR4Hx9iVjaKkKN-WsSunrtKCRsKUJqJQpaksTGkqC1PaYHXqKt2hkTCliShUaSoLU5rKwpQ2WF1Unh6itDHDXm2ljV3163ooaSTMQyIK9ZDKwjyksjAPDZagPNTkotUlojATqSxURTIMc5EMw2Q0YcbNOqeQkIiO5ijxuzXmo7kx43ZdVUiLiMKMpLJQJckwzEkyDJPShBlPOFWl7BFRmJRUFiolGYZJSYZhUpow4zknL2UHkdIcpXHvriyluTHj3l1VSpuIwqSkslApyTBMSjIMk9KEGY87VaXsE1GYlFQWKiUZhklJhmFSmjDjoSf_0tdGpDRGKY17eGUp-7s5h7t1-P2r74EL7ee_5pGPwx-kF6j7GNwnmK3C7xn39nGjY3Dv1DrWHD6rb3qoEx09-IEfJ_4S3CTa6t3ul_8DAAD__6vIYNk=
 
 # TODO(radu): rework these tests (the inner ORDER BY aren't useful anymore).
 #

@@ -12,17 +12,21 @@ package scdecomp
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -225,6 +229,52 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 	}
 }
 
+func GetSequenceOptions(
+	sequenceID descpb.ID, opts *descpb.TableDescriptor_SequenceOpts,
+) []*scpb.SequenceOption {
+	// Compute the default sequence options.
+	defaultOpts := descpb.TableDescriptor_SequenceOpts{
+		Increment: 1,
+	}
+	err := schemaexpr.AssignSequenceOptions(&defaultOpts,
+		nil,
+		64,
+		true,
+		nil,
+	)
+	if err != nil {
+		panic(err)
+	}
+	var sequenceOptions []*scpb.SequenceOption
+	addSequenceOption := func(key string, defaultValue, value interface{}) {
+		// Nil or empty values can be skipped. Or values which
+		// are the defaults.
+		if value == nil || reflect.DeepEqual(defaultValue, value) {
+			return
+		}
+		valueStr := fmt.Sprintf("%v", value)
+		if len(valueStr) == 0 {
+			return
+		}
+		sequenceOptions = append(
+			sequenceOptions,
+			&scpb.SequenceOption{
+				SequenceID: sequenceID,
+				Key:        key,
+				Value:      valueStr,
+			})
+	}
+
+	addSequenceOption(tree.SeqOptIncrement, defaultOpts.Increment, opts.Increment)
+	addSequenceOption(tree.SeqOptMinValue, defaultOpts.MinValue, opts.MinValue)
+	addSequenceOption(tree.SeqOptMaxValue, defaultOpts.MaxValue, opts.MaxValue)
+	addSequenceOption(tree.SeqOptStart, defaultOpts.Start, opts.Start)
+	addSequenceOption(tree.SeqOptVirtual, defaultOpts.Virtual, opts.Virtual)
+	addSequenceOption(tree.SeqOptCache, defaultOpts.CacheSize, opts.CacheSize)
+	addSequenceOption(tree.SeqOptAs, defaultOpts.AsIntegerType, opts.AsIntegerType)
+	return sequenceOptions
+}
+
 func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	switch {
 	case tbl.IsSequence():
@@ -233,7 +283,13 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 			IsTemporary: tbl.IsTemporary(),
 		})
 		if opts := tbl.GetSequenceOpts(); opts != nil {
+
 			w.backRefs.Add(opts.SequenceOwner.OwnerTableID)
+			options := GetSequenceOptions(tbl.GetID(), opts)
+			for _, opt := range options {
+				w.ev(descriptorStatus(tbl),
+					opt)
+			}
 		}
 	case tbl.IsView():
 		w.ev(descriptorStatus(tbl), &scpb.View{
@@ -532,7 +588,7 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			Invisibility:        idx.GetInvisibility(),
 		}
 		if geoConfig := idx.GetGeoConfig(); !geoConfig.IsEmpty() {
-			index.GeoConfig = protoutil.Clone(&geoConfig).(*geoindex.Config)
+			index.GeoConfig = protoutil.Clone(&geoConfig).(*geopb.Config)
 		}
 		for i, c := range cpy.KeyColumnIDs {
 			invertedKind := catpb.InvertedIndexColumnKind_DEFAULT
@@ -573,7 +629,11 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 		}
 		idxStatus := maybeMutationStatus(idx)
 		if idx.GetEncodingType() == catenumpb.PrimaryIndexEncoding {
-			w.ev(idxStatus, &scpb.PrimaryIndex{Index: index})
+			if idx.IsTemporaryIndexForBackfill() {
+				w.ev(idxStatus, &scpb.TemporaryIndex{Index: index})
+			} else {
+				w.ev(idxStatus, &scpb.PrimaryIndex{Index: index})
+			}
 		} else {
 			sec := &scpb.SecondaryIndex{
 				Index: index,
@@ -581,15 +641,7 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			if idx.IsPartial() {
 				pp, err := w.newExpression(idx.GetPredicate())
 				onErrPanic(err)
-				if w.clusterVersion.IsActive(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates) {
-					sec.EmbeddedExpr = pp
-				} else {
-					w.ev(scpb.Status_PUBLIC, &scpb.SecondaryIndexPartial{
-						TableID:    index.TableID,
-						IndexID:    index.IndexID,
-						Expression: *pp,
-					})
-				}
+				sec.EmbeddedExpr = pp
 			}
 			w.ev(idxStatus, sec)
 		}

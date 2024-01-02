@@ -14,12 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -41,23 +40,26 @@ func TestMrSystemDatabase(t *testing.T) {
 	ctx := context.Background()
 
 	// Enable settings required for configuring a tenant's system database as multi-region.
-	cs := cluster.MakeTestingClusterSettings()
-	sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(ctx, &cs.SV, true)
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &cs.SV, true)
-	instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+	makeSettings := func() *cluster.Settings {
+		cs := cluster.MakeTestingClusterSettings()
+		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+		return cs
+	}
 
-	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3, base.TestingKnobs{}, multiregionccltestutils.WithSettings(cs))
+	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3,
+		base.TestingKnobs{},
+		multiregionccltestutils.WithSettings(makeSettings()))
 	defer cleanup()
 
 	id, err := roachpb.MakeTenantID(11)
 	require.NoError(t, err)
 
 	tenantArgs := base.TestTenantArgs{
-		Settings: cs,
+		Settings: makeSettings(),
 		TenantID: id,
-		Locality: *cluster.Servers[0].Locality(),
+		Locality: cluster.Servers[0].Locality(),
 	}
-	_, tenantSQL := serverutils.StartTenant(t, cluster.Servers[0], tenantArgs)
+	ts, tenantSQL := serverutils.StartTenant(t, cluster.Servers[0], tenantArgs)
 
 	tDB := sqlutils.MakeSQLRunner(tenantSQL)
 
@@ -146,7 +148,7 @@ func TestMrSystemDatabase(t *testing.T) {
 				FROM system.sql_instances
 				WHERE session_id IS NULL GROUP BY crdb_region
 			`
-			preallocatedCount := instancestorage.PreallocatedCount.Get(&cs.SV)
+			preallocatedCount := instancestorage.PreallocatedCount.Get(&ts.ClusterSettings().SV)
 			testutils.SucceedsSoon(t, func() error {
 				rows := tDB.Query(t, query)
 				require.True(t, rows.Next())
@@ -218,6 +220,7 @@ func TestMrSystemDatabase(t *testing.T) {
 			{"TABLE system.public.descriptor"},
 			{"TABLE system.public.namespace"},
 			{"TABLE system.public.privileges"},
+			{"TABLE system.public.region_liveness"},
 			{"TABLE system.public.role_members"},
 			{"TABLE system.public.role_options"},
 			{"TABLE system.public.settings"},
@@ -231,18 +234,27 @@ func TestMrSystemDatabase(t *testing.T) {
 	t.Run("QueryByEnum", func(t *testing.T) {
 		// This is a regression test for a bug triggered by setting up the system
 		// database. If the operation to configure the does not clear table
-		// statistics, this query will fail in the optimizer, because the stats
-		// will have the wrong type for the crdb_column.
-		row := tDB.QueryRow(t, `
-			SELECT crdb_region, session_id, expiration 
-			FROM system.sqlliveness 
-			WHERE crdb_region = 'us-east1'
-			LIMIT 1;`)
-		var sessionID string
-		var crdbRegion string
-		var rawExpiration apd.Decimal
-		row.Scan(&crdbRegion, &sessionID, &rawExpiration)
-		require.Equal(t, "us-east1", crdbRegion)
+		// statistics, this query will fail in the optimizer, because the stats will
+		// have the wrong type for the crdb_region column. Since stats are generated
+		// asynchronously, we poll for the results until they are correct.
+		testutils.SucceedsSoon(t, func() error {
+			var sessionID string
+			var crdbRegion string
+			var rawExpiration apd.Decimal
+			err := tenantSQL.QueryRow(`
+				SELECT crdb_region, session_id, expiration 
+				FROM system.sqlliveness 
+				WHERE crdb_region = 'us-east1'
+				LIMIT 1;`).Scan(&crdbRegion, &sessionID, &rawExpiration)
+			if err != nil {
+				return err
+			}
+			if crdbRegion != "us-east1" {
+				return errors.Newf("expected region to be us-east1; got %s", crdbRegion)
+			}
+			return nil
+		})
+
 	})
 }
 
@@ -253,19 +265,13 @@ func TestMultiRegionTenantRegions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Enable settings required for configuring a tenant's system database as multi-region.
-	cs := cluster.MakeTestingClusterSettings()
-	sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(context.Background(), &cs.SV, true)
-	sql.SecondaryTenantZoneConfigsEnabled.Override(context.Background(), &cs.SV, true)
-
 	tc, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /*numServers*/, base.TestingKnobs{}, multiregionccltestutils.WithSettings(cs),
+		t, 3 /*numServers*/, base.TestingKnobs{},
 	)
 	defer cleanup()
 
 	ctx := context.Background()
 	ten, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
-		Settings: cs,
 		TenantID: serverutils.TestTenantID(),
 		Locality: roachpb.Locality{
 			Tiers: []roachpb.Tier{
@@ -273,7 +279,7 @@ func TestMultiRegionTenantRegions(t *testing.T) {
 			},
 		},
 	})
-	defer ten.Stopper().Stop(ctx)
+	defer ten.AppStopper().Stop(ctx)
 	defer tSQL.Close()
 	tenSQLDB := sqlutils.MakeSQLRunner(tSQL)
 
@@ -331,19 +337,13 @@ func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Enable settings required for configuring a tenant's system database as multi-region.
-	cs := cluster.MakeTestingClusterSettings()
-	sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(context.Background(), &cs.SV, true)
-	sql.SecondaryTenantZoneConfigsEnabled.Override(context.Background(), &cs.SV, true)
-
 	tc, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /*numServers*/, base.TestingKnobs{}, multiregionccltestutils.WithSettings(cs),
+		t, 3 /*numServers*/, base.TestingKnobs{},
 	)
 	defer cleanup()
 
 	tenID := roachpb.MustMakeTenantID(10)
 	ten, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
-		Settings: cs,
 		TenantID: tenID,
 		Locality: roachpb.Locality{
 			Tiers: []roachpb.Tier{
@@ -360,7 +360,6 @@ func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 	tenSQLDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
 
 	ten2, tSQL2 := serverutils.StartTenant(t, tc.Server(2), base.TestTenantArgs{
-		Settings: cs,
 		TenantID: tenID,
 		Locality: roachpb.Locality{
 			Tiers: []roachpb.Tier{

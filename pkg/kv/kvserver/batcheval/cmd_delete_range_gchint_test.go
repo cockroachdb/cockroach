@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,7 +30,7 @@ func TestDeleteRangeTombstoneSetsGCHint(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -39,13 +38,14 @@ func TestDeleteRangeTombstoneSetsGCHint(t *testing.T) {
 			},
 		},
 	})
-	s := serv.(*server.TestServer)
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
 
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	s := srv.ApplicationLayer()
+
+	store, err := srv.StorageLayer().GetStores().(*kvserver.Stores).GetStore(srv.StorageLayer().GetFirstStoreID())
 	require.NoError(t, err)
 
-	key := roachpb.Key("b")
+	key := append(s.Codec().TenantPrefix(), roachpb.Key("b")...)
 	content := []byte("test")
 
 	repl := store.LookupReplica(roachpb.RKey(key))
@@ -58,11 +58,11 @@ func TestDeleteRangeTombstoneSetsGCHint(t *testing.T) {
 		},
 		Value: roachpb.MakeValueFromBytes(content),
 	}
-	if _, pErr := kv.SendWrapped(ctx, s.DistSender(), pArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, s.DistSenderI().(kv.Sender), pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
-	r, err := s.LookupRange(key)
+	r, err := srv.LookupRange(key)
 	require.NoError(t, err, "failed to lookup range")
 
 	drArgs := &kvpb.DeleteRangeRequest{
@@ -73,7 +73,7 @@ func TestDeleteRangeTombstoneSetsGCHint(t *testing.T) {
 			EndKey: r.EndKey.AsRawKey(),
 		},
 	}
-	if _, pErr := kv.SendWrapped(ctx, s.DistSender(), drArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, s.DistSenderI().(kv.Sender), drArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 

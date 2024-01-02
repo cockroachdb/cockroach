@@ -550,7 +550,7 @@ UPDATE t32477 SET x = count(x)
 statement error window functions are not allowed in UPDATE SET
 UPDATE t32477 SET x = rank() OVER ()
 
-statement error generator functions are not allowed in UPDATE SET
+statement error pq: generate_series\(\): set-returning functions are not allowed in UPDATE SET
 UPDATE t32477 SET x = generate_series(1,2)
 
 #regression test for #32054
@@ -661,3 +661,26 @@ SELECT * FROM generated_as_id_t ORDER BY a;
 7  4  4
 8  5  5
 9  6  6
+
+# Regression test for #107634. Do not allow aggregate functions in ORDER BY.
+subtest regression_107634
+
+statement ok
+CREATE TABLE t107634 (a INT)
+
+statement error pgcode 42803 sum\(\): aggregate functions are not allowed in ORDER BY in UPDATE
+UPDATE t107634 SET a = 1 ORDER BY sum(a) LIMIT 1;
+
+subtest end
+
+# Regression test for #108166. Do not allow aggregate functions in ORDER BY when
+# the function is wrapped by a conditional expression.
+subtest regression_108166
+
+statement ok
+CREATE TABLE t108166 (a INT)
+
+statement error pgcode 42803 sum\(\): aggregate functions are not allowed in ORDER BY in UPDATE
+UPDATE t108166 SET a = 1 ORDER BY COALESCE(sum(a), 1) LIMIT 1;
+
+subtest end

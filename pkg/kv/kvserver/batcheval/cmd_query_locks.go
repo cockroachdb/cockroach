@@ -35,9 +35,10 @@ func declareKeysQueryLocks(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	// Latch on the range descriptor during evaluation of query locks.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
+	return nil
 }
 
 // QueryLocks uses the concurrency manager to query the state of locks

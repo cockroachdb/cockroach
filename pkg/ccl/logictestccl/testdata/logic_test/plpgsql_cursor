@@ -1,0 +1,1925 @@
+# LogicTest: !local-mixed-23.1
+statement ok
+CREATE TABLE xy (x INT, y INT);
+INSERT INTO xy VALUES (1, 2), (3, 4);
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+INSERT INTO kv VALUES (1, 2), (3, 4);
+
+# Testing OPEN statements.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+1
+
+statement ok
+ABORT;
+
+statement error pgcode 34000 pq: cursor \"foo\" does not exist
+FETCH FORWARD 3 FROM foo;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    x INT := 10;
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT x;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+10
+
+# TODO(#115680): postgres returns an ambiguous column error here by default,
+# although it can be configured to prefer either the variable or the column.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    x INT := 10;
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT * FROM xy WHERE xy.x = x;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query II rowsort
+FETCH FORWARD 10 FROM foo;
+----
+1  2
+3  4
+
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 3;
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT * FROM xy WHERE x = i;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query II
+FETCH FORWARD 3 FROM foo;
+----
+3  4
+
+# It should be possible to fetch from the cursor incrementally.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs NO SCROLL FOR SELECT * FROM (VALUES (1, 2), (3, 4), (5, 6), (7, 8)) v(a, b);
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query II rowsort
+FETCH FORWARD 1 FROM foo;
+----
+1  2
+
+query II rowsort
+FETCH FORWARD 2 FROM foo;
+----
+3  4
+5  6
+
+query II rowsort
+FETCH FORWARD 3 FROM foo;
+----
+7  8
+
+# Cursor with NO SCROLL option.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs NO SCROLL FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+1
+
+# Multiple cursors.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    curs2 REFCURSOR := 'bar';
+    curs3 REFCURSOR := 'baz';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    OPEN curs2 FOR SELECT 2;
+    OPEN curs3 FOR SELECT 3;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+1
+
+query I
+FETCH FORWARD 3 FROM bar;
+----
+2
+
+query I
+FETCH FORWARD 3 FROM baz;
+----
+3
+
+# The cursor should reflect changes to the database state that occur before
+# it is opened, but not those that happen after it is opened.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    curs2 REFCURSOR := 'bar';
+    curs3 REFCURSOR := 'baz';
+  BEGIN
+    OPEN curs FOR SELECT * FROM xy WHERE x = 99;
+    INSERT INTO xy VALUES (99, 99);
+    OPEN curs2 FOR SELECT * FROM xy WHERE x = 99;
+    UPDATE xy SET y = 100 WHERE x = 99;
+    OPEN curs3 FOR SELECT * FROM xy WHERE x = 99;
+    DELETE FROM xy WHERE x = 99;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query II
+FETCH FORWARD 3 FROM foo;
+----
+
+query II
+FETCH FORWARD 3 FROM bar;
+----
+99  99
+
+query II
+FETCH FORWARD 3 FROM baz;
+----
+99  100
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# The empty string conflicts with the unnamed portal, which always exists.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := '';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement error pgcode 42P03 pq: cursor \"\" already in use
+SELECT f();
+
+# It is possible to use the OPEN statement in an implicit transaction, but the
+# cursor is closed at the end of the transaction when the statement execution
+# finishes. So, until FETCH is implemented, we can't actually read from the
+# cursor.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+SELECT f();
+
+statement error pgcode 34000 pq: cursor \"foo\" does not exist
+FETCH FORWARD 5 FROM foo;
+
+statement error pgcode 0A000 pq: unimplemented: DECLARE SCROLL CURSOR
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs SCROLL FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P11 pq: cannot open INSERT query as cursor
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs FOR INSERT INTO xy VALUES (1, 1);
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: CTE usage inside a function definition
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 3;
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs FOR WITH foo AS (SELECT * FROM xy WHERE x = i) SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# TODO(#92961): once CTEs in routines are supported, the error should be:
+# pgcode 0A000 pq: DECLARE CURSOR must not contain data-modifying statements in WITH
+statement error pgcode 0A000 pq: unimplemented: CTE usage inside a function definition
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 3;
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs FOR WITH foo AS (INSERT INTO xy VALUES (1, 1) RETURNING x) SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 pq: \"curs\" is not a known variable
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 3;
+  BEGIN
+    OPEN curs FOR WITH foo AS (SELECT * FROM xy WHERE x = i) SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1 // 0;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement error pgcode 22012 pq: division by zero
+SELECT f();
+
+# Conflict with an existing cursor.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement ok
+DECLARE foo CURSOR FOR SELECT 100;
+
+statement error pgcode 42P03 pq: cursor \"foo\" already exists
+SELECT f();
+
+# Conflict between OPEN statements within the same routine.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    curs2 REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    OPEN curs2 FOR SELECT 2;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement error pgcode 42P03 pq: cursor \"foo\" already exists
+SELECT f();
+
+statement ok
+ABORT;
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# Testing bound cursors.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 1;
+  BEGIN
+    curs := 'foo';
+    OPEN curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement ok
+SELECT f();
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+1
+
+# Bound cursors should reflect the database state when they are opened, not
+# when they are declared.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT * FROM xy;
+  BEGIN
+    curs := 'foo';
+    IF n = 0 THEN
+      OPEN curs;
+    END IF;
+    INSERT INTO xy VALUES (10, 10);
+    IF n = 1 THEN
+      OPEN curs;
+    END IF;
+    DELETE FROM xy WHERE x = 10;
+    IF n = 2 THEN
+      OPEN curs;
+    END IF;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# The cursor is opened before the insert.
+statement ok
+BEGIN;
+SELECT f(0);
+
+query II rowsort
+FETCH FORWARD 5 FROM foo;
+----
+1  2
+3  4
+
+# The cursor is opened after the insert, before the delete.
+statement ok
+ABORT;
+BEGIN;
+SELECT f(1);
+
+query II rowsort
+FETCH FORWARD 5 FROM foo;
+----
+1   2
+3   4
+10  10
+
+# The cursor is opened after the delete.
+statement ok
+ABORT;
+BEGIN;
+SELECT f(2);
+
+query II rowsort
+FETCH FORWARD 5 FROM foo;
+----
+1  2
+3  4
+
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+    curs CURSOR FOR SELECT count(*) FROM xy;
+  BEGIN
+    curs := 'foo';
+    IF b <= 0 OR a >= b THEN
+      OPEN curs;
+    END IF;
+    WHILE i < b LOOP
+      INSERT INTO xy VALUES (100, 100);
+      IF i = a THEN
+        OPEN curs;
+      END IF;
+      i := i + 1;
+    END LOOP;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+BEGIN;
+SELECT f(0, 0);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+2
+
+statement ok
+ABORT;
+BEGIN;
+SELECT f(0, 3);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+3
+
+statement ok
+ABORT;
+BEGIN;
+SELECT f(1, 3);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+4
+
+statement ok
+ABORT;
+BEGIN;
+SELECT f(2, 3);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+5
+
+# The cursor query can reference parameters and PLpgSQL variables.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 1 // n;
+  BEGIN
+    curs := 'foo';
+    OPEN curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement ok
+SELECT f(-1);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+-1
+
+statement ok
+CLOSE foo;
+
+statement error pgcode 22012 pq: division by zero
+SELECT f(0);
+
+# The cursor query observes variables as of the time when OPEN is called.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+    curs CURSOR FOR SELECT i;
+  BEGIN
+    curs := 'foo';
+    WHILE i < b LOOP
+      IF i = a THEN
+        OPEN curs;
+      END IF;
+      i := i + 1;
+    END LOOP;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+BEGIN;
+SELECT f(0, 3);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+0
+
+statement ok
+ABORT;
+BEGIN;
+SELECT f(1, 3);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+1
+
+statement ok
+ABORT;
+BEGIN;
+SELECT f(2, 3);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+2
+
+# A declared cursor does not have to be opened. If it is not opened, it should
+# not have side-effects.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 1 // n;
+  BEGIN
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement ok
+SELECT f(1);
+SELECT f(-1);
+SELECT f(0);
+
+query I
+SELECT count(*) FROM pg_cursors;
+----
+0
+
+statement ok
+ABORT;
+
+# A query must be bound to the cursor in either the declaration or the OPEN
+# statement.
+statement error pgcode 42601 pq: expected \"FOR\" at or near \"OPEN\"\nHINT: no query was specified for cursor \"curs\"
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# A query cannot be bound to a cursor in both the declaration and OPEN
+# statement.
+statement error pgcode 42601 pq: syntax error at or near \"FOR\"\nHINT: cannot specify a query during OPEN for bound cursor \"curs\"
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 1;
+  BEGIN
+    curs := 'foo';
+    OPEN curs FOR SELECT 2;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P11 pq: cannot open INSERT query as cursor
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR INSERT INTO xy VALUES (1, 1);
+  BEGIN
+    curs := 'foo';
+    OPEN curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# Testing unnamed cursors.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS REFCURSOR AS $$
+  DECLARE
+    curs REFCURSOR;
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN curs;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+BEGIN;
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+
+query T
+SELECT f();
+----
+<unnamed portal 1>
+
+query I
+FETCH FORWARD 3 FROM "<unnamed portal 1>";
+----
+1
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 1>
+
+query T
+SELECT f();
+----
+<unnamed portal 2>
+
+query I
+FETCH FORWARD 3 FROM "<unnamed portal 2>";
+----
+1
+
+query T
+SELECT f();
+----
+<unnamed portal 3>
+
+query I
+FETCH FORWARD 3 FROM "<unnamed portal 3>";
+----
+1
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 1>
+<unnamed portal 2>
+<unnamed portal 3>
+
+# The generated name does not "fill in gaps".
+statement ok
+CLOSE "<unnamed portal 2>";
+CLOSE "<unnamed portal 1>";
+
+query T
+SELECT f();
+----
+<unnamed portal 4>
+
+query T
+SELECT f();
+----
+<unnamed portal 5>
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 4>
+<unnamed portal 5>
+<unnamed portal 3>
+
+statement ok
+ABORT;
+BEGIN;
+
+query T
+SELECT f();
+----
+<unnamed portal 6>
+
+# The counter for the generated name keeps incrementing as long as the session
+# is open.
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 6>
+
+# The generated name will not conflict with manually created cursors.
+statement ok
+DECLARE "<unnamed portal 7>" CURSOR FOR SELECT 1;
+DECLARE "<unnamed portal 8>" CURSOR FOR SELECT 1;
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 7>
+<unnamed portal 8>
+<unnamed portal 6>
+
+query T
+SELECT f();
+----
+<unnamed portal 9>
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 6>
+<unnamed portal 7>
+<unnamed portal 8>
+<unnamed portal 9>
+
+# Do not generate a new name if one was supplied.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS REFCURSOR AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN curs;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+
+query T
+SELECT f();
+----
+foo
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+foo
+
+# The unnamed portal counter shouldn't have incremented for the named cursor,
+# since no name was generated.
+statement ok
+CREATE OR REPLACE FUNCTION f_unnamed() RETURNS REFCURSOR AS $$
+  DECLARE
+    curs REFCURSOR;
+  BEGIN
+    OPEN curs FOR SELECT 2;
+    RETURN curs;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f_unnamed();
+----
+<unnamed portal 10>
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 10>
+foo
+
+query I
+FETCH FORWARD 3 FROM "<unnamed portal 10>";
+----
+2
+
+# A bound, unnamed cursor.
+statement ok
+ABORT;
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 100;
+  BEGIN
+    OPEN curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement ok
+SELECT f();
+
+query I
+FETCH FORWARD 3 FROM "<unnamed portal 11>";
+----
+100
+
+# Testing CLOSE statements.
+#
+# Test CLOSE within the scope of a routine.
+statement ok
+ABORT;
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    curs2 REFCURSOR := 'bar';
+  BEGIN
+    RAISE NOTICE 'cursors: %', (SELECT count(*) FROM pg_cursors);
+    OPEN curs FOR SELECT 1;
+    RAISE NOTICE 'cursors: %', (SELECT count(*) FROM pg_cursors);
+    OPEN curs2 FOR SELECT 2;
+    RAISE NOTICE 'cursors: %', (SELECT count(*) FROM pg_cursors);
+    CLOSE curs;
+    RAISE NOTICE 'cursors: %', (SELECT count(*) FROM pg_cursors);
+    OPEN curs FOR SELECT 3;
+    RAISE NOTICE 'cursors: %', (SELECT count(*) FROM pg_cursors);
+    CLOSE curs;
+    CLOSE curs2;
+    RAISE NOTICE 'cursors: %', (SELECT count(*) FROM pg_cursors);
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: cursors: 0
+NOTICE: cursors: 1
+NOTICE: cursors: 2
+NOTICE: cursors: 1
+NOTICE: cursors: 2
+NOTICE: cursors: 0
+
+# Test CLOSE across statement boundaries.
+statement ok
+CREATE OR REPLACE FUNCTION f(curs REFCURSOR) RETURNS INT AS $$
+  BEGIN
+    CLOSE curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+BEGIN;
+
+statement ok
+DECLARE foo CURSOR FOR SELECT 1;
+
+query T
+SELECT name FROM pg_cursors;
+----
+foo
+
+statement ok
+SELECT f('foo');
+
+query T
+SELECT name FROM pg_cursors;
+----
+
+statement ok
+DECLARE foo CURSOR FOR SELECT 1;
+DECLARE bar CURSOR FOR SELECT 2;
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+foo
+bar
+
+statement ok
+SELECT f('bar');
+
+query T
+SELECT name FROM pg_cursors;
+----
+foo
+
+statement ok
+SELECT f('foo');
+
+query T
+SELECT name FROM pg_cursors;
+----
+
+statement ok
+ABORT;
+
+# Test attempting to CLOSE a nonexistent cursor.
+statement error pgcode 34000 pq: cursor \"foo\" does not exist
+SELECT f('foo');
+
+# Testing cursors with exception handling.
+#
+# Cursors are allowed in routines with an exception block.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 100;
+  BEGIN
+    curs := ('foo' || n::STRING)::REFCURSOR;
+    OPEN curs;
+    RETURN 1 // n;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+# Successful cursor creation.
+query I
+SELECT f(1);
+----
+1
+
+query I
+FETCH foo1;
+----
+100
+
+# The cursor should be rolled back.
+query I
+SELECT f(0);
+----
+-1
+
+statement error pgcode 34000 pq: cursor \"foo0\" does not exist
+FETCH foo0;
+
+# The cursors opened within a block should be closed before exception-handling.
+statement ok
+ABORT;
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 1;
+  BEGIN
+    curs := 'foo';
+    OPEN curs;
+    RAISE NOTICE '%', (SELECT array_agg(name) FROM pg_cursors)::STRING;
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RAISE NOTICE '%', (SELECT array_agg(name) FROM pg_cursors)::STRING;
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: {foo}
+NOTICE: <NULL>
+
+statement error pgcode 34000 pq: cursor \"foo\" does not exist
+FETCH foo;
+
+# The exception block can catch an error thrown as the cursor is being opened.
+statement ok
+BEGIN;
+DECLARE dup CURSOR FOR SELECT 0;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    curs2 REFCURSOR := 'dup';
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    OPEN curs2 FOR SELECT 200;
+  EXCEPTION
+    WHEN duplicate_cursor THEN
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+-1
+
+# The first cursor should have been rolled back, but the original 'dup' cursor
+# should still be open.
+query T
+SELECT name FROM pg_cursors;
+----
+dup
+
+query I
+FETCH 3 FROM dup;
+----
+0
+
+# The exception handler can catch an error thrown as the cursor executes.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+query I
+SELECT f();
+----
+-1
+
+# The cursor should have been rolled back (or not created in the first place).
+statement error pgcode 34000 pq: cursor \"foo\" does not exist
+FETCH foo;
+
+# It is possible to open a cursor within the exception block.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      OPEN curs FOR SELECT 2;
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+query I
+SELECT f();
+----
+-1
+
+# Should retrieve "2" from the second OPEN.
+query I
+FETCH 3 FROM foo;
+----
+2
+
+# The exception handler should not catch a duplicate cursor error thrown from
+# within the exception handler itself.
+statement ok
+ABORT;
+BEGIN;
+DECLARE dup CURSOR FOR SELECT 0;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    curs2 REFCURSOR := 'dup';
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      OPEN curs2 FOR SELECT 300;
+    WHEN duplicate_cursor THEN
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P03 pq: cursor \"dup\" already exists
+SELECT f();
+
+# Case where the cursor is opened and then closed before control reaches teh
+# exception handler.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT * FROM (VALUES (100), (200), (300));
+    RAISE NOTICE 'opened %', (SELECT array_agg(name) FROM pg_cursors)::STRING;
+    CLOSE curs;
+    RAISE NOTICE 'closed %', (SELECT array_agg(name) FROM pg_cursors)::STRING;
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RAISE NOTICE 'exception %', (SELECT array_agg(name) FROM pg_cursors)::STRING;
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: opened {foo}
+NOTICE: closed <NULL>
+NOTICE: exception <NULL>
+
+query T
+SELECT name FROM pg_cursors;
+----
+
+# Testing FETCH statements.
+statement ok
+ABORT;
+DELETE FROM xy WHERE x >= 100;
+INSERT INTO xy VALUES (5, 6);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+5  6
+
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x INT;
+    y INT;
+  BEGIN
+    OPEN curs FOR SELECT * FROM xy ORDER BY x;
+    FETCH curs INTO x, y;
+    RAISE NOTICE 'x: %, y: %', x, y;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: x: 1, y: 2
+
+# FETCH inside a loop.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x INT;
+    y INT;
+    i INT := 0;
+  BEGIN
+    OPEN curs FOR SELECT * FROM xy ORDER BY x;
+    WHILE i < n LOOP
+      FETCH curs INTO x, y;
+      RAISE NOTICE 'i: %, x: %, y: %', i, x, y;
+      i := i + 1;
+    END LOOP;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f(0);
+----
+
+query T noticetrace
+SELECT f(1);
+----
+NOTICE: i: 0, x: 1, y: 2
+
+query T noticetrace
+SELECT f(2);
+----
+NOTICE: i: 0, x: 1, y: 2
+NOTICE: i: 1, x: 3, y: 4
+
+query T noticetrace
+SELECT f(3);
+----
+NOTICE: i: 0, x: 1, y: 2
+NOTICE: i: 1, x: 3, y: 4
+NOTICE: i: 2, x: 5, y: 6
+
+query T noticetrace
+SELECT f(4);
+----
+NOTICE: i: 0, x: 1, y: 2
+NOTICE: i: 1, x: 3, y: 4
+NOTICE: i: 2, x: 5, y: 6
+NOTICE: i: 3, x: <NULL>, y: <NULL>
+
+# Target list is smaller than the number of fetched columns.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x INT;
+    i INT := 0;
+  BEGIN
+    OPEN curs FOR SELECT * FROM xy ORDER BY x;
+    WHILE i < 5 LOOP
+      FETCH curs INTO x;
+      RAISE NOTICE 'i: %, x: %', i, x;
+      i := i + 1;
+    END LOOP;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 0, x: 1
+NOTICE: i: 1, x: 3
+NOTICE: i: 2, x: 5
+NOTICE: i: 3, x: <NULL>
+NOTICE: i: 4, x: <NULL>
+
+# Target list is larger than the number of fetched columns.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x INT;
+    y INT := 1000;
+    i INT := 0;
+  BEGIN
+    OPEN curs FOR SELECT x FROM xy ORDER BY x;
+    WHILE i < 5 LOOP
+      FETCH curs INTO x, y;
+      RAISE NOTICE 'i: %, x: %, y: %', i, x, y;
+      i := i + 1;
+    END LOOP;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 0, x: 1, y: <NULL>
+NOTICE: i: 1, x: 3, y: <NULL>
+NOTICE: i: 2, x: 5, y: <NULL>
+NOTICE: i: 3, x: <NULL>, y: <NULL>
+NOTICE: i: 4, x: <NULL>, y: <NULL>
+
+# Fetch and Move interleaved.
+statement ok
+CREATE OR REPLACE FUNCTION f_fetch(curs REFCURSOR) RETURNS INT AS $$
+  DECLARE
+    x INT;
+    y INT;
+  BEGIN
+    FETCH curs INTO x, y;
+    RAISE NOTICE 'x: %, y: %', x, y;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+CREATE OR REPLACE FUNCTION f_move(curs REFCURSOR) RETURNS INT AS $$
+  BEGIN
+    MOVE curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement ok
+INSERT INTO xy VALUES (7, 8), (9, 10);
+DECLARE foo CURSOR FOR SELECT * FROM xy ORDER BY x DESC;
+
+statement ok
+SELECT f_move('foo');
+
+# This should fetch the (7, 8) row.
+query T noticetrace
+SELECT f_fetch('foo');
+----
+NOTICE: x: 7, y: 8
+
+statement ok
+SELECT f_move('foo');
+SELECT f_move('foo');
+
+# This should fetch the (1, 2) row.
+query T noticetrace
+SELECT f_fetch('foo');
+----
+NOTICE: x: 1, y: 2
+
+statement ok
+SELECT f_move('foo');
+SELECT f_move('foo');
+
+# The cursor has been exhausted.
+query T noticetrace
+SELECT f_fetch('foo');
+----
+NOTICE: x: <NULL>, y: <NULL>
+
+# Fetch with different directions.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := format('foo%s', n)::REFCURSOR;
+    x INT;
+  BEGIN
+    OPEN curs FOR SELECT * FROM xy ORDER BY x;
+    IF n = 0 THEN
+      FETCH curs INTO x;
+    ELSIF n = 1 THEN
+      FETCH NEXT curs INTO x;
+    ELSIF n = 2 THEN
+      FETCH PRIOR curs INTO x;
+    ELSIF n = 3 THEN
+      FETCH FIRST curs INTO x;
+    ELSIF n = 4 THEN
+      FETCH LAST curs INTO x;
+    ELSIF n = 5 THEN
+      FETCH ABSOLUTE 2 curs INTO x;
+    ELSIF n = 6 THEN
+      FETCH ABSOLUTE -2 curs INTO x;
+    ELSIF n = 7 THEN
+      FETCH RELATIVE 2 curs INTO x;
+    ELSIF n = 8 THEN
+      FETCH RELATIVE -2 curs INTO x;
+    ELSIF n = 9 THEN
+      FETCH FORWARD 2 curs INTO x;
+    ELSIF n = 10 THEN
+      FETCH BACKWARD 2 curs INTO x;
+    END IF;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIIIII
+SELECT f(0), f(1), f(3), f(5), f(7), f(9);
+----
+1  1  1  3  3  3
+
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT f(2);
+
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT f(4);
+
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT f(6);
+
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT f(8);
+
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT f(10);
+
+# Move with different directions.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := format('foo%s', n)::REFCURSOR;
+    x INT;
+  BEGIN
+    OPEN curs FOR SELECT * FROM xy ORDER BY x;
+    IF n = 0 THEN
+      MOVE curs;
+    ELSIF n = 1 THEN
+      MOVE NEXT curs;
+    ELSIF n = 2 THEN
+      MOVE PRIOR curs;
+    ELSIF n = 3 THEN
+      MOVE FIRST curs;
+    ELSIF n = 4 THEN
+      MOVE LAST curs;
+    ELSIF n = 5 THEN
+      MOVE ABSOLUTE 2 curs;
+    ELSIF n = 6 THEN
+      MOVE ABSOLUTE -2 curs;
+    ELSIF n = 7 THEN
+      MOVE RELATIVE 2 curs;
+    ELSIF n = 8 THEN
+      MOVE RELATIVE -2 curs;
+    ELSIF n = 9 THEN
+      MOVE FORWARD 2 curs;
+    ELSIF n = 10 THEN
+      MOVE BACKWARD 2 curs;
+    ELSIF n = 11 THEN
+      MOVE FORWARD ALL curs;
+    ELSIF n = 12 THEN
+      MOVE BACKWARD ALL curs;
+    ELSIF n = 13 THEN
+      MOVE ALL curs;
+    END IF;
+    FETCH curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIIIIIII
+SELECT f(0), f(1), f(3), f(5), f(7), f(9), f(11), f(13);
+----
+3  3  3  5  5  5  NULL  NULL
+
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT f(2);
+
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT f(4);
+
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT f(6);
+
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT f(8);
+
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT f(10);
+
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT f(12);
+
+# The FIRST option only works if the cursor hasn't seeked yet, since backwards
+# seeking isn't yet supported.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x INT;
+  BEGIN
+    IF n = 0 THEN
+      FETCH FIRST curs INTO x;
+    ELSE
+      MOVE FIRST curs;
+    END IF;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM xy ORDER BY x;
+
+# MOVE FIRST and FETCH FIRST leave the cursor positioned at the first row.
+statement ok
+SELECT f(1);
+SELECT f(1);
+SELECT f(1);
+
+query I
+SELECT f(0);
+----
+1
+
+statement ok
+SELECT f(1);
+SELECT f(1);
+
+query I
+SELECT f(0);
+----
+1
+
+# After seeking the cursor, MOVE FIRST fails.
+query II rowsort
+FETCH FORWARD 2 FROM foo;
+----
+3  4
+5  6
+
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT f(1);
+
+# After seeking the cursor, FETCH FIRST fails.
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM xy ORDER BY x;
+MOVE FORWARD 2 IN foo;
+
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT f(0);
+
+statement ok
+ABORT;
+
+# String cast to an int.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x INT;
+  BEGIN
+    OPEN curs FOR SELECT '1';
+    FETCH curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+1
+
+# String cast to a bool.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS BOOL AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x BOOL;
+  BEGIN
+    OPEN curs FOR SELECT 'f';
+    FETCH curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query B
+SELECT f();
+----
+false
+
+# String cast to Char. The string fits in the Char type.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS CHAR AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x CHAR;
+  BEGIN
+    OPEN curs FOR SELECT 'a';
+    FETCH curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+a
+
+# String cast to Bit. The string fits in the Bit type.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS BIT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x BIT;
+  BEGIN
+    OPEN curs FOR SELECT '1';
+    FETCH curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+1
+
+# Int cast to Float.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS FLOAT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x FLOAT;
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    FETCH curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query R
+SELECT f();
+----
+1
+
+# Int cast to Decimal.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS DECIMAL AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x DECIMAL;
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    FETCH curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query R
+SELECT f();
+----
+1
+
+# Float cast to Int.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x INT;
+  BEGIN
+    OPEN curs FOR SELECT 1.1::FLOAT;
+    FETCH curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+1
+
+# Decimal cast to Int.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x INT;
+  BEGIN
+    OPEN curs FOR SELECT 1.1::DECIMAL;
+    FETCH curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+1
+
+# Widening Decimal to Decimal.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS DECIMAL(10, 4) AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x DECIMAL(10, 4);
+  BEGIN
+    OPEN curs FOR SELECT 1.11::DECIMAL(10, 2);
+    FETCH curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query R
+SELECT f();
+----
+1.1100
+
+# Narrowing Decimal to Decimal.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS DECIMAL(10, 2) AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x DECIMAL(10, 2);
+  BEGIN
+    OPEN curs FOR SELECT 1.1111::DECIMAL(10, 4);
+    FETCH curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query R
+SELECT f();
+----
+1.11
+
+# Different-sized int casts.
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x2 INT2;
+    x4 INT4;
+    x8 INT8;
+  BEGIN
+    OPEN curs FOR SELECT b;
+    IF a = 2 THEN
+      FETCH curs INTO x2;
+    ELSIF a = 4 THEN
+      FETCH curs INTO x4;
+    ELSIF a = 8 THEN
+      FETCH curs INTO x8;
+    END IF;
+    RAISE NOTICE 'x2: %, x4: %, x8: %', x2, x4, x8;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f(2, 1);
+----
+NOTICE: x2: 1, x4: <NULL>, x8: <NULL>
+
+query T noticetrace
+SELECT f(4, 1);
+----
+NOTICE: x2: <NULL>, x4: 1, x8: <NULL>
+
+query T noticetrace
+SELECT f(8, 1);
+----
+NOTICE: x2: <NULL>, x4: <NULL>, x8: 1
+
+statement error pgcode 22003 pq: integer out of range for type int2
+SELECT f(2, 5000000000);
+
+statement error pgcode 22003 pq: integer out of range for type int4
+SELECT f(4, 5000000000);
+
+query T noticetrace
+SELECT f(8, 5000000000);
+----
+NOTICE: x2: <NULL>, x4: <NULL>, x8: 5000000000
+
+statement error pgcode 0A000 pq: FETCH statement cannot return multiple rows
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x INT;
+  BEGIN
+    OPEN curs FOR SELECT x FROM xy ORDER BY x;
+    FETCH ALL FROM curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: FETCH statement cannot return multiple rows
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs REFCURSOR := 'foo';
+    x INT;
+  BEGIN
+    OPEN curs FOR SELECT x FROM xy ORDER BY x;
+    FETCH BACKWARD ALL FROM curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# It is possible to open a cursor with a REFCURSOR parameter.
+statement ok
+CREATE OR REPLACE FUNCTION f(curs REFCURSOR) RETURNS INT AS $$
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f('foo');
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+100
+
+statement ok
+ABORT;
+
+# Testing invalid cursor variables.
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs STRING) RETURNS INT AS $$
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs NAME) RETURNS INT AS $$
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs CHAR) RETURNS INT AS $$
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs INT) RETURNS INT AS $$
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs BOOL) RETURNS INT AS $$
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING;
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs NAME;
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs CHAR;
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs INT;
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs BOOL;
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs STRING) RETURNS INT AS $$
+  BEGIN
+    CLOSE curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs STRING) RETURNS INT AS $$
+  DECLARE
+    x INT;
+  BEGIN
+    FETCH curs INTO x;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs STRING) RETURNS INT AS $$
+  BEGIN
+    MOVE curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;

@@ -79,25 +79,18 @@ type registration struct {
 	span             roachpb.Span
 	catchUpTimestamp hlc.Timestamp // exclusive
 	withDiff         bool
+	withFiltering    bool
 	metrics          *Metrics
-
-	// catchUpIterConstructor is used to construct the catchUpIter if necessary.
-	// The reason this constructor is plumbed down is to make sure that the
-	// iterator does not get constructed too late in server shutdown. However,
-	// it must also be stored in the struct to ensure that it is not constructed
-	// too late, after the raftMu has been dropped. Thus, this function, if
-	// non-nil, will be used to populate mu.catchUpIter while the registration
-	// is being registered by the processor.
-	catchUpIterConstructor CatchUpIteratorConstructor
 
 	// Output.
 	stream Stream
 	done   *future.ErrorFuture
 	unreg  func()
 	// Internal.
-	id   int64
-	keys interval.Range
-	buf  chan *sharedEvent
+	id            int64
+	keys          interval.Range
+	buf           chan *sharedEvent
+	blockWhenFull bool // if true, block when buf is full (for tests)
 
 	mu struct {
 		sync.Locker
@@ -112,9 +105,10 @@ type registration struct {
 		outputLoopCancelFn func()
 		disconnected       bool
 
-		// catchUpIter is populated on the Processor's goroutine while the
-		// Replica.raftMu is still held. If it is non-nil at the time that
-		// disconnect is called, it is closed by disconnect.
+		// catchUpIter is created by replcia under raftMu lock when registration is
+		// created. It is detached by output loop for processing and closed.
+		// If output loop was not started and catchUpIter is non-nil at the time
+		// that disconnect is called, it is closed by disconnect.
 		catchUpIter *CatchUpIterator
 	}
 }
@@ -122,27 +116,31 @@ type registration struct {
 func newRegistration(
 	span roachpb.Span,
 	startTS hlc.Timestamp,
-	catchUpIterConstructor CatchUpIteratorConstructor,
+	catchUpIter *CatchUpIterator,
 	withDiff bool,
+	withFiltering bool,
 	bufferSz int,
+	blockWhenFull bool,
 	metrics *Metrics,
 	stream Stream,
 	unregisterFn func(),
 	done *future.ErrorFuture,
 ) registration {
 	r := registration{
-		span:                   span,
-		catchUpTimestamp:       startTS,
-		catchUpIterConstructor: catchUpIterConstructor,
-		withDiff:               withDiff,
-		metrics:                metrics,
-		stream:                 stream,
-		done:                   done,
-		unreg:                  unregisterFn,
-		buf:                    make(chan *sharedEvent, bufferSz),
+		span:             span,
+		catchUpTimestamp: startTS,
+		withDiff:         withDiff,
+		withFiltering:    withFiltering,
+		metrics:          metrics,
+		stream:           stream,
+		done:             done,
+		unreg:            unregisterFn,
+		buf:              make(chan *sharedEvent, bufferSz),
+		blockWhenFull:    blockWhenFull,
 	}
 	r.mu.Locker = &syncutil.Mutex{}
 	r.mu.caughtUp = true
+	r.mu.catchUpIter = catchUpIter
 	return r
 }
 
@@ -167,6 +165,22 @@ func (r *registration) publish(
 	case r.buf <- e:
 		r.mu.caughtUp = false
 	default:
+		// If we're asked to block (in tests), do a blocking send after releasing
+		// the mutex -- otherwise, the output loop won't be able to consume from the
+		// channel. We optimistically attempt the non-blocking send above first,
+		// since we're already holding the mutex.
+		if r.blockWhenFull {
+			r.mu.Unlock()
+			select {
+			case r.buf <- e:
+				r.mu.Lock()
+				r.mu.caughtUp = false
+			case <-ctx.Done():
+				r.mu.Lock()
+				alloc.Release(ctx)
+			}
+			return
+		}
 		// Buffer exceeded and we are dropping this event. Registration will need
 		// a catch-up scan.
 		r.mu.overflowed = true
@@ -271,9 +285,8 @@ func (r *registration) maybeStripEvent(event *kvpb.RangeFeedEvent) *kvpb.RangeFe
 }
 
 // disconnect cancels the output loop context for the registration and passes an
-// error to the output error stream for the registration. This also sets the
-// disconnected flag on the registration, preventing it from being disconnected
-// again.
+// error to the output error stream for the registration.
+// Safe to run multiple times, but subsequent errors would be discarded.
 func (r *registration) disconnect(pErr *kvpb.Error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -387,7 +400,7 @@ func (r *registration) maybeRunCatchUpScan(ctx context.Context) error {
 		r.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	return catchUpIter.CatchUpScan(ctx, r.stream.Send, r.withDiff)
+	return catchUpIter.CatchUpScan(ctx, r.stream.Send, r.withDiff, r.withFiltering)
 }
 
 // ID implements interval.Interface.
@@ -447,7 +460,11 @@ func (reg *registry) nextID() int64 {
 // PublishToOverlapping publishes the provided event to all registrations whose
 // range overlaps the specified span.
 func (reg *registry) PublishToOverlapping(
-	ctx context.Context, span roachpb.Span, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
+	ctx context.Context,
+	span roachpb.Span,
+	event *kvpb.RangeFeedEvent,
+	omitInRangefeeds bool,
+	alloc *SharedBudgetAllocation,
 ) {
 	// Determine the earliest starting timestamp that a registration
 	// can have while still needing to hear about this event.
@@ -471,9 +488,10 @@ func (reg *registry) PublishToOverlapping(
 	}
 
 	reg.forOverlappingRegs(span, func(r *registration) (bool, *kvpb.Error) {
-		// Don't publish events if they are equal to or less
-		// than the registration's starting timestamp.
-		if r.catchUpTimestamp.Less(minTS) {
+		// Don't publish events if they:
+		// 1. are equal to or less than the registration's starting timestamp, or
+		// 2. have OmitInRangefeeds = true and this registration has opted into filtering.
+		if r.catchUpTimestamp.Less(minTS) && !(r.withFiltering && omitInRangefeeds) {
 			r.publish(ctx, event, alloc)
 		}
 		return false, nil
@@ -492,6 +510,18 @@ func (reg *registry) Unregister(ctx context.Context, r *registration) {
 		panic(err)
 	}
 	r.drainAllocations(ctx)
+}
+
+// DisconnectAllOnShutdown disconnectes all registrations on processor shutdown.
+// This is different from normal disconnect as registrations won't be able to
+// perform Unregister when processor's work loop is already terminated.
+// This method will cleanup metrics controlled by registry itself beside posting
+// errors to registrations.
+// TODO: this should be revisited as part of
+// https://github.com/cockroachdb/cockroach/issues/110634
+func (reg *registry) DisconnectAllOnShutdown(pErr *kvpb.Error) {
+	reg.metrics.RangeFeedRegistrations.Dec(int64(reg.tree.Len()))
+	reg.DisconnectWithErr(all, pErr)
 }
 
 // Disconnect disconnects all registrations that overlap the specified span with
@@ -567,21 +597,6 @@ func (r *registration) waitForCaughtUp() error {
 		}
 	}
 	return errors.Errorf("registration %v failed to empty in time", r.Range())
-}
-
-// maybeConstructCatchUpIter calls the catchUpIterConstructor and attaches
-// the catchUpIter to be detached in the catchUpScan or closed on disconnect.
-func (r *registration) maybeConstructCatchUpIter() {
-	if r.catchUpIterConstructor == nil {
-		return
-	}
-
-	catchUpIter := r.catchUpIterConstructor(r.span, r.catchUpTimestamp)
-	r.catchUpIterConstructor = nil
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mu.catchUpIter = catchUpIter
 }
 
 // detachCatchUpIter detaches the catchUpIter that was previously attached.

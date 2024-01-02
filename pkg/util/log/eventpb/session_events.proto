@@ -44,6 +44,8 @@ message CommonConnectionDetails {
   // proxy or other intermediate server, this field will contain the
   // address of the intermediate server.
   string remote_address = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The connection's hex encoded session id.
+  string session_id = 4 [(gogoproto.customname) = "SessionID", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // CommonConnectionDetails are payload fields common to all
@@ -121,6 +123,9 @@ enum AuthFailReason {
   CREDENTIALS_INVALID = 6;
   // CREDENTIALS_EXPIRED occur when the credentials provided by the client are expired.
   CREDENTIALS_EXPIRED = 7;
+  // NO_REPLICATION_ROLEOPTION occurs when the connection requires a replication role option,
+  // but the user does not have it.
+  NO_REPLICATION_ROLEOPTION = 8;
 }
 
 // ClientAuthenticationFailed is reported when a client session

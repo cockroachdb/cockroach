@@ -8,12 +8,13 @@
     "react/jsx-key": "off",
     "@typescript-eslint/ban-types": "off",
     "react/no-unescaped-entities": "off",
-    "@typescript-eslint/no-unused-vars": "off",
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
     "@typescript-eslint/explicit-module-boundary-types": "off",
     "@typescript-eslint/no-explicit-any": "off",
     "no-restricted-imports": ["error", {
       "patterns": ["@cockroachlabs/cluster-ui/src/*"]
     }],
-    "@cockroachlabs/crdb/require-antd-style-import": "error"
+    "@cockroachlabs/crdb/require-antd-style-import": "error",
+    "eqeqeq": ["error", "smart"]
   }
 }

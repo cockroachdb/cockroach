@@ -33,11 +33,11 @@ const CacheCapacityMax = 65000
 // ClientCertExpirationCacheCapacity is the cluster setting that controls the
 // maximum number of client cert expirations in the cache.
 var ClientCertExpirationCacheCapacity = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.client_cert_expiration_cache.capacity",
 	"the maximum number of client cert expirations stored",
 	1000,
-).WithPublic()
+	settings.WithPublic)
 
 // ClientCertExpirationCache contains a cache of gauge objects keyed by
 // SQL username strings. It is a FIFO cache that stores gauges valued by
@@ -88,6 +88,9 @@ func NewClientCertExpirationCache(
 		},
 		OnEvictedEntry: func(entry *cache.Entry) {
 			gauge := entry.Value.(*aggmetric.Gauge)
+			// The child metric will continue to report into the parent metric even
+			// after unlinking, so we also reset it to 0.
+			gauge.Update(0)
 			gauge.Unlink()
 			c.mu.acc.Shrink(ctx, int64(unsafe.Sizeof(*gauge)))
 		},

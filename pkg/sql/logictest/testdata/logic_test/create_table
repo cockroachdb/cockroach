@@ -339,7 +339,7 @@ SHOW CREATE TABLE like_hash
 ----
 like_hash  CREATE TABLE public.like_hash (
              a INT8 NULL,
-             crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
+             crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
              CONSTRAINT like_hash_pkey PRIMARY KEY (rowid ASC),
              INDEX like_hash_base_a_idx (a ASC) USING HASH WITH (bucket_count=4)
@@ -356,7 +356,7 @@ SHOW CREATE TABLE like_hash
 ----
 like_hash  CREATE TABLE public.like_hash (
              a INT8 NULL,
-             crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
+             crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
              CONSTRAINT like_hash_pkey PRIMARY KEY (rowid ASC),
              INDEX like_hash_base_a_idx (a ASC) USING HASH WITH (bucket_count=4)
@@ -408,14 +408,14 @@ statement ok
 CREATE TABLE unique_without_index1 (a INT, b INT, CONSTRAINT ab UNIQUE WITHOUT INDEX (a, b))
 
 query TTTTB colnames
-SHOW CONSTRAINTS FROM unique_without_index
+SELECT * FROM [SHOW CONSTRAINTS FROM unique_without_index] ORDER BY constraint_name
 ----
 table_name            constraint_name            constraint_type  details                   validated
 unique_without_index  unique_a                   UNIQUE           UNIQUE WITHOUT INDEX (a)  true
 unique_without_index  unique_without_index_pkey  PRIMARY KEY      PRIMARY KEY (rowid ASC)   true
 
 query TTTTB colnames
-SHOW CONSTRAINTS FROM unique_without_index1
+SELECT * FROM [SHOW CONSTRAINTS FROM unique_without_index1] ORDER BY constraint_name
 ----
 table_name             constraint_name             constraint_type  details                      validated
 unique_without_index1  ab                          UNIQUE           UNIQUE WITHOUT INDEX (a, b)  true
@@ -463,17 +463,14 @@ CREATE TABLE error (a INT, b INT, INDEX idx (a), UNIQUE INDEX idx (b))
 statement error pgcode 42P07 duplicate index name: \"idx\"
 CREATE TABLE error (a INT, b INT, UNIQUE INDEX idx (a), UNIQUE INDEX idx (b))
 
-# Regression test for using some virtual tables in CREATE TABLE AS which is not
-# supported at the moment (#65512).
+statement ok
+CREATE TABLE ctas1 AS (SELECT * FROM crdb_internal.node_statement_statistics);
 
-query error crdb_internal.node_statement_statistics cannot be used in this context
-CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_statement_statistics);
+statement ok
+CREATE TABLE ctas2 AS (SELECT * FROM crdb_internal.node_transaction_statistics);
 
-query error crdb_internal.node_transaction_statistics cannot be used in this context
-CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_transaction_statistics);
-
-query error crdb_internal.node_txn_stats cannot be used in this context
-CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_txn_stats);
+statement ok
+CREATE TABLE ctas3 AS (SELECT * FROM crdb_internal.node_txn_stats);
 
 subtest generated_as_identity
 statement ok
@@ -648,7 +645,7 @@ CREATE TABLE test_serial (
 	b SERIAL
 );
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SELECT l.table_id, l.name, l.state, r.refobjid
 FROM (
   SELECT table_id, name, state
@@ -681,7 +678,7 @@ CREATE TABLE test_serial (
 	b SERIAL
 );
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SELECT l.table_id, l.name, l.state, r.refobjid
 FROM (
   SELECT table_id, name, state
@@ -850,11 +847,11 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_good_hash_indexes_1];
 ----
 CREATE TABLE public.t_good_hash_indexes_1 (
-  crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
+  crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 5:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
   b INT8 NULL,
   c INT8 NULL,
-  crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 5:::INT8)) VIRTUAL,
+  crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 5:::INT8)) VIRTUAL,
   CONSTRAINT t_good_hash_indexes_1_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=5),
   INDEX t_good_hash_indexes_1_b_idx (b ASC) USING HASH WITH (bucket_count=5)
 )
@@ -870,7 +867,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t_good_hash_indexes_2];
 ----
 CREATE TABLE public.t_good_hash_indexes_2 (
   a INT8 NOT NULL,
-  crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
+  crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 5:::INT8)) VIRTUAL,
   CONSTRAINT t_good_hash_indexes_2_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=5)
 )
 
@@ -986,3 +983,86 @@ tbl  CREATE TABLE public.tbl (
        CONSTRAINT tbl_pkey PRIMARY KEY (i ASC),
        FAMILY f1 (i, j)
      )
+
+# We should propagate the type of the column into the sequence (#110352), instead
+# of always using INT8 for them.
+subtest validate_serial_seq_type
+
+statement ok
+CREATE TABLE gen_by_default_int2 (
+  a INT UNIQUE,
+  b INT4 GENERATED BY DEFAULT AS IDENTITY (START 2 INCREMENT 3 CACHE 10),
+  c INT2 GENERATED BY DEFAULT AS IDENTITY (START 2 INCREMENT 3 CACHE 10),
+  d INT GENERATED BY DEFAULT AS IDENTITY (START 2 INCREMENT 3 CACHE 10),
+  FAMILY f1 (a, b)
+)
+
+statement ok
+SET default_int_size=4;
+
+statement ok
+CREATE TABLE gen_by_default_int3 (
+  a INT UNIQUE,
+  b INT4 GENERATED BY DEFAULT AS IDENTITY (START 2 INCREMENT 3 CACHE 10),
+  c INT2 GENERATED BY DEFAULT AS IDENTITY (START 2 INCREMENT 3 CACHE 10),
+  d INT GENERATED BY DEFAULT AS IDENTITY (START 2 INCREMENT 3 CACHE 10),
+  FAMILY f1 (a, b)
+)
+
+statement ok
+SET default_int_size=8;
+
+# Validate the sequence type matches based on the defintion
+query TTT rowsort
+SELECT
+  sequence_schema, sequence_name,
+  data_type AS type
+FROM information_schema.sequences
+JOIN pg_namespace AS ns ON ns.nspname = sequence_schema
+JOIN pg_class AS cls ON cls.relnamespace = ns.oid AND cls.relname = sequence_name;
+----
+public  gen_by_default_int3_d_seq                INT4
+public  gen_by_default_int3_c_seq                INT2
+public  gen_by_default_int3_b_seq                INT4
+public  gen_by_default_int2_d_seq                INT8
+public  gen_by_default_int2_c_seq                INT2
+public  gen_by_default_int2_b_seq                INT4
+public  s2                                       INT8
+public  s1                                       INT8
+public  s                                        INT8
+public  serial_test_sequence                     INT8
+public  gen_by_default_as_id_seqopt_cache_b_seq  INT8
+public  gen_by_default_as_id_seqopt_b_seq        INT8
+public  gen_always_as_id_seqopt_cache_b_seq      INT8
+public  gen_always_as_id_seqopt_b_seq            INT8
+public  generated_by_default_t_notnull_b_seq     INT8
+public  generated_always_t_notnull_b_seq         INT8
+public  generated_by_default_t_b_seq             INT8
+public  generated_always_t_b_seq                 INT8
+
+subtest end
+
+# This subtest ensures we can create not valid unique-without-index constraint
+# during table creation, which will be treated as a "normal"
+# unique-without-index constraint (meaning the NOT VALID will be dropped).
+subtest 115352
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE t_115352 (i INT, UNIQUE WITHOUT INDEX (i) NOT VALID);
+
+# NOT VALID constraint specified within `CREATE TABLE` is a no-op and does not
+# skip validation.
+query T
+SELECT create_statement FROM [SHOW CREATE t_115352];
+----
+CREATE TABLE public.t_115352 (
+    i INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT t_115352_pkey PRIMARY KEY (rowid ASC),
+    CONSTRAINT unique_i UNIQUE WITHOUT INDEX (i)
+)
+
+subtest end

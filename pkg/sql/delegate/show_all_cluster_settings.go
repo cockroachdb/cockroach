@@ -77,12 +77,12 @@ func (d *delegator) delegateShowClusterSettingList(
 
 	if stmt.All {
 		return d.parse(
-			`SELECT variable, value, type AS setting_type, public, description
+			`SELECT variable, value, type AS setting_type, public, description, default_value, origin
        FROM   crdb_internal.cluster_settings`,
 		)
 	}
 	return d.parse(
-		`SELECT variable, value, type AS setting_type, description
+		`SELECT variable, value, type AS setting_type, description, default_value, origin
      FROM   crdb_internal.cluster_settings
      WHERE  public IS TRUE`,
 	)
@@ -95,10 +95,7 @@ func (d *delegator) delegateShowTenantClusterSettingList(
 	// privileged operation than viewing local cluster settings. So we
 	// shouldn't be allowing with just the role option
 	// VIEWCLUSTERSETTINGS.
-	//
-	// TODO(knz): Using admin authz for now; we may want to introduce a
-	// more specific role option later.
-	if err := d.catalog.RequireAdminRole(d.ctx, "show a tenant cluster setting"); err != nil {
+	if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 		return nil, err
 	}
 
@@ -131,17 +128,17 @@ WITH
     LEFT JOIN system.tenants st ON id = tenant_id.tenant_id
   ),
   tenantspecific AS (
-     SELECT t.name, t.value
+     SELECT t.name AS setting_key, t.value
      FROM system.tenant_settings t, tenant_id
      WHERE t.tenant_id = tenant_id.tenant_id
   ),
   allsettings AS (
-    SELECT variable, value, public, type, description
+    SELECT variable AS setting_name, value, public, type, description, key AS setting_key
     FROM system.crdb_internal.cluster_settings ` + publicFilter + `
   )
 SELECT
-  allsettings.variable || substr('', (SELECT ok FROM isvalid)) AS variable,
-  crdb_internal.decode_cluster_setting(allsettings.variable,
+  allsettings.setting_name || substr('', (SELECT ok FROM isvalid)) AS variable,
+  crdb_internal.decode_cluster_setting(allsettings.setting_name,
      -- NB: careful not to coalesce with allsettings.value directly!
      -- This is the value for the system tenant and is not relevant to other tenants.
      COALESCE(tenantspecific.value,
@@ -161,8 +158,8 @@ SELECT
 FROM
   allsettings
   LEFT JOIN tenantspecific ON
-                  allsettings.variable = tenantspecific.name
+                  allsettings.setting_key = tenantspecific.setting_key
   LEFT JOIN system.tenant_settings AS overrideall ON
-                  allsettings.variable = overrideall.name AND overrideall.tenant_id = 0
+                  allsettings.setting_key = overrideall.name AND overrideall.tenant_id = 0
 `)
 }

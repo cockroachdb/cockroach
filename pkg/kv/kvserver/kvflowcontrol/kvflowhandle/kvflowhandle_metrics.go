@@ -20,6 +20,20 @@ import (
 )
 
 var (
+	streamsConnected = metric.Metadata{
+		Name:        "kvadmission.flow_handle.streams_connected",
+		Help:        "Number of times we've connected to a stream, at the handle level",
+		Measurement: "Streams",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	streamsDisconnected = metric.Metadata{
+		Name:        "kvadmission.flow_handle.streams_disconnected",
+		Help:        "Number of times we've disconnected from a stream, at the handle level",
+		Measurement: "Streams",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	requestsWaiting = metric.Metadata{
 		Name:        "kvadmission.flow_handle.%s_requests_waiting",
 		Help:        "Number of %s requests waiting for flow tokens, at the handle level",
@@ -62,17 +76,23 @@ func annotateMetricTemplateWithWorkClass(
 
 // Metrics is a metric.Struct for all kvflowcontrol.Handles.
 type Metrics struct {
-	RequestsWaiting  [admissionpb.NumWorkClasses]*metric.Gauge
-	RequestsAdmitted [admissionpb.NumWorkClasses]*metric.Counter
-	RequestsErrored  [admissionpb.NumWorkClasses]*metric.Counter
-	WaitDuration     [admissionpb.NumWorkClasses]metric.IHistogram
+	StreamsConnected    *metric.Counter
+	StreamsDisconnected *metric.Counter
+	RequestsWaiting     [admissionpb.NumWorkClasses]*metric.Gauge
+	RequestsAdmitted    [admissionpb.NumWorkClasses]*metric.Counter
+	RequestsErrored     [admissionpb.NumWorkClasses]*metric.Counter
+	WaitDuration        [admissionpb.NumWorkClasses]metric.IHistogram
 }
 
 var _ metric.Struct = &Metrics{}
 
 // NewMetrics returns a new instance of Metrics.
 func NewMetrics(registry *metric.Registry) *Metrics {
-	m := &Metrics{}
+	m := &Metrics{
+		StreamsConnected:    metric.NewCounter(streamsConnected),
+		StreamsDisconnected: metric.NewCounter(streamsDisconnected),
+	}
+
 	for _, wc := range []admissionpb.WorkClass{
 		admissionpb.RegularWorkClass,
 		admissionpb.ElasticWorkClass,
@@ -89,10 +109,10 @@ func NewMetrics(registry *metric.Registry) *Metrics {
 		)
 		m.WaitDuration[wc] = metric.NewHistogram(
 			metric.HistogramOptions{
-				Metadata: annotateMetricTemplateWithWorkClass(wc, waitDuration),
-				Duration: base.DefaultHistogramWindowInterval(),
-				Buckets:  metric.IOLatencyBuckets,
-				Mode:     metric.HistogramModePrometheus,
+				Metadata:     annotateMetricTemplateWithWorkClass(wc, waitDuration),
+				Duration:     base.DefaultHistogramWindowInterval(),
+				BucketConfig: metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePrometheus,
 			},
 		)
 	}

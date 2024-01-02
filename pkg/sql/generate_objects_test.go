@@ -38,7 +38,7 @@ func BenchmarkGenerateObjects(b *testing.B) {
 	s, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{
 		// Secondary tenants have unreasonably low span config limits. We
 		// can't use them yet for this test.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(83461),
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -46,7 +46,7 @@ func BenchmarkGenerateObjects(b *testing.B) {
 
 	// Disable auto stats and range splits, which introduce noise.
 	db.Exec(b, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
-	db.Exec(b, `SET CLUSTER SETTING spanconfig.storage_coalesce_adjacent.enabled = true`)
+	db.Exec(b, `SET CLUSTER SETTING spanconfig.range_coalescing.system.enabled = true`)
 
 	for _, bench := range benches {
 		b.Run(bench.name, func(b *testing.B) {

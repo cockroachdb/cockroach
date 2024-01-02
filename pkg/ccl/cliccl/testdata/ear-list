@@ -1,0 +1,47 @@
+list
+----
+000002.log:
+  env type: Data, AES128_CTR
+  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
+  nonce: 06 c2 26 f9 68 f0 fc ff b9 e7 82 8f
+  counter: 914487965
+000004.log:
+  env type: Data, AES128_CTR
+  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
+  nonce: 71 12 f7 22 9a fb 90 24 4e 58 27 01
+  counter: 3082989236
+000005.sst:
+  env type: Data, AES128_CTR
+  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
+  nonce: 5a 01 ec 25 29 aa 75 fc 92 76 48 ad
+  counter: 1294279409
+COCKROACHDB_DATA_KEYS_000001_monolith:
+  env type: Store, AES128_CTR
+  keyID: f594229216d81add7811c4360212eb7629b578ef4eab6e5d05679b3c5de48867
+  nonce: 8f 4c ba 1a a3 4f db 3c db 84 cf f5
+  counter: 2436226951
+MANIFEST-000001:
+  env type: Data, AES128_CTR
+  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
+  nonce: 2e fd 49 2f 5f c5 53 0a e8 8f 78 cc
+  counter: 110434741
+OPTIONS-000003:
+  env type: Data, AES128_CTR
+  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
+  nonce: 80 18 c0 79 61 c7 cf ef b4 25 4e 78
+  counter: 1483615076
+marker.datakeys.000001.COCKROACHDB_DATA_KEYS_000001_monolith:
+  env type: Store, AES128_CTR
+  keyID: f594229216d81add7811c4360212eb7629b578ef4eab6e5d05679b3c5de48867
+  nonce: 55 d7 d4 27 6c 97 9b dd f1 5d 40 c8
+  counter: 467030050
+marker.format-version.000001.013:
+  env type: Data, AES128_CTR
+  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
+  nonce: d3 97 11 b3 1a ed 22 2b 74 fb 02 0c
+  counter: 1229228536
+marker.manifest.000001.MANIFEST-000001:
+  env type: Data, AES128_CTR
+  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
+  nonce: 18 c2 a6 23 cc 6e 2e 7c 8e bf 84 77
+  counter: 3159373900

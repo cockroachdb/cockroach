@@ -45,8 +45,9 @@ import (
 
 func TestTableReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
@@ -191,7 +192,7 @@ func TestMisplannedRangesMetadata(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
+	tc := serverutils.StartCluster(t, 3, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{

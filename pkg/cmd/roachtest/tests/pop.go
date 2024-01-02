@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
@@ -33,8 +34,9 @@ func registerPop(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		startOpts := option.DefaultStartOptsInMemory()
+		startOpts.RoachprodOpts.SQLPort = config.DefaultSQLPort
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
 			t.Fatal(err)
@@ -99,11 +101,12 @@ func registerPop(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "pop",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `orm`),
-		Run:     runPop,
+		Name:             "pop",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.ORM),
+		Run:              runPop,
 	})
 }

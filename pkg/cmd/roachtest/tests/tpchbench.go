@@ -34,9 +34,6 @@ type tpchBenchSpec struct {
 	benchType       string
 	url             string
 	numRunsPerQuery int
-	// minVersion specifies the minimum version of CRDB nodes. If omitted, it
-	// will default to v19.1.0.
-	minVersion string
 	// maxLatency is the expected maximum time that a query will take to execute
 	// needed to correctly initialize histograms.
 	maxLatency time.Duration
@@ -57,7 +54,6 @@ func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBen
 	loadNode := c.Node(c.Spec().NodeCount)
 
 	t.Status("copying binaries")
-	c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 
 	filename := b.benchType
@@ -76,7 +72,7 @@ func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBen
 
 		t.Status("setting up dataset")
 		err := loadTPCHDataset(
-			ctx, t, c, conn, b.ScaleFactor, m, roachNodes, true, /* disableMergeQueue */
+			ctx, t, c, conn, b.ScaleFactor, m, roachNodes, true /* disableMergeQueue */, false, /* secure */
 		)
 		if err != nil {
 			return err
@@ -166,16 +162,14 @@ func registerTPCHBenchSpec(r registry.Registry, b tpchBenchSpec) {
 
 	// Add a load generator node.
 	numNodes := b.Nodes + 1
-	minVersion := b.minVersion
-	if minVersion == `` {
-		minVersion = "v19.1.0" // needed for import
-	}
 
 	r.Add(registry.TestSpec{
-		Name:      strings.Join(nameParts, "/"),
-		Owner:     registry.OwnerSQLQueries,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(numNodes),
+		Name:             strings.Join(nameParts, "/"),
+		Owner:            registry.OwnerSQLQueries,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHBench(ctx, t, c, b)
 		},
@@ -200,7 +194,6 @@ func registerTPCHBench(r registry.Registry) {
 			benchType:       `tpch`,
 			url:             `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/tpch-queries`,
 			numRunsPerQuery: 3,
-			minVersion:      `v19.2.0`,
 			maxLatency:      500 * time.Second,
 		},
 	}

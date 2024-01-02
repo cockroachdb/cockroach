@@ -13,6 +13,7 @@ package log
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"regexp"
 	"strconv"
@@ -23,68 +24,125 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/ttycolor"
 )
 
 // formatCrdbV1 is the pre-v21.1 canonical log format, without a
 // counter column.
-type formatCrdbV1 struct{}
-
-func (formatCrdbV1) formatterName() string { return "crdb-v1" }
-
-func (formatCrdbV1) formatEntry(entry logEntry) *buffer {
-	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, false /*showCounter*/, nil)
+type formatCrdbV1 struct {
+	// showCounter determines whether the counter column is printed.
+	showCounter bool
+	// colorProfile is used to colorize the output.
+	colorProfile ttycolor.Profile
+	// colorProfileName is the name of the color profile, used for
+	// documentation purposes.
+	colorProfileName string
+	// loc is the time zone to use. When non-nil, it forces the
+	// presentation of a time zone specification after the time stamp.
+	// The corresponding code path is much slower.
+	loc *time.Location
 }
 
-func (formatCrdbV1) doc() string { return formatCrdbV1CommonDoc(false /* withCounter */) }
+func (f *formatCrdbV1) setOption(k string, v string) error {
+	switch k {
+	case "show-counter":
+		switch v {
+		case "true":
+			f.showCounter = true
+		case "false":
+			f.showCounter = false
+		default:
+			return errors.WithHint(
+				errors.Newf("unknown show-counter value: %q", redact.Safe(v)),
+				"Possible values: true, false.")
+		}
+		return nil
+
+	case "colors":
+		switch v {
+		case "none":
+			f.colorProfile = nil
+		case "auto":
+			f.colorProfile = ttycolor.StderrProfile
+		case "ansi":
+			f.colorProfile = ttycolor.Profile8
+		case "256color":
+			f.colorProfile = ttycolor.Profile256
+		default:
+			return errors.WithHint(
+				errors.Newf("unknown colors value: %q", redact.Safe(v)),
+				"Possible values: none, auto, ansi, 256color.")
+		}
+		f.colorProfileName = v
+		return nil
+
+	case "timezone":
+		l, err := timeutil.LoadLocation(v)
+		if err != nil {
+			return errors.Wrapf(err, "invalid timezone: %q", v)
+		}
+		if l == time.UTC {
+			// Avoid triggering the slow path in the entry formatter.
+			l = nil
+		}
+		f.loc = l
+		return nil
+
+	default:
+		return errors.Newf("unknown format option: %q", redact.Safe(k))
+	}
+}
+
+func (f formatCrdbV1) formatterName() string {
+	var buf strings.Builder
+	buf.WriteString("crdb-v1")
+	if f.colorProfileName != "none" {
+		buf.WriteString("-tty")
+	}
+	if f.showCounter {
+		buf.WriteString("-count")
+	}
+	return buf.String()
+}
 
 func (formatCrdbV1) contentType() string { return "text/plain" }
 
-func formatCrdbV1CommonDoc(withCounter bool) string {
-	var buf strings.Builder
+func (f formatCrdbV1) doc() string {
+	if f.formatterName() != "crdb-v1" {
+		var buf strings.Builder
+		fmt.Fprintf(&buf, `This format name is an alias for 'crdb-v1' with
+the following format option defaults:
 
-	if !withCounter {
-		buf.WriteString(`This is the legacy file format used from CockroachDB v1.0.`)
-	} else {
-		buf.WriteString(`This is an alternative, backward-compatible legacy file format used from CockroachDB v2.0.`)
+- `+"`show-counter: %v`"+`
+- `+"`colors: %v`"+`
+`, f.showCounter, f.colorProfileName)
+		return buf.String()
 	}
 
+	var buf strings.Builder
+
 	buf.WriteString(`
+This is a legacy file format used from CockroachDB v1.0.
 
-Each log entry is emitted using a common prefix, described below,`)
-
-	if withCounter {
-		buf.WriteString(`
-followed by the text of the log entry.`)
-	} else {
-		buf.WriteString(`
-followed by:
+Each log entry is emitted using a common prefix, described below, followed by:
 
 - The logging context tags enclosed between ` + "`[`" + ` and ` + "`]`" + `, if any. It is possible
   for this to be omitted if there were no context tags.
-- the text of the log entry.`)
-	}
+- Optionally, a counter column, if the option 'show-counter' is enabled. See below for details.
+- the text of the log entry.
 
-	buf.WriteString(`
+Beware that the text of the log entry can span multiple lines.
+The following caveats apply:
 
-Beware that the text of the log entry can span multiple lines. The following caveats apply:
-
-`)
-
-	if !withCounter {
-		// If there is no counter, the format is ambiguous. Explain that.
-		buf.WriteString(`
 - The text of the log entry can start with text enclosed between ` + "`[`" + ` and ` + "`]`" + `.
   If there were no logging tags to start with, it is not possible to distinguish between
   logging context tag information and a ` + "`[...]`" + ` string in the main text of the
-  log entry. This means that this format is ambiguous. For an unambiguous alternative,
-  consider ` + "`" + formatCrdbV1WithCounter{}.formatterName() + "`" + `.
-`)
-	}
+  log entry. This means that this format is ambiguous.
 
-	// General disclaimer about the lack of boundaries.
-	buf.WriteString(`
+  To remove this ambiguity, you can use the option 'show-counter'.
+
 - The text of the log entry can embed arbitrary application-level strings,
   including strings that represent log entries. In particular, an accident
   of implementation can cause the common entry prefix (described below)
@@ -116,13 +174,10 @@ if known, and other metadata about the running process.
 
 Each line of output starts with the following prefix:
 
-     Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker`)
+     Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker tags counter
 
-	if withCounter {
-		buf.WriteString(` tags counter`)
-	}
-
-	buf.WriteString(`
+Reminder, the tags may be omitted; and the counter is only printed if the option
+'show-counter' is specified.
 
 | Field           | Description                                                                                                                          |
 |-----------------|--------------------------------------------------------------------------------------------------------------------------------------|
@@ -135,15 +190,9 @@ Each line of output starts with the following prefix:
 | chan            | The channel number (omitted if zero for backward compatibility).                                                                     |
 | file            | The file name where the entry originated.                                                                                            |
 | line            | The line number where the entry originated.                                                                                          |
-| marker          | Redactability marker ` + "` + redactableIndicator + `" + ` (see below for details).                                                  |`)
-
-	if withCounter {
-		buf.WriteString(`
-| tags    | The logging tags, enclosed between ` + "`[`" + ` and ` + "`]`" + `. May be absent. |
-| counter | The entry counter. Always present.                                                 |`)
-	}
-
-	buf.WriteString(`
+| marker          | Redactability marker ` + "` + redactableIndicator + `" + ` (see below for details).                                                  |
+| tags            | The logging tags, enclosed between ` + "`[`" + ` and ` + "`]`" + `. May be absent.                                                   |
+| counter         | The entry counter. Only included if 'show-counter' is enabled.                                                                       |
 
 The redactability marker can be empty; in this case, its position in the common prefix is
 a double ASCII space character which can be used to reliably identify this situation.
@@ -154,92 +203,49 @@ fields that are considered sensitive. These markers are automatically recognized
 by ` + "[`cockroach debug zip`](cockroach-debug-zip.html)" + ` and ` +
 		"[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" +
 		` when log redaction is requested.
+
+
+Additional options recognized via ` + "`format-options`" + `:
+
+| Option | Description |
+|--------|-------------|
+| ` + "`show-counter`" + ` | Whether to include the counter column in the line header. Without it, the format may be ambiguous due to the optionality of tags. |
+| ` + "`colors`" + ` | The color profile to use. Possible values: none, auto, ansi, 256color. Default is auto. |
+| ` + "`timezone`" + ` | The timezone to use for the timestamp column. The value can be any timezone name recognized by the Go standard library. Default is ` + "`UTC`" + ` |
+
 `)
 
 	return buf.String()
 }
 
-// formatCrdbV1WithCounter is the canonical log format including a
-// counter column.
-type formatCrdbV1WithCounter struct{}
-
-func (formatCrdbV1WithCounter) formatterName() string { return "crdb-v1-count" }
-
-func (formatCrdbV1WithCounter) formatEntry(entry logEntry) *buffer {
-	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, true /*showCounter*/, nil)
+func (f formatCrdbV1) formatEntry(entry logEntry) *buffer {
+	return formatLogEntryInternalV1(entry.convertToLegacy(),
+		entry.header, f.showCounter, f.colorProfile, f.loc)
 }
 
-func (formatCrdbV1WithCounter) doc() string { return formatCrdbV1CommonDoc(true /* withCounter */) }
-
-func (formatCrdbV1WithCounter) contentType() string { return "text/plain" }
-
-// formatCrdbV1TTY is like formatCrdbV1 and includes VT color codes if
-// the stderr output is a TTY and -nocolor is not passed on the
-// command line.
-type formatCrdbV1TTY struct{}
-
-func (formatCrdbV1TTY) formatterName() string { return "crdb-v1-tty" }
-
-func (formatCrdbV1TTY) formatEntry(entry logEntry) *buffer {
-	cp := ttycolor.StderrProfile
-	if logging.stderrSink.noColor.Get() {
-		cp = nil
+func writeCrdbHeader(
+	buf *buffer,
+	cp ttycolor.Profile,
+	sev logpb.Severity,
+	ch logpb.Channel,
+	file string,
+	line int,
+	ts int64,
+	loc *time.Location,
+	gid int,
+	redactable bool,
+) {
+	if line < 0 {
+		line = 0 // not a real line number, but acceptable to someDigits
 	}
-	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, false /*showCounter*/, cp)
-}
-
-const ttyFormatDoc = `
-
-In addition, if the output stream happens to be a VT-compatible terminal,
-and the flag ` + "`no-color`" + ` was *not* set in the configuration, the entries
-are decorated using ANSI color codes.`
-
-func (formatCrdbV1TTY) doc() string {
-	return "Same textual format as `" + formatCrdbV1{}.formatterName() + "`." + ttyFormatDoc
-}
-
-func (formatCrdbV1TTY) contentType() string { return "text/plain" }
-
-// formatCrdbV1ColorWithCounter is like formatCrdbV1WithCounter and
-// includes VT color codes if the stderr output is a TTY and -nocolor
-// is not passed on the command line.
-type formatCrdbV1TTYWithCounter struct{}
-
-func (formatCrdbV1TTYWithCounter) formatterName() string { return "crdb-v1-tty-count" }
-
-func (formatCrdbV1TTYWithCounter) formatEntry(entry logEntry) *buffer {
-	cp := ttycolor.StderrProfile
-	if logging.stderrSink.noColor.Get() {
-		cp = nil
-	}
-	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, true /*showCounter*/, cp)
-}
-
-func (formatCrdbV1TTYWithCounter) doc() string {
-	return "Same textual format as `" + formatCrdbV1WithCounter{}.formatterName() + "`." + ttyFormatDoc
-}
-
-func (formatCrdbV1TTYWithCounter) contentType() string { return "text/plain" }
-
-// formatEntryInternalV1 renders a log entry.
-// Log lines are colorized depending on severity.
-// It uses a newly allocated *buffer. The caller is responsible
-// for calling putBuffer() afterwards.
-func formatLogEntryInternalV1(
-	entry logpb.Entry, isHeader, showCounter bool, cp ttycolor.Profile,
-) *buffer {
-	buf := getBuffer()
-	if entry.Line < 0 {
-		entry.Line = 0 // not a real line number, but acceptable to someDigits
-	}
-	if entry.Severity > severity.FATAL || entry.Severity <= severity.UNKNOWN {
-		entry.Severity = severity.INFO // for safety.
+	if sev > severity.FATAL || sev <= severity.UNKNOWN {
+		sev = severity.INFO // for safety.
 	}
 
 	tmp := buf.tmp[:len(buf.tmp)]
 	var n int
 	var prefix []byte
-	switch entry.Severity {
+	switch sev {
 	case severity.INFO:
 		prefix = cp[ttycolor.Cyan]
 	case severity.WARNING:
@@ -248,50 +254,67 @@ func formatLogEntryInternalV1(
 		prefix = cp[ttycolor.Red]
 	}
 	n += copy(tmp, prefix)
-	// Avoid Fprintf, for speed. The format is so simple that we can do it quickly by hand.
-	// It's worth about 3X. Fprintf is hard.
-	now := timeutil.Unix(0, entry.Time)
-	year, month, day := now.Date()
-	hour, minute, second := now.Clock()
 	// Lyymmdd hh:mm:ss.uuuuuu file:line
-	tmp[n] = severityChar[entry.Severity-1]
+	tmp[n] = severityChar[sev-1]
 	n++
-	if year < 2000 {
-		year = 2000
+
+	if loc == nil {
+		// Default time zone (UTC).
+		// Avoid Fprintf, for speed. The format is so simple that we can do it quickly by hand.
+		// It's worth about 3X. Fprintf is hard.
+		now := timeutil.Unix(0, ts)
+		year, month, day := now.Date()
+		hour, minute, second := now.Clock()
+		if year < 2000 {
+			year = 2000
+		}
+		n += buf.twoDigits(n, year-2000)
+		n += buf.twoDigits(n, int(month))
+		n += buf.twoDigits(n, day)
+		n += copy(tmp[n:], cp[ttycolor.Gray]) // gray for time, file & line
+		tmp[n] = ' '
+		n++
+		n += buf.twoDigits(n, hour)
+		tmp[n] = ':'
+		n++
+		n += buf.twoDigits(n, minute)
+		tmp[n] = ':'
+		n++
+		n += buf.twoDigits(n, second)
+		tmp[n] = '.'
+		n++
+		n += buf.nDigits(6, n, now.Nanosecond()/1000, '0')
+	} else {
+		// Time zone was specified.
+		// Slooooow path.
+		buf.Write(tmp[:n])
+		n = 0
+		now := timeutil.Unix(0, ts).In(loc)
+		buf.WriteString(now.Format("060102"))
+		buf.Write(cp[ttycolor.Gray])
+		buf.WriteByte(' ')
+		buf.WriteString(now.Format("15:04:05.000000-070000"))
 	}
-	n += buf.twoDigits(n, year-2000)
-	n += buf.twoDigits(n, int(month))
-	n += buf.twoDigits(n, day)
-	n += copy(tmp[n:], cp[ttycolor.Gray]) // gray for time, file & line
+
 	tmp[n] = ' '
 	n++
-	n += buf.twoDigits(n, hour)
-	tmp[n] = ':'
-	n++
-	n += buf.twoDigits(n, minute)
-	tmp[n] = ':'
-	n++
-	n += buf.twoDigits(n, second)
-	tmp[n] = '.'
-	n++
-	n += buf.nDigits(6, n, now.Nanosecond()/1000, '0')
-	tmp[n] = ' '
-	n++
-	if entry.Goroutine > 0 {
-		n += buf.someDigits(n, int(entry.Goroutine))
+	if gid >= 0 {
+		n += buf.someDigits(n, gid)
 		tmp[n] = ' '
 		n++
 	}
-	if !isHeader && entry.Channel != 0 {
+
+	if ch != 0 {
 		// Prefix the filename with the channel number.
-		n += buf.someDigits(n, int(entry.Channel))
+		n += buf.someDigits(n, int(ch))
 		tmp[n] = '@'
 		n++
 	}
+
 	buf.Write(tmp[:n])
-	buf.WriteString(entry.File)
+	buf.WriteString(file)
 	tmp[0] = ':'
-	n = buf.someDigits(1, int(entry.Line))
+	n = buf.someDigits(1, line)
 	n++
 	// Reset the color to default.
 	n += copy(tmp[n:], cp[ttycolor.Reset])
@@ -300,7 +323,7 @@ func formatLogEntryInternalV1(
 	// If redaction is enabled, indicate that the current entry has
 	// markers. This indicator is used in the log parser to determine
 	// which redaction strategy to adopt.
-	if entry.Redactable {
+	if redactable {
 		copy(tmp[n:], redactableIndicatorBytes)
 		n += len(redactableIndicatorBytes)
 	}
@@ -311,24 +334,74 @@ func formatLogEntryInternalV1(
 	tmp[n] = ' '
 	n++
 	buf.Write(tmp[:n])
+}
+
+// checkTenantLabel returns true if the entry has a tenant label
+// and a size estimate for the printout of the label.
+func checkTenantLabel(tenantID string, tenantName string) (hasLabel bool, length int) {
+	const tenantDetailsTagPrefixLen = len(string(tenantIDLogTagKey) + string(tenantNameLogTagKey) + ",,")
+	return tenantID != "", len(tenantID) + tenantDetailsTagPrefixLen + len(tenantName)
+}
+
+// writeTenantLabel is a representation of the tenant (ID,name) pair
+// specific to the CRDB logging format, and that can also be parsed
+// back.
+func writeTenantLabel(buf *buffer, tenantID string, tenantName string) {
+	if tenantID != "" {
+		buf.WriteByte(tenantIDLogTagKey)
+		buf.WriteString(tenantID)
+		if tenantName != "" {
+			buf.WriteByte(',')
+		}
+	}
+	if tenantName != "" {
+		buf.WriteByte(tenantNameLogTagKey)
+		buf.WriteString(tenantName)
+	}
+}
+
+// formatEntryInternalV1 renders a log entry.
+// Log lines are colorized depending on severity.
+// It uses a newly allocated *buffer. The caller is responsible
+// for calling putBuffer() afterwards.
+func formatLogEntryInternalV1(
+	entry logpb.Entry, isHeader, showCounter bool, cp ttycolor.Profile, loc *time.Location,
+) *buffer {
+	buf := getBuffer()
+	ch := entry.Channel
+	if isHeader {
+		ch = 0
+	}
+	gid := int(entry.Goroutine)
+	if gid == 0 {
+		// In the -v1 format, a goroutine ID of 0 is hidden.
+		gid = -1
+	}
+	writeCrdbHeader(buf, cp, entry.Severity, ch, entry.File, int(entry.Line), entry.Time, loc, gid, entry.Redactable)
+
+	hasTenantLabel, tenantLabelLength := checkTenantLabel(entry.TenantID, entry.TenantName)
+	hasTags := len(entry.Tags) > 0
 
 	// The remainder is variable-length and could exceed
-	// the static size of tmp. But we do have an upper bound.
-	buf.Grow(len(entry.Tags) + 14 + len(entry.Message))
+	// the static size of tmp. But we do have an optimistic upper bound.
+	//
+	// We optimistically count 3 times the size of entry.Tags to have
+	// one character for the key, one character for the value and one
+	// for the comma.
+	buf.Grow(len(entry.Tags)*3 + tenantLabelLength + 14 + len(entry.Message))
 
 	// We must always tag with tenant ID if present.
 	buf.Write(cp[ttycolor.Blue])
-	if entry.TenantID != "" || len(entry.Tags) != 0 {
+	if hasTenantLabel || hasTags {
 		buf.WriteByte('[')
-		if entry.TenantID != "" {
-			buf.WriteByte(TenantIDLogTagKey)
-			buf.WriteString(entry.TenantID)
-			if len(entry.Tags) != 0 {
+		if hasTenantLabel {
+			writeTenantLabel(buf, entry.TenantID, entry.TenantName)
+			if hasTags {
 				buf.WriteByte(',')
 			}
 		}
 		// Display the tags if set.
-		if len(entry.Tags) != 0 {
+		if hasTags {
 			buf.WriteString(entry.Tags)
 		}
 		buf.WriteString("] ")
@@ -337,7 +410,8 @@ func formatLogEntryInternalV1(
 
 	// Display the counter if set and enabled.
 	if showCounter && entry.Counter > 0 {
-		n = buf.someDigits(0, int(entry.Counter))
+		tmp := buf.tmp[:len(buf.tmp)]
+		n := buf.someDigits(0, int(entry.Counter))
 		tmp[n] = ' '
 		n++
 		buf.Write(tmp[:n])
@@ -360,7 +434,7 @@ func formatLogEntryInternalV1(
 var entryREV1 = regexp.MustCompile(
 	`(?m)^` +
 		/* Severity         */ `([` + severityChar + `])` +
-		/* Date and time    */ `(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) ` +
+		/* Date and time    */ `(\d{6} \d{2}:\d{2}:\d{2}.\d{6}(?:[---+]\d{6})?) ` +
 		/* Goroutine ID     */ `(?:(\d+) )?` +
 		/* Channel/File/Line*/ `([^:]+):(\d+) ` +
 		/* Redactable flag  */ `((?:` + redactableIndicator + `)?) ` +
@@ -371,6 +445,19 @@ type entryDecoderV1 struct {
 	scanner            *bufio.Scanner
 	sensitiveEditor    redactEditor
 	truncatedLastEntry bool
+}
+
+func decodeTimestamp(fragment []byte) (unixNano int64, err error) {
+	timeFormat := MessageTimeFormat
+	if len(fragment) > 7 && (fragment[len(fragment)-7] == '+' || fragment[len(fragment)-7] == '-') {
+		// The timestamp has a timezone offset.
+		timeFormat = MessageTimeFormatWithTZ
+	}
+	t, err := time.Parse(timeFormat, string(fragment))
+	if err != nil {
+		return 0, err
+	}
+	return t.UnixNano(), nil
 }
 
 // Decode decodes the next log entry into the provided protobuf message.
@@ -395,11 +482,11 @@ func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 		entry.Severity = Severity(strings.IndexByte(severityChar, m[1][0]) + 1)
 
 		// Process the timestamp.
-		t, err := time.Parse(MessageTimeFormat, string(m[2]))
+		var err error
+		entry.Time, err = decodeTimestamp(m[2])
 		if err != nil {
 			return err
 		}
-		entry.Time = t.UnixNano()
 
 		// Process the goroutine ID.
 		if len(m[3]) > 0 {
@@ -432,18 +519,7 @@ func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 		// Look for a tenant ID tag. Default to system otherwise.
 		entry.TenantID = serverident.SystemTenantID
 		tagsToProcess := m[7]
-		if len(tagsToProcess) != 0 && bytes.HasPrefix(tagsToProcess, tenantIDLogTagBytePrefix) {
-			commaIndex := bytes.IndexByte(tagsToProcess, ',')
-			if commaIndex >= 0 {
-				// More tags exist than just the tenant ID tag.
-				entry.TenantID = string(tagsToProcess[1:commaIndex])
-				tagsToProcess = tagsToProcess[commaIndex+1:]
-			} else {
-				// We only have a tenant ID tag.
-				entry.TenantID = string(tagsToProcess[1:])
-				tagsToProcess = []byte{}
-			}
-		}
+		entry.TenantID, entry.TenantName, tagsToProcess = maybeReadTenantDetails(tagsToProcess)
 
 		// Process any remaining tags.
 		if len(tagsToProcess) != 0 {
@@ -499,6 +575,48 @@ func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 
 		return nil
 	}
+}
+
+// maybeReadTenantDetails reads the tenant ID and name. If neither the
+// ID nor the name are present, the system tenant ID is returned.
+func maybeReadTenantDetails(
+	tagsToProcess []byte,
+) (tenantID string, tenantName string, remainingTagsToProcess []byte) {
+	var hasTenantID bool
+	hasTenantID, tenantID, tagsToProcess = maybeReadOneTag(tagsToProcess, tenantIDLogTagBytePrefix)
+	if !hasTenantID {
+		// If we do not see a tenant ID, avoid reading a name. This is because (currently)
+		// our log filtering is only able to use the tenant ID.
+		// It's better to fold entries with an unknown tenant ID into the stream of
+		// events for the system tenant, than mistakenly insert the system tenant ID
+		// into the event stream of a secondary tenant.
+		//
+		// TODO(obs-inf): We will want a better story there when the name
+		// will be used for filtering.
+		return serverident.SystemTenantID, "", tagsToProcess
+	}
+	_, tenantName, tagsToProcess = maybeReadOneTag(tagsToProcess, tenantNameLogTagBytePrefix)
+	return tenantID, tenantName, tagsToProcess
+}
+
+// maybeReadOneTag reads a single tag from the byte array if it
+// starts with the given prefix.
+func maybeReadOneTag(
+	tagsToProcess []byte, prefix []byte,
+) (foundValue bool, tagValue string, remainingTagsToProcess []byte) {
+	if !bytes.HasPrefix(tagsToProcess, prefix) {
+		return false, "", tagsToProcess
+	}
+	commaIndex := bytes.IndexByte(tagsToProcess, ',')
+	if commaIndex < 0 {
+		commaIndex = len(tagsToProcess)
+	}
+	retVal := string(tagsToProcess[1:commaIndex])
+	tagsToProcess = tagsToProcess[commaIndex:]
+	if len(tagsToProcess) > 0 && tagsToProcess[0] == ',' {
+		tagsToProcess = tagsToProcess[1:]
+	}
+	return true, retVal, tagsToProcess
 }
 
 // split function for the crdb-v1 entry decoder scanner.

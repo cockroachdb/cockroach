@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -18,7 +17,6 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
-        "//pkg/util/uuid",
     ],
 )
 
@@ -35,16 +33,14 @@ go_test(
         "region_util_test.go",
         "regional_by_row_system_database_test.go",
         "regional_by_row_test.go",
+        "regionliveness_test.go",
         "roundtrips_test.go",
         "show_test.go",
         "unique_test.go",
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
     data = glob(["testdata/**"]),
     embed = [":multiregionccl"],
+    exec_properties = {"Pool": "large"},
     shard_count = 16,
     tags = ["ccl_test"],
     deps = [
@@ -67,23 +63,28 @@ go_test(
         "//pkg/server",
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
+        "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/catalog/lease",
+        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/enum",
         "//pkg/sql/execinfra",
         "//pkg/sql/isql",
         "//pkg/sql/parser",
+        "//pkg/sql/regionliveness",
+        "//pkg/sql/regions",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlinstance/instancestorage",
         "//pkg/sql/sqlliveness",
+        "//pkg/sql/sqlliveness/slinstance",
         "//pkg/sql/sqlliveness/slstorage",
         "//pkg/sql/sqltestutils",
-        "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
@@ -96,6 +97,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/quotapool",
         "//pkg/util/randutil",
+        "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
@@ -110,5 +112,3 @@ go_test(
         "@org_golang_google_grpc//:go_default_library",
     ],
 )
-
-get_x_data(name = "get_x_data")

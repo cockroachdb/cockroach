@@ -12,6 +12,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"math"
 	"sync"
 
@@ -19,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable"
@@ -42,14 +43,23 @@ type pebbleIterator struct {
 	rangeKeyMaskingBuf []byte
 	// Filter to use if masking is enabled.
 	maskFilter mvccWallTimeIntervalRangeKeyMask
+	// [minTimestamp,maxTimestamp] contain the encoded timestamp bounds of the
+	// iterator, if any. This iterator will not return keys outside these
+	// timestamps. These are encoded because lexicographic comparison on encoded
+	// timestamps is equivalent to the comparison on decoded timestamps. These
+	// timestamps are enforced through the IterOptions.SkipPoint function, which
+	// is provided with encoded keys.
+	//
+	// NB: minTimestamp and maxTimestamp are both inclusive.
+	minTimestamp []byte // inclusive
+	maxTimestamp []byte // inclusive
 
 	// Buffer used to store MVCCRangeKeyVersions returned by RangeKeys(). Lazily
 	// initialized the first time an iterator's RangeKeys() method is called.
 	mvccRangeKeyVersions []MVCCRangeKeyVersion
-	// statsReporter is used to sum iterator stats across all the iterators
-	// during the lifetime of the Engine when the iterator is closed or its
-	// stats reset. It's intended to be used with (*Pebble). It must not be nil.
-	statsReporter iterStatsReporter
+
+	// parent is a pointer to the Engine from which the iterator was constructed.
+	parent *Pebble
 
 	// Set to true to govern whether to call SeekPrefixGE or SeekGE. Skips
 	// SSTables based on MVCC/Engine key when true.
@@ -75,16 +85,6 @@ type pebbleIterator struct {
 	mvccDone bool
 }
 
-type iterStatsReporter interface {
-	aggregateIterStats(IteratorStats)
-}
-
-var noopStatsReporter = noopStatsReporterImpl{}
-
-type noopStatsReporterImpl struct{}
-
-func (noopStatsReporterImpl) aggregateIterStats(IteratorStats) {}
-
 var _ MVCCIterator = &pebbleIterator{}
 var _ EngineIterator = &pebbleIterator{}
 
@@ -96,28 +96,33 @@ var pebbleIterPool = sync.Pool{
 
 // newPebbleIterator creates a new Pebble iterator for the given Pebble reader.
 func newPebbleIterator(
+	ctx context.Context,
 	handle pebble.Reader,
 	opts IterOptions,
 	durability DurabilityRequirement,
-	statsReporter iterStatsReporter,
-) *pebbleIterator {
+	parent *Pebble,
+) (*pebbleIterator, error) {
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
-	p.init(nil, opts, durability, statsReporter)
-	p.iter = pebbleiter.MaybeWrap(handle.NewIter(&p.options))
-	return p
+	p.init(ctx, nil, opts, durability, parent)
+	iter, err := handle.NewIterWithContext(ctx, &p.options)
+	if err != nil {
+		return nil, err
+	}
+	p.iter = pebbleiter.MaybeWrap(iter)
+	return p, nil
 }
 
 // newPebbleIteratorByCloning creates a new Pebble iterator by cloning the given
 // iterator and reconfiguring it.
 func newPebbleIteratorByCloning(
-	cloneCtx CloneContext, opts IterOptions, durability DurabilityRequirement,
+	ctx context.Context, cloneCtx CloneContext, opts IterOptions, durability DurabilityRequirement,
 ) *pebbleIterator {
 	var err error
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
-	p.init(nil, opts, durability, cloneCtx.statsReporter)
-	p.iter, err = cloneCtx.rawIter.Clone(pebble.CloneOptions{
+	p.init(ctx, nil, opts, durability, cloneCtx.engine)
+	p.iter, err = cloneCtx.rawIter.CloneWithContext(ctx, pebble.CloneOptions{
 		IterOptions:      &p.options,
 		RefreshBatchView: true,
 	})
@@ -134,7 +139,7 @@ func newPebbleSSTIterator(
 ) (*pebbleIterator, error) {
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
-	p.init(nil, opts, StandardDurability, noopStatsReporter)
+	p.init(context.Background(), nil, opts, StandardDurability, nil)
 
 	var externalIterOpts []pebble.ExternalIterOption
 	if forwardOnly {
@@ -155,10 +160,11 @@ func newPebbleSSTIterator(
 // reconfiguring the given iter. It is valid to pass a nil iter and then create
 // p.iter using p.options, to avoid redundant reconfiguration via SetOptions().
 func (p *pebbleIterator) init(
+	ctx context.Context,
 	iter pebbleiter.Iterator,
 	opts IterOptions,
 	durability DurabilityRequirement,
-	statsReporter iterStatsReporter,
+	statsReporter *Pebble,
 ) {
 	*p = pebbleIterator{
 		iter:               iter,
@@ -166,10 +172,10 @@ func (p *pebbleIterator) init(
 		lowerBoundBuf:      p.lowerBoundBuf,
 		upperBoundBuf:      p.upperBoundBuf,
 		rangeKeyMaskingBuf: p.rangeKeyMaskingBuf,
-		statsReporter:      statsReporter,
+		parent:             statsReporter,
 		reusable:           p.reusable,
 	}
-	p.setOptions(opts, durability)
+	p.setOptions(ctx, opts, durability)
 	p.inuse = true // after setOptions(), so panic won't cause reader to panic too
 }
 
@@ -180,41 +186,50 @@ func (p *pebbleIterator) init(
 // 2. iter != nil && clone: clone and reconfigure the given raw Pebble iterator.
 // 3. iter == nil: create a new iterator from handle.
 func (p *pebbleIterator) initReuseOrCreate(
+	ctx context.Context,
 	handle pebble.Reader,
 	iter pebbleiter.Iterator,
 	clone bool,
 	opts IterOptions,
 	durability DurabilityRequirement,
-	statsReporter iterStatsReporter,
-) {
+	statsReporter *Pebble,
+) error {
 	if iter != nil && !clone {
-		p.init(iter, opts, durability, statsReporter)
-		return
+		p.init(ctx, iter, opts, durability, statsReporter)
+		return nil
 	}
 
-	p.init(nil, opts, durability, statsReporter)
+	p.init(ctx, nil, opts, durability, statsReporter)
 	if iter == nil {
-		p.iter = pebbleiter.MaybeWrap(handle.NewIter(&p.options))
+		// TODO(sumeer): fix after bumping to latest Pebble.
+		innerIter, err := handle.NewIterWithContext(ctx, &p.options)
+		if err != nil {
+			return err
+		}
+		p.iter = pebbleiter.MaybeWrap(innerIter)
 	} else if clone {
 		var err error
-		p.iter, err = iter.Clone(pebble.CloneOptions{
+		p.iter, err = iter.CloneWithContext(ctx, pebble.CloneOptions{
 			IterOptions:      &p.options,
 			RefreshBatchView: true,
 		})
 		if err != nil {
 			p.Close()
-			panic(err)
+			return err
 		}
 	}
+	return nil
 }
 
 // setOptions updates the options for a pebbleIterator. If p.iter is non-nil, it
-// updates the options on the existing iterator too.
-func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequirement) {
+// updates the options on the existing iterator too, and set the context.
+func (p *pebbleIterator) setOptions(
+	ctx context.Context, opts IterOptions, durability DurabilityRequirement,
+) {
 	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
 		panic("iterator must set prefix or upper bound or lower bound")
 	}
-	if opts.MinTimestampHint.IsSet() && opts.MaxTimestampHint.IsEmpty() {
+	if opts.MinTimestamp.IsSet() && opts.MaxTimestamp.IsEmpty() {
 		panic("min timestamp hint set without max timestamp hint")
 	}
 	if opts.Prefix && opts.RangeKeyMaskingBelow.IsSet() {
@@ -226,6 +241,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		OnlyReadGuaranteedDurable: durability == GuaranteedDurability,
 		KeyTypes:                  opts.KeyTypes,
 		UseL6Filters:              opts.useL6Filters,
+		CategoryAndQoS:            getCategoryAndQoS(opts.ReadCategory),
 	}
 	p.prefix = opts.Prefix
 
@@ -254,15 +270,36 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		p.options.RangeKeyMasking.Filter = p.getBlockPropertyFilterMask
 	}
 
-	if opts.MaxTimestampHint.IsSet() {
+	if opts.MaxTimestamp.IsSet() {
+		// Install an IterOptions.SkipPoint function to ensure that we skip over
+		// any keys outside the the time bounds that don't get excluded by the
+		// coarse, opportunistic block-property filters. To avoid decoding
+		// per-KV, the SkipPoint function performs lexicographic comparisons on
+		// encoded timestamps, which is equivalent to the decoded, logical
+		// comparisons when ignoring the synthetic bit. In lexicographic order,
+		// the encoded key with the synthetic bit set sorts after the same
+		// timestamp without the synthetic bit. Timestamps differing only in the
+		// synthetic bit should otherwise be equal, so we take care to construct
+		// a minimum bound without the bit and a maximum bound with the bit to
+		// be inclusive on both ends.
+		p.minTimestamp = encodeMVCCTimestamp(hlc.Timestamp{
+			WallTime: opts.MinTimestamp.WallTime,
+			Logical:  opts.MinTimestamp.Logical,
+		})
+		p.maxTimestamp = append(encodeMVCCTimestamp(hlc.Timestamp{
+			WallTime: opts.MaxTimestamp.WallTime,
+			Logical:  opts.MaxTimestamp.Logical,
+		}), 0x01 /* Synthetic bit */)
+		p.options.SkipPoint = p.skipPointIfOutsideTimeBounds
+
 		// TODO(erikgrinaker): For compatibility with SSTables written by 21.2 nodes
 		// or earlier, we filter on table properties too. We still wrote these
 		// properties in 22.1, but stop doing so in 22.2. We can remove this
 		// filtering when nodes are guaranteed to no longer have SSTables written by
 		// 21.2 or earlier (which can still happen e.g. when clusters are upgraded
 		// through multiple major versions in rapid succession).
-		encodedMinTS := string(encodeMVCCTimestamp(opts.MinTimestampHint))
-		encodedMaxTS := string(encodeMVCCTimestamp(opts.MaxTimestampHint))
+		encodedMinTS := string(p.minTimestamp)
+		encodedMaxTS := string(p.maxTimestamp)
 		p.options.TableFilter = func(userProps map[string]string) bool {
 			tableMinTS := userProps["crdb.ts.min"]
 			if len(tableMinTS) == 0 {
@@ -274,14 +311,19 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 			}
 			return encodedMaxTS >= tableMinTS && encodedMinTS <= tableMaxTS
 		}
-		// We are given an inclusive [MinTimestampHint, MaxTimestampHint]. The
+		// We are given an inclusive [MinTimestamp, MaxTimestamp]. The
 		// MVCCWAllTimeIntervalCollector has collected the WallTimes and we need
 		// [min, max), i.e., exclusive on the upper bound.
-		p.options.PointKeyFilters = []pebble.BlockPropertyFilter{
+		//
+		// NB: PointKeyFilters documents that when set to non-empty, the capacity
+		// of the slice should be at least one more than the length, for a
+		// Pebble-internal performance optimization.
+		pkf := [2]pebble.BlockPropertyFilter{
 			sstable.NewBlockIntervalFilter(mvccWallTimeIntervalCollector,
-				uint64(opts.MinTimestampHint.WallTime),
-				uint64(opts.MaxTimestampHint.WallTime)+1),
+				uint64(opts.MinTimestamp.WallTime),
+				uint64(opts.MaxTimestamp.WallTime)+1),
 		}
+		p.options.PointKeyFilters = pkf[:1:2]
 		// NB: We disable range key block filtering because of complications in
 		// MVCCIncrementalIterator.maybeSkipKeys: the TBI may see different range
 		// key fragmentation than the main iterator due to the filtering. This would
@@ -297,6 +339,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 	// Set the new iterator options. We unconditionally do so, since Pebble will
 	// optimize noop changes as needed, and it may affect batch write visibility.
 	if p.iter != nil {
+		p.iter.SetContext(ctx)
 		p.iter.SetOptions(&p.options)
 	}
 }
@@ -310,8 +353,8 @@ func (p *pebbleIterator) Close() {
 
 	// Report the iterator's stats so they can be accumulated and exposed
 	// through time-series metrics.
-	if p.iter != nil {
-		p.statsReporter.aggregateIterStats(p.Stats())
+	if p.iter != nil && p.parent != nil {
+		p.parent.aggregateIterStats(p.Stats())
 	}
 
 	if p.reusable {
@@ -334,11 +377,6 @@ func (p *pebbleIterator) SeekGE(key MVCCKey) {
 	} else {
 		p.iter.SeekGE(p.keyBuf)
 	}
-}
-
-// SeekIntentGE implements the MVCCIterator interface.
-func (p *pebbleIterator) SeekIntentGE(key roachpb.Key, _ uuid.UUID) {
-	p.SeekGE(MVCCKey{Key: key})
 }
 
 // SeekEngineKeyGE implements the EngineIterator interface.
@@ -521,7 +559,7 @@ func (p *pebbleIterator) UnsafeValue() ([]byte, error) {
 	return p.iter.ValueAndErr()
 }
 
-// UnsafeLazyValue implements the MVCCIterator interface.
+// UnsafeLazyValue implements the MVCCIterator and EngineIterator interfaces.
 func (p *pebbleIterator) UnsafeLazyValue() pebble.LazyValue {
 	if ok := p.iter.Valid(); !ok {
 		panic(errors.AssertionFailedf("UnsafeLazyValue called on !Valid iterator"))
@@ -917,11 +955,58 @@ func (p *pebbleIterator) IsPrefix() bool {
 
 // CloneContext is part of the EngineIterator interface.
 func (p *pebbleIterator) CloneContext() CloneContext {
-	return CloneContext{rawIter: p.iter, statsReporter: p.statsReporter}
+	return CloneContext{rawIter: p.iter, engine: p.parent}
 }
 
 func (p *pebbleIterator) getBlockPropertyFilterMask() pebble.BlockPropertyFilterMask {
 	return &p.maskFilter
+}
+
+func (p *pebbleIterator) skipPointIfOutsideTimeBounds(key []byte) (skip bool) {
+	if len(key) == 0 {
+		return false
+	}
+	// Last byte is the version length + 1 when there is a version,
+	// else it is 0.
+	versionLen := int(key[len(key)-1])
+	if versionLen == 0 {
+		// This is not an MVCC key.
+		return false
+	}
+	// prefixPartEnd points to the sentinel byte, unless this is a bare suffix, in
+	// which case the index is -1.
+	prefixPartEnd := len(key) - 1 - versionLen
+	// Sanity check: the index should be >= -1. Additionally, if the index is >=
+	// 0, it should point to the sentinel byte, as this is a full EngineKey. If
+	// the key appears invalid and we don't understand it, don't skip it so the
+	// iterator will observe it and hopefully propagate an error up the stack.
+	if prefixPartEnd < -1 || (prefixPartEnd >= 0 && key[prefixPartEnd] != sentinel) {
+		return false
+	}
+
+	switch versionLen - 1 {
+	case engineKeyVersionWallTimeLen, engineKeyVersionWallAndLogicalTimeLen, engineKeyVersionWallLogicalAndSyntheticTimeLen:
+		// INVARIANT: -1 <= prefixPartEnd < len(b) - 1.
+		// Version consists of the bytes after the sentinel and before the length.
+		ts := key[prefixPartEnd+1 : len(key)-1]
+		// Lexicographic comparison on the encoded timestamps is equivalent to the
+		// comparison on decoded timestamps, so we avoid the need to decode the
+		// walltimes by performing simple byte comarisons.
+		if bytes.Compare(ts, p.minTimestamp) < 0 {
+			return true
+		}
+		if bytes.Compare(ts, p.maxTimestamp) > 0 {
+			return true
+		}
+		// minTimestamp ≤ ts ≤ maxTimestamp
+		//
+		// The key's timestamp is within the iterator's configured bounds.
+		return false
+	default:
+		// Not a MVCC key.
+		return false
+	}
+
 }
 
 func (p *pebbleIterator) destroy() {
@@ -950,7 +1035,11 @@ func (p *pebbleIterator) destroy() {
 		//
 		// NB: The panic is omitted if the error is encountered on an external
 		// iterator which is iterating over uncommitted sstables.
+
 		if err := p.iter.Close(); !p.external && errors.Is(err, pebble.ErrCorruption) {
+			if p.parent != nil {
+				p.parent.writePreventStartupFile(context.Background(), err)
+			}
 			panic(err)
 		}
 		p.iter = nil

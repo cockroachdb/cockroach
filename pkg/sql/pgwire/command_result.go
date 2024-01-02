@@ -264,6 +264,27 @@ func (r *commandResult) AddBatch(ctx context.Context, batch coldata.Batch) error
 	return r.conn.bufferBatch(ctx, batch, r)
 }
 
+// BufferedResultsLen is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) BufferedResultsLen() int {
+	return r.conn.writerState.buf.Len()
+}
+
+// TruncateBufferedResults is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) TruncateBufferedResults(idx int) bool {
+	r.assertNotReleased()
+	if r.conn.writerState.fi.lastFlushed >= r.pos {
+		return false
+	}
+	if idx < 0 {
+		return false
+	}
+	if idx > r.conn.writerState.buf.Len() {
+		return true
+	}
+	r.conn.writerState.buf.Truncate(idx)
+	return true
+}
+
 // SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) SupportsAddBatch() bool {
 	return true
@@ -286,6 +307,14 @@ func (r *commandResult) BufferParamStatusUpdate(param string, val string) {
 // BufferNotice is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) BufferNotice(notice pgnotice.Notice) {
 	r.buffer.notices = append(r.buffer.notices, notice)
+}
+
+// SendNotice is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) SendNotice(ctx context.Context, notice pgnotice.Notice) error {
+	if err := r.conn.bufferNotice(ctx, notice); err != nil {
+		return err
+	}
+	return r.conn.Flush(r.pos)
 }
 
 // SetColumns is part of the sql.RestrictedCommandResult interface.

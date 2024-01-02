@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -395,6 +394,56 @@ func TestReplicaCircuitBreaker_Liveness_QuorumLoss(t *testing.T) {
 	require.NoError(t, tc.Write(n1))
 }
 
+// In this test, a txn anchored on the range losing quorum also has an intent on
+// a healthy range. Quorum is lost before committing, poisoning latches for the
+// txn info. When resolving the intent on the healthy range, it will hit a
+// poisoned latch. This should result in a ReplicaUnavailableError from the
+// original range that lost quorum, not from the range with the intent.
+func TestReplicaCircuitBreaker_ResolveIntent_QuorumLoss(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tc := setupCircuitBreakerTest(t)
+	defer tc.Stopper().Stop(ctx)
+
+	// Get lease on n1.
+	require.NoError(t, tc.Write(n1))
+
+	// Split off a healthy range, which will inherit a lease on n1. Remove the
+	// replica on n2, so that it remains healthy when we take down n2.
+	failKey := tc.ScratchRange(t)
+	okKey := failKey.Next()
+	failDesc, _ := tc.SplitRangeOrFatal(t, okKey)
+	okDesc := tc.RemoveVotersOrFatal(t, okKey, tc.Target(n2))
+	t.Logf("failDesc=%s", failDesc)
+	t.Logf("okDesc=%s", okDesc)
+
+	// Start a transaction, anchoring it on the faulty range.
+	db := tc.Server(n1).DB()
+	txn := db.NewTxn(ctx, "test")
+	require.NoError(t, txn.Put(ctx, failKey, "fail"))
+	require.NoError(t, txn.Put(ctx, okKey, "ok"))
+
+	// Lose quorum.
+	tc.StopServer(n2)
+	tc.HeartbeatNodeLiveness(t, n1)
+
+	// Attempt to commit. It should fail, but will poison latches on
+	// the faulty range.
+	tc.SetSlowThreshold(time.Second)
+	err := txn.Commit(ctx)
+	tc.RequireIsBreakerOpen(t, err)
+
+	// Read the key from the healthy range. It should fail due to a poisoned latch
+	// on the txn's anchored range. This error should appear to come from the
+	// failed range, not from the healthy range.
+	_, err = db.Get(ctx, okKey)
+	tc.RequireIsBreakerOpen(t, err)
+	ruErr := &kvpb.ReplicaUnavailableError{}
+	require.True(t, errors.As(err, &ruErr))
+	require.Equal(t, failDesc.RangeID, ruErr.Desc.RangeID)
+}
+
 type dummyStream struct {
 	name string
 	ctx  context.Context
@@ -624,10 +673,12 @@ func TestReplicaCircuitBreaker_ExemptRequests(t *testing.T) {
 		})
 	}
 
-	// Restore the breaker via the probe.
+	// Restore the breaker via the probe, and wait for any pending (re)proposals
+	// from previous tests to be flushed.
 	resumeHeartbeats()
 	tc.SetProbeEnabled(n1, true)
 	tc.UntripsSoon(t, tc.Write, n1)
+	tc.WaitForProposals(t, n1)
 
 	// Lose quorum (liveness stays intact).
 	tc.SetSlowThreshold(10 * time.Millisecond)
@@ -752,7 +803,7 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 	raftCfg.SetDefaults()
 	raftCfg.RaftHeartbeatIntervalTicks = 1
 	raftCfg.RaftElectionTimeoutTicks = 2
-	reg := server.NewStickyInMemEnginesRegistry()
+	reg := server.NewStickyVFSRegistry()
 	args := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
@@ -760,16 +811,14 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 			RaftConfig: raftCfg,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					WallClock:            manualClock,
-					StickyEngineRegistry: reg,
+					WallClock:         manualClock,
+					StickyVFSRegistry: reg,
 				},
 				Store: storeKnobs,
 			},
 		},
 	}
 	tc := testcluster.StartTestCluster(t, 2, args)
-	tc.Stopper().AddCloser(stop.CloserFn(reg.CloseAllStickyInMemEngines))
-
 	_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold = '45s'`)
 	require.NoError(t, err)
 
@@ -839,6 +888,19 @@ func (cbt *circuitBreakerTest) UntripsSoon(t *testing.T, method func(idx int) er
 	})
 }
 
+func (cbt *circuitBreakerTest) WaitForProposals(t *testing.T, idx int) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		t.Helper()
+
+		repl := cbt.repls[idx].Replica
+		if n := repl.NumPendingProposals(); n > 0 {
+			return errors.Errorf("%d pending proposals", n)
+		}
+		return nil
+	})
+}
+
 func (cbt *circuitBreakerTest) ExpireAllLeasesAndN1LivenessRecord(
 	t *testing.T, pauseHeartbeats bool,
 ) (undo func()) {
@@ -856,7 +918,7 @@ func (cbt *circuitBreakerTest) ExpireAllLeasesAndN1LivenessRecord(
 		require.True(t, ok)
 
 		ts := hlc.Timestamp{WallTime: self.Expiration.WallTime}
-		require.NoError(t, srv.Stores().VisitStores(func(s *kvserver.Store) error {
+		require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 			s.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
 				lease, next := replica.GetLease()
 				if lease.Expiration != nil {
@@ -957,10 +1019,10 @@ func (cbt *circuitBreakerTest) SendCtxTS(
 func (cbt *circuitBreakerTest) WriteDS(idx int) error {
 	cbt.t.Helper()
 	put := kvpb.NewPut(cbt.repls[idx].Desc().StartKey.AsRawKey(), roachpb.MakeValueFromString("hello"))
-	return cbt.sendViaDistSender(cbt.Servers[idx].DistSender(), put)
+	return cbt.sendViaDistSender(cbt.Servers[idx].DistSenderI().(kv.Sender), put)
 }
 
-func (cbt *circuitBreakerTest) sendViaDistSender(ds *kvcoord.DistSender, req kvpb.Request) error {
+func (cbt *circuitBreakerTest) sendViaDistSender(ds kv.Sender, req kvpb.Request) error {
 	cbt.t.Helper()
 	ba := &kvpb.BatchRequest{}
 	ba.Add(req)
@@ -1022,14 +1084,14 @@ func (cbt *circuitBreakerTest) Write(idx int) error {
 func (cbt *circuitBreakerTest) Read(idx int) error {
 	cbt.t.Helper()
 	repl := cbt.repls[idx]
-	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey(), false /* forUpdate */)
+	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey())
 	return cbt.Send(idx, get)
 }
 
 func (cbt *circuitBreakerTest) FollowerRead(idx int) error {
 	cbt.t.Helper()
 	repl := cbt.repls[idx]
-	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey(), false /* forUpdate */)
+	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey())
 	ctx := context.Background()
 	ts := repl.GetCurrentClosedTimestamp(ctx)
 	return cbt.SendCtxTS(ctx, idx, get, ts)

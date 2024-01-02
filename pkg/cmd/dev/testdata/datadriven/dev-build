@@ -49,22 +49,20 @@ cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkou
 exec
 dev build -- --verbose_failures --sandbox_debug
 ----
-bazel build //pkg/cmd/cockroach:cockroach --config=with_ui --verbose_failures --sandbox_debug --build_event_binary_file=/tmp/path
+bazel info workspace --color=no
+ls crdb-checkout/pkg/ui/node_modules/@cockroachlabs
+ls crdb-checkout/pkg/ui/workspaces/eslint-plugin-crdb/node_modules/@cockroachlabs
+ls crdb-checkout/pkg/ui/workspaces/db-console/src/js/node_modules/@cockroachlabs
+ls crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/node_modules/@cockroachlabs
+ls crdb-checkout/pkg/ui/workspaces/cluster-ui/node_modules/@cockroachlabs
+ls crdb-checkout/pkg/ui/workspaces/db-console/node_modules/@cockroachlabs
+ls crdb-checkout/pkg/ui/workspaces/e2e-tests/node_modules/@cockroachlabs
+bazel build //pkg/cmd/cockroach:cockroach --verbose_failures --sandbox_debug --build_event_binary_file=/tmp/path
 bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no
 rm crdb-checkout/cockroach
 cp sandbox/pkg/cmd/cockroach/cockroach_/cockroach crdb-checkout/cockroach
-
-exec
-dev build stress
-----
-bazel build @com_github_cockroachdb_stress//:stress --//build/toolchains:nogo_disable_flag --build_event_binary_file=/tmp/path
-bazel info workspace --color=no
-mkdir crdb-checkout/bin
-bazel info bazel-bin --color=no
-rm crdb-checkout/bin/stress
-cp sandbox/external/com_github_cockroachdb_stress/stress_/stress crdb-checkout/bin/stress
 
 exec
 dev build tests

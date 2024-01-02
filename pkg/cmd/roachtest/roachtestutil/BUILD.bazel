@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -8,6 +7,7 @@ go_library(
         "disk_usage.go",
         "health_checker.go",
         "jaeger.go",
+        "utils.go",
         "validation_check.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil",
@@ -16,21 +16,22 @@ go_library(
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/test",
+        "//pkg/kv/kvpb",
+        "//pkg/roachprod/config",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/testutils/sqlutils",
         "//pkg/util/humanizeutil",
+        "//pkg/util/log",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
 go_test(
     name = "roachtestutil_test",
     srcs = ["commandbuilder_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":roachtestutil"],
     deps = ["@com_github_stretchr_testify//require"],
 )
-
-get_x_data(name = "get_x_data")

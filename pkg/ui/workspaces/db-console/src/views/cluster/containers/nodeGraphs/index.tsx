@@ -70,6 +70,7 @@ import changefeedsDashboard from "./dashboards/changefeeds";
 import overloadDashboard from "./dashboards/overload";
 import ttlDashboard from "./dashboards/ttl";
 import crossClusterReplicationDashboard from "./dashboards/crossClusterReplication";
+import networkingDashboard from "./dashboards/networking";
 import { getMatchParamByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
 import {
@@ -90,8 +91,8 @@ import {
   selectCrossClusterReplicationEnabled,
 } from "src/redux/clusterSettings";
 import { getDataFromServer } from "src/util/dataFromServer";
-import { getCookieValue, SYSTEM_TENANT_NAME } from "src/redux/cookies";
-import { tenantDropdownOptions } from "src/redux/tenants";
+import { getCookieValue } from "src/redux/cookies";
+import { isSystemTenant, tenantDropdownOptions } from "src/redux/tenants";
 
 interface GraphDashboard {
   label: string;
@@ -113,6 +114,11 @@ const dashboards: { [key: string]: GraphDashboard } = {
   runtime: {
     label: "Runtime",
     component: runtimeDashboard,
+    isKvDashboard: true,
+  },
+  networking: {
+    label: "Networking",
+    component: networkingDashboard,
     isKvDashboard: true,
   },
   sql: { label: "SQL", component: sqlDashboard, isKvDashboard: false },
@@ -149,7 +155,7 @@ const dashboards: { [key: string]: GraphDashboard } = {
   },
   ttl: { label: "TTL", component: ttlDashboard, isKvDashboard: false },
   crossClusterReplication: {
-    label: "Cross-Cluster Replication",
+    label: "Physical Cluster Replication",
     component: crossClusterReplicationDashboard,
     isKvDashboard: true,
   },
@@ -254,7 +260,7 @@ export class NodeGraphs extends React.Component<
     // settings won't change frequently so it's safe to request one
     // when page is loaded.
     this.props.refreshNodeSettings();
-    if (this.props.currentTenant === SYSTEM_TENANT_NAME) {
+    if (isSystemTenant(this.props.currentTenant)) {
       this.props.refreshTenantsList();
     }
   }
@@ -320,10 +326,9 @@ export class NodeGraphs extends React.Component<
 
     const selectedNode = getMatchParamByName(match, nodeIDAttr) || "";
     const nodeSources = selectedNode !== "" ? [selectedNode] : null;
-    const selectedTenant =
-      currentTenant === SYSTEM_TENANT_NAME
-        ? getMatchParamByName(match, tenantNameAttr) || ""
-        : "";
+    const selectedTenant = isSystemTenant(currentTenant)
+      ? getMatchParamByName(match, tenantNameAttr) || ""
+      : undefined;
     // When "all" is the selected source, some graphs display a line for every
     // node in the cluster using the nodeIDs collection. However, if a specific
     // node is already selected, these per-node graphs should only display data
@@ -397,7 +402,7 @@ export class NodeGraphs extends React.Component<
       .filter(
         option =>
           this.props.crossClusterReplicationEnabled ||
-          option.label !== "Cross-Cluster Replication",
+          option.label !== "Physical Cluster Replication",
       );
 
     return (
@@ -405,10 +410,10 @@ export class NodeGraphs extends React.Component<
         <Helmet title={"Metrics"} />
         <h3 className="base-heading">Metrics</h3>
         <PageConfig>
-          {currentTenant === SYSTEM_TENANT_NAME && tenantOptions.length > 1 && (
+          {isSystemTenant(currentTenant) && tenantOptions.length > 1 && (
             <PageConfigItem>
               <Dropdown
-                title="Tenant"
+                title="Virtual Cluster"
                 options={tenantOptions}
                 selected={selectedTenant}
                 onChange={selection => this.setClusterPath("tenant", selection)}

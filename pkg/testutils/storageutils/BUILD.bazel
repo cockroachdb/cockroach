@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -25,8 +24,7 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
         "//pkg/util/syncutil/singleflight",
+        "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

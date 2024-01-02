@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -33,10 +34,10 @@ func (s *statusServer) Statements(
 		return s.CombinedStatementStats(ctx, &combinedRequest)
 	}
 
-	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -74,17 +75,13 @@ func (s *statusServer) Statements(
 		return status.Statements(ctx, localReq)
 	}
 
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := s.dialNode(ctx, nodeID)
-		return client, err
-	}
-	nodeStatement := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
-		status := client.(serverpb.StatusClient)
+	nodeStatement := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return status.Statements(ctx, localReq)
 	}
 
-	if err := s.iterateNodes(ctx, "statement statistics",
-		dialFn,
+	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "statement statistics",
+		noTimeout,
+		s.dialNode,
 		nodeStatement,
 		func(nodeID roachpb.NodeID, resp interface{}) {
 			statementsResp := resp.(*serverpb.StatementsResponse)

@@ -1,16 +1,12 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "testshout_test",
     size = "small",
     srcs = ["shout_test.go"],
-    args = ["-test.timeout=55s"],
     deps = [
         "//pkg/util/log",
         "//pkg/util/log/logconfig",
         "//pkg/util/log/severity",
     ],
 )
-
-get_x_data(name = "get_x_data")

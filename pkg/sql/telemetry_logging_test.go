@@ -12,19 +12,23 @@ package sql
 
 import (
 	"context"
+	gosql "database/sql"
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/url"
 	"regexp"
-	"strconv"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -105,7 +109,7 @@ func TestTelemetryLogging(t *testing.T) {
 		execTimestampsSeconds   []float64 // Execute the query with the following timestamps.
 		expectedLogStatement    string
 		stubMaxEventFrequency   int64
-		expectedSkipped         []int // Expected skipped query count per expected log line.
+		expectedSkipped         []uint64 // Expected skipped query count per expected log line.
 		expectedUnredactedTags  []string
 		expectedApplicationName string
 		expectedFullScan        bool
@@ -130,7 +134,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{1, 1.1, 1.2, 2},
 			expectedLogStatement:    `TRUNCATE TABLE defaultdb.public.t`,
 			stubMaxEventFrequency:   1,
-			expectedSkipped:         []int{0, 0, 0, 0},
+			expectedSkipped:         []uint64{0, 0, 0, 0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        false,
@@ -162,6 +166,7 @@ func TestTelemetryLogging(t *testing.T) {
 				CPUTime:                            113,
 				KVBatchRequestsIssued:              113,
 				KVTime:                             114,
+				Regions:                            []string{"eastus1"},
 			},
 			enableTracing: false,
 		},
@@ -174,7 +179,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{3},
 			expectedLogStatement:    `SELECT * FROM \"\".\"\".t LIMIT ‹1›`,
 			stubMaxEventFrequency:   1,
-			expectedSkipped:         []int{0},
+			expectedSkipped:         []uint64{0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        false,
@@ -197,7 +202,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{4, 4.1, 4.2, 5},
 			expectedLogStatement:    `SELECT * FROM \"\".\"\".u LIMIT ‹2›`,
 			stubMaxEventFrequency:   1,
-			expectedSkipped:         []int{0, 2},
+			expectedSkipped:         []uint64{0, 2},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        false,
@@ -222,7 +227,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{6, 6.01, 6.05, 6.06, 6.1, 6.2},
 			expectedLogStatement:    `SELECT * FROM \"\".\"\".u LIMIT ‹3›`,
 			stubMaxEventFrequency:   10,
-			expectedSkipped:         []int{0, 3, 0},
+			expectedSkipped:         []uint64{0, 3, 0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        false,
@@ -250,7 +255,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{7},
 			expectedLogStatement:    `SELECT x FROM \"\".\"\".u`,
 			stubMaxEventFrequency:   10,
-			expectedSkipped:         []int{0},
+			expectedSkipped:         []uint64{0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        true,
@@ -277,7 +282,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{8},
 			expectedLogStatement:    `UPDATE \"\".\"\".u SET x = ‹5› WHERE x > ‹50› RETURNING x`,
 			stubMaxEventFrequency:   10,
-			expectedSkipped:         []int{0},
+			expectedSkipped:         []uint64{0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        true,
@@ -302,7 +307,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{9},
 			expectedLogStatement:    `CREATE USER root`,
 			stubMaxEventFrequency:   1,
-			expectedSkipped:         []int{0},
+			expectedSkipped:         []uint64{0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        false,
@@ -323,7 +328,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{10, 10.01, 10.02, 10.03, 10.04, 10.05},
 			expectedLogStatement:    `SELECT * FROM \"\".\"\".u LIMIT ‹4›`,
 			stubMaxEventFrequency:   10,
-			expectedSkipped:         []int{0, 0, 0, 0, 0, 0},
+			expectedSkipped:         []uint64{0, 0, 0, 0, 0, 0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        false,
@@ -349,7 +354,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{11, 11.01, 11.02, 11.03, 11.04, 11.05},
 			expectedLogStatement:    `SELECT * FROM \"\".\"\".u WHERE x > ‹10› LIMIT ‹3›`,
 			stubMaxEventFrequency:   10,
-			expectedSkipped:         []int{0},
+			expectedSkipped:         []uint64{0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        true,
@@ -369,7 +374,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{20},
 			expectedLogStatement:    `SELECT x FROM \"\".\"\".u ORDER BY x DESC`,
 			stubMaxEventFrequency:   1,
-			expectedSkipped:         []int{24},
+			expectedSkipped:         []uint64{24},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        true,
@@ -402,13 +407,19 @@ func TestTelemetryLogging(t *testing.T) {
 				CPUTime:                            9223372036854775807,
 				KVBatchRequestsIssued:              9223372036854775807,
 				KVTime:                             9223372036854775807,
+				Regions:                            []string{"9223372036854775807EastUS9223372036854775807/z^&*&#()(!@%&^61%^7'\\\\&*@#$%"},
+				SqlInstanceIds: map[base.SQLInstanceID]struct{}{
+					base.SQLInstanceID(-2147483648): {},
+					base.SQLInstanceID(0):           {},
+					base.SQLInstanceID(2147483647):  {},
+				},
 			},
 			enableTracing: true,
 		},
 	}
 
 	for _, tc := range testData {
-		TelemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, tc.stubMaxEventFrequency)
+		TelemetryMaxStatementEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, tc.stubMaxEventFrequency)
 		if tc.enableInjectTxErrors {
 			_, err := db.DB.ExecContext(context.Background(), "SET inject_retry_errors_enabled = 'true'")
 			require.NoError(t, err)
@@ -429,7 +440,7 @@ func TestTelemetryLogging(t *testing.T) {
 		}
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -470,17 +481,11 @@ func TestTelemetryLogging(t *testing.T) {
 					var sampledQueryFromLog eventpb.SampledQuery
 					err = json.Unmarshal([]byte(e.Message), &sampledQueryFromLog)
 					require.NoError(t, err)
-					expectedSkipped := tc.expectedSkipped[logCount]
+
+					require.Equal(t, tc.expectedSkipped[logCount], sampledQueryFromLog.SkippedQueries)
+
 					logCount++
-					if expectedSkipped == 0 {
-						if strings.Contains(e.Message, "SkippedQueries") {
-							t.Errorf("%s: expected no skipped queries, found:\n%s", tc.name, e.Message)
-						}
-					} else {
-						if expected := fmt.Sprintf(`"SkippedQueries":%d`, expectedSkipped); !strings.Contains(e.Message, expected) {
-							t.Errorf("%s: expected %s found:\n%s", tc.name, expected, e.Message)
-						}
-					}
+
 					costRe := regexp.MustCompile("\"CostEstimate\":[0-9]*\\.[0-9]*")
 					if !costRe.MatchString(e.Message) {
 						t.Errorf("expected to find CostEstimate but none was found")
@@ -512,19 +517,18 @@ func TestTelemetryLogging(t *testing.T) {
 							}
 						}
 					}
-					if !strings.Contains(e.Message, "\"ApplicationName\":\""+tc.expectedApplicationName+"\"") {
-						t.Errorf("expected to find unredacted Application Name: %s", tc.expectedApplicationName)
-					}
-					if !strings.Contains(e.Message, "\"SessionID\":\""+sessionID+"\"") {
-						t.Errorf("expected to find sessionID: %s", sessionID)
-					}
-					if !strings.Contains(e.Message, "\"Database\":\""+databaseName+"\"") {
-						t.Errorf("expected to find Database: %s", databaseName)
-					}
+
+					require.Equal(t, tc.expectedApplicationName, sampledQueryFromLog.ApplicationName)
+					require.Equal(t, sessionID, sampledQueryFromLog.SessionID)
+					require.Equal(t, databaseName, sampledQueryFromLog.Database)
+
+					// All expected logs in this test are single stmt txns.
+					require.Equal(t, uint32(1), sampledQueryFromLog.StmtPosInTxn)
+
 					stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(tc.queryNoConstants, tc.expectedErr != "", true, databaseName)
-					if !strings.Contains(e.Message, "\"StatementFingerprintID\":"+strconv.FormatUint(uint64(stmtFingerprintID), 10)) {
-						t.Errorf("expected to find StatementFingerprintID: %v", stmtFingerprintID)
-					}
+
+					require.Equal(t, uint64(stmtFingerprintID), sampledQueryFromLog.StatementFingerprintID)
+
 					maxFullScanRowsRe := regexp.MustCompile("\"MaxFullScanRowsEstimate\":[0-9]*")
 					foundFullScan := maxFullScanRowsRe.MatchString(e.Message)
 					if tc.expectedFullScan && !foundFullScan {
@@ -580,6 +584,17 @@ func TestTelemetryLogging(t *testing.T) {
 					require.Equal(t, tc.queryLevelStats.KVPairsRead, sampledQueryFromLog.KVPairsRead)
 					require.Equal(t, tc.queryLevelStats.KVBatchRequestsIssued, sampledQueryFromLog.KvGrpcCalls)
 					require.Equal(t, tc.queryLevelStats.KVTime.Nanoseconds(), sampledQueryFromLog.KvTimeNanos)
+					require.Equal(t, tc.queryLevelStats.Regions, sampledQueryFromLog.Regions)
+					if len(tc.queryLevelStats.SqlInstanceIds) > 0 {
+						arr := make([]int32, 0, len(tc.queryLevelStats.SqlInstanceIds))
+						for id := range tc.queryLevelStats.SqlInstanceIds {
+							arr = append(arr, int32(id))
+						}
+						sort.Slice(arr, func(i, j int) bool {
+							return arr[i] < arr[j]
+						})
+						require.Equal(t, arr, sampledQueryFromLog.SQLInstanceIDs, "stmt: %s", sampledQueryFromLog.Statement)
+					}
 
 					require.Equal(t, tc.queryLevelStats.CPUTime.Nanoseconds(), sampledQueryFromLog.CpuTimeNanos)
 					require.Greater(t, sampledQueryFromLog.PlanLatencyNanos, int64(0))
@@ -692,6 +707,194 @@ func TestTelemetryLogging(t *testing.T) {
 	}
 }
 
+// TestTelemetryLoggingInternalEnabled verifies that setting the cluster setting to send
+// internal queries to telemetry works as intended.
+func TestTelemetryLoggingInternalEnabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	defer cleanup()
+
+	st := logtestutils.StubTime{}
+	sts := logtestutils.StubTracingStatus{}
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			EventLog: &EventLogTestingKnobs{
+				// The sampling checks below need to have a deterministic
+				// number of statements run by internal executor.
+				SyncWrites: true,
+			},
+			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
+				getTimeNow:       st.TimeNow,
+				getTracingStatus: sts.TracingStatus,
+			},
+		},
+	})
+
+	defer s.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `SET application_name = 'telemetry-internal-logging-test'`)
+
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 10;`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.internal.enabled = true;`)
+
+	// This query should trigger 2 internal TRUNCATE queries.
+	// Since TRUNCATE is not a DML stmt, both should certainly get logged.
+	stubTime := timeutil.FromUnixMicros(int64(1e6))
+	st.SetTime(stubTime)
+	db.Exec(t, `SELECT crdb_internal.reset_sql_stats();`)
+
+	expectedQueries := []string{
+		`TRUNCATE TABLE system.public.statement_statistics`,
+		`TRUNCATE TABLE system.public.transaction_statistics`,
+	}
+
+	log.FlushFiles()
+
+	entries, err := log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`"EventType":"sampled_query"`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) == 0 {
+		t.Fatal(errors.Newf("no entries found"))
+	}
+
+	for _, e := range entries {
+		if strings.Contains(e.Message, "SELECT crdb_internal.reset_sql_stats") {
+			t.Errorf("unexpected query log: %s", e.Message)
+		}
+	}
+
+	// Attempt to find all expected logs.
+	for _, expected := range expectedQueries {
+		found := false
+
+		for _, e := range entries {
+			if strings.Contains(e.Message, `"ExecMode":"`+executorTypeInternal.logLabel()) &&
+				strings.Contains(e.Message, expected) {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			t.Errorf("did not find expected query log in log entries: %s", expected)
+		}
+	}
+}
+
+// TestTelemetryLoggingInternalConsoleEnabled verifies that setting the cluster setting to send
+// internal console queries to telemetry works as intended.
+func TestTelemetryLoggingInternalConsoleEnabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	defer cleanup()
+
+	st := logtestutils.StubTime{}
+	sts := logtestutils.StubTracingStatus{}
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			EventLog: &EventLogTestingKnobs{
+				// The sampling checks below need to have a deterministic
+				// number of statements run by internal executor.
+				SyncWrites: true,
+			},
+			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
+				getTimeNow:       st.TimeNow,
+				getTracingStatus: sts.TracingStatus,
+			},
+		},
+	})
+	stubTime := timeutil.FromUnixMicros(int64(1e6))
+	st.SetTime(stubTime)
+	defer s.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+	// Set query internal to `false` to guarantee that if an entry qith `internal-console` is showing
+	// is because of the setting `sql.telemetry.query_sampling.internal_console.enabled` and not
+	// being sampled as a regular internal.
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.internal.enabled = false;`)
+
+	testData := []struct {
+		appName            string
+		logInternalConsole bool
+		errorMessage       string
+	}{
+		{
+			"$ internal-console",
+			false,
+			"query from internal-console found on logs with internal_console cluster setting disabled",
+		},
+		{
+			"$ internal-console-extra-name",
+			false,
+			"query from internal-console-extra-name found on logs with internal_console cluster setting disabled",
+		},
+		{
+			"$ internal-console",
+			true,
+			"query from internal-console not found on logs with internal_console cluster setting enabled",
+		},
+		{
+			"$ internal-console-extra-name",
+			true,
+			"query from internal-console-extra-name not found on logs with internal_console cluster setting enabled",
+		},
+	}
+
+	query := `SELECT count(*) FROM crdb_internal.statement_statistics`
+	for _, tc := range testData {
+		db.Exec(t, `SET application_name = $1`, tc.appName)
+		db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.internal_console.enabled = $1;`, tc.logInternalConsole)
+		db.Exec(t, query)
+		log.FlushFiles()
+
+		entries, err := log.FetchEntriesFromFiles(
+			0,
+			math.MaxInt64,
+			10000,
+			regexp.MustCompile(`"EventType":"sampled_query"`),
+			log.WithMarkedSensitiveData,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) == 0 {
+			t.Fatal(errors.Newf("no entries found"))
+		}
+
+		found := false
+		for _, e := range entries {
+			if strings.Contains(e.Message, tc.appName) && strings.Contains(e.Message, query) {
+				found = true
+				break
+			}
+		}
+
+		if found != tc.logInternalConsole {
+			t.Errorf(tc.errorMessage)
+		}
+	}
+}
+
 func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := log.ScopeWithoutShowLogs(t)
@@ -716,7 +919,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 	db.Exec(t, "CREATE TABLE t();")
 
 	stubMaxEventFrequency := int64(1)
-	TelemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
+	TelemetryMaxStatementEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
 
 	/*
 		Testing Cases:
@@ -765,7 +968,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 		db.Exec(t, tc.query)
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -832,7 +1035,7 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 		");")
 
 	stubMaxEventFrequency := int64(1000000)
-	TelemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
+	TelemetryMaxStatementEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
 
 	testData := []struct {
 		name                   string
@@ -932,7 +1135,7 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 		},
 		{
 			"zig-zag-join",
-			"SELECT * FROM t@{FORCE_ZIGZAG} WHERE t.j @> '{\"a\":\"b\"}' AND t.j @> '{\"c\":\"d\"}';",
+			"SET enable_zigzag_join = true; SELECT * FROM t@{FORCE_ZIGZAG} WHERE t.j @> '{\"a\":\"b\"}' AND t.j @> '{\"c\":\"d\"}'; RESET enable_zigzag_join;",
 			`"SELECT * FROM \"\".\"\".t@{FORCE_ZIGZAG} WHERE (t.j @> ‹'{\"a\":\"b\"}'›) AND (t.j @> ‹'{\"c\":\"d\"}'›)"`,
 			1,
 			map[string]int{"InnerJoin": 1},
@@ -969,7 +1172,7 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 		db.Exec(t, tc.query)
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -1224,7 +1427,7 @@ func TestTelemetryScanCounts(t *testing.T) {
 		db.Exec(t, tc.query)
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -1325,7 +1528,7 @@ func TestFunctionBodyRedacted(t *testing.T) {
 	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
 	db.Exec(t, `CREATE TABLE kv (k STRING, v INT)`)
 	stubMaxEventFrequency := int64(1000000)
-	TelemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
+	TelemetryMaxStatementEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
 
 	stmt := `CREATE FUNCTION f() RETURNS INT 
 LANGUAGE SQL 
@@ -1338,7 +1541,7 @@ $$`
 
 	db.Exec(t, stmt)
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -1365,5 +1568,599 @@ $$`
 	}
 	if numLogsFound != 1 {
 		t.Errorf("expected 1 log entries, found %d", numLogsFound)
+	}
+}
+
+// TestTelemetryLoggingStmtPosInTxn verifies that StmtCount is logged correctly to
+// telemetry. The structure of the other test cases makes it difficult to verify
+// this property, so we do it explicitly here.
+func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	defer cleanup()
+
+	st := logtestutils.StubTime{}
+	sts := logtestutils.StubTracingStatus{}
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			EventLog: &EventLogTestingKnobs{
+				// The sampling checks below need to have a deterministic
+				// number of statements run by internal executor.
+				SyncWrites: true,
+			},
+			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
+				getTimeNow:       st.TimeNow,
+				getTracingStatus: sts.TracingStatus,
+			},
+		},
+	})
+
+	defer s.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	st.SetTime(timeutil.FromUnixMicros(0))
+	db.Exec(t, `SET application_name = 'telemetry-stmt=count-logging-test'`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "statement";`)
+
+	st.SetTime(timeutil.FromUnixMicros(int64(1e6)))
+	db.Exec(t, `BEGIN;`)
+	st.SetTime(timeutil.FromUnixMicros(int64(2 * 1e6)))
+	db.Exec(t, `SELECT 1`)
+	st.SetTime(timeutil.FromUnixMicros(int64(3 * 1e6)))
+	db.Exec(t, `SELECT 2`)
+	st.SetTime(timeutil.FromUnixMicros(int64(4 * 1e6)))
+	db.Exec(t, `SELECT 3`)
+	st.SetTime(timeutil.FromUnixMicros(int64(5 * 1e6)))
+	db.Exec(t, `COMMIT;`)
+
+	expectedQueries := []string{
+		`BEGIN`, `SELECT ‹1›`, `SELECT ‹2›`, `SELECT ‹3›`, `COMMIT`,
+	}
+
+	log.FlushFiles()
+
+	entries, err := log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`"EventType":"sampled_query"`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	require.NotEmpty(t, entries)
+	var expectedTxnID string
+	var expectedTxnCounter uint32 = 4
+
+	// Attempt to find all expected logs.
+	for i, expected := range expectedQueries {
+		found := false
+		for _, e := range entries {
+			if strings.Contains(e.Message, expected) {
+				var sq eventpb.SampledQuery
+				require.NoError(t, json.Unmarshal([]byte(e.Message), &sq))
+				require.Equalf(t, uint32(i), sq.StmtPosInTxn, "stmt=%s entries: %s", expected, entries)
+				require.Equalf(t, expectedTxnCounter, sq.TxnCounter, "stmt=%s entries: %s", expected, entries)
+				found = true
+
+				if expected == "BEGIN" {
+					require.Equal(t, "", sq.TransactionID, "BEGIN should not have a transaction ID")
+				} else if expectedTxnID == "" {
+					require.NotEqualf(t, "", sq.TransactionID, "expected to find a transaction ID for %s", expected)
+					expectedTxnID = sq.TransactionID
+				} else {
+					require.Equalf(t, expectedTxnID, sq.TransactionID, "expected to find the same transaction ID for %s", expected)
+				}
+				break
+			}
+		}
+
+		if !found {
+			t.Errorf("did not find expected query log in log entries: %s", expected)
+		}
+	}
+}
+
+type testQuery struct {
+	query          string
+	logTime        float64
+	tracingEnabled bool
+}
+
+type expectedLog struct {
+	logMsg            string
+	skippedQueryCount int
+}
+
+// TestTelemetryLoggingTxnMode tests that when the telemetry logging is set to "transaction",
+// we sample events at the transaction level, which means that we'll emit all statements
+// for a transaction as if they were counted as 1 emitted event.
+func TestTelemetryLoggingTxnMode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	defer cleanup()
+
+	st := logtestutils.StubTime{}
+	sts := logtestutils.StubTracingStatus{}
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			EventLog: &EventLogTestingKnobs{
+				// The sampling checks below need to have a deterministic
+				// number of statements run by internal executor.
+				SyncWrites: true,
+			},
+			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
+				getTimeNow:       st.TimeNow,
+				getTracingStatus: sts.TracingStatus,
+			},
+		},
+	})
+
+	defer s.Stopper().Stop(context.Background())
+
+	queries := []testQuery{
+		{
+			query:   "BEGIN; TRUNCATE t; COMMIT",
+			logTime: 0, // Logged.
+		},
+		{
+			query:   "BEGIN; SELECT 1; SELECT 2; SELECT 3; COMMIT",
+			logTime: 1, // Logged.
+		},
+		{
+			query:   "SELECT 1, 2;",
+			logTime: 1, // Skipped.
+		},
+		{
+			query:          "SELECT 1, 2;",
+			logTime:        1, // Logged. Tracing is enabled.
+			tracingEnabled: true,
+		},
+		{
+			query:   `SELECT * FROM t LIMIT 1`,
+			logTime: 1.05, // Skipped.
+		},
+		{
+			query:   `SELECT * FROM t LIMIT 1`,
+			logTime: 1.08, // Skipped.
+		},
+		{
+			query:   `SELECT * FROM t LIMIT 2`,
+			logTime: 1.1, // Logged.
+		},
+		{
+			query:   `BEGIN; SELECT * FROM t LIMIT 3; COMMIT`,
+			logTime: 1.15, // Skipped.
+		},
+		{
+			query:   `BEGIN; SELECT * FROM t LIMIT 4; SELECT * FROM t LIMIT 5; COMMIT`,
+			logTime: 1.2, // Logged.
+		},
+	}
+
+	expectedLogs := []expectedLog{
+		{
+			logMsg:            `TRUNCATE TABLE defaultdb.public.t`,
+			skippedQueryCount: 1, // Skipped BEGIN.
+		},
+		{
+			logMsg:            `COMMIT TRANSACTION`,
+			skippedQueryCount: 0,
+		},
+		{
+			logMsg:            `SELECT ‹1›`,
+			skippedQueryCount: 1, // BEGIN skipped.
+		},
+		{
+			logMsg:            `SELECT ‹2›`,
+			skippedQueryCount: 0,
+		},
+		{
+			logMsg:            `SELECT ‹3›`,
+			skippedQueryCount: 0,
+		},
+		{
+			logMsg:            `COMMIT TRANSACTION`,
+			skippedQueryCount: 0,
+		},
+		{
+			logMsg:            `SELECT ‹1›, ‹2›`,
+			skippedQueryCount: 1,
+		},
+		{
+			logMsg:            `SELECT * FROM ""."".t LIMIT ‹2›`,
+			skippedQueryCount: 2,
+		},
+		{
+			logMsg:            `SELECT * FROM ""."".t LIMIT ‹4›`,
+			skippedQueryCount: 4,
+		},
+		{
+			logMsg:            `SELECT * FROM ""."".t LIMIT ‹5›`,
+			skippedQueryCount: 0,
+		},
+		{
+			logMsg:            `COMMIT TRANSACTION`,
+			skippedQueryCount: 0,
+		},
+	}
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	st.SetTime(timeutil.FromUnixMicros(0))
+	db.Exec(t, `SET application_name = 'telemetry-logging-test-txn-mode'`)
+	db.Exec(t, "CREATE TABLE t();")
+	db.Exec(t, "CREATE TABLE u(x int);")
+
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 10;`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+
+	for _, query := range queries {
+		stubTime := timeutil.FromUnixMicros(int64(query.logTime * 1e6))
+		st.SetTime(stubTime)
+		sts.SetTracingStatus(query.tracingEnabled)
+		db.Exec(t, query.query)
+	}
+
+	log.FlushFiles()
+
+	entries, err := log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`"EventType":"sampled_query"`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) == 0 {
+		t.Fatal(errors.Newf("no entries found"))
+	}
+
+	for _, e := range entries {
+		if strings.Contains(e.Message, `"ExecMode":"`+executorTypeInternal.logLabel()) {
+			t.Errorf("unexpected telemetry event for internal statement:\n%s", e.Message)
+		}
+	}
+
+	expectedLogCount := len(expectedLogs)
+	require.GreaterOrEqualf(t, len(entries), expectedLogCount,
+		"expected at least %d log entries, got: %d\nentries:\n%v", expectedLogCount, len(entries), entries)
+
+	// FetchEntriesFromFiles delivers entries in reverse order.
+	entryIdx := len(entries) - 1
+
+	// Skip the cluster setting queries.
+	for strings.Contains(entries[entryIdx].Message, "SET CLUSTER SETTING") {
+		entryIdx--
+	}
+
+	for i := 0; i < expectedLogCount; i++ {
+		e := entries[entryIdx-i]
+
+		var sq eventpb.SampledQuery
+		err = json.Unmarshal([]byte(e.Message), &sq)
+		require.NoError(t, err)
+
+		if !strings.Contains(string(sq.Statement), expectedLogs[i].logMsg) {
+			t.Fatalf("expected log message to contain:\n%s\nbut received:\n%s\nentries:\n%v\n",
+				expectedLogs[i].logMsg, sq.Statement, entries)
+		}
+
+		expectedSkipped := expectedLogs[i].skippedQueryCount
+		if expectedSkipped == 0 {
+			require.Zerof(t, sq.SkippedQueries, "expected no skipped queries, found:\n%s", e.Message)
+		} else {
+			require.Equalf(t, uint64(expectedSkipped), sq.SkippedQueries, "expected skipped queries, found:\n%s", e.Message)
+		}
+	}
+}
+
+// TestTelemetryLoggingClearsTxns tests that when the telemetry logging is set to "statements",
+// the list of tracked txns is cleared.
+func TestTelemetryLoggingClearsTxns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	defer cleanup()
+
+	st := logtestutils.StubTime{}
+	sts := logtestutils.StubTracingStatus{}
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			EventLog: &EventLogTestingKnobs{
+				// The sampling checks below need to have a deterministic
+				// number of statements run by internal executor.
+				SyncWrites: true,
+			},
+			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
+				getTimeNow:       st.TimeNow,
+				getTracingStatus: sts.TracingStatus,
+			},
+		},
+	})
+
+	defer s.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	pgURL, cleanupGoDB := sqlutils.PGUrl(
+		t, s.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
+	defer cleanupGoDB()
+	sqlDB2, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(t, err)
+	defer sqlDB2.Close()
+	db2 := sqlutils.MakeSQLRunner(sqlDB2)
+
+	st.SetTime(timeutil.FromUnixMicros(0))
+	db.Exec(t, `SET application_name = 'telemetry-logging-test-txns-cleared'`)
+
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 10;`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+
+	telemetryLogging := s.SQLServer().(*Server).TelemetryLoggingMetrics
+
+	require.Zero(t, telemetryLogging.getTrackedTxnsCount())
+	stubTime := timeutil.Now()
+	st.SetTime(stubTime)
+	db.Exec(t, "BEGIN; SELECT 1;")
+	require.Equal(t, 1, telemetryLogging.getTrackedTxnsCount())
+
+	// Ensure that the tracked txn cache is cleared.
+	db2.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "statement";`)
+
+	testutils.SucceedsSoon(t, func() error {
+		if telemetryLogging.getTrackedTxnsCount() != 0 {
+			return errors.Newf("expected no tracked txns")
+		}
+		return nil
+	})
+
+	db.Exec(t, "COMMIT;")
+}
+
+func TestTelemetryLoggingRespectsTxnLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	defer cleanup()
+
+	st := logtestutils.StubTime{}
+	sts := logtestutils.StubTracingStatus{}
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			EventLog: &EventLogTestingKnobs{
+				// The sampling checks below need to have a deterministic
+				// number of statements run by internal executor.
+				SyncWrites: true,
+			},
+			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
+				getTimeNow:       st.TimeNow,
+				getTracingStatus: sts.TracingStatus,
+			},
+		},
+	})
+
+	defer s.Stopper().Stop(context.Background())
+
+	// Start 2 txns. Start the second txn with enough elapsed time that would normally allow
+	// txn tracking for telemetry, however since we set the limit to 1 tracked txn, the
+	// statements in the 2nd txn will only be logged if it is non DML or tracing is on.
+
+	queries := []struct {
+		testQuery
+		txnNum int
+	}{
+		{
+			testQuery: testQuery{
+				query:   "BEGIN;",
+				logTime: 1,
+			},
+			txnNum: 1,
+		},
+		{
+			testQuery: testQuery{
+				query:   "BEGIN;",
+				logTime: 2,
+			},
+			txnNum: 2,
+		},
+		{
+			testQuery: testQuery{
+				query:   "SELECT 1;", // Logged.
+				logTime: 2,
+			},
+			txnNum: 1,
+		},
+		{
+			testQuery: testQuery{
+				query:   "SELECT 2;", // Skipped.
+				logTime: 2,
+			},
+			txnNum: 2,
+		},
+		{
+			testQuery: testQuery{
+				query:   "SELECT 1, 1;", // Logged.
+				logTime: 2,
+			},
+			txnNum: 1,
+		},
+		{
+			testQuery: testQuery{
+				query:   "SELECT 2, 2;", // Skipped.
+				logTime: 2,
+			},
+			txnNum: 2,
+		},
+		{
+			testQuery: testQuery{
+				query:   "SELECT 2, 2, 2;", // Not logged, even though enough time has elapsed.
+				logTime: 2.1,
+			},
+			txnNum: 2,
+		},
+		{
+			testQuery: testQuery{
+				query:          "SELECT 2, 2, 2, 2;", // Logged. Tracing is on.
+				logTime:        2.1,
+				tracingEnabled: true,
+			},
+			txnNum: 2,
+		},
+		{
+			testQuery: testQuery{
+				query:   "SELECT 1, 1, 1;", // Logged.
+				logTime: 2.1,
+			},
+			txnNum: 1,
+		},
+		{
+			testQuery: testQuery{
+				query:   "COMMIT;",
+				logTime: 3,
+			},
+			txnNum: 1,
+		},
+		{
+			testQuery: testQuery{
+				query:   "SELECT 2, 2, 2;", // Not logged, even though enough time has elapsed it is not the first stmt.
+				logTime: 3.5,
+			},
+			txnNum: 2,
+		},
+		{
+			testQuery: testQuery{
+				query:   "COMMIT;",
+				logTime: 3,
+			},
+			txnNum: 2,
+		},
+	}
+
+	expectedLogs := []expectedLog{
+		{
+			logMsg:            `SELECT ‹1›`,
+			skippedQueryCount: 2, // Skipped both BEGIN queries.
+		},
+		{
+			logMsg:            `SELECT ‹1›, ‹1›`,
+			skippedQueryCount: 1,
+		},
+		{
+			logMsg:            `SELECT ‹2›, ‹2›, ‹2›, ‹2›`,
+			skippedQueryCount: 2,
+		},
+		{
+			logMsg:            `SELECT ‹1›, ‹1›, ‹1›`,
+			skippedQueryCount: 0,
+		},
+	}
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	pgURL, cleanupGoDB := sqlutils.PGUrl(
+		t, s.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
+	defer cleanupGoDB()
+	sqlDB2, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(t, err)
+	defer sqlDB2.Close()
+	db2 := sqlutils.MakeSQLRunner(sqlDB2)
+
+	st.SetTime(timeutil.FromUnixMicros(0))
+	db.Exec(t, `SET application_name = 'telemetry-logging-test-txn-limit'`)
+
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.txn_mode.tracking_limit = 1;`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 10;`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+
+	for _, query := range queries {
+		stubTime := timeutil.FromUnixMicros(int64(query.logTime * 1e6))
+		st.SetTime(stubTime)
+		sts.SetTracingStatus(query.tracingEnabled)
+		if query.txnNum == 1 {
+			db.Exec(t, query.query)
+		} else {
+			db2.Exec(t, query.query)
+		}
+	}
+
+	log.FlushFiles()
+
+	entries, err := log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`"EventType":"sampled_query"`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) == 0 {
+		t.Fatal(errors.Newf("no entries found"))
+	}
+
+	for _, e := range entries {
+		if strings.Contains(e.Message, `"ExecMode":"`+executorTypeInternal.logLabel()) {
+			t.Errorf("unexpected telemetry event for internal statement:\n%s", e.Message)
+		}
+	}
+
+	expectedLogCount := len(expectedLogs)
+	if expectedLogCount > len(entries) {
+		t.Fatalf("expected at least %d log entries, got: %d", expectedLogCount, len(entries))
+	}
+
+	// FetchEntriesFromFiles delivers entries in reverse order.
+	entryIdx := len(entries) - 1
+
+	// Skip the cluster setting queries.
+	for strings.Contains(entries[entryIdx].Message, "SET CLUSTER SETTING") {
+		entryIdx--
+	}
+
+	for i := 0; i < expectedLogCount; i++ {
+		e := entries[entryIdx-i]
+		if !strings.Contains(e.Message, expectedLogs[i].logMsg+"\"") {
+			t.Errorf("expected log message to contain:\n%s\nbut received:\n%s\n",
+				expectedLogs[i].logMsg, e.Message)
+		}
+
+		var sq eventpb.SampledQuery
+		err = json.Unmarshal([]byte(e.Message), &sq)
+		require.NoError(t, err)
+
+		expectedSkipped := expectedLogs[i].skippedQueryCount
+		if expectedSkipped == 0 {
+			require.Zerof(t, sq.SkippedQueries, "expected no skipped queries, found:\n%s", e.Message)
+		} else {
+			require.Equalf(t, uint64(expectedSkipped), sq.SkippedQueries, "expected skipped queries, found:\n%s", e.Message)
+		}
 	}
 }

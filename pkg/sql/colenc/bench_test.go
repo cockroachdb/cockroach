@@ -16,10 +16,10 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -91,11 +90,11 @@ func BenchmarkTCPHLineItem(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 
-	params, _ := tests.CreateTestServerParams()
-	s, _, kvdb := serverutils.StartServer(b, params)
-	defer s.Stopper().Stop(ctx)
+	srv, _, kvdb := serverutils.StartServer(b, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	url, cleanup := sqlutils.PGUrl(b, s.ServingSQLAddr(), "copytest", url.User(username.RootUser))
+	url, cleanup := sqlutils.PGUrl(b, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
 	defer cleanup()
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -128,8 +127,8 @@ func BenchmarkTCPHLineItem(b *testing.B) {
 		}
 	}
 	cb.SetLength(numRows)
-	desc := desctestutils.TestingGetTableDescriptor(kvdb, keys.SystemSQLCodec, "defaultdb", "public", "lineitem")
-	enc := colenc.MakeEncoder(keys.SystemSQLCodec, desc, &st.SV, cb, desc.PublicColumns(),
+	desc := desctestutils.TestingGetTableDescriptor(kvdb, s.Codec(), "defaultdb", "public", "lineitem")
+	enc := colenc.MakeEncoder(s.Codec(), desc, &st.SV, cb, desc.PublicColumns(),
 		nil /*metrics*/, nil /*partialIndexMap*/, func() error { return nil })
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

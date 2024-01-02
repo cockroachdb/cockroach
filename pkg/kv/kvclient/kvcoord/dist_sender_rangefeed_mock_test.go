@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb/kvpbmock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -136,17 +135,17 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 							stream.EXPECT().Send(gomock.Any()).Return(nil)
 							stream.EXPECT().Recv().Do(func() {
 								cancel()
-							}).Return(nil, context.Canceled)
-							client.EXPECT().MuxRangeFeed(gomock.Any()).Return(stream, nil)
+							}).Return(nil, context.Canceled).AnyTimes()
+							client.EXPECT().MuxRangeFeed(gomock.Any()).Return(stream, nil).AnyTimes()
 						} else {
 							stream := kvpbmock.NewMockInternal_RangeFeedClient(ctrl)
 							stream.EXPECT().Recv().Do(cancel).Return(nil, io.EOF)
 							client.EXPECT().RangeFeed(gomock.Any(), gomock.Any()).Return(stream, nil)
 						}
 
-						transport.EXPECT().IsExhausted().Return(false)
-						transport.EXPECT().NextReplica().Return(desc.InternalReplicas[0])
-						transport.EXPECT().NextInternalClient(gomock.Any()).Return(client, nil)
+						transport.EXPECT().IsExhausted().Return(false).AnyTimes()
+						transport.EXPECT().NextReplica().Return(desc.InternalReplicas[0]).AnyTimes()
+						transport.EXPECT().NextInternalClient(gomock.Any()).Return(client, nil).AnyTimes()
 						transport.EXPECT().Release().AnyTimes()
 					}
 
@@ -155,14 +154,11 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 						Clock:           clock,
 						NodeDescs:       g,
 						RPCRetryOptions: &retry.Options{MaxRetries: 10},
-						RPCContext:      rpcContext,
-						TestingKnobs: ClientTestingKnobs{
-							TransportFactory: func(SendOptions, *nodedialer.Dialer, ReplicaSlice) (Transport, error) {
-								return transport, nil
-							},
+						Stopper:         stopper,
+						TransportFactory: func(options SendOptions, slice ReplicaSlice) (Transport, error) {
+							return transport, nil
 						},
 						RangeDescriptorDB: rangeDB,
-						NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
 						Settings:          cluster.MakeTestingClusterSettings(),
 					})
 					ds.rangeCache.Insert(ctx, roachpb.RangeInfo{

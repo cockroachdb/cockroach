@@ -54,13 +54,14 @@ func (tsdb *DB) MaintainTimeSeries(
 	budgetBytes int64,
 	now hlc.Timestamp,
 ) error {
-	series, err := tsdb.findTimeSeries(reader, start, end, now)
+	series, err := tsdb.findTimeSeries(ctx, reader, start, end, now)
 	if err != nil {
 		return err
 	}
 	if tsdb.WriteRollups() {
 		qmc := MakeQueryMemoryContext(mem, mem, QueryMemoryOptions{
 			BudgetBytes: budgetBytes,
+			Columnar:    tsdb.WriteColumnar(),
 		})
 		if err := tsdb.rollupTimeSeries(ctx, series, now, qmc); err != nil {
 			return err

@@ -54,9 +54,15 @@ func generate(outDir string) error {
 		if q.doNotGenerate {
 			continue
 		}
-		out, err := q.target.execQuery(qd)
-		if err != nil {
-			return err
+		var out []string
+		if len(q.hardCodedQueryResults) == 0 {
+			var err error
+			out, err = q.target.execQuery(qd)
+			if err != nil {
+				return err
+			}
+		} else {
+			out = q.hardCodedQueryResults
 		}
 		if err := q.target.write(outDir, out); err != nil {
 			return err

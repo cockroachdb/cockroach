@@ -1,7 +1,6 @@
-# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 # LogicTest: multiregion-3node-3superlongregions
 
-query TTTTT
+query TTTTT rowsort
 SHOW REGIONS
 ----
 veryveryveryveryveryveryverylongregion1  {}  {}  {}  {}

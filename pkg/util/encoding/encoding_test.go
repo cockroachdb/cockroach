@@ -12,6 +12,7 @@ package encoding
 
 import (
 	"bytes"
+	crypto_rand "crypto/rand"
 	"fmt"
 	"math"
 	"math/rand"
@@ -25,6 +26,7 @@ import (
 	// Blank import so projections are initialized correctly.
 	_ "github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
@@ -377,10 +379,11 @@ func TestEncodeDecodeUvarintDescending(t *testing.T) {
 // TestDecodeInvalid tests that decoding invalid bytes panics.
 func TestDecodeInvalid(t *testing.T) {
 	tests := []struct {
-		name    string             // name printed with errors.
-		buf     []byte             // buf contains an invalid uvarint to decode.
-		pattern string             // pattern matches the panic string.
-		decode  func([]byte) error // decode is called with buf.
+		name     string             // name printed with errors.
+		buf      []byte             // buf contains an invalid uvarint to decode.
+		pattern  string             // pattern matches the panic string.
+		decode   func([]byte) error // decode is called with buf.
+		validate func([]byte) error // validate is called with buf; may be nil
 	}{
 		{
 			name:    "DecodeVarint, overflows int64",
@@ -389,40 +392,46 @@ func TestDecodeInvalid(t *testing.T) {
 			decode:  func(b []byte) error { _, _, err := DecodeVarintAscending(b); return err },
 		},
 		{
-			name:    "Bytes, no marker",
-			buf:     []byte{'a'},
-			pattern: "did not find marker",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			name:     "Bytes, no marker",
+			buf:      []byte{'a'},
+			pattern:  "did not find marker",
+			decode:   func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			validate: func(b []byte) error { _, err := ValidateDecodeBytesAscending(b); return err },
 		},
 		{
-			name:    "Bytes, no terminator",
-			buf:     []byte{bytesMarker, 'a'},
-			pattern: "did not find terminator",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			name:     "Bytes, no terminator",
+			buf:      []byte{bytesMarker, 'a'},
+			pattern:  "did not find terminator",
+			decode:   func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			validate: func(b []byte) error { _, err := ValidateDecodeBytesAscending(b); return err },
 		},
 		{
-			name:    "Bytes, malformed escape",
-			buf:     []byte{bytesMarker, 'a', 0x00},
-			pattern: "malformed escape",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			name:     "Bytes, malformed escape",
+			buf:      []byte{bytesMarker, 'a', 0x00},
+			pattern:  "malformed escape",
+			decode:   func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			validate: func(b []byte) error { _, err := ValidateDecodeBytesAscending(b); return err },
 		},
 		{
-			name:    "Bytes, invalid escape 1",
-			buf:     []byte{bytesMarker, 'a', 0x00, 0x00},
-			pattern: "unknown escape",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			name:     "Bytes, invalid escape 1",
+			buf:      []byte{bytesMarker, 'a', 0x00, 0x00},
+			pattern:  "unknown escape",
+			decode:   func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			validate: func(b []byte) error { _, err := ValidateDecodeBytesAscending(b); return err },
 		},
 		{
-			name:    "Bytes, invalid escape 2",
-			buf:     []byte{bytesMarker, 'a', 0x00, 0x02},
-			pattern: "unknown escape",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			name:     "Bytes, invalid escape 2",
+			buf:      []byte{bytesMarker, 'a', 0x00, 0x02},
+			pattern:  "unknown escape",
+			decode:   func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			validate: func(b []byte) error { _, err := ValidateDecodeBytesAscending(b); return err },
 		},
 		{
-			name:    "BytesDescending, no marker",
-			buf:     []byte{'a'},
-			pattern: "did not find marker",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			name:     "BytesDescending, no marker",
+			buf:      []byte{'a'},
+			pattern:  "did not find marker",
+			decode:   func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			validate: func(b []byte) error { _, err := ValidateDecodeBytesAscending(b); return err },
 		},
 		{
 			name:    "BytesDescending, no terminator",
@@ -466,6 +475,12 @@ func TestDecodeInvalid(t *testing.T) {
 		if !regexp.MustCompile(test.pattern).MatchString(err.Error()) {
 			t.Errorf("%q, pattern %q doesn't match %q", test.name, test.pattern, err)
 		}
+		if test.validate != nil {
+			err := test.validate(test.buf)
+			if !regexp.MustCompile(test.pattern).MatchString(err.Error()) {
+				t.Errorf("%q, pattern %q doesn't match %q", test.name, test.pattern, err)
+			}
+		}
 	}
 }
 
@@ -474,7 +489,7 @@ func TestDecodeInvalid(t *testing.T) {
 func testPeekLength(t *testing.T, encoded []byte) {
 	gLen := rand.Intn(10)
 	garbage := make([]byte, gLen)
-	_, _ = rand.Read(garbage)
+	_, _ = crypto_rand.Read(garbage)
 
 	var buf []byte
 	buf = append(buf, encoded...)
@@ -520,6 +535,11 @@ func TestEncodeDecodeBytesAscending(t *testing.T) {
 			t.Errorf("expected encoded size %d, got %d", expSize, len(enc))
 		}
 
+		if _, err := ValidateDecodeBytesAscending(enc); err != nil {
+			t.Error(err)
+			continue
+		}
+
 		remainder, dec, err := DecodeBytesAscending(enc, nil)
 		if err != nil {
 			t.Error(err)
@@ -535,12 +555,17 @@ func TestEncodeDecodeBytesAscending(t *testing.T) {
 		testPeekLength(t, enc)
 
 		enc = append(enc, []byte("remainder")...)
-		remainder, _, err = DecodeBytesAscending(enc, nil)
-		if err != nil {
+
+		if remainder, err = ValidateDecodeBytesAscending(enc); err != nil {
 			t.Error(err)
 			continue
+		} else if string(remainder) != "remainder" {
+			t.Errorf("unexpected remaining bytes: %v", remainder)
 		}
-		if string(remainder) != "remainder" {
+		if remainder, _, err = DecodeBytesAscending(enc, nil); err != nil {
+			t.Error(err)
+			continue
+		} else if string(remainder) != "remainder" {
 			t.Errorf("unexpected remaining bytes: %v", remainder)
 		}
 	}
@@ -807,7 +832,7 @@ func TestEncodeBitArray(t *testing.T) {
 				0, 0xba}},
 		{bitarray.MakeZeroBitArray(62),
 			[]byte{0x3a,
-				0x88, //word 0
+				0x88, // word 0
 				0, 0xc6}},
 		{bitarray.Not(bitarray.MakeZeroBitArray(62)),
 			[]byte{0x3a,
@@ -937,8 +962,8 @@ func TestKeyEncodeDecodeBitArrayRand(t *testing.T) {
 				buf = EncodeBitArrayAscending(nil, test)
 				remainder, x, err = DecodeBitArrayAscending(buf)
 			} else {
-				buf = EncodeBitArrayAscending(nil, test)
-				remainder, x, err = DecodeBitArrayAscending(buf)
+				buf = EncodeBitArrayDescending(nil, test)
+				remainder, x, err = DecodeBitArrayDescending(buf)
 			}
 			if err != nil {
 				t.Fatalf("%+v", err)
@@ -2596,6 +2621,41 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 		if str != test.expected {
 			t.Errorf("%d: got %q expected %q", i, str, test.expected)
 		}
+	}
+}
+
+func TestUnsafeConvertStringToBytes(t *testing.T) {
+	// Large input runs slowly.
+	skip.UnderStress(t)
+
+	testCases := []struct {
+		desc           string
+		input          string
+		expectNil      bool
+		expectedLength int
+	}{
+		{
+			desc:      "empty",
+			input:     "",
+			expectNil: true,
+		},
+		{
+			// Previous impl could not handle strings longer than math.MaxInt32.
+			// See https://github.com/cockroachdb/cockroach/issues/111626
+			desc:           "large input",
+			input:          string(make([]byte, math.MaxInt32+1)),
+			expectedLength: math.MaxInt32 + 1,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			actual := UnsafeConvertStringToBytes(tc.input)
+			if tc.expectNil {
+				require.Nil(t, actual)
+			} else {
+				require.Equal(t, len(actual), tc.expectedLength)
+			}
+		})
 	}
 }
 

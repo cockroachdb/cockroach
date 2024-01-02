@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -37,6 +38,8 @@ type scheduledBackupExecutor struct {
 type backupMetrics struct {
 	*jobs.ExecutorMetrics
 	*jobs.ExecutorPTSMetrics
+	// TODO(rui): move this to the backup job so it can be controlled by the
+	// updates_cluster_monitoring_metrics option.
 	RpoMetric *metric.Gauge
 }
 
@@ -97,11 +100,28 @@ func (e *scheduledBackupExecutor) executeBackup(
 	}
 	backupStmt.AsOf = tree.AsOfClause{Expr: endTime}
 
-	log.Infof(ctx, "Starting scheduled backup %d", sj.ScheduleID())
-
 	// Invoke backup plan hook.
 	hook, cleanup := cfg.PlanHookMaker(ctx, "exec-backup", txn.KV(), sj.Owner())
 	defer cleanup()
+
+	planner := hook.(sql.PlanHookState)
+	currentClusterID := planner.ExtendedEvalContext().ClusterID
+	currentDetails := sj.ScheduleDetails()
+
+	// If the current cluster ID is different than the schedule's cluster ID,
+	// pause the schedule. To maintain backward compatability with schedules
+	// without a clusterID, don't pause schedules without a clusterID.
+	if !currentDetails.ClusterID.Equal(uuid.Nil) && currentClusterID != currentDetails.ClusterID {
+		log.Infof(ctx, "schedule %d last run by different cluster %s, pausing until manually resumed",
+			sj.ScheduleID(),
+			currentDetails.ClusterID)
+		currentDetails.ClusterID = currentClusterID
+		sj.SetScheduleDetails(*currentDetails)
+		sj.Pause()
+		return nil
+	}
+
+	log.Infof(ctx, "Starting scheduled backup %d", sj.ScheduleID())
 
 	if knobs, ok := cfg.TestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.OverrideAsOfClause != nil {
@@ -109,7 +129,7 @@ func (e *scheduledBackupExecutor) executeBackup(
 		}
 	}
 
-	backupFn, err := planBackup(ctx, hook.(sql.PlanHookState), backupStmt)
+	backupFn, err := planBackup(ctx, planner, backupStmt)
 	if err != nil {
 		return err
 	}
@@ -346,7 +366,7 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 		e.metrics.RpoMetric.Update(details.(jobspb.BackupDetails).EndTime.GoTime().Unix())
 	}
 
-	if args.UnpauseOnSuccess == jobs.InvalidScheduleID {
+	if args.UnpauseOnSuccess == jobspb.InvalidScheduleID {
 		return nil
 	}
 
@@ -370,7 +390,7 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 	}
 
 	// Clear UnpauseOnSuccess; caller updates schedule.
-	args.UnpauseOnSuccess = jobs.InvalidScheduleID
+	args.UnpauseOnSuccess = jobspb.InvalidScheduleID
 	any, err := pbtypes.MarshalAny(args)
 	if err != nil {
 		return errors.Wrap(err, "marshaling args")
@@ -404,7 +424,7 @@ func extractBackupStatement(sj *jobs.ScheduledJob) (*annotatedBackupStatement, e
 			Backup: backupStmt,
 			CreatedByInfo: &jobs.CreatedByInfo{
 				Name: jobs.CreatedByScheduledJobs,
-				ID:   sj.ScheduleID(),
+				ID:   int64(sj.ScheduleID()),
 			},
 		}, nil
 	}

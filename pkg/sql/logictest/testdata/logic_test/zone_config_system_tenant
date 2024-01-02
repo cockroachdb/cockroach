@@ -9,7 +9,7 @@ ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
 
 # Should have no effect on the system tenant.
 statement ok
-SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = false
+SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = false
 
 statement ok
 ALTER TABLE t CONFIGURE ZONE USING num_replicas = 3;
@@ -21,7 +21,6 @@ CREATE TABLE a(id INT PRIMARY KEY)
 statement error OSS binaries do not include enterprise features
 ALTER TABLE a CONFIGURE ZONE USING global_reads = true
 
-skipif config local-mixed-22.2-23.1
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
@@ -110,7 +109,6 @@ SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)
 FROM system.span_configurations
 WHERE end_key > (SELECT crdb_internal.table_span($t_id)[1])
 ----
-{"gcPolicy": {"ttlSeconds": 14400}, "numReplicas": 3, "rangeMaxBytes": "67108864", "rangeMinBytes": "1048576"}
 
 statement ok
 CREATE TABLE db2.t2 (i INT PRIMARY KEY);
@@ -123,13 +121,14 @@ ALTER DATABASE db2 CONFIGURE ZONE USING gc.ttlseconds = 90001;
 
 # Both the dropped and the new table should eventually have span configurations
 # and they should both inherit from the database's GC TTL setting.
-query T retry
-SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)
+query TT retry
+SELECT
+  crdb_internal.pretty_key(start_key, -1),
+  crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)
 FROM system.span_configurations
 WHERE end_key > (SELECT crdb_internal.table_span($t_id)[1])
+ORDER BY start_key
 ----
-{"gcPolicy": {"ttlSeconds": 90001}, "numReplicas": 3, "rangeMaxBytes": "67108864", "rangeMinBytes": "1048576"}
-{"gcPolicy": {"ttlSeconds": 90001}, "numReplicas": 3, "rangeMaxBytes": "1073741824", "rangeMinBytes": "67108864"}
 
 # Check that dropped relations can have their GC TTLs altered.
 subtest dropped_relation_gc_ttl
@@ -150,16 +149,21 @@ t   25:00:01
 t2  25:00:01
 t3  04:00:00
 
-query T
-SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)->'gcPolicy'->>'ttlSeconds'
+# The tables in db2 should have a gc_ttl of 90001, while test.public.t3 should
+# have a gc_ttl of 14400.
+query TT retry
+SELECT
+  crdb_internal.pretty_key(start_key, -1),
+  crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)->'gcPolicy'->>'ttlSeconds'
 FROM system.span_configurations
 WHERE start_key >= (SELECT crdb_internal.table_span(100)[1])
 ORDER BY start_key
 ----
-14400
-14400
-90001
-90001
+/Table/106  14400
+/Table/107  14400
+/Table/110  90001
+/Table/111  90001
+/Table/112  14400
 
 query B
 SELECT crdb_internal.upsert_dropped_relation_gc_ttl(id, '1 second')
@@ -178,14 +182,23 @@ t3  00:00:01
 
 # Check that the zone config changes eventually get picked up by the span
 # config reconciler.
-query T retry
-SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)->'gcPolicy'->>'ttlSeconds'
+query TT retry
+SELECT
+  crdb_internal.pretty_key(start_key, -1),
+  crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)->'gcPolicy'->>'ttlSeconds'
 FROM system.span_configurations
 WHERE start_key >= (SELECT crdb_internal.table_span(100)[1])
 ORDER BY start_key
 ----
-14400
-14400
-90001
-1
-1
+/Table/106  14400
+/Table/107  14400
+/Table/110  90001
+/Table/111  1
+/Table/112  1
+
+subtest transactional_schemachanges
+
+statement ok
+ALTER RANGE meta CONFIGURE ZONE DISCARD; ALTER RANGE meta CONFIGURE ZONE DISCARD;
+
+subtest end

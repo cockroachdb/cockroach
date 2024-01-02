@@ -142,7 +142,7 @@ SELECT a FROM t_idx WHERE w IN (4,6)
 5
 
 # Covering lookup join.
-query II
+query II rowsort
 SELECT v, x FROM (VALUES (1), (2), (10), (5)) AS u(x) INNER LOOKUP JOIN t_idx@t_idx_v_idx ON u.x = t_idx.v
 ----
 2   2
@@ -151,7 +151,7 @@ SELECT v, x FROM (VALUES (1), (2), (10), (5)) AS u(x) INNER LOOKUP JOIN t_idx@t_
 10  10
 
 # Non-covering lookup join that requires a second join on the primary index.
-query IIII
+query IIII rowsort
 SELECT a, b, v, x FROM (VALUES (1), (2), (10), (5)) AS u(x) INNER LOOKUP JOIN t_idx@t_idx_v_idx ON u.x = t_idx.v
 ----
 1  1  2   2
@@ -1366,11 +1366,44 @@ ALTER TABLE t81675 ADD COLUMN j INT GENERATED ALWAYS AS (i+1) VIRTUAL;
 statement ok
 ALTER TABLE t81675 DROP COLUMN j;
 
-# Note that the pgcode here ought to be 23502 (not null violation) but is
-# instead 23514 (check constraint violation) because of implementation details.
-onlyif config local-legacy-schema-changer
-statement error pgcode 23514 validation of NOT NULL constraint failed
+statement error pgcode 23502 validation of column "j" NOT NULL failed on row: i=NULL, rowid=\d+, j=NULL
 ALTER TABLE t81675 ADD COLUMN j INT GENERATED ALWAYS AS (i+1) VIRTUAL NOT NULL;
 
 statement ok
 DROP TABLE t81675;
+
+
+# Regression tests for #91817. Assignment casts should be applied to virtual
+# computed column projections when the expression type is not identical to the
+# column type.
+subtest regression_91817
+
+statement ok
+CREATE TABLE t91817a (
+  s STRING,
+  comp_s "char" AS (s) STORED,
+  comp_v "char" AS (s) VIRTUAL
+);
+INSERT INTO t91817a VALUES ('foo')
+
+# The stored and virtual computed columns should have the same value.
+query TTT
+SELECT * FROM t91817a
+----
+foo  f  f
+
+statement ok
+CREATE TABLE t91817b (
+  k INT2 PRIMARY KEY,
+  v INT2 GENERATED ALWAYS AS (k + 1) VIRTUAL
+);
+INSERT INTO t91817b VALUES (0)
+
+# This query should not cause an internal error.
+query T
+SELECT var_pop(v::INT8) OVER ()
+FROM t91817b
+GROUP BY k, v
+HAVING every(true)
+----
+0

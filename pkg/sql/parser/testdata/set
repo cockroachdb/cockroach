@@ -626,3 +626,11 @@ SET LOCAL tracing = 'off'
 SET LOCAL tracing = ('off') -- fully parenthesized
 SET LOCAL tracing = '_' -- literals removed
 SET LOCAL tracing = 'off' -- identifiers removed
+
+parse
+SET "" = 'a'
+----
+SET "" = 'a'
+SET "" = ('a') -- fully parenthesized
+SET "" = '_' -- literals removed
+SET "" = 'a' -- identifiers removed

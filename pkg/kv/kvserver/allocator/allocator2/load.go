@@ -42,6 +42,18 @@ type loadValue int64
 // dimension.
 type loadVector [numLoadDimensions]loadValue
 
+func (lv *loadVector) add(other loadVector) {
+	for i := range other {
+		(*lv)[i] += other[i]
+	}
+}
+
+func (lv *loadVector) subtract(other loadVector) {
+	for i := range other {
+		(*lv)[i] -= other[i]
+	}
+}
+
 // A resource can have a capacity, which is also expressed using loadValue.
 // There are some special case capacity values, enumerated here.
 const (
@@ -75,6 +87,18 @@ const (
 )
 
 type secondaryLoadVector [numSecondaryLoadDimensions]loadValue
+
+func (lv *secondaryLoadVector) add(other secondaryLoadVector) {
+	for i := range other {
+		(*lv)[i] += other[i]
+	}
+}
+
+func (lv *secondaryLoadVector) subtract(other secondaryLoadVector) {
+	for i := range other {
+		(*lv)[i] -= other[i]
+	}
+}
 
 type rangeLoad struct {
 	load loadVector

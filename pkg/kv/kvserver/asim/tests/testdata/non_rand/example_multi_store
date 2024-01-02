@@ -1,0 +1,46 @@
+# This test simulates identical parameters as the rebalance_load multi-store
+# test. The number of leases per store should be equal to 1. We assert on this
+# with a balance threshold of 1 (i.e. identical number of leases) and a steady
+# state threshold of 0 (i.e. doesn't change).
+gen_cluster nodes=7 stores_per_node=2
+----
+
+gen_ranges ranges=14 placement_skew=true
+----
+
+gen_load rate=7000
+----
+
+assertion stat=leases type=balance ticks=6 upper_bound=1
+----
+
+assertion stat=leases type=steady ticks=6 upper_bound=0
+----
+
+eval duration=5m seed=42
+----
+OK
+
+plot stat=leases
+----
+----
+
+ 14.00 ┼╮
+ 13.07 ┤╰╮
+ 12.13 ┤ ╰╮
+ 11.20 ┤  │
+ 10.27 ┤  │
+  9.33 ┤  │
+  8.40 ┤  ╰╮
+  7.47 ┤   ╰╮
+  6.53 ┤    │
+  5.60 ┤    │
+  4.67 ┤    │
+  3.73 ┤    ╰───────────╮
+  2.80 ┤                │
+  1.87 ┤    ╭───────────╮──────────────╮
+  0.93 ┤╭╭╭────────────────────────────────────────────────────────────────────────────
+  0.00 ┼──╯─────────────╯──────────────╯
+                                             leases
+----
+----

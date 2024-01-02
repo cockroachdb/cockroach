@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
@@ -178,6 +179,8 @@ func (e logicalAvroExec) createAvroDataFromDatums(
 // 3. Import both Avro tables and test they are identical to the original table.
 func TestImportAvroLogicalTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	dbName := "log"
 	ctx := context.Background()
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -287,7 +290,7 @@ func TestImportAvroLogicalTypes(t *testing.T) {
 	}
 	require.Equal(t, true, success, "failed to generate random data after 5 attempts")
 
-	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor()
+	ie := srv.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor()
 	datums, _, err := ie.QueryBufferedExWithCols(
 		ctx,
 		"",

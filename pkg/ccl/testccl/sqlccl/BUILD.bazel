@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
@@ -14,7 +13,6 @@ go_test(
         "temp_table_clean_test.go",
         "tenant_gc_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = [
         "//c-deps:libgeos",  # keep
     ],
@@ -38,9 +36,6 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/sql",
-        "//pkg/sql/catalog",
-        "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/gcjob",
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
@@ -68,8 +63,7 @@ go_test(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//types",
         "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

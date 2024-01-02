@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -36,13 +35,15 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/metric",
-        "//pkg/util/quotapool",
+        "//pkg/util/schedulerlatency",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_tokenbucket//:tokenbucket",
     ],
 )
 
@@ -62,7 +63,6 @@ go_test(
         "tokens_linear_model_test.go",
         "work_queue_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":admission"],
     deps = [
@@ -76,16 +76,14 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/metric",
-        "//pkg/util/quotapool",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_tokenbucket//:tokenbucket",
         "@com_github_guptarohit_asciigraph//:asciigraph",
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

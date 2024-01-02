@@ -373,7 +373,7 @@ subtest regression_62369
 query error "10000000000000000000000000000000000": value out of range
 SELECT INTERVAL '10000000000000000000000000000000000 year'
 
-query T
+query T nosort
 SELECT i / 2 FROM ( VALUES
   ('0 days 0.253000 seconds'::interval),
   (INTERVAL '0.000001'::interval),
@@ -713,7 +713,7 @@ SELECT date_trunc('week', interval '1 month')
 statement error pgcode 0A000 interval units "weeks" not supported because months usually have fractional weeks
 SELECT date_trunc('weeks', interval '1 month')
 
-query TT
+query TT nosort
 SELECT timespan, date_trunc(timespan, '1111 year 4 month 1 day 1 hour 1 minute 1 second 1 millisecond 1 microsecond')
 FROM (VALUES
   ('millennia'),

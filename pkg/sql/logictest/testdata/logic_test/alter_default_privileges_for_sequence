@@ -11,7 +11,7 @@ USE d;
 statement ok
 CREATE SEQUENCE testuser_s;
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON testuser_s;
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -29,7 +29,7 @@ CREATE SEQUENCE testuser_s2;
 # Note that CREATE is still present for testuser due to our current inheritance
 # behavior.
 # TODO(richardjcai): Remove this when we remove our current inheritance logic.
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON testuser_s2
 ----
 database_name  schema_name  table_name   grantee   privilege_type  is_grantable
@@ -51,7 +51,7 @@ ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO testuser, testuser2
 statement ok
 CREATE SEQUENCE s
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON s
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -64,7 +64,7 @@ test           public       s           testuser2  ALL             false
 statement ok
 CREATE TABLE t()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
@@ -78,7 +78,7 @@ ALTER DEFAULT PRIVILEGES REVOKE SELECT ON SEQUENCES FROM testuser, testuser2
 statement ok
 CREATE SEQUENCE s2
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON s2
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -107,7 +107,7 @@ ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM testuser, testuser2
 statement ok
 CREATE SEQUENCE s3
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON s3
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
@@ -128,7 +128,7 @@ statement ok
 CREATE SEQUENCE s4
 
 # testuser still has CREATE due to "inheriting" it from the parent database.
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON s4
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -154,7 +154,7 @@ statement ok
 CREATE SEQUENCE s5
 
 # testuser still has CREATE due to "inheriting" it from the parent database.
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON s5
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable

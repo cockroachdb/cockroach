@@ -39,37 +39,37 @@ import (
 var (
 	MetaPreServeNewConns = metric.Metadata{
 		Name:        "sql.pre_serve.new_conns",
-		Help:        "Counter of the number of SQL connections created prior to routine the connection a specific tenant",
+		Help:        "Number of SQL connections created prior to routing the connection to the target SQL server",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaPreServeBytesIn = metric.Metadata{
 		Name:        "sql.pre_serve.bytesin",
-		Help:        "Number of SQL bytes received prior to routing the connection to a specific tenant",
+		Help:        "Number of SQL bytes received prior to routing the connection to the target SQL server",
 		Measurement: "SQL Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	MetaPreServeBytesOut = metric.Metadata{
 		Name:        "sql.pre_serve.bytesout",
-		Help:        "Number of SQL bytes sent prior to routing the connection to a specific tenant",
+		Help:        "Number of SQL bytes sent prior to routing the connection to the target SQL server",
 		Measurement: "SQL Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	MetaPreServeConnFailures = metric.Metadata{
 		Name:        "sql.pre_serve.conn.failures",
-		Help:        "Number of SQL connection failures prior to routing the connection to a specific tenant",
+		Help:        "Number of SQL connection failures prior to routing the connection to the target SQL server",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaPreServeMaxBytes = metric.Metadata{
 		Name:        "sql.pre_serve.mem.max",
-		Help:        "Memory usage for SQL connections prior to routing the connection to a specific tenant",
+		Help:        "Memory usage for SQL connections prior to routing the connection to the target SQL server",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 	}
 	MetaPreServeCurBytes = metric.Metadata{
 		Name:        "sql.pre_serve.mem.cur",
-		Help:        "Current memory usage for SQL connections prior to routing the connection to a specific tenant",
+		Help:        "Current memory usage for SQL connections prior to routing the connection to the target SQL server",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 	}
@@ -192,10 +192,10 @@ func makeTenantIndependentMetrics(histogramWindow time.Duration) tenantIndepende
 		PreServeNewConns:      metric.NewCounter(MetaPreServeNewConns),
 		PreServeConnFailures:  metric.NewCounter(MetaPreServeConnFailures),
 		PreServeMaxBytes: metric.NewHistogram(metric.HistogramOptions{
-			Metadata: MetaPreServeMaxBytes,
-			Duration: histogramWindow,
-			Buckets:  metric.MemoryUsage64MBBuckets,
-			Mode:     metric.HistogramModePrometheus,
+			Metadata:     MetaPreServeMaxBytes,
+			Duration:     histogramWindow,
+			BucketConfig: metric.MemoryUsage64MBBuckets,
+			Mode:         metric.HistogramModePrometheus,
 		}),
 		PreServeCurBytes: metric.NewGauge(MetaPreServeCurBytes),
 	}
@@ -217,7 +217,6 @@ func (s *PreServeConnHandler) SendRoutingError(
 		`Double check your "-ccluster=" connection option or your "cluster:" database name prefix.`)
 
 	_ = s.sendErr(ctx, s.st, conn, err)
-	_ = conn.Close()
 }
 
 // sendErr sends errors to the client during the connection startup
@@ -235,7 +234,6 @@ func (s *PreServeConnHandler) sendErr(
 	// receive error payload are highly correlated with clients
 	// disconnecting abruptly.
 	_ /* err */ = w.writeErr(ctx, err, conn)
-	_ = conn.Close()
 	return err
 }
 
@@ -324,7 +322,7 @@ func (s *PreServeConnHandler) PreServe(
 	case versionCancel:
 		// The cancel message is rather peculiar: it is sent without
 		// authentication, always over an unencrypted channel.
-		if ok, key := readCancelKeyAndCloseConn(ctx, conn, &buf); ok {
+		if ok, key := readCancelKey(ctx, &buf); ok {
 			return conn, PreServeStatus{
 				State:     PreServeCancel,
 				CancelKey: key,
@@ -374,7 +372,7 @@ func (s *PreServeConnHandler) PreServe(
 		// Yet, we've found clients in the wild that send the cancel
 		// after the TLS handshake, for example at
 		// https://github.com/cockroachlabs/support/issues/600.
-		if ok, key := readCancelKeyAndCloseConn(ctx, conn, &buf); ok {
+		if ok, key := readCancelKey(ctx, &buf); ok {
 			return conn, PreServeStatus{
 				State:     PreServeCancel,
 				CancelKey: key,

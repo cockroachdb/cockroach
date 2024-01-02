@@ -131,7 +131,7 @@ func evalNewLease(
 	}
 
 	// Store the lease to disk & in-memory.
-	if err := MakeStateLoader(rec).SetLease(ctx, readWriter, ms, lease); err != nil {
+	if err := MakeStateLoader(rec).SetLeaseBlind(ctx, readWriter, ms, lease, prevLease); err != nil {
 		return newFailedLeaseTrigger(isTransfer), err
 	}
 

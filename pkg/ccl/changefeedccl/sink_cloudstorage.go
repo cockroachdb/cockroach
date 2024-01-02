@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
@@ -47,6 +48,10 @@ func isCloudStorageSink(u *url.URL) bool {
 	case changefeedbase.SinkSchemeCloudStorageS3, changefeedbase.SinkSchemeCloudStorageGCS,
 		changefeedbase.SinkSchemeCloudStorageNodelocal, changefeedbase.SinkSchemeCloudStorageHTTP,
 		changefeedbase.SinkSchemeCloudStorageHTTPS, changefeedbase.SinkSchemeCloudStorageAzure:
+		return true
+	// During the deprecation period, we need to keep parsing these as cloudstorage for backwards
+	// compatibility. Afterwards we'll either remove them or move them to webhook.
+	case changefeedbase.DeprecatedSinkSchemeHTTP, changefeedbase.DeprecatedSinkSchemeHTTPS:
 		return true
 	default:
 		return false
@@ -65,14 +70,33 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
-	created      time.Time
-	codec        io.WriteCloser
-	rawSize      int
-	numMessages  int
-	buf          bytes.Buffer
-	alloc        kvevent.Alloc
-	oldestMVCC   hlc.Timestamp
-	parquetCodec *parquetWriter
+	created       time.Time
+	codec         io.WriteCloser
+	rawSize       int
+	numMessages   int
+	buf           bytes.Buffer
+	alloc         kvevent.Alloc
+	oldestMVCC    hlc.Timestamp
+	parquetCodec  *parquetWriter
+	allocCallback func(delta int64)
+}
+
+func (f *cloudStorageSinkFile) mergeAlloc(other *kvevent.Alloc) {
+	prev := f.alloc.Bytes()
+	f.alloc.Merge(other)
+	f.allocCallback(f.alloc.Bytes() - prev)
+}
+
+func (f *cloudStorageSinkFile) releaseAlloc(ctx context.Context) {
+	prev := f.alloc.Bytes()
+	f.alloc.Release(ctx)
+	f.allocCallback(-prev)
+}
+
+func (f *cloudStorageSinkFile) adjustBytesToTarget(ctx context.Context, targetBytes int64) {
+	prev := f.alloc.Bytes()
+	f.alloc.AdjustBytesToTarget(ctx, targetBytes)
+	f.allocCallback(f.alloc.Bytes() - prev)
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
@@ -374,6 +398,7 @@ func makeCloudStorageSink(
 		}
 	}
 	u.Scheme = strings.TrimPrefix(u.Scheme, `experimental-`)
+	u.Scheme = strings.TrimPrefix(u.Scheme, `file-`)
 
 	sinkID := atomic.AddInt64(&cloudStorageSinkIDAtomic, 1)
 	sessID, err := generateChangefeedSessionID()
@@ -504,6 +529,7 @@ func (s *cloudStorageSink) getOrCreateFile(
 		created:             timeutil.Now(),
 		cloudStorageSinkKey: key,
 		oldestMVCC:          eventMVCC,
+		allocCallback:       s.metrics.makeCloudstorageFileAllocCallback(),
 	}
 
 	if s.compression.enabled() {
@@ -524,17 +550,34 @@ func (s *cloudStorageSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
-) error {
+) (retErr error) {
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
+
+	defer func() {
+		if !s.compression.enabled() {
+			return
+		}
+		if retErr == nil {
+			retErr = ctx.Err()
+		}
+		if retErr != nil {
+			// If we are returning an error, immediately close all compression
+			// codecs to release resources.  This step is also done in the
+			// Close() method, but doing this clean-up as soon as we know
+			// an error has occurred, ensures that we do not leak resources,
+			// even if the Close() method is not called.
+			retErr = errors.CombineErrors(retErr, s.closeAllCodecs())
+		}
+	}()
 
 	s.metrics.recordMessageSize(int64(len(key) + len(value)))
 	file, err := s.getOrCreateFile(topic, mvcc)
 	if err != nil {
 		return err
 	}
-	file.alloc.Merge(&alloc)
+	file.mergeAlloc(&alloc)
 
 	if _, err := file.Write(value); err != nil {
 		return err
@@ -654,7 +697,7 @@ func (s *cloudStorageSink) setDataFileTimestamp() {
 
 // enableAsyncFlush controls async flushing behavior for this sink.
 var enableAsyncFlush = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.cloudstorage.async_flush.enabled",
 	"enable async flushing",
 	true,
@@ -716,8 +759,10 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	filename := fmt.Sprintf(`%s-%s-%d-%d-%08x-%s-%x%s`, s.dataFileTs,
 		s.jobSessionID, s.srcID, s.sinkID, fileID, file.topic, file.schemaID, s.ext)
 	if s.prevFilename != "" && filename < s.prevFilename {
-		return errors.AssertionFailedf("error: detected a filename %s that lexically "+
+		err := errors.AssertionFailedf("error: detected a filename %s that lexically "+
 			"precedes a file emitted before: %s", filename, s.prevFilename)
+		logcrash.ReportOrPanic(ctx, &s.settings.SV, "incorrect filename order: %v", err)
+		return err
 	}
 	s.prevFilename = filename
 	dest := filepath.Join(s.dataFilePartition, filename)
@@ -789,7 +834,7 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 func (f *cloudStorageSinkFile) flushToStorage(
 	ctx context.Context, es cloud.ExternalStorage, dest string, m metricsRecorder,
 ) error {
-	defer f.alloc.Release(ctx)
+	defer f.releaseAlloc(ctx)
 
 	if f.rawSize == 0 {
 		// This method shouldn't be called with an empty file, but be defensive
@@ -812,10 +857,33 @@ func (f *cloudStorageSinkFile) flushToStorage(
 	return nil
 }
 
+func (s *cloudStorageSink) closeAllCodecs() (err error) {
+	// Close any codecs we might have in use and collect the first error if any
+	// (other errors are ignored because they are likely going to be the same ones,
+	// though based on the current compression implementation, the close method
+	// should not return an error).
+	// Codecs need to be closed because of the klauspost compression library implementation
+	// details where it spins up go routines to perform compression in parallel.
+	// Those go routines are cleaned up when the compression codec is closed.
+	s.files.Ascend(func(i btree.Item) (wantMore bool) {
+		f := i.(*cloudStorageSinkFile)
+		if f.codec != nil {
+			cErr := f.codec.Close()
+			f.codec = nil
+			if err == nil {
+				err = cErr
+			}
+		}
+		return true
+	})
+	return err
+}
+
 // Close implements the Sink interface.
 func (s *cloudStorageSink) Close() error {
+	err := s.closeAllCodecs()
 	s.files = nil
-	err := s.waitAsyncFlush(context.Background())
+	err = errors.CombineErrors(err, s.waitAsyncFlush(context.Background()))
 	close(s.asyncFlushCh) // signal flusher to exit.
 	err = errors.CombineErrors(err, s.flushGroup.Wait())
 	return errors.CombineErrors(err, s.es.Close())

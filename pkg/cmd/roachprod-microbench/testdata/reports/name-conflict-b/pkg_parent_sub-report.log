@@ -1,1 +1,1 @@
-BenchmarkWithNameConflict 2000 2000 ns/op 2000 B/op 2000 allocs/op
+BenchmarkWithNameConflict 2200 2200 ns/op 2200 B/op 2200 allocs/op

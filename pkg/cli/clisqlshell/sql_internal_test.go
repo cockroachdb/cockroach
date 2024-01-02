@@ -142,8 +142,6 @@ func TestGetSetArgs(t *testing.T) {
 	}{
 		// Missing option.
 		{``, false, ``, false, ``},
-		// Invalid syntax in value.
-		{`a  a"b`, false, ``, false, ``},
 		// Missing option.
 		{`    `, false, ``, false, ``},
 		// Standalone option, also supporting various characters in the option.
@@ -152,8 +150,7 @@ func TestGetSetArgs(t *testing.T) {
 		{`a_b`, true, `a_b`, false, ``},
 		{`a-b`, true, `a-b`, false, ``},
 		{`a123`, true, `a123`, false, ``},
-		// Invalid character in option.
-		{`a/b`, false, ``, false, ``},
+		{`a/b`, true, `a/b`, false, ``},
 		// Optional spaces.
 		{`a   `, true, `a`, false, ``},
 		{`  a   `, true, `a`, false, ``},
@@ -166,7 +163,7 @@ func TestGetSetArgs(t *testing.T) {
 		// Quoted value.
 		{`a "b c"`, true, `a`, true, `"b c"`},
 		{`a   "b c"  `, true, `a`, true, `"b c"`},
-		{`a   "b\"c"  `, true, `a`, true, `"b\"c"`},
+		{`a   'b\"c'  `, true, `a`, true, `b"c`},
 		{`a "" `, true, `a`, true, `""`},
 		// Non-quoted value.
 		{`a   b.c  `, true, `a`, true, `b.c`},
@@ -182,7 +179,12 @@ func TestGetSetArgs(t *testing.T) {
 	}
 
 	for _, tc := range td {
-		ok, option, hasValue, value := getSetArgs(tc.input)
+		args, err := scanLocalCmdArgs(tc.input)
+		if err != nil {
+			t.Errorf("%s: %v", tc.input, err)
+			continue
+		}
+		ok, option, hasValue, value := getSetArgs(args)
 		if ok != tc.ok || option != tc.option || hasValue != tc.hasValue || value != tc.value {
 			t.Errorf("%s: expected (%v,%v,%v,%v), got (%v,%v,%v,%v)", tc.input,
 				tc.ok, tc.option, tc.hasValue, tc.value,

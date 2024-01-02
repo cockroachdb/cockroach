@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/petermattis/goid"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/jaeger"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/zipkin"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -106,67 +105,54 @@ const (
 // resolved via #58610, this setting can be removed so that all traces
 // have redactability enabled.
 var enableTraceRedactable = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"trace.redactable.enabled",
 	"set to true to enable finer-grainer redactability for unstructured events in traces",
 	true,
 )
 
 var enableNetTrace = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"trace.debug.enable",
 	"if set, traces for recent requests can be seen at https://<ui>/debug/requests",
 	false,
-).WithPublic()
+	settings.WithName("trace.debug_http_endpoint.enabled"),
+	settings.WithPublic)
 
-var openTelemetryCollector = settings.RegisterValidatedStringSetting(
-	settings.TenantWritable,
+var openTelemetryCollector = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
 	"trace.opentelemetry.collector",
 	"address of an OpenTelemetry trace collector to receive "+
 		"traces using the otel gRPC protocol, as <host>:<port>. "+
 		"If no port is specified, 4317 will be used.",
 	envutil.EnvOrDefaultString("COCKROACH_OTLP_COLLECTOR", ""),
-	func(_ *settings.Values, s string) error {
+	settings.WithValidateString(func(_ *settings.Values, s string) error {
 		if s == "" {
 			return nil
 		}
 		_, _, err := addr.SplitHostPort(s, "4317")
 		return err
-	},
-).WithPublic()
-
-var jaegerAgent = settings.RegisterValidatedStringSetting(
-	settings.TenantWritable,
-	"trace.jaeger.agent",
-	"the address of a Jaeger agent to receive traces using the "+
-		"Jaeger UDP Thrift protocol, as <host>:<port>. "+
-		"If no port is specified, 6381 will be used.",
-	envutil.EnvOrDefaultString("COCKROACH_JAEGER", ""),
-	func(_ *settings.Values, s string) error {
-		if s == "" {
-			return nil
-		}
-		_, _, err := addr.SplitHostPort(s, "6381")
-		return err
-	},
-).WithPublic()
+	}),
+	settings.WithPublic,
+)
 
 // ZipkinCollector is the cluster setting that specifies the Zipkin instance
 // to send traces to, if any.
-var ZipkinCollector = settings.RegisterValidatedStringSetting(
-	settings.TenantWritable,
+var ZipkinCollector = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
 	"trace.zipkin.collector",
 	"the address of a Zipkin instance to receive traces, as <host>:<port>. "+
 		"If no port is specified, 9411 will be used.",
 	envutil.EnvOrDefaultString("COCKROACH_ZIPKIN", ""),
-	func(_ *settings.Values, s string) error {
+	settings.WithValidateString(func(_ *settings.Values, s string) error {
 		if s == "" {
 			return nil
 		}
 		_, _, err := addr.SplitHostPort(s, "9411")
 		return err
-	},
-).WithPublic()
+	}),
+	settings.WithPublic,
+)
 
 // EnableActiveSpansRegistry controls Tracers configured as
 // WithTracingMode(TracingModeFromEnv) (which is the default). When enabled,
@@ -174,19 +160,19 @@ var ZipkinCollector = settings.RegisterValidatedStringSetting(
 // finished. When disabled, span creation is short-circuited for a small
 // performance improvement.
 var EnableActiveSpansRegistry = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"trace.span_registry.enabled",
 	"if set, ongoing traces can be seen at https://<ui>/#/debug/tracez",
 	envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", true),
-).WithPublic()
+	settings.WithPublic)
 
 var periodicSnapshotInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"trace.snapshot.rate",
 	"if non-zero, interval at which background trace snapshots are captured",
 	0,
 	settings.NonNegativeDuration,
-).WithPublic()
+	settings.WithPublic)
 
 // panicOnUseAfterFinish, if set, causes use of a span after Finish() to panic
 // if detected.
@@ -449,14 +435,9 @@ func (r *SpanRegistry) getSpanByID(id tracingpb.SpanID) RegistrySpan {
 // The callback should not hold on to the span after it returns.
 func (r *SpanRegistry) VisitRoots(visitor func(span RegistrySpan) error) error {
 	// Take a snapshot of the registry and release the lock.
-	r.mu.Lock()
-	spans := make([]spanRef, 0, len(r.mu.m))
-	for _, sp := range r.mu.m {
-		// We'll keep the spans alive while we're visiting them below.
-		spans = append(spans, makeSpanRef(sp.sp))
-	}
-	r.mu.Unlock()
+	spans := r.getSpanRefs()
 
+	// Keep the spans alive while visting them below.
 	defer func() {
 		for i := range spans {
 			spans[i].release()
@@ -485,14 +466,9 @@ func visitTrace(sp *crdbSpan, visitor func(sp RegistrySpan)) {
 // The callback should not hold on to the span after it returns.
 func (r *SpanRegistry) VisitSpans(visitor func(span RegistrySpan)) {
 	// Take a snapshot of the registry and release the lock.
-	r.mu.Lock()
-	spans := make([]spanRef, 0, len(r.mu.m))
-	for _, sp := range r.mu.m {
-		// We'll keep the spans alive while we're visiting them below.
-		spans = append(spans, makeSpanRef(sp.sp))
-	}
-	r.mu.Unlock()
+	spans := r.getSpanRefs()
 
+	// Keep the spans alive while visting them below.
 	defer func() {
 		for i := range spans {
 			spans[i].release()
@@ -502,6 +478,18 @@ func (r *SpanRegistry) VisitSpans(visitor func(span RegistrySpan)) {
 	for _, sp := range spans {
 		visitTrace(sp.Span.i.crdb, visitor)
 	}
+}
+
+// getSpanRefs collects references to all spans in the SpanRegistry map and
+// returns a slice of them.
+func (r *SpanRegistry) getSpanRefs() []spanRef {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	spans := make([]spanRef, 0, len(r.mu.m))
+	for _, sp := range r.mu.m {
+		spans = append(spans, makeSpanRef(sp.sp))
+	}
+	return spans
 }
 
 // testingAll returns (pointers to) all the spans in the registry, in an
@@ -527,17 +515,19 @@ func (r *SpanRegistry) testingAll() []*crdbSpan {
 // concurrently with this call. swap takes ownership of the spanRefs, and will
 // release() them.
 func (r *SpanRegistry) swap(parentID tracingpb.SpanID, children []spanRef) {
-	r.mu.Lock()
-	r.removeSpanLocked(parentID)
-	for _, c := range children {
-		sp := c.Span.i.crdb
-		sp.withLock(func() {
-			if !sp.mu.finished {
-				r.addSpanLocked(sp)
-			}
-		})
-	}
-	r.mu.Unlock()
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.removeSpanLocked(parentID)
+		for _, c := range children {
+			sp := c.Span.i.crdb
+			sp.withLock(func() {
+				if !sp.mu.finished {
+					r.addSpanLocked(sp)
+				}
+			})
+		}
+	}()
 	for _, c := range children {
 		c.release()
 	}
@@ -765,7 +755,6 @@ func (t *Tracer) configure(ctx context.Context, sv *settings.Values, tracingDefa
 	// reconfigure will be called every time a cluster setting affecting tracing
 	// is updated.
 	reconfigure := func(ctx context.Context) {
-		jaegerAgentAddr := jaegerAgent.Get(sv)
 		otlpCollectorAddr := openTelemetryCollector.Get(sv)
 		zipkinAddr := ZipkinCollector.Get(sv)
 		enableRedactable := enableTraceRedactable.Get(sv)
@@ -790,7 +779,7 @@ func (t *Tracer) configure(ctx context.Context, sv *settings.Values, tracingDefa
 		atomic.StoreInt32(&t._useNetTrace, nt)
 
 		// Return early if the OpenTelemetry tracer is disabled.
-		if jaegerAgentAddr == "" && otlpCollectorAddr == "" && zipkinAddr == "" {
+		if otlpCollectorAddr == "" && zipkinAddr == "" {
 			if traceProvider != nil {
 				t.SetOpenTelemetryTracer(nil)
 				if err := traceProvider.Shutdown(ctx); err != nil {
@@ -816,15 +805,6 @@ func (t *Tracer) configure(ctx context.Context, sv *settings.Values, tracingDefa
 				opts = append(opts, otelsdk.WithSpanProcessor(spanProcessor))
 			} else {
 				fmt.Fprintf(os.Stderr, "failed to create OTLP processor: %s", err)
-			}
-		}
-
-		if jaegerAgentAddr != "" {
-			spanProcessor, err := createJaegerSpanCollector(ctx, jaegerAgentAddr)
-			if err == nil {
-				opts = append(opts, otelsdk.WithSpanProcessor(spanProcessor))
-			} else {
-				fmt.Fprintf(os.Stderr, "failed to create Jaeger processor: %s", err)
 			}
 		}
 
@@ -864,7 +844,6 @@ func (t *Tracer) configure(ctx context.Context, sv *settings.Values, tracingDefa
 	enableNetTrace.SetOnChange(sv, reconfigure)
 	openTelemetryCollector.SetOnChange(sv, reconfigure)
 	ZipkinCollector.SetOnChange(sv, reconfigure)
-	jaegerAgent.SetOnChange(sv, reconfigure)
 	enableTraceRedactable.SetOnChange(sv, reconfigure)
 }
 
@@ -881,23 +860,6 @@ func createOTLPSpanProcessor(
 		otlptracegrpc.WithEndpoint(fmt.Sprintf("%s:%s", host, port)),
 		// TODO(andrei): Add support for secure connections to the collector.
 		otlptracegrpc.WithInsecure())
-	if err != nil {
-		return nil, err
-	}
-	spanProcessor := otelsdk.NewBatchSpanProcessor(exporter)
-	return spanProcessor, nil
-}
-
-func createJaegerSpanCollector(
-	ctx context.Context, agentAddr string,
-) (otelsdk.SpanProcessor, error) {
-	host, port, err := addr.SplitHostPort(agentAddr, "6831")
-	if err != nil {
-		return nil, err
-	}
-	exporter, err := jaeger.New(jaeger.WithAgentEndpoint(
-		jaeger.WithAgentHost(host),
-		jaeger.WithAgentPort(port)))
 	if err != nil {
 		return nil, err
 	}
@@ -1032,14 +994,16 @@ func (t *Tracer) releaseSpanToPool(sp *Span) {
 	// Nobody is supposed to have a reference to the span at this point, but let's
 	// take the lock anyway to protect against buggy clients accessing the span
 	// after Finish().
-	c.mu.Lock()
-	c.mu.openChildren = nil
-	c.mu.recording.finishedChildren = Trace{}
-	c.mu.tags = nil
-	c.mu.lazyTags = nil
-	c.mu.recording.logs.Discard()
-	c.mu.recording.structured.Discard()
-	c.mu.Unlock()
+	func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.mu.openChildren = nil
+		c.mu.recording.finishedChildren = Trace{}
+		c.mu.tags = nil
+		c.mu.lazyTags = nil
+		c.mu.recording.logs.Discard()
+		c.mu.recording.structured.Discard()
+	}()
 
 	// Zero out the spanAllocHelper buffers to make the elements inside the
 	// arrays, if any, available for GC.

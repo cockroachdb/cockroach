@@ -79,6 +79,7 @@ type kv struct {
 	minBlockSizeBytes, maxBlockSizeBytes int
 	cycleLength                          int64
 	readPercent                          int
+	followerReadPercent                  int
 	spanPercent                          int
 	delPercent                           int
 	spanLimit                            int
@@ -95,6 +96,7 @@ type kv struct {
 	enum                                 bool
 	keySize                              int
 	insertCount                          int
+	txnQoS                               string
 }
 
 func init() {
@@ -141,6 +143,8 @@ var kvMeta = workload.Meta{
 			`Number of keys repeatedly accessed by each writer through upserts.`)
 		g.flags.IntVar(&g.readPercent, `read-percent`, 0,
 			`Percent (0-100) of operations that are reads of existing keys.`)
+		g.flags.IntVar(&g.followerReadPercent, `follower-read-percent`, 0,
+			`Percent (0-100) of read operations that are follower reads.`)
 		g.flags.IntVar(&g.spanPercent, `span-percent`, 0,
 			`Percent (0-100) of operations that are spanning queries of all ranges.`)
 		g.flags.IntVar(&g.delPercent, `del-percent`, 0,
@@ -178,6 +182,9 @@ var kvMeta = workload.Meta{
 			`Use string key of appropriate size instead of int`)
 		g.flags.DurationVar(&g.sfuDelay, `sfu-wait-delay`, 10*time.Millisecond,
 			`Delay before sfu write transaction commits or aborts`)
+		g.flags.StringVar(&g.txnQoS, `txn-qos`, `regular`,
+			`Set default_transaction_quality_of_service session variable, accepted`+
+				`values are 'background', 'regular' and 'critical'.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -268,6 +275,12 @@ func (w *kv) validateConfig() (err error) {
 				"zipfian --write-seq is incompatible with a --sequential or default (random) key sequence")
 		}
 	}
+	if w.txnQoS != "" && w.txnQoS != "background" &&
+		w.txnQoS != "regular" && w.txnQoS != "critical" {
+		return errors.Errorf(
+			"--txn-qos must be one of 'background', 'regular' or 'critical', found %s", w.txnQoS,
+		)
+	}
 	// We create generator and discard it to have a single piece of code that
 	// handles generator type which affects target key range.
 	_, _, _, kr := w.createKeyGenerator()
@@ -282,17 +295,17 @@ func (w *kv) validateConfig() (err error) {
 // Note that sequence is only exposed for testing purposes and is used by
 // returned keyGenerators.
 func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransformer, keyRange) {
-	writeSeq := 0
+	var writeSeq atomic.Int64
 	if w.writeSeq != "" {
-		var err error
-		writeSeq, err = strconv.Atoi(w.writeSeq[1:])
+		writeSeqVal, err := strconv.Atoi(w.writeSeq[1:])
 		if err != nil {
 			panic("creating generator from unvalidated workload")
 		}
+		writeSeq.Store(int64(writeSeqVal))
 	}
 
 	// Sequence is shared between all generators.
-	seq := &sequence{max: w.cycleLength, val: int64(writeSeq)}
+	seq := &sequence{max: w.cycleLength, val: &writeSeq}
 
 	var gen func() keyGenerator
 	var kr keyRange
@@ -446,25 +459,27 @@ func (w *kv) Ops(
 
 	// Read statement
 	var buf strings.Builder
+	var folBuf strings.Builder
 	if w.enum {
 		buf.WriteString(`SELECT k, v, e FROM kv WHERE k IN (`)
-		for i := 0; i < w.batchSize; i++ {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, `$%d`, i+1)
-		}
+		folBuf.WriteString(`SELECT k, v, e FROM kv AS OF SYSTEM TIME follower_read_timestamp() WHERE k IN (`)
 	} else {
 		buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
-		for i := 0; i < w.batchSize; i++ {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, `$%d`, i+1)
+		folBuf.WriteString(`SELECT k, v FROM kv AS OF SYSTEM TIME follower_read_timestamp() WHERE k IN (`)
+	}
+	for i := 0; i < w.batchSize; i++ {
+		if i > 0 {
+			buf.WriteString(", ")
+			folBuf.WriteString(", ")
 		}
+		fmt.Fprintf(&buf, `$%d`, i+1)
+		fmt.Fprintf(&folBuf, `$%d`, i+1)
 	}
 	buf.WriteString(`)`)
+	folBuf.WriteString(`)`)
+
 	readStmtStr := buf.String()
+	followerReadStmtStr := folBuf.String()
 
 	// Write statement
 	buf.Reset()
@@ -520,19 +535,25 @@ func (w *kv) Ops(
 
 	gen, _, kt, _ := w.createKeyGenerator()
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
-	numEmptyResults := new(int64)
+	var numEmptyResults atomic.Int64
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		op := &kvOp{
 			config:          w,
 			hists:           reg.GetHandle(),
-			numEmptyResults: numEmptyResults,
+			numEmptyResults: &numEmptyResults,
 		}
 		op.readStmt = op.sr.Define(readStmtStr)
+		op.followerReadStmt = op.sr.Define(followerReadStmtStr)
 		op.writeStmt = op.sr.Define(writeStmtStr)
 		if len(sfuStmtStr) > 0 {
 			op.sfuStmt = op.sr.Define(sfuStmtStr)
 		}
 		op.spanStmt = op.sr.Define(spanStmtStr)
+		if w.txnQoS != `regular` {
+			stmt := op.sr.Define(fmt.Sprintf(
+				" SET default_transaction_quality_of_service = %s", w.txnQoS))
+			op.qosStmt = &stmt
+		}
 		op.delStmt = op.sr.Define(delStmtStr)
 		if err := op.sr.Init(ctx, "kv", mcp); err != nil {
 			return workload.QueryLoad{}, err
@@ -547,18 +568,20 @@ func (w *kv) Ops(
 }
 
 type kvOp struct {
-	config          *kv
-	hists           *histogram.Histograms
-	sr              workload.SQLRunner
-	mcp             *workload.MultiConnPool
-	readStmt        workload.StmtHandle
-	writeStmt       workload.StmtHandle
-	spanStmt        workload.StmtHandle
-	sfuStmt         workload.StmtHandle
-	delStmt         workload.StmtHandle
-	g               keyGenerator
-	t               keyTransformer
-	numEmptyResults *int64 // accessed atomically
+	config           *kv
+	hists            *histogram.Histograms
+	sr               workload.SQLRunner
+	mcp              *workload.MultiConnPool
+	qosStmt          *workload.StmtHandle
+	readStmt         workload.StmtHandle
+	followerReadStmt workload.StmtHandle
+	writeStmt        workload.StmtHandle
+	spanStmt         workload.StmtHandle
+	sfuStmt          workload.StmtHandle
+	delStmt          workload.StmtHandle
+	g                keyGenerator
+	t                keyTransformer
+	numEmptyResults  *atomic.Int64
 }
 
 func (o *kvOp) run(ctx context.Context) (retErr error) {
@@ -568,6 +591,12 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		defer cancel()
 	}
 
+	if o.qosStmt != nil {
+		_, err := o.qosStmt.Exec(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	statementProbability := o.g.rand().Intn(100) // Determines what statement is executed.
 	if statementProbability < o.config.readPercent {
 		args := make([]interface{}, o.config.batchSize)
@@ -575,7 +604,12 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 			args[i] = o.t.getKey(o.g.readKey())
 		}
 		start := timeutil.Now()
-		rows, err := o.readStmt.Query(ctx, args...)
+		readStmt := o.readStmt
+
+		if o.g.rand().Intn(100) < o.config.followerReadPercent {
+			readStmt = o.followerReadStmt
+		}
+		rows, err := readStmt.Query(ctx, args...)
 		if err != nil {
 			return err
 		}
@@ -584,7 +618,7 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 			empty = false
 		}
 		if empty {
-			atomic.AddInt64(o.numEmptyResults, 1)
+			o.numEmptyResults.Add(1)
 		}
 		elapsed := timeutil.Since(start)
 		o.hists.Get(`read`).Record(elapsed)
@@ -616,6 +650,9 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 			_, err = o.spanStmt.Exec(ctx, arg)
 		} else {
 			_, err = o.spanStmt.Exec(ctx)
+		}
+		if err != nil {
+			return err
 		}
 		elapsed := timeutil.Since(start)
 		o.hists.Get(`span`).Record(elapsed)
@@ -674,6 +711,9 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 	} else {
 		_, err = o.writeStmt.Exec(ctx, writeArgs...)
 	}
+	if err != nil {
+		return err
+	}
 	elapsed := timeutil.Since(start)
 	o.hists.Get(`write`).Record(elapsed)
 	return err
@@ -695,27 +735,29 @@ func (o *kvOp) tryHandleWriteErr(name string, start time.Time, err error) error 
 	return err
 }
 
-func (o *kvOp) close(context.Context) {
-	if empty := atomic.LoadInt64(o.numEmptyResults); empty != 0 {
+func (o *kvOp) close(context.Context) error {
+	if empty := o.numEmptyResults.Load(); empty != 0 {
 		fmt.Printf("Number of reads that didn't return any results: %d.\n", empty)
 	}
 	fmt.Printf("Write sequence could be resumed by passing --write-seq=%s to the next run.\n",
 		o.g.state())
+	return nil
 }
 
 type sequence struct {
-	val, max int64
+	val *atomic.Int64
+	max int64
 }
 
 func (s *sequence) write() int64 {
-	return (atomic.AddInt64(&s.val, 1) - 1) % s.max
+	return (s.val.Add(1) - 1) % s.max
 }
 
 // read returns the last key index that has been written. Note that the returned
 // index might not actually have been written yet, so a read operation cannot
 // require that the key is present.
 func (s *sequence) read() int64 {
-	return atomic.LoadInt64(&s.val) % s.max
+	return s.val.Load() % s.max
 }
 
 // Converts int64 based keys into database keys. Workload uses int64 based

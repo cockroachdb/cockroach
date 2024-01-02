@@ -317,7 +317,7 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [Sequence:{DescID: 104}, ABSENT]
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]

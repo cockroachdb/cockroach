@@ -11,98 +11,108 @@ CREATE TABLE crdb_internal.t (x INT)
 query error database "crdb_internal" does not exist
 DROP DATABASE crdb_internal
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES FROM crdb_internal
 ----
-crdb_internal  active_range_feeds                      table  admin  NULL  NULL
-crdb_internal  backward_dependencies                   table  admin  NULL  NULL
-crdb_internal  builtin_functions                       table  admin  NULL  NULL
-crdb_internal  cluster_contended_indexes               view   admin  NULL  NULL
-crdb_internal  cluster_contended_keys                  view   admin  NULL  NULL
-crdb_internal  cluster_contended_tables                view   admin  NULL  NULL
-crdb_internal  cluster_contention_events               table  admin  NULL  NULL
-crdb_internal  cluster_database_privileges             table  admin  NULL  NULL
-crdb_internal  cluster_distsql_flows                   table  admin  NULL  NULL
-crdb_internal  cluster_execution_insights              table  admin  NULL  NULL
-crdb_internal  cluster_inflight_traces                 table  admin  NULL  NULL
-crdb_internal  cluster_locks                           table  admin  NULL  NULL
-crdb_internal  cluster_queries                         table  admin  NULL  NULL
-crdb_internal  cluster_sessions                        table  admin  NULL  NULL
-crdb_internal  cluster_settings                        table  admin  NULL  NULL
-crdb_internal  cluster_statement_statistics            table  admin  NULL  NULL
-crdb_internal  cluster_transaction_statistics          table  admin  NULL  NULL
-crdb_internal  cluster_transactions                    table  admin  NULL  NULL
-crdb_internal  cluster_txn_execution_insights          table  admin  NULL  NULL
-crdb_internal  create_function_statements              table  admin  NULL  NULL
-crdb_internal  create_schema_statements                table  admin  NULL  NULL
-crdb_internal  create_statements                       table  admin  NULL  NULL
-crdb_internal  create_type_statements                  table  admin  NULL  NULL
-crdb_internal  cross_db_references                     table  admin  NULL  NULL
-crdb_internal  databases                               table  admin  NULL  NULL
-crdb_internal  default_privileges                      table  admin  NULL  NULL
-crdb_internal  feature_usage                           table  admin  NULL  NULL
-crdb_internal  forward_dependencies                    table  admin  NULL  NULL
-crdb_internal  gossip_alerts                           table  admin  NULL  NULL
-crdb_internal  gossip_liveness                         table  admin  NULL  NULL
-crdb_internal  gossip_network                          table  admin  NULL  NULL
-crdb_internal  gossip_nodes                            table  admin  NULL  NULL
-crdb_internal  index_columns                           table  admin  NULL  NULL
-crdb_internal  index_spans                             table  admin  NULL  NULL
-crdb_internal  index_usage_statistics                  table  admin  NULL  NULL
-crdb_internal  invalid_objects                         table  admin  NULL  NULL
-crdb_internal  jobs                                    table  admin  NULL  NULL
-crdb_internal  kv_catalog_comments                     table  admin  NULL  NULL
-crdb_internal  kv_catalog_descriptor                   table  admin  NULL  NULL
-crdb_internal  kv_catalog_namespace                    table  admin  NULL  NULL
-crdb_internal  kv_catalog_zones                        table  admin  NULL  NULL
-crdb_internal  kv_dropped_relations                    view   admin  NULL  NULL
-crdb_internal  kv_node_liveness                        table  admin  NULL  NULL
-crdb_internal  kv_node_status                          table  admin  NULL  NULL
-crdb_internal  kv_store_status                         table  admin  NULL  NULL
-crdb_internal  leases                                  table  admin  NULL  NULL
-crdb_internal  lost_descriptors_with_data              table  admin  NULL  NULL
-crdb_internal  node_build_info                         table  admin  NULL  NULL
-crdb_internal  node_contention_events                  table  admin  NULL  NULL
-crdb_internal  node_distsql_flows                      table  admin  NULL  NULL
-crdb_internal  node_execution_insights                 table  admin  NULL  NULL
-crdb_internal  node_inflight_trace_spans               table  admin  NULL  NULL
-crdb_internal  node_memory_monitors                    table  admin  NULL  NULL
-crdb_internal  node_metrics                            table  admin  NULL  NULL
-crdb_internal  node_queries                            table  admin  NULL  NULL
-crdb_internal  node_runtime_info                       table  admin  NULL  NULL
-crdb_internal  node_sessions                           table  admin  NULL  NULL
-crdb_internal  node_statement_statistics               table  admin  NULL  NULL
-crdb_internal  node_tenant_capabilities_cache          table  admin  NULL  NULL
-crdb_internal  node_transaction_statistics             table  admin  NULL  NULL
-crdb_internal  node_transactions                       table  admin  NULL  NULL
-crdb_internal  node_txn_execution_insights             table  admin  NULL  NULL
-crdb_internal  node_txn_stats                          table  admin  NULL  NULL
-crdb_internal  partitions                              table  admin  NULL  NULL
-crdb_internal  pg_catalog_table_is_implemented         table  admin  NULL  NULL
-crdb_internal  ranges                                  view   admin  NULL  NULL
-crdb_internal  ranges_no_leases                        table  admin  NULL  NULL
-crdb_internal  regions                                 table  admin  NULL  NULL
-crdb_internal  schema_changes                          table  admin  NULL  NULL
-crdb_internal  session_trace                           table  admin  NULL  NULL
-crdb_internal  session_variables                       table  admin  NULL  NULL
-crdb_internal  statement_activity                      view   admin  NULL  NULL
-crdb_internal  statement_statistics                    view   admin  NULL  NULL
-crdb_internal  statement_statistics_persisted          view   admin  NULL  NULL
-crdb_internal  statement_statistics_persisted_v22_2    view   admin  NULL  NULL
-crdb_internal  super_regions                           table  admin  NULL  NULL
-crdb_internal  system_jobs                             table  admin  NULL  NULL
-crdb_internal  table_columns                           table  admin  NULL  NULL
-crdb_internal  table_indexes                           table  admin  NULL  NULL
-crdb_internal  table_row_statistics                    table  admin  NULL  NULL
-crdb_internal  table_spans                             table  admin  NULL  NULL
-crdb_internal  tables                                  table  admin  NULL  NULL
-crdb_internal  tenant_usage_details                    view   admin  NULL  NULL
-crdb_internal  transaction_activity                    view   admin  NULL  NULL
-crdb_internal  transaction_contention_events           table  admin  NULL  NULL
-crdb_internal  transaction_statistics                  view   admin  NULL  NULL
-crdb_internal  transaction_statistics_persisted        view   admin  NULL  NULL
-crdb_internal  transaction_statistics_persisted_v22_2  view   admin  NULL  NULL
-crdb_internal  zones                                   table  admin  NULL  NULL
+crdb_internal  active_range_feeds                      table  node  NULL  NULL
+crdb_internal  backward_dependencies                   table  node  NULL  NULL
+crdb_internal  builtin_functions                       table  node  NULL  NULL
+crdb_internal  cluster_contended_indexes               view   node  NULL  NULL
+crdb_internal  cluster_contended_keys                  view   node  NULL  NULL
+crdb_internal  cluster_contended_tables                view   node  NULL  NULL
+crdb_internal  cluster_contention_events               table  node  NULL  NULL
+crdb_internal  cluster_database_privileges             table  node  NULL  NULL
+crdb_internal  cluster_distsql_flows                   table  node  NULL  NULL
+crdb_internal  cluster_execution_insights              table  node  NULL  NULL
+crdb_internal  cluster_inflight_traces                 table  node  NULL  NULL
+crdb_internal  cluster_locks                           table  node  NULL  NULL
+crdb_internal  cluster_queries                         table  node  NULL  NULL
+crdb_internal  cluster_sessions                        table  node  NULL  NULL
+crdb_internal  cluster_settings                        table  node  NULL  NULL
+crdb_internal  cluster_statement_statistics            table  node  NULL  NULL
+crdb_internal  cluster_transaction_statistics          table  node  NULL  NULL
+crdb_internal  cluster_transactions                    table  node  NULL  NULL
+crdb_internal  cluster_txn_execution_insights          table  node  NULL  NULL
+crdb_internal  create_function_statements              table  node  NULL  NULL
+crdb_internal  create_procedure_statements             table  node  NULL  NULL
+crdb_internal  create_schema_statements                table  node  NULL  NULL
+crdb_internal  create_statements                       table  node  NULL  NULL
+crdb_internal  create_type_statements                  table  node  NULL  NULL
+crdb_internal  cross_db_references                     table  node  NULL  NULL
+crdb_internal  databases                               table  node  NULL  NULL
+crdb_internal  default_privileges                      table  node  NULL  NULL
+crdb_internal  feature_usage                           table  node  NULL  NULL
+crdb_internal  forward_dependencies                    table  node  NULL  NULL
+crdb_internal  gossip_alerts                           table  node  NULL  NULL
+crdb_internal  gossip_liveness                         table  node  NULL  NULL
+crdb_internal  gossip_network                          table  node  NULL  NULL
+crdb_internal  gossip_nodes                            table  node  NULL  NULL
+crdb_internal  index_columns                           table  node  NULL  NULL
+crdb_internal  index_spans                             table  node  NULL  NULL
+crdb_internal  index_usage_statistics                  table  node  NULL  NULL
+crdb_internal  invalid_objects                         table  node  NULL  NULL
+crdb_internal  jobs                                    table  node  NULL  NULL
+crdb_internal  kv_builtin_function_comments            table  node  NULL  NULL
+crdb_internal  kv_catalog_comments                     table  node  NULL  NULL
+crdb_internal  kv_catalog_descriptor                   table  node  NULL  NULL
+crdb_internal  kv_catalog_namespace                    table  node  NULL  NULL
+crdb_internal  kv_catalog_zones                        table  node  NULL  NULL
+crdb_internal  kv_dropped_relations                    view   node  NULL  NULL
+crdb_internal  kv_flow_control_handles                 table  node  NULL  NULL
+crdb_internal  kv_flow_controller                      table  node  NULL  NULL
+crdb_internal  kv_flow_token_deductions                table  node  NULL  NULL
+crdb_internal  kv_inherited_role_members               table  node  NULL  NULL
+crdb_internal  kv_node_liveness                        table  node  NULL  NULL
+crdb_internal  kv_node_status                          table  node  NULL  NULL
+crdb_internal  kv_protected_ts_records                 table  node  NULL  NULL
+crdb_internal  kv_repairable_catalog_corruptions       view   node  NULL  NULL
+crdb_internal  kv_session_based_leases                 table  node  NULL  NULL
+crdb_internal  kv_store_status                         table  node  NULL  NULL
+crdb_internal  kv_system_privileges                    view   node  NULL  NULL
+crdb_internal  leases                                  table  node  NULL  NULL
+crdb_internal  lost_descriptors_with_data              table  node  NULL  NULL
+crdb_internal  node_build_info                         table  node  NULL  NULL
+crdb_internal  node_contention_events                  table  node  NULL  NULL
+crdb_internal  node_distsql_flows                      table  node  NULL  NULL
+crdb_internal  node_execution_insights                 table  node  NULL  NULL
+crdb_internal  node_inflight_trace_spans               table  node  NULL  NULL
+crdb_internal  node_memory_monitors                    table  node  NULL  NULL
+crdb_internal  node_metrics                            table  node  NULL  NULL
+crdb_internal  node_queries                            table  node  NULL  NULL
+crdb_internal  node_runtime_info                       table  node  NULL  NULL
+crdb_internal  node_sessions                           table  node  NULL  NULL
+crdb_internal  node_statement_statistics               table  node  NULL  NULL
+crdb_internal  node_tenant_capabilities_cache          table  node  NULL  NULL
+crdb_internal  node_transaction_statistics             table  node  NULL  NULL
+crdb_internal  node_transactions                       table  node  NULL  NULL
+crdb_internal  node_txn_execution_insights             table  node  NULL  NULL
+crdb_internal  node_txn_stats                          table  node  NULL  NULL
+crdb_internal  partitions                              table  node  NULL  NULL
+crdb_internal  pg_catalog_table_is_implemented         table  node  NULL  NULL
+crdb_internal  ranges                                  view   node  NULL  NULL
+crdb_internal  ranges_no_leases                        table  node  NULL  NULL
+crdb_internal  regions                                 table  node  NULL  NULL
+crdb_internal  schema_changes                          table  node  NULL  NULL
+crdb_internal  session_trace                           table  node  NULL  NULL
+crdb_internal  session_variables                       table  node  NULL  NULL
+crdb_internal  statement_activity                      view   node  NULL  NULL
+crdb_internal  statement_statistics                    view   node  NULL  NULL
+crdb_internal  statement_statistics_persisted          view   node  NULL  NULL
+crdb_internal  statement_statistics_persisted_v22_2    view   node  NULL  NULL
+crdb_internal  super_regions                           table  node  NULL  NULL
+crdb_internal  system_jobs                             table  node  NULL  NULL
+crdb_internal  table_columns                           table  node  NULL  NULL
+crdb_internal  table_indexes                           table  node  NULL  NULL
+crdb_internal  table_row_statistics                    table  node  NULL  NULL
+crdb_internal  table_spans                             table  node  NULL  NULL
+crdb_internal  tables                                  table  node  NULL  NULL
+crdb_internal  tenant_usage_details                    view   node  NULL  NULL
+crdb_internal  transaction_activity                    view   node  NULL  NULL
+crdb_internal  transaction_contention_events           table  node  NULL  NULL
+crdb_internal  transaction_statistics                  view   node  NULL  NULL
+crdb_internal  transaction_statistics_persisted        view   node  NULL  NULL
+crdb_internal  transaction_statistics_persisted_v22_2  view   node  NULL  NULL
+crdb_internal  zones                                   table  node  NULL  NULL
 
 statement ok
 CREATE DATABASE testdb; CREATE TABLE testdb.foo(x INT)
@@ -156,7 +166,7 @@ FROM crdb_internal.tables WHERE NAME = 'descriptor'
 table_id  parent_id  name        database_name  version  format_version            state   sc_lease_node_id  sc_lease_expiration_time  drop_time  audit_mode  schema_name  parent_schema_id
 3         1          descriptor  system         1        InterleavedFormatVersion  PUBLIC  NULL              NULL                      NULL       DISABLED    public       29
 
-query TB colnames
+query TB colnames,rowsort
 SELECT * FROM crdb_internal.pg_catalog_table_is_implemented
 ----
 name                             implemented
@@ -195,7 +205,7 @@ pg_index                         false
 pg_indexes                       false
 pg_inherits                      true
 pg_init_privs                    true
-pg_language                      true
+pg_language                      false
 pg_largeobject                   true
 pg_largeobject_metadata          true
 pg_locks                         true
@@ -295,7 +305,7 @@ pg_views                         false
 statement ok
 CREATE TABLE testdb." ""\'" (i int)
 
-query T
+query T rowsort
 SELECT NAME from crdb_internal.tables WHERE DATABASE_NAME = 'testdb'
 ----
 foo
@@ -316,7 +326,7 @@ ClusterID
 Organization
 Version
 Channel
-
+VirtualClusterName
 
 # The validity of the rows in this table are tested elsewhere; we merely assert the columns.
 query ITTTTTTTTTTTRTTIITTITT colnames
@@ -349,10 +359,10 @@ SELECT * FROM crdb_internal.session_trace WHERE span_idx < 0
 ----
 span_idx  message_idx  timestamp  duration  operation  loc  tag  message age
 
-query TTTBT colnames
+query TTTBTTTT colnames
 SELECT * FROM crdb_internal.cluster_settings WHERE variable = ''
 ----
-variable  value  type  public  description
+variable  value  type  public  description  default_value  origin  key
 
 query TI colnames
 SELECT * FROM crdb_internal.feature_usage WHERE feature_name = ''
@@ -374,15 +384,15 @@ SELECT * FROM crdb_internal.cluster_queries WHERE node_id < 0
 ----
 query_id  txn_id  node_id  session_id  user_name  start  query  client_address  application_name  distributed  phase  full_scan  plan_gist  database
 
-query TITTTTIIIT colnames
+query TITTTTIIITTTT colnames
 SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason  isolation_level  priority  quality_of_service
 
-query TITTTTIIIT colnames
+query TITTTTIIITTTT colnames
 SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason  isolation_level  priority  quality_of_service
 
 # Accessing the tables should error for a user without a privilege.
 user testuser
@@ -401,15 +411,15 @@ GRANT SYSTEM VIEWACTIVITY TO testuser
 # Now testuser can query transactions since it has the VIEWACTIVITY privilege.
 user testuser
 
-query TITTTTIIIT colnames
+query TITTTTIIITTTT colnames
 SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason  isolation_level  priority  quality_of_service
 
-query TITTTTIIIT colnames
+query TITTTTIIITTTT colnames
 SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason  isolation_level  priority  quality_of_service
 
 user root
 
@@ -422,30 +432,30 @@ GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser
 # testuser can query transactions since it has the VIEWACTIVITYREDACTED privilege.
 user testuser
 
-query TITTTTIIIT colnames
+query TITTTTIIITTTT colnames
 SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason  isolation_level  priority  quality_of_service
 
-query TITTTTIIIT colnames
+query TITTTTIIITTTT colnames
 SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason  isolation_level  priority  quality_of_service
 
 user root
 
 statement ok
 REVOKE SYSTEM VIEWACTIVITYREDACTED FROM testuser
 
-query ITTTTTTTTTTTTTT colnames
+query ITTTTTTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.node_sessions WHERE node_id < 0
 ----
-node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  num_txns_executed  session_start  active_query_start  kv_txn  alloc_bytes  max_alloc_bytes  status  session_end
+node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  num_txns_executed  session_start  active_query_start  kv_txn  alloc_bytes  max_alloc_bytes  status  session_end  pg_backend_pid
 
-query ITTTTTTTTTTTTTT colnames
+query ITTTTTTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.cluster_sessions WHERE node_id < 0
 ----
-node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  num_txns_executed  session_start  active_query_start  kv_txn  alloc_bytes  max_alloc_bytes  status  session_end
+node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  num_txns_executed  session_start  active_query_start  kv_txn  alloc_bytes  max_alloc_bytes  status  session_end  pg_backend_pid
 
 query IIITTTI colnames
 SELECT * FROM crdb_internal.node_contention_events WHERE table_id < 0
@@ -457,10 +467,10 @@ SELECT * FROM crdb_internal.cluster_contention_events WHERE table_id < 0
 ----
 table_id  index_id  num_contention_events  cumulative_contention_time  key  txn_id  count
 
-query TTTTT colnames
+query TTTTTO colnames
 SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
 ----
-function  signature  category  details  schema
+function  signature  category  details  schema  oid
 
 query ITTITTTTTTTTBBBB colnames
 SELECT * FROM crdb_internal.create_statements WHERE database_name = ''
@@ -522,16 +532,26 @@ SELECT * FROM crdb_internal.ranges_no_leases WHERE range_id < 0
 ----
 range_id  start_key  start_pretty  end_key  end_pretty  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
 
-query TTTBTTTTTIITITTTTTITT colnames
+query TTTBTTTTTIITITTTTTTTTTTTTITT colnames
+SELECT * FROM crdb_internal.cluster_execution_insights WHERE query = ''
+----
+session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  last_error_redactable
+
+query TTTBTTTTTIITITTTTTTTTTTTTITT colnames
+SELECT * FROM crdb_internal.node_execution_insights WHERE query = ''
+----
+session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  last_error_redactable
+
+query TTTBTTTTTIITITTTTTITTT colnames
 SELECT * FROM crdb_internal.cluster_txn_execution_insights WHERE query = ''
 ----
-txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids cpu_sql_nanos last_error_code status
+txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids  cpu_sql_nanos  last_error_code  last_error_redactable  status
 
 
-query TTTBTTTTTIITITTTTTITT colnames
+query TTTBTTTTTIITITTTTTITTT colnames
 SELECT * FROM crdb_internal.node_txn_execution_insights WHERE query = ''
 ----
-txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids cpu_sql_nanos last_error_code status
+txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids cpu_sql_nanos last_error_code last_error_redactable status
 
 
 statement ok
@@ -547,7 +567,6 @@ INSERT INTO system.zones (id, config) VALUES
   ($testdb_foo_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
   ($schema_bar_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
 
-skipif config local-mixed-22.2-23.1
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
@@ -620,11 +639,17 @@ select crdb_internal.get_vmodule()
 ·
 
 query T
-select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-1000023.1
+24.1
 
-query ITTT colnames
+query error version '1.0' not supported
+SELECT crdb_internal.release_series('1.0')
+
+query error version '2000000.0' not supported
+SELECT crdb_internal.release_series('2000000.0')
+
+query ITTT colnames,rowsort
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
 ----
 node_id  component  field   value
@@ -642,7 +667,7 @@ node_id  component  field   value
 1        UI         URI     /
 
 query ITTTTT colnames
-SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-\d+)?$', '<server_version>') as server_version FROM crdb_internal.gossip_nodes WHERE node_id = 1
+SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-upgrading-to-\d+\.\d+-step-\d+)?$', '<server_version>') as server_version FROM crdb_internal.gossip_nodes WHERE node_id = 1
 ----
 node_id  network  address           attrs  locality            server_version
 1        tcp      127.0.0.1:<port>  []     region=test,dc=dc1  <server_version>
@@ -654,7 +679,7 @@ node_id  epoch        expiration    draining  decommissioning     membership
 1        <epoch>      <timestamp>   false     false               active
 
 query ITTTTTT colnames
-SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-\d+)?$', '<server_version>') as server_version, regexp_replace(go_version, '^go.+$', '<go_version>') as go_version
+SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-upgrading-to-\d+\.\d+-step-\d+)?$', '<server_version>') as server_version, regexp_replace(go_version, '^go.+$', '<go_version>') as go_version
 FROM crdb_internal.kv_node_status WHERE node_id = 1
 ----
 node_id  network  address           attrs  locality            server_version    go_version
@@ -739,7 +764,7 @@ select crdb_internal.set_vmodule('')
 query error insufficient privilege
 select crdb_internal.get_vmodule()
 
-query error pq: only users with the admin role are allowed to access the node runtime information
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.node_runtime_info
 
 query error pq: only users with the VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
@@ -748,35 +773,35 @@ select * from crdb_internal.ranges
 query error pq: only users with the VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
 SHOW RANGES FROM TABLE foo
 
-query error pq: only users with the admin role are allowed to read crdb_internal.gossip_nodes
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.gossip_nodes
 
-query error pq: only users with the admin role are allowed to read crdb_internal.gossip_liveness
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.gossip_liveness
 
-query error pq: only users with the admin role are allowed to read crdb_internal.node_metrics
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.node_metrics
 
-query error pq: only users with the admin role are allowed to read crdb_internal.kv_node_status
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.kv_node_status
 
-query error pq: only users with the admin role are allowed to read crdb_internal.kv_store_status
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.kv_store_status
 
-query error pq: only users with the admin role are allowed to read crdb_internal.gossip_alerts
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.gossip_alerts
 
-query error pq: only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.node_inflight_trace_spans
 
-query error pq: crdb_internal.check_consistency requires admin privileges
+query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.check_consistency(true, b'\x02', b'\x04')
 
 # Anyone can see the executable version.
 query T
-select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-1000023.1
+24.1
 
 user root
 
@@ -847,7 +872,7 @@ ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
 statement ok
 ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 
-query TT colnames
+query TT colnames,rowsort
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty    end_pretty
@@ -881,7 +906,7 @@ ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
 statement ok
 ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 
-query TT colnames,retry
+query TT colnames,retry,rowsort
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty    end_pretty
@@ -909,7 +934,7 @@ ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
 statement ok
 ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 
-query TT colnames,retry
+query TT colnames,retry,rowsort
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty    end_pretty
@@ -925,7 +950,7 @@ DROP INDEX foo@idx
 
 # Verify only the start keys of the manually split ranges because the merge queue could merge the
 # ranges [/Table/58/1/3, /Table/58/2/1) with its right neighbors.
-query T colnames,retry
+query T colnames,retry,rowsort
 SELECT start_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty
@@ -985,22 +1010,6 @@ user testuser
 query error crdb_internal.compact_engine_span\(\): insufficient privilege
 SELECT crdb_internal.compact_engine_span(1, 1, decode('c08989', 'hex'), decode('c0898a', 'hex'))
 
-subtest builtin_is_admin
-
-user root
-
-query B
-SELECT crdb_internal.is_admin()
-----
-true
-
-user testuser
-
-query B
-SELECT crdb_internal.is_admin()
-----
-false
-
 user root
 
 # Test the crdb_internal.create_type_statements table.
@@ -1009,7 +1018,7 @@ CREATE TYPE enum1 AS ENUM ('hello', 'hi');
 CREATE TYPE enum2 AS ENUM ()
 
 query ITTITTT
-SELECT * FROM crdb_internal.create_type_statements
+SELECT * FROM crdb_internal.create_type_statements ORDER BY descriptor_id
 ----
 104  test  public  116  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
 104  test  public  118  enum2  CREATE TYPE public.enum2 AS ENUM ()               {}
@@ -1047,7 +1056,7 @@ statement ok
 SELECT * FROM t_53504
 
 query ITTTI colnames
-SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics'
+SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics' ORDER BY key
 ----
 node_id  application_name     key                   statement_ids                                                  count
 1        test_txn_statistics  10922505138341351577  {4104808689124681542}                                          1
@@ -1062,7 +1071,7 @@ subtest cluster_database_privileges
 statement ok
 CREATE DATABASE other_db; SET DATABASE = other_db
 
-query TTTT colnames
+query TTTT colnames,rowsort
 SELECT * FROM crdb_internal.cluster_database_privileges
 ----
 database_name  grantee  privilege_type  is_grantable
@@ -1074,7 +1083,7 @@ statement ok
 GRANT CONNECT ON DATABASE other_db TO testuser;
 GRANT DROP ON DATABASE other_db TO testuser
 
-query TTTT colnames
+query TTTT colnames,rowsort
 SELECT * FROM crdb_internal.cluster_database_privileges
 ----
 database_name  grantee   privilege_type  is_grantable
@@ -1103,13 +1112,13 @@ SELECT crdb_internal.unsafe_upsert_namespace_entry(1, 29, 'badobj', 502, true);
 SELECT crdb_internal.unsafe_upsert_namespace_entry(1, 404, 'badobj', 503, true);
 
 query ITTTT colnames
-SELECT * FROM "".crdb_internal.invalid_objects
+SELECT * FROM "".crdb_internal.invalid_objects ORDER BY id
 ----
 id   database_name  schema_name  obj_name  error
-500  baddb          ·            ·         referenced descriptor not found
-501  system         badschema    ·         referenced descriptor not found
-502  system         public       badobj    referenced descriptor not found
-503  system         [404]        badobj    referenced descriptor not found
+500  baddb          ·            ·         referenced schema ID 500: referenced descriptor not found
+501  system         badschema    ·         referenced schema ID 501: referenced descriptor not found
+502  system         public       badobj    referenced schema ID 502: referenced descriptor not found
+503  system         [404]        badobj    referenced schema ID 503: referenced descriptor not found
 
 statement ok
 SELECT crdb_internal.unsafe_delete_namespace_entry(0, 0, 'baddb', 500, true);
@@ -1263,13 +1272,11 @@ true
 
 user root
 
-skipif config local-mixed-22.2-23.1
 statement ok
 GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
 
 user testuser
 
-skipif config local-mixed-22.2-23.1
 query T
 SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
 ----
@@ -1280,7 +1287,6 @@ user root
 statement ok
 REVOKE SYSTEM VIEWCLUSTERSETTING FROM testuser
 
-skipif config local-mixed-22.2-23.1
 statement ok
 REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
 
@@ -1306,11 +1312,10 @@ NULL 100 KiB
 
 # Sanity checks of the crdb_internal.node_memory_monitors table.
 
-# The root monitor has a standalone budget, so its 'used' field is zero.
-query BB
-SELECT used = 0, reserved_used > 0 FROM crdb_internal.node_memory_monitors WHERE name = 'root'
+query BBB
+SELECT used > 0, reserved_used > 0, used < reserved_used FROM crdb_internal.node_memory_monitors WHERE name = 'root'
 ----
-true true
+true true true
 
 query B
 SELECT used > 0 FROM crdb_internal.node_memory_monitors WHERE name = 'sql'
@@ -1336,19 +1341,16 @@ awaitstatement sleepQuery
 
 user root
 
-skipif config local-mixed-22.2-23.1
 statement ok
 GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
 
 user testuser
 
-skipif config local-mixed-22.2-23.1
 query T
 SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('sql.defaults.zigzag_join.enabled')
 ----
-true
+false
 
-skipif config local-mixed-22.2-23.1
 query T
 SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
 ----
@@ -1356,7 +1358,6 @@ SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics
 
 user root
 
-skipif config local-mixed-22.2-23.1
 statement ok
 REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
 
@@ -1418,3 +1419,229 @@ user root
 
 statement ok
 REVOKE SYSTEM VIEWACTIVITY FROM testuser
+
+# Regression tests for not setting SQL stats provider in the backfill (#76710).
+statement ok
+CREATE TABLE t76710_1 AS SELECT * FROM crdb_internal.statement_statistics;
+
+statement ok
+CREATE MATERIALIZED VIEW t76710_2 AS SELECT fingerprint_id FROM crdb_internal.cluster_statement_statistics;
+
+subtest end
+
+
+subtest create_function_statements
+
+statement ok
+CREATE FUNCTION f(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION f(STRING, b INT) RETURNS STRING STRICT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+# Add a procedure to ensure that it doesn't show up in the
+# create_function_statements table.
+skipif config local-mixed-23.1
+statement ok
+CREATE PROCEDURE f(BOOL) LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE SCHEMA sc;
+
+statement
+CREATE FUNCTION sc.f2(STRING) RETURNS STRING LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+query TTTT
+SELECT database_name, schema_name, function_name, create_statement
+FROM crdb_internal.create_function_statements
+WHERE function_name IN ('f', 'f2')
+ORDER BY function_id;
+----
+test  public  f   CREATE FUNCTION public.f(IN INT8)
+                    RETURNS INT8
+                    VOLATILE
+                    NOT LEAKPROOF
+                    CALLED ON NULL INPUT
+                    LANGUAGE SQL
+                    AS $$
+                    SELECT 1;
+                  $$
+test  public  f   CREATE FUNCTION public.f(IN STRING, IN b INT8)
+                    RETURNS STRING
+                    IMMUTABLE
+                    LEAKPROOF
+                    STRICT
+                    LANGUAGE SQL
+                    AS $$
+                    SELECT 'hello';
+                  $$
+test  sc      f2  CREATE FUNCTION sc.f2(IN STRING)
+                    RETURNS STRING
+                    VOLATILE
+                    NOT LEAKPROOF
+                    CALLED ON NULL INPUT
+                    LANGUAGE SQL
+                    AS $$
+                    SELECT 'hello';
+                  $$
+
+statement ok
+CREATE DATABASE test_cross_db;
+USE test_cross_db;
+CREATE FUNCTION f_cross_db() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+USE test;
+
+query TTTT
+SELECT database_name, schema_name, function_name, create_statement
+FROM "".crdb_internal.create_function_statements
+WHERE function_name IN ('f', 'f2', 'f_cross_db')
+ORDER BY function_id;
+----
+test           public  f           CREATE FUNCTION public.f(IN INT8)
+                                     RETURNS INT8
+                                     VOLATILE
+                                     NOT LEAKPROOF
+                                     CALLED ON NULL INPUT
+                                     LANGUAGE SQL
+                                     AS $$
+                                     SELECT 1;
+                                   $$
+test           public  f           CREATE FUNCTION public.f(IN STRING, IN b INT8)
+                                     RETURNS STRING
+                                     IMMUTABLE
+                                     LEAKPROOF
+                                     STRICT
+                                     LANGUAGE SQL
+                                     AS $$
+                                     SELECT 'hello';
+                                   $$
+test           sc      f2          CREATE FUNCTION sc.f2(IN STRING)
+                                     RETURNS STRING
+                                     VOLATILE
+                                     NOT LEAKPROOF
+                                     CALLED ON NULL INPUT
+                                     LANGUAGE SQL
+                                     AS $$
+                                     SELECT 'hello';
+                                   $$
+test_cross_db  public  f_cross_db  CREATE FUNCTION public.f_cross_db()
+                                     RETURNS INT8
+                                     VOLATILE
+                                     NOT LEAKPROOF
+                                     CALLED ON NULL INPUT
+                                     LANGUAGE SQL
+                                     AS $$
+                                     SELECT 1;
+                                   $$
+
+skipif config local-mixed-23.1
+statement ok
+DROP PROCEDURE f(BOOL);
+
+statement ok
+DROP FUNCTION f(INT);
+DROP FUNCTION f(STRING, INT);
+DROP FUNCTION sc.f2(STRING);
+DROP SCHEMA sc;
+USE test_cross_db;
+DROP FUNCTION f_cross_db;
+USE test;
+DROP DATABASE test_cross_db;
+
+subtest end
+
+
+subtest create_procedure_statements
+
+skipif config local-mixed-23.1
+statement ok
+CREATE PROCEDURE p(INT) LANGUAGE SQL AS $$ SELECT 1 $$;
+
+skipif config local-mixed-23.1
+statement ok
+CREATE PROCEDURE p(STRING, b INT) LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+# Add a function to ensure that it doesn't show up in the
+# create_procedure_statements table.
+skipif config local-mixed-23.1
+statement ok
+CREATE FUNCTION p(BOOL) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+skipif config local-mixed-23.1
+statement ok
+CREATE SCHEMA sc;
+
+skipif config local-mixed-23.1
+statement
+CREATE PROCEDURE sc.p2(STRING) LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+skipif config local-mixed-23.1
+query ITITITT
+SELECT database_id, database_name, schema_id, schema_name, procedure_id, procedure_name, create_statement
+FROM crdb_internal.create_procedure_statements
+WHERE procedure_name IN ('p', 'p2')
+ORDER BY procedure_id;
+----
+104  test  105  public  137  p   CREATE PROCEDURE public.p(IN INT8)
+                                   LANGUAGE SQL
+                                   AS $$
+                                   SELECT 1;
+                                 $$
+104  test  105  public  138  p   CREATE PROCEDURE public.p(IN STRING, IN b INT8)
+                                   LANGUAGE SQL
+                                   AS $$
+                                   SELECT 'hello';
+                                 $$
+104  test  140  sc      141  p2  CREATE PROCEDURE sc.p2(IN STRING)
+                                   LANGUAGE SQL
+                                   AS $$
+                                   SELECT 'hello';
+                                 $$
+
+skipif config local-mixed-23.1
+statement ok
+CREATE DATABASE test_cross_db;
+USE test_cross_db;
+CREATE PROCEDURE p_cross_db() LANGUAGE SQL AS $$ SELECT 1 $$;
+USE test;
+
+skipif config local-mixed-23.1
+query ITITITT
+SELECT database_id, database_name, schema_id, schema_name, procedure_id, procedure_name, create_statement
+FROM "".crdb_internal.create_procedure_statements
+WHERE procedure_name IN ('p', 'p2', 'p_cross_db')
+ORDER BY procedure_id;
+----
+104  test           105  public  137  p           CREATE PROCEDURE public.p(IN INT8)
+                                                    LANGUAGE SQL
+                                                    AS $$
+                                                    SELECT 1;
+                                                  $$
+104  test           105  public  138  p           CREATE PROCEDURE public.p(IN STRING, IN b INT8)
+                                                    LANGUAGE SQL
+                                                    AS $$
+                                                    SELECT 'hello';
+                                                  $$
+104  test           140  sc      141  p2          CREATE PROCEDURE sc.p2(IN STRING)
+                                                    LANGUAGE SQL
+                                                    AS $$
+                                                    SELECT 'hello';
+                                                  $$
+142  test_cross_db  143  public  144  p_cross_db  CREATE PROCEDURE public.p_cross_db()
+                                                    LANGUAGE SQL
+                                                    AS $$
+                                                    SELECT 1;
+                                                  $$
+
+skipif config local-mixed-23.1
+statement ok
+DROP PROCEDURE p(INT);
+DROP PROCEDURE p(STRING, INT);
+DROP FUNCTION p(BOOL);
+DROP PROCEDURE sc.p2(STRING);
+DROP SCHEMA sc;
+USE test_cross_db;
+DROP PROCEDURE p_cross_db;
+USE test;
+DROP DATABASE test_cross_db;
+
+subtest end

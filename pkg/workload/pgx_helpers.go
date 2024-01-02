@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/dnscache"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -28,7 +29,7 @@ import (
 type MultiConnPool struct {
 	Pools []*pgxpool.Pool
 	// Atomic counter used by Get().
-	counter uint32
+	counter atomic.Uint32
 
 	mu struct {
 		syncutil.RWMutex
@@ -40,6 +41,9 @@ type MultiConnPool struct {
 	// NOTE(seanc@): method is on the hot-path, therefore make all reads to the
 	// query exec mode a dirty read.
 	method pgx.QueryExecMode
+
+	// Caching DNS resolver
+	resolver *dnscache.Resolver
 }
 
 // MultiConnPoolCfg encapsulates the knobs passed to NewMultiConnPool.
@@ -86,6 +90,13 @@ type MultiConnPoolCfg struct {
 	// max number of connections per pool.  A value less than 0 skips the
 	// connection warmup phase.
 	WarmupConns int
+
+	// Duration between refreshes of the DNS cache
+	DNSRefreshInterval time.Duration
+
+	// QueryTracer is an optional tracer to attach to the pgx connections from
+	// this pool. See [pgx.ConnConfig] for details.
+	QueryTracer pgx.QueryTracer
 }
 
 // NewMultiConnPoolCfgFromFlags constructs a new MultiConnPoolCfg object based
@@ -93,6 +104,7 @@ type MultiConnPoolCfg struct {
 func NewMultiConnPoolCfgFromFlags(cf *ConnFlags) MultiConnPoolCfg {
 	return MultiConnPoolCfg{
 		ConnHealthCheckPeriod: cf.ConnHealthCheckPeriod,
+		DNSRefreshInterval:    cf.DNSRefreshInterval,
 		MaxConnIdleTime:       cf.MaxConnIdleTime,
 		MaxConnLifetime:       cf.MaxConnLifetime,
 		MaxConnLifetimeJitter: cf.MaxConnLifetimeJitter,
@@ -155,6 +167,36 @@ func NewMultiConnPool(
 	if cfg.MinConns > 0 {
 		minConns = cfg.MinConns
 	}
+	var dnsCacheRefreshInterval time.Duration
+	switch {
+	case cfg.DNSRefreshInterval > 0:
+		dnsCacheRefreshInterval = cfg.DNSRefreshInterval
+	case cfg.DNSRefreshInterval < 0:
+		// Disable DNS caching
+	default:
+		dnsCacheRefreshInterval = defaultDNSCacheRefresh
+	}
+	if dnsCacheRefreshInterval > 0 {
+		m.resolver = &dnscache.Resolver{}
+
+		// Refresh DNS cache
+		go func() {
+			ticker := time.NewTicker(dnsCacheRefreshInterval)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ticker.C:
+					m.resolver.RefreshWithOptions(dnscache.ResolverRefreshOptions{
+						ClearUnused:      true,
+						PersistOnFailure: true,
+					})
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
 
 	connsPerURL := distribute(cfg.MaxTotalConnections, len(urls))
 	maxConnsPerPool := cfg.MaxConnsPerPool
@@ -202,7 +244,13 @@ func NewMultiConnPool(
 				return true
 			}
 
+			// Attach the supplied tracer to the ConnConfig.
+			poolCfg.ConnConfig.Tracer = cfg.QueryTracer
+
 			connCfg := poolCfg.ConnConfig
+			if m.resolver != nil {
+				connCfg.LookupFunc = m.resolver.LookupHost
+			}
 			connCfg.DefaultQueryExecMode = queryMode
 			p, err := pgxpool.NewWithConfig(ctx, poolCfg)
 			if err != nil {
@@ -235,7 +283,7 @@ func (m *MultiConnPool) Get() *pgxpool.Pool {
 	if numPools == 1 {
 		return m.Pools[0]
 	}
-	i := atomic.AddUint32(&m.counter, 1) - 1
+	i := m.counter.Add(1) - 1
 
 	return m.Pools[i%numPools]
 }

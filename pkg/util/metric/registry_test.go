@@ -11,8 +11,13 @@
 package metric
 
 import (
+	"context"
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/stretchr/testify/require"
 )
 
 func (r *Registry) findMetricByName(name string) Iterable {
@@ -77,10 +82,10 @@ func TestRegistry(t *testing.T) {
 	r.AddMetric(topCounter)
 
 	r.AddMetric(NewHistogram(HistogramOptions{
-		Mode:     HistogramModePrometheus,
-		Metadata: Metadata{Name: "top.histogram"},
-		Duration: time.Minute,
-		Buckets:  Count1KBuckets,
+		Mode:         HistogramModePrometheus,
+		Metadata:     Metadata{Name: "top.histogram"},
+		Duration:     time.Minute,
+		BucketConfig: Count1KBuckets,
 	}))
 
 	r.AddMetric(NewGauge(Metadata{Name: "bottom.gauge"}))
@@ -94,12 +99,7 @@ func TestRegistry(t *testing.T) {
 		// Ensure that nil struct values in arrays are safe.
 		NestedStructArray [2]*NestedStruct
 		// A few extra ones: either not exported, or not metric objects.
-		privateStructGauge            *Gauge
-		privateStructGauge64          *GaugeFloat64
-		privateStructCounter          *Counter
-		privateStructHistogram        IHistogram
-		privateNestedStructGauge      NestedStruct
-		privateArrayStructCounters    [2]*Counter
+		privateInt                    int
 		NotAMetric                    int
 		AlsoNotAMetric                string
 		ReallyNotAMetric              *Registry
@@ -109,10 +109,10 @@ func TestRegistry(t *testing.T) {
 		StructGauge64: NewGaugeFloat64(Metadata{Name: "struct.gauge64"}),
 		StructCounter: NewCounter(Metadata{Name: "struct.counter"}),
 		StructHistogram: NewHistogram(HistogramOptions{
-			Mode:     HistogramModePrometheus,
-			Metadata: Metadata{Name: "struct.histogram"},
-			Duration: time.Minute,
-			Buckets:  Count1KBuckets,
+			Mode:         HistogramModePrometheus,
+			Metadata:     Metadata{Name: "struct.histogram"},
+			Duration:     time.Minute,
+			BucketConfig: Count1KBuckets,
 		}),
 		NestedStructGauge: NestedStruct{
 			NestedStructGauge: NewGauge(Metadata{Name: "nested.struct.gauge"}),
@@ -128,22 +128,6 @@ func TestRegistry(t *testing.T) {
 			1: {
 				NestedStructGauge: NewGauge(Metadata{Name: "nested.struct.array.1.gauge"}),
 			},
-		},
-		privateStructGauge:   NewGauge(Metadata{Name: "private.struct.gauge"}),
-		privateStructGauge64: NewGaugeFloat64(Metadata{Name: "private.struct.gauge64"}),
-		privateStructCounter: NewCounter(Metadata{Name: "private.struct.counter"}),
-		privateStructHistogram: NewHistogram(HistogramOptions{
-			Mode:     HistogramModePrometheus,
-			Metadata: Metadata{Name: "private.struct.histogram"},
-			Duration: time.Minute,
-			Buckets:  Count1KBuckets,
-		}),
-		privateNestedStructGauge: NestedStruct{
-			NestedStructGauge: NewGauge(Metadata{Name: "private.nested.struct.gauge"}),
-		},
-		privateArrayStructCounters: [...]*Counter{
-			NewCounter(Metadata{Name: "private.array.struct.counter.0"}),
-			NewCounter(Metadata{Name: "private.array.struct.counter.1"}),
 		},
 		NotAMetric:                    0,
 		AlsoNotAMetric:                "foo",
@@ -218,4 +202,108 @@ func TestRegistry(t *testing.T) {
 	if c := r.getCounter("top.histogram"); c != nil {
 		t.Errorf("getCounter returned non-nil %v of type %T when requesting non-counter, expected nil", c, c)
 	}
+}
+
+type embedMetricStruct struct {
+	ExportedCounter *Counter
+}
+
+func (embedMetricStruct) MetricStruct() {}
+
+func TestRegistryPanicsWhenAddingUnexportedMetrics(t *testing.T) {
+	if !buildutil.CrdbTestBuild {
+		t.Logf("skipping test; crdb_test build tag must be set for this test")
+		return
+	}
+
+	defer testingSetPanicHandler(func(ctx context.Context, msg string, args ...interface{}) {
+		panic(fmt.Sprintf(msg, args...))
+	})()
+
+	r := NewRegistry()
+
+	// empty struct -- strange, but okay.
+	r.AddMetricStruct(struct{}{})
+
+	// Unexported, non-metrics fields are fine.
+	r.AddMetricStruct(struct{ unexportedInt int }{0})
+
+	g := NewGauge(Metadata{Name: "private.struct.gauge"})
+	c := NewCounter(Metadata{Name: "private.struct.counter"})
+
+	const unnamedStructName = "<unnamed>"
+	unexportedErr := func(parentName, fieldName string) string {
+
+		return fmt.Sprintf("metric field %s.%s (or any of embedded metrics) must be exported", parentName, fieldName)
+	}
+
+	// Panics when struct has unexported gauge.
+	require.PanicsWithValue(t,
+		unexportedErr(unnamedStructName, "unexportedGauge"),
+		func() {
+			r.AddMetricStruct(struct{ unexportedGauge *Gauge }{g})
+		},
+	)
+
+	// Panics when we have a mix of exported and unexported metrics.
+	require.PanicsWithValue(t,
+		unexportedErr(unnamedStructName, "unexportedCounter"),
+		func() {
+			r.AddMetricStruct(struct {
+				ExportedGauge     *Gauge
+				unexportedCounter *Counter
+			}{g, c})
+		},
+	)
+
+	// Panics when we have a mix of exported and unexported metrics.
+	require.PanicsWithValue(t,
+		unexportedErr(unnamedStructName, "unexportedSlice"),
+		func() {
+			r.AddMetricStruct(struct {
+				ExportedGauge   *Gauge
+				unexportedSlice []*Counter
+			}{g, []*Counter{c}})
+		},
+	)
+
+	// Panics when embedded struct is unexported.
+	require.PanicsWithValue(t,
+		unexportedErr(unnamedStructName, "embedMetricStruct"),
+		func() {
+			r.AddMetricStruct(struct {
+				ExportedArray [1]*Counter
+				embedMetricStruct
+			}{
+				ExportedArray: [1]*Counter{c},
+				embedMetricStruct: embedMetricStruct{
+					ExportedCounter: c,
+				},
+			})
+		},
+	)
+
+	// Even though we can't directly embed embedMetricStruct (since it's unexported), we can
+	// still use it as exported field since struct implements metric.Struct.
+	r.AddMetricStruct(struct{ Embed embedMetricStruct }{Embed: embedMetricStruct{ExportedCounter: c}})
+
+	type EmbedBroken struct {
+		ExportedCounter *Counter
+	}
+
+	// Panics when embedded struct with metrics did not implement metric.Struct.
+	require.PanicsWithValue(t,
+		"embedded struct field <unnamed>.EmbedBroken (metric.EmbedBroken) does not implement metric.Struct interface",
+		func() {
+			r.AddMetricStruct(struct {
+				ExportedArray [1]*Counter
+				EmbedBroken
+			}{
+				ExportedArray: [1]*Counter{c},
+				EmbedBroken: EmbedBroken{
+					ExportedCounter: c,
+				},
+			})
+		},
+	)
 }

@@ -18,7 +18,6 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
-	"math"
 	"math/rand"
 	"net"
 	"net/url"
@@ -62,20 +61,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -210,8 +209,6 @@ import (
 // # cluster-opt: opt1 opt2
 //
 // The options are:
-// - disable-span-config: If specified, the span configs infrastructure will be
-//   disabled.
 // - tracing-off: If specified, tracing defaults to being turned off. This is
 //   used to override the environment, which may ask for tracing to be on by
 //   default.
@@ -295,7 +292,9 @@ import (
 //        place of actual results.
 //
 //    Options are comma separated strings from the following:
-//      - nosort (default)
+//      - nosort: sorts neither the returned or expected rows. Skips the
+//            flakiness check that forces either rowsort, valuesort,
+//            partialsort, or an ORDER BY clause to be present.
 //      - rowsort: sorts both the returned and the expected rows assuming one
 //            white-space separated word per column.
 //      - valuesort: sorts all values on all rows as one big set of
@@ -374,12 +373,18 @@ import (
 //  - sleep <duration>
 //    Introduces a sleep period. Example: sleep 2s
 //
-//  - user <username> [nodeidx=N]
+//  - user <username> [nodeidx=N] [newsession]
 //    Changes the user for subsequent statements or queries.
 //    If nodeidx is specified, this user will connect to the node
 //    in the cluster with index N (note this is 0-indexed, while
 //    node IDs themselves are 1-indexed). Otherwise, it will connect
 //    to the node with index 0 (node ID 1).
+//    A new session is created only on the first invocation for a distinct
+//    (username, nodeidx) pair, unless newsession is specified, in which case
+//    the existing session (if one exists) is closed and a new one is created.
+//    This option is useful when we want to verify a certain side effect has
+//    occurred after the current session has ended and/or a fresh new session
+//    is created.
 //    A "host-cluster-" prefix can be prepended to the user, which will force
 //    the user session to be against the host cluster (useful for multi-tenant
 //    configurations).
@@ -506,10 +511,13 @@ import (
 // - For troubleshooting / analysis: add -v -show-sql -error-summary.
 
 var (
-	resultsRE = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
-	noticeRE  = regexp.MustCompile(`^statement\s+notice\s+(.*)$`)
-	errorRE   = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
-	varRE     = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
+	resultsRE   = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
+	noticeRE    = regexp.MustCompile(`^statement\s+notice\s+(.*)$`)
+	errorRE     = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
+	varRE       = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
+	orderRE     = regexp.MustCompile(`(?i)ORDER\s+BY`)
+	explainRE   = regexp.MustCompile(`(?i)EXPLAIN\W+`)
+	showTraceRE = regexp.MustCompile(`(?i)SHOW\s+(KV\s+)?TRACE`)
 
 	// Bigtest is a flag which should be set if the long-running sqlite logic tests should be run.
 	Bigtest = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
@@ -718,7 +726,11 @@ func (ls *logicStatement) readSQL(
 					if i > 0 {
 						fmt.Fprintln(&newSyntax, ";")
 					}
-					fmt.Fprint(&newSyntax, pcfg.Pretty(stmtList[i].AST))
+					p, err := pcfg.Pretty(stmtList[i].AST)
+					if err != nil {
+						return "", errors.Wrapf(err, "error while pretty printing")
+					}
+					fmt.Fprint(&newSyntax, p)
 				}
 				return newSyntax.String(), nil
 			}(ls.sql)
@@ -877,6 +889,8 @@ type logicQuery struct {
 	colNames bool
 	// some tests require the output to match modulo sorting.
 	sorter logicSorter
+	// noSort is true if the nosort option was explicitly provided in the test.
+	noSort bool
 	// expectedErr and expectedErrCode are as in logicStatement.
 
 	// if set, the results are cross-checked against previous queries with the
@@ -988,13 +1002,14 @@ type logicTest struct {
 	// If this test uses a SQL tenant server, this is its address. In this case,
 	// all clients are created against this tenant.
 	tenantAddrs []string
+	tenantApps  []serverutils.ApplicationLayerInterface
 	// map of built clients, keyed first on username and then node idx.
 	// They are persisted so that they can be reused. They are not closed
 	// until the end of a test.
 	clients map[string]map[int]*gosql.DB
 	// client currently in use. This can change during processing
 	// of a test input file when encountering the "user" directive.
-	// see setUser() for details.
+	// see setSessionUser() for details.
 	user string
 	db   *gosql.DB
 	// clusterCleanupFuncs contains the cleanup methods that are specific to a
@@ -1162,20 +1177,28 @@ func (t *logicTest) outf(format string, args ...interface{}) {
 	fmt.Printf("[%s] %s\n", now, msg)
 }
 
-// setUser sets the DB client to the specified user and connects
-// to the node in the cluster at index nodeIdx.
-func (t *logicTest) setUser(user string, nodeIdx int) {
-	db := t.getOrOpenClient(user, nodeIdx)
+// setSessionUser sets the DB client to the specified user and connects
+// to the node in the cluster at index nodeIdx. If newSession is specified,
+// the current client for the (user, nodeIdx) combination (if one exists)
+// will be closed and a new one will be created.
+func (t *logicTest) setSessionUser(user string, nodeIdx int, newSession bool) {
+	db := t.getOrOpenClient(user, nodeIdx, newSession)
 	t.db = db
 	t.user = user
 	t.nodeIdx = nodeIdx
 }
 
 // getOrOpenClient returns the existing client for the given user and nodeIdx,
-// if one exists. Otherwise, it opens and returns a new client.
-func (t *logicTest) getOrOpenClient(user string, nodeIdx int) *gosql.DB {
+// if one exists. Otherwise, it opens and returns a new client. If newSession is
+// specified, the existing client (if one exists) will be closed and a new one
+// will be opened.
+func (t *logicTest) getOrOpenClient(user string, nodeIdx int, newSession bool) *gosql.DB {
 	if db, ok := t.clients[user][nodeIdx]; ok {
-		return db
+		if !newSession {
+			return db
+		}
+		_ = db.Close()
+		delete(t.clients[user], nodeIdx)
 	}
 
 	var pgURL url.URL
@@ -1191,7 +1214,7 @@ func (t *logicTest) getOrOpenClient(user string, nodeIdx int) *gosql.DB {
 		pgURL.Host = net.JoinHostPort("127.0.0.1", port)
 		pgURL.User = url.User(pgUser)
 	} else {
-		addr := t.cluster.Server(nodeIdx).ServingSQLAddr()
+		addr := t.cluster.Server(nodeIdx).ApplicationLayer().AdvSQLAddr()
 		if len(t.tenantAddrs) > 0 && !strings.HasPrefix(user, "host-cluster-") {
 			addr = t.tenantAddrs[nodeIdx]
 		}
@@ -1241,6 +1264,9 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 		if notice.Hint != "" {
 			t.noticeBuffer = append(t.noticeBuffer, "HINT: "+notice.Hint)
 		}
+		if notice.Code != "" && notice.Code != "00000" {
+			t.noticeBuffer = append(t.noticeBuffer, "SQLSTATE: "+string(notice.Code))
+		}
 	})
 
 	return gosql.OpenDB(connector)
@@ -1254,7 +1280,19 @@ var _ = ((*logicTest)(nil)).newTestServerCluster
 // bootstrapBinaryPath is given by the config's CockroachGoBootstrapVersion.
 // upgradeBinaryPath is given by the config's CockroachGoUpgradeVersion, or
 // is the locally built version if CockroachGoUpgradeVersion was not specified.
-func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBinaryPath string) {
+func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath string) {
+	logsDir, err := os.MkdirTemp("", "cockroach-logs*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanupLogsDir := func() {
+		if t.rootT.Failed() {
+			fmt.Fprintf(os.Stderr, "cockroach logs captured in: %s\n", logsDir)
+		} else {
+			_ = os.RemoveAll(logsDir)
+		}
+	}
+
 	// During config initialization, NumNodes is required to be 3.
 	opts := []testserver.TestServerOpt{
 		testserver.ThreeNodeOpt(),
@@ -1262,13 +1300,17 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBina
 		testserver.CockroachBinaryPathOpt(bootstrapBinaryPath),
 		testserver.UpgradeCockroachBinaryPathOpt(upgradeBinaryPath),
 		testserver.PollListenURLTimeoutOpt(120),
+		testserver.CockroachLogsDirOpt(logsDir),
 	}
 	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
-		// If we're using a cockroach-short binary, that means it was
-		// locally built, so we need to opt-out of version offsetting to
-		// better simulate a real upgrade path.
 		opts = append(opts, testserver.EnvVarOpt([]string{
+			// If we're using a cockroach-short binary, that means it was
+			// locally built, so we need to opt-out of version offsetting to
+			// better simulate a real upgrade path.
 			"COCKROACH_TESTING_FORCE_RELEASE_BRANCH=true",
+			// The build is made during testing, so it has metamorphic constants.
+			// We disable them here so that the test is more stable.
+			"COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true",
 		}))
 	}
 
@@ -1284,9 +1326,17 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBina
 	}
 
 	t.testserverCluster = ts
-	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop)
+	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop, cleanupLogsDir)
 
-	t.setUser(username.RootUser, 0 /* nodeIdx */)
+	t.setSessionUser(username.RootUser, 0 /* nodeIdx */, false /* newSession */)
+
+	// These tests involve stopping and starting nodes, so to reduce flakiness,
+	// we increase the lease Transfer timeout.
+	// Note: we use the old name of the setting for the benefit of mixed-version
+	// testing.
+	if _, err := t.db.Exec("SET CLUSTER SETTING server.shutdown.lease_transfer_wait = '40s'"); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // newCluster creates a new cluster. It should be called after the logic tests's
@@ -1301,7 +1351,7 @@ func (t *logicTest) newCluster(
 		if forSystemTenant {
 			// System tenants use the constructor that doesn't initialize the
 			// cluster version (see makeTestConfigFromParams). This is needed
-			// for local-mixed-22.2-23.1 config.
+			// for local-mixed configs.
 			st = cluster.MakeClusterSettings()
 		} else {
 			// Regular tenants use the constructor that initializes the cluster
@@ -1325,9 +1375,28 @@ func (t *logicTest) newCluster(
 		}
 		return st
 	}
-	var corpusCollectionCallback func(p scplan.Plan, stageIdx int) error
-	if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
-		corpusCollectionCallback = t.declarativeCorpusCollector.GetBeforeStage(t.rootT.Name(), t.t())
+	setSQLTestingKnobs := func(knobs *base.TestingKnobs) {
+		knobs.SQLEvalContext = &eval.TestingKnobs{
+			AssertBinaryExprReturnTypes:     true,
+			AssertUnaryExprReturnTypes:      true,
+			AssertFuncExprReturnTypes:       true,
+			DisableOptimizerRuleProbability: *disableOptRuleProbability,
+			OptimizerCostPerturbation:       *optimizerCostPerturbation,
+			ForceProductionValues:           serverArgs.ForceProductionValues,
+		}
+		knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+			DeterministicExplain:            true,
+			UseTransactionalDescIDGenerator: true,
+		}
+		knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
+		if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
+			knobs.SQLDeclarativeSchemaChanger = &scexec.TestingKnobs{
+				BeforeStage: t.declarativeCorpusCollector.GetBeforeStage(t.rootT.Name(), t.t()),
+			}
+		}
+		knobs.DistSQL = &execinfra.TestingKnobs{
+			ForceDiskSpill: t.cfg.SQLExecUseDisk,
+		}
 	}
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
 	// it installs detects a transaction that doesn't have
@@ -1342,17 +1411,29 @@ func (t *logicTest) newCluster(
 	shouldUseMVCCRangeTombstonesForPointDeletes := useMVCCRangeTombstonesForPointDeletes && !serverArgs.DisableUseMVCCRangeTombstonesForPointDeletes
 	ignoreMVCCRangeTombstoneErrors := globalMVCCRangeTombstone || shouldUseMVCCRangeTombstonesForPointDeletes
 
-	defaultTestTenant := t.cfg.DefaultTestTenant
-	if defaultTestTenant == base.TestTenantEnabled {
-		// If the test tenant is explicitly enabled then `logic test` will handle
-		// the creation of a configured test tenant, thus for this case we disable
-		// the implicit creation of the default test tenant.
-		defaultTestTenant = base.TestTenantDisabled
+	var defaultTestTenant base.DefaultTestTenantOptions
+	switch t.cfg.UseSecondaryTenant {
+	case logictestbase.Always, logictestbase.Never:
+		// If the test tenant is explicitly enabled or disabled then
+		// `logic test` will handle the creation of a configured test
+		// tenant, thus for this case we disable the implicit creation of
+		// the default test tenant.
+		defaultTestTenant = base.TestControlsTenantsExplicitly
+	case logictestbase.Random:
+		// Delegate to the test framework what to do.
+		defaultTestTenant = base.TestTenantProbabilisticOnly
 	}
 
+	// Ensure that the server has at least 320MiB of SQL memory budget. We've
+	// seen cases when the default of 256MiB is insufficient.
+	const maxSQLMemoryLimitLowerBound = 320 << 20 /* 320MiB */
+	maxSQLMemoryLimit := serverArgs.MaxSQLMemoryLimit
+	if maxSQLMemoryLimit <= maxSQLMemoryLimitLowerBound {
+		maxSQLMemoryLimit = maxSQLMemoryLimitLowerBound
+	}
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			SQLMemoryPoolSize: serverArgs.MaxSQLMemoryLimit,
+			SQLMemoryPoolSize: maxSQLMemoryLimit,
 			DefaultTestTenant: defaultTestTenant,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
@@ -1363,24 +1444,6 @@ func (t *logicTest) newCluster(
 						DisableInitPutFailOnTombstones:    ignoreMVCCRangeTombstoneErrors,
 						UseRangeTombstonesForPointDeletes: shouldUseMVCCRangeTombstonesForPointDeletes,
 					},
-				},
-				SQLEvalContext: &eval.TestingKnobs{
-					AssertBinaryExprReturnTypes:     true,
-					AssertUnaryExprReturnTypes:      true,
-					AssertFuncExprReturnTypes:       true,
-					DisableOptimizerRuleProbability: *disableOptRuleProbability,
-					OptimizerCostPerturbation:       *optimizerCostPerturbation,
-					ForceProductionValues:           serverArgs.ForceProductionValues,
-				},
-				SQLExecutor: &sql.ExecutorTestingKnobs{
-					DeterministicExplain:            true,
-					UseTransactionalDescIDGenerator: true,
-				},
-				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					AOSTClause: "AS OF SYSTEM TIME '-1us'",
-				},
-				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
-					BeforeStage: corpusCollectionCallback,
 				},
 				RangeFeed: &rangefeed.TestingKnobs{
 					IgnoreOnDeleteRangeError: ignoreMVCCRangeTombstoneErrors,
@@ -1393,22 +1456,24 @@ func (t *logicTest) newCluster(
 		// matter where the data really is.
 		ReplicationMode: base.ReplicationManual,
 	}
+	setSQLTestingKnobs(&params.ServerArgs.Knobs)
 
 	cfg := t.cfg
-	if cfg.DefaultTestTenant == base.TestTenantEnabled {
+	if cfg.UseSecondaryTenant == logictestbase.Always {
 		// In the tenant case we need to enable replication in order to split and
 		// relocate ranges correctly.
+		//
+		// TODO(#76378): This condition is faulty. In the case where the
+		// profile is configured with "Random", we want to set the
+		// replication mode as well when a test tenant is effectively
+		// created. This currently is not happening.
 		params.ReplicationMode = base.ReplicationAuto
-	}
-	params.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
-		ForceDiskSpill: cfg.SQLExecUseDisk,
 	}
 	if cfg.BootstrapVersion != clusterversion.Key(0) {
 		if params.ServerArgs.Knobs.Server == nil {
 			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
 		}
-		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BootstrapVersionKeyOverride = cfg.BootstrapVersion
-		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BinaryVersionOverride = clusterversion.ByKey(cfg.BootstrapVersion)
+		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BinaryVersionOverride = cfg.BootstrapVersion.Version()
 	}
 	if cfg.DisableUpgrade {
 		if params.ServerArgs.Knobs.Server == nil {
@@ -1455,7 +1520,8 @@ func (t *logicTest) newCluster(
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 	stats.DefaultRefreshInterval = time.Millisecond
 
-	t.cluster = serverutils.StartNewTestCluster(t.rootT, cfg.NumNodes, params)
+	t.cluster = serverutils.StartCluster(t.rootT, cfg.NumNodes, params)
+	t.purgeZoneConfig()
 	if cfg.UseFakeSpanResolver {
 		// We need to update the DistSQL span resolver with the fake resolver.
 		// Note that DistSQL was disabled in makeClusterSetting above, so we
@@ -1468,8 +1534,14 @@ func (t *logicTest) newCluster(
 	}
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
-	if cfg.DefaultTestTenant == base.TestTenantEnabled {
+	if cfg.UseSecondaryTenant == logictestbase.Always {
+		// The config profile requires the test to run with a secondary
+		// tenant. Set the tenant servers up now.
+		//
+		// TODO(cli): maybe share this code with the code in
+		// cli/democluster which does a very similar thing.
 		t.tenantAddrs = make([]string, cfg.NumNodes)
+		t.tenantApps = make([]serverutils.ApplicationLayerInterface, cfg.NumNodes)
 		for i := 0; i < cfg.NumNodes; i++ {
 			settings := makeClusterSettings(false /* forSystemTenant */)
 			tempStorageConfig := base.DefaultTestTempStorageConfigWithSize(settings, tempStorageDiskLimit)
@@ -1477,13 +1549,6 @@ func (t *logicTest) newCluster(
 				TenantID: serverutils.TestTenantID(),
 				Settings: settings,
 				TestingKnobs: base.TestingKnobs{
-					SQLExecutor: &sql.ExecutorTestingKnobs{
-						DeterministicExplain:            true,
-						UseTransactionalDescIDGenerator: true,
-					},
-					SQLStatsKnobs: &sqlstats.TestingKnobs{
-						AOSTClause: "AS OF SYSTEM TIME '-1us'",
-					},
 					RangeFeed: paramsPerNode[i].Knobs.RangeFeed,
 				},
 				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
@@ -1493,31 +1558,24 @@ func (t *logicTest) newCluster(
 				// Give every tenant its own ExternalIO directory.
 				ExternalIODir: path.Join(t.sharedIODir, strconv.Itoa(i)),
 			}
+			setSQLTestingKnobs(&tenantArgs.TestingKnobs)
 
 			for _, opt := range knobOpts {
 				t.rootT.Logf("apply knob opt %T to tenant", opt)
 				opt.apply(&tenantArgs.TestingKnobs)
 			}
 
-			tenant, err := t.cluster.Server(i).StartTenant(context.Background(), tenantArgs)
+			tenant, err := t.cluster.Server(i).TenantController().StartTenant(context.Background(), tenantArgs)
 			if err != nil {
 				t.rootT.Fatalf("%+v", err)
 			}
+			t.tenantApps[i] = tenant
 			t.tenantAddrs[i] = tenant.SQLAddr()
 		}
 
 		// Open a connection to a tenant to set any cluster settings specified
 		// by the test config.
-		pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(username.RootUser))
-		defer cleanup()
-		if params.ServerArgs.Insecure {
-			pgURL.RawQuery = "sslmode=disable"
-		}
-		db, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.rootT.Fatal(err)
-		}
-		defer db.Close()
+		db := t.tenantApps[0].SQLConn(t.rootT)
 		connsForClusterSettingChanges = append(connsForClusterSettingChanges, db)
 
 		// Increase tenant rate limits for faster tests.
@@ -1537,12 +1595,12 @@ func (t *logicTest) newCluster(
 	// If we've created a tenant (either explicitly, or probabilistically and
 	// implicitly) set any necessary cluster settings to override blocked
 	// behavior.
-	if cfg.DefaultTestTenant == base.TestTenantEnabled || t.cluster.StartedDefaultTestTenant() {
+	if cfg.UseSecondaryTenant == logictestbase.Always || t.cluster.StartedDefaultTestTenant() {
+		tenantID := serverutils.TestTenantID()
+		conn := t.cluster.SystemLayer(0).SQLConn(t.rootT)
 
-		conn := t.cluster.StorageClusterConn()
 		clusterSettings := toa.clusterSettings
-		_, ok := clusterSettings[sql.SecondaryTenantZoneConfigsEnabled.Key()]
-		if ok {
+		if len(clusterSettings) > 0 {
 			// We reduce the closed timestamp duration on the host tenant so that the
 			// setting override can propagate to the tenant faster.
 			if _, err := conn.Exec(
@@ -1555,26 +1613,28 @@ func (t *logicTest) newCluster(
 			); err != nil {
 				t.Fatal(err)
 			}
-		}
-
-		tenantID := serverutils.TestTenantID()
-		for name, value := range clusterSettings {
-			query := fmt.Sprintf("ALTER TENANT [$1] SET CLUSTER SETTING %s = $2", name)
-			if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '50ms'",
+			); err != nil {
 				t.Fatal(err)
+			}
+			for settingName, value := range clusterSettings {
+				query := fmt.Sprintf("ALTER TENANT [$1] SET CLUSTER SETTING %s = $2", settingName)
+				if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
+					t.Fatal(err)
+				}
 			}
 		}
 
 		capabilities := toa.capabilities
-		for name, value := range capabilities {
-			query := fmt.Sprintf("ALTER TENANT [$1] GRANT CAPABILITY %s = $2", name)
-			if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
-				t.Fatal(err)
+		if len(capabilities) > 0 {
+			for name, value := range capabilities {
+				query := fmt.Sprintf("ALTER TENANT [$1] GRANT CAPABILITY %s = $2", name)
+				if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
+					t.Fatal(err)
+				}
 			}
-		}
-		numCapabilities := len(capabilities)
-		if numCapabilities > 0 {
-			capabilityMap := make(map[tenantcapabilities.ID]string, numCapabilities)
+			capabilityMap := make(map[tenantcapabilities.ID]string, len(capabilities))
 			for k, v := range capabilities {
 				capability, ok := tenantcapabilities.FromName(k)
 				if !ok {
@@ -1721,37 +1781,30 @@ func (t *logicTest) newCluster(
 		})
 	}
 
-	for name, value := range toa.clusterSettings {
-		t.waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
-			name, value, params.ServerArgs.Insecure,
+	for settingName, value := range toa.clusterSettings {
+		t.waitForSystemVisibleClusterSettingToTakeEffectOrFatal(
+			settingName, value, params.ServerArgs.Insecure,
 		)
 	}
 
-	t.setUser(username.RootUser, 0 /* nodeIdx */)
+	t.setSessionUser(username.RootUser, 0 /* nodeIdx */, false /* newSession */)
 }
 
-// waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal waits until all tenant
+// waitForSystemVisibleClusterSettingToTakeEffectOrFatal waits until all tenant
 // servers are aware about the supplied setting's expected value. Fatal's if
 // this doesn't happen within the SucceedsSoonDuration.
-func (t *logicTest) waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
+func (t *logicTest) waitForSystemVisibleClusterSettingToTakeEffectOrFatal(
 	settingName string, expValue string, insecure bool,
 ) {
 	// Wait until all tenant servers are aware of the setting override.
+	dbs := make([]*gosql.DB, len(t.tenantApps))
+	for i := range dbs {
+		dbs[i] = t.tenantApps[i].SQLConn(t.rootT)
+	}
 	testutils.SucceedsSoon(t.rootT, func() error {
-		for i := 0; i < len(t.tenantAddrs); i++ {
-			pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(username.RootUser))
-			defer cleanup()
-			if insecure {
-				pgURL.RawQuery = "sslmode=disable"
-			}
-			db, err := gosql.Open("postgres", pgURL.String())
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer db.Close()
-
+		for i := 0; i < len(t.tenantApps); i++ {
 			var val string
-			err = db.QueryRow(
+			err := dbs[i].QueryRow(
 				fmt.Sprintf("SHOW CLUSTER SETTING %s", settingName),
 			).Scan(&val)
 			if err != nil {
@@ -1840,17 +1893,11 @@ func (t *logicTest) setup(
 		if err != nil {
 			t.Fatal(err)
 		}
-		bootstrapVersion, err := version.PredecessorVersion(*upgradeVersion)
+		bootstrapVersion, err := release.LatestPredecessor(upgradeVersion)
 		if err != nil {
 			t.Fatal(err)
 		}
-		bootstrapBinaryPath, err := binfetcher.Download(context.Background(), binfetcher.Options{
-			Binary:  "cockroach",
-			Dir:     tempExternalIODir,
-			Version: "v" + bootstrapVersion,
-			GOOS:    runtime.GOOS,
-			GOARCH:  runtime.GOARCH,
-		})
+		bootstrapBinaryPath, err := locateCockroachPredecessor(bootstrapVersion)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1900,17 +1947,6 @@ type tenantOverrideArgs struct {
 // which a test will run.
 type clusterOpt interface {
 	apply(args *base.TestServerArgs)
-}
-
-// clusterOptDisableSpanConfigs corresponds to the disable-span-configs
-// directive.
-type clusterOptDisableSpanConfigs struct{}
-
-var _ clusterOpt = clusterOptDisableSpanConfigs{}
-
-// apply implements the clusterOpt interface.
-func (c clusterOptDisableSpanConfigs) apply(args *base.TestServerArgs) {
-	args.DisableSpanConfigs = true
 }
 
 // clusterOptTracingOff corresponds to the tracing-off directive.
@@ -2099,8 +2135,6 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 	var res []clusterOpt
 	parseDirectiveOptions(t, path, clusterDirective, func(opt string) {
 		switch opt {
-		case "disable-span-configs":
-			res = append(res, clusterOptDisableSpanConfigs{})
 		case "tracing-off":
 			res = append(res, clusterOptTracingOff{})
 		case "ignore-tenant-strict-gc-enforcement":
@@ -2226,7 +2260,7 @@ func (t *logicTest) maybeBackupRestore(
 	oldUser := t.user
 	oldNodeIdx := t.nodeIdx
 	defer func() {
-		t.setUser(oldUser, oldNodeIdx)
+		t.setSessionUser(oldUser, oldNodeIdx, false /* newSession */)
 	}()
 
 	log.Info(context.Background(), "Running cluster backup and restore")
@@ -2246,7 +2280,7 @@ func (t *logicTest) maybeBackupRestore(
 		userToSessionVars[user] = make(map[int]map[string]string)
 		for nodeIdx := range userClients {
 			users[user] = append(users[user], nodeIdx)
-			t.setUser(user, nodeIdx)
+			t.setSessionUser(user, nodeIdx, false /* newSession */)
 
 			// Serialize session variables.
 			var userSession string
@@ -2283,11 +2317,12 @@ func (t *logicTest) maybeBackupRestore(
 		}
 	}
 
-	backupLocation := fmt.Sprintf("gs://cockroachdb-backup-testing/logic-test-backup-restore-nightly/%s?AUTH=implicit",
-		strconv.FormatInt(timeutil.Now().UnixNano(), 10))
+	bucket := testutils.BackupTestingBucket()
+	backupLocation := fmt.Sprintf("gs://%s/logic-test-backup-restore-nightly/%s?AUTH=implicit",
+		bucket, strconv.FormatInt(timeutil.Now().UnixNano(), 10))
 
 	// Perform the backup and restore as root.
-	t.setUser(username.RootUser, 0 /* nodeIdx */)
+	t.setSessionUser(username.RootUser, 0 /* nodeIdx */, false /* newSession */)
 
 	if _, err := t.db.Exec(fmt.Sprintf("BACKUP INTO '%s'", backupLocation)); err != nil {
 		return errors.Wrap(err, "backing up cluster")
@@ -2298,7 +2333,7 @@ func (t *logicTest) maybeBackupRestore(
 	t.resetCluster()
 
 	// Run the restore as root.
-	t.setUser(username.RootUser, 0 /* nodeIdx */)
+	t.setSessionUser(username.RootUser, 0 /* nodeIdx */, false /* newSession */)
 	if _, err := t.db.Exec(fmt.Sprintf("RESTORE FROM LATEST IN '%s'", backupLocation)); err != nil {
 		return errors.Wrap(err, "restoring cluster")
 	}
@@ -2310,7 +2345,7 @@ func (t *logicTest) maybeBackupRestore(
 	for user, userNodeIdxs := range users {
 		for _, nodeIdx := range userNodeIdxs {
 			// Call setUser for every user to create the connection for that user.
-			t.setUser(user, nodeIdx)
+			t.setSessionUser(user, nodeIdx, false /* newSession */)
 
 			if userSession, ok := userToHexSession[user][nodeIdx]; ok {
 				if _, err := t.db.Exec(fmt.Sprintf(`SELECT crdb_internal.deserialize_session(decode('%s', 'hex'))`, userSession)); err != nil {
@@ -2395,7 +2430,7 @@ func (t *logicTest) purgeZoneConfig() {
 		return
 	}
 	for i := 0; i < t.cluster.NumServers(); i++ {
-		sysconfigProvider := t.cluster.Server(i).SystemConfigProvider()
+		sysconfigProvider := t.cluster.Server(i).ApplicationLayer().SystemConfigProvider()
 		sysconfig := sysconfigProvider.GetSystemConfig()
 		if sysconfig != nil {
 			sysconfig.PurgeZoneConfigCache()
@@ -2677,6 +2712,7 @@ func (t *logicTest) processSubtest(
 						switch opt {
 						case "nosort":
 							query.sorter = nil
+							query.noSort = true
 
 						case "rowsort":
 							query.sorter = rowSort
@@ -2956,10 +2992,22 @@ func (t *logicTest) processSubtest(
 					nodeIdx = int(idx)
 				}
 			}
-			t.setUser(fields[1], nodeIdx)
+			var newSession bool
+			if len(fields) >= 4 {
+				if fields[3] != "newsession" {
+					return errors.Errorf("unknown user option: %s", fields[3])
+				}
+				newSession = true
+			}
+			t.setSessionUser(fields[1], nodeIdx, newSession)
 			// In multi-tenant tests, we may need to also create database test when
 			// we switch to a different tenant.
-			if t.cfg.DefaultTestTenant == base.TestTenantEnabled && strings.HasPrefix(fields[1], "host-cluster-") {
+			//
+			// TODO(#76378): It seems the conditional should include `||
+			// t.cluster.StartedDefaultTestTenant()` here, to cover the case
+			// where the config specified "Random" and a test tenant was
+			// effectively created.
+			if t.cfg.UseSecondaryTenant == logictestbase.Always && strings.HasPrefix(fields[1], "host-cluster-") {
 				if _, err := t.db.Exec("CREATE DATABASE IF NOT EXISTS test; USE test;"); err != nil {
 					return errors.Wrapf(err, "error creating database on admin tenant")
 				}
@@ -3055,34 +3103,45 @@ func (t *logicTest) processSubtest(
 			if t.testserverCluster == nil {
 				return errors.Errorf(`could not perform "upgrade", not a cockroach-go/testserver cluster`)
 			}
-			nodeIdx, err := strconv.Atoi(fields[1])
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := t.testserverCluster.UpgradeNode(nodeIdx); err != nil {
-				t.Fatal(err)
-			}
-			for i := 0; i < t.cfg.NumNodes; i++ {
-				// Wait for each node to be reachable, since UpgradeNode uses `kill`
-				// to terminate nodes, and may introduce temporary unavailability in
-				// the system range.
-				if err := t.testserverCluster.WaitForInitFinishForNode(i); err != nil {
+			upgradeNode := func(nodeIdx int) {
+				if err := t.testserverCluster.UpgradeNode(nodeIdx); err != nil {
 					t.Fatal(err)
 				}
-			}
-			// The port may have changed, so we must remove all the cached connections
-			// to this node.
-			for _, m := range t.clients {
-				if c, ok := m[nodeIdx]; ok {
-					_ = c.Close()
+				for i := 0; i < t.cfg.NumNodes; i++ {
+					// Wait for each node to be reachable, since UpgradeNode uses `kill`
+					// to terminate nodes, and may introduce temporary unavailability in
+					// the system range.
+					if err := t.testserverCluster.WaitForInitFinishForNode(i); err != nil {
+						t.Fatal(err)
+					}
 				}
-				delete(m, nodeIdx)
+				// The port may have changed, so we must remove all the cached connections
+				// to this node.
+				for _, m := range t.clients {
+					if c, ok := m[nodeIdx]; ok {
+						_ = c.Close()
+					}
+					delete(m, nodeIdx)
+				}
+				// If we upgraded the node we are currently on, we need to open a new
+				// connection since the previous one might now be invalid.
+				if t.nodeIdx == nodeIdx {
+					t.setSessionUser(t.user, nodeIdx, false /* newSession */)
+				}
 			}
-			// If we upgraded the node we are currently on, we need to open a new
-			// connection since the previous one might now be invalid.
-			if t.nodeIdx == nodeIdx {
-				t.setUser(t.user, nodeIdx)
+			nodeStr := fields[1]
+			if nodeStr == "all" {
+				for i := 0; i < t.cfg.NumNodes; i++ {
+					upgradeNode(i)
+				}
+			} else {
+				nodeIdx, err := strconv.Atoi(nodeStr)
+				if err != nil {
+					t.Fatal(err)
+				}
+				upgradeNode(nodeIdx)
 			}
+
 		default:
 			return errors.Errorf("%s:%d: unknown command: %s",
 				path, s.Line+subtest.lineLineIndexIntoFile, cmd,
@@ -3114,8 +3173,8 @@ func (t *logicTest) maybeSkipOnRetry(err error) {
 func (t *logicTest) verifyError(
 	sql, pos, expectNotice, expectErr, expectErrCode string, err error,
 ) (bool, error) {
+	t.maybeSkipOnRetry(err)
 	if expectErr == "" && expectErrCode == "" && err != nil {
-		t.maybeSkipOnRetry(err)
 		return t.unexpectedError(sql, pos, err)
 	}
 	if expectNotice != "" {
@@ -3320,7 +3379,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 
 	db := t.db
 	if query.nodeIdx != t.nodeIdx {
-		db = t.getOrOpenClient(t.user, query.nodeIdx)
+		db = t.getOrOpenClient(t.user, query.nodeIdx, false /* newSession */)
 	}
 
 	if query.expectAsync {
@@ -3382,6 +3441,7 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 	defer rows.Close()
 
 	var actualResultsRaw []string
+	rowCount := 0
 	if query.noticetrace {
 		// We have to force close the results for the notice handler from lib/pq
 		// returns results.
@@ -3412,6 +3472,7 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 				if err := rows.Scan(vals...); err != nil {
 					return err
 				}
+				rowCount++
 				for i, v := range vals {
 					colT := query.colTypes[i]
 					// Ignore column - useful for non-deterministic output.
@@ -3519,6 +3580,32 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		}
 	}
 
+	allDuplicateRows := true
+	numCols := len(query.colTypes)
+	resultsWithoutColNames := actualResults
+	if query.colNames {
+		resultsWithoutColNames = resultsWithoutColNames[numCols:]
+	}
+	for i := numCols; i < len(resultsWithoutColNames); i++ {
+		// There are numCols*numRows elements in actualResults, each a string
+		// representation of a single column in a row. The element at i%numCols
+		// is the value in the first row in the same column as i.
+		if resultsWithoutColNames[i%numCols] != resultsWithoutColNames[i] {
+			allDuplicateRows = false
+			break
+		}
+	}
+
+	if rowCount > 1 && !allDuplicateRows && query.sorter == nil && !query.noSort &&
+		!query.kvtrace && !orderRE.MatchString(query.sql) && !explainRE.MatchString(query.sql) &&
+		!showTraceRE.MatchString(query.sql) {
+		return fmt.Errorf("to prevent flakes in queries that return multiple rows, " +
+			"add the rowsort option, the valuesort option, the partialsort option, " +
+			"or an ORDER BY clause. If you are certain that your test will not flake " +
+			"due to a non-deterministic ordering of rows, you can add the nosort option " +
+			"to ignore this error")
+	}
+
 	if query.sorter != nil {
 		query.sorter(len(query.colTypes), actualResults)
 		query.sorter(len(query.colTypes), query.expectedResults)
@@ -3608,9 +3695,9 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 				// ('R') coltypes are approximately equal to take into account
 				// platform differences in floating point calculations.
 				if runtime.GOARCH == "s390x" && (colT == 'F' || colT == 'R') {
-					resultMatches, err = floatsMatchApprox(expected, actual)
+					resultMatches, err = floatcmp.FloatsMatchApprox(expected, actual)
 				} else if colT == 'F' {
-					resultMatches, err = floatsMatch(expected, actual)
+					resultMatches, err = floatcmp.FloatsMatch(expected, actual)
 				}
 				if err != nil {
 					return errors.CombineErrors(makeError(), err)
@@ -3676,93 +3763,6 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 
 	t.finishOne("OK")
 	return nil
-}
-
-// parseExpectedAndActualFloats converts the strings expectedString and
-// actualString to float64 values.
-func parseExpectedAndActualFloats(expectedString, actualString string) (float64, float64, error) {
-	expected, err := strconv.ParseFloat(expectedString, 64 /* bitSize */)
-	if err != nil {
-		return 0, 0, errors.Wrap(err, "when parsing expected")
-	}
-	actual, err := strconv.ParseFloat(actualString, 64 /* bitSize */)
-	if err != nil {
-		return 0, 0, errors.Wrap(err, "when parsing actual")
-	}
-	return expected, actual, nil
-}
-
-// floatsMatchApprox returns whether two floating point represented as
-// strings are equal within a tolerance.
-func floatsMatchApprox(expectedString, actualString string) (bool, error) {
-	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
-	if err != nil {
-		return false, err
-	}
-	return floatcmp.EqualApprox(expected, actual, floatcmp.CloseFraction, floatcmp.CloseMargin), nil
-}
-
-// floatsMatch returns whether two floating point numbers represented as
-// strings have matching 15 significant decimal digits (this is the precision
-// that Postgres supports for 'double precision' type).
-func floatsMatch(expectedString, actualString string) (bool, error) {
-	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
-	if err != nil {
-		return false, err
-	}
-	// Check special values - NaN, +Inf, -Inf, 0.
-	if math.IsNaN(expected) || math.IsNaN(actual) {
-		return math.IsNaN(expected) == math.IsNaN(actual), nil
-	}
-	if math.IsInf(expected, 0 /* sign */) || math.IsInf(actual, 0 /* sign */) {
-		bothNegativeInf := math.IsInf(expected, -1 /* sign */) == math.IsInf(actual, -1 /* sign */)
-		bothPositiveInf := math.IsInf(expected, 1 /* sign */) == math.IsInf(actual, 1 /* sign */)
-		return bothNegativeInf || bothPositiveInf, nil
-	}
-	if expected == 0 || actual == 0 {
-		return expected == actual, nil
-	}
-	// Check that the numbers have the same sign.
-	if expected*actual < 0 {
-		return false, nil
-	}
-	expected = math.Abs(expected)
-	actual = math.Abs(actual)
-	// Check that 15 significant digits match. We do so by normalizing the
-	// numbers and then checking one digit at a time.
-	//
-	// normalize converts f to base * 10**power representation where base is in
-	// [1.0, 10.0) range.
-	normalize := func(f float64) (base float64, power int) {
-		for f >= 10 {
-			f = f / 10
-			power++
-		}
-		for f < 1 {
-			f *= 10
-			power--
-		}
-		return f, power
-	}
-	var expPower, actPower int
-	expected, expPower = normalize(expected)
-	actual, actPower = normalize(actual)
-	if expPower != actPower {
-		return false, nil
-	}
-	// TODO(yuzefovich): investigate why we can't always guarantee deterministic
-	// 15 significant digits and switch back from 14 to 15 digits comparison
-	// here. See #56446 for more details.
-	for i := 0; i < 14; i++ {
-		expDigit := int(expected)
-		actDigit := int(actual)
-		if expDigit != actDigit {
-			return false, nil
-		}
-		expected -= (expected - float64(expDigit)) * 10
-		actual -= (actual - float64(actDigit)) * 10
-	}
-	return true, nil
 }
 
 func (t *logicTest) formatValues(vals []string, valsPerLine int) []string {
@@ -3832,23 +3832,25 @@ func (t *logicTest) validateAfterTestCompletion() error {
 		if user == username.RootUser {
 			continue
 		}
-		for i, c := range userClients {
-			if err := c.Close(); err != nil {
-				t.Fatalf("failed to close connection to node %d for user %s: %v", i, user, err)
-			}
+		for _, c := range userClients {
+			// Ignore the error from closing the connection. This may not succeed if,
+			// for example, CANCEL SESSION was called on one of the sessions.
+			_ = c.Close()
 		}
 		delete(t.clients, user)
 	}
-	t.setUser(username.RootUser, 0 /* nodeIdx */)
+	t.setSessionUser(username.RootUser, 0 /* nodeIdx */, false /* newSession */)
 
 	// Some cleanup to make sure the following validation queries can run
 	// successfully. First we rollback in case the logic test had an uncommitted
 	// txn and second we reset vectorize mode in case it was switched to
 	// `experimental_always`.
 	_, _ = t.db.Exec("ROLLBACK")
-	_, err := t.db.Exec("RESET vectorize")
-	if err != nil {
+	if _, err := t.db.Exec("RESET vectorize"); err != nil {
 		t.Fatal(errors.Wrap(err, "could not reset vectorize mode"))
+	}
+	if _, err := t.db.Exec("RESET ROLE"); err != nil {
+		t.Fatal(errors.Wrap(err, "could not reset role"))
 	}
 
 	validate := func() (string, error) {
@@ -4016,8 +4018,8 @@ var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_C
 // want to specify for the test clusters to be created with.
 type TestServerArgs struct {
 	// MaxSQLMemoryLimit determines the value of --max-sql-memory startup
-	// argument for the server. If unset, then the default limit of 256MiB will
-	// be used.
+	// argument for the server. This value will always be bumped to at least
+	// 320MiB (including when unset).
 	MaxSQLMemoryLimit int64
 	// If set, mutations.MaxBatchSize, row.getKVBatchSize, and other values
 	// randomized via the metamorphic testing will be overridden to use the
@@ -4060,6 +4062,15 @@ func RunLogicTest(
 	// please make adjustments there.
 	// As of 6/4/2019, the logic tests never complete under race.
 	skip.UnderStressRace(t, "logic tests and race detector don't mix: #37993")
+
+	// This test relies on repeated sequential storage.EventuallyFileOnlySnapshot
+	// acquisitions. Reduce the max wait time for each acquisition to speed up
+	// this test.
+	origEFOSWait := storage.MaxEFOSWait
+	storage.MaxEFOSWait = 30 * time.Millisecond
+	defer func() {
+		storage.MaxEFOSWait = origEFOSWait
+	}()
 
 	if skipLogicTests {
 		skip.IgnoreLint(t, "COCKROACH_LOGIC_TESTS_SKIP")
@@ -4361,4 +4372,32 @@ func (t *logicTest) printCompletion(path string, config logictestbase.TestCluste
 	}
 	t.outf("--- done: %s with config %s: %d tests, %d failures%s", path, config.Name,
 		t.progress, t.failures, unsupportedMsg)
+}
+
+func locateCockroachPredecessor(version string) (string, error) {
+	if !strings.HasPrefix(version, "v") {
+		version = "v" + version
+	}
+	munge := func(s string) string {
+		return strings.ReplaceAll(
+			strings.ReplaceAll(s, ".", "_"), "-", "_")
+	}
+	configs := map[string]string{
+		"linux_amd64":  "linux-amd64",
+		"linux_arm64":  "linux-arm64",
+		"darwin_amd64": "darwin-10.9-amd64",
+		"darwin_arm64": "darwin-11.0-arm64",
+	}
+	cfg, ok := configs[fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)]
+	if !ok {
+		return "", fmt.Errorf("unknown GOOS/GOARCH combination")
+	}
+	where := fmt.Sprintf(
+		"external/cockroach_binary_%s_%s/cockroach-%s.%s/cockroach",
+		munge(version), munge(cfg), version, cfg)
+	path, err := bazel.Runfile(where)
+	if err != nil {
+		return "", err
+	}
+	return path, nil
 }

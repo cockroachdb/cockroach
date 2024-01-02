@@ -1,16 +1,18 @@
 # LogicTest: 5node
 
 statement ok
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT)
+CREATE TABLE t1 (a INT PRIMARY KEY, b INT, c INT);
+CREATE TABLE t2 (a INT PRIMARY KEY, b INT, c INT);
 
 # Move the single range to a remote node.
 statement ok
-ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 2);
+ALTER TABLE t1 EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 2);
+ALTER TABLE t2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 2);
 
 # There are no stats on the table, so the single flow should stay on the remote
 # node.
 query T
-EXPLAIN (VEC) SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.b
+EXPLAIN (VEC) SELECT * FROM t1, t2 WHERE t1.a = t2.b
 ----
 │
 ├ Node 1
@@ -22,7 +24,7 @@ EXPLAIN (VEC) SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.b
       └ *colfetcher.ColBatchScan
 
 query T
-EXPLAIN (DISTSQL) SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.b
+EXPLAIN (DISTSQL) SELECT * FROM t1, t2 WHERE t1.a = t2.b
 ----
 distribution: full
 vectorized: true
@@ -33,20 +35,42 @@ vectorized: true
 │
 ├── • scan
 │     missing stats
-│     table: t@t_pkey
+│     table: t1@t1_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: t@t_pkey
+      table: t2@t2_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysktFr2zAQxt_3V4h7Ssa1ieRsD4aCSufRjCzp4sAGIwzFuqVmruVJZ9gI-d-H7UEbsyTb6Jv06X6n7ztuB-F7ATEkn-5m19O5GLyZpqv0w2wo0mSW3KzES_F2uXgvWFyngiX-Pijx8TZZJoLlpRFXgtXlBhBKZ2luHihA_BkkIChYI1TeZRSC8428a4um9gfEY4S8rGpu5DVC5jxBvAPOuSCIYe4uXDWKAMESm7xoy_YIruZHKLDZEsSTPT5pLE83XplNQUsylvxofNAeWPOX6hv9BIQbV9QPZYiFQbFBkQFCWplGuIBjNuT_2pDPakMdtfH4e106b8mT7c_3fMkfstyacP_O5SX5kTqMUtBXHmg5vPL59p4HWg0BYVFzLLRErVBHqCeoX6F-fTRPdJDnzNosKVSuDPRXezNuwpDdUjec4Gqf0Z13WftNd120XCtYCty9TrrLtOyeGoNPYXkSjg5g2YfVP8CqD0cn4XHP9nr_4lcAAAD__-8iSMs=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkt9v2jAQx9_3V1j3VKajxA7bg6VKmQpTmSh0gLRJU1WZ5ICoIc7si7oK8b9PCesKUaH74QdLPp8_9_2ebwP-ewYa-l9vhh8GI3HWG0xn08_Dlpj2h_3LmXgrPk7G14IlClbiy1V_0hcsz424EKzO54CQ24RGZk0e9DeQgKDgFqFwNibvravCmzppkPwAHSCkeVFyFb5FiK0j0BvglDMCDSPbtkUnBISE2KRZnbZFsCU_P_JslgS6u1dl0AMdbnGvkDxdaGbmGU3IJOQ6wUE5YBmxvCvu6REQLm1WrnOvhUExRxEDwrQwVaANx4TJhrDgX4XJhjAVsfofYaohTB4V9qynzK1LyFHS_JPXU15wd2X86pNNc3IddWguowWfRbJ14dLlis8i1QKEcclaRBIjhVGIURejdxi9P-ovbPhTB_5eGb0J-cLmnv5o9oJGpbas3FKypF33vC1dTDfOxnXu7jiuQXUgIc-72-7uMMifrjw7Muvfc7NPkidJ4QFJniSpvyCpfZJsksKTpOC4O1V1bJHZh7s0AQ3Br9V-YXtaUD0wS19923RlH2rs7LGomr4wmSeEa3NPPWJy6zRPPacxaHYlbbdvfgYAAP__MJ2RJw==
 
 # Inject stats so that column 'b' has few unique values whereas column 'c' has
 # many unique values.
 statement ok
-ALTER TABLE t INJECT STATISTICS '[
+ALTER TABLE t1 INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 3
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+ALTER TABLE t2 INJECT STATISTICS '[
   {
     "columns": ["a"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
@@ -69,7 +93,7 @@ ALTER TABLE t INJECT STATISTICS '[
 
 # Now check that the single flow with a join is moved to the gateway.
 query T
-EXPLAIN (VEC) SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.b
+EXPLAIN (VEC) SELECT * FROM t1, t2 WHERE t1.a = t2.b
 ----
 │
 └ Node 1
@@ -78,7 +102,7 @@ EXPLAIN (VEC) SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.b
     └ *colfetcher.ColBatchScan
 
 query T
-EXPLAIN (DISTSQL) SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.b
+EXPLAIN (DISTSQL) SELECT * FROM t1, t2 WHERE t1.a = t2.b
 ----
 distribution: local
 vectorized: true
@@ -90,20 +114,20 @@ vectorized: true
 │
 ├── • scan
 │     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
-│     table: t@t_pkey
+│     table: t1@t1_pkey
 │     spans: FULL SCAN
 │
 └── • scan
       estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
-      table: t@t_pkey
+      table: t2@t2_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskdFr1EAQxt_9K5Z5upOxvd1THxYKW2qkkbNXkwMFCbKXHa_BNBt3J6Ac-d8liVCvtMpJ37LfzG---SZ7iN9r0JB8ul6dp1di9ibNN_mH1VzkySq52Ijn4m22fi9YnOeCJf7-UOLjZZIlguWJFWeC1ckWEBrv6MreUgT9GSQUCG3wJcXowyDtx4bU_QC9QKiatuNBLhBKHwj0HrjimkDDxm5rysg6CqcLQHDEtqrHsWz4S_uNfgLCha-72yZqYVFsUZSAkLd2EF5A0SP4ju8sItsdgZY9_t8a8knXUI-ucefeNT44CuQOnIuB_FfLA1kubbx556uGwqk6jFLTV54ZOT8L1e6GZ0bNAWHdsRZGolFolmheonmF5vWjeZbHnDWj2Pom0v1cD05eDGHI7Wg6TvRdKOk6-HK0mZ7rkRsFR5GnqpoeaTOWxv_-JyyPgNV9WP0VXh7Ai77on_0KAAD__xTTFrk=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykklFr2zAQx9_3KcQ9JePSWsq2B0FBo8loRtp0SWCDYYpiXxJTx_KkM10J-e7DzrYmJt3opgeDTtLvfv_DWwjfctAw_HI7fj-6EZ3BaDaffRp3xWw4Hl7OxWvxYTq5FixRsBKfr4bToWB5ZsWFYHW2AITCpXRjNxRAfwUJMULpXUIhOF-Xts2FUfoddISQFWXFdTlGSJwn0FvgjHMCDXO7yGlKNiV_HgFCSmyzvMGyNCzvynt6BIRLl1ebImhhUSxQJIAwK21d6EG8Q3AVPzUJbFcEWh5YjQagox3-m5hsiSnD6n_EVEtMPiv25FMVzqfkKT1yieuXf7tyIt2VDeuPLivIn6vjcDktuWNk98JnqzV3jOoCwqRiLYxEo9D00bxB8xbNu2fz9Vv51EsGP6VQuiJQO-fJTlGrU0_WaSld0X56wVU-oVvvkubufjtpQE0hpcD7U7XfjIrmSNYdPNnN7__mkCRfQFKHJNkmqT-S-kek6NgpRljm7uEuS0FD9HP1Tnx-Lagf2FWohz1bu4cGO38s61EtbR4I4dre04CY_CYrssBZApp9Rbvdqx8BAAD__-o0VdY=
 
 
 # If we add a not very selective filter, the flow is still moved to the gateway.
 query T
-EXPLAIN (VEC) SELECT * FROM t AS t1, t AS t2 WHERE t1.b = 1 AND t1.a = t2.a
+EXPLAIN (VEC) SELECT * FROM t1, t2 WHERE t1.b = 1 AND t1.a = t2.a
 ----
 │
 └ Node 1
@@ -113,7 +137,7 @@ EXPLAIN (VEC) SELECT * FROM t AS t1, t AS t2 WHERE t1.b = 1 AND t1.a = t2.a
       └ *colfetcher.ColBatchScan
 
 query T
-EXPLAIN (DISTSQL) SELECT * FROM t AS t1, t AS t2 WHERE t1.b = 1 AND t1.a = t2.a
+EXPLAIN (DISTSQL) SELECT * FROM t1, t2 WHERE t1.b = 1 AND t1.a = t2.a
 ----
 distribution: local
 vectorized: true
@@ -126,7 +150,7 @@ vectorized: true
 │
 ├── • scan
 │     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
-│     table: t@t_pkey
+│     table: t2@t2_pkey
 │     spans: FULL SCAN
 │
 └── • filter
@@ -135,14 +159,14 @@ vectorized: true
     │
     └── • scan
           estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
-          table: t@t_pkey
+          table: t1@t1_pkey
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskm-L00AQxt_7KYZ51erctflTkYVCyl0OI730bAoKEmSbjDWYy8bdDSil312SCGdLW63cu51n9zfPM5Ns0XwvUWD48WE-i2IY3EbJKnk_H0ISzsObFbyEu-XiHizMErAO_T648OFtuAxhYJ3rNUzBGcIsvu1KCVOw7rUcImGlco7lIxsUn9DBlLDWKmNjlG6lbfcgyn-gGBMWVd3YVk4JM6UZxRZtYUtGgSu5LnnJMmc9GiNhzlYWZdfWBvZz_Y1_IuGNKpvHygiQBGuCDAmTWrbCFaY7QtXYJwtj5YZRODv6vxjOs8ZwL4lxV5SWNeuRu5-h1wUEbvtJhBBRvHpz0tI7afnk1FRK56w53zNKW_JvT47kvme94XeqqFiPvP3oJX-xg8B5NZzqYvO1PyLhorECAp-CCQWvKXAocCnwTo7kX7LFWF2peuQfTna08eSSxks2taoM_1PncbsozjfcL96oRmf8oFXW2fTlouM6IWdj-1uvL6Kqu-p-4z9h5yzs7sHjQ9i9wNk9hL2zsH_e2T8LTw7gdPfiVwAAAP__pa6FWw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkl9v2jAUxd_3Kaz7BJspsROmyRJSqkK1TPzpAGmTJlSZ5JJGDXFmO-oqxHefkmwrRMDG6ocovrZ_5xxfb8F8T0HA8Ovd6DqYkNYgmC_mn0dtMh-OhjcL8pbczqZjYhkllpMvH4ezIWlZdrUifcLa5HoyqKaS9InlV7INFDIV4URu0ID4BgyWFHKtQjRG6bK0rTYE0Q8QDoUkywtblpcUQqURxBZsYlMEAQu5SnGGMkLddYBChFYmaYW13Lf8Pn_EZ6Bwo9JikxlBJCUrSkKgMM9lWejAckdBFfZFxFgZIwi25yoYgHB29P-MsYYx5lv2GmO8YYxdYuw2SS1q1F1-6KquC-Lzsm1CiGCy-HDSgtuwwE9aeFEuMqUj1BgdCC_Lk3_bciTHGHWMn1SSoe66h1FSXNuWz961-zqJH-pfoDAtrCC-R_0e9d9Tn1GfU989GdFrRHQvueWJ6qi86zWTHhXqNYS8S4RmaHKVGfwnJaeh1GHlzWIUY90powod4p1WYbW3nk4rUFWI0Nh61a0nQVYtsVJBo9z8eY37JHaWxA9Izj7JaZL4BZ74Pok3Se5Zknfak9skeWdJvXPplhTWqXq6TyIQ4PwanSOf3wPKAzI25QOYP6inCrt4zsv2rWVqkMJYPuIALepNkiXGJiEIqwvc7d78DAAA___NVNb4
 
 # However, if we add a selective filter, the flow is kept on the remote node.
 query T
-EXPLAIN (VEC) SELECT * FROM t AS t1 INNER MERGE JOIN t AS t2 ON t1.a = t2.a WHERE t1.c = 1
+EXPLAIN (VEC) SELECT * FROM t1 INNER MERGE JOIN t2 ON t1.a = t2.a WHERE t1.c = 1
 ----
 │
 ├ Node 1
@@ -155,7 +179,7 @@ EXPLAIN (VEC) SELECT * FROM t AS t1 INNER MERGE JOIN t AS t2 ON t1.a = t2.a WHER
       └ *colfetcher.ColBatchScan
 
 query T
-EXPLAIN (DISTSQL) SELECT * FROM t AS t1 INNER MERGE JOIN t AS t2 ON t1.a = t2.a WHERE t1.c = 1
+EXPLAIN (DISTSQL) SELECT * FROM t1 INNER MERGE JOIN t2 ON t1.a = t2.a WHERE t1.c = 1
 ----
 distribution: full
 vectorized: true
@@ -172,12 +196,12 @@ vectorized: true
 │   │
 │   └── • scan
 │         estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
-│         table: t@t_pkey
+│         table: t1@t1_pkey
 │         spans: FULL SCAN
 │
 └── • scan
       estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
-      table: t@t_pkey
+      table: t2@t2_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysktFr2zAQxt_3Vxz31G5qEznOGIKASuduLond2YENRhiqfcvMXMuTZNgI-d-H7UHrsLjr6Jv13f3uvk_WDu2PEgUGn26WF2EEJ2_DdJ1-WJ5CGiyDyzW8hKskXoGDixQchzCKggRWQfIugOs4jP4UPIgjcPxcwQKcd67g4_sgCVolgwVwZFjpnCJ1RxbFZ2wFDzcMa6MzslabVt51TWH-E8WUYVHVjWvlDcNMG0KxQ1e4klBgpM90PfGRYU5OFWXXtmeoG3cPWae2hGK-Zw8G8_HBa3VbUkIqJzOZDsajk-5L_Z1-IcNLXTZ3lRWgGNwyyJBhWqtWOMNjNvhTbFwVpSNDZsKHHnpdgJy1tyqECKP1m6Mrvf9N7j1r8tlRG_fbm0qbnAzlh7_08Za_ZFmR2dK1Lioyk9kwS0lf3Ynkr04Xpth-6z-RYdw4AZIz6TE5Y9Jncs7k66OR_EGkRx5rQrbWlaV_eq3TNg_lW-rvx-rGZHRjdNat6Y9xx3VCTtb11Xl_CKu-1Bp8CPNR2BuHvVHYH8D8EJ49AfYOYX8Unh7Y3uxf_A4AAP__NPGJeQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk1Fr2zAUhd_3K8R9ajelsWRnDEHAo3E3l8TpnMAGoxTVvklNHcuTZLoS8t-H7XVNTJMumx9CfHT13XOupTWYHzkICL5djT-GETkZhbP57Mv4lMyCcXA-J2_JRTydEMtIGEVBTCZB_Ckgl9MwIpaTaUQsO5NkSCw_k-Tr5yAOaiUhQ8KAQqFSjOQKDYjvUAscrimUWiVojNK1vG6KwvQnCIdCVpSVreVrConSCGINNrM5goBI9VTZ94BCilZmeVO2oaAq-7zJWLlEEIOtLuEIhLehW43Y4UZzeZtjjDJF3Xd22oFlvmU35T0-AoVzlVerwggiKbmlJAEKs1LWQg_2GWMdY84xxi6y3KJG3We7rlpdEN-t5y6ECKP5h70WeMcC-9fZ8M5suG_5_8zG7Rjje409-6kKpVPUmHaPxeslL6SboF7ipcoK1H13N12OC3vis3enQ50t79q_QGFaWUF8Rn1OfZf6HvUH1H-_N6LXiejuRHzlAsRoSlUY_Ksb4HQ69VgdGNMltgM0qtIJXmmVNLXt67QBNUKKxrarg_YlLJ6WjNUoV39O7zaJHSTxI0j8IMnbIbFtEuuS3CNIfJvEuyTvIMnZn86tZ7_I1cNNloIA5_fTe-Hn6YF6g1ya-gDM7tRDg50_lvXnW8jcIIWJvMcRWtSrrMiMzRIQVle42bz5FQAA__89HtsW

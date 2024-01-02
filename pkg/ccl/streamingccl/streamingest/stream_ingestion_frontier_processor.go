@@ -36,17 +36,13 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// JobCheckpointFrequency controls the frequency of frontier checkpoints into
-// the jobs table.
-var JobCheckpointFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
-	"stream_replication.job_checkpoint_frequency",
-	"controls the frequency with which partitions update their progress; if 0, disabled.",
-	10*time.Second,
-	settings.NonNegativeDuration,
-)
+const (
+	streamIngestionFrontierProcName = `ingestfntr`
 
-const streamIngestionFrontierProcName = `ingestfntr`
+	// frontierEntriesFilename is the name of the file at which the stream ingestion
+	// frontier periodically dumps its state.
+	frontierEntriesFilename = "~replication-frontier-entries.binpb"
+)
 
 type streamIngestionFrontier struct {
 	execinfra.ProcessorBase
@@ -60,7 +56,7 @@ type streamIngestionFrontier struct {
 
 	// frontier contains the current resolved timestamp high-water for the tracked
 	// span set.
-	frontier *span.Frontier
+	frontier span.Frontier
 
 	// metrics are monitoring all running ingestion jobs.
 	metrics *Metrics
@@ -78,7 +74,14 @@ type streamIngestionFrontier struct {
 	persistedReplicatedTime hlc.Timestamp
 
 	lastPartitionUpdate time.Time
+	lastFrontierDump    time.Time
 	partitionProgress   map[string]jobspb.StreamIngestionProgress_PartitionProgress
+
+	lastNodeLagCheck time.Time
+
+	// replicatedTimeAtLastPositiveLagNodeCheck records the replicated time the
+	// last time the lagging node checker detected a lagging node.
+	replicatedTimeAtLastPositiveLagNodeCheck hlc.Timestamp
 }
 
 var _ execinfra.Processor = &streamIngestionFrontier{}
@@ -159,7 +162,7 @@ type heartbeatSender struct {
 	streamID        streampb.StreamID
 	frontierUpdates chan hlc.Timestamp
 	frontier        hlc.Timestamp
-	flowCtx         *execinfra.FlowCtx
+	sv              *settings.Values
 	// cg runs the heartbeatSender thread.
 	cg ctxgroup.Group
 	// cancel stops heartbeat sender.
@@ -171,14 +174,16 @@ type heartbeatSender struct {
 func newHeartbeatSender(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, spec execinfrapb.StreamIngestionFrontierSpec,
 ) (*heartbeatSender, error) {
-	streamClient, err := streamclient.GetFirstActiveClient(ctx, spec.StreamAddresses)
+
+	streamID := streampb.StreamID(spec.StreamID)
+	streamClient, err := streamclient.GetFirstActiveClient(ctx, spec.StreamAddresses, flowCtx.Cfg.DB, streamclient.WithStreamID(streamID))
 	if err != nil {
 		return nil, err
 	}
 	return &heartbeatSender{
 		client:          streamClient,
-		streamID:        streampb.StreamID(spec.StreamID),
-		flowCtx:         flowCtx,
+		streamID:        streamID,
+		sv:              &flowCtx.EvalCtx.Settings.SV,
 		frontierUpdates: make(chan hlc.Timestamp),
 		cancel:          func() {},
 		stoppedChan:     make(chan struct{}),
@@ -186,18 +191,20 @@ func newHeartbeatSender(
 }
 
 func (h *heartbeatSender) maybeHeartbeat(
-	ctx context.Context, frontier hlc.Timestamp,
+	ctx context.Context,
+	ts timeutil.TimeSource,
+	frontier hlc.Timestamp,
+	heartbeatFrequency time.Duration,
 ) (bool, streampb.StreamReplicationStatus, error) {
-	heartbeatFrequency := streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(&h.flowCtx.EvalCtx.Settings.SV)
-	if h.lastSent.Add(heartbeatFrequency).After(timeutil.Now()) {
+	if h.lastSent.Add(heartbeatFrequency).After(ts.Now()) {
 		return false, streampb.StreamReplicationStatus{}, nil
 	}
-	h.lastSent = timeutil.Now()
+	h.lastSent = ts.Now()
 	s, err := h.client.Heartbeat(ctx, h.streamID, frontier)
 	return true, s, err
 }
 
-func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
+func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context, ts timeutil.TimeSource) {
 	ctx, cancel := context.WithCancel(ctx)
 	h.cancel = cancel
 	h.cg = ctxgroup.WithContext(ctx)
@@ -206,24 +213,25 @@ func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
 			// The heartbeat thread send heartbeats when there is a frontier update,
 			// and it has been a while since last time we sent it, or when we need
 			// to heartbeat to keep the stream alive even if the frontier has no update.
-			timer := time.NewTimer(streamingccl.StreamReplicationConsumerHeartbeatFrequency.
-				Get(&h.flowCtx.EvalCtx.Settings.SV))
+			timer := ts.NewTimer()
+			timer.Reset(streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(h.sv))
 			defer timer.Stop()
 			unknownStreamStatusRetryErr := log.Every(1 * time.Minute)
 			for {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case <-timer.C:
-					timer.Reset(streamingccl.StreamReplicationConsumerHeartbeatFrequency.
-						Get(&h.flowCtx.EvalCtx.Settings.SV))
+				case <-timer.Ch():
+					timer.MarkRead()
+					timer.Reset(streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(h.sv))
 				case frontier := <-h.frontierUpdates:
 					h.frontier.Forward(frontier)
 				}
-				sent, streamStatus, err := h.maybeHeartbeat(ctx, h.frontier)
-				// TODO(casper): add unit tests to test different kinds of client errors.
+				heartbeatFrequency := streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(h.sv)
+				sent, streamStatus, err := h.maybeHeartbeat(ctx, ts, h.frontier, heartbeatFrequency)
 				if err != nil {
-					return err
+					log.Errorf(ctx, "replication stream %d received an error from the producer job: %v", h.streamID, err)
+					continue
 				}
 
 				if !sent || streamStatus.StreamStatus == streampb.StreamReplicationStatus_STREAM_ACTIVE {
@@ -268,7 +276,7 @@ func (sf *streamIngestionFrontier) Start(ctx context.Context) {
 	ctx = sf.StartInternal(ctx, streamIngestionFrontierProcName)
 	sf.metrics.RunningCount.Inc(1)
 	sf.input.Start(ctx)
-	sf.heartbeatSender.startHeartbeatLoop(ctx)
+	sf.heartbeatSender.startHeartbeatLoop(ctx, timeutil.DefaultTimeSource{})
 }
 
 // Next is part of the RowSource interface.
@@ -289,13 +297,22 @@ func (sf *streamIngestionFrontier) Next() (
 			break
 		}
 
-		if _, err := sf.noteResolvedTimestamps(row[0]); err != nil {
+		if err := sf.noteResolvedTimestamps(row[0]); err != nil {
 			sf.MoveToDraining(err)
 			break
 		}
 
-		if err := sf.maybeUpdatePartitionProgress(); err != nil {
-			log.Errorf(sf.Ctx(), "failed to update partition progress: %+v", err)
+		if err := sf.maybeUpdateProgress(); err != nil {
+			log.Errorf(sf.Ctx(), "failed to update progress: %+v", err)
+			sf.MoveToDraining(err)
+			break
+		}
+
+		if err := sf.maybePersistFrontierEntries(); err != nil {
+			log.Errorf(sf.Ctx(), "failed to persist frontier entries: %+v", err)
+		}
+
+		if err := sf.maybeCheckForLaggingNodes(); err != nil {
 			sf.MoveToDraining(err)
 			break
 		}
@@ -324,6 +341,8 @@ func (sf *streamIngestionFrontier) Next() (
 }
 
 func (sf *streamIngestionFrontier) close() {
+	defer sf.frontier.Release()
+
 	if err := sf.heartbeatSender.stop(); err != nil {
 		log.Errorf(sf.Ctx(), "heartbeat sender exited with error: %s", err)
 	}
@@ -358,41 +377,37 @@ func decodeResolvedSpans(
 	return &resolvedSpans, nil
 }
 
-// noteResolvedTimestamps processes a batch of resolved timestamp events, and
-// returns whether the frontier has moved forward after processing the batch.
+// noteResolvedTimestamps processes a batch of resolved timestamp events.
 func (sf *streamIngestionFrontier) noteResolvedTimestamps(
 	resolvedSpanDatums rowenc.EncDatum,
-) (bool, error) {
-	var frontierChanged bool
+) error {
 	resolvedSpans, err := decodeResolvedSpans(&sf.alloc, resolvedSpanDatums)
 	if err != nil {
-		return false, err
+		return err
 	}
 	for _, resolved := range resolvedSpans.ResolvedSpans {
 		// Inserting a timestamp less than the one the ingestion flow started at could
 		// potentially regress the job progress. This is not expected and thus we
 		// assert to catch such unexpected behavior.
 		if !resolved.Timestamp.IsEmpty() && resolved.Timestamp.Less(sf.replicatedTimeAtStart) {
-			return frontierChanged, errors.AssertionFailedf(
+			return errors.AssertionFailedf(
 				`got a resolved timestamp %s that is less than the frontier processor start time %s`,
 				redact.Safe(resolved.Timestamp), redact.Safe(sf.replicatedTimeAtStart))
 		}
 
-		changed, err := sf.frontier.Forward(resolved.Span, resolved.Timestamp)
-		if err != nil {
-			return false, err
+		if _, err := sf.frontier.Forward(resolved.Span, resolved.Timestamp); err != nil {
+			return err
 		}
-		frontierChanged = frontierChanged || changed
 	}
-
-	return frontierChanged, nil
+	return nil
 }
 
-// maybeUpdatePartitionProgress polls the frontier and updates the job progress with
-// partition-specific information to track the status of each partition.
-func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
+// maybeUpdateProgress updates the job progress with the
+// latest replicated time and partition-specific information to track
+// the status of each partition.
+func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	ctx := sf.Ctx()
-	updateFreq := JobCheckpointFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
+	updateFreq := streamingccl.JobCheckpointFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
 	if updateFreq == 0 || timeutil.Since(sf.lastPartitionUpdate) < updateFreq {
 		return nil
 	}
@@ -410,8 +425,8 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	partitionProgress := sf.partitionProgress
 
 	sf.lastPartitionUpdate = timeutil.Now()
-
-	if err := registry.UpdateJobWithTxn(ctx, jobID, nil, false, func(
+	log.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime)
+	if err := registry.UpdateJobWithTxn(ctx, jobID, nil /* txn */, func(
 		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
@@ -476,11 +491,91 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	}
 	sf.metrics.JobProgressUpdates.Inc(1)
 	sf.persistedReplicatedTime = f.Frontier()
-	sf.metrics.FrontierCheckpointSpanCount.Update(int64(len(frontierResolvedSpans)))
-	if !sf.persistedReplicatedTime.IsEmpty() {
-		// Only update the frontier lag if the replicated time has been updated,
-		// implying the initial scan has completed.
-		sf.metrics.FrontierLagNanos.Update(timeutil.Since(sf.persistedReplicatedTime.GoTime()).Nanoseconds())
-	}
+	sf.metrics.ReplicatedTimeSeconds.Update(sf.persistedReplicatedTime.GoTime().Unix())
 	return nil
+}
+
+// maybePersistFrontierEntries periodically persists the current state of the
+// frontier to the `system.job_info` table. This information is used to hydrate
+// the execution details that can be requested for the C2C ingestion job. Note,
+// we always persist the entries to the same info key and so we never have more
+// than one row describing the state of the frontier at a given point in time.
+func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
+	dumpFreq := streamingccl.DumpFrontierEntries.Get(&sf.FlowCtx.Cfg.Settings.SV)
+	if dumpFreq == 0 || timeutil.Since(sf.lastFrontierDump) < dumpFreq {
+		return nil
+	}
+	ctx := sf.Ctx()
+	f := sf.frontier
+	jobID := jobspb.JobID(sf.spec.JobID)
+
+	frontierEntries := &execinfrapb.FrontierEntries{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
+	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+		frontierEntries.ResolvedSpans = append(frontierEntries.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+		return span.ContinueMatch
+	})
+
+	frontierBytes, err := protoutil.Marshal(frontierEntries)
+	if err != nil {
+		return err
+	}
+
+	if err = sf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return jobs.WriteChunkedFileToJobInfo(ctx, frontierEntriesFilename, frontierBytes, txn, jobID)
+	}); err != nil {
+		return err
+	}
+
+	sf.lastFrontierDump = timeutil.Now()
+	return nil
+}
+
+func (sf *streamIngestionFrontier) maybeCheckForLaggingNodes() error {
+	ctx := sf.Ctx()
+
+	// We halve the frequency relative to the ReplanFrequency setting (i.e.
+	// check twice as often), because the node lag checker will only restart the
+	// distSQL plan if a node is lagging for 2 checks in a row.
+	checkFreq := streamingccl.ReplanFrequency.Get(&sf.FlowCtx.Cfg.Settings.SV) / 2
+	maxLag := streamingccl.InterNodeLag.Get(&sf.FlowCtx.Cfg.Settings.SV)
+	if checkFreq == 0 || maxLag == 0 || timeutil.Since(sf.lastNodeLagCheck) < checkFreq {
+		log.VEventf(ctx, 2, "skipping lag replanning check: maxLag %d; checkFreq %.2f; last node check %s; time since last check %.2f",
+			maxLag, checkFreq.Minutes(), sf.lastNodeLagCheck, timeutil.Since(sf.lastNodeLagCheck).Minutes())
+		return nil
+	}
+	// Don't check for lagging nodes if the hwm has yet to advance.
+	if sf.replicatedTimeAtStart.Equal(sf.persistedReplicatedTime) {
+		log.VEventf(ctx, 2, "skipping lag replanning check: hwm has yet to advance past %s", sf.replicatedTimeAtStart)
+		return nil
+	}
+	defer func() {
+		sf.lastNodeLagCheck = timeutil.Now()
+	}()
+	executionDetails := constructSpanFrontierExecutionDetailsWithFrontier(sf.spec.PartitionSpecs, sf.frontier)
+	log.VEvent(ctx, 2, "checking for lagging nodes")
+	err := checkLaggingNodes(
+		ctx,
+		executionDetails,
+		maxLag,
+	)
+	return sf.handleLaggingNodeError(ctx, err)
+}
+
+func (sf *streamIngestionFrontier) handleLaggingNodeError(ctx context.Context, err error) error {
+	switch {
+	case err == nil:
+		sf.replicatedTimeAtLastPositiveLagNodeCheck = hlc.Timestamp{}
+		log.VEvent(ctx, 2, "no lagging nodes after check")
+		return nil
+	case !errors.Is(err, ErrNodeLagging):
+		return err
+	case sf.replicatedTimeAtLastPositiveLagNodeCheck.Less(sf.persistedReplicatedTime):
+		log.Infof(ctx, "detected a lagging node: %s. Don't forward error because replicated time at last check %s is less than current replicated time %s", err, sf.replicatedTimeAtLastPositiveLagNodeCheck, sf.persistedReplicatedTime)
+		sf.replicatedTimeAtLastPositiveLagNodeCheck = sf.persistedReplicatedTime
+		return nil
+	case sf.replicatedTimeAtLastPositiveLagNodeCheck.Equal(sf.persistedReplicatedTime):
+		return errors.Wrapf(err, "hwm has not advanced from %s", sf.persistedReplicatedTime)
+	default:
+		return errors.Wrapf(err, "unable to handle replanning error with replicated time %s and last node lag check replicated time %s", sf.persistedReplicatedTime, sf.replicatedTimeAtLastPositiveLagNodeCheck)
+	}
 }

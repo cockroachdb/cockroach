@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -53,7 +52,7 @@ func (p *planner) DropRole(ctx context.Context, n *tree.DropRole) (planNode, err
 func (p *planner) DropRoleNode(
 	ctx context.Context, roleSpecs tree.RoleSpecList, ifExists bool, isRole bool, opName string,
 ) (*DropRoleNode, error) {
-	if err := p.CheckRoleOption(ctx, roleoption.CREATEROLE); err != nil {
+	if err := p.CheckGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE); err != nil {
 		return nil, err
 	}
 
@@ -263,7 +262,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			userNames[fnDesc.GetPrivileges().Owner()] = append(
 				userNames[fnDesc.GetPrivileges().Owner()],
 				objectAndType{
-					ObjectType: privilege.Function,
+					ObjectType: privilege.Routine,
 					ObjectName: name.String(),
 				},
 			)
@@ -355,7 +354,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	}
 
 	// All safe - do the work.
-	var numRoleMembershipsDeleted, numRoleSettingsRowsDeleted int
+	var numRoleSettingsRowsDeleted int
 	for normalizedUsername := range userNames {
 		// Specifically reject special users and roles. Some (root, admin) would fail with
 		// "privileges still exist" first.
@@ -407,18 +406,16 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 
 		// Drop all role memberships involving the user/role.
-		rowsDeleted, err := params.p.InternalSQLTxn().ExecEx(
+		if _, err = params.p.InternalSQLTxn().ExecEx(
 			params.ctx,
 			"drop-role-membership",
 			params.p.txn,
 			sessiondata.NodeUserSessionDataOverride,
 			`DELETE FROM system.role_members WHERE "role" = $1 OR "member" = $1`,
 			normalizedUsername,
-		)
-		if err != nil {
+		); err != nil {
 			return err
 		}
-		numRoleMembershipsDeleted += rowsDeleted
 
 		_, err = params.p.InternalSQLTxn().ExecEx(
 			params.ctx,
@@ -435,7 +432,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			return err
 		}
 
-		rowsDeleted, err = params.p.InternalSQLTxn().ExecEx(
+		if rowsDeleted, err := params.p.InternalSQLTxn().ExecEx(
 			params.ctx,
 			opName,
 			params.p.txn,
@@ -445,12 +442,23 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				sessioninit.DatabaseRoleSettingsTableName,
 			),
 			normalizedUsername,
+		); err != nil {
+			return err
+		} else {
+			numRoleSettingsRowsDeleted += rowsDeleted
+		}
+
+		_, err = params.p.InternalSQLTxn().ExecEx(
+			params.ctx,
+			opName,
+			params.p.txn,
+			sessiondata.NodeUserSessionDataOverride,
+			`UPDATE system.web_sessions SET "revokedAt" = now() WHERE username = $1 AND "revokedAt" IS NULL;`,
+			normalizedUsername,
 		)
 		if err != nil {
 			return err
 		}
-		numRoleSettingsRowsDeleted += rowsDeleted
-
 	}
 
 	// Bump role-related table versions to force a refresh of membership/auth
@@ -468,10 +476,8 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			}
 		}
 	}
-	if numRoleMembershipsDeleted > 0 {
-		if err := params.p.BumpRoleMembershipTableVersion(params.ctx); err != nil {
-			return err
-		}
+	if err := params.p.BumpRoleMembershipTableVersion(params.ctx); err != nil {
+		return err
 	}
 
 	normalizedNames := make([]string, len(n.roleNames))

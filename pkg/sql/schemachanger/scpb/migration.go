@@ -10,16 +10,17 @@
 
 package scpb
 
-import "github.com/cockroachdb/cockroach/pkg/clusterversion"
+import (
+	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+)
 
 // HasDeprecatedElements returns if the target contains any element marked
 // for deprecation.
 func HasDeprecatedElements(version clusterversion.ClusterVersion, target Target) bool {
-	if version.IsActive(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates) &&
-		target.GetSecondaryIndexPartial() != nil {
-		return true
-	}
-	return false
+	return target.GetSecondaryIndexPartial() != nil
 }
 
 // migrateTargetElement migrates an individual target at a given index.
@@ -99,14 +100,33 @@ func MigrateCurrentState(version clusterversion.ClusterVersion, state *CurrentSt
 	return updated
 }
 
+func checkForTableDataElement(target Target) (createID catid.DescID, existingID catid.DescID) {
+	if target.TargetStatus != Status_PUBLIC {
+		return catid.InvalidDescID, catid.InvalidDescID
+	}
+	switch e := target.Element().(type) {
+	case *PrimaryIndex:
+		return e.TableID, catid.InvalidDescID
+	case *SecondaryIndex:
+		return e.TableID, catid.InvalidDescID
+	case *TableData:
+		return catid.InvalidDescID, e.TableID
+	}
+	return catid.InvalidDescID, catid.InvalidDescID
+}
+
 // MigrateDescriptorState migrates descriptor state and applies any changes
 // relevant for the current cluster version.
-func MigrateDescriptorState(version clusterversion.ClusterVersion, state *DescriptorState) bool {
+func MigrateDescriptorState(
+	version clusterversion.ClusterVersion, parentID catid.DescID, state *DescriptorState,
+) bool {
 	// Nothing to do for empty states.
 	if state == nil {
 		return false
 	}
 	targetsToRemove := make(map[int]struct{})
+	newIndexes := make(map[catid.DescID]*TargetMetadata)
+	newTargets := 0
 	updated := false
 	for idx, target := range state.Targets {
 		if HasDeprecatedElements(version, target) {
@@ -114,12 +134,33 @@ func MigrateDescriptorState(version clusterversion.ClusterVersion, state *Descri
 			migrateTargetElement(state.Targets, idx)
 			targetsToRemove[idx] = struct{}{}
 		}
+		if newIndexID, descID := checkForTableDataElement(target); descID != catid.InvalidDescID || newIndexID != catid.InvalidDescID {
+			if _, ok := newIndexes[newIndexID]; newIndexID != catid.InvalidDescID && !ok {
+				newIndexes[newIndexID] = &target.Metadata
+			}
+			if descID != catid.InvalidDescID {
+				newIndexes[descID] = nil
+			}
+		}
 		current, targetStatus, update := migrateStatuses(state.CurrentStatuses[idx], target.TargetStatus)
 		if update {
 			state.CurrentStatuses[idx] = current
 			target.TargetStatus = targetStatus
 			updated = true
 		}
+	}
+	for id, md := range newIndexes {
+		if md == nil {
+			continue
+		}
+		// Generate a TableData element
+		state.Targets = append(state.Targets, MakeTarget(ToPublic, &TableData{
+			TableID:    id,
+			DatabaseID: parentID,
+		}, md))
+		state.CurrentStatuses = append(state.CurrentStatuses, Status_PUBLIC)
+		state.TargetRanks = append(state.TargetRanks, math.MaxUint32-uint32(newTargets))
+		newTargets += 1
 	}
 	if !updated {
 		return updated
@@ -138,5 +179,6 @@ func MigrateDescriptorState(version clusterversion.ClusterVersion, state *Descri
 		state.TargetRanks = append(state.TargetRanks, existingTargetRanks[idx])
 		state.CurrentStatuses = append(state.CurrentStatuses, existingStatuses[idx])
 	}
+
 	return updated
 }

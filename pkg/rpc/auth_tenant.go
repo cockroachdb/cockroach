@@ -482,10 +482,10 @@ func contextWithoutClientTenant(ctx context.Context) context.Context {
 
 func tenantPrefix(tenID roachpb.TenantID) roachpb.RSpan {
 	// TODO(nvanbenschoten): consider caching this span.
-	prefix := roachpb.RKey(keys.MakeTenantPrefix(tenID))
+	sp := keys.MakeTenantSpan(tenID)
 	return roachpb.RSpan{
-		Key:    prefix,
-		EndKey: prefix.PrefixEnd(),
+		Key:    roachpb.RKey(sp.Key),
+		EndKey: roachpb.RKey(sp.EndKey),
 	}
 }
 

@@ -273,3 +273,133 @@ close
 write("COCKROACHDB_REGISTRY_000002", <...0 bytes...>)
 close("COCKROACHDB_REGISTRY_000002")
 close("")
+
+load soft-max-size=128
+----
+open-dir("")
+open("COCKROACHDB_REGISTRY_000002")
+close("COCKROACHDB_REGISTRY_000002")
+stat("bar")
+stat("bax")
+stat("foo")
+create("COCKROACHDB_REGISTRY_000003")
+write("COCKROACHDB_REGISTRY_000003", <...72 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
+create("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
+close("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
+remove("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+sync("")
+remove("COCKROACHDB_REGISTRY_000002")
+write("COCKROACHDB_REGISTRY_000003", <...14 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
+
+set filename=abcd settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000003", <...109 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
+
+set filename=abcde settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000003", <...110 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
+
+# Triggers a rotation.
+
+set filename=abcdef settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+create("COCKROACHDB_REGISTRY_000004")
+write("COCKROACHDB_REGISTRY_000004", <...259 bytes...>)
+sync("COCKROACHDB_REGISTRY_000004")
+create("marker.registry.000004.COCKROACHDB_REGISTRY_000004")
+close("marker.registry.000004.COCKROACHDB_REGISTRY_000004")
+remove("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
+sync("")
+write("COCKROACHDB_REGISTRY_000003", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000003")
+remove("COCKROACHDB_REGISTRY_000003")
+write("COCKROACHDB_REGISTRY_000004", <...111 bytes...>)
+sync("COCKROACHDB_REGISTRY_000004")
+
+set filename=abcdefg settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000004", <...112 bytes...>)
+sync("COCKROACHDB_REGISTRY_000004")
+
+set filename=abcdefgh settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000004", <...113 bytes...>)
+sync("COCKROACHDB_REGISTRY_000004")
+
+set filename=abcdefghi settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000004", <...114 bytes...>)
+sync("COCKROACHDB_REGISTRY_000004")
+
+# Triggers a rotation.
+
+set filename=abcdefghij settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+create("COCKROACHDB_REGISTRY_000005")
+write("COCKROACHDB_REGISTRY_000005", <...681 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+create("marker.registry.000005.COCKROACHDB_REGISTRY_000005")
+close("marker.registry.000005.COCKROACHDB_REGISTRY_000005")
+remove("marker.registry.000004.COCKROACHDB_REGISTRY_000004")
+sync("")
+write("COCKROACHDB_REGISTRY_000004", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000004")
+remove("COCKROACHDB_REGISTRY_000004")
+write("COCKROACHDB_REGISTRY_000005", <...115 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+set filename=abcdefghijk settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000005", <...116 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+set filename=abcdefghijkl settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000005", <...117 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+set filename=abcdefghijklm settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000005", <...118 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+set filename=abcdefghijklmn settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000005", <...119 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+set filename=abcdefghijklmno settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000005", <...120 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+set filename=abcdefghijklmnop settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000005", <...121 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+set filename=abcdefghijklmnopq settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000005", <...122 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+# Triggers a rotation.
+
+set filename=abcdefghijklmnopqr settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+create("COCKROACHDB_REGISTRY_000006")
+write("COCKROACHDB_REGISTRY_000006", <...1573 bytes...>)
+sync("COCKROACHDB_REGISTRY_000006")
+create("marker.registry.000006.COCKROACHDB_REGISTRY_000006")
+close("marker.registry.000006.COCKROACHDB_REGISTRY_000006")
+remove("marker.registry.000005.COCKROACHDB_REGISTRY_000005")
+sync("")
+write("COCKROACHDB_REGISTRY_000005", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000005")
+remove("COCKROACHDB_REGISTRY_000005")
+write("COCKROACHDB_REGISTRY_000006", <...123 bytes...>)
+sync("COCKROACHDB_REGISTRY_000006")

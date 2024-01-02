@@ -10,6 +10,12 @@
 
 package log
 
+import (
+	"sort"
+
+	"github.com/cockroachdb/ttycolor"
+)
+
 type logFormatter interface {
 	formatterName() string
 	// doc is used to generate the formatter documentation.
@@ -17,6 +23,9 @@ type logFormatter interface {
 	// formatEntry formats a logEntry into a newly allocated *buffer.
 	// The caller is responsible for calling putBuffer() afterwards.
 	formatEntry(entry logEntry) *buffer
+
+	// setOption configures the formatter with the given option.
+	setOption(key string, value string) error
 
 	// contentType is the MIME content-type field to use on
 	// transports which use this metadata.
@@ -36,22 +45,46 @@ var formatParsers = map[string]string{
 	"json-fluent-compact": "json-compact",
 }
 
-var formatters = func() map[string]logFormatter {
-	m := make(map[string]logFormatter)
-	r := func(f logFormatter) {
-		m[f.formatterName()] = f
+var formatters = func() map[string]func() logFormatter {
+	m := make(map[string]func() logFormatter)
+	r := func(f func() logFormatter) {
+		name := f().formatterName()
+		if _, ok := m[name]; ok {
+			panic("duplicate formatter name: " + name)
+		}
+		m[name] = f
 	}
-	r(formatCrdbV1{})
-	r(formatCrdbV1WithCounter{})
-	r(formatCrdbV1TTY{})
-	r(formatCrdbV1TTYWithCounter{})
-	r(formatCrdbV2{})
-	r(formatCrdbV2TTY{})
-	r(formatFluentJSONCompact{})
-	r(formatFluentJSONFull{})
-	r(formatJSONCompact{})
-	r(formatJSONFull{})
+	r(func() logFormatter {
+		return &formatCrdbV1{showCounter: false, colorProfile: ttycolor.StderrProfile, colorProfileName: "auto"}
+	})
+	r(func() logFormatter {
+		return &formatCrdbV1{showCounter: false, colorProfileName: "none"}
+	})
+	r(func() logFormatter {
+		return &formatCrdbV1{showCounter: true, colorProfile: ttycolor.StderrProfile, colorProfileName: "auto"}
+	})
+	r(func() logFormatter {
+		return &formatCrdbV1{showCounter: true, colorProfileName: "none"}
+	})
+	r(func() logFormatter {
+		return &formatCrdbV2{colorProfileName: "none"}
+	})
+	r(func() logFormatter {
+		return &formatCrdbV2{colorProfile: ttycolor.StderrProfile, colorProfileName: "auto"}
+	})
+	r(func() logFormatter { return &formatJSONFull{fluentTag: true, tags: tagCompact} })
+	r(func() logFormatter { return &formatJSONFull{fluentTag: true, tags: tagVerbose} })
+	r(func() logFormatter { return &formatJSONFull{tags: tagCompact} })
+	r(func() logFormatter { return &formatJSONFull{tags: tagVerbose} })
 	return m
+}()
+
+var formatNames = func() (res []string) {
+	for name := range formatters {
+		res = append(res, name)
+	}
+	sort.Strings(res)
+	return res
 }()
 
 // GetFormatterDocs returns the embedded documentation for all the
@@ -59,7 +92,7 @@ var formatters = func() map[string]logFormatter {
 func GetFormatterDocs() map[string]string {
 	m := make(map[string]string)
 	for fmtName, f := range formatters {
-		m[fmtName] = f.doc()
+		m[fmtName] = f().doc()
 	}
 	return m
 }

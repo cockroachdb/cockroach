@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -26,7 +25,6 @@ go_test(
     name = "fmtsafe_test",
     size = "small",
     srcs = ["fmtsafe_test.go"],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]) + [
         "@go_sdk//:files",
     ],
@@ -38,5 +36,3 @@ go_test(
         "@org_golang_x_tools//go/analysis/analysistest",
     ],
 )
-
-get_x_data(name = "get_x_data")

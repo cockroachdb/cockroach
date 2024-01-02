@@ -1,9 +1,9 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "ssmemstorage",
     srcs = [
+        "ss_mem_counter.go",
         "ss_mem_iterator.go",
         "ss_mem_storage.go",
         "ss_mem_writer.go",
@@ -26,7 +26,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
-
-get_x_data(name = "get_x_data")

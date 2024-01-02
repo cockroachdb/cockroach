@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("@bazel_gomock//:gomock.bzl", "gomock")
 
@@ -34,7 +33,6 @@ go_test(
         "streamer_test.go",
         ":clusterstats_mock",  # keep
     ],
-    args = ["-test.timeout=295s"],
     embed = [":clusterstats"],
     deps = [
         "//pkg/roachprod/logger",
@@ -58,5 +56,3 @@ gomock(
         "//pkg/gen:__pkg__",
     ],
 )
-
-get_x_data(name = "get_x_data")

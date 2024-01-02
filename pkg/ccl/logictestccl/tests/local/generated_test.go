@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
@@ -50,6 +51,11 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
+
+	defer serverutils.TestingSetDefaultTenantSelectionOverride(
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+	)()
+
 	os.Exit(m.Run())
 }
 
@@ -107,11 +113,25 @@ func TestCCLLogic_crdb_internal(
 	runCCLLogicTest(t, "crdb_internal")
 }
 
+func TestCCLLogic_explain_call_plpgsql(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "explain_call_plpgsql")
+}
+
 func TestCCLLogic_explain_redact(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "explain_redact")
+}
+
+func TestCCLLogic_fips_ready(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "fips_ready")
 }
 
 func TestCCLLogic_new_schema_changer(
@@ -163,11 +183,60 @@ func TestCCLLogic_partitioning_index(
 	runCCLLogicTest(t, "partitioning_index")
 }
 
+func TestCCLLogic_pgcrypto_builtins(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "pgcrypto_builtins")
+}
+
+func TestCCLLogic_plpgsql_cursor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_cursor")
+}
+
+func TestCCLLogic_plpgsql_record(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_record")
+}
+
+func TestCCLLogic_plpgsql_unsupported(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_unsupported")
+}
+
+func TestCCLLogic_procedure_plpgsql(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "procedure_plpgsql")
+}
+
+func TestCCLLogic_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "read_committed")
+}
+
 func TestCCLLogic_redact_descriptor(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "redact_descriptor")
+}
+
+func TestCCLLogic_refcursor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "refcursor")
 }
 
 func TestCCLLogic_restore(
@@ -203,4 +272,25 @@ func TestCCLLogic_tenant_usage(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "tenant_usage")
+}
+
+func TestCCLLogic_udf_plpgsql(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "udf_plpgsql")
+}
+
+func TestCCLLogic_udf_rewrite(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "udf_rewrite")
+}
+
+func TestCCLLogic_udf_volatility_check(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "udf_volatility_check")
 }

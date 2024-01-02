@@ -16,10 +16,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,13 +30,13 @@ import (
 var adminPrefix = "/_admin/v1/"
 
 func getAdminJSONProto(
-	ts serverutils.TestTenantInterface, path string, response protoutil.Message,
+	ts serverutils.ApplicationLayerInterface, path string, response protoutil.Message,
 ) error {
 	return getAdminJSONProtoWithAdminOption(ts, path, response, true)
 }
 
 func getAdminJSONProtoWithAdminOption(
-	ts serverutils.TestTenantInterface, path string, response protoutil.Message, isAdmin bool,
+	ts serverutils.ApplicationLayerInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
 	return serverutils.GetJSONProtoWithAdminOption(ts, adminPrefix+path, response, isAdmin)
 }
@@ -47,19 +47,23 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Need to disable the test tenant because this test fails
-	// when run through a tenant (with internal server error).
-	// More investigation is required. Tracked with #76387.
-	defaultTestTenant := base.TestTenantDisabled
-	testCluster := serverutils.StartNewTestCluster(t, 3,
+	skip.UnderRace(t, "this test creates a 3 node cluster; too resource intensive.")
+
+	// TODO(clust-obs): This test should work with just a single node,
+	// i.e. using serverutils.StartServer` instead of
+	// `StartCluster`.
+	testCluster := serverutils.StartCluster(t, 3,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: defaultTestTenant,
+				// The code below ought to work when this is omitted. This
+				// needs to be investigated further.
+				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(106897),
 			},
 		})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServer := testCluster.Server(0)
+
 	sqlDB := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
 
 	sqlDB.Exec(t, `CREATE DATABASE roachblog`)
@@ -81,11 +85,6 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	// Would use locality constraints except this test cluster hasn't been started up with localities.
 	sqlDB.Exec(t, `ALTER PARTITION us OF TABLE comments CONFIGURE ZONE USING gc.ttlseconds = 9001`)
 	sqlDB.Exec(t, `ALTER PARTITION eu OF TABLE comments CONFIGURE ZONE USING gc.ttlseconds = 9002`)
-
-	if defaultTestTenant == base.TestTenantDisabled {
-		// Make sure secondary tenants don't cause the endpoint to error.
-		sqlDB.Exec(t, "CREATE TENANT 'app'")
-	}
 
 	// Assert that we get all roachblog zone configs back.
 	expectedZoneConfigNames := map[string]struct{}{
@@ -113,7 +112,7 @@ func TestAdminAPIChartCatalog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServer := testCluster.Server(0)
@@ -131,7 +130,7 @@ func TestAdminAPIJobs(t *testing.T) {
 	defer dirCleanupFn()
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Fails with the default test tenant. Tracked with #76378.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		ExternalIODir:     dir})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -170,12 +169,12 @@ func TestListTenants(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)
 
-	_, _, err := s.(*server.TestServer).StartSharedProcessTenant(ctx,
+	_, _, err := s.TenantController().StartSharedProcessTenant(ctx,
 		base.TestSharedProcessTenantArgs{
 			TenantName: "test",
 		})
@@ -204,14 +203,13 @@ func TestListTenants(t *testing.T) {
 
 func TestTableAndDatabaseDetailsAndStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	st, db := serverutils.StartTenant(t, s, base.TestTenantArgs{
-		TenantID: serverutils.TestTenantID(),
-	})
+	st := s.ApplicationLayer()
 	_, err := db.Exec("CREATE TABLE test (id int)")
 	require.NoError(t, err)
 	_, err = db.Exec("INSERT INTO test VALUES (1)")
@@ -224,6 +222,12 @@ func TestTableAndDatabaseDetailsAndStats(t *testing.T) {
 
 	require.Equal(t, dbResp.TableNames[0], "public.test")
 
+	var dbDetailsResp serverpb.DatabaseDetailsResponse
+	err = getAdminJSONProto(st, "databases/defaultdb?include_stats=true", &dbDetailsResp)
+	require.NoError(t, err)
+
+	require.Greater(t, dbDetailsResp.Stats.RangeCount, int64(0))
+
 	// TableStats
 	tableStatsResp := &serverpb.TableStatsResponse{}
 	err = getAdminJSONProto(st, "databases/defaultdb/tables/public.test/stats", tableStatsResp)
@@ -232,9 +236,16 @@ func TestTableAndDatabaseDetailsAndStats(t *testing.T) {
 	require.Greater(t, tableStatsResp.Stats.LiveBytes, int64(0))
 
 	// TableDetails
-	tableDetailsResp := &serverpb.TableDetailsResponse{}
-	err = getAdminJSONProto(st, "databases/defaultdb/tables/public.test", tableDetailsResp)
-	require.NoError(t, err)
-
-	require.Greater(t, tableDetailsResp.DataLiveBytes, int64(0))
+	// Call to endpoint is wrapped with retry logic to potentially avoid flakiness of
+	// returned results (issue #112387).
+	testutils.SucceedsSoon(t, func() error {
+		tableDetailsResp := &serverpb.TableDetailsResponse{}
+		if err := getAdminJSONProto(st, "databases/defaultdb/tables/public.test", tableDetailsResp); err != nil {
+			return err
+		}
+		if tableDetailsResp.DataLiveBytes <= 0 {
+			return fmt.Errorf("expected DataLiveBytes to be greater than 0 but got %d", tableDetailsResp.DataLiveBytes)
+		}
+		return nil
+	})
 }

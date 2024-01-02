@@ -53,6 +53,26 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 		}
 	}
 
+	lintEnv := os.Environ()
+
+	if !short {
+		// First, generate code to make sure GCAssert and any other
+		// tests that depend on generated code still work.
+		if err := d.generateGo(cmd); err != nil {
+			return err
+		}
+		// We also need `CC` and `CXX` set appropriately.
+		cc, err := d.exec.LookPath("cc")
+		if err != nil {
+			return fmt.Errorf("`cc` is not installed; needed for `TestGCAssert` (%w)", err)
+		}
+		cc = strings.TrimSpace(cc)
+		d.log.Printf("export CC=%s", cc)
+		d.log.Printf("export CXX=%s", cc)
+		envWithCc := []string{"CC=" + cc, "CXX=" + cc}
+		lintEnv = append(envWithCc, lintEnv...)
+	}
+
 	var args []string
 	// NOTE the --config=test here. It's very important we compile the test binary with the
 	// appropriate stuff (gotags, etc.)
@@ -80,13 +100,11 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 		if !strings.HasPrefix(pkg, "./") {
 			pkg = "./" + pkg
 		}
-		env := os.Environ()
 		envvar := fmt.Sprintf("PKG=%s", pkg)
 		d.log.Printf("export %s", envvar)
-		env = append(env, envvar)
-		return d.exec.CommandContextWithEnv(ctx, env, "bazel", args...)
+		lintEnv = append(lintEnv, envvar)
 	}
-	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	err := d.exec.CommandContextWithEnv(ctx, lintEnv, "bazel", args...)
 	if err != nil {
 		return err
 	}

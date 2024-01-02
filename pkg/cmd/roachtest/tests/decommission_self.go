@@ -24,14 +24,14 @@ import (
 func runDecommissionSelf(ctx context.Context, t test.Test, c cluster.Cluster) {
 	allNodes := c.All()
 	u := newVersionUpgradeTest(c,
-		uploadVersionStep(allNodes, clusterupgrade.MainVersion),
-		startVersion(allNodes, clusterupgrade.MainVersion),
-		fullyDecommissionStep(2, 2, clusterupgrade.MainVersion),
+		uploadCockroachStep(allNodes, clusterupgrade.CurrentVersion()),
+		startVersion(allNodes, clusterupgrade.CurrentVersion()),
+		fullyDecommissionStep(2, 2, clusterupgrade.CurrentVersion()),
 		func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 			// Stop n2 and exclude it from post-test consistency checks,
 			// as this node can't contact cluster any more and operations
 			// on it will hang.
-			u.c.Wipe(ctx, c.Node(2))
+			u.c.Wipe(ctx, false /* preserveCerts */, c.Node(2))
 		},
 		checkOneMembership(1, "decommissioned"),
 	)

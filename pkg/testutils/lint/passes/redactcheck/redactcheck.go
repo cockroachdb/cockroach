@@ -60,6 +60,11 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"StoreIDContainer": {},
 						"SQLInstanceID":    {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/settings": {
+						"InternalKey": {},
+						"SettingName": {},
+						"ValueOrigin": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/cli/exit": {
 						"Code": {},
 					},
@@ -82,6 +87,21 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"LeaseAppliedIndex": {},
 						"RaftIndex":         {},
 						"RaftTerm":          {},
+						"PushTxnType":       {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator": {
+						"LeaseTransferOutcome": {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl": {
+						"AllocatorAction":   {},
+						"TargetReplicaType": {},
+						"ReplicaStatus":     {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load": {
+						"Dimension": {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool": {
+						"storeStatus": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb": {
 						"SeqNum": {},
@@ -98,9 +118,15 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb": {
 						"SnapshotRequest_Type": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb": {
+						"MembershipStatus": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset": {
 						"SpanAccess": {},
 						"SpanScope":  {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split": {
+						"SplitObjective": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities": {
 						"ID": {},
@@ -117,6 +143,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"ReplicaID":         {},
 						"ReplicaType":       {},
 						"StoreID":           {},
+						"StoreIDSlice":      {},
 						"TenantID":          {},
 						"TransactionStatus": {},
 					},
@@ -124,7 +151,8 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"ConnectionClass": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb": {
-						"JobID": {},
+						"JobID":      {},
+						"ScheduleID": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb": {
 						"ConstraintValidity":           {},
@@ -135,6 +163,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"IndexDescriptorVersion":       {},
 						"MutationID":                   {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/sql/clusterunique": {
+						"ID": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb": {
 						"ComponentID_Type": {},
 					},
@@ -142,8 +173,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"FormatCode": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/privilege": {
-						"Kind":       {},
-						"ObjectType": {},
+						"KindInternalKey": {},
+						"KindDisplayName": {},
+						"ObjectType":      {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants": {
 						"ConstraintType": {},
@@ -162,6 +194,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"IndexID":        {},
 						"PGAttributeNum": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/sql/sem/tree": {
+						"IsolationLevel": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness": {
 						"SessionID": {},
 					},
@@ -171,10 +206,17 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"TxnEpoch":       {},
 						"TxnSeq":         {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/util/admission": {
+						"WorkKind":  {},
+						"QueueKind": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/util/hlc": {
 						"ClockTimestamp":  {},
 						"LegacyTimestamp": {},
 						"Timestamp":       {},
+					},
+					"github.com/cockroachdb/pebble": {
+						"FormatMajorVersion": {},
 					},
 					"github.com/cockroachdb/pebble/internal/humanize": {
 						"FormattedString": {},

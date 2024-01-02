@@ -1,14 +1,19 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load("@io_bazel_rules_go//extras:bindata.bzl", "bindata")
 
 go_library(
     name = "securitytest",
     srcs = [
         "securitytest.go",
         "testcerts.go",
-        ":embedded",  # keep
     ],
+    # keep
+    embedsrcs = glob(
+        ["test_certs/*"],
+        exclude = [
+            "test_certs/README.md",
+            "test_certs/regenerate.sh",
+        ],
+    ),
     importpath = "github.com/cockroachdb/cockroach/pkg/security/securitytest",
     visibility = ["//visibility:public"],
     deps = [
@@ -17,25 +22,3 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
-
-bindata(
-    name = "embedded",
-    srcs = glob(
-        ["test_certs/*"],
-        exclude = [
-            "test_certs/README.md",
-            "test_certs/regenerate.sh",
-        ],
-    ),
-    extra_args = [
-        "-mode",
-        "0600",
-        "-modtime",
-        "1400000000",
-    ],
-    metadata = True,
-    package = "securitytest",
-    visibility = ["//pkg/gen:__pkg__"],
-)
-
-get_x_data(name = "get_x_data")

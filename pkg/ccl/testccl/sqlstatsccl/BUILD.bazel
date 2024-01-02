@@ -1,13 +1,13 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "sqlstatsccl_test",
+    # Explicitly indicate timeout as some of the tests (ie TestSQLStatsRegions) might take up to 3 min to run.
+    timeout = "moderate",
     srcs = [
         "main_test.go",
         "sql_stats_test.go",
     ],
-    args = ["-test.timeout=295s"],
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",
@@ -16,9 +16,8 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/settings/cluster",
-        "//pkg/sql",
         "//pkg/sql/appstatspb",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
@@ -29,5 +28,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

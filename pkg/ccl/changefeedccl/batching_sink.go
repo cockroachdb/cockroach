@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -28,9 +27,11 @@ import (
 // SinkClient is an interface to an external sink, where messages are written
 // into batches as they arrive and once ready are flushed out.
 type SinkClient interface {
-	MakeResolvedPayload(body []byte, topic string) (SinkPayload, error)
-	// Batches can only hold messages for one unique topic
 	MakeBatchBuffer(topic string) BatchBuffer
+	// FlushResolvedPayload flushes the resolved payload to the sink. It takes
+	// an iterator over the set of topics in case the client chooses to emit
+	// the payload to multiple topics.
+	FlushResolvedPayload(context.Context, []byte, func(func(topic string) error) error, retry.Options) error
 	Flush(context.Context, SinkPayload) error
 	Close() error
 }
@@ -38,7 +39,7 @@ type SinkClient interface {
 // BatchBuffer is an interface to aggregate KVs into a payload that can be sent
 // to the sink.
 type BatchBuffer interface {
-	Append(key []byte, value []byte)
+	Append(key []byte, value []byte, attributes attributes)
 	ShouldFlush() bool
 
 	// Once all data has been Append'ed, Close can be called to return a finalized
@@ -90,6 +91,12 @@ type flushReq struct {
 	waiter chan struct{}
 }
 
+// attributes contain additional metadata which may be emitted alongside a row
+// but separate from the encoded keys and values.
+type attributes struct {
+	tableName string
+}
+
 type rowEvent struct {
 	key             []byte
 	val             []byte
@@ -136,7 +143,7 @@ var _ Sink = (*batchingSink)(nil)
 // therefore escape to the heap) can both be incredibly frequent (every event
 // may be its own batch) and temporary, so to avoid GC thrashing they are both
 // claimed and freed from object pools.
-var eventPool sync.Pool = sync.Pool{
+var eventPool = sync.Pool{
 	New: func() interface{} {
 		return new(rowEvent)
 	},
@@ -199,17 +206,12 @@ func (s *batchingSink) EmitResolvedTimestamp(
 	if err != nil {
 		return err
 	}
-	payload, err := s.client.MakeResolvedPayload(data, "")
-	if err != nil {
-		return err
-	}
-
+	// Flush the buffered rows.
 	if err = s.Flush(ctx); err != nil {
 		return err
 	}
-	return retry.WithMaxAttempts(ctx, s.retryOpts, s.retryOpts.MaxRetries+1, func() error {
-		return s.client.Flush(ctx, payload)
-	})
+
+	return s.client.FlushResolvedPayload(ctx, data, s.topicNamer.Each, s.retryOpts)
 }
 
 // Close implements the Sink interface.
@@ -262,6 +264,11 @@ func (sb *sinkBatch) Keys() intsets.Fast {
 	return sb.keys
 }
 
+// NumMessages implements the IORequest interface.
+func (sb *sinkBatch) NumMessages() int {
+	return sb.numMessages
+}
+
 func (sb *sinkBatch) isEmpty() bool {
 	return sb.numMessages == 0
 }
@@ -278,7 +285,9 @@ func (sb *sinkBatch) Append(e *rowEvent) {
 		sb.bufferTime = timeutil.Now()
 	}
 
-	sb.buffer.Append(e.key, e.val)
+	sb.buffer.Append(e.key, e.val, attributes{
+		tableName: e.topicDescriptor.GetTableName(),
+	})
 
 	sb.keys.Add(hashToInt(sb.hasher, e.key))
 	sb.numMessages += 1
@@ -402,11 +411,12 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 	for {
 		select {
 		case req := <-s.eventCh:
-			if err := s.pacer.Pace(ctx); err != nil {
-				if pacerLogEvery.ShouldLog() {
-					log.Errorf(ctx, "automatic sink batcher pacing: %v", err)
-				}
-			}
+			// Swallow pacer error -- it happens only if context is canceled,
+			// and that's handled below.
+			// TODO(yevgeniy): rework this function: this function should simply
+			// return an error, and not rely on "handleError".
+			// It's hard to reason about this functions correctness otherwise.
+			_ = s.pacer.Pace(ctx)
 
 			switch r := req.(type) {
 			case *rowEvent:

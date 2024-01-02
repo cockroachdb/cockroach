@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
@@ -17,7 +16,6 @@ go_library(
         "go.go",
         "lint.go",
         "main.go",
-        "merge_test_xmls.go",
         "roachprod_stress.go",
         "test.go",
         "test_binaries.go",
@@ -47,11 +45,11 @@ go_binary(
 
 go_test(
     name = "dev_test",
+    size = "small",
     srcs = [
         "datadriven_test.go",
         "recorderdriven_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":dev_lib"],
     deps = [
@@ -84,5 +82,3 @@ disallowed_imports_test(
     ],
     disallow_cdeps = True,
 )
-
-get_x_data(name = "get_x_data")

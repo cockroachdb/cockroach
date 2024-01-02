@@ -1,11 +1,9 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "auditlogging",
     srcs = [
         "audit_log.go",
-        "audit_log_config.go",
         "parser.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/auditlogging",
@@ -19,7 +17,6 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
-        "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/syncutil",
@@ -31,7 +28,6 @@ go_library(
 go_test(
     name = "auditlogging_test",
     srcs = ["audit_log_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":auditlogging"],
     deps = [
@@ -41,5 +37,3 @@ go_test(
         "@com_github_kr_pretty//:pretty",
     ],
 )
-
-get_x_data(name = "get_x_data")

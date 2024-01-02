@@ -198,15 +198,12 @@ func RunCDCEvaluation(
 		return err
 	}
 
-	// Execute the flow.  Force the use of planner descriptor cache when setting
-	// up this local flow.  This is necessary so that as soon as the local flow
-	// setup completes, and all descriptors have been resolved (including leases
-	// for user defined types), we can release those descriptors. If we don't,
-	// then the descriptor leases acquired will be held for the
-	// DefaultDescriptorLeaseDuration (5 minutes), blocking potential schema
-	// changes.
-	cdcPlan.PlanCtx.usePlannerDescriptorsForLocalFlow = true
 	p := cdcPlan.PlanCtx.planner
+	// Make sure that as soon as the local flow setup completes, and all
+	// descriptors have been resolved (including leases for user defined types),
+	// we can release those descriptors. If we don't, then the descriptor leases
+	// acquired will be held for the DefaultDescriptorLeaseDuration (5 minutes),
+	// blocking potential schema changes.
 	finishedSetupFn := func(flowinfra.Flow) {
 		p.Descriptors().ReleaseAll(ctx)
 	}
@@ -410,7 +407,7 @@ func (c *cdcOptCatalog) ResolveDataSourceByID(
 // ResolveFunction implements cat.Catalog interface.
 // We provide custom implementation to resolve CDC specific functions.
 func (c *cdcOptCatalog) ResolveFunction(
-	ctx context.Context, fnName *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, fnName tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
 	if c.semaCtx != nil && c.semaCtx.FunctionResolver != nil {
 		fnDef, err := c.semaCtx.FunctionResolver.ResolveFunction(ctx, fnName, path)

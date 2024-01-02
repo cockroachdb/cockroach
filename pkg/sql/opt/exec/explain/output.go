@@ -16,9 +16,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
@@ -210,7 +213,13 @@ func (ob *OutputBuilder) BuildStringRows() []string {
 			child.AddLine(fmt.Sprintf("columns: %s", entry.columns))
 		}
 		if entry.ordering != "" {
-			child.AddLine(fmt.Sprintf("ordering: %s", entry.ordering))
+			// Do not print "ordering" redundantly  with "order" attribute of
+			// sort operators. Note that we choose to keep the latter so that
+			// "already ordered" and "K" attributes are printed right after the
+			// order.
+			if entry.node != nodeNames[sortOp] && entry.node != nodeNames[topKOp] {
+				child.AddLine(fmt.Sprintf("ordering: %s", entry.ordering))
+			}
 		}
 		// Add any fields for the node.
 		for entry = popField(); entry != nil; entry = popField() {
@@ -387,11 +396,11 @@ func (ob *OutputBuilder) AddCPUTime(cpuTime time.Duration) {
 
 // AddRUEstimate adds a top-level field for the estimated number of RUs consumed
 // by the query.
-func (ob *OutputBuilder) AddRUEstimate(ru int64) {
+func (ob *OutputBuilder) AddRUEstimate(ru float64) {
 	ob.AddFlakyTopLevelField(
 		DeflakeVolatile,
 		"estimated RUs consumed",
-		string(humanizeutil.Count(uint64(ru))),
+		string(humanizeutil.Countf(ru)),
 	)
 }
 
@@ -402,6 +411,16 @@ func (ob *OutputBuilder) AddRegionsStats(regions []string) {
 		"regions",
 		strings.Join(regions, ", "),
 	)
+}
+
+// AddTxnInfo adds top-level fields for information about the query's
+// transaction.
+func (ob *OutputBuilder) AddTxnInfo(
+	txnIsoLevel isolation.Level, txnPriority roachpb.UserPriority, txnQoSLevel sessiondatapb.QoSLevel,
+) {
+	ob.AddTopLevelField("isolation level", txnIsoLevel.StringLower())
+	ob.AddTopLevelField("priority", txnPriority.String())
+	ob.AddTopLevelField("quality of service", txnQoSLevel.String())
 }
 
 // AddWarning adds the provided string to the list of warnings. Warnings will be

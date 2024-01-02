@@ -20,303 +20,217 @@ package serverutils
 import (
 	"context"
 	gosql "database/sql"
-	"flag"
-	"math/rand"
+	"fmt"
 	"net/url"
-	"testing"
+	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
-// DefaultTestTenantMessage is a message that is printed when a test is run
-// with the default test tenant. This is useful for debugging test failures.
-const DefaultTestTenantMessage = "Running test with the default test tenant. " +
-	"If you are only seeing a test case failure when this message appears, there may be a " +
-	"problem with your test case running within tenants."
+// defaultTestTenantMessage is a message that is printed when a test is run
+// under cluster virtualization. This is useful for debugging test failures.
+//
+// If you see this message, the test server was configured to route SQL queries
+// to a virtual cluster (secondary tenant). If you are only seeing a test
+// failure when this message appears, there may be a problem specific to cluster
+// virtualization or multi-tenancy. A virtual cluster can be started either as a
+// shared process or as an external process. The problem may be specific to one
+// of these modes, so it is important to note which mode was used from the log
+// message.
+//
+// To investigate, consider using "COCKROACH_TEST_TENANT=true" to force-enable
+// just the virtual cluster in all runs (or, alternatively, "false" to
+// force-disable), or use "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true"
+// to disable all random test variables altogether.`
 
-// TenantModeFlagName is the exported name of the tenantMode flag, for use
-// in other packages.
-const TenantModeFlagName = "tenantMode"
+var defaultTestTenantMessage = func(sharedProcess bool) string {
+	processModeMessage := "an external process"
+	if sharedProcess {
+		processModeMessage = "a shared process"
+	}
+	return fmt.Sprintf(
+		`automatically injected %s virtual cluster under test; see comment at top of test_server_shim.go for details.`,
+		processModeMessage,
+	)
+}
 
-var tenantModeFlag = flag.String(
-	TenantModeFlagName, tenantModeDefault,
-	"tenantMode in which to run tests. Options are forceTenant, forceNoTenant, and default "+
-		"which alternates between tenant and no-tenant mode probabilistically. Note that the two force "+
-		"modes are ignored if the test is already forced to run in one of the two modes.")
-
-const (
-	tenantModeForceTenant   = "forceTenant"
-	tenantModeForceNoTenant = "forceNoTenant"
-	tenantModeDefault       = "default"
-)
-
-var PreventStartTenantError = errors.New("attempting to manually start a tenant while " +
+var PreventStartTenantError = errors.New("attempting to manually start a virtual cluster while " +
 	"DefaultTestTenant is set to TestTenantProbabilisticOnly")
 
 // ShouldStartDefaultTestTenant determines whether a default test tenant
 // should be started for test servers or clusters, to serve SQL traffic by
-// default. It defaults to 50% probability, but can be overridden by the
-// tenantMode test flag or the COCKROACH_TEST_TENANT_MODE environment variable.
-// If both the environment variable and the test flag are set, the environment
-// variable wins out.
-func ShouldStartDefaultTestTenant(t testing.TB, serverArgs base.TestServerArgs) bool {
-	// Explicit cases for enabling or disabling the default test tenant.
-	if serverArgs.DefaultTestTenant == base.TestTenantDisabled {
-		return false
-	}
-	if serverArgs.DefaultTestTenant == base.TestTenantEnabled {
-		return true
+// default. It returns a new base.DefaultTestTenantOptions that reflects
+// the decision that was taken.
+//
+// The decision can be overridden either via the build tag `metamorphic_disable`
+// or just for test tenants via COCKROACH_TEST_TENANT.
+//
+// This function is included in package 'serverutils' instead of 'server.testServer'
+// directly so that it only gets linked into test code (and to avoid a linter
+// error that 'skip' must only be used in test code).
+func ShouldStartDefaultTestTenant(
+	t TestLogger, baseArg base.DefaultTestTenantOptions, multiNodeCluster bool,
+) (retval base.DefaultTestTenantOptions) {
+	// Explicit case for disabling the default test tenant.
+	if baseArg.TestTenantAlwaysDisabled() {
+		if issueNum, label := baseArg.IssueRef(); issueNum != 0 {
+			t.Logf("cluster virtualization disabled due to issue: #%d (expected label: %s)", issueNum, label)
+		}
+		return baseArg
 	}
 
-	// Probabilistic cases for enabling or disabling the default test tenant.
-	var defaultProbabilityOfStartingTestTenant = 0.5
 	if skip.UnderBench() {
 		// Until #83461 is resolved, we want to make sure that we don't use the
 		// multi-tenant setup so that the comparison against old single-tenant
 		// SHAs in the benchmarks is fair.
-		defaultProbabilityOfStartingTestTenant = 0
-	}
-	var probabilityOfStartingDefaultTestTenant float64
-
-	tenantModeTestString, envSet := envutil.EnvString("COCKROACH_TEST_TENANT_MODE", 0)
-	if !envSet {
-		tenantModeTestString = *tenantModeFlag
+		return base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(83461)
 	}
 
-	switch tenantModeTestString {
-	case tenantModeForceTenant:
-		probabilityOfStartingDefaultTestTenant = 1.0
-	case tenantModeForceNoTenant:
-		probabilityOfStartingDefaultTestTenant = 0.0
-	case tenantModeDefault:
-		probabilityOfStartingDefaultTestTenant = defaultProbabilityOfStartingTestTenant
+	// If the test tenant is explicitly enabled and a process mode selected, then
+	// we are done.
+	if !baseArg.TestTenantNoDecisionMade() {
+		return baseArg
+	}
+
+	// Determine if the default test tenant should be run as a shared process.
+	var shared bool
+	switch {
+	case baseArg.SharedProcessMode():
+		shared = true
+	case baseArg.ExternalProcessMode():
+		shared = false
 	default:
-		t.Fatal("invalid setting of tenantMode flag")
+		// If no explicit process mode was selected, then randomly select one.
+		rng, _ := randutil.NewTestRand()
+		shared = rng.Intn(2) == 0
 	}
 
-	return rand.Float64() <= probabilityOfStartingDefaultTestTenant
+	// Explicit case for enabling the default test tenant, but with a
+	// probabilistic selection made for running as a shared or external process.
+	if baseArg.TestTenantAlwaysEnabled() {
+		return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared /* shared */)
+	}
+
+	if decision, override := testTenantDecisionFromEnvironment(baseArg, shared); override {
+		if decision.TestTenantAlwaysEnabled() {
+			t.Log(defaultTestTenantMessage(decision.SharedProcessMode()) + "\n(override via COCKROACH_TEST_TENANT)")
+		}
+		return decision
+	}
+
+	if globalDefaultSelectionOverride.isSet {
+		override := globalDefaultSelectionOverride.value
+		if override.TestTenantNoDecisionMade() {
+			panic("programming error: global override does not contain a final decision")
+		}
+		if override.TestTenantAlwaysDisabled() {
+			if issueNum, label := override.IssueRef(); issueNum != 0 {
+				t.Logf("cluster virtualization disabled in global scope due to issue: #%d (expected label: %s)", issueNum, label)
+			}
+		} else {
+			t.Log(defaultTestTenantMessage(shared) + "\n(override via TestingSetDefaultTenantSelectionOverride)")
+		}
+		return override
+	}
+
+	if multiNodeCluster && util.RaceEnabled {
+		// Race builds now run in the EngFlow environment which seems to be
+		// often overloaded if we have multi-node clusters and start a default
+		// test tenant, so we disable the tenant randomization in such a
+		// scenario.
+		if t != nil {
+			t.Log("cluster virtualization disabled under race")
+		}
+		return base.InternalNonDefaultDecision(baseArg, false /* enable */, false /* shared */)
+	}
+
+	// Note: we ask the metamorphic framework for a "disable" value, instead
+	// of an "enable" value, because it probabilistically returns its default value
+	// more often than not and that is what we want.
+	enabled := !util.ConstantWithMetamorphicTestBoolWithoutLogging("disable-test-tenant", false)
+	if enabled && t != nil {
+		t.Log(defaultTestTenantMessage(shared))
+	}
+	if enabled {
+		return base.InternalNonDefaultDecision(baseArg, true /* enable */, shared /* shared */)
+	}
+	return base.InternalNonDefaultDecision(baseArg, false /* enable */, false /* shared */)
 }
 
-// TestServerInterface defines test server functionality that tests need; it is
-// implemented by server.TestServer.
-type TestServerInterface interface {
-	Start(context.Context) error
-
-	// TestTenantInterface embeds SQL-only APIs that tests need to interact with
-	// the host tenant.
+const (
+	// COCKROACH_TEST_TENANT controls whether a secondary tenant
+	// is used by a TestServer-based test.
 	//
-	// TODO(irfansharif): Audit the remaining symbols in TestServerInterface to
-	// see if they're better suited to TestTenantInterface.
-	TestTenantInterface
-
-	// Node returns the server.Node as an interface{}.
-	Node() interface{}
-
-	// NodeID returns the ID of this node within its cluster.
-	NodeID() roachpb.NodeID
-
-	// StorageClusterID returns the storage cluster ID as understood by
-	// this node in the cluster.
-	StorageClusterID() uuid.UUID
-
-	// ServingRPCAddr returns the server's advertised address.
-	ServingRPCAddr() string
-
-	// ServingSQLAddr returns the server's advertised SQL address.
-	ServingSQLAddr() string
-
-	// RPCAddr returns the server's RPC address.
-	// Note: use ServingRPCAddr() instead unless specific reason not to.
-	RPCAddr() string
-
-	// LeaseManager() returns the *sql.LeaseManager as an interface{}.
-	LeaseManager() interface{}
-
-	// InternalExecutor returns a *sql.InternalExecutor as an interface{} (which
-	// also implements insql.InternalExecutor if the test cannot depend on sql).
-	InternalExecutor() interface{}
-
-	// InternalExecutorInternalExecutorFactory returns a
-	// insql.InternalDB as an interface{}.
-	InternalDB() interface{}
-
-	// TracerI returns a *tracing.Tracer as an interface{}.
-	TracerI() interface{}
-
-	// GossipI returns the gossip used by the TestServer.
-	// The real return type is *gossip.Gossip.
-	GossipI() interface{}
-
-	// DistSenderI returns the DistSender used by the TestServer.
-	// The real return type is *kv.DistSender.
-	DistSenderI() interface{}
-
-	// MigrationServer returns the internal *migrationServer as in interface{}
-	MigrationServer() interface{}
-
-	// SQLServer returns the *sql.Server as an interface{}.
-	SQLServer() interface{}
-
-	// SQLLivenessProvider returns the sqlliveness.Provider as an interface{}.
-	SQLLivenessProvider() interface{}
-
-	// NodeLiveness exposes the NodeLiveness instance used by the TestServer as an
-	// interface{}.
-	NodeLiveness() interface{}
-
-	// HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
-	HeartbeatNodeLiveness() error
-
-	// NodeDialer exposes the NodeDialer instance used by the TestServer as an
-	// interface{}.
-	NodeDialer() interface{}
-
-	// SetDistSQLSpanResolver changes the SpanResolver used for DistSQL inside the
-	// server's executor. The argument must be a physicalplan.SpanResolver
-	// instance.
+	// - false disables the use of tenants;
 	//
-	// This method exists because we cannot pass the fake span resolver with the
-	// server or cluster params: the fake span resolver needs the node IDs and
-	// addresses of the servers in a cluster, which are not available before we
-	// start the servers.
+	// - true forces the use of tenants, randomly deciding between
+	//   an external or shared process tenant;
 	//
-	// It is the caller's responsibility to make sure no queries are being run
-	// with DistSQL at the same time.
-	SetDistSQLSpanResolver(spanResolver interface{})
-
-	// MustGetSQLCounter returns the value of a counter metric from the server's
-	// SQL Executor. Runs in O(# of metrics) time, which is fine for test code.
-	MustGetSQLCounter(name string) int64
-	// MustGetSQLNetworkCounter returns the value of a counter metric from the
-	// server's SQL server. Runs in O(# of metrics) time, which is fine for test
-	// code.
-	MustGetSQLNetworkCounter(name string) int64
-	// WriteSummaries records summaries of time-series data, which is required for
-	// any tests that query server stats.
-	WriteSummaries() error
-
-	// GetFirstStoreID is a utility function returning the StoreID of the first
-	// store on this node.
-	GetFirstStoreID() roachpb.StoreID
-
-	// GetStores returns the collection of stores from this TestServer's node.
-	// The return value is of type *kvserver.Stores.
-	GetStores() interface{}
-
-	// Decommission idempotently sets the decommissioning flag for specified nodes.
-	Decommission(ctx context.Context, targetStatus livenesspb.MembershipStatus, nodeIDs []roachpb.NodeID) error
-
-	// DecommissioningNodeMap returns a map of nodeIDs that are known to the
-	// server to be decommissioning.
-	DecommissioningNodeMap() map[roachpb.NodeID]interface{}
-
-	// SplitRange splits the range containing splitKey.
-	SplitRange(splitKey roachpb.Key) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)
-
-	// MergeRanges merges the range containing leftKey with the following adjacent
-	// range.
-	MergeRanges(leftKey roachpb.Key) (merged roachpb.RangeDescriptor, err error)
-
-	// ExpectedInitialRangeCount returns the expected number of ranges that should
-	// be on the server after initial (asynchronous) splits have been completed,
-	// assuming no additional information is added outside of the normal bootstrap
-	// process.
-	ExpectedInitialRangeCount() (int, error)
-
-	// ForceTableGC sends a GCRequest for the ranges corresponding to a table.
+	// - shared forces the use of a tenant, always starting a
+	//   shared process tenant;
 	//
-	// An error will be returned if the same table name exists in multiple schemas
-	// inside the specified database.
-	ForceTableGC(ctx context.Context, database, table string, timestamp hlc.Timestamp) error
+	// - external forces the use of a tenant, always starting a
+	//   separate process tenant.
+	testTenantEnabledEnvVar = "COCKROACH_TEST_TENANT"
 
-	// UpdateChecker returns the server's *diagnostics.UpdateChecker as an
-	// interface{}. The UpdateChecker periodically phones home to check for new
-	// updates that are available.
-	UpdateChecker() interface{}
+	testTenantModeEnabledShared   = "shared"
+	testTenantModeEnabledExternal = "external"
+)
 
-	// StartSharedProcessTenant starts a "shared-process" tenant - i.e. a tenant
-	// running alongside a KV server.
-	//
-	// args.TenantName must be specified. If a tenant with that name already
-	// exists, its ID is checked against args.TenantID (if set), and, if it
-	// matches, new tenant metadata is not created in the system.tenants table.
-	//
-	// See also StartTenant(), which starts a tenant mimicking out-of-process tenant
-	// servers.
-	StartSharedProcessTenant(
-		ctx context.Context, args base.TestSharedProcessTenantArgs,
-	) (TestTenantInterface, *gosql.DB, error)
+func testTenantDecisionFromEnvironment(
+	baseArg base.DefaultTestTenantOptions, shared bool,
+) (base.DefaultTestTenantOptions, bool) {
+	if str, present := envutil.EnvString(testTenantEnabledEnvVar, 0); present {
+		v, err := strconv.ParseBool(str)
+		if err == nil {
+			if v {
+				return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared /* shared */), true
+			}
+			return base.InternalNonDefaultDecision(baseArg, false /* enabled */, false /* shared */), true
+		}
 
-	// StartTenant starts a tenant server connecting to this TestServer. The
-	// tenant server simulates an out-of-process server. See also
-	// StartSharedProcessTenant() for a tenant simulating a shared-memory server.
-	StartTenant(ctx context.Context, params base.TestTenantArgs) (TestTenantInterface, error)
-
-	// DisableStartTenant prevents manual starting of tenants. If an attempt at
-	// starting a tenant is made, the server will return the specified error.
-	DisableStartTenant(reason error)
-
-	// ScratchRange splits off a range suitable to be used as KV scratch space.
-	// (it doesn't overlap system spans or SQL tables).
-	//
-	// Calling this multiple times is undefined (but see
-	// TestCluster.ScratchRange() which is idempotent).
-	ScratchRange() (roachpb.Key, error)
-
-	// Engines returns the TestServer's engines.
-	Engines() []storage.Engine
-
-	// MetricsRecorder periodically records node-level and store-level metrics.
-	MetricsRecorder() *status.MetricsRecorder
-
-	// CollectionFactory returns a *descs.CollectionFactory.
-	CollectionFactory() interface{}
-
-	// SystemTableIDResolver returns a catalog.SystemTableIDResolver.
-	SystemTableIDResolver() interface{}
-
-	// SpanConfigKVSubscriber returns the embedded spanconfig.KVSubscriber for
-	// the server.
-	SpanConfigKVSubscriber() interface{}
-
-	// TestTenants returns the test tenants associated with the server
-	TestTenants() []TestTenantInterface
-
-	// StartedDefaultTestTenant returns true if the server has started the default
-	// test tenant.
-	StartedDefaultTestTenant() bool
-
-	// TenantOrServer returns the default test tenant, if it was started or this
-	// server if not.
-	TenantOrServer() TestTenantInterface
-
-	// BinaryVersionOverride returns the value of an override if set using
-	// TestingKnobs.
-	BinaryVersionOverride() roachpb.Version
+		switch str {
+		case testTenantModeEnabledShared:
+			return base.InternalNonDefaultDecision(baseArg, true /* enabled */, true /* shared */), true
+		case testTenantModeEnabledExternal:
+			return base.InternalNonDefaultDecision(baseArg, true /* enabled */, false /* shared */), true
+		default:
+			panic(fmt.Sprintf("invalid value for %s: %s", testTenantEnabledEnvVar, str))
+		}
+	}
+	return baseArg, false
 }
 
-// TestServerFactory encompasses the actual implementation of the shim
-// service.
-type TestServerFactory interface {
-	// New instantiates a test server.
-	New(params base.TestServerArgs) (interface{}, error)
+// globalDefaultSelectionOverride is used when an entire package needs
+// to override the probabilistic behavior.
+var globalDefaultSelectionOverride struct {
+	isSet bool
+	value base.DefaultTestTenantOptions
+}
+
+// TestingSetDefaultTenantSelectionOverride changes the global selection override.
+func TestingSetDefaultTenantSelectionOverride(v base.DefaultTestTenantOptions) func() {
+	globalDefaultSelectionOverride.isSet = true
+	globalDefaultSelectionOverride.value = v
+	return func() {
+		globalDefaultSelectionOverride.isSet = false
+	}
 }
 
 var srvFactoryImpl TestServerFactory
@@ -328,51 +242,88 @@ func InitTestServerFactory(impl TestServerFactory) {
 	srvFactoryImpl = impl
 }
 
-// StartServer creates and starts a test server, and sets up a gosql DB
-// connection to it. The server should be stopped by calling
-// server.Stopper().Stop().
-func StartServer(
-	t testing.TB, params base.TestServerArgs,
-) (TestServerInterface, *gosql.DB, *kv.DB) {
-	preventFurtherTenants := params.DefaultTestTenant == base.TestTenantProbabilisticOnly
-	// Determine if we should probabilistically start a test tenant
-	// for this server.
-	startDefaultSQLServer := ShouldStartDefaultTestTenant(t, params)
-	if !startDefaultSQLServer {
-		// If we're told not to start a test tenant, set the
-		// disable flag explicitly.
-		params.DefaultTestTenant = base.TestTenantDisabled
-	}
+// TestLogger is the minimal interface of testing.T that is used by
+// StartServerOnlyE.
+type TestLogger interface {
+	Helper()
+	Log(args ...interface{})
+	Logf(format string, args ...interface{})
+}
+
+// TestFataler is the minimal interface of testing.T that is used by
+// StartServer.
+type TestFataler interface {
+	TestLogger
+	Fatal(args ...interface{})
+	Fatalf(format string, args ...interface{})
+	Errorf(format string, args ...interface{})
+	FailNow()
+}
+
+// StartServerOnlyE is like StartServerOnly() but it lets
+// the test decide what to do with the error.
+//
+// The first argument is optional. If non-nil; it is used for logging
+// server configuration messages.
+func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInterface, error) {
+	allowAdditionalTenants := params.DefaultTestTenant.AllowAdditionalTenants()
+	// Update the flags with the actual decision as to whether we should
+	// start the service for a default test tenant.
+	params.DefaultTestTenant = ShouldStartDefaultTestTenant(
+		t, params.DefaultTestTenant, false, /* multiNodeCluster */
+	)
 
 	s, err := NewServer(params)
 	if err != nil {
-		t.Fatalf("%+v", err)
+		return nil, err
 	}
 
-	if err := s.Start(context.Background()); err != nil {
-		t.Fatalf("%+v", err)
-	}
-
-	if s.StartedDefaultTestTenant() {
-		t.Log(DefaultTestTenantMessage)
-	}
-
-	if preventFurtherTenants {
-		s.DisableStartTenant(PreventStartTenantError)
-	}
-
-	goDB := OpenDBConn(
-		t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
-
-	// Now that we have started the server on the bootstrap version, let us run
-	// the migrations up to the overridden BinaryVersion.
-	if v := s.BinaryVersionOverride(); v != (roachpb.Version{}) {
-		if _, err := goDB.Exec(`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
-			t.Fatal(err)
+	if t != nil {
+		if w, ok := s.(*wrap); ok {
+			// Redirect the info/warning messages to the test logs.
+			w.loggerFn = t.Logf
 		}
 	}
 
-	return s, goDB, s.DB()
+	ctx := context.Background()
+
+	if err := s.Start(ctx); err != nil {
+		return nil, err
+	}
+
+	if !allowAdditionalTenants {
+		s.TenantController().DisableStartTenant(PreventStartTenantError)
+	}
+
+	return s, nil
+}
+
+// StartServerOnly creates and starts a test server.
+// The returned server should be stopped by calling
+// server.Stopper().Stop().
+func StartServerOnly(t TestFataler, params base.TestServerArgs) TestServerInterface {
+	s, err := StartServerOnlyE(t, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+// StartServer creates and starts a test server.
+// The returned server should be stopped by calling
+// server.Stopper().Stop().
+//
+// The second and third return values are equivalent to
+// .ApplicationLayer().SQLConn() and .ApplicationLayer().DB(),
+// respectively. If your test does not need them, consider
+// using StartServerOnly() instead.
+func StartServer(
+	t TestFataler, params base.TestServerArgs,
+) (TestServerInterface, *gosql.DB, *kv.DB) {
+	s := StartServerOnly(t, params)
+	goDB := s.ApplicationLayer().SQLConn(t, DBName(params.UseDatabase))
+	kvDB := s.ApplicationLayer().DB()
+	return s, goDB, kvDB
 }
 
 // NewServer creates a test server.
@@ -381,15 +332,21 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 		return nil, errors.AssertionFailedf("TestServerFactory not initialized. One needs to be injected " +
 			"from the package's TestMain()")
 	}
+	tcfg := params.DefaultTestTenant
+	if tcfg.TestTenantNoDecisionMade() {
+		return nil, errors.AssertionFailedf("programming error: DefaultTestTenant does not contain a decision\n(maybe call ShouldStartDefaultTestTenant?)")
+	}
 
 	srv, err := srvFactoryImpl.New(params)
 	if err != nil {
 		return nil, err
 	}
+	srv = wrapTestServer(srv.(TestServerInterfaceRaw), tcfg)
 	return srv.(TestServerInterface), nil
 }
 
 // OpenDBConnE is like OpenDBConn, but returns an error.
+// Note: consider using the .SQLConnE() method on the test server instead.
 func OpenDBConnE(
 	sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
 ) (*gosql.DB, error) {
@@ -417,31 +374,15 @@ func OpenDBConnE(
 }
 
 // OpenDBConn sets up a gosql DB connection to the given server.
+// Note: consider using the .SQLConn() method on the test server instead.
 func OpenDBConn(
-	t testing.TB, sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
+	t TestFataler, sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
 ) *gosql.DB {
 	conn, err := OpenDBConnE(sqlAddr, useDatabase, insecure, stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return conn
-}
-
-// StartServerRaw creates and starts a TestServer.
-// Generally StartServer() should be used. However, this function can be used
-// directly when opening a connection to the server is not desired.
-func StartServerRaw(t testing.TB, args base.TestServerArgs) (TestServerInterface, error) {
-	server, err := NewServer(args)
-	if err != nil {
-		return nil, err
-	}
-	if err := server.Start(context.Background()); err != nil {
-		return nil, err
-	}
-	if server.StartedDefaultTestTenant() {
-		t.Log(DefaultTestTenantMessage)
-	}
-	return server, nil
 }
 
 // StartTenant starts a tenant SQL server connecting to the supplied test
@@ -452,28 +393,21 @@ func StartServerRaw(t testing.TB, args base.TestServerArgs) (TestServerInterface
 // (otherwise, having more than one test in a package which uses StartTenant
 // without log.Scope() will cause a a "clusterID already set" panic).
 func StartTenant(
-	t testing.TB, ts TestServerInterface, params base.TestTenantArgs,
-) (TestTenantInterface, *gosql.DB) {
-
-	tenant, err := ts.StartTenant(context.Background(), params)
+	t TestFataler, ts TestServerInterface, params base.TestTenantArgs,
+) (ApplicationLayerInterface, *gosql.DB) {
+	tenant, err := ts.TenantController().StartTenant(context.Background(), params)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
 
-	stopper := params.Stopper
-	if stopper == nil {
-		stopper = ts.Stopper()
-	}
-
-	goDB := OpenDBConn(
-		t, tenant.SQLAddr(), params.UseDatabase, false /* insecure */, stopper)
+	goDB := tenant.SQLConn(t, DBName(params.UseDatabase))
 	return tenant, goDB
 }
 
 func StartSharedProcessTenant(
-	t testing.TB, ts TestServerInterface, params base.TestSharedProcessTenantArgs,
-) (TestTenantInterface, *gosql.DB) {
-	tenant, goDB, err := ts.StartSharedProcessTenant(context.Background(), params)
+	t TestFataler, ts TestServerInterface, params base.TestSharedProcessTenantArgs,
+) (ApplicationLayerInterface, *gosql.DB) {
+	tenant, goDB, err := ts.TenantController().StartSharedProcessTenant(context.Background(), params)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -484,46 +418,70 @@ func StartSharedProcessTenant(
 // starting a test Tenant. The returned tenant IDs match those built
 // into the test certificates.
 func TestTenantID() roachpb.TenantID {
-	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[0])
+	return roachpb.MustMakeTenantID(securitytest.EmbeddedTenantIDs()[0])
 }
 
 // TestTenantID2 returns another roachpb.TenantID that can be used when
 // starting a test Tenant. The returned tenant IDs match those built
 // into the test certificates.
 func TestTenantID2() roachpb.TenantID {
-	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[1])
+	return roachpb.MustMakeTenantID(securitytest.EmbeddedTenantIDs()[1])
 }
 
 // TestTenantID3 returns another roachpb.TenantID that can be used when
 // starting a test Tenant. The returned tenant IDs match those built
 // into the test certificates.
 func TestTenantID3() roachpb.TenantID {
-	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[2])
+	return roachpb.MustMakeTenantID(securitytest.EmbeddedTenantIDs()[2])
 }
 
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters
 // and unmarshals the result into response.
-func GetJSONProto(ts TestTenantInterface, path string, response protoutil.Message) error {
+func GetJSONProto(ts ApplicationLayerInterface, path string, response protoutil.Message) error {
 	return GetJSONProtoWithAdminOption(ts, path, response, true)
 }
 
 // GetJSONProtoWithAdminOption is like GetJSONProto but the caller can customize
 // whether the request is performed with admin privilege
 func GetJSONProtoWithAdminOption(
-	ts TestTenantInterface, path string, response protoutil.Message, isAdmin bool,
+	ts ApplicationLayerInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
 	httpClient, err := ts.GetAuthenticatedHTTPClient(isAdmin, SingleTenantSession)
 	if err != nil {
 		return err
 	}
-	fullURL := ts.AdminURL() + path
+	u := ts.AdminURL()
+	fullURL := u.WithPath(path).String()
 	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
+	return httputil.GetJSON(httpClient, fullURL, response)
+}
+
+// GetJSONProtoWithAdminAndTimeoutOption is like GetJSONProtoWithAdminOption but
+// the caller can specify an additional timeout duration for the request.
+func GetJSONProtoWithAdminAndTimeoutOption(
+	ts ApplicationLayerInterface,
+	path string,
+	response protoutil.Message,
+	isAdmin bool,
+	additionalTimeout time.Duration,
+) error {
+	httpClient, err := ts.GetAuthenticatedHTTPClient(isAdmin, SingleTenantSession)
+	if err != nil {
+		return err
+	}
+	httpClient.Timeout += additionalTimeout
+	u := ts.AdminURL()
+	fullURL := u.WithPath(path).String()
+	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
+	log.Infof(context.Background(), "set HTTP client timeout to: %s", httpClient.Timeout)
 	return httputil.GetJSON(httpClient, fullURL, response)
 }
 
 // PostJSONProto uses the supplied client to POST the URL specified by the parameters
 // and unmarshals the result into response.
-func PostJSONProto(ts TestTenantInterface, path string, request, response protoutil.Message) error {
+func PostJSONProto(
+	ts ApplicationLayerInterface, path string, request, response protoutil.Message,
+) error {
 	return PostJSONProtoWithAdminOption(ts, path, request, response, true)
 }
 
@@ -531,13 +489,27 @@ func PostJSONProto(ts TestTenantInterface, path string, request, response protou
 // can customize whether the request is performed with admin
 // privilege.
 func PostJSONProtoWithAdminOption(
-	ts TestTenantInterface, path string, request, response protoutil.Message, isAdmin bool,
+	ts ApplicationLayerInterface, path string, request, response protoutil.Message, isAdmin bool,
 ) error {
 	httpClient, err := ts.GetAuthenticatedHTTPClient(isAdmin, SingleTenantSession)
 	if err != nil {
 		return err
 	}
-	fullURL := ts.AdminURL() + path
+	fullURL := ts.AdminURL().WithPath(path).String()
 	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
 	return httputil.PostJSON(httpClient, fullURL, request, response)
+}
+
+// WaitForTenantCapabilities waits until the given set of capabilities have been cached.
+func WaitForTenantCapabilities(
+	t TestFataler,
+	s TestServerInterface,
+	tenID roachpb.TenantID,
+	targetCaps map[tenantcapabilities.ID]string,
+	errPrefix string,
+) {
+	err := s.TenantController().WaitForTenantCapabilities(context.Background(), tenID, targetCaps, errPrefix)
+	if err != nil {
+		t.Fatal(err)
+	}
 }

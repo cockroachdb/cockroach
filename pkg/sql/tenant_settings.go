@@ -19,17 +19,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
 // alterTenantSetClusterSettingNode represents an
-// ALTER TENANT ... SET CLUSTER SETTING statement.
+// ALTER VIRTUAL CLUSTER ... SET CLUSTER SETTING statement.
 type alterTenantSetClusterSettingNode struct {
-	name       string
+	name       settings.SettingName
 	tenantSpec tenantSpec
 	st         *cluster.Settings
 	setting    settings.NonMaskedSetting
@@ -38,7 +40,7 @@ type alterTenantSetClusterSettingNode struct {
 }
 
 // AlterTenantSetClusterSetting sets tenant level session variables.
-// Privileges: MANAGETENANT.
+// Privileges: MANAGEVIRTUALCLUSTER.
 func (p *planner) AlterTenantSetClusterSetting(
 	ctx context.Context, n *tree.AlterTenantSetClusterSetting,
 ) (planNode, error) {
@@ -52,14 +54,18 @@ func (p *planner) AlterTenantSetClusterSetting(
 	// Error out if we're trying to call this from a non-system tenant.
 	if !p.execCfg.Codec.ForSystemTenant() {
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-			"ALTER TENANT can only be called by system operators")
+			"ALTER VIRTUAL CLUSTER can only be called by system operators")
 	}
 
-	name := strings.ToLower(n.Name)
+	name := settings.SettingName(strings.ToLower(n.Name))
 	st := p.EvalContext().Settings
-	setting, ok := settings.LookupForLocalAccess(name, true /* forSystemTenant - checked above already */)
+	setting, ok, nameStatus := settings.LookupForLocalAccess(name, true /* forSystemTenant - checked above already */)
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
+	}
+	if nameStatus != settings.NameActive {
+		p.BufferClientNotice(ctx, settingNameDeprecationNotice(name, setting.Name()))
+		name = setting.Name()
 	}
 	// Error out if we're trying to set a system-only variable.
 	if setting.Class() == settings.SystemOnly {
@@ -67,7 +73,7 @@ func (p *planner) AlterTenantSetClusterSetting(
 			"%s is a system-only setting and must be set in the admin tenant using SET CLUSTER SETTING", name)
 	}
 
-	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "ALTER TENANT SET CLUSTER SETTING "+name)
+	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "ALTER VIRTUAL CLUSTER SET CLUSTER SETTING "+string(name))
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +123,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		if _, err := params.p.InternalSQLTxn().ExecEx(
 			params.ctx, "reset-tenant-setting", params.p.Txn(),
 			sessiondata.RootUserSessionDataOverride,
-			"DELETE FROM system.tenant_settings WHERE tenant_id = $1 AND name = $2", tenantID, n.name,
+			"DELETE FROM system.tenant_settings WHERE tenant_id = $1 AND name = $2", tenantID, n.setting.InternalKey(),
 		); err != nil {
 			return err
 		}
@@ -127,7 +133,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		encoded, err := toSettingString(params.ctx, n.st, n.name, n.setting, value)
+		encoded, err := toSettingString(params.ctx, n.st, n.setting, value)
 		if err != nil {
 			return err
 		}
@@ -135,7 +141,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 			params.ctx, "update-tenant-setting", params.p.Txn(),
 			sessiondata.RootUserSessionDataOverride,
 			`UPSERT INTO system.tenant_settings (tenant_id, name, value, last_updated, value_type) VALUES ($1, $2, $3, now(), $4)`,
-			tenantID, n.name, encoded, n.setting.Typ(),
+			tenantID, n.setting.InternalKey(), encoded, n.setting.Typ(),
 		); err != nil {
 			return err
 		}
@@ -146,7 +152,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		params.ctx,
 		0, /* no target */
 		&eventpb.SetTenantClusterSetting{
-			SettingName: n.name,
+			SettingName: string(n.name),
 			Value:       reportedValue,
 			TenantId:    tenantID,
 			AllTenants:  tenantID == 0,
@@ -166,17 +172,18 @@ func (p *planner) ShowTenantClusterSetting(
 	// privileged operation than viewing local cluster settings. So we
 	// shouldn't be allowing with just the role option
 	// VIEWCLUSTERSETTINGS.
-	//
-	// TODO(knz): Using admin authz for now; we may want to introduce a
-	// more specific role option later.
-	if err := p.RequireAdminRole(ctx, "view a tenant cluster setting"); err != nil {
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 		return nil, err
 	}
 
-	name := strings.ToLower(n.Name)
-	setting, ok := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
+	name := settings.SettingName(strings.ToLower(n.Name))
+	setting, ok, nameStatus := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
+	}
+	if nameStatus != settings.NameActive {
+		p.BufferClientNotice(ctx, settingNameDeprecationNotice(name, setting.Name()))
+		name = setting.Name()
 	}
 
 	// Error out if we're trying to call this from a non-system tenant or if
@@ -236,7 +243,7 @@ FROM
 				ctx, "get-tenant-setting-value", p.txn,
 				sessiondata.RootUserSessionDataOverride,
 				lookupEncodedTenantSetting,
-				name, rec.ID)
+				setting.InternalKey(), rec.ID)
 			if err != nil {
 				return false, "", err
 			}

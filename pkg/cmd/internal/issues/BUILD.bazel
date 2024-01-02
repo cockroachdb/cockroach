@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -12,7 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/internal/issues",
     visibility = ["//pkg/cmd:__subpackages__"],
     deps = [
-        "//pkg/roachprod/logger",
+        "//pkg/build",
         "//pkg/util/version",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_google_go_github//github",
@@ -28,11 +27,9 @@ go_test(
         "issues_test.go",
         "render_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":issues"],
     deps = [
-        "//pkg/roachprod/logger",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/skip",
         "@com_github_cockroachdb_datadriven//:datadriven",
@@ -41,5 +38,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

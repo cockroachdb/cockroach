@@ -55,8 +55,7 @@ type Dependencies interface {
 	// of checking whether CCL features are enabled.
 	ClusterID() uuid.UUID
 
-	// Codec returns the current session data, as in execCfg.
-	// So far this is used only to build a eval.Context.
+	// Codec returns the current SQL codec.
 	Codec() keys.SQLCodec
 
 	// Statements returns the statements behind this schema change.
@@ -129,10 +128,10 @@ type CatalogReader interface {
 	// If withOffline is set, we include offline schema descs into our search.
 	MayResolveSchema(ctx context.Context, name tree.ObjectNamePrefix, withOffline bool) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor)
 
-	// MustResolvePrefix looks up a database and schema given the prefix at best
+	// MayResolvePrefix looks up a database and schema given the prefix at best
 	// effort, meaning the prefix may not have explicit catalog and schema name.
 	// It fails if the db or schema represented by the prefix does not exist.
-	MustResolvePrefix(ctx context.Context, name tree.ObjectNamePrefix) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor)
+	MayResolvePrefix(ctx context.Context, name tree.ObjectNamePrefix) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor)
 
 	// MayResolveTable looks up a table by name.
 	MayResolveTable(ctx context.Context, name tree.UnresolvedObjectName) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor)
@@ -247,3 +246,12 @@ type ReferenceProvider interface {
 type ReferenceProviderFactory interface {
 	NewReferenceProvider(ctx context.Context, stmt tree.Statement) (ReferenceProvider, error)
 }
+
+// Export dependency interfaces.
+// These are defined in the scbuildstmts package instead of scbuild to avoid
+// circular import dependencies.
+type (
+	// FeatureChecker contains operations for checking if a schema change
+	// feature is allowed by the database administrator.
+	FeatureChecker = scbuildstmt.SchemaFeatureChecker
+)

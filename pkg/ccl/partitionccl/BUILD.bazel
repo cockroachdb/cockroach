@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -40,7 +39,6 @@ go_test(
         "scrub_test.go",
         "zone_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":partitionccl"],
     tags = ["ccl_test"],
     deps = [
@@ -54,7 +52,6 @@ go_test(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
-        "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -80,7 +77,6 @@ go_test(
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/encoding",
@@ -89,14 +85,10 @@ go_test(
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
-        "//pkg/util/uuid",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
-        "@com_github_gogo_protobuf//proto",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
-
-get_x_data(name = "get_x_data")

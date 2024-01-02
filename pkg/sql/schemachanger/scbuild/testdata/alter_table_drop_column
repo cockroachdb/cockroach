@@ -44,7 +44,7 @@ ALTER TABLE defaultdb.t DROP COLUMN j
   {columnId: 2, indexId: 2, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC]
   {columnId: 1, indexId: 2, kind: KEY_SUFFIX, tableId: 104}
-- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC]
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC]
   {indexId: 2, tableId: 104}
 - [[IndexName:{DescID: 104, Name: t_j_idx, IndexID: 2}, ABSENT], PUBLIC]
   {indexId: 2, name: t_j_idx, tableId: 104}
@@ -56,12 +56,14 @@ ALTER TABLE defaultdb.t DROP COLUMN j
   {columnId: 3, indexId: 3, ordinalInKind: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, ABSENT], PUBLIC]
   {columnId: 1, indexId: 3, kind: KEY_SUFFIX, tableId: 104}
-- [[SecondaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0}, ABSENT], PUBLIC]
+- [[SecondaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC]
   {indexId: 3, tableId: 104}
 - [[IndexName:{DescID: 104, Name: t_j_k_idx, IndexID: 3}, ABSENT], PUBLIC]
   {indexId: 3, name: t_j_k_idx, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 3}, ABSENT], PUBLIC]
   {indexId: 3, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 - [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT]
   {constraintId: 2, indexId: 4, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 5}
 - [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, PUBLIC], ABSENT]
@@ -122,18 +124,22 @@ ALTER TABLE defaultdb.t DROP COLUMN k, DROP COLUMN l
   {indexId: 1, name: t_pkey, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
+  {indexId: 2, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, ABSENT], PUBLIC]
   {columnId: 2, indexId: 3, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 3, ordinalInKind: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, ABSENT], PUBLIC]
   {columnId: 1, indexId: 3, kind: KEY_SUFFIX, tableId: 104}
-- [[SecondaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0}, ABSENT], PUBLIC]
+- [[SecondaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC]
   {indexId: 3, tableId: 104}
 - [[IndexName:{DescID: 104, Name: t_j_k_idx, IndexID: 3}, ABSENT], PUBLIC]
   {indexId: 3, name: t_j_k_idx, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 3}, ABSENT], PUBLIC]
   {indexId: 3, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 - [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT]
   {constraintId: 2, indexId: 4, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 5}
 - [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, PUBLIC], ABSENT]
@@ -196,6 +202,12 @@ ALTER TABLE defaultdb.t DROP COLUMN l
   {indexId: 1, name: t_pkey, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
+  {indexId: 2, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 3}, PUBLIC], PUBLIC]
+  {indexId: 3, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 - [[Namespace:{DescID: 105, Name: t_l_seq, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 105, name: t_l_seq, schemaId: 101}
 - [[Owner:{DescID: 105}, ABSENT], PUBLIC]

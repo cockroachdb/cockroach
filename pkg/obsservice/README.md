@@ -17,15 +17,6 @@ Build with
 ./dev build obsservice
 ```
 
-which will include the DB Console UI served on the HTTP port. This adds the
-`"--config=with_ui"` bazel flag that embeds the UI.
-
-You can also build without the UI using:
-
-```shell
-./dev build pkg/obsservice/cmd/obsservice
-```
-
 which will produce a binary in `./bin/obsservice`.
 
 ## Running
@@ -33,7 +24,7 @@ which will produce a binary in `./bin/obsservice`.
 Assuming you're already running a local CRDB instance:
 
 ```shell
-obsservice --otlp-addr=localhost:4317 --http-addr=localhost:8081 --crdb-http-url=http://localhost:8080 --ui-cert=certs/cert.pem --ui-cert-key=certs/key.pem --ca-cert=certs/ca.crt
+obsservice --otlp-addr=localhost:4317 --http-addr=localhost:8081 --sink-pgurl=postgresql://root@localhost:26257?sslmode=disable
 ```
 
 - `--otlp-addr` is the address on which the OTLP Logs gRPC service is exposed.
@@ -47,53 +38,67 @@ exporters:
     tls:
       insecure: true
 ```
-- `--http-addr` is the address on which the DB Console is served.
-- `--crdb-http-url` is CRDB's HTTP address. For a multi-node CRDB cluster, this
-  can point to a load-balancer. It can be either a HTTP or an HTTPS address,
-  depending on whether the CRDB cluster is running as `--insecure`.
-- `--ui-cert` and `--ui-cert-key` are the paths to the certificate
-  presented by the Obs Service to its HTTPS clients, and the private key
-  corresponding to the certificate. If no certificates are configured, the Obs
-  Service will not use TLS. Certificates need to be specified if the CRDB
-  cluster is not running in `--insecure` mode: i.e. the Obs Service will refuse
-  to forward HTTP requests over HTTPS. The reverse is allowed, though: the Obs
-  Service can be configured with certificates even if CRDB is running in
-  `--insecure`. In this case, the Obs Service will terminate TLS connections and
-  forward HTTPS requests over HTTP.
+- `--http-addr` is the address on which any HTTP-related endpoints, such as healthchecks or
+  metrics, will be served on.
+- `--sink-pgurl` is the address which the obsservice will use to write data to after processing. 
+  It will also be used to run migrations found in `pkg/obsservice/obslib/migrations/sqlmigrations`
+  on startup. TIP: Use the `sslrootcert` query parameter in the pgurl string to point to a root certificate.
+- `--no-db` will prevent the obsservice from attempting to connect to the `--sink-pgurl` at startup.
+  This is meant for testing purposes only.
 
-  If configured with certificates, HTTP requests will be redirected to HTTPS.  
+## Building & Pushing a Docker Image
 
-  For testing, self-signed certificates can be generated, for example, with the
-  [`generate_cert.go`](https://go.dev/src/crypto/tls/generate_cert.go) utility in
-  the Golang standard library: `go run ./crypto/tls/generate_cert.go
-  --host=localhost`.
-- `--ca-cert` is the path to a certificate authority certificate file (perhaps
-  one created with `cockroach cert create-ca`). If specified, HTTP requests are
-  only proxied to CRDB nodes that present certificates signed by this CA. If not
-  specified, the system's CA list is used.
-- `--sink-pgurl` is the connection string for the sink cluster. If the pgurl
-  contains a database name, that database will be used; otherwise `obsservice`
-  will be used. If not specified, a connection to a local cluster will be
-  attempted.
+With a local docker instance running, you can build a docker image using the Dockerfile in `pkg/obsservice/cmd/obsservice`,
+which can then be pushed & hosted in GCR. Once in GCR, the image is available to be pulled by environments such
+as Kubernetes.
+
+To build an `obsservice` docker image locally, make use of the `build-docker.sh` script in
+`pkg/obsservice/cmd/obsservice`.
+
+```shell
+$ ./pkg/obsservice/cmd/obsservice/build-docker.sh
+```
+
+This should create a Docker image locally. You can check this locally.
+```shell
+ $ docker image ls | grep obsservice
+obsservice    latest    13c5d49056cc    12 seconds ago    156MB
+```
+
+You can run the image locally via Docker.
+```shell
+$ docker run --platform=linux/amd64 obsservice:latest
+I231113 22:25:02.716505 1 main/main.go:112  [-] 1  Listening for OTLP connections on localhost:4317.
+```
+
+You can use environment variables to control things like the OTLP listen address.
+```shell
+$ docker run -e OTLP_ADDR=0.0.0.0:7171 -e HTTP_ADDR=0.0.0.0:8082 -e SINK_PGURL="postgresql://myuser@myhost:26257?foo=bar" --platform=linux/amd64 obsservice:latest
+I231113 22:25:02.716505 1 main/main.go:112  [-] 1  Listening for OTLP connections on 0.0.0.0:7171.
+Listening for HTTP requests on http://0.0.0.0:8082.
+```
+
+You can find the supported environment variables in `pkg/obsservice/cmd/obsservice/Dockerfile`.
+
+With the image created, you can [push it to GCR](https://cockroachlabs.atlassian.net/wiki/spaces/OI/pages/3249472038/Pushing+an+Antenna+Docker+Image+to+GCR).
+
+NOTE: This script is not meant to last the test of time, but rather get a prototype up and running
+quickly. It is not meant for production use. The main problem with it is that it relies on 
+`./dev build --cross=linux` for cross compilation of the `obsservice`.
+`obsservice` makes use of CGO libraries, meaning it can't be cross-compiled without Docker. Therefore, the
+script uses `./dev build --cross=linux` to generate the cross-compiled artifact, copies the artifact into
+`pkg/obsservice/cmd/obsservice`, and then the Dockerfile targets that artifact file to generate the Docker
+image. It's probably not best practice to use `./dev build --cross` and then copy the artifact elsewhere.
 
 ## Functionality
 
-In the current fledgling state, the Obs Service does a couple of things:
-
-1. The Obs Service serves the DB Console, when built with `--config=with_ui`.
-
-2. The Obs Service reverse-proxies some HTTP routes to
-   CRDB (`/_admin/`, `/_status/`, `/ts/`, `/api/v2/`).
-
-3. The Obs Service exposes the OTLP Logs gRPC service and is able to ingest
+1. The Obs Service exposes the OTLP Logs gRPC service and is able to ingest
    events received through calls to this RPC service. Only insecure gRPC
-   connections are supported at the moment.
-
-4. The Obs Service connects to a sink cluster identified by `--sink-pgurl`. The
-   required schema is automatically created using SQL migrations run with
-   [goose](https://github.com/pressly/goose). The state of migrations in a sink
-   cluster can be inspected through the `observice.obs_admin.migrations` table.
-   The ingested events are saved in the sink cluster.
+   connections are supported at the moment. Events are ingested into the
+   Obs Service for aggregation and eventual storage. 
+2. The Obs Service provides a pluggable framework to define asynchronous event processing
+   pipelines. Events can be routed, transformed, validated, enqueued, consumed,
+   processed, and stored.
 
 ## Event ingestion
 
@@ -107,21 +112,9 @@ and,within that, into
 [`ScopeLogs`](https://github.com/open-telemetry/opentelemetry-proto/blob/200ccff768a29f8bd431e0a4a463da7ed58be557/opentelemetry/proto/logs/v1/logs.proto#L64).
 A resource identifies the cluster/node/tenant that is emitting the respective
 events. A scope identifies the type of event; events of different types get
-persisted in different tables, based on this event type. Events of unrecognized
-types are dropped. Currently, a single event type is supported: `"eventlog"`.
+routed to different processing pipelines, based on this event type. Events of 
+unrecognized types are dropped. Currently, a single event type is supported: `"eventlog"`.
 The log records carry attributes and a JSON payload representing the event.
-
-The mapping between event types and tables is listed in the table below:
-
-| Event type | Table          | Attributes   |
-|------------|----------------|--------------|
-| eventlog   | cluster_events | {event_type} |
-
-Each table storing events can have a different schema. It is expected that these
-tables store some event fields as columns and otherwise store the raw event in a
-JSON column. The values of the different columns can come from the attributes of
-the log record (listed in the table above), or from the JSON itself. Virtual or
-computed columns can be used to extract data from the JSON directly.
 
 ## Licensing
 

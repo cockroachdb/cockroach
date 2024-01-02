@@ -23,19 +23,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
 // TODO(michae2): Remove this when #70731 is fixed.
 var multipleModificationsOfTableEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.multiple_modifications_of_table.enabled",
 	"if true, allow statements containing multiple INSERT ON CONFLICT, UPSERT, UPDATE, or DELETE "+
 		"subqueries modifying the same table, at the risk of data corruption if the same row is "+
 		"modified multiple times by a single statement (multiple INSERT subqueries without ON "+
 		"CONFLICT cannot cause corruption and are always allowed)",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 // windowAggregateFrame() returns a frame that any aggregate built as a window
 // can use.
@@ -477,7 +478,7 @@ func (b *Builder) resolveSchemaForCreateTable(name *tree.TableName) (cat.Schema,
 // resolveSchemaForCreateFunction is the same as resolveSchemaForCreate but
 // specific for functions.
 func (b *Builder) resolveSchemaForCreateFunction(
-	name *tree.FunctionName,
+	name *tree.RoutineName,
 ) (cat.Schema, cat.SchemaName) {
 	return b.resolveSchemaForCreate(&name.ObjectNamePrefix, name)
 }
@@ -512,26 +513,52 @@ func (b *Builder) resolveSchemaForCreate(
 	return sch, resName
 }
 
-func (b *Builder) checkMultipleMutations(tab cat.Table, simpleInsert bool) {
-	if b.areAllTableMutationsSimpleInserts == nil {
-		b.areAllTableMutationsSimpleInserts = make(map[cat.StableID]bool)
-	}
-	allSimpleInserts, prevMutations := b.areAllTableMutationsSimpleInserts[tab.ID()]
-	if !prevMutations {
-		b.areAllTableMutationsSimpleInserts[tab.ID()] = simpleInsert
+func (b *Builder) checkMultipleMutations(tab cat.Table, typ mutationType) {
+	if multipleModificationsOfTableEnabled.Get(&b.evalCtx.Settings.SV) ||
+		b.evalCtx.SessionData().MultipleModificationsOfTable {
 		return
 	}
-	allSimpleInserts = allSimpleInserts && simpleInsert
-	b.areAllTableMutationsSimpleInserts[tab.ID()] = allSimpleInserts
-	if !allSimpleInserts &&
-		!multipleModificationsOfTableEnabled.Get(&b.evalCtx.Settings.SV) &&
-		!b.evalCtx.SessionData().MultipleModificationsOfTable {
+	if !b.stmtTree.CanMutateTable(tab.ID(), typ, false /* isPostStmt */) {
 		panic(pgerror.Newf(
 			pgcode.FeatureNotSupported,
-			"multiple modification subqueries of the same table %q are not supported unless "+
-				"they all use INSERT without ON CONFLICT; this is to prevent data corruption, see "+
+			"multiple mutations of the same table %q are not supported unless they all "+
+				"use INSERT without ON CONFLICT; this is to prevent data corruption, see "+
 				"documentation of sql.multiple_modifications_of_table.enabled", tab.Name(),
 		))
+	}
+	if tab.InboundForeignKeyCount() > 0 {
+		var visited intsets.Fast
+		b.checkMultipleMutationsCascade(tab, typ, visited)
+	}
+}
+
+func (b *Builder) checkMultipleMutationsCascade(
+	tab cat.Table, typ mutationType, visited intsets.Fast,
+) {
+	// If this table references foreign keys that will also be mutated, then add
+	// them to the statement tree via a recursive call. We only need to check each
+	// table once even if there are multiple references to it.
+	for i := 0; i < tab.InboundForeignKeyCount(); i++ {
+		fk := tab.InboundForeignKey(i)
+		if (fk.DeleteReferenceAction() != tree.NoAction && fk.DeleteReferenceAction() != tree.Restrict && typ != simpleInsert) ||
+			(fk.UpdateReferenceAction() != tree.NoAction && fk.UpdateReferenceAction() != tree.Restrict) {
+			fkTab := resolveTable(b.ctx, b.catalog, fk.OriginTableID())
+			// If the origin table is still being added, it will be nil. It's safe to
+			// do the mutation in this case.
+			if fkTab == nil || visited.Contains(int(fkTab.ID())) {
+				continue
+			}
+			if !b.stmtTree.CanMutateTable(fkTab.ID(), typ, true /* isPostStmt */) {
+				panic(pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"multiple mutations of the same table %q are not supported unless they all "+
+						"use INSERT without ON CONFLICT; this is to prevent data corruption, see "+
+						"documentation of sql.multiple_modifications_of_table.enabled", fkTab.Name(),
+				))
+			}
+			visited.Add(int(fkTab.ID()))
+			b.checkMultipleMutationsCascade(fkTab, typ, visited)
+		}
 	}
 }
 
@@ -704,7 +731,9 @@ func resolveNumericColumnRefs(tab cat.Table, columns []tree.ColumnID) (ordinals 
 		cnt := tab.ColumnCount()
 		for ord < cnt {
 			col := tab.Column(ord)
-			if col.ColID() == cat.StableID(c) && col.Visibility() != cat.Inaccessible {
+			// NOTE: Inverted columns cannot be referenced.
+			if col.Kind() != cat.Inverted && col.ColID() == cat.StableID(c) &&
+				col.Visibility() != cat.Inaccessible {
 				break
 			}
 			ord++

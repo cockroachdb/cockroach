@@ -42,10 +42,15 @@ func TestMetadataSST(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	const numAccounts = 1
 	userfile := "userfile:///0"
-	tc, sqlDB, _, cleanupFn := backuptestutils.BackupRestoreTestSetup(t, backuptestutils.SingleNode, numAccounts,
-		backuptestutils.InitManualReplication)
+	tc, sqlDB, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t,
+		backuptestutils.SingleNode,
+		backuptestutils.WithBank(1),
+		backuptestutils.WithParams(base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			},
+		}))
 	defer cleanupFn()
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = true`)
@@ -72,7 +77,7 @@ func TestMetadataSST(t *testing.T) {
 
 	// Check for correct backup metadata on tenant backups.
 	userfile2 := "userfile:///2"
-	_, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
+	_, err := tc.Servers[0].TenantController().StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 	require.NoError(t, err)
 	sqlDB.Exec(t, `BACKUP TENANT 10 TO $1`, userfile2)
 	checkMetadata(ctx, t, tc, userfile2)

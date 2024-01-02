@@ -14,6 +14,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
@@ -49,6 +50,7 @@ func statementForDropJob(e scpb.Element, md *opGenContext) scop.StatementForDrop
 // lookup.
 type opGenContext struct {
 	scpb.TargetState
+	Current         []scpb.Status
 	ActiveVersion   clusterversion.ClusterVersion
 	elementToTarget map[scpb.Element]int
 	InRollback      bool
@@ -61,6 +63,7 @@ func makeOpgenContext(
 		ActiveVersion:   activeVersion,
 		InRollback:      cs.InRollback,
 		TargetState:     cs.TargetState,
+		Current:         cs.Current,
 		elementToTarget: make(map[scpb.Element]int),
 	}
 	for i := range cs.Targets {
@@ -163,4 +166,32 @@ func checkOpFunc(el scpb.Element, fn interface{}) (opType scop.Type, _ error) {
 			out, opInterfaceType)
 	}
 	return opType, nil
+}
+
+// checkIfDescriptorIsWithoutData given the context this will determine if
+// a descriptor is an added state, and has no data. This can allow us to
+// skip certain operations like backfills / validation.
+func checkIfDescriptorIsWithoutData(id descpb.ID, md *opGenContext) bool {
+	// Older versions did not emit the data element.
+	if !md.ActiveVersion.IsActive(clusterversion.V23_2) {
+		return false
+	}
+	doesDescriptorHaveData := false
+	for idx, t := range md.Targets {
+		// Validate this is the descriptor ID we are
+		// looking for.
+		if screl.GetDescID(t.Element()) != id {
+			continue
+		}
+		switch t.Element().(type) {
+		case *scpb.IndexData, *scpb.TableData:
+			// Check if this descriptor has any data within
+			// a public state.
+			if md.Current[idx] == scpb.Status_PUBLIC ||
+				t.TargetStatus == scpb.Status_PUBLIC {
+				doesDescriptorHaveData = true
+			}
+		}
+	}
+	return !doesDescriptorHaveData
 }

@@ -168,24 +168,24 @@ func WriteInitialClusterData(
 
 		// Range descriptor.
 		if err := storage.MVCCPutProto(
-			ctx, batch, nil /* ms */, keys.RangeDescriptorKey(desc.StartKey),
-			now, hlc.ClockTimestamp{}, nil /* txn */, desc,
+			ctx, batch, keys.RangeDescriptorKey(desc.StartKey),
+			now, desc, storage.MVCCWriteOptions{},
 		); err != nil {
 			return err
 		}
 
 		// Replica GC timestamp.
 		if err := storage.MVCCPutProto(
-			ctx, batch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID),
-			hlc.Timestamp{}, hlc.ClockTimestamp{}, nil /* txn */, &now,
+			ctx, batch, keys.RangeLastReplicaGCTimestampKey(desc.RangeID),
+			hlc.Timestamp{}, &now, storage.MVCCWriteOptions{},
 		); err != nil {
 			return err
 		}
 		// Range addressing for meta2.
 		meta2Key := keys.RangeMetaKey(endKey)
 		if err := storage.MVCCPutProto(
-			ctx, batch, firstRangeMS, meta2Key.AsRawKey(),
-			now, hlc.ClockTimestamp{}, nil /* txn */, desc,
+			ctx, batch, meta2Key.AsRawKey(),
+			now, desc, storage.MVCCWriteOptions{Stats: firstRangeMS},
 		); err != nil {
 			return err
 		}
@@ -195,7 +195,7 @@ func WriteInitialClusterData(
 			// Range addressing for meta1.
 			meta1Key := keys.RangeMetaKey(keys.RangeMetaKey(roachpb.RKeyMax))
 			if err := storage.MVCCPutProto(
-				ctx, batch, nil /* ms */, meta1Key.AsRawKey(), now, hlc.ClockTimestamp{}, nil /* txn */, desc,
+				ctx, batch, meta1Key.AsRawKey(), now, desc, storage.MVCCWriteOptions{},
 			); err != nil {
 				return err
 			}
@@ -205,8 +205,8 @@ func WriteInitialClusterData(
 		for _, kv := range rangeInitialValues {
 			// Initialize the checksums.
 			kv.Value.InitChecksum(kv.Key)
-			if err := storage.MVCCPut(
-				ctx, batch, nil /* ms */, kv.Key, now, hlc.ClockTimestamp{}, kv.Value, nil, /* txn */
+			if _, err := storage.MVCCPut(
+				ctx, batch, kv.Key, now, kv.Value, storage.MVCCWriteOptions{},
 			); err != nil {
 				return err
 			}
@@ -216,7 +216,7 @@ func WriteInitialClusterData(
 			ctx, batch, *desc, firstReplicaID, initialReplicaVersion); err != nil {
 			return err
 		}
-		computedStats, err := rditer.ComputeStatsForRange(desc, batch, now.WallTime)
+		computedStats, err := rditer.ComputeStatsForRange(ctx, desc, batch, now.WallTime)
 		if err != nil {
 			return err
 		}

@@ -403,12 +403,12 @@ vectorized: true
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column85) = (table_id)
+        │ equality: (column95) = (table_id)
         │
         ├── • render
         │   │
         │   └── • hash join (left outer)
-        │       │ equality: (column67) = (table_id)
+        │       │ equality: (column77) = (table_id)
         │       │
         │       ├── • render
         │       │   │
@@ -436,11 +436,21 @@ vectorized: true
         │       │               │   └── • virtual table
         │       │               │         table: pg_class@pg_class_oid_idx
         │       │               │
-        │       │               └── • filter
-        │       │                   │ filter: (objsubid = 0) AND (classoid = 4294967106)
+        │       │               └── • sort
+        │       │                   │ order: +objoid
         │       │                   │
-        │       │                   └── • virtual table
-        │       │                         table: pg_description@pg_description_objoid_idx
+        │       │                   └── • render
+        │       │                       │
+        │       │                       └── • filter
+        │       │                           │ filter: objsubid = 0
+        │       │                           │
+        │       │                           └── • render
+        │       │                               │
+        │       │                               └── • filter
+        │       │                                   │ filter: classoid = 4294967096
+        │       │                                   │
+        │       │                                   └── • virtual table
+        │       │                                         table: kv_catalog_comments@primary
         │       │
         │       └── • virtual table
         │             table: table_row_statistics@primary
@@ -573,16 +583,45 @@ SELECT * FROM [EXPLAIN SHOW GRANTS ON foo] WHERE info NOT LIKE '%size%'
 distribution: local
 vectorized: true
 ·
-• sort
-│ order: +grantee,+privilege_type
+• root
 │
-└── • render
+├── • sort
+│   │ order: +database_name,+schema_name,+table_name,+grantee,+privilege_type,+is_grantable
+│   │
+│   └── • distinct
+│       │ distinct on: database_name, schema_name, table_name, grantee, privilege_type, is_grantable
+│       │
+│       └── • render
+│           │
+│           └── • union all
+│               │
+│               ├── • hash join
+│               │   │ equality: (role) = (grantee)
+│               │   │
+│               │   ├── • virtual table
+│               │   │     table: kv_inherited_role_members@primary
+│               │   │
+│               │   └── • scan buffer
+│               │         label: buffer 1 (r)
+│               │
+│               └── • scan buffer
+│                     label: buffer 1 (r)
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: SELECT * FROM (SELECT table_catalog AS database_name, table_schema AS schema_name, table_name, grantee, privilege_type, is_grantable::BOOL FROM "".information_schema.table_privileges) WHERE (database_name, schema_name, table_name) IN (('test', 'public', 'foo'),)
+    │ exec mode: all rows
     │
-    └── • filter
-        │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+    └── • buffer
+        │ label: buffer 1 (r)
         │
-        └── • virtual table
-              table: table_privileges@primary
+        └── • render
+            │
+            └── • filter
+                │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+                │
+                └── • virtual table
+                      table: table_privileges@primary
 
 query T
 EXPLAIN SHOW INDEX FROM foo
@@ -927,7 +966,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, b)
-│ ordering: +b
 │ estimated row count: 10 (missing stats)
 │ order: +b
 │
@@ -956,7 +994,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, b)
-│ ordering: +b
 │ estimated row count: 10 (missing stats)
 │ order: +b
 │
@@ -1197,7 +1234,6 @@ vectorized: true
 ·
 • sort
 │ columns: (v int)
-│ ordering: +v
 │ estimated row count: 1,000 (missing stats)
 │ order: +v
 │
@@ -2188,6 +2224,9 @@ vectorized: <hidden>
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • values
   nodes: <hidden>
@@ -2199,7 +2238,7 @@ regions: <hidden>
 query T
 EXPLAIN (OPT, MEMO) SELECT * FROM tc JOIN t ON k=a
 ----
-memo (optimized, ~12KB, required=[presentation: info:10] [distribution: test])
+memo (optimized, ~18KB, required=[presentation: info:10] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:6,v:7] [distribution: test])
  │    └── [presentation: info:10] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:6,v:7] [distribution: test]" [presentation: a:1,b:2,k:6,v:7] [distribution: test])
@@ -2276,7 +2315,7 @@ TABLE t
  ├── tableoid oid [hidden] [system]
  └── PRIMARY INDEX t_pkey
       └── k int not null
-memo (optimized, ~12KB, required=[presentation: info:10] [distribution: test])
+memo (optimized, ~18KB, required=[presentation: info:10] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:6,v:7] [distribution: test])
  │    └── [presentation: info:10] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:6,v:7] [distribution: test]" [presentation: a:1,b:2,k:6,v:7] [distribution: test])

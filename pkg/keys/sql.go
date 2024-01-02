@@ -27,6 +27,18 @@ func MakeTenantPrefix(tenID roachpb.TenantID) roachpb.Key {
 	return encoding.EncodeUvarintAscending(TenantPrefix, tenID.ToUint64())
 }
 
+// MakeTenantSpan creates the start/end key pair associated with the specified tenant.
+func MakeTenantSpan(tenID roachpb.TenantID) roachpb.Span {
+	if tenID == roachpb.SystemTenantID {
+		return roachpb.Span{Key: MinKey, EndKey: MaxKey}
+	}
+	tenIDint := tenID.ToUint64()
+	return roachpb.Span{
+		Key:    encoding.EncodeUvarintAscending(TenantPrefix, tenIDint),
+		EndKey: encoding.EncodeUvarintAscending(TenantPrefix, tenIDint+1),
+	}
+}
+
 // DecodeTenantPrefix determines the tenant ID from the key prefix, returning
 // the remainder of the key (with the prefix removed) and the decoded tenant ID.
 func DecodeTenantPrefix(key roachpb.Key) ([]byte, roachpb.TenantID, error) {
@@ -40,7 +52,11 @@ func DecodeTenantPrefix(key roachpb.Key) ([]byte, roachpb.TenantID, error) {
 	if err != nil {
 		return nil, roachpb.TenantID{}, err
 	}
-	return rem, roachpb.MustMakeTenantID(tenID), nil
+	id, err := roachpb.MakeTenantID(tenID)
+	if err != nil {
+		return nil, roachpb.TenantID{}, err
+	}
+	return rem, id, nil
 }
 
 // DecodeTenantPrefixE determines the tenant ID from the key prefix, returning
@@ -130,6 +146,11 @@ type SQLCodec struct {
 // value of a sqlEncoder will panic.
 type sqlEncoder struct {
 	buf *roachpb.Key
+	// endKey is the end key of the tenant, in the context of which the sqlEncoder
+	// exists, that it can access. It is set to /Max for the system tenant. We
+	// compute it once, and store it here, instead of having to do so every time
+	// we need access to it.
+	endKey *roachpb.Key
 }
 
 // sqlDecoder implements the decoding logic for SQL keys.
@@ -143,11 +164,12 @@ type sqlDecoder struct {
 
 // MakeSQLCodec creates a new  SQLCodec suitable for manipulating SQL keys.
 func MakeSQLCodec(tenID roachpb.TenantID) SQLCodec {
-	k := MakeTenantPrefix(tenID)
-	k = k[:len(k):len(k)] // bound capacity, avoid aliasing
+	sp := MakeTenantSpan(tenID)
+	sp.Key = sp.Key[:len(sp.Key):len(sp.Key)]             // bound capacity, avoid aliasing
+	sp.EndKey = sp.EndKey[:len(sp.EndKey):len(sp.EndKey)] // bound capacity, avoid aliasing
 	return SQLCodec{
-		sqlEncoder: sqlEncoder{&k},
-		sqlDecoder: sqlDecoder{&k},
+		sqlEncoder: sqlEncoder{&sp.Key, &sp.EndKey},
+		sqlDecoder: sqlDecoder{&sp.Key},
 	}
 }
 
@@ -164,10 +186,16 @@ func (e sqlEncoder) TenantPrefix() roachpb.Key {
 	return *e.buf
 }
 
+// TenantEndKey returns the end key of the tenant's keyspace.
+func (e sqlEncoder) TenantEndKey() roachpb.Key {
+	return *e.endKey
+}
+
 // TenantSpan returns a span representing the tenant's keyspace.
 func (e sqlEncoder) TenantSpan() roachpb.Span {
 	key := *e.buf
-	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}
+	endKey := *e.endKey
+	return roachpb.Span{Key: key, EndKey: endKey}
 }
 
 // TablePrefix returns the key prefix used for the table's data.

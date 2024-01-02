@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
@@ -55,12 +55,8 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	// is a member of old roles and new roles and has CREATE privilege.
 	// Postgres first checks if the role exists before checking privileges.
 	for _, oldRole := range normalizedOldRoles {
-		roleExists, err := RoleExists(ctx, p.InternalSQLTxn(), oldRole)
-		if err != nil {
+		if err := p.CheckRoleExists(ctx, oldRole); err != nil {
 			return nil, err
-		}
-		if !roleExists {
-			return nil, sqlerrors.NewUndefinedUserError(oldRole)
 		}
 	}
 	newRole, err := decodeusername.FromRoleSpec(
@@ -69,11 +65,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	if err != nil {
 		return nil, err
 	}
-	roleExists, err := RoleExists(ctx, p.InternalSQLTxn(), newRole)
-	if !roleExists {
-		return nil, sqlerrors.NewUndefinedUserError(newRole)
-	}
-	if err != nil {
+	if err := p.CheckRoleExists(ctx, newRole); err != nil {
 		return nil, err
 	}
 
@@ -152,7 +144,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 				// Don't reassign public schema.
 				// TODO(richardjcai): revisit this in 22.2, in 22.1 we do not allow
 				// modifying the public schema.
-				if lCtx.schemaDescs[schemaID].GetName() == tree.PublicSchema {
+				if lCtx.schemaDescs[schemaID].GetName() == catconstants.PublicSchemaName {
 					continue
 				}
 				if err := n.reassignSchemaOwner(lCtx.schemaDescs[schemaID], currentDbDesc, params); err != nil {

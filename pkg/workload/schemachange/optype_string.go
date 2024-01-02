@@ -8,96 +8,61 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[addColumn-0]
-	_ = x[addConstraint-1]
-	_ = x[addForeignKeyConstraint-2]
-	_ = x[addRegion-3]
-	_ = x[addUniqueConstraint-4]
-	_ = x[alterTableLocality-5]
-	_ = x[createIndex-6]
-	_ = x[createSequence-7]
-	_ = x[createTable-8]
-	_ = x[createTableAs-9]
-	_ = x[createView-10]
-	_ = x[createEnum-11]
-	_ = x[createSchema-12]
-	_ = x[dropColumn-13]
-	_ = x[dropColumnDefault-14]
-	_ = x[dropColumnNotNull-15]
-	_ = x[dropColumnStored-16]
-	_ = x[dropConstraint-17]
-	_ = x[dropIndex-18]
-	_ = x[dropSequence-19]
-	_ = x[dropTable-20]
-	_ = x[dropView-21]
-	_ = x[dropSchema-22]
-	_ = x[primaryRegion-23]
-	_ = x[renameColumn-24]
-	_ = x[renameIndex-25]
-	_ = x[renameSequence-26]
-	_ = x[renameTable-27]
-	_ = x[renameView-28]
-	_ = x[setColumnDefault-29]
-	_ = x[setColumnNotNull-30]
-	_ = x[setColumnType-31]
-	_ = x[survive-32]
-	_ = x[insertRow-33]
-	_ = x[selectStmt-34]
-	_ = x[validate-35]
+	_ = x[insertRow-0]
+	_ = x[selectStmt-1]
+	_ = x[validate-2]
+	_ = x[renameIndex-3]
+	_ = x[renameSequence-4]
+	_ = x[renameTable-5]
+	_ = x[renameView-6]
+	_ = x[alterDatabaseAddRegion-7]
+	_ = x[alterDatabasePrimaryRegion-8]
+	_ = x[alterDatabaseSurvivalGoal-9]
+	_ = x[alterDatabaseAddSuperRegion-10]
+	_ = x[alterDatabaseDropSuperRegion-11]
+	_ = x[alterFunctionRename-12]
+	_ = x[alterFunctionSetSchema-13]
+	_ = x[alterTableAddColumn-14]
+	_ = x[alterTableAddConstraint-15]
+	_ = x[alterTableAddConstraintForeignKey-16]
+	_ = x[alterTableAddConstraintUnique-17]
+	_ = x[alterTableAlterColumnType-18]
+	_ = x[alterTableAlterPrimaryKey-19]
+	_ = x[alterTableDropColumn-20]
+	_ = x[alterTableDropColumnDefault-21]
+	_ = x[alterTableDropConstraint-22]
+	_ = x[alterTableDropNotNull-23]
+	_ = x[alterTableDropStored-24]
+	_ = x[alterTableLocality-25]
+	_ = x[alterTableRenameColumn-26]
+	_ = x[alterTableSetColumnDefault-27]
+	_ = x[alterTableSetColumnNotNull-28]
+	_ = x[alterTypeDropValue-29]
+	_ = x[createTypeEnum-30]
+	_ = x[createIndex-31]
+	_ = x[createSchema-32]
+	_ = x[createSequence-33]
+	_ = x[createTable-34]
+	_ = x[createTableAs-35]
+	_ = x[createView-36]
+	_ = x[createFunction-37]
+	_ = x[commentOn-38]
+	_ = x[dropFunction-39]
+	_ = x[dropIndex-40]
+	_ = x[dropSchema-41]
+	_ = x[dropSequence-42]
+	_ = x[dropTable-43]
+	_ = x[dropView-44]
 }
 
 func (i opType) String() string {
 	switch i {
-	case addColumn:
-		return "addColumn"
-	case addConstraint:
-		return "addConstraint"
-	case addForeignKeyConstraint:
-		return "addForeignKeyConstraint"
-	case addRegion:
-		return "addRegion"
-	case addUniqueConstraint:
-		return "addUniqueConstraint"
-	case alterTableLocality:
-		return "alterTableLocality"
-	case createIndex:
-		return "createIndex"
-	case createSequence:
-		return "createSequence"
-	case createTable:
-		return "createTable"
-	case createTableAs:
-		return "createTableAs"
-	case createView:
-		return "createView"
-	case createEnum:
-		return "createEnum"
-	case createSchema:
-		return "createSchema"
-	case dropColumn:
-		return "dropColumn"
-	case dropColumnDefault:
-		return "dropColumnDefault"
-	case dropColumnNotNull:
-		return "dropColumnNotNull"
-	case dropColumnStored:
-		return "dropColumnStored"
-	case dropConstraint:
-		return "dropConstraint"
-	case dropIndex:
-		return "dropIndex"
-	case dropSequence:
-		return "dropSequence"
-	case dropTable:
-		return "dropTable"
-	case dropView:
-		return "dropView"
-	case dropSchema:
-		return "dropSchema"
-	case primaryRegion:
-		return "primaryRegion"
-	case renameColumn:
-		return "renameColumn"
+	case insertRow:
+		return "insertRow"
+	case selectStmt:
+		return "selectStmt"
+	case validate:
+		return "validate"
 	case renameIndex:
 		return "renameIndex"
 	case renameSequence:
@@ -106,20 +71,82 @@ func (i opType) String() string {
 		return "renameTable"
 	case renameView:
 		return "renameView"
-	case setColumnDefault:
-		return "setColumnDefault"
-	case setColumnNotNull:
-		return "setColumnNotNull"
-	case setColumnType:
-		return "setColumnType"
-	case survive:
-		return "survive"
-	case insertRow:
-		return "insertRow"
-	case selectStmt:
-		return "selectStmt"
-	case validate:
-		return "validate"
+	case alterDatabaseAddRegion:
+		return "alterDatabaseAddRegion"
+	case alterDatabasePrimaryRegion:
+		return "alterDatabasePrimaryRegion"
+	case alterDatabaseSurvivalGoal:
+		return "alterDatabaseSurvivalGoal"
+	case alterDatabaseAddSuperRegion:
+		return "alterDatabaseAddSuperRegion"
+	case alterDatabaseDropSuperRegion:
+		return "alterDatabaseDropSuperRegion"
+	case alterFunctionRename:
+		return "alterFunctionRename"
+	case alterFunctionSetSchema:
+		return "alterFunctionSetSchema"
+	case alterTableAddColumn:
+		return "alterTableAddColumn"
+	case alterTableAddConstraint:
+		return "alterTableAddConstraint"
+	case alterTableAddConstraintForeignKey:
+		return "alterTableAddConstraintForeignKey"
+	case alterTableAddConstraintUnique:
+		return "alterTableAddConstraintUnique"
+	case alterTableAlterColumnType:
+		return "alterTableAlterColumnType"
+	case alterTableAlterPrimaryKey:
+		return "alterTableAlterPrimaryKey"
+	case alterTableDropColumn:
+		return "alterTableDropColumn"
+	case alterTableDropColumnDefault:
+		return "alterTableDropColumnDefault"
+	case alterTableDropConstraint:
+		return "alterTableDropConstraint"
+	case alterTableDropNotNull:
+		return "alterTableDropNotNull"
+	case alterTableDropStored:
+		return "alterTableDropStored"
+	case alterTableLocality:
+		return "alterTableLocality"
+	case alterTableRenameColumn:
+		return "alterTableRenameColumn"
+	case alterTableSetColumnDefault:
+		return "alterTableSetColumnDefault"
+	case alterTableSetColumnNotNull:
+		return "alterTableSetColumnNotNull"
+	case alterTypeDropValue:
+		return "alterTypeDropValue"
+	case createTypeEnum:
+		return "createTypeEnum"
+	case createIndex:
+		return "createIndex"
+	case createSchema:
+		return "createSchema"
+	case createSequence:
+		return "createSequence"
+	case createTable:
+		return "createTable"
+	case createTableAs:
+		return "createTableAs"
+	case createView:
+		return "createView"
+	case createFunction:
+		return "createFunction"
+	case commentOn:
+		return "commentOn"
+	case dropFunction:
+		return "dropFunction"
+	case dropIndex:
+		return "dropIndex"
+	case dropSchema:
+		return "dropSchema"
+	case dropSequence:
+		return "dropSequence"
+	case dropTable:
+		return "dropTable"
+	case dropView:
+		return "dropView"
 	default:
 		return "opType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

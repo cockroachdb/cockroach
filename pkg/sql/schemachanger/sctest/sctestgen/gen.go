@@ -30,7 +30,10 @@ var (
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, arguments []string) error {
 			var buf bytes.Buffer
-			args.Files = arguments
+			args.Files = make([]string, len(arguments))
+			for i, arg := range arguments {
+				args.Files[i] = filepath.Dir(arg)
+			}
 			if err := templ.Execute(&buf, args); err != nil {
 				return err
 			}
@@ -50,21 +53,21 @@ var (
 		},
 	}
 	args struct {
-		Package        string
-		Suffix         string
-		NewClusterFunc string
-		Tests          []string
-		Files          []string
-		CCL            bool
-		out            string
+		Package string
+		Suffix  string
+		Factory string
+		Tests   []string
+		Files   []string
+		CCL     bool
+		out     string
 	}
 )
 
 func init() {
 	flags := pflag.NewFlagSet("run", pflag.ContinueOnError)
 	flags.StringVar(
-		&args.NewClusterFunc, "new-cluster-func",
-		"", "name of go function to use to create a new cluster",
+		&args.Factory, "new-cluster-factory",
+		"", "name of factory to use to create a new cluster",
 	)
 	flags.StringVar(&args.Package, "package", "", "name of the package")
 	flags.StringSliceVar(&args.Tests, "tests", nil, "tests to generate")
@@ -125,14 +128,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
-
-{{ range $index, $file  := $.Files -}}
-{{- range $a, $test :=  $.Tests -}}
+{{ range $a, $test := $.Tests -}}
+{{ range $index, $file := $.Files }}
 func Test{{ $test }}{{ $.Suffix }}_{{ basename $file }}(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.{{ $test }}(t, "{{ $file }}", {{ $.NewClusterFunc }})
+	const path = "{{ $file }}"
+	sctest.{{ $test }}(t, path, {{ $.Factory }})
 }
-{{ end -}}
-{{ end -}}
+{{ end }}
+{{- end -}}
 `))

@@ -98,7 +98,7 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	d := memo.ExtractConstDatum(constantVal)
 	if d.ResolvedType() != types.String {
 		panic(errors.AssertionFailedf(
-			"trying to apply inverted index to unsupported type %s", d.ResolvedType(),
+			"trying to apply inverted index to unsupported type %s", d.ResolvedType().SQLStringForError(),
 		))
 	}
 	s := string(*d.(*tree.DString))

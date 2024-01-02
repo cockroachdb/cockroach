@@ -113,12 +113,12 @@ func TestKVFeed(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	runTest := func(t *testing.T, tc testCase) {
 		settings := cluster.MakeTestingClusterSettings()
-		buf := kvevent.MakeChanBuffer()
 		mm := mon.NewUnlimitedMonitor(
 			context.Background(), "test", mon.MemoryResource,
 			nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
 		)
 		metrics := kvevent.MakeMetrics(time.Minute)
+		buf := kvevent.NewMemBuffer(mm.MakeBoundAccount(), &st.SV, &metrics)
 
 		// bufferFactory, when called, gives you a memory-monitored
 		// in-memory "buffer" to write to and read from.
@@ -140,7 +140,7 @@ func TestKVFeed(t *testing.T) {
 		tf := newRawTableFeed(tc.descs, tc.initialHighWater)
 		f := newKVFeed(buf, tc.spans, tc.checkpoint, hlc.Timestamp{},
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
-			tc.needsInitialScan, tc.withDiff,
+			tc.needsInitialScan, tc.withDiff, true, /* withFiltering */
 			tc.initialHighWater, tc.endTime,
 			codec,
 			tf, sf, rangefeedFactory(ref.run), bufferFactory,

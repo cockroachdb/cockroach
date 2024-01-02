@@ -29,8 +29,10 @@ import (
 // specified in a configuration.
 const DefaultFileFormat = `crdb-v2`
 
-// DefaultStderrFormat is the entry format for stderr sinks
-// when not specified in a configuration.
+// DefaultStderrFormat is the entry format for stderr sinks.
+// NB: The format for stderr is always set to `crdb-v2-tty`,
+// and cannot be changed. We enforce this in the validation step.
+// See: https://www.cockroachlabs.com/docs/stable/configure-logs#output-to-stderr
 const DefaultStderrFormat = `crdb-v2-tty`
 
 // DefaultFluentFormat is the entry format for fluent sinks
@@ -69,6 +71,7 @@ http-defaults:
     format: ` + DefaultHTTPFormat + `
     redactable: true
     exit-on-error: false
+    timeout: 2s
     buffering:
       max-staleness: 5s	
       flush-trigger-size: 1mib
@@ -188,6 +191,12 @@ type CommonBufferSinkConfig struct {
 	// FlushTriggerSize is reached, and a new buffer is created once the flushing
 	// is started. Only one flushing operation is active at a time.
 	MaxBufferSize *ByteSize `yaml:"max-buffer-size"`
+
+	// Format describes how the buffer output should be formatted.
+	// Currently 2 options:
+	// newline: default option - separates buffer entries with newline char
+	// json-array: separates entries with ',' and wraps buffer contents in square brackets
+	Format *BufferFormat `yaml:",omitempty"`
 }
 
 // CommonBufferSinkConfigWrapper is a BufferSinkConfig with a special value represented in YAML by
@@ -208,6 +217,9 @@ type CommonSinkConfig struct {
 
 	// Format indicates the entry format to use.
 	Format *string `yaml:",omitempty"`
+
+	// FormatOptions indicates additional options for the format.
+	FormatOptions map[string]string `yaml:"format-options,omitempty"`
 
 	// Redact indicates whether to strip sensitive information before
 	// log events are emitted to this sink.
@@ -284,7 +296,8 @@ type StderrSinkConfig struct {
 	Channels ChannelFilters `yaml:",omitempty,flow"`
 
 	// NoColor forces the omission of VT color codes in the output even
-	// when stderr is a terminal.
+	// when stderr is a terminal. This option is deprecated; its effects
+	// are equivalent to 'format-options: {colors: none}'.
 	NoColor bool `yaml:"no-color,omitempty"`
 
 	// CommonSinkConfig is the configuration common to all sinks. Note
@@ -470,6 +483,9 @@ type FileSinkConfig struct {
 	prefix string
 }
 
+var GzipCompression = "gzip"
+var NoneCompression = "none"
+
 // HTTPDefaults refresents the configuration defaults for HTTP sinks.
 type HTTPDefaults struct {
 	// Address is the network address of the http server. The
@@ -495,6 +511,17 @@ type HTTPDefaults struct {
 	// intended for testing only and can cause excessive network
 	// overhead in production systems.
 	DisableKeepAlives *bool `yaml:"disable-keep-alives,omitempty"`
+
+	// Headers is a list of headers to attach to each HTTP request
+	Headers map[string]string `yaml:",omitempty,flow"`
+
+	// FileBasedHeaders is a list of headers with filepaths whose contents are
+	// attached to each HTTP request
+	FileBasedHeaders map[string]string `yaml:"file-based-headers,omitempty,flow"`
+
+	// Compression can be "none" or "gzip" to enable gzip compression.
+	// Set to "gzip" by default.
+	Compression *string `yaml:",omitempty"`
 
 	CommonSinkConfig `yaml:",inline"`
 }
@@ -1022,6 +1049,15 @@ func (x *FilePermissions) UnmarshalYAML(fn func(interface{}) error) (err error) 
 	return nil
 }
 
+func init() {
+	// Use FutureLineWrap to avoid wrapping long lines. This is required for cases
+	// where one of the logging or zone config fields is longer than 80
+	// characters. In that case, without FutureLineWrap, the output will have `\n`
+	// characters interspersed every 80 characters. FutureLineWrap ensures that
+	// the whole field shows up as a single line.
+	yaml.FutureLineWrap()
+}
+
 // String implements the fmt.Stringer interface.
 func (c *Config) String() string {
 	b, err := yaml.Marshal(c)
@@ -1070,10 +1106,12 @@ func (w *CommonBufferSinkConfigWrapper) UnmarshalYAML(fn func(interface{}) error
 		if strings.ToUpper(v) == "NONE" {
 			d := time.Duration(0)
 			s := ByteSize(0)
+			format := BufferFmtNewline
 			w.CommonBufferSinkConfig = CommonBufferSinkConfig{
 				MaxStaleness:     &d,
 				FlushTriggerSize: &s,
 				MaxBufferSize:    &s,
+				Format:           &format,
 			}
 			return nil
 		}
@@ -1129,6 +1167,41 @@ type constrainedString interface {
 	Accept(string)
 	Canonicalize(string) string
 	AllowedSet() []string
+}
+
+const (
+	BufferFmtJsonArray BufferFormat = "json-array"
+	BufferFmtNewline   BufferFormat = "newline"
+)
+
+// BufferFormat is a string restricted to "json-array" and "newline".
+type BufferFormat string
+
+var _ constrainedString = (*BufferFormat)(nil)
+
+// Accept implements the constrainedString interface.
+func (hsm *BufferFormat) Accept(s string) {
+	*hsm = BufferFormat(s)
+}
+
+// Canonicalize implements the constrainedString interface.
+func (BufferFormat) Canonicalize(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+// AllowedSet implements the constrainedString interface.
+func (BufferFormat) AllowedSet() []string {
+	return []string{string(BufferFmtJsonArray), string(BufferFmtNewline), "unknown"}
+}
+
+// MarshalYAML implements yaml.Marshaler interface.
+func (hsm BufferFormat) MarshalYAML() (interface{}, error) {
+	return string(hsm), nil
+}
+
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (hsm *BufferFormat) UnmarshalYAML(fn func(interface{}) error) error {
+	return unmarshalYAMLConstrainedString(hsm, fn)
 }
 
 // unmarshalYAMLConstrainedString is a utility function to unmarshal

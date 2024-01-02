@@ -13,14 +13,15 @@ package kvcoord
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // ClientTestingKnobs contains testing options that dictate the behavior
 // of the key-value client.
 type ClientTestingKnobs struct {
-	// The RPC dispatcher. Defaults to grpc but can be changed here for
-	// testing purposes.
-	TransportFactory TransportFactory
+	// This is used to wrap the existing factory rather than to inject a brand
+	// new one. Otherwise, set DistSenderConfig.TransportFactory directly.
+	TransportFactory func(TransportFactory) TransportFactory
 
 	// DontConsiderConnHealth, if set, makes the GRPCTransport not take into
 	// consideration the connection health when deciding the ordering for
@@ -48,10 +49,6 @@ type ClientTestingKnobs struct {
 	// only applies to requests sent with the LEASEHOLDER routing policy.
 	DontReorderReplicas bool
 
-	// DisableCommitSanityCheck allows "setting" the DisableCommitSanityCheck to
-	// true without actually overriding the variable.
-	DisableCommitSanityCheck bool
-
 	// CommitWaitFilter allows tests to instrument the beginning of a transaction
 	// commit wait sleep.
 	CommitWaitFilter func()
@@ -61,6 +58,10 @@ type ClientTestingKnobs struct {
 	// error which, if non-nil, becomes the result of the batch. Otherwise, execution
 	// continues.
 	OnRangeSpanningNonTxnalBatch func(ba *kvpb.BatchRequest) *kvpb.Error
+
+	// TransactionRetryFilter allows transaction retry loops to inject retriable
+	// errors.
+	TransactionRetryFilter func(roachpb.Transaction) bool
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}

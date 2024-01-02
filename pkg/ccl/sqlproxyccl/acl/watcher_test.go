@@ -75,11 +75,19 @@ func TestACLWatcher(t *testing.T) {
 
 	dir, tds := tenantdirsvr.SetupTestDirectory(t, ctx, stopper, nil /* timeSource */)
 	tenantID := roachpb.MustMakeTenantID(10)
+
+	// Wait until the tenant watcher has been established.
+	testutils.SucceedsSoon(t, func() error {
+		if tds.WatchTenantsListenersCount() == 0 {
+			return errors.New("watchers have not been established yet")
+		}
+		return nil
+	})
+
 	tds.CreateTenant(tenantID, &tenant.Tenant{
 		Version:                 "001",
 		TenantID:                tenantID.ToUint64(),
 		ClusterName:             "my-tenant",
-		ConnectivityType:        tenant.ALLOW_ALL,
 		AllowedCIDRRanges:       []string{"1.1.0.0/16"},
 		AllowedPrivateEndpoints: []string{"foo-bar-baz", "cockroachdb"},
 	})
@@ -257,7 +265,6 @@ func TestACLWatcher(t *testing.T) {
 			Version:                 "002",
 			TenantID:                tenantID.ToUint64(),
 			ClusterName:             "my-tenant",
-			ConnectivityType:        tenant.ALLOW_ALL,
 			AllowedCIDRRanges:       []string{"1.1.0.0/16"},
 			AllowedPrivateEndpoints: []string{"foo-bar-baz"},
 		})
@@ -269,7 +276,7 @@ func TestACLWatcher(t *testing.T) {
 				return err
 			}
 			if ten.Version != "002" {
-				return errors.New("tenant is not up-to-date")
+				return errors.Newf("tenant is not up-to-date, found version=%s", ten.Version)
 			}
 			return nil
 		})
@@ -310,7 +317,6 @@ func TestACLWatcher(t *testing.T) {
 			Version:           "003",
 			TenantID:          tenantID.ToUint64(),
 			ClusterName:       "my-tenant",
-			ConnectivityType:  tenant.ALLOW_ALL,
 			AllowedCIDRRanges: []string{"127.0.0.1/32"},
 		})
 
@@ -321,7 +327,7 @@ func TestACLWatcher(t *testing.T) {
 				return err
 			}
 			if ten.Version != "003" {
-				return errors.New("tenant is not up-to-date")
+				return errors.Newf("tenant is not up-to-date, found version=%s", ten.Version)
 			}
 			return nil
 		})

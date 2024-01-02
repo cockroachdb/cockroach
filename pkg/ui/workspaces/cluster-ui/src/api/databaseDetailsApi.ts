@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import {
+  combineQueryErrors,
   createSqlExecutionRequest,
   executeInternalSql,
   formatApiResult,
@@ -17,6 +18,8 @@ import {
   SqlApiResponse,
   SqlExecutionErrorMessage,
   SqlExecutionRequest,
+  sqlResultsAreEmpty,
+  SqlExecutionResponse,
   SqlStatement,
   SqlTxnResult,
   txnResultIsEmpty,
@@ -26,11 +29,21 @@ import { Format, Identifier, QualifiedIdentifier } from "./safesql";
 import moment from "moment-timezone";
 import { fromHexString, withTimeout } from "./util";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { getLogger, indexUnusedDuration } from "../util";
 
 const { ZoneConfig } = cockroach.config.zonepb;
 const { ZoneConfigurationLevel } = cockroach.server.serverpb;
 type ZoneConfigType = cockroach.config.zonepb.ZoneConfig;
 type ZoneConfigLevelType = cockroach.server.serverpb.ZoneConfigurationLevel;
+
+export type DatabaseDetailsReqParams = {
+  database: string;
+  csIndexUnusedDuration: string;
+};
+
+export type DatabaseDetailsSpanStatsReqParams = {
+  database: string;
+};
 
 export type DatabaseDetailsResponse = {
   idResp: SqlApiQueryResponse<DatabaseIdRow>;
@@ -38,6 +51,11 @@ export type DatabaseDetailsResponse = {
   tablesResp: SqlApiQueryResponse<DatabaseTablesResponse>;
   zoneConfigResp: SqlApiQueryResponse<DatabaseZoneConfigResponse>;
   stats?: DatabaseDetailsStats;
+  error?: SqlExecutionErrorMessage;
+};
+
+export type DatabaseDetailsSpanStatsResponse = {
+  spanStats: SqlApiQueryResponse<DatabaseSpanStatsRow>;
   error?: SqlExecutionErrorMessage;
 };
 
@@ -54,18 +72,24 @@ function newDatabaseDetailsResponse(): DatabaseDetailsResponse {
       zone_config_level: ZoneConfigurationLevel.CLUSTER,
     },
     stats: {
-      spanStats: {
-        approximate_disk_bytes: 0,
-        live_bytes: 0,
-        total_bytes: 0,
-        range_count: 0,
-      },
       replicaData: {
         replicas: [],
         regions: [],
       },
       indexStats: { num_index_recommendations: 0 },
     },
+  };
+}
+
+function newDatabaseDetailsSpanStatsResponse(): DatabaseDetailsSpanStatsResponse {
+  return {
+    spanStats: {
+      approximate_disk_bytes: 0,
+      live_bytes: 0,
+      total_bytes: 0,
+      range_count: 0,
+    },
+    error: undefined,
   };
 }
 
@@ -93,12 +117,8 @@ const getDatabaseId: DatabaseDetailsQuery<DatabaseIdRow> = {
       resp.idResp.error = txn_result.error;
     }
   },
-  handleMaxSizeError: (
-    dbName: string,
-    response: SqlTxnResult<DatabaseIdRow>,
-    dbDetail: DatabaseDetailsResponse,
-  ) => {
-    return new Promise<boolean>(() => false);
+  handleMaxSizeError: (_dbName, _response, _dbDetail) => {
+    return Promise.resolve(false);
   },
 };
 
@@ -135,17 +155,13 @@ const getDatabaseGrantsQuery: DatabaseDetailsQuery<DatabaseGrantsRow> = {
       }
     }
   },
-  handleMaxSizeError: (
-    dbName: string,
-    response: SqlTxnResult<DatabaseGrantsRow>,
-    dbDetail: DatabaseDetailsResponse,
-  ) => {
-    return new Promise<boolean>(() => false);
+  handleMaxSizeError: (_dbName, _response, _dbDetail) => {
+    return Promise.resolve(false);
   },
 };
 
 // Database Tables
-type DatabaseTablesResponse = {
+export type DatabaseTablesResponse = {
   tables: string[];
 };
 
@@ -240,7 +256,7 @@ type DatabaseZoneConfigRow = {
 const getDatabaseZoneConfig: DatabaseDetailsQuery<DatabaseZoneConfigRow> = {
   createStmt: dbName => {
     return {
-      sql: `SELECT 
+      sql: `SELECT
         encode(
           crdb_internal.get_zone_config(
             (SELECT crdb_internal.get_database_id($1))
@@ -272,8 +288,10 @@ const getDatabaseZoneConfig: DatabaseDetailsQuery<DatabaseZoneConfigRow> = {
         );
         resp.zoneConfigResp.zone_config_level = ZoneConfigurationLevel.DATABASE;
       } catch (e) {
-        console.error(
+        getLogger().error(
           `Database Details API - encountered an error decoding zone config string: ${zoneConfigHexString}`,
+          /* additional context */ undefined,
+          e,
         );
         // Catch and assign the error if we encounter one decoding.
         resp.zoneConfigResp.error = e;
@@ -281,74 +299,59 @@ const getDatabaseZoneConfig: DatabaseDetailsQuery<DatabaseZoneConfigRow> = {
       }
     }
     if (txn_result.error) {
-      resp.idResp.error = txn_result.error;
+      resp.zoneConfigResp.error = txn_result.error;
     }
   },
-  handleMaxSizeError: (
-    dbName: string,
-    response: SqlTxnResult<DatabaseZoneConfigRow>,
-    dbDetail: DatabaseDetailsResponse,
-  ) => {
-    return new Promise<boolean>(() => false);
+  handleMaxSizeError: (_dbName, _response, _dbDetail) => {
+    return Promise.resolve(false);
   },
 };
 
 // Database Stats
 type DatabaseDetailsStats = {
-  spanStats: SqlApiQueryResponse<DatabaseSpanStatsRow>;
   replicaData: SqlApiQueryResponse<DatabaseReplicasRegionsRow>;
   indexStats: SqlApiQueryResponse<DatabaseIndexUsageStatsResponse>;
 };
 
-type DatabaseSpanStatsRow = {
+export type DatabaseSpanStatsRow = {
   approximate_disk_bytes: number;
   live_bytes: number;
   total_bytes: number;
   range_count: number;
 };
 
-const getDatabaseSpanStats: DatabaseDetailsQuery<DatabaseSpanStatsRow> = {
-  createStmt: dbName => {
-    return {
-      sql: `SELECT
-            sum(range_count) as range_count,
-            sum(approximate_disk_bytes) as approximate_disk_bytes,
-            sum(live_bytes) as live_bytes,
-            sum(total_bytes) as total_bytes
-          FROM crdb_internal.tenant_span_stats((SELECT crdb_internal.get_database_id($1)))`,
-      arguments: [dbName],
-    };
-  },
-  addToDatabaseDetail: (
-    txn_result: SqlTxnResult<DatabaseSpanStatsRow>,
-    resp: DatabaseDetailsResponse,
-  ) => {
-    if (txn_result && txn_result.error) {
-      resp.stats.spanStats.error = txn_result.error;
-    }
-    if (txnResultIsEmpty(txn_result)) {
-      return;
-    }
-    if (txn_result.rows.length === 1) {
-      const row = txn_result.rows[0];
-      resp.stats.spanStats.approximate_disk_bytes = row.approximate_disk_bytes;
-      resp.stats.spanStats.range_count = row.range_count;
-      resp.stats.spanStats.live_bytes = row.live_bytes;
-      resp.stats.spanStats.total_bytes = row.total_bytes;
-    } else {
-      resp.stats.spanStats.error = new Error(
-        `DatabaseDetails - Span Stats, expected 1 row, got ${txn_result.rows.length}`,
-      );
-    }
-  },
-  handleMaxSizeError: (
-    dbName: string,
-    response: SqlTxnResult<DatabaseSpanStatsRow>,
-    dbDetail: DatabaseDetailsResponse,
-  ) => {
-    return new Promise<boolean>(() => false);
-  },
-};
+function formatSpanStatsExecutionResult(
+  res: SqlExecutionResponse<DatabaseSpanStatsRow>,
+): DatabaseDetailsSpanStatsResponse {
+  const out = newDatabaseDetailsSpanStatsResponse();
+
+  if (res.execution.txn_results.length === 0) {
+    return out;
+  }
+
+  const txn_result = res.execution.txn_results[0];
+
+  if (txn_result && txn_result.error) {
+    // Copy the SQLExecutionError and the SqlTransactionResult error.
+    out.error = res.error;
+    out.spanStats.error = txn_result.error;
+  }
+  if (txnResultIsEmpty(txn_result)) {
+    return out;
+  }
+  if (txn_result.rows.length === 1) {
+    const row = txn_result.rows[0];
+    out.spanStats.approximate_disk_bytes = row.approximate_disk_bytes;
+    out.spanStats.range_count = row.range_count;
+    out.spanStats.live_bytes = row.live_bytes;
+    out.spanStats.total_bytes = row.total_bytes;
+  } else {
+    out.spanStats.error = new Error(
+      `DatabaseDetails - Span Stats, expected 1 row, got ${txn_result.rows.length}`,
+    );
+  }
+  return out;
+}
 
 type DatabaseReplicasRegionsRow = {
   replicas: number[];
@@ -360,19 +363,19 @@ const getDatabaseReplicasAndRegions: DatabaseDetailsQuery<DatabaseReplicasRegion
     createStmt: dbName => {
       return {
         sql: Format(
-          `WITH
-          replicasAndregions as (
-              SELECT
-                r.replicas,
-                ARRAY(SELECT DISTINCT split_part(split_part(unnest(replica_localities),',',1),'=',2)) as regions
-              FROM crdb_internal.tables as t
-                     JOIN %1.crdb_internal.table_spans as s ON s.descriptor_id = t.table_id
-             JOIN crdb_internal.ranges_no_leases as r ON s.start_key < r.end_key AND s.end_key > r.start_key
-           WHERE t.database_name = $1
-          ),
-          unique_replicas AS (SELECT array_agg(distinct(unnest(replicas))) as replicas FROM replicasAndRegions),
-          unique_regions AS (SELECT array_agg(distinct(unnest(regions))) as regions FROM replicasAndRegions)
-          SELECT replicas, regions FROM unique_replicas CROSS JOIN unique_regions`,
+          `WITH replicasAndRegionsPerDbRange AS (
+            SELECT
+              r.replicas,
+              ARRAY(SELECT DISTINCT split_part(split_part(unnest(replica_localities), ',', 1), '=', 2)) AS regions
+            FROM crdb_internal.tables AS t
+                   JOIN %1.crdb_internal.table_spans AS s ON s.descriptor_id = t.table_id
+                   JOIN crdb_internal.ranges_no_leases AS r ON s.start_key < r.end_key AND s.end_key > r.start_key
+            WHERE t.database_name = $1
+          )
+           SELECT
+             array_agg(DISTINCT replica_val) AS replicas,
+             array_agg(DISTINCT region_val) AS regions
+           FROM replicasAndRegionsPerDbRange, unnest(replicas) AS replica_val, unnest(regions) AS region_val`,
           [new Identifier(dbName)],
         ),
         arguments: [dbName],
@@ -390,12 +393,8 @@ const getDatabaseReplicasAndRegions: DatabaseDetailsQuery<DatabaseReplicasRegion
         resp.stats.replicaData.error = txn_result.error;
       }
     },
-    handleMaxSizeError: (
-      dbName: string,
-      response: SqlTxnResult<DatabaseReplicasRegionsRow>,
-      dbDetail: DatabaseDetailsResponse,
-    ) => {
-      return new Promise<boolean>(() => false);
+    handleMaxSizeError: (_dbName, _response, _dbDetail) => {
+      return Promise.resolve(false);
     },
   };
 
@@ -404,24 +403,19 @@ type DatabaseIndexUsageStatsResponse = {
 };
 
 const getDatabaseIndexUsageStats: DatabaseDetailsQuery<IndexUsageStatistic> = {
-  createStmt: dbName => {
+  createStmt: (dbName: string, csIndexUnusedDuration: string) => {
+    csIndexUnusedDuration = csIndexUnusedDuration ?? indexUnusedDuration;
     return {
       sql: Format(
-        `WITH cs AS (
-          SELECT value 
-              FROM crdb_internal.cluster_settings 
-          WHERE variable = 'sql.index_recommendation.drop_unused_duration'
-          )
-          SELECT * FROM (SELECT
+        `SELECT * FROM (SELECT
                   ti.created_at,
                   us.last_read,
                   us.total_reads,
-                  cs.value as unused_threshold,
-                  cs.value::interval as interval_threshold,
+                  '${csIndexUnusedDuration}' as unused_threshold,
+                  '${csIndexUnusedDuration}'::interval as interval_threshold,
                   now() - COALESCE(us.last_read AT TIME ZONE 'UTC', COALESCE(ti.created_at, '0001-01-01')) as unused_interval
                   FROM %1.crdb_internal.index_usage_statistics AS us
                   JOIN %1.crdb_internal.table_indexes AS ti ON (us.index_id = ti.index_id AND us.table_id = ti.descriptor_id)
-                  CROSS JOIN cs
                  WHERE $1 != 'system' AND ti.is_unique IS false)
                WHERE unused_interval > interval_threshold
                ORDER BY total_reads DESC;`,
@@ -444,12 +438,8 @@ const getDatabaseIndexUsageStats: DatabaseDetailsQuery<IndexUsageStatistic> = {
       resp.stats.indexStats.error = txn_result.error;
     }
   },
-  handleMaxSizeError: (
-    dbName: string,
-    response: SqlTxnResult<IndexUsageStatistic>,
-    dbDetail: DatabaseDetailsResponse,
-  ) => {
-    return new Promise<boolean>(() => false);
+  handleMaxSizeError: (_dbName, _response, _dbDetail) => {
+    return Promise.resolve(false);
   },
 };
 
@@ -463,7 +453,7 @@ export type DatabaseDetailsRow =
   | IndexUsageStatistic;
 
 type DatabaseDetailsQuery<RowType> = {
-  createStmt: (dbName: string) => SqlStatement;
+  createStmt: (dbName: string, csIndexUnusedDuration: string) => SqlStatement;
   addToDatabaseDetail: (
     response: SqlTxnResult<RowType>,
     dbDetail: DatabaseDetailsResponse,
@@ -482,66 +472,114 @@ const databaseDetailQueries: DatabaseDetailsQuery<DatabaseDetailsRow>[] = [
   getDatabaseReplicasAndRegions,
   getDatabaseIndexUsageStats,
   getDatabaseZoneConfig,
-  getDatabaseSpanStats,
 ];
 
-export function createDatabaseDetailsReq(dbName: string): SqlExecutionRequest {
-  return createSqlExecutionRequest(
-    dbName,
-    databaseDetailQueries.map(query => query.createStmt(dbName)),
+export function createDatabaseDetailsReq(
+  params: DatabaseDetailsReqParams,
+): SqlExecutionRequest {
+  return {
+    ...createSqlExecutionRequest(
+      params.database,
+      databaseDetailQueries.map(query =>
+        query.createStmt(params.database, params.csIndexUnusedDuration),
+      ),
+    ),
+    separate_txns: true,
+  };
+}
+
+export function createDatabaseDetailsSpanStatsReq(
+  params: DatabaseDetailsSpanStatsReqParams,
+): SqlExecutionRequest {
+  const statement = {
+    sql: `SELECT
+            sum(range_count) as range_count,
+            sum(approximate_disk_bytes) as approximate_disk_bytes,
+            sum(live_bytes) as live_bytes,
+            sum(total_bytes) as total_bytes
+          FROM crdb_internal.tenant_span_stats((SELECT crdb_internal.get_database_id($1)))`,
+    arguments: [params.database],
+  };
+  return createSqlExecutionRequest(params.database, [statement]);
+}
+
+export async function getDatabaseDetailsSpanStats(
+  params: DatabaseDetailsSpanStatsReqParams,
+) {
+  const req: SqlExecutionRequest = createDatabaseDetailsSpanStatsReq(params);
+  const sqlResp = await executeInternalSql<DatabaseSpanStatsRow>(req);
+  const res = formatSpanStatsExecutionResult(sqlResp);
+  return formatApiResult<DatabaseDetailsSpanStatsResponse>(
+    res,
+    res.error,
+    "retrieving database span stats",
+    false,
   );
 }
 
 export async function getDatabaseDetails(
-  databaseName: string,
+  params: DatabaseDetailsReqParams,
   timeout?: moment.Duration,
 ): Promise<SqlApiResponse<DatabaseDetailsResponse>> {
-  return withTimeout(fetchDatabaseDetails(databaseName), timeout);
+  return withTimeout(fetchDatabaseDetails(params), timeout);
 }
 
 async function fetchDatabaseDetails(
-  databaseName: string,
+  params: DatabaseDetailsReqParams,
 ): Promise<SqlApiResponse<DatabaseDetailsResponse>> {
   const detailsResponse: DatabaseDetailsResponse = newDatabaseDetailsResponse();
-  const req: SqlExecutionRequest = createDatabaseDetailsReq(databaseName);
+  const req: SqlExecutionRequest = createDatabaseDetailsReq(params);
   const resp = await executeInternalSql<DatabaseDetailsRow>(req);
+  const errs: Error[] = [];
   resp.execution.txn_results.forEach(txn_result => {
-    if (txn_result.rows) {
-      const query: DatabaseDetailsQuery<DatabaseDetailsRow> =
-        databaseDetailQueries[txn_result.statement - 1];
-      query.addToDatabaseDetail(txn_result, detailsResponse);
+    if (txn_result.error) {
+      errs.push(txn_result.error);
     }
+    const query: DatabaseDetailsQuery<DatabaseDetailsRow> =
+      databaseDetailQueries[txn_result.statement - 1];
+    query.addToDatabaseDetail(txn_result, detailsResponse);
   });
   if (resp.error) {
-    if (resp.error.message.includes("max result size exceeded")) {
-      return fetchSeparatelyDatabaseDetails(databaseName);
+    if (isMaxSizeError(resp.error.message)) {
+      return fetchSeparatelyDatabaseDetails(params);
     }
     detailsResponse.error = resp.error;
   }
+
+  detailsResponse.error = combineQueryErrors(errs, detailsResponse.error);
   return formatApiResult<DatabaseDetailsResponse>(
     detailsResponse,
     detailsResponse.error,
-    "retrieving database details information",
+    `retrieving database details information for database '${params.database}'`,
+    false,
   );
 }
 
 async function fetchSeparatelyDatabaseDetails(
-  databaseName: string,
+  params: DatabaseDetailsReqParams,
 ): Promise<SqlApiResponse<DatabaseDetailsResponse>> {
   const detailsResponse: DatabaseDetailsResponse = newDatabaseDetailsResponse();
+  const errs: Error[] = [];
   for (const databaseDetailQuery of databaseDetailQueries) {
-    const req = createSqlExecutionRequest(databaseName, [
-      databaseDetailQuery.createStmt(databaseName),
+    const req = createSqlExecutionRequest(params.database, [
+      databaseDetailQuery.createStmt(
+        params.database,
+        params.csIndexUnusedDuration,
+      ),
     ]);
     const resp = await executeInternalSql<DatabaseDetailsRow>(req);
-    const txn_result = resp.execution.txn_results[0];
-    if (txn_result.rows) {
-      databaseDetailQuery.addToDatabaseDetail(txn_result, detailsResponse);
+    if (sqlResultsAreEmpty(resp)) {
+      continue;
     }
+    const txn_result = resp.execution.txn_results[0];
+    if (txn_result.error) {
+      errs.push(txn_result.error);
+    }
+    databaseDetailQuery.addToDatabaseDetail(txn_result, detailsResponse);
 
     if (resp.error) {
       const handleFailure = await databaseDetailQuery.handleMaxSizeError(
-        databaseName,
+        params.database,
         txn_result,
         detailsResponse,
       );
@@ -551,9 +589,11 @@ async function fetchSeparatelyDatabaseDetails(
     }
   }
 
+  detailsResponse.error = combineQueryErrors(errs, detailsResponse.error);
   return formatApiResult<DatabaseDetailsResponse>(
     detailsResponse,
     detailsResponse.error,
-    "retrieving database details information",
+    `retrieving database details information for database '${params.database}'`,
+    false,
   );
 }

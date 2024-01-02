@@ -82,13 +82,16 @@ stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_b
 >> put k=k ts=5 v=k5
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> put k=d v=d7 t=A
-stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-190 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+put: lock acquisition = {d id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-190 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> put k=f v=f7 t=A
-stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_bytes=+48 gc_bytes_age=+1767 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+put: lock acquisition = {f id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_bytes=+48 gc_bytes_age=+1767 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> put k=j v=j7 t=A
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+put: lock acquisition = {j id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -100,12 +103,12 @@ rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "d"/2.000000000,0 -> /BYTES/d2
 data: "e"/3.000000000,0 -> /BYTES/e3
-meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/7.000000000,0 -> /BYTES/f7
 data: "f"/6.000000000,0 -> /BYTES/f6
 data: "f"/4.000000000,0 -> /BYTES/f4
@@ -113,10 +116,10 @@ data: "f"/2.000000000,0 -> /BYTES/f2
 data: "g"/4.000000000,0 -> /BYTES/g4
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "h"/3.000000000,0 -> /BYTES/h3
-meta: "j"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "j"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "j"/7.000000000,0 -> /BYTES/j7
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=9 key_bytes=210 val_count=16 val_bytes=242 range_key_count=8 range_key_bytes=158 range_val_count=14 range_val_bytes=13 live_count=5 live_bytes=249 gc_bytes_age=35952 intent_count=3 intent_bytes=57 separated_intent_count=3 intent_age=279
+stats: key_count=9 key_bytes=210 val_count=16 val_bytes=242 range_key_count=8 range_key_bytes=158 range_val_count=14 range_val_bytes=13 live_count=5 live_bytes=249 gc_bytes_age=35952 intent_count=3 intent_bytes=57 lock_count=3 lock_age=279
 
 # Forward scans at all timestamps.
 run ok
@@ -224,9 +227,9 @@ scan: "k" -> /BYTES/k5 @5.000000000,0
 run ok
 scan k=a end=z ts=7 tombstones inconsistent
 ----
-scan: intent "d" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
-scan: intent "f" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
-scan: intent "j" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
+scan: intent "d" {id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
+scan: intent "f" {id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
+scan: intent "j" {id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
 scan: "a" -> /<empty> @4.000000000,0
 scan: "b" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @5.000000000,0
@@ -342,9 +345,9 @@ scan: "a" -> /<empty> @4.000000000,0
 run ok
 scan k=a end=z ts=7 reverse tombstones inconsistent
 ----
-scan: intent "j" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
-scan: intent "f" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
-scan: intent "d" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
+scan: intent "j" {id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
+scan: intent "f" {id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
+scan: intent "d" {id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
 scan: "k" -> /BYTES/k5 @5.000000000,0
 scan: "h" -> /BYTES/h3 @3.000000000,0
 scan: "g" -> /<empty> @5.000000000,0

@@ -10,7 +10,7 @@
 
 import React from "react";
 import { RouteComponentProps } from "react-router-dom";
-import { flatMap, merge } from "lodash";
+import { flatMap, merge, groupBy } from "lodash";
 import classNames from "classnames/bind";
 import { getValidErrorsList, Loading } from "src/loading";
 import { Delayed } from "src/delayed";
@@ -32,7 +32,7 @@ import {
   updateFiltersQueryParamsOnTab,
 } from "../queryFilter";
 
-import { syncHistory, unique } from "src/util";
+import { Timestamp, TimestampToMoment, syncHistory, unique } from "src/util";
 import {
   AggregateStatistics,
   makeStatementsColumns,
@@ -78,9 +78,10 @@ import {
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsReport,
   SqlStatsResponse,
+  StatementDiagnosticsResponse,
 } from "../api";
 import {
-  filteredStatementsData,
+  filterStatementsData,
   convertRawStmtsToAggregateStatisticsMemoized,
   getAppsFromStmtsResponseMemoized,
 } from "../sqlActivity/util";
@@ -94,7 +95,7 @@ import {
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import { RequestState } from "src/api/types";
-import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
+import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -134,6 +135,7 @@ export interface StatementsPageDispatchProps {
   onChangeLimit: (limit: number) => void;
   onChangeReqSort: (sort: SqlStatsSortType) => void;
   onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) => void;
+  onRequestTimeChange: (t: moment.Moment) => void;
 }
 export interface StatementsPageStateProps {
   statementsResponse: RequestState<SqlStatsResponse>;
@@ -150,6 +152,9 @@ export interface StatementsPageStateProps {
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   hasAdminRole?: UIConfigState["hasAdminRole"];
   stmtsTotalRuntimeSecs: number;
+  statementDiagnostics: StatementDiagnosticsResponse | null;
+  requestTime: moment.Moment;
+  oldestDataAvailable: Timestamp;
 }
 
 export interface StatementsPageState {
@@ -216,7 +221,7 @@ export class StatementsPage extends React.Component<
 
     // Search query.
     const searchQuery = searchParams.get("q") || undefined;
-    if (onSearchComplete && searchQuery && search != searchQuery) {
+    if (onSearchComplete && searchQuery && search !== searchQuery) {
       onSearchComplete(searchQuery);
     }
 
@@ -256,7 +261,7 @@ export class StatementsPage extends React.Component<
 
   isSortSettingSameAsReqSort = (): boolean => {
     return (
-      getSortColumn(this.props.reqSortSetting) ==
+      getSortColumn(this.props.reqSortSetting) ===
       this.props.sortSetting.columnTitle
     );
   };
@@ -287,6 +292,7 @@ export class StatementsPage extends React.Component<
         getSortLabel(this.state.reqSortSetting, "Statement"),
       );
     }
+    this.props.onRequestTimeChange(moment());
     this.refreshStatements();
     const ss: SortSetting = {
       ascending: false,
@@ -363,7 +369,7 @@ export class StatementsPage extends React.Component<
     const searchParams = new URLSearchParams(history.location.search);
     const currentTab = searchParams.get("tab") || "";
     const searchQueryString = searchParams.get("q") || "";
-    if (currentTab === tab && search && search != searchQueryString) {
+    if (currentTab === tab && search && search !== searchQueryString) {
       syncHistory(
         {
           q: search,
@@ -500,7 +506,7 @@ export class StatementsPage extends React.Component<
   hasReqSortOption = (): boolean => {
     let found = false;
     Object.values(SqlStatsSortOptions).forEach((option: SqlStatsSortType) => {
-      if (getSortColumn(option) == this.props.sortSetting.columnTitle) {
+      if (getSortColumn(option) === this.props.sortSetting.columnTitle) {
         found = true;
       }
     });
@@ -524,7 +530,7 @@ export class StatementsPage extends React.Component<
       databases,
       hasAdminRole,
     } = this.props;
-    const data = filteredStatementsData(filters, search, statements, isTenant);
+    const data = filterStatementsData(filters, search, statements, isTenant);
 
     const apps = getAppsFromStmtsResponseMemoized(
       this.props.statementsResponse?.data,
@@ -546,7 +552,7 @@ export class StatementsPage extends React.Component<
 
     // Creates a list of all possible columns,
     // hiding nodeRegions if is not multi-region and
-    // hiding columns that won't be displayed for tenants.
+    // hiding columns that won't be displayed for virtual clusters.
     const columns = makeStatementsColumns(
       statements,
       filters.app?.split(","),
@@ -581,7 +587,6 @@ export class StatementsPage extends React.Component<
       isSelectedColumn(userSelectedColumnsToShow, c),
     );
 
-    const period = <FormattedTimescale ts={this.props.timeScale} />;
     const sortSettingLabel = getSortLabel(
       this.props.reqSortSetting,
       "Statement",
@@ -589,7 +594,7 @@ export class StatementsPage extends React.Component<
     const showSortWarning =
       !this.isSortSettingSameAsReqSort() &&
       this.hasReqSortOption() &&
-      data.length == this.props.limit;
+      data.length === this.props.limit;
 
     return (
       <>
@@ -631,8 +636,14 @@ export class StatementsPage extends React.Component<
           <PageConfig className={cx("float-right")}>
             <PageConfigItem>
               <p className={timeScaleStylesCx("time-label")}>
-                Showing aggregated stats from{" "}
-                <span className={timeScaleStylesCx("bold")}>{period}</span>
+                <TimeScaleLabel
+                  timeScale={this.props.timeScale}
+                  requestTime={moment(this.props.requestTime)}
+                  oldestDataTime={
+                    this.props.oldestDataAvailable &&
+                    TimestampToMoment(this.props.oldestDataAvailable)
+                  }
+                />
                 {", "}
                 <ResultsPerPageLabel
                   pagination={{ ...pagination, total: data.length }}
@@ -704,10 +715,21 @@ export class StatementsPage extends React.Component<
       refreshStatementDiagnosticsRequests,
       onActivateStatementDiagnostics,
       onDiagnosticsModalOpen,
+      statementDiagnostics,
     } = this.props;
+
+    const diagnosticsByStatement = groupBy(
+      statementDiagnostics,
+      sd => sd.statement_fingerprint,
+    );
 
     const statements = convertRawStmtsToAggregateStatisticsMemoized(
       this.props.statementsResponse?.data?.statements,
+    ).map(
+      (s): AggregateStatistics => ({
+        ...s,
+        diagnosticsReports: diagnosticsByStatement[s.label] || [],
+      }),
     );
 
     const longLoadingMessage = (
@@ -740,9 +762,11 @@ export class StatementsPage extends React.Component<
             renderError={() =>
               LoadingError({
                 statsType: "statements",
-                timeout: this.props.statementsResponse?.error?.name
-                  ?.toLowerCase()
-                  .includes("timeout"),
+                error: this.props.statementsResponse?.error,
+                sourceTables: this.props.statementsResponse?.data
+                  ?.stmts_source_table && [
+                  this.props.statementsResponse?.data?.stmts_source_table,
+                ],
               })
             }
           />

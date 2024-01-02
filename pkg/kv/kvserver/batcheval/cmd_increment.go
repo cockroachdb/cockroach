@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
@@ -32,11 +33,22 @@ func Increment(
 	h := cArgs.Header
 	reply := resp.(*kvpb.IncrementResponse)
 
+	opts := storage.MVCCWriteOptions{
+		Txn:                            h.Txn,
+		LocalTimestamp:                 cArgs.Now,
+		Stats:                          cArgs.Stats,
+		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
+		OmitInRangefeeds:               cArgs.OmitInRangefeeds,
+		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		Category:                       storage.BatchEvalReadCategory,
+	}
+
 	var err error
-	reply.NewValue, err = storage.MVCCIncrement(
-		ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, h.Txn, args.Increment)
+	var acq roachpb.LockAcquisition
+	reply.NewValue, acq, err = storage.MVCCIncrement(
+		ctx, readWriter, args.Key, h.Timestamp, opts, args.Increment)
 	if err != nil {
 		return result.Result{}, err
 	}
-	return result.FromAcquiredLocks(h.Txn, args.Key), nil
+	return result.WithAcquiredLocks(acq), nil
 }

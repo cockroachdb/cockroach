@@ -111,7 +111,7 @@ b2 public schema <nil> incremental
 b2 me schema <nil> incremental
 b2 greeting type <nil> incremental
 b2 _greeting type <nil> incremental
-b2 baz table 3 incremental
+b2 baz table 0 incremental
 
 
 # Ensure the restored cluster contains nothing from the in-progress restoring database as of system
@@ -240,7 +240,7 @@ d public schema <nil> incremental
 d me schema <nil> incremental
 d greeting type <nil> incremental
 d _greeting type <nil> incremental
-d baz table 3 incremental
+d baz table 0 incremental
 
 
 # Ensure that restoring the database, AOST the in-progress restore, elides the restoring descriptors

@@ -39,7 +39,10 @@ import (
 // the version setting. The caller is responsible for decoding the
 // value to transform it to a user-facing string.
 func (p *planner) getCurrentEncodedVersionSettingValue(
-	ctx context.Context, s *settings.VersionSetting, name string,
+	ctx context.Context,
+	s *settings.VersionSetting,
+	key settings.InternalKey,
+	name settings.SettingName,
 ) (string, error) {
 	st := p.ExecCfg().Settings
 	var res string
@@ -61,7 +64,7 @@ func (p *planner) getCurrentEncodedVersionSettingValue(
 						ctx, "read-setting",
 						txn.KV(),
 						sessiondata.RootUserSessionDataOverride,
-						"SELECT value FROM system.settings WHERE name = $1", name,
+						"SELECT value FROM system.settings WHERE name = $1", key,
 					)
 					if err != nil {
 						return err
@@ -92,9 +95,9 @@ func (p *planner) getCurrentEncodedVersionSettingValue(
 						return errors.AssertionFailedf("no value found for version setting")
 					}
 
-					localRawVal := []byte(s.Get(&st.SV))
+					localVal := s.GetInternal(&st.SV)
 					if err := checkClusterSettingValuesAreEquivalent(
-						localRawVal, kvRawVal,
+						localVal.Encode(), kvRawVal,
 					); err != nil {
 						// NB: errors.Wrapf(nil, ...) returns nil.
 						// nolint:errwrap
@@ -149,24 +152,32 @@ func checkClusterSettingValuesAreEquivalent(localRawVal, kvRawVal []byte) error 
 		localVal, kvVal)
 }
 
+func settingNameDeprecationNotice(oldName, newName settings.SettingName) pgnotice.Notice {
+	return pgnotice.Newf("the name %q is deprecated; use %q instead", oldName, newName)
+}
+
 func (p *planner) ShowClusterSetting(
 	ctx context.Context, n *tree.ShowClusterSetting,
 ) (planNode, error) {
-	name := strings.ToLower(n.Name)
-	setting, ok := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
+	name := settings.SettingName(strings.ToLower(n.Name))
+	setting, ok, nameStatus := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
+	}
+	if nameStatus != settings.NameActive {
+		p.BufferClientNotice(ctx, settingNameDeprecationNotice(name, setting.Name()))
+		name = setting.Name()
 	}
 
 	if err := checkPrivilegesForSetting(ctx, p, name, "show"); err != nil {
 		return nil, err
 	}
 
-	if strings.HasPrefix(n.Name, "sql.defaults") {
+	if strings.HasPrefix(string(name), "sql.defaults") {
 		p.BufferClientNotice(
 			ctx,
 			errors.WithHintf(
-				pgnotice.Newf("using global default %s is not recommended", n.Name),
+				pgnotice.Newf("using global default %s is not recommended", name),
 				"use the `ALTER ROLE ... SET` syntax to control session variable defaults at a finer-grained level. See: %s",
 				docs.URL("alter-role.html#set-default-session-variable-values-for-a-role"),
 			),
@@ -181,7 +192,7 @@ func (p *planner) ShowClusterSetting(
 	return planShowClusterSetting(setting, name, columns,
 		func(ctx context.Context, p *planner) (bool, string, error) {
 			if verSetting, ok := setting.(*settings.VersionSetting); ok {
-				encoded, err := p.getCurrentEncodedVersionSettingValue(ctx, verSetting, name)
+				encoded, err := p.getCurrentEncodedVersionSettingValue(ctx, verSetting, setting.InternalKey(), name)
 				return true, encoded, err
 			}
 			return true, setting.Encoded(&p.ExecCfg().Settings.SV), nil
@@ -190,7 +201,7 @@ func (p *planner) ShowClusterSetting(
 }
 
 func getShowClusterSettingPlanColumns(
-	val settings.NonMaskedSetting, name string,
+	val settings.NonMaskedSetting, name settings.SettingName,
 ) (colinfo.ResultColumns, error) {
 	var dType *types.T
 	switch val.(type) {
@@ -209,17 +220,17 @@ func getShowClusterSettingPlanColumns(
 	default:
 		return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
 	}
-	return colinfo.ResultColumns{{Name: name, Typ: dType}}, nil
+	return colinfo.ResultColumns{{Name: string(name), Typ: dType}}, nil
 }
 
 func planShowClusterSetting(
 	val settings.NonMaskedSetting,
-	name string,
+	name settings.SettingName,
 	columns colinfo.ResultColumns,
 	getEncodedValue func(ctx context.Context, p *planner) (bool, string, error),
 ) (planNode, error) {
 	return &delayedNode{
-		name:    "SHOW CLUSTER SETTING " + name,
+		name:    "SHOW CLUSTER SETTING " + string(name),
 		columns: columns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			isNotNull, encoded, err := getEncodedValue(ctx, p)
@@ -273,7 +284,7 @@ func planShowClusterSetting(
 				}
 			}
 
-			v := p.newContainerValuesNode(columns, 0)
+			v := p.newContainerValuesNode(columns, 1)
 			if _, err := v.rows.AddRow(ctx, tree.Datums{d}); err != nil {
 				v.rows.Close(ctx)
 				return nil, err

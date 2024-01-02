@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3"
 )
 
@@ -80,7 +81,7 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 		int64(LBRebalancingLeasesOnly):        "leases",
 		int64(LBRebalancingLeasesAndReplicas): "leases and replicas",
 	},
-).WithPublic()
+	settings.WithPublic)
 
 // LBRebalancingMode controls if and when we do store-level rebalancing
 // based on load.
@@ -125,6 +126,9 @@ const (
 	// replica (lease included) must contribute, in order to consider it
 	// worthwhile rebalancing when overfull.
 	minReplicaLoadFraction = 0.02
+	// maxHotRangesToLog is the maximum number of hot ranges which will be logged
+	// after failing to rebalance below the desired load threshold.
+	maxHotRangesToLog = 5
 )
 
 // StoreRebalancer is responsible for examining how the associated store's load
@@ -230,6 +234,7 @@ type RebalanceContext struct {
 	mode                               LBRebalancingMode
 	allStoresList                      storepool.StoreList
 	hottestRanges, rebalanceCandidates []CandidateReplica
+	leftoverCandidates                 []CandidateReplica
 }
 
 // RebalanceMode returns the mode of the store rebalancer. See
@@ -247,6 +252,35 @@ func (sr *StoreRebalancer) RebalanceObjective() LBRebalancingObjective {
 // threshold w.r.t the balanced load dimension, false otherwise.
 func (r *RebalanceContext) LessThanMaxThresholds() bool {
 	return !load.Greater(r.LocalDesc.Capacity.Load(), r.maxThresholds, r.loadDimension)
+}
+
+// formatHotRanges returns a redactable string containing a new line separated
+// list of ranges given. Each range's descriptor is included alongside range
+// usage information. Note the print order is identical to ranges slice.
+func formatHotRanges(ranges []CandidateReplica) redact.RedactableString {
+	var buf redact.StringBuilder
+	for idx, r := range ranges {
+		if idx > 0 {
+			buf.SafeRune('\n')
+		}
+		desc := r.Desc()
+		buf.Printf("\t%d: r%d:%v replicas=[%v] load=%v",
+			idx+1, desc.RangeID, desc.KeySpan(), desc.Replicas(), r.RangeUsageInfo())
+	}
+	return buf.RedactableString()
+}
+
+// logRemainingHotRanges logs the hottest candidate ranges which have had no
+// rebalance actions taken.
+func (r *RebalanceContext) logRemainingHotRanges(ctx context.Context) {
+	if n := len(r.leftoverCandidates); n > 0 {
+		candidatesToLog := maxHotRangesToLog
+		if candidatesToLog > n {
+			candidatesToLog = n
+		}
+		log.KvDistribution.Infof(ctx,
+			"%v", formatHotRanges(r.leftoverCandidates[:candidatesToLog]))
+	}
 }
 
 // Start runs an infinite loop in a goroutine which regularly checks whether
@@ -513,7 +547,7 @@ func (sr *StoreRebalancer) applyLeaseRebalance(
 			candidateReplica.RangeUsageInfo(),
 		)
 	}); err != nil {
-		log.KvDistribution.Errorf(ctx, "unable to transfer lease to s%d: %+v", target.StoreID, err)
+		log.KvDistribution.Infof(ctx, "unable to transfer lease to s%d: %v", target.StoreID, err)
 		return false
 	}
 	return true
@@ -578,7 +612,7 @@ func (sr *StoreRebalancer) TransferToRebalanceRanges(
 ) bool {
 	if rctx.LessThanMaxThresholds() {
 		log.KvDistribution.Infof(ctx,
-			"load-based lease transfers successfully brought s%d down to %s load, mean=%s, upperThreshold=%s)",
+			"load-based lease transfers successfully brought s%d down to %s load, mean=%s, upperThreshold=%s",
 			rctx.LocalDesc.StoreID, rctx.LocalDesc.Capacity.Load(),
 			rctx.allStoresList.LoadMeans(), rctx.maxThresholds)
 		return false
@@ -589,6 +623,8 @@ func (sr *StoreRebalancer) TransferToRebalanceRanges(
 			"ran out of leases worth transferring and load %s is still above desired threshold %s",
 			rctx.LocalDesc.Capacity.Load(), rctx.maxThresholds)
 		sr.metrics.ImbalancedStateOverfullOptionsExhausted.Inc(1)
+		rctx.leftoverCandidates = append(rctx.leftoverCandidates, rctx.rebalanceCandidates...)
+		rctx.logRemainingHotRanges(ctx)
 		return false
 	}
 
@@ -611,6 +647,7 @@ func (sr *StoreRebalancer) LogRangeRebalanceOutcome(ctx context.Context, rctx *R
 			"ran out of replicas worth transferring and load %s is still above desired threshold %s; will check again soon",
 			rctx.LocalDesc.Capacity.Load(), rctx.maxThresholds)
 		sr.metrics.ImbalancedStateOverfullOptionsExhausted.Inc(1)
+		rctx.logRemainingHotRanges(ctx)
 		return
 	}
 
@@ -654,11 +691,10 @@ func (sr *StoreRebalancer) applyRangeRebalance(
 	candidateReplica CandidateReplica,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 ) bool {
-	descBeforeRebalance, _ := candidateReplica.DescAndSpanConfig()
-	log.KvDistribution.VEventf(
+	descBeforeRebalance := candidateReplica.Desc()
+	log.KvDistribution.Infof(
 		ctx,
-		1,
-		"rebalancing r%d (%s load) to better balance load: voters from %v to %v; non-voters from %v to %v",
+		"rebalancing r%d load=%s to better balance load: voters from %v to %v; non-voters from %v to %v",
 		candidateReplica.GetRangeID(),
 		candidateReplica.RangeUsageInfo().Load(),
 		descBeforeRebalance.Replicas().Voters(),
@@ -741,7 +777,12 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			continue
 		}
 
-		desc, conf := candidateReplica.DescAndSpanConfig()
+		desc := candidateReplica.Desc()
+		conf, err := candidateReplica.LoadSpanConfig(ctx)
+		if err != nil {
+			log.KvDistribution.VEventf(ctx, 2, "unable to load span config: %v", err)
+			continue
+		}
 		log.KvDistribution.VEventf(ctx, 3, "considering lease transfer for r%d with %s load",
 			desc.RangeID, candidateReplica.RangeUsageInfo().TransferImpact())
 
@@ -759,6 +800,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		candidate := sr.allocator.TransferLeaseTarget(
 			ctx,
 			sr.storePool,
+			desc,
 			conf,
 			candidates,
 			candidateReplica,
@@ -800,9 +842,8 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			continue
 		}
 		if targetStore, ok := rctx.allStoresList.FindStoreByID(candidate.StoreID); ok {
-			log.KvDistribution.VEventf(
+			log.KvDistribution.Infof(
 				ctx,
-				1,
 				"transferring lease for r%d load=%s to store s%d load=%s from local store s%d load=%s",
 				desc.RangeID,
 				candidateReplica.RangeUsageInfo().TransferImpact(),
@@ -822,7 +863,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 type rangeRebalanceContext struct {
 	candidateReplica CandidateReplica
 	rangeDesc        *roachpb.RangeDescriptor
-	conf             roachpb.SpanConfig
+	conf             *roachpb.SpanConfig
 }
 
 func (sr *StoreRebalancer) chooseRangeToRebalance(
@@ -865,18 +906,16 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 				rctx.LocalDesc.StoreID,
 				rctx.LocalDesc.Capacity.Load(),
 			)
-			log.KvDistribution.Infof(
-				ctx,
-				"r%d's %s load is too little to matter relative to s%d's %s total load",
-				candidateReplica.GetRangeID(),
-				candidateReplica.RangeUsageInfo().Load(),
-				rctx.LocalDesc.StoreID,
-				rctx.LocalDesc.Capacity.Load(),
-			)
+			rctx.leftoverCandidates = append(rctx.leftoverCandidates, candidateReplica)
 			continue
 		}
 
-		rangeDesc, conf := candidateReplica.DescAndSpanConfig()
+		rangeDesc := candidateReplica.Desc()
+		conf, err := candidateReplica.LoadSpanConfig(ctx)
+		if err != nil {
+			log.KvDistribution.VEventf(ctx, 2, "unable to load span config: %v", err)
+			continue
+		}
 		clusterNodes := sr.storePool.ClusterNodeCount()
 		numDesiredVoters := allocatorimpl.GetNeededVoters(conf.GetNumVoters(), clusterNodes)
 		numDesiredNonVoters := allocatorimpl.GetNeededNonVoters(numDesiredVoters, int(conf.GetNumNonVoters()), clusterNodes)
@@ -889,6 +928,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 				expected,
 				actual,
 			)
+			rctx.leftoverCandidates = append(rctx.leftoverCandidates, candidateReplica)
 			continue
 		}
 		if expected, actual := numDesiredNonVoters, len(rangeDesc.Replicas().NonVoterDescriptors()); expected != actual {
@@ -900,6 +940,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 				expected,
 				actual,
 			)
+			rctx.leftoverCandidates = append(rctx.leftoverCandidates, candidateReplica)
 			continue
 		}
 		rebalanceCtx := rangeRebalanceContext{
@@ -951,6 +992,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 			// If the range needs a lease transfer to enable better load distribution,
 			// it will be handled by the logic in `chooseLeaseToTransfer()`.
 			log.KvDistribution.VEventf(ctx, 3, "could not find rebalance opportunities for r%d", candidateReplica.GetRangeID())
+			rctx.leftoverCandidates = append(rctx.leftoverCandidates, candidateReplica)
 			continue
 		}
 
@@ -970,6 +1012,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		validTargets := sr.allocator.ValidLeaseTargets(
 			ctx,
 			sr.storePool,
+			rebalanceCtx.rangeDesc,
 			rebalanceCtx.conf,
 			targetVoterRepls,
 			rebalanceCtx.candidateReplica,
@@ -989,6 +1032,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 				"could not find rebalance opportunities for r%d, no replica found to hold lease",
 				candidateReplica.GetRangeID(),
 			)
+			rctx.leftoverCandidates = append(rctx.leftoverCandidates, candidateReplica)
 			continue
 		}
 

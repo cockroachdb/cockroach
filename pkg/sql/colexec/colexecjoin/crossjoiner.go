@@ -147,16 +147,16 @@ func (c *crossJoiner) readNextLeftBatch() int {
 // on the join type.
 func (c *crossJoiner) consumeRightInput(ctx context.Context) {
 	c.rightInputConsumed = true
+
+	// Figure out how to consume the right input.
 	var needRightTuples, needOnlyNumRightTuples bool
 	switch c.joinType {
 	case descpb.InnerJoin, descpb.LeftOuterJoin, descpb.RightOuterJoin, descpb.FullOuterJoin:
-		c.needLeftTuples = true
 		needRightTuples = true
 	case descpb.LeftSemiJoin:
 		// With LEFT SEMI join we only need to know whether the right input is
 		// empty or not.
 		c.numRightTuples = c.InputTwo.Next().Length()
-		c.needLeftTuples = c.numRightTuples != 0
 	case descpb.RightSemiJoin:
 		// With RIGHT SEMI join we only need to know whether the left input is
 		// empty or not.
@@ -165,7 +165,6 @@ func (c *crossJoiner) consumeRightInput(ctx context.Context) {
 		// With LEFT ANTI join we only need to know whether the right input is
 		// empty or not.
 		c.numRightTuples = c.InputTwo.Next().Length()
-		c.needLeftTuples = c.numRightTuples == 0
 	case descpb.RightAntiJoin:
 		// With RIGHT ANTI join we only need to know whether the left input is
 		// empty or not.
@@ -173,11 +172,12 @@ func (c *crossJoiner) consumeRightInput(ctx context.Context) {
 	case descpb.IntersectAllJoin, descpb.ExceptAllJoin:
 		// With set-operation joins we only need the number of tuples from the
 		// right input.
-		c.needLeftTuples = true
 		needOnlyNumRightTuples = true
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unexpected join type %s", c.joinType.String()))
 	}
+
+	// Consume the right input if necessary.
 	if needRightTuples || needOnlyNumRightTuples {
 		for {
 			batch := c.InputTwo.Next()
@@ -189,6 +189,23 @@ func (c *crossJoiner) consumeRightInput(ctx context.Context) {
 			}
 			c.numRightTuples += batch.Length()
 		}
+	}
+
+	// Figure out whether we need tuples from the left source.
+	switch c.joinType {
+	case descpb.InnerJoin, descpb.RightOuterJoin, descpb.LeftSemiJoin, descpb.IntersectAllJoin:
+		c.needLeftTuples = c.numRightTuples != 0
+	case descpb.LeftOuterJoin, descpb.FullOuterJoin, descpb.ExceptAllJoin:
+		c.needLeftTuples = true
+	case descpb.LeftAntiJoin:
+		c.needLeftTuples = c.numRightTuples == 0
+	case descpb.RightSemiJoin, descpb.RightAntiJoin:
+		// With RIGHT SEMI and RIGHT ANTI joins we only need to know whether the
+		// left input is empty or not, and we already determined that in the
+		// switch above.
+		c.needLeftTuples = false
+	default:
+		colexecerror.InternalError(errors.AssertionFailedf("unexpected join type %s", c.joinType.String()))
 	}
 }
 
@@ -258,6 +275,11 @@ func (c *crossJoiner) willEmit() int {
 		return c.canEmit()
 	}
 	switch c.joinType {
+	case descpb.InnerJoin, descpb.RightOuterJoin, descpb.IntersectAllJoin:
+		// We don't need the left tuples, and in case of INNER, RIGHT OUTER, and
+		// INTERSECT ALL joins this means that the right input was empty, so the
+		// cross join is empty.
+		return 0
 	case descpb.LeftSemiJoin, descpb.LeftAntiJoin:
 		// We don't need the left tuples, and in case of LEFT SEMI/ANTI this
 		// means that the right input was empty/non-empty, so the cross join

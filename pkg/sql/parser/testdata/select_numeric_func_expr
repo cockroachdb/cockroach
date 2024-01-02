@@ -53,3 +53,14 @@ SELECT [FUNCTION 1074](DISTINCT 'hello', 'world')
 SELECT ([FUNCTION 1074](DISTINCT ('hello'), ('world'))) -- fully parenthesized
 SELECT [FUNCTION 1074](DISTINCT '_', '_') -- literals removed
 SELECT [FUNCTION 1074](DISTINCT 'hello', 'world') -- identifiers removed
+
+# Regression test for not allowing custom "ORDER BY <index>" syntax in function
+# calls (#114788).
+error
+SELECT [FUNCTION 1074]('hello','word' ORDER BY PRIMARY KEY FAMILY DESC)
+----
+at or near "primary": syntax error
+DETAIL: source SQL:
+SELECT [FUNCTION 1074]('hello','word' ORDER BY PRIMARY KEY FAMILY DESC)
+                                               ^
+HINT: try \hf [FUNCTION 1074]

@@ -19,16 +19,14 @@ import {
 } from "../../api/indexDetailsApi";
 
 export type IndexStatsState = {
-  data: TableIndexStatsResponse;
-  lastError: Error;
+  data?: TableIndexStatsResponse;
+  lastError?: Error;
   valid: boolean;
   inFlight: boolean;
 };
 
 export type IndexStatsReducerState = {
-  cachedData: {
-    [id: string]: IndexStatsState;
-  };
+  [id: string]: IndexStatsState;
 };
 
 export type ResetIndexUsageStatsPayload = {
@@ -36,9 +34,7 @@ export type ResetIndexUsageStatsPayload = {
   table: string;
 };
 
-const initialState: IndexStatsReducerState = {
-  cachedData: {},
-};
+const initialState: IndexStatsReducerState = {};
 
 const indexStatsSlice = createSlice({
   name: `${DOMAIN_NAME}/indexstats`,
@@ -48,7 +44,7 @@ const indexStatsSlice = createSlice({
       state,
       action: PayloadAction<TableIndexStatsResponseWithKey>,
     ) => {
-      state.cachedData[action.payload.key] = {
+      state[action.payload.key] = {
         data: action.payload.indexStatsResponse,
         valid: true,
         lastError: null,
@@ -56,7 +52,7 @@ const indexStatsSlice = createSlice({
       };
     },
     failed: (state, action: PayloadAction<ErrorWithKey>) => {
-      state.cachedData[action.payload.key] = {
+      state[action.payload.key] = {
         data: null,
         valid: false,
         lastError: action.payload.err,
@@ -64,19 +60,19 @@ const indexStatsSlice = createSlice({
       };
     },
     invalidated: (state, action: PayloadAction<{ key: string }>) => {
-      delete state.cachedData[action.payload.key];
+      delete state[action.payload.key];
     },
     invalidateAll: state => {
       const keys = Object.keys(state);
       for (const key in keys) {
-        delete state.cachedData[key];
+        delete state[key];
       }
     },
     refresh: (state, action: PayloadAction<TableIndexStatsRequest>) => {
       const key = action?.payload
         ? generateTableID(action.payload.database, action.payload.table)
         : "";
-      state.cachedData[key] = {
+      state[key] = {
         data: null,
         valid: false,
         lastError: null,
@@ -87,7 +83,7 @@ const indexStatsSlice = createSlice({
       const key = action?.payload
         ? generateTableID(action.payload.database, action.payload.table)
         : "";
-      state.cachedData[key] = {
+      state[key] = {
         data: null,
         valid: false,
         lastError: null,
@@ -98,7 +94,7 @@ const indexStatsSlice = createSlice({
       const key = action?.payload
         ? generateTableID(action.payload.database, action.payload.table)
         : "";
-      state.cachedData[key] = {
+      state[key] = {
         data: null,
         valid: false,
         lastError: null,

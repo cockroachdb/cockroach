@@ -243,7 +243,7 @@ func TestSchedulerLoop(t *testing.T) {
 		return nil
 	})
 
-	count, _ := m.RaftSchedulerLatency.Total()
+	count, _ := m.RaftSchedulerLatency.CumulativeSnapshot().Total()
 	require.Equal(t, int64(3), count)
 }
 
@@ -370,15 +370,15 @@ func TestNewSchedulerShards(t *testing.T) {
 		{pri, 12, 3, []int{pri, 3, 3, 3, 3}},
 
 		// Typical examples, using 8 workers per CPU core. Note that we cap workers
-		// at 96 by default.
+		// at 128 by default.
 		{pri, 1 * 8, 16, []int{pri, 8}},
 		{pri, 2 * 8, 16, []int{pri, 16}},
 		{pri, 3 * 8, 16, []int{pri, 12, 12}},
 		{pri, 4 * 8, 16, []int{pri, 16, 16}},
 		{pri, 6 * 8, 16, []int{pri, 16, 16, 16}},
 		{pri, 8 * 8, 16, []int{pri, 16, 16, 16, 16}},
-		{pri, 12 * 8, 16, []int{pri, 16, 16, 16, 16, 16, 16}}, // 96 workers
-		{pri, 16 * 8, 16, []int{pri, 16, 16, 16, 16, 16, 16, 16, 16}},
+		{pri, 12 * 8, 16, []int{pri, 16, 16, 16, 16, 16, 16}},
+		{pri, 16 * 8, 16, []int{pri, 16, 16, 16, 16, 16, 16, 16, 16}}, // 128 workers
 	}
 	for _, tc := range testcases {
 		t.Run(fmt.Sprintf("workers=%d/shardSize=%d", tc.workers, tc.shardSize), func(t *testing.T) {
@@ -480,7 +480,7 @@ func TestSchedulerPrioritizesLivenessAndMeta(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	store, err := s.GetStores().(*Stores).GetStore(s.GetFirstStoreID())

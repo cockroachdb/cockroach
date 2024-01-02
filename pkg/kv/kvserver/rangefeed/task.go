@@ -12,9 +12,11 @@ package rangefeed
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -28,8 +30,15 @@ import (
 type runnable interface {
 	// Run executes the runnable. Cannot be called multiple times.
 	Run(context.Context)
-	// Must be called if runnable is not Run.
+	// Cancel must be called if runnable is not Run.
 	Cancel()
+}
+
+// processorTaskHelper abstracts away processor for tasks.
+type processorTaskHelper interface {
+	StopWithErr(pErr *kvpb.Error)
+	setResolvedTSInitialized(ctx context.Context)
+	sendEvent(ctx context.Context, e event, timeout time.Duration) bool
 }
 
 // initResolvedTSScan scans over all keys using the provided iterator and
@@ -39,12 +48,13 @@ type runnable interface {
 // The Processor can initialize its resolvedTimestamp once the scan completes
 // because it knows it is now tracking all intents in its key range.
 type initResolvedTSScan struct {
-	p  *Processor
-	is IntentScanner
+	span roachpb.RSpan
+	p    processorTaskHelper
+	is   IntentScanner
 }
 
-func newInitResolvedTSScan(p *Processor, c IntentScanner) runnable {
-	return &initResolvedTSScan{p: p, is: c}
+func newInitResolvedTSScan(span roachpb.RSpan, p processorTaskHelper, c IntentScanner) runnable {
+	return &initResolvedTSScan{span: span, p: p, is: c}
 }
 
 func (s *initResolvedTSScan) Run(ctx context.Context) {
@@ -60,8 +70,8 @@ func (s *initResolvedTSScan) Run(ctx context.Context) {
 }
 
 func (s *initResolvedTSScan) iterateAndConsume(ctx context.Context) error {
-	startKey := s.p.Span.Key.AsRawKey()
-	endKey := s.p.Span.EndKey.AsRawKey()
+	startKey := s.span.Key.AsRawKey()
+	endKey := s.span.EndKey.AsRawKey()
 	return s.is.ConsumeIntents(ctx, startKey, endKey, func(op enginepb.MVCCWriteIntentOp) bool {
 		var ops [1]enginepb.MVCCLogicalOp
 		ops[0].SetValue(&op)
@@ -84,21 +94,36 @@ type IntentScanner interface {
 	Close()
 }
 
-// SeparatedIntentScanner is an IntentScanner that assumes that
-// separated intents are in use.
-//
-// EngineIterator Contract:
-//
-//   - The EngineIterator must have an UpperBound set.
-//   - The range must be using separated intents.
+// SeparatedIntentScanner is an IntentScanner that scans the lock table keyspace
+// and searches for intents.
 type SeparatedIntentScanner struct {
-	iter storage.EngineIterator
+	iter *storage.LockTableIterator
 }
 
 // NewSeparatedIntentScanner returns an IntentScanner appropriate for
 // use when the separated intents migration has completed.
-func NewSeparatedIntentScanner(iter storage.EngineIterator) IntentScanner {
-	return &SeparatedIntentScanner{iter: iter}
+func NewSeparatedIntentScanner(
+	ctx context.Context, reader storage.Reader, span roachpb.RSpan,
+) (IntentScanner, error) {
+	lowerBound, _ := keys.LockTableSingleKey(span.Key.AsRawKey(), nil)
+	upperBound, _ := keys.LockTableSingleKey(span.EndKey.AsRawKey(), nil)
+	iter, err := storage.NewLockTableIterator(
+		// Do not use ctx, since it is not the ctx passed in when ConsumeIntents
+		// is called. See https://github.com/cockroachdb/cockroach/issues/116440.
+		//
+		// NB: the storage iterator does not respect context cancellation, and
+		// only uses it for tracing.
+		context.Background(), reader, storage.LockTableIteratorOptions{
+			LowerBound: lowerBound,
+			UpperBound: upperBound,
+			// Ignore Shared and Exclusive locks. We only care about intents.
+			MatchMinStr:  lock.Intent,
+			ReadCategory: storage.RangefeedReadCategory,
+		})
+	if err != nil {
+		return nil, err
+	}
+	return &SeparatedIntentScanner{iter: iter}, nil
 }
 
 // ConsumeIntents implements the IntentScanner interface.
@@ -107,6 +132,8 @@ func (s *SeparatedIntentScanner) ConsumeIntents(
 ) error {
 	ltStart, _ := keys.LockTableSingleKey(startKey, nil)
 	var meta enginepb.MVCCMetadata
+	// TODO(sumeer): ctx is not used for iteration. Fix by adding a method to
+	// EngineIterator to replace the context.
 	for valid, err := s.iter.SeekEngineKeyGE(storage.EngineKey{Key: ltStart}); ; valid, err = s.iter.NextEngineKey() {
 		if err != nil {
 			return err
@@ -117,13 +144,16 @@ func (s *SeparatedIntentScanner) ConsumeIntents(
 			break
 		}
 
-		engineKey, err := s.iter.EngineKey()
+		engineKey, err := s.iter.UnsafeEngineKey()
 		if err != nil {
 			return err
 		}
-		lockedKey, err := keys.DecodeLockTableSingleKey(engineKey.Key)
+		ltKey, err := engineKey.ToLockTableKey()
 		if err != nil {
-			return errors.Wrapf(err, "decoding LockTable key: %s", lockedKey)
+			return errors.Wrapf(err, "decoding LockTable key: %s", ltKey)
+		}
+		if ltKey.Strength != lock.Intent {
+			return errors.AssertionFailedf("LockTableKey with strength %s: %s", ltKey.Strength, ltKey)
 		}
 
 		v, err := s.iter.UnsafeValue()
@@ -131,10 +161,10 @@ func (s *SeparatedIntentScanner) ConsumeIntents(
 			return err
 		}
 		if err := protoutil.Unmarshal(v, &meta); err != nil {
-			return errors.Wrapf(err, "unmarshaling mvcc meta for locked key %s", lockedKey)
+			return errors.Wrapf(err, "unmarshaling mvcc meta for locked key %s", ltKey)
 		}
 		if meta.Txn == nil {
-			return errors.Newf("expected transaction metadata but found none for %s", lockedKey)
+			return errors.Newf("expected transaction metadata but found none for %s", ltKey)
 		}
 
 		consumer(enginepb.MVCCWriteIntentOp{
@@ -150,76 +180,6 @@ func (s *SeparatedIntentScanner) ConsumeIntents(
 
 // Close implements the IntentScanner interface.
 func (s *SeparatedIntentScanner) Close() { s.iter.Close() }
-
-// LegacyIntentScanner is an IntentScanner that assumers intents might
-// not be separated.
-//
-// MVCCIterator Contract:
-//
-//	The provided MVCCIterator must observe all intents in the Processor's keyspan.
-//	An important implication of this is that if the iterator is a
-//	TimeBoundIterator, its MinTimestamp cannot be above the keyspan's largest
-//	known resolved timestamp, if one has ever been recorded. If one has never
-//	been recorded, the TimeBoundIterator cannot have any lower bound.
-type LegacyIntentScanner struct {
-	iter storage.SimpleMVCCIterator
-}
-
-// NewLegacyIntentScanner returns an IntentScanner appropriate for use
-// when the separated intents migration has not yet completed.
-func NewLegacyIntentScanner(iter storage.SimpleMVCCIterator) IntentScanner {
-	return &LegacyIntentScanner{iter: iter}
-}
-
-// ConsumeIntents implements the IntentScanner interface.
-func (l *LegacyIntentScanner) ConsumeIntents(
-	ctx context.Context, start roachpb.Key, end roachpb.Key, consumer eventConsumer,
-) error {
-	startKey := storage.MakeMVCCMetadataKey(start)
-	endKey := storage.MakeMVCCMetadataKey(end)
-	// Iterate through all keys using NextKey. This will look at the first MVCC
-	// version for each key. We're only looking for MVCCMetadata versions, which
-	// will always be the first version of a key if it exists, so its fine that
-	// we skip over all other versions of keys.
-	var meta enginepb.MVCCMetadata
-	for l.iter.SeekGE(startKey); ; l.iter.NextKey() {
-		if ok, err := l.iter.Valid(); err != nil {
-			return err
-		} else if !ok || !l.iter.UnsafeKey().Less(endKey) {
-			break
-		}
-
-		// If the key is not a metadata key, ignore it.
-		unsafeKey := l.iter.UnsafeKey()
-		if unsafeKey.IsValue() {
-			continue
-		}
-
-		// Found a metadata key. Unmarshal.
-		v, err := l.iter.UnsafeValue()
-		if err != nil {
-			return err
-		}
-		if err := protoutil.Unmarshal(v, &meta); err != nil {
-			return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
-		}
-
-		// If this is an intent, inform the Processor.
-		if meta.Txn != nil {
-			consumer(enginepb.MVCCWriteIntentOp{
-				TxnID:           meta.Txn.ID,
-				TxnKey:          meta.Txn.Key,
-				TxnIsoLevel:     meta.Txn.IsoLevel,
-				TxnMinTimestamp: meta.Txn.MinTimestamp,
-				Timestamp:       meta.Txn.WriteTimestamp,
-			})
-		}
-	}
-	return nil
-}
-
-// Close implements the IntentScanner interface.
-func (l *LegacyIntentScanner) Close() { l.iter.Close() }
 
 // TxnPusher is capable of pushing transactions to a new timestamp and
 // cleaning up the intents of transactions that are found to be committed.
@@ -249,20 +209,29 @@ type TxnPusher interface {
 //     - ABORTED:   inform the Processor to stop caring about the transaction.
 //     It will never commit and its intents can be safely ignored.
 type txnPushAttempt struct {
-	p     *Processor
-	txns  []enginepb.TxnMeta
-	ts    hlc.Timestamp
-	doneC chan struct{}
+	span   roachpb.RSpan
+	pusher TxnPusher
+	p      processorTaskHelper
+	txns   []enginepb.TxnMeta
+	ts     hlc.Timestamp
+	done   func()
 }
 
 func newTxnPushAttempt(
-	p *Processor, txns []enginepb.TxnMeta, ts hlc.Timestamp, doneC chan struct{},
+	span roachpb.RSpan,
+	pusher TxnPusher,
+	p processorTaskHelper,
+	txns []enginepb.TxnMeta,
+	ts hlc.Timestamp,
+	done func(),
 ) runnable {
 	return &txnPushAttempt{
-		p:     p,
-		txns:  txns,
-		ts:    ts,
-		doneC: doneC,
+		span:   span,
+		pusher: pusher,
+		p:      p,
+		txns:   txns,
+		ts:     ts,
+		done:   done,
 	}
 }
 
@@ -278,7 +247,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	// This may cause transaction restarts, but span refreshing should
 	// prevent a restart for any transaction that has not been written
 	// over at a larger timestamp.
-	pushedTxns, err := a.p.TxnPusher.PushTxns(ctx, a.txns, a.ts)
+	pushedTxns, err := a.pusher.PushTxns(ctx, a.txns, a.ts)
 	if err != nil {
 		return err
 	}
@@ -319,7 +288,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 			// intents are resolved before the resolved timestamp can advance past the
 			// transaction's commit timestamp, so the best we can do is help speed up
 			// the resolution.
-			txnIntents := intentsInBound(txn, a.p.Span.AsRawSpanWithNoLocals())
+			txnIntents := intentsInBound(txn, a.span.AsRawSpanWithNoLocals())
 			intentsToCleanup = append(intentsToCleanup, txnIntents...)
 		case roachpb.ABORTED:
 			// The transaction is aborted, so it doesn't need to be tracked
@@ -346,7 +315,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 			// LockSpans populated. If, however, we ran into a transaction that its
 			// coordinator tried to rollback but didn't follow up with garbage
 			// collection, then LockSpans will be populated.
-			txnIntents := intentsInBound(txn, a.p.Span.AsRawSpanWithNoLocals())
+			txnIntents := intentsInBound(txn, a.span.AsRawSpanWithNoLocals())
 			intentsToCleanup = append(intentsToCleanup, txnIntents...)
 		}
 	}
@@ -355,11 +324,11 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	a.p.sendEvent(ctx, event{ops: ops}, 0)
 
 	// Resolve intents, if necessary.
-	return a.p.TxnPusher.ResolveIntents(ctx, intentsToCleanup)
+	return a.pusher.ResolveIntents(ctx, intentsToCleanup)
 }
 
 func (a *txnPushAttempt) Cancel() {
-	close(a.doneC)
+	a.done()
 }
 
 // intentsInBound returns LockUpdates for the provided transaction's LockSpans

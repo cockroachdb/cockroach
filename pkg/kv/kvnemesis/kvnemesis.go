@@ -24,7 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
+
+var errInjected = errors.New("injected error")
 
 type loggerKey struct{}
 
@@ -107,9 +110,19 @@ func RunNemesis(
 		for atomic.AddInt64(&stepsStartedAtomic, 1) <= int64(numSteps) {
 			stepIdx++
 			step := g.RandStep(rng)
-			trace, err := a.Apply(ctx, &step)
 
 			stepPrefix := fmt.Sprintf("w%d_step%d", workerIdx, stepIdx)
+			basename := fmt.Sprintf("%s_%T", stepPrefix, reflect.Indirect(reflect.ValueOf(step.Op.GetValue())).Interface())
+
+			{
+				// Write next step into file so we know steps if test deadlock and has
+				// to be killed.
+				var buf strings.Builder
+				step.format(&buf, formatCtx{indent: `  ` + workerName + ` PRE `})
+				l(ctx, basename, "%s", &buf)
+			}
+
+			trace, err := a.Apply(ctx, &step)
 			step.Trace = l(ctx, fmt.Sprintf("%s_trace", stepPrefix), "%s", trace.String())
 
 			stepsByWorker[workerIdx] = append(stepsByWorker[workerIdx], step)
@@ -124,7 +137,6 @@ func RunNemesis(
 				fmt.Fprintf(&buf, "  before: %s", step.Before)
 				step.format(&buf, formatCtx{indent: `  ` + workerName + prefix})
 				fmt.Fprintf(&buf, "\n  after: %s", step.After)
-				basename := fmt.Sprintf("%s_%T", stepPrefix, reflect.Indirect(reflect.ValueOf(step.Op.GetValue())).Interface())
 				l(ctx, basename, "%s", &buf)
 			}
 
@@ -171,16 +183,31 @@ func RunNemesis(
 
 		reproFile := l(ctx, "repro.go", "// Reproduction steps:\n%s", printRepro(stepsByWorker))
 		rangefeedFile := l(ctx, "kvs-rangefeed.txt", "kvs (recorded from rangefeed):\n%s", kvs.DebugPrint("  "))
-		var kvsFile string
-		scanKVs, err := dbs[0].Scan(ctx, dataSpan.Key, dataSpan.EndKey, -1)
-		if err != nil {
-			l(ctx, "", "could not scan actual latest values: %+v", err)
-		} else {
+		kvsFile := "<error>"
+		var scanKVs []kv.KeyValue
+		for i := 0; ; i++ {
+			var err error
+			scanKVs, err = dbs[0].Scan(ctx, dataSpan.Key, dataSpan.EndKey, -1)
+			if errors.Is(err, errInjected) && i < 100 {
+				// The scan may end up resolving intents, and the intent resolution may
+				// fail with an injected reproposal error. We do want to know the
+				// contents anyway, so retry appropriately. (The interceptor lowers the
+				// probability of injecting an error with successive attempts, so this
+				// is essentially guaranteed to work out).
+				//
+				// Just in case there is a real infinite loop here, we only try this
+				// 100 times.
+				continue
+			} else if err != nil {
+				l(ctx, "", "could not scan actual latest values: %+v", err)
+				break
+			}
 			var kvsBuf strings.Builder
 			for _, kv := range scanKVs {
 				fmt.Fprintf(&kvsBuf, "  %s %s -> %s\n", kv.Key, kv.Value.Timestamp, kv.Value.PrettyPrint())
 			}
 			kvsFile = l(ctx, "kvs-scan.txt", "kvs (scan of latest values according to crdb):\n%s", kvsBuf.String())
+			break
 		}
 		l(ctx, "", `failures(verbose): %s
 repro steps: %s

@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -132,12 +131,3 @@ type TenantSideExternalIORecorder interface {
 type exemptCtxValueType struct{}
 
 var exemptCtxValue interface{} = exemptCtxValueType{}
-
-// TenantRUEstimateEnabled determines whether EXPLAIN ANALYZE should return an
-// estimate for the number of RUs consumed by tenants.
-var TenantRUEstimateEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"sql.tenant_ru_estimation.enabled",
-	"determines whether explain analyze should return an estimate for the query's RU consumption",
-	true,
-)

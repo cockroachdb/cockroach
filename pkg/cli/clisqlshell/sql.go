@@ -126,15 +126,14 @@ Commands specific to the demo shell (EXPERIMENTAL):
   \demo ls                     list the demo nodes and their connection URLs.
   \demo shutdown <nodeid>      stop a demo node.
   \demo restart <nodeid>       restart a stopped demo node.
-  \demo decommission <nodeid>  decommission a node.
-  \demo recommission <nodeid>  recommission a node.
+  \demo decommission <nodeid>  decommission a node. This implies a shutdown.
   \demo add <locality>         add a node (locality specified as "region=<region>,zone=<zone>").
 `
 
-	defaultPromptPattern = "%n@%M/%C%/%x>"
+	defaultPromptPattern = "%n@%M:%>/%C%/%x>"
 
 	// debugPromptPattern avoids substitution patterns that require a db roundtrip.
-	debugPromptPattern = "%n@%M %C>"
+	debugPromptPattern = "%n@%M:%> %C>"
 )
 
 // cliState defines the current state of the CLI during
@@ -530,7 +529,7 @@ var options = map[string]struct {
 		deprecated:                true,
 	},
 	`prompt1`: {
-		description:               "prompt string to use before each command (the following are expanded: %M full host, %m host, %> port number, %n user, %/ database, %x txn status)",
+		description:               "prompt string to use before each command (expansions: %M full host, %m host, %> port number, %n user, %/ database, %x txn status, %C logical cluster)",
 		isBoolean:                 false,
 		validDuringMultilineEntry: true,
 		set: func(c *cliState, val string) error {
@@ -556,32 +555,44 @@ var optionNames = func() []string {
 	return names
 }()
 
-var setArgsRe = regexp.MustCompile(`^\s*` + // zero or more leading space.
-	`(?P<option>(?:[a-zA-Z_.0-9]|-)+)` + // 1 or more non-space option characters.
-	`(?:` +
-	`\s*(?:=\s*|\s+)` + // separator: either some spaces, or an equal sign surrounded by optional spaces.
-	`(?P<value>` +
-	`"(?:[^"]|\\.)*"` + // value is either a double-quoted string, which might be empty; or
-	`|` +
-	`[^\s"]+` + // value may be a string of non-space, non-quote characters.
-	`))?` + // value, as a whole, is optional.
-	`\s*$`, // either a standalone option or the value can be followed by optional spaces.
-)
-
-func getSetArgs(sargs string) (ok bool, option string, hasValue bool, value string) {
-	m := setArgsRe.FindStringSubmatch(sargs)
-	if m == nil {
+func getSetArgs(args []string) (ok bool, option string, hasValue bool, value string) {
+	if len(args) == 0 {
+		// Used in testing only.
 		return false, "", false, ""
 	}
-	option = m[1]
-	if len(m) == 2 || m[2] == "" {
-		return true, option, false, ""
+
+	if strings.Contains(args[0], "=") {
+		// Syntax: a=b, a= b.
+		parts := strings.SplitN(args[0], "=", 2)
+		args[0] = parts[0]
+		if len(args) == 1 {
+			args = append(args, "")
+		}
+		args[1] = parts[1] + args[1]
+	} else if len(args) >= 2 && strings.HasPrefix(args[1], "=") {
+		// Syntax: a =b, a = b.
+		if len(args) == 2 {
+			args = append(args, "")
+		}
+		args[2] = args[1][1:] + args[2]
+		copy(args[1:], args[2:])
+		args = args[:len(args)-1]
 	}
-	return true, option, true, m[2]
+
+	if len(args) == 1 {
+		return true, args[0], false, ""
+	}
+
+	// This is the same behavior as in postgres: multiple arguments
+	// in set are concatenated together to form the value string.
+	// To introduce spaces, use quotes.
+	return true, args[0], true, strings.Join(args[1:], "")
 }
 
 // handleSet supports the \set client-side command.
-func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cliStateEnum {
+func (c *cliState) handleSet(
+	line string, args []string, nextState, errState cliStateEnum,
+) cliStateEnum {
 	if len(args) == 0 {
 		optData := make([][]string, 0, len(options))
 		for _, n := range optionNames {
@@ -600,20 +611,14 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 		return nextState
 	}
 
-	// For \set, we're not trusting the default field separator which
-	// simply splits at spaces, because it doesn't help us handle
-	// "a=b", "a = b", "a b" and "a =b" effectively.
-	// Regular expressions to the rescue.
-	sargs := strings.Join(args, " ")
-
-	ok, optName, hasValue, val := getSetArgs(sargs)
+	ok, optName, hasValue, val := getSetArgs(args)
 	if !ok {
 		return c.invalidSyntax(errState)
 	}
 
 	opt, ok := options[optName]
 	if !ok {
-		return c.invalidSyntax(errState)
+		return c.cliError(errState, errors.Newf("unknown variable name: %q", optName))
 	}
 	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
 		return c.invalidOptionChange(errState, optName)
@@ -643,7 +648,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 	}
 
 	if err != nil {
-		return c.cliError(errState, errors.Wrapf(err, "\\set %s", sargs))
+		return c.cliError(errState, errors.Wrapf(err, "%s", line))
 	}
 
 	return nextState
@@ -656,7 +661,7 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 	}
 	opt, ok := options[args[0]]
 	if !ok {
-		return c.invalidSyntax(errState)
+		return c.cliError(errState, errors.Newf("unknown variable name: %q", args[0]))
 	}
 	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
 		return c.invalidOptionChange(errState, args[0])
@@ -683,7 +688,7 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 	//
 	//	- A lone command (currently, only ls)
 	//	- A command followed by a string (add followed by locality string)
-	//	- A command followed by a node number (shutdown, restart, decommission, recommission)
+	//	- A command followed by a node number (shutdown, restart, decommission)
 	//
 	// We parse these commands separately, in the following blocks.
 	if len(cmd) == 1 && cmd[0] == "ls" {
@@ -778,12 +783,6 @@ func (c *cliState) handleDemoNodeCommands(
 			return c.internalServerError(errState, err)
 		}
 		fmt.Fprintf(c.iCtx.stdout, "node %d has been restarted\n", nodeID)
-		return nextState
-	case "recommission":
-		if err := c.sqlCtx.DemoCluster.Recommission(ctx, int32(nodeID)); err != nil {
-			return c.internalServerError(errState, err)
-		}
-		fmt.Fprintf(c.iCtx.stdout, "node %d has been recommissioned\n", nodeID)
 		return nextState
 	case "decommission":
 		if err := c.sqlCtx.DemoCluster.Decommission(ctx, int32(nodeID)); err != nil {
@@ -946,50 +945,97 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 			dbName = c.refreshDatabaseName()
 		}
 
-		// Do we have a "cluster" option; either as an options= parameter
-		// or as a prefix to the database name?
-		opts := parsedURL.GetExtraOptions()
-		var logicalCluster string
-		if extOptsS := opts.Get("options"); extOptsS != "" {
-			extOpts, err := pgurl.ParseExtendedOptions(extOptsS)
-			if err == nil {
-				logicalCluster = extOpts.Get("cluster")
-			}
-		}
-		if urlDB := parsedURL.GetDatabase(); strings.HasPrefix(urlDB, "cluster:") {
-			parts := strings.SplitN(urlDB, "/", 2)
-			logicalCluster = parts[0][len("cluster:"):]
-		}
-		if logicalCluster != "" {
-			logicalCluster += "/"
-		}
-
 		c.fullPrompt = rePromptFmt.ReplaceAllStringFunc(c.iCtx.customPromptPattern, func(m string) string {
+			// See:
+			// https://www.postgresql.org/docs/15/app-psql.html#APP-PSQL-PROMPTING
 			switch m {
 			case "%M":
-				_, host, port := parsedURL.GetNetworking()
-				return host + ":" + port // server:port
+				// "The full host name (with domain name) of the database
+				// server, or [local] if the connection is over a Unix domain
+				// socket, or [local:/dir/name], if the Unix domain socket is
+				// not at the compiled in default location."
+				net, host, _ := parsedURL.GetNetworking()
+				switch net {
+				case pgurl.ProtoTCP:
+					return host
+				case pgurl.ProtoUnix:
+					// We do not have "compiled-in default location" in
+					// CockroachDB so the location is always explicit.
+					return fmt.Sprintf("[local:%s]", host)
+				default:
+					// unreachable
+					return ""
+				}
+
 			case "%m":
-				_, host, _ := parsedURL.GetNetworking()
-				return host
+				// "The host name of the database server, truncated at the
+				// first dot, or [local] if the connection is over a Unix
+				// domain socket."
+				net, host, _ := parsedURL.GetNetworking()
+				switch net {
+				case pgurl.ProtoTCP:
+					return strings.SplitN(host, ".", 2)[0]
+				case pgurl.ProtoUnix:
+					return "[local]"
+				default:
+					// unreachable
+					return ""
+				}
+
 			case "%>":
+				// "The port number at which the database server is listening."
 				_, _, port := parsedURL.GetNetworking()
 				return port
-			case "%n": // user name.
+
+			case "%n":
+				// "The database session user name."
+				//
+				// TODO(sql): in psql this is updated based on the current user
+				// in the session set via SET SESSION AUTHORIZATION.
+				// See: https://github.com/cockroachdb/cockroach/issues/105136
 				return userName
-			case "%/": // database name.
+
+			case "%/":
+				// "The name of the current database."
 				return dbName
-			case "%x": // txn status.
+
+			case "%x":
+				// "Transaction status:..."
+				// Note: the specific string here is incompatible with psql.
+				// For example we use "OPEN" instead of '*". This was an extremely
+				// early decision in the SQL shell's history.
 				return c.lastKnownTxnStatus
+
 			case "%%":
 				return "%"
+
 			case "%C":
+				// CockroachDB extension: the logical cluster name.
+				logicalCluster := c.conn.GetServerInfo().VirtualClusterName
+				if logicalCluster != "" {
+					logicalCluster += "/"
+				}
 				return logicalCluster
+
 			default:
+				// Not implemented:
+				// %~: "Like %/, but the output is ~ (tilde) if the database is your default database."
+				//     CockroachDB does not have per-user default databases (yet).
+				// %#: "If the session user is a database superuser, then a #, otherwise a >."
+				//     The shell does not know how to determine this yet. See: #105136
+				// %p: "The process ID of the backend currently connected to."
+				//     CockroachDB does not have "backend process IDs" like PostgreSQL.
+				// %R: continuation character
+				//     The mechanism for continuation is handled internally by the input editor.
+				// %l: "The line number inside the current statement, starting from 1."
+				//     Lines are handled internally by the input editor.
+				// %w: "Whitespace of the same width as the most recent output of PROMPT1."
+				//     The prompt alignment for multi-line edits is handled internally by the input editor.
+				// %digits: "Character with given octal code."
+				//     This can also be done via `\set prompt1 '\NNN'`
 				err = fmt.Errorf("unrecognized format code in prompt: %q", m)
 				return ""
 			}
-
 		})
 		if err != nil {
 			c.fullPrompt = err.Error()
@@ -1350,7 +1396,10 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	// any, in all cases.
 	line := strings.TrimRight(c.lastInputLine, "; ")
 
-	cmd := strings.Fields(line)
+	cmd, err := scanLocalCmdArgs(line)
+	if err != nil {
+		return c.cliError(cliStartLine, err)
+	}
 	if cmd[0] == `\z` {
 		// psql compatibility.
 		cmd[0] = `\dp`
@@ -1377,7 +1426,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		c.maybeFlushOutput()
 
 	case `\set`:
-		return c.handleSet(cmd[1:], loopState, errState)
+		return c.handleSet(line, cmd[1:], loopState, errState)
 
 	case `\unset`:
 		return c.handleUnset(cmd[1:], loopState, errState)
@@ -1650,6 +1699,7 @@ func (c *cliState) handleConnectInternal(cmd []string, omitConnString bool) erro
 	// Parse the arguments to \connect:
 	// it accepts newdb, user, host, port and options in that order.
 	// Each field can be marked as "-" to reuse the current defaults.
+	dbOverride := false
 	switch len(cmd) {
 	case 5:
 		if cmd[4] != "-" {
@@ -1683,6 +1733,7 @@ func (c *cliState) handleConnectInternal(cmd []string, omitConnString bool) erro
 		fallthrough
 	case 1:
 		if cmd[0] != "-" {
+			dbOverride = true
 			if err := newURL.SetOption("database", cmd[0]); err != nil {
 				return err
 			}
@@ -1697,6 +1748,41 @@ func (c *cliState) handleConnectInternal(cmd []string, omitConnString bool) erro
 
 	default:
 		return errors.Newf(`unknown syntax: \c %s`, strings.Join(cmd, " "))
+	}
+
+	// If the URL contained -ccluster=XXX to start with, but the user
+	// is overriding the DB name manually with cluster:XXX, we want
+	// to inject the new name into the `-ccluster` option.
+	if newDB := newURL.GetDatabase(); dbOverride && strings.HasPrefix(newDB, "cluster:") {
+		extraOpts := newURL.GetExtraOptions()
+		if extendedOptsS := extraOpts.Get("options"); extendedOptsS != "" {
+			extendedOpts, err := pgurl.ParseExtendedOptions(extendedOptsS)
+			// Note: we ignore the case where there is an error. In that
+			// case, the existing `options` string is preserved unchanged.
+			// We do not block the connection here, because perhaps the user
+			// is trying to use a new syntax (supported in a later version
+			// of the server) that we don't yet support in this version of
+			// the shell.
+			if err == nil {
+				parts := strings.SplitN(newDB, "/", 2)
+				logicalCluster := parts[0][len("cluster:"):]
+
+				// Override the cluster name in the -ccluster option with the
+				// new specified cluster.
+				extendedOpts.Set("cluster", logicalCluster)
+				if err := newURL.SetOption("options", pgurl.EncodeExtendedOptions(extendedOpts)); err != nil {
+					return err
+				}
+				// Set the requested db name to the remainder of the db string.
+				actualNewDB := ""
+				if len(parts) > 1 {
+					actualNewDB = parts[1]
+				}
+				if err := newURL.SetOption("database", actualNewDB); err != nil {
+					return err
+				}
+			}
+		}
 	}
 
 	// If we are reconnecting to the same server with the same user, reuse

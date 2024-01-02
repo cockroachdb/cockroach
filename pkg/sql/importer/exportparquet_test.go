@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	crlparquet "github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/fraugster/parquet-go/parquet"
@@ -98,6 +100,18 @@ func validateParquetFile(
 		validationStmt)
 	require.NoError(t, err)
 
+	// It's possible to have a set of rows where each row has no columns.
+	// Ex.    CREATE TABLE public.tabl͛e1 (
+	//                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	//                CONSTRAINT tabl͛e1_pkey PRIMARY KEY (rowid ASC)
+	//        )
+	// In this case, the parquet file will simply contain no datums, but
+	// the SELECT above returns a slice of empty slices [[], [], []...].
+	// Thus, we override the array of test datums as an empty slice [].
+	if len(test.datums) > 0 && len(test.datums[0]) == 0 {
+		test.datums = make([]tree.Datums, 0)
+	}
+
 	meta, readDatums, err := crlparquet.ReadFile(paths[0])
 	require.NoError(t, err)
 
@@ -127,7 +141,8 @@ func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum, typ *ty
 		eArr := expected.(*tree.DArray)
 		aArr := actual.(*tree.DArray)
 		for i := 0; i < eArr.Len(); i++ {
-			validateDatum(t, tree.UnwrapDOidWrapper(eArr.Array[i]), aArr.Array[i], typ.ArrayContents())
+			validateDatum(t, tree.UnwrapDOidWrapper(eArr.Array[i]),
+				tree.UnwrapDOidWrapper(aArr.Array[i]), typ.ArrayContents())
 		}
 	case types.DateFamily:
 		// pgDate.orig property doesn't matter and can cause the test to fail
@@ -167,21 +182,14 @@ func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum, typ *ty
 func TestRandomParquetExports(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer ccl.TestingEnableEnterprise()() // allow usage of partitions
+
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
-	defer ccl.TestingEnableEnterprise()()
 	dbName := "rand"
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Test fails when run within a test tenant. More
-		// investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TestTenantDisabled,
-		UseDatabase:       dbName,
-		ExternalIODir:     dir,
-		Knobs: base.TestingKnobs{
-			DistSQL: &execinfra.TestingKnobs{
-				Export: &importer.ExportTestingKnobs{EnableParquetTestMetadata: true},
-			},
-		},
+		UseDatabase:   dbName,
+		ExternalIODir: dir,
 	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
@@ -190,7 +198,7 @@ func TestRandomParquetExports(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
 	var tableName string
-	idb := srv.ExecutorConfig().(sql.ExecutorConfig).InternalDB
+	idb := srv.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).InternalDB
 	// Try at most 10 times to populate a random table with at least 10 rows.
 	{
 		var (
@@ -272,20 +280,13 @@ func TestRandomParquetExports(t *testing.T) {
 func TestBasicParquetTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	dbName := "baz"
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Test fails when run within a test tenant. More
-		// investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TestTenantDisabled,
-		UseDatabase:       dbName,
-		ExternalIODir:     dir,
-		Knobs: base.TestingKnobs{
-			DistSQL: &execinfra.TestingKnobs{
-				Export: &importer.ExportTestingKnobs{EnableParquetTestMetadata: true},
-			},
-		},
+		UseDatabase:   dbName,
+		ExternalIODir: dir,
 	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
@@ -293,8 +294,8 @@ func TestBasicParquetTypes(t *testing.T) {
 
 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
-	// instantiating an internal executor to easily get datums from the table
-	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor()
+	// Instantiating an internal executor to easily get datums from the table.
+	ie := srv.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor()
 
 	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL, 
 INDEX (y))`)
@@ -400,4 +401,42 @@ INDEX (y))`)
 		err := validateParquetFile(t, ctx, ie, test)
 		require.NoError(t, err, "failed to validate parquet file")
 	}
+}
+
+func TestMemoryMonitor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Arrange for a small memory budget.
+	budget := int64(4096)
+	mm := mon.NewMonitorWithLimit(
+		"test-mm", mon.MemoryResource, budget,
+		nil, nil,
+		128 /* small allocation increment */, 100,
+		cluster.MakeTestingClusterSettings())
+	mm.Start(context.Background(), nil, mon.NewStandaloneBudget(budget))
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dir,
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				Export: &importer.ExportTestingKnobs{
+					MemoryMonitor: mm,
+				},
+			},
+		},
+	})
+	ctx := context.Background()
+	cleanup := func() {
+		s.Stopper().Stop(ctx)
+	}
+	defer cleanup()
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE foo(key INT PRIMARY KEY DEFAULT unique_rowid(), val INT)`)
+	sqlDB.Exec(t, `INSERT INTO foo (val) SELECT * FROM generate_series(1, 100)`)
+	sqlDB.ExpectErr(t, "memory budget exceeded", `EXPORT INTO PARQUET 'nodelocal://1/foo' FROM SELECT * FROM foo`)
 }

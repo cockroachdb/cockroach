@@ -9,11 +9,14 @@
 package changefeedbase
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
@@ -73,33 +76,35 @@ const (
 
 // Constants for the options.
 const (
-	OptAvroSchemaPrefix        = `avro_schema_prefix`
-	OptConfluentSchemaRegistry = `confluent_schema_registry`
-	OptCursor                  = `cursor`
-	OptCustomKeyColumn         = `key_column`
-	OptEndTime                 = `end_time`
-	OptEnvelope                = `envelope`
-	OptFormat                  = `format`
-	OptFullTableName           = `full_table_name`
-	OptKeyInValue              = `key_in_value`
-	OptTopicInValue            = `topic_in_value`
-	OptResolvedTimestamps      = `resolved`
-	OptMinCheckpointFrequency  = `min_checkpoint_frequency`
-	OptUpdatedTimestamps       = `updated`
-	OptMVCCTimestamps          = `mvcc_timestamp`
-	OptDiff                    = `diff`
-	OptCompression             = `compression`
-	OptSchemaChangeEvents      = `schema_change_events`
-	OptSchemaChangePolicy      = `schema_change_policy`
-	OptSplitColumnFamilies     = `split_column_families`
-	OptExpirePTSAfter          = `gc_protect_expires_after`
-	OptWebhookAuthHeader       = `webhook_auth_header`
-	OptWebhookClientTimeout    = `webhook_client_timeout`
-	OptOnError                 = `on_error`
-	OptMetricsScope            = `metrics_label`
-	OptUnordered               = `unordered`
-	OptVirtualColumns          = `virtual_columns`
-	OptExecutionLocality       = `execution_locality`
+	OptAvroSchemaPrefix             = `avro_schema_prefix`
+	OptConfluentSchemaRegistry      = `confluent_schema_registry`
+	OptCursor                       = `cursor`
+	OptCustomKeyColumn              = `key_column`
+	OptEndTime                      = `end_time`
+	OptEnvelope                     = `envelope`
+	OptFormat                       = `format`
+	OptFullTableName                = `full_table_name`
+	OptKeyInValue                   = `key_in_value`
+	OptTopicInValue                 = `topic_in_value`
+	OptResolvedTimestamps           = `resolved`
+	OptMinCheckpointFrequency       = `min_checkpoint_frequency`
+	OptUpdatedTimestamps            = `updated`
+	OptMVCCTimestamps               = `mvcc_timestamp`
+	OptDiff                         = `diff`
+	OptCompression                  = `compression`
+	OptSchemaChangeEvents           = `schema_change_events`
+	OptSchemaChangePolicy           = `schema_change_policy`
+	OptSplitColumnFamilies          = `split_column_families`
+	OptExpirePTSAfter               = `gc_protect_expires_after`
+	OptWebhookAuthHeader            = `webhook_auth_header`
+	OptWebhookClientTimeout         = `webhook_client_timeout`
+	OptOnError                      = `on_error`
+	OptMetricsScope                 = `metrics_label`
+	OptUnordered                    = `unordered`
+	OptVirtualColumns               = `virtual_columns`
+	OptExecutionLocality            = `execution_locality`
+	OptLaggingRangesThreshold       = `lagging_ranges_threshold`
+	OptLaggingRangesPollingInterval = `lagging_ranges_polling_interval`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -162,6 +167,11 @@ const (
 	DeprecatedSinkSchemeCloudStorageNodelocal = `experimental-nodelocal`
 	DeprecatedSinkSchemeCloudStorageS3        = `experimental-s3`
 
+	// DeprecatedSinkSchemeHTTP is interpreted as cloudstorage over HTTP PUT.
+	DeprecatedSinkSchemeHTTP = `http`
+	// DeprecatedSinkSchemeHTTPS is interpreted as cloudstorage over HTTPS PUT.
+	DeprecatedSinkSchemeHTTPS = `https`
+
 	// OptKafkaSinkConfig is a JSON configuration for kafka sink (kafkaSinkConfig).
 	OptKafkaSinkConfig   = `kafka_sink_config`
 	OptPubsubSinkConfig  = `pubsub_sink_config`
@@ -186,13 +196,11 @@ const (
 	SinkParamTopicName              = `topic_name`
 	SinkSchemeCloudStorageAzure     = `azure`
 	SinkSchemeCloudStorageGCS       = `gs`
-	SinkSchemeCloudStorageHTTP      = `http`
-	SinkSchemeCloudStorageHTTPS     = `https`
+	SinkSchemeCloudStorageHTTP      = `file-http`
+	SinkSchemeCloudStorageHTTPS     = `file-https`
 	SinkSchemeCloudStorageNodelocal = `nodelocal`
 	SinkSchemeCloudStorageS3        = `s3`
 	SinkSchemeExperimentalSQL       = `experimental-sql`
-	SinkSchemeHTTP                  = `http`
-	SinkSchemeHTTPS                 = `https`
 	SinkSchemeKafka                 = `kafka`
 	SinkSchemeNull                  = `null`
 	SinkSchemeWebhookHTTP           = `webhook-http`
@@ -208,6 +216,11 @@ const (
 	SinkParamSASLTokenURL           = `sasl_token_url`
 	SinkParamSASLScopes             = `sasl_scopes`
 	SinkParamSASLGrantType          = `sasl_grant_type`
+	SinkParamTableNameAttribute     = `with_table_name_attribute`
+
+	SinkSchemeConfluentKafka    = `confluent-cloud`
+	SinkParamConfluentAPIKey    = `api_key`
+	SinkParamConfluentAPISecret = `api_secret`
 
 	RegistryParamCACert     = `ca_cert`
 	RegistryParamClientCert = `client_cert`
@@ -345,6 +358,8 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptUnordered:                          flagOption,
 	OptVirtualColumns:                     enum("omitted", "null"),
 	OptExecutionLocality:                  stringOption,
+	OptLaggingRangesThreshold:             durationOption,
+	OptLaggingRangesPollingInterval:       durationOption,
 }
 
 // CommonOptions is options common to all sinks
@@ -357,7 +372,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptOnError,
 	OptInitialScan, OptNoInitialScan, OptInitialScanOnly, OptUnordered, OptCustomKeyColumn,
 	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptExpirePTSAfter,
-	OptExecutionLocality,
+	OptExecutionLocality, OptLaggingRangesThreshold, OptLaggingRangesPollingInterval,
 )
 
 // SQLValidOptions is options exclusive to SQL sink
@@ -438,12 +453,7 @@ var InitialScanOnlyUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, Opt
 
 // ParquetFormatUnsupportedOptions is options that are not supported with the
 // parquet format.
-//
-// OptKeyInValue is disallowed because parquet files have no concept of key
-// columns, so there is no reason to emit duplicate key datums.
-//
-// TODO(#103129): add support for some of these
-var ParquetFormatUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, OptDiff, OptKeyInValue, OptTopicInValue)
+var ParquetFormatUnsupportedOptions OptionsSet = makeStringSet(OptTopicInValue)
 
 // AlterChangefeedUnsupportedOptions are changefeed options that we do not allow
 // users to alter.
@@ -619,6 +629,8 @@ func (s StatementOptions) getEnumValue(k string) (string, error) {
 	return rawVal, nil
 }
 
+// getDurationValue validates that the option `k` was supplied with a
+// valid duration.
 func (s StatementOptions) getDurationValue(k string) (*time.Duration, error) {
 	v, ok := s.m[k]
 	if !ok {
@@ -935,6 +947,44 @@ func (s StatementOptions) GetResolvedTimestampInterval() (*time.Duration, bool, 
 func (s StatementOptions) GetMetricScope() (string, bool) {
 	v, ok := s.m[OptMetricsScope]
 	return v, ok
+}
+
+// GetLaggingRangesConfig returns the threshold and polling rate to use for
+// lagging ranges metrics.
+func (s StatementOptions) GetLaggingRangesConfig(
+	ctx context.Context, settings *cluster.Settings,
+) (threshold time.Duration, pollingInterval time.Duration, e error) {
+	// This version gate prevents the scenario where the changefeed is created
+	// with options on a 23.2 node and resumed on a node with an old version
+	// which does not have those options.
+	laggingRangesVersionIsActive := settings.Version.IsActive(ctx, clusterversion.V23_2_ChangefeedLaggingRangesOpts)
+	threshold = DefaultLaggingRangesThreshold
+	pollingInterval = DefaultLaggingRangesPollingInterval
+	_, ok := s.m[OptLaggingRangesThreshold]
+	if ok {
+		if !laggingRangesVersionIsActive {
+			return threshold, pollingInterval, WithTerminalError(errors.New("cluster version must be 23.2 or" +
+				" greater to use lagging ranges metrics configs"))
+		}
+		t, err := s.getDurationValue(OptLaggingRangesThreshold)
+		if err != nil {
+			return threshold, pollingInterval, err
+		}
+		threshold = *t
+	}
+	_, ok = s.m[OptLaggingRangesPollingInterval]
+	if ok {
+		if !laggingRangesVersionIsActive {
+			return threshold, pollingInterval, WithTerminalError(errors.New("cluster version must be 23.2 or" +
+				" greater to use lagging ranges metrics configs"))
+		}
+		i, err := s.getDurationValue(OptLaggingRangesPollingInterval)
+		if err != nil {
+			return threshold, pollingInterval, err
+		}
+		pollingInterval = *i
+	}
+	return threshold, pollingInterval, nil
 }
 
 // IncludeVirtual returns true if we need to set placeholder nulls for virtual columns.

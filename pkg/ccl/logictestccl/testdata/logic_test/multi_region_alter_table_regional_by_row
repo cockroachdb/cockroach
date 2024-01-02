@@ -1,4 +1,3 @@
-# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 # LogicTest: multiregion-9node-3region-3azs
 
 # This file contains a regression test for ALTER TABLE ... REGIONAL BY ROW
@@ -46,7 +45,7 @@ SELECT status, error FROM [SHOW JOB WHEN COMPLETE $job_id]
 ----
 succeeded  ·
 
-query TI
+query TI rowsort
 SELECT crdb_region, * FROM t
 ----
 ap-southeast-2  1
@@ -79,7 +78,7 @@ SELECT status, error FROM [SHOW JOB WHEN COMPLETE $job_id]
 ----
 succeeded  ·
 
-query I
+query I rowsort
 SELECT * FROM t
 ----
 1

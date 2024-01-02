@@ -295,7 +295,7 @@ CREATE TABLE missing_col (customer INT REFERENCES customers (idz))
 statement ok
 CREATE TABLE unindexed (customer INT REFERENCES customers)
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM unindexed
 ----
 table_name  index_name      non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -429,7 +429,7 @@ CREATE TABLE "user content".review_stats (
 )
 
 query TTTTB
-SHOW CONSTRAINTS FROM "user content".review_stats
+SELECT * FROM [SHOW CONSTRAINTS FROM "user content".review_stats] ORDER BY constraint_name
 ----
 review_stats  review_stats_pkey  PRIMARY KEY  PRIMARY KEY (id ASC)                                true
 review_stats  reviewfk           FOREIGN KEY  FOREIGN KEY (id) REFERENCES "customer reviews"(id)  true
@@ -554,7 +554,7 @@ statement error pgcode 23503 foreign key violation: "delivery" row item='8851550
 ALTER TABLE delivery ADD FOREIGN KEY (item) REFERENCES products (upc)
 
 query TTTTB
-SHOW CONSTRAINTS FROM delivery
+SELECT * FROM [SHOW CONSTRAINTS FROM delivery] ORDER BY constraint_name
 ----
 delivery  delivery_order_shipment_fkey  FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment)  true
 delivery  delivery_pkey                 PRIMARY KEY  PRIMARY KEY (rowid ASC)                                          true
@@ -566,7 +566,7 @@ statement ok
 ALTER TABLE delivery ADD FOREIGN KEY (item) REFERENCES products (upc)
 
 query TTTTB
-SHOW CONSTRAINTS FROM delivery
+SELECT * FROM [SHOW CONSTRAINTS FROM delivery] ORDER BY constraint_name
 ----
 delivery  delivery_item_fkey            FOREIGN KEY  FOREIGN KEY (item) REFERENCES products(upc)                      true
 delivery  delivery_order_shipment_fkey  FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment)  true
@@ -635,7 +635,7 @@ statement ok
 TRUNCATE delivery, products, orders, "user content"."customer reviews"
 
 query TTTTB colnames
-SHOW CONSTRAINTS FROM orders
+SELECT * FROM [SHOW CONSTRAINTS FROM orders] ORDER BY constraint_name
 ----
 table_name  constraint_name      constraint_type  details                                                                               validated
 orders      orders_pkey          PRIMARY KEY      PRIMARY KEY (id ASC, shipment ASC)                                                    true
@@ -657,23 +657,9 @@ ALTER TABLE delivery DROP COLUMN "item"
 statement ok
 DROP INDEX products@products_upc_key CASCADE
 
-skipif config local-legacy-schema-changer
-statement error "products" is referenced by foreign key from table "customer reviews"
-DROP TABLE products
-
-# Legacy schema changer orders dependent fks differently, but
-# semantically the same error.
-onlyif config local-legacy-schema-changer
 statement error "products" is referenced by foreign key from table "orders"
 DROP TABLE products
 
-skipif config local-legacy-schema-changer
-statement error referenced by foreign key from table "customer reviews"
-DROP TABLE products RESTRICT
-
-# Legacy schema changer orders dependent fks differently, but
-# semantically the same error.
-onlyif config local-legacy-schema-changer
 statement error "products" is referenced by foreign key from table "orders"
 DROP TABLE products RESTRICT
 
@@ -783,7 +769,7 @@ CREATE TABLE refpairs_wrong_order (
   INDEX (b, a)
 )
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM refpairs_wrong_order
 ----
 table_name            index_name                    non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -797,7 +783,7 @@ refpairs_wrong_order  refpairs_wrong_order_pkey     false       3             b 
 statement ok
 CREATE TABLE refpairs_c_between (a INT, b STRING, c INT, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (a, c, b))
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM refpairs_c_between
 ----
 table_name          index_name                    non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -820,7 +806,7 @@ CREATE TABLE refpairs (
   FAMILY "primary" (a, b, c, rowid)
 )
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM refpairs
 ----
 table_name  index_name          non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -924,7 +910,7 @@ CREATE TABLE domain_modules (
 )
 
 query TTTTB
-SHOW CONSTRAINTS FROM domain_modules
+SELECT * FROM [SHOW CONSTRAINTS FROM domain_modules] ORDER BY constraint_name
 ----
 domain_modules  domain_modules_domain_id_fk  FOREIGN KEY  FOREIGN KEY (domain_id) REFERENCES domains(id)  true
 domain_modules  domain_modules_module_id_fk  FOREIGN KEY  FOREIGN KEY (module_id) REFERENCES modules(id)  true
@@ -1069,7 +1055,7 @@ statement ok
 DROP INDEX refers@another_idx
 
 # refers is not visible because it is in the ADD state.
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES FROM test
 ----
 public  bar                   table  root  0  NULL
@@ -2790,7 +2776,7 @@ statement ok
 ALTER TABLE pet ADD CONSTRAINT fk_constraint FOREIGN KEY (id) REFERENCES person (id) NOT VALID
 
 query TTTTB
-SHOW CONSTRAINTS FROM pet
+SELECT * FROM [SHOW CONSTRAINTS FROM pet] ORDER BY constraint_name
 ----
 pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES person(id) NOT VALID  false
 pet  pet_pkey       PRIMARY KEY  PRIMARY KEY (id ASC)                              true
@@ -2805,7 +2791,7 @@ statement ok
 ALTER TABLE pet VALIDATE CONSTRAINT fk_constraint
 
 query TTTTB
-SHOW CONSTRAINTS FROM pet
+SELECT * FROM [SHOW CONSTRAINTS FROM pet] ORDER BY constraint_name
 ----
 pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES person(id)  true
 pet  pet_pkey       PRIMARY KEY  PRIMARY KEY (id ASC)                    true
@@ -3763,6 +3749,9 @@ INSERT INTO nonunique_idx_child VALUES (0, 1, 10)
 # involved a mixed situation would error out.
 
 statement ok
+SET enable_multiple_modifications_of_table = true
+
+statement ok
 CREATE TABLE x (
     k INT PRIMARY KEY
 )
@@ -3782,6 +3771,8 @@ SELECT
 FROM
     a
 
+statement ok
+RESET enable_multiple_modifications_of_table
 
 # Test that reversing a constraint addition after adding a self foreign key
 # works correctly.
@@ -3884,10 +3875,18 @@ CREATE TABLE child2 (c INT PRIMARY KEY, p INT REFERENCES db1.public.parent(p))
 
 # Validate that cross DB foreign keys are detected by internal tables
 query TTTTTTT
-select * from "".crdb_internal.cross_db_references;
+select * from "".crdb_internal.cross_db_references ORDER BY object_name
 ----
 db2  public  child   db1  public  parent  table foreign key reference
 db2  public  child2  db1  public  parent  table foreign key reference
+
+# Ensure later tests only operate on the test database to avoid
+# confusion.
+statement ok
+USE test;
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_fks.enabled = FALSE
 
 
 # Test that foreign keys cannot reference columns that are indexed by a partial
@@ -4164,3 +4163,26 @@ query I
 SELECT count(*) FROM child80828
 ----
 0
+
+# See #104546 which was a regression when an invalid column name was specified,
+# when adding a FK reference.
+subtest unknown_column_name
+
+statement ok
+create table t104546 (a int primary key);
+create table t104546_fk_src (a int primary key, b int);
+
+statement error pgcode 42703 column "b" does not exist
+alter table t104546 add constraint con foreign key (b) references t104546_fk_src(b);
+
+statement ok
+create schema sc1;
+create schema sc2;
+create table sc1.parent (p int primary key);
+create table sc2.child(p int primary key, r int REFERENCES sc1.parent (p));
+
+query TTTTTT rowsort
+SELECT constraint_catalog, constraint_schema, constraint_name, unique_constraint_catalog, unique_constraint_schema, unique_constraint_name
+FROM  information_schema.referential_constraints WHERE unique_constraint_schema='sc1';
+----
+test  sc2  child_r_fkey  test  sc1  parent_pkey

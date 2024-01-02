@@ -46,20 +46,20 @@ import (
 // createStatsPostEvents controls the cluster setting for logging
 // automatic table statistics collection to the event log.
 var createStatsPostEvents = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.post_events.enabled",
 	"if set, an event is logged for every CREATE STATISTICS job",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 // featureStatsEnabled is used to enable and disable the CREATE STATISTICS and
 // ANALYZE features.
 var featureStatsEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"feature.stats.enabled",
 	"set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
-).WithPublic()
+	settings.WithPublic)
 
 const nonIndexColHistogramBuckets = 2
 
@@ -84,7 +84,7 @@ func StubTableStats(
 }
 
 // createStatsNode is a planNode implemented in terms of a function. The
-// startJob function starts a Job during Start, and the remainder of the
+// runJob function starts a Job during Start, and the remainder of the
 // CREATE STATISTICS planning and execution is performed within the jobs
 // framework.
 type createStatsNode struct {
@@ -97,44 +97,23 @@ type createStatsNode struct {
 	// If it is false, the flow for create statistics is planned directly; this
 	// is used when the statement is under EXPLAIN or EXPLAIN ANALYZE.
 	runAsJob bool
-
-	run createStatsRun
-}
-
-// createStatsRun contains the run-time state of createStatsNode during local
-// execution.
-type createStatsRun struct {
-	errCh chan error
 }
 
 func (n *createStatsNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("stats"))
-	n.run.errCh = make(chan error)
-	go func() {
-		err := n.startJob(params.ctx)
-		select {
-		case <-params.ctx.Done():
-		case n.run.errCh <- err:
-		}
-		close(n.run.errCh)
-	}()
-	return nil
+	return n.runJob(params.ctx)
 }
 
 func (n *createStatsNode) Next(params runParams) (bool, error) {
-	select {
-	case <-params.ctx.Done():
-		return false, params.ctx.Err()
-	case err := <-n.run.errCh:
-		return false, err
-	}
+	return false, nil
 }
 
 func (*createStatsNode) Close(context.Context) {}
 func (*createStatsNode) Values() tree.Datums   { return nil }
 
-// startJob starts a CreateStats job to plan and execute statistics creation.
-func (n *createStatsNode) startJob(ctx context.Context) error {
+// runJob starts a CreateStats job synchronously to plan and execute
+// statistics creation and then waits for the job to complete.
+func (n *createStatsNode) runJob(ctx context.Context) error {
 	record, err := n.makeJobRecord(ctx)
 	if err != nil {
 		return err
@@ -167,8 +146,7 @@ func (n *createStatsNode) startJob(ctx context.Context) error {
 	if err := job.Start(ctx); err != nil {
 		return err
 	}
-
-	if err := job.AwaitCompletion(ctx); err != nil {
+	if err = job.AwaitCompletion(ctx); err != nil {
 		if errors.Is(err, stats.ConcurrentCreateStatsError) {
 			// Delete the job so users don't see it and get confused by the error.
 			const stmt = `DELETE FROM system.jobs WHERE id = $1`
@@ -178,9 +156,8 @@ func (n *createStatsNode) startJob(ctx context.Context) error {
 				log.Warningf(ctx, "failed to delete job: %v", delErr)
 			}
 		}
-		return err
 	}
-	return nil
+	return err
 }
 
 // makeJobRecord creates a CreateStats job record which can be used to plan and
@@ -230,12 +207,6 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	if tableDesc.GetID() == keys.LeaseTableID {
 		return nil, pgerror.New(
 			pgcode.WrongObjectType, "cannot create statistics on system.lease",
-		)
-	}
-
-	if tableDesc.GetID() == keys.JobsTableID {
-		return nil, pgerror.New(
-			pgcode.WrongObjectType, "cannot create statistics on system.jobs",
 		)
 	}
 
@@ -724,6 +695,9 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (r *createStatsResumer) OnFailOrCancel(context.Context, interface{}, error) error { return nil }
+
+// CollectProfile is part of the jobs.Resumer interface.
+func (r *createStatsResumer) CollectProfile(context.Context, interface{}) error { return nil }
 
 func init() {
 	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {

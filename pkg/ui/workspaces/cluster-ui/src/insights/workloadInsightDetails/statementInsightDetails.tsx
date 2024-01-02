@@ -43,6 +43,7 @@ export interface StatementInsightDetailsStateProps {
   isTenant?: boolean;
   timeScale?: TimeScale;
   hasAdminRole: boolean;
+  useObsService: boolean;
 }
 
 export interface StatementInsightDetailsDispatchProps {
@@ -76,8 +77,8 @@ export const StatementInsightDetails: React.FC<
   isTenant,
   timeScale,
   hasAdminRole,
-  setTimeScale,
   refreshUserSQLRoles,
+  useObsService,
 }) => {
   const [explainPlanState, setExplainPlanState] = useState<ExplainPlanState>({
     explainPlan: null,
@@ -90,8 +91,9 @@ export const StatementInsightDetails: React.FC<
       loaded: insightEventDetails != null,
       error: insightError,
     });
+  const [prevUseObsService, setPrevUseObsService] = useState(useObsService);
 
-  const details = insightDetails.details;
+  const details = insightDetails?.details;
 
   const prevPage = (): void => history.goBack();
 
@@ -117,11 +119,17 @@ export const StatementInsightDetails: React.FC<
 
   useEffect(() => {
     refreshUserSQLRoles();
-    if (details != null) {
+    if (details != null && prevUseObsService === useObsService) {
       return;
     }
+    setPrevUseObsService(useObsService);
     const [start, end] = toDateRange(timeScale);
-    getStmtInsightsApi({ stmtExecutionID: executionID, start, end })
+    getStmtInsightsApi({
+      stmtExecutionID: executionID,
+      start,
+      end,
+      useObsService,
+    })
       .then(res => {
         setInsightDetails({
           details: res?.results?.length ? res.results[0] : null,
@@ -131,7 +139,14 @@ export const StatementInsightDetails: React.FC<
       .catch(e => {
         setInsightDetails({ details: null, error: e, loaded: true });
       });
-  }, [details, executionID, timeScale, refreshUserSQLRoles]);
+  }, [
+    details,
+    executionID,
+    timeScale,
+    refreshUserSQLRoles,
+    useObsService,
+    prevUseObsService,
+  ]);
 
   return (
     <div>
@@ -151,10 +166,10 @@ export const StatementInsightDetails: React.FC<
       </h3>
       <div>
         <Loading
-          loading={!insightDetails.loaded}
+          loading={!insightDetails?.loaded}
           page="Statement Insight details"
-          error={insightDetails.error}
-          renderError={() => InsightsError(insightDetails.error?.message)}
+          error={insightDetails?.error}
+          renderError={() => InsightsError(insightDetails?.error?.message)}
         >
           <section className={cx("section")}>
             <Row>

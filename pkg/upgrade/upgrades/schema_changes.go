@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -298,7 +299,6 @@ func indexDescForComparison(idx catalog.Index) *descpb.IndexDescriptor {
 
 	// Clear out the column IDs, but retain their length. Column IDs may
 	// change. Note that we retain the name slices. Those should match.
-	desc.StoreColumnIDs = nil
 	for i := range desc.StoreColumnIDs {
 		desc.StoreColumnIDs[i] = 0
 	}
@@ -307,6 +307,9 @@ func indexDescForComparison(idx catalog.Index) *descpb.IndexDescriptor {
 	}
 	for i := range desc.KeySuffixColumnIDs {
 		desc.KeySuffixColumnIDs[i] = 0
+	}
+	for i := range desc.CompositeColumnIDs {
+		desc.CompositeColumnIDs[i] = 0
 	}
 
 	desc.CreatedAtNanos = 0
@@ -408,4 +411,29 @@ func onlyHasColumnFamily(
 		}
 	}
 	return true, nil
+}
+
+// bumpSystemDatabaseSchemaVersion bumps the SystemDatabaseSchemaVersion
+// field for the system database descriptor. It should be called at the end
+// of any upgrade that creates or modifies the schema of any system table.
+func bumpSystemDatabaseSchemaVersion(
+	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+) error {
+	return d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		systemDBDesc, err := txn.Descriptors().MutableByName(txn.KV()).Database(ctx, catconstants.SystemDatabaseName)
+		if err != nil {
+			return err
+		}
+		if sv := systemDBDesc.GetSystemDatabaseSchemaVersion(); sv != nil {
+			if cs.Version.Less(*sv) {
+				return errors.AssertionFailedf(
+					"new system schema version (%#v) is lower than previous system schema version (%#v)",
+					cs.Version,
+					*sv,
+				)
+			}
+		}
+		systemDBDesc.SystemDatabaseSchemaVersion = &cs.Version
+		return txn.Descriptors().WriteDesc(ctx, false /* kvTrace */, systemDBDesc, txn.KV())
+	})
 }

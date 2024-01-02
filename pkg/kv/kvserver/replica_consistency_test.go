@@ -19,9 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -59,7 +62,8 @@ func TestReplicaChecksumVersion(t *testing.T) {
 
 		var g errgroup.Group
 		g.Go(func() error { return tc.repl.computeChecksumPostApply(ctx, cc) })
-		shortCtx, cancel := context.WithTimeout(ctx, time.Second)
+		// NB: This timeout should be longer than storage.maxEfosWait.
+		shortCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		rc, err := tc.repl.getChecksum(shortCtx, cc.ChecksumID)
 		taskErr := g.Wait()
@@ -127,8 +131,8 @@ func TestStoreCheckpointSpans(t *testing.T) {
 		"/Local/RangeID/{1\"\"-3\"\"}",
 		"/Local/RangeID/{4\"\"-5\"\"}",
 		"/Local/Range\"{a\"-c\"}",
-		"/Local/Lock/Intent/Local/Range\"{a\"-c\"}",
-		"/Local/Lock/Intent\"{a\"-c\"}",
+		"/Local/Lock/Local/Range\"{a\"-c\"}",
+		"/Local/Lock\"{a\"-c\"}",
 		"{a-c}",
 	}, {
 		// r4 with keys [b, c). The checkpoint includes range-ID replicated and
@@ -139,8 +143,8 @@ func TestStoreCheckpointSpans(t *testing.T) {
 		"/Local/RangeID/{1\"\"-2\"\"}",
 		"/Local/RangeID/{2\"\"-3\"\"}",
 		"/Local/Range\"{a\"-f\"}",
-		"/Local/Lock/Intent/Local/Range\"{a\"-f\"}",
-		"/Local/Lock/Intent\"{a\"-f\"}",
+		"/Local/Lock/Local/Range\"{a\"-f\"}",
+		"/Local/Lock\"{a\"-f\"}",
 		"{a-f}",
 	}, {
 		// r2 with keys [e, f). The checkpoint includes range-ID replicated and
@@ -150,8 +154,8 @@ func TestStoreCheckpointSpans(t *testing.T) {
 		"/Local/RangeID/{1\"\"-4\"\"}",
 		"/Local/RangeID/{4\"\"-5\"\"}",
 		"/Local/Range\"{b\"-f\"}",
-		"/Local/Lock/Intent/Local/Range\"{b\"-f\"}",
-		"/Local/Lock/Intent\"{b\"-f\"}",
+		"/Local/Lock/Local/Range\"{b\"-f\"}",
+		"/Local/Lock\"{b\"-f\"}",
 		"{b-f}",
 	}}
 
@@ -271,7 +275,7 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 
 	// Hash the empty state.
 	unlim := quotapool.NewRateLimiter("test", quotapool.Inf(), 0)
-	rd, err := CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim)
+	rd, err := CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim, nil /* settings */)
 	require.NoError(t, err)
 	fmt.Fprintf(sb, "checksum0: %x\n", rd.SHA512)
 
@@ -306,16 +310,38 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 			require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(
 				ctx, eng, nil, key, endKey, ts, localTS, nil, nil, false, 0, nil))
 		} else {
-			require.NoError(t, storage.MVCCPut(ctx, eng, nil, key, ts, localTS, value, nil))
+			_, err = storage.MVCCPut(ctx, eng, key, ts, value, storage.MVCCWriteOptions{LocalTimestamp: localTS})
+			require.NoError(t, err)
 		}
 
-		rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim)
+		rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim, nil /* settings */)
+		require.NoError(t, err)
+		fmt.Fprintf(sb, "checksum%d: %x\n", i+1, rd.SHA512)
+	}
+
+	// We then do the same for replicated locks.
+	locks := []struct {
+		key   string
+		str   lock.Strength
+		txnID int64
+	}{
+		{"a", lock.Exclusive, 1},
+		{"b", lock.Shared, 1},
+		{"b", lock.Shared, 2},
+	}
+
+	for i, l := range locks {
+		txnID := uuid.FromUint128(uint128.FromInts(0, uint64(l.txnID)))
+		txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: txnID}}
+		require.NoError(t, storage.MVCCAcquireLock(ctx, eng, txn, l.str, roachpb.Key(l.key), nil, 0))
+
+		rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim, nil /* settings */)
 		require.NoError(t, err)
 		fmt.Fprintf(sb, "checksum%d: %x\n", i+1, rd.SHA512)
 	}
 
 	// Run another check to obtain stats for the final state.
-	rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim)
+	rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim, nil /* settings */)
 	require.NoError(t, err)
 	jsonpb := protoutil.JSONPb{Indent: "  "}
 	json, err := jsonpb.Marshal(&rd.RecomputedMS)

@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -16,9 +15,6 @@ go_library(
 go_test(
     name = "identmap_test",
     srcs = ["ident_map_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":identmap"],
     deps = ["@com_github_stretchr_testify//assert"],
 )
-
-get_x_data(name = "get_x_data")

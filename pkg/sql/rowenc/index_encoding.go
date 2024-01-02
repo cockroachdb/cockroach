@@ -161,10 +161,15 @@ func MakeSpanFromEncDatums(
 }
 
 // NeededColumnFamilyIDs returns the minimal set of column families required to
-// retrieve neededCols for the specified table and index. The returned descpb.FamilyIDs
-// are in sorted order.
+// retrieve neededCols for the specified table and index. The returned
+// descpb.FamilyIDs are in sorted order. If forSideEffect is true, column
+// families that would otherwise be skipped (e.g. due to the column being fully
+// encoded in the key of family 0) are not skipped.
 func NeededColumnFamilyIDs(
-	neededColOrdinals intsets.Fast, table catalog.TableDescriptor, index catalog.Index,
+	neededColOrdinals intsets.Fast,
+	table catalog.TableDescriptor,
+	index catalog.Index,
+	forSideEffect bool,
 ) []descpb.FamilyID {
 	if table.NumFamilies() == 1 {
 		return []descpb.FamilyID{table.GetFamilies()[0].ID}
@@ -210,7 +215,8 @@ func NeededColumnFamilyIDs(
 	mvccColumnRequested := false
 	nc := neededColOrdinals.Copy()
 	neededColOrdinals.ForEach(func(columnOrdinal int) {
-		if indexedCols.Contains(columnOrdinal) && !compositeCols.Contains(columnOrdinal) {
+		if indexedCols.Contains(columnOrdinal) && !compositeCols.Contains(columnOrdinal) &&
+			!forSideEffect {
 			// We can decode this column from the index key, so no particular family
 			// is needed.
 			nc.Remove(columnOrdinal)
@@ -624,7 +630,7 @@ func EncodeInvertedIndexTableKeys(
 	case types.TSVectorFamily:
 		return tsearch.EncodeInvertedIndexKeys(inKey, val.(*tree.DTSVector).TSVector)
 	}
-	return nil, errors.AssertionFailedf("trying to apply inverted index to unsupported type %s", datum.ResolvedType())
+	return nil, errors.AssertionFailedf("trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError())
 }
 
 // EncodeContainingInvertedIndexSpans returns the spans that must be scanned in
@@ -652,7 +658,7 @@ func EncodeContainingInvertedIndexSpans(
 		return encodeContainingArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)
 	default:
 		return nil, errors.AssertionFailedf(
-			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+			"trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError(),
 		)
 	}
 }
@@ -683,7 +689,7 @@ func EncodeContainedInvertedIndexSpans(
 		return json.EncodeContainedInvertedIndexSpans(nil /* inKey */, val.(*tree.DJSON).JSON)
 	default:
 		return nil, errors.AssertionFailedf(
-			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+			"trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError(),
 		)
 	}
 }
@@ -714,7 +720,7 @@ func EncodeExistsInvertedIndexSpans(
 	case types.ArrayFamily:
 		if val.ResolvedType().ArrayContents().Family() != types.StringFamily {
 			return nil, errors.AssertionFailedf(
-				"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+				"trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError(),
 			)
 		}
 		var expr inverted.Expression
@@ -738,7 +744,7 @@ func EncodeExistsInvertedIndexSpans(
 		return expr, nil
 	default:
 		return nil, errors.AssertionFailedf(
-			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+			"trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError(),
 		)
 	}
 }
@@ -766,7 +772,7 @@ func EncodeOverlapsInvertedIndexSpans(
 		return encodeOverlapsArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)
 	default:
 		return nil, errors.AssertionFailedf(
-			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+			"trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError(),
 		)
 	}
 }
@@ -987,7 +993,7 @@ func EncodeTrigramSpans(s string, allMustMatch bool) (inverted.Expression, error
 // EncodeGeoInvertedIndexTableKeys is the equivalent of EncodeInvertedIndexTableKeys
 // for Geography and Geometry.
 func EncodeGeoInvertedIndexTableKeys(
-	val tree.Datum, inKey []byte, indexGeoConfig geoindex.Config,
+	val tree.Datum, inKey []byte, indexGeoConfig geopb.Config,
 ) (key [][]byte, err error) {
 	if val == tree.DNull {
 		return nil, nil

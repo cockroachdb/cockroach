@@ -170,6 +170,7 @@ Function :  FunctionID
 Function : []Params
 Function :  ReturnSet
 Function :  ReturnType
+Function :  IsProcedure
 
 object FunctionBody
 
@@ -285,11 +286,6 @@ object SchemaComment
 SchemaComment :  SchemaID
 SchemaComment :  Comment
 
-object SchemaName
-
-SchemaName :  SchemaID
-SchemaName :  Name
-
 object SchemaParent
 
 SchemaParent :  SchemaID
@@ -299,6 +295,7 @@ object SecondaryIndex
 
 SecondaryIndex :  Index
 SecondaryIndex :  EmbeddedExpr
+SecondaryIndex :  RecreateSourceIndexID
 
 object SecondaryIndexPartial
 
@@ -309,7 +306,15 @@ SecondaryIndexPartial :  Expression
 object Sequence
 
 Sequence :  SequenceID
+Sequence :  RestartWith
+Sequence :  UseRestartWith
 Sequence :  IsTemporary
+
+object SequenceOption
+
+SequenceOption :  SequenceID
+SequenceOption :  Key
+SequenceOption :  Value
 
 object SequenceOwner
 
@@ -367,6 +372,7 @@ object TemporaryIndex
 
 TemporaryIndex :  Index
 TemporaryIndex :  IsUsingSecondaryEncoding
+TemporaryIndex :  Expr
 
 object UniqueWithoutIndexConstraint
 
@@ -470,11 +476,11 @@ Table <|-- SchemaChild
 View <|-- SchemaChild
 Sequence <|-- SchemaChild
 Schema <|-- SchemaComment
-Schema <|-- SchemaName
 Schema <|-- SchemaParent
 Table <|-- SecondaryIndex
 View <|-- SecondaryIndex
 SecondaryIndex <|-- SecondaryIndexPartial
+Sequence <|-- SequenceOption
 Column <|-- SequenceOwner
 Table <|-- TableComment
 View <|-- TableComment

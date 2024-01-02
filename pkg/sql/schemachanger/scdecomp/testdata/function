@@ -26,6 +26,7 @@ BackReferencedIDs:
 ElementState:
 - Function:
     functionId: 110
+    isProcedure: false
     params:
     - class:
         class: IN
@@ -129,6 +130,12 @@ ElementState:
 - SchemaChild:
     childObjectId: 110
     schemaId: 101
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
+    privileges: "1048576"
+    userName: public
+    withGrantOption: "0"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 110

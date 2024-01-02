@@ -36,12 +36,12 @@ type instrumentedEngine struct {
 }
 
 func (ie *instrumentedEngine) NewMVCCIterator(
-	iterKind storage.MVCCIterKind, opts storage.IterOptions,
-) storage.MVCCIterator {
+	ctx context.Context, iterKind storage.MVCCIterKind, opts storage.IterOptions,
+) (storage.MVCCIterator, error) {
 	if ie.onNewIterator != nil {
 		ie.onNewIterator(opts)
 	}
-	return ie.Engine.NewMVCCIterator(iterKind, opts)
+	return ie.Engine.NewMVCCIterator(ctx, iterKind, opts)
 }
 
 // TestCollectIntentsUsesSameIterator tests that all uses of CollectIntents
@@ -128,12 +128,12 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 
 				// Write an intent.
 				val := roachpb.MakeValueFromBytes([]byte("val"))
-				txn := roachpb.MakeTransaction("test", key, isolation.Serializable, roachpb.NormalUserPriority, ts, 0, 1)
+				txn := roachpb.MakeTransaction("test", key, isolation.Serializable, roachpb.NormalUserPriority, ts, 0, 1, 0, false /* omitInRangefeeds */)
 				var err error
 				if delete {
-					_, err = storage.MVCCDelete(ctx, db, nil, key, ts, hlc.ClockTimestamp{}, &txn)
+					_, _, err = storage.MVCCDelete(ctx, db, key, ts, storage.MVCCWriteOptions{Txn: &txn})
 				} else {
-					err = storage.MVCCPut(ctx, db, nil, key, ts, hlc.ClockTimestamp{}, val, &txn)
+					_, err = storage.MVCCPut(ctx, db, key, ts, val, storage.MVCCWriteOptions{Txn: &txn})
 				}
 				require.NoError(t, err)
 

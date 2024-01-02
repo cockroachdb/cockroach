@@ -32,7 +32,7 @@ func declareKeysBarrier(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	// Barrier is special-cased in the concurrency manager to *not* actually
 	// grab these latches. Instead, any conflicting latches with these are waited
 	// on, but new latches aren't inserted.
@@ -44,6 +44,7 @@ func declareKeysBarrier(
 	// follower. We don't currently need any guarantees regarding concurrent
 	// reads, so this is acceptable.
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, req.Header().Span())
+	return nil
 }
 
 // Barrier evaluation is a no-op, as all the latch waiting happens in

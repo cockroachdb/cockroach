@@ -18,8 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -36,24 +34,20 @@ func TestTenantVars(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-
-	serverParams, _ := tests.CreateTestServerParams()
-	testCluster := serverutils.StartNewTestCluster(t, 1 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: serverParams,
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
-	defer testCluster.Stopper().Stop(ctx)
-
-	srv := testCluster.Server(0 /* idx */)
+	defer srv.Stopper().Stop(ctx)
 
 	testutils.RunTrueAndFalse(t, "shared-process", func(t *testing.T, sharedProcess bool) {
-		var tenant serverutils.TestTenantInterface
+		var tenant serverutils.ApplicationLayerInterface
 		if !sharedProcess {
 			tenant, _ = serverutils.StartTenant(t, srv, base.TestTenantArgs{
 				TenantID: roachpb.MustMakeTenantID(10 /* id */),
 			})
 		} else {
 			var err error
-			tenant, _, err = srv.(*server.TestServer).StartSharedProcessTenant(ctx,
+			tenant, _, err = srv.TenantController().StartSharedProcessTenant(ctx,
 				base.TestSharedProcessTenantArgs{
 					TenantName: roachpb.TenantName("test"),
 					TenantID:   roachpb.MustMakeTenantID(20),
@@ -62,7 +56,7 @@ func TestTenantVars(t *testing.T) {
 		}
 
 		startNowNanos := timeutil.Now().UnixNano()
-		url := tenant.AdminURL() + "/_status/load"
+		url := tenant.AdminURL().WithPath("/_status/load").String()
 		client := http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},

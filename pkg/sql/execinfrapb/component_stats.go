@@ -50,11 +50,12 @@ func StreamComponentID(
 }
 
 // FlowComponentID returns a ComponentID for the given flow.
-func FlowComponentID(instanceID base.SQLInstanceID, flowID FlowID) ComponentID {
+func FlowComponentID(instanceID base.SQLInstanceID, flowID FlowID, region string) ComponentID {
 	return ComponentID{
 		FlowID:        flowID,
 		Type:          ComponentID_FLOW,
 		SQLInstanceID: instanceID,
+		Region:        region,
 	}
 }
 
@@ -74,7 +75,11 @@ const (
 func (s *ComponentStats) StatsForQueryPlan() []string {
 	result := make([]string, 0, 4)
 	s.formatStats(func(key string, value interface{}) {
-		result = append(result, fmt.Sprintf("%s: %v", key, value))
+		if value != nil {
+			result = append(result, fmt.Sprintf("%s: %v", key, value))
+		} else {
+			result = append(result, key)
+		}
 	})
 	return result
 }
@@ -93,12 +98,16 @@ func (ComponentID_Type) SafeValue() {}
 func (s *ComponentStats) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("ComponentStats{ID: %v", s.Component)
 	s.formatStats(func(key string, value interface{}) {
-		w.Printf(", %s: %v", redact.SafeString(key), value)
+		if value != nil {
+			w.Printf(", %s: %v", redact.SafeString(key), value)
+		} else {
+			w.Printf(", %s", redact.SafeString(key))
+		}
 	})
 	w.SafeRune('}')
 }
 
-// formatStats calls fn for each statistic that is set.
+// formatStats calls fn for each statistic that is set. value can be nil.
 func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) {
 	// Network Rx stats.
 	if s.NetRx.Latency.HasValue() {
@@ -188,6 +197,9 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 				humanizeutil.Count(s.KV.NumInterfaceSeeks.Value()),
 				humanizeutil.Count(s.KV.NumInternalSeeks.Value())),
 		)
+	}
+	if s.KV.UsedStreamer {
+		fn("used streamer", nil)
 	}
 
 	// Exec stats.

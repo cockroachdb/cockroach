@@ -215,7 +215,7 @@ func setupData(
 ) (storage.Engine, string) {
 	// Include the current version in the fixture name, or we may inadvertently
 	// run against a left-over fixture that is no longer supported.
-	verStr := fmt.Sprintf("v%s", clusterversion.TestingBinaryVersion.String())
+	verStr := fmt.Sprintf("v%s", clusterversion.Latest.String())
 	orderStr := "linear"
 	if opts.randomKeyOrder {
 		orderStr = "random"
@@ -252,7 +252,9 @@ func setupData(
 			value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, opts.valueBytes))
 			value.InitChecksum(key)
 			ts := hlc.Timestamp{WallTime: int64((pos + 1) * 5)}
-			if err := storage.MVCCPut(ctx, batch, nil /* ms */, key, ts, hlc.ClockTimestamp{}, value, nil); err != nil {
+			if _, err := storage.MVCCPut(
+				ctx, batch, key, ts, value, storage.MVCCWriteOptions{},
+			); err != nil {
 				b.Fatal(err)
 			}
 		}

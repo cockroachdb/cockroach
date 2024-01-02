@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -50,22 +49,19 @@ func checkGauge(t *testing.T, id string, g gaugeValuer, e int64) {
 	}
 }
 
-// verifyStatsOnStoppedServer checks a sets of stats on the specified list of servers. This method
-// may produce false negatives when executed against a running server that has
-// live traffic on it.
-func verifyStatsOnStoppedServer(t *testing.T, tc *testcluster.TestCluster, storeIdxSlice ...int) {
+// verifyStatsOnServers checks a sets of stats on the specified
+// list of servers.
+func verifyStatsOnServers(
+	t *testing.T, tc *testcluster.TestCluster, locs map[int]storage.Location, storeIdxSlice ...int,
+) {
 	t.Helper()
-	var stores []*kvserver.Store
-	var wg sync.WaitGroup
-
-	for _, storeIdx := range storeIdxSlice {
-		stores = append(stores, tc.GetFirstStoreFromServer(t, storeIdx))
-	}
+	ctx := context.Background()
 
 	// Sanity regression check for bug #4624: ensure intent count is zero.
 	// This may not be true immediately due to the asynchronous nature of
 	// non-local intent resolution.
-	for _, s := range stores {
+	for i := 0; i < tc.NumServers(); i++ {
+		s := tc.GetFirstStoreFromServer(t, i)
 		m := s.Metrics()
 		testutils.SucceedsSoon(t, func() error {
 			if a := m.IntentCount.Value(); a != 0 {
@@ -75,21 +71,20 @@ func verifyStatsOnStoppedServer(t *testing.T, tc *testcluster.TestCluster, store
 		})
 	}
 
-	wg.Add(len(storeIdxSlice))
-	// We actually stop *all* of the Servers. Stopping only a few is riddled
-	// with deadlocks since operations can span nodes, but stoppers don't
-	// know about this - taking all of them down at the same time is the
-	// only sane way of guaranteeing that nothing interesting happens, at
-	// least when bringing down the nodes jeopardizes majorities.
-	for _, storeIdx := range storeIdxSlice {
-		go func(i int) {
-			defer wg.Done()
-			tc.StopServer(i)
-		}(storeIdx)
+	// Stop all servers.
+	//
+	// Stopping the servers stabilizes the metrics, ensuring
+	// background operations don't mutate metrics between reading and
+	// recomputing them.
+	for _, i := range storeIdxSlice {
+		tc.StopServer(i)
 	}
-	wg.Wait()
 
-	for _, s := range stores {
+	for _, storeIdx := range storeIdxSlice {
+		// The server is currently stopped and the engine is closed,
+		// but we can still retrieve the existing metrics off the
+		// Store.
+		s := tc.GetFirstStoreFromServer(t, storeIdx)
 		idString := s.Ident.String()
 		m := s.Metrics()
 
@@ -100,7 +95,16 @@ func verifyStatsOnStoppedServer(t *testing.T, tc *testcluster.TestCluster, store
 		}
 
 		// Compute real total MVCC statistics from store.
-		realStats, err := s.ComputeMVCCStats()
+		// To recompute the metrics, we need an open engine. Open the
+		// Engine again in read-only mode (leaving the rest of the
+		// Server stopped) to compute MVCC stats.
+		e, err := storage.Open(ctx, locs[storeIdx], s.GetStoreConfig().Settings,
+			storage.MustExist, storage.ReadOnly)
+		if err != nil {
+			t.Fatal(err)
+		}
+		realStats, err := s.ComputeMVCCStats(e)
+		e.Close()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -112,12 +116,14 @@ func verifyStatsOnStoppedServer(t *testing.T, tc *testcluster.TestCluster, store
 		checkGauge(t, idString, m.RangeKeyBytes, realStats.RangeKeyBytes)
 		checkGauge(t, idString, m.RangeValBytes, realStats.RangeValBytes)
 		checkGauge(t, idString, m.IntentBytes, realStats.IntentBytes)
+		checkGauge(t, idString, m.LockBytes, realStats.LockBytes)
 		checkGauge(t, idString, m.LiveCount, realStats.LiveCount)
 		checkGauge(t, idString, m.KeyCount, realStats.KeyCount)
 		checkGauge(t, idString, m.ValCount, realStats.ValCount)
 		checkGauge(t, idString, m.RangeKeyCount, realStats.RangeKeyCount)
 		checkGauge(t, idString, m.RangeValCount, realStats.RangeValCount)
 		checkGauge(t, idString, m.IntentCount, realStats.IntentCount)
+		checkGauge(t, idString, m.LockCount, realStats.LockCount)
 		checkGauge(t, idString, m.SysBytes, realStats.SysBytes)
 		checkGauge(t, idString, m.SysCount, realStats.SysCount)
 		checkGauge(t, idString, m.AbortSpanBytes, realStats.AbortSpanBytes)
@@ -127,45 +133,11 @@ func verifyStatsOnStoppedServer(t *testing.T, tc *testcluster.TestCluster, store
 	}
 
 	if t.Failed() {
-		t.Fatalf("verifyStatsOnStoppedServer failed, aborting test.")
+		t.Fatalf("verifyStatsOnServers failed, aborting test.")
 	}
-
-	// Restart all Stores.
-	for _, storeIdx := range storeIdxSlice {
-		require.NoError(t, tc.RestartServer(storeIdx))
-	}
-}
-
-func verifyStorageStats(t *testing.T, s *kvserver.Store) {
-	if err := s.ComputeMetrics(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-
-	// TODO(jackson): Adjust TestStoreMetrics to reliably construct multiple
-	// levels within the LSM so that we can assert non-zero bloom filter
-	// statistics. At the time of writing, the engines in TestStoreMetrics
-	// sometimes contain files only in L6, which do not use bloom filters except
-	// when explicitly opted into.
-
-	m := s.Metrics()
-	testcases := []struct {
-		gauge *metric.Gauge
-		min   int64
-	}{
-		{m.RdbBlockCacheHits, 10},
-		{m.RdbBlockCacheMisses, 0},
-		{m.RdbBlockCacheUsage, 0},
-		{m.RdbBloomFilterPrefixChecked, 0},
-		{m.RdbBloomFilterPrefixUseful, 0},
-		{m.RdbMemtableTotalSize, 5000},
-		{m.RdbFlushes, 1},
-		{m.RdbCompactions, 0},
-		{m.RdbTableReadersMemEstimate, 50},
-	}
-	for _, tc := range testcases {
-		if a := tc.gauge.Value(); a < tc.min {
-			t.Errorf("gauge %s = %d < min %d", tc.gauge.GetName(), a, tc.min)
-		}
+	// Restart all servers.
+	for _, i := range storeIdxSlice {
+		require.NoError(t, tc.RestartServer(i))
 	}
 }
 
@@ -186,10 +158,9 @@ func TestStoreResolveMetrics(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	s := serv.(*server.TestServer)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
 	key, err := s.ScratchRange()
@@ -202,7 +173,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 	store.Metrics().ResolveAbortCount.Clear()
 	store.Metrics().ResolvePoisonCount.Clear()
 
-	txn := roachpb.MakeTransaction("foo", span.Key, isolation.Serializable, roachpb.MinUserPriority, hlc.Timestamp{WallTime: 123}, 999, int32(s.NodeID()))
+	txn := roachpb.MakeTransaction("foo", span.Key, isolation.Serializable, roachpb.MinUserPriority, hlc.Timestamp{WallTime: 123}, 999, int32(s.NodeID()), 0, false /* omitInRangefeeds */)
 
 	const resolveCommitCount = int64(200)
 	const resolveAbortCount = int64(800)
@@ -266,17 +237,18 @@ func TestStoreMetrics(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
 	const numServers int = 3
+	stickyVFSRegistry := server.NewStickyVFSRegistry()
 	stickyServerArgs := make(map[int]base.TestServerArgs)
+	locs := make(map[int]storage.Location)
 	for i := 0; i < numServers; i++ {
+		stickyVFSID := strconv.FormatInt(int64(i), 10)
 		stickyServerArgs[i] = base.TestServerArgs{
 			CacheSize: 1 << 20, /* 1 MiB */
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: stickyVFSID,
 					// Specify a size to trigger the BlockCache in Pebble.
 					Size: base.SizeSpec{
 						InBytes: 512 << 20, /* 512 MiB */
@@ -285,7 +257,7 @@ func TestStoreMetrics(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
+					StickyVFSRegistry: stickyVFSRegistry,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					DisableRaftLogQueue: true,
@@ -293,6 +265,7 @@ func TestStoreMetrics(t *testing.T) {
 				},
 			},
 		}
+		locs[i] = storage.MakeLocation("", stickyVFSRegistry.Get(stickyVFSID))
 	}
 	tc := testcluster.StartTestCluster(t, numServers,
 		base.TestClusterArgs{
@@ -300,15 +273,6 @@ func TestStoreMetrics(t *testing.T) {
 			ServerArgsPerNode: stickyServerArgs,
 		})
 	defer tc.Stopper().Stop(ctx)
-
-	// Flush Pebble memtables, so that Pebble begins using block-based tables.
-	// This is useful, because most of the stats we track don't apply to
-	// memtables.
-	for i := range tc.Servers {
-		if err := tc.GetFirstStoreFromServer(t, i).TODOEngine().Flush(); err != nil {
-			t.Fatal(err)
-		}
-	}
 
 	initialCount := tc.GetFirstStoreFromServer(t, 0).Metrics().ReplicaCount.Value()
 	key := tc.ScratchRange(t)
@@ -323,7 +287,7 @@ func TestStoreMetrics(t *testing.T) {
 	require.NoError(t, tc.WaitForVoters(key, tc.Targets(1, 2)...))
 
 	// Verify stats on store1 after replication.
-	verifyStatsOnStoppedServer(t, tc, 1)
+	verifyStatsOnServers(t, tc, locs, 1)
 
 	// Add some data to the "right" range.
 	rangeKeyStart, rangeKeyEnd := key, key.Next()
@@ -341,7 +305,7 @@ func TestStoreMetrics(t *testing.T) {
 	// do that given all if the system table activity generated by the TestCluster.
 	// We use Servers[1] and Servers[2] instead, since we can control the traffic
 	// on those servers.
-	verifyStatsOnStoppedServer(t, tc, 1, 2)
+	verifyStatsOnServers(t, tc, locs, 1, 2)
 
 	// Create a transaction statement that fails. Regression test for #4969.
 	if err := tc.GetFirstStoreFromServer(t, 0).DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -355,7 +319,7 @@ func TestStoreMetrics(t *testing.T) {
 	}
 
 	// Verify stats after addition.
-	verifyStatsOnStoppedServer(t, tc, 1, 2)
+	verifyStatsOnServers(t, tc, locs, 1, 2)
 	checkGauge(t, "store 0", tc.GetFirstStoreFromServer(t, 0).Metrics().ReplicaCount, initialCount+1)
 	tc.RemoveLeaseHolderOrFatal(t, desc, tc.Target(0), tc.Target(1))
 	testutils.SucceedsSoon(t, func() error {
@@ -374,8 +338,38 @@ func TestStoreMetrics(t *testing.T) {
 	checkGauge(t, "store 1", tc.GetFirstStoreFromServer(t, 1).Metrics().ReplicaCount, 1)
 
 	// Verify all stats on all stores after range is removed.
-	verifyStatsOnStoppedServer(t, tc, 1, 2)
+	verifyStatsOnServers(t, tc, locs, 1, 2)
 
-	verifyStorageStats(t, tc.GetFirstStoreFromServer(t, 1))
-	verifyStorageStats(t, tc.GetFirstStoreFromServer(t, 2))
+	for _, serverIdx := range []int{1, 2} {
+		s := tc.GetFirstStoreFromServer(t, serverIdx)
+		if err := s.ComputeMetrics(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+
+		// TODO(jackson): Adjust this test to reliably construct multiple levels
+		// within the LSM so that we can assert non-zero bloom filter
+		// statistics. At the time of writing, the engines in TestStoreMetrics
+		// sometimes only contain files only in L6, which do not use bloom
+		// filters except when explicitly opted into.
+
+		m := s.Metrics()
+		testcases := []struct {
+			gauge *metric.Gauge
+			min   int64
+		}{
+			{m.RdbBlockCacheHits, 10},
+			{m.RdbBlockCacheMisses, 0},
+			{m.RdbBlockCacheUsage, 0},
+			{m.RdbBloomFilterPrefixChecked, 0},
+			{m.RdbBloomFilterPrefixUseful, 0},
+			{m.RdbMemtableTotalSize, 5000},
+			{m.RdbCompactions, 0},
+			{m.RdbTableReadersMemEstimate, 50},
+		}
+		for _, tc := range testcases {
+			if a := tc.gauge.Value(); a < tc.min {
+				t.Errorf("gauge %s = %d < min %d", tc.gauge.GetName(), a, tc.min)
+			}
+		}
+	}
 }

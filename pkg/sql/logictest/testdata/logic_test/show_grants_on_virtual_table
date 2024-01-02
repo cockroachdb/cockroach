@@ -7,7 +7,7 @@ test           crdb_internal  tables      public   SELECT          false
 statement ok
 GRANT SELECT ON crdb_internal.tables TO testuser
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON crdb_internal.tables
 ----
 database_name  schema_name    table_name  grantee   privilege_type  is_grantable
@@ -23,7 +23,7 @@ CREATE USER testuser2
 statement ok
 GRANT SELECT ON crdb_internal.tables TO testuser2 WITH GRANT OPTION
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON crdb_internal.tables
 ----
 database_name  schema_name    table_name  grantee    privilege_type  is_grantable

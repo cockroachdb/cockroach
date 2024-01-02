@@ -43,7 +43,7 @@ import (
 // indexBackfillMergeBatchSize is the maximum number of rows we attempt to merge
 // in a single transaction during the merging process.
 var indexBackfillMergeBatchSize = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.index_backfill.merge_batch_size",
 	"the number of rows we merge between temporary and adding indexes in a single batch",
 	1000,
@@ -54,7 +54,7 @@ var indexBackfillMergeBatchSize = settings.RegisterIntSetting(
 // merge from the temporary index in a single transaction during the merging
 // process.
 var indexBackfillMergeBatchBytes = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.index_backfill.merge_batch_bytes",
 	"the max number of bytes we merge between temporary and adding indexes in a single batch",
 	16<<20,
@@ -66,7 +66,7 @@ var indexBackfillMergeBatchBytes = settings.RegisterIntSetting(
 // default to 4 as higher values didn't seem to improve the index build times in
 // the schemachange/index/tpcc/w=1000 roachtest.
 var indexBackfillMergeNumWorkers = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.index_backfill.merge_num_workers",
 	"the number of parallel merges per node in the cluster",
 	4,
@@ -136,11 +136,18 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowRec
 		return prog
 	}
 
+	var outputMu syncutil.Mutex
 	pushProgress := func() {
 		p := getStoredProgressForPush()
 		if p.CompletedSpans != nil {
 			log.VEventf(ctx, 2, "sending coordinator completed spans: %+v", p.CompletedSpans)
 		}
+		// Even though the contract of execinfra.RowReceiver says that Push is
+		// thread-safe, in reality it's not always the case, so we protect it
+		// with a mutex. At the time of writing, the only source of concurrency
+		// for Push()ing is present due to testing knobs though.
+		outputMu.Lock()
+		defer outputMu.Unlock()
 		output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
 	}
 
@@ -346,11 +353,12 @@ func (ibm *IndexBackfillMerger) merge(
 	) error {
 		var deletedCount int
 		txn.KV().AddCommitTrigger(func(ctx context.Context) {
+			commitTs, _ := txn.KV().CommitTimestamp()
 			log.VInfof(ctx, 2, "merged batch of %d keys (%d deletes) (span: %s) (commit timestamp: %s)",
 				len(sourceKeys),
 				deletedCount,
 				sourceSpan,
-				txn.KV().CommitTimestamp(),
+				commitTs,
 			)
 		})
 		if len(sourceKeys) == 0 {
@@ -378,7 +386,8 @@ func (ibm *IndexBackfillMerger) merge(
 			}
 		}
 		return nil
-	})
+	},
+		isql.WithPriority(admissionpb.BulkNormalPri))
 
 	return err
 }

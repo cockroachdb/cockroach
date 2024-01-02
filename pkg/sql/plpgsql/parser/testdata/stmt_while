@@ -7,9 +7,85 @@ WHILE x > 0 LOOP
 END LOOP;
 END
 ----
-expected parse error: at or near "while": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+x := 10;
+WHILE x > 0 LOOP
+x := x - 1;
+END LOOP;
+END
+ -- normalized!
+DECLARE
+BEGIN
+x := (10);
+WHILE ((x) > (0)) LOOP
+x := ((x) - (1));
+END LOOP;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+x := _;
+WHILE x > _ LOOP
+x := x - _;
+END LOOP;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := 10;
+WHILE _ > 0 LOOP
+_ := _ - 1;
+END LOOP;
+END
+ -- identifiers removed
 
-
+parse
+DECLARE
+BEGIN
+x := 10;
+WHILE x > 0 AND x < 100 LOOP
+  x := x - 1;
+  x := x - 2;
+END LOOP;
+END
+----
+DECLARE
+BEGIN
+x := 10;
+WHILE (x > 0) AND (x < 100) LOOP
+x := x - 1;
+x := x - 2;
+END LOOP;
+END
+ -- normalized!
+DECLARE
+BEGIN
+x := (10);
+WHILE ((((x) > (0))) AND (((x) < (100)))) LOOP
+x := ((x) - (1));
+x := ((x) - (2));
+END LOOP;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+x := _;
+WHILE (x > _) AND (x < _) LOOP
+x := x - _;
+x := x - _;
+END LOOP;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := 10;
+WHILE (_ > 0) AND (_ < 100) LOOP
+_ := _ - 1;
+_ := _ - 2;
+END LOOP;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -21,4 +97,39 @@ WHILE x > 0 LOOP
 END LOOP labeled;
 END
 ----
-expected parse error: at or near "while": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+x := 10;
+<<labeled>>
+WHILE x > 0 LOOP
+x := x - 1;
+END LOOP labeled;
+END
+ -- normalized!
+DECLARE
+BEGIN
+x := (10);
+<<labeled>>
+WHILE ((x) > (0)) LOOP
+x := ((x) - (1));
+END LOOP labeled;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+x := _;
+<<labeled>>
+WHILE x > _ LOOP
+x := x - _;
+END LOOP labeled;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := 10;
+<<_>>
+WHILE _ > 0 LOOP
+_ := _ - 1;
+END LOOP _;
+END
+ -- identifiers removed

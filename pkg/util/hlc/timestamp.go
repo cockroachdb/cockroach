@@ -202,7 +202,7 @@ func (t Timestamp) AsOfSystemTime() string {
 // IsEmpty returns true if t is an empty Timestamp.
 // gcassert:inline
 func (t Timestamp) IsEmpty() bool {
-	return t.WallTime == 0 && t.Logical == 0 && !t.Synthetic
+	return t == Timestamp{}
 }
 
 // IsSet returns true if t is not an empty Timestamp.
@@ -442,7 +442,7 @@ func (t ClockTimestamp) String() string { return t.ToTimestamp().String() }
 // SafeValue implements the redact.SafeValue interface.
 func (t ClockTimestamp) SafeValue() {}
 
-// IsEmpty retruns true if t is an empty ClockTimestamp.
+// IsEmpty returns true if t is an empty ClockTimestamp.
 func (t ClockTimestamp) IsEmpty() bool { return Timestamp(t).IsEmpty() }
 
 // Forward is like Timestamp.Forward, but for ClockTimestamps.

@@ -31,13 +31,15 @@ func Example_statement_diag() {
 		        (20, 'SELECT _ FROM _ WHERE _ > _', 'SELECT a FROM t WHERE b > 1', '2010-01-02 03:04:06', ARRAY[1001,1002,1003]),
 		        (30, 'SELECT _ FROM _ WHERE _ > _', 'SELECT a FROM t WHERE b > 1', '2010-01-02 03:04:07', ARRAY[1001])`,
 
-		`INSERT INTO system.statement_diagnostics_requests(id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, sampling_probability, min_execution_latency, expires_at)
-		 VALUES (1, TRUE, 'SELECT _ FROM _', 10, '2010-01-02 03:04:00', NULL, NULL, NULL),
-		        (2, TRUE, 'SELECT _ FROM _ WHERE _ > _', 20, '2010-01-02 03:04:02', 0.5, NULL, NULL),
-		        (3, TRUE, 'SELECT _ FROM _ WHERE _ > _', 30, '2010-01-02 03:04:05', 1.0, NULL, NULL),
-		        (4, FALSE, 'SELECT _ + _', NULL, '2010-01-02 03:04:10', 0.8, '1d 2h 3m 4s 5ms 6us', NULL),
-		        (5, FALSE, 'SELECT _ - _', NULL, '2010-01-02 03:04:11', 1.0, NULL, '2030-01-02 03:04:12'),
-		        (6, FALSE, 'SELECT _ / _', NULL, '2010-01-02 03:04:12', NULL, '0s', NULL)`,
+		`INSERT INTO system.statement_diagnostics_requests(
+                     id, completed, statement_fingerprint, plan_gist, anti_plan_gist, statement_diagnostics_id,
+                     requested_at, sampling_probability, min_execution_latency, expires_at)
+		 VALUES (1, TRUE, 'SELECT _ FROM _', '', NULL, 10, '2010-01-02 03:04:00', NULL, NULL, NULL),
+		        (2, TRUE, 'SELECT _ FROM _ WHERE _ > _', '', NULL, 20, '2010-01-02 03:04:02', 0.5, NULL, NULL),
+		        (3, TRUE, 'SELECT _ FROM _ WHERE _ > _', '', NULL, 30, '2010-01-02 03:04:05', 1.0, NULL, NULL),
+		        (4, FALSE, 'SELECT _ + _', '', NULL, NULL, '2010-01-02 03:04:10', 0.8, '1d 2h 3m 4s 5ms 6us', NULL),
+		        (5, FALSE, 'SELECT _ - _', 'foo', false, NULL, '2010-01-02 03:04:11', 1.0, NULL, '2030-01-02 03:04:12'),
+		        (6, FALSE, 'SELECT _ / _', 'bar', true, NULL, '2010-01-02 03:04:12', NULL, '0s', NULL)`,
 	}
 
 	for _, cmd := range commands {
@@ -94,10 +96,10 @@ func Example_statement_diag() {
 	//   10  2010-01-02 03:04:05 UTC  SELECT _ FROM _
 	//
 	// Outstanding activation requests:
-	//   ID  Activation time          Statement     Sampling probability  Min execution latency  Expires at
-	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _  1.0000                N/A                    never
-	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _  1.0000                N/A                    2030-01-02 03:04:12 +0000 UTC
-	//   4   2010-01-02 03:04:10 UTC  SELECT _ + _  0.8000                26h3m4.005s            never
+	//   ID  Activation time          Statement     Plan gist  Anti plan gist  Sampling probability  Min execution latency  Expires at
+	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _  bar        true            1.0000                N/A                    never
+	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _  foo        false           1.0000                N/A                    2030-01-02 03:04:12 +0000 UTC
+	//   4   2010-01-02 03:04:10 UTC  SELECT _ + _             false           0.8000                26h3m4.005s            never
 	// statement-diag download 13
 	// ERROR: failed to download statement diagnostics bundle 13 to 'stmt-bundle-13.zip': no statement diagnostics bundle with ID 13
 	// statement-diag download 20 tempfile.zip
@@ -120,18 +122,18 @@ func Example_statement_diag() {
 	//   20  2010-01-02 03:04:06 UTC  SELECT _ FROM _ WHERE _ > _
 	//
 	// Outstanding activation requests:
-	//   ID  Activation time          Statement     Sampling probability  Min execution latency  Expires at
-	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _  1.0000                N/A                    never
-	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _  1.0000                N/A                    2030-01-02 03:04:12 +0000 UTC
-	//   4   2010-01-02 03:04:10 UTC  SELECT _ + _  0.8000                26h3m4.005s            never
+	//   ID  Activation time          Statement     Plan gist  Anti plan gist  Sampling probability  Min execution latency  Expires at
+	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _  bar        true            1.0000                N/A                    never
+	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _  foo        false           1.0000                N/A                    2030-01-02 03:04:12 +0000 UTC
+	//   4   2010-01-02 03:04:10 UTC  SELECT _ + _             false           0.8000                26h3m4.005s            never
 	// statement-diag delete --all
 	// statement-diag list
 	// No statement diagnostics bundles available.
 	// Outstanding activation requests:
-	//   ID  Activation time          Statement     Sampling probability  Min execution latency  Expires at
-	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _  1.0000                N/A                    never
-	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _  1.0000                N/A                    2030-01-02 03:04:12 +0000 UTC
-	//   4   2010-01-02 03:04:10 UTC  SELECT _ + _  0.8000                26h3m4.005s            never
+	//   ID  Activation time          Statement     Plan gist  Anti plan gist  Sampling probability  Min execution latency  Expires at
+	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _  bar        true            1.0000                N/A                    never
+	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _  foo        false           1.0000                N/A                    2030-01-02 03:04:12 +0000 UTC
+	//   4   2010-01-02 03:04:10 UTC  SELECT _ + _             false           0.8000                26h3m4.005s            never
 	// statement-diag cancel xx
 	// ERROR: invalid ID
 	// statement-diag cancel 5 6
@@ -142,9 +144,9 @@ func Example_statement_diag() {
 	// statement-diag list
 	// No statement diagnostics bundles available.
 	// Outstanding activation requests:
-	//   ID  Activation time          Statement     Sampling probability  Min execution latency  Expires at
-	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _  1.0000                N/A                    never
-	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _  1.0000                N/A                    2030-01-02 03:04:12 +0000 UTC
+	//   ID  Activation time          Statement     Plan gist  Anti plan gist  Sampling probability  Min execution latency  Expires at
+	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _  bar        true            1.0000                N/A                    never
+	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _  foo        false           1.0000                N/A                    2030-01-02 03:04:12 +0000 UTC
 	// statement-diag cancel 123
 	// ERROR: no outstanding activation request with ID 123
 	// statement-diag cancel --all

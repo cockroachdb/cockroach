@@ -84,6 +84,10 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 	// is set on creation and never changes over the lifetime of a Replica. Also,
 	// the replica is always contained in its descriptor. So this code below should
 	// be removable.
+	//
+	// TODO(pavelkalinnikov): coming back in 2023, the above may still happen if:
+	// (1) state machine syncs, (2) OS crashes before (3) sideloaded was able to
+	// sync the files removal. The files should be cleaned up on restart.
 	if r.raftMu.sideloaded != nil {
 		if err := r.raftMu.sideloaded.Clear(ctx); err != nil {
 			return err
@@ -162,7 +166,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 
 // disconnectReplicationRaftMuLocked is called when a Replica is being removed.
 // It cancels all outstanding proposals, closes the proposalQuota if there
-// is one, and removes the in-memory raft state.
+// is one, releases all held flow tokens, and removes the in-memory raft state.
 func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 	r.raftMu.AssertHeld()
 	r.mu.Lock()
@@ -174,15 +178,17 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 	if pq := r.mu.proposalQuota; pq != nil {
 		pq.Close("destroyed")
 	}
+	r.mu.replicaFlowControlIntegration.onDestroyed(ctx)
 	r.mu.proposalBuf.FlushLockedWithoutProposing(ctx)
 	for _, p := range r.mu.proposals {
 		r.cleanupFailedProposalLocked(p)
 		// NB: each proposal needs its own version of the error (i.e. don't try to
 		// share the error across proposals).
-		p.finishApplication(ctx, proposalResult{
-			Err: kvpb.NewError(
-				kvpb.NewAmbiguousResultError(apply.ErrRemoved)),
-		})
+		p.finishApplication(ctx, makeProposalResultErr(kvpb.NewAmbiguousResultError(apply.ErrRemoved)))
+	}
+
+	if !r.mu.destroyStatus.Removed() {
+		log.Fatalf(ctx, "removing raft group before destroying replica %s", r)
 	}
 	r.mu.internalRaftGroup = nil
 }

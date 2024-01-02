@@ -104,6 +104,17 @@ func (s *stmtStatsMetadata) jsonFields() jsonFields {
 	}
 }
 
+func (s *stmtStatsMetadata) jsonFlagsOnlyFields() jsonFields {
+	return jsonFields{
+		{"db", (*jsonString)(&s.Key.Database)},
+		{"distsql", (*jsonBool)(&s.Key.DistSQL)},
+		{"failed", (*jsonBool)(&s.Key.Failed)},
+		{"implicitTxn", (*jsonBool)(&s.Key.ImplicitTxn)},
+		{"vec", (*jsonBool)(&s.Key.Vec)},
+		{"fullScan", (*jsonBool)(&s.Key.FullScan)},
+	}
+}
+
 type aggregatedMetadata appstatspb.AggregatedStatementMetadata
 
 func (s *aggregatedMetadata) jsonFields() jsonFields {
@@ -469,6 +480,12 @@ func (t *jsonTime) encodeJSON() (json.JSON, error) {
 type jsonString string
 
 func (s *jsonString) decodeJSON(js json.JSON) error {
+	// Tolerate provided nil JSON value as valid case and interpret
+	// it as null result.
+	if js == nil {
+		*s = "<null>"
+		return nil
+	}
 	text, err := js.AsText()
 	if err != nil {
 		return err

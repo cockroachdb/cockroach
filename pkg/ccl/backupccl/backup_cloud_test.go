@@ -16,25 +16,18 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
-
-// InitManualReplication calls tc.ToggleReplicateQueues(false).
-//
-// Note that the test harnesses that use this typically call
-// tc.WaitForFullReplication before calling this method,
-// so up-replication has usually already taken place.
-func InitManualReplication(tc *testcluster.TestCluster) {
-	tc.ToggleReplicateQueues(false)
-}
 
 // The tests in this file talk to remote APIs which require credentials.
 // To run these tests, you need to supply credentials via env vars (the tests
@@ -48,16 +41,27 @@ func InitManualReplication(tc *testcluster.TestCluster) {
 func TestCloudBackupRestoreS3(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	creds, bucket := requiredS3CredsAndBucket(t)
+	creds, baseBucket := requiredS3CredsAndBucket(t)
 
 	const numAccounts = 1000
-
 	ctx := context.Background()
-	tc, db, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
-	defer cleanupFn()
-	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
-	uri := setupS3URI(t, db, bucket, prefix, creds)
-	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
+
+	for _, locked := range []bool{true, false} {
+		bucket := baseBucket
+		testName := "regular-bucket"
+		if locked {
+			testName = "object-locked-bucket"
+			bucket += "-locked"
+		}
+
+		t.Run(testName, func(t *testing.T) {
+			tc, db, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
+			defer cleanupFn()
+			prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
+			uri := setupS3URI(t, db, bucket, prefix, creds)
+			backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
+		})
+	}
 }
 
 // TestCloudBackupRestoreS3WithLegacyPut tests that backup/restore works when
@@ -114,6 +118,28 @@ func setupS3URI(
 	}
 	uri.RawQuery = values.Encode()
 	return uri
+}
+
+func TestOnlineRestoreS3(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	creds, bucket := requiredS3CredsAndBucket(t)
+	prefix := fmt.Sprintf("TestOnlineRestoreS3-%d", timeutil.Now().UnixNano())
+	uri := setupS3URI(t, sqlDB, bucket, prefix, creds)
+	externalStorage := uri.String()
+
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
+
+	params := base.TestClusterArgs{}
+	_, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, "", InitManualReplication, params)
+	defer cleanupFnRestored()
+
+	bankOnlineRestore(t, rSQLDB, numAccounts, externalStorage)
 }
 
 // TestBackupRestoreGoogleCloudStorage hits the real GCS and so could
@@ -238,5 +264,53 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 				backupAndRestore(ctx, t, testCluster, []string{storageURI.String()}, []string{storageURI.String()}, numAccounts, kmsURI)
 			})
 		}
+	}
+}
+
+// TestCloudBackupRestoreKMSInaccessibleMetric tests that backup statements
+// updates the KMSInaccessibleError metric.
+func TestCloudBackupRestoreKMSInaccessibleMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	azureVaultName := os.Getenv("AZURE_VAULT_NAME")
+	if azureVaultName == "" {
+		skip.IgnoreLintf(t, "AZURE_VAULT_NAME env var must be set")
+	}
+
+	for _, tt := range []struct {
+		name string
+		uri  string
+	}{
+		{
+			name: "s3",
+			uri:  "aws-kms:///non-existent-key?AUTH=implicit&REGION=us-east-1",
+		},
+		{
+			name: "gcs",
+			uri:  "gcp-kms:///non-existent-key?AUTH=implicit",
+		},
+		{
+			name: "azure",
+			uri:  fmt.Sprintf("azure-kms:///non-existent-key/000?AUTH=implicit&AZURE_VAULT_NAME=%s", azureVaultName),
+		},
+	} {
+		tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, 1, 1, InitManualReplication)
+		defer cleanupFn()
+
+		t.Run(tt.name, func(t *testing.T) {
+			testStart := timeutil.Now().Unix()
+			bm := tc.Server(0).JobRegistry().(*jobs.Registry).MetricsStruct().Backup.(*BackupMetrics)
+
+			// LastKMSInaccessibleErrorTime should not be set without
+			// updates_cluster_monitoring_metrics despite a KMS error.
+			sqlDB.ExpectErr(t, "failed to encrypt data key", "BACKUP INTO 'userfile:///foo' WITH OPTIONS (kms = $1)", tt.uri)
+			require.Equal(t, bm.LastKMSInaccessibleErrorTime.Value(), int64(0))
+
+			// LastKMSInaccessibleErrorTime should be set with
+			// updates_cluster_monitoring_metrics.
+			sqlDB.ExpectErr(t, "failed to encrypt data key", "BACKUP INTO 'userfile:///foo' WITH OPTIONS (kms = $1, updates_cluster_monitoring_metrics)", tt.uri)
+			require.GreaterOrEqual(t, bm.LastKMSInaccessibleErrorTime.Value(), testStart)
+		})
 	}
 }

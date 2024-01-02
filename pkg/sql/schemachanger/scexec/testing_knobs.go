@@ -27,6 +27,10 @@ type TestingKnobs struct {
 	// for concurrent schema changes to finish.
 	BeforeWaitingForConcurrentSchemaChanges func(stmts []string)
 
+	// WhileWaitingForConcurrentSchemaChanges is called while waiting
+	// for concurrent schema changes to finish.
+	WhileWaitingForConcurrentSchemaChanges func(stmts []string)
+
 	// OnPostCommitPlanError is called whenever the schema changer job returns an
 	// error on building the state or on planning the stages.
 	OnPostCommitPlanError func(err error) error
@@ -37,6 +41,10 @@ type TestingKnobs struct {
 
 	// RunBeforeBackfill is called just before starting the backfill.
 	RunBeforeBackfill func() error
+
+	// RunBeforeMakingPostCommitPlan is called just before making the post commit
+	// plan.
+	RunBeforeMakingPostCommitPlan func(inRollback bool) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

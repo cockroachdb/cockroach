@@ -16,7 +16,10 @@ import { toRoundedDateRange } from "./utils";
 import { TimeScale } from "./timeScaleTypes";
 import { Timezone } from "src/timestamp";
 
-export const FormattedTimescale = (props: { ts: TimeScale }) => {
+export const FormattedTimescale = (props: {
+  ts: TimeScale;
+  requestTime?: moment.Moment;
+}) => {
   const timezone = useContext(TimezoneContext);
 
   const [start, end] = toRoundedDateRange(props.ts);
@@ -29,7 +32,10 @@ export const FormattedTimescale = (props: { ts: TimeScale }) => {
   const dateEnd =
     omitDayFormat || startEndOnSameDay ? "" : endTz.format(dateFormat);
   const timeStart = startTz.format(timeFormat);
-  const timeEnd = endTz.format(timeFormat);
+  const timeEnd =
+    props.ts.key !== "Custom" && props.requestTime?.isValid()
+      ? props.requestTime.tz(timezone).format(timeFormat)
+      : endTz.format(timeFormat);
 
   return (
     <>

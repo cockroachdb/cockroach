@@ -43,5 +43,7 @@ service PerReplica {
 
 service PerStore {
     rpc CompactEngineSpan(cockroach.kv.kvserver.CompactEngineSpanRequest) returns (cockroach.kv.kvserver.CompactEngineSpanResponse) {}
+    rpc GetTableMetrics(cockroach.kv.kvserver.GetTableMetricsRequest) returns (cockroach.kv.kvserver.GetTableMetricsResponse) {}
+    rpc ScanStorageInternalKeys(cockroach.kv.kvserver.ScanStorageInternalKeysRequest) returns (cockroach.kv.kvserver.ScanStorageInternalKeysResponse) {}
     rpc SetCompactionConcurrency(cockroach.kv.kvserver.CompactionConcurrencyRequest) returns (cockroach.kv.kvserver.CompactionConcurrencyResponse) {}
 }

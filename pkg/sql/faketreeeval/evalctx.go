@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/errors"
@@ -90,6 +91,13 @@ func (so *DummySequenceOperators) GetLatestValueInSessionForSequenceByID(
 	ctx context.Context, seqID int64,
 ) (int64, error) {
 	return 0, errors.WithStack(errSequenceOperators)
+}
+
+// GetLastSequenceValueByID implements the eval.SequenceOperators interface.
+func (so *DummySequenceOperators) GetLastSequenceValueByID(
+	ctx context.Context, seqID uint32,
+) (int64, bool, error) {
+	return 0, false, errors.WithStack(errSequenceOperators)
 }
 
 // SetSequenceValueByID implements the eval.SequenceOperators interface.
@@ -320,6 +328,28 @@ func (*DummyEvalPlanner) ExecutorConfig() interface{} {
 	return nil
 }
 
+// Optimizer is part of the cat.Catalog interface.
+func (*DummyEvalPlanner) Optimizer() interface{} {
+	return nil
+}
+
+// GenUniqueCursorName is part of the eval.Planner interface.
+func (*DummyEvalPlanner) GenUniqueCursorName() tree.Name {
+	return ""
+}
+
+// PLpgSQLCloseCursor is part of the eval.Planner interface.
+func (*DummyEvalPlanner) PLpgSQLCloseCursor(_ tree.Name) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
+// PLpgSQLFetchCursor is part of the Planner interface.
+func (*DummyEvalPlanner) PLpgSQLFetchCursor(
+	context.Context, *tree.CursorStmt,
+) (tree.Datums, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
@@ -330,6 +360,12 @@ func (ep *DummyEvalPlanner) CurrentDatabaseRegionConfig(
 	_ context.Context,
 ) (eval.DatabaseRegionConfig, error) {
 	return nil, errors.WithStack(errEvalPlanner)
+}
+
+func (ep *DummyEvalPlanner) FingerprintSpan(
+	_ context.Context, _ roachpb.Span, _ hlc.Timestamp, _ bool, _ bool,
+) (uint64, error) {
+	return 0, errors.AssertionFailedf("FingerprintSpan unimplemented")
 }
 
 // ResetMultiRegionZoneConfigsForTable is part of the eval.RegionOperator
@@ -440,7 +476,7 @@ func (ep *DummyEvalPlanner) IsActive(_ context.Context, _ clusterversion.Key) bo
 
 // ResolveFunction implements FunctionReferenceResolver interface.
 func (ep *DummyEvalPlanner) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
 	return nil, errors.AssertionFailedf("ResolveFunction unimplemented")
 }
@@ -448,7 +484,7 @@ func (ep *DummyEvalPlanner) ResolveFunction(
 // ResolveFunctionByOID implements FunctionReferenceResolver interface.
 func (ep *DummyEvalPlanner) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (*tree.FunctionName, *tree.Overload, error) {
+) (*tree.RoutineName, *tree.Overload, error) {
 	return nil, nil, errors.AssertionFailedf("ResolveFunctionByOID unimplemented")
 }
 
@@ -501,6 +537,11 @@ func (ep *DummyEvalPlanner) GetDetailsForSpanStats(
 func (ep *DummyEvalPlanner) MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx) {
 }
 
+// AutoCommit is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) AutoCommit() bool {
+	return false
+}
+
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 
@@ -521,6 +562,11 @@ func (ep *DummyPrivilegedAccessor) LookupZoneConfigByNamespaceID(
 	ctx context.Context, id int64,
 ) (tree.DBytes, bool, error) {
 	return "", false, errors.WithStack(errEvalPrivileged)
+}
+
+// IsSystemTable is part of the tree.PrivilegedAccessor interface.
+func (ep *DummyPrivilegedAccessor) IsSystemTable(ctx context.Context, id int64) (bool, error) {
+	return false, errors.WithStack(errEvalPrivileged)
 }
 
 // DummySessionAccessor implements the eval.SessionAccessor interface by returning errors.
@@ -567,8 +613,8 @@ func (ep *DummySessionAccessor) HasRoleOption(
 // HasViewActivityOrViewActivityRedactedRole is part of the eval.SessionAccessor interface.
 func (ep *DummySessionAccessor) HasViewActivityOrViewActivityRedactedRole(
 	context.Context,
-) (bool, error) {
-	return false, errors.WithStack(errEvalSessionVar)
+) (bool, bool, error) {
+	return false, false, errors.WithStack(errEvalSessionVar)
 }
 
 // DummyClientNoticeSender implements the eval.ClientNoticeSender interface.
@@ -578,6 +624,11 @@ var _ eval.ClientNoticeSender = &DummyClientNoticeSender{}
 
 // BufferClientNotice is part of the eval.ClientNoticeSender interface.
 func (c *DummyClientNoticeSender) BufferClientNotice(context.Context, pgnotice.Notice) {}
+
+// SendClientNotice is part of the eval.ClientNoticeSender interface.
+func (c *DummyClientNoticeSender) SendClientNotice(context.Context, pgnotice.Notice) error {
+	return nil
+}
 
 // DummyTenantOperator implements the tree.TenantOperator interface.
 type DummyTenantOperator struct{}
@@ -603,11 +654,6 @@ func (c *DummyTenantOperator) LookupTenantID(
 func (c *DummyTenantOperator) DropTenantByID(
 	ctx context.Context, tenantID uint64, synchronous, ignoreServiceMode bool,
 ) error {
-	return errors.WithStack(errEvalTenant)
-}
-
-// GCTenant is part of the tree.TenantOperator interface.
-func (c *DummyTenantOperator) GCTenant(_ context.Context, _ uint64) error {
 	return errors.WithStack(errEvalTenant)
 }
 

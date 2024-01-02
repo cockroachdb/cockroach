@@ -63,11 +63,11 @@ import (
 
 // featureChangefeedEnabled is used to enable and disable the CHANGEFEED feature.
 var featureChangefeedEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"feature.changefeed.enabled",
 	"set to true to enable changefeeds, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
-).WithPublic()
+	settings.WithPublic)
 
 func init() {
 	sql.AddPlanHook("changefeed", changefeedPlanHook, changefeedTypeCheck)
@@ -253,8 +253,8 @@ func changefeedPlanHook(
 				jobID,
 				AllTargets(details),
 				details.StatementTime,
-				progress.GetChangefeed(),
 			)
+			progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
 
 			jr.Progress = *progress.GetChangefeed()
 
@@ -512,16 +512,6 @@ func createChangefeedJobRecord(
 			return nil, err
 		}
 		if withDiff {
-			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_1_ChangefeedExpressionProductionReady) {
-				return nil,
-					pgerror.Newf(
-						pgcode.FeatureNotSupported,
-						"cannot create new changefeed with CDC expression <%s>, "+
-							"which requires access to cdc_prev until cluster upgrade to %s finalized.",
-						tree.AsString(normalized),
-						clusterversion.V23_1_ChangefeedExpressionProductionReady.String,
-					)
-			}
 			opts.ForceDiff()
 		} else if opts.IsSet(changefeedbase.OptDiff) {
 			// Expression didn't reference cdc_prev, but the diff option was specified.
@@ -615,7 +605,7 @@ func createChangefeedJobRecord(
 
 	if scope, ok := opts.GetMetricScope(); ok {
 		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), "CHANGEFEED",
+			p.ExecCfg().Settings, "CHANGEFEED",
 		); err != nil {
 			return nil, errors.Wrapf(err,
 				"use of %q option requires an enterprise license.", changefeedbase.OptMetricsScope)
@@ -634,7 +624,7 @@ func createChangefeedJobRecord(
 		if !status.ChildMetricsEnabled.Get(&p.ExecCfg().Settings.SV) {
 			p.BufferClientNotice(ctx, pgnotice.Newf(
 				"%s is set to false, metrics will only be published to the '%s' label when it is set to true",
-				status.ChildMetricsEnabled.Key(),
+				status.ChildMetricsEnabled.Name(),
 				scope,
 			))
 		}
@@ -644,7 +634,7 @@ func createChangefeedJobRecord(
 
 		if details.Select != `` {
 			if err := utilccl.CheckEnterpriseEnabled(
-				p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), "CHANGEFEED",
+				p.ExecCfg().Settings, "CHANGEFEED",
 			); err != nil {
 				return nil, errors.Wrap(err, "use of AS SELECT requires an enterprise license.")
 			}
@@ -664,7 +654,7 @@ func createChangefeedJobRecord(
 	}
 
 	if err := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), "CHANGEFEED",
+		p.ExecCfg().Settings, "CHANGEFEED",
 	); err != nil {
 		return nil, err
 	}
@@ -700,6 +690,12 @@ func createChangefeedJobRecord(
 				changefeedbase.OptExecutionLocality, clusterversion.V23_1.String(),
 			)
 		}
+		if err := utilccl.CheckEnterpriseEnabled(
+			p.ExecCfg().Settings, changefeedbase.OptExecutionLocality,
+		); err != nil {
+			return nil, err
+		}
+
 		var executionLocality roachpb.Locality
 		if err := executionLocality.Set(locFilter); err != nil {
 			return nil, err
@@ -904,6 +900,25 @@ func validateSink(
 	if err != nil {
 		return err
 	}
+	u, err := url.Parse(details.SinkURI)
+	if err != nil {
+		return err
+	}
+
+	ambiguousSchemes := map[string][2]string{
+		changefeedbase.DeprecatedSinkSchemeHTTP:  {changefeedbase.SinkSchemeCloudStorageHTTP, changefeedbase.SinkSchemeWebhookHTTP},
+		changefeedbase.DeprecatedSinkSchemeHTTPS: {changefeedbase.SinkSchemeCloudStorageHTTPS, changefeedbase.SinkSchemeWebhookHTTPS},
+	}
+
+	if disambiguations, isAmbiguous := ambiguousSchemes[u.Scheme]; isAmbiguous {
+		p.BufferClientNotice(ctx, pgnotice.Newf(
+			`Interpreting deprecated URI scheme %s as %s. For webhook semantics, use %s.`,
+			u.Scheme,
+			disambiguations[0],
+			disambiguations[1],
+		))
+	}
+
 	var nilOracle timestampLowerBoundOracle
 	canarySink, err := getAndDialSink(ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details,
 		nilOracle, p.User(), jobID, sli)
@@ -963,10 +978,12 @@ func changefeedJobDescription(
 	sinkURI string,
 	opts changefeedbase.StatementOptions,
 ) (string, error) {
+	// Redacts user sensitive information from job description.
 	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, []string{
 		changefeedbase.SinkParamSASLPassword,
 		changefeedbase.SinkParamCACert,
 		changefeedbase.SinkParamClientCert,
+		changefeedbase.SinkParamConfluentAPISecret,
 	})
 	if err != nil {
 		return "", err
@@ -1078,11 +1095,7 @@ func (b *changefeedResumer) setJobRunningStatus(
 	}
 
 	status := jobs.RunningStatus(fmt.Sprintf(fmtOrMsg, args...))
-	if err := b.job.NoTxn().RunningStatus(ctx,
-		func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
-			return status, nil
-		},
-	); err != nil {
+	if err := b.job.NoTxn().RunningStatus(ctx, status); err != nil {
 		log.Warningf(ctx, "failed to set running status: %v", err)
 	}
 
@@ -1097,13 +1110,39 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
 
-	if createdBy := b.job.Payload().CreationClusterID; !jobExec.ExtendedEvalContext().ClusterID.Equal(createdBy) {
-		return errors.Newf("this changefeed was orignally created by cluster %s; it must be recreated on this cluster if this cluster is now expected to emit to the same destination", createdBy)
+	if err := b.ensureClusterIDMatches(ctx, jobExec.ExtendedEvalContext().ClusterID); err != nil {
+		return err
 	}
 
 	err := b.resumeWithRetries(ctx, jobExec, jobID, details, progress, execCfg)
 	if err != nil {
 		return b.handleChangefeedError(ctx, err, details, jobExec)
+	}
+	return nil
+}
+
+// ensureClusterIDMatches verifies that this job record matches
+// the cluster ID of this cluster.
+// This check ensures that if the job has been restored from the
+// full backup, or from streaming replication, then we will fail
+// this changefeed since resuming changefeed, from potentially
+// long "sleep", and attempting to write to existing bucket/topic,
+// is more undesirable and dangerous than just failing this job.
+func (b *changefeedResumer) ensureClusterIDMatches(ctx context.Context, clusterID uuid.UUID) error {
+	if createdBy := b.job.Payload().CreationClusterID; createdBy == uuid.Nil {
+		// This cluster was upgraded from a version that did not set clusterID
+		// in the job record -- rectify this issue.
+		if err := b.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			md.Payload.CreationClusterID = clusterID
+			ju.UpdatePayload(md.Payload)
+			return nil
+		}); err != nil {
+			return jobs.MarkAsRetryJobError(err)
+		}
+	} else if clusterID != createdBy {
+		return errors.Newf("this changefeed was originally created by cluster %s; "+
+			"it must be recreated on this cluster if this cluster is now expected "+
+			"to emit to the same destination", createdBy)
 	}
 	return nil
 }
@@ -1318,6 +1357,12 @@ func reconcileJobStateWithLocalState(
 			`job should be retried later`, jobID, reloadErr)
 		return reloadErr
 	}
+	knobs, _ := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
+	if knobs != nil && knobs.LoadJobErr != nil {
+		if err := knobs.LoadJobErr(); err != nil {
+			return err
+		}
+	}
 
 	localState.progress = reloadedJob.Progress()
 
@@ -1402,6 +1447,11 @@ func (b *changefeedResumer) OnFailOrCancel(
 		exec.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).Failures.Inc(1)
 		logChangefeedFailedTelemetry(ctx, b.job, changefeedbase.UnknownError)
 	}
+	return nil
+}
+
+// CollectProfile is part of the jobs.Resumer interface.
+func (b *changefeedResumer) CollectProfile(_ context.Context, _ interface{}) error {
 	return nil
 }
 
@@ -1563,9 +1613,8 @@ func failureTypeForStartupError(err error) changefeedbase.FailureType {
 }
 
 // maybeUpgradePreProductionReadyExpression updates job record for the
-// changefeed using CDC transformation, created prior to
-// clusterversion.V23_1_ChangefeedExpressionProductionReady. The update happens
-// once cluster version finalized.
+// changefeed using CDC transformation, created prior to 23.1. The update
+// happens once cluster version finalized.
 // Returns nil when nothing needs to be done.
 // Returns fatal error message, causing changefeed to fail, if automatic upgrade
 // cannot for some reason. Returns a transient error to cause job retry/reload
@@ -1586,18 +1635,9 @@ func maybeUpgradePreProductionReadyExpression(
 		return nil
 	}
 
-	if !jobExec.ExecCfg().Settings.Version.IsActive(
-		ctx, clusterversion.V23_1_ChangefeedExpressionProductionReady,
-	) {
-		// Can't upgrade job record yet -- wait until upgrade finalized.
-		return nil
-	}
-
-	// Expressions prior to
-	// clusterversion.V23_1_ChangefeedExpressionProductionReady were rewritten to
-	// fully qualify all columns/types.  Furthermore, those expressions couldn't
-	// use any functions that depend on session data.  Thus, it is safe to use
-	// minimal session data.
+	// Expressions prior to 23.1 were rewritten to fully qualify all
+	// columns/types. Furthermore, those expressions couldn't use any functions
+	// that depend on session data. Thus, it is safe to use minimal session data.
 	sd := sessiondatapb.SessionData{
 		Database:   "",
 		UserProto:  jobExec.User().EncodeProto(),
@@ -1621,8 +1661,7 @@ func maybeUpgradePreProductionReadyExpression(
 	}
 	details.Select = cdceval.AsStringUnredacted(newExpression)
 
-	const useReadLock = false
-	if err := jobExec.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, nil, useReadLock,
+	if err := jobExec.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, nil, /* txn */
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			payload := md.Payload
 			payload.Details = jobspb.WrapPayloadDetails(details)

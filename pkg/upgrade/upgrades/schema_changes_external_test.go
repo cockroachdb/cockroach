@@ -245,8 +245,8 @@ func testMigrationWithFailures(
 
 	// We're going to be migrating from the minimum supported version to the
 	// "next" version. We'll be injecting the migration for the next version.
-	startKey := clusterversion.BinaryMinSupportedVersionKey
-	startCV := clusterversion.ByKey(startKey)
+	startKey := clusterversion.MinSupported
+	startCV := startKey.Version()
 	endCV := startCV
 	endCV.Internal += 2
 
@@ -341,7 +341,6 @@ func testMigrationWithFailures(
 						Server: &server.TestingKnobs{
 							DisableAutomaticVersionUpgrade: make(chan struct{}),
 							BinaryVersionOverride:          startCV,
-							BootstrapVersionKeyOverride:    startKey,
 						},
 						JobsTestingKnobs: jobsKnobs,
 						SQLExecutor: &sql.ExecutorTestingKnobs{
@@ -366,6 +365,7 @@ func testMigrationWithFailures(
 										endCV,
 										upgrade.NoPrecondition,
 										migrationFunc,
+										upgrade.RestoreActionNotRequired("test"),
 									), true
 								}
 								panic("unexpected version")
@@ -510,7 +510,7 @@ func testMigrationWithFailures(
 			})
 			if test.waitForMigrationRestart {
 				// Ensure that we have observed the expected number of ignored schema change jobs.
-				log.Flush()
+				log.FlushFiles()
 				entries, err := log.FetchEntriesFromFiles(
 					0, math.MaxInt64, 10000,
 					regexp.MustCompile("skipping.*operation as the schema change already exists."),
@@ -532,7 +532,7 @@ func cancelJob(
 		// Using this way of canceling because the migration job us non-cancelable.
 		// Canceling in this way skips the check.
 		return s.JobRegistry().(*jobs.Registry).UpdateJobWithTxn(
-			ctx, jobID, txn, false /* useReadLock */, func(
+			ctx, jobID, txn, func(
 				txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 			) error {
 				ju.UpdateStatus(jobs.StatusCancelRequested)

@@ -41,9 +41,7 @@ sinks:
       redactable: true
       exit-on-error: true
   stderr:
-    channels: {INFO: [DEV], WARNING: [OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA,
-        USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF,
-        TELEMETRY, KV_DISTRIBUTION]}
+    channels: {INFO: [DEV], WARNING: [OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]}
     format: crdb-v2-tty
     redact: false
     redactable: true
@@ -83,6 +81,7 @@ sinks:
         max-staleness: 5s
         flush-trigger-size: 1.0MiB
         max-buffer-size: 50MiB
+        format: newline
   stderr:
     format: crdb-v2-tty
     redact: false
@@ -116,8 +115,9 @@ sinks:
       address: localhost:5170
       method: POST
       unsafe-tls: false
-      timeout: 0s
+      timeout: 2s
       disable-keep-alives: false
+      compression: gzip
       filter: INFO
       format: json-compact
       redact: false
@@ -128,6 +128,7 @@ sinks:
         max-staleness: 5s
         flush-trigger-size: 1.0MiB
         max-buffer-size: 50MiB
+        format: newline
   stderr:
     format: crdb-v2-tty
     redact: false

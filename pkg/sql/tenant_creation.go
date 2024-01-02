@@ -47,7 +47,7 @@ import (
 )
 
 const (
-	tenantCreationMinSupportedVersionKey = clusterversion.V22_2
+	tenantCreationMinSupportedVersionKey = clusterversion.MinSupported
 )
 
 // CreateTenant implements the tree.TenantOperator interface.
@@ -67,7 +67,7 @@ func (p *planner) CreateTenant(
 		// Tenant creation via this interface (which includes
 		// crdb_internal.create_tenant) should be prevented from gobbling
 		// up the entire tenant ID space by asking for too large values.
-		// Otherwise, CREATE TENANT will not be possible any more.
+		// Otherwise, CREATE VIRTUAL CLUSTER will not be possible any more.
 		return tid, pgerror.Newf(pgcode.ProgramLimitExceeded, "tenant ID %d out of range", *ctcfg.ID)
 	}
 
@@ -89,7 +89,7 @@ func (p *planner) createTenantInternal(
 	if p.EvalContext().TxnReadOnly {
 		return tid, readOnlyError("create_tenant()")
 	}
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "create"); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "create", p.execCfg.Settings); err != nil {
 		return tid, err
 	}
 	if err := CanManageTenant(ctx, p); err != nil {
@@ -164,20 +164,20 @@ func (p *planner) createTenantInternal(
 	if p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride != 0 {
 		// An override was passed using testing knobs. Bootstrap the cluster
 		// using this override.
-		tenantVersion.Version = clusterversion.ByKey(p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride)
+		tenantVersion.Version = p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride.Version()
 		bootstrapVersionOverride = p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride
-	} else if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.BinaryVersionKey) {
+	} else if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.Latest) {
 		// The cluster is not running the latest version.
 		// Use the previous major version to create the tenant and bootstrap it
 		// just like the previous major version binary would, using hardcoded
 		// initial values.
-		tenantVersion.Version = clusterversion.ByKey(tenantCreationMinSupportedVersionKey)
+		tenantVersion.Version = tenantCreationMinSupportedVersionKey.Version()
 		bootstrapVersionOverride = tenantCreationMinSupportedVersionKey
 	} else {
 		// The cluster is running the latest version.
 		// Use this version to create the tenant and bootstrap it using the host
 		// cluster's bootstrapping logic.
-		tenantVersion.Version = clusterversion.ByKey(clusterversion.BinaryVersionKey)
+		tenantVersion.Version = clusterversion.Latest.Version()
 		bootstrapVersionOverride = 0
 	}
 
@@ -264,16 +264,13 @@ func CreateTenantRecord(
 	testingKnobs *TenantTestingKnobs,
 ) (roachpb.TenantID, error) {
 	const op = "create"
-	if err := rejectIfCantCoordinateMultiTenancy(codec, op); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(codec, op, settings); err != nil {
 		return roachpb.TenantID{}, err
 	}
 	if err := rejectIfSystemTenant(info.ID, op); err != nil {
 		return roachpb.TenantID{}, err
 	}
 	if info.Name != "" {
-		if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
-			return roachpb.TenantID{}, pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
-		}
 		if err := info.Name.IsValid(); err != nil {
 			return roachpb.TenantID{}, pgerror.WithCandidateCode(err, pgcode.Syntax)
 		}
@@ -293,24 +290,24 @@ func CreateTenantRecord(
 		tenID = tenantID.ToUint64()
 		info.ID = tenID
 	}
+	if info.ID > roachpb.MaxTenantID.ToUint64() {
+		return roachpb.TenantID{}, pgerror.Newf(pgcode.ProgramLimitExceeded, "tenant ID %d out of range", info.ID)
+	}
 
-	// Update the ID sequence if available.
+	// Update the ID sequence.
 	// We only keep the latest ID.
-	if settings.Version.IsActive(ctx, clusterversion.V23_1_TenantIDSequence) {
-		if err := updateTenantIDSequence(ctx, txn, info.ID); err != nil {
-			return roachpb.TenantID{}, err
-		}
+	if err := updateTenantIDSequence(ctx, txn, info.ID); err != nil {
+		return roachpb.TenantID{}, err
 	}
 
 	if info.Name == "" {
-		// No name: generate one if we are at the appropriate version.
-		if settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
-			info.Name = roachpb.TenantName(fmt.Sprintf("tenant-%d", info.ID))
-		}
+		// No name: generate one.
+		info.Name = roachpb.TenantName(fmt.Sprintf("cluster-%d", info.ID))
 	}
 
 	// Populate the deprecated DataState field for compatibility
 	// with pre-v23.1 servers.
+	// TODO(radu): we can remove this now.
 	switch info.DataState {
 	case mtinfopb.DataStateReady:
 		info.DeprecatedDataState = mtinfopb.ProtoInfo_READY
@@ -336,9 +333,6 @@ func CreateTenantRecord(
 	// Insert into the tenant table and detect collisions.
 	var name tree.Datum
 	if info.Name != "" {
-		if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
-			return roachpb.TenantID{}, pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
-		}
 		name = tree.NewDString(string(info.Name))
 	} else {
 		name = tree.DNull
@@ -346,11 +340,6 @@ func CreateTenantRecord(
 
 	query := `INSERT INTO system.tenants (id, active, info, name, data_state, service_mode) VALUES ($1, $2, $3, $4, $5, $6)`
 	args := []interface{}{tenID, active, infoBytes, name, info.DataState, info.ServiceMode}
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
-		// Ensure the insert can succeed if the upgrade is not finalized yet.
-		query = `INSERT INTO system.tenants (id, active, info) VALUES ($1, $2, $3)`
-		args = args[:3]
-	}
 
 	if num, err := txn.ExecEx(
 		ctx, "create-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
@@ -462,33 +451,35 @@ func CreateTenantRecord(
 	}
 	toUpsert := []spanconfig.Record{startRecord}
 
-	// We want to ensure we have a split at the non-inclusive end of the tenant's
-	// keyspace, which also happens to be the inclusive start of the next
-	// tenant's (with ID=ours+1). If we didn't do anything here, and we were the
-	// tenant with the highest ID thus far, our last range would extend to /Max.
-	// If a tenant with a higher ID was created, when installing its initial span
-	// config record, it would carve itself off (and our last range would only
-	// extend to that next tenant's boundary), but this is a bit awkward for code
-	// that wants to rely on the invariant that ranges for a tenant only extend
-	// to the tenant's well-defined end key.
+	// We want to ensure we have a split at the start of the next tenant's
+	// (with ID=ours+1) keyspace. This ensures our ranges do not straddle tenant
+	// boundaries, into the next one.
+	// We want to ensure our ranges do not straddle tenant boundaries, either into
+	// the next one or the previous one. Tenant's creation installs a span
+	// configuration at the start of a tenant's keyspace, above, so that handles
+	// the latter. The former only needs handling if the tenant we're creating
+	// here has the highest ID thus far. Such a tenant's range would extend until
+	// /Max. We've deemed this edge case undesirable, so we need to do something
+	// here. In particular, we choose to install a split point at the end of the
+	// tenant's keyspace. We do so by installing a span config record, the start
+	// key of which will serve as a split point.
 	//
-	// So how do we ensure this split at this tenant's non-inclusive end key?
-	// Hard splits are controlled by the start keys on span config records[^1],
-	// so we'll try insert one accordingly. But we cannot do this blindly. We
-	// cannot assume that tenants are created in ID order, so it's possible that
-	// the tenant with the next ID is already present + running. If so, it may
-	// already have span config records that start at the key at which we want
-	// to write a span config record for. Over-writing it blindly would be a
-	// mistake -- there's no telling what config that next tenant has associated
-	// for that span. So we'll do something simple -- we'll check transactionally
-	// whether there's anything written already, and if so, do nothing. We
-	// already have the split we need.
+	// Note that we need to be careful about which key to put in the record's
+	// start key here. The key needs to be such that it is safe to split at;
+	// otherwise. Notably, this makes tenantPrefix.PrefixEnd() an unsuitable
+	// candidate -- see https://github.com/cockroachdb/cockroach/issues/104928 for
+	// more context about why.
 	//
-	// [^1]: See ComputeSplitKey in spanconfig.StoreReader.
-	tenantPrefixEnd := tenantPrefix.PrefixEnd()
+	// Note that we're creating a span config record that controls the next
+	// tenant's keyspace here. If such a tenant exists, writing a span config
+	// record here blindly wouldn't be safe -- we could be clobbering something
+	// that tenant has already reconciled. We instead need to transactionally
+	// check if a record exists or not before writing one. If something already
+	// exists, we do nothing; otherwise, we write the record.
+	nextTenantPrefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenID + 1))
 	endRecordTarget := spanconfig.MakeTargetFromSpan(roachpb.Span{
-		Key:    tenantPrefixEnd,
-		EndKey: tenantPrefixEnd.Next(),
+		Key:    nextTenantPrefix,
+		EndKey: nextTenantPrefix.Next(),
 	})
 
 	// Check if a record exists for the next tenant's startKey from when the next
@@ -601,12 +592,9 @@ HAVING ($1 = '' OR NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.name = $1)
 	nextIDFromTable := uint64(*row[0].(*tree.DInt))
 
 	// Is the sequence available yet?
-	var lastIDFromSequence int64
-	if settings.Version.IsActive(ctx, clusterversion.V23_1_TenantIDSequence) {
-		lastIDFromSequence, err = getTenantIDSequenceValue(ctx, txn)
-		if err != nil {
-			return roachpb.TenantID{}, err
-		}
+	lastIDFromSequence, err := getTenantIDSequenceValue(ctx, txn)
+	if err != nil {
+		return roachpb.TenantID{}, err
 	}
 
 	nextID := nextIDFromTable
@@ -617,7 +605,7 @@ HAVING ($1 = '' OR NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.name = $1)
 	return roachpb.MakeTenantID(nextID)
 }
 
-var tenantIDSequenceFQN = tree.MakeTableNameWithSchema(catconstants.SystemDatabaseName, tree.PublicSchemaName, tree.Name(catconstants.TenantIDSequenceTableName))
+var tenantIDSequenceFQN = tree.MakeTableNameWithSchema(catconstants.SystemDatabaseName, catconstants.PublicSchemaName, tree.Name(catconstants.TenantIDSequenceTableName))
 
 // getTenantIDSequenceDesc retrieves a leased descriptor for the
 // sequence system.tenant_id_seq.

@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 go_library(
@@ -6,9 +5,11 @@ go_library(
     srcs = [
         "compare.go",
         "executor.go",
+        "export.go",
         "main.go",
         "metadata.go",
         "report.go",
+        "slack.go",
         "util.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench",
@@ -16,19 +17,21 @@ go_library(
     deps = [
         "//pkg/cmd/roachprod-microbench/cluster",
         "//pkg/cmd/roachprod-microbench/google",
+        "//pkg/cmd/roachprod-microbench/model",
         "//pkg/roachprod",
         "//pkg/roachprod/config",
+        "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/vm",
-        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_klauspost_compress//gzip",
+        "@com_github_slack_go_slack//:slack",
         "@com_github_spf13_cobra//:cobra",
-        "@org_golang_x_perf//benchstat",
-        "@org_golang_x_perf//storage/benchfmt",
+        "@org_golang_x_exp//maps",
+        "@org_golang_x_perf//benchfmt",
     ],
 )
 
@@ -43,17 +46,16 @@ go_test(
     srcs = [
         "compare_test.go",
         "executor_test.go",
+        "export_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":roachprod-microbench_lib"],
     deps = [
+        "//pkg/cmd/roachprod-microbench/model",
         "//pkg/testutils/datapathutils",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
         "@org_golang_x_exp//maps",
-        "@org_golang_x_perf//benchstat",
     ],
 )
-
-get_x_data(name = "get_x_data")

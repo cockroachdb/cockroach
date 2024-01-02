@@ -23,7 +23,7 @@ INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 statement count 2
 DELETE FROM kv WHERE k=3 OR v=6
 
-query II
+query II rowsort
 DELETE FROM kv RETURNING k, v
 ----
 1 2
@@ -226,14 +226,14 @@ statement ok
 SET tracing = on,kv; DELETE FROM a; SET tracing = off
 
 # Ensure that DelRange requests are chunked for DELETE FROM...
-query TT
+query TT nosort
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%DelRange%' OR message LIKE '%DelRng%'
 ----
 delete range      DelRange /Table/110/1 - /Table/110/2
-dist sender send  r63: sending batch 1 DelRng to (n1,s1):1
+dist sender send  r67: sending batch 1 DelRng to (n1,s1):1
 delete range      DelRange /Table/110/1/601/0 - /Table/110/2
-dist sender send  r63: sending batch 1 DelRng to (n1,s1):1
+dist sender send  r67: sending batch 1 DelRng to (n1,s1):1
 
 # Ensure that DelRange requests are autocommitted when DELETE FROM happens on a
 # chunk of fewer than 600 keys.
@@ -247,12 +247,12 @@ SET tracing = on,kv; DELETE FROM a WHERE a = 5;
 statement ok
 SET tracing = off
 
-query TT
+query TT nosort
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%Del%' OR message LIKE '%sending batch%'
 ----
 delete range      Del /Table/110/1/5/0
-dist sender send  r63: sending batch 1 Del, 1 EndTxn to (n1,s1):1
+dist sender send  r67: sending batch 1 Del, 1 EndTxn to (n1,s1):1
 
 # Ensure that we send DelRanges when doing a point delete operation on a table
 # that has multiple column families.
@@ -266,12 +266,12 @@ SELECT * FROM multicf
 statement ok
 SET tracing = on,kv; DELETE FROM multicf WHERE a = 5; SET tracing = off
 
-query TT
+query TT nosort
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%Del%' OR message LIKE '%sending batch%'
 ----
 delete range      DelRange /Table/111/1/5 - /Table/111/1/6
-dist sender send  r63: sending batch 1 DelRng to (n1,s1):1
+dist sender send  r67: sending batch 1 DelRng to (n1,s1):1
 
 statement ok
 CREATE TABLE xyz (
@@ -337,3 +337,47 @@ vectorized: true
               estimated row count: 990 (missing stats)
               table: xyz@xyz_y_idx
               spans: /1-/1000 /2001-/3000
+
+# Testcase for issue 105803.
+
+statement ok
+CREATE TABLE b (b INT PRIMARY KEY)
+
+query T
+EXPLAIN (TYPES) DELETE FROM a USING b WHERE b > 1 RETURNING a, b, NULL
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (a int, b int, "?column?" unknown)
+│ render ?column?: (NULL)[unknown]
+│ render a: (a)[int]
+│ render b: (b)[int]
+│
+└── • delete
+    │ columns: (a int, b int)
+    │ estimated row count: 1,000 (missing stats)
+    │ from: a
+    │ auto commit
+    │
+    └── • distinct
+        │ columns: (a int, b int)
+        │ estimated row count: 1,000 (missing stats)
+        │ distinct on: a
+        │
+        └── • cross join (inner)
+            │ columns: (a int, b int)
+            │ estimated row count: 333,333 (missing stats)
+            │
+            ├── • scan
+            │     columns: (a int)
+            │     estimated row count: 1,000 (missing stats)
+            │     table: a@a_pkey
+            │     spans: FULL SCAN
+            │
+            └── • scan
+                  columns: (b int)
+                  estimated row count: 333 (missing stats)
+                  table: b@b_pkey
+                  spans: /2-

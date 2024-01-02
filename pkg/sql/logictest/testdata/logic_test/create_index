@@ -23,7 +23,7 @@ CREATE INDEX bar ON t (c)
 statement error index \"bar\" contains duplicate column \"b\"
 CREATE INDEX bar ON t (b, b);
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -38,7 +38,7 @@ INSERT INTO t VALUES (2,1)
 statement error pgcode 23505 violates unique constraint "bar"
 CREATE UNIQUE INDEX bar ON t (b)
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -68,7 +68,7 @@ CREATE INDEX b_desc ON t (b DESC)
 statement ok
 CREATE INDEX b_asc ON t (b ASC, c DESC)
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -96,7 +96,6 @@ CREATE TABLE privs (a INT PRIMARY KEY, b INT)
 user testuser
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 statement error must be owner of table privs or have CREATE privilege on table privs
 CREATE INDEX foo ON privs (b)
 
@@ -107,7 +106,7 @@ CREATE INDEX foo ON privs (b)
 
 user root
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM privs
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -122,7 +121,7 @@ user testuser
 statement ok
 CREATE INDEX foo ON privs (b)
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM privs
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -276,7 +275,6 @@ SELECT 'tbl'::regclass::int
 # hold the json text for the resume spans we want. We'll verify them below.
 # This is some really low-level mucking around. Things to know are that 0xfe
 # is the tenant prefix.
-skipif config local-mixed-22.2-23.1
 let $spans
   WITH span AS (
                 SELECT j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0 AS span
@@ -326,7 +324,6 @@ SELECT json_build_array(
 # spans that both the wrong tenant ID or no tenant ID before resuming it to make
 # sure that on resume it re-keys the spans correctly. We pretty_key these below
 # to confirm/show what is in them.
-skipif config local-mixed-22.2-23.1
 statement ok
 UPDATE system.job_info
   SET value = crdb_internal.json_to_pb(
@@ -341,7 +338,6 @@ WHERE info_key = 'legacy_payload' AND crdb_internal.pb_to_json('cockroach.sql.jo
 
 # confirm we see these bogus start and end keys in the job, both for the wrong
 # tenant and for no tenant.
-skipif config local-mixed-22.2-23.1
 query TTTT
 SELECT
   crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0->>'key', 'base64'), 0),
@@ -393,8 +389,8 @@ CREATE TABLE public.t_hash (
   pk INT8 NOT NULL,
   a INT8 NULL,
   b INT8 NULL,
-  crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
-  crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 5:::INT8)) VIRTUAL,
+  crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 5:::INT8)) VIRTUAL,
+  crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 5:::INT8)) VIRTUAL,
   CONSTRAINT t_hash_pkey PRIMARY KEY (pk ASC),
   INDEX idx_t_hash_a (a ASC) USING HASH WITH (bucket_count=5),
   UNIQUE INDEX idx_t_hash_b (b ASC) USING HASH WITH (bucket_count=5),
@@ -430,3 +426,10 @@ CREATE MATERIALIZED VIEW v (b) AS SELECT a * 2 FROM t WITH DATA;
 
 statement ok
 CREATE INDEX ON v (b);
+
+# Issue #114843 happened because we are unable to create
+# virtual columns on materialized views in the declarative
+# schema changer.
+statement ok
+CREATE INDEX ON v ((b>0));
+

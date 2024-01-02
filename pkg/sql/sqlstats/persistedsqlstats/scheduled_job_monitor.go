@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -60,6 +62,7 @@ var longIntervalWarningThreshold = time.Hour * 24
 // periodically every scanInterval (subject to jittering).
 type jobMonitor struct {
 	st           *cluster.Settings
+	clusterID    func() uuid.UUID
 	db           isql.DB
 	scanInterval time.Duration
 	jitterFn     func(time.Duration) time.Duration
@@ -144,7 +147,7 @@ func (j *jobMonitor) getSchedule(
 		return nil, errScheduleNotFound
 	}
 
-	scheduledJobID := int64(tree.MustBeDInt(row[0]))
+	scheduledJobID := jobspb.ScheduleID(tree.MustBeDInt(row[0]))
 
 	sj, err = jobs.ScheduledJobTxn(txn).Load(ctx, scheduledjobs.ProdJobSchedulerEnv, scheduledJobID)
 	if err != nil {
@@ -171,7 +174,7 @@ func (j *jobMonitor) updateSchedule(ctx context.Context, cronExpr string) {
 				if !jobs.HasScheduledJobNotFoundError(err) && !errors.Is(err, errScheduleNotFound) {
 					return err
 				}
-				sj, err = CreateSQLStatsCompactionScheduleIfNotYetExist(ctx, txn, j.st)
+				sj, err = CreateSQLStatsCompactionScheduleIfNotYetExist(ctx, txn, j.st, j.clusterID())
 				if err != nil {
 					return err
 				}

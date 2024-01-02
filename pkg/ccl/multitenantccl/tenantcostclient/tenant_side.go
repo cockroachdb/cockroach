@@ -10,6 +10,7 @@ package tenantcostclient
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -32,43 +34,56 @@ import (
 	"github.com/cockroachdb/errors/errorspb"
 )
 
+// InitialRequestSetting is exported for testing purposes.
+var InitialRequestSetting = settings.RegisterFloatSetting(
+	settings.SystemVisible,
+	"tenant_initial_request",
+	"number of request units to get from server on first request (requires restart)",
+	bufferRUs/5,
+	settings.WithName("tenant_cost_control.initial_request"),
+	settings.FloatInRange(0, bufferRUs*10),
+)
+
 // TargetPeriodSetting is exported for testing purposes.
 var TargetPeriodSetting = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"tenant_cost_control_period",
-	"target duration between token bucket requests from tenants (requires restart)",
+	"target duration between token bucket requests (requires restart)",
 	10*time.Second,
-	checkDurationInRange(5*time.Second, 120*time.Second),
+	settings.WithName("tenant_cost_control.token_request_period"),
+	settings.DurationInRange(5*time.Second, 120*time.Second),
 )
 
 // CPUUsageAllowance is exported for testing purposes.
 var CPUUsageAllowance = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"tenant_cpu_usage_allowance",
 	"this much CPU usage per second is considered background usage and "+
 		"doesn't contribute to consumption; for example, if it is set to 10ms, "+
 		"that corresponds to 1% of a CPU",
 	10*time.Millisecond,
-	checkDurationInRange(0, 1000*time.Millisecond),
+	settings.WithName("tenant_cost_control.cpu_usage_allowance"),
+	settings.DurationInRange(0, 1000*time.Millisecond),
 )
 
 // ExternalIORUAccountingMode controls whether external ingress and
 // egress bytes are included in RU calculations.
-var ExternalIORUAccountingMode = *settings.RegisterValidatedStringSetting(
-	settings.TenantReadOnly,
+var ExternalIORUAccountingMode = *settings.RegisterStringSetting(
+	settings.SystemVisible,
 	"tenant_external_io_ru_accounting_mode",
 	"controls how external IO RU accounting behaves; allowed values are 'on' (external IO RUs are accounted for and callers wait for RUs), "+
 		"'nowait' (external IO RUs are accounted for but callers do not wait for RUs), "+
 		"and 'off' (no external IO RU accounting)",
 	"on",
-	func(_ *settings.Values, s string) error {
+	settings.WithName("tenant_cost_control.external_io.ru_accounting_mode"),
+	settings.WithValidateString(func(_ *settings.Values, s string) error {
 		switch s {
 		case "on", "off", "nowait":
 			return nil
 		default:
 			return errors.Errorf("invalid value %q, expected 'on', 'off', or 'nowait'", s)
 		}
-	},
+	}),
 )
 
 type externalIORUAccountingMode int64
@@ -98,27 +113,6 @@ func externalIORUAccountingModeFromString(s string) externalIORUAccountingMode {
 		return externalIORUAccountingOff
 	}
 }
-
-// checkDurationInRange returns a function used to validate duration cluster
-// settings. Because these values are currently settable by the tenant, we need
-// to restrict the allowed values to avoid possible sabotage of the cost control
-// mechanisms.
-func checkDurationInRange(min, max time.Duration) func(v time.Duration) error {
-	return func(v time.Duration) error {
-		if v < min || v > max {
-			return errors.Errorf("value %s out of range (%s, %s)", v, min, max)
-		}
-		return nil
-	}
-}
-
-// Initial settings for the local token bucket. They are used only until the
-// first TokenBucket request returns. We allow immediate use of the initial RUs
-// (we essentially borrow them and pay them back in the first TokenBucket
-// request). The intention is to avoid any throttling during start-up in normal
-// circumstances.
-const initialRUs = 10000
-const initialRate = 100
 
 // defaultTickInterval is the default period at which we collect CPU usage and
 // evaluate whether we need to send a new token request.
@@ -174,13 +168,24 @@ func newTenantSideCostController(
 		responseChan:    make(chan *kvpb.TokenBucketResponse, 1),
 		lowRUNotifyChan: make(chan struct{}, 1),
 	}
-	c.limiter.Init(timeSource, c.lowRUNotifyChan)
+
+	// Initialize metrics.
+	c.metrics.Init()
+
+	// Start with filled burst buffer.
+	c.limiter.Init(&c.metrics, timeSource, c.lowRUNotifyChan)
 	c.limiter.Reconfigure(timeSource.Now(), limiterReconfigureArgs{
-		NewTokens: initialRUs,
-		NewRate:   initialRate,
+		NewTokens:       bufferRUs,
+		NotifyThreshold: bufferRUs,
 	})
 
-	c.costCfg = tenantcostmodel.ConfigFromSettings(&st.SV)
+	tenantcostmodel.SetOnChange(&st.SV, func(ctx context.Context) {
+		config := tenantcostmodel.ConfigFromSettings(&st.SV)
+		c.costCfg.Swap(&config)
+	})
+	initialConfig := tenantcostmodel.ConfigFromSettings(&st.SV)
+	c.costCfg.CompareAndSwap(nil, &initialConfig)
+
 	c.modeMu.externalIORUAccountingMode = externalIORUAccountingModeFromString(ExternalIORUAccountingMode.Get(&st.SV))
 	ExternalIORUAccountingMode.SetOnChange(&st.SV, func(context.Context) {
 		c.modeMu.Lock()
@@ -240,10 +245,11 @@ func init() {
 }
 
 type tenantSideCostController struct {
+	metrics              metrics
 	timeSource           timeutil.TimeSource
 	testInstr            TestInstrumentation
 	settings             *cluster.Settings
-	costCfg              tenantcostmodel.Config
+	costCfg              atomic.Pointer[tenantcostmodel.Config]
 	tenantID             roachpb.TenantID
 	provider             kvtenant.TokenBucketProvider
 	limiter              limiter
@@ -296,11 +302,8 @@ type tenantSideCostController struct {
 		targetPeriod time.Duration
 
 		// requestSeqNum is an increasing sequence number that is included in token
-		// bucket requests.
+		// bucket requests to prevent duplicate consumption reporting.
 		requestSeqNum int64
-		// initialRequestCompleted is set to true when the first token bucket
-		// request completes successfully.
-		initialRequestCompleted bool
 		// requestInProgress is the token bucket request that is in progress, or
 		// nil if there is no call in progress. It gets set to nil when we process
 		// the response (in the main loop), even in error cases.
@@ -331,11 +334,6 @@ type tenantSideCostController struct {
 		// If the server directly granted RUs with no trickle deadline, then this
 		// is zero-valued.
 		trickleDeadline time.Time
-		// trickleThreshold is the level below which a low RU notification should
-		// be sent. However, it is only applied once the trickle timer has expired,
-		// since there's no reason to request more RUs from the server until that
-		// happens.
-		trickleThreshold tenantcostmodel.RU
 
 		// fallbackRate is the refill rate we fall back to if the token bucket
 		// requests don't complete or take a long time.
@@ -388,7 +386,7 @@ func (c *tenantSideCostController) initRunState(ctx context.Context) {
 	c.run.lastTick = now
 	c.run.externalUsage = c.externalUsageFn(ctx)
 	c.run.lastRequestTime = now
-	c.run.avgRUPerSec = initialRUs / c.run.targetPeriod.Seconds()
+	c.run.avgRUPerSec = InitialRequestSetting.Get(&c.settings.SV) / c.run.targetPeriod.Seconds()
 	c.run.requestSeqNum = 1
 }
 
@@ -408,41 +406,47 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 
 		avgCPU := deltaCPU / deltaTime.Seconds()
 
-		c.mu.Lock()
-		// If total CPU usage is small (less than 3% of a single CPU by default)
-		// and there have been no recent read/write operations, then ignore the
-		// recent usage altogether. This is intended to minimize RU usage when the
-		// cluster is idle.
-		if deltaCPU < allowance*2 {
-			if c.mu.consumption.ReadBatches == c.run.consumption.ReadBatches &&
-				c.mu.consumption.WriteBatches == c.run.consumption.WriteBatches {
-				deltaCPU = 0
+		func() {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			// If total CPU usage is small (less than 3% of a single CPU by default)
+			// and there have been no recent read/write operations, then ignore the
+			// recent usage altogether. This is intended to minimize RU usage when the
+			// cluster is idle.
+			if deltaCPU < allowance*2 {
+				if c.mu.consumption.ReadBatches == c.run.consumption.ReadBatches &&
+					c.mu.consumption.WriteBatches == c.run.consumption.WriteBatches {
+					deltaCPU = 0
+				}
 			}
-		}
-		// Keep track of an exponential moving average of CPU usage.
-		c.mu.avgCPUPerSec *= 1 - movingAvgCPUPerSecFactor
-		c.mu.avgCPUPerSec += avgCPU * movingAvgCPUPerSecFactor
-		c.mu.Unlock()
+			// Keep track of an exponential moving average of CPU usage.
+			c.mu.avgCPUPerSec *= 1 - movingAvgCPUPerSecFactor
+			c.mu.avgCPUPerSec += avgCPU * movingAvgCPUPerSecFactor
+		}()
 	}
 	if deltaCPU < 0 {
 		deltaCPU = 0
 	}
 
-	ru := c.costCfg.PodCPUCost(deltaCPU)
+	costCfg := c.costCfg.Load()
+	ru := costCfg.PodCPUCost(deltaCPU)
 
 	var deltaPGWireEgressBytes uint64
 	if newExternalUsage.PGWireEgressBytes > c.run.externalUsage.PGWireEgressBytes {
 		deltaPGWireEgressBytes = newExternalUsage.PGWireEgressBytes - c.run.externalUsage.PGWireEgressBytes
-		ru += c.costCfg.PGWireEgressCost(int64(deltaPGWireEgressBytes))
+		ru += costCfg.PGWireEgressCost(int64(deltaPGWireEgressBytes))
 	}
 
 	// KV RUs are not included here, these metrics correspond only to the SQL pod.
-	c.mu.Lock()
-	c.mu.consumption.SQLPodsCPUSeconds += deltaCPU
-	c.mu.consumption.PGWireEgressBytes += deltaPGWireEgressBytes
-	c.mu.consumption.RU += float64(ru)
-	newConsumption := c.mu.consumption
-	c.mu.Unlock()
+	var newConsumption kvpb.TenantConsumption
+	func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.mu.consumption.SQLPodsCPUSeconds += deltaCPU
+		c.mu.consumption.PGWireEgressBytes += deltaPGWireEgressBytes
+		c.mu.consumption.RU += float64(ru)
+		newConsumption = c.mu.consumption
+	}()
 
 	// Update the average RUs consumed per second, based on the latest stats.
 	delta := newConsumption.RU - c.run.consumption.RU
@@ -457,10 +461,12 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 	c.limiter.RemoveRU(newTime, ru)
 
 	// Switch to the fallback rate if needed.
-	if !c.run.fallbackRateStart.IsZero() && !newTime.Before(c.run.fallbackRateStart) {
+	if !c.run.fallbackRateStart.IsZero() && !newTime.Before(c.run.fallbackRateStart) &&
+		c.run.fallbackRate != 0 {
 		log.Infof(ctx, "switching to fallback rate %.10g", c.run.fallbackRate)
 		c.limiter.Reconfigure(c.timeSource.Now(), limiterReconfigureArgs{
-			NewRate: tenantcostmodel.RU(c.run.fallbackRate),
+			NewRate:   tenantcostmodel.RU(c.run.fallbackRate),
+			MaxTokens: bufferRUs + tenantcostmodel.RU(c.run.fallbackRate*c.run.targetPeriod.Seconds()),
 		})
 		c.run.fallbackRateStart = time.Time{}
 	}
@@ -500,28 +506,30 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 
 	deltaConsumption := c.run.consumption
 	deltaConsumption.Sub(&c.run.lastReportedConsumption)
-	var requested float64
+	var requested tenantcostmodel.RU
 	now := c.timeSource.Now()
 
-	if !c.run.initialRequestCompleted {
-		requested = initialRUs
-	} else if c.run.trickleTimer != nil {
+	if c.run.trickleTimer != nil {
 		// Don't request additional RUs if we're in the middle of a trickle
 		// that was started recently.
 		requested = 0
 	} else {
 		// Request what we expect to need over the next target period plus the
 		// buffer amount.
-		requested = c.run.avgRUPerSec*c.run.targetPeriod.Seconds() + bufferRUs
+		requested = tenantcostmodel.RU(c.run.avgRUPerSec*c.run.targetPeriod.Seconds()) + bufferRUs
 
-		// Adjust by the currently available amount. If we are in debt, we request
-		// more to cover the debt.
-		requested -= float64(c.limiter.AvailableRU(now))
+		// Requested RUs are adjusted by what's still left in the burst buffer.
+		// Note that this can be negative, which indicates we are in debt. In that
+		// case, enough RUs should be added to the request to cover the debt.
+		requested -= c.limiter.AvailableRU(now)
 		if requested < 0 {
 			// We don't need more RUs right now, but we still want to report
 			// consumption.
 			requested = 0
 		}
+
+		// Switch to fallback rate if the response takes too long.
+		c.run.fallbackRateStart = now.Add(anticipation)
 	}
 
 	req := &kvpb.TokenBucketRequest{
@@ -531,7 +539,7 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 		NextLiveInstanceID:          uint32(c.nextLiveInstanceIDFn(ctx)),
 		SeqNum:                      c.run.requestSeqNum,
 		ConsumptionSinceLastRequest: deltaConsumption,
-		RequestedRU:                 requested,
+		RequestedRU:                 float64(requested),
 		TargetRequestPeriod:         c.run.targetPeriod,
 	}
 	c.run.requestInProgress = req
@@ -555,7 +563,7 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 		} else if (resp.Error != errorspb.EncodedError{}) {
 			// This is a "logic" error which indicates a configuration problem on the
 			// host side. We will keep retrying periodically.
-			err := errors.DecodeError(ctx, resp.Error)
+			err = errors.DecodeError(ctx, resp.Error)
 			log.Warningf(ctx, "TokenBucket error: %v", err)
 			resp = nil
 		}
@@ -581,14 +589,9 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 	c.run.fallbackRate = resp.FallbackRate
 	c.run.fallbackRateStart = time.Time{}
 
-	// Don't process granted RUs if none were requested.
-	if req.RequestedRU == 0 {
-		return
-	}
-
 	// Process granted RUs.
 	now := c.timeSource.Now()
-	granted := resp.GrantedRU
+	granted := tenantcostmodel.RU(resp.GrantedRU)
 
 	// Shut down any trickle previously in-progress trickle.
 	if c.run.trickleTimer != nil {
@@ -607,61 +610,53 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 		// and even if it occurs, the usage is still counted. The only effect is
 		// some extra debt accumulation, which is fine.
 		if since := c.run.trickleDeadline.Sub(now); since > 0 {
-			granted += c.run.lastRate * since.Seconds()
+			granted += tenantcostmodel.RU(c.run.lastRate * since.Seconds())
 		}
 		c.run.trickleDeadline = time.Time{}
-		c.run.trickleThreshold = 0
 	}
 
-	// If zero tokens were granted, then the token bucket server is completely
-	// dry. Configure the token bucket to have a zero rate and to not send low RU
-	// notifications (since that would just spam the server). The local token
-	// bucket won't be refilled until the next regularly scheduled consumption
-	// reporting interval.
 	var cfg limiterReconfigureArgs
-	if granted > 0 {
+
+	// Directly add tokens to the bucket if they're immediately available.
+	// Configure a token trickle if the tokens are only available over time.
+	if resp.TrickleDuration == 0 {
 		// Calculate the threshold at which a low RU notification will be sent.
-		notifyThreshold := tenantcostmodel.RU(granted * notifyFraction)
+		notifyThreshold := granted * notifyFraction
 		if notifyThreshold < bufferRUs {
 			notifyThreshold = bufferRUs
 		}
 
-		// Directly add tokens to the bucket if they're immediately available.
-		// Configure a token trickle if the tokens are only available over time.
-		if resp.TrickleDuration == 0 {
-			// We received a batch of tokens to use as needed. Set up the token
-			// bucket to notify us when the tokens are running low.
-			cfg.NewTokens = tenantcostmodel.RU(granted)
-			cfg.NewRate = 0
-			cfg.NotifyThreshold = notifyThreshold
-		} else {
-			// We received a batch of tokens that can only be used over the
-			// TrickleDuration. Set up the token bucket to notify us a bit before
-			// this period elapses.
-			timerDuration := resp.TrickleDuration - anticipation
-			if timerDuration <= 0 {
-				timerDuration = (resp.TrickleDuration + 1) / 2
-			}
-			c.run.trickleTimer = c.timeSource.NewTimer()
-			c.run.trickleTimer.Reset(timerDuration)
-			c.run.trickleCh = c.run.trickleTimer.Ch()
-			c.run.trickleDeadline = now.Add(resp.TrickleDuration)
-			c.run.trickleThreshold = notifyThreshold
+		// We received a batch of tokens to use as needed. Set up the token
+		// bucket to notify us when the tokens are running low.
+		cfg.NewTokens = granted
+		cfg.NewRate = 0
 
-			cfg.NewRate = tenantcostmodel.RU(granted / resp.TrickleDuration.Seconds())
+		// Configure the low RU notification threshold. However, if the server
+		// could not even grant the RUs that were requested, then avoid triggering
+		// extra calls to the server. The next call to the server will be made by
+		// the next regularly scheduled consumption reporting interval.
+		if req.RequestedRU == resp.GrantedRU {
+			cfg.NotifyThreshold = notifyThreshold
 		}
+	} else {
+		// We received a batch of tokens that can only be used over the
+		// TrickleDuration. Set up the token bucket to notify us a bit before
+		// this period elapses.
+		timerDuration := resp.TrickleDuration - anticipation
+		if timerDuration <= 0 {
+			timerDuration = (resp.TrickleDuration + 1) / 2
+		}
+		c.run.trickleTimer = c.timeSource.NewTimer()
+		c.run.trickleTimer.Reset(timerDuration)
+		c.run.trickleCh = c.run.trickleTimer.Ch()
+		c.run.trickleDeadline = now.Add(resp.TrickleDuration)
+
+		cfg.NewRate = granted / tenantcostmodel.RU(resp.TrickleDuration.Seconds())
+		cfg.MaxTokens = bufferRUs + granted
 	}
+
 	c.limiter.Reconfigure(now, cfg)
 	c.run.lastRate = float64(cfg.NewRate)
-
-	// Wait until reconfigure is done before removing the initial RUs to avoid
-	// triggering an unnecessary low RU notification.
-	if !c.run.initialRequestCompleted {
-		c.run.initialRequestCompleted = true
-		// This is the first successful request. Take back the initial RUs that we
-		// used to pre-fill the bucket.
-		c.limiter.RemoveRU(now, initialRUs)
-	}
 
 	if log.ExpensiveLogEnabled(ctx, 1) {
 		log.Infof(ctx, "Limiter: %s", c.limiter.String(now))
@@ -680,7 +675,10 @@ func (c *tenantSideCostController) mainLoop(ctx context.Context) {
 	tickerCh := ticker.Ch()
 
 	c.initRunState(ctx)
-	c.sendTokenBucketRequest(ctx)
+
+	if c.testInstr != nil {
+		c.testInstr.Event(c.timeSource.Now(), MainLoopStarted)
+	}
 
 	// The main loop should never block. The remote requests run in separate
 	// goroutines.
@@ -736,17 +734,15 @@ func (c *tenantSideCostController) mainLoop(ctx context.Context) {
 			// bucket gets low (or is already low).
 			c.run.trickleTimer = nil
 			c.run.trickleCh = nil
-			c.limiter.SetupNotification(c.timeSource.Now(), c.run.trickleThreshold)
+			c.sendTokenBucketRequest(ctx)
 
 		case <-c.lowRUNotifyChan:
 			// Switch to fallback rate if we don't get a token bucket response
 			// soon enough.
-			now := c.timeSource.Now()
-			c.run.fallbackRateStart = now.Add(anticipation)
 			c.sendTokenBucketRequest(ctx)
 
 			if c.testInstr != nil {
-				c.testInstr.Event(now, LowRUNotification)
+				c.testInstr.Event(c.timeSource.Now(), LowRUNotification)
 			}
 
 		case <-c.stopper.ShouldQuiesce():
@@ -779,9 +775,10 @@ func (c *tenantSideCostController) OnResponseWait(
 	}
 
 	// Account for the cost of write requests and read responses.
-	writeRU := c.costCfg.RequestCost(req)
-	readRU := c.costCfg.ResponseCost(resp)
-	totalRU := writeRU + readRU
+	costCfg := c.costCfg.Load()
+	writeKVRU, writeNetworkRU := costCfg.RequestCost(req)
+	readKVRU, readNetworkRU := costCfg.ResponseCost(resp)
+	totalRU := writeKVRU + readKVRU + writeNetworkRU + readNetworkRU
 
 	// TODO(andyk): Consider breaking up huge acquisition requests into chunks
 	// that can be fulfilled separately and reported separately. This would make
@@ -791,7 +788,7 @@ func (c *tenantSideCostController) OnResponseWait(
 	}
 
 	// Record the number of RUs consumed by the IO request.
-	if multitenant.TenantRUEstimateEnabled.Get(&c.settings.SV) {
+	if execinfra.IncludeRUEstimateInExplainAnalyze.Get(&c.settings.SV) {
 		if sp := tracing.SpanFromContext(ctx); sp != nil &&
 			sp.RecordingType() != tracingpb.RecordingOff {
 			sp.RecordStructured(&kvpb.TenantConsumption{
@@ -807,14 +804,16 @@ func (c *tenantSideCostController) OnResponseWait(
 		c.mu.consumption.WriteBatches += uint64(req.WriteReplicas())
 		c.mu.consumption.WriteRequests += uint64(req.WriteReplicas() * req.WriteCount())
 		c.mu.consumption.WriteBytes += uint64(req.WriteReplicas() * req.WriteBytes())
-		c.mu.consumption.KVRU += float64(writeRU)
-		c.mu.consumption.RU += float64(writeRU)
+		c.mu.consumption.KVRU += float64(writeKVRU)
+		c.mu.consumption.RU += float64(writeKVRU + writeNetworkRU)
+		c.mu.consumption.CrossRegionNetworkRU += float64(writeNetworkRU)
 	} else if resp.IsRead() {
 		c.mu.consumption.ReadBatches++
 		c.mu.consumption.ReadRequests += uint64(resp.ReadCount())
 		c.mu.consumption.ReadBytes += uint64(resp.ReadBytes())
-		c.mu.consumption.KVRU += float64(readRU)
-		c.mu.consumption.RU += float64(readRU)
+		c.mu.consumption.KVRU += float64(readKVRU)
+		c.mu.consumption.RU += float64(readKVRU + readNetworkRU)
+		c.mu.consumption.CrossRegionNetworkRU += float64(readNetworkRU)
 	}
 
 	return nil
@@ -859,8 +858,9 @@ func (c *tenantSideCostController) onExternalIO(
 		return nil
 	}
 
-	totalRU := c.costCfg.ExternalIOIngressCost(usage.IngressBytes) +
-		c.costCfg.ExternalIOEgressCost(usage.EgressBytes)
+	costCfg := c.costCfg.Load()
+	totalRU := costCfg.ExternalIOIngressCost(usage.IngressBytes) +
+		costCfg.ExternalIOEgressCost(usage.EgressBytes)
 
 	if wait {
 		if err := c.limiter.Wait(ctx, totalRU); err != nil {
@@ -871,12 +871,12 @@ func (c *tenantSideCostController) onExternalIO(
 	}
 
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.mu.consumption.ExternalIOIngressBytes += uint64(usage.IngressBytes)
 	c.mu.consumption.ExternalIOEgressBytes += uint64(usage.EgressBytes)
 	if c.shouldAccountForExternalIORUs() {
 		c.mu.consumption.RU += float64(totalRU)
 	}
-	c.mu.Unlock()
 
 	return nil
 }
@@ -891,5 +891,5 @@ func (c *tenantSideCostController) GetCPUMovingAvg() float64 {
 
 // GetCostConfig is part of the multitenant.TenantSideCostController interface.
 func (c *tenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
-	return &c.costCfg
+	return c.costCfg.Load()
 }

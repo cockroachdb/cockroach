@@ -11,117 +11,231 @@ with t=A
   put k=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee v=e
   put k=f v=f
 ----
+put: lock acquisition = {a id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {b id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {c id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {dddddddddddddddddddddddddddddddddddddddddddddddddd id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {f id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/1.000000000,0 -> /BYTES/a
-meta: "b"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/1.000000000,0 -> /BYTES/b
-meta: "c"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "c"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "c"/1.000000000,0 -> /BYTES/c
-meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
-meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
-meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/1.000000000,0 -> /BYTES/f
 
 # Resolve none since targetBytes < 0.
-run ok
+run stats ok
 resolve_intent t=A k=c status=COMMITTED targetBytes=-1 batched
 ----
+>> resolve_intent t=A k=c status=COMMITTED targetBytes=-1 batched
+resolve_intent: "c" -> resolved key = false, 0 bytes
+resolve_intent: resume span ["c",/Min)
 resolve_intent: batch after write is empty
+stats: no change
 >> at end:
-meta: "a"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "a"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/1.000000000,0 -> /BYTES/a
-meta: "b"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/1.000000000,0 -> /BYTES/b
-meta: "c"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "c"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "c"/1.000000000,0 -> /BYTES/c
-meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
-meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
-meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/1.000000000,0 -> /BYTES/f
+stats: key_count=6 key_bytes=182 val_count=6 val_bytes=324 live_count=6 live_bytes=506 intent_count=6 intent_bytes=108 lock_count=6 lock_age=594
 
 # Resolve intent "b".
-run ok
+run stats ok
 resolve_intent t=A k=b status=COMMITTED targetBytes=1 batched
 ----
+>> resolve_intent t=A k=b status=COMMITTED targetBytes=1 batched
+resolve_intent: "b" -> resolved key = true, 28 bytes
 resolve_intent: batch after write is non-empty
+stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-18 lock_count=-1 lock_age=-99
 >> at end:
-meta: "a"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "a"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/1.000000000,0 -> /BYTES/a
 data: "b"/1.000000000,0 -> /BYTES/b
-meta: "c"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "c"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "c"/1.000000000,0 -> /BYTES/c
-meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
-meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
-meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/1.000000000,0 -> /BYTES/f
+stats: key_count=6 key_bytes=182 val_count=6 val_bytes=276 live_count=6 live_bytes=458 intent_count=5 intent_bytes=90 lock_count=5 lock_age=495
 
 # Resolve none since maxKeys < 0.
-run ok
+run stats ok
 resolve_intent_range t=A k=a end=z status=COMMITTED maxKeys=-1 batched
 ----
+>> resolve_intent_range t=A k=a end=z status=COMMITTED maxKeys=-1 batched
+resolve_intent_range: "a"-"z" -> resolved 0 key(s), 0 bytes
+resolve_intent_range: resume span ["a","z") RESUME_KEY_LIMIT
 resolve_intent_range: batch after write is empty
+stats: no change
 >> at end:
-meta: "a"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "a"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/1.000000000,0 -> /BYTES/a
 data: "b"/1.000000000,0 -> /BYTES/b
-meta: "c"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "c"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "c"/1.000000000,0 -> /BYTES/c
-meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
-meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
-meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/1.000000000,0 -> /BYTES/f
+stats: key_count=6 key_bytes=182 val_count=6 val_bytes=276 live_count=6 live_bytes=458 intent_count=5 intent_bytes=90 lock_count=5 lock_age=495
 
 # Resolve 2 intents "a" and "c".
-run ok
+run stats ok
 resolve_intent_range t=A k=a end=z status=COMMITTED maxKeys=2 batched
 ----
+>> resolve_intent_range t=A k=a end=z status=COMMITTED maxKeys=2 batched
+resolve_intent_range: "a"-"z" -> resolved 2 key(s), 56 bytes
+resolve_intent_range: resume span ["c\x00","z") RESUME_KEY_LIMIT
 resolve_intent_range: batch after write is non-empty
+stats: val_bytes=-96 live_bytes=-96 intent_count=-2 intent_bytes=-36 lock_count=-2 lock_age=-198
 >> at end:
 data: "a"/1.000000000,0 -> /BYTES/a
 data: "b"/1.000000000,0 -> /BYTES/b
 data: "c"/1.000000000,0 -> /BYTES/c
-meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
-meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
-meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/1.000000000,0 -> /BYTES/f
+stats: key_count=6 key_bytes=182 val_count=6 val_bytes=180 live_count=6 live_bytes=362 intent_count=3 intent_bytes=54 lock_count=3 lock_age=297
 
 # Resolve none since targetBytes < 0.
-run ok
+run stats ok
 resolve_intent_range t=A k=a end=z status=COMMITTED targetBytes=-1 batched
 ----
+>> resolve_intent_range t=A k=a end=z status=COMMITTED targetBytes=-1 batched
+resolve_intent_range: "a"-"z" -> resolved 0 key(s), 0 bytes
+resolve_intent_range: resume span ["a","z") RESUME_BYTE_LIMIT
 resolve_intent_range: batch after write is empty
+stats: no change
 >> at end:
 data: "a"/1.000000000,0 -> /BYTES/a
 data: "b"/1.000000000,0 -> /BYTES/b
 data: "c"/1.000000000,0 -> /BYTES/c
-meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
-meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
-meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/1.000000000,0 -> /BYTES/f
+stats: key_count=6 key_bytes=182 val_count=6 val_bytes=180 live_count=6 live_bytes=362 intent_count=3 intent_bytes=54 lock_count=3 lock_age=297
 
-run ok
+run stats ok
 resolve_intent_range t=A k=a end=z status=COMMITTED targetBytes=99 batched
 ----
+>> resolve_intent_range t=A k=a end=z status=COMMITTED targetBytes=99 batched
+resolve_intent_range: "a"-"z" -> resolved 2 key(s), 154 bytes
+resolve_intent_range: resume span ["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\x00","z") RESUME_BYTE_LIMIT
 resolve_intent_range: batch after write is non-empty
+stats: val_bytes=-96 live_bytes=-96 intent_count=-2 intent_bytes=-36 lock_count=-2 lock_age=-198
 >> at end:
 data: "a"/1.000000000,0 -> /BYTES/a
 data: "b"/1.000000000,0 -> /BYTES/b
 data: "c"/1.000000000,0 -> /BYTES/c
 data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
 data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
-meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/1.000000000,0 -> /BYTES/f
+stats: key_count=6 key_bytes=182 val_count=6 val_bytes=84 live_count=6 live_bytes=266 intent_count=1 intent_bytes=18 lock_count=1 lock_age=99
+
+
+# Test MaxKeys and TargetBytes for resolve intent range with replicated locks.
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# Put some test data with locks.
+run ok
+with t=B
+  txn_begin ts=1
+  acquire_lock k=a str=shared
+  put k=a v=a
+  acquire_lock k=b str=shared
+  acquire_lock k=b str=exclusive
+  put k=b v=b
+  acquire_lock k=c str=shared
+----
+put: lock acquisition = {a id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {b id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0 Replicated Intent []}
+>> at end:
+txn: "B" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/1.000000000,0 -> /BYTES/a
+meta: "b"/0,0 -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/1.000000000,0 -> /BYTES/b
+lock (Replicated): "a"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "b"/Exclusive -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "b"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "c"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+
+run stats ok
+resolve_intent_range t=B k=a end=z status=COMMITTED maxKeys=1 batched
+----
+>> resolve_intent_range t=B k=a end=z status=COMMITTED maxKeys=1 batched
+resolve_intent_range: "a"-"z" -> resolved 1 key(s), 56 bytes
+resolve_intent_range: resume span ["a\x00","z") RESUME_KEY_LIMIT
+resolve_intent_range: released shared or exclusive locks
+resolve_intent_range: batch after write is non-empty
+stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-18 lock_count=-2 lock_bytes=-66 lock_age=-198
+>> at end:
+data: "a"/1.000000000,0 -> /BYTES/a
+meta: "b"/0,0 -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/1.000000000,0 -> /BYTES/b
+lock (Replicated): "b"/Exclusive -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "b"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "c"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=2 key_bytes=28 val_count=2 val_bytes=60 live_count=2 live_bytes=88 intent_count=1 intent_bytes=18 lock_count=4 lock_bytes=198 lock_age=396
+
+run stats ok
+resolve_intent_range t=B k=a end=z status=COMMITTED targetBytes=1 batched
+----
+>> resolve_intent_range t=B k=a end=z status=COMMITTED targetBytes=1 batched
+resolve_intent_range: "a"-"z" -> resolved 1 key(s), 84 bytes
+resolve_intent_range: resume span ["b\x00","z") RESUME_BYTE_LIMIT
+resolve_intent_range: released shared or exclusive locks
+resolve_intent_range: batch after write is non-empty
+stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-18 lock_count=-3 lock_bytes=-132 lock_age=-297
+>> at end:
+data: "a"/1.000000000,0 -> /BYTES/a
+data: "b"/1.000000000,0 -> /BYTES/b
+lock (Replicated): "c"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=2 key_bytes=28 val_count=2 val_bytes=12 live_count=2 live_bytes=40 lock_count=1 lock_bytes=66 lock_age=99
+
+run stats ok
+resolve_intent_range t=B k=a end=z status=COMMITTED maxKeys=1 batched
+----
+>> resolve_intent_range t=B k=a end=z status=COMMITTED maxKeys=1 batched
+resolve_intent_range: "a"-"z" -> resolved 1 key(s), 28 bytes
+resolve_intent_range: released shared or exclusive locks
+resolve_intent_range: batch after write is non-empty
+stats: lock_count=-1 lock_bytes=-66 lock_age=-99
+>> at end:
+data: "a"/1.000000000,0 -> /BYTES/a
+data: "b"/1.000000000,0 -> /BYTES/b
+stats: key_count=2 key_bytes=28 val_count=2 val_bytes=12 live_count=2 live_bytes=40

@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -154,14 +153,14 @@ type s3Client struct {
 }
 
 var reuseSession = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.s3.session_reuse.enabled",
 	"persist the last opened s3 session and re-use it when opening a new session with the same arguments",
 	true,
 )
 
 var usePutObject = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.s3.buffer_and_put_uploads.enabled",
 	"construct files in memory before uploading via PutObject (may cause crashes due to memory usage)",
 	false,
@@ -292,7 +291,7 @@ func S3URI(bucket, path string, conf *cloudpb.ExternalStorage_S3) string {
 	return s3URL.String()
 }
 
-func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.ExternalStorage, error) {
+func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	s3URL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	if s3URL.Host == "" {
@@ -389,7 +388,7 @@ func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.Extern
 
 // MakeS3Storage returns an instance of S3 ExternalStorage.
 func MakeS3Storage(
-	ctx context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
+	ctx context.Context, args cloud.EarlyBootExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.s3")
 	conf := dest.S3Config
@@ -515,6 +514,12 @@ func newClient(
 
 	opts := session.Options{}
 
+	httpClient, err := cloud.MakeHTTPClient(settings)
+	if err != nil {
+		return s3Client{}, "", err
+	}
+	opts.Config.HTTPClient = httpClient
+
 	if conf.endpoint != "" {
 		opts.Config.Endpoint = aws.String(conf.endpoint)
 		opts.Config.S3ForcePathStyle = aws.Bool(true)
@@ -522,12 +527,6 @@ func newClient(
 		if conf.region == "" {
 			conf.region = "default-region"
 		}
-
-		client, err := cloud.MakeHTTPClient(settings)
-		if err != nil {
-			return s3Client{}, "", err
-		}
-		opts.Config.HTTPClient = client
 	}
 
 	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
@@ -548,7 +547,6 @@ func newClient(
 	opts.Config.Retryer = retryer
 
 	var sess *session.Session
-	var err error
 
 	switch conf.auth {
 	case "", cloud.AuthParamSpecified:
@@ -566,10 +564,6 @@ func newClient(
 	}
 
 	if conf.assumeRoleProvider.roleARN != "" {
-		if !settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SupportAssumeRoleAuth) {
-			return s3Client{}, "", errors.New("cannot authenticate to cloud storage via assume role until cluster has fully upgraded to 22.2")
-		}
-
 		for _, delegateProvider := range conf.delegateRoleProviders {
 			intermediateCreds := stscreds.NewCredentials(sess, delegateProvider.roleARN, withExternalID(delegateProvider.externalID))
 			opts.Config.Credentials = intermediateCreds
@@ -712,6 +706,7 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 			SSEKMSKeyId:          nilIfEmpty(s.conf.ServerKMSID),
 			StorageClass:         nilIfEmpty(s.conf.StorageClass),
 		})
+		err = interpretAWSError(err)
 		return errors.Wrap(err, "upload failed")
 	}), nil
 }
@@ -738,17 +733,10 @@ func (s *s3Storage) openStreamAt(
 
 	out, err := client.GetObjectWithContext(ctx, req)
 	if err != nil {
-		if aerr := (awserr.Error)(nil); errors.As(err, &aerr) {
-			switch aerr.Code() {
-			// Relevant 404 errors reported by AWS.
-			case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
-				// nolint:errwrap
-				return nil, errors.Wrapf(
-					errors.Wrap(cloud.ErrFileDoesNotExist, "s3 object does not exist"),
-					"%v",
-					err.Error(),
-				)
-			}
+		err = interpretAWSError(err)
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			// keep this string in case anyone is depending on it
+			err = errors.Wrap(err, "s3 object does not exist")
 		}
 		return nil, errors.Wrap(err, "failed to get s3 object")
 	}
@@ -790,6 +778,7 @@ func (s *s3Storage) ReadFile(
 				// so try a Size() request.
 				x, err := s.Size(ctx, basename)
 				if err != nil {
+					err = interpretAWSError(err)
 					return nil, 0, errors.Wrap(err, "content-length missing from GetObject and Size() failed")
 				}
 				fileSize = x
@@ -798,14 +787,14 @@ func (s *s3Storage) ReadFile(
 			}
 		}
 	}
-	opener := func(ctx context.Context, pos int64) (io.ReadCloser, error) {
+	opener := func(ctx context.Context, pos int64) (io.ReadCloser, int64, error) {
 		s, err := s.openStreamAt(ctx, basename, pos, endOffset)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		return s.Body, nil
+		return s.Body, fileSize, nil
 	}
-	return cloud.NewResumingReader(ctx, opener, stream.Body, opts.Offset, path,
+	return cloud.NewResumingReader(ctx, opener, stream.Body, opts.Offset, fileSize, path,
 		cloud.ResumingReaderRetryOnErrFnForSettings(ctx, s.settings), s3ErrDelay), fileSize, nil
 }
 
@@ -851,10 +840,48 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 	if err := client.ListObjectsPagesWithContext(
 		ctx, s3Input, pageFn,
 	); err != nil {
+		err = interpretAWSError(err)
 		return errors.Wrap(err, `failed to list s3 bucket`)
 	}
 
 	return fnErr
+}
+
+// interpretAWSError attempts to surface safe information that otherwise would be redacted
+func interpretAWSError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	if strings.Contains(err.Error(), "AssumeRole") {
+		err = errors.Wrap(err, "AssumeRole")
+	}
+
+	if strings.Contains(err.Error(), "AccessDenied") {
+		err = errors.Wrap(err, "AccessDenied")
+	}
+
+	if aerr := (awserr.Error)(nil); errors.As(err, &aerr) {
+		code := aerr.Code()
+
+		if code != "" {
+			// nolint:errwrap
+			err = errors.Wrapf(err, "%v", code)
+
+			switch code {
+			// Relevant 404 errors reported by AWS.
+			case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
+				// nolint:errwrap
+				err = errors.Wrapf(
+					errors.Wrap(cloud.ErrFileDoesNotExist, "s3 object does not exist"),
+					"%v",
+					err.Error(),
+				)
+			}
+		}
+	}
+
+	return err
 }
 
 func (s *s3Storage) Delete(ctx context.Context, basename string) error {
@@ -890,6 +917,7 @@ func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
 			return err
 		})
 	if err != nil {
+		err = interpretAWSError(err)
 		return 0, errors.Wrap(err, "failed to get s3 object headers")
 	}
 	return *out.ContentLength, nil
@@ -929,5 +957,11 @@ func withExternalID(externalID string) func(*stscreds.AssumeRoleProvider) {
 
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_s3,
-		parseS3URL, MakeS3Storage, cloud.RedactedParams(AWSSecretParam, AWSTempTokenParam), scheme)
+		cloud.RegisteredProvider{
+			EarlyBootConstructFn: MakeS3Storage,
+			EarlyBootParseFn:     parseS3URL,
+
+			RedactedParams: cloud.RedactedParams(AWSSecretParam, AWSTempTokenParam),
+			Schemes:        []string{scheme},
+		})
 }

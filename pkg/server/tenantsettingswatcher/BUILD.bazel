@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -27,12 +26,15 @@ go_library(
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/startup",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -44,11 +46,10 @@ go_test(
         "row_decoder_test.go",
         "watcher_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":tenantsettingswatcher"],
     deps = [
         "//pkg/base",
-        "//pkg/keys",
+        "//pkg/clusterversion",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
@@ -57,12 +58,12 @@ go_test(
         "//pkg/settings",
         "//pkg/sql",
         "//pkg/sql/catalog",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

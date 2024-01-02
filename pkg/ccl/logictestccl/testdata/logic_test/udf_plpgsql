@@ -1,0 +1,2831 @@
+# LogicTest: !local-mixed-23.1
+
+statement ok
+CREATE TABLE xy (x INT, y INT);
+INSERT INTO xy VALUES (1, 2), (3, 4);
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+INSERT INTO kv VALUES (1, 2), (3, 4);
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  BEGIN
+    RETURN a;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(1, 2);
+----
+1
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  BEGIN
+    RETURN a + b;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(1, 2);
+----
+3
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    c INT;
+  BEGIN
+    RETURN c;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(1, 2);
+----
+NULL
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    c INT := 0;
+  BEGIN
+    RETURN c;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(1, 2);
+----
+0
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    c INT;
+  BEGIN
+    c := 0;
+    RETURN c;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(1, 2);
+----
+0
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    c INT;
+  BEGIN
+    IF a < b THEN
+      c := a;
+    END IF;
+    RETURN c;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II
+SELECT f(1, 2), f(4, 3);
+----
+1  NULL
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    c INT;
+  BEGIN
+    IF a < b THEN
+      c := a;
+    ELSE
+      c := b;
+    END IF;
+    RETURN c;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II
+SELECT f(1, 2), f(4, 3);
+----
+1  3
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    c INT;
+  BEGIN
+    IF a < b THEN
+      c := a;
+    ELSE
+      RETURN 100;
+    END IF;
+    RETURN c;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query III
+SELECT f(1, 2), f(4, 3), f(-1, -1);
+----
+1  100  100
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    c INT;
+  BEGIN
+    IF a < b THEN
+      RETURN 100;
+    ELSE
+      c := b;
+    END IF;
+    RETURN c;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query III
+SELECT f(1, 2), f(4, 3), f(-1, -1);
+----
+100  3  -1
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    c INT;
+  BEGIN
+    IF a < b THEN
+      RETURN 100;
+    ELSE
+      RETURN 0;
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query III
+SELECT f(1, 2), f(4, 3), f(-1, -1);
+----
+100  0  0
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    i INT := a;
+  BEGIN
+    LOOP
+      RETURN 100;
+    END LOOP;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query III
+SELECT f(1, 5), f(0, 1), f(1, 1);
+----
+100  100  100
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    i INT := a;
+  BEGIN
+    LOOP
+      IF a < b THEN
+        RETURN 0;
+      END IF;
+      RETURN 100;
+    END LOOP;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query III
+SELECT f(0, 1), f(1, 1), f(1, 0);
+----
+0  100  100
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    i INT := a;
+  BEGIN
+    LOOP
+      IF i >= b THEN EXIT; END IF;
+      IF i = 8 THEN RETURN 100; END IF;
+      i := i + 1;
+    END LOOP;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIIII
+SELECT f(1, 5), f(0, 1), f(1, 1), f(8, 9), f(1, 100);
+----
+5  1  1  100  100
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    i INT := a;
+  BEGIN
+    LOOP
+      IF i >= b THEN EXIT; END IF;
+      i := i + 1;
+    END LOOP;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query III
+SELECT f(1, 5), f(0, 1), f(1, 1);
+----
+5  1  1
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    sum INT := 0;
+    i INT := a;
+  BEGIN
+    IF a IS NOT NULL AND b is NOT NULL THEN
+      LOOP
+        IF i >= b THEN EXIT; END IF;
+        sum := sum + i;
+        i := i + 1;
+      END LOOP;
+    END IF;
+    RETURN sum;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II
+SELECT f(0, 0), f(0, 1);
+----
+0  0
+
+query II
+SELECT f(5, -5), f(10, 10);
+----
+0  0
+
+query III
+SELECT f(NULL, 10), f(0, NULL), f(NULL, NULL);
+----
+0  0  0
+
+query IIIII
+SELECT f(0, 5), f(1, 5), f(1, 6), f(-5, 5), f(-5, 0);
+----
+10  10  15  -5  -15
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    sum INT := 0;
+    i INT := a;
+  BEGIN
+    LOOP
+      IF i >= b THEN EXIT; END IF;
+      IF i = 2 THEN
+        i := i + 1;
+        CONTINUE;
+      END IF;
+      sum := sum + i;
+      i := i + 1;
+    END LOOP;
+    RETURN sum;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II
+SELECT f(5, -5), f(10, 10);
+----
+0  0
+
+query IIIII
+SELECT f(0, 5), f(1, 5), f(1, 6), f(-5, 5), f(-5, 0);
+----
+8  8  13  -7  -15
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    sum INT := 0;
+    i INT := a;
+    j INT;
+  BEGIN
+    LOOP
+      IF i >= b THEN EXIT; END IF;
+      j := 0;
+      LOOP
+        IF j >= i THEN EXIT; END IF;
+        sum := sum + j;
+        j := j + 1;
+      END LOOP;
+      i := i + 1;
+    END LOOP;
+    RETURN sum;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query III
+SELECT f(1, 5), f(-5, 5), f(0, 1)
+----
+10  10  0
+
+# TODO(#88198): add back the dijkstra test once UDFs calling other UDFs is
+# allowed.
+
+# --------------------------------------------------
+# Tests for WHILE LOOP
+# --------------------------------------------------
+
+subtest while
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+    sum INT := 0;
+  BEGIN
+    WHILE i <= n LOOP
+      sum := sum + i;
+      i := i + 1;
+    END LOOP;
+    RETURN sum;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIII
+SELECT f(0), f(1), f(2), f(10);
+----
+0  1  3  55
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+    sum INT := 0;
+  BEGIN
+    WHILE i <= n LOOP
+      IF i > 10 THEN
+        EXIT;
+      END IF;
+      sum := sum + i;
+      i := i + 1;
+    END LOOP;
+    RETURN sum;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II
+SELECT f(5), f(20)
+----
+15  55
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+    sum INT := 0;
+  BEGIN
+    WHILE i <= n LOOP
+      IF i % 2 = 0 THEN
+        i := i + 1;
+        CONTINUE;
+      END IF;
+      sum := sum + i;
+      i := i + 1;
+    END LOOP;
+    RETURN sum;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIII
+SELECT f(0), f(1), f(2), f(5)
+----
+0  1  1  9
+
+subtest end
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  BEGIN
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 2F005 control reached end of function without RETURN
+SELECT f(1, 2);
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    i := a;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 2F005 control reached end of function without RETURN
+SELECT f(1, 2);
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  BEGIN
+    IF a < b THEN
+      RETURN a;
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(1, 2);
+----
+1
+
+statement error pgcode 2F005 control reached end of function without RETURN
+SELECT f(2, 1);
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    IF a < b THEN
+      i := a;
+    ELSE
+      RETURN 0;
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 2F005 control reached end of function without RETURN
+SELECT f(1, 2);
+
+query I
+SELECT f(2, 1);
+----
+0
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    IF a < b THEN
+      RETURN -1;
+    ELSIF a = b THEN
+      i := 0;
+    ELSE
+      RETURN 1;
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II
+SELECT f(1, 2), f(2, 1);
+----
+-1  1
+
+statement error pgcode 2F005 control reached end of function without RETURN
+SELECT f(1, 1);
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  BEGIN
+    LOOP
+      EXIT;
+    END LOOP;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 2F005 control reached end of function without RETURN
+SELECT f(1, 2);
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  BEGIN
+    LOOP
+      EXIT;
+    END LOOP;
+    IF a < b THEN
+      RETURN 0;
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(1, 2);
+----
+0
+
+statement error pgcode 2F005 control reached end of function without RETURN
+SELECT f(2, 1);
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  BEGIN
+    IF a < b THEN
+      RAISE 'foo % %', a, b;
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode P0001 foo 1 2
+SELECT f(1, 2);
+
+statement error pgcode 2F005 control reached end of function without RETURN
+SELECT f(2, 1);
+
+statement error pgcode 0A000 PL/pgSQL functions with RECORD input arguments are not yet supported
+CREATE FUNCTION f_err(p1 RECORD) RETURNS RECORD AS $$
+  BEGIN
+   RETURN p1;
+ END
+$$ LANGUAGE PLpgSQL;
+
+# Testing RAISE statements.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE DEBUG 'foo';
+    RAISE LOG 'foo';
+    RAISE INFO 'foo';
+    RAISE NOTICE 'foo';
+    RAISE WARNING 'foo';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+INFO: foo
+NOTICE: foo
+WARNING: foo
+
+statement ok
+SET client_min_messages = 'debug1';
+
+query T noticetrace
+SELECT f();
+----
+DEBUG1: foo
+LOG: foo
+INFO: foo
+NOTICE: foo
+WARNING: foo
+
+statement ok
+RESET client_min_messages;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE NOTICE '%', 1;
+    RAISE NOTICE 'foo: %, %, %', 1, 2, 3;
+    RAISE NOTICE '%%';
+    RAISE NOTICE '%%%', 1;
+    RAISE NOTICE '%%%foo%% bar%%%% %% %%%% ba%z%', 1, 2, 3;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: 1
+NOTICE: foo: 1, 2, 3
+NOTICE: %
+NOTICE: %1
+NOTICE: %1foo% bar%% % %% ba2z3
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE NOTICE division_by_zero;
+    RAISE NOTICE null_value_not_allowed;
+    RAISE NOTICE reading_sql_data_not_permitted;
+    RAISE NOTICE SQLSTATE '22012';
+    RAISE NOTICE SQLSTATE '22004';
+    RAISE NOTICE SQLSTATE '39004';
+    RAISE NOTICE SQLSTATE '2F004';
+    RAISE NOTICE SQLSTATE '38004';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: division_by_zero
+SQLSTATE: 22012
+NOTICE: null_value_not_allowed
+SQLSTATE: 22004
+NOTICE: reading_sql_data_not_permitted
+SQLSTATE: 2F004
+NOTICE: 22012
+SQLSTATE: 22012
+NOTICE: 22004
+SQLSTATE: 22004
+NOTICE: 39004
+SQLSTATE: 39004
+NOTICE: 2F004
+SQLSTATE: 2F004
+NOTICE: 38004
+SQLSTATE: 38004
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE NOTICE USING MESSAGE = 'foo';
+    RAISE NOTICE USING MESSAGE = format('%s %s!','Hello','World');
+    RAISE NOTICE USING MESSAGE = 'foo', DETAIL = 'bar', HINT = 'baz';
+    RAISE NOTICE 'foo' USING ERRCODE = 'division_by_zero';
+    RAISE NOTICE 'foo' USING ERRCODE = '22012';
+    -- If no message is specified, the error code is used.
+    RAISE NOTICE USING ERRCODE = 'division_by_zero';
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: foo
+NOTICE: Hello World!
+NOTICE: foo
+DETAIL: bar
+HINT: baz
+NOTICE: foo
+SQLSTATE: 22012
+NOTICE: foo
+SQLSTATE: 22012
+NOTICE: division_by_zero
+SQLSTATE: 22012
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    RAISE NOTICE '1: i = %', i;
+    i := 100;
+    RAISE NOTICE '2: i = %', i;
+    i := (SELECT count(*) FROM xy);
+    RAISE NOTICE '3: i = %', i;
+    RAISE NOTICE 'max_x: %', (SELECT max(x) FROM xy);
+    return i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: 1: i = 0
+NOTICE: 2: i = 100
+NOTICE: 3: i = 2
+NOTICE: max_x: 3
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    LOOP
+      IF i >= 5 THEN EXIT; END IF;
+      RAISE NOTICE 'i = %', i;
+      i := i + 1;
+    END LOOP;
+    RAISE NOTICE 'finished with i = %', i;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i = 0
+NOTICE: i = 1
+NOTICE: i = 2
+NOTICE: i = 3
+NOTICE: i = 4
+NOTICE: finished with i = 5
+
+# Testing RAISE statement with EXCEPTION log level.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION 'foo';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode P0001 pq: foo
+SELECT f();
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION division_by_zero;
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode 22012 pq: division_by_zero
+SELECT f();
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION SQLSTATE '22012';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode 22012 pq: 22012
+SELECT f();
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    LOOP
+      IF i >= 5 THEN EXIT; END IF;
+      IF i = 3 THEN
+        RAISE EXCEPTION 'i = %', i;
+      END IF;
+      RAISE NOTICE 'i = %', i;
+      i := i + 1;
+    END LOOP;
+    RAISE NOTICE 'finished with i = %', i;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode P0001 pq: i = 3
+SELECT f();
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION USING ERRCODE = 'division_by_zero';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode 22012 pq: division_by_zero
+SELECT f();
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION USING ERRCODE = '22012';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode 22012 pq: 22012
+SELECT f();
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION USING DETAIL = 'use default errcode for the code and message';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode P0001 pq: P0001\nDETAIL: use default errcode for the code and message
+SELECT f();
+
+# The default level is ERROR.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE 'foo';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode P0001 pq: foo
+SELECT f();
+
+statement error pgcode 42601 pq: too few parameters specified for RAISE
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE 'foo% % %', 1, 2;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 pq: too many parameters specified for RAISE
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE 'foo%', 1, 2;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 pq: RAISE option already specified: ERRCODE
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION USING ERRCODE = '22012', ERRCODE = '22013';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# NULL formatting arguments are printed as "<NULL>".
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE 'foo % bar %', NULL::TEXT, NULL::INT;
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode P0001 pq: foo <NULL> bar <NULL>
+SELECT f();
+
+# NULL values cannot be supplied as RAISE options.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  BEGIN
+    IF n = 0 THEN
+      RAISE division_by_zero USING message = NULL::TEXT;
+    END IF;
+    IF n = 1 THEN
+      RAISE division_by_zero USING detail = NULL::TEXT;
+    END IF;
+    RAISE division_by_zero USING hint = (SELECT 'foo' FROM xy WHERE False);
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22004 pq: RAISE statement option cannot be null
+SELECT f(0);
+
+statement error pgcode 22004 pq: RAISE statement option cannot be null
+SELECT f(1);
+
+statement error pgcode 22004 pq: RAISE statement option cannot be null
+SELECT f(2);
+
+statement error pgcode 42601 pq: \"i\" is not a known variable
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    i := 0;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 CONTINUE cannot be used outside a loop
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    CONTINUE;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 EXIT cannot be used outside a loop, unless it has a label
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    EXIT;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Testing CONSTANT variable declarations.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT;
+  BEGIN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+NULL
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT := 0;
+  BEGIN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+0
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT := (SELECT x FROM xy ORDER BY x LIMIT 1);
+  BEGIN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+1
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT := n;
+  BEGIN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIIIII
+SELECT f(-100), f(-1), f(0), f(1), f(100), f(NULL);
+----
+-100  -1  0  1  100  NULL
+
+statement error pgcode 22005 pq: variable \"i\" is declared CONSTANT
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT;
+  BEGIN
+    i := i + 1;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22005 pq: variable \"i\" is declared CONSTANT
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT := 0;
+  BEGIN
+    i := i + 1;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22005 pq: variable \"i\" is declared CONSTANT
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT := 0;
+  BEGIN
+    IF n > 0 THEN
+      i := i + 1;
+    END IF;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22005 pq: variable \"i\" is declared CONSTANT
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT := 0;
+  BEGIN
+    LOOP IF i >= 10 THEN EXIT; END IF;
+      i := i + 1;
+    END LOOP;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Testing IF statements with ELSIF branches.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT := -1;
+  BEGIN
+    IF n = 0 THEN
+      RETURN 0;
+    ELSIF n = 1 THEN
+      i := 100;
+    ELSIF n = 2 THEN
+      i := 200;
+      RETURN i;
+    END IF;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIII
+SELECT f(0), f(1), f(2), f(100);
+----
+0  100  200  -1
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+    foo INT := 0;
+  BEGIN
+    LOOP IF i >= a THEN EXIT; END IF;
+      IF b = 0 THEN
+        RETURN NULL;
+      ELSIF b = 1 THEN
+        foo := foo + 1;
+      ELSIF b = 2 THEN
+        RETURN 100;
+      ELSE
+        foo := foo + b;
+      END IF;
+      i := i + 1;
+    END LOOP;
+    RETURN foo;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIIII
+SELECT f(0, 0), f(1, 0), f(1, 1), f(1, 2), f(1, 3);
+----
+0  NULL  1  100  3
+
+query IIII
+SELECT f(5, 0), f(5, 1), f(5, 2), f(5, 3);
+----
+NULL  5  100  15
+
+# Branches should only be executed if the previous ones fail.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  BEGIN
+    IF n <= 0 THEN
+      RAISE NOTICE 'foo';
+    ELSIF n <= 1 THEN
+      RAISE NOTICE 'bar';
+    ELSIF n <= 2 THEN
+      RAISE NOTICE 'baz';
+    END IF;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f(0);
+----
+NOTICE: foo
+
+query T noticetrace
+SELECT f(1);
+----
+NOTICE: bar
+
+query T noticetrace
+SELECT f(2);
+----
+NOTICE: baz
+
+query I
+SELECT f(100);
+----
+0
+
+# Test nested IF/ELSIF/ELSE.
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  BEGIN
+    IF a > 1 THEN
+      IF b > 1 THEN
+        RETURN 0;
+      ELSIF b = 1 THEN
+        RETURN 1;
+      ELSIF b = 0 THEN
+        RETURN 2;
+      ELSE
+        RETURN 3;
+      END IF;
+    ELSIF a = 1 THEN
+      IF b > 1 THEN
+        RETURN 4;
+      ELSIF b = 1 THEN
+        RETURN 5;
+      ELSIF b = 0 THEN
+        RETURN 6;
+      ELSE
+        RETURN 7;
+      END IF;
+    ELSIF a = 0 THEN
+      IF b > 1 THEN
+        RETURN 8;
+      ELSIF b = 1 THEN
+        RETURN 9;
+      ELSIF b = 0 THEN
+        RETURN 10;
+      ELSE
+        RETURN 11;
+      END IF;
+    ELSE
+      IF b > 1 THEN
+        RETURN 12;
+      ELSIF b = 1 THEN
+        RETURN 13;
+      ELSIF b = 0 THEN
+        RETURN 14;
+      ELSE
+        RETURN 15;
+      END IF;
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIIIIIIIIIIIIIII
+SELECT f(-1, -1), f(-1, 0), f(-1, 1), f(-1, 10), f(0, -1), f(0, 0), f(0, 1), f(0, 10),
+  f(1, -1), f(1, 0), f(1, 1), f(1, 10), f(10, -1), f(10, 0), f(10, 1), f(10, 10);
+----
+15  14  13  12  11  10  9  8  7  6  5  4  3  2  1  0
+
+# Testing EXCEPTION blocks.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 100;
+    WHEN invalid_regular_expression THEN
+      RETURN 200;
+    WHEN SQLSTATE '2200C' THEN
+      RETURN 300;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+100
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN invalid_regular_expression THEN
+      RETURN 200;
+    WHEN division_by_zero THEN
+      RETURN 100;
+    WHEN SQLSTATE '2200C' THEN
+      RETURN 300;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+100
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN SQLSTATE '22012' THEN
+      RETURN 100;
+    WHEN invalid_regular_expression THEN
+      RETURN 200;
+    WHEN SQLSTATE '2200C' THEN
+      RETURN 300;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+100
+
+statement ok
+DROP FUNCTION f(INT);
+CREATE OR REPLACE FUNCTION f(i INT) RETURNS INT AS $$
+  BEGIN
+    IF i > 0 THEN
+      RETURN 1 // 0;
+    ELSE
+      RETURN sqrt(i::FLOAT)::INT;
+    END IF;
+  EXCEPTION
+    WHEN SQLSTATE '22012' OR invalid_argument_for_power_function THEN
+      RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query III
+SELECT f(-1), f(0), f(1);
+----
+100  0  100
+
+statement ok
+CREATE OR REPLACE FUNCTION f(i INT) RETURNS INT AS $$
+  BEGIN
+    IF i > 0 THEN
+      RETURN 1 // 0;
+    ELSE
+      RETURN sqrt(i::FLOAT)::INT;
+    END IF;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 100;
+    WHEN SQLSTATE '2201F' THEN
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query III
+SELECT f(-1), f(0), f(1);
+----
+-1  0  100
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE division_by_zero;
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+100
+
+statement ok
+CREATE OR REPLACE FUNCTION f(i INT) RETURNS INT AS $$
+  BEGIN
+    IF i = 0 THEN
+      RAISE division_by_zero;
+    END IF;
+    IF i = 1 THEN
+      RAISE invalid_text_representation;
+    END IF;
+    IF i = 2 THEN
+      RAISE SQLSTATE '22P03';
+    END IF;
+    RAISE SQLSTATE '22007';
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 101;
+    WHEN SQLSTATE '22P02' THEN
+      RETURN 102;
+    WHEN invalid_binary_representation THEN
+      RETURN 103;
+    WHEN SQLSTATE '22007' THEN
+      RETURN 104;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Raise with error name, catch with error name.
+query I
+SELECT f(0);
+----
+101
+
+# Raise with error name, catch with code.
+query I
+SELECT f(1);
+----
+102
+
+# Raise with code, catch with error name.
+query I
+SELECT f(2);
+----
+103
+
+# Raise with code, catch with code.
+query I
+SELECT f(3);
+----
+104
+
+# Uncaught exception.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE SQLSTATE '12345';
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 101;
+    WHEN SQLSTATE '22P02' THEN
+      RETURN 102;
+    WHEN invalid_binary_representation THEN
+      RETURN 103;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 12345 pq: 12345
+SELECT f();
+
+# No exception raised.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 101;
+    WHEN SQLSTATE '22P02' THEN
+      RETURN 102;
+    WHEN invalid_binary_representation THEN
+      RETURN 103;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+0
+
+# Have to drop the function here because otherwise it's seen as a
+# "parameter name change" error.
+statement ok
+DROP FUNCTION f(INT);
+
+# The exception block does not catch errors thrown during variable declaration.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT := 100 // n;
+  BEGIN
+    RETURN i;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 101;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22012 pq: division by zero
+SELECT f(0);
+
+query II
+SELECT f(-1), f(1)
+----
+-100  100
+
+# When an error is thrown, any variable assignments that happened before the
+# error should be visible to the exception handler. Any variable assignments
+# during or after the error should not be visible.
+statement ok
+CREATE OR REPLACE FUNCTION f(i INT, j INT, k INT) RETURNS INT AS $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    x := 1 // i;
+    x := 2 // j;
+    x := 3 // k;
+    RETURN x;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIII
+SELECT f(0, 0, 0), f(1, 0, 0), f(1, 1, 0), f(1, 1, 1);
+----
+0  1  2  3
+
+# Have to drop the function here because otherwise it's seen as a
+# "parameter name change" error.
+statement ok
+DROP FUNCTION f(INT);
+
+statement ok
+CREATE OR REPLACE FUNCTION f(i INT) RETURNS INT AS $$
+  DECLARE
+    x INT;
+  BEGIN
+    IF i = 0 THEN
+      x := 100;
+      RAISE division_by_zero;
+    ELSE
+      x := 200;
+      RAISE division_by_zero;
+    END IF;
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II
+SELECT f(0), f(1);
+----
+100  200
+
+# Have to drop the function here because otherwise it's seen as a
+# "parameter name change" error.
+statement ok
+DROP FUNCTION f(INT, INT);
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT, a INT) RETURNS INT AS $$
+  DECLARE
+    x INT;
+    i INT := 0;
+  BEGIN
+    LOOP IF i >= n THEN EXIT; END IF;
+      x := 1 // (i - a);
+      i := i + 1;
+    END LOOP;
+    RETURN -1;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIIIIII
+SELECT f(5, -1), f(5, 0), f(5, 1), f(5, 2), f(5, 3), f(5, 4), f(5, 5);
+----
+-1  0  1  2  3  4  -1
+
+# Duplicate catch branches are allowed; postgres just takes the first.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 100;
+    WHEN division_by_zero THEN
+      RETURN 200;
+    WHEN SQLSTATE '22012' THEN
+      RETURN 300;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+100
+
+statement error pgcode 42704 pq: unrecognized exception condition "this_error_does_not_exist"
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION
+    WHEN this_error_does_not_exist THEN
+      RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# SQLSTATE error code must be 5 digits and/or letters.
+statement error pgcode 42601 pq: invalid SQLSTATE code '123'
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION
+    WHEN SQLSTATE '123' THEN
+      RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 pq: invalid SQLSTATE code '123aB'
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION
+    WHEN SQLSTATE '123aB' THEN
+      RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# It is possible for the exception handler itself to result in an error; when
+# that happens, it does not attempt to catch its own error.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RAISE division_by_zero USING message = 'Oh no, division by zero!';
+      RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22012 pq: Oh no, division by zero!
+SELECT f();
+
+# Testing SQL statement execution.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    SELECT 1 + 1;
+    SELECT random();
+    SELECT * FROM xy;
+    INSERT INTO xy VALUES (1000, 1000);
+    DELETE FROM xy WHERE x = 1000;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+0
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    INSERT INTO kv VALUES (100, 100);
+    DELETE FROM kv WHERE k = 100;
+    INSERT INTO kv VALUES (100, 100);
+    RETURN (SELECT v FROM kv WHERE k = 100);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+100
+
+query II rowsort
+SELECT * FROM kv;
+----
+1    2
+3    4
+100  100
+
+statement ok
+DELETE FROM kv WHERE k = 100;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    INSERT INTO kv VALUES (100, 100);
+    INSERT INTO kv VALUES (100, 100);
+    RETURN (SELECT v FROM kv WHERE k = 100);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint \"kv_pkey\"
+SELECT f();
+
+query II rowsort
+SELECT * FROM kv;
+----
+1  2
+3  4
+
+statement error pgcode 0A000 pq: unimplemented: EXPLAIN usage inside a function definition
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    EXPLAIN SELECT * FROM xy;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: CTE usage inside a function definition
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    WITH foo AS MATERIALIZED (SELECT * FROM xy) SELECT * FROM foo;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: SHOW DATABASES usage inside a function definition
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    SHOW databases;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: statement source \(square bracket syntax\) within user-defined function
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    SELECT * FROM [SHOW databases];
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+
+statement error pgcode 0A000 pq: unimplemented: CREATE TABLE usage inside a function definition
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    CREATE TABLE ab (a INT, b INT);
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+
+statement error pgcode 0A000 pq: unimplemented: ALTER TABLE usage inside a function definition
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    ALTER TABLE xy ADD COLUMN z INT;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+
+statement error pgcode 0A000 pq: unimplemented: PREPARE usage inside a function definition
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    PREPARE foo AS SELECT * FROM xy WHERE x = $1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Testing SQL statements with INTO.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT 1 INTO i;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+1
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT x INTO i FROM xy ORDER BY x DESC LIMIT 1;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+3
+
+# If the INTO query returns more than one row, only the first is used.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT x INTO i FROM xy ORDER BY x DESC;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+3
+
+# If the INTO query returns no rows, the target variables are set to NULL.
+statement ok
+DELETE FROM xy WHERE true;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT x INTO i FROM xy ORDER BY x DESC;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+NULL
+
+statement ok
+INSERT INTO xy VALUES (1, 2), (3, 4);
+
+query I
+SELECT f();
+----
+3
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    INSERT INTO xy VALUES (100, 100) RETURNING x INTO i;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+100
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+100  100
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    UPDATE xy SET y = y * 2 WHERE x = 100 RETURNING x INTO i;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+100
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+100  200
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    DELETE FROM xy WHERE x = 100 RETURNING x INTO i;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+100
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+statement ok
+DROP FUNCTION f(INT);
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    foo INT;
+    bar INT;
+    i INT := 0;
+  BEGIN
+    LOOP IF i >= n THEN EXIT; END IF;
+      INSERT INTO xy VALUES (100+i, 200+i) RETURNING y INTO bar;
+      SELECT x INTO foo FROM xy ORDER BY x DESC LIMIT 1;
+      RAISE NOTICE 'foo: %, bar: %', foo, bar;
+      i := i + 1;
+    END LOOP;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f(5);
+----
+NOTICE: foo: 100, bar: 200
+NOTICE: foo: 101, bar: 201
+NOTICE: foo: 102, bar: 202
+NOTICE: foo: 103, bar: 203
+NOTICE: foo: 104, bar: 204
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+100  200
+101  201
+102  202
+103  203
+104  204
+
+# If there are more INTO targets than output columns, the left over variables
+# are set to NULL.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+    j INT;
+  BEGIN
+    SELECT x INTO i, j FROM xy ORDER BY x DESC;
+    RAISE NOTICE 'i = %', i;
+    IF j IS NULL THEN
+      RAISE NOTICE 'j is null!';
+    END IF;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i = 104
+NOTICE: j is null!
+
+# If there are less INTO targets than output columns, the left over columns
+# are ignored.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT x, y INTO i FROM xy ORDER BY x DESC;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+104
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+100  200
+101  201
+102  202
+103  203
+104  204
+
+# It is possible to SELECT INTO multiple targets.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+    j INT;
+  BEGIN
+    SELECT x, y INTO i, j FROM xy ORDER BY x DESC;
+    RETURN i + j;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+308
+
+# It is possible to reference a previous value of a target variable in a
+# SELECT INTO statement.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT x INTO i FROM xy ORDER BY x DESC;
+    RAISE NOTICE 'i = %', i;
+    SELECT x INTO i FROM xy WHERE x < i ORDER BY x DESC;
+    RAISE NOTICE 'i = %', i;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i = 104
+NOTICE: i = 103
+
+# When the SQL statement returns zero rows, the target variables are all set
+# to NULL.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    RAISE NOTICE 'i = %', i;
+    SELECT x INTO i FROM xy WHERE False;
+    RAISE NOTICE 'i = %', i;
+    i := 1;
+    RAISE NOTICE 'i = %', i;
+    INSERT INTO xy (SELECT 1, 2 FROM generate_series(1, 0)) RETURNING x INTO i;
+    RAISE NOTICE 'i = %', i;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i = 0
+NOTICE: i = <NULL>
+NOTICE: i = 1
+NOTICE: i = <NULL>
+
+statement error pgcode 0A000 pq: unimplemented: assigning to a variable more than once in the same INTO statement is not supported
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT x, y INTO i, i FROM xy ORDER BY x DESC;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Functions with VOID return types do not need explicit RETURN statements
+# for all possible control flows.
+statement ok
+DROP FUNCTION f(INT);
+CREATE OR REPLACE FUNCTION f(i INT) RETURNS VOID AS $$
+  BEGIN
+    IF i > 0 THEN
+      RAISE NOTICE 'inside IF';
+    END IF;
+    RAISE NOTICE 'outside IF';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f(1)
+----
+NOTICE: inside IF
+NOTICE: outside IF
+
+query T noticetrace
+SELECT f(-1)
+----
+NOTICE: outside IF
+
+statement ok
+DELETE FROM xy WHERE x >= 100;
+
+# Testing rollback behavior for EXCEPTION blocks.
+statement ok
+DROP FUNCTION f(INT);
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    INSERT INTO xy VALUES (-100, -100);
+    i := 100;
+    RETURN 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    INSERT INTO xy VALUES (-200, -200);
+    IF n > 0 THEN
+      RAISE EXCEPTION 'foo';
+    END IF;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# After the division-by-zero error, the INSERT should have been rolled back
+# but the updated value for "i" should be returned. The INSERT in the exception
+# handler can proceed.
+query I
+SELECT f(0);
+----
+100
+
+query II rowsort
+SELECT * FROM xy;
+----
+1     2
+3     4
+-200  -200
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# The error raised in the exception handler should prevent the second insert
+# from succeeding as well.
+statement error pgcode P0001 pq: foo
+SELECT f(1);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT x INTO i FROM xy ORDER BY x;
+    INSERT INTO xy VALUES (-100, -100);
+    IF n = 0 THEN
+      RAISE division_by_zero;
+    END IF;
+    SELECT x INTO i FROM xy ORDER BY x;
+    IF n = 1 THEN
+      RAISE division_by_zero;
+    END IF;
+    RETURN i;
+  EXCEPTION WHEN division_by_zero THEN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# The error occurs before reading from xy the second time.
+query I
+SELECT f(0);
+----
+1
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# The error occurs after reading from xy the second time. The insert should
+# "appear" in the result, but should not have been committed.
+query I
+SELECT f(1);
+----
+-100
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# There is no error, so the newly inserted value should be returned and
+# also committed.
+query I
+SELECT f(2);
+----
+-100
+
+query II rowsort
+SELECT * FROM xy;
+----
+1     2
+3     4
+-100  -100
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# Test interaction with IF statements.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    IF n >= 0 THEN
+      INSERT INTO xy VALUES (n, n);
+    ELSIF n < 0 THEN
+      INSERT INTO xy VALUES (n*2, n*2);
+    END IF;
+    RETURN 1 // n;
+  EXCEPTION WHEN division_by_zero THEN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# The insert should succeed.
+statement ok
+SELECT f(100);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1     2
+3     4
+100   100
+
+# The insert should succeed with n * 2.
+statement ok
+SELECT f(-100);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1     2
+3     4
+100   100
+-200  -200
+
+# The insert should fail.
+statement ok
+SELECT f(0);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1     2
+3     4
+100   100
+-200  -200
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# Test interaction with loops.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT := n;
+  BEGIN
+    WHILE i <= (n + 5) LOOP
+      IF i = 105 THEN
+        RAISE division_by_zero;
+      ELSIF i % 2 = 0 THEN
+        INSERT INTO xy VALUES (i, i);
+      END IF;
+      i := i + 1;
+    END LOOP;
+    RETURN 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# The insert should fail.
+statement ok
+SELECT f(100);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# The inserts should succeed for even values.
+statement ok
+SELECT f(200);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+200  200
+202  202
+204  204
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# Catching a Transaction Retry error is not supported, because such errors
+# leave the transaction in a poisoned state.
+statement error pgcode 0A000 pq: unimplemented: catching a Transaction Retry error in a PLpgSQL EXCEPTION block is not yet implemented
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION WHEN serialization_failure THEN
+    RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: catching a Transaction Retry error in a PLpgSQL EXCEPTION block is not yet implemented
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION WHEN SQLSTATE '40001' THEN
+    RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Branches of an exception block don't interact with one another.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      INSERT INTO xy VALUES (100, 100);
+      RAISE invalid_password;
+    WHEN invalid_password THEN
+      INSERT INTO xy VALUES (200, 200);
+      RETURN -2;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 28P01 pq: invalid_password
+SELECT f();
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# Testing the special OTHERS condition for exception handling.
+subtest others
+
+statement ok
+DROP FUNCTION f(INT);
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS TEXT AS $$
+  BEGIN
+    IF n = 0 THEN
+      RAISE division_by_zero;
+    ELSIF n = 1 THEN
+      RAISE data_exception;
+    ELSIF n = 2 THEN
+      RAISE not_null_violation;
+    ELSIF n = 3 THEN
+      RAISE query_canceled;
+    ELSE
+      RAISE assert_failure;
+    END IF;
+  EXCEPTION
+    WHEN not_null_violation THEN
+      RETURN 'not_null_violation';
+    WHEN OTHERS THEN
+      RETURN 'others';
+    WHEN assert_failure THEN
+      RETURN 'assert_failure';
+    WHEN data_exception THEN
+      RETURN 'data_exception';
+  END
+$$ LANGUAGE PLpgSQL;
+
+# OTHERS should catch division_by_zero.
+query T
+SELECT f(0);
+----
+others
+
+# OTHERS should catch data_exception despite the later branch that
+# explicitly catches it.
+query T
+SELECT f(1);
+----
+others
+
+# OTHERS can catch not_null_violation, but does not in this instance because
+# the branch that explicitly catches it comes first.
+query T
+SELECT f(2);
+----
+not_null_violation
+
+# OTHERS cannot catch query_canceled or assert_failure; however, they can be
+# explicitly caught.
+statement error pgcode 57014 pq: query_canceled
+SELECT f(3);
+
+query T
+SELECT f(4);
+----
+assert_failure
+
+# Postgres allows multiple OTHERS branches.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS TEXT AS $$
+  BEGIN
+    RAISE division_by_zero;
+  EXCEPTION
+    WHEN OTHERS THEN
+      RETURN 'first branch';
+    WHEN OTHERS THEN
+      RETURN 'second branch';
+    WHEN division_by_zero THEN
+      RETURN 'third branch';
+    WHEN OTHERS THEN
+      RETURN 'fourth branch';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+first branch
+
+# The first OTHERS branch is taken even though it raises its own exception.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS TEXT AS $$
+  BEGIN
+    RAISE division_by_zero;
+  EXCEPTION
+    WHEN OTHERS THEN
+      RAISE null_value_not_allowed;
+    WHEN OTHERS THEN
+      RETURN 'second branch';
+    WHEN division_by_zero THEN
+      RETURN 'third branch';
+    WHEN OTHERS THEN
+      RETURN 'fourth branch';
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22004 pq: null_value_not_allowed
+SELECT f();
+
+# Regression test for #112940 - UPSERT INTO should be allowed.
+subtest upsert_into
+
+statement ok
+BEGIN;
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    UPSERT INTO xy VALUES (100, 200);
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+SELECT f();
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+100  200
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    a INT;
+  BEGIN
+    UPSERT INTO xy VALUES (300, 400) RETURNING y, x INTO a;
+    RETURN a;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+400
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+100  200
+300  400
+
+statement ok
+ABORT;
+
+subtest plpgsql_types
+# If an assignment cast is available, the cast is performed automatically.
+#
+# float -> int
+# TODO(112515): the float value is incorrectly truncated instead of rounded.
+statement ok
+DROP FUNCTION F();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 105.67::FLOAT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+105
+
+# decimal -> int
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 105.67::DECIMAL;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+106
+
+# int -> float
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS FLOAT AS $$
+  BEGIN
+    RETURN 105::INT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query R
+SELECT f();
+----
+105
+
+# float -> decimal
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS DECIMAL AS $$
+  BEGIN
+    RETURN 105::INT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query R
+SELECT f();
+----
+105
+
+# string -> varchar
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS VARCHAR AS $$
+  BEGIN
+    RETURN 'abcd123';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+abcd123
+
+# string -> name
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS NAME AS $$
+  BEGIN
+    RETURN 'abcd123';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+abcd123
+
+# name -> string
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS TEXT AS $$
+  BEGIN
+    RETURN 'abcd123'::NAME;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+abcd123
+
+# char -> string
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS STRING AS $$
+  BEGIN
+    RETURN 'a'::CHAR;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+a
+
+# string -> char
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS CHAR AS $$
+  BEGIN
+    RETURN 'a'::TEXT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+a
+
+# string -> char succeeds even though the string is too long.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS CHAR AS $$
+  BEGIN
+    RETURN 'abcd'::TEXT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+a
+
+# string -> bit succeeds even though the string is too long.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS BIT AS $$
+  BEGIN
+    RETURN '101'::TEXT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+1
+
+# If an assignment cast is not valid, the expression is converted to a string,
+# and then cast to the required type.
+#
+# string -> int
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN '105';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+105
+
+# char -> string -> int
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN '1'::CHAR;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+1
+
+# bit -> string -> int
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN '1'::BIT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+1
+
+# string -> bit
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS BIT AS $$
+  BEGIN
+    RETURN '1'::TEXT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+1
+
+# It is possible for the cast to fail.
+#
+# date -> string -> int
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN '2020-06-17'::DATE;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22P02 pq: could not parse \"2020-06-17\" as type int
+SELECT f();
+
+# bool -> string -> int
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN True;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22P02 pq: could not parse \"true\" as type int
+SELECT f();
+
+# string -> int
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN '105.67'::TEXT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22P02 pq: could not parse \"105.67\" as type int
+SELECT f();
+
+# Typed NULL values are allowed, even for incompatible types.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN NULL::BOOL;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+NULL
+
+# Type-coercion applies to branches of an IF statement.
+statement ok
+DROP FUNCTION f(INT);
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  BEGIN
+    If n = 0 THEN
+      RETURN 1;
+    ELSIF n = 1 THEN
+      RETURN 2.1::FLOAT;
+    ELSIF n = 2 THEN
+      RETURN 3.1::DECIMAL;
+    ELSIF n = 3 THEN
+      RETURN '4';
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(0);
+----
+1
+
+query I
+SELECT f(1);
+----
+2
+
+query I
+SELECT f(2);
+----
+3
+
+query I
+SELECT f(3);
+----
+4
+
+# Type-coercion applies to assignments.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    w INT[] := ARRAY[1, 2, 3];
+    x FLOAT := 100.1010101;
+    y INT := 200;
+    z TEXT := 'abc';
+  BEGIN
+    w := w || '{4}';
+    x := x + 1000;
+    y := y + 1.111::DECIMAL;
+    z := z || 6.0::FLOAT;
+    RAISE NOTICE 'w: %, x: %, y: %, z: %', w, x, y, z;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: w: {1,2,3,4}, x: 1100.1010101, y: 201, z: abc6
+
+# The condition for an IF statement is coerced to BOOL.
+statement ok
+CREATE TABLE t_text(x TEXT);
+INSERT INTO t_text VALUES ('True');
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    IF (SELECT * FROM t_text) THEN
+      RETURN 0;
+    END IF;
+    RETURN 1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+0
+
+statement ok
+DELETE FROM t_text WHERE True;
+INSERT INTO t_text VALUES ('False');
+
+query I
+SELECT f();
+----
+1
+
+# Regression test for #114826 - PLpgSQL routines should not prematurely exit
+# when a SELECT INTO statement returns no rows.
+subtest no_row_select_into
+
+statement ok
+CREATE TABLE t114826 (a INT);
+
+statement ok
+CREATE FUNCTION f114826() RETURNS INT AS $$
+  DECLARE
+    found INT;
+  BEGIN
+    RAISE NOTICE 'HERE 1';
+    SELECT a INTO found FROM t114826 WHERE a = 3;
+    RAISE NOTICE 'HERE 2';
+    INSERT INTO t114826 (SELECT * FROM t114826) RETURNING a INTO found;
+    RAISE NOTICE 'HERE 3';
+    RETURN 10;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f114826();
+----
+NOTICE: HERE 1
+NOTICE: HERE 2
+NOTICE: HERE 3
+
+query I
+SELECT f114826();
+----
+10
+
+statement ok
+INSERT INTO t114826 VALUES (1);
+
+query T noticetrace
+SELECT f114826();
+----
+NOTICE: HERE 1
+NOTICE: HERE 2
+NOTICE: HERE 3
+
+query I
+SELECT * FROM t114826;
+----
+1
+1
+
+query I
+SELECT f114826();
+----
+10
+
+query I
+SELECT * FROM t114826;
+----
+1
+1
+1
+1
+
+# Regression test for #114678 - cast RAISE format arguments to strings.
+subtest raise_format_arg
+
+statement ok
+CREATE FUNCTION f114678() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN RAISE NOTICE '% % %', now(), 1, True; RETURN 0; END $$;
+CREATE PROCEDURE p114678() LANGUAGE PLpgSQL AS $$ BEGIN RAISE NOTICE '% % %', now(), 1, True; END $$;
+
+statement ok
+SELECT f114678();
+CALL p114678();
+
+subtest end

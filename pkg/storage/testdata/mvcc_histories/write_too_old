@@ -9,6 +9,8 @@ with t=A
   put  k=a v=abc resolve
   txn_remove
 ----
+put: lock acquisition = {a id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=44.000000000,0 min=0,0 seq=0 Replicated Intent []}
+resolve_intent: "a" -> resolved key = true
 >> at end:
 data: "a"/44.000000000,0 -> /BYTES/abc
 
@@ -21,13 +23,14 @@ with t=A
 ----
 del: "a": found key false
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=33.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=33.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=33.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=33.000000000,0 wto=false gul=0,0
 data: "a"/44.000000000,0 -> /BYTES/abc
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 33.000000000,0 too old; must write at or above 44.000000000,1
 
 run ok
 resolve_intent t=A k=a status=ABORTED
 ----
+resolve_intent: "a" -> resolved key = false
 >> at end:
 data: "a"/44.000000000,0 -> /BYTES/abc
 
@@ -42,12 +45,13 @@ with t=B
   cput   k=a v=def
 ----
 >> at end:
-txn: "B" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=33.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=33.000000000,0 wto=false gul=55.000000000,0
+txn: "B" meta={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=33.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=33.000000000,0 wto=false gul=55.000000000,0
 data: "a"/44.000000000,0 -> /BYTES/abc
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 33.000000000,0 too old; must write at or above 44.000000000,1
 
 run ok
 resolve_intent t=B k=a status=ABORTED
 ----
+resolve_intent: "a" -> resolved key = false
 >> at end:
 data: "a"/44.000000000,0 -> /BYTES/abc

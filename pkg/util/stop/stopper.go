@@ -44,9 +44,9 @@ var ErrUnavailable = &kvpb.NodeUnavailableError{}
 
 func register(s *Stopper) {
 	trackedStoppers.Lock()
+	defer trackedStoppers.Unlock()
 	trackedStoppers.stoppers = append(trackedStoppers.stoppers,
 		stopperWithStack{s: s, createdAt: string(debug.Stack())})
-	trackedStoppers.Unlock()
 }
 
 func unregister(s *Stopper) {
@@ -521,10 +521,13 @@ func (s *Stopper) Stop(ctx context.Context) {
 		panic(r)
 	}
 
-	s.mu.Lock()
-	stopCalled := s.mu.stopping
-	s.mu.stopping = true
-	s.mu.Unlock()
+	stopCalled := func() (stopCalled bool) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		stopCalled = s.mu.stopping
+		s.mu.stopping = true
+		return stopCalled
+	}()
 
 	if stopCalled {
 		// Wait for the concurrent Stop() to complete.

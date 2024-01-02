@@ -61,7 +61,7 @@ SELECT * FROM kv
 statement count 0
 DELETE FROM kv WHERE k=5
 
-query II
+query II rowsort
 DELETE FROM kv RETURNING k, v
 ----
 1 2
@@ -83,7 +83,7 @@ SELECT * FROM unindexed
 1 2
 7 8
 
-query II
+query II rowsort
 DELETE FROM unindexed RETURNING k, v
 ----
 1 2
@@ -96,14 +96,14 @@ SELECT * FROM unindexed
 statement count 4
 INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
-query II colnames
+query II colnames,rowsort
 DELETE FROM unindexed WHERE k=3 or v=6 RETURNING *
 ----
 k v
 3 4
 5 6
 
-query II colnames
+query II colnames,rowsort
 DELETE FROM unindexed RETURNING unindexed.*
 ----
 k v
@@ -565,3 +565,26 @@ false
 query I
 SELECT a FROM t99630a@idx WHERE a > 0
 ----
+
+# Regression test for #107634. Do not allow aggregate functions in ORDER BY.
+subtest regression_107634
+
+statement ok
+CREATE TABLE t107634 (a INT)
+
+statement error pgcode 42803 sum\(\): aggregate functions are not allowed in ORDER BY in DELETE
+DELETE FROM t107634 ORDER BY sum(a) LIMIT 1;
+
+subtest end
+
+# Regression test for #108166. Do not allow aggregate functions in ORDER BY when
+# the function is wrapped by a conditional expression.
+subtest regression_108166
+
+statement ok
+CREATE TABLE t108166 (a INT)
+
+statement error pgcode 42803 sum\(\): aggregate functions are not allowed in ORDER BY in DELETE
+DELETE FROM t108166 ORDER BY COALESCE(sum(a), 1) LIMIT 1;
+
+subtest end

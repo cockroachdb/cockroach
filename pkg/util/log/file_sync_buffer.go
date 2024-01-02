@@ -35,7 +35,7 @@ type syncBuffer struct {
 
 // Sync implements the flushSyncWriter interface.
 //
-// Note: the other methods from flushSyncWriter (Flush, io.Writer) is
+// Note: the other methods from flushSyncWriter (FlushFiles, io.Writer) is
 // implemented by the embedded *bufio.Writer directly.
 func (sb *syncBuffer) Sync() error {
 	return sb.file.Sync()

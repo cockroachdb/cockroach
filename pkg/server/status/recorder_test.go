@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"math/rand"
 	"os"
 	"reflect"
 	"sort"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 	prometheusgo "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -118,7 +120,10 @@ func TestMetricsRecorderLabels(t *testing.T) {
 		manual,
 		st,
 	)
-	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
+	appReg := metric.NewRegistry()
+	logReg := metric.NewRegistry()
+	sysReg := metric.NewRegistry()
+	recorder.AddNode(reg1, appReg, logReg, sysReg, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	nodeDescTenant := roachpb.NodeDescriptor{
 		NodeID: roachpb.NodeID(7),
@@ -137,7 +142,9 @@ func TestMetricsRecorderLabels(t *testing.T) {
 		manual,
 		stTenant,
 	)
-	recorderTenant.AddNode(regTenant, nodeDescTenant, 50, "foo:26257", "foo:26258", "foo:5432")
+	recorderTenant.AddNode(
+		regTenant,
+		appReg, logReg, sysReg, nodeDescTenant, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	// ========================================
 	// Verify that the recorder exports metrics for tenants as text.
@@ -151,17 +158,21 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	regTenant.AddMetric(g2)
 	g2.Update(456)
 
+	c1 := metric.NewCounter(metric.Metadata{Name: "some_log_metric"})
+	logReg.AddMetric(c1)
+	c1.Inc(2)
+
 	recorder.AddTenantRegistry(tenantID, regTenant)
 
 	buf := bytes.NewBuffer([]byte{})
-	err = recorder.PrintAsText(buf)
+	err = recorder.PrintAsText(buf, expfmt.FmtText)
 	require.NoError(t, err)
 
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="system"} 123`)
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="application"} 456`)
 
 	bufTenant := bytes.NewBuffer([]byte{})
-	err = recorderTenant.PrintAsText(bufTenant)
+	err = recorderTenant.PrintAsText(bufTenant, expfmt.FmtText)
 	require.NoError(t, err)
 
 	require.NotContains(t, bufTenant.String(), `some_metric{node_id="7",tenant="system"} 123`)
@@ -172,14 +183,14 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	appNameContainer.Set("application2")
 
 	buf = bytes.NewBuffer([]byte{})
-	err = recorder.PrintAsText(buf)
+	err = recorder.PrintAsText(buf, expfmt.FmtText)
 	require.NoError(t, err)
 
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="system"} 123`)
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="application2"} 456`)
 
 	bufTenant = bytes.NewBuffer([]byte{})
-	err = recorderTenant.PrintAsText(bufTenant)
+	err = recorderTenant.PrintAsText(bufTenant, expfmt.FmtText)
 	require.NoError(t, err)
 
 	require.NotContains(t, bufTenant.String(), `some_metric{node_id="7",tenant="system"} 123`)
@@ -208,6 +219,16 @@ func TestMetricsRecorderLabels(t *testing.T) {
 				{
 					TimestampNanos: manual.Now().UnixNano(),
 					Value:          float64(123),
+				},
+			},
+		},
+		{
+			Name:   "cr.node.some_log_metric",
+			Source: "7",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: manual.Now().UnixNano(),
+					Value:          float64(2),
 				},
 			},
 		},
@@ -435,7 +456,10 @@ func TestMetricsRecorder(t *testing.T) {
 	recorder := NewMetricsRecorder(roachpb.SystemTenantID, roachpb.NewTenantNameContainer(""), nil, nil, manual, st)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
-	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
+	appReg := metric.NewRegistry()
+	logReg := metric.NewRegistry()
+	sysReg := metric.NewRegistry()
+	recorder.AddNode(reg1, appReg, logReg, sysReg, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	// Ensure the metric system's view of time does not advance during this test
 	// as the test expects time to not advance too far which would age the actual
@@ -464,6 +488,12 @@ func TestMetricsRecorder(t *testing.T) {
 		{
 			reg:    reg1,
 			prefix: "two.",
+			source: 1,
+			isNode: true,
+		},
+		{
+			reg:    logReg,
+			prefix: "log.",
 			source: 1,
 			isNode: true,
 		},
@@ -672,11 +702,42 @@ func TestMetricsRecorder(t *testing.T) {
 			if _, err := recorder.MarshalJSON(); err != nil {
 				t.Error(err)
 			}
-			_ = recorder.PrintAsText(io.Discard)
+			_ = recorder.PrintAsText(io.Discard, expfmt.FmtText)
 			_ = recorder.GetTimeSeriesData()
 			wg.Done()
 		}()
 	}
 	wg.Wait()
 	recorder.mu.RUnlock()
+}
+
+func BenchmarkExtractValueAllocs(b *testing.B) {
+	// Create a dummy histogram.
+	h := metric.NewHistogram(metric.HistogramOptions{
+		Mode: metric.HistogramModePrometheus,
+		Metadata: metric.Metadata{
+			Name: "benchmark.histogram",
+		},
+		Duration:     10 * time.Second,
+		BucketConfig: metric.IOLatencyBuckets,
+	})
+	genValues := func() {
+		for i := 0; i < 100000; i++ {
+			value := rand.Intn(10e9 /* 10s */)
+			h.RecordValue(int64(value))
+		}
+	}
+	// Fill in the histogram with 100k dummy values, ranging from [0s, 10s), tick, and then do it again.
+	// This ensures we have filled-in histograms for both the previous & current window.
+	genValues()
+	h.Tick()
+	genValues()
+
+	// Run a benchmark and report allocations.
+	for n := 0; n < b.N; n++ {
+		if err := extractValue(h.GetName(), h, func(string, float64) {}); err != nil {
+			b.Error(err)
+		}
+	}
+	b.ReportAllocs()
 }

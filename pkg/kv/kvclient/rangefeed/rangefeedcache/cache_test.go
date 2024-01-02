@@ -13,16 +13,19 @@ package rangefeedcache_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -37,15 +40,21 @@ func TestCache(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
 
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
-	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
-	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	s := srv.ApplicationLayer()
 
-	scratch, err := s.ScratchRange()
+	for _, l := range []serverutils.ApplicationLayerInterface{s, srv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+		kvserver.RangeFeedRefreshInterval.Override(ctx, &l.ClusterSettings().SV, 10*time.Millisecond)
+		closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 10*time.Millisecond)
+		closedts.SideTransportCloseInterval.Override(ctx, &l.ClusterSettings().SV, 10*time.Millisecond)
+	}
+
+	scratch := append(s.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+
+	_, _, err := srv.SplitRange(scratch)
 	require.NoError(t, err)
 	scratchSpan := roachpb.Span{
 		Key:    scratch,
@@ -63,7 +72,7 @@ func TestCache(t *testing.T) {
 		s.RangeFeedFactory().(*rangefeed.Factory),
 		[]roachpb.Span{scratchSpan},
 	)
-	require.NoError(t, c.Start(ctx, s.Stopper()))
+	require.NoError(t, c.Start(ctx, s.AppStopper()))
 	readRowsAt := func(t *testing.T, ts hlc.Timestamp) []roachpb.KeyValue {
 		txn := kvDB.NewTxn(ctx, "test")
 		require.NoError(t, txn.SetFixedTimestamp(ctx, ts))
@@ -88,14 +97,18 @@ func TestCache(t *testing.T) {
 		}))
 		testutils.SucceedsSoon(t, func() error {
 			_, ts, ok := c.GetSnapshot()
-			if !ok || ts.Less(copied.CommitTimestamp()) {
+			commitTs, err := copied.CommitTimestamp()
+			require.NoError(t, err)
+			if !ok || ts.Less(commitTs) {
 				return errors.Errorf("cache not yet up to date")
 			}
 			return nil
 		})
 		resp := readRowsAt(t, s.Clock().Now())
 		got, _, _ := c.GetSnapshot()
-		require.Equalf(t, resp, got, "%v", copied.CommitTimestamp())
+		commitTs, err := copied.CommitTimestamp()
+		require.NoError(t, err)
+		require.Equalf(t, resp, got, "%v", commitTs)
 	}
 
 	// Initialize an empty cache.

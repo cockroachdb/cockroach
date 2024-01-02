@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
@@ -25,7 +24,6 @@ go_test(
         "alter_column_type_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":schemachange"],
     deps = [
         "//pkg/base",
@@ -55,5 +53,3 @@ stringer(
     additional_args = ["--trimprefix ColumnConversion"],
     typ = "ColumnConversionKind",
 )
-
-get_x_data(name = "get_x_data")

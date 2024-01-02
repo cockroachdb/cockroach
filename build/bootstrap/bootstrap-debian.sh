@@ -8,9 +8,6 @@ set -euxo pipefail
 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | sudo apt-key add -
 echo "deb https://deb.nodesource.com/node_16.x focal main" | sudo tee /etc/apt/sources.list.d/nodesource.list
 
-curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
-echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-
 sudo apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
 sudo apt-get install -y --no-install-recommends \
@@ -24,8 +21,10 @@ sudo apt-get install -y --no-install-recommends \
   g++ \
   git \
   nodejs \
-  yarn \
   bison
+
+# pnpm doesn't provide a Debian repository, and supports either `curl | sh` or `npm install -g` installations.
+curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=8.6.6 sh -
 
 sudo adduser "${USER}" docker
 
@@ -44,9 +43,9 @@ sudo tar -C /usr --strip-components=1 -zxf /tmp/cmake.tgz && rm /tmp/cmake.tgz
 
 # Install Go.
 trap 'rm -f /tmp/go.tgz' EXIT
-curl -fsSL https://dl.google.com/go/go1.19.4.linux-amd64.tar.gz > /tmp/go.tgz
+curl -fsSL https://dl.google.com/go/go1.21.5.linux-amd64.tar.gz > /tmp/go.tgz
 sha256sum -c - <<EOF
-c9c08f783325c4cf840a94333159cc937f05f75d36a8b307951d5bd959cf2ab8  /tmp/go.tgz
+a2e1d5743e896e5fe1e7d96479c0a769254aed18cf216cf8f4c3a2300a9b3923  /tmp/go.tgz
 EOF
 sudo tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
 
@@ -62,7 +61,6 @@ curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.10.1/baze
 echo '4cb534c52cdd47a6223d4596d530e7c9c785438ab3b0a49ff347e991c210b2cd /tmp/bazelisk' | sha256sum -c -
 chmod +x /tmp/bazelisk
 sudo mv /tmp/bazelisk /usr/bin/bazel
-echo "build --config=dev" > ~/.bazelrc
 
 # Install the Unison file-syncer.
 . bootstrap/bootstrap-unison.sh

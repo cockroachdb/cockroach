@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
@@ -35,8 +36,9 @@ func registerLiquibase(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.SQLPort = config.DefaultSQLPort
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -131,11 +133,12 @@ func registerLiquibase(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "liquibase",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `tool`),
+		Name:             "liquibase",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.Tool),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLiquibase(ctx, t, c)
 		},

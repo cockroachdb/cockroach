@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -89,8 +90,12 @@ func GetIngestingDescriptorPrivileges(
 			updatedPrivileges = catpb.NewBaseDatabasePrivilegeDescriptor(user)
 		}
 	case catalog.FunctionDescriptor:
+		// If the ingestion is not a cluster restore we cannot know that the
+		// users on the ingesting cluster match the ones that were on the
+		// cluster that was backed up. So we wipe the privileges on the
+		// function.
 		if descCoverage == tree.RequestedDescriptors {
-			updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)
+			updatedPrivileges = catpb.NewBaseFunctionPrivilegeDescriptor(user)
 		}
 	}
 	return updatedPrivileges, nil
@@ -114,7 +119,7 @@ func getIngestingPrivilegesForTableOrSchema(
 		// are granted on object creation.
 		switch privilegeType {
 		case privilege.Schema:
-			if desc.GetName() == tree.PublicSchema {
+			if desc.GetName() == catconstants.PublicSchemaName {
 				updatedPrivileges = catpb.NewPublicSchemaPrivilegeDescriptor(includePublicSchemaCreatePriv)
 			} else {
 				updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)

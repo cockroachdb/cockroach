@@ -36,10 +36,11 @@ func declareKeysRecoverTransaction(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	rr := req.(*kvpb.RecoverTxnRequest)
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(rr.Txn.Key, rr.Txn.ID)})
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(rs.GetRangeID(), rr.Txn.ID)})
+	return nil
 }
 
 // RecoverTxn attempts to recover the specified transaction from an
@@ -77,7 +78,8 @@ func RecoverTxn(
 
 	// Fetch transaction record; if missing, attempt to synthesize one.
 	if ok, err := storage.MVCCGetProto(
-		ctx, readWriter, key, hlc.Timestamp{}, &reply.RecoveredTxn, storage.MVCCGetOptions{},
+		ctx, readWriter, key, hlc.Timestamp{}, &reply.RecoveredTxn,
+		storage.MVCCGetOptions{ReadCategory: storage.BatchEvalReadCategory},
 	); err != nil {
 		return result.Result{}, err
 	} else if !ok {
@@ -219,7 +221,8 @@ func RecoverTxn(
 		reply.RecoveredTxn.Status = roachpb.ABORTED
 	}
 	txnRecord := reply.RecoveredTxn.AsRecord()
-	if err := storage.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRecord); err != nil {
+	if err := storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
+		storage.MVCCWriteOptions{Stats: cArgs.Stats, Category: storage.BatchEvalReadCategory}); err != nil {
 		return result.Result{}, err
 	}
 

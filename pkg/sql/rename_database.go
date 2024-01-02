@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -48,7 +47,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 	}
 
 	if n.Name == "" || n.NewName == "" {
-		return nil, errEmptyDatabaseName
+		return nil, sqlerrors.ErrEmptyDatabaseName
 	}
 
 	if string(n.Name) == p.SessionData().Database && p.SessionData().SafeUpdates {
@@ -81,7 +80,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 			return nil, pgerror.Newf(
 				pgcode.InsufficientPrivilege, "must be owner of database %s", n.Name)
 		}
-		hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
+		hasCreateDB, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEDB)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +187,7 @@ func getQualifiedDependentObjectName(
 		depTblName := tree.MakeTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(t.GetName()))
 		return depTblName.String(), nil
 	case catalog.FunctionDescriptor:
-		depFnName := tree.MakeQualifiedFunctionName(dbName, scName, t.GetName())
+		depFnName := tree.MakeQualifiedRoutineName(dbName, scName, t.GetName())
 		return depFnName.String(), nil
 	default:
 		return "", errors.AssertionFailedf("expected only function or table descriptor, but got %s", t.DescriptorType())
@@ -247,16 +246,13 @@ func maybeFailOnDependentDescInRename(
 			if err != nil {
 				return err
 			}
-			depErr := sqlerrors.NewDependentObjectErrorf(
+			// Otherwise, we default to the view error message.
+			return errors.WithHintf(sqlerrors.NewDependentObjectErrorf(
 				"cannot rename %s because relation %q depends on relation %q",
 				renameDescType,
 				dependentDescQualifiedString,
 				tbTableName.String(),
-			)
-
-			// Otherwise, we default to the view error message.
-			return errors.WithHintf(depErr,
-				"you can drop %q instead", dependentDescQualifiedString)
+			), "consider dropping %q first", dependentDescQualifiedString)
 		}); err != nil {
 			return err
 		}

@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -33,6 +34,41 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
+
+func TestExplainAnalyzeDebugWithTxnRetries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	retryFilter, verifyRetryHit := testutils.TestingRequestFilterRetryTxnWithPrefix(t, "stmt-diag-", 1)
+	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: true,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: retryFilter,
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(godb)
+	r.Exec(t, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE);
+CREATE SCHEMA s;
+CREATE TABLE s.a (a INT PRIMARY KEY);`)
+
+	base := "statement.sql trace.json trace.txt trace-jaeger.json env.sql"
+	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
+
+	// Set a small chunk size to test splitting into chunks. The bundle files are
+	// on the order of 10KB.
+	r.Exec(t, "SET CLUSTER SETTING sql.stmt_diagnostics.bundle_chunk_size = '2000'")
+
+	rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
+	checkBundle(
+		t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */
+		base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
+	)
+	verifyRetryHit()
+}
 
 func TestExplainAnalyzeDebug(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -59,7 +95,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 	t.Run("no-table", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 123")
 		checkBundle(
-			t, fmt.Sprint(rows), "", nil,
+			t, fmt.Sprint(rows), "", nil, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt",
 		)
 	})
@@ -67,7 +103,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 	t.Run("basic", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
 		checkBundle(
-			t, fmt.Sprint(rows), "public.abc", nil,
+			t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */
 			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
@@ -76,7 +112,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 	t.Run("subqueries", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT EXISTS (SELECT * FROM abc WHERE c=1)")
 		checkBundle(
-			t, fmt.Sprint(rows), "public.abc", nil,
+			t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */
 			base, plans, "stats-defaultdb.public.abc.sql", "distsql-2-main-query.html distsql-1-subquery.html vec-1-subquery-v.txt vec-1-subquery.txt vec-2-main-query-v.txt vec-2-main-query.txt",
 		)
 	})
@@ -84,7 +120,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 	t.Run("user-defined schema", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM s.a WHERE a=1")
 		checkBundle(
-			t, fmt.Sprint(rows), "s.a", nil,
+			t, fmt.Sprint(rows), "s.a", nil, false, /* expectErrors */
 			base, plans, "stats-defaultdb.s.a.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
@@ -98,7 +134,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		// The bundle url is inside the error detail.
 		var pqErr *pq.Error
 		_ = errors.As(err, &pqErr)
-		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), "", nil, base, plans, "distsql.html errors.txt")
+		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), "", nil, false /* expectErrors */, base, plans, "distsql.html errors.txt")
 	})
 
 	// #92920 Make sure schema and opt files are created.
@@ -111,7 +147,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 				}
 			}
 			return nil
-		}, base, plans, "distsql.html vec.txt vec-v.txt")
+		}, false /* expectErrors */, base, plans, "distsql.html vec.txt vec-v.txt")
 	})
 
 	// This is a regression test for the situation where wrapped into the
@@ -128,7 +164,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 `)
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) INSERT INTO users (promo_id) VALUES (642606224929619969);")
 		checkBundle(
-			t, fmt.Sprint(rows), "public.users", nil, base, plans,
+			t, fmt.Sprint(rows), "public.users", nil, false /* expectErrors */, base, plans,
 			"stats-defaultdb.public.users.sql", "stats-defaultdb.public.promos.sql",
 			"distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt",
 		)
@@ -140,7 +176,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		defer r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='0ms';")
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
 		checkBundle(
-			t, fmt.Sprint(rows), "public.abc", nil,
+			t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */
 			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
@@ -162,7 +198,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			{"enable_implicit_transaction_for_batch_statements", "off"},
 			{"enable_insert_fast_path", "off"},
 			{"enable_multiple_modifications_of_table", "on"},
-			{"enable_zigzag_join", "off"},
+			{"enable_zigzag_join", "on"},
 			{"expect_and_ignore_not_visible_columns_in_copy", "on"},
 			{"intervalstyle", "iso_8601"},
 			{"large_full_scan_rows", "2000"},
@@ -198,7 +234,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 							}
 						}
 						return nil
-					},
+					}, false, /* expectErrors */
 					base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
 				)
 			})
@@ -243,14 +279,14 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		checkBundle(
 			t, fmt.Sprint(rows), "child", func(name, contents string) error {
 				if name == "schema.sql" {
-					reg := regexp.MustCompile("CREATE TABLE public.parent")
+					reg := regexp.MustCompile("CREATE TABLE defaultdb.public.parent")
 					if reg.FindString(contents) == "" {
 						return errors.Newf(
-							"could not find 'CREATE TABLE public.parent' in schema.sql:\n%s", contents)
+							"could not find 'CREATE TABLE defaultdb.public.parent' in schema.sql:\n%s", contents)
 					}
 				}
 				return nil
-			},
+			}, false, /* expectErrors */
 			base, plans, "stats-defaultdb.public.parent.sql", "stats-defaultdb.public.child.sql",
 			"distsql.html vec.txt vec-v.txt",
 		)
@@ -275,7 +311,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 					}
 				}
 				return nil
-			},
+			}, false, /* expectErrors */
 			plans, "statement.sql stats-defaultdb.public.pterosaur.sql env.sql vec.txt vec-v.txt",
 		)
 	})
@@ -285,32 +321,130 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		r.Exec(t, "CREATE TYPE test_type2 AS ENUM ('goodbye','earth');")
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 1;")
 		checkBundle(
-			t, fmt.Sprint(rows), "test_type1", nil, base, plans,
-			"distsql.html vec.txt vec-v.txt")
+			t, fmt.Sprint(rows), "test_type1", nil, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt",
+		)
 		checkBundle(
-			t, fmt.Sprint(rows), "test_type2", nil, base, plans,
-			"distsql.html vec.txt vec-v.txt")
+			t, fmt.Sprint(rows), "test_type2", nil, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt",
+		)
 	})
 
 	t.Run("udfs", func(t *testing.T) {
-		r.Exec(t, "CREATE FUNCTION add(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a + b';")
-		r.Exec(t, "CREATE FUNCTION subtract(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a - b';")
-		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT add(3, 4);")
+		r.Exec(t, "CREATE FUNCTION add_func(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a + b';")
+		r.Exec(t, "CREATE FUNCTION subtract_func(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a - b';")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT add_func(3, 4);")
 		checkBundle(
-			t, fmt.Sprint(rows), "add", func(name, contents string) error {
+			t, fmt.Sprint(rows), "add_func", func(name, contents string) error {
 				if name == "schema.sql" {
-					reg := regexp.MustCompile("add")
+					reg := regexp.MustCompile("add_func")
 					if reg.FindString(contents) == "" {
-						return errors.Errorf("could not find definition for 'add' function in schema.sql")
+						return errors.Errorf("could not find definition for 'add_func' function in schema.sql")
 					}
-					reg = regexp.MustCompile("subtract")
+					reg = regexp.MustCompile("subtract_func")
 					if reg.FindString(contents) != "" {
-						return errors.Errorf("Found irrelevant user defined function 'substract' in schema.sql")
+						return errors.Errorf("Found irrelevant user defined function 'subtract_func' in schema.sql")
 					}
 				}
 				return nil
-			}, base, plans,
-			"distsql-1-subquery.html distsql-2-main-query.html vec-1-subquery-v.txt vec-1-subquery.txt vec-2-main-query-v.txt vec-2-main-query.txt")
+			}, false /* expectErrors */, base, plans,
+			"distsql.html vec-v.txt vec.txt")
+	})
+
+	t.Run("procedures", func(t *testing.T) {
+		r.Exec(t, "CREATE PROCEDURE add_proc(a INT, b INT) LANGUAGE SQL AS 'SELECT a + b';")
+		r.Exec(t, "CREATE PROCEDURE subtract_proc(a INT, b INT) LANGUAGE SQL AS 'SELECT a - b';")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) CALL add_proc(3, 4);")
+		checkBundle(
+			t, fmt.Sprint(rows), "add_proc", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile("add_proc")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 'add_proc' procedure in schema.sql")
+					}
+					reg = regexp.MustCompile("subtract_proc")
+					if reg.FindString(contents) != "" {
+						return errors.Errorf("Found irrelevant procedure 'subtract_proc' in schema.sql")
+					}
+				}
+				return nil
+			}, false /* expectErrors */, base, plans,
+			"distsql.html vec-v.txt vec.txt")
+	})
+
+	t.Run("permission error", func(t *testing.T) {
+		r.Exec(t, "CREATE USER test")
+		r.Exec(t, "SET ROLE test")
+		defer r.Exec(t, "SET ROLE root")
+		r.Exec(t, "CREATE TABLE permissions (k PRIMARY KEY) AS SELECT 1")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM permissions")
+		// Check that we see an error about missing privileges for the cluster
+		// settings as a warnings. (Since `test` is the table owner, it already
+		// has permissions on the table itself.)
+		var numErrors int
+		for _, row := range rows {
+			if strings.HasPrefix(row[0], "-- error getting cluster settings:") {
+				numErrors++
+			}
+		}
+		if numErrors != 1 {
+			t.Fatalf("didn't see 1 error in %v", rows)
+		}
+		checkBundle(
+			t, fmt.Sprint(rows), "permission" /* tableName */, nil /* contentCheck */, true, /* expectErrors */
+			base, plans, "distsql.html errors.txt stats-defaultdb.public.permissions.sql vec.txt vec-v.txt",
+		)
+	})
+
+	t.Run("with in-flight trace", func(t *testing.T) {
+		r.Exec(t, "SET CLUSTER SETTING sql.stmt_diagnostics.in_flight_trace_collector.poll_interval = '0.25s'")
+		defer r.Exec(t, "SET CLUSTER SETTING sql.stmt_diagnostics.in_flight_trace_collector.poll_interval = '0s'")
+		// Sleep for 1s during the query execution to allow for the trace
+		// collector goroutine to start.
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT pg_sleep(1)")
+		checkBundle(
+			t, fmt.Sprint(rows), "" /* tableName */, nil /* contentCheck */, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt inflight-trace-n1.txt inflight-trace-jaeger-n1.json",
+		)
+	})
+
+	t.Run("virtual table", func(t *testing.T) {
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT count(*) FROM pg_catalog.pg_class;")
+		// tableName is empty since we expect that the table is not included
+		// into schema.sql.
+		var tableName string
+		contentCheck := func(name, contents string) error {
+			if name != "schema.sql" {
+				return nil
+			}
+			if strings.Contains(contents, "CREATE TABLE pg_catalog.pg_class") {
+				return errors.New("virtual tables should be omitted from schema.sql")
+			}
+			return nil
+		}
+		checkBundle(
+			t, fmt.Sprint(rows), tableName, contentCheck, false, /* expectErrors */
+			// Note that the list of files doesn't include stats for the virtual
+			// table - this will probably change when #27611 is addressed.
+			base, plans, "distsql.html vec.txt vec-v.txt",
+		)
+	})
+
+	t.Run("multiple databases", func(t *testing.T) {
+		r.Exec(t, "CREATE DATABASE db1;")
+		r.Exec(t, "CREATE DATABASE db2;")
+		r.Exec(t, "CREATE SCHEMA db2.s2;")
+		r.Exec(t, "CREATE TABLE db1.t1 (pk INT PRIMARY KEY);")
+		r.Exec(t, "CREATE TABLE db2.s2.t2 (pk INT PRIMARY KEY);")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM db1.t1, db2.s2.t2;")
+		checkBundle(
+			t, fmt.Sprint(rows), "db1.public.t1", nil, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-db1.public.t1.sql stats-db2.s2.t2.sql",
+		)
+		checkBundle(
+			t, fmt.Sprint(rows), "db2.s2.t2", nil, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-db1.public.t1.sql stats-db2.s2.t2.sql",
+		)
 	})
 }
 
@@ -318,10 +452,16 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 // bundle contains the expected files. The expected files are passed as an
 // arbitrary number of strings; each string contains one or more filenames
 // separated by a space.
+// - tableName: if non-empty, checkBundle asserts that the substring equal to
+// tableName is present in schema.sql. It doesn't have to be a fully qualified
+// name, but that is encouraged.
+// - expectErrors: if set, indicates that non-critical errors might have
+// occurred during the bundle collection and shouldn't fail the test.
 func checkBundle(
 	t *testing.T,
 	text, tableName string,
-	contentCheck func(name, contents string) error,
+	contentCheck func(name string, contents string) error,
+	expectErrors bool,
 	expectedFiles ...string,
 ) {
 	httpClient := httputil.NewClientWithTimeout(30 * time.Second)
@@ -368,7 +508,7 @@ func checkBundle(
 		}
 		contents := string(bytes)
 
-		if strings.Contains(contents, "-- error") {
+		if !expectErrors && strings.Contains(contents, "-- error") {
 			t.Errorf(
 				"expected no errors in %s, file contents:\n%s",
 				f.Name, contents,

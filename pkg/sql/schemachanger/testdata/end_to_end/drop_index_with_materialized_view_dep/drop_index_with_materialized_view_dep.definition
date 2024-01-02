@@ -1,0 +1,27 @@
+setup
+CREATE TABLE t1(i INT PRIMARY KEY, j INT);
+CREATE MATERIALIZED VIEW v2 AS SELECT i, j FROM t1;
+CREATE INDEX idx ON v2(j);
+CREATE MATERIALIZED VIEW v3 AS SELECT j FROM v2@idx
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t1 (i, j) VALUES($stageKey, $stageKey);
+INSERT INTO t1 (i, j) VALUES($stageKey + 1, $stageKey + 1);
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+DELETE FROM t1 WHERE j=$stageKey+1;
+INSERT INTO t1 (i, j) VALUES($stageKey + 1, $stageKey + 1);
+----
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM t1;
+----
+true
+
+test
+DROP INDEX idx CASCADE
+----

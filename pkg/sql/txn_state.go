@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -22,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -58,6 +58,12 @@ type txnState struct {
 
 		// txnStart records the time that txn started.
 		txnStart time.Time
+
+		// The transaction's priority.
+		priority roachpb.UserPriority
+
+		// The transaction's isolation level.
+		isolationLevel isolation.Level
 
 		// stmtCount keeps track of the number of statements that the transaction
 		// has executed.
@@ -95,21 +101,17 @@ type txnState struct {
 	// This must be constant for the lifetime of a SQL transaction.
 	sqlTimestamp time.Time
 
-	// The transaction's priority.
-	priority roachpb.UserPriority
-
-	// The transaction's isolation level.
-	isolationLevel isolation.Level
-
 	// The transaction's read only state.
-	readOnly bool
+	readOnly atomic.Bool
 
 	// Set to true when the current transaction is using a historical timestamp
 	// through the use of AS OF SYSTEM TIME.
-	isHistorical bool
+	isHistorical atomic.Bool
 
-	// lastEpoch is the last observed epoch in the current txn.
-	lastEpoch enginepb.TxnEpoch
+	// injectedTxnRetryCounter keeps track of how many errors have been
+	// injected in this transaction with the inject_retry_errors_enabled
+	// flag.
+	injectedTxnRetryCounter int
 
 	// mon tracks txn-bound objects like the running state of
 	// planNode in the midst of performing a computation.
@@ -187,11 +189,12 @@ func (ts *txnState) resetForNewSQLTxn(
 	tranCtx transitionCtx,
 	qualityOfService sessiondatapb.QoSLevel,
 	isoLevel isolation.Level,
+	omitInRangefeeds bool,
 ) (txnID uuid.UUID) {
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
-	ts.isHistorical = false
-	ts.lastEpoch = 0
+	ts.isHistorical.Swap(false)
+	ts.injectedTxnRetryCounter = 0
 
 	// Create a context for this transaction. It will include a root span that
 	// will contain everything executed as part of the upcoming SQL txn, including
@@ -227,6 +230,9 @@ func (ts *txnState) resetForNewSQLTxn(
 		if txn == nil {
 			ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeIDOrZero, qualityOfService)
 			ts.mu.txn.SetDebugName(opName)
+			if omitInRangefeeds {
+				ts.mu.txn.SetOmitInRangefeeds()
+			}
 			if err := ts.setPriorityLocked(priority); err != nil {
 				panic(err)
 			}
@@ -290,7 +296,11 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 		defer ts.mu.Unlock()
 		txnID = ts.mu.txn.ID()
 		if ts.mu.txn.IsCommitted() {
-			timestamp = ts.mu.txn.CommitTimestamp()
+			var err error
+			timestamp, err = ts.mu.txn.CommitTimestamp()
+			if err != nil {
+				panic(errors.Wrapf(err, "failed to get commit timestamp of committed txn"))
+			}
 		}
 		ts.mu.txn = nil
 		ts.mu.txnStart = time.Time{}
@@ -330,7 +340,7 @@ func (ts *txnState) setHistoricalTimestamp(
 		return err
 	}
 	ts.sqlTimestamp = historicalTimestamp.GoTime()
-	ts.isHistorical = true
+	ts.isHistorical.Swap(true)
 	return nil
 }
 
@@ -351,7 +361,7 @@ func (ts *txnState) setPriorityLocked(userPriority roachpb.UserPriority) error {
 	if err := ts.mu.txn.SetUserPriority(userPriority); err != nil {
 		return err
 	}
-	ts.priority = userPriority
+	ts.mu.priority = userPriority
 	return nil
 }
 
@@ -365,7 +375,7 @@ func (ts *txnState) setIsolationLevelLocked(level isolation.Level) error {
 	if err := ts.mu.txn.SetIsoLevel(level); err != nil {
 		return err
 	}
-	ts.isolationLevel = level
+	ts.mu.isolationLevel = level
 	return nil
 }
 
@@ -374,12 +384,12 @@ func (ts *txnState) setReadOnlyMode(mode tree.ReadWriteMode) error {
 	case tree.UnspecifiedReadWriteMode:
 		return nil
 	case tree.ReadOnly:
-		ts.readOnly = true
+		ts.readOnly.Swap(true)
 	case tree.ReadWrite:
-		if ts.isHistorical {
+		if ts.isHistorical.Load() {
 			return tree.ErrAsOfSpecifiedWithReadWrite
 		}
-		ts.readOnly = false
+		ts.readOnly.Swap(false)
 	default:
 		return errors.AssertionFailedf("unknown read mode: %s", errors.Safe(mode))
 	}

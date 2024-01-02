@@ -60,6 +60,8 @@ type ReplicationPlanner interface {
 		ctx context.Context,
 		now hlc.ClockTimestamp,
 		repl AllocatorReplica,
+		desc *roachpb.RangeDescriptor,
+		conf *roachpb.SpanConfig,
 		canTransferLeaseFrom CanTransferLeaseFrom,
 	) (bool, float64)
 	// PlanOneChange calls the allocator to determine an action to be taken upon a
@@ -68,6 +70,8 @@ type ReplicationPlanner interface {
 	PlanOneChange(
 		ctx context.Context,
 		repl AllocatorReplica,
+		desc *roachpb.RangeDescriptor,
+		conf *roachpb.SpanConfig,
 		canTransferLeaseFrom CanTransferLeaseFrom,
 		scatter bool,
 	) (ReplicateChange, error)
@@ -78,6 +82,7 @@ type ReplicationPlanner interface {
 type CanTransferLeaseFrom func(
 	ctx context.Context,
 	repl LeaseCheckReplica,
+	conf *roachpb.SpanConfig,
 ) bool
 
 // LeaseCheckReplica contains methods that may be used to check a replica's
@@ -85,7 +90,7 @@ type CanTransferLeaseFrom func(
 type LeaseCheckReplica interface {
 	HasCorrectLeaseType(lease roachpb.Lease) bool
 	LeaseStatusAt(ctx context.Context, now hlc.ClockTimestamp) kvserverpb.LeaseStatus
-	LeaseViolatesPreferences(context.Context) bool
+	LeaseViolatesPreferences(context.Context, *roachpb.SpanConfig) bool
 	OwnsValidLease(context.Context, hlc.ClockTimestamp) bool
 }
 
@@ -98,8 +103,6 @@ type AllocatorReplica interface {
 	GetFirstIndex() kvpb.RaftIndex
 	LastReplicaAdded() (roachpb.ReplicaID, time.Time)
 	StoreID() roachpb.StoreID
-	DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)
-	Desc() *roachpb.RangeDescriptor
 	GetRangeID() roachpb.RangeID
 }
 
@@ -116,6 +119,9 @@ type ReplicaPlannerTestingKnobs struct {
 	// DisableReplicaRebalancing disables rebalancing of replicas but otherwise
 	// leaves the replicate queue operational.
 	DisableReplicaRebalancing bool
+	// AllowVoterRemovalWhenNotLeader allows removing voters when this replica is
+	// not the leader.
+	AllowVoterRemovalWhenNotLeader bool
 }
 
 var _ ReplicationPlanner = &ReplicaPlanner{}
@@ -141,9 +147,10 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 	ctx context.Context,
 	now hlc.ClockTimestamp,
 	repl AllocatorReplica,
+	desc *roachpb.RangeDescriptor,
+	conf *roachpb.SpanConfig,
 	canTransferLeaseFrom CanTransferLeaseFrom,
 ) (shouldPlanChange bool, priority float64) {
-	desc, conf := repl.DescAndSpanConfig()
 
 	log.KvDistribution.VEventf(ctx, 6,
 		"computing range action desc=%s config=%s",
@@ -197,10 +204,11 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 	}
 
 	// If the lease is valid, check to see if we should transfer it.
-	if canTransferLeaseFrom(ctx, repl) &&
+	if canTransferLeaseFrom(ctx, repl, conf) &&
 		rp.allocator.ShouldTransferLease(
 			ctx,
 			rp.storePool,
+			desc,
 			conf,
 			voterReplicas,
 			repl,
@@ -235,6 +243,8 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 func (rp ReplicaPlanner) PlanOneChange(
 	ctx context.Context,
 	repl AllocatorReplica,
+	desc *roachpb.RangeDescriptor,
+	conf *roachpb.SpanConfig,
 	canTransferLeaseFrom CanTransferLeaseFrom,
 	scatter bool,
 ) (change ReplicateChange, _ error) {
@@ -245,14 +255,6 @@ func (rp ReplicaPlanner) PlanOneChange(
 		Op:      AllocationNoop{},
 		Replica: repl,
 	}
-	// TODO(aayush): The fact that we're calling `repl.DescAndZone()` here once to
-	// pass to `ComputeAction()` to use for deciding which action to take to
-	// repair a range, and then calling it again inside methods like
-	// `addOrReplace{Non}Voters()` or `remove{Dead,Decommissioning}` to execute
-	// upon that decision is a bit unfortunate. It means that we could
-	// successfully execute a decision that was based on the state of a stale
-	// range descriptor.
-	desc, conf := repl.DescAndSpanConfig()
 	log.KvDistribution.VEventf(ctx, 6,
 		"planning range change desc=%s config=%s",
 		desc, conf.String())
@@ -299,12 +301,12 @@ func (rp ReplicaPlanner) PlanOneChange(
 		switch action.TargetReplicaType() {
 		case allocatorimpl.VoterTarget:
 			op, stats, err = rp.addOrReplaceVoters(
-				ctx, repl, existing, remainingLiveVoters, remainingLiveNonVoters,
+				ctx, repl, desc, conf, existing, remainingLiveVoters, remainingLiveNonVoters,
 				removeIdx, action.ReplicaStatus(), allocatorPrio,
 			)
 		case allocatorimpl.NonVoterTarget:
 			op, stats, err = rp.addOrReplaceNonVoters(
-				ctx, repl, existing, remainingLiveVoters, remainingLiveNonVoters,
+				ctx, repl, desc, conf, existing, remainingLiveVoters, remainingLiveNonVoters,
 				removeIdx, action.ReplicaStatus(), allocatorPrio,
 			)
 		default:
@@ -313,9 +315,9 @@ func (rp ReplicaPlanner) PlanOneChange(
 
 	// Remove replicas.
 	case allocatorimpl.AllocatorRemoveVoter:
-		op, stats, err = rp.removeVoter(ctx, repl, voterReplicas, nonVoterReplicas)
+		op, stats, err = rp.removeVoter(ctx, repl, desc, conf, voterReplicas, nonVoterReplicas)
 	case allocatorimpl.AllocatorRemoveNonVoter:
-		op, stats, err = rp.removeNonVoter(ctx, repl, voterReplicas, nonVoterReplicas)
+		op, stats, err = rp.removeNonVoter(ctx, repl, desc, conf, voterReplicas, nonVoterReplicas)
 
 	// Remove decommissioning replicas.
 	//
@@ -323,9 +325,9 @@ func (rp ReplicaPlanner) PlanOneChange(
 	// has decommissioning replicas; in the common case we'll hit
 	// AllocatorReplaceDecommissioning{Non}Voter above.
 	case allocatorimpl.AllocatorRemoveDecommissioningVoter:
-		op, stats, err = rp.removeDecommissioning(ctx, repl, allocatorimpl.VoterTarget)
+		op, stats, err = rp.removeDecommissioning(ctx, repl, desc, conf, allocatorimpl.VoterTarget)
 	case allocatorimpl.AllocatorRemoveDecommissioningNonVoter:
-		op, stats, err = rp.removeDecommissioning(ctx, repl, allocatorimpl.NonVoterTarget)
+		op, stats, err = rp.removeDecommissioning(ctx, repl, desc, conf, allocatorimpl.NonVoterTarget)
 
 	// Remove dead replicas.
 	//
@@ -348,6 +350,8 @@ func (rp ReplicaPlanner) PlanOneChange(
 		op, stats, err = rp.considerRebalance(
 			ctx,
 			repl,
+			desc,
+			conf,
 			voterReplicas,
 			nonVoterReplicas,
 			allocatorPrio,
@@ -385,13 +389,14 @@ func (rp ReplicaPlanner) PlanOneChange(
 func (rp ReplicaPlanner) addOrReplaceVoters(
 	ctx context.Context,
 	repl AllocatorReplica,
+	desc *roachpb.RangeDescriptor,
+	conf *roachpb.SpanConfig,
 	existingVoters []roachpb.ReplicaDescriptor,
 	remainingLiveVoters, remainingLiveNonVoters []roachpb.ReplicaDescriptor,
 	removeIdx int,
 	replicaStatus allocatorimpl.ReplicaStatus,
 	allocatorPriority float64,
 ) (op AllocationOp, stats ReplicateStats, _ error) {
-	desc, conf := repl.DescAndSpanConfig()
 	var replacing *roachpb.ReplicaDescriptor
 	if removeIdx >= 0 {
 		replacing = &existingVoters[removeIdx]
@@ -481,13 +486,14 @@ func (rp ReplicaPlanner) addOrReplaceVoters(
 func (rp ReplicaPlanner) addOrReplaceNonVoters(
 	ctx context.Context,
 	repl AllocatorReplica,
+	_ *roachpb.RangeDescriptor,
+	conf *roachpb.SpanConfig,
 	existingNonVoters []roachpb.ReplicaDescriptor,
 	liveVoterReplicas, liveNonVoterReplicas []roachpb.ReplicaDescriptor,
 	removeIdx int,
 	replicaStatus allocatorimpl.ReplicaStatus,
 	allocatorPrio float64,
 ) (op AllocationOp, stats ReplicateStats, _ error) {
-	_, conf := repl.DescAndSpanConfig()
 	var replacing *roachpb.ReplicaDescriptor
 	if removeIdx >= 0 {
 		replacing = &existingNonVoters[removeIdx]
@@ -538,13 +544,12 @@ func (rp ReplicaPlanner) addOrReplaceNonVoters(
 func (rp ReplicaPlanner) findRemoveVoter(
 	ctx context.Context,
 	repl interface {
-		DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)
 		LastReplicaAdded() (roachpb.ReplicaID, time.Time)
 		RaftStatus() *raft.Status
 	},
+	conf *roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicationTarget, string, error) {
-	_, zone := repl.DescAndSpanConfig()
 	// This retry loop involves quick operations on local state, so a
 	// small MaxBackoff is good (but those local variables change on
 	// network time scales as raft receives responses).
@@ -568,6 +573,12 @@ func (rp ReplicaPlanner) findRemoveVoter(
 		}
 		raftStatus := repl.RaftStatus()
 		if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
+			// If requested, assume all replicas are up-to-date.
+			if rp.knobs.AllowVoterRemovalWhenNotLeader {
+				candidates = allocatorimpl.FilterUnremovableReplicasWithoutRaftStatus(
+					ctx, existingVoters, existingVoters, lastReplAdded)
+				break
+			}
 			// If we've lost raft leadership, we're unlikely to regain it so give up immediately.
 			return roachpb.ReplicationTarget{}, "",
 				benignerror.New(errors.Errorf("not raft leader while range needs removal"))
@@ -612,7 +623,7 @@ func (rp ReplicaPlanner) findRemoveVoter(
 	return rp.allocator.RemoveVoter(
 		ctx,
 		rp.storePool,
-		zone,
+		conf,
 		candidates,
 		existingVoters,
 		existingNonVoters,
@@ -623,15 +634,17 @@ func (rp ReplicaPlanner) findRemoveVoter(
 func (rp ReplicaPlanner) removeVoter(
 	ctx context.Context,
 	repl AllocatorReplica,
+	desc *roachpb.RangeDescriptor,
+	conf *roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 ) (op AllocationOp, stats ReplicateStats, _ error) {
-	removeVoter, details, err := rp.findRemoveVoter(ctx, repl, existingVoters, existingNonVoters)
+	removeVoter, details, err := rp.findRemoveVoter(ctx, repl, conf, existingVoters, existingNonVoters)
 	if err != nil {
 		return nil, stats, err
 	}
 
 	transferOp, err := rp.maybeTransferLeaseAwayTarget(
-		ctx, repl, removeVoter.StoreID, nil /* canTransferLeaseFrom */)
+		ctx, repl, desc, conf, removeVoter.StoreID, nil /* canTransferLeaseFrom */)
 	if err != nil {
 		return nil, stats, err
 	}
@@ -664,9 +677,10 @@ func (rp ReplicaPlanner) removeVoter(
 func (rp ReplicaPlanner) removeNonVoter(
 	ctx context.Context,
 	repl AllocatorReplica,
+	_ *roachpb.RangeDescriptor,
+	conf *roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 ) (op AllocationOp, stats ReplicateStats, _ error) {
-	_, conf := repl.DescAndSpanConfig()
 	removeNonVoter, details, err := rp.allocator.RemoveNonVoter(
 		ctx,
 		rp.storePool,
@@ -701,9 +715,12 @@ func (rp ReplicaPlanner) removeNonVoter(
 }
 
 func (rp ReplicaPlanner) removeDecommissioning(
-	ctx context.Context, repl AllocatorReplica, targetType allocatorimpl.TargetReplicaType,
+	ctx context.Context,
+	repl AllocatorReplica,
+	desc *roachpb.RangeDescriptor,
+	conf *roachpb.SpanConfig,
+	targetType allocatorimpl.TargetReplicaType,
 ) (op AllocationOp, stats ReplicateStats, _ error) {
-	desc, _ := repl.DescAndSpanConfig()
 	var decommissioningReplicas []roachpb.ReplicaDescriptor
 	switch targetType {
 	case allocatorimpl.VoterTarget:
@@ -725,7 +742,7 @@ func (rp ReplicaPlanner) removeDecommissioning(
 	decommissioningReplica := decommissioningReplicas[0]
 
 	transferOp, err := rp.maybeTransferLeaseAwayTarget(
-		ctx, repl, decommissioningReplica.StoreID, nil /* canTransferLeaseFrom */)
+		ctx, repl, desc, conf, decommissioningReplica.StoreID, nil /* canTransferLeaseFrom */)
 	if err != nil {
 		return nil, stats, err
 	}
@@ -796,6 +813,8 @@ func (rp ReplicaPlanner) removeDead(
 func (rp ReplicaPlanner) considerRebalance(
 	ctx context.Context,
 	repl AllocatorReplica,
+	desc *roachpb.RangeDescriptor,
+	conf *roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	allocatorPrio float64,
 	canTransferLeaseFrom CanTransferLeaseFrom,
@@ -806,7 +825,6 @@ func (rp ReplicaPlanner) considerRebalance(
 		return nil, stats, nil
 	}
 
-	desc, conf := repl.DescAndSpanConfig()
 	rebalanceTargetType := allocatorimpl.VoterTarget
 
 	scorerOpts := allocatorimpl.ScorerOptions(rp.allocator.ScorerOptions(ctx))
@@ -851,7 +869,7 @@ func (rp ReplicaPlanner) considerRebalance(
 		log.KvDistribution.VInfof(ctx, 2, "no suitable rebalance target for non-voters")
 	} else if !lhRemovalAllowed {
 		if transferOp, err := rp.maybeTransferLeaseAwayTarget(
-			ctx, repl, removeTarget.StoreID, canTransferLeaseFrom,
+			ctx, repl, desc, conf, removeTarget.StoreID, canTransferLeaseFrom,
 		); err != nil {
 			// No transfer possible.
 			ok = false
@@ -865,10 +883,11 @@ func (rp ReplicaPlanner) considerRebalance(
 	// No rebalance target was found, check whether we are able and should
 	// transfer the lease away to another store.
 	if !ok {
-		if !canTransferLeaseFrom(ctx, repl) {
+		if !canTransferLeaseFrom(ctx, repl, conf) {
 			return nil, stats, nil
 		}
-		return rp.shedLeaseTarget(
+		var err error
+		op, err = rp.shedLeaseTarget(
 			ctx,
 			repl,
 			desc,
@@ -878,8 +897,19 @@ func (rp ReplicaPlanner) considerRebalance(
 				ExcludeLeaseRepl:       false,
 				CheckCandidateFullness: true,
 			},
-		), stats, nil
-
+		)
+		if err != nil {
+			if scatter && errors.Is(err, CantTransferLeaseViolatingPreferencesError{}) {
+				// When scatter is specified, we ignore lease preference violation
+				// errors returned from shedLeaseTarget. These errors won't place the
+				// replica into purgatory because they are called outside the replicate
+				// queue loop, directly.
+				log.KvDistribution.VEventf(ctx, 3, "%v", err)
+				err = nil
+			}
+			return nil, stats, err
+		}
+		return op, stats, nil
 	}
 
 	// If we have a valid rebalance action (ok == true) and we haven't
@@ -923,24 +953,40 @@ func (rp ReplicaPlanner) shedLeaseTarget(
 	ctx context.Context,
 	repl AllocatorReplica,
 	desc *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	opts allocator.TransferLeaseOptions,
-) (op AllocationOp) {
+) (op AllocationOp, _ error) {
 	usage := repl.RangeUsageInfo()
+	existingVoters := desc.Replicas().VoterDescriptors()
 	// Learner replicas aren't allowed to become the leaseholder or raft leader,
 	// so only consider the `VoterDescriptors` replicas.
 	target := rp.allocator.TransferLeaseTarget(
 		ctx,
 		rp.storePool,
+		desc,
 		conf,
-		desc.Replicas().VoterDescriptors(),
+		existingVoters,
 		repl,
 		usage,
 		false, /* forceDecisionWithoutStats */
 		opts,
 	)
 	if target == (roachpb.ReplicaDescriptor{}) {
-		return nil
+		// If we don't find a suitable target, but we own a lease violating the
+		// lease preferences, and there is a more suitable target, return an error
+		// to place the replica in purgatory and retry sooner. This typically
+		// happens when we've just acquired a violating lease and we eagerly
+		// enqueue the replica before we've received Raft leadership, which
+		// prevents us from finding appropriate lease targets since we can't
+		// determine if any are behind.
+		liveVoters, _ := rp.storePool.LiveAndDeadReplicas(
+			existingVoters, false /* includeSuspectAndDrainingStores */)
+		preferred := rp.allocator.PreferredLeaseholders(rp.storePool, conf, liveVoters)
+		if len(preferred) > 0 &&
+			repl.LeaseViolatesPreferences(ctx, conf) {
+			return nil, CantTransferLeaseViolatingPreferencesError{RangeID: desc.RangeID}
+		}
+		return nil, nil
 	}
 
 	op = AllocationTransferLeaseOp{
@@ -949,7 +995,7 @@ func (rp ReplicaPlanner) shedLeaseTarget(
 		Usage:              usage,
 		bypassSafetyChecks: false,
 	}
-	return op
+	return op, nil
 }
 
 // maybeTransferLeaseAwayTarget is called whenever a replica on a given store
@@ -964,16 +1010,17 @@ func (rp ReplicaPlanner) shedLeaseTarget(
 func (rp ReplicaPlanner) maybeTransferLeaseAwayTarget(
 	ctx context.Context,
 	repl AllocatorReplica,
+	desc *roachpb.RangeDescriptor,
+	conf *roachpb.SpanConfig,
 	removeStoreID roachpb.StoreID,
 	canTransferLeaseFrom CanTransferLeaseFrom,
 ) (op AllocationOp, _ error) {
 	if removeStoreID != repl.StoreID() {
 		return nil, nil
 	}
-	if canTransferLeaseFrom != nil && !canTransferLeaseFrom(ctx, repl) {
+	if canTransferLeaseFrom != nil && !canTransferLeaseFrom(ctx, repl, conf) {
 		return nil, errors.Errorf("cannot transfer lease")
 	}
-	desc, conf := repl.DescAndSpanConfig()
 	usageInfo := repl.RangeUsageInfo()
 	// The local replica was selected as the removal target, but that replica
 	// is the leaseholder, so transfer the lease instead. We don't check that
@@ -988,6 +1035,7 @@ func (rp ReplicaPlanner) maybeTransferLeaseAwayTarget(
 	target := rp.allocator.TransferLeaseTarget(
 		ctx,
 		rp.storePool,
+		desc,
 		conf,
 		desc.Replicas().VoterDescriptors(),
 		repl,
@@ -1015,3 +1063,26 @@ func (rp ReplicaPlanner) maybeTransferLeaseAwayTarget(
 
 	return op, nil
 }
+
+// CantTransferLeaseViolatingPreferencesError is an error returned when a lease
+// violates the lease preferences, but we couldn't find a valid target to
+// transfer the lease to. It indicates that the replica should be sent to
+// purgatory, to retry the transfer faster.
+type CantTransferLeaseViolatingPreferencesError struct {
+	RangeID roachpb.RangeID
+}
+
+var _ errors.SafeFormatter = CantTransferLeaseViolatingPreferencesError{}
+
+func (e CantTransferLeaseViolatingPreferencesError) Error() string { return fmt.Sprint(e) }
+
+func (e CantTransferLeaseViolatingPreferencesError) Format(s fmt.State, verb rune) {
+	errors.FormatError(e, s, verb)
+}
+
+func (e CantTransferLeaseViolatingPreferencesError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("can't transfer r%d lease violating preferences, no suitable target", e.RangeID)
+	return nil
+}
+
+func (CantTransferLeaseViolatingPreferencesError) PurgatoryErrorMarker() {}

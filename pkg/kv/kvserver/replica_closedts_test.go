@@ -606,7 +606,7 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 	manual.Increment(remainingNanos - pause1 + 1)
 	leaseAcqErrCh := make(chan error)
 	go func() {
-		r, _, err := n2.Stores().GetReplicaForRangeID(ctx, desc.RangeID)
+		r, _, err := n2.GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, desc.RangeID)
 		if err != nil {
 			leaseAcqErrCh <- err
 			return
@@ -698,7 +698,7 @@ func BenchmarkBumpSideTransportClosed(b *testing.B) {
 
 	ctx := context.Background()
 	manual := hlc.NewHybridManualClock()
-	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{
+	s := serverutils.StartServerOnly(b, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manual,
@@ -779,7 +779,7 @@ func TestNonBlockingReadsAtResolvedTimestamp(t *testing.T) {
 			scan := kvpb.ScanRequest{
 				RequestHeader: kvpb.RequestHeaderFromSpan(keySpan),
 			}
-			txn := roachpb.MakeTransaction("test", keySpan.Key, 0, 0, resTS, 0, 0)
+			txn := roachpb.MakeTransaction("test", keySpan.Key, 0, 0, resTS, 0, 0, 0, false /* omitInRangefeeds */)
 			scanHeader := kvpb.Header{
 				RangeID:         rangeID,
 				ReadConsistency: kvpb.CONSISTENT,
@@ -920,7 +920,7 @@ func testNonBlockingReadsWithReaderFn(
 
 	// Reader goroutines: run one reader per store.
 	for _, s := range tc.Servers {
-		store, err := s.Stores().GetStore(s.GetFirstStoreID())
+		store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 		require.NoError(t, err)
 		g.Go(func() error {
 			readerFn := readerFnFactory(store, scratchRange.RangeID, keySpan)

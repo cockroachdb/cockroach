@@ -15,11 +15,11 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -29,19 +29,7 @@ const (
 	txnLogFile = "transactions.ndjson"
 )
 
-type randomLoadBenchSpec struct {
-	Nodes       int
-	Ops         int
-	Concurrency int
-	Tags        map[string]struct{}
-}
-
 func registerSchemaChangeRandomLoad(r registry.Registry) {
-	geoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
-	if r.MakeClusterSpec(1).Cloud == spec.AWS {
-		geoZones = []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
-	}
-	geoZonesStr := strings.Join(geoZones, ",")
 	r.Add(registry.TestSpec{
 		Name:      "schemachange/random-load",
 		Owner:     registry.OwnerSQLFoundations,
@@ -49,10 +37,14 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(
 			3,
 			spec.Geo(),
-			spec.Zones(geoZonesStr),
+			spec.GCEZones("us-east1-b,us-west1-b,europe-west2-b"),
+			spec.AWSZones("us-east-2b,us-west-1a,eu-west-1a"),
 		),
-		Leases:     registry.MetamorphicLeases,
-		NativeLibs: registry.LibGEOS,
+		// TODO(radu): enable this test on AWS.
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		NativeLibs:       registry.LibGEOS,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 5000
 			concurrency := 20
@@ -62,47 +54,6 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 			}
 			runSchemaChangeRandomLoad(ctx, t, c, maxOps, concurrency)
 		},
-	})
-
-	// Run a few representative scbench specs in CI.
-	registerRandomLoadBenchSpec(r, randomLoadBenchSpec{
-		Nodes:       3,
-		Ops:         2000,
-		Concurrency: 1,
-		Tags:        registry.Tags("aws"),
-	})
-
-	registerRandomLoadBenchSpec(r, randomLoadBenchSpec{
-		Nodes:       3,
-		Ops:         10000,
-		Concurrency: 20,
-	})
-}
-
-func registerRandomLoadBenchSpec(r registry.Registry, b randomLoadBenchSpec) {
-	nameParts := []string{
-		"scbench",
-		"randomload",
-		fmt.Sprintf("nodes=%d", b.Nodes),
-		fmt.Sprintf("ops=%d", b.Ops),
-		fmt.Sprintf("conc=%d", b.Concurrency),
-	}
-	name := strings.Join(nameParts, "/")
-
-	r.Add(registry.TestSpec{
-		Name:       name,
-		Owner:      registry.OwnerSQLFoundations,
-		Benchmark:  true,
-		Cluster:    r.MakeClusterSpec(b.Nodes),
-		NativeLibs: registry.LibGEOS,
-		Skip:       "https://github.com/cockroachdb/cockroach/issues/56230",
-		// This is set while development is still happening on the workload and we
-		// fix (or bypass) minor schema change bugs that are discovered.
-		NonReleaseBlocker: true,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runSchemaChangeRandomLoad(ctx, t, c, b.Ops, b.Concurrency)
-		},
-		Tags: b.Tags,
 	})
 }
 
@@ -143,12 +94,15 @@ func runSchemaChangeRandomLoad(
 	loadNode := c.Node(1)
 	roachNodes := c.Range(1, c.Spec().NodeCount)
 	t.Status("copying binaries")
-	c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 
 	t.Status("starting cockroach nodes")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
-	c.Run(ctx, loadNode, "./workload init schemachange")
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Run(ctx, loadNode, fmt.Sprintf("./workload init schemachange '%s'", pgurl))
 
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), "echo", "-n", "{store-dir}")
 	if err != nil {
@@ -164,6 +118,7 @@ func runSchemaChangeRandomLoad(
 		fmt.Sprintf("--max-ops %d", maxOps),
 		fmt.Sprintf("--concurrency %d", concurrency),
 		fmt.Sprintf("--txn-log %s", filepath.Join(storeDirectory, txnLogFile)),
+		fmt.Sprintf("{pgurl%s}", loadNode),
 	}
 	t.Status("running schemachange workload")
 	err = c.RunE(ctx, loadNode, runCmd...)

@@ -14,11 +14,11 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -54,15 +54,17 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	ctx, span := tracing.ChildSpan(ctx, n.StatementTag())
 	defer span.Finish()
 
-	hasAdminRole, err := p.HasAdminRole(ctx)
+	hasCreateRolePriv, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE)
 	if err != nil {
 		return nil, err
 	}
+
 	// Check permissions on each role.
 	allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
 	if err != nil {
 		return nil, err
 	}
+	grantingRoleHasAdminOptionOnAdmin := allRoles[username.AdminRoleName()]
 
 	inputRoles, err := decodeusername.FromNameList(n.Roles)
 	if err != nil {
@@ -76,19 +78,24 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	}
 
 	for _, r := range inputRoles {
-		// If the user is an admin, don't check if the user is allowed to add/drop
-		// roles in the role. However, if the role being modified is the admin role, then
-		// make sure the user is an admin with the admin option.
-		if hasAdminRole && !r.IsAdminRole() {
+		// If the current user has CREATEROLE, and the role being granted is not an
+		// admin there is no need to check if the user is allowed to grant/revoke
+		// membership in the role. However, if the role being granted is an admin,
+		// then make sure the current user also has the admin option for that role.
+		grantedRoleIsAdmin, err := p.UserHasAdminRole(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		if hasCreateRolePriv && !grantedRoleIsAdmin {
 			continue
 		}
-		if isAdmin, ok := allRoles[r]; !ok || !isAdmin {
-			if r.IsAdminRole() {
+		if hasAdminOption := allRoles[r]; !hasAdminOption && !grantingRoleHasAdminOptionOnAdmin {
+			if grantedRoleIsAdmin {
 				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-					"%s is not a role admin for role %s", p.User(), r)
+					"%s must have admin option on role %q", p.User(), r)
 			}
 			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-				"%s is not a superuser or role admin for role %s", p.User(), r)
+				"%s must have CREATEROLE or have admin option on role %q", p.User(), r)
 		}
 	}
 
@@ -168,17 +175,13 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 
 func (n *GrantRoleNode) startExec(params runParams) error {
 	var rowsAffected int
-	roleMembersHasIDs := params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V23_1RoleMembersTableHasIDColumns)
 
 	// Add memberships. Existing memberships are allowed.
 	// If admin option is false, we do not remove it from existing memberships.
-	memberStmt := `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3) ON CONFLICT ("role", "member")`
-	if roleMembersHasIDs {
-		memberStmt = `
+	memberStmt := `
 INSERT INTO system.role_members ("role", "member", "isAdmin", role_id, member_id)
 VALUES ($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $1), (SELECT user_id FROM system.users WHERE username = $2))
 ON CONFLICT ("role", "member")`
-	}
 	if n.adminOption {
 		// admin option: true, set "isAdmin" even if the membership exists.
 		memberStmt += ` DO UPDATE SET "isAdmin" = true`

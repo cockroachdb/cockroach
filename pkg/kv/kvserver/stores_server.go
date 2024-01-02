@@ -153,6 +153,44 @@ func (is Server) CompactEngineSpan(
 	return resp, err
 }
 
+// GetTableMetrics implements PerStoreServer. It retrieves metrics
+// SSTables for a given node and store id.
+func (is Server) GetTableMetrics(
+	ctx context.Context, req *GetTableMetricsRequest,
+) (*GetTableMetricsResponse, error) {
+	resp := &GetTableMetricsResponse{}
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
+		func(ctx context.Context, s *Store) error {
+			metricsInfo, err := s.TODOEngine().GetTableMetrics(req.Span.Key, req.Span.EndKey)
+
+			if err != nil {
+				return err
+			}
+
+			resp.TableMetrics = metricsInfo
+			return nil
+		})
+	return resp, err
+}
+
+func (is Server) ScanStorageInternalKeys(
+	ctx context.Context, req *ScanStorageInternalKeysRequest,
+) (*ScanStorageInternalKeysResponse, error) {
+	resp := &ScanStorageInternalKeysResponse{}
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
+		func(ctx context.Context, s *Store) error {
+			metrics, err := s.TODOEngine().ScanStorageInternalKeys(req.Span.Key, req.Span.EndKey, req.MegabytesPerSecond)
+
+			if err != nil {
+				return err
+			}
+
+			resp.AdvancedPebbleMetrics = metrics
+			return nil
+		})
+	return resp, err
+}
+
 // SetCompactionConcurrency implements PerStoreServer. It changes the compaction
 // concurrency of a store. While SetCompactionConcurrency is safe for concurrent
 // use, it adds uncertainty about the compaction concurrency actually set on

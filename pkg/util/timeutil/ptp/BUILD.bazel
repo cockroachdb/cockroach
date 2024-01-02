@@ -1,5 +1,4 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "ptp",
@@ -61,4 +60,17 @@ go_library(
     }),
 )
 
-get_x_data(name = "get_x_data")
+go_test(
+    name = "ptp_test",
+    srcs = ["ptp_clock_linux_test.go"],
+    embed = [":ptp"],
+    deps = select({
+        "@io_bazel_rules_go//go/platform:android": [
+            "//pkg/util/timeutil",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "//pkg/util/timeutil",
+        ],
+        "//conditions:default": [],
+    }),
+)

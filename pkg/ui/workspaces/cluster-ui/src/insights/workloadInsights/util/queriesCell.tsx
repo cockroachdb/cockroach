@@ -29,15 +29,17 @@ export function QueriesCell(
     (transactionQueries.length === 1 &&
       transactionQueries[0]?.length < textLimit)
   ) {
-    const query = transactionQueries?.length ? transactionQueries[0] : "";
+    const query = transactionQueries?.length
+      ? transactionQueries[0]
+      : "Query not available.";
     return <div>{query}</div>;
   }
 
   const combinedQuery = transactionQueries?.map((query, idx, arr) => (
     <div key={idx}>
-      {idx != 0 && <br />}
+      {idx !== 0 && <br />}
       {query}
-      {idx != arr.length - 1 && <br />}
+      {idx !== arr.length - 1 && <br />}
     </div>
   ));
 

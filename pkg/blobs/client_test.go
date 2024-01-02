@@ -55,7 +55,8 @@ func setUpService(
 	localExternalDir string,
 	remoteExternalDir string,
 ) BlobClientFactory {
-	s, err := rpc.NewServer(rpcContext)
+	ctx := context.Background()
+	s, err := rpc.NewServer(ctx, rpcContext)
 	require.NoError(t, err)
 
 	remoteBlobServer, err := NewBlobService(remoteExternalDir)
@@ -65,7 +66,7 @@ func setUpService(
 	ln, err := netutil.ListenAndServeGRPC(rpcContext.Stopper, s, util.TestAddr)
 	require.NoError(t, err)
 
-	s2, err := rpc.NewServer(rpcContext)
+	s2, err := rpc.NewServer(ctx, rpcContext)
 	require.NoError(t, err)
 	localBlobServer, err := NewBlobService(localExternalDir)
 	require.NoError(t, err)

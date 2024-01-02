@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/decommissioning"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -44,31 +45,12 @@ type decommissioningNodeMap struct {
 	nodes map[roachpb.NodeID]interface{}
 }
 
-// decommissionRangeCheckResult is the result of evaluating the allocator action
-// and target for a single range that has an extant replica on a node targeted
-// for decommission.
-type decommissionRangeCheckResult struct {
-	desc         roachpb.RangeDescriptor
-	action       string
-	tracingSpans tracingpb.Recording
-	err          error
-}
-
-// decommissionPreCheckResult is the result of checking the readiness
-// of a node or set of nodes to be decommissioned.
-type decommissionPreCheckResult struct {
-	rangesChecked  int
-	replicasByNode map[roachpb.NodeID][]roachpb.ReplicaIdent
-	actionCounts   map[string]int
-	rangesNotReady []decommissionRangeCheckResult
-}
-
 // makeOnNodeDecommissioningCallback returns a callback that enqueues the
 // decommissioning node's ranges into the `stores`' replicateQueues for
 // rebalancing.
 func (t *decommissioningNodeMap) makeOnNodeDecommissioningCallback(
 	stores *kvserver.Stores,
-) liveness.OnNodeDecommissionCallback {
+) func(id roachpb.NodeID) {
 	return func(decommissioningNodeID roachpb.NodeID) {
 		ctx := context.Background()
 		t.Lock()
@@ -159,17 +141,17 @@ func getPingCheckDecommissionFn(
 // or remove actions. If maxErrors >0, range checks will stop once maxError is
 // reached.
 // The error returned is a gRPC error.
-func (s *Server) DecommissionPreCheck(
+func (s *topLevelServer) DecommissionPreCheck(
 	ctx context.Context,
 	nodeIDs []roachpb.NodeID,
 	strictReadiness bool,
 	collectTraces bool,
 	maxErrors int,
-) (decommissionPreCheckResult, error) {
+) (decommissioning.PreCheckResult, error) {
 	// Ensure that if collectTraces is enabled, that a maxErrors >0 is set in
 	// order to avoid unlimited memory usage.
 	if collectTraces && maxErrors <= 0 {
-		return decommissionPreCheckResult{},
+		return decommissioning.PreCheckResult{},
 			grpcstatus.Error(codes.InvalidArgument, "MaxErrors must be set to collect traces.")
 	}
 
@@ -177,7 +159,7 @@ func (s *Server) DecommissionPreCheck(
 	decommissionCheckNodeIDs := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus)
 	replicasByNode := make(map[roachpb.NodeID][]roachpb.ReplicaIdent)
 	actionCounts := make(map[string]int)
-	var rangeErrors []decommissionRangeCheckResult
+	var rangeErrors []decommissioning.RangeCheckResult
 	const pageSize = 10000
 
 	for _, nodeID := range nodeIDs {
@@ -210,7 +192,7 @@ func (s *Server) DecommissionPreCheck(
 		err = errors.Errorf("n%d has no initialized store", s.NodeID())
 	}
 	if err != nil {
-		return decommissionPreCheckResult{}, grpcstatus.Error(codes.NotFound, err.Error())
+		return decommissioning.PreCheckResult{}, grpcstatus.Error(codes.NotFound, err.Error())
 	}
 
 	// Define our node liveness overrides to simulate that the nodeIDs for which
@@ -274,14 +256,14 @@ func (s *Server) DecommissionPreCheck(
 	})
 
 	if err != nil {
-		return decommissionPreCheckResult{}, grpcstatus.Errorf(codes.Internal, err.Error())
+		return decommissioning.PreCheckResult{}, grpcstatus.Errorf(codes.Internal, err.Error())
 	}
 
-	return decommissionPreCheckResult{
-		rangesChecked:  rangesChecked,
-		replicasByNode: replicasByNode,
-		actionCounts:   actionCounts,
-		rangesNotReady: rangeErrors,
+	return decommissioning.PreCheckResult{
+		RangesChecked:  rangesChecked,
+		ReplicasByNode: replicasByNode,
+		ActionCounts:   actionCounts,
+		RangesNotReady: rangeErrors,
 	}, nil
 }
 
@@ -295,15 +277,15 @@ func evaluateRangeCheckResult(
 	action allocatorimpl.AllocatorAction,
 	recording tracingpb.Recording,
 	rErr error,
-) (passed bool, _ decommissionRangeCheckResult) {
-	checkResult := decommissionRangeCheckResult{
-		desc:   *desc,
-		action: action.String(),
-		err:    rErr,
+) (passed bool, _ decommissioning.RangeCheckResult) {
+	checkResult := decommissioning.RangeCheckResult{
+		Desc:   *desc,
+		Action: action.String(),
+		Err:    rErr,
 	}
 
 	if collectTraces {
-		checkResult.tracingSpans = recording
+		checkResult.TracingSpans = recording
 	}
 
 	if rErr != nil {
@@ -313,14 +295,14 @@ func evaluateRangeCheckResult(
 	if action == allocatorimpl.AllocatorRangeUnavailable ||
 		action == allocatorimpl.AllocatorNoop ||
 		action == allocatorimpl.AllocatorConsiderRebalance {
-		checkResult.err = errors.Errorf("range r%d requires unexpected allocation action: %s",
+		checkResult.Err = errors.Errorf("range r%d requires unexpected allocation action: %s",
 			desc.RangeID, action,
 		)
 		return false, checkResult
 	}
 
 	if strictReadiness && !(action.Replace() || action.Remove()) {
-		checkResult.err = errors.Errorf(
+		checkResult.Err = errors.Errorf(
 			"range r%d needs repair beyond replacing/removing the decommissioning replica: %s",
 			desc.RangeID, action,
 		)
@@ -332,7 +314,7 @@ func evaluateRangeCheckResult(
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.
 // The error return is a gRPC error.
-func (s *Server) Decommission(
+func (s *topLevelServer) Decommission(
 	ctx context.Context, targetStatus livenesspb.MembershipStatus, nodeIDs []roachpb.NodeID,
 ) error {
 	// If we're asked to decommission ourself we may lose access to cluster RPC,
@@ -347,25 +329,26 @@ func (s *Server) Decommission(
 		nodeIDs = orderedNodeIDs
 	}
 
-	var event logpb.EventPayload
-	var nodeDetails *eventpb.CommonNodeDecommissionDetails
-	if targetStatus.Decommissioning() {
-		ev := &eventpb.NodeDecommissioning{}
-		nodeDetails = &ev.CommonNodeDecommissionDetails
-		event = ev
-	} else if targetStatus.Decommissioned() {
-		ev := &eventpb.NodeDecommissioned{}
-		nodeDetails = &ev.CommonNodeDecommissionDetails
-		event = ev
-	} else if targetStatus.Active() {
-		ev := &eventpb.NodeRecommissioned{}
-		nodeDetails = &ev.CommonNodeDecommissionDetails
-		event = ev
-	} else {
-		panic("unexpected target membership status")
+	newEvent := func() (event logpb.EventPayload, nodeDetails *eventpb.CommonNodeDecommissionDetails) {
+		if targetStatus.Decommissioning() {
+			ev := &eventpb.NodeDecommissioning{}
+			nodeDetails = &ev.CommonNodeDecommissionDetails
+			event = ev
+		} else if targetStatus.Decommissioned() {
+			ev := &eventpb.NodeDecommissioned{}
+			nodeDetails = &ev.CommonNodeDecommissionDetails
+			event = ev
+		} else if targetStatus.Active() {
+			ev := &eventpb.NodeRecommissioned{}
+			nodeDetails = &ev.CommonNodeDecommissionDetails
+			event = ev
+		} else {
+			panic(errors.AssertionFailedf("unexpected target membership status: %v", targetStatus))
+		}
+		event.CommonDetails().Timestamp = timeutil.Now().UnixNano()
+		nodeDetails.RequestingNodeID = int32(s.NodeID())
+		return event, nodeDetails
 	}
-	event.CommonDetails().Timestamp = timeutil.Now().UnixNano()
-	nodeDetails.RequestingNodeID = int32(s.NodeID())
 
 	for _, nodeID := range nodeIDs {
 		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus)
@@ -377,6 +360,7 @@ func (s *Server) Decommission(
 			return grpcstatus.Errorf(codes.Internal, err.Error())
 		}
 		if statusChanged {
+			event, nodeDetails := newEvent()
 			nodeDetails.TargetNodeID = int32(nodeID)
 			// Ensure an entry is produced in the external log in all cases.
 			log.StructuredEvent(ctx, event)
@@ -412,7 +396,7 @@ func (s *Server) Decommission(
 
 // DecommissioningNodeMap returns the set of node IDs that are decommissioning
 // from the perspective of the server.
-func (s *Server) DecommissioningNodeMap() map[roachpb.NodeID]interface{} {
+func (s *topLevelServer) DecommissioningNodeMap() map[roachpb.NodeID]interface{} {
 	s.decomNodeMap.RLock()
 	defer s.decomNodeMap.RUnlock()
 	nodes := make(map[roachpb.NodeID]interface{})

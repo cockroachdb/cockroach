@@ -93,6 +93,14 @@ build_ncurses aarch64-unknown-linux-gnu
 build_ncurses s390x-ibm-linux-gnu
 cd ..
 
+# Add openssl header files needed by the FIPS build.
+mkdir openssl \
+ && curl -fsSL https://github.com/openssl/openssl/releases/download/openssl-3.1.2/openssl-3.1.2.tar.gz -o openssl.tar.gz \
+ && echo 'a0ce69b8b97ea6a35b96875235aa453b966ba3cba8af2de23657d8b6767d6539 openssl.tar.gz' | sha256sum -c - \
+ && tar --strip-components=1 -C openssl -xzf openssl.tar.gz \
+ && cd openssl && ./Configure && make && patch -p0 <../bootstrap/crypto.h.patch \
+ && cp -r include/openssl /x-tools/x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu/sysroot/usr/include && cd ..
+
 apt-get purge -y gcc g++ && apt-get autoremove -y
 
 apt-get update \
@@ -100,7 +108,6 @@ apt-get update \
     clang-10 \
   && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10
-
 
 # Bundle artifacts
 bundle() {

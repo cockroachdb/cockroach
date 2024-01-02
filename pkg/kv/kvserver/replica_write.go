@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -153,11 +154,13 @@ func (r *Replica) executeWriteBatch(
 		// meant to protect against future correctness anomalies.
 		defer func() {
 			if br != nil && ba.Txn != nil && br.Txn == nil {
-				log.Fatalf(ctx, "assertion failed: transaction updated by "+
-					"timestamp cache, but transaction returned in response; "+
-					"updated timestamp would have been lost (recovered): "+
-					"%s in batch %s", ba.Txn, ba,
-				)
+				pErr = kvpb.NewError(errors.NewAssertionErrorWithWrappedErrf(pErr.GoError(),
+					"assertion failed: transaction updated by "+
+						"timestamp cache, but transaction returned in response; "+
+						"updated timestamp would have been lost (recovered): "+
+						"%s in batch %s", ba.Txn, ba,
+				))
+				logcrash.ReportOrPanic(ctx, &r.store.cfg.Settings.SV, "%v", pErr)
 			}
 		}()
 	}
@@ -171,7 +174,8 @@ func (r *Replica) executeWriteBatch(
 
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
-	// evalAndPropose.
+	// evalAndPropose. If we return with an error from executeWriteBatch, we
+	// also return the guard which the caller reassumes ownership of.
 	ch, abandon, _, writeBytes, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx))
 	if pErr != nil {
 		if cErr, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {
@@ -203,8 +207,12 @@ func (r *Replica) executeWriteBatch(
 			// Semi-synchronously process any intents that need resolving here in
 			// order to apply back pressure on the client which generated them. The
 			// resolution is semi-synchronous in that there is a limited number of
-			// outstanding asynchronous resolution tasks allowed after which
-			// further calls will block.
+			// outstanding asynchronous resolution tasks allowed after which further
+			// calls will block. The limited number of asynchronous resolution tasks
+			// ensures that the number of goroutines doing intent resolution does
+			// not diverge from the number of workload goroutines (see
+			// https://github.com/cockroachdb/cockroach/issues/4925#issuecomment-193015586
+			// for an old problem predating such a limit).
 			if len(propResult.EndTxns) > 0 {
 				if err := r.store.intentResolver.CleanupTxnIntentsAsync(
 					ctx, r.RangeID, propResult.EndTxns, true, /* allowSync */
@@ -214,7 +222,7 @@ func (r *Replica) executeWriteBatch(
 			}
 			if len(propResult.EncounteredIntents) > 0 {
 				if err := r.store.intentResolver.CleanupIntentsAsync(
-					ctx, propResult.EncounteredIntents, true, /* allowSync */
+					ctx, ba.AdmissionHeader, propResult.EncounteredIntents, true, /* allowSync */
 				); err != nil {
 					log.Warningf(ctx, "intent cleanup failed: %v", err)
 				}
@@ -441,10 +449,14 @@ func (r *Replica) evaluateWriteBatch(
 
 	ms := newMVCCStats()
 	defer releaseMVCCStats(ms)
-	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
+	rec := NewReplicaEvalContext(
+		ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot(), ba.AdmissionHeader)
 	defer rec.Release()
+	// For non-transactional writes, omitInRangefeeds should always be false.
+	// For transactional writes, we propagate the flag from the txn.
+	omitInRangefeeds := ba.Txn != nil && ba.Txn.OmitInRangefeeds
 	batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
-		ctx, idKey, rec, ms, ba, g, st, ui, hlc.Timestamp{} /* deadline */)
+		ctx, idKey, rec, ms, ba, g, st, ui, hlc.Timestamp{} /* deadline */, omitInRangefeeds)
 	return batch, *ms, br, res, pErr
 }
 
@@ -495,9 +507,12 @@ func (r *Replica) evaluate1PC(
 	var batch storage.Batch
 	defer func() {
 		// Close the batch unless it's passed to the caller (when the evaluation
-		// succeeds).
+		// succeeds). Also increment metrics.
 		if onePCRes.success != onePCSucceeded {
 			batch.Close()
+			r.store.Metrics().OnePhaseCommitFailure.Inc(1)
+		} else {
+			r.store.Metrics().OnePhaseCommitSuccess.Inc(1)
 		}
 	}()
 
@@ -511,7 +526,8 @@ func (r *Replica) evaluate1PC(
 	// Is this relying on the batch being write-only?
 	ui := uncertainty.Interval{}
 
-	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
+	rec := NewReplicaEvalContext(
+		ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot(), ba.AdmissionHeader)
 	defer rec.Release()
 	var br *kvpb.BatchResponse
 	var res result.Result
@@ -525,10 +541,10 @@ func (r *Replica) evaluate1PC(
 	defer releaseMVCCStats(ms)
 	if ba.CanForwardReadTimestamp {
 		batch, br, res, pErr = r.evaluateWriteBatchWithServersideRefreshes(
-			ctx, idKey, rec, ms, &strippedBa, g, st, ui, etArg.Deadline)
+			ctx, idKey, rec, ms, &strippedBa, g, st, ui, etArg.Deadline, ba.Txn.OmitInRangefeeds)
 	} else {
 		batch, br, res, pErr = r.evaluateWriteBatchWrapper(
-			ctx, idKey, rec, ms, &strippedBa, g, st, ui)
+			ctx, idKey, rec, ms, &strippedBa, g, st, ui, ba.Txn.OmitInRangefeeds)
 	}
 
 	if pErr != nil || (!ba.CanForwardReadTimestamp && ba.Timestamp != br.Timestamp) {
@@ -657,6 +673,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	deadline hlc.Timestamp,
+	omitInRangefeeds bool,
 ) (batch storage.Batch, br *kvpb.BatchResponse, res result.Result, pErr *kvpb.Error) {
 	goldenMS := *ms
 	for retries := 0; ; retries++ {
@@ -669,7 +686,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 			batch.Close()
 		}
 
-		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, g, st, ui)
+		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, g, st, ui, omitInRangefeeds)
 
 		// Allow one retry only; a non-txn batch containing overlapping
 		// spans will always experience WriteTooOldError.
@@ -698,10 +715,11 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
+	omitInRangefeeds bool,
 ) (storage.Batch, *kvpb.BatchResponse, result.Result, *kvpb.Error) {
 	batch, opLogger := r.newBatchedEngine(ba, g)
 	now := timeutil.Now()
-	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, g, st, ui, readWrite)
+	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, g, st, ui, readWrite, omitInRangefeeds)
 	r.store.metrics.ReplicaWriteBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
 	if pErr == nil {
 		if opLogger != nil {
@@ -784,6 +802,7 @@ func (r *Replica) newBatchedEngine(
 //     condition is isolation level dependent.
 //  3. the transaction is not in its first epoch and the EndTxn request does
 //     not require one phase commit.
+//  4. the EndTxn request explicitly disables one phase commit.
 func isOnePhaseCommit(ba *kvpb.BatchRequest) bool {
 	if ba.Txn == nil {
 		return false
@@ -806,6 +825,9 @@ func isOnePhaseCommit(ba *kvpb.BatchRequest) bool {
 	}
 	arg, _ := ba.GetArg(kvpb.EndTxn)
 	etArg := arg.(*kvpb.EndTxnRequest)
+	if etArg.Disable1PC {
+		return false // explicitly disabled
+	}
 	if retry, _, _ := batcheval.IsEndTxnTriggeringRetryError(ba.Txn, etArg.Deadline); retry {
 		return false
 	}

@@ -43,11 +43,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
@@ -61,11 +62,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -101,10 +104,6 @@ const (
 	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
 	rangeIDAllocCount = 10
 
-	// defaultRaftEntryCacheSize is the default size in bytes for a
-	// store's Raft log entry cache.
-	defaultRaftEntryCacheSize = 1 << 24 // 16M
-
 	// replicaQueueExtraSize is the number of requests that a replica's incoming
 	// message queue can keep over RaftConfig.RaftMaxInflightMsgs. When the leader
 	// maxes out RaftMaxInflightMsgs, we want the receiving replica to still have
@@ -117,22 +116,51 @@ const (
 // rounded up such that all stores have the same number of workers (10 workers
 // across 3 stores yields 4 workers per store or 12 in total).
 //
-// For small machines, we scale the scheduler concurrency by the number of
-// CPUs. 8*NumCPU was determined in 9a68241 (April 2017) as the optimal
-// concurrency level on 8 CPU machines. For larger machines, we've seen
-// (#56851) that this scaling curve can be too aggressive and lead to too much
-// contention in the Raft scheduler, so we cap the concurrency level at 96.
-//
-// As of November 2020, this default value could be re-tuned.
+// For small machines, we scale the scheduler concurrency by the number of CPUs.
+// 8*NumCPU was determined in 9a68241 (April 2017) as the optimal concurrency
+// level on 8 CPU machines. For larger machines, we've seen (#56851) that this
+// scaling curve can be too aggressive and lead to too much contention in the
+// Raft scheduler, so we cap the concurrency level at 128. This was revisited in
+// #99063 (June 2023) with Raft scheduler sharding and multi-store worker
+// distribution, and both the scaling and cap were found to still be reasonable,
+// but the cap was increased from 96 to 128 to reduce chance of starvation
+// within shards or on multi-store nodes.
 var defaultRaftSchedulerConcurrency = envutil.EnvOrDefaultInt(
-	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.GOMAXPROCS(0), 96))
+	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.GOMAXPROCS(0), 128))
 
 // defaultRaftSchedulerShardSize specifies the default maximum number of
 // scheduler worker goroutines per mutex shard. By default, we spin up 8 workers
-// per CPU core, capped at 96, so 16 is equivalent to 2 CPUs per shard, or a
-// maximum of 6 shards. This significantly relieves contention at high core
+// per CPU core, capped at 128, so 16 is equivalent to 2 CPUs per shard, or a
+// maximum of 8 shards. This significantly relieves contention at high core
 // counts, while also avoiding starvation by excessive sharding.
 var defaultRaftSchedulerShardSize = envutil.EnvOrDefaultInt("COCKROACH_SCHEDULER_SHARD_SIZE", 16)
+
+// defaultRaftEntryCacheSize is the default size in bytes for the Raft entry
+// cache, divided evenly between stores. The Raft entry cache is shared by all
+// Raft groups managed by each store. It is used to cache uncommitted raft log
+// entries such that once those entries are committed, their application can
+// avoid disk reads to retrieve them from the persistent log.
+//
+// It defaults to 1/256 of system memory, with minimum 32 MB, e.g.:
+//
+// 8 GB RAM  = 32 MB  (~2 vCPUs)
+// 16 GB RAM = 64 MB  (~4 vCPUs)
+// 32 GB RAM = 128 MB (~8 vCPUs)
+// 64 GB RAM = 256 MB (~16 vCPUs)
+//
+// This is conservative, since the memory is not accounted for in memory budgets
+// nor via the --cache flag. However, it should be sufficient to achieve near
+// 100% cache hit rate for well-provisioned low-latency clusters with moderate
+// write volume. See: https://github.com/cockroachdb/cockroach/issues/98666
+var defaultRaftEntryCacheSize = func() int64 {
+	var cacheSize int64 = 32 << 20 // 32 MiB
+	if mem, _, err := status.GetTotalMemoryWithoutLogging(); err == nil {
+		if s := mem / 256; s > cacheSize {
+			cacheSize = s
+		}
+	}
+	return envutil.EnvOrDefaultBytes("COCKROACH_RAFT_ENTRY_CACHE_SIZE", cacheSize)
+}()
 
 // defaultRaftSchedulerPriorityShardSize specifies the default size of the Raft
 // scheduler priority shard, used for certain system ranges. This shard is
@@ -151,20 +179,43 @@ var logStoreTelemetryTicks = envutil.EnvOrDefaultInt(
 	6*60,
 )
 
+// defaultRangefeedSchedulerConcurrency specifies how many workers rangefeed
+// scheduler will use to perform rangefeed work. This number will be divided
+// between stores of the node.
+var defaultRangefeedSchedulerConcurrency = envutil.EnvOrDefaultInt(
+	"COCKROACH_RANGEFEED_SCHEDULER_WORKERS", min(4*runtime.GOMAXPROCS(0), 64))
+
+// defaultRangefeedSchedulerShardSize specifies the default maximum number of
+// scheduler worker goroutines per mutex shard. By default, we spin up 4 workers
+// per CPU core, capped at 64, so 8 is equivalent to 2 CPUs per shard, or a
+// maximum of 8 shards. Since rangefeed processing is generally cheap, this
+// significantly relieves contention, while also avoiding starvation by
+// excessive sharding.
+var defaultRangefeedSchedulerShardSize = envutil.EnvOrDefaultInt(
+	"COCKROACH_RANGEFEED_SCHEDULER_SHARD_SIZE", 8)
+
+// defaultRangefeedSchedulerPriorityShardSize specifies the default size of the
+// rangefeed scheduler priority shard, used for certain system ranges. This
+// shard is always fully populated with workers that don't count towards the
+// concurrency limit, and is thus effectively the number of priority workers per
+// store.
+var defaultRangefeedSchedulerPriorityShardSize = envutil.EnvOrDefaultInt(
+	"COCKROACH_RANGEFEED_SCHEDULER_PRIORITY_SHARD_SIZE", 2)
+
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kv.bulk_io_write.max_rate",
 	"the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops",
-	1<<40,
-).WithPublic()
+	1<<40, // 1 TiB
+	settings.WithPublic)
 
 // addSSTableRequestLimit limits concurrent AddSSTable requests.
 var addSSTableRequestLimit = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"kv.bulk_io_write.concurrent_addsstable_requests",
 	"number of concurrent AddSSTable requests per store before queueing",
-	1,
+	math.MaxInt, // unlimited
 	settings.PositiveInt,
 )
 
@@ -177,7 +228,7 @@ var addSSTableAsWritesRequestLimit = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"kv.bulk_io_write.concurrent_addsstable_as_writes_requests",
 	"number of concurrent AddSSTable requests ingested as writes per store before queueing",
-	10,
+	math.MaxInt, // unlimited
 	settings.PositiveInt,
 )
 
@@ -211,47 +262,48 @@ var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-// leaseTransferWait is the timeout for a single iteration of draining range leases.
-var leaseTransferWait = func() *settings.DurationSetting {
-	s := settings.RegisterDurationSetting(
-		settings.SystemOnly,
-		leaseTransferWaitSettingName,
-		"the timeout for a single iteration of the range lease transfer phase of draining "+
-			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
-			"after changing this setting)",
-		5*time.Second,
-		func(v time.Duration) error {
-			if v < 0 {
-				return errors.Errorf("cannot set %s to a negative duration: %s",
-					leaseTransferWaitSettingName, v)
-			}
-			return nil
-		},
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
+// LeaseTransferPerIterationTimeout is the timeout for a single iteration of draining range leases.
+var LeaseTransferPerIterationTimeout = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"server.shutdown.lease_transfer_wait",
+	"the timeout for a single iteration of the range lease transfer phase of draining "+
+		"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
+		"after changing this setting)",
+	5*time.Second,
+	settings.WithName("server.shutdown.lease_transfer_iteration.timeout"),
+	settings.NonNegativeDuration,
+	settings.WithPublic,
+)
 
-const leaseTransferWaitSettingName = "server.shutdown.lease_transfer_wait"
-
-// ExportRequestsLimit is the number of Export requests that can run at once.
+// exportRequestsLimit is the number of Export requests that can run at once.
 // Each extracts data from Pebble to an in-memory SST and returns it to the
 // caller. In order to not exhaust the disk or memory, or saturate the network,
 // limit the number of these that can be run in parallel. This number was chosen
 // by a guessing - it could be improved by more measured heuristics. Exported
 // here since we check it in the caller to limit generated requests as well
 // to prevent excessive queuing.
-var ExportRequestsLimit = settings.RegisterIntSetting(
-	settings.SystemOnly,
+var exportRequestsLimit = settings.RegisterIntSetting(
+	settings.SystemVisible, // used in backup processor
 	"kv.bulk_io_write.concurrent_export_requests",
 	"number of export requests a store will handle concurrently before queuing",
 	3,
 	settings.PositiveInt,
 )
 
+// raftStepDownOnRemoval is a metamorphic test parameter that makes Raft leaders
+// step down on demotion or removal. Following an upgrade, clusters may have
+// replicas with mixed settings, because it's only changed when initializing
+// replicas. Varying it makes sure we handle this state.
+var raftStepDownOnRemoval = util.ConstantWithMetamorphicTestBool("raft-step-down-on-removal", true)
+
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig(clock *hlc.Clock) StoreConfig {
-	return testStoreConfig(clock, clusterversion.TestingBinaryVersion)
+	return testStoreConfig(clock, clusterversion.Latest.Version())
+}
+
+// TestStoreConfigWithVersion is the same as TestStoreConfig but allows to pass a cluster version.
+func TestStoreConfigWithVersion(clock *hlc.Clock, version roachpb.Version) StoreConfig {
+	return testStoreConfig(clock, version)
 }
 
 func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
@@ -291,6 +343,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 }
 
 func newRaftConfig(
+	ctx context.Context,
 	strg raft.Storage,
 	id uint64,
 	appliedIndex kvpb.RaftIndex,
@@ -298,18 +351,33 @@ func newRaftConfig(
 	logger raft.Logger,
 ) *raft.Config {
 	return &raft.Config{
-		ID:                        id,
-		Applied:                   uint64(appliedIndex),
-		AsyncStorageWrites:        true,
-		ElectionTick:              storeCfg.RaftElectionTimeoutTicks,
-		HeartbeatTick:             storeCfg.RaftHeartbeatIntervalTicks,
-		MaxUncommittedEntriesSize: storeCfg.RaftMaxUncommittedEntriesSize,
-		MaxCommittedSizePerReady:  storeCfg.RaftMaxCommittedSizePerReady,
-		MaxSizePerMsg:             storeCfg.RaftMaxSizePerMsg,
-		MaxInflightMsgs:           storeCfg.RaftMaxInflightMsgs,
-		MaxInflightBytes:          storeCfg.RaftMaxInflightBytes,
-		Storage:                   strg,
-		Logger:                    logger,
+		ID:                          id,
+		Applied:                     uint64(appliedIndex),
+		AsyncStorageWrites:          true,
+		ElectionTick:                storeCfg.RaftElectionTimeoutTicks,
+		HeartbeatTick:               storeCfg.RaftHeartbeatIntervalTicks,
+		MaxUncommittedEntriesSize:   storeCfg.RaftMaxUncommittedEntriesSize,
+		MaxCommittedSizePerReady:    storeCfg.RaftMaxCommittedSizePerReady,
+		DisableConfChangeValidation: true, // see https://github.com/cockroachdb/cockroach/issues/105797
+		MaxSizePerMsg:               storeCfg.RaftMaxSizePerMsg,
+		MaxInflightMsgs:             storeCfg.RaftMaxInflightMsgs,
+		MaxInflightBytes:            storeCfg.RaftMaxInflightBytes,
+		Storage:                     strg,
+		Logger:                      logger,
+
+		// StepDownOnRemoval requires 23.2. Otherwise, in a mixed-version cluster, a
+		// 23.2 leader may step down when it demotes itself to learner, but a
+		// designated follower (first in the range) running 23.1 will only campaign
+		// once the leader is entirely removed from the range descriptor (see
+		// shouldCampaignOnConfChange). This would leave the range without a leader,
+		// having to wait out an election timeout.
+		//
+		// We only set this on replica initialization, so replicas without
+		// StepDownOnRemoval may remain on 23.2 nodes until they restart. That's
+		// totally fine, we just can't rely on this behavior until 24.1, but
+		// we currently don't either.
+		StepDownOnRemoval: storeCfg.Settings.Version.IsActive(ctx, clusterversion.V23_2) &&
+			raftStepDownOnRemoval,
 
 		PreVote:     true,
 		CheckQuorum: storeCfg.RaftEnableCheckQuorum,
@@ -583,18 +651,18 @@ A Replica should be thought of primarily as a State Machine applying commands
 from a replicated log (the log being replicated across the members of the
 Range). The Store's RaftTransport receives Raft messages from Replicas residing
 on other Stores and routes them to the appropriate Replicas via
-Store.HandleRaftRequest (which is part of the RaftMessageHandler interface),
-ultimately resulting in a call to Replica.handleRaftReadyRaftMuLocked, which
-houses the integration with the etcd/raft library (raft.RawNode). This may
-generate Raft messages to be sent to other Stores; these are handed to
-Replica.sendRaftMessages which ultimately hands them to the Store's
-RaftTransport.SendAsync method. Raft uses message passing (not
-request-response), and outgoing messages will use a gRPC stream that differs
-from that used for incoming messages (which makes asymmetric partitions more
-likely in case of stream-specific problems). The steady state is relatively
-straightforward but when Ranges are being reconfigured, an understanding the
-Replica Lifecycle becomes important and upholding the Store's invariants becomes
-more complex.
+Store.HandleRaftRequest (which is part of the IncomingRaftMessageHandler
+interface), ultimately resulting in a call to
+Replica.handleRaftReadyRaftMuLocked, which houses the integration with the
+etcd/raft library (raft.RawNode). This may generate Raft messages to be sent to
+other Stores; these are handed to Replica.sendRaftMessages which ultimately
+hands them to the Store's RaftTransport.SendAsync method. Raft uses message
+passing (not request-response), and outgoing messages will use a gRPC stream
+that differs from that used for incoming messages (which makes asymmetric
+partitions more likely in case of stream-specific problems). The steady state is
+relatively straightforward but when Ranges are being reconfigured, an
+understanding the Replica Lifecycle becomes important and upholding the Store's
+invariants becomes more complex.
 
 A first phenomenon to understand is that of uninitialized Replicas, which is the
 State Machine at applied index zero, i.e. has an empty state. In CockroachDB, an
@@ -803,6 +871,10 @@ type Store struct {
 	ctSender            *sidetransport.Sender
 	storeGossip         *StoreGossip
 	rebalanceObjManager *RebalanceObjectiveManager
+	// raftTransportForFlowControl exposes the set of (remote) stores the raft
+	// transport is connected to, and is used by the canonical
+	// replicaFlowControlIntegration implementation.
+	raftTransportForFlowControl raftTransportForFlowControl
 
 	coalescedMu struct {
 		syncutil.Mutex
@@ -961,8 +1033,12 @@ type Store struct {
 	// The subset of replicas with active rangefeeds.
 	rangefeedReplicas struct {
 		syncutil.Mutex
-		m map[roachpb.RangeID]struct{}
+		// m contains mapping from rangeID that could be used to retrieve replicas
+		// with associated rangefeed processor scheduler IDs that allow enqueueing
+		// periodic events directly.
+		m map[roachpb.RangeID]int64
 	}
+	rangefeedScheduler *rangefeed.Scheduler
 
 	// raftRecvQueues is a map of per-Replica incoming request queues. These
 	// queues might more naturally belong in Replica, but are kept separate to
@@ -1016,6 +1092,8 @@ type Store struct {
 }
 
 var _ kv.Sender = &Store{}
+var _ IncomingRaftMessageHandler = &Store{}
+var _ OutgoingRaftMessageHandler = &Store{}
 
 // A StoreConfig encompasses the auxiliary objects and configuration
 // required to create a store.
@@ -1136,15 +1214,25 @@ type StoreConfig struct {
 	// SpanConfigsDisabled determines whether we're able to use the span configs
 	// infrastructure or not.
 	//
-	// TODO(irfansharif): We can remove this.
+	// TODO(baptist): Don't add any future uses of this. Will be removed soon.
 	SpanConfigsDisabled bool
-	// Used to subscribe to span configuration changes, keeping up-to-date a
-	// data structure useful for retrieving span configs. Only available if
-	// SpanConfigsDisabled is unset.
-	SpanConfigSubscriber spanconfig.KVSubscriber
 
-	// KVAdmissionController is an optional field used for admission control.
+	// Used to subscribe to span configuration changes, keeping up-to-date a
+	// data structure useful for retrieving span configs.
+	SpanConfigSubscriber spanconfig.KVSubscriber
+	// SharedStorageEnabled stores whether this store is configured with a
+	// shared.Storage instance and can accept shared snapshots.
+	SharedStorageEnabled bool
+
+	// KVAdmissionController is used for admission control.
 	KVAdmissionController kvadmission.Controller
+	// KVFlowController is used for replication admission control.
+	KVFlowController kvflowcontrol.Controller
+	// KVFlowHandles is used for replication admission control.
+	KVFlowHandles kvflowcontrol.Handles
+	// KVFlowHandleMetrics is a shared metrics struct for all
+	// kvflowcontrol.Handles.
+	KVFlowHandleMetrics *kvflowhandle.Metrics
 
 	// SchedulerLatencyListener listens in on scheduling latencies, information
 	// that's then used to adjust various admission control components (like how
@@ -1160,24 +1248,33 @@ type StoreConfig struct {
 
 	// RangeLogWriter is used to write entries to the system.rangelog table.
 	RangeLogWriter RangeLogWriter
+
+	// RangeFeedSchedulerConcurrency specifies number of rangefeed scheduler
+	// workers for the store.
+	RangeFeedSchedulerConcurrency int
+
+	// RangeFeedSchedulerConcurrentPriority specifies the number of rangefeed
+	// scheduler workers for this store's dedicated priority shard. Values < 1
+	// imply 1.
+	RangeFeedSchedulerConcurrencyPriority int
+
+	// RangeFeedSchedulerShardSize specifies the maximum number of workers per
+	// scheduler shard.
+	RangeFeedSchedulerShardSize int
 }
 
 // logRangeAndNodeEventsEnabled is used to enable or disable logging range events
 // (e.g., split, merge, add/remove voter/non-voter) into the system.rangelog
 // table and node join and restart events into system.eventolog table.
 // Decommissioning events are not controlled by this setting.
-var logRangeAndNodeEventsEnabled = func() *settings.BoolSetting {
-	s := settings.RegisterBoolSetting(
-		settings.SystemOnly,
-		"kv.log_range_and_node_events.enabled",
-		"set to true to transactionally log range events"+
-			" (e.g., split, merge, add/remove voter/non-voter) into system.rangelog"+
-			"and node join and restart events into system.eventolog",
-		true,
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
+var logRangeAndNodeEventsEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.log_range_and_node_events.enabled",
+	"set to true to transactionally log range events"+
+		" (e.g., split, merge, add/remove voter/non-voter) into system.rangelog"+
+		"and node join and restart events into system.eventolog",
+	true,
+	settings.WithPublic)
 
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
 // behavior of the consistency checker for tests.
@@ -1197,7 +1294,8 @@ func (sc *StoreConfig) Valid() bool {
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
 		sc.RaftElectionTimeoutTicks > 0 && sc.RaftReproposalTimeoutTicks > 0 &&
 		sc.RaftSchedulerConcurrency > 0 && sc.RaftSchedulerConcurrencyPriority > 0 &&
-		sc.RaftSchedulerShardSize > 0 && sc.ScanInterval >= 0 && sc.AmbientCtx.Tracer != nil
+		sc.RaftSchedulerShardSize > 0 && sc.ScanInterval >= 0 && sc.AmbientCtx.Tracer != nil &&
+		sc.RangeFeedSchedulerConcurrency > 0 && sc.RangeFeedSchedulerShardSize > 0
 }
 
 // SetDefaults initializes unset fields in StoreConfig to values
@@ -1225,14 +1323,39 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 		sc.RaftSchedulerShardSize = defaultRaftSchedulerShardSize
 	}
 	if sc.RaftEntryCacheSize == 0 {
-		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
+		sc.RaftEntryCacheSize = uint64(defaultRaftEntryCacheSize)
+		if numStores > 1 { // guard against zero division
+			sc.RaftEntryCacheSize /= uint64(numStores)
+		}
 	}
 	if raftDisableLeaderFollowsLeaseholder {
 		sc.TestingKnobs.DisableLeaderFollowsLeaseholder = true
 		sc.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader = true // otherwise lease requests fail
+		// The allocator must skip snapshot checks, since these only work when the
+		// leader and leaseholder are colocated.
+		if sc.TestingKnobs.AllocatorKnobs == nil {
+			sc.TestingKnobs.AllocatorKnobs = &allocator.TestingKnobs{}
+		}
+		sc.TestingKnobs.AllocatorKnobs.AllowLeaseTransfersToReplicasNeedingSnapshots = true
+		sc.TestingKnobs.ReplicaPlannerKnobs.AllowVoterRemovalWhenNotLeader = true // downreplication
 	}
 	if raftDisableQuiescence {
 		sc.TestingKnobs.DisableQuiescence = true
+	}
+	if sc.RangeFeedSchedulerConcurrency == 0 {
+		sc.RangeFeedSchedulerConcurrency = defaultRangefeedSchedulerConcurrency
+		if numStores > 1 && sc.RangeFeedSchedulerConcurrency > 1 {
+			// We want at least two workers per store to avoid any blocking.
+			sc.RangeFeedSchedulerConcurrency = min(
+				(sc.RangeFeedSchedulerConcurrency-1)/numStores+1, // ceil division
+				2)
+		}
+	}
+	if sc.RangeFeedSchedulerShardSize == 0 {
+		sc.RangeFeedSchedulerShardSize = defaultRangefeedSchedulerShardSize
+	}
+	if sc.RangeFeedSchedulerConcurrencyPriority == 0 {
+		sc.RangeFeedSchedulerConcurrencyPriority = defaultRangefeedSchedulerPriorityShardSize
 	}
 }
 
@@ -1382,7 +1505,7 @@ func NewStore(
 	s.unquiescedReplicas.Unlock()
 
 	s.rangefeedReplicas.Lock()
-	s.rangefeedReplicas.m = map[roachpb.RangeID]struct{}{}
+	s.rangefeedReplicas.m = map[roachpb.RangeID]int64{}
 	s.rangefeedReplicas.Unlock()
 
 	s.tsCache = tscache.New(cfg.Clock)
@@ -1409,7 +1532,7 @@ func NewStore(
 		s.limiters.BulkIOWriteRate.SetLimit(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)))
 	})
 	s.limiters.ConcurrentExportRequests = limit.MakeConcurrentRequestLimiter(
-		"exportRequestLimiter", int(ExportRequestsLimit.Get(&cfg.Settings.SV)),
+		"exportRequestLimiter", int(exportRequestsLimit.Get(&cfg.Settings.SV)),
 	)
 	s.eagerLeaseAcquisitionLimiter = cfg.EagerLeaseAcquisitionLimiter
 
@@ -1428,6 +1551,7 @@ func NewStore(
 		log.Warningf(ctx, "failed to clear snapshot storage: %v", err)
 	}
 	s.protectedtsReader = cfg.ProtectedTimestampReader
+	s.raftTransportForFlowControl = cfg.Transport
 
 	// On low-CPU instances, a default limit value may still allow ExportRequests
 	// to tie up all cores so cap limiter at cores-1 when setting value is higher.
@@ -1435,8 +1559,8 @@ func NewStore(
 	if exportCores < 1 {
 		exportCores = 1
 	}
-	ExportRequestsLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
-		limit := int(ExportRequestsLimit.Get(&cfg.Settings.SV))
+	exportRequestsLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		limit := int(exportRequestsLimit.Get(&cfg.Settings.SV))
 		if limit > exportCores {
 			limit = exportCores
 		}
@@ -1656,7 +1780,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 					case <-transferCtx.Done():
 						// Context canceled: the timeout loop has decided we've
 						// done enough draining
-						// (server.shutdown.lease_transfer_wait).
+						// (server.shutdown.lease_transfer_iteration.timeout).
 						//
 						// We need this check here because each call of
 						// transferAllAway() traverses all stores/replicas without
@@ -1815,7 +1939,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 
 	// We've seen all the replicas once. Now we're going to iterate
 	// until they're all gone, up to the configured timeout.
-	transferTimeout := leaseTransferWait.Get(&s.cfg.Settings.SV)
+	transferTimeout := LeaseTransferPerIterationTimeout.Get(&s.cfg.Settings.SV)
 
 	drainLeasesOp := "transfer range leases"
 	if err := timeutil.RunWithTimeout(ctx, drainLeasesOp, transferTimeout,
@@ -1855,7 +1979,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 			// same time. If we see it on healthy ones, there's likely something to fix.
 			log.Warningf(ctx, "unable to drain cleanly within %s (cluster setting %s), "+
 				"service might briefly deteriorate if the node is terminated: %s",
-				transferTimeout, leaseTransferWaitSettingName, tErr.Cause())
+				transferTimeout, LeaseTransferPerIterationTimeout.Name(), tErr.Cause())
 		} else {
 			log.Warningf(ctx, "drain error: %+v", err)
 		}
@@ -1889,6 +2013,21 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// TODO(sep-raft-log): do for both engines.
 	if err := s.TODOEngine().SetStoreID(ctx, int32(s.StoreID())); err != nil {
 		return err
+	}
+
+	{
+		m := rangefeed.NewSchedulerMetrics(s.cfg.HistogramWindowInterval)
+		rfs := rangefeed.NewScheduler(rangefeed.SchedulerConfig{
+			Workers:         s.cfg.RangeFeedSchedulerConcurrency,
+			PriorityWorkers: s.cfg.RangeFeedSchedulerConcurrencyPriority,
+			ShardSize:       s.cfg.RangeFeedSchedulerShardSize,
+			Metrics:         m,
+		})
+		s.Registry().AddMetricStruct(m)
+		if err = rfs.Start(ctx, s.stopper); err != nil {
+			return err
+		}
+		s.rangefeedScheduler = rfs
 	}
 
 	// Add the store ID to the scanner's AmbientContext before starting it, since
@@ -1938,6 +2077,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		Clock:                s.cfg.Clock,
 		DB:                   s.db,
 		Stopper:              stopper,
+		Settings:             s.cfg.Settings,
 		TaskLimit:            s.cfg.IntentResolverTaskLimit,
 		AmbientCtx:           s.cfg.AmbientCtx,
 		TestingKnobs:         s.cfg.TestingKnobs.IntentResolverKnobs,
@@ -1971,15 +2111,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// due to a split crashing halfway will simply be resolved on the
 	// next split attempt. They can otherwise be ignored.
 	//
-	// Note that we do not create raft groups at this time; they will be created
-	// on-demand the first time they are needed. This helps reduce the amount of
-	// election-related traffic in a cold start.
-	// Raft initialization occurs when we propose a command on this range or
-	// receive a raft message addressed to it.
-	// TODO(bdarnell): Also initialize raft groups when read leases are needed.
-	// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
-	// and initialize those groups.
-	//
 	// TODO(peter): While we have to iterate to find the replica descriptors
 	// serially, we can perform the migrations and replica creation
 	// concurrently. Note that while we can perform this initialization
@@ -1992,7 +2123,14 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if err != nil {
 		return err
 	}
-	for _, repl := range repls {
+	logEvery := log.Every(10 * time.Second)
+	for i, repl := range repls {
+		// Log progress regularly, but not for the first replica (we only want to
+		// log when this is slow). The last replica is logged after iteration.
+		if logEvery.ShouldLog() && i > 0 {
+			log.Infof(ctx, "initialized %d/%d replicas", i, len(repls))
+		}
+
 		if repl.Desc == nil {
 			// Uninitialized Replicas are not currently instantiated at store start.
 			continue
@@ -2030,23 +2168,19 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			return errors.AssertionFailedf("no tenantID for initialized replica %s", rep)
 		}
 
-		// For replicas that use expiration-based leases, eagerly initialize the
-		// Raft group and unquiesce it. We don't quiesce ranges with expiration
-		// leases, and we want to eagerly acquire leases for them, which happens
-		// during Raft ticks. We rely on Raft pre-vote to avoid disturbing
-		// established Raft leaders.
+		// Eagerly unquiesce replicas that use expiration-based leases. We don't
+		// quiesce ranges with expiration leases, and we want to eagerly acquire
+		// leases for them, which happens during Raft ticks. We rely on Raft
+		// pre-vote to avoid disturbing established Raft leaders.
 		//
 		// NB: cluster settings haven't propagated yet, so we have to check the last
 		// known lease instead of relying on shouldUseExpirationLeaseRLocked(). We
 		// also check Sequence > 0 to omit ranges that haven't seen a lease yet.
 		if l, _ := rep.GetLease(); l.Type() == roachpb.LeaseExpiration && l.Sequence > 0 {
-			rep.maybeInitializeRaftGroup(ctx)
+			rep.maybeUnquiesce(ctx, true /* wakeLeader */, true /* mayCampaign */)
 		}
 	}
-
-	// Start Raft processing goroutines.
-	s.cfg.Transport.Listen(s.StoreID(), s)
-	s.processRaft(ctx)
+	log.Infof(ctx, "initialized %d/%d replicas", len(repls), len(repls))
 
 	// Register a callback to unquiesce any ranges with replicas on a
 	// node transitioning from non-live to live.
@@ -2100,28 +2234,21 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			s.onSpanConfigUpdate(ctx, update)
 		})
 
-		// When toggling between the system config span and the span
-		// configs infrastructure, we want to re-apply configs on all
-		// replicas from whatever the new source is.
-		spanconfigstore.EnabledSetting.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
-			enabled := spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV)
-			if enabled {
-				s.applyAllFromSpanConfigStore(ctx)
-			} else if scp := s.cfg.SystemConfigProvider; scp != nil {
-				if sc := scp.GetSystemConfig(); sc != nil {
-					s.systemGossipUpdate(sc)
-				}
-			}
-		})
-
 		// We also want to do it when the fallback config setting is changed.
 		spanconfigstore.FallbackConfigOverride.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
 			s.applyAllFromSpanConfigStore(ctx)
 		})
 	}
 
+	// Start Raft processing goroutines.
+	s.cfg.Transport.ListenIncomingRaftMessages(s.StoreID(), s)
+	s.cfg.Transport.ListenOutgoingMessage(s.StoreID(), s)
+	s.processRaft(ctx)
+
 	// Connect rangefeeds to closed timestamp updates.
 	s.startRangefeedUpdater(ctx)
+
+	s.startRangefeedTxnPushNotifier(ctx)
 
 	if s.replicateQueue != nil {
 		s.storeRebalancer = NewStoreRebalancer(
@@ -2152,10 +2279,7 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 		return s.cfg.TestingKnobs.ConfReaderInterceptor(), nil
 	}
 
-	if s.cfg.SpanConfigsDisabled ||
-		!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) ||
-		s.TestingKnobs().UseSystemConfigSpanForQueues {
-
+	if s.cfg.SpanConfigsDisabled || s.TestingKnobs().UseSystemConfigSpanForQueues {
 		sysCfg := s.cfg.SystemConfigProvider.GetSystemConfig()
 		if sysCfg == nil {
 			return nil, errSpanConfigsUnavailable
@@ -2300,9 +2424,52 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 	})
 }
 
-func (s *Store) addReplicaWithRangefeed(rangeID roachpb.RangeID) {
+// startRangefeedTxnPushNotifier starts a worker that would periodically
+// enqueue txn push event for rangefeed processors to let them push lagging
+// transactions.
+// Note that this is only affecting scheduler based rangefeeds.
+func (s *Store) startRangefeedTxnPushNotifier(ctx context.Context) {
+	_ /* err */ = s.stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{
+		TaskName: "transaction-rangefeed-push-notifier",
+		SpanOpt:  stop.SterileRootSpan,
+	}, func(ctx context.Context) {
+		ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
+		makeSchedulerBatch := func() *rangefeed.SchedulerBatch {
+			batch := s.rangefeedScheduler.NewEnqueueBatch()
+			s.rangefeedReplicas.Lock()
+			for _, id := range s.rangefeedReplicas.m {
+				if id != 0 {
+					// Only process ranges that use scheduler.
+					batch.Add(id)
+				}
+			}
+			s.rangefeedReplicas.Unlock()
+			return batch
+		}
+
+		ticker := time.NewTicker(rangefeed.DefaultPushTxnsInterval)
+		for {
+			select {
+			case <-ticker.C:
+				if !rangefeed.PushTxnsEnabled.Get(&s.ClusterSettings().SV) {
+					continue
+				}
+				batch := makeSchedulerBatch()
+				s.rangefeedScheduler.EnqueueBatch(batch, rangefeed.PushTxnQueued)
+				batch.Close()
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			}
+		}
+	})
+}
+
+func (s *Store) addReplicaWithRangefeed(rangeID roachpb.RangeID, schedulerID int64) {
 	s.rangefeedReplicas.Lock()
-	s.rangefeedReplicas.m[rangeID] = struct{}{}
+	s.rangefeedReplicas.m[rangeID] = schedulerID
 	s.rangefeedReplicas.Unlock()
 }
 
@@ -2315,10 +2482,6 @@ func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 // onSpanConfigUpdate is the callback invoked whenever this store learns of a
 // span config update.
 func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
-	if !spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
-		return
-	}
-
 	sp, err := keys.SpanAddr(updated)
 	if err != nil {
 		log.Errorf(ctx, "skipped applying update (%s), unexpected error resolving span address: %v",
@@ -2339,6 +2502,7 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 
 			replCtx := repl.AnnotateCtx(ctx)
 			startKey := repl.Desc().StartKey
+			changed := true
 			if sp.ContainsKey(startKey) {
 				// It's possible that the update we're receiving here implies a split.
 				// If the update corresponds to what would be the config for the
@@ -2354,41 +2518,16 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 				// adjacent table. This results in a single update, corresponding to the
 				// new table's span, which forms the right-hand side post split.
 
-				// TODO(irfansharif): It's possible for a config to be applied over an
-				// entire range when it only pertains to the first half of the range.
-				// This will be corrected shortly -- we enqueue the range for a split
-				// below where we then apply the right config on each half. But still,
-				// it's surprising behavior and gets in the way of a desirable
-				// consistency guarantee: a key's config at any point in time is one
-				// that was explicitly declared over it, or the default config.
-				//
-				// We can do better, we can skip applying the config entirely and
-				// enqueue the split, then relying on the split trigger to install
-				// the right configs on each half. The current structure is as it is
-				// to maintain parity with the system config span variant.
-
 				conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, startKey)
 				if err != nil {
-					log.Errorf(ctx, "skipped applying update, unexpected error reading from subscriber: %v", err)
+					log.Errorf(replCtx, "skipped applying update, unexpected error reading from subscriber: %v", err)
 					return err
 				}
-				repl.SetSpanConfig(conf)
+				changed = repl.SetSpanConfig(conf)
 			}
-
-			// TODO(irfansharif): For symmetry with the system config span variant,
-			// we queue blindly; we could instead only queue it if we knew the
-			// range's keyspans has a split in there somewhere, or was now part of a
-			// larger range and eligible for a merge, or the span config implied a
-			// need for {up,down}replication.
-			s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
-			s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
-			s.replicateQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
+			if changed {
+				repl.MaybeQueue(ctx, now)
+			}
 			return nil // more
 		},
 	); err != nil {
@@ -2410,13 +2549,10 @@ func (s *Store) applyAllFromSpanConfigStore(ctx context.Context) {
 			return true // more
 		}
 
-		repl.SetSpanConfig(conf)
-		s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-			h.MaybeAdd(ctx, repl, now)
-		})
-		s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-			h.MaybeAdd(ctx, repl, now)
-		})
+		changed := repl.SetSpanConfig(conf)
+		if changed {
+			repl.MaybeQueue(replCtx, now)
+		}
 		return true // more
 	})
 }
@@ -2485,12 +2621,10 @@ func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) er
 	return storage.MVCCPutProto(
 		ctx,
 		s.TODOEngine(), // TODO(sep-raft-log): probably state engine
-		nil,
 		keys.StoreLastUpKey(),
 		hlc.Timestamp{},
-		hlc.ClockTimestamp{},
-		nil,
 		&time,
+		storage.MVCCWriteOptions{},
 	)
 }
 
@@ -2521,12 +2655,10 @@ func (s *Store) WriteHLCUpperBound(ctx context.Context, time int64) error {
 	if err := storage.MVCCPutProto(
 		ctx,
 		batch,
-		nil,
 		keys.StoreHLCUpperBoundKey(),
 		hlc.Timestamp{},
-		hlc.ClockTimestamp{},
-		nil,
 		&ts,
+		storage.MVCCWriteOptions{},
 	); err != nil {
 		return err
 	}
@@ -2572,7 +2704,7 @@ func ReadMaxHLCUpperBound(ctx context.Context, engines []storage.Engine) (int64,
 
 // GetReplica fetches a replica by Range ID. Returns an error if no replica is found.
 //
-// See also GetReplicaIfExists for a more perfomant version.
+// See also GetReplicaIfExists for a more performant version.
 func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 	if r := s.GetReplicaIfExists(rangeID); r != nil {
 		return r, nil
@@ -2888,22 +3020,24 @@ func (s *Store) RangeFeed(
 // whenever availability changes.
 func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	var (
-		raftLeaderCount               int64
-		leaseHolderCount              int64
-		leaseExpirationCount          int64
-		leaseEpochCount               int64
-		leaseLivenessCount            int64
-		raftLeaderNotLeaseHolderCount int64
-		raftLeaderInvalidLeaseCount   int64
-		quiescentCount                int64
-		uninitializedCount            int64
-		averageQueriesPerSecond       float64
-		averageRequestsPerSecond      float64
-		averageReadsPerSecond         float64
-		averageWritesPerSecond        float64
-		averageReadBytesPerSecond     float64
-		averageWriteBytesPerSecond    float64
-		averageCPUNanosPerSecond      float64
+		raftLeaderCount                int64
+		leaseHolderCount               int64
+		leaseExpirationCount           int64
+		leaseEpochCount                int64
+		leaseLivenessCount             int64
+		leaseViolatingPreferencesCount int64
+		leaseLessPreferredCount        int64
+		raftLeaderNotLeaseHolderCount  int64
+		raftLeaderInvalidLeaseCount    int64
+		quiescentCount                 int64
+		uninitializedCount             int64
+		averageQueriesPerSecond        float64
+		averageRequestsPerSecond       float64
+		averageReadsPerSecond          float64
+		averageWritesPerSecond         float64
+		averageReadBytesPerSecond      float64
+		averageWriteBytesPerSecond     float64
+		averageCPUNanosPerSecond       float64
 
 		rangeCount                int64
 		unavailableRangeCount     int64
@@ -2927,10 +3061,6 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	)
 
 	now := s.cfg.Clock.NowAsClockTimestamp()
-	var livenessMap livenesspb.IsLiveMap
-	if s.cfg.NodeLiveness != nil {
-		livenessMap = s.cfg.NodeLiveness.GetIsLiveMap()
-	}
 	clusterNodes := s.ClusterNodeCount()
 
 	s.mu.RLock()
@@ -2943,6 +3073,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	ioOverload, _ = s.ioThreshold.t.Score()
 	s.ioThreshold.Unlock()
 
+	// We want to avoid having to read this multiple times during the replica
+	// visiting, so load it once up front for all nodes.
+	livenessMap := s.cfg.NodeLiveness.ScanNodeVitalityFromCache()
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		metrics := rep.Metrics(ctx, now, livenessMap, clusterNodes)
 		if metrics.Leader {
@@ -2966,6 +3099,13 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 			if metrics.LivenessLease {
 				leaseLivenessCount++
+			}
+			// NB: Can't be satisfying a less preferred preference, and also
+			// satisfying no preferences.
+			if metrics.ViolatingLeasePreferences {
+				leaseViolatingPreferencesCount++
+			} else if metrics.LessPreferredLease {
+				leaseLessPreferredCount++
 			}
 		}
 		if metrics.Quiescent {
@@ -3025,6 +3165,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.LeaseHolderCount.Update(leaseHolderCount)
 	s.metrics.LeaseExpirationCount.Update(leaseExpirationCount)
 	s.metrics.LeaseEpochCount.Update(leaseEpochCount)
+	s.metrics.LeaseViolatingPreferencesCount.Update(leaseViolatingPreferencesCount)
+	s.metrics.LeaseLessPreferredCount.Update(leaseLessPreferredCount)
 	s.metrics.LeaseLivenessCount.Update(leaseLivenessCount)
 	s.metrics.QuiescentCount.Update(quiescentCount)
 	s.metrics.UninitializedCount.Update(uninitializedCount)
@@ -3346,11 +3488,17 @@ func (s *Store) ReplicateQueueDryRun(
 		s.cfg.AmbientCtx.Tracer, "replicate queue dry run",
 	)
 	defer collectAndFinish()
-	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica) bool {
+	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig) bool {
 		return true
 	}
-	_, err := s.replicateQueue.processOneChange(
-		ctx, repl, canTransferLease, false /* scatter */, true, /* dryRun */
+	desc := repl.Desc()
+	conf, err := repl.LoadSpanConfig(ctx)
+	if err != nil {
+		log.Eventf(ctx, "error simulating allocator unable to load span config %s: %s", repl, err)
+		return collectAndFinish(), nil
+	}
+	_, err = s.replicateQueue.processOneChange(
+		ctx, repl, desc, conf, canTransferLease, false /* scatter */, true, /* dryRun */
 	)
 	if err != nil {
 		log.Eventf(ctx, "error simulating allocator on replica %s: %s", repl, err)
@@ -3408,7 +3556,7 @@ func (s *Store) AllocatorCheckRange(
 		storePool = s.cfg.StorePool
 	}
 
-	action, _ := s.allocator.ComputeAction(ctx, storePool, conf, desc)
+	action, _ := s.allocator.ComputeAction(ctx, storePool, &conf, desc)
 
 	// In the case that the action does not require a target, return immediately.
 	if !(action.Add() || action.Replace()) {
@@ -3422,7 +3570,7 @@ func (s *Store) AllocatorCheckRange(
 		return action, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
 	}
 
-	target, _, err := s.allocator.AllocateTarget(ctx, storePool, conf,
+	target, _, err := s.allocator.AllocateTarget(ctx, storePool, &conf,
 		filteredVoters, filteredNonVoters, replacing, action.ReplicaStatus(), action.TargetReplicaType(),
 	)
 	if err == nil {
@@ -3433,7 +3581,7 @@ func (s *Store) AllocatorCheckRange(
 		fragileQuorumErr := s.allocator.CheckAvoidsFragileQuorum(
 			ctx,
 			storePool,
-			conf,
+			&conf,
 			desc.Replicas().VoterDescriptors(),
 			filteredVoters,
 			action.ReplicaStatus(),
@@ -3643,6 +3791,10 @@ func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 	return s.cfg.KVMemoryMonitor
 }
 
+func (s *Store) getRangefeedScheduler() *rangefeed.Scheduler {
+	return s.rangefeedScheduler
+}
+
 // Implementation of the storeForTruncator interface.
 type storeForTruncatorImpl Store
 
@@ -3682,11 +3834,4 @@ func (s *storeForTruncatorImpl) getEngine() storage.Engine {
 
 func init() {
 	tracing.RegisterTagRemapping("s", "store")
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

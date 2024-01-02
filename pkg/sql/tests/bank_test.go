@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/bench"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // maxTransfer is the maximum amount to transfer in one transaction.
@@ -61,10 +62,27 @@ CREATE TABLE IF NOT EXISTS bench.bank (
 
 			amount := rand.Intn(maxTransfer)
 
-			const update = `
+			// Query each account to determine whether it is eligible to take
+			// part in the transfer. We include these checks as filters in the
+			// UPDATE statement to avoid a multi-statement transaction. If
+			// either check fails, the UPDATE will be a no-op.
+			//
+			// The SELECT ... FOR UPDATE ensures that the accounts are locked
+			// before filtering, to avoid thrashing under heavy contention.
+			lock1 := `AND (SELECT balance >= $3 FROM bench.bank WHERE id = $1 FOR UPDATE)`
+			lock2 := `AND (SELECT true          FROM bench.bank WHERE id = $2 FOR UPDATE)`
+			if to < from {
+				// Enforce a consistent lock ordering across accounts,
+				// regardless of transfer direction. This prevents deadlocks,
+				// which will be broken by the database but harm performance.
+				lock1, lock2 = lock2, lock1
+			}
+
+			update := fmt.Sprintf(`
 UPDATE bench.bank
   SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
-  WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bench.bank WHERE id = $1)`
+  WHERE id IN ($1, $2) %s %s`, lock1, lock2)
+
 			db.Exec(b, update, from, to, amount)
 		}
 	})
@@ -72,6 +90,7 @@ UPDATE bench.bank
 }
 
 func BenchmarkBank(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	bench.ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
 		for _, numAccounts := range []int{2, 4, 8, 32, 64} {
 			b.Run(fmt.Sprintf("numAccounts=%d", numAccounts), func(b *testing.B) {

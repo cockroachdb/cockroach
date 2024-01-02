@@ -72,8 +72,9 @@ type scope struct {
 	// distinctOnCols records the DISTINCT ON columns by ID.
 	distinctOnCols opt.ColSet
 
-	// extraCols contains columns specified by the ORDER BY or DISTINCT ON clauses
-	// which don't appear in cols.
+	// extraCols contains columns specified by the ORDER BY or DISTINCT ON
+	// clauses, or needed by FOR UPDATE or FOR SHARE clauses, which don't appear
+	// in cols.
 	extraCols []scopeColumn
 
 	// expr is the SQL node built with this scope.
@@ -132,6 +133,8 @@ const (
 	exprKindOffset
 	exprKindOn
 	exprKindOrderBy
+	exprKindOrderByDelete
+	exprKindOrderByUpdate
 	exprKindReturning
 	exprKindSelect
 	exprKindStoreID
@@ -153,6 +156,8 @@ var exprKindName = [...]string{
 	exprKindOffset:            "OFFSET",
 	exprKindOn:                "ON",
 	exprKindOrderBy:           "ORDER BY",
+	exprKindOrderByDelete:     "ORDER BY in DELETE",
+	exprKindOrderByUpdate:     "ORDER BY in UPDATE",
 	exprKindReturning:         "RETURNING",
 	exprKindSelect:            "SELECT",
 	exprKindStoreID:           "RELOCATE STORE ID",
@@ -565,7 +570,8 @@ func (s *scope) hasSameColumns(other *scope) bool {
 }
 
 // removeHiddenCols removes hidden columns from the scope (and moves them to
-// extraCols, in case they are referenced by ORDER BY or DISTINCT ON).
+// extraCols, in case they are referenced by ORDER BY or DISTINCT ON or needed
+// by FOR UPDATE or FOR SHARE).
 func (s *scope) removeHiddenCols() {
 	n := 0
 	for i := range s.cols {
@@ -1026,11 +1032,8 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		colI, resolveErr := colinfo.ResolveColumnItem(s.builder.ctx, s, t)
 		if resolveErr != nil {
 			// It may be a reference to a table, e.g. SELECT tbl FROM tbl.
-			// Attempt to resolve as a TupleStar. We do not attempt to resolve
-			// as a TupleStar if we are inside a view or function definition
-			// because views and functions do not support * expressions.
-			if !s.builder.insideViewDef && !s.builder.insideFuncDef &&
-				sqlerrors.IsUndefinedColumnError(resolveErr) {
+			// Attempt to resolve as a TupleStar.
+			if sqlerrors.IsUndefinedColumnError(resolveErr) {
 				// Attempt to resolve as columnname.*, which allows items
 				// such as SELECT row_to_json(tbl_name) FROM tbl_name to work.
 				return func() (bool, tree.Expr) {
@@ -1357,15 +1360,10 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.ResolvedFunctionDefi
 	// We will be performing type checking on expressions from PARTITION BY and
 	// ORDER BY clauses below, and we need the semantic context to know that we
 	// are in a window function. InWindowFunc is updated when type checking
-	// FuncExpr above, but it is reset upon returning from that, so we need to do
-	// this update manually.
-	defer func(ctx *tree.SemaContext, prevWindow bool) {
-		ctx.Properties.Derived.InWindowFunc = prevWindow
-	}(
-		s.builder.semaCtx,
-		s.builder.semaCtx.Properties.Derived.InWindowFunc,
-	)
-	s.builder.semaCtx.Properties.Derived.InWindowFunc = true
+	// FuncExpr above, but it is reset upon returning from that, so we need to
+	// do this update manually.
+	defer s.builder.semaCtx.Properties.Ancestors.PopTo(s.builder.semaCtx.Properties.Ancestors)
+	s.builder.semaCtx.Properties.Ancestors.Push(tree.WindowFuncAncestor)
 
 	oldPartitions := f.WindowDef.Partitions
 	f.WindowDef.Partitions = make(tree.Exprs, len(oldPartitions))

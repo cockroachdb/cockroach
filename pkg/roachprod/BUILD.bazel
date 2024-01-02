@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -16,6 +15,7 @@ go_library(
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
         "//pkg/roachprod/install",
+        "//pkg/roachprod/lock",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",
         "//pkg/roachprod/vm",
@@ -26,12 +26,10 @@ go_library(
         "//pkg/server/debug/replay",
         "//pkg/util/ctxgroup",
         "//pkg/util/httputil",
+        "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
-        "@org_golang_x_sys//unix",
     ],
 )
-
-get_x_data(name = "get_x_data")

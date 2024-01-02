@@ -66,6 +66,7 @@ func NewMutableFunctionDescriptor(
 	params []descpb.FunctionDescriptor_Parameter,
 	returnType *types.T,
 	returnSet bool,
+	isProcedure bool,
 	privs *catpb.PrivilegeDescriptor,
 ) Mutable {
 	return Mutable{
@@ -84,6 +85,7 @@ func NewMutableFunctionDescriptor(
 				Volatility:        catpb.DefaultFunctionVolatility,
 				LeakProof:         catpb.DefaultFunctionLeakProof,
 				NullInputBehavior: catpb.Function_CALLED_ON_NULL_INPUT,
+				IsProcedure:       isProcedure,
 				Privileges:        privs,
 				Version:           1,
 				ModificationTime:  hlc.Timestamp{},
@@ -193,7 +195,7 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	if desc.Privileges == nil {
 		vea.Report(errors.AssertionFailedf("privileges not set"))
 	} else {
-		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Function))
+		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Routine))
 	}
 
 	// Validate types are properly set.
@@ -392,6 +394,15 @@ func (desc *immutable) GetPostDeserializationChanges() catalog.PostDeserializati
 func (desc *immutable) HasConcurrentSchemaChanges() bool {
 	return desc.DeclarativeSchemaChangerState != nil &&
 		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID
+}
+
+// ConcurrentSchemaChangeJobIDs implements the catalog.Descriptor interface.
+func (desc *immutable) ConcurrentSchemaChangeJobIDs() (ret []catpb.JobID) {
+	if desc.DeclarativeSchemaChangerState != nil &&
+		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID {
+		ret = append(ret, desc.DeclarativeSchemaChangerState.JobID)
+	}
+	return ret
 }
 
 // SkipNamespace implements the catalog.Descriptor interface.
@@ -649,14 +660,14 @@ func (desc *Mutable) RemoveReference(id descpb.ID) {
 	desc.DependedOnBy = ret
 }
 
-// ToFuncObj converts the descriptor to a tree.FuncObj.
-func (desc *immutable) ToFuncObj() *tree.FuncObj {
-	ret := &tree.FuncObj{
-		FuncName: tree.MakeFunctionNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
-		Params:   make(tree.FuncParams, len(desc.Params)),
+// ToRoutineObj converts the descriptor to a tree.RoutineObj.
+func (desc *immutable) ToRoutineObj() *tree.RoutineObj {
+	ret := &tree.RoutineObj{
+		FuncName: tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
+		Params:   make(tree.RoutineParams, len(desc.Params)),
 	}
 	for i := range desc.Params {
-		ret.Params[i] = tree.FuncParam{
+		ret.Params[i] = tree.RoutineParam{
 			Type: desc.Params[i].Type,
 		}
 	}
@@ -665,7 +676,15 @@ func (desc *immutable) ToFuncObj() *tree.FuncObj {
 
 // GetObjectType implements the Object interface.
 func (desc *immutable) GetObjectType() privilege.ObjectType {
-	return privilege.Function
+	return privilege.Routine
+}
+
+// GetObjectTypeString implements the Object interface.
+func (desc *immutable) GetObjectTypeString() string {
+	if desc.IsProcedure() {
+		return "procedure"
+	}
+	return "function"
 }
 
 // FuncDesc implements the catalog.FunctionDescriptor interface.
@@ -679,13 +698,18 @@ func (desc *immutable) GetLanguage() catpb.Function_Language {
 }
 
 func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
+	routineType := tree.UDFRoutine
+	if desc.IsProcedure() {
+		routineType = tree.ProcedureRoutine
+	}
 	ret = &tree.Overload{
 		Oid:        catid.FuncIDToOID(desc.ID),
 		ReturnType: tree.FixedReturnType(desc.ReturnType.Type),
 		ReturnSet:  desc.ReturnType.ReturnSet,
 		Body:       desc.FunctionBody,
-		IsUDF:      true,
+		Type:       routineType,
 		Version:    uint64(desc.Version),
+		Language:   desc.getCreateExprLang(),
 	}
 
 	argTypes := make(tree.ParamTypes, 0, len(desc.Params))
@@ -747,17 +771,18 @@ func (desc *immutable) calledOnNullInput() (bool, error) {
 }
 
 // ToCreateExpr implements the FunctionDescriptor interface.
-func (desc *immutable) ToCreateExpr() (ret *tree.CreateFunction, err error) {
-	ret = &tree.CreateFunction{
-		FuncName: tree.MakeFunctionNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
-		ReturnType: tree.FuncReturnType{
+func (desc *immutable) ToCreateExpr() (ret *tree.CreateRoutine, err error) {
+	ret = &tree.CreateRoutine{
+		Name:        tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
+		IsProcedure: desc.IsProcedure(),
+		ReturnType: tree.RoutineReturnType{
 			Type:  desc.ReturnType.Type,
-			IsSet: desc.ReturnType.ReturnSet,
+			SetOf: desc.ReturnType.ReturnSet,
 		},
 	}
-	ret.Params = make(tree.FuncParams, len(desc.Params))
+	ret.Params = make(tree.RoutineParams, len(desc.Params))
 	for i := range desc.Params {
-		ret.Params[i] = tree.FuncParam{
+		ret.Params[i] = tree.RoutineParam{
 			Name:  tree.Name(desc.Params[i].Name),
 			Type:  desc.Params[i].Type,
 			Class: toTreeNodeParamClass(desc.Params[i].Class),
@@ -771,57 +796,64 @@ func (desc *immutable) ToCreateExpr() (ret *tree.CreateFunction, err error) {
 	}
 	// We only store 5 function attributes at the moment. We may extend the
 	// pre-allocated capacity in the future.
-	ret.Options = make(tree.FunctionOptions, 0, 5)
+	ret.Options = make(tree.RoutineOptions, 0, 5)
 	ret.Options = append(ret.Options, desc.getCreateExprVolatility())
-	ret.Options = append(ret.Options, tree.FunctionLeakproof(desc.LeakProof))
+	ret.Options = append(ret.Options, tree.RoutineLeakproof(desc.LeakProof))
 	ret.Options = append(ret.Options, desc.getCreateExprNullInputBehavior())
-	ret.Options = append(ret.Options, tree.FunctionBodyStr(desc.FunctionBody))
+	ret.Options = append(ret.Options, tree.RoutineBodyStr(desc.FunctionBody))
 	ret.Options = append(ret.Options, desc.getCreateExprLang())
 	return ret, nil
 }
 
-func (desc *immutable) getCreateExprLang() tree.FunctionLanguage {
+// IsProcedure implements the FunctionDescriptor interface.
+func (desc *immutable) IsProcedure() bool {
+	return desc.FunctionDescriptor.IsProcedure
+}
+
+func (desc *immutable) getCreateExprLang() tree.RoutineLanguage {
 	switch desc.Lang {
 	case catpb.Function_SQL:
-		return tree.FunctionLangSQL
+		return tree.RoutineLangSQL
+	case catpb.Function_PLPGSQL:
+		return tree.RoutineLangPLpgSQL
 	}
-	return tree.FunctionLangUnknown
+	return tree.RoutineLangUnknown
 }
 
-func (desc *immutable) getCreateExprVolatility() tree.FunctionVolatility {
+func (desc *immutable) getCreateExprVolatility() tree.RoutineVolatility {
 	switch desc.Volatility {
 	case catpb.Function_IMMUTABLE:
-		return tree.FunctionImmutable
+		return tree.RoutineImmutable
 	case catpb.Function_STABLE:
-		return tree.FunctionStable
+		return tree.RoutineStable
 	case catpb.Function_VOLATILE:
-		return tree.FunctionVolatile
+		return tree.RoutineVolatile
 	}
 	return 0
 }
 
-func (desc *immutable) getCreateExprNullInputBehavior() tree.FunctionNullInputBehavior {
+func (desc *immutable) getCreateExprNullInputBehavior() tree.RoutineNullInputBehavior {
 	switch desc.NullInputBehavior {
 	case catpb.Function_CALLED_ON_NULL_INPUT:
-		return tree.FunctionCalledOnNullInput
+		return tree.RoutineCalledOnNullInput
 	case catpb.Function_RETURNS_NULL_ON_NULL_INPUT:
-		return tree.FunctionReturnsNullOnNullInput
+		return tree.RoutineReturnsNullOnNullInput
 	case catpb.Function_STRICT:
-		return tree.FunctionStrict
+		return tree.RoutineStrict
 	}
 	return 0
 }
 
-func toTreeNodeParamClass(class catpb.Function_Param_Class) tree.FuncParamClass {
+func toTreeNodeParamClass(class catpb.Function_Param_Class) tree.RoutineParamClass {
 	switch class {
 	case catpb.Function_Param_IN:
-		return tree.FunctionParamIn
+		return tree.RoutineParamIn
 	case catpb.Function_Param_OUT:
-		return tree.FunctionParamOut
+		return tree.RoutineParamOut
 	case catpb.Function_Param_IN_OUT:
-		return tree.FunctionParamInOut
+		return tree.RoutineParamInOut
 	case catpb.Function_Param_VARIADIC:
-		return tree.FunctionParamVariadic
+		return tree.RoutineParamVariadic
 	}
 	return 0
 }

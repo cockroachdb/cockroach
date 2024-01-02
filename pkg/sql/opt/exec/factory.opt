@@ -464,17 +464,21 @@ define Insert {
 #    insert is not processed through side-effecting expressions.
 #  - there are no self-referencing foreign keys;
 #  - all FK checks can be performed using direct lookups into unique indexes.
+#  - all uniqueness checks can be performed using direct lookups
+#    into an index (could be a key prefix and not the entire key).
 #
-# In this case, the foreign-key checks can run before (or even concurrently
-# with) the insert. If they are run before, the insert is allowed to
-# auto-commit.
+# In this case, the foreign-key and uniqueness checks can run before the insert.
+# Foreign-key checks could potentially be run concurrently with the insert since
+# they are scanning from a different index than is being mutated. If the checks
+# are run before, the insert is allowed to auto-commit.
 define InsertFastPath {
     Rows [][]tree.TypedExpr
     Table cat.Table
     InsertCols exec.TableColumnOrdinalSet
     ReturnCols exec.TableColumnOrdinalSet
     CheckCols exec.CheckOrdinalSet
-    FkChecks []exec.InsertFastPathFKCheck
+    FkChecks []exec.InsertFastPathCheck
+    UniqChecks []exec.InsertFastPathCheck
 
     # If set, the operator will commit the transaction as part of its execution.
     # This is false when executing inside an explicit transaction.
@@ -621,17 +625,12 @@ define CreateTableAs {
 
 # CreateView implements a CREATE VIEW statement.
 define CreateView {
+    CreateView *tree.CreateView
     Schema cat.Schema
-    ViewName *cat.DataSourceName
-    IfNotExists bool
-    Replace bool
-    Persistence tree.Persistence
-    Materialized bool
     ViewQuery string
     Columns colinfo.ResultColumns
     deps opt.SchemaDeps
     typeDeps opt.SchemaTypeDeps
-    withData bool
 }
 
 # SequenceSelect implements a scan of a sequence as a data source.
@@ -769,7 +768,7 @@ define AlterRangeRelocate {
 # CreateFunction implements CREATE FUNCTION.
 define CreateFunction {
     Schema cat.Schema
-    Cf *tree.CreateFunction
+    Cr *tree.CreateRoutine
     Deps opt.SchemaDeps
     TypeDeps opt.SchemaTypeDeps
 }
@@ -784,4 +783,9 @@ define LiteralValues {
 # ShowCompletions implements SHOW COMPLETIONS.
 define ShowCompletions {
     Command *tree.ShowCompletions
+}
+
+# Call implements CALL for invoking a procedure.
+define Call {
+    Proc *tree.RoutineExpr
 }

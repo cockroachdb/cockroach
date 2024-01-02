@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -56,6 +57,8 @@ func sharedTestdata(t *testing.T) string {
 func TestImportMultiRegion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRaceWithIssue(t, 116049, "probable OOM")
 
 	baseDir := sharedTestdata(t)
 	tc, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -303,6 +306,8 @@ func TestMultiRegionExportImportRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "probable OOM")
+
 	validateNumRows := func(sqlDB *gosql.DB, tableName string, expected int) {
 		res := sqlDB.QueryRow(fmt.Sprintf(`SELECT count(*) FROM %s`, tableName))
 		require.NoError(t, res.Err())
@@ -387,8 +392,8 @@ func TestExportInsideTenant(t *testing.T) {
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantProbabilistic,
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		ExternalIODir:     dir,
 	})
 	defer srv.Stopper().Stop(context.Background())
@@ -420,7 +425,7 @@ func TestImportInTenant(t *testing.T) {
 		ExternalIODir: baseDir,
 		// Test is designed to run inside a tenant so no need to
 		// probabilistically run it inside the default test tenant.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -474,10 +479,10 @@ func TestImportInMultiServerTenant(t *testing.T) {
 	args := base.TestServerArgs{
 		// Test is designed to run inside a tenant so no need to
 		// probabilistically run it inside the default test tenant.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		ExternalIODir:     baseDir,
 	}
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 
 	// Setup a SQL server on a tenant.

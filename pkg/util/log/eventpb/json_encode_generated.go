@@ -281,7 +281,8 @@ func (m *AlterDefaultPrivileges) AppendJSONFields(printComma bool, b redact.Reda
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"ForAllRoles\":true"...)
+		b = append(b, "\"ForAllRoles\":"...)
+		b = strconv.AppendBool(b, m.ForAllRoles)
 	}
 
 	if m.SchemaName != "" {
@@ -434,7 +435,8 @@ func (m *AlterIndexVisible) AppendJSONFields(printComma bool, b redact.Redactabl
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"NotVisible\":true"...)
+		b = append(b, "\"NotVisible\":"...)
+		b = strconv.AppendBool(b, m.NotVisible)
 	}
 
 	if m.Invisibility != 0 {
@@ -788,7 +790,8 @@ func (m *CapturedIndexUsageStats) AppendJSONFields(printComma bool, b redact.Red
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"IsUnique\":true"...)
+		b = append(b, "\"IsUnique\":"...)
+		b = strconv.AppendBool(b, m.IsUnique)
 	}
 
 	if m.IsInverted {
@@ -796,7 +799,8 @@ func (m *CapturedIndexUsageStats) AppendJSONFields(printComma bool, b redact.Red
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"IsInverted\":true"...)
+		b = append(b, "\"IsInverted\":"...)
+		b = strconv.AppendBool(b, m.IsInverted)
 	}
 
 	if m.CreatedAt != "" {
@@ -832,7 +836,8 @@ func (m *CertsReload) AppendJSONFields(printComma bool, b redact.RedactableBytes
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"Success\":true"...)
+		b = append(b, "\"Success\":"...)
+		b = strconv.AppendBool(b, m.Success)
 	}
 
 	if m.ErrorMessage != "" {
@@ -993,6 +998,15 @@ func (m *ChangefeedEmittedBytes) AppendJSONFields(printComma bool, b redact.Reda
 		b = strconv.AppendInt(b, int64(m.EmittedBytes), 10)
 	}
 
+	if m.EmittedMessages != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"EmittedMessages\":"...)
+		b = strconv.AppendInt(b, int64(m.EmittedMessages), 10)
+	}
+
 	if m.LoggingInterval != 0 {
 		if printComma {
 			b = append(b, ',')
@@ -1007,7 +1021,8 @@ func (m *ChangefeedEmittedBytes) AppendJSONFields(printComma bool, b redact.Reda
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"Closing\":true"...)
+		b = append(b, "\"Closing\":"...)
+		b = strconv.AppendBool(b, m.Closing)
 	}
 
 	return printComma, b
@@ -1228,7 +1243,8 @@ func (m *CommentOnColumn) AppendJSONFields(printComma bool, b redact.RedactableB
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"NullComment\":true"...)
+		b = append(b, "\"NullComment\":"...)
+		b = strconv.AppendBool(b, m.NullComment)
 	}
 
 	return printComma, b
@@ -1282,7 +1298,8 @@ func (m *CommentOnConstraint) AppendJSONFields(printComma bool, b redact.Redacta
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"NullComment\":true"...)
+		b = append(b, "\"NullComment\":"...)
+		b = strconv.AppendBool(b, m.NullComment)
 	}
 
 	return printComma, b
@@ -1324,7 +1341,8 @@ func (m *CommentOnDatabase) AppendJSONFields(printComma bool, b redact.Redactabl
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"NullComment\":true"...)
+		b = append(b, "\"NullComment\":"...)
+		b = strconv.AppendBool(b, m.NullComment)
 	}
 
 	return printComma, b
@@ -1378,7 +1396,8 @@ func (m *CommentOnIndex) AppendJSONFields(printComma bool, b redact.RedactableBy
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"NullComment\":true"...)
+		b = append(b, "\"NullComment\":"...)
+		b = strconv.AppendBool(b, m.NullComment)
 	}
 
 	return printComma, b
@@ -1420,7 +1439,8 @@ func (m *CommentOnSchema) AppendJSONFields(printComma bool, b redact.RedactableB
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"NullComment\":true"...)
+		b = append(b, "\"NullComment\":"...)
+		b = strconv.AppendBool(b, m.NullComment)
 	}
 
 	return printComma, b
@@ -1462,7 +1482,8 @@ func (m *CommentOnTable) AppendJSONFields(printComma bool, b redact.RedactableBy
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"NullComment\":true"...)
+		b = append(b, "\"NullComment\":"...)
+		b = strconv.AppendBool(b, m.NullComment)
 	}
 
 	return printComma, b
@@ -1568,6 +1589,16 @@ func (m *CommonConnectionDetails) AppendJSONFields(printComma bool, b redact.Red
 		b = append(b, redact.StartMarker()...)
 		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.RemoteAddress)))))
 		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.SessionID != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SessionID\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SessionID)))
 		b = append(b, '"')
 	}
 
@@ -1923,7 +1954,8 @@ func (m *CommonSQLExecDetails) AppendJSONFields(printComma bool, b redact.Redact
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"FullTableScan\":true"...)
+		b = append(b, "\"FullTableScan\":"...)
+		b = strconv.AppendBool(b, m.FullTableScan)
 	}
 
 	if m.FullIndexScan {
@@ -1931,7 +1963,8 @@ func (m *CommonSQLExecDetails) AppendJSONFields(printComma bool, b redact.Redact
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"FullIndexScan\":true"...)
+		b = append(b, "\"FullIndexScan\":"...)
+		b = strconv.AppendBool(b, m.FullIndexScan)
 	}
 
 	if m.TxnCounter != 0 {
@@ -1950,6 +1983,15 @@ func (m *CommonSQLExecDetails) AppendJSONFields(printComma bool, b redact.Redact
 		printComma = true
 		b = append(b, "\"BulkJobId\":"...)
 		b = strconv.AppendUint(b, uint64(m.BulkJobId), 10)
+	}
+
+	if m.StmtPosInTxn != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StmtPosInTxn\":"...)
+		b = strconv.AppendUint(b, uint64(m.StmtPosInTxn), 10)
 	}
 
 	return printComma, b
@@ -2253,7 +2295,8 @@ func (m *CreateChangefeed) AppendJSONFields(printComma bool, b redact.Redactable
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"Transformation\":true"...)
+		b = append(b, "\"Transformation\":"...)
+		b = strconv.AppendBool(b, m.Transformation)
 	}
 
 	return printComma, b
@@ -2305,7 +2348,8 @@ func (m *CreateFunction) AppendJSONFields(printComma bool, b redact.RedactableBy
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"IsReplace\":true"...)
+		b = append(b, "\"IsReplace\":"...)
+		b = strconv.AppendBool(b, m.IsReplace)
 	}
 
 	return printComma, b
@@ -3350,6 +3394,103 @@ func (m *LevelStats) AppendJSONFields(printComma bool, b redact.RedactableBytes)
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *MVCCIteratorStats) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"StepCount\":"...)
+	b = strconv.AppendInt(b, int64(m.StepCount), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"StepCountInternal\":"...)
+	b = strconv.AppendInt(b, int64(m.StepCountInternal), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"SeekCount\":"...)
+	b = strconv.AppendInt(b, int64(m.SeekCount), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"SeekCountInternal\":"...)
+	b = strconv.AppendInt(b, int64(m.SeekCountInternal), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"BlockBytes\":"...)
+	b = strconv.AppendInt(b, int64(m.BlockBytes), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"BlockBytesInCache\":"...)
+	b = strconv.AppendInt(b, int64(m.BlockBytesInCache), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"KeyBytes\":"...)
+	b = strconv.AppendInt(b, int64(m.KeyBytes), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"ValueBytes\":"...)
+	b = strconv.AppendInt(b, int64(m.ValueBytes), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"PointCount\":"...)
+	b = strconv.AppendInt(b, int64(m.PointCount), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"PointsCoveredByRangeTombstones\":"...)
+	b = strconv.AppendInt(b, int64(m.PointsCoveredByRangeTombstones), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"RangeKeyCount\":"...)
+	b = strconv.AppendInt(b, int64(m.RangeKeyCount), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"RangeKeyContainedPoints\":"...)
+	b = strconv.AppendInt(b, int64(m.RangeKeyContainedPoints), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"RangeKeySkippedPoints\":"...)
+	b = strconv.AppendInt(b, int64(m.RangeKeySkippedPoints), 10)
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *NodeDecommissioned) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
@@ -3481,7 +3622,8 @@ func (m *RecoveryEvent) AppendJSONFields(printComma bool, b redact.RedactableByt
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"IsMultiregionTarget\":true"...)
+		b = append(b, "\"IsMultiregionTarget\":"...)
+		b = strconv.AppendBool(b, m.IsMultiregionTarget)
 	}
 
 	if m.TargetCount != 0 {
@@ -3542,7 +3684,8 @@ func (m *RecoveryEvent) AppendJSONFields(printComma bool, b redact.RedactableByt
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"IsLocalityAware\":true"...)
+		b = append(b, "\"IsLocalityAware\":"...)
+		b = strconv.AppendBool(b, m.IsLocalityAware)
 	}
 
 	if m.AsOfInterval != 0 {
@@ -3559,7 +3702,8 @@ func (m *RecoveryEvent) AppendJSONFields(printComma bool, b redact.RedactableByt
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"WithRevisionHistory\":true"...)
+		b = append(b, "\"WithRevisionHistory\":"...)
+		b = strconv.AppendBool(b, m.WithRevisionHistory)
 	}
 
 	if m.HasEncryptionPassphrase {
@@ -3567,7 +3711,8 @@ func (m *RecoveryEvent) AppendJSONFields(printComma bool, b redact.RedactableByt
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"HasEncryptionPassphrase\":true"...)
+		b = append(b, "\"HasEncryptionPassphrase\":"...)
+		b = strconv.AppendBool(b, m.HasEncryptionPassphrase)
 	}
 
 	if m.KMSType != "" {
@@ -3699,7 +3844,8 @@ func (m *RecoveryEvent) AppendJSONFields(printComma bool, b redact.RedactableByt
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"IgnoreExistingBackup\":true"...)
+		b = append(b, "\"IgnoreExistingBackup\":"...)
+		b = strconv.AppendBool(b, m.IgnoreExistingBackup)
 	}
 
 	if m.ApplicationName != "" {
@@ -4143,6 +4289,67 @@ func (m *RuntimeStats) AppendJSONFields(printComma bool, b redact.RedactableByte
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *SampledExecStats) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"NetworkBytes\":"...)
+	b = strconv.AppendInt(b, int64(m.NetworkBytes), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"MaxMemUsage\":"...)
+	b = strconv.AppendInt(b, int64(m.MaxMemUsage), 10)
+
+	if m.ContentionTime != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ContentionTime\":"...)
+		b = strconv.AppendInt(b, int64(m.ContentionTime), 10)
+	}
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"NetworkMessages\":"...)
+	b = strconv.AppendInt(b, int64(m.NetworkMessages), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"MaxDiskUsage\":"...)
+	b = strconv.AppendInt(b, int64(m.MaxDiskUsage), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"CPUSQLNanos\":"...)
+	b = strconv.AppendInt(b, int64(m.CPUSQLNanos), 10)
+
+	if m.MVCCIteratorStats != nil {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MVCCIteratorStats\":"...)
+		b = append(b, '{')
+		printComma, b = m.MVCCIteratorStats.AppendJSONFields(false, b)
+		b = append(b, '}')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
@@ -4270,7 +4477,8 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"StatsAvailable\":true"...)
+		b = append(b, "\"StatsAvailable\":"...)
+		b = strconv.AppendBool(b, m.StatsAvailable)
 	}
 
 	if m.NanosSinceStatsCollected != 0 {
@@ -4810,6 +5018,249 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = strconv.AppendInt(b, int64(m.MvccRangeKeySkippedPoints), 10)
 	}
 
+	if m.SchemaChangerMode != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SchemaChangerMode\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SchemaChangerMode)))
+		b = append(b, '"')
+	}
+
+	if len(m.SQLInstanceIDs) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SQLInstanceIDs\":["...)
+		for i, v := range m.SQLInstanceIDs {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = strconv.AppendInt(b, int64(v), 10)
+		}
+		b = append(b, ']')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *SampledTransaction) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"User\":\""...)
+
+	if safeRe1.MatchString(m.User) {
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.User)))))
+	} else {
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.User)))))
+		b = append(b, redact.EndMarker()...)
+	}
+	b = append(b, '"')
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"ApplicationName\":\""...)
+	b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.ApplicationName)))
+	b = append(b, '"')
+
+	if m.TxnCounter != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TxnCounter\":"...)
+		b = strconv.AppendUint(b, uint64(m.TxnCounter), 10)
+	}
+
+	if m.SessionID != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SessionID\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SessionID)))
+		b = append(b, '"')
+	}
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"TransactionID\":\""...)
+	b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.TransactionID)))
+	b = append(b, '"')
+
+	if m.TransactionFingerprintID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TransactionFingerprintID\":"...)
+		b = strconv.AppendUint(b, uint64(m.TransactionFingerprintID), 10)
+	}
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"Committed\":"...)
+	b = strconv.AppendBool(b, m.Committed)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"ImplicitTxn\":"...)
+	b = strconv.AppendBool(b, m.ImplicitTxn)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"StartTimeUnixNanos\":"...)
+	b = strconv.AppendInt(b, int64(m.StartTimeUnixNanos), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"EndTimeUnixNanos\":"...)
+	b = strconv.AppendInt(b, int64(m.EndTimeUnixNanos), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"ServiceLatNanos\":"...)
+	b = strconv.AppendInt(b, int64(m.ServiceLatNanos), 10)
+
+	if m.SQLSTATE != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SQLSTATE\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SQLSTATE)))
+		b = append(b, '"')
+	}
+
+	if m.ErrorText != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ErrorText\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.ErrorText)))
+		b = append(b, '"')
+	}
+
+	if m.NumRetries != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NumRetries\":"...)
+		b = strconv.AppendInt(b, int64(m.NumRetries), 10)
+	}
+
+	if m.LastAutoRetryReason != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"LastAutoRetryReason\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.LastAutoRetryReason)))
+		b = append(b, '"')
+	}
+
+	if len(m.StatementFingerprintIDs) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StatementFingerprintIDs\":["...)
+		for i, v := range m.StatementFingerprintIDs {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = strconv.AppendUint(b, uint64(v), 10)
+		}
+		b = append(b, ']')
+	}
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"NumRows\":"...)
+	b = strconv.AppendInt(b, int64(m.NumRows), 10)
+
+	if m.RetryLatNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RetryLatNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.RetryLatNanos), 10)
+	}
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"CommitLatNanos\":"...)
+	b = strconv.AppendInt(b, int64(m.CommitLatNanos), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"IdleLatNanos\":"...)
+	b = strconv.AppendInt(b, int64(m.IdleLatNanos), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"BytesRead\":"...)
+	b = strconv.AppendInt(b, int64(m.BytesRead), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"RowsRead\":"...)
+	b = strconv.AppendInt(b, int64(m.RowsRead), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"RowsWritten\":"...)
+	b = strconv.AppendInt(b, int64(m.RowsWritten), 10)
+
+	if m.SampledExecStats != nil {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SampledExecStats\":"...)
+		b = append(b, '{')
+		printComma, b = m.SampledExecStats.AppendJSONFields(false, b)
+		b = append(b, '}')
+	}
+
 	return printComma, b
 }
 
@@ -5090,7 +5541,8 @@ func (m *SetTenantClusterSetting) AppendJSONFields(printComma bool, b redact.Red
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"AllTenants\":true"...)
+		b = append(b, "\"AllTenants\":"...)
+		b = strconv.AppendBool(b, m.AllTenants)
 	}
 
 	return printComma, b
@@ -5484,7 +5936,8 @@ func (m *TenantSharedServiceStart) AppendJSONFields(printComma bool, b redact.Re
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"OK\":true"...)
+		b = append(b, "\"OK\":"...)
+		b = strconv.AppendBool(b, m.OK)
 	}
 
 	if m.ErrorText != "" {
@@ -5622,7 +6075,8 @@ func (m *UnsafeDeleteDescriptor) AppendJSONFields(printComma bool, b redact.Reda
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"Force\":true"...)
+		b = append(b, "\"Force\":"...)
+		b = strconv.AppendBool(b, m.Force)
 	}
 
 	if m.ForceNotice != "" {
@@ -5682,7 +6136,8 @@ func (m *UnsafeDeleteNamespaceEntry) AppendJSONFields(printComma bool, b redact.
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"Force\":true"...)
+		b = append(b, "\"Force\":"...)
+		b = strconv.AppendBool(b, m.Force)
 	}
 
 	if m.ForceNotice != "" {
@@ -5736,7 +6191,8 @@ func (m *UnsafeUpsertDescriptor) AppendJSONFields(printComma bool, b redact.Reda
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"Force\":true"...)
+		b = append(b, "\"Force\":"...)
+		b = strconv.AppendBool(b, m.Force)
 	}
 
 	if m.ForceNotice != "" {
@@ -5805,7 +6261,8 @@ func (m *UnsafeUpsertNamespaceEntry) AppendJSONFields(printComma bool, b redact.
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"Force\":true"...)
+		b = append(b, "\"Force\":"...)
+		b = strconv.AppendBool(b, m.Force)
 	}
 
 	if m.FailedValidation {
@@ -5813,7 +6270,8 @@ func (m *UnsafeUpsertNamespaceEntry) AppendJSONFields(printComma bool, b redact.
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"FailedValidation\":true"...)
+		b = append(b, "\"FailedValidation\":"...)
+		b = strconv.AppendBool(b, m.FailedValidation)
 	}
 
 	if m.ValidationErrors != "" {

@@ -1,0 +1,19 @@
+parse
+IDENTIFY_SYSTEM
+----
+IDENTIFY_SYSTEM
+IDENTIFY_SYSTEM -- literals removed
+
+parse
+IDENTIFY_SYSTEM;
+----
+IDENTIFY_SYSTEM -- normalized!
+IDENTIFY_SYSTEM -- literals removed
+
+parse error
+iDENTIFY_SYSTEM
+----
+at or near "identify_system": syntax error
+DETAIL: source SQL:
+iDENTIFY_SYSTEM
+^

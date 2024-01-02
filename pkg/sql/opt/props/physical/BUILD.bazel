@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -30,7 +29,6 @@ go_test(
         "distribution_test.go",
         "required_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":physical"],
     deps = [
         "//pkg/config/zonepb",
@@ -43,5 +41,3 @@ go_test(
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
-
-get_x_data(name = "get_x_data")

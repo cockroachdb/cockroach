@@ -41,12 +41,35 @@ const (
 	// TagArch is the CPU architecture tag const.
 	TagArch = "arch"
 
-	ArchARM64 = CPUArch("arm64")
-	ArchAMD64 = CPUArch("amd64")
-	ArchFIPS  = CPUArch("fips")
+	ArchARM64   = CPUArch("arm64")
+	ArchAMD64   = CPUArch("amd64")
+	ArchFIPS    = CPUArch("fips")
+	ArchUnknown = CPUArch("unknown")
 )
 
 type CPUArch string
+
+// ParseArch parses a string into a CPUArch using a simple, non-exhaustive heuristic.
+// Supported input values were extracted from the following CLI tools/binaries: file, gcloud, aws
+func ParseArch(s string) CPUArch {
+	if s == "" {
+		return ArchUnknown
+	}
+	arch := strings.ToLower(s)
+
+	if strings.Contains(arch, "amd64") || strings.Contains(arch, "x86_64") ||
+		strings.Contains(arch, "intel") {
+		return ArchAMD64
+	}
+	if strings.Contains(arch, "arm64") || strings.Contains(arch, "aarch64") ||
+		strings.Contains(arch, "ampere") || strings.Contains(arch, "graviton") {
+		return ArchARM64
+	}
+	if strings.Contains(arch, "fips") {
+		return ArchFIPS
+	}
+	return ArchUnknown
+}
 
 // GetDefaultLabelMap returns a label map for a common set of labels.
 func GetDefaultLabelMap(opts CreateOpts) map[string]string {
@@ -73,11 +96,18 @@ type VM struct {
 	CreatedAt time.Time `json:"created_at"`
 	// If non-empty, indicates that some or all of the data in the VM instance
 	// is not present or otherwise invalid.
-	Errors   []error           `json:"errors"`
-	Lifetime time.Duration     `json:"lifetime"`
-	Labels   map[string]string `json:"labels"`
+	Errors      []error           `json:"errors"`
+	Lifetime    time.Duration     `json:"lifetime"`
+	Preemptible bool              `json:"preemptible"`
+	Labels      map[string]string `json:"labels"`
 	// The provider-internal DNS name for the VM instance
 	DNS string `json:"dns"`
+
+	// PublicDNS is the public DNS name that can be used to connect to the VM.
+	PublicDNS string `json:"public_dns"`
+	// The DNS provider to use for DNS operations performed for this VM.
+	DNSProvider string `json:"dns_provider"`
+
 	// The name of the cloud provider that hosts the VM instance
 	Provider string `json:"provider"`
 	// The provider-specific id for the instance.  This may or may not be the same as Name, depending
@@ -93,20 +123,14 @@ type VM struct {
 	// their public or private IP.
 	VPC         string `json:"vpc"`
 	MachineType string `json:"machine_type"`
-	Zone        string `json:"zone"`
+	// When available, either vm.ArchAMD64 or vm.ArchARM64.
+	CPUArch CPUArch `json:"cpu_architecture"`
+	// When available, 'Haswell', 'Skylake', etc.
+	CPUFamily string `json:"cpu_family"`
+	Zone      string `json:"zone"`
 	// Project represents the project to which this vm belongs, if the VM is in a
 	// cloud that supports project (i.e. GCE). Empty otherwise.
 	Project string `json:"project"`
-
-	// SQLPort is the port on which the cockroach process is listening for SQL
-	// connections.
-	// Usually config.DefaultSQLPort, except for local clusters.
-	SQLPort int `json:"sql_port"`
-
-	// AdminUIPort is the port on which the cockroach process is listening for
-	// HTTP traffic for the Admin UI.
-	// Usually config.DefaultAdminUIPort, except for local clusters.
-	AdminUIPort int `json:"adminui_port"`
 
 	// LocalClusterName is only set for VMs in a local cluster.
 	LocalClusterName string `json:"local_cluster_name,omitempty"`
@@ -120,6 +144,11 @@ type VM struct {
 	// CostPerHour is the estimated cost per hour of this VM, in US dollars. 0 if
 	//there is no estimate available.
 	CostPerHour float64
+
+	// EmptyCluster indicates that the VM does not exist. Azure allows for empty
+	// clusters, but roachprod does not allow VM-less clusters except when deleting them.
+	// A fake VM will be used in this scenario.
+	EmptyCluster bool
 }
 
 // Name generates the name for the i'th node in a cluster.
@@ -129,9 +158,10 @@ func Name(cluster string, idx int) string {
 
 // Error values for VM.Error
 var (
-	ErrBadNetwork   = errors.New("could not determine network information")
-	ErrInvalidName  = errors.New("invalid VM name")
-	ErrNoExpiration = errors.New("could not determine expiration")
+	ErrBadNetwork    = errors.New("could not determine network information")
+	ErrBadScheduling = errors.New("could not determine scheduling information")
+	ErrInvalidName   = errors.New("invalid VM name")
+	ErrNoExpiration  = errors.New("could not determine expiration")
 )
 
 var regionRE = regexp.MustCompile(`(.*[^-])-?[a-z]$`)
@@ -248,6 +278,7 @@ type CreateOpts struct {
 
 	GeoDistributed bool
 	Arch           string
+	UbuntuVersion  UbuntuVersion
 	VMProviders    []string
 	SSDOpts        struct {
 		UseLocalSSD bool
@@ -385,7 +416,13 @@ type VolumeCreateOpts struct {
 
 type ListOptions struct {
 	IncludeVolumes       bool
+	IncludeEmptyClusters bool
 	ComputeEstimatedCost bool
+}
+
+type PreemptedVM struct {
+	Name        string
+	PreemptedAt time.Time
 }
 
 // A Provider is a source of virtual machines running on some hosting platform.
@@ -404,6 +441,9 @@ type Provider interface {
 	FindActiveAccount(l *logger.Logger) (string, error)
 	List(l *logger.Logger, opts ListOptions) (List, error)
 	// The name of the Provider, which will also surface in the top-level Providers map.
+
+	AddLabels(l *logger.Logger, vms List, labels map[string]string) error
+	RemoveLabels(l *logger.Logger, vms List, labels []string) error
 	Name() string
 
 	// Active returns true if the provider is properly installed and capable of
@@ -436,6 +476,14 @@ type Provider interface {
 	ListVolumeSnapshots(l *logger.Logger, vslo VolumeSnapshotListOpts) ([]VolumeSnapshot, error)
 	// DeleteVolumeSnapshots permanently deletes the given snapshots.
 	DeleteVolumeSnapshots(l *logger.Logger, snapshot ...VolumeSnapshot) error
+
+	// SpotVM related APIs.
+
+	// SupportsSpotVMs returns if the provider supports spot VMs.
+	SupportsSpotVMs() bool
+	// GetPreemptedSpotVMs returns a list of Spot VMs that were preempted since the time specified.
+	// Returns nil, nil when SupportsSpotVMs() is false.
+	GetPreemptedSpotVMs(l *logger.Logger, vms List, since time.Time) ([]PreemptedVM, error)
 }
 
 // DeleteCluster is an optional capability for a Provider which can
@@ -640,4 +688,44 @@ func DNSSafeAccount(account string) string {
 		}
 	}
 	return strings.Map(safe, account)
+}
+
+// SanitizeLabel returns a version of the string that can be used as a label.
+// This takes the lowest common denominator of the label requirements;
+// GCE: "The value can only contain lowercase letters, numeric characters, underscores and dashes.
+// The value can be at most 63 characters long"
+func SanitizeLabel(label string) string {
+	// Replace any non-alphanumeric characters with hyphens
+	re := regexp.MustCompile("[^a-zA-Z0-9]+")
+	label = re.ReplaceAllString(label, "-")
+	label = strings.ToLower(label)
+
+	// Truncate the label to 63 characters (the maximum allowed by GCP)
+	if len(label) > 63 {
+		label = label[:63]
+	}
+	// Remove any leading or trailing hyphens
+	label = strings.Trim(label, "-")
+	return label
+}
+
+// UbuntuVersion specifies the version of Ubuntu used. Note that a default
+// version is already provided and this is only for overriding that default.
+// TODO(Darryl): Remove after all tests are upgraded to Ubuntu 22.04.
+// See: https://github.com/cockroachdb/cockroach/issues/112112.
+type UbuntuVersion string
+
+type UbuntuImages struct {
+	DefaultImage string
+	ARM64Image   string
+	FIPSImage    string
+}
+
+const (
+	FocalFossa UbuntuVersion = "20.04"
+)
+
+// IsOverridden returns true if an Ubuntu version was specified.
+func (u UbuntuVersion) IsOverridden() bool {
+	return u != ""
 }

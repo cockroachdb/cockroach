@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/big"
-	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
@@ -38,7 +37,6 @@ import (
 // pgx.
 func TestShowCommitTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -79,7 +77,7 @@ CREATE TABLE foo (i INT PRIMARY KEY)`)
 
 	testutils.RunTrueAndFalse(t, "pgx batch; simple", func(t *testing.T, simple bool) {
 		resetTable(t)
-		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "", url.User("root"))
+		pgURL, cleanup := s.ApplicationLayer().PGUrl(t)
 		defer cleanup()
 		conf, err := pgx.ParseConfig(pgURL.String())
 		require.NoError(t, err)
@@ -131,7 +129,7 @@ CREATE TABLE foo (i INT PRIMARY KEY)`)
 	})
 	testutils.RunTrueAndFalse(t, "pgx with crdb; simple", func(t *testing.T, simple bool) {
 		resetTable(t)
-		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "", url.User("root"))
+		pgURL, cleanup := s.ApplicationLayer().PGUrl(t)
 		defer cleanup()
 		conf, err := pgx.ParseConfig(pgURL.String())
 		require.NoError(t, err)

@@ -14,7 +14,8 @@ func _() {
 	_ = x[Rows-3]
 	_ = x[CopyIn-4]
 	_ = x[CopyOut-5]
-	_ = x[Unknown-6]
+	_ = x[Replication-6]
+	_ = x[Unknown-7]
 }
 
 func (i StatementReturnType) String() string {
@@ -31,6 +32,8 @@ func (i StatementReturnType) String() string {
 		return "CopyIn"
 	case CopyOut:
 		return "CopyOut"
+	case Replication:
+		return "Replication"
 	case Unknown:
 		return "Unknown"
 	default:

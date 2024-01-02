@@ -40,12 +40,12 @@ import (
 )
 
 var maxConcurrentUploadBuffers = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.azure.concurrent_upload_buffers",
 	"controls the number of concurrent buffers that will be used by the Azure client when uploading chunks."+
 		"Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload",
 	1,
-).WithPublic()
+	settings.WithPublic)
 
 // A note on Azure authentication:
 //
@@ -122,9 +122,7 @@ func azureAuthMethod(uri *url.URL, consumeURI *cloud.ConsumeURL) (cloudpb.AzureA
 
 }
 
-func parseAzureURL(
-	_ cloud.ExternalStorageURIContext, uri *url.URL,
-) (cloudpb.ExternalStorage, error) {
+func parseAzureURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	azureURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_azure
@@ -211,7 +209,7 @@ type azureStorage struct {
 var _ cloud.ExternalStorage = &azureStorage{}
 
 func makeAzureStorage(
-	_ context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
+	_ context.Context, args cloud.EarlyBootExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.azure")
 	conf := dest.AzureConfig
@@ -252,10 +250,18 @@ func makeAzureStorage(
 			return nil, errors.New(
 				"implicit credentials disallowed for azure due to --external-io-disable-implicit-credentials flag")
 		}
-		// The Default credential supports env vars and managed identity magic.
-		// We rely on the former for testing and the latter in prod.
-		// https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential
-		credential, err := azidentity.NewDefaultAzureCredential(nil)
+
+		options := cloud.ExternalStorageOptions{}
+		for _, o := range args.Options {
+			o(&options)
+		}
+
+		defaultCredentialsOptions := &DefaultAzureCredentialWithFileOptions{}
+		if knobs := options.AzureStorageTestingKnobs; knobs != nil {
+			defaultCredentialsOptions.testingKnobs = knobs.(*TestingKnobs)
+		}
+
+		credential, err := NewDefaultAzureCredentialWithFile(defaultCredentialsOptions)
 		if err != nil {
 			return nil, errors.Wrap(err, "azure default credential")
 		}
@@ -405,7 +411,20 @@ func (s *azureStorage) Close() error {
 	return nil
 }
 
+type TestingKnobs struct {
+	MapFileCredentialToken func(azcore.AccessToken, error) (azcore.AccessToken, error)
+}
+
+func (*TestingKnobs) ModuleTestingKnobs() {}
+
+var _ base.ModuleTestingKnobs = &TestingKnobs{}
+
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_azure,
-		parseAzureURL, makeAzureStorage, cloud.RedactedParams(AzureAccountKeyParam), scheme, deprecatedScheme, deprecatedExternalConnectionScheme)
+		cloud.RegisteredProvider{
+			EarlyBootConstructFn: makeAzureStorage,
+			EarlyBootParseFn:     parseAzureURL,
+			RedactedParams:       cloud.RedactedParams(AzureAccountKeyParam),
+			Schemes:              []string{scheme, deprecatedScheme, deprecatedExternalConnectionScheme},
+		})
 }

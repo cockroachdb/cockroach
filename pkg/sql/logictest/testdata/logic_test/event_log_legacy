@@ -458,7 +458,7 @@ statement ok
 SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = DEFAULT
 
 statement ok
-PREPARE set_setting AS SET CLUSTER SETTING cluster.organization = $1
+PREPARE set_setting AS SET CLUSTER SETTING cluster.label = $1
 
 statement ok
 EXECUTE set_setting('some string')
@@ -479,11 +479,11 @@ AND info NOT LIKE '%sql.stats%'
 ORDER BY "timestamp", info
 ----
 1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
-1  {"EventType": "set_cluster_setting", "SettingName": "kv.range_merge.queue_enabled", "Statement": "SET CLUSTER SETTING \"kv.range_merge.queue_enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
+1  {"EventType": "set_cluster_setting", "SettingName": "kv.range_merge.queue.enabled", "Statement": "SET CLUSTER SETTING \"kv.range_merge.queue.enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
 1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
 1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
 1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = DEFAULT", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "DEFAULT"}
-1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.organization", "Statement": "SET CLUSTER SETTING \"cluster.organization\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
+1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.label", "Statement": "SET CLUSTER SETTING \"cluster.label\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
 
 onlyif config 3node-tenant-default-configs
 query IT
@@ -500,7 +500,7 @@ ORDER BY "timestamp", info
 ----
 1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
 1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
-1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.organization", "Statement": "SET CLUSTER SETTING \"cluster.organization\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
+1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.label", "Statement": "SET CLUSTER SETTING \"cluster.label\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
 
 # Set and unset zone configs
 ##################
@@ -579,7 +579,7 @@ SELECT "eventType", "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
  WHERE "eventType" in ('create_view', 'drop_view')
 ORDER BY "timestamp", info
 ----
-create_view  1  {"EventType": "create_view", "Statement": "CREATE VIEW \"\".\"\".v AS SELECT 1", "Tag": "CREATE VIEW", "User": "root", "ViewName": "test.public.v", "ViewQuery": "SELECT 1"}
+create_view  1  {"EventType": "create_view", "Statement": "CREATE VIEW test.public.v AS SELECT 1", "Tag": "CREATE VIEW", "User": "root", "ViewName": "test.public.v", "ViewQuery": "SELECT 1"}
 drop_view    1  {"EventType": "drop_view", "Statement": "DROP VIEW test.public.v", "Tag": "DROP VIEW", "User": "root", "ViewName": "test.public.v"}
 
 
@@ -809,7 +809,7 @@ SELECT jdesc->'schema'->>'name' AS schema, jdesc->'schema'->'privileges'->>'owne
        FROM descs
 ORDER BY 1,2,3,4,5,6
 
-query TTTTTT
+query TTTTTT rowsort
 EXECUTE showOwners('atest')
 ----
 NULL    NULL      NULL  NULL      s     testuser
@@ -835,7 +835,7 @@ ALTER DATABASE atest OWNER TO u;
 # See: https://github.com/cockroachdb/cockroach/issues/57965
 
 # Observe/verify the ownership change.
-query TTTTTT
+query TTTTTT rowsort
 EXECUTE showOwners('atest')
 ----
 NULL    NULL   NULL  NULL  s     testuser
@@ -853,9 +853,9 @@ SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
  WHERE "eventType" LIKE '%_owner'
 ORDER BY "timestamp", info
 ----
-1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "u", "Statement": "ALTER DATABASE atest OWNER TO u", "Tag": "ALTER DATABASE OWNER", "User": "root"}
+1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "u", "Statement": "ALTER DATABASE atest OWNER TO u", "Tag": "ALTER DATABASE", "User": "root"}
 1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "u", "SchemaName": "atest.sc", "Statement": "ALTER SCHEMA atest.sc OWNER TO u", "Tag": "ALTER SCHEMA", "User": "root"}
-1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "u", "Statement": "ALTER TABLE atest.sc.t OWNER TO u", "TableName": "atest.sc.t", "Tag": "ALTER TABLE OWNER", "User": "root"}
+1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "u", "Statement": "ALTER TABLE atest.sc.t OWNER TO u", "TableName": "atest.sc.t", "Tag": "ALTER TABLE", "User": "root"}
 1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "Tag": "ALTER TYPE", "TypeName": "atest.sc.ty", "User": "root"}
 1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "Tag": "ALTER TYPE", "TypeName": "atest.sc._ty", "User": "root"}
 
@@ -875,7 +875,7 @@ statement ok
 REASSIGN OWNED BY testuser TO v
 
 # Observe/verify the ownership change.
-query TTTTTT
+query TTTTTT rowsort
 EXECUTE showOwners('atest')
 ----
 NULL    NULL   NULL  NULL  s     v
@@ -1048,9 +1048,9 @@ ORDER BY "timestamp", info
 ----
 1  {"DescriptorName": "defaultdb.public.eventlog", "DescriptorType": "type", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.eventlog", "Statement": "ALTER TYPE defaultdb.public.eventlog SET SCHEMA testing", "Tag": "ALTER TYPE", "User": "root"}
 1  {"DescriptorName": "defaultdb.testing.eventlog", "DescriptorType": "type", "EventType": "set_schema", "NewDescriptorName": "defaultdb.public.eventlog", "Statement": "ALTER TYPE defaultdb.testing.eventlog SET SCHEMA public", "Tag": "ALTER TYPE", "User": "root"}
-1  {"DescriptorName": "defaultdb.public.a", "DescriptorType": "table", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.a", "Statement": "ALTER TABLE a SET SCHEMA testing", "Tag": "ALTER TABLE SET SCHEMA", "User": "root"}
-1  {"DescriptorName": "defaultdb.public.s", "DescriptorType": "sequence", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.s", "Statement": "ALTER SEQUENCE s SET SCHEMA testing", "Tag": "ALTER TABLE SET SCHEMA", "User": "root"}
-1  {"DescriptorName": "defaultdb.public.v", "DescriptorType": "view", "EventType": "set_schema", "NewDescriptorName": "defaultdb.test_sc.v", "Statement": "ALTER VIEW v SET SCHEMA test_sc", "Tag": "ALTER TABLE SET SCHEMA", "User": "root"}
+1  {"DescriptorName": "defaultdb.public.a", "DescriptorType": "table", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.a", "Statement": "ALTER TABLE a SET SCHEMA testing", "Tag": "ALTER TABLE", "User": "root"}
+1  {"DescriptorName": "defaultdb.public.s", "DescriptorType": "sequence", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.s", "Statement": "ALTER SEQUENCE s SET SCHEMA testing", "Tag": "ALTER SEQUENCE", "User": "root"}
+1  {"DescriptorName": "defaultdb.public.v", "DescriptorType": "view", "EventType": "set_schema", "NewDescriptorName": "defaultdb.test_sc.v", "Statement": "ALTER VIEW v SET SCHEMA test_sc", "Tag": "ALTER VIEW", "User": "root"}
 
 
 # Test the event logs generated by commands that drop views.

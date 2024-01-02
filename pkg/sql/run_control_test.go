@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -60,7 +59,7 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	var queryLatency *time.Duration
 	sem := make(chan struct{}, 1)
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	tc := serverutils.StartNewTestCluster(t, 2, /* numNodes */
+	tc := serverutils.StartCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -167,7 +166,7 @@ func TestCancelSessionPermissions(t *testing.T) {
 
 	ctx := context.Background()
 	numNodes := 2
-	testCluster := serverutils.StartNewTestCluster(t, numNodes,
+	testCluster := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -280,7 +279,7 @@ func TestCancelQueryPermissions(t *testing.T) {
 
 	ctx := context.Background()
 	numNodes := 2
-	testCluster := serverutils.StartNewTestCluster(t, numNodes,
+	testCluster := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -384,7 +383,7 @@ func TestCancelIfExists(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := serverutils.StartNewTestCluster(t, 1, /* numNodes */
+	tc := serverutils.StartCluster(t, 1, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -409,7 +408,7 @@ func TestCancelWithSubquery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, conn, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -423,7 +422,7 @@ func TestIdleInSessionTimeout(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -497,7 +496,7 @@ func TestIdleInTransactionSessionTimeout(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -568,7 +567,7 @@ func TestTransactionTimeout(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -649,7 +648,7 @@ func TestIdleInTransactionSessionTimeoutAbortedState(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -708,7 +707,7 @@ func TestIdleInTransactionSessionTimeoutCommitWaitState(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -770,7 +769,7 @@ func TestStatementTimeoutRetryableErrors(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -820,7 +819,7 @@ func getUserConn(t *testing.T, username string, server serverutils.TestServerInt
 	pgURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(username),
-		Host:     server.ServingSQLAddr(),
+		Host:     server.AdvSQLAddr(),
 		RawQuery: "sslmode=disable",
 	}
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -830,13 +829,13 @@ func getUserConn(t *testing.T, username string, server serverutils.TestServerInt
 	return db
 }
 
-// TestTenantStatementTimeoutAdmissionQueueCancelation tests that a KV request
+// TestTenantStatementTimeoutAdmissionQueueCancellation tests that a KV request
 // that is canceled via a statement timeout is properly removed from the
 // admission control queue. A testing filter is used to "park" a small number of
 // requests thereby consuming those CPU "slots" and testing knobs are used to
 // tightly control the number of entries in the queue so that we guarantee our
 // main statement with a timeout is blocked.
-func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
+func TestTenantStatementTimeoutAdmissionQueueCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -879,9 +878,9 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	}
 
 	params := base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TestTenantAlwaysEnabled,
 		Knobs: base.TestingKnobs{
-			AdmissionControl: &admission.Options{
+			AdmissionControlOptions: &admission.Options{
 				MaxCPUSlots: numBlockers,
 				// During testing if CPU isn't responsive and skipEnforcement
 				// turns off admission control queuing behavior, for this test
@@ -922,11 +921,9 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 		},
 	}
 
-	kvserver, _, _ := serverutils.StartServer(t, params)
-	defer kvserver.Stopper().Stop(context.Background())
-
-	tenant, db := serverutils.StartTenant(t, kvserver, base.TestTenantArgs{TenantID: tenantID})
-	defer db.Close()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	tt := s.ApplicationLayer()
 
 	r1 := sqlutils.MakeSQLRunner(db)
 	r1.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
@@ -937,7 +934,7 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	require.Equal(t, tableID, int(id))
 
 	makeTenantConn := func() *sqlutils.SQLRunner {
-		return sqlutils.MakeSQLRunner(serverutils.OpenDBConn(t, tenant.SQLAddr(), "" /* useDatabase */, false /* insecure */, kvserver.Stopper()))
+		return sqlutils.MakeSQLRunner(tt.SQLConn(t))
 	}
 
 	blockers := make([]*sqlutils.SQLRunner, numBlockers)

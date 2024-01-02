@@ -1,0 +1,55 @@
+setup
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY, k INT);
+CREATE SEQUENCE db.public.sq1;
+INSERT INTO db.public.tbl VALUES (-1, -1),(-2, -2),(-3, -3), (-7, -7);
+----
+
+stage-exec phase=PreCommitPhase stage=1 schemaChangeExecErrorForRollback=(.*validation of column "j" NOT NULL failed on row:.*)
+UPDATE db.public.tbl SET k=NULL WHERE i = -7;
+----
+
+# Each insert will be injected twice per stage, plus 1 extra.
+stage-query phase=PostCommitNonRevertiblePhase stage=: rollback=true
+SELECT count(*)=($successfulStageCount*2)+4 FROM db.public.tbl;
+----
+true
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO db.public.tbl VALUES($stageKey, 1);
+INSERT INTO db.public.tbl VALUES($stageKey + 1, 1);
+UPDATE db.public.tbl SET k=$stageKey WHERE i <> -7;
+UPDATE db.public.tbl SET k=i WHERE i <> -7;
+DELETE FROM db.public.tbl WHERE i=-1;
+DELETE FROM db.public.tbl WHERE i=$stageKey;
+INSERT INTO db.public.tbl VALUES($stageKey, 1);
+INSERT INTO db.public.tbl VALUES(-1, -1);
+----
+
+# Each insert will be injected twice per stage, plus 1 extra.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=($successfulStageCount*2)+4 FROM db.public.tbl;
+----
+true
+
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO db.public.tbl VALUES($stageKey, 1);
+INSERT INTO db.public.tbl VALUES($stageKey + 1, 1);
+UPDATE db.public.tbl SET k=$stageKey WHERE i <> -7;
+UPDATE db.public.tbl SET k=i WHERE i <> -7;
+DELETE FROM db.public.tbl WHERE i=-1;
+DELETE FROM db.public.tbl WHERE i=$stageKey;
+INSERT INTO db.public.tbl VALUES($stageKey, 1);
+INSERT INTO db.public.tbl VALUES(-1, -1);
+----
+
+# Each insert will be injected twice per stage, , plus 1 extra.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=($successfulStageCount*2)+1 FROM db.public.tbl;
+----
+false
+
+test
+ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL AS (k)  STORED
+----

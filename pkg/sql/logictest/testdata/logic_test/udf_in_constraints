@@ -1,5 +1,3 @@
-# LogicTest: !local-mixed-22.2-23.1
-
 statement ok
 CREATE FUNCTION f1(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + 1 $$;
 
@@ -229,7 +227,7 @@ CREATE TABLE t2(
   FAMILY fam_0 (a, b)
 );
 
-statement error cannot drop function "f1" because other objects \(\[test.public.t1, test.public.t2\]\) still depend on it
+statement error pgcode 2BP01 cannot drop function "f1" because other objects \(\[test.public.t1, test.public.t2\]\) still depend on it
 DROP FUNCTION f1;
 
 statement ok
@@ -368,26 +366,26 @@ CREATE TABLE t1 (
   FAMILY fam_0 (a, b)
 );
 
-statement error failed to satisfy CHECK constraint \(public\.f1\(b\) > 1:::INT8\)
+statement error pgcode 23514 failed to satisfy CHECK constraint \(public\.f1\(b\) > 1:::INT8\)
 INSERT INTO t1 VALUES (1,0);
 
 statement ok
 INSERT INTO t1 VALUES (1,1);
 
-statement error validation of CHECK "public\.f1\(a\) > 10:::INT8" failed on row: a=1, b=1
+statement error pgcode 23514 validation of CHECK "public\.f1\(a\) > 10:::INT8" failed on row: a=1, b=1
 ALTER TABLE t1 ADD CONSTRAINT cka CHECK (f1(a) > 10);
 
 # Make sure that constraint still works after a function is renamed.
 statement ok
 ALTER TABLE t1 ADD CONSTRAINT cka CHECK (f1(a) > 1);
 
-statement error pq: failed to satisfy CHECK constraint \(public\.f1\(b\) > 1:::INT8\)
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(public\.f1\(b\) > 1:::INT8\)
 INSERT INTO t1 VALUES (2, -1);
 
 statement ok
 ALTER FUNCTION f1 RENAME to f2;
 
-statement error pq: failed to satisfy CHECK constraint \(public\.f2\(b\) > 1:::INT8\)
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(public\.f2\(b\) > 1:::INT8\)
 INSERT INTO t1 VALUES (2, -1);
 
 query T
@@ -433,5 +431,63 @@ statement ok
 CREATE TABLE t_circle(a INT PRIMARY KEY, b INT);
 CREATE FUNCTION f_circle() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM t_circle $$;
 
+# TODO(107369): This does not appear to error in postgres.
 statement error .*cannot add dependency from descriptor \d+ to function f_circle \(\d+\) because there will be a dependency cycle
 ALTER TABLE t_circle ADD CONSTRAINT ckb CHECK (b + f_circle() > 1);
+
+# Reproduction/regression test for https://github.com/cockroachdb/cockroach/issues/109414
+# Adding a check constraint with alter table doesn't appropriately update back references.
+subtest issue-109414-minimal
+
+statement ok
+CREATE FUNCTION true_is_true() RETURNS BOOL LANGUAGE SQL AS $$ SELECT true = true $$;
+
+statement ok
+BEGIN;
+CREATE TABLE alter_add_check_constraint();
+ALTER TABLE alter_add_check_constraint ADD CONSTRAINT noop CHECK (true_is_true());
+COMMIT;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE alter_add_check_constraint];
+----
+CREATE TABLE public.alter_add_check_constraint (
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT alter_add_check_constraint_pkey PRIMARY KEY (rowid ASC),
+  CONSTRAINT noop CHECK (public.true_is_true())
+)
+
+# This is the original Reproduction of #109414. It's quite interesting in and
+# of itself, so it's been included as it may catch other regressions that the
+# minimal case wouldn't.
+subtest issue-109414-full
+
+statement ok
+CREATE TABLE accounts_a (id UUID NOT NULL, FAMILY "primary" (id, rowid));
+CREATE TABLE accounts_b (id UUID NOT NULL, FAMILY "primary" (id, rowid));
+CREATE FUNCTION is_a_or_b(account_id UUID, account_type TEXT) RETURNS BOOL LANGUAGE SQL AS $$ SELECT (CASE
+        WHEN account_type = 'type_a' THEN (SELECT EXISTS(SELECT * FROM accounts_a WHERE id = account_id))
+        WHEN account_type = 'type_b' THEN (SELECT EXISTS(SELECT * FROM accounts_b WHERE id = account_id))
+        ELSE false
+END) $$;
+
+statement ok
+BEGIN;
+CREATE TABLE a (
+  account_id UUID NOT NULL,
+  account_type TEXT NOT NULL,
+  FAMILY "primary" (account_id, account_type, rowid)
+);
+ALTER TABLE a ADD CONSTRAINT is_a_or_b CHECK (is_a_or_b(account_id, account_type));
+COMMIT;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE a];
+----
+CREATE TABLE public.a (
+	account_id UUID NOT NULL,
+	account_type STRING NOT NULL,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT a_pkey PRIMARY KEY (rowid ASC),
+	CONSTRAINT is_a_or_b CHECK (public.is_a_or_b(account_id, account_type))
+)

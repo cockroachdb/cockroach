@@ -54,6 +54,10 @@ message ComponentID {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "SQLInstanceID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
+
+  // The region the component is associated with.
+  // For the initial implementation only ComponentIDs of Flow type might have this set.
+  optional string region = 5 [(gogoproto.nullable) = false];
 }
 
 // ComponentStats contains statistics for an execution component. A component is
@@ -165,6 +169,10 @@ message KVStats {
   optional util.optional.Uint num_gets = 21 [(gogoproto.nullable) = false];
   optional util.optional.Uint num_scans = 22 [(gogoproto.nullable) = false];
   optional util.optional.Uint num_reverse_scans = 23 [(gogoproto.nullable) = false];
+
+  // UsedStreamer indicates whether the Streamer API was used to perform KV
+  // operations.
+  optional bool used_streamer = 25 [(gogoproto.nullable) = false];
 }
 
 // ExecStats contains statistics about the execution of a component.

@@ -13,6 +13,7 @@ import { DOMAIN_NAME } from "../utils";
 
 type Page =
   | "Databases"
+  | "Database Details"
   | "Index Details"
   | "Jobs"
   | "Schema Insights"
@@ -110,6 +111,23 @@ type TimeScaleChangeEvent = {
   value: string;
 };
 
+type ViewModeEvent = {
+  name: "View Mode Clicked";
+  page: Page;
+  value: string;
+};
+
+type AutoRefreshEvent = {
+  name: "Auto Refresh Toggle";
+  page: Page;
+  value: boolean;
+};
+
+type ManualRefreshEvent = {
+  name: "Manual Refresh";
+  page: Page;
+};
+
 type AnalyticsEvent =
   | ApplySearchCriteriaEvent
   | BackButtonClick
@@ -124,7 +142,10 @@ type AnalyticsEvent =
   | StatementClicked
   | StatementDiagnosticEvent
   | TabChangedEvent
-  | TimeScaleChangeEvent;
+  | TimeScaleChangeEvent
+  | ViewModeEvent
+  | AutoRefreshEvent
+  | ManualRefreshEvent;
 
 const PREFIX = `${DOMAIN_NAME}/analytics`;
 

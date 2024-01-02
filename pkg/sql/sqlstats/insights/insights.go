@@ -14,6 +14,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -26,33 +28,33 @@ import (
 // ExecutionInsightsCapacity limits the number of execution insights retained in memory.
 // As further insights are had, the oldest ones are evicted.
 var ExecutionInsightsCapacity = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.insights.execution_insights_capacity",
 	"the size of the per-node store of execution insights",
 	1000,
 	settings.NonNegativeInt,
-).WithPublic()
+	settings.WithPublic)
 
 // LatencyThreshold configures the execution time beyond which a statement is
 // considered slow. A LatencyThreshold of 0 (the default) disables this
 // detection.
 var LatencyThreshold = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.insights.latency_threshold",
 	"amount of time after which an executing statement is considered slow. Use 0 to disable.",
 	100*time.Millisecond,
-).WithPublic()
+	settings.WithPublic)
 
 // AnomalyDetectionEnabled turns on a per-fingerprint heuristic-based
 // algorithm for marking statements as slow, attempting to capture elevated
 // p99 latency while generally excluding uninteresting executions less than
 // 100ms.
 var AnomalyDetectionEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.insights.anomaly_detection.enabled",
 	"enable per-fingerprint latency recording and anomaly detection",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // AnomalyDetectionLatencyThreshold sets the bar above which we consider
 // statement executions worth inspecting for slow execution. A statement's
@@ -61,33 +63,43 @@ var AnomalyDetectionEnabled = settings.RegisterBoolSetting(
 // and any potential slow execution must also cross this threshold to be
 // reported (this is a UX optimization, removing noise).
 var AnomalyDetectionLatencyThreshold = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.insights.anomaly_detection.latency_threshold",
 	"statements must surpass this threshold to trigger anomaly detection and identification",
 	50*time.Millisecond,
 	settings.NonNegativeDuration,
-).WithPublic()
+	settings.WithPublic)
 
 // AnomalyDetectionMemoryLimit restricts the overall memory available for
 // tracking per-statement execution latencies. When changing this setting, keep
 // an eye on the metrics for memory usage and evictions to avoid introducing
 // churn.
 var AnomalyDetectionMemoryLimit = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.insights.anomaly_detection.memory_limit",
 	"the maximum amount of memory allowed for tracking statement latencies",
 	1024*1024,
-).WithPublic()
+	settings.WithPublic)
 
 // HighRetryCountThreshold sets the number of times a slow statement must have
 // been retried to be marked as having a high retry count.
 var HighRetryCountThreshold = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.insights.high_retry_count.threshold",
 	"the number of retries a slow statement must have undergone for its high retry count to be highlighted as a potential problem",
 	10,
 	settings.NonNegativeInt,
-).WithPublic()
+	settings.WithPublic)
+
+var SQLInsightsStatsExportEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.insights.export.enabled",
+	"controls whether statement and transaction insights statistics are exported to "+
+		"the address pointed to by the CLI flag, --"+cliflags.ObsServiceAddr.Name+
+		". Insights are exported as soon as they're detected. Note that if the --"+
+		cliflags.ObsServiceAddr.Name+" was not set at node startup, enabling this setting will "+
+		"have no effect until the node is restarted with the flag set.",
+	false)
 
 // Metrics holds running measurements of various insights-related runtime stats.
 type Metrics struct {
@@ -141,7 +153,7 @@ type Writer interface {
 	ObserveStatement(sessionID clusterunique.ID, statement *Statement)
 
 	// ObserveTransaction notifies the registry of the end of a transaction.
-	ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction)
+	ObserveTransaction(ctx context.Context, sessionID clusterunique.ID, transaction *Transaction)
 }
 
 // WriterProvider offers a Writer.
@@ -182,8 +194,10 @@ type Provider interface {
 }
 
 // New builds a new Provider.
-func New(st *cluster.Settings, metrics Metrics) Provider {
-	store := newStore(st)
+func New(
+	st *cluster.Settings, metrics Metrics, eventsExporter obs.EventsExporterInterface,
+) Provider {
+	store := newStore(st, eventsExporter)
 	anomalyDetector := newAnomalyDetector(st, metrics)
 
 	return &defaultProvider{
@@ -192,9 +206,7 @@ func New(st *cluster.Settings, metrics Metrics) Provider {
 			newRegistry(st, &compositeDetector{detectors: []detector{
 				&latencyThresholdDetector{st: st},
 				anomalyDetector,
-			}}, &compositeSink{sinks: []sink{
-				store,
-			}}),
+			}}, store),
 		),
 		anomalyDetector: anomalyDetector,
 	}

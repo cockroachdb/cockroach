@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io/fs"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type config struct {
@@ -91,7 +93,7 @@ func IsActive() (active bool, firstUse string) {
 func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 	// Sanity check.
 	if active, firstUse := IsActive(); active {
-		panic(errors.Newf("logging already active; first use:\n%s", firstUse))
+		reportOrPanic(context.Background(), nil /* sv */, "logging already active; first use:\n%s", firstUse)
 	}
 
 	// Our own cancellable context to stop the secondary loggers below.
@@ -132,7 +134,7 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 
 	// Call the final value of logShutdownFn immediately if returning with error.
 	defer func() {
-		if err != nil {
+		if err != nil && logShutdownFn != nil {
 			logShutdownFn()
 		}
 	}()
@@ -247,6 +249,17 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 	logging.stderrSink.noColor.Set(config.Sinks.Stderr.NoColor)
 	if err := logging.stderrSinkInfoTemplate.applyConfig(config.Sinks.Stderr.CommonSinkConfig); err != nil {
 		return nil, err
+	}
+	if config.Sinks.Stderr.NoColor {
+		// This branch exists for backward compatibility with CockroachDB
+		// v23.1 and previous versions. The same effect can be obtained
+		// using 'format-options: {colors: none}'.
+		switch t := logging.stderrSinkInfoTemplate.formatter.(type) {
+		case *formatCrdbV1:
+			t.colorProfile = nil
+		case *formatCrdbV2:
+			t.colorProfile = nil
+		}
 	}
 	logging.stderrSinkInfoTemplate.applyFilters(config.Sinks.Stderr.Channels)
 
@@ -415,12 +428,15 @@ func attachBufferWrapper(
 	if bufConfig.IsNone() {
 		return
 	}
+
 	bs := newBufferedSink(
 		s.sink,
 		*bufConfig.MaxStaleness,
 		uint64(*bufConfig.FlushTriggerSize),
 		uint64(*bufConfig.MaxBufferSize),
-		s.criticality /* crashOnAsyncFlushErr */)
+		s.criticality, /* crashOnAsyncFlushErr */
+		bufConfig.Format,
+	)
 	bs.Start(closer)
 	s.sink = bs
 }
@@ -434,9 +450,15 @@ func (l *sinkInfo) applyConfig(c logconfig.CommonSinkConfig) error {
 	l.criticality = *c.Criticality
 	f, ok := formatters[*c.Format]
 	if !ok {
-		return errors.Newf("unknown format: %q", *c.Format)
+		return errors.WithHintf(errors.Newf("unknown format: %q", *c.Format),
+			"Supported formats: %s.", redact.Safe(strings.Join(formatNames, ", ")))
 	}
-	l.formatter = f
+	l.formatter = f()
+	for k, v := range c.FormatOptions {
+		if err := l.formatter.setOption(k, v); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -452,13 +474,15 @@ func (l *sinkInfo) describeAppliedConfig() (c logconfig.CommonSinkConfig) {
 	c.Format = &f
 	bufferedSink, ok := l.sink.(*bufferedSink)
 	if ok {
+
 		c.Buffering.MaxStaleness = &bufferedSink.maxStaleness
 		triggerSize := logconfig.ByteSize(bufferedSink.triggerSize)
 		c.Buffering.FlushTriggerSize = &triggerSize
+		c.Buffering.Format = &bufferedSink.format.fmtType
 		bufferedSink.mu.Lock()
+		defer bufferedSink.mu.Unlock()
 		maxBufferSize := logconfig.ByteSize(bufferedSink.mu.buf.maxSizeBytes)
 		c.Buffering.MaxBufferSize = &maxBufferSize
-		bufferedSink.mu.Unlock()
 	}
 	return c
 }
@@ -481,9 +505,11 @@ func DescribeAppliedConfig() string {
 	if logging.testingFd2CaptureLogger != nil {
 		config.CaptureFd2.Enable = true
 		fs := logging.testingFd2CaptureLogger.sinkInfos[0].sink.(*fileSink)
-		fs.mu.Lock()
-		dir := fs.mu.logDir
-		fs.mu.Unlock()
+		dir := func() string {
+			fs.mu.Lock()
+			defer fs.mu.Unlock()
+			return fs.mu.logDir
+		}()
 		config.CaptureFd2.Dir = &dir
 		m := logconfig.ByteSize(fs.logFilesCombinedMaxSize)
 		config.CaptureFd2.MaxGroupSize = &m
@@ -505,10 +531,12 @@ func DescribeAppliedConfig() string {
 	}
 
 	// Describe the connections to the stderr sink.
-	logging.rmu.RLock()
-	chans := logging.rmu.channels
-	stderrSinkInfo := logging.rmu.currentStderrSinkInfo
-	logging.rmu.RUnlock()
+
+	chans, stderrSinkInfo := func() (map[logpb.Channel]*loggerT, *sinkInfo) {
+		logging.rmu.RLock()
+		defer logging.rmu.RUnlock()
+		return logging.rmu.channels, logging.rmu.currentStderrSinkInfo
+	}()
 	for ch, logger := range chans {
 		describeConnections(logger, ch,
 			stderrSinkInfo, &config.Sinks.Stderr.Channels)
@@ -532,9 +560,11 @@ func DescribeAppliedConfig() string {
 		fc.MaxFileSize = &mf
 		mg := logconfig.ByteSize(fileSink.logFilesCombinedMaxSize)
 		fc.MaxGroupSize = &mg
-		fileSink.mu.Lock()
-		dir := fileSink.mu.logDir
-		fileSink.mu.Unlock()
+		dir := func() string {
+			fileSink.mu.Lock()
+			defer fileSink.mu.Unlock()
+			return fileSink.mu.logDir
+		}()
 		fc.Dir = &dir
 		fc.BufferedWrites = &fileSink.bufferedWrites
 

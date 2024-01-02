@@ -53,6 +53,13 @@ func NewSSTIterator(
 	return newPebbleSSTIterator(files, opts, forwardOnly)
 }
 
+// NewSSTEngineIterator is like NewSSTIterator, but returns an EngineIterator.
+func NewSSTEngineIterator(
+	files [][]sstable.ReadableFile, opts IterOptions, forwardOnly bool,
+) (EngineIterator, error) {
+	return newPebbleSSTIterator(files, opts, forwardOnly)
+}
+
 // NewMemSSTIterator returns an MVCCIterator for the provided SST data,
 // similarly to NewSSTIterator().
 func NewMemSSTIterator(sst []byte, verify bool, opts IterOptions) (MVCCIterator, error) {
@@ -96,9 +103,9 @@ func NewMultiMemSSTIterator(ssts [][]byte, verify bool, opts IterOptions) (MVCCI
 // engine contains MVCC range keys in the ingested span then this will cause
 // MVCC stats to be estimates since we can't adjust stats for masked points.
 //
-// The given SST and reader cannot contain intents or inline values (i.e. zero
-// timestamps), but this is only checked for keys that exist in both sides, for
-// performance.
+// The given SST and reader cannot contain intents, replicated locks, or inline
+// values (i.e. zero timestamps). This is checked across the entire key span,
+// from start to end.
 //
 // The returned MVCC statistics is a delta between the SST-only statistics and
 // their effect when applied, which when added to the SST statistics will adjust
@@ -112,7 +119,7 @@ func CheckSSTConflicts(
 	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
 	sstTimestamp hlc.Timestamp,
-	maxIntents int64,
+	maxLockConflicts int64,
 	usePrefixSeek bool,
 ) (enginepb.MVCCStats, error) {
 
@@ -140,22 +147,33 @@ func CheckSSTConflicts(
 	// a seek.
 	const numNextsBeforeSeek = 5
 	var statsDiff enginepb.MVCCStats
-	var intents []roachpb.Intent
 	if usePrefixSeek {
 		// If we're going to be using a prefix iterator, check for the fast path
 		// first, where there are no keys in the reader between the sstable's start
 		// and end keys. We use a non-prefix iterator for this search, and reopen a
 		// prefix one if there are engine keys in the span.
-		nonPrefixIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-			KeyTypes:   IterKeyTypePointsAndRanges,
-			UpperBound: end.Key,
+		nonPrefixIter, err := reader.NewMVCCIterator(ctx, MVCCKeyAndIntentsIterKind, IterOptions{
+			KeyTypes:     IterKeyTypePointsAndRanges,
+			UpperBound:   end.Key,
+			ReadCategory: BatchEvalReadCategory,
 		})
+		if err != nil {
+			return statsDiff, err
+		}
 		nonPrefixIter.SeekGE(start)
 		valid, err := nonPrefixIter.Valid()
 		nonPrefixIter.Close()
 		if !valid {
 			return statsDiff, err
 		}
+	}
+
+	// Check for any overlapping locks, and return them to be resolved.
+	if locks, err := ScanLocks(
+		ctx, reader, start.Key, end.Key, maxLockConflicts, 0, BatchEvalReadCategory); err != nil {
+		return enginepb.MVCCStats{}, err
+	} else if len(locks) > 0 {
+		return enginepb.MVCCStats{}, &kvpb.LockConflictError{Locks: locks}
 	}
 
 	// Check for any range keys.
@@ -183,10 +201,14 @@ func CheckSSTConflicts(
 	}
 	rkIter.Close()
 
-	rkIter = reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-		UpperBound: rightPeekBound,
-		KeyTypes:   IterKeyTypeRangesOnly,
+	rkIter, err = reader.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
+		UpperBound:   rightPeekBound,
+		KeyTypes:     IterKeyTypeRangesOnly,
+		ReadCategory: BatchEvalReadCategory,
 	})
+	if err != nil {
+		return enginepb.MVCCStats{}, err
+	}
 	rkIter.SeekGE(start)
 
 	var engineHasRangeKeys bool
@@ -220,14 +242,18 @@ func CheckSSTConflicts(
 		// https://github.com/cockroachdb/cockroach/issues/92254
 		statsDiff.ContainsEstimates += 2
 	}
-	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+	extIter, err := reader.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
 		KeyTypes:             IterKeyTypePointsAndRanges,
 		LowerBound:           leftPeekBound,
 		UpperBound:           rightPeekBound,
 		RangeKeyMaskingBelow: sstTimestamp,
 		Prefix:               usePrefixSeek,
 		useL6Filters:         true,
+		ReadCategory:         BatchEvalReadCategory,
 	})
+	if err != nil {
+		return enginepb.MVCCStats{}, err
+	}
 	defer extIter.Close()
 
 	sstIter, err := NewMemSSTIterator(sst, false, IterOptions{
@@ -262,20 +288,11 @@ func CheckSSTConflicts(
 				return err
 			}
 			if len(mvccMeta.RawBytes) > 0 {
-				return errors.New("inline values are unsupported")
+				return errors.AssertionFailedf("inline values are unsupported")
 			} else if mvccMeta.Txn == nil {
-				return errors.New("found intent without transaction")
+				return errors.AssertionFailedf("found intent without transaction")
 			} else {
-				// If we encounter a write intent, keep looking for additional intents
-				// in order to return a large batch for intent resolution. The caller
-				// will likely resolve the returned intents and retry the call, which
-				// would be quadratic, so this significantly reduces the overall number
-				// of scans.
-				intents = append(intents, roachpb.MakeIntent(mvccMeta.Txn, extIter.UnsafeKey().Key.Clone()))
-				if int64(len(intents)) >= maxIntents {
-					return &kvpb.WriteIntentError{Intents: intents}
-				}
-				return nil
+				return errors.AssertionFailedf("found intent after ScanLocks call")
 			}
 		}
 		extValueIsTombstone, err := EncodedMVCCValueIsTombstone(extValueRaw)
@@ -516,17 +533,7 @@ func CheckSSTConflicts(
 					return enginepb.MVCCStats{}, err
 				}
 			} else {
-				// extIter is at an intent. Save it to the intents list and Next().
-				var mvccMeta enginepb.MVCCMetadata
-				if err = extIter.ValueProto(&mvccMeta); err != nil {
-					return enginepb.MVCCStats{}, err
-				}
-				intents = append(intents, roachpb.MakeIntent(mvccMeta.Txn, extIter.UnsafeKey().Key.Clone()))
-				if int64(len(intents)) >= maxIntents {
-					return statsDiff, &kvpb.WriteIntentError{Intents: intents}
-				}
-				extIter.Next()
-				continue
+				return enginepb.MVCCStats{}, errors.AssertionFailedf("found intent after ScanLocks call")
 			}
 
 			if sstBottomTombstone.Timestamp.LessEq(extKey.Timestamp) {
@@ -1213,9 +1220,6 @@ func CheckSSTConflicts(
 	if sstErr != nil {
 		return enginepb.MVCCStats{}, sstErr
 	}
-	if len(intents) > 0 {
-		return enginepb.MVCCStats{}, &kvpb.WriteIntentError{Intents: intents}
-	}
 
 	return statsDiff, nil
 }
@@ -1246,6 +1250,8 @@ func UpdateSSTTimestamps(
 		// Calculate this delta by subtracting all the relevant stats at the
 		// old timestamp, and then aging the stats to the new timestamp before
 		// zeroing the stats again.
+		// TODO(nvanbenschoten): should this just be using MVCCStats.Add and
+		// MVCCStats.Subtract?
 		statsDelta.AgeTo(from.WallTime)
 		statsDelta.KeyBytes -= stats.KeyBytes
 		statsDelta.ValBytes -= stats.ValBytes
@@ -1254,6 +1260,8 @@ func UpdateSSTTimestamps(
 		statsDelta.LiveBytes -= stats.LiveBytes
 		statsDelta.IntentBytes -= stats.IntentBytes
 		statsDelta.IntentCount -= stats.IntentCount
+		statsDelta.LockBytes -= stats.LockBytes
+		statsDelta.LockCount -= stats.LockCount
 		statsDelta.AgeTo(to.WallTime)
 		statsDelta.KeyBytes += stats.KeyBytes
 		statsDelta.ValBytes += stats.ValBytes
@@ -1262,6 +1270,8 @@ func UpdateSSTTimestamps(
 		statsDelta.LiveBytes += stats.LiveBytes
 		statsDelta.IntentBytes += stats.IntentBytes
 		statsDelta.IntentCount += stats.IntentCount
+		statsDelta.LockBytes += stats.LockBytes
+		statsDelta.LockCount += stats.LockCount
 	}
 
 	// Fancy optimized Pebble SST rewriter.

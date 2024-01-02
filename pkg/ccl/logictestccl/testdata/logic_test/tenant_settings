@@ -7,12 +7,6 @@ true
 
 user host-cluster-root
 
-# Ensure that the version is set the same in the system tenant and in the tenant override.
-query I
-select count(*) from system.settings JOIN system.tenant_settings on tenant_settings.name = settings.name where tenant_settings.name = 'version' and tenant_settings.value = settings.value;
-----
-1
-
 statement ok
 ALTER TENANT [10] SET CLUSTER SETTING sql.notices.enabled = false
 
@@ -114,7 +108,7 @@ SHOW CLUSTER SETTING sql.notices.enabled
 ----
 true
 
-# Verify that we disallow setting a TenantWritable setting that is overridden.
+# Verify that we disallow setting a ApplicationLevel setting that is overridden.
 statement error cluster setting 'sql.notices.enabled' is currently overridden by the operator
 SET CLUSTER SETTING sql.notices.enabled = false
 
@@ -144,7 +138,7 @@ SHOW CLUSTER SETTING sql.notices.enabled
 ----
 true
 
-# Verify that the tenant cannot modify TenantReadOnly settings.
+# Verify that the tenant cannot modify SystemVisible settings.
 query T
 SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval
 ----

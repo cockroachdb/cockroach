@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -7,6 +6,7 @@ go_library(
     srcs = [
         "api.go",
         "txn_recovery.go",
+        "txn_restart.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils",
     visibility = ["//visibility:public"],
@@ -14,10 +14,10 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
+        "//pkg/testutils",
         "//pkg/util/hlc",
+        "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
-
-get_x_data(name = "get_x_data")

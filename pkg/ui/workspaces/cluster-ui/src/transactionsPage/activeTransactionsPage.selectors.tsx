@@ -16,17 +16,21 @@ import {
   ActiveTransactionsViewStateProps,
   AppState,
   SortSetting,
+  analyticsActions,
 } from "src";
 import {
   selectAppName,
   selectActiveTransactions,
-  selectExecutionStatus,
   selectClusterLocksMaxApiSizeReached,
 } from "src/selectors/activeExecutions.selectors";
-import { actions as localStorageActions } from "src/store/localStorage";
+import {
+  LocalStorageKeys,
+  actions as localStorageActions,
+} from "src/store/localStorage";
 import { actions as sessionsActions } from "src/store/sessions";
 import { localStorageSelector } from "../store/utils/selectors";
 import { selectIsTenant } from "src/store/uiConfig";
+import { selectIsAutoRefreshEnabled } from "src/statementsPage/activeStatementsPage.selectors";
 
 export const selectSortSetting = (state: AppState): SortSetting =>
   localStorageSelector(state)["sortSetting/ActiveTransactionsPage"];
@@ -56,10 +60,11 @@ export const mapStateToActiveTransactionsPageProps = (
   selectedColumns: selectColumns(state),
   sortSetting: selectSortSetting(state),
   filters: selectFilters(state),
-  executionStatus: selectExecutionStatus(),
   internalAppNamePrefix: selectAppName(state),
   isTenant: selectIsTenant(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
+  isAutoRefreshEnabled: selectIsAutoRefreshEnabled(state),
+  lastUpdated: state.adminUI?.sessions.lastUpdated,
 });
 
 export const mapDispatchToActiveTransactionsPageProps = (
@@ -87,4 +92,28 @@ export const mapDispatchToActiveTransactionsPageProps = (
         value: ss,
       }),
     ),
+  onAutoRefreshToggle: (isEnabled: boolean) => {
+    dispatch(
+      localStorageActions.update({
+        key: LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED,
+        value: isEnabled,
+      }),
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "Auto Refresh Toggle",
+        page: "Transactions",
+        value: isEnabled,
+      }),
+    );
+  },
+  onManualRefresh: () => {
+    dispatch(sessionsActions.refresh());
+    dispatch(
+      analyticsActions.track({
+        name: "Manual Refresh",
+        page: "Transactions",
+      }),
+    );
+  },
 });

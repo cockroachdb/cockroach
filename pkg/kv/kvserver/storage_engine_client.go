@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,6 +48,59 @@ func (c *StorageEngineClient) CompactEngineSpan(
 	}
 	_, err = client.CompactEngineSpan(ctx, req)
 	return err
+}
+
+// GetTableMetrics is a tree.GetTableMetricsFunc.
+func (c *StorageEngineClient) GetTableMetrics(
+	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
+) ([]enginepb.SSTableMetricsInfo, error) {
+	conn, err := c.nd.Dial(ctx, roachpb.NodeID(nodeID), rpc.DefaultClass)
+	if err != nil {
+		return []enginepb.SSTableMetricsInfo{}, errors.Wrapf(err, "could not dial node ID %d", nodeID)
+	}
+
+	client := NewPerStoreClient(conn)
+	req := &GetTableMetricsRequest{
+		StoreRequestHeader: StoreRequestHeader{
+			NodeID:  roachpb.NodeID(nodeID),
+			StoreID: roachpb.StoreID(storeID),
+		},
+		Span: roachpb.Span{Key: roachpb.Key(startKey), EndKey: roachpb.Key(endKey)},
+	}
+
+	resp, err := client.GetTableMetrics(ctx, req)
+
+	if err != nil {
+		return []enginepb.SSTableMetricsInfo{}, err
+	}
+	return resp.TableMetrics, nil
+}
+
+// ScanStorageInternalKeys is a tree.ScanStorageInternalKeys
+func (c *StorageEngineClient) ScanStorageInternalKeys(
+	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte, megabytesPerSecond int64,
+) ([]enginepb.StorageInternalKeysMetrics, error) {
+	conn, err := c.nd.Dial(ctx, roachpb.NodeID(nodeID), rpc.DefaultClass)
+	if err != nil {
+		return []enginepb.StorageInternalKeysMetrics{}, errors.Wrapf(err, "could not dial node ID %d", nodeID)
+	}
+
+	client := NewPerStoreClient(conn)
+	req := &ScanStorageInternalKeysRequest{
+		StoreRequestHeader: StoreRequestHeader{
+			NodeID:  roachpb.NodeID(nodeID),
+			StoreID: roachpb.StoreID(storeID),
+		},
+		Span:               roachpb.Span{Key: roachpb.Key(startKey), EndKey: roachpb.Key(endKey)},
+		MegabytesPerSecond: megabytesPerSecond,
+	}
+
+	resp, err := client.ScanStorageInternalKeys(ctx, req)
+
+	if err != nil {
+		return []enginepb.StorageInternalKeysMetrics{}, err
+	}
+	return resp.AdvancedPebbleMetrics, nil
 }
 
 // SetCompactionConcurrency is a tree.CompactionConcurrencyFunc.

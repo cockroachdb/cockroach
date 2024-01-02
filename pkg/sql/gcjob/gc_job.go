@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -55,7 +55,7 @@ func SetSmallMaxGCIntervalForTest() func() {
 }
 
 var idleWaitDuration = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"sql.gc_job.idle_wait_duration",
 	"after this duration of waiting for an update, the gc job will mark itself idle",
 	time.Second,
@@ -166,8 +166,15 @@ func deleteTableData(
 	return nil
 }
 
-// unsplitRangesInSpan unsplits any manually splits ranges within a span.
-func unsplitRangesInSpan(ctx context.Context, kvDB *kv.DB, span roachpb.Span) error {
+// unsplitRangesInSpan unsplits any manually split ranges within a span.
+func unsplitRangesInSpan(
+	ctx context.Context, execCfg *sql.ExecutorConfig, span roachpb.Span,
+) error {
+	if !execCfg.Codec.ForSystemTenant() {
+		return unsplitRangesInSpanForSecondaryTenant(ctx, execCfg, span)
+	}
+
+	kvDB := execCfg.DB
 	ranges, err := kvclient.ScanMetaKVs(ctx, kvDB.NewTxn(ctx, "unsplit-ranges-in-span"), span)
 	if err != nil {
 		return err
@@ -196,22 +203,86 @@ func unsplitRangesInSpan(ctx context.Context, kvDB *kv.DB, span roachpb.Span) er
 	return nil
 }
 
+// unsplitRangesInSpanForSecondaryTenant unsplits any manually split
+// ranges within a span using an implementation that is appropriate
+// for a secondary tenant.
+//
+// When operating in a secondary tenant, unsplitting is not guaranteed
+// because:
+//
+//   - The tenant may no longer be allowed to unsplit.
+//
+//   - We use the range cache to look up range start keys and our
+//     range cache may be out of date.
+func unsplitRangesInSpanForSecondaryTenant(
+	ctx context.Context, execCfg *sql.ExecutorConfig, span roachpb.Span,
+) error {
+	rangeStartKeysToUnsplit, err := rangeStartKeysForSpanSecondaryTenant(ctx, execCfg, span)
+	if err != nil {
+		return err
+	}
+
+	for _, key := range rangeStartKeysToUnsplit {
+		if err := execCfg.DB.AdminUnsplit(ctx, key); err != nil {
+			// Swallow "key is not the start of a range" errors because it would mean
+			// that the sticky bit was removed and merged concurrently. DROP TABLE
+			// should not fail because of this.
+			if strings.Contains(err.Error(), "is not the start of a range") {
+				continue
+			}
+			// If we are in a secondary tenant and get an auth
+			// error, the likely case is that we don't have
+			// permission to AdminUnsplit.
+			//
+			// TODO(ssd): We've opted to log a warning and move on,
+			// but this means in some cases the user may be left
+			// with empty, unmergable ranges.
+			if !execCfg.Codec.ForSystemTenant() && grpcutil.IsAuthError(err) {
+				log.Warningf(ctx, "failed to unsplit range at %s: %s", key, err)
+				continue
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func rangeStartKeysForSpanSecondaryTenant(
+	ctx context.Context, execCfg *sql.ExecutorConfig, span roachpb.Span,
+) ([]roachpb.Key, error) {
+	ret := []roachpb.Key{}
+	rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(ctx, execCfg.Codec.TenantSpan())
+	if err != nil {
+		return nil, err
+	}
+
+	for rangeDescIterator.Valid() {
+		rangeDesc := rangeDescIterator.CurRangeDescriptor()
+		rangeDescIterator.Next()
+
+		if !span.ContainsKey(rangeDesc.StartKey.AsRawKey()) {
+			continue
+		}
+		if rangeDesc.StickyBit.IsEmpty() {
+			continue
+		}
+		ret = append(ret, rangeDesc.StartKey.AsRawKey())
+	}
+	return ret, nil
+}
+
 func unsplitRangesForTables(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	droppedTables []jobspb.SchemaChangeGCDetails_DroppedID,
 ) error {
-	if !execCfg.Codec.ForSystemTenant() {
-		return nil
-	}
-
 	for _, droppedTable := range droppedTables {
 		startKey := execCfg.Codec.TablePrefix(uint32(droppedTable.ID))
 		span := roachpb.Span{
 			Key:    startKey,
 			EndKey: startKey.PrefixEnd(),
 		}
-		if err := unsplitRangesInSpan(ctx, execCfg.DB, span); err != nil {
+		if err := unsplitRangesInSpan(ctx, execCfg, span); err != nil {
 			return err
 		}
 	}
@@ -226,10 +297,6 @@ func unsplitRangesForIndexes(
 	indexes []jobspb.SchemaChangeGCDetails_DroppedIndex,
 	parentTableID descpb.ID,
 ) error {
-	if !execCfg.Codec.ForSystemTenant() {
-		return nil
-	}
-
 	for _, idx := range indexes {
 		startKey := execCfg.Codec.IndexPrefix(uint32(parentTableID), uint32(idx.IndexID))
 		idxSpan := roachpb.Span{
@@ -237,7 +304,7 @@ func unsplitRangesForIndexes(
 			EndKey: startKey.PrefixEnd(),
 		}
 
-		if err := unsplitRangesInSpan(ctx, execCfg.DB, idxSpan); err != nil {
+		if err := unsplitRangesInSpan(ctx, execCfg, idxSpan); err != nil {
 			return err
 		}
 	}
@@ -248,7 +315,7 @@ func unsplitRangesForIndexes(
 func maybeUnsplitRanges(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	jobID jobspb.JobID,
+	job *jobs.Job,
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
@@ -269,7 +336,7 @@ func maybeUnsplitRanges(
 	}
 
 	progress.RangesUnsplitDone = true
-	persistProgress(ctx, execCfg, jobID, progress, runningStatusGC(progress))
+	persistProgress(ctx, execCfg, job, progress, runningStatusGC(progress))
 
 	return nil
 }
@@ -300,11 +367,11 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 			return err
 		}
 	}
-	details, progress, err := initDetailsAndProgress(ctx, &execCfg, r.job.ID())
+	details, progress, err := initDetailsAndProgress(ctx, &execCfg, r.job)
 	if err != nil {
 		return err
 	}
-	if err := maybeUnsplitRanges(ctx, &execCfg, r.job.ID(), details, progress); err != nil {
+	if err := maybeUnsplitRanges(ctx, &execCfg, r.job, details, progress); err != nil {
 		return err
 	}
 
@@ -320,7 +387,7 @@ func (r schemaChangeGCResumer) deleteDataAndWaitForGC(
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
-	persistProgress(ctx, &execCfg, r.job.ID(), progress,
+	persistProgress(ctx, &execCfg, r.job, progress,
 		sql.RunningStatusDeletingData)
 	if fn := execCfg.GCJobTestingKnobs.RunBeforePerformGC; fn != nil {
 		if err := fn(r.job.ID()); err != nil {
@@ -330,7 +397,7 @@ func (r schemaChangeGCResumer) deleteDataAndWaitForGC(
 	if err := deleteData(ctx, &execCfg, details, progress); err != nil {
 		return err
 	}
-	persistProgress(ctx, &execCfg, r.job.ID(), progress, sql.RunningStatusWaitingForMVCCGC)
+	persistProgress(ctx, &execCfg, r.job, progress, sql.RunningStatusWaitingForMVCCGC)
 	r.job.MarkIdle(true)
 	return waitForGC(ctx, &execCfg, details, progress)
 }
@@ -360,7 +427,7 @@ func waitForGC(
 // EmptySpanPollInterval is the interval at which the GC job will poll the
 // spans to determine whether the data have been garbage collected.
 var EmptySpanPollInterval = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"sql.gc_job.wait_for_gc.interval",
 	"interval at which the GC job should poll to see if the deleted data has been GC'd",
 	5*time.Minute,
@@ -461,7 +528,7 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 		if details.Tenant == nil {
 			remainingTables := getAllTablesWaitingForGC(details, progress)
 			expired, earliestDeadline = refreshTables(
-				ctx, &execCfg, remainingTables, tableDropTimes, indexDropTimes, r.job.ID(), progress,
+				ctx, &execCfg, remainingTables, tableDropTimes, indexDropTimes, r.job, progress,
 			)
 		} else {
 			var err error
@@ -474,7 +541,7 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 
 		if expired {
 			// Some elements have been marked as DELETING to save the progress.
-			persistProgress(ctx, &execCfg, r.job.ID(), progress, runningStatusGC(progress))
+			persistProgress(ctx, &execCfg, r.job, progress, runningStatusGC(progress))
 			if fn := execCfg.GCJobTestingKnobs.RunBeforePerformGC; fn != nil {
 				if err := fn(r.job.ID()); err != nil {
 					return err
@@ -483,7 +550,7 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 			if err := performGC(ctx, &execCfg, details, progress); err != nil {
 				return err
 			}
-			persistProgress(ctx, &execCfg, r.job.ID(), progress, sql.RunningStatusWaitingGC)
+			persistProgress(ctx, &execCfg, r.job, progress, sql.RunningStatusWaitingGC)
 
 			// Trigger immediate re-run in case of more expired elements.
 			timerDuration = 0
@@ -507,10 +574,7 @@ func shouldUseDelRange(
 	knobs *sql.GCJobTestingKnobs,
 ) bool {
 	// TODO(ajwerner): Adopt the DeleteRange protocol for tenant GC.
-	return details.Tenant == nil &&
-		(storage.CanUseMVCCRangeTombstones(ctx, s) ||
-			// Allow this testing knob to override the storage setting, for convenience.
-			knobs.SkipWaitingForMVCCGC)
+	return details.Tenant == nil
 }
 
 // waitForWork waits until there is work to do given the gossipUpDateC, the
@@ -580,6 +644,11 @@ func isMissingDescriptorError(err error) bool {
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (r schemaChangeGCResumer) OnFailOrCancel(context.Context, interface{}, error) error {
+	return nil
+}
+
+// CollectProfile is part of the jobs.Resumer interface.
+func (r schemaChangeGCResumer) CollectProfile(context.Context, interface{}) error {
 	return nil
 }
 

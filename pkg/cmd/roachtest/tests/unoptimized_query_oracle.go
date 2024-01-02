@@ -54,20 +54,23 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 				Name: fmt.Sprintf(
 					"unoptimized-query-oracle/disable-rules=%s/%s", disableRuleSpec.disableRules, setupName,
 				),
-				Owner:           registry.OwnerSQLQueries,
-				Timeout:         time.Hour * 1,
-				RequiresLicense: true,
-				Tags:            nil,
-				Cluster:         clusterSpec,
+				Owner:            registry.OwnerSQLQueries,
+				NativeLibs:       registry.LibGEOS,
+				Timeout:          time.Hour * 1,
+				RequiresLicense:  true,
+				Cluster:          clusterSpec,
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Nightly),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runQueryComparison(ctx, t, c, &queryComparisonTest{
 						name:      "unoptimized-query-oracle",
 						setupName: setupName,
-						run: func(s *sqlsmith.Smither, r *rand.Rand, h queryComparisonHelper) error {
+						run: func(s queryGenerator, r *rand.Rand, h queryComparisonHelper) error {
 							return runUnoptimizedQueryOracleImpl(s, r, h, disableRuleSpec.disableRuleProbability)
 						},
 					})
 				},
+				ExtraLabels: []string{"O-rsg"},
 			})
 		}
 	}
@@ -78,10 +81,7 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 // and once with normal optimization and/or execution. If the results of the two
 // executions are not equal an error is returned.
 func runUnoptimizedQueryOracleImpl(
-	smither *sqlsmith.Smither,
-	rnd *rand.Rand,
-	h queryComparisonHelper,
-	disableRuleProbability float64,
+	qgen queryGenerator, rnd *rand.Rand, h queryComparisonHelper, disableRuleProbability float64,
 ) error {
 	var stmt string
 	// Ignore panics from Generate.
@@ -91,7 +91,7 @@ func runUnoptimizedQueryOracleImpl(
 				return
 			}
 		}()
-		stmt = smither.Generate()
+		stmt = qgen.Generate()
 	}()
 
 	var verboseLogging bool
@@ -122,10 +122,22 @@ func runUnoptimizedQueryOracleImpl(
 	if err := h.execStmt(disableVectorizeStmt); err != nil {
 		return h.makeError(err, "failed to disable the vectorized engine")
 	}
+	disableDistSQLStmt := "SET distsql = off"
+	if err := h.execStmt(disableDistSQLStmt); err != nil {
+		return h.makeError(err, "failed to disable DistSQL")
+	}
 
 	unoptimizedRows, err := h.runQuery(stmt)
 	if err != nil {
-		// Skip unoptimized statements that fail with an error.
+		// Skip unoptimized statements that fail with an error (unless it's an
+		// internal error).
+		if es := err.Error(); strings.Contains(es, "internal error") {
+			verboseLogging = true
+			// The stmt wasn't already included since it resulted in an error,
+			// but to make the reproduction easier, we do want to include it.
+			h.addStmtForLogging(stmt, nil /* rows */)
+			return h.makeError(err, "internal error while running unoptimized statement")
+		}
 		//nolint:returnerrcheck
 		return nil
 	}
@@ -153,6 +165,15 @@ func runUnoptimizedQueryOracleImpl(
 			return h.makeError(err, "failed to disable not visible index feature")
 		}
 	}
+	if roll := rnd.Intn(4); roll > 0 {
+		distSQLMode := "auto"
+		if roll == 3 {
+			distSQLMode = "on"
+		}
+		if err := h.execStmt(fmt.Sprintf("SET distsql = %s", distSQLMode)); err != nil {
+			return h.makeError(err, "failed to re-enable DistSQL")
+		}
+	}
 
 	// Then, rerun the statement with optimization and/or vectorization enabled
 	// and/or not visible index feature disabled.
@@ -163,6 +184,9 @@ func runUnoptimizedQueryOracleImpl(
 		es := err.Error()
 		if strings.Contains(es, "internal error") {
 			verboseLogging = true
+			// The stmt wasn't already included since it resulted in an error,
+			// but to make the reproduction easier, we do want to include it.
+			h.addStmtForLogging(stmt, nil /* rows */)
 			return h.makeError(err, "internal error while running optimized statement")
 		}
 		// Otherwise, skip optimized statements that fail with a non-internal
@@ -173,7 +197,11 @@ func runUnoptimizedQueryOracleImpl(
 		//nolint:returnerrcheck
 		return nil
 	}
-	if diff := unsortedMatricesDiff(unoptimizedRows, optimizedRows); diff != "" {
+	diff, err := unsortedMatricesDiffWithFloatComp(unoptimizedRows, optimizedRows, h.colTypes)
+	if err != nil {
+		return err
+	}
+	if diff != "" {
 		// We have a mismatch in the unoptimized vs optimized query outputs.
 		verboseLogging = true
 		return h.makeError(errors.Newf(

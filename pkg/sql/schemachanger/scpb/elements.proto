@@ -18,7 +18,7 @@ import "sql/sem/semenumpb/constraint.proto";
 import "sql/catalog/catpb/function.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
-import "geo/geoindex/config.proto";
+import "geo/geopb/config.proto";
 
 option (gogoproto.equal_all) = true;
 
@@ -81,7 +81,7 @@ message ElementProto {
     IndexZoneConfig index_zone_config = 122 [(gogoproto.moretags) = "parent:\"Index\""];
     TableData table_data = 131 [(gogoproto.customname) = "TableData", (gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
     TablePartitioning table_partitioning = 132 [(gogoproto.customname) = "TablePartitioning", (gogoproto.moretags) = "parent:\"Table\""];
-  TableSchemaLocked table_schema_locked = 133 [(gogoproto.customname) = "TableSchemaLocked", (gogoproto.moretags) = "parent:\"Table\""];
+    TableSchemaLocked table_schema_locked = 133 [(gogoproto.customname) = "TableSchemaLocked", (gogoproto.moretags) = "parent:\"Table\""];
 
     // Multi-region elements.
     TableLocalityGlobal table_locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -97,6 +97,10 @@ message ElementProto {
     SequenceOwner sequence_owner = 34 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnComment column_comment = 35 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnNotNull column_not_null = 36 [(gogoproto.moretags) = "parent:\"Column\""];
+
+    // Sequence elements.
+    SequenceOption sequence_option = 37 [(gogoproto.moretags) = "parent:\"Sequence\""];
+
 
     // Index elements.
     IndexName index_name = 40 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
@@ -121,10 +125,10 @@ message ElementProto {
     DatabaseComment database_comment = 82 [(gogoproto.moretags) = "parent:\"Database\""];
     DatabaseData database_data = 83 [(gogoproto.customname) = "DatabaseData", (gogoproto.moretags) = "parent:\"Database\""];
 
-  // Schema elements.
-  SchemaParent schema_parent = 90 [(gogoproto.moretags) = "parent:\"Schema\""];
-  SchemaComment schema_comment = 91 [(gogoproto.moretags) = "parent:\"Schema\""];
-  SchemaName schema_name = 92 [(gogoproto.moretags) = "parent:\"Schema\""];
+    // Schema elements.
+    SchemaParent schema_parent = 90 [(gogoproto.moretags) = "parent:\"Schema\""];
+    SchemaComment schema_comment = 91 [(gogoproto.moretags) = "parent:\"Schema\""];
+
 
     // SchemaChild elements.
     SchemaChild schema_child = 100 [(gogoproto.moretags) = "parent:\"AliasType, EnumType, Table, View, Sequence\""];
@@ -270,11 +274,17 @@ message PrimaryIndex {
 message SecondaryIndex {
   Index embedded_index = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Expression embedded_expr = 3 [(gogoproto.nullable) = true];
+
+  // If an index is being recreated, this is the original
+  // secondary index that we are trying to replace (this
+  // is done for primary key changes).
+  uint32 recreate_source_id = 4 [(gogoproto.customname) = "RecreateSourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 }
 
 message TemporaryIndex {
   Index embedded_index = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool is_using_secondary_encoding = 2;
+  Expression expr = 3 [(gogoproto.nullable) = true];
 }
 
 message SecondaryIndexPartial {
@@ -304,9 +314,17 @@ message SchemaChild {
 
 message Sequence {
   uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-
+  int64 restart_with = 2;
+  bool use_restart_with = 3;
   bool is_temporary = 10;
 }
+
+message SequenceOption {
+  uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string key = 2;
+  string value = 3;
+}
+
 
 message SequenceOwner {
   uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
@@ -660,6 +678,7 @@ message Function {
 
   bool return_set = 3;
   TypeT return_type = 4 [(gogoproto.nullable) = false];
+  bool is_procedure = 5;
 }
 
 message FunctionName {
@@ -715,9 +734,4 @@ message FunctionParamDefaultExpression {
 
 message ElementCreationMetadata {
   bool in_23_1_or_later = 1;
-}
-
-message SchemaName {
-  uint32 schema_id = 1 [(gogoproto.customname) = "SchemaID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  string name = 2;
 }

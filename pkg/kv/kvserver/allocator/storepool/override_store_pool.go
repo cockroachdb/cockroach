@@ -12,13 +12,13 @@ package storepool
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/redact"
 )
 
 // OverrideStorePool is an implementation of AllocatorStorePool that allows
@@ -50,12 +50,11 @@ var _ AllocatorStorePool = &OverrideStorePool{}
 func OverrideNodeLivenessFunc(
 	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus, realNodeLivenessFunc NodeLivenessFunc,
 ) NodeLivenessFunc {
-	return func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+	return func(nid roachpb.NodeID) livenesspb.NodeLivenessStatus {
 		if override, ok := overrides[nid]; ok {
 			return override
 		}
-
-		return realNodeLivenessFunc(nid, now, timeUntilStoreDead)
+		return realNodeLivenessFunc(nid)
 	}
 }
 
@@ -66,7 +65,17 @@ func OverrideNodeCountFunc(
 	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus, nodeLiveness *liveness.NodeLiveness,
 ) NodeCountFunc {
 	return func() int {
-		return nodeLiveness.GetNodeCountWithOverrides(overrides)
+		var count int
+		for id, nv := range nodeLiveness.ScanNodeVitalityFromCache() {
+			if !nv.IsDecommissioning() && !nv.IsDecommissioned() {
+				if overrideStatus, ok := overrides[id]; !ok ||
+					(overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONING &&
+						overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONED) {
+					count++
+				}
+			}
+		}
+		return count
 	}
 }
 
@@ -84,7 +93,12 @@ func NewOverrideStorePool(
 }
 
 func (o *OverrideStorePool) String() string {
-	return o.sp.statusString(o.overrideNodeLivenessFn)
+	return redact.StringWithoutMarkers(o)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (o *OverrideStorePool) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Print(o.sp.statusString(o.overrideNodeLivenessFn))
 }
 
 // IsStoreReadyForRoutineReplicaTransfer implements the AllocatorStorePool interface.

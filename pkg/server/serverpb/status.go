@@ -46,6 +46,7 @@ type SQLStatusServer interface {
 	LogFile(context.Context, *LogFileRequest) (*LogEntriesResponse, error)
 	Logs(context.Context, *LogsRequest) (*LogEntriesResponse, error)
 	NodesUI(context.Context, *NodesRequest) (*NodesResponseExternal, error)
+	RequestJobProfilerExecutionDetails(context.Context, *RequestJobProfilerExecutionDetailsRequest) (*RequestJobProfilerExecutionDetailsResponse, error)
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present
@@ -86,15 +87,17 @@ type TenantStatusServer interface {
 	// SpanStats is used to access MVCC stats from KV
 	SpanStats(context.Context, *roachpb.SpanStatsRequest) (*roachpb.SpanStatsResponse, error)
 	Nodes(context.Context, *NodesRequest) (*NodesResponse, error)
+	// TODO(adityamaru): DownloadSpan has the side effect of telling the engine to
+	// download remote files. A method that mutates state should not be on the
+	// status server and so in the long run we should move it.
+	DownloadSpan(ctx context.Context, request *DownloadSpanRequest) (*DownloadSpanResponse, error)
 }
 
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is
 // available. If it is not, an error referring to the optionally supplied issues
 // is returned.
-func (s *OptionalNodesStatusServer) OptionalNodesStatusServer(
-	issue int,
-) (NodesStatusServer, error) {
-	v, err := s.w.OptionalErr(issue)
+func (s *OptionalNodesStatusServer) OptionalNodesStatusServer() (NodesStatusServer, error) {
+	v, err := s.w.OptionalErr(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
 	if err != nil {
 		return nil, err
 	}

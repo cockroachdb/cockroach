@@ -98,11 +98,11 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 		Ctx:           ctx,
 		connCtx:       tc.ctx,
 		sqlTimestamp:  timeutil.Now(),
-		priority:      roachpb.NormalUserPriority,
 		mon:           txnStateMon,
 		txnAbortCount: metric.NewCounter(MetaTxnAbort),
 	}
 	ts.mu.txn = kv.NewTxn(ctx, tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */)
+	ts.mu.priority = roachpb.NormalUserPriority
 
 	state := stateOpen{
 		ImplicitTxn: fsm.FromBool(typ == implicitTxn),
@@ -299,7 +299,9 @@ func TestTransitions(t *testing.T) {
 			},
 			ev: eventTxnStart{ImplicitTxn: fsm.True},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
-				nil /* historicalTimestamp */, tranCtx, sessiondatapb.Normal, isolation.Serializable),
+				nil /* historicalTimestamp */, tranCtx, sessiondatapb.Normal, isolation.Serializable,
+				false, /* omitInRangefeeds */
+			),
 			expState: stateOpen{ImplicitTxn: fsm.True, WasUpgraded: fsm.False},
 			expAdv: expAdvance{
 				// We expect to stayInPlace; upon starting a txn the statement is
@@ -324,7 +326,9 @@ func TestTransitions(t *testing.T) {
 			},
 			ev: eventTxnStart{ImplicitTxn: fsm.False},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
-				nil /* historicalTimestamp */, tranCtx, sessiondatapb.Normal, isolation.Serializable),
+				nil /* historicalTimestamp */, tranCtx, sessiondatapb.Normal, isolation.Serializable,
+				false, /* omitInRangefeeds */
+			),
 			expState: stateOpen{ImplicitTxn: fsm.False, WasUpgraded: fsm.False},
 			expAdv: expAdvance{
 				expCode: advanceOne,
@@ -413,7 +417,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: dummyRewCap,
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.False}, b
@@ -437,7 +441,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: dummyRewCap,
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.False}, b
@@ -463,7 +467,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: dummyRewCap,
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.True}, b
@@ -488,7 +492,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: dummyRewCap,
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.True}, b
@@ -512,7 +516,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: rewindCapability{},
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}, b
@@ -537,7 +541,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: rewindCapability{},
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}, b
@@ -566,7 +570,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: rewindCapability{},
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.True}, b
@@ -606,7 +610,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: rewindCapability{},
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}, b

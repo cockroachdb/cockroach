@@ -1888,9 +1888,10 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedSearchOfLookupJoins(
 
 // LookupsAreLocal returns true if the lookups done by the given lookup join
 // are done in the local region.
-func (c *CustomFuncs) LookupsAreLocal(lookupJoinExpr *memo.LookupJoinExpr) bool {
-	var inputDistribution physical.Distribution
-	provided := distribution.BuildLookupJoinLookupTableDistribution(c.e.ctx, c.e.f.EvalContext(), lookupJoinExpr, 0, inputDistribution)
+func (c *CustomFuncs) LookupsAreLocal(
+	lookupJoinExpr *memo.LookupJoinExpr, required *physical.Required,
+) bool {
+	_, provided := distribution.BuildLookupJoinLookupTableDistribution(c.e.ctx, c.e.f.EvalContext(), lookupJoinExpr, required, c.e.o.MaybeGetBestCostRelation)
 	if provided.Any() || len(provided.Regions) != 1 {
 		return false
 	}
@@ -1916,9 +1917,10 @@ func (c *CustomFuncs) GenerateLocalityOptimizedSearchOfLookupJoins(
 ) {
 	var localSelectFilters, remoteSelectFilters memo.FiltersExpr
 	if len(inputFilters) > 0 {
-		// Both local and remote branches must evaluate the original filters.
-		localSelectFilters = inputFilters
-		remoteSelectFilters = inputFilters
+		// Both local and remote branches must evaluate the original filters. Make
+		// sure to limit the capacity to allow appending.
+		localSelectFilters = inputFilters[:len(inputFilters):len(inputFilters)]
+		remoteSelectFilters = inputFilters[:len(inputFilters):len(inputFilters)]
 	}
 	// We should only generate a locality-optimized search if there is a limit
 	// hint coming from an ancestor expression with a LIMIT, meaning that the
@@ -2115,6 +2117,9 @@ func (c *CustomFuncs) GenerateLocalityOptimizedSearchLOJ(
 	inputScan *memo.ScanExpr,
 	inputFilters memo.FiltersExpr,
 ) {
+	if !c.LookupsAreLocal(lookupJoinExpr, required) {
+		return
+	}
 	c.GenerateLocalityOptimizedSearchOfLookupJoins(grp, required, lookupJoinExpr, inputScan, inputFilters, nil)
 }
 

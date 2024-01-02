@@ -36,6 +36,9 @@ import (
 //
 // limiter's methods are thread-safe.
 type limiter struct {
+	// metrics manages the set of metrics that are tracked by the cost client.
+	metrics *metrics
+
 	// notifyCh gets a (non-blocking) send when available RUs falls below the
 	// notifyThreshold.
 	notifyCh chan struct{}
@@ -59,12 +62,13 @@ type limiter struct {
 	}
 }
 
-func (l *limiter) Init(timeSource timeutil.TimeSource, notifyCh chan struct{}) {
-	*l = limiter{notifyCh: notifyCh}
+func (l *limiter) Init(metrics *metrics, timeSource timeutil.TimeSource, notifyCh chan struct{}) {
+	*l = limiter{metrics: metrics, notifyCh: notifyCh}
 
 	onWaitStartFn := func(ctx context.Context, poolName string, r quotapool.Request) {
 		// Add to the waiting RU total if this request has not already been added
 		// to it in Acquire.
+		l.metrics.CurrentBlocked.Inc(1)
 		l.qp.Update(func(quotapool.Resource) (shouldNotify bool) {
 			l.maybeAddWaitingRULocked(r.(*waitRequest))
 			return false
@@ -78,6 +82,7 @@ func (l *limiter) Init(timeSource timeutil.TimeSource, notifyCh chan struct{}) {
 			l.maybeRemoveWaitingRULocked(r.(*waitRequest))
 			return false
 		})
+		l.metrics.CurrentBlocked.Dec(1)
 
 		// Log a trace event for requests that waited for a long time.
 		if waitDuration := timeSource.Since(start); waitDuration > time.Second {
@@ -141,6 +146,11 @@ type limiterReconfigureArgs struct {
 	// NewRate is the new token fill rate for the bucket.
 	NewRate tenantcostmodel.RU
 
+	// MaxTokens is the maximum number of tokens that can be present in the
+	// bucket. Tokens beyond this limit are discarded. If MaxTokens = 0, then
+	// no limit is enforced.
+	MaxTokens tenantcostmodel.RU
+
 	// NotifyThreshold is the AvailableRU level below which a low RU notification
 	// will be sent.
 	NotifyThreshold tenantcostmodel.RU
@@ -159,6 +169,7 @@ func (l *limiter) Reconfigure(now time.Time, cfg limiterReconfigureArgs) {
 		l.qp.tb.Reconfigure(now, tokenBucketReconfigureArgs{
 			NewTokens: cfg.NewTokens,
 			NewRate:   cfg.NewRate,
+			MaxTokens: cfg.MaxTokens,
 		})
 		l.maybeNotifyLocked(now)
 

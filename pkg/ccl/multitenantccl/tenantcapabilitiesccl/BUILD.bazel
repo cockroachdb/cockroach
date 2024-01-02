@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
@@ -7,7 +6,6 @@ go_test(
         "capabilities_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     tags = ["ccl_test"],
     deps = [
@@ -18,10 +16,7 @@ go_test(
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
-        "//pkg/security/username",
         "//pkg/server",
-        "//pkg/settings/cluster",
-        "//pkg/sql",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
@@ -36,5 +31,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

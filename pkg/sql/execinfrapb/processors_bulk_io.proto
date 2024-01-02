@@ -190,9 +190,33 @@ message IngestStoppedSpec {
 // to connect to it.
 message StreamIngestionPartitionSpec {
   optional string partition_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "PartitionID"];
+
   optional string subscription_token = 2 [(gogoproto.nullable) = false];
+
   optional string address = 3 [(gogoproto.nullable) = false];
+
   repeated roachpb.Span spans = 4 [(gogoproto.nullable) = false];
+
+  optional int32 src_instance_id = 5 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SrcInstanceID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
+
+  optional int32 dest_instance_id = 6 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "DestInstanceID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
+}
+
+// StreamIngestionPartitionSpecs contains all the partition specs that are part
+// of the DistSQL plan.
+message StreamIngestionPartitionSpecs {
+  repeated StreamIngestionPartitionSpec specs = 3;
+}
+
+// FrontierEntries is a snapshot of a span frontier.
+message FrontierEntries {
+  repeated jobs.jobspb.ResolvedSpan resolved_spans = 1 [(gogoproto.nullable) = false];
 }
 
 message StreamIngestionDataSpec {
@@ -260,6 +284,9 @@ message StreamIngestionFrontierSpec {
 
   // StreamAddresses are the addresses that can be connected to to interact with the source job
   repeated string stream_addresses = 8;
+
+  // PartitionSpecs contains the topology of the physical replication stream.
+  optional StreamIngestionPartitionSpecs partition_specs = 9 [(gogoproto.nullable) = false];
 }
 
 message BackupDataSpec {
@@ -292,6 +319,9 @@ message RestoreFileSpec {
   optional string path = 2 [(gogoproto.nullable) = false];
   reserved 3;
   reserved 4;
+  optional roachpb.Span backup_file_entry_span = 5 [(gogoproto.nullable) = false];
+  optional roachpb.RowCount backup_file_entry_counts = 6 [(gogoproto.nullable) = false];
+  optional uint64 backing_file_size = 7 [(gogoproto.nullable) = false];
 }
 
 message TableRekey {
@@ -340,24 +370,6 @@ message RestoreDataSpec {
   optional bool memory_monitor_ssts = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "MemoryMonitorSSTs"];
 
   // NEXT ID: 10.
-}
-
-message SplitAndScatterSpec {
-  // TODO(lidor): job_id is not needed when interoperability with 22.2 is
-  // dropped, the new way to send the job tag is using 'job_tag' in the
-  // SetupFlowRequest message.
-  optional int64 job_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
-  message RestoreEntryChunk {
-    repeated RestoreSpanEntry entries = 1 [(gogoproto.nullable) = false];
-  }
-
-  repeated RestoreEntryChunk chunks = 1 [(gogoproto.nullable) = false];
-  repeated TableRekey table_rekeys = 2 [(gogoproto.nullable) = false];
-  repeated TenantRekey tenant_rekeys = 3 [(gogoproto.nullable) = false];
-  reserved 5;
-  optional bool validate_only = 6 [(gogoproto.nullable) = false];
-
-  // NEXTID: 7.
 }
 
 // ExporterSpec is the specification for a processor that consumes rows and
@@ -430,9 +442,10 @@ message GenerativeSplitAndScatterSpec {
   // NumNodes is the number of nodes available for dist restore.
   optional int64 num_nodes = 17[(gogoproto.nullable) = false];
   optional int64 job_id = 18 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
-  optional bool use_simple_import_spans = 19 [(gogoproto.nullable) = false];
   optional bool use_frontier_checkpointing = 20 [(gogoproto.nullable) = false];
   repeated jobs.jobspb.RestoreProgress.FrontierEntry checkpointed_spans = 21 [(gogoproto.nullable) = false];
+
+  reserved 19;
 }
 
 

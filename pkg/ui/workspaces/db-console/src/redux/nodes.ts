@@ -71,7 +71,10 @@ const partialNodeStatusesSelector = createSelector(
   nodeStatusesSelector,
   (nodeStatuses: INodeStatus[]) => {
     return nodeStatuses?.map((ns: INodeStatus) => {
-      const { metrics, store_statuses, updated_at, activity, ...rest } = ns;
+      // We need to extract the fields that constantly change below, so
+      // suppress the eslint rule.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { metrics, updated_at, activity, store_statuses, ...rest } = ns;
       return {
         ...rest,
         store_statuses: store_statuses?.map(ss => ({ desc: ss.desc })),
@@ -515,7 +518,7 @@ export const versionsSelector = createSelector(validateNodesSelector, nodes =>
     .value(),
 );
 
-export const numNodesByVersionsSelector = createSelector(
+export const numNodesByVersionsTagSelector = createSelector(
   validateNodesSelector,
   nodes => {
     if (!nodes) {
@@ -523,6 +526,26 @@ export const numNodesByVersionsSelector = createSelector(
     }
     return new Map(
       Object.entries(_.countBy(nodes, node => node?.build_info?.tag)),
+    );
+  },
+);
+
+export const numNodesByVersionsSelector = createSelector(
+  validateNodesSelector,
+  nodes => {
+    if (!nodes) {
+      return new Map();
+    }
+    return new Map(
+      Object.entries(
+        _.countBy(nodes, node => {
+          const serverVersion = node?.desc?.ServerVersion;
+          if (serverVersion) {
+            return `${serverVersion.major_val}.${serverVersion.minor_val}`;
+          }
+          return "";
+        }),
+      ),
     );
   },
 );
@@ -565,11 +588,11 @@ export const partitionedStatuses = createSelector(
   nodesSummarySelector,
   summary => {
     return _.groupBy(summary.nodeStatuses, ns => {
-      switch (summary.livenessByNodeID[ns.desc.node_id]) {
-        case MembershipStatus.ACTIVE:
-        case MembershipStatus.DECOMMISSIONING:
+      switch (summary.livenessStatusByNodeID[ns.desc.node_id]) {
+        case LivenessStatus.NODE_STATUS_LIVE:
+        case LivenessStatus.NODE_STATUS_DECOMMISSIONING:
           return "live";
-        case MembershipStatus.DECOMMISSIONED:
+        case LivenessStatus.NODE_STATUS_DECOMMISSIONED:
           return "decommissioned";
         default:
           // TODO (koorosh): "live" has to be renamed to some partition which

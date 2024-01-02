@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -94,13 +94,12 @@ func runLogin(cmd *cobra.Command, args []string) error {
 func createAuthSessionToken(
 	username string,
 ) (sessionID int64, httpCookie *http.Cookie, resErr error) {
-	sqlConn, err := makeSQLClient("cockroach auth-session login", useSystemDb)
+	ctx := context.Background()
+	sqlConn, err := makeSQLClient(ctx, "cockroach auth-session login", useSystemDb)
 	if err != nil {
 		return -1, nil, err
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, sqlConn.Close()) }()
-
-	ctx := context.Background()
 
 	// First things first. Does the user exist?
 	_, rows, err := sqlExecCtx.RunQuery(
@@ -117,7 +116,7 @@ func createAuthSessionToken(
 	}
 
 	// Make a secret.
-	secret, hashedSecret, err := server.CreateAuthSecret()
+	secret, hashedSecret, err := authserver.CreateAuthSecret()
 	if err != nil {
 		return -1, nil, err
 	}
@@ -128,7 +127,7 @@ func createAuthSessionToken(
 	err = sqlConn.ExecTxn(ctx, func(ctx context.Context, conn clisqlclient.TxBoundConn) error {
 		rows, err := conn.Query(ctx,
 			"SELECT crdb_internal.is_at_least_version($1)",
-			clusterversion.ByKey(clusterversion.V23_1WebSessionsTableHasUserIDColumn))
+			clusterversion.MinSupported.Version())
 		if err != nil {
 			return err
 		}
@@ -185,7 +184,7 @@ RETURNING id
 
 	// Spell out the cookie.
 	sCookie := &serverpb.SessionCookie{ID: id, Secret: secret}
-	httpCookie, err = server.EncodeSessionCookie(sCookie, false /* forHTTPSOnly */)
+	httpCookie, err = authserver.EncodeSessionCookie(sCookie, false /* forHTTPSOnly */)
 	return id, httpCookie, err
 }
 
@@ -204,8 +203,8 @@ The user for which the HTTP sessions are revoked can be arbitrary.
 
 func runLogout(cmd *cobra.Command, args []string) (resErr error) {
 	username := tree.Name(args[0]).Normalize()
-
-	sqlConn, err := makeSQLClient("cockroach auth-session logout", useSystemDb)
+	ctx := context.Background()
+	sqlConn, err := makeSQLClient(ctx, "cockroach auth-session logout", useSystemDb)
 	if err != nil {
 		return err
 	}
@@ -219,7 +218,7 @@ func runLogout(cmd *cobra.Command, args []string) (resErr error) {
             "revokedAt" AS "revoked"`,
 		username)
 	return sqlExecCtx.RunQueryAndFormatResults(
-		context.Background(),
+		ctx,
 		sqlConn, os.Stdout, os.Stdout, stderr, logoutQuery)
 }
 
@@ -236,7 +235,8 @@ The user invoking the 'list' CLI command must be an admin on the cluster.
 }
 
 func runAuthList(cmd *cobra.Command, args []string) (resErr error) {
-	sqlConn, err := makeSQLClient("cockroach auth-session list", useSystemDb)
+	ctx := context.Background()
+	sqlConn, err := makeSQLClient(ctx, "cockroach auth-session list", useSystemDb)
 	if err != nil {
 		return err
 	}
@@ -253,7 +253,7 @@ SELECT username,
        "lastUsedAt" as "last used"
   FROM system.web_sessions AS w`)
 	return sqlExecCtx.RunQueryAndFormatResults(
-		context.Background(),
+		ctx,
 		sqlConn, os.Stdout, os.Stdout, stderr, authListQuery)
 }
 

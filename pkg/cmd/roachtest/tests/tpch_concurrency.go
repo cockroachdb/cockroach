@@ -33,7 +33,6 @@ func registerTPCHConcurrency(r registry.Registry) {
 		c cluster.Cluster,
 		disableStreamer bool,
 	) {
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, numNodes-1))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(numNodes))
 		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
 
@@ -46,7 +45,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 
 		if err := loadTPCHDataset(
 			ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx, c.Range(1, numNodes-1)),
-			c.Range(1, numNodes-1), true, /* disableMergeQueue */
+			c.Range(1, numNodes-1), true /* disableMergeQueue */, false, /* secure */
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -161,15 +160,15 @@ func registerTPCHConcurrency(r registry.Registry) {
 		disableStreamer bool,
 	) {
 		setupCluster(ctx, t, c, disableStreamer)
-		// Run at concurrency 1000. We often can push this a bit higher, but
-		// then the iterations also get longer. 1000 concurrently running
-		// analytical queries on the 3 node cluster that doesn't crash is much
-		// more than we expect our users to run.
-		const concurrency = 1000
+		// Run at concurrency 500. We often can push this higher, but then the
+		// iterations also get longer. 500 concurrently running analytical
+		// queries on the 3 node cluster that doesn't crash is much more than we
+		// expect our users to run.
+		const concurrency = 500
 		// Each iteration can take on the order of 3 hours, so we choose the
 		// iteration count such that it'd be definitely completed with 18 hour
 		// timeout.
-		const numIterations = 3
+		const numIterations = 4
 		var numFails int
 		for i := 0; i < numIterations; i++ {
 			if err := checkConcurrency(ctx, t, c, concurrency); err != nil {
@@ -179,10 +178,20 @@ func registerTPCHConcurrency(r registry.Registry) {
 		// Restart the cluster so that if any nodes crashed in the last
 		// iteration, it doesn't fail the test.
 		restartCluster(ctx, c, t)
-		if numFails > numIterations/2 {
-			// If we had a node crash in more than half of all iterations, then
-			// we fail the test.
-			t.Fatalf("crashed %d times out of %d iterations", numFails, numIterations)
+		// When the streamer is enabled, we expect better stability, so the
+		// failure condition depends on the disableStreamer boolean.
+		if disableStreamer {
+			if numFails == numIterations {
+				// If we had a node crash in every iteration when the streamer
+				// is disabled, then we fail the test.
+				t.Fatalf("crashed %d times out of %d iterations (streamer disabled)", numFails, numIterations)
+			}
+		} else {
+			if numFails > numIterations/2 {
+				// If we had a node crash in more than half of all iterations
+				// when the streamer is enabled, then we fail the test.
+				t.Fatalf("crashed %d times out of %d iterations (streamer enabled)", numFails, numIterations)
+			}
 		}
 	}
 
@@ -190,21 +199,30 @@ func registerTPCHConcurrency(r registry.Registry) {
 	// the test as "weekly").
 	const timeout = 18 * time.Hour
 
+	// We run this test without runtime assertions as it pushes the VMs way past
+	// the overload point, so it cannot withstand any metamorphic perturbations.
+	cockroachBinary := registry.StandardCockroach
 	r.Add(registry.TestSpec{
-		Name:    "tpch_concurrency",
-		Owner:   registry.OwnerSQLQueries,
-		Timeout: timeout,
-		Cluster: r.MakeClusterSpec(numNodes),
+		Name:             "tpch_concurrency",
+		Owner:            registry.OwnerSQLQueries,
+		Timeout:          timeout,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		CockroachBinary:  cockroachBinary,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, false /* disableStreamer */)
 		},
 	})
 
 	r.Add(registry.TestSpec{
-		Name:    "tpch_concurrency/no_streamer",
-		Owner:   registry.OwnerSQLQueries,
-		Timeout: timeout,
-		Cluster: r.MakeClusterSpec(numNodes),
+		Name:             "tpch_concurrency/no_streamer",
+		Owner:            registry.OwnerSQLQueries,
+		Timeout:          timeout,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		CockroachBinary:  cockroachBinary,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, true /* disableStreamer */)
 		},

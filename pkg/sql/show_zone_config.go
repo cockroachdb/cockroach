@@ -68,7 +68,7 @@ func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (p
 		name:    n.String(),
 		columns: showZoneConfigColumns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			v := p.newContainerValuesNode(showZoneConfigColumns, 0)
+			v := p.newContainerValuesNode(showZoneConfigColumns, 1)
 
 			// This signifies SHOW ALL.
 			// However, SHOW ALL should be handled by the delegate.
@@ -163,12 +163,6 @@ func getShowZoneConfigRow(
 
 // zoneConfigToSQL pretty prints a zone configuration as a SQL string.
 func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, error) {
-	// Use FutureLineWrap to avoid wrapping long lines. This is required for
-	// cases where one of the zone config fields is longer than 80 characters.
-	// In that case, without FutureLineWrap, the output will have `\n`
-	// characters interspersed every 80 characters. FutureLineWrap ensures that
-	// the whole field shows up as a single line.
-	yaml.FutureLineWrap()
 	constraints, err := yamlMarshalFlow(zonepb.ConstraintsList{
 		Constraints: zone.Constraints,
 		Inherited:   zone.InheritedConstraints})

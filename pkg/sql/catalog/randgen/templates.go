@@ -138,8 +138,8 @@ outer:
 		}
 
 		for _, origColDef := range origDesc.Columns {
-			// We don't take over hidden/inaccessible columns.
-			if origColDef.Hidden || origColDef.Inaccessible {
+			// We don't take over hidden/inaccessible/virtual columns.
+			if origColDef.Hidden || origColDef.Inaccessible || origColDef.Virtual {
 				continue
 			}
 			colID := t.desc.NextColumnID
@@ -163,6 +163,23 @@ outer:
 				t.desc.Families[0].ColumnIDs, colID)
 			t.desc.Families[0].ColumnNames = append(
 				t.desc.Families[0].ColumnNames, newColDef.Name)
+
+			// Add to the primary index as either a key or store column.
+			for i, name := range origDesc.PrimaryIndex.KeyColumnNames {
+				if name == origColDef.Name {
+					t.desc.PrimaryIndex.KeyColumnIDs = append(t.desc.PrimaryIndex.KeyColumnIDs, colID)
+					t.desc.PrimaryIndex.KeyColumnNames = append(t.desc.PrimaryIndex.KeyColumnNames, name)
+					t.desc.PrimaryIndex.KeyColumnDirections = append(t.desc.PrimaryIndex.KeyColumnDirections, origDesc.PrimaryIndex.KeyColumnDirections[i])
+					break
+				}
+			}
+			for _, name := range origDesc.PrimaryIndex.StoreColumnNames {
+				if name == origColDef.Name {
+					t.desc.PrimaryIndex.StoreColumnIDs = append(t.desc.PrimaryIndex.StoreColumnIDs, colID)
+					t.desc.PrimaryIndex.StoreColumnNames = append(t.desc.PrimaryIndex.StoreColumnNames, name)
+					break
+				}
+			}
 		}
 		g.models.tb = append(g.models.tb, t)
 	}
@@ -192,6 +209,14 @@ func defaultTemplate() tbTemplate {
 			t.desc.Families[0].ColumnIDs, colID)
 		t.desc.Families[0].ColumnNames = append(
 			t.desc.Families[0].ColumnNames, colName)
+		if colID == 0 {
+			t.desc.PrimaryIndex.KeyColumnIDs = []descpb.ColumnID{colID}
+			t.desc.PrimaryIndex.KeyColumnNames = []string{colName}
+			t.desc.PrimaryIndex.KeyColumnDirections = []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC}
+		} else {
+			t.desc.PrimaryIndex.StoreColumnIDs = append(t.desc.PrimaryIndex.StoreColumnIDs, colID)
+			t.desc.PrimaryIndex.StoreColumnNames = append(t.desc.PrimaryIndex.StoreColumnNames, colName)
+		}
 	}
 	return t
 }

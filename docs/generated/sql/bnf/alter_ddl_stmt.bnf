@@ -12,4 +12,5 @@ alter_ddl_stmt ::=
 	| alter_changefeed_stmt
 	| alter_backup_stmt
 	| alter_func_stmt
+	| alter_proc_stmt
 	| alter_backup_schedule

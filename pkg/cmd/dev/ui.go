@@ -10,12 +10,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
 	"os"
 	"os/signal"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -42,12 +42,17 @@ func makeUICmd(d *dev) *cobra.Command {
 	uiCmd.AddCommand(makeUIWatchCmd(d))
 	uiCmd.AddCommand(makeUIE2eCmd(d))
 	uiCmd.AddCommand(makeMirrorDepsCmd(d))
+	uiCmd.AddCommand(makeUIStorybookCmd(d))
 
 	return uiCmd
 }
 
 // UIDirectories contains the absolute path to the root of each UI sub-project.
 type UIDirectories struct {
+	workspace string
+	// workspace is the absolute path to ./ .
+	// root is the absolute path to ./pkg/ui.
+	root string
 	// clusterUI is the absolute path to ./pkg/ui/workspaces/cluster-ui.
 	clusterUI string
 	// dbConsole is the absolute path to ./pkg/ui/workspaces/db-console.
@@ -56,6 +61,10 @@ type UIDirectories struct {
 	e2eTests string
 	// eslintPlugin is the absolute path to ./pkg/ui/workspaces/eslint-plugin-crdb.
 	eslintPlugin string
+	// protoOss is the absolute path to ./pkg/ui/workspaces/db-console/src/js/.
+	protoOss string
+	// protoCcl is the absolute path to ./pkg/ui/workspaces/db-console/ccl/src/js/.
+	protoCcl string
 }
 
 // getUIDirs computes the absolute path to the root of each UI sub-project.
@@ -66,11 +75,184 @@ func getUIDirs(d *dev) (*UIDirectories, error) {
 	}
 
 	return &UIDirectories{
-		clusterUI:    path.Join(workspace, "./pkg/ui/workspaces/cluster-ui"),
-		dbConsole:    path.Join(workspace, "./pkg/ui/workspaces/db-console"),
-		e2eTests:     path.Join(workspace, "./pkg/ui/workspaces/e2e-tests"),
-		eslintPlugin: path.Join(workspace, "./pkg/ui/workspaces/eslint-plugin-crdb"),
+		workspace:    workspace,
+		root:         filepath.Join(workspace, "./pkg/ui"),
+		clusterUI:    filepath.Join(workspace, "./pkg/ui/workspaces/cluster-ui"),
+		dbConsole:    filepath.Join(workspace, "./pkg/ui/workspaces/db-console"),
+		e2eTests:     filepath.Join(workspace, "./pkg/ui/workspaces/e2e-tests"),
+		eslintPlugin: filepath.Join(workspace, "./pkg/ui/workspaces/eslint-plugin-crdb"),
+		protoOss:     filepath.Join(workspace, "./pkg/ui/workspaces/db-console/src/js"),
+		protoCcl:     filepath.Join(workspace, "./pkg/ui/workspaces/db-console/ccl/src/js"),
 	}, nil
+}
+
+// assertNoLinkedNpmDeps looks for JS packages linked outside the Bazel
+// workspace (typically via `pnpm link`). It returns an error if:
+//
+// 'targets' contains a Bazel target that requires the web UI
+// AND
+// a node_modules/ tree exists within pkg/ui (or its subtrees)
+// AND
+// a @cockroachlabs-scoped package is symlinked to an external directory
+//
+// (or if any error occurs while performing one of those checks).
+func (d *dev) assertNoLinkedNpmDeps(targets []buildTarget) error {
+	uiWillBeBuilt := false
+	for _, target := range targets {
+		// TODO: This could potentially be a bazel query, e.g.
+		// 'somepath(${target.fullName}, //pkg/ui/workspaces/db-console:*)' or
+		// similar, but with only two eligible targets it doesn't seem quite
+		// worth it.
+		if target.fullName == cockroachTarget || target.fullName == cockroachTargetOss {
+			uiWillBeBuilt = true
+			break
+		}
+	}
+	if !uiWillBeBuilt {
+		// If no UI build is required, the presence of an externally-linked
+		// package doesn't matter.
+		return nil
+	}
+
+	// Find the current workspace and build some relevant absolute paths.
+	uiDirs, err := getUIDirs(d)
+	if err != nil {
+		return fmt.Errorf("could not check for linked NPM dependencies: %w", err)
+	}
+
+	jsPkgRoots := []string{
+		uiDirs.root,
+		uiDirs.eslintPlugin,
+		uiDirs.protoOss,
+		uiDirs.protoCcl,
+		uiDirs.clusterUI,
+		uiDirs.dbConsole,
+		uiDirs.e2eTests,
+	}
+
+	type LinkedPackage struct {
+		name string
+		dir  string
+	}
+
+	anyPackageEscapesWorkspace := false
+
+	// Check for symlinks in each package's node_modules/@cockroachlabs/ dir.
+	for _, jsPkgRoot := range jsPkgRoots {
+		crlModulesPath := filepath.Join(jsPkgRoot, "node_modules/@cockroachlabs")
+		crlDeps, err := d.os.ReadDir(crlModulesPath)
+
+		// If node_modules/@cockroachlabs doesn't exist, it's likely that JS
+		// dependencies haven't been installed outside the Bazel workspace.
+		// This is expected for non-UI devs, and is a safe state.
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("could not @cockroachlabs/ packages: %w", err)
+		}
+
+		linkedPackages := []LinkedPackage{}
+
+		// For each dependency in node_modules/@cockroachlabs/ ...
+		for _, depName := range crlDeps {
+			// Ignore empty strings, which are produced by d.os.ReadDir in
+			// dry-run mode.
+			if depName == "" {
+				continue
+			}
+
+			depPath := filepath.Join(crlModulesPath, depName)
+
+			// Determine if depName is a symlink. It should be when dependencies
+			// are installed via pnpm, but there are cases involving stale
+			// node_modules/ trees that can result in it being a regular
+			// directory.
+			isSymlink, err := d.os.IsSymlink(depPath)
+			if err != nil {
+				return fmt.Errorf("could not determine if %s is a symlink: %w", depPath, err)
+			}
+
+			// Regular directories cannot (by definition) link outside the Bazel
+			// workspace, so are safe to ignore.
+			if !isSymlink {
+				continue
+			}
+
+			// Resolve the symlink.
+			resolved, err := d.os.Readlink(depPath)
+			if err != nil {
+				return fmt.Errorf("could not evaluate symlink %s: %w", depPath, err)
+			}
+
+			// Convert it to a path relative to the Bazel workspace root to make
+			// it obvious when a link escapes the workspace.
+			relativeToWorkspace, err := filepath.Rel(
+				uiDirs.workspace,
+				filepath.Join(crlModulesPath, resolved),
+			)
+			if err != nil {
+				return fmt.Errorf("could not relativize path %s: %w", resolved, err)
+			}
+
+			// If it doesn't start with '..', it doesn't escape the Bazel
+			// workspace.
+			// TODO: Once Go 1.20 is supported here, switch to filepath.IsLocal.
+			if !strings.HasPrefix(relativeToWorkspace, "..") {
+				continue
+			}
+
+			// This package escapes the Bazel workspace! Add it to the queue
+			// with its absolute path for simpler presentation to users.
+			abs, err := filepath.Abs(relativeToWorkspace)
+			if err != nil {
+				return fmt.Errorf("could not absolutize path %s: %w", resolved, err)
+			}
+
+			linkedPackages = append(
+				linkedPackages,
+				LinkedPackage{
+					name: "@cockroachlabs/" + depName,
+					dir:  abs,
+				},
+			)
+		}
+
+		// If this internal package has no dependencies provided by pnpm link,
+		// move on without logging anything.
+		if len(linkedPackages) == 0 {
+			continue
+		}
+
+		if !anyPackageEscapesWorkspace {
+			anyPackageEscapesWorkspace = true
+			log.Println("Externally-linked package(s) detected:")
+		}
+
+		log.Printf("pkg/ui/workspaces/%s:", filepath.Base(jsPkgRoot))
+		for _, pkg := range linkedPackages {
+			log.Printf("    %s <- %s\n", pkg.name, pkg.dir)
+		}
+		log.Println()
+	}
+
+	if anyPackageEscapesWorkspace {
+		msg := strings.TrimSpace(`
+At least one JS dependency is linked to another directory on your machine.
+Bazel cannot see changes in these packages, which could lead to both
+false-positive and false-negative behavior in the UI.
+This build has been pre-emptively failed.
+
+To build without the UI, run:
+    dev build short
+To remove all linked dependencies, run:
+    dev ui clean --all
+`) + "\n"
+
+		return fmt.Errorf("%s", msg)
+	}
+
+	return nil
 }
 
 // makeUIWatchCmd initializes the 'ui watch' subcommand, which sets up a
@@ -87,6 +269,9 @@ func makeUIWatchCmd(d *dev) *cobra.Command {
 		// secureFlag is the name of the boolean long (GNU-style) flag that makes
 		// webpack's dev server use HTTPS.
 		secureFlag = "secure"
+		// clusterUiDestinationsFlag is the name of the long (GNU-style) flag that
+		// tells webpack where to copy emitted files during watch mode.
+		clusterUiDestinationsFlag = "cluster-ui-dst"
 	)
 
 	watchCmd := &cobra.Command{
@@ -101,17 +286,24 @@ Replaces 'make ui-watch'.`,
 			ctx, stop := signal.NotifyContext(d.cli.Context(), os.Interrupt, os.Kill)
 			defer stop()
 
+			dirs, err := getUIDirs(d)
+			if err != nil {
+				log.Fatalf("unable to find cluster-ui and db-console directories: %v", err)
+				return err
+			}
+
 			isOss, err := cmd.Flags().GetBool(ossFlag)
 			if err != nil {
 				return err
 			}
 
-			// Fetch all node dependencies (through Bazel) to ensure things are up-to-date
+			// Ensure node dependencies are up-to-date.
 			err = d.exec.CommandContextInheritingStdStreams(
 				ctx,
-				"bazel",
-				"fetch",
-				"//pkg/ui/workspaces/db-console:db-console-ccl",
+				"pnpm",
+				"--dir",
+				dirs.root,
+				"install",
 			)
 			if err != nil {
 				log.Fatalf("failed to fetch node dependencies: %v", err)
@@ -120,10 +312,10 @@ Replaces 'make ui-watch'.`,
 			// Build prerequisites for db-console
 			args := []string{
 				"build",
-				"//pkg/ui/workspaces/cluster-ui:cluster-ui",
+				"//pkg/ui/workspaces/cluster-ui:cluster-ui-lib",
 			}
 			if !isOss {
-				args = append(args, "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl")
+				args = append(args, "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib")
 			}
 			logCommand("bazel", args...)
 			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
@@ -133,7 +325,7 @@ Replaces 'make ui-watch'.`,
 				return err
 			}
 
-			if err := arrangeFilesForWatchers(d /* ossOnly */, isOss); err != nil {
+			if err := arrangeFilesForWatchers(d, isOss); err != nil {
 				log.Fatalf("failed to arrange files for watchers: %v", err)
 				return err
 			}
@@ -145,33 +337,49 @@ Replaces 'make ui-watch'.`,
 				return err
 			}
 			port := fmt.Sprint(portNumber)
-			dbTarget, err := cmd.Flags().GetString(dbTargetFlag)
-			if err != nil {
-				log.Fatalf("unexpected error: %v", err)
-				return err
-			}
+			dbTarget := mustGetFlagString(cmd, dbTargetFlag)
 			_, err = url.Parse(dbTarget)
 			if err != nil {
 				log.Fatalf("invalid format for --%s argument: %v", dbTargetFlag, err)
 				return err
 			}
 			secure := mustGetFlagBool(cmd, secureFlag)
+			clusterUiDestinations := mustGetFlagStringArray(cmd, clusterUiDestinationsFlag)
 
-			dirs, err := getUIDirs(d)
-			if err != nil {
-				log.Fatalf("unable to find cluster-ui and db-console directories: %v", err)
-				return err
+			// Start the cluster-ui watch tasks
+			nbExec := d.exec.AsNonBlocking()
+			{
+				argv := []string{
+					"--dir", dirs.clusterUI, "run", "build:watch",
+				}
+
+				// Add additional webpack args to copy cluster-ui output to external directories.
+				for _, dst := range clusterUiDestinations {
+					argv = append(argv, "--env.copy-to="+dst)
+				}
+
+				err = nbExec.CommandContextInheritingStdStreams(ctx, "pnpm", argv...)
+				if err != nil {
+					log.Fatalf("Unable to start webpack watcher cluster-ui for changes: %v", err)
+					return err
+				}
 			}
 
-			// Start the cluster-ui watch task
-			nbExec := d.exec.AsNonBlocking()
-			argv := buildBazelYarnArgv(
-				"--silent", "--cwd", dirs.clusterUI, "build:watch",
-			)
-			err = nbExec.CommandContextInheritingStdStreams(ctx, "bazel", argv...)
-			if err != nil {
-				log.Fatalf("Unable to watch cluster-ui for changes: %v", err)
-				return err
+			{
+				argv := []string{
+					"--dir", dirs.clusterUI, "run", "tsc:watch",
+				}
+
+				// Add additional webpack args to copy cluster-ui output to external directories.
+				for _, dst := range clusterUiDestinations {
+					argv = append(argv, "--copy-to="+dst)
+				}
+
+				err = nbExec.CommandContextInheritingStdStreams(ctx, "pnpm", argv...)
+				if err != nil {
+					log.Fatalf("Unable to start typescript cluster-ui for changes: %v", err)
+					return err
+				}
 			}
 
 			var webpackDist string
@@ -182,9 +390,9 @@ Replaces 'make ui-watch'.`,
 			}
 
 			args = []string{
-				"--silent",
-				"--cwd",
+				"--dir",
 				dirs.dbConsole,
+				"exec",
 				"webpack-dev-server",
 				"--config", "webpack.config.js",
 				"--mode", "development",
@@ -199,10 +407,8 @@ Replaces 'make ui-watch'.`,
 				args = append(args, "--https")
 			}
 
-			argv = buildBazelYarnArgv(args...)
-
 			// Start the db-console web server + watcher
-			err = nbExec.CommandContextInheritingStdStreams(ctx, "bazel", argv...)
+			err = nbExec.CommandContextInheritingStdStreams(ctx, "pnpm", args...)
 			if err != nil {
 				log.Fatalf("Unable to serve db-console: %v", err)
 				return err
@@ -220,8 +426,125 @@ Replaces 'make ui-watch'.`,
 	watchCmd.Flags().String(dbTargetFlag, "http://localhost:8080", "url to proxy DB requests to")
 	watchCmd.Flags().Bool(secureFlag, false, "serve via HTTPS")
 	watchCmd.Flags().Bool(ossFlag, false, "build only the open-source parts of the UI")
+	watchCmd.Flags().StringArray(
+		clusterUiDestinationsFlag,
+		[]string{},
+		"directory to copy emitted cluster-ui files to. Can be set multiple times.",
+	)
 
 	return watchCmd
+}
+
+// makeUIStorybookCmd initializes the 'ui storybook' subcommand, which runs
+// storybook for either db-console or cluster-ui projects.
+func makeUIStorybookCmd(d *dev) *cobra.Command {
+	const (
+		// projectFlag indicates whether storybook should be run for db-console or
+		// cluster-ui projects
+		projectFlag = "project"
+		// portFlag defines the port to run Storybook
+		portFlag = "port"
+	)
+
+	storybookCmd := &cobra.Command{
+		Use:   "storybook",
+		Short: "Runs Storybook in watch mode",
+		Long:  ``,
+		Args:  cobra.MinimumNArgs(0),
+		RunE: func(cmd *cobra.Command, commandLine []string) error {
+			// Create a context that cancels when OS signals come in.
+			ctx, stop := signal.NotifyContext(d.cli.Context(), os.Interrupt, os.Kill)
+			defer stop()
+
+			// Fetch all node dependencies (through Bazel) to ensure things are up-to-date
+			err := d.exec.CommandContextInheritingStdStreams(
+				ctx,
+				"bazel",
+				"fetch",
+				"//pkg/ui/workspaces/cluster-ui:cluster-ui",
+				"//pkg/ui/workspaces/db-console:db-console-ccl",
+			)
+			if err != nil {
+				log.Fatalf("failed to fetch node dependencies: %v", err)
+			}
+
+			// Build prerequisites for Storybook. It runs Db Console with CCL license.
+			args := []string{
+				"build",
+				"//pkg/ui/workspaces/cluster-ui:cluster-ui",
+				"//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
+			}
+
+			logCommand("bazel", args...)
+			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+			if err != nil {
+				log.Fatalf("failed to build UI watch prerequisites: %v", err)
+				return err
+			}
+
+			if err := arrangeFilesForWatchers(d /* ossOnly */, false); err != nil {
+				log.Fatalf("failed to arrange files for watchers: %v", err)
+				return err
+			}
+
+			dirs, err := getUIDirs(d)
+			if err != nil {
+				log.Fatalf("unable to find cluster-ui and db-console directories: %v", err)
+				return err
+			}
+
+			portNumber, err := cmd.Flags().GetInt16(portFlag)
+			if err != nil {
+				log.Fatalf("unexpected error: %v", err)
+				return err
+			}
+			port := fmt.Sprint(portNumber)
+
+			project, err := cmd.Flags().GetString(projectFlag)
+			if err != nil {
+				log.Fatalf("unexpected error: %v", err)
+				return err
+			}
+
+			projectToPath := map[string]string{
+				"db-console": dirs.dbConsole,
+				"cluster-ui": dirs.clusterUI,
+			}
+
+			cwd, ok := projectToPath[project]
+			if !ok {
+				err = fmt.Errorf("unexpected project name (%s) provided with --project flag", project)
+				log.Fatalf("%v", err)
+				return err
+			}
+
+			nbExec := d.exec.AsNonBlocking()
+
+			args = []string{
+				"--dir", cwd,
+				"exec",
+				"start-storybook",
+				"-p", port,
+			}
+
+			err = nbExec.CommandContextInheritingStdStreams(ctx, "pnpm", args...)
+			if err != nil {
+				log.Fatalf("Unable to run Storybook for %s : %v", project, err)
+				return err
+			}
+
+			// Wait for OS signals to cancel if we're not in test-mode.
+			if !d.exec.IsDryrun() {
+				<-ctx.Done()
+			}
+			return nil
+		},
+	}
+
+	storybookCmd.Flags().Int16P(portFlag, "p", 6006, "port to run Storybook")
+	storybookCmd.Flags().String(projectFlag, "db-console", "db-console, cluster-ui")
+
+	return storybookCmd
 }
 
 func makeUILintCmd(d *dev) *cobra.Command {
@@ -244,27 +567,30 @@ Replaces 'make ui-lint'.`,
 				return err
 			}
 
-			args := []string{
-				"test",
-				"//pkg/ui:lint",
-			}
-			args = append(args,
-				d.getTestOutputArgs(
-					false, /* stream */
-					isVerbose,
-					false, /* showLogs */
-					false, /* streamOutput */
-				)...,
+			bazelTestArgs := d.getTestOutputArgs(
+				isVerbose,
+				false, /* showLogs */
+				false, /* streamOutput */
 			)
 
-			logCommand("bazel", args...)
-			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+			// Check for unmirrored dependencies before running the lint target, since that lint
+			// target requires all dependencies to be mirrored. The presence of any unmirrored
+			// dependencies during //pkg/ui:lint results in cryptic errors that don't help users.
+			targets := []string{"//pkg/cmd/mirror/npm:list_unmirrored_dependencies", "//pkg/ui:lint"}
+			for _, target := range targets {
+				args := append(
+					[]string{"test", target},
+					bazelTestArgs...,
+				)
 
-			if err != nil {
-				log.Fatalf("failed to lint UI projects: %v", err)
-				return err
+				logCommand("bazel", args...)
+				err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+
+				if err != nil {
+					log.Fatalf("failed to lint UI projects: %v", err)
+					return err
+				}
 			}
-
 			return nil
 		},
 	}
@@ -310,7 +636,10 @@ func makeUICleanCmd(d *dev) *cobra.Command {
 					filepath.Join(workspace, "pkg", "ui", "node_modules"),
 					filepath.Join(uiDirs.dbConsole, "node_modules"),
 					filepath.Join(uiDirs.dbConsole, "src", "js", "node_modules"),
+					filepath.Join(uiDirs.dbConsole, "ccl", "src", "js", "node_modules"),
 					filepath.Join(uiDirs.clusterUI, "node_modules"),
+					filepath.Join(uiDirs.e2eTests, "node_modules"),
+					filepath.Join(uiDirs.eslintPlugin, "node_modules"),
 				)
 			}
 
@@ -345,20 +674,20 @@ func makeUICleanCmd(d *dev) *cobra.Command {
 //
 // See https://github.com/bazelbuild/rules_nodejs/issues/2028
 func arrangeFilesForWatchers(d *dev, ossOnly bool) error {
-	bazelBin, err := d.getBazelBin(d.cli.Context())
+	bazelBin, err := d.getBazelBin(d.cli.Context(), []string{})
 	if err != nil {
 		return err
 	}
 
-	ossProtobufSrc := filepath.Join(bazelBin, "pkg", "ui", "workspaces", "db-console")
-	cclProtobufSrc := filepath.Join(ossProtobufSrc, "ccl")
+	dbConsoleSrc := filepath.Join(bazelBin, "pkg", "ui", "workspaces", "db-console")
+	dbConsoleCclSrc := filepath.Join(dbConsoleSrc, "ccl")
 
 	dstDirs, err := getUIDirs(d)
 	if err != nil {
 		return err
 	}
-	ossProtobufDst := dstDirs.dbConsole
-	cclProtobufDst := filepath.Join(ossProtobufDst, "ccl")
+	dbConsoleDst := dstDirs.dbConsole
+	dbConsoleCclDst := filepath.Join(dbConsoleDst, "ccl")
 
 	protoFiles := []string{
 		filepath.Join("src", "js", "protos.js"),
@@ -367,8 +696,8 @@ func arrangeFilesForWatchers(d *dev, ossOnly bool) error {
 
 	// Recreate protobuf client files that were previously copied out of the sandbox
 	for _, relPath := range protoFiles {
-		ossDst := filepath.Join(ossProtobufDst, relPath)
-		if err := d.os.CopyFile(filepath.Join(ossProtobufSrc, relPath), ossDst); err != nil {
+		ossDst := filepath.Join(dbConsoleDst, relPath)
+		if err := d.os.CopyFile(filepath.Join(dbConsoleSrc, relPath), ossDst); err != nil {
 			return err
 		}
 
@@ -376,8 +705,8 @@ func arrangeFilesForWatchers(d *dev, ossOnly bool) error {
 			continue
 		}
 
-		cclDst := filepath.Join(cclProtobufDst, relPath)
-		if err := d.os.CopyFile(filepath.Join(cclProtobufSrc, relPath), cclDst); err != nil {
+		cclDst := filepath.Join(dbConsoleCclDst, relPath)
+		if err := d.os.CopyFile(filepath.Join(dbConsoleCclSrc, relPath), cclDst); err != nil {
 			return err
 		}
 	}
@@ -444,7 +773,7 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 					return err
 				}
 
-				err = arrangeFilesForWatchers(d /* ossOnly */, false)
+				err = arrangeFilesForWatchers(d, false /* ossOnly */)
 				if err != nil {
 					// nolint:errwrap
 					return fmt.Errorf("unable to arrange files properly for watch-mode testing: %+v", err)
@@ -458,30 +787,32 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 
 				nbExec := d.exec.AsNonBlocking()
 
-				argv := buildBazelYarnArgv(
-					"--silent",
-					"--cwd",
+				argv := []string{
+					"--dir",
 					dirs.dbConsole,
-				)
-
+					"exec",
+					"jest",
+					"--watch",
+					"-w4",
+				}
 				env := append(os.Environ(), "BAZEL_TARGET=fake")
-				logCommand("yarn", args...)
-				err = nbExec.CommandContextWithEnv(ctx, env, "bazel", argv...)
+				logCommand("pnpm", args...)
+				err = nbExec.CommandContextWithEnv(ctx, env, "pnpm", argv...)
 				if err != nil {
 					// nolint:errwrap
 					return fmt.Errorf("unable to start db-console tests in watch mode: %+v", err)
 				}
 
-				argv = buildBazelYarnArgv(
-					"--silent",
-					"--cwd",
+				argv = []string{
+					"--dir",
 					dirs.clusterUI,
+					"exec",
 					"jest",
 					"--watch",
-				)
-				logCommand("yarn", args...)
+				}
+				logCommand("pnpm", args...)
 				env = append(os.Environ(), "BAZEL_TARGET=fake", "CI=1")
-				err = nbExec.CommandContextWithEnv(ctx, env, "bazel", argv...)
+				err = nbExec.CommandContextWithEnv(ctx, env, "pnpm", argv...)
 				if err != nil {
 					// nolint:errwrap
 					return fmt.Errorf("unable to start cluster-ui tests in watch mode: %+v", err)
@@ -493,7 +824,6 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 				}
 			} else {
 				testOutputArg := d.getTestOutputArgs(
-					false, // stress
 					isVerbose,
 					false,                     // showLogs
 					isWatch || isStreamOutput, // streamOutput
@@ -542,9 +872,9 @@ launching test in a real browser. Extra flags are passed directly to the
 			ctx := cmd.Context()
 
 			isHeaded := mustGetFlagBool(cmd, headedFlag)
-			var yarnTarget string = "cy:run"
+			var pnpmTarget string = "cy:run"
 			if isHeaded {
-				yarnTarget = "cy:debug"
+				pnpmTarget = "cy:debug"
 			}
 
 			uiDirs, err := getUIDirs(d)
@@ -558,9 +888,9 @@ launching test in a real browser. Extra flags are passed directly to the
 			}
 
 			// Ensure e2e-tests dependencies are installed
-			installArgv := buildBazelYarnArgv("--silent", "--cwd", uiDirs.e2eTests, "install")
-			logCommand("bazel", installArgv...)
-			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", installArgv...)
+			installArgv := []string{"--dir", uiDirs.e2eTests, "install"}
+			logCommand("pnpm", installArgv...)
+			err = d.exec.CommandContextInheritingStdStreams(ctx, "pnpm", installArgv...)
 			if err != nil {
 				return fmt.Errorf("unable to install NPM dependencies: %w", err)
 			}
@@ -569,7 +899,6 @@ launching test in a real browser. Extra flags are passed directly to the
 			buildCockroachArgv := []string{
 				"build",
 				"//pkg/cmd/cockroach:cockroach",
-				"--config=with_ui",
 			}
 			logCommand("bazel", buildCockroachArgv...)
 			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", buildCockroachArgv...)
@@ -578,25 +907,24 @@ launching test in a real browser. Extra flags are passed directly to the
 			}
 
 			// Ensure the native Cypress binary is installed.
-			cyInstallArgv := buildBazelYarnArgv("--silent", "--cwd", uiDirs.e2eTests, "cypress", "install")
-			logCommand("bazel", cyInstallArgv...)
-			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", cyInstallArgv...)
+			cyInstallArgv := []string{"--dir", uiDirs.e2eTests, "exec", "cypress", "install"}
+			logCommand("pnpm", cyInstallArgv...)
+			err = d.exec.CommandContextInheritingStdStreams(ctx, "pnpm", cyInstallArgv...)
 			if err != nil {
 				return fmt.Errorf("unable to install Cypress native package: %w", err)
 			}
 
 			// Run Cypress tests, passing any extra args through to 'cypress'
-			startCrdbThenSh := path.Join(uiDirs.e2eTests, "build/start-crdb-then.sh")
-			runCypressArgv := append(
-				[]string{"bazel"},
-				buildBazelYarnArgv("--silent", "--cwd", uiDirs.e2eTests, yarnTarget)...,
-			)
+			startCrdbThenSh := filepath.Join(uiDirs.e2eTests, "build/start-crdb-then.sh")
+			runCypressArgv := []string{
+				"pnpm", "--dir", uiDirs.e2eTests, pnpmTarget,
+			}
 			runCypressArgv = append(runCypressArgv, cmd.Flags().Args()...)
 
 			logCommand(startCrdbThenSh, runCypressArgv...)
 			env := append(
 				os.Environ(),
-				fmt.Sprintf("COCKROACH=%s", path.Join(workspace, "cockroach")),
+				fmt.Sprintf("COCKROACH=%s", filepath.Join(workspace, "cockroach")),
 			)
 			err = d.exec.CommandContextWithEnv(ctx, env, startCrdbThenSh, runCypressArgv...)
 			if err != nil {
@@ -606,7 +934,7 @@ launching test in a real browser. Extra flags are passed directly to the
 			return nil
 		},
 	}
-	e2eTestCmd.Flags().Bool(headedFlag /* default */, false, "run tests in the interactive Cypres GUI")
+	e2eTestCmd.Flags().Bool(headedFlag /* default */, false, "run tests in the interactive Cypress GUI")
 
 	return e2eTestCmd
 }
@@ -617,9 +945,7 @@ func makeMirrorDepsCmd(d *dev) *cobra.Command {
 		Short: "mirrors NPM dependencies to Google Cloud Storage",
 		Long: strings.TrimSpace(`
 Downloads NPM dependencies from public registries, uploads them to a Google
-Cloud Storage bucket managed by Cockroach Labs, and rewrites yarn.lock files
-so that future 'yarn install' invocations download from that bucket instead
-of the default registries.`),
+Cloud Storage bucket managed by Cockroach Labs.`),
 		RunE: func(cmd *cobra.Command, commandLine []string) error {
 			ctx := cmd.Context()
 
@@ -629,26 +955,9 @@ of the default registries.`),
 				return fmt.Errorf("unable to mirror dependencies to GCS: %w", err)
 			}
 
-			updateArgv := []string{"run", "//pkg/cmd/mirror/npm:update_yarn_lock"}
-			logCommand("bazel", updateArgv...)
-			if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", updateArgv...); err != nil {
-				return fmt.Errorf("unable to update yarn.lock files: %w", err)
-			}
-
 			return nil
 		},
 	}
 
 	return mirrorDepsCmd
-}
-
-// buildBazelYarnArgv returns the provided argv formatted so it can be run with
-// the bazel-provided version of yarn via `d.exec.CommandContextWithEnv`, e.g.:
-//
-//	argv := buildBazelYarnArgv("--cwd", "/path/to/dir", "run", "some-target")
-//	d.exec.CommandContextWithEnv(ctx, env, "bazel", argv)
-func buildBazelYarnArgv(argv ...string) []string {
-	return append([]string{
-		"run", "@yarn//:yarn", "--",
-	}, argv...)
 }

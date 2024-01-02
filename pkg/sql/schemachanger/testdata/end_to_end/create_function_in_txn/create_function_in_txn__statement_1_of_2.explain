@@ -1,0 +1,68 @@
+/* setup */
+CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL);
+
+/* test */
+EXPLAIN (DDL) CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+----
+Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
+	RETURNS INT8
+	LANGUAGE SQL
+	AS $$SELECT ‹1›;$$;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 8 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC Function:{DescID: 105 (t+)}
+ │         │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 105 (t+), ReferencedDescID: 101 (public)}
+ │         │    ├── ABSENT → PUBLIC FunctionName:{DescID: 105 (t+)}
+ │         │    ├── ABSENT → PUBLIC Owner:{DescID: 105 (t+)}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (t+), Name: "admin"}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (t+), Name: "public"}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (t+), Name: "root"}
+ │         │    └── ABSENT → PUBLIC FunctionBody:{DescID: 105 (t+)}
+ │         └── 11 Mutation operations
+ │              ├── CreateFunctionDescriptor {"Function":{"FunctionID":105}}
+ │              ├── SetFunctionName {"FunctionID":105,"Name":"t"}
+ │              ├── UpdateOwner {"Owner":{"DescriptorID":105,"Owner":"root"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":1048576,"UserName":"public"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+ │              ├── SetFunctionBody {"Body":{"Body":"SELECT 1;","FunctionID":105}}
+ │              ├── UpdateFunctionTypeReferences {"FunctionID":105}
+ │              ├── UpdateFunctionRelationReferences {"FunctionID":105}
+ │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":101}}
+ │              └── MarkDescriptorAsPublic {"DescriptorID":105}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 8 elements transitioning toward PUBLIC
+      │    │    ├── PUBLIC → ABSENT Function:{DescID: 105 (t+)}
+      │    │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 105 (t+), ReferencedDescID: 101 (public)}
+      │    │    ├── PUBLIC → ABSENT FunctionName:{DescID: 105 (t+)}
+      │    │    ├── PUBLIC → ABSENT Owner:{DescID: 105 (t+)}
+      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 105 (t+), Name: "admin"}
+      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 105 (t+), Name: "public"}
+      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 105 (t+), Name: "root"}
+      │    │    └── PUBLIC → ABSENT FunctionBody:{DescID: 105 (t+)}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 8 elements transitioning toward PUBLIC
+           │    ├── ABSENT → PUBLIC Function:{DescID: 105 (t+)}
+           │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 105 (t+), ReferencedDescID: 101 (public)}
+           │    ├── ABSENT → PUBLIC FunctionName:{DescID: 105 (t+)}
+           │    ├── ABSENT → PUBLIC Owner:{DescID: 105 (t+)}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (t+), Name: "admin"}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (t+), Name: "public"}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (t+), Name: "root"}
+           │    └── ABSENT → PUBLIC FunctionBody:{DescID: 105 (t+)}
+           └── 11 Mutation operations
+                ├── CreateFunctionDescriptor {"Function":{"FunctionID":105}}
+                ├── SetFunctionName {"FunctionID":105,"Name":"t"}
+                ├── UpdateOwner {"Owner":{"DescriptorID":105,"Owner":"root"}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":1048576,"UserName":"public"}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+                ├── SetFunctionBody {"Body":{"Body":"SELECT 1;","FunctionID":105}}
+                ├── UpdateFunctionTypeReferences {"FunctionID":105}
+                ├── UpdateFunctionRelationReferences {"FunctionID":105}
+                ├── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":101}}
+                └── MarkDescriptorAsPublic {"DescriptorID":105}

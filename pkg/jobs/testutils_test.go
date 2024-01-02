@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -90,7 +89,6 @@ func newTestHelperForTables(
 		sqlDB.Exec(t, jobstest.GetJobsTableSchema(env))
 	}
 
-	restoreRegistry := settings.TestingSaveRegistry()
 	return &testHelper{
 			env:    env,
 			server: s,
@@ -107,7 +105,6 @@ func newTestHelperForTables(
 				sqlDB.Exec(t, "DROP TABLE "+env.ScheduledJobsTableName())
 			}
 			s.Stopper().Stop(context.Background())
-			restoreRegistry()
 		}
 }
 
@@ -118,6 +115,7 @@ func (h *testHelper) newScheduledJob(t *testing.T, scheduleLabel, sql string) *S
 	j.SetOwner(username.TestUserName())
 	any, err := types.MarshalAny(&jobspb.SqlStatementExecutionArg{Statement: sql})
 	require.NoError(t, err)
+	j.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{}))
 	j.SetExecutionDetails(InlineExecutorName, jobspb.ExecutionArguments{Args: any})
 	return j
 }
@@ -131,11 +129,12 @@ func (h *testHelper) newScheduledJobForExecutor(
 	j.SetScheduleLabel(scheduleLabel)
 	j.SetOwner(username.TestUserName())
 	j.SetExecutionDetails(executorName, jobspb.ExecutionArguments{Args: executorArgs})
+	j.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{}))
 	return j
 }
 
 // loadSchedule loads  all columns for the specified scheduled job.
-func (h *testHelper) loadSchedule(t *testing.T, id int64) *ScheduledJob {
+func (h *testHelper) loadSchedule(t *testing.T, id jobspb.ScheduleID) *ScheduledJob {
 	j := NewScheduledJob(h.env)
 	row, cols, err := h.cfg.DB.Executor().QueryRowExWithCols(
 		context.Background(), "sched-load", nil,
@@ -169,18 +168,17 @@ func registerScopedScheduledJobExecutor(name string, ex ScheduledJobExecutor) fu
 // addFakeJob adds a fake job associated with the specified scheduleID.
 // Returns the id of the newly created job.
 func addFakeJob(
-	t *testing.T, h *testHelper, scheduleID int64, status Status, txn isql.Txn,
+	t *testing.T, h *testHelper, scheduleID jobspb.ScheduleID, status Status, txn isql.Txn,
 ) jobspb.JobID {
-	payload := []byte("fake payload")
 	datums, err := txn.QueryRowEx(context.Background(), "fake-job", txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf(`
-INSERT INTO %s (created_by_type, created_by_id, status, payload)
-VALUES ($1, $2, $3, $4)
+INSERT INTO %s (created_by_type, created_by_id, status)
+VALUES ($1, $2, $3)
 RETURNING id`,
 			h.env.SystemJobsTableName(),
 		),
-		CreatedByScheduledJobs, scheduleID, status, payload,
+		CreatedByScheduledJobs, scheduleID, status,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, datums)

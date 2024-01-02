@@ -378,7 +378,7 @@ func (t *ttlBench) Tables() []workload.Table {
 	if ttlBatchSize < 0 {
 		panic(fmt.Sprintf("invalid ttl-batch-size %d", ttlBatchSize))
 	}
-	rowCount := int64(0)
+	var rowCount atomic.Int64
 	return []workload.Table{
 		{
 			Name: ttlTableName,
@@ -391,7 +391,7 @@ func (t *ttlBench) Tables() []workload.Table {
 			InitialRows: workload.Tuples(
 				initialRowCount,
 				func(i int) []interface{} {
-					newRowCount := atomic.AddInt64(&rowCount, 1)
+					newRowCount := rowCount.Add(1)
 					const printRowCount = 100_000
 					if newRowCount%printRowCount == 0 {
 						log.Infof(context.Background(), "inserted %d rows", newRowCount)

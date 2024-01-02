@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"context"
+	"math/rand"
 	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -19,10 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -35,11 +38,9 @@ const (
 	OpTxnCoordSender = "txn coordinator send"
 )
 
-// DisableCommitSanityCheck allows opting out of a fatal assertion error that was observed in the wild
-// and for which a root cause is not yet available.
-//
-// See: https://github.com/cockroachdb/cockroach/pull/73512.
-var DisableCommitSanityCheck = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_COMMIT_SANITY_CHECK", false)
+// forceTxnRetries enables random transaction retries for test builds
+// even if they aren't enabled via testing knobs.
+var forceTxnRetries = envutil.EnvOrDefaultBool("COCKROACH_FORCE_RANDOM_TXN_RETRIES", false)
 
 // txnState represents states relating to whether an EndTxn request needs
 // to be sent.
@@ -54,7 +55,7 @@ const (
 	// txnRetryableError means that the transaction encountered a
 	// TransactionRetryWithProtoRefreshError, and calls to Send() fail in this
 	// state. It is possible to move back to txnPending by calling
-	// ClearTxnRetryableErr().
+	// ClearRetryableErr().
 	txnRetryableError
 
 	// txnError means that a batch encountered a non-retriable error. Further
@@ -258,9 +259,9 @@ func newRootTxnCoordSender(
 		mu:      &tcs.mu.Mutex,
 	}
 	tcs.interceptorAlloc.txnMetricRecorder = txnMetricRecorder{
-		metrics: &tcs.metrics,
-		clock:   tcs.clock,
-		txn:     &tcs.mu.txn,
+		metrics:    &tcs.metrics,
+		timeSource: timeutil.DefaultTimeSource{},
+		txn:        &tcs.mu.txn,
 	}
 	tcs.initCommonInterceptors(tcf, txn, kv.RootTxn)
 
@@ -457,6 +458,7 @@ func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
 		// the closure passed to db.Txn()), db.Txn() doesn't attempt to commit again.
 		// Also so that the correct metric gets incremented.
 		tc.mu.txn.Status = roachpb.COMMITTED
+		tc.interceptorAlloc.txnMetricRecorder.setReadOnlyCommit()
 	} else {
 		tc.mu.txn.Status = roachpb.ABORTED
 	}
@@ -519,6 +521,10 @@ func (tc *TxnCoordSender) Send(
 	lastIndex := len(ba.Requests) - 1
 	if lastIndex < 0 {
 		return nil, nil
+	}
+
+	if tc.shouldStepReadTimestampLocked() {
+		tc.maybeAutoStepReadTimestampLocked()
 	}
 
 	// Clone the Txn's Proto so that future modifications can be made without
@@ -700,7 +706,8 @@ func (tc *TxnCoordSender) maybeRejectIncompatibleRequest(
 func (tc *TxnCoordSender) maybeRejectClientLocked(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) *kvpb.Error {
-	if ba != nil && ba.IsSingleAbortTxnRequest() && tc.mu.txn.Status != roachpb.COMMITTED {
+	rollback := ba != nil && ba.IsSingleAbortTxnRequest()
+	if rollback && tc.mu.txn.Status != roachpb.COMMITTED {
 		// As a special case, we allow rollbacks to be sent at any time. Any
 		// rollback attempt moves the TxnCoordSender state to txnFinalized, but higher
 		// layers are free to retry rollbacks if they want (and they do, for
@@ -724,8 +731,13 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	case txnFinalized:
 		msg := redact.Sprintf("client already committed or rolled back the transaction. "+
 			"Trying to execute: %s", ba.Summary())
-		stack := string(debug.Stack())
-		log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
+		if !rollback {
+			// If the client is trying to do anything other than rollback, it is
+			// unexpected for it to find the transaction already in a txnFinalized
+			// state. This may be a bug, so log a stack trace.
+			stack := string(debug.Stack())
+			log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
+		}
 		reason := kvpb.TransactionStatusError_REASON_UNKNOWN
 		if tc.mu.txn.Status == roachpb.COMMITTED {
 			reason = kvpb.TransactionStatusError_REASON_TXN_COMMITTED
@@ -785,15 +797,6 @@ func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context) {
 	}
 }
 
-// UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.
-func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
-	ctx context.Context, pErr *kvpb.Error,
-) *kvpb.Error {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	return kvpb.NewError(tc.handleRetryableErrLocked(ctx, pErr))
-}
-
 // handleRetryableErrLocked takes a retriable error and creates a
 // TransactionRetryWithProtoRefreshError containing the transaction that needs
 // to be used by the next attempt. It also handles various aspects of updating
@@ -801,15 +804,25 @@ func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
 // not be usable afterwards (in case of TransactionAbortedError). The caller is
 // expected to check the ID of the resulting transaction. If the TxnCoordSender
 // can still be used, it will have been prepared for a new epoch.
-func (tc *TxnCoordSender) handleRetryableErrLocked(
-	ctx context.Context, pErr *kvpb.Error,
-) *kvpb.TransactionRetryWithProtoRefreshError {
+func (tc *TxnCoordSender) handleRetryableErrLocked(ctx context.Context, pErr *kvpb.Error) error {
+	// If the transaction is already in a retryable state and the provided error
+	// does not have a higher priority than the existing error, return the
+	// existing error instead of attempting to handle the retryable error. This
+	// prevents the TxnCoordSender from losing information about a higher
+	// priority error.
+	if tc.mu.txnState == txnRetryableError &&
+		kvpb.ErrPriority(pErr.GoError()) <= kvpb.ErrPriority(tc.mu.storedRetryableErr) {
+		return tc.mu.storedRetryableErr
+	}
+
 	// If the error is a transaction retry error, update metrics to
 	// reflect the reason for the restart. More details about the
 	// different error types are documented above on the metaRestart
 	// variables.
+	var conflictingTxn *enginepb.TxnMeta
 	switch tErr := pErr.GetDetail().(type) {
 	case *kvpb.TransactionRetryError:
+		conflictingTxn = tErr.ConflictingTxn
 		switch tErr.Reason {
 		case kvpb.RETRY_WRITE_TOO_OLD:
 			tc.metrics.RestartsWriteTooOld.Inc()
@@ -838,44 +851,67 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 	default:
 		tc.metrics.RestartsUnknown.Inc()
 	}
-	errTxnID := pErr.GetTxn().ID
-	newTxn := kvpb.PrepareTransactionForRetry(ctx, pErr, tc.mu.userPriority, tc.clock)
 
-	// We'll pass a TransactionRetryWithProtoRefreshError up to the next layer.
+	// Construct the next txn proto using the provided error.
+	prevTxn := pErr.GetTxn()
+	nextTxn, assertErr := kvpb.PrepareTransactionForRetry(pErr, tc.mu.userPriority, tc.clock)
+	if assertErr != nil {
+		return assertErr
+	}
+
+	// Construct the TransactionRetryWithProtoRefreshError using the next txn proto.
 	retErr := kvpb.NewTransactionRetryWithProtoRefreshError(
-		redact.Sprint(pErr),
-		errTxnID, // the id of the transaction that encountered the error
-		newTxn)
+		redact.Sprint(pErr), /* msg */
+		prevTxn.ID,          /* prevTxnID */
+		prevTxn.Epoch,       /* prevTxnEpoch */
+		nextTxn,             /* nextTxn */
+		kvpb.WithConflictingTxn(conflictingTxn),
+	)
 
+	// Update the TxnCoordSender's state.
+	tc.handleTransactionRetryWithProtoRefreshErrorErrLocked(ctx, retErr)
+
+	// Finally, pass a TransactionRetryWithProtoRefreshError up to the next layer.
+	return retErr
+}
+
+// handleTransactionRetryWithProtoRefreshErrorErrLocked takes a
+// TransactionRetryWithProtoRefreshError containing the transaction that needs
+// to be used by the next attempt and handles various aspects of updating the
+// TxnCoordSender's state.
+func (tc *TxnCoordSender) handleTransactionRetryWithProtoRefreshErrorErrLocked(
+	ctx context.Context, retErr *kvpb.TransactionRetryWithProtoRefreshError,
+) {
 	// Move to a retryable error state, where all Send() calls fail until the
 	// state is cleared.
 	tc.mu.txnState = txnRetryableError
 	tc.mu.storedRetryableErr = retErr
 
-	// If the ID changed, it means we had to start a new transaction and the
-	// old one is toast. This TxnCoordSender cannot be used any more - future
-	// Send() calls will be rejected; the client is supposed to create a new
-	// one.
-	if errTxnID != newTxn.ID {
+	// If the previous transaction is aborted, it means we had to start a new
+	// transaction and the old one is toast. This TxnCoordSender cannot be used
+	// any more - future Send() calls will be rejected; the client is supposed to
+	// create a new one.
+	if retErr.PrevTxnAborted() {
 		// Remember that this txn is aborted to reject future requests.
 		tc.mu.txn.Status = roachpb.ABORTED
-		// Abort the old txn. The client is not supposed to use use this
-		// TxnCoordSender any more.
+		// Abort the old txn. The client is not supposed to use this
+		// TxnCoordSender anymore.
 		tc.interceptorAlloc.txnHeartbeater.abortTxnAsyncLocked(ctx)
 		tc.cleanupTxnLocked(ctx)
-		return retErr
+		return
 	}
 
-	// This is where we get a new epoch.
-	tc.mu.txn.Update(&newTxn)
+	// This is where we get a new read timestamp or a new epoch.
+	tc.mu.txn.Update(&retErr.NextTransaction)
 
-	// Reset state as this is a retryable txn error that is incrementing
+	// Reset state if this is a retryable txn error that is incrementing
 	// the transaction's epoch.
-	log.VEventf(ctx, 2, "resetting epoch-based coordinator state on retry")
-	for _, reqInt := range tc.interceptorStack {
-		reqInt.epochBumpedLocked()
+	if retErr.PrevTxnEpochBumped() {
+		log.VEventf(ctx, 2, "resetting epoch-based coordinator state on retry")
+		for _, reqInt := range tc.interceptorStack {
+			reqInt.epochBumpedLocked()
+		}
 	}
-	return retErr
 }
 
 // updateStateLocked updates the transaction state in both the success and error
@@ -965,13 +1001,14 @@ func (tc *TxnCoordSender) updateStateLocked(
 // encounter such errors. Marking a transaction as explicitly-committed can also
 // encounter these errors, but those errors don't make it to the TxnCoordSender.
 //
-// Returns the passed-in error or fatals (depending on DisableCommitSanityCheck
-// env var), wrapping the input error in case of an assertion violation.
+// Wraps the error in case of an assertion violation, otherwise returns as-is.
 //
-// The assertion is known to have failed in the wild, see:
-// https://github.com/cockroachdb/cockroach/issues/67765
+// This checks for the occurence of a known issue involving ambiguous write
+// errors that occur alongside commits, which may race with transaction
+// recovery requests started by contending operations.
+// https://github.com/cockroachdb/cockroach/issues/103817
 func sanityCheckErrWithTxn(
-	ctx context.Context, pErrWithTxn *kvpb.Error, ba *kvpb.BatchRequest, knobs *ClientTestingKnobs,
+	ctx context.Context, pErrWithTxn *kvpb.Error, ba *kvpb.BatchRequest, _ *ClientTestingKnobs,
 ) error {
 	txn := pErrWithTxn.GetTxn()
 	if txn.Status != roachpb.COMMITTED {
@@ -984,24 +1021,20 @@ func sanityCheckErrWithTxn(
 		return nil
 	}
 
-	// Finding out about our transaction being committed indicates a serious bug.
-	// Requests are not supposed to be sent on transactions after they are
-	// committed.
+	// Finding out about our transaction being committed indicates a serious but
+	// known bug. Requests are not supposed to be sent on transactions after they
+	// are committed.
 	err := errors.Wrapf(pErrWithTxn.GoError(),
 		"transaction unexpectedly committed, ba: %s. txn: %s",
 		ba, pErrWithTxn.GetTxn(),
 	)
 	err = errors.WithAssertionFailure(
 		errors.WithIssueLink(err, errors.IssueLink{
-			IssueURL: "https://github.com/cockroachdb/cockroach/issues/67765",
+			IssueURL: "https://github.com/cockroachdb/cockroach/issues/103817",
 			Detail: "you have encountered a known bug in CockroachDB, please consider " +
-				"reporting on the Github issue or reach out via Support. " +
-				"This assertion can be disabled by setting the environment variable " +
-				"COCKROACH_DISABLE_COMMIT_SANITY_CHECK=true",
+				"reporting on the Github issue or reach out via Support.",
 		}))
-	if !DisableCommitSanityCheck && !knobs.DisableCommitSanityCheck {
-		log.Fatalf(ctx, "%s", err)
-	}
+	log.Warningf(ctx, "%v", err)
 	return err
 }
 
@@ -1065,6 +1098,28 @@ func (tc *TxnCoordSender) SetDebugName(name string) {
 	tc.mu.txn.Name = name
 }
 
+// GetOmitInRangefeeds is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) GetOmitInRangefeeds() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.OmitInRangefeeds
+}
+
+// SetOmitInRangefeeds is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) SetOmitInRangefeeds() {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if tc.mu.txn.OmitInRangefeeds {
+		return
+	}
+
+	if tc.mu.active {
+		panic("cannot change OmitInRangefeeds of a running transaction")
+	}
+	tc.mu.txn.OmitInRangefeeds = true
+}
+
 // String is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) String() string {
 	tc.mu.Lock()
@@ -1079,6 +1134,13 @@ func (tc *TxnCoordSender) ReadTimestamp() hlc.Timestamp {
 	return tc.mu.txn.ReadTimestamp
 }
 
+// ReadTimestampFixed is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) ReadTimestampFixed() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.ReadTimestampFixed
+}
+
 // ProvisionalCommitTimestamp is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) ProvisionalCommitTimestamp() hlc.Timestamp {
 	tc.mu.Lock()
@@ -1087,37 +1149,33 @@ func (tc *TxnCoordSender) ProvisionalCommitTimestamp() hlc.Timestamp {
 }
 
 // CommitTimestamp is part of the kv.TxnSender interface.
-func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
+func (tc *TxnCoordSender) CommitTimestamp() (hlc.Timestamp, error) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	txn := &tc.mu.txn
-	if txn.Status == roachpb.COMMITTED {
-		return txn.ReadTimestamp
+	switch txn.Status {
+	case roachpb.COMMITTED:
+		return txn.ReadTimestamp, nil
+	case roachpb.ABORTED:
+		return hlc.Timestamp{}, errors.Errorf("CommitTimestamp called on aborted transaction")
+	default:
+		// If the transaction is not yet committed, configure the ReadTimestampFixed
+		// flag to ensure that the transaction's read timestamp is not pushed before
+		// it commits.
+		//
+		// This operates by disabling the transaction refresh mechanism. For
+		// isolation levels that can tolerate write skew, this is not enough to
+		// prevent the transaction from committing with a later timestamp. In fact,
+		// it's not even clear what timestamp to consider the "commit timestamp" for
+		// these transactions, given that they can read at one or more different
+		// timestamps than the one they eventually write at. For this reason, we
+		// disable the CommitTimestamp method for these isolation levels.
+		if txn.IsoLevel.ToleratesWriteSkew() {
+			return hlc.Timestamp{}, errors.Errorf("CommitTimestamp called on weak isolation transaction")
+		}
+		tc.mu.txn.ReadTimestampFixed = true
+		return txn.ReadTimestamp, nil
 	}
-	// If the transaction is not yet committed, configure the CommitTimestampFixed
-	// flag to ensure that the transaction's commit timestamp is not pushed before
-	// it commits.
-	//
-	// This operates by disabling the transaction refresh mechanism. For isolation
-	// levels that can tolerate write skew, this is not enough to prevent the
-	// transaction from committing with a later timestamp. In fact, it's not even
-	// clear what timestamp to consider the "commit timestamp" for these
-	// transactions. For this reason, we currently disable the CommitTimestamp
-	// method for these isolation levels.
-	// TODO(nvanbenschoten): figure out something better to do here. At least
-	// return an error. Tracked in #103245.
-	if txn.IsoLevel.ToleratesWriteSkew() {
-		panic("unsupported")
-	}
-	tc.mu.txn.CommitTimestampFixed = true
-	return txn.ReadTimestamp
-}
-
-// CommitTimestampFixed is part of the kv.TxnSender interface.
-func (tc *TxnCoordSender) CommitTimestampFixed() bool {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	return tc.mu.txn.CommitTimestampFixed
 }
 
 // SetFixedTimestamp is part of the kv.TxnSender interface.
@@ -1136,8 +1194,8 @@ func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestam
 
 	tc.mu.txn.ReadTimestamp = ts
 	tc.mu.txn.WriteTimestamp = ts
+	tc.mu.txn.ReadTimestampFixed = true
 	tc.mu.txn.GlobalUncertaintyLimit = ts
-	tc.mu.txn.CommitTimestampFixed = true
 
 	// Set the MinTimestamp to the minimum of the existing MinTimestamp and the fixed
 	// timestamp. This ensures that the MinTimestamp is always <= the other timestamps.
@@ -1152,29 +1210,73 @@ func (tc *TxnCoordSender) RequiredFrontier() hlc.Timestamp {
 	return tc.mu.txn.RequiredFrontier()
 }
 
-// ManualRestart is part of the kv.TxnSender interface.
-func (tc *TxnCoordSender) ManualRestart(
-	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp,
-) {
+// GenerateForcedRetryableErr is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) GenerateForcedRetryableErr(
+	ctx context.Context, ts hlc.Timestamp, mustRestart bool, msg redact.RedactableString,
+) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-
-	if tc.mu.txnState == txnFinalized {
-		log.Fatalf(ctx, "ManualRestart called on finalized txn: %s", tc.mu.txn)
+	if tc.mu.txnState != txnPending && tc.mu.txnState != txnRetryableError {
+		return errors.AssertionFailedf("cannot generate retryable error, current state: %s", tc.mu.txnState)
 	}
 
-	// Invalidate any writes performed by any workers after the retry updated
-	// the txn's proto but before we synchronized (some of these writes might
-	// have been performed at the wrong epoch).
-	tc.mu.txn.Restart(pri, 0 /* upgradePriority */, ts)
-
-	for _, reqInt := range tc.interceptorStack {
-		reqInt.epochBumpedLocked()
+	// Construct the next txn proto.
+	prevTxn := tc.mu.txn
+	nextTxn := prevTxn.Clone()
+	nextTxn.WriteTimestamp.Forward(ts)
+	// See kvpb.PrepareTransactionForRetry for an explanation of why the isolation
+	// level dictates whether we need to restart or can bump the read timestamp.
+	if !nextTxn.IsoLevel.PerStatementReadSnapshot() || mustRestart {
+		nextTxn.Restart(tc.mu.userPriority, 0 /* upgradePriority */, nextTxn.WriteTimestamp)
+	} else {
+		nextTxn.BumpReadTimestamp(nextTxn.WriteTimestamp)
 	}
 
-	// The txn might have entered the txnError state after the epoch was bumped.
-	// Reset the state for the retry.
+	// Construct the TransactionRetryWithProtoRefreshError using the next txn proto.
+	retErr := kvpb.NewTransactionRetryWithProtoRefreshError(
+		msg, prevTxn.ID, prevTxn.Epoch, *nextTxn)
+
+	// Update the TxnCoordSender's state.
+	tc.handleTransactionRetryWithProtoRefreshErrorErrLocked(ctx, retErr)
+
+	// Finally, pass a TransactionRetryWithProtoRefreshError up to the next layer.
+	return retErr
+}
+
+// UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
+	ctx context.Context, pErr *kvpb.Error,
+) *kvpb.Error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return kvpb.NewError(tc.handleRetryableErrLocked(ctx, pErr))
+}
+
+// GetRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) GetRetryableErr(
+	ctx context.Context,
+) *kvpb.TransactionRetryWithProtoRefreshError {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState == txnRetryableError {
+		return tc.mu.storedRetryableErr
+	}
+	return nil
+}
+
+// ClearRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) ClearRetryableErr(ctx context.Context) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState != txnRetryableError {
+		return errors.AssertionFailedf("cannot clear retryable error, in state: %s", tc.mu.txnState)
+	}
+	if tc.mu.storedRetryableErr.PrevTxnAborted() {
+		return errors.AssertionFailedf("cannot clear retryable error, txn aborted: %s", tc.mu.txn)
+	}
 	tc.mu.txnState = txnPending
+	tc.mu.storedRetryableErr = nil
+	return nil
 }
 
 // IsSerializablePushAndRefreshNotPossible is part of the kv.TxnSender interface.
@@ -1185,8 +1287,8 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 	isTxnSerializable := tc.mu.txn.IsoLevel == isolation.Serializable
 	isTxnPushed := tc.mu.txn.WriteTimestamp != tc.mu.txn.ReadTimestamp
 	refreshAttemptNotPossible := tc.interceptorAlloc.txnSpanRefresher.refreshInvalid ||
-		tc.mu.txn.CommitTimestampFixed
-	// We check CommitTimestampFixed here because, if that's set, refreshing
+		tc.mu.txn.ReadTimestampFixed
+	// We check ReadTimestampFixed here because, if that's set, refreshing
 	// of reads is not performed.
 	return isTxnSerializable && isTxnPushed && refreshAttemptNotPossible
 }
@@ -1240,7 +1342,7 @@ func (tc *TxnCoordSender) GetLeafTxnInputState(
 	}
 
 	// Also mark the TxnCoordSender as "active".  This prevents changing
-	// the priority after a leaf has been created. It als conservatively
+	// the priority after a leaf has been created. It also conservatively
 	// ensures that Active() returns true if there's maybe a command
 	// being executed concurrently by a leaf.
 	tc.mu.active = true
@@ -1335,27 +1437,19 @@ func (tc *TxnCoordSender) TestingCloneTxn() *roachpb.Transaction {
 	return tc.mu.txn.Clone()
 }
 
-// PrepareRetryableError is part of the kv.TxnSender interface.
-func (tc *TxnCoordSender) PrepareRetryableError(
-	ctx context.Context, msg redact.RedactableString,
-) error {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	if tc.mu.txnState != txnPending {
-		return errors.AssertionFailedf("cannot set a retryable error. current state: %s", tc.mu.txnState)
-	}
-	pErr := kvpb.NewTransactionRetryWithProtoRefreshError(
-		msg, tc.mu.txn.ID, tc.mu.txn)
-	tc.mu.storedRetryableErr = pErr
-	tc.mu.txnState = txnRetryableError
-	return pErr
-}
-
 // Step is part of the TxnSender interface.
-func (tc *TxnCoordSender) Step(ctx context.Context) error {
+func (tc *TxnCoordSender) Step(ctx context.Context, allowReadTimestampStep bool) error {
+	// TODO(nvanbenschoten): it should be possible to make this assertion, but
+	// the API is currently misused by the connExecutor. See #86162.
+	// if tc.typ != kv.RootTxn {
+	//	return errors.AssertionFailedf("cannot step in non-root txn")
+	// }
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	return tc.interceptorAlloc.txnSeqNumAllocator.stepLocked(ctx)
+	if allowReadTimestampStep && tc.shouldStepReadTimestampLocked() {
+		tc.manualStepReadTimestampLocked()
+	}
+	return tc.interceptorAlloc.txnSeqNumAllocator.manualStepReadSeqLocked(ctx)
 }
 
 // GetReadSeqNum is part of the TxnSender interface.
@@ -1388,11 +1482,94 @@ func (tc *TxnCoordSender) ConfigureStepping(
 
 // GetSteppingMode is part of the TxnSender interface.
 func (tc *TxnCoordSender) GetSteppingMode(ctx context.Context) (curMode kv.SteppingMode) {
-	curMode = kv.SteppingDisabled
-	if tc.interceptorAlloc.txnSeqNumAllocator.steppingModeEnabled {
-		curMode = kv.SteppingEnabled
+	return tc.interceptorAlloc.txnSeqNumAllocator.steppingMode
+}
+
+// manualStepReadTimestampLocked advances the transaction's read timestamp to a
+// timestamp taken from the local clock and resets refresh span tracking.
+//
+//gcassert:inline
+func (tc *TxnCoordSender) manualStepReadTimestampLocked() {
+	tc.stepReadTimestampLocked()
+}
+
+// maybeAutoStepReadTimestampLocked advances the transaction's read timestamp to
+// a timestamp taken from the local clock and resets refresh span tracking, if
+// manual stepping is disabled and the transaction is expected to automatically
+// capture a new read snapshot on each batch.
+//
+//gcassert:inline
+func (tc *TxnCoordSender) maybeAutoStepReadTimestampLocked() {
+	if tc.typ != kv.RootTxn {
+		return // only root transactions auto-step
 	}
-	return curMode
+	if tc.interceptorAlloc.txnSeqNumAllocator.steppingMode == kv.SteppingEnabled {
+		return // only manual stepping allowed
+	}
+	tc.stepReadTimestampLocked()
+}
+
+// stepReadTimestampLocked advances the transaction's read timestamp to a
+// timestamp taken from the local clock and resets refresh span tracking.
+//
+// Doing so establishes a new external "read snapshot" from which all future
+// reads in the transaction will operate. This read snapshot will be at least as
+// recent as the previous read snapshot, and will typically be more recent (i.e.
+// it will never regress). Consistency with prior reads in the transaction is
+// not maintained, so reads of previously read keys may not be "repeatable" and
+// may observe "phantoms". On the other hand, by not maintaining consistency
+// between read snapshots, isolation-related retries (write-write conflicts) and
+// consistency-related retries (uncertainty errors) have a higher chance of
+// being refreshed away (client-side or server-side) without need for client
+// intervention (i.e. without requiring a statement-level retry).
+//
+// Note that the transaction's uncertainty interval is not reset by this method
+// to now()+max_offset, even though doing so would be necessary to strictly
+// guarantee real-time ordering between the commit of a writer transaction and
+// the subsequent establishment of a new read snapshot in a reader transaction.
+// By not resetting the uncertainty interval, we allow for the possibility that
+// a reader transaction may establish a new read snapshot after the writer has
+// committed (on a node with a fast clock) and yet not observe that writer's
+// writes.
+//
+// This decision not to reset the transaction's uncertainty interval is
+// discussed in the Read Committed RFC (section "Read Uncertainty Intervals"):
+//
+// > Read Committed transactions have the option to provide the same "no stale
+// > reads" guarantee at the level of each individual statement. Doing so would
+// > require transactions to reset their `GlobalUncertaintyLimit` and
+// > `ObservedTimestamps` on each statement boundary, setting their
+// > `GlobalUncertaintyLimit` to `hlc.Now() + hlc.MaxOffset()` and clearing all
+// > `ObservedTimestamps`.
+// >
+// > We propose that Read Committed transactions do not do this. The cost of
+// > resetting a transaction's uncertainty interval on each statement boundary is
+// > likely greater than the benefit. Doing so increases the chance that
+// > individual statements retry due to `ReadWithinUncertaintyInterval` errors. In
+// > the worst case, each statement will need to traverse (through retries) an
+// > entire uncertainty interval before converging to a "certain" read snapshot.
+// > While these retries will be scoped to a single statement and should not
+// > escape to the client, they do still have a latency cost.
+// >
+// > We make this decision because we do not expect that applications rely on
+// > strong consistency guarantees between the commit of one transaction and the
+// > start of an individual statement within another in-progress transaction. To
+// > rely on such guarantees would require complex and surprising application-side
+// > synchronization.
+func (tc *TxnCoordSender) stepReadTimestampLocked() {
+	now := tc.clock.Now()
+	tc.mu.txn.BumpReadTimestamp(now)
+	tc.interceptorAlloc.txnSpanRefresher.resetRefreshSpansLocked()
+}
+
+// shouldStepReadTimestampLocked returns true if the transaction's read
+// timestamp should be advanced on each step, based on the transaction's
+// isolation level and whether its read timestamp has been fixed.
+//
+// The specific approach to stepping (manual vs. automatic) depends on the
+// configured the stepping mode.
+func (tc *TxnCoordSender) shouldStepReadTimestampLocked() bool {
+	return tc.mu.txn.IsoLevel.PerStatementReadSnapshot() && !tc.mu.txn.ReadTimestampFixed
 }
 
 // DeferCommitWait is part of the TxnSender interface.
@@ -1411,28 +1588,6 @@ func (tc *TxnCoordSender) DeferCommitWait(ctx context.Context) func(context.Cont
 	}
 }
 
-// GetTxnRetryableErr is part of the TxnSender interface.
-func (tc *TxnCoordSender) GetTxnRetryableErr(
-	ctx context.Context,
-) *kvpb.TransactionRetryWithProtoRefreshError {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	if tc.mu.txnState == txnRetryableError {
-		return tc.mu.storedRetryableErr
-	}
-	return nil
-}
-
-// ClearTxnRetryableErr is part of the TxnSender interface.
-func (tc *TxnCoordSender) ClearTxnRetryableErr(ctx context.Context) {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	if tc.mu.txnState == txnRetryableError {
-		tc.mu.storedRetryableErr = nil
-		tc.mu.txnState = txnPending
-	}
-}
-
 // HasPerformedReads is part of the TxnSender interface.
 func (tc *TxnCoordSender) HasPerformedReads() bool {
 	tc.mu.Lock()
@@ -1445,6 +1600,22 @@ func (tc *TxnCoordSender) HasPerformedWrites() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.hasPerformedWritesLocked()
+}
+
+// TestingShouldRetry is part of the TxnSender interface.
+func (tc *TxnCoordSender) TestingShouldRetry() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState == txnFinalized {
+		return false
+	}
+	if filter := tc.testingKnobs.TransactionRetryFilter; filter != nil && filter(tc.mu.txn) {
+		return true
+	}
+	if forceTxnRetries && buildutil.CrdbTestBuild {
+		return rand.Float64() < kv.RandomTxnRetryProbability
+	}
+	return false
 }
 
 func (tc *TxnCoordSender) hasPerformedReadsLocked() bool {

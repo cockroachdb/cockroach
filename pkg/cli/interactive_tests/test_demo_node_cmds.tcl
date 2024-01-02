@@ -5,7 +5,7 @@ source [file join [file dirname $argv0] common.tcl]
 start_test "Check \\demo commands work as expected"
 # Start a demo with 5 nodes. Set multitenant=false due to unsupported
 # gossip commands below.
-spawn $argv demo --empty --no-line-editor --nodes=5 --multitenant=false
+spawn $argv demo --empty --no-line-editor --nodes=5 --multitenant=false --log-dir=logs
 
 eexpect "defaultdb>"
 
@@ -30,9 +30,6 @@ eexpect "defaultdb>"
 send "\\demo decommission 8\r"
 eexpect "node 8 does not exist"
 eexpect "defaultdb>"
-send "\\demo recommission 8\r"
-eexpect "node 8 does not exist"
-eexpect "defaultdb>"
 
 # Cannot restart a node that is not shut down.
 send "\\demo restart 2\r"
@@ -44,12 +41,12 @@ send "\\demo shutdown 3\r"
 eexpect "node 3 has been shutdown"
 eexpect "defaultdb>"
 
-send "select node_id, draining, decommissioning, membership from crdb_internal.gossip_liveness ORDER BY node_id;\r"
-eexpect "1 |    f     |        f        | active"
-eexpect "2 |    f     |        f        | active"
-eexpect "3 |    t     |        f        | active"
-eexpect "4 |    f     |        f        | active"
-eexpect "5 |    f     |        f        | active"
+send "select node_id, draining, membership from crdb_internal.kv_node_liveness ORDER BY node_id;\r"
+eexpect "1 |    f     | active"
+eexpect "2 |    f     | active"
+eexpect "3 |    t     | active"
+eexpect "4 |    f     | active"
+eexpect "5 |    f     | active"
 eexpect "defaultdb>"
 
 # Cannot shut it down again.
@@ -67,34 +64,26 @@ send "\\demo restart 3\r"
 eexpect "node 3 has been restarted"
 eexpect "defaultdb>"
 
-# NB: this is flaky, sometimes n3 is still marked as draining due to
-# gossip propagation delays. See:
-# https://github.com/cockroachdb/cockroach/issues/76391
-# send "select node_id, draining, decommissioning, membership from crdb_internal.gossip_liveness ORDER BY node_id;\r"
-# eexpect "1 |  false   |      false      | active"
-# eexpect "2 |  false   |      false      | active"
-# eexpect "3 |  false   |      false      | active"
-# eexpect "4 |  false   |      false      | active"
-# eexpect "5 |  false   |      false      | active"
-# eexpect "defaultdb>"
+send "select node_id, draining, membership from crdb_internal.kv_node_liveness ORDER BY node_id;\r"
+eexpect "1 |    f     | active"
+eexpect "2 |    f     | active"
+eexpect "3 |    f     | active"
+eexpect "4 |    f     | active"
+eexpect "5 |    f     | active"
+eexpect "defaultdb>"
 
-# Try commissioning commands
+# Try decommissioning commands
 send "\\demo decommission 4\r"
+eexpect "node is draining"
 eexpect "node 4 has been decommissioned"
 eexpect "defaultdb>"
 
-# NB: skipping this out of an abundance of caution, see:
-# https://github.com/cockroachdb/cockroach/issues/76391
-# send "select node_id, draining, decommissioning, membership from crdb_internal.gossip_liveness ORDER BY node_id;\r"
-# eexpect "1 |  false   |      false      | active"
-# eexpect "2 |  false   |      false      | active"
-# eexpect "3 |  false   |      false      | active"
-# eexpect "4 |  false   |      true       | decommissioned"
-# eexpect "5 |  false   |      false      | active"
-# eexpect "defaultdb>"
-
-send "\\demo recommission 4\r"
-eexpect "can only recommission a decommissioning node"
+send "select node_id, draining, membership from crdb_internal.kv_node_liveness ORDER BY node_id;\r"
+eexpect "1 |    f     | active"
+eexpect "2 |    f     | active"
+eexpect "3 |    f     | active"
+eexpect "4 |    t     | decommissioned"
+eexpect "5 |    f     | active"
 eexpect "defaultdb>"
 
 send "\\demo add blah\r"
@@ -128,17 +117,26 @@ eexpect "node 6 has been shutdown"
 set timeout 30
 eexpect "defaultdb>"
 
-# By now the node should have stabilized in gossip which allows us to query the more detailed information there.
-# NB: skip this to avoid flakes, see:
-# https://github.com/cockroachdb/cockroach/issues/76391
-# send "select node_id, draining, decommissioning, membership from crdb_internal.gossip_liveness ORDER BY node_id;\r"
-# eexpect "1 |  false   |      false      | active"
-# eexpect "2 |  false   |      false      | active"
-# eexpect "3 |  false   |      false      | active"
-# eexpect "4 |  false   |      true       | decommissioned"
-# eexpect "5 |  false   |      false      | active"
-# eexpect "6 |   true   |      false      | active"
-# eexpect "defaultdb>"
+# NB: use kv_node_liveness to avoid flakes due to gossip delays.
+# See https://github.com/cockroachdb/cockroach/issues/76391
+send "select node_id, draining, membership from crdb_internal.kv_node_liveness ORDER BY node_id;\r"
+eexpect "1 |    f     | active"
+eexpect "2 |    f     | active"
+eexpect "3 |    f     | active"
+eexpect "4 |    t     | decommissioned"
+eexpect "5 |    f     | active"
+eexpect "6 |    t     | active"
+eexpect "defaultdb>"
+
+send "\\demo restart 4\r"
+eexpect "node 4 is permanently decommissioned"
+eexpect "defaultdb>"
+send "\\demo shutdown 4\r"
+eexpect "node 4 is permanently decommissioned"
+eexpect "defaultdb>"
+send "\\demo decommission 4\r"
+eexpect "node 4 is permanently decommissioned"
+eexpect "defaultdb>"
 
 send "\\q\r"
 eexpect eof

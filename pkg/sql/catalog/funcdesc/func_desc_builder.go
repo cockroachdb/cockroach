@@ -12,8 +12,12 @@ package funcdesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -91,7 +95,7 @@ func (fdb *functionDescriptorBuilder) RunPostDeserializationChanges() (err error
 	// Set the ModificationTime field before doing anything else.
 	// Other changes may depend on it.
 	mustSetModTime, err := descpb.MustSetModificationTime(
-		fdb.original.ModificationTime, fdb.mvccTimestamp, fdb.original.Version,
+		fdb.original.ModificationTime, fdb.mvccTimestamp, fdb.original.Version, fdb.original.State,
 	)
 	if err != nil {
 		return err
@@ -101,6 +105,19 @@ func (fdb *functionDescriptorBuilder) RunPostDeserializationChanges() (err error
 		fdb.maybeModified.ModificationTime = fdb.mvccTimestamp
 		fdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
 	}
+	desc := fdb.maybeModified
+	if desc.GetPrivileges().Version < catpb.Version23_2 {
+		// Grant EXECUTE privilege on the function for the public role if the
+		// descriptor was created before v23.2. This matches the default
+		// privilege for newly created functions.
+		desc.GetPrivileges().Grant(
+			username.PublicRoleName(),
+			privilege.List{privilege.EXECUTE},
+			false, /* withGrantOption */
+		)
+		desc.GetPrivileges().SetVersion(catpb.Version23_2)
+		fdb.changes.Add(catalog.GrantExecuteOnFunctionToPublicRole)
+	}
 	return nil
 }
 
@@ -109,8 +126,27 @@ func (fdb *functionDescriptorBuilder) RunRestoreChanges(
 	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) error {
 	// Upgrade the declarative schema changer state.
-	if scpb.MigrateDescriptorState(version, fdb.maybeModified.DeclarativeSchemaChangerState) {
+	if scpb.MigrateDescriptorState(version, fdb.maybeModified.ParentID, fdb.maybeModified.DeclarativeSchemaChangerState) {
 		fdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
+	}
+	return nil
+}
+
+// StripDanglingBackReferences implements the catalog.DescriptorBuilder
+// interface.
+func (fdb *functionDescriptorBuilder) StripDanglingBackReferences(
+	descIDMightExist func(id descpb.ID) bool, nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
+) error {
+	sliceIdx := 0
+	for _, backref := range fdb.maybeModified.DependedOnBy {
+		fdb.maybeModified.DependedOnBy[sliceIdx] = backref
+		if descIDMightExist(backref.ID) {
+			sliceIdx++
+		}
+	}
+	if sliceIdx < len(fdb.maybeModified.DependedOnBy) {
+		fdb.maybeModified.DependedOnBy = fdb.maybeModified.DependedOnBy[:sliceIdx]
+		fdb.changes.Add(catalog.StrippedDanglingBackReferences)
 	}
 	return nil
 }

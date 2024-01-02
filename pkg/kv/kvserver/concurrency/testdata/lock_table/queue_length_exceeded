@@ -10,7 +10,7 @@ new-txn txn=txn2 ts=10 epoch=0
 new-txn txn=txn3 ts=10 epoch=0
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=intent@a
+new-request r=req1 txn=txn1 ts=10 spans=exclusive@a
 ----
 
 new-request r=req2 txn=txn2 ts=10 spans=intent@a
@@ -23,11 +23,11 @@ scan r=req1
 ----
 start-waiting: false
 
-acquire r=req1 k=a durability=u
+acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
 
 scan r=req2
 ----
@@ -41,10 +41,10 @@ print
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
-   queued writers:
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 2
 
 # ---------------------------------------------------------------------------------
@@ -70,10 +70,10 @@ dequeue r=req4
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
-   queued writers:
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 2
 
 # ---------------------------------------------------------------------------------
@@ -98,10 +98,10 @@ dequeue r=req5
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
-   queued writers:
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 2
 
 # ---------------------------------------------------------------------------------
@@ -126,10 +126,10 @@ dequeue r=req6
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
-   queued writers:
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 2
 
 # ---------------------------------------------------------------------------------
@@ -151,10 +151,10 @@ dequeue r=req7
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
-   queued writers:
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 2
 
 new-request r=req8 txn=none ts=10 spans=intent@a max-lock-wait-queue-length=2
@@ -172,10 +172,10 @@ dequeue r=req8
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
-   queued writers:
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 2
 
 # ------------------------------------------------------------------------------
@@ -188,24 +188,24 @@ num=1
 new-txn txn=txn6 ts=10 epoch=0
 ----
 
-new-request r=req9 txn=txn6 ts=10 spans=intent@b
+new-request r=req9 txn=txn6 ts=10 spans=exclusive@b
 ----
 
 scan r=req9
 ----
 start-waiting: false
 
-acquire r=req9 k=b durability=u
+acquire r=req9 k=b durability=u strength=exclusive
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
-   queued writers:
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 2
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
 
 new-txn txn=txn7 ts=10 epoch=0
 ----
@@ -225,15 +225,15 @@ print
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
-   queued writers:
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 2
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
-   queued writers:
-    active: true req: 10, txn: 00000000-0000-0000-0000-000000000007
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 10, strength: Intent, txn: 00000000-0000-0000-0000-000000000007
    distinguished req: 10
 
 # Re-scan.
@@ -241,12 +241,6 @@ scan r=req10
 ----
 start-waiting: true
 
-# Note that the state here changed from waitForDistinguished to waitFor. This
-# is because we're cheating slightly in this test by calling scan on a request
-# that's already actively waiting at a lock, which is something that cannot
-# happen outside of unit tests. tryActiveWait doesn't expect this, and doesn't
-# handle this state transition -- we could teach it, but it would be just for
-# this contrived test scenario.
 guard-state r=req10
 ----
-new: state=waitFor txn=txn6 key="b" held=true guard-strength=Intent
+new: state=waitForDistinguished txn=txn6 key="b" held=true guard-strength=Intent

@@ -204,7 +204,13 @@ func makeConstDatum(s *Smither, typ *types.T) tree.Datum {
 		if typ.Width() > 0 {
 			sv = util.TruncateString(sv, int(typ.Width()))
 		}
-		datum = tree.NewDString(sv)
+		if typ.Family() == types.RefCursorFamily {
+			// REFCURSOR is not compatible with the other string-like types, so make
+			// sure not to lose the type of the datum.
+			datum = tree.NewDRefCursor(sv)
+		} else {
+			datum = tree.NewDString(sv)
+		}
 	}
 	return datum
 }
@@ -231,6 +237,9 @@ func getColRef(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, *colRef,
 	}
 	col := cols[s.rnd.Intn(len(cols))]
 	if s.disableDecimals && col.typ.Family() == types.DecimalFamily {
+		return nil, nil, false
+	}
+	if s.disableOIDs && col.typ.Family() == types.OidFamily {
 		return nil, nil, false
 	}
 	return col.typedExpr(), col, true
@@ -410,12 +419,14 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 	if class == tree.WindowClass && s.d6() != 1 {
 		class = tree.NormalClass
 	}
-	fns := functions[class][typ.Oid()]
+	functions.Lock()
+	fns := functions.fns[class][typ.Oid()]
+	functions.Unlock()
 	if len(fns) == 0 {
 		return nil, false
 	}
 	fn := fns[s.rnd.Intn(len(fns))]
-	if s.disableUDFs && fn.overload.IsUDF {
+	if s.disableUDFs && fn.overload.Type == tree.UDFRoutine {
 		return nil, false
 	}
 	if s.disableNondeterministicFns && fn.overload.Volatility > volatility.Immutable {

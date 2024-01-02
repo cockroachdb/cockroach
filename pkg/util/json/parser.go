@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"reflect"
 	"strings"
 	"unsafe"
 
@@ -331,7 +330,6 @@ func decodeErrorContext(err error, s string, pos int) error {
 // This unsafe mechanism is safe to use here because, ultimately, every
 // JSON object produced from those bytes will copy those bytes anyway
 // (i.e. jsonString([]byte)).
-// See https://groups.google.com/g/golang-nuts/c/Zsfk-VMd_fU/m/O1ru4fO-BgAJ
 func unsafeGetBytes(s string) ([]byte, error) {
 	const maxStrLen = 1 << 30 // Really, can't see us supporting input JSONs that big.
 	if len(s) > maxStrLen {
@@ -340,6 +338,6 @@ func unsafeGetBytes(s string) ([]byte, error) {
 	if len(s) == 0 {
 		return nil, nil
 	}
-	p := unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&s)).Data)
-	return (*[maxStrLen]byte)(p)[:len(s):len(s)], nil
+
+	return unsafe.Slice(unsafe.StringData(s), len(s)), nil
 }

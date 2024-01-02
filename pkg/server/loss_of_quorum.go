@@ -39,23 +39,19 @@ func newPlanStore(cfg Config) (loqrecovery.PlanStore, error) {
 	path := spec.Path
 	if spec.InMemory {
 		path = ""
-		if spec.StickyInMemoryEngineID != "" {
+		if spec.StickyVFSID != "" {
 			if cfg.TestingKnobs.Server == nil {
 				return loqrecovery.PlanStore{}, errors.AssertionFailedf("Could not create a sticky " +
 					"engine no server knobs available to get a registry. " +
-					"Please use Knobs.Server.StickyEngineRegistry to provide one.")
+					"Please use Knobs.Server.StickyVFSRegistry to provide one.")
 			}
 			knobs := cfg.TestingKnobs.Server.(*TestingKnobs)
-			if knobs.StickyEngineRegistry == nil {
+			if knobs.StickyVFSRegistry == nil {
 				return loqrecovery.PlanStore{}, errors.Errorf("Could not create a sticky " +
 					"engine no registry available. Please use " +
-					"Knobs.Server.StickyEngineRegistry to provide one.")
+					"Knobs.Server.StickyVFSRegistry to provide one.")
 			}
-			var err error
-			fs, err = knobs.StickyEngineRegistry.GetUnderlyingFS(spec)
-			if err != nil {
-				return loqrecovery.PlanStore{}, err
-			}
+			fs = knobs.StickyVFSRegistry.Get(spec.StickyVFSID)
 		} else {
 			fs = vfs.NewMem()
 		}
@@ -93,7 +89,7 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 	ctx context.Context,
 	ie isql.Executor,
 	stores *kvserver.Stores,
-	server *Server,
+	server *topLevelServer,
 	stopper *stop.Stopper,
 ) {
 	publishCtx, publishCancel := stopper.WithCancelOnQuiesce(ctx)

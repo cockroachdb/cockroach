@@ -124,7 +124,7 @@ func verifyNodeLiveness(
 	if err := retry.WithMaxAttempts(ctx, retry.Options{
 		MaxBackoff: 500 * time.Millisecond,
 	}, 60, func() (err error) {
-		response, err = getMetrics(adminURLs[0], now.Add(-runDuration), now, []tsQuery{
+		response, err = getMetrics(ctx, adminURLs[0], now.Add(-runDuration), now, []tsQuery{
 			{
 				name:      "cr.node.liveness.heartbeatfailures",
 				queryType: total,
@@ -165,7 +165,8 @@ func registerTPCCOverload(r registry.Registry) {
 			Name:              name,
 			Owner:             registry.OwnerAdmissionControl,
 			Benchmark:         true,
-			Tags:              registry.Tags(`weekly`),
+			CompatibleClouds:  registry.AllExceptAWS,
+			Suites:            registry.Suites(registry.Weekly),
 			Cluster:           r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs)),
 			Run:               s.run,
 			EncryptionSupport: registry.EncryptionMetamorphic,
@@ -188,13 +189,14 @@ func registerTPCCSevereOverload(r registry.Registry) {
 		Benchmark: true,
 		// TODO(abaptist): This test will require a lot of admission control work
 		// to pass. Just putting it here to make easy to run at any time.
-		Skip:    "#89142",
-		Cluster: r.MakeClusterSpec(7, spec.CPU(8)),
+		Skip:             "#89142",
+		Cluster:          r.MakeClusterSpec(7, spec.CPU(8)),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			roachNodes := c.Range(1, c.Spec().NodeCount-1)
 			workloadNode := c.Spec().NodeCount
 
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), roachNodes)
 
 			t.Status("initializing (~1h)")

@@ -115,7 +115,11 @@ export const executionsTableTitles: ExecutionsTableTitleType = {
           "Preparing", the ${execType} is being parsed and planned.
           If "Executing", the ${execType} is currently being
           executed. If "Waiting", the ${execType} is currently
-          experiencing contention.`}
+          experiencing contention. ${
+            execType === "transaction"
+              ? `If "Idle", the transaction is open but is not currently executing a statement.`
+              : ``
+          }`}
         </p>
       }
     >

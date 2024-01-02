@@ -37,11 +37,11 @@ import (
 
 const (
 	defaultProject = "cockroach-ephemeral"
-	// ProviderName is gce.
-	ProviderName        = "gce"
-	DefaultImage        = "ubuntu-2004-focal-v20210603"
-	ARM64Image          = "ubuntu-2004-focal-arm64-v20230523"
-	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230302"
+	ProviderName   = "gce"
+	DefaultImage   = "ubuntu-2204-jammy-v20230727"
+	ARM64Image     = "ubuntu-2204-jammy-arm64-v20230727"
+	// TODO(DarrylWong): Upgrade FIPS to Ubuntu 22 when it is available.
+	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
 	defaultImageProject = "ubuntu-os-cloud"
 	FIPSImageProject    = "ubuntu-os-pro-cloud"
 )
@@ -55,7 +55,7 @@ func DefaultProject() string {
 }
 
 // projects for which a cron GC job exists.
-var projectsWithGC = []string{defaultProject, "andrei-jepsen"}
+var projectsWithGC = []string{defaultProject}
 
 // Denotes if this provider was successfully initialized.
 var initialized = false
@@ -76,6 +76,7 @@ func Init() error {
 			"(https://cloud.google.com/sdk/downloads)")
 		return errors.New("gcloud not found")
 	}
+	providerInstance.DNSProvider = NewDNSProvider()
 	initialized = true
 	vm.Providers[ProviderName] = providerInstance
 	return nil
@@ -118,7 +119,16 @@ type jsonVM struct {
 			NatIP string
 		}
 	}
+	Scheduling struct {
+		AutomaticRestart          bool
+		Preemptible               bool
+		OnHostMaintenance         string
+		InstanceTerminationAction string
+		ProvisioningModel         string
+	}
 	MachineType string
+	// CPU platform corresponding to machine type; see https://cloud.google.com/compute/docs/cpu-platforms
+	CPUPlatform string
 	SelfLink    string
 	Zone        string
 	instanceDisksResponse
@@ -155,8 +165,13 @@ func (jsonVM *jsonVM) toVM(
 			vpc = lastComponent(jsonVM.NetworkInterfaces[0].Network)
 		}
 	}
+	if jsonVM.Scheduling.OnHostMaintenance == "" {
+		// N.B. 'onHostMaintenance' is always non-empty, hence its absense implies a parsing error
+		vmErrors = append(vmErrors, vm.ErrBadScheduling)
+	}
 
 	machineType := lastComponent(jsonVM.MachineType)
+	cpuPlatform := jsonVM.CPUPlatform
 	zone := lastComponent(jsonVM.Zone)
 	remoteUser := config.SharedUser
 	if !opts.useSharedUser {
@@ -216,18 +231,21 @@ func (jsonVM *jsonVM) toVM(
 		Errors:                 vmErrors,
 		DNS:                    fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
 		Lifetime:               lifetime,
+		Preemptible:            jsonVM.Scheduling.Preemptible,
 		Labels:                 jsonVM.Labels,
 		PrivateIP:              privateIP,
 		Provider:               ProviderName,
+		DNSProvider:            ProviderName,
 		ProviderID:             jsonVM.Name,
 		PublicIP:               publicIP,
+		PublicDNS:              fmt.Sprintf("%s.%s", jsonVM.Name, Subdomain),
 		RemoteUser:             remoteUser,
 		VPC:                    vpc,
 		MachineType:            machineType,
+		CPUArch:                vm.ParseArch(cpuPlatform),
+		CPUFamily:              strings.Replace(strings.ToLower(cpuPlatform), "intel ", "", 1),
 		Zone:                   zone,
 		Project:                project,
-		SQLPort:                config.DefaultSQLPort,
-		AdminUIPort:            config.DefaultAdminUIPort,
 		NonBootAttachedVolumes: volumes,
 		LocalDisks:             localDisks,
 	}
@@ -241,9 +259,11 @@ type jsonAuth struct {
 // DefaultProviderOpts returns a new gce.ProviderOpts with default values set.
 func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
-		// projects needs space for one project, which is set by the flags for
-		// commands that accept a single project.
-		MachineType:          "n1-standard-4",
+		// N.B. we set minCPUPlatform to "Intel Ice Lake" by default because it's readily available in the majority of GCE
+		// regions. Furthermore, it gets us closer to AWS instances like m6i which exclusively run Ice Lake.
+		MachineType: "n2-standard-4",
+		// TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
+		//MinCPUPlatform:       "Intel Ice Lake",
 		MinCPUPlatform:       "",
 		Zones:                nil,
 		Image:                DefaultImage,
@@ -251,6 +271,7 @@ func DefaultProviderOpts() *ProviderOpts {
 		PDVolumeType:         "pd-ssd",
 		PDVolumeSize:         500,
 		TerminateOnMigration: false,
+		UseSpot:              false,
 		useSharedUser:        true,
 		preemptible:          false,
 	}
@@ -274,10 +295,12 @@ type ProviderOpts struct {
 	PDVolumeType     string
 	PDVolumeSize     int
 	UseMultipleDisks bool
+	// use spot instances (i.e., latest version of preemptibles which can run > 24 hours)
+	UseSpot bool
+
 	// GCE allows two availability policies in case of a maintenance event (see --maintenance-policy via gcloud),
 	// 'TERMINATE' or 'MIGRATE'. The default is 'MIGRATE' which we denote by 'TerminateOnMigration == false'.
 	TerminateOnMigration bool
-
 	// useSharedUser indicates that the shared user rather than the personal
 	// user should be used to ssh into the remote machines.
 	useSharedUser bool
@@ -287,8 +310,94 @@ type ProviderOpts struct {
 
 // Provider is the GCE implementation of the vm.Provider interface.
 type Provider struct {
+	vm.DNSProvider
 	Projects       []string
 	ServiceAccount string
+}
+
+// LogEntry represents a single log entry from the gcloud logging(stack driver)
+type LogEntry struct {
+	LogName  string `json:"logName"`
+	Resource struct {
+		Labels struct {
+			InstanceID string `json:"instance_id"`
+		} `json:"labels"`
+	} `json:"resource"`
+	Timestamp    string `json:"timestamp"`
+	ProtoPayload struct {
+		ResourceName string `json:"resourceName"`
+	} `json:"protoPayload"`
+}
+
+func (p *Provider) SupportsSpotVMs() bool {
+	return true
+}
+
+// GetPreemptedSpotVMs checks the preemption status of the given VMs, by querying the GCP logging service.
+func (p *Provider) GetPreemptedSpotVMs(
+	l *logger.Logger, vms vm.List, since time.Time,
+) ([]vm.PreemptedVM, error) {
+	args, err := buildFilterPreemptionCliArgs(vms, p.GetProject(), since)
+	if err != nil {
+		l.Printf("Error building gcloud cli command: %v\n", err)
+		return nil, err
+	}
+	l.Printf("gcloud cli for preemption : " + strings.Join(append([]string{"gcloud"}, args...), " "))
+	var logEntries []LogEntry
+	if err := runJSONCommand(args, &logEntries); err != nil {
+		l.Printf("Error running gcloud cli command: %v\n", err)
+		return nil, err
+	}
+	// Extract the VM name and the time of preemption from logs.
+	var preemptedVMs []vm.PreemptedVM
+	for _, logEntry := range logEntries {
+		timestamp, err := time.Parse(time.RFC3339, logEntry.Timestamp)
+		if err != nil {
+			l.Printf("Error parsing gcp log timestamp, Preemption time not available: %v", err)
+			preemptedVMs = append(preemptedVMs, vm.PreemptedVM{Name: logEntry.ProtoPayload.ResourceName})
+			continue
+		}
+		preemptedVMs = append(preemptedVMs, vm.PreemptedVM{Name: logEntry.ProtoPayload.ResourceName, PreemptedAt: timestamp})
+	}
+	return preemptedVMs, nil
+}
+
+// buildFilterPreemptionCliArgs returns the arguments to be passed to gcloud cli to query the logs for preemption events.
+func buildFilterPreemptionCliArgs(
+	vms vm.List, projectName string, since time.Time,
+) ([]string, error) {
+	vmFullResourceNames := make([]string, len(vms))
+	if projectName == "" {
+		return nil, errors.New("project name cannot be empty")
+	}
+	if since.After(timeutil.Now()) {
+		return nil, errors.New("since cannot be in the future")
+	}
+	if vms == nil {
+		return nil, errors.New("vms cannot be nil")
+	}
+	// construct full resource names
+	for i, vmNode := range vms {
+		// example format : projects/cockroach-ephemeral/zones/us-east1-b/instances/test-name
+		vmFullResourceNames[i] = "projects/" + projectName + "/zones/" + vmNode.Zone + "/instances/" + vmNode.Name
+	}
+	// Prepend vmFullResourceNames with "protoPayload.resourceName=" to help with filter construction.
+	vmIDFilter := make([]string, len(vms))
+	for i, vmID := range vmFullResourceNames {
+		vmIDFilter[i] = fmt.Sprintf("protoPayload.resourceName=%s", vmID)
+	}
+	// Create a filter to match preemption events for the specified VM IDs
+	filter := fmt.Sprintf(`resource.type=gce_instance AND (protoPayload.methodName=compute.instances.preempted) AND (%s)`,
+		strings.Join(vmIDFilter, " OR "))
+	args := []string{
+		"logging",
+		"read",
+		"--project=" + projectName,
+		"--format=json",
+		fmt.Sprintf("--freshness=%dh", int(timeutil.Since(since).Hours()+1)), // only look at logs from the "since" specified
+		filter,
+	}
+	return args, nil
 }
 
 type snapshotJson struct {
@@ -315,6 +424,7 @@ func (p *Provider) CreateVolumeSnapshot(
 ) (vm.VolumeSnapshot, error) {
 	args := []string{
 		"compute",
+		"--project", p.GetProject(),
 		"snapshots",
 		"create", vsco.Name,
 		"--source-disk", volume.ProviderResourceID,
@@ -336,6 +446,7 @@ func (p *Provider) CreateVolumeSnapshot(
 
 	args = []string{
 		"compute",
+		"--project", p.GetProject(),
 		"snapshots",
 		"add-labels", vsco.Name,
 		"--labels", s[:len(s)-1],
@@ -355,6 +466,7 @@ func (p *Provider) ListVolumeSnapshots(
 ) ([]vm.VolumeSnapshot, error) {
 	args := []string{
 		"compute",
+		"--project", p.GetProject(),
 		"snapshots",
 		"list",
 		"--format", "json(name,id)",
@@ -398,6 +510,7 @@ func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.Volum
 	}
 	args := []string{
 		"compute",
+		"--project", p.GetProject(),
 		"snapshots",
 		"delete",
 	}
@@ -438,6 +551,7 @@ func (p *Provider) CreateVolume(
 	}
 	args := []string{
 		"compute",
+		"--project", p.GetProject(),
 		"disks",
 		"create", vco.Name,
 		"--size", strconv.Itoa(vco.Size),
@@ -496,6 +610,7 @@ func (p *Provider) CreateVolume(
 		s := sb.String()
 		args = []string{
 			"compute",
+			"--project", p.GetProject(),
 			"disks",
 			"add-labels", vco.Name,
 			"--labels", s[:len(s)-1],
@@ -522,6 +637,7 @@ func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) e
 	{ // Detach disks.
 		args := []string{
 			"compute",
+			"--project", p.GetProject(),
 			"instances",
 			"detach-disk", vm.Name,
 			"--disk", volume.ProviderResourceID,
@@ -535,6 +651,7 @@ func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) e
 	{ // Delete disks.
 		args := []string{
 			"compute",
+			"--project", p.GetProject(),
 			"disks",
 			"delete",
 			volume.ProviderResourceID,
@@ -646,6 +763,7 @@ func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (
 	// Volume attach.
 	args := []string{
 		"compute",
+		"--project", p.GetProject(),
 		"instances",
 		"attach-disk",
 		vm.ProviderID,
@@ -675,6 +793,7 @@ func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (
 	// Volume auto delete.
 	args = []string{
 		"compute",
+		"--project", p.GetProject(),
 		"instances",
 		"set-disk-auto-delete", vm.ProviderID,
 		"--auto-delete",
@@ -767,7 +886,7 @@ func (p *Provider) GetProjects() []string {
 
 // ConfigureCreateFlags implements vm.ProviderOptions.
 func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
-	flags.StringVar(&o.MachineType, "machine-type", "n1-standard-4", "DEPRECATED")
+	flags.StringVar(&o.MachineType, "machine-type", "n2-standard-4", "DEPRECATED")
 	_ = flags.MarkDeprecated("machine-type", "use "+ProviderName+"-machine-type instead")
 	flags.StringSliceVar(&o.Zones, "zones", nil, "DEPRECATED")
 	_ = flags.MarkDeprecated("zones", "use "+ProviderName+"-zones instead")
@@ -775,9 +894,9 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&providerInstance.ServiceAccount, ProviderName+"-service-account",
 		providerInstance.ServiceAccount, "Service account to use")
 
-	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n1-standard-4",
+	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n2-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
-	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "",
+	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "Intel Ice Lake",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
 	flags.StringVar(&o.Image, ProviderName+"-image", DefaultImage,
 		"Image to use to create the vm, "+
@@ -799,7 +918,10 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
 			strings.Join(defaultZones, ",")))
-	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false, "use preemptible GCE instances")
+	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false,
+		"use preemptible GCE instances (lifetime cannot exceed 24h)")
+	flags.BoolVar(&o.UseSpot, ProviderName+"-use-spot", false,
+		"use spot GCE instances (like preemptible but lifetime can exceed 24h)")
 	flags.BoolVar(&o.TerminateOnMigration, ProviderName+"-terminateOnMigration", false,
 		"use 'TERMINATE' maintenance policy (for GCE live migrations)")
 }
@@ -855,6 +977,54 @@ func (p *Provider) ConfigSSH(l *logger.Logger, zones []string) error {
 	return nil
 }
 
+func (p *Provider) editLabels(
+	l *logger.Logger, vms vm.List, labels map[string]string, remove bool,
+) error {
+	cmdArgs := []string{"compute", "instances"}
+	if remove {
+		cmdArgs = append(cmdArgs, "remove-labels")
+	} else {
+		cmdArgs = append(cmdArgs, "add-labels")
+	}
+
+	tagArgs := make([]string, 0, len(labels))
+	for key, value := range labels {
+		if remove {
+			tagArgs = append(tagArgs, key)
+		} else {
+			tagArgs = append(tagArgs, fmt.Sprintf("%s=%s", key, vm.SanitizeLabel(value)))
+		}
+	}
+	tagArgsString := strings.Join(tagArgs, ",")
+	commonArgs := []string{"--project", p.GetProject(), fmt.Sprintf("--labels=%s", tagArgsString)}
+
+	for _, v := range vms {
+		vmArgs := make([]string, len(cmdArgs))
+		copy(vmArgs, cmdArgs)
+
+		vmArgs = append(vmArgs, v.Name, "--zone", v.Zone)
+		vmArgs = append(vmArgs, commonArgs...)
+		cmd := exec.Command("gcloud", vmArgs...)
+		if b, err := cmd.CombinedOutput(); err != nil {
+			return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", vmArgs, string(b))
+		}
+	}
+	return nil
+}
+
+// AddLabels adds the given labels to the given VMs.
+func (p *Provider) AddLabels(l *logger.Logger, vms vm.List, labels map[string]string) error {
+	return p.editLabels(l, vms, labels, false /* remove */)
+}
+
+func (p *Provider) RemoveLabels(l *logger.Logger, vms vm.List, labels []string) error {
+	labelsMap := make(map[string]string, len(labels))
+	for _, label := range labels {
+		labelsMap[label] = ""
+	}
+	return p.editLabels(l, vms, labelsMap, true /* remove */)
+}
+
 // Create TODO(peter): document
 func (p *Provider) Create(
 	l *logger.Logger, names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
@@ -899,14 +1069,21 @@ func (p *Provider) Create(
 		if len(providerOpts.Zones) == 0 {
 			zones = []string{"us-central1-a"}
 		} else {
+			supportedT2ARegions := []string{"us-central1", "asia-southeast1", "europe-west4"}
 			for _, zone := range providerOpts.Zones {
-				if !strings.HasPrefix(zone, "us-central1-") {
-					return errors.New("T2A instances are not supported outside of us-central1")
+				for _, region := range supportedT2ARegions {
+					if !strings.HasPrefix(zone, region) {
+						return errors.Newf("T2A instances are not supported outside of [%s]", strings.Join(supportedT2ARegions, ","))
+					}
 				}
 			}
 		}
+		if providerOpts.MinCPUPlatform != "" {
+			l.Printf("WARNING: --gce-min-cpu-platform is ignored for T2A instances")
+			providerOpts.MinCPUPlatform = ""
+		}
 	}
-	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
+	// TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
 	if useArmAMI {
 		image = ARM64Image
 		l.Printf("Using ARM64 AMI: %s for machine type: %s", image, providerOpts.MachineType)
@@ -916,6 +1093,14 @@ func (p *Provider) Create(
 		image = FIPSImage
 		imageProject = FIPSImageProject
 		l.Printf("Using FIPS-enabled AMI: %s for machine type: %s", image, providerOpts.MachineType)
+	}
+	// If a non default Ubuntu version was specified, we want to use that instead.
+	if opts.UbuntuVersion.IsOverridden() {
+		image, err = getUbuntuImage(opts.UbuntuVersion, opts.Arch)
+		if err != nil {
+			return err
+		}
+		l.Printf("Overriding default Ubuntu image with %s", image)
 	}
 	args := []string{
 		"compute", "instances", "create",
@@ -946,6 +1131,8 @@ func (p *Provider) Create(
 		// Preemptible instances require the following arguments set explicitly
 		args = append(args, "--maintenance-policy", "TERMINATE")
 		args = append(args, "--no-restart-on-failure")
+	} else if providerOpts.UseSpot {
+		args = append(args, "--provisioning-model", "SPOT")
 	} else {
 		if providerOpts.TerminateOnMigration {
 			args = append(args, "--maintenance-policy", "TERMINATE")
@@ -957,15 +1144,15 @@ func (p *Provider) Create(
 	extraMountOpts := ""
 	// Dynamic args.
 	if opts.SSDOpts.UseLocalSSD {
-		// n2-class and c2-class GCP machines cannot be requested with only 1
-		// SSD; minimum number of actual SSDs is 2.
-		// TODO(pbardea): This is more general for machine types that
-		// come in different sizes.
-		// See: https://cloud.google.com/compute/docs/disks/
-		n2MachineTypes := regexp.MustCompile("^[cn]2-.+-16")
-		if n2MachineTypes.MatchString(providerOpts.MachineType) && providerOpts.SSDCount == 1 {
-			fmt.Fprint(os.Stderr, "WARNING: SSD count must be at least 2 for n2 and c2 machine types with 16vCPU. Setting --gce-local-ssd-count to 2.\n")
-			providerOpts.SSDCount = 2
+		if counts, err := AllowedLocalSSDCount(providerOpts.MachineType); err != nil {
+			return err
+		} else {
+			// Make sure the minimum number of local SSDs is met.
+			minCount := counts[0]
+			if providerOpts.SSDCount < minCount {
+				l.Printf("WARNING: SSD count must be at least %d for %q. Setting --gce-local-ssd-count to %d", minCount, providerOpts.MachineType, minCount)
+				providerOpts.SSDCount = minCount
+			}
 		}
 		for i := 0; i < providerOpts.SSDCount; i++ {
 			args = append(args, "--local-ssd", "interface=NVME")
@@ -979,6 +1166,9 @@ func (p *Provider) Create(
 			fmt.Sprintf("size=%dGB", providerOpts.PDVolumeSize),
 			"auto-delete=yes",
 		}
+		// TODO(pavelkalinnikov): support disk types with "provisioned-throughput"
+		// option, such as Hyperdisk Throughput:
+		// https://cloud.google.com/compute/docs/disks/add-hyperdisk#hyperdisk-throughput.
 		args = append(args, "--create-disk", strings.Join(pdProps, ","))
 		// Enable DISCARD commands for persistent disks, as is advised in:
 		// https://cloud.google.com/compute/docs/disks/optimizing-pd-performance#formatting_parameters.
@@ -986,7 +1176,7 @@ func (p *Provider) Create(
 	}
 
 	// Create GCE startup script file.
-	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS))
+	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS), !shouldEnableRSAForSSH(opts.UbuntuVersion, opts.Arch))
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}
@@ -1059,6 +1249,58 @@ func (p *Provider) Create(
 	return propagateDiskLabels(l, project, labels, zoneToHostNames, &opts)
 }
 
+// Given a machine type, return the allowed number (> 0) of local SSDs, sorted in ascending order.
+// N.B. Only n1, n2 and c2 instances are supported since we don't typically use other instance types.
+// Consult https://cloud.google.com/compute/docs/disks/#local_ssd_machine_type_restrictions for other types of instances.
+func AllowedLocalSSDCount(machineType string) ([]int, error) {
+	// E.g., n2-standard-4, n2-custom-8-16384.
+	machineTypes := regexp.MustCompile(`^([cn])(\d+)-[a-z]+-(\d+)(?:-\d+)?$`)
+	matches := machineTypes.FindStringSubmatch(machineType)
+
+	if len(matches) >= 3 {
+		family := matches[1] + matches[2]
+		numCpus, err := strconv.Atoi(matches[3])
+		if err != nil {
+			return nil, err
+		}
+		if family == "n1" {
+			return []int{1, 2, 3, 4, 5, 6, 7, 8, 16, 24}, nil
+		}
+		switch family {
+		case "n2":
+			if numCpus <= 10 {
+				return []int{1, 2, 4, 8, 16, 24}, nil
+			}
+			if numCpus <= 20 {
+				return []int{2, 4, 8, 16, 24}, nil
+			}
+			if numCpus <= 40 {
+				return []int{4, 8, 16, 24}, nil
+			}
+			if numCpus <= 80 {
+				return []int{8, 16, 24}, nil
+			}
+			if numCpus <= 128 {
+				return []int{16, 24}, nil
+			}
+		case "c2":
+			if numCpus <= 8 {
+				return []int{1, 2, 4, 8}, nil
+			}
+			if numCpus <= 16 {
+				return []int{2, 4, 8}, nil
+			}
+			if numCpus <= 30 {
+				return []int{4, 8}, nil
+			}
+			if numCpus <= 60 {
+				return []int{8}, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("unsupported machine type: %q, matches: %v", machineType, matches)
+}
+
 // N.B. neither boot disk nor additional persistent disks are assigned VM labels by default.
 // Hence, we must propagate them. See: https://cloud.google.com/compute/docs/labeling-resources#labeling_boot_disks
 func propagateDiskLabels(
@@ -1113,13 +1355,6 @@ func propagateDiskLabels(
 		}
 	}
 	return g.Wait()
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // Delete TODO(peter): document
@@ -1211,24 +1446,9 @@ func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
 
 // Extend TODO(peter): document
 func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration) error {
-	// The gcloud command only takes a single instance.  Unlike Delete() above, we have to
-	// perform the iteration here.
-	for _, v := range vms {
-		args := []string{"compute", "instances", "add-labels"}
-
-		args = append(args, "--project", v.Project)
-		args = append(args, "--zone", v.Zone)
-		args = append(args, "--labels", fmt.Sprintf("lifetime=%s", lifetime))
-		args = append(args, v.Name)
-
-		cmd := exec.Command("gcloud", args...)
-
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
-		}
-	}
-	return nil
+	return p.AddLabels(l, vms, map[string]string{
+		"lifetime": lifetime.String(),
+	})
 }
 
 // FindActiveAccount TODO(peter): document
@@ -1411,14 +1631,47 @@ func populateCostPerHour(l *logger.Logger, vms vm.List) error {
 							},
 						},
 					},
-					MachineType: &cloudbilling.MachineType{
-						PredefinedMachineType: &cloudbilling.PredefinedMachineType{
-							MachineType: machineType,
-						},
-					},
+					Preemptible:     vm.Preemptible,
 					PersistentDisks: []*cloudbilling.PersistentDisk{},
 					Region:          zone[:len(zone)-2],
 				},
+			}
+			if !strings.Contains(machineType, "custom") {
+				workload.ComputeVmWorkload.MachineType = &cloudbilling.MachineType{
+					PredefinedMachineType: &cloudbilling.PredefinedMachineType{
+						MachineType: machineType,
+					},
+				}
+			} else {
+				decodeCustomType := func() (string, int64, int64, error) {
+					parts := strings.Split(machineType, "-")
+					decodeErr := errors.Newf("invalid custom machineType %s", machineType)
+					if len(parts) != 4 {
+						return "", 0, 0, decodeErr
+					}
+					series, cpus, memory := parts[0], parts[2], parts[3]
+					cpusInt, parseErr := strconv.Atoi(cpus)
+					if parseErr != nil {
+						return "", 0, 0, decodeErr
+					}
+					memoryInt, parseErr := strconv.Atoi(memory)
+					if parseErr != nil {
+						return "", 0, 0, decodeErr
+					}
+					return series, int64(cpusInt), int64(memoryInt), nil
+				}
+				series, cpus, memory, err := decodeCustomType()
+				if err != nil {
+					l.Errorf("Error estimating VM costs (will continue without): %v", err)
+					continue
+				}
+				workload.ComputeVmWorkload.MachineType = &cloudbilling.MachineType{
+					CustomMachineType: &cloudbilling.CustomMachineType{
+						MachineSeries:   series,
+						VirtualCpuCount: cpus,
+						MemorySizeGb:    float64(memory / 1024),
+					},
+				}
 			}
 			for _, v := range vm.NonBootAttachedVolumes {
 				workload.ComputeVmWorkload.PersistentDisks = append(workload.ComputeVmWorkload.PersistentDisks, &cloudbilling.PersistentDisk{
@@ -1494,11 +1747,53 @@ func (p *Provider) ProjectActive(project string) bool {
 // lastComponent splits a url path and returns only the last part. This is
 // used because some fields in GCE APIs are defined using URLs like:
 //
-//	"https://www.googleapis.com/compute/v1/projects/cockroach-shared/zones/us-east1-b/machineTypes/n1-standard-16"
+//	"https://www.googleapis.com/compute/v1/projects/cockroach-shared/zones/us-east1-b/machineTypes/n2-standard-16"
 //
-// We want to strip this down to "n1-standard-16", so we only want the last
+// We want to strip this down to "n2-standard-16", so we only want the last
 // component.
 func lastComponent(url string) string {
 	s := strings.Split(url, "/")
 	return s[len(s)-1]
+}
+
+var (
+	// We define the actual image here because it's different for every provider.
+	focalFossa = vm.UbuntuImages{
+		DefaultImage: "ubuntu-2004-focal-v20230817",
+		ARM64Image:   "ubuntu-2004-focal-arm64-v20230817",
+		FIPSImage:    "ubuntu-pro-fips-2004-focal-v20230811",
+	}
+
+	gceUbuntuImages = map[vm.UbuntuVersion]vm.UbuntuImages{
+		vm.FocalFossa: focalFossa,
+	}
+)
+
+// getUbuntuImage returns the correct Ubuntu image for the specified Ubuntu version and architecture.
+func getUbuntuImage(version vm.UbuntuVersion, arch string) (string, error) {
+	image, ok := gceUbuntuImages[version]
+	if ok {
+		switch arch {
+		case string(vm.ArchAMD64):
+			return image.DefaultImage, nil
+		case string(vm.ArchARM64):
+			return image.ARM64Image, nil
+		case string(vm.ArchFIPS):
+			return image.FIPSImage, nil
+		default:
+			return "", errors.Errorf("Unknown architecture specified.")
+		}
+	}
+
+	return "", errors.Errorf("Unknown Ubuntu version specified.")
+}
+
+// Returns true if the current Ubuntu image is 22.04. RSA SHA1 is no longer supported
+// in 22.04, but is required by Jepsen tests so we enable it. However, some tests are
+// still on Ubuntu 20.04, which will break sshd if we try to enable.
+// TODO(DarrylWong): In the future, when all tests are run on Ubuntu 22.04, we can remove this check and default true.
+// See: https://github.com/cockroachdb/cockroach/issues/112112
+func shouldEnableRSAForSSH(version vm.UbuntuVersion, arch string) bool {
+	// FIPS is not yet available on 22.04, it's still using Ubuntu 20.04.
+	return version.IsOverridden() || arch == string(vm.ArchFIPS)
 }

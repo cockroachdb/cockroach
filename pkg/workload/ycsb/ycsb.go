@@ -93,6 +93,7 @@ type ycsb struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
+	isoLevel    string
 	timeString  bool
 	insertHash  bool
 	zeroPadding int
@@ -125,8 +126,11 @@ var ycsbMeta = workload.Meta{
 		g := &ycsb{}
 		g.flags.FlagSet = pflag.NewFlagSet(`ycsb`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`workload`: {RuntimeOnly: true},
+			`isolation-level`:          {RuntimeOnly: true},
+			`read-modify-write-in-txn`: {RuntimeOnly: true},
+			`workload`:                 {RuntimeOnly: true},
 		}
+		g.flags.StringVar(&g.isoLevel, `isolation-level`, ``, `Isolation level to run workload transactions under [serializable, snapshot, read_committed]. If unset, the workload will run with the default isolation level of the database.`)
 		g.flags.BoolVar(&g.timeString, `time-string`, false, `Prepend field[0-9] data with current time in microsecond precision.`)
 		g.flags.BoolVar(&g.insertHash, `insert-hash`, true, `Key to be hashed or ordered.`)
 		g.flags.IntVar(&g.zeroPadding, `zero-padding`, 1, `Key using "insert-hash=false" has zeros padded to left to make this length of digits.`)
@@ -135,7 +139,7 @@ var ycsbMeta = workload.Meta{
 		g.flags.IntVar(&g.recordCount, `record-count`, 0, `Key to start workload insertions from. Must be >= insert-start + insert-count. (Default: insert-start + insert-count)`)
 		g.flags.BoolVar(&g.json, `json`, false, `Use JSONB rather than relational data.`)
 		g.flags.BoolVar(&g.families, `families`, true, `Place each column in its own column family.`)
-		g.flags.BoolVar(&g.rmwInTxn, `read-modify-write-in-txn`, true, `Run workload F's read-modify-write operation in an explicit transaction.`)
+		g.flags.BoolVar(&g.rmwInTxn, `read-modify-write-in-txn`, false, `Run workload F's read-modify-write operation in an explicit transaction.`)
 		g.flags.BoolVar(&g.sfu, `select-for-update`, true, `Use SELECT FOR UPDATE syntax in read-modify-write operation, if run in an explicit transactions.`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations.`)
 		g.flags.StringVar(&g.workload, `workload`, `B`, `Workload type. Choose from A-F.`)
@@ -378,6 +382,9 @@ func (g *ycsb) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
+	if err := workload.SetDefaultIsolationLevel(urls, g.isoLevel); err != nil {
+		return workload.QueryLoad{}, err
+	}
 
 	const readStmtStr = `SELECT * FROM usertable WHERE ycsb_key = $1`
 
@@ -427,8 +434,8 @@ func (g *ycsb) Ops(
 		}
 	}
 
-	rowIndexVal := uint64(g.recordCount)
-	rowIndex := &rowIndexVal
+	var rowIndex atomic.Uint64
+	rowIndex.Store(uint64(g.recordCount))
 	rowCounter := NewAcknowledgedCounter((uint64)(g.recordCount))
 
 	var requestGen randGenerator
@@ -530,7 +537,7 @@ func (g *ycsb) Ops(
 			scanStmt:                scanStmt,
 			insertStmt:              insertStmt,
 			updateStmts:             updateStmts,
-			rowIndex:                rowIndex,
+			rowIndex:                &rowIndex,
 			rowCounter:              rowCounter,
 			nextInsertIndex:         nil,
 			requestGen:              requestGen,
@@ -565,7 +572,7 @@ type ycsbWorker struct {
 	updateStmts []stmtKey
 
 	// The next row index to insert.
-	rowIndex *uint64
+	rowIndex *atomic.Uint64
 	// Counter to keep track of which rows have been inserted.
 	rowCounter *AcknowledgedCounter
 	// Next insert index to use if non-nil.
@@ -606,7 +613,7 @@ func (yw *ycsbWorker) run(ctx context.Context) error {
 	return nil
 }
 
-var readOnly int32
+var readOnly atomic.Int32
 
 type operation string
 
@@ -676,7 +683,7 @@ func (yw *ycsbWorker) nextInsertKeyIndex() uint64 {
 		yw.nextInsertIndex = nil
 		return result
 	}
-	return atomic.AddUint64(yw.rowIndex, 1) - 1
+	return yw.rowIndex.Add(1) - 1
 }
 
 var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -865,15 +872,15 @@ func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {
 // Choose an operation in proportion to the frequencies.
 func (yw *ycsbWorker) chooseOp() operation {
 	p := yw.rng.Float32()
-	if atomic.LoadInt32(&readOnly) == 0 && p <= yw.config.updateFreq {
+	if readOnly.Load() == 0 && p <= yw.config.updateFreq {
 		return updateOp
 	}
 	p -= yw.config.updateFreq
-	if atomic.LoadInt32(&readOnly) == 0 && p <= yw.config.insertFreq {
+	if readOnly.Load() == 0 && p <= yw.config.insertFreq {
 		return insertOp
 	}
 	p -= yw.config.insertFreq
-	if atomic.LoadInt32(&readOnly) == 0 && p <= yw.config.readModifyWriteFreq {
+	if readOnly.Load() == 0 && p <= yw.config.readModifyWriteFreq {
 		return readModifyWriteOp
 	}
 	p -= yw.config.readModifyWriteFreq

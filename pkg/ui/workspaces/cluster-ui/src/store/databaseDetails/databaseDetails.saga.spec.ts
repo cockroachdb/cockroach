@@ -18,6 +18,7 @@ import {
 import * as matchers from "redux-saga-test-plan/matchers";
 import { expectSaga } from "redux-saga-test-plan";
 import {
+  DatabaseDetailsReqParams,
   DatabaseDetailsResponse,
   getDatabaseDetails,
   SqlApiResponse,
@@ -29,17 +30,17 @@ import {
   requestDatabaseDetailsSaga,
 } from "./databaseDetails.saga";
 import {
-  actions,
-  DatabaseDetailsState,
   KeyedDatabaseDetailsState,
-  reducer,
+  databaseDetailsReducer,
 } from "./databaseDetails.reducer";
-import { DatabasesListState, refreshDatabasesListSaga } from "../databasesList";
+import { indexUnusedDuration } from "src/util/constants";
+const { actions, reducer } = databaseDetailsReducer;
 
 describe("DatabaseDetails sagas", () => {
   const database = "test_db";
-  const requestAction: PayloadAction<string> = {
-    payload: database,
+  const csIndexUnusedDuration = indexUnusedDuration;
+  const requestAction: PayloadAction<DatabaseDetailsReqParams> = {
+    payload: { database, csIndexUnusedDuration },
     type: "request",
   };
   const databaseDetailsResponse: SqlApiResponse<DatabaseDetailsResponse> = {
@@ -67,12 +68,6 @@ describe("DatabaseDetails sagas", () => {
         zone_config_level: ZoneConfigurationLevel.CLUSTER,
       },
       stats: {
-        spanStats: {
-          approximate_disk_bytes: 1000,
-          live_bytes: 100,
-          total_bytes: 500,
-          range_count: 20,
-        },
         replicaData: {
           replicas: [1, 2, 3],
           regions: ["this", "is", "a", "region"],

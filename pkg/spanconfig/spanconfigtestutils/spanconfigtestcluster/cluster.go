@@ -12,13 +12,10 @@ package spanconfigtestcluster
 
 import (
 	"context"
-	gosql "database/sql"
-	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreconciler"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
@@ -39,6 +36,7 @@ type Handle struct {
 	tc      *testcluster.TestCluster
 	ts      map[roachpb.TenantID]*Tenant
 	scKnobs *spanconfig.TestingKnobs
+	sysDB   *sqlutils.SQLRunner
 }
 
 // NewHandle returns a new Handle.
@@ -50,6 +48,7 @@ func NewHandle(
 		tc:      tc,
 		ts:      make(map[roachpb.TenantID]*Tenant),
 		scKnobs: scKnobs,
+		sysDB:   sqlutils.MakeSQLRunner(tc.Server(0).SystemLayer().SQLConn(t)),
 	}
 }
 
@@ -59,11 +58,11 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 	testServer := h.tc.Server(0)
 	tenantState := &Tenant{t: h.t}
 	if tenID == roachpb.SystemTenantID {
-		tenantState.TestTenantInterface = testServer
-		tenantState.db = sqlutils.MakeSQLRunner(h.tc.ServerConn(0))
+		tenantState.ApplicationLayerInterface = testServer.SystemLayer()
+		tenantState.db = h.sysDB
 		tenantState.cleanup = func() {} // noop
 	} else {
-		serverGCJobKnobs := testServer.TestingKnobs().GCJob
+		serverGCJobKnobs := testServer.SystemLayer().TestingKnobs().GCJob
 		tenantGCJobKnobs := sql.GCJobTestingKnobs{SkipWaitingForMVCCGC: true}
 		if serverGCJobKnobs != nil {
 			tenantGCJobKnobs = *serverGCJobKnobs.(*sql.GCJobTestingKnobs)
@@ -77,18 +76,13 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 			},
 		}
 		var err error
-		tenantState.TestTenantInterface, err = testServer.StartTenant(ctx, tenantArgs)
+		tenantState.ApplicationLayerInterface, err = testServer.TenantController().StartTenant(ctx, tenantArgs)
 		require.NoError(h.t, err)
 
-		pgURL, cleanupPGUrl := sqlutils.PGUrl(h.t, tenantState.SQLAddr(), "Tenant", url.User(username.RootUser))
-		tenantSQLDB, err := gosql.Open("postgres", pgURL.String())
-		require.NoError(h.t, err)
+		tenantSQLDB := tenantState.SQLConn(h.t)
 
 		tenantState.db = sqlutils.MakeSQLRunner(tenantSQLDB)
-		tenantState.cleanup = func() {
-			require.NoError(h.t, tenantSQLDB.Close())
-			cleanupPGUrl()
-		}
+		tenantState.cleanup = func() {}
 	}
 
 	var tenKnobs *spanconfig.TestingKnobs
@@ -119,20 +113,6 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 	return tenantState
 }
 
-// AllowSecondaryTenantToSetZoneConfigurations enables zone configuration
-// support for the given tenant. Given the cluster setting involved is tenant
-// read-only, the SQL statement is run as the system tenant.
-func (h *Handle) AllowSecondaryTenantToSetZoneConfigurations(t *testing.T, tenID roachpb.TenantID) {
-	_, found := h.LookupTenant(tenID)
-	require.True(t, found)
-	sqlDB := sqlutils.MakeSQLRunner(h.tc.ServerConn(0))
-	sqlDB.Exec(
-		t,
-		"ALTER TENANT [$1] SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
-		tenID.ToUint64(),
-	)
-}
-
 // EnsureTenantCanSetZoneConfigurationsOrFatal ensures that the tenant observes
 // a 'true' value for sql.zone_configs.allow_for_secondary_tenants.enabled. It
 // fatals if this condition doesn't evaluate within SucceedsSoonDuration.
@@ -140,12 +120,12 @@ func (h *Handle) EnsureTenantCanSetZoneConfigurationsOrFatal(t *testing.T, tenan
 	testutils.SucceedsSoon(t, func() error {
 		var val string
 		tenant.QueryRow(
-			"SHOW CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled",
+			"SHOW CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled",
 		).Scan(&val)
 
 		if val == "false" {
 			return errors.New(
-				"waiting for sql.zone_configs.allow_for_secondary_tenant.enabled to be updated",
+				"waiting for sql.virtual_cluster.feature_access.zone_configs.enabled to be updated",
 			)
 		}
 		return nil

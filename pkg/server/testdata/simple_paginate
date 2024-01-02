@@ -48,10 +48,3 @@ paginate 5 -1
 ----
 result=[1 2 3 4 5]
 next=5
-
-# Non-slice input always returns a nil output
-
-paginate 5 5
-----
-result=<nil>
-next=0

@@ -304,7 +304,8 @@ type planTop struct {
 	planComponents
 
 	// mem/catalog retains the memo and catalog that were used to create the
-	// plan. Only set if needed by instrumentation (see ShouldSaveMemo).
+	// plan. Set unconditionally but used only by instrumentation (in order to
+	// build the stmt bundle).
 	mem     *memo.Memo
 	catalog optPlanningCatalog
 
@@ -595,9 +596,6 @@ const (
 	// engine.
 	planFlagVectorized
 
-	// planFlagTenant is set if the plan is executed on behalf of a tenant.
-	planFlagTenant
-
 	// planFlagContainsFullTableScan is set if the plan involves an unconstrained
 	// scan on (the primary key of) a table. This could be an unconstrained scan
 	// of any cardinality.
@@ -624,6 +622,14 @@ const (
 	// planFlagContainsNonDefaultLocking is set if the plan has a node with
 	// non-default key locking strength.
 	planFlagContainsNonDefaultLocking
+
+	// planFlagCheckContainsNonDefaultLocking is set if at least one check plan
+	// has a node with non-default key locking strength.
+	planFlagCheckContainsNonDefaultLocking
+
+	// planFlagSessionMigration is set if the plan is being created during
+	// a session migration.
+	planFlagSessionMigration
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {

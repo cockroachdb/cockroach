@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -43,8 +42,8 @@ type tpcc struct {
 	activeWarehouses int
 	nowString        []byte
 	numConns         int
-
-	idleConns int
+	idleConns        int
+	isoLevel         string
 
 	// Used in non-uniform random data generation. cLoad is the value of C at load
 	// time. cCustomerID is the value of C for the customer id generator. cItemID
@@ -87,10 +86,6 @@ type tpcc struct {
 	// violation of the TPC-C spec, so it should only be used for internal
 	// testing purposes.
 	localWarehouses bool
-
-	usePostgres  bool
-	serializable bool
-	txOpts       pgx.TxOptions
 
 	expensiveChecks bool
 
@@ -170,12 +165,12 @@ var tpccMeta = workload.Meta{
 			`zones`:                    {RuntimeOnly: true},
 			`active-warehouses`:        {RuntimeOnly: true},
 			`scatter`:                  {RuntimeOnly: true},
-			`serializable`:             {RuntimeOnly: true},
 			`split`:                    {RuntimeOnly: true},
 			`wait`:                     {RuntimeOnly: true},
 			`workers`:                  {RuntimeOnly: true},
 			`conns`:                    {RuntimeOnly: true},
 			`idle-conns`:               {RuntimeOnly: true},
+			`isolation-level`:          {RuntimeOnly: true},
 			`expensive-checks`:         {RuntimeOnly: true, CheckConsistencyOnly: true},
 			`local-warehouses`:         {RuntimeOnly: true},
 			`regions`:                  {RuntimeOnly: true},
@@ -203,6 +198,7 @@ var tpccMeta = workload.Meta{
 			numConnsPerWarehouse,
 		))
 		g.flags.IntVar(&g.idleConns, `idle-conns`, 0, `Number of idle connections. Defaults to 0`)
+		g.flags.StringVar(&g.isoLevel, `isolation-level`, ``, `Isolation level to run workload transactions under [serializable, snapshot, read_committed]. If unset, the workload will run with the default isolation level of the database.`)
 		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables`)
 		g.flags.IntVar(&g.clientPartitions, `client-partitions`, 0, `Make client behave as if the tables are partitioned, but does not actually partition underlying data. Requires --partition-affinity.`)
 		g.flags.IntSliceVar(&g.affinityPartitions, `partition-affinity`, nil, `Run load generator against specific partition (requires partitions). `+
@@ -214,7 +210,6 @@ var tpccMeta = workload.Meta{
 		g.flags.Var(&g.multiRegionCfg.survivalGoal, "survival-goal", "Survival goal to use for multi-region setups. Allowed values: [zone, region].")
 		g.flags.IntVar(&g.activeWarehouses, `active-warehouses`, 0, `Run the load generator against a specific number of warehouses. Defaults to --warehouses'`)
 		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
-		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
 		g.flags.BoolVar(&g.separateColumnFamilies, `families`, false, `Use separate column families for dynamic and static columns`)
@@ -342,10 +337,6 @@ func (w *tpcc) Hooks() workload.Hooks {
 			if w.waitFraction > 0 && w.workers != w.activeWarehouses*NumWorkersPerWarehouse {
 				return errors.Errorf(`--wait > 0 and --warehouses=%d requires --workers=%d`,
 					w.activeWarehouses, w.warehouses*NumWorkersPerWarehouse)
-			}
-
-			if w.serializable {
-				w.txOpts = pgx.TxOptions{IsoLevel: pgx.Serializable}
 			}
 
 			w.auditor = newAuditor(w.activeWarehouses)
@@ -755,12 +746,9 @@ func (w *tpcc) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	parsedURL, err := url.Parse(urls[0])
-	if err != nil {
+	if err := workload.SetDefaultIsolationLevel(urls, w.isoLevel); err != nil {
 		return workload.QueryLoad{}, err
 	}
-
-	w.usePostgres = parsedURL.Port() == "5432"
 
 	// We can't use a single MultiConnPool because we want to implement partition
 	// affinity. Instead we have one MultiConnPool per server.
@@ -898,12 +886,13 @@ func (w *tpcc) Ops(
 	}
 
 	// Close idle connections.
-	ql.Close = func(context context.Context) {
+	ql.Close = func(context context.Context) error {
 		for _, conn := range conns {
 			if err := conn.Close(ctx); err != nil {
 				log.Warningf(ctx, "%v", err)
 			}
 		}
+		return nil
 	}
 	return ql, nil
 }

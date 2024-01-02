@@ -1,10 +1,16 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/sql/schemachanger/sctest/sctestgen:gen.bzl", "sctest_gen")
 
+go_library(
+    name = "schemachanger",
+    srcs = ["doc.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger",
+    visibility = ["//visibility:public"],
+)
+
 filegroup(
-    name = "testdata",
-    srcs = glob(["testdata/**"]),
+    name = "end_to_end_testdata_definitions",
+    srcs = glob(["testdata/end_to_end/*/*.definition"]),
     visibility = ["//visibility:public"],
 )
 
@@ -18,18 +24,21 @@ go_test(
     name = "schemachanger_test",
     size = "enormous",
     srcs = [
+        "comparator_generated_test.go",  # keep
+        "comparator_test.go",
+        "dml_injection_test.go",
         "main_test.go",
         "schemachanger_test.go",
         ":test_gen",  # keep
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
-    data = [":testdata"],
+    data = glob(["testdata/**"]) + [
+        "//pkg/sql/logictest:testdata",
+    ],
+    exec_properties = {"Pool": "large"},
     shard_count = 16,
     deps = [
         "//pkg/base",
+        "//pkg/build/bazel",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
@@ -39,31 +48,33 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
-        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/execinfra",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/rowenc",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/schemachanger/sctest",  # keep
-        "//pkg/sql/tests",
+        "//pkg/sql/sessiondatapb",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/ctxgroup",
+        "//pkg/util/envutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
-        "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
-        "@org_golang_x_sync//errgroup",
+        "@org_golang_x_exp//slices",
     ],
 )
 
@@ -71,14 +82,17 @@ sctest_gen(
     name = "test_gen",
     out = "sctest_generated_test.go",
     ccl = False,
-    new_cluster_func = "sctest.SingleNodeCluster",
+    new_cluster_factory = "sctest.SingleNodeTestClusterFactory{}",
     package = "schemachanger",
-    test_data = glob(["testdata/end_to_end/**"]),
+    test_data = [
+        ":end_to_end_testdata_definitions",
+    ],
     tests = [
         "EndToEndSideEffects",
         "ExecuteWithDMLInjection",
         "GenerateSchemaChangeCorpus",
         "Pause",
+        "PauseMixedVersion",
         "Rollback",
     ],
     visibility = [
@@ -87,20 +101,22 @@ sctest_gen(
     ],
 )
 
-sctest_gen(
-    name = "test_mixed_gen",
-    out = "sctest_mixed_generated_test.go",
-    ccl = False,
-    new_cluster_func = "sctest.SingleNodeMixedCluster",
-    package = "schemachanger",
-    test_data = glob(["testdata/end_to_end/**"]),
-    tests = [
-        "ValidateMixedVersionElements",
+genrule(
+    name = "gen-comparator-tests",
+    srcs = [
+        "//pkg/sql/logictest:testdata",
+    ],
+    outs = [
+        "comparator_generated_test.go",
+    ],
+    cmd = """
+        $(location //pkg/sql/schemachanger/sctest/sccomparatortestgen) -out-file=$(location comparator_generated_test.go)
+    """,
+    exec_tools = [
+        "//pkg/sql/schemachanger/sctest/sccomparatortestgen",
     ],
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",
     ],
 )
-
-get_x_data(name = "get_x_data")

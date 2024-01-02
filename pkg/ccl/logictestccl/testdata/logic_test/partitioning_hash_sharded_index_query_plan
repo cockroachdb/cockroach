@@ -75,7 +75,7 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (crdb_internal_id_shard_16_eq, pid)
-                    │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                    │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                     │ render pid: column2
                     │
                     └── • project
@@ -153,7 +153,7 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (crdb_internal_id_shard_16_eq, pid)
-                    │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                    │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                     │ render pid: column2
                     │
                     └── • project
@@ -201,7 +201,7 @@ vectorized: true
     │
     └── • render
         │ columns: (crdb_internal_user_id_shard_16_comp, column2, val_cast, user_id_default)
-        │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
+        │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(user_id_default))), 16)
         │ render column2: column2
         │ render val_cast: val_cast
         │ render user_id_default: user_id_default
@@ -235,36 +235,30 @@ vectorized: true
     │ render user_id_default: user_id_default
     │ render crdb_internal_user_id_shard_16_comp: crdb_internal_user_id_shard_16_comp
     │
-    └── • distinct
+    └── • project
         │ columns: (column2, val_cast, user_id_default, crdb_internal_user_id_shard_16_comp)
-        │ estimated row count: 0 (missing stats)
-        │ distinct on: user_id_default
-        │ nulls are distinct
         │
-        └── • project
-            │ columns: (column2, val_cast, user_id_default, crdb_internal_user_id_shard_16_comp)
+        └── • lookup join (anti)
+            │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, column2, val_cast, user_id_default)
+            │ estimated row count: 0 (missing stats)
+            │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
+            │ equality cols are key
+            │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_user_id_shard_16_eq = crdb_internal_user_id_shard_16)) AND (user_id_default = user_id)
             │
-            └── • lookup join (anti)
+            └── • render
                 │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, column2, val_cast, user_id_default)
-                │ estimated row count: 0 (missing stats)
-                │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
-                │ equality cols are key
-                │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_user_id_shard_16_eq = crdb_internal_user_id_shard_16)) AND (user_id_default = user_id)
+                │ render crdb_internal_user_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(user_id_default))), 16)
+                │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(user_id_default))), 16)
+                │ render column2: column2
+                │ render val_cast: val_cast
+                │ render user_id_default: user_id_default
                 │
-                └── • render
-                    │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, column2, val_cast, user_id_default)
-                    │ render crdb_internal_user_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
-                    │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
-                    │ render column2: column2
-                    │ render val_cast: val_cast
-                    │ render user_id_default: user_id_default
-                    │
-                    └── • values
-                          columns: (column2, val_cast, user_id_default)
-                          size: 3 columns, 1 row
-                          row 0, expr 0: 'seattle'
-                          row 0, expr 1: '4321'
-                          row 0, expr 2: gen_random_uuid()
+                └── • values
+                      columns: (column2, val_cast, user_id_default)
+                      size: 3 columns, 1 row
+                      row 0, expr 0: 'seattle'
+                      row 0, expr 1: '4321'
+                      row 0, expr 2: gen_random_uuid()
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_gen_random_uuid (val, part) VALUES (4321, 'seattle'), (8765, 'new york') ON CONFLICT DO NOTHING;
@@ -306,8 +300,8 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, column2, val_cast, user_id_default)
-                    │ render crdb_internal_user_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
-                    │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
+                    │ render crdb_internal_user_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(user_id_default))), 16)
+                    │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(user_id_default))), 16)
                     │ render column2: column2
                     │ render val_cast: val_cast
                     │ render user_id_default: user_id_default
@@ -344,54 +338,18 @@ EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id, part) VALUES (4321, 'seattle
 distribution: local
 vectorized: true
 ·
-• root
-│ columns: ()
-│
-├── • insert
-│   │ columns: ()
-│   │ estimated row count: 0 (missing stats)
-│   │ into: t_unique_hash_pk(crdb_internal_id_shard_16, id, part)
-│   │
-│   └── • values
-│         columns: (crdb_internal_id_shard_16_comp, column1, column2, check1, check2)
-│         size: 5 columns, 1 row
-│         row 0, expr 0: 4321
-│         row 0, expr 1: 'seattle'
-│         row 0, expr 2: 9
-│         row 0, expr 3: true
-│         row 0, expr 4: true
-│
-└── • constraint-check
-    │
-    └── • error if rows
-        │ columns: ()
-        │
-        └── • project
-            │ columns: (id)
-            │
-            └── • cross join (inner)
-                │ columns: (id, crdb_internal_id_shard_16, id, part)
-                │ estimated row count: 1 (missing stats)
-                │
-                ├── • values
-                │     columns: (id)
-                │     size: 1 column, 1 row
-                │     row 0, expr 0: 4321
-                │
-                └── • limit
-                    │ columns: (crdb_internal_id_shard_16, id, part)
-                    │ count: 1
-                    │
-                    └── • filter
-                        │ columns: (crdb_internal_id_shard_16, id, part)
-                        │ estimated row count: 6 (missing stats)
-                        │ filter: (crdb_internal_id_shard_16 != 9) OR (part != 'seattle')
-                        │
-                        └── • scan
-                              columns: (crdb_internal_id_shard_16, id, part)
-                              estimated row count: 0 (missing stats)
-                              table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                              spans: /"new york"/9/4321/0 /"seattle"/9/4321/0
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: t_unique_hash_pk(crdb_internal_id_shard_16, id, part)
+  auto commit
+  uniqueness check: t_unique_hash_pk@t_unique_hash_pk_pkey
+  size: 5 columns, 1 row
+  row 0, expr 0: 11
+  row 0, expr 1: 4321
+  row 0, expr 2: 'seattle'
+  row 0, expr 3: true
+  row 0, expr 4: true
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id, part) VALUES (4321, 'seattle') ON CONFLICT DO NOTHING;
@@ -423,13 +381,13 @@ vectorized: true
         │     size: 3 columns, 1 row
         │     row 0, expr 0: 4321
         │     row 0, expr 1: 'seattle'
-        │     row 0, expr 2: 9
+        │     row 0, expr 2: 11
         │
         └── • scan
               columns: (id)
               estimated row count: 1 (missing stats)
               table: t_unique_hash_pk@t_unique_hash_pk_pkey
-              spans: /"new york"/9/4321/0 /"seattle"/9/4321/0
+              spans: /"new york"/11/4321/0 /"seattle"/11/4321/0
               parallel
 
 query T
@@ -465,8 +423,8 @@ vectorized: true
             │
             └── • render
                 │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, column1, column2)
-                │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
-                │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
+                │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
+                │ render crdb_internal_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
                 │ render column1: column1
                 │ render column2: column2
                 │
@@ -508,13 +466,13 @@ vectorized: true
         │     size: 3 columns, 1 row
         │     row 0, expr 0: 4321
         │     row 0, expr 1: 'seattle'
-        │     row 0, expr 2: 9
+        │     row 0, expr 2: 11
         │
         └── • scan
               columns: (id)
               estimated row count: 1 (missing stats)
               table: t_unique_hash_pk@t_unique_hash_pk_pkey
-              spans: /"new york"/9/4321/0 /"seattle"/9/4321/0
+              spans: /"new york"/11/4321/0 /"seattle"/11/4321/0
               parallel
 
 query T
@@ -550,8 +508,8 @@ vectorized: true
             │
             └── • render
                 │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, column1, column2)
-                │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
-                │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
+                │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
+                │ render crdb_internal_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
                 │ render column1: column1
                 │ render column2: column2
                 │
@@ -616,13 +574,13 @@ vectorized: true
 │                       │     size: 3 columns, 1 row
 │                       │     row 0, expr 0: 4321
 │                       │     row 0, expr 1: 'seattle'
-│                       │     row 0, expr 2: 9
+│                       │     row 0, expr 2: 11
 │                       │
 │                       └── • scan
 │                             columns: (crdb_internal_id_shard_16, id, part)
 │                             estimated row count: 1 (missing stats)
 │                             table: t_unique_hash_pk@t_unique_hash_pk_pkey
-│                             spans: /"new york"/9/4321/0 /"seattle"/9/4321/0
+│                             spans: /"new york"/11/4321/0 /"seattle"/11/4321/0
 │                             parallel
 │                             locking strength: for update
 │
@@ -646,7 +604,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, part)
-                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
+                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
                         │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16_comp
                         │ render id: column1
                         │ render part: upsert_part
@@ -716,8 +674,8 @@ vectorized: true
 │                           │
 │                           └── • render
 │                               │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, column1, column2)
-│                               │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
-│                               │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
+│                               │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
+│                               │ render crdb_internal_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
 │                               │ render column1: column1
 │                               │ render column2: column2
 │                               │
@@ -749,7 +707,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, part)
-                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
+                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
                         │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16_comp
                         │ render id: column1
                         │ render part: upsert_part
@@ -798,13 +756,13 @@ vectorized: true
             │     size: 3 columns, 1 row
             │     row 0, expr 0: 4321
             │     row 0, expr 1: 'seattle'
-            │     row 0, expr 2: 9
+            │     row 0, expr 2: 11
             │
             └── • scan
                   columns: (crdb_internal_id_shard_16, id, part)
                   estimated row count: 1 (missing stats)
                   table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                  spans: /"new york"/9/4321/0 /"seattle"/9/4321/0
+                  spans: /"new york"/11/4321/0 /"seattle"/11/4321/0
                   parallel
                   locking strength: for update
 
@@ -848,8 +806,8 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, column1, column2)
-                    │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
-                    │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
+                    │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
+                    │ render crdb_internal_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
                     │ render column1: column1
                     │ render column2: column2
                     │
@@ -883,7 +841,7 @@ vectorized: true
 │       └── • render
 │           │ columns: (crdb_internal_id_shard_16, id, part, crdb_internal_id_shard_16_comp, id_new, check2)
 │           │ render check2: true
-│           │ render crdb_internal_id_shard_16_comp: 6
+│           │ render crdb_internal_id_shard_16_comp: 4
 │           │ render id_new: 1234
 │           │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16
 │           │ render id: id
@@ -893,7 +851,7 @@ vectorized: true
 │                 columns: (crdb_internal_id_shard_16, id, part)
 │                 estimated row count: 1 (missing stats)
 │                 table: t_unique_hash_pk@t_unique_hash_pk_pkey
-│                 spans: /"new york"/9/4321/0 /"seattle"/9/4321/0
+│                 spans: /"new york"/11/4321/0 /"seattle"/11/4321/0
 │                 parallel
 │                 locking strength: for update
 │
@@ -917,7 +875,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, part)
-                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(id_new)), 16)
+                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(id_new))), 16)
                         │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16_comp
                         │ render id: id_new
                         │ render part: part
@@ -952,79 +910,20 @@ EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email, part) VALUES (43
 distribution: local
 vectorized: true
 ·
-• root
-│ columns: ()
-│
-├── • insert
-│   │ columns: ()
-│   │ estimated row count: 0 (missing stats)
-│   │ into: t_unique_hash_sec_key(id, email, part, crdb_internal_email_shard_16)
-│   │
-│   └── • values
-│         columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
-│         size: 6 columns, 1 row
-│         row 0, expr 0: 4321
-│         row 0, expr 1: 'some_email'
-│         row 0, expr 2: 'seattle'
-│         row 0, expr 3: 13
-│         row 0, expr 4: true
-│         row 0, expr 5: true
-│
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │ columns: ()
-│       │
-│       └── • project
-│           │ columns: (id)
-│           │
-│           └── • cross join (inner)
-│               │ columns: (id, id, part)
-│               │ estimated row count: 1 (missing stats)
-│               │
-│               ├── • values
-│               │     columns: (id)
-│               │     size: 1 column, 1 row
-│               │     row 0, expr 0: 4321
-│               │
-│               └── • scan
-│                     columns: (id, part)
-│                     estimated row count: 1 (missing stats)
-│                     table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
-│                     spans: /"new york"/4321/0
-│                     limit: 1
-│
-└── • constraint-check
-    │
-    └── • error if rows
-        │ columns: ()
-        │
-        └── • project
-            │ columns: (email)
-            │
-            └── • cross join (inner)
-                │ columns: (email, id, email, part)
-                │ estimated row count: 1 (missing stats)
-                │
-                ├── • values
-                │     columns: (email)
-                │     size: 1 column, 1 row
-                │     row 0, expr 0: 'some_email'
-                │
-                └── • limit
-                    │ columns: (id, email, part)
-                    │ count: 1
-                    │
-                    └── • filter
-                        │ columns: (id, email, part)
-                        │ estimated row count: 6 (missing stats)
-                        │ filter: (id != 4321) OR (part != 'seattle')
-                        │
-                        └── • scan
-                              columns: (id, email, part)
-                              estimated row count: 0 (missing stats)
-                              table: t_unique_hash_sec_key@idx_uniq_hash_email
-                              spans: /"new york"/13/"some_email"/0 /"seattle"/13/"some_email"/0
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: t_unique_hash_sec_key(id, email, part, crdb_internal_email_shard_16)
+  auto commit
+  uniqueness check: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
+  uniqueness check: t_unique_hash_sec_key@idx_uniq_hash_email
+  size: 6 columns, 1 row
+  row 0, expr 0: 4321
+  row 0, expr 1: 'some_email'
+  row 0, expr 2: 'seattle'
+  row 0, expr 3: 1
+  row 0, expr 4: true
+  row 0, expr 5: true
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email, part) VALUES (4321, 'some_email', 'seattle') ON CONFLICT DO NOTHING;
@@ -1060,7 +959,7 @@ vectorized: true
             │
             └── • render
                 │ columns: (crdb_internal_email_shard_16_eq, column1, column2, column3, crdb_internal_email_shard_16_comp)
-                │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                 │ render column1: column1
                 │ render column2: column2
                 │ render column3: column3
@@ -1076,7 +975,7 @@ vectorized: true
                     │     row 0, expr 0: 4321
                     │     row 0, expr 1: 'some_email'
                     │     row 0, expr 2: 'seattle'
-                    │     row 0, expr 3: 13
+                    │     row 0, expr 3: 1
                     │
                     └── • project
                         │ columns: ()
@@ -1122,7 +1021,7 @@ vectorized: true
             │
             └── • render
                 │ columns: (crdb_internal_email_shard_16_eq, column1, column2, column3, crdb_internal_email_shard_16_comp)
-                │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                 │ render column1: column1
                 │ render column2: column2
                 │ render column3: column3
@@ -1137,7 +1036,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_comp, column1, column2, column3)
-                        │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                        │ render crdb_internal_email_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                         │ render column1: column1
                         │ render column2: column2
                         │ render column3: column3
@@ -1186,7 +1085,7 @@ vectorized: true
 │           │     row 0, expr 0: 4321
 │           │     row 0, expr 1: 'some_email'
 │           │     row 0, expr 2: 'seattle'
-│           │     row 0, expr 3: 13
+│           │     row 0, expr 3: 1
 │           │
 │           └── • project
 │               │ columns: ()
@@ -1195,7 +1094,7 @@ vectorized: true
 │                     columns: (email)
 │                     estimated row count: 1 (missing stats)
 │                     table: t_unique_hash_sec_key@idx_uniq_hash_email
-│                     spans: /"new york"/13/"some_email"/0 /"seattle"/13/"some_email"/0
+│                     spans: /"new york"/1/"some_email"/0 /"seattle"/1/"some_email"/0
 │                     parallel
 │
 └── • constraint-check
@@ -1262,8 +1161,8 @@ vectorized: true
 │                   │
 │                   └── • render
 │                       │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, column1, column2, column3)
-│                       │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
-│                       │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+│                       │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
+│                       │ render crdb_internal_email_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
 │                       │ render column1: column1
 │                       │ render column2: column2
 │                       │ render column3: column3
@@ -1345,7 +1244,7 @@ vectorized: true
 │                   │ render upsert_id: CASE WHEN part IS NULL THEN column1 ELSE id END
 │                   │ render upsert_email: CASE WHEN part IS NULL THEN column2 ELSE 'bad_email' END
 │                   │ render upsert_part: CASE WHEN part IS NULL THEN column3 ELSE part END
-│                   │ render upsert_crdb_internal_email_shard_16: CASE WHEN part IS NULL THEN crdb_internal_email_shard_16_comp ELSE 6 END
+│                   │ render upsert_crdb_internal_email_shard_16: CASE WHEN part IS NULL THEN crdb_internal_email_shard_16_comp ELSE 9 END
 │                   │ render column1: column1
 │                   │ render column2: column2
 │                   │ render column3: column3
@@ -1365,11 +1264,11 @@ vectorized: true
 │                       │     row 0, expr 0: 4321
 │                       │     row 0, expr 1: 'some_email'
 │                       │     row 0, expr 2: 'seattle'
-│                       │     row 0, expr 3: 13
+│                       │     row 0, expr 3: 1
 │                       │
 │                       └── • render
 │                           │ columns: (crdb_internal_email_shard_16, id, email, part)
-│                           │ render crdb_internal_email_shard_16: mod(fnv32(crdb_internal.datums_to_bytes(email)), 16)
+│                           │ render crdb_internal_email_shard_16: mod(fnv32(md5(crdb_internal.datums_to_bytes(email))), 16)
 │                           │ render id: id
 │                           │ render email: email
 │                           │ render part: part
@@ -1378,7 +1277,7 @@ vectorized: true
 │                                 columns: (id, email, part)
 │                                 estimated row count: 1 (missing stats)
 │                                 table: t_unique_hash_sec_key@idx_uniq_hash_email
-│                                 spans: /"new york"/13/"some_email"/0 /"seattle"/13/"some_email"/0
+│                                 spans: /"new york"/1/"some_email"/0 /"seattle"/1/"some_email"/0
 │                                 parallel
 │
 ├── • constraint-check
@@ -1424,7 +1323,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
-                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(upsert_email)), 16)
+                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(upsert_email))), 16)
                         │ render id: upsert_id
                         │ render email: upsert_email
                         │ render part: upsert_part
@@ -1481,7 +1380,7 @@ vectorized: true
 │                   │ render upsert_id: CASE WHEN part IS NULL THEN column1 ELSE id END
 │                   │ render upsert_email: CASE WHEN part IS NULL THEN column2 ELSE 'bad_email' END
 │                   │ render upsert_part: CASE WHEN part IS NULL THEN column3 ELSE part END
-│                   │ render upsert_crdb_internal_email_shard_16: CASE WHEN part IS NULL THEN crdb_internal_email_shard_16_comp ELSE 6 END
+│                   │ render upsert_crdb_internal_email_shard_16: CASE WHEN part IS NULL THEN crdb_internal_email_shard_16_comp ELSE 9 END
 │                   │ render column1: column1
 │                   │ render column2: column2
 │                   │ render column3: column3
@@ -1493,7 +1392,7 @@ vectorized: true
 │                   │
 │                   └── • render
 │                       │ columns: (crdb_internal_email_shard_16, column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part)
-│                       │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(crdb_internal.datums_to_bytes(email)), 16) END
+│                       │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(md5(crdb_internal.datums_to_bytes(email))), 16) END
 │                       │ render column1: column1
 │                       │ render column2: column2
 │                       │ render column3: column3
@@ -1518,8 +1417,8 @@ vectorized: true
 │                                   │
 │                                   └── • render
 │                                       │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, column1, column2, column3)
-│                                       │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
-│                                       │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+│                                       │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
+│                                       │ render crdb_internal_email_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
 │                                       │ render column1: column1
 │                                       │ render column2: column2
 │                                       │ render column3: column3
@@ -1577,7 +1476,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
-                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(upsert_email)), 16)
+                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(upsert_email))), 16)
                         │ render id: upsert_id
                         │ render email: upsert_email
                         │ render part: upsert_part
@@ -1636,11 +1535,11 @@ vectorized: true
 │                   │     row 0, expr 0: 1
 │                   │     row 0, expr 1: 'email1'
 │                   │     row 0, expr 2: 'seattle'
-│                   │     row 0, expr 3: 5
+│                   │     row 0, expr 3: 12
 │                   │
 │                   └── • render
 │                       │ columns: (crdb_internal_email_shard_16, id, email, part)
-│                       │ render crdb_internal_email_shard_16: mod(fnv32(crdb_internal.datums_to_bytes(email)), 16)
+│                       │ render crdb_internal_email_shard_16: mod(fnv32(md5(crdb_internal.datums_to_bytes(email))), 16)
 │                       │ render id: id
 │                       │ render email: email
 │                       │ render part: part
@@ -1672,7 +1571,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
-                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                         │ render id: upsert_id
                         │ render email: column2
                         │ render part: column3
@@ -1723,7 +1622,7 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (crdb_internal_email_shard_16, column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part)
-│                   │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(crdb_internal.datums_to_bytes(email)), 16) END
+│                   │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(md5(crdb_internal.datums_to_bytes(email))), 16) END
 │                   │ render column1: column1
 │                   │ render column2: column2
 │                   │ render column3: column3
@@ -1742,7 +1641,7 @@ vectorized: true
 │                       │
 │                       └── • render
 │                           │ columns: (crdb_internal_email_shard_16_comp, column1, column2, column3)
-│                           │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+│                           │ render crdb_internal_email_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
 │                           │ render column1: column1
 │                           │ render column2: column2
 │                           │ render column3: column3
@@ -1777,7 +1676,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
-                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                         │ render id: upsert_id
                         │ render email: column2
                         │ render part: column3
@@ -1812,9 +1711,9 @@ vectorized: true
 │       └── • render
 │           │ columns: (id, email, part, crdb_internal_email_shard_16, email_new, crdb_internal_email_shard_16_comp, check2)
 │           │ render check2: true
-│           │ render crdb_internal_email_shard_16_comp: 5
+│           │ render crdb_internal_email_shard_16_comp: 12
 │           │ render email_new: 'email1'
-│           │ render crdb_internal_email_shard_16: mod(fnv32(crdb_internal.datums_to_bytes(email)), 16)
+│           │ render crdb_internal_email_shard_16: mod(fnv32(md5(crdb_internal.datums_to_bytes(email))), 16)
 │           │ render id: id
 │           │ render email: email
 │           │ render part: part
@@ -1847,7 +1746,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
-                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(email_new)), 16)
+                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(email_new))), 16)
                         │ render id: id
                         │ render email: email_new
                         │ render part: part

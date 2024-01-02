@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/raftpb"
 	"go.etcd.io/raft/v3/tracker"
@@ -68,9 +69,9 @@ const mergeApplicationTimeout = 5 * time.Second
 var sendSnapshotTimeout = envutil.EnvOrDefaultDuration(
 	"COCKROACH_RAFT_SEND_SNAPSHOT_TIMEOUT", 1*time.Hour)
 
-// AdminSplit divides the range into into two ranges using args.SplitKey.
+// AdminSplit divides the range into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
-	ctx context.Context, args kvpb.AdminSplitRequest, reason string,
+	ctx context.Context, args kvpb.AdminSplitRequest, reason redact.RedactableString,
 ) (reply kvpb.AdminSplitResponse, _ *kvpb.Error) {
 	if len(args.SplitKey) == 0 {
 		return kvpb.AdminSplitResponse{}, kvpb.NewErrorf("cannot split range with no key provided")
@@ -100,8 +101,8 @@ func maybeDescriptorChangedError(
 	return false, nil
 }
 
-func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) string {
-	var s string
+func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) redact.RedactableString {
+	var s redact.RedactableString
 	if status != nil && status.RaftState == raft.StateLeader {
 		for replicaID, pr := range status.Progress {
 			if replicaID == status.Lead {
@@ -113,7 +114,7 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) strin
 				// This follower is in good working order.
 				continue
 			}
-			s += fmt.Sprintf("; r%d/%d is ", rangeID, replicaID)
+			s += redact.Sprintf("; r%d/%d is ", rangeID, replicaID)
 			switch pr.State {
 			case tracker.StateSnapshot:
 				// If the Raft snapshot queue is backed up, replicas can spend
@@ -127,7 +128,7 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) strin
 				s += "being probed (may or may not need a Raft snapshot)"
 			default:
 				// Future proofing.
-				s += "in unknown state " + pr.State.String()
+				s += redact.Sprintf("in unknown state %s", redact.Safe(pr.State))
 			}
 		}
 	}
@@ -172,7 +173,7 @@ func splitTxnAttempt(
 	splitKey roachpb.RKey,
 	expiration hlc.Timestamp,
 	oldDesc *roachpb.RangeDescriptor,
-	reason string,
+	reason redact.RedactableString,
 ) error {
 	txn.SetDebugName(splitTxnName)
 
@@ -210,7 +211,7 @@ func splitTxnAttempt(
 	}
 
 	// Log the split into the range event log.
-	if err := store.logSplit(ctx, txn, *leftDesc, *rightDesc, reason, true /* logAsync */); err != nil {
+	if err := store.logSplit(ctx, txn, *leftDesc, *rightDesc, reason.StripMarkers(), true /* logAsync */); err != nil {
 		return err
 	}
 
@@ -298,7 +299,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	args kvpb.AdminSplitRequest,
 	desc *roachpb.RangeDescriptor,
 	delayable bool,
-	reason string,
+	reason redact.RedactableString,
 	findFirstSafeKey bool,
 ) (kvpb.AdminSplitResponse, error) {
 	var err error
@@ -322,7 +323,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		if len(args.SplitKey) == 0 {
 			// Find a key to split by size.
 			var err error
-			targetSize := r.GetMaxBytes() / 2
+			targetSize := r.GetMaxBytes(ctx) / 2
 			foundSplitKey, err = storage.MVCCFindSplitKey(
 				ctx, r.store.TODOEngine(), desc.StartKey, desc.EndKey, targetSize)
 			if err != nil {
@@ -391,6 +392,9 @@ func (r *Replica) adminSplitWithDescriptor(
 		if !storage.IsValidSplitKey(foundSplitKey) {
 			return reply, errors.Errorf("cannot split range at key %s", splitKey)
 		}
+		if _, _, err := keys.DecodeTenantPrefixE(splitKey.AsRawKey()); err != nil {
+			return reply, errors.Wrapf(err, "checking for valid tenantID")
+		}
 	}
 
 	// If the range starts at the splitKey, we treat the AdminSplit
@@ -427,7 +431,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		return reply, errors.Wrap(err, "unable to allocate range id for right hand side")
 	}
 
-	var extra string
+	var extra redact.RedactableString
 	if delayable {
 		extra += maybeDelaySplitToAvoidSnapshot(ctx, (*splitDelayHelper)(r))
 	}
@@ -591,7 +595,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
 func (r *Replica) AdminMerge(
-	ctx context.Context, args kvpb.AdminMergeRequest, reason string,
+	ctx context.Context, args kvpb.AdminMergeRequest, reason redact.RedactableString,
 ) (kvpb.AdminMergeResponse, *kvpb.Error) {
 	var reply kvpb.AdminMergeResponse
 
@@ -637,7 +641,7 @@ func (r *Replica) AdminMerge(
 		// shortly.
 		var rightDesc roachpb.RangeDescriptor
 		rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
-		dbRightDescKV, err := txn.GetForUpdate(ctx, rightDescKey)
+		dbRightDescKV, err := txn.GetForUpdate(ctx, rightDescKey, kvpb.BestEffort)
 		if err != nil {
 			return err
 		}
@@ -2811,7 +2815,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 	}
 
 	snapUUID := uuid.MakeV4()
-	appliedIndex, cleanup := r.addSnapshotLogTruncationConstraint(ctx, snapUUID, snapType == kvserverpb.SnapshotRequest_INITIAL, recipient.StoreID)
+	appliedIndex, cleanup := r.addSnapshotLogTruncationConstraint(ctx, snapUUID, senderQueueName != kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE, recipient.StoreID)
 	// The cleanup function needs to be called regardless of success or failure of
 	// sending to release the log truncation constraint.
 	defer cleanup()
@@ -2828,10 +2832,10 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		RangeID:              r.RangeID,
 		CoordinatorReplica:   sender,
 		RecipientReplica:     recipient,
-		Priority:             priority,
+		DeprecatedPriority:   priority,
 		SenderQueueName:      senderQueueName,
 		SenderQueuePriority:  senderQueuePriority,
-		Type:                 snapType,
+		DeprecatedType:       snapType,
 		Term:                 kvpb.RaftTerm(status.Term),
 		DelegatedSender:      sender,
 		FirstIndex:           appliedIndex,
@@ -2869,7 +2873,23 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		retErr = timeutil.RunWithTimeout(
 			ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 				// Sending snapshot
-				return r.store.cfg.Transport.DelegateSnapshot(ctx, delegateRequest)
+				resp, err := r.store.cfg.Transport.DelegateSnapshot(ctx, delegateRequest)
+				if err != nil {
+					return err
+				}
+				if resp.MsgAppResp != nil {
+					_ = r.withRaftGroup(func(rn *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
+						msg := *resp.MsgAppResp
+						// With a delegated snapshot, the recipient received the snapshot
+						// from another replica and will thus respond to it instead. But the
+						// message is valid for the actual originator of the send as well.
+						msg.To = rn.BasicStatus().ID
+						// We do want to unquiesce here - we wouldn't ever want state transitions
+						// on a quiesced replica.
+						return true, rn.Step(*resp.MsgAppResp)
+					})
+				}
+				return nil
 			},
 		)
 		if !selfDelegate {
@@ -2894,7 +2914,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 
 // validateSnapshotDelegationRequest will validate that this replica can send
 // the snapshot that the coordinator requested. The main reasons a request can't
-// be delegated are if the Generation or Term of the replica is not equal to the
+// be delegated are if the Generation or Term of the replica are less than the
 // Generation or Term of the coordinator's request or the applied index on this
 // replica is behind the truncated index of the coordinator. Note that the request
 // is validated twice, once before "queueing" and once after. This reduces the
@@ -2906,20 +2926,22 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	ctx context.Context, req *kvserverpb.DelegateSendSnapshotRequest,
 ) error {
 	desc := r.Desc()
-	// If the generation has changed, this snapshot may be useless, so don't
-	// attempt to send it.
-	// NB: This is an overly strict check. If other delegates are added to this
-	// snapshot, we don't necessarily need to reject sending the snapshot, however
-	// if there are merges or splits, it is safer to reject.
-	if desc.Generation != req.DescriptorGeneration {
-		log.VEventf(ctx, 2,
-			"%s: generation has changed since snapshot was generated %s != %s",
-			r, req.DescriptorGeneration, desc.Generation,
+	// If the delegate doesn't know about a generation change (its index is lower
+	// than the leaseholders) the snapshot it sends may be useless, so don't
+	// attempt to send it and instead return an error.
+	// NB: This is an overly strict check. Some generation changes are acceptable
+	// even if the delegate doesn't know about them. Changes like splits or merges
+	// we don't know about can invalidate the snapshot we would otherwise send. If
+	// the delegates generations is higher than the request generation, then the
+	// snapshot will still be valid since the leaseholder is also on this
+	// generation by now.
+	if desc.Generation < req.DescriptorGeneration {
+		err := errors.Errorf(
+			"%s: generation has changed since snapshot was generated %s < %s",
+			r, desc.Generation, req.DescriptorGeneration,
 		)
-		return errors.Errorf(
-			"%s: generation has changed since snapshot was generated %s != %s",
-			r, req.DescriptorGeneration, desc.Generation,
-		)
+		log.VEventf(ctx, 2, "%v", err)
+		return err
 	}
 
 	// Check that the snapshot we generated has a descriptor that includes the
@@ -2946,23 +2968,25 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// that is also needs a snapshot, then any snapshot it sends will be useless.
 	r.mu.RLock()
 	replIdx := r.mu.state.RaftAppliedIndex + 1
-
 	status := r.raftStatusRLocked()
+	r.mu.RUnlock()
+
 	if status == nil {
 		// This code path is sometimes hit during scatter for replicas that
 		// haven't woken up yet.
 		return errors.Errorf("raft status not initialized")
 	}
 	replTerm := kvpb.RaftTerm(status.Term)
-	r.mu.RUnlock()
 
-	// Delegate has a different term than the coordinator. This typically means
-	// the lease has been transferred, and we should not process this request.
-	// There is a potential race where the leaseholder sends a delegate request
-	// and then the term changes before this request is processed. In that
-	// case this code path will not be checked and the snapshot will still be
-	// sent.
-	if replTerm != req.Term {
+	// Delegate has a lower term than the coordinator. This typically means the
+	// lease has been transferred, and we should not process this request. There
+	// is a potential race where the leaseholder sends a delegate request and then
+	// the term changes before this request is processed. In that case the
+	// snapshot will still be sent. There isn't a problem sending a snapshot with
+	// a lower term, however the new leaseholder may think we need a snapshot and
+	// send an additional one. This check attempts to minimize the change of the
+	// double snapshot being sent.
+	if replTerm < req.Term {
 		log.Infof(
 			ctx,
 			"sender: %v is not fit to send snapshot for %v; sender term: %v coordinator term: %v",
@@ -3044,7 +3068,7 @@ func (r *Replica) followerSendSnapshot(
 	ctx context.Context,
 	recipient roachpb.ReplicaDescriptor,
 	req *kvserverpb.DelegateSendSnapshotRequest,
-) error {
+) (*raftpb.Message, error) {
 	ctx = r.AnnotateCtx(ctx)
 	sendThreshold := traceSnapshotThreshold.Get(&r.ClusterSettings().SV)
 	if sendThreshold > 0 {
@@ -3073,14 +3097,14 @@ func (r *Replica) followerSendSnapshot(
 	// expensive to send.
 	err := r.validateSnapshotDelegationRequest(ctx, req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Throttle snapshot sending. Obtain the send semaphore and determine the rate limit.
 	rangeSize := r.GetMVCCStats().Total()
 	cleanup, err := r.store.reserveSendSnapshot(ctx, req, rangeSize)
 	if err != nil {
-		return errors.Wrap(err, "Unable to reserve space for sending this snapshot")
+		return nil, errors.Wrap(err, "Unable to reserve space for sending this snapshot")
 	}
 	defer cleanup()
 
@@ -3088,13 +3112,12 @@ func (r *Replica) followerSendSnapshot(
 	// sent after we are doing waiting.
 	err = r.validateSnapshotDelegationRequest(ctx, req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	snapType := req.Type
-	snap, err := r.GetSnapshot(ctx, snapType, req.SnapId)
+	snap, err := r.GetSnapshot(ctx, req.SnapId)
 	if err != nil {
-		return errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
+		return nil, errors.Wrapf(err, "%s: failed to generate snapshot", r)
 	}
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
@@ -3113,6 +3136,12 @@ func (r *Replica) followerSendSnapshot(
 	// explicitly for snapshots going out to followers.
 	snap.State.DeprecatedUsingAppliedStateKey = true
 
+	// Use shared replication if shared storage is enabled and we're sending
+	// a snapshot for a non-system range. This allows us to send metadata of
+	// sstables in shared storage as opposed to streaming their contents. Keys
+	// in higher levels of the LSM are still streamed in the snapshot.
+	sharedReplicate := r.store.cfg.SharedStorageEnabled && snap.State.Desc.StartKey.AsRawKey().Compare(keys.TableDataMin) >= 0
+
 	// Create new snapshot request header using the delegate snapshot request.
 	header := kvserverpb.SnapshotRequest_Header{
 		State:                                snap.State,
@@ -3130,11 +3159,12 @@ func (r *Replica) followerSendSnapshot(
 			},
 		},
 		RangeSize:           rangeSize,
-		Priority:            req.Priority,
+		DeprecatedPriority:  req.DeprecatedPriority,
 		SenderQueueName:     req.SenderQueueName,
 		SenderQueuePriority: req.SenderQueuePriority,
-		Strategy:            kvserverpb.SnapshotRequest_KV_BATCH,
-		Type:                req.Type,
+		DeprecatedStrategy:  kvserverpb.SnapshotRequest_KV_BATCH,
+		DeprecatedType:      req.DeprecatedType,
+		SharedReplicate:     sharedReplicate,
 	}
 	newBatchFn := func() storage.WriteBatch {
 		return r.store.TODOEngine().NewWriteBatch()
@@ -3142,6 +3172,8 @@ func (r *Replica) followerSendSnapshot(
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
+	comparisonResult := r.store.getLocalityComparison(ctx, req.CoordinatorReplica.NodeID,
+		req.RecipientReplica.NodeID)
 
 	recordBytesSent := func(inc int64) {
 		// Only counts for delegated bytes if we are not self-delegating.
@@ -3149,26 +3181,36 @@ func (r *Replica) followerSendSnapshot(
 			r.store.metrics.DelegateSnapshotSendBytes.Inc(inc)
 		}
 		r.store.metrics.RangeSnapshotSentBytes.Inc(inc)
-		if r.store.shouldIncrementCrossRegionSnapshotMetrics(ctx, req.CoordinatorReplica, req.RecipientReplica) {
-			r.store.metrics.RangeSnapShotCrossRegionSentBytes.Inc(inc)
-		}
+		r.store.metrics.updateCrossLocalityMetricsOnSnapshotSent(comparisonResult, inc)
 
-		switch header.Priority {
-		case kvserverpb.SnapshotRequest_RECOVERY:
+		// This computation is a little ugly, it is intended for backward
+		// compatibility of stats, but in the future it should be cleaned up.
+		if header.SenderQueueName == kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE {
 			r.store.metrics.RangeSnapshotRecoverySentBytes.Inc(inc)
-		case kvserverpb.SnapshotRequest_REBALANCE:
+		} else if header.SenderQueueName == kvserverpb.SnapshotRequest_OTHER {
+			// OTHER snapshots are sent by Replica.ChangeReplicas but are not used for
+			// recovery, but do have various uses (user, pre-merge, store rebalancer).
+			// They are all bucketed under the Rebalance bucket.
 			r.store.metrics.RangeSnapshotRebalancingSentBytes.Inc(inc)
-		default:
-			// If a snapshot is not a RECOVERY or REBALANCE snapshot, it must be of
-			// type UNKNOWN.
-			r.store.metrics.RangeSnapshotUnknownSentBytes.Inc(inc)
+		} else {
+			// SnapshotRequest_REPLICATE_QUEUE sends both recovery and rebalance
+			// snapshots. Split based on whether the priority is set. Priority 0 means
+			// it is used for rebalance.
+			// See AllocatorAction.Priority
+			if header.SenderQueuePriority > 0 {
+				r.store.metrics.RangeSnapshotRecoverySentBytes.Inc(inc)
+			} else {
+				r.store.metrics.RangeSnapshotRebalancingSentBytes.Inc(inc)
+			}
 		}
 	}
 
-	return timeutil.RunWithTimeout(
+	var msgAppResp *raftpb.Message
+	if err := timeutil.RunWithTimeout(
 		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
-			return r.store.cfg.Transport.SendSnapshot(
+			resp, err := r.store.cfg.Transport.SendSnapshot(
 				ctx,
+				r.store.ClusterID(),
 				r.store.cfg.StorePool,
 				header,
 				snap,
@@ -3176,8 +3218,16 @@ func (r *Replica) followerSendSnapshot(
 				sent,
 				recordBytesSent,
 			)
+			if err != nil {
+				return err
+			}
+			msgAppResp = resp.MsgAppResp
+			return nil
 		},
-	)
+	); err != nil {
+		return nil, err
+	}
+	return msgAppResp, nil
 }
 
 // replicasCollocated is used in AdminMerge to ensure that the ranges are
@@ -3251,12 +3301,13 @@ func conditionalGetDescValueFromDB(
 	forUpdate bool,
 	check func(*roachpb.RangeDescriptor) (matched, skip bool),
 ) (kvDesc *roachpb.RangeDescriptor, kvDescBytes []byte, skip bool, err error) {
-	get := txn.Get
-	if forUpdate {
-		get = txn.GetForUpdate
-	}
 	descKey := keys.RangeDescriptorKey(startKey)
-	existingDescKV, err := get(ctx, descKey)
+	var existingDescKV kv.KeyValue
+	if forUpdate {
+		existingDescKV, err = txn.GetForUpdate(ctx, descKey, kvpb.BestEffort)
+	} else {
+		existingDescKV, err = txn.Get(ctx, descKey)
+	}
 	if err != nil {
 		return nil, nil, false /* skip */, errors.Wrap(err, "fetching current range descriptor value")
 	}
@@ -3511,9 +3562,9 @@ type RelocateOneOptions interface {
 	Allocator() allocatorimpl.Allocator
 	// StorePool returns the store's configured store pool.
 	StorePool() storepool.AllocatorStorePool
-	// SpanConfig returns the span configuration for the range with start key.
-	SpanConfig(ctx context.Context, startKey roachpb.RKey) (roachpb.SpanConfig, error)
-	// LeaseHolder returns the descriptor of the replica which holds the lease
+	// LoadSpanConfig loads the span configuration for the range with start key.
+	LoadSpanConfig(ctx context.Context, startKey roachpb.RKey) (*roachpb.SpanConfig, error)
+	// Leaseholder returns the descriptor of the replica which holds the lease
 	// on the range with start key.
 	Leaseholder(ctx context.Context, startKey roachpb.RKey) (roachpb.ReplicaDescriptor, error)
 }
@@ -3532,19 +3583,19 @@ func (roo *replicaRelocateOneOptions) StorePool() storepool.AllocatorStorePool {
 	return roo.store.cfg.StorePool
 }
 
-// SpanConfig returns the span configuration for the range with start key.
-func (roo *replicaRelocateOneOptions) SpanConfig(
+// LoadSpanConfig loads the span configuration for the range with start key.
+func (roo *replicaRelocateOneOptions) LoadSpanConfig(
 	ctx context.Context, startKey roachpb.RKey,
-) (roachpb.SpanConfig, error) {
+) (*roachpb.SpanConfig, error) {
 	confReader, err := roo.store.GetConfReader(ctx)
 	if err != nil {
-		return roachpb.SpanConfig{}, errors.Wrap(err, "can't relocate range")
+		return nil, errors.Wrap(err, "can't relocate range")
 	}
 	conf, err := confReader.GetSpanConfigForKey(ctx, startKey)
 	if err != nil {
-		return roachpb.SpanConfig{}, err
+		return nil, err
 	}
-	return conf, nil
+	return &conf, nil
 }
 
 // Leaseholder returns the descriptor of the replica which holds the lease on
@@ -3584,7 +3635,7 @@ func RelocateOne(
 	allocator := options.Allocator()
 	storePool := options.StorePool()
 
-	conf, err := options.SpanConfig(ctx, desc.StartKey)
+	conf, err := options.LoadSpanConfig(ctx, desc.StartKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -3945,9 +3996,8 @@ func (r *Replica) adminScatter(
 	// Note that we disable lease transfers until the final step as transferring
 	// the lease prevents any further action on this node.
 	var allowLeaseTransfer bool
-	var err error
 	requeue := true
-	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica) bool {
+	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig) bool {
 		return allowLeaseTransfer
 	}
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
@@ -3957,8 +4007,14 @@ func (r *Replica) adminScatter(
 		if currentAttempt == maxAttempts-1 || !requeue {
 			allowLeaseTransfer = true
 		}
+		desc, conf := r.DescAndSpanConfig()
+		_, err := rq.replicaCanBeProcessed(ctx, r, false /* acquireLeaseIfNeeded */)
+		if err != nil {
+			// The replica can not be processed, so skip it.
+			break
+		}
 		requeue, err = rq.processOneChange(
-			ctx, r, canTransferLease, true /* scatter */, false, /* dryRun */
+			ctx, r, desc, conf, canTransferLease, true /* scatter */, false, /* dryRun */
 		)
 		if err != nil {
 			// TODO(tbg): can this use IsRetriableReplicationError?
@@ -3976,9 +4032,9 @@ func (r *Replica) adminScatter(
 	// done by transferring the lease to any of the given N replicas with
 	// probability 1/N of choosing each.
 	if args.RandomizeLeases && r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
-		desc := r.Desc()
+		desc, conf := r.DescAndSpanConfig()
 		potentialLeaseTargets := r.store.allocator.ValidLeaseTargets(
-			ctx, r.store.cfg.StorePool, r.SpanConfig(), desc.Replicas().VoterDescriptors(), r, allocator.TransferLeaseOptions{})
+			ctx, r.store.cfg.StorePool, desc, conf, desc.Replicas().VoterDescriptors(), r, allocator.TransferLeaseOptions{})
 		if len(potentialLeaseTargets) > 0 {
 			newLeaseholderIdx := rand.Intn(len(potentialLeaseTargets))
 			targetStoreID := potentialLeaseTargets[newLeaseholderIdx].StoreID

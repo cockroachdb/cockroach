@@ -211,6 +211,9 @@ func Tuples(count int, fn func(int) []interface{}) BatchedTuples {
 const (
 	// timestampOutputFormat is used to output all timestamps.
 	timestampOutputFormat = "2006-01-02 15:04:05.999999-07:00"
+
+	// defaultDNSCacheRefresh is used to change the default --dns-refresh interval
+	defaultDNSCacheRefresh = 30 * time.Second
 )
 
 // TypedTuples returns a BatchedTuples where each batch has size 1. It's
@@ -386,11 +389,11 @@ type QueryLoad struct {
 	WorkerFns []func(context.Context) error
 
 	// Close, if set, is called before the process exits, giving workloads a
-	// chance to print some information.
+	// chance to print some information or perform cleanup.
 	// It's guaranteed that the ctx passed to WorkerFns (if they're still running)
 	// has been canceled by the time this is called (so an implementer can
 	// synchronize with the WorkerFns if need be).
-	Close func(context.Context)
+	Close func(context.Context) error
 
 	// ResultHist is the name of the NamedHistogram to use for the benchmark
 	// formatted results output at the end of `./workload run`. The empty string

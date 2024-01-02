@@ -44,7 +44,7 @@ type externalStorageBuilder struct {
 }
 
 func (e *externalStorageBuilder) init(
-	ctx context.Context,
+	esAccessor *cloud.EarlyBootExternalStorageAccessor,
 	conf base.ExternalIODirConfig,
 	settings *cluster.Settings,
 	nodeIDContainer *base.SQLIDContainer,
@@ -67,20 +67,27 @@ func (e *externalStorageBuilder) init(
 	e.blobClientFactory = blobClientFactory
 	e.initCalled = true
 	e.db = db
-	e.limiters = cloud.MakeLimiters(ctx, &settings.SV)
+	e.limiters = esAccessor.Limiters()
 	e.recorder = recorder
 
 	// Register the metrics that track interactions with external storage
 	// providers.
-	e.metrics = cloud.MakeMetrics()
+	e.metrics = esAccessor.Metrics()
 	registry.AddMetricStruct(e.metrics)
+}
+
+func (e *externalStorageBuilder) assertInitComplete() error {
+	if !e.initCalled {
+		return errors.AssertionFailedf("external storage not initialized")
+	}
+	return nil
 }
 
 func (e *externalStorageBuilder) makeExternalStorage(
 	ctx context.Context, dest cloudpb.ExternalStorage, opts ...cloud.ExternalStorageOption,
 ) (cloud.ExternalStorage, error) {
 	if !e.initCalled {
-		return nil, errors.New("cannot create external storage before init")
+		return nil, errors.AssertionFailedf("cannot create external storage before init")
 	}
 	return cloud.MakeExternalStorage(
 		ctx, dest, e.conf, e.settings, e.blobClientFactory, e.db, e.limiters, e.metrics,
@@ -92,7 +99,7 @@ func (e *externalStorageBuilder) makeExternalStorageFromURI(
 	ctx context.Context, uri string, user username.SQLUsername, opts ...cloud.ExternalStorageOption,
 ) (cloud.ExternalStorage, error) {
 	if !e.initCalled {
-		return nil, errors.New("cannot create external storage before init")
+		return nil, errors.AssertionFailedf("cannot create external storage before init")
 	}
 	return cloud.ExternalStorageFromURI(
 		ctx, uri, e.conf, e.settings, e.blobClientFactory, user, e.db, e.limiters, e.metrics,

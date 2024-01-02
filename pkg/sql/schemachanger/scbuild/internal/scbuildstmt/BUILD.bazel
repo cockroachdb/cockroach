@@ -1,5 +1,4 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "scbuildstmt",
@@ -16,6 +15,7 @@ go_library(
         "create_function.go",
         "create_index.go",
         "create_schema.go",
+        "create_sequence.go",
         "dependencies.go",
         "drop_database.go",
         "drop_function.go",
@@ -28,6 +28,7 @@ go_library(
         "drop_view.go",
         "helpers.go",
         "process.go",
+        "statement_control.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt",
     visibility = ["//pkg/sql/schemachanger/scbuild:__subpackages__"],
@@ -38,6 +39,7 @@ go_library(
         "//pkg/keys",
         "//pkg/security/username",
         "//pkg/server/telemetry",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catenumpb",
@@ -79,4 +81,13 @@ go_library(
     ],
 )
 
-get_x_data(name = "get_x_data")
+go_test(
+    name = "scbuildstmt_test",
+    srcs = ["process_test.go"],
+    embed = [":scbuildstmt"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/sql/sem/tree",
+        "@com_github_stretchr_testify//require",
+    ],
+)

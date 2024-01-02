@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -603,20 +604,21 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 	const numNodes = 3
 	const testQuery = "SELECT * FROM foo"
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			UseDatabase: "test",
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &ExecutorTestingKnobs{
-					DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
+					DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 						if query != testQuery {
 							return nil
 						}
-						return func(_ rowenc.EncDatumRow, _ coldata.Batch, meta *execinfrapb.ProducerMetadata) {
+						return func(row rowenc.EncDatumRow, batch coldata.Batch, meta *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 							if meta != nil {
 								accumulatedMeta = append(accumulatedMeta, *meta)
 							}
+							return row, batch, meta
 						}
 					},
 				},
@@ -646,7 +648,7 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 	)
 
 	// Connect to the cluster via the PGWire client.
-	p, err := pgtest.NewPGTest(ctx, tc.Server(0).ServingSQLAddr(), username.RootUser)
+	p, err := pgtest.NewPGTest(ctx, tc.Server(0).AdvSQLAddr(), username.RootUser)
 	require.NoError(t, err)
 
 	// We disable multiple active portals here as it only supports local-only plan.
@@ -832,7 +834,7 @@ func TestSetupFlowRPCError(t *testing.T) {
 		queries[1]: 3, // error on n3
 		queries[2]: 0, // no error
 	}
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
@@ -971,4 +973,263 @@ CREATE TABLE child (
 		}
 		sqlDB.Exec(t, fmt.Sprintf(`%[1]sINSERT INTO child VALUES (%[2]d, %[2]d, %[2]d)`, prefix, id))
 	}
+}
+
+// TestDistributedQueryErrorIsRetriedLocally verifies that if a query with a
+// distributed plan results in a SQL retryable error, then it is rerun as local
+// transparently.
+func TestDistributedQueryErrorIsRetriedLocally(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start a 3 node cluster where we can inject an error for SetupFlow RPC on
+	// the server side for the queries in question.
+	const numNodes = 3
+	getError := func(nodeID base.SQLInstanceID) error {
+		return errors.Newf("connection refused: n%d", nodeID)
+	}
+	// Assert that the injected error is in the allow-list of errors that are
+	// retried transparently.
+	if err := getError(base.SQLInstanceID(0)); !pgerror.IsSQLRetryableError(err) {
+		t.Fatalf("expected error to be in the allow-list for a retry: %v", err)
+	}
+
+	// We use different queries to simplify handling the node ID on which the
+	// error should be injected (i.e. we avoid the need for synchronization in
+	// the test). In particular, the difficulty comes from the fact that some of
+	// the SetupFlow RPCs might not be issued at all while others are served
+	// after the corresponding flow on the gateway has exited.
+	queries := []string{
+		"SELECT k FROM test.foo",
+		// Run one of the queries via EXPLAIN ANALYZE (DEBUG) so that we can
+		// check the contents of the bundle later.
+		"EXPLAIN ANALYZE (DEBUG) SELECT v FROM test.foo",
+		"SELECT * FROM test.foo",
+	}
+	stmtToNodeIDForError := map[string]base.SQLInstanceID{
+		queries[0]: 2, // error on n2
+		queries[1]: 3, // error on n3
+		queries[2]: 0, // no error
+	}
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					SetupFlowCb: func(_ context.Context, nodeID base.SQLInstanceID, req *execinfrapb.SetupFlowRequest) error {
+						nodeIDForError, ok := stmtToNodeIDForError[req.StatementSQL]
+						if !ok || nodeIDForError != nodeID {
+							return nil
+						}
+						return getError(nodeID)
+					},
+				},
+			},
+			Insecure: true,
+		},
+	})
+	defer tc.Stopper().Stop(context.Background())
+
+	// Create a table with 30 rows, split them into 3 ranges with each node
+	// having one.
+	db := tc.ServerConn(0)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlutils.CreateTable(
+		t, db, "foo",
+		"k INT PRIMARY KEY, v INT",
+		30,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(2)),
+	)
+	sqlDB.Exec(t, "ALTER TABLE test.foo SPLIT AT VALUES (10), (20)")
+	sqlDB.Exec(
+		t,
+		fmt.Sprintf("ALTER TABLE test.foo EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 0), (ARRAY[%d], 10), (ARRAY[%d], 20)",
+			tc.Server(0).GetFirstStoreID(),
+			tc.Server(1).GetFirstStoreID(),
+			tc.Server(2).GetFirstStoreID(),
+		),
+	)
+
+	var bundleRows [][]string
+	for _, query := range queries {
+		nodeID := stmtToNodeIDForError[query]
+		injectError := nodeID != base.SQLInstanceID(0)
+		if injectError {
+			t.Logf("running %q with error being injected on n%d", query, nodeID)
+		} else {
+			t.Logf("running %q without error being injected", query)
+		}
+		sqlDB.Exec(t, "SET TRACING=on;")
+		// We expect that the query was retried as local which should succeed,
+		// so we can use the sql runner.
+		rows := sqlDB.QueryStr(t, query)
+		sqlDB.Exec(t, "SET TRACING=off;")
+		if strings.HasPrefix(query, "EXPLAIN ANALYZE (DEBUG)") {
+			bundleRows = rows
+		}
+		trace := sqlDB.QueryStr(t, "SELECT message FROM [SHOW TRACE FOR SESSION]")
+		// Inspect the trace to ensure that the query was, indeed, initially run
+		// as distributed but hit a retryable error and was rerun as local.
+		var foundDistributed, foundLocal bool
+		for _, message := range trace {
+			if strings.Contains(message[0], "creating DistSQL plan with isLocal=false") {
+				foundDistributed = true
+			} else if strings.Contains(message[0], "encountered an error when running the distributed plan, re-running it as local") {
+				foundLocal = true
+			}
+		}
+		if injectError {
+			if !foundDistributed || !foundLocal {
+				t.Fatalf("with remote error injection, foundDistributed=%t, foundLocal=%t\ntrace:%s", foundDistributed, foundLocal, trace)
+			}
+		} else {
+			// When no error is injected, the query should succeed right away
+			// when run in distributed fashion.
+			if !foundDistributed || foundLocal {
+				t.Fatalf("without remote error injection, foundDistributed=%t, foundLocal=%t\ntrace:%s", foundDistributed, foundLocal, trace)
+			}
+		}
+	}
+
+	// Now disable the retry mechanism and ensure that when remote error is
+	// injected, it is returned as the query result.
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.distributed_query_rerun_locally.enabled = false;")
+	for _, query := range queries[:2] {
+		nodeID := stmtToNodeIDForError[query]
+		t.Logf("running %q with error being injected on n%d but local retry disabled", query, nodeID)
+		_, err := db.Exec(query)
+		require.NotNil(t, err)
+		// lib/pq wraps the error, so we cannot use errors.Is() check.
+		require.True(t, strings.Contains(err.Error(), getError(nodeID).Error()))
+	}
+
+	// Now sanity check the contents of the stmt bundle that was collected when
+	// retry-as-local mechanism kicked in.
+	baseFiles := `env.sql opt-v.txt opt-vv.txt opt.txt plan.txt schema.sql statement.sql stats-test.public.foo.sql trace-jaeger.json trace.json trace.txt`
+	distributedRunFiles := `distsql-1-main-query.html vec-1-main-query-v.txt vec-1-main-query.txt`
+	localRunFiles := `distsql-2-main-query.html vec-2-main-query-v.txt vec-2-main-query.txt`
+	checkBundle(
+		t, fmt.Sprint(bundleRows), "public.foo" /* tableName */, nil, false, /* expectErrors */
+		baseFiles, distributedRunFiles, localRunFiles,
+	)
+}
+
+// TestLogicalPlanCorruptionBeforeRetryingLocally verifies that if a distributed
+// query (that has a TableReader in the local flow) fails with such an error
+// that gets retried via the "retry-as-local" mechanism, the query still
+// produces the correct result. This is a regression test for #110712 which
+// occurred because of the logical plan corruption during the distributed plan
+// run (namely, scanNode.spans slice was being corrupted).
+func TestLogicalPlanCorruptionBeforeRetryingLocally(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Use a query such that
+	// - it is distributed (because it has a join)
+	// - it has a TableReader on the local node
+	// - that TableReader takes over the whole spans slice assigned to it
+	//   (because it has a LIMIT 1, so the spans aren't partitioned).
+	targetQuery := `WITH cte1 AS (SELECT job_id, details FROM job_info WHERE (job_id = 1) ORDER BY info_key DESC LIMIT 1)
+SELECT id, details FROM jobs AS j INNER JOIN cte1 ON id = job_id WHERE id = 1;
+`
+	errToInject := errors.Newf("connection refused: n2")
+	// Sanity check that this error will be treated as retryable for
+	// rerun-as-local mechanism.
+	require.True(t, pgerror.IsSQLRetryableError(errToInject))
+
+	// Create a three node cluster that has a special "push callback" which
+	// injects the error on the first call to DistSQLReceiver.PushBatch. This
+	// particular point during the execution is crucial for reproducing #110721:
+	// - the distributed physical planning has been performed,
+	// - all TableReaders have fetched some data,
+	// - any resume spans in the local TableReader would previously corrupt the
+	//   spans stored in the logical plan.
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLExecutor: &ExecutorTestingKnobs{
+					DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
+						if !strings.HasPrefix(query, targetQuery[:20]) {
+							return nil
+						}
+						var injected bool
+						return func(row rowenc.EncDatumRow, batch coldata.Batch, meta *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
+							if !injected {
+								// Inject the error only once so that when we
+								// retry the query as local, it succeeds.
+								row, batch = nil, nil
+								meta = &execinfrapb.ProducerMetadata{Err: errToInject}
+								injected = true
+							}
+							return row, batch, meta
+						}
+					},
+				},
+			},
+		}})
+	defer tc.Stopper().Stop(context.Background())
+
+	db := tc.ServerConn(0 /* idx */)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, "CREATE TABLE job_info(job_id INT, info_key INT, details INT, PRIMARY KEY (job_id, info_key));")
+	sqlDB.Exec(t, "CREATE TABLE jobs(id INT PRIMARY KEY);")
+	sqlDB.Exec(t, "INSERT INTO job_info VALUES (1, 1, 1);")
+	sqlDB.Exec(t, "INSERT INTO jobs VALUES (1);")
+	sqlDB.Exec(t, "ALTER TABLE job_info SPLIT AT VALUES (1, 1);")
+	sqlDB.Exec(t, "ALTER TABLE jobs SPLIT AT VALUES (1);")
+	sqlDB.Exec(t, "ALTER TABLE job_info EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1, 1);")
+	sqlDB.Exec(t, "ALTER TABLE jobs EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1);")
+
+	// Sanity check that the query gets the distributed plan as we expect.
+	//
+	// (Note that ideally we would have used EXPLAIN (DISTSQL) and compared the
+	// diagrams, but for some reason the encoded urls differ slightly between
+	// runs although visible diagrams remain the same, so we use EXPLAIN (VEC)
+	// below.)
+	expectedPlan := `
+│
+├ Node 1
+│ └ *colexec.ParallelUnorderedSynchronizer
+│   ├ *colrpc.Inbox
+│   └ *colexecjoin.mergeJoinInnerOp
+│     ├ *colrpc.Inbox
+│     └ *colflow.routerOutputOp
+│       └ *colflow.HashRouter
+│         └ *colexecsel.selEQInt64Int64ConstOp
+│           └ *colexec.limitOp
+│             └ *colfetcher.ColBatchScan
+└ Node 2
+  └ *colrpc.Outbox
+    └ *colexecjoin.mergeJoinInnerOp
+      ├ *colflow.routerOutputOp
+      │ └ *colflow.HashRouter
+      │   └ *colfetcher.ColBatchScan
+      └ *colrpc.Inbox
+`
+	expectedPlanRows := strings.Split(expectedPlan, "\n")
+	// Skip the first empty line.
+	expectedPlanRows = expectedPlanRows[1:]
+	// Make sure that "regular" ColBatchScans are used to make the output of
+	// EXPLAIN (VEC) constant.
+	sqlDB.Exec(t, "SET direct_columnar_scans_enabled = false")
+	actualPlanRows := sqlDB.QueryStr(t, "EXPLAIN (VEC) "+targetQuery)
+	for i, r := range actualPlanRows {
+		if expectedPlanRows[i] != r[0] {
+			var actualPlan string
+			for _, r := range actualPlanRows {
+				actualPlan += "\n" + r[0]
+			}
+			t.Fatalf("expected plan: %s\nactual plan: %s", expectedPlan, actualPlan)
+		}
+	}
+
+	// Now the meat of the test - run the query that gets an error injected
+	// during the distributed execution, then automatically is retried as local,
+	// and produces the correct output.
+	r := sqlDB.QueryRow(t, targetQuery)
+	var id, details int
+	r.Scan(&id, &details)
+	require.Equal(t, 1, id)
+	require.Equal(t, 1, details)
 }

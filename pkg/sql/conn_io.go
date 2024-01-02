@@ -367,9 +367,14 @@ type CopyIn struct {
 	// Conn is the network connection. Execution of the CopyFrom statement takes
 	// control of the connection.
 	Conn pgwirebase.Conn
-	// CopyDone is decremented once execution finishes, signaling that control of
-	// the connection is being handed back to the network routine.
-	CopyDone *sync.WaitGroup
+	// CopyDone is used to signal that control of the connection is being handed
+	// back to the network routine.
+	CopyDone struct {
+		// WaitGroup is decremented once execution finishes.
+		*sync.WaitGroup
+		// Once is used to decrement the WaitGroup exactly once.
+		*sync.Once
+	}
 	// TimeReceived is the time at which the message was received
 	// from the client. Used to compute the service latency.
 	TimeReceived time.Time
@@ -818,6 +823,9 @@ type RestrictedCommandResult interface {
 	// This gets flushed only when the CommandResult is closed.
 	BufferNotice(notice pgnotice.Notice)
 
+	// SendNotice immediately flushes a notice to the client.
+	SendNotice(ctx context.Context, notice pgnotice.Notice) error
+
 	// SetColumns informs the client about the schema of the result. The columns
 	// can be nil.
 	//
@@ -841,6 +849,13 @@ type RestrictedCommandResult interface {
 	// deeply copying them. The memory in the input batch is safe to modify as
 	// soon as AddBatch returns.
 	AddBatch(ctx context.Context, batch coldata.Batch) error
+
+	// BufferedResultsLen returns the length of the results buffer.
+	BufferedResultsLen() int
+
+	// TruncateBufferedResults clears any results that have been buffered after
+	// given index, and returns true iff any results were actually truncated.
+	TruncateBufferedResults(idx int) bool
 
 	// SupportsAddBatch returns whether this command result supports AddBatch
 	// method of adding the data. If false is returned, then the behavior of
@@ -1079,6 +1094,12 @@ func (r *streamingCommandResult) BufferNotice(notice pgnotice.Notice) {
 	// Unimplemented: the internal executor does not support notices.
 }
 
+// SendNotice is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) SendNotice(ctx context.Context, notice pgnotice.Notice) error {
+	// Unimplemented: the internal executor does not support notices.
+	return nil
+}
+
 // ResetStmtType is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) ResetStmtType(stmt tree.Statement) {
 	panic("unimplemented")
@@ -1102,6 +1123,18 @@ func (r *streamingCommandResult) AddRow(ctx context.Context, row tree.Datums) er
 func (r *streamingCommandResult) AddBatch(context.Context, coldata.Batch) error {
 	// TODO(yuzefovich): implement this.
 	panic("unimplemented")
+}
+
+// BufferedResultsLen is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) BufferedResultsLen() int {
+	// Since this implementation is streaming, there is no sensible return
+	// value here.
+	panic("unimplemented")
+}
+
+// TruncateBufferedResults is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) TruncateBufferedResults(int) bool {
+	return false
 }
 
 // SupportsAddBatch is part of the RestrictedCommandResult interface.

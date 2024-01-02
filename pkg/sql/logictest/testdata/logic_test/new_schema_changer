@@ -387,7 +387,7 @@ CREATE VIEW v4Dep AS (SELECT n2, n1 FROM v2Dep);
 statement ok
 EXPLAIN (DDL) DROP VIEW v1Dep CASCADE;
 
-statement error pq: cannot drop relation "v1dep" because view "v3dep" depends on it
+statement error pq: cannot drop relation "v1dep" because view "v2dep" depends on it
 DROP VIEW v1Dep RESTRICT;
 
 statement error pq: "v1dep" is not a materialized view
@@ -442,7 +442,7 @@ CREATE TABLE defaultdb.shipments (
     CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES defaultdb.orders(customer)
  );
 
-statement error "customers" is referenced by foreign key from table "shipments"
+statement error "customers" is referenced by foreign key from table "orders"
 DROP TABLE defaultdb.customers;
 
 statement ok
@@ -771,8 +771,13 @@ SELECT 'a'::db1.sc1.typ::string
 statement ok
 SET use_declarative_schema_changer = 'unsafe'
 
+let $db1_id
+SELECT id FROM system.namespace WHERE name = 'db1' AND "parentID" = 0 LIMIT 1
+
+# Only look at IDs greater than or equal to $db1_id so objects that were dropped
+# earlier in the test don't interfere with this count.
 let $desc_count_pre_drop
-select count(*) from system.descriptor
+select count(*) from system.descriptor WHERE id >= $db1_id
 
 # Actually drop the database now.
 statement ok
@@ -781,7 +786,6 @@ DROP DATABASE db1 CASCADE
 statement ok
 DROP SCHEMA sc2 CASCADE
 
-skipif config local-mixed-22.2-23.1
 # No comments should be left after.
 query T
 SELECT comment FROM system.comments ORDER BY comment ASC
@@ -795,11 +799,15 @@ database_id  role_name      settings
 0            ·              {application_name=d}
 0            test_set_role  {application_name=a,custom_option.setting=e}
 
+# Only look at IDs greater than or equal to $db1_id so objects that were dropped
+# earlier in the test don't interfere with this count.
 let $desc_count_post_drop
-select count(*) from system.descriptor
+select count(*) from system.descriptor WHERE id >= $db1_id
 
 # Excluding anything that needs GC, we should drop by 13 (4 types [array and
-# normal], 4 schemas, and 5 views)
+# normal], 4 schemas, and 5 views). The tables and sequences will be GC'd later.
+# This is a regression test for an issue where descriptors were not cleaned up
+# properly (https://github.com/cockroachdb/cockroach/pull/73356).
 query I
 select $desc_count_pre_drop-$desc_count_post_drop
 ----
@@ -874,7 +882,7 @@ CREATE TABLE tIndx2 (a INT PRIMARY KEY, b INT, INDEX ((a+b)))
 statement ok
 CREATE TABLE tIndx3 (a INT PRIMARY KEY, b INT, INVERTED INDEX ((ARRAY[a,b])))
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,nosort
 SHOW INDEXES FROM tIndex
 ----
 table_name  index_name   non_unique  seq_in_index  column_name               definition     direction  storing  implicit  visible  visibility
@@ -901,7 +909,7 @@ INSERT INTO tIndex VALUES (20000,10000)
 #statement error pgcode 23505 violates unique constraint "bar"
 #CREATE UNIQUE INDEX bar ON tIndex (b)
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,nosort
 SHOW INDEXES FROM tIndex
 ----
 table_name  index_name   non_unique  seq_in_index  column_name               definition     direction  storing  implicit  visible  visibility
@@ -939,7 +947,7 @@ CREATE INDEX b_desc ON tIndx (b DESC)
 statement ok
 CREATE INDEX b_asc ON tIndx (b ASC, c DESC)
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM tIndx
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -967,7 +975,6 @@ CREATE TABLE privs (a INT PRIMARY KEY, b INT)
 user testuser
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 statement error  must be owner of table privs or have CREATE privilege on table privs
 CREATE INDEX foo ON privs (b)
 
@@ -977,7 +984,7 @@ CREATE INDEX foo ON privs (b)
 
 user root
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM privs
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -992,7 +999,7 @@ user testuser
 statement ok
 CREATE INDEX foo ON privs (b)
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM privs
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -1406,12 +1413,7 @@ SET use_declarative_schema_changer = 'unsafe'
 statement error pgcode 2BP01 cannot drop index "idx" because view "child" depends on it
 DROP INDEX parent@idx
 
-skipif config local-mixed-22.2-23.1
 statement ok
-EXPLAIN (DDL) DROP INDEX parent@idx CASCADE;
-
-onlyif config local-mixed-22.2-23.1
-statement error cannot explain a statement which is not supported by the declarative schema change
 EXPLAIN (DDL) DROP INDEX parent@idx CASCADE;
 
 statement ok
@@ -1464,3 +1466,159 @@ SELECT * FROM t
 1  4  42
 2  5  42
 3  6  42
+
+subtest create-schema
+
+statement ok
+BEGIN
+
+skipif config local-mixed-23.1
+statement ok
+CREATE SCHEMA sc
+
+skipif config local-mixed-23.1
+query TT rowsort
+SHOW SCHEMAS
+----
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
+public              admin
+sc                  root
+
+skipif config local-mixed-23.1
+statement ok
+DROP SCHEMA sc
+
+skipif config local-mixed-23.1
+query TT rowsort
+SHOW SCHEMAS
+----
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
+public              admin
+
+statement ok
+COMMIT
+
+
+subtest statement-control
+
+# Disable ALTER table completely and validate it works
+statement ok
+SET use_declarative_schema_changer = 'on'
+
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!ALTER TABLE'
+
+statement ok
+CREATE TABLE stmt_ctrl(n int primary key)
+
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE stmt_ctrl ADD COLUMN j BOOL
+
+statement ok
+ALTER TABLE stmt_ctrl ADD COLUMN fallback_works BOOL
+
+# Validate that CREATE SEQUENCE is disabled and can be re-enabled with the same flag.
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) CREATE SEQUENCE sq2
+
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='+CREATE SEQUENCE'
+
+skipif config local-mixed-23.1
+statement ok
+EXPLAIN (DDL) CREATE SEQUENCE sq2
+
+subtest end
+
+# This subtest ensures ALTER TABLE with multiple ADD COLUMN, DROP COLUMN, and/or
+# ALTER PK is disabled with declarative schema changer by default, unless
+# `use_declarative_schema_changer = (unsafe|unsafe_always)` or
+# `sql.schema.force_declarative_statements='+ALTER TABLE'`.
+# TODO (xiang): Enable it by default on the next major release after v23.2, be it v24.1 or v23.3.
+subtest 108870
+
+statement ok
+SET sql_safe_updates = false;
+SET use_declarative_schema_changer = 'on';
+
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements = '';
+
+statement ok
+CREATE TABLE t_108870 (i INT PRIMARY KEY, j INT NOT NULL);
+
+# Ensure ALTER TABLE with only ADD COLUMN, only DROP COLUMN, or only ALTER PK can use declarative schema changer.
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 DROP COLUMN j;
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ADD COLUMN k INT DEFAULT 40;
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ADD COLUMN k INT DEFAULT 40, ADD COLUMN p INT DEFAULT 50;
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j);
+
+# Ensure ALTER TABLE with multiple ADD COLUMN, DROP COLUMN, and/or ALTER PK cannot use declarative schema changer.
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
+
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE t_108870 DROP COLUMN j, ADD COLUMN k INT DEFAULT 30;
+
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE t_108870 ADD COLUMN k INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j);
+
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN k INT DEFAULT 30;
+
+# Ensure we can enable it in declarative schema changer with cluster setting
+# sql.schema.force_declarative_statements.
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='+ALTER TABLE';
+
+statement ok
+SET use_declarative_schema_changer = 'on';
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 DROP COLUMN j, ADD COLUMN k INT DEFAULT 30;
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ADD COLUMN k INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j);
+
+skipif config local-mixed-23.1
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN k INT DEFAULT 30;
+
+# Ensure we can also enable it in declarative schema changer with session variable
+# use_declarative_schema_changer.
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='';
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always';
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 DROP COLUMN j, ADD COLUMN k INT DEFAULT 30;
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ADD COLUMN k INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j);
+
+skipif config local-mixed-23.1
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN k INT DEFAULT 30;
+
+subtest end

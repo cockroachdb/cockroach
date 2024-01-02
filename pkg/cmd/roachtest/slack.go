@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/slack-go/slack"
 )
 
@@ -73,8 +74,8 @@ func postSlackReport(pass, fail, skip map[*testImpl]struct{}) {
 
 	var prefix string
 	switch {
-	case cloud != "":
-		prefix = strings.ToUpper(cloud)
+	case roachtestflags.Cloud != "":
+		prefix = strings.ToUpper(roachtestflags.Cloud)
 	default:
 		prefix = "GCE"
 	}

@@ -247,8 +247,6 @@ func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph.Graph) e
 			// marked as no-op or is the next in the queue.
 			if len(queue) > 0 && oe == queue[0] {
 				queue = queue[1:]
-			} else if !g.IsNoOp(oe) {
-				continue
 			}
 
 			current[i] = oe.To()
@@ -264,7 +262,7 @@ func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph.Graph) e
 							de.From(), oe.To(), de.RuleNames())
 					}
 				case during:
-					if de.Kind() == scgraph.PreviousStagePrecedence {
+					if de.Kind() == scgraph.PreviousStagePrecedence || de.Kind() == scgraph.PreviousTransactionPrecedence {
 						return errors.Errorf("%s reached in same stage as %s, violates rule in %s",
 							de.From(), oe.To(), de.RuleNames())
 					}

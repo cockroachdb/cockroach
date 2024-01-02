@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -13,6 +12,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo/geoindex",
+        "//pkg/geo/geopb",
         "//pkg/roachpb",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
@@ -33,7 +33,6 @@ go_test(
         "hypothetical_table_test.go",
         "indexrec_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":indexrec"],
     deps = [
@@ -48,5 +47,3 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -1,0 +1,372 @@
+# LogicTest: local
+
+statement ok
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
+
+statement ok
+CREATE TABLE supermarket (
+  person STRING PRIMARY KEY,
+  aisle INT NOT NULL,
+  starts_with STRING GENERATED ALWAYS AS (left(person, 1)) STORED,
+  ends_with STRING GENERATED ALWAYS AS (right(person, 3)) STORED,
+  INDEX (starts_with),
+  INDEX (ends_with),
+  FAMILY (person, aisle, starts_with, ends_with)
+)
+
+statement ok
+INSERT INTO supermarket (person, aisle)
+  VALUES ('abbie', 1), ('gideon', 2), ('matilda', 3), ('michael', 4)
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+query T
+EXPLAIN (OPT) SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
+----
+lock supermarket
+ ├── locking: for-update,durability-guaranteed
+ └── scan supermarket
+      └── constraint: /1: [/'matilda' - /'matilda']
+
+query T
+EXPLAIN (VERBOSE) SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (aisle)
+│
+└── • scan
+      columns: (person, aisle)
+      estimated row count: 1 (missing stats)
+      table: supermarket@supermarket_pkey
+      spans: /"matilda"/0
+      locking strength: for update
+      locking durability: guaranteed
+
+query T
+EXPLAIN (OPT)
+UPDATE supermarket
+  SET aisle = (SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE)
+  WHERE person = 'michael'
+----
+update supermarket
+ └── project
+      ├── scan supermarket
+      │    └── constraint: /7: [/'michael' - /'michael']
+      └── projections
+           └── subquery
+                └── project
+                     └── lock supermarket
+                          ├── locking: for-update,durability-guaranteed
+                          └── scan supermarket
+                               └── constraint: /13: [/'matilda' - /'matilda']
+
+query T
+EXPLAIN (VERBOSE)
+UPDATE supermarket
+  SET aisle = (SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE)
+  WHERE person = 'michael'
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • update
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ table: supermarket
+│   │ set: aisle
+│   │
+│   └── • render
+│       │ columns: (person, aisle, starts_with, ends_with, aisle_new)
+│       │ render aisle_new: @S1
+│       │ render person: person
+│       │ render aisle: aisle
+│       │ render starts_with: starts_with
+│       │ render ends_with: ends_with
+│       │
+│       └── • scan
+│             columns: (person, aisle, starts_with, ends_with)
+│             estimated row count: 1 (missing stats)
+│             table: supermarket@supermarket_pkey
+│             spans: /"michael"/0
+│             locking strength: for update
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE)
+    │ exec mode: one row
+    │
+    └── • project
+        │ columns: (aisle)
+        │
+        └── • scan
+              columns: (person, aisle)
+              estimated row count: 1 (missing stats)
+              table: supermarket@supermarket_pkey
+              spans: /"matilda"/0
+              locking strength: for update
+              locking durability: guaranteed
+
+query T
+EXPLAIN (OPT)
+WITH s AS
+  (SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE)
+SELECT aisle + 1 FROM s
+----
+with &1 (s)
+ ├── project
+ │    └── lock supermarket
+ │         ├── locking: for-update,durability-guaranteed
+ │         └── scan supermarket
+ │              └── constraint: /1: [/'matilda' - /'matilda']
+ └── project
+      ├── with-scan &1 (s)
+      └── projections
+           └── aisle + 1
+
+query T
+EXPLAIN (VERBOSE)
+WITH s AS
+  (SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE)
+SELECT aisle + 1 FROM s
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ("?column?")
+│
+├── • render
+│   │ columns: ("?column?")
+│   │ render ?column?: aisle + 1
+│   │
+│   └── • scan buffer
+│         columns: (aisle)
+│         estimated row count: 1 (missing stats)
+│         label: buffer 1 (s)
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
+    │ exec mode: all rows
+    │
+    └── • buffer
+        │ columns: (aisle)
+        │ label: buffer 1 (s)
+        │
+        └── • project
+            │ columns: (aisle)
+            │
+            └── • scan
+                  columns: (person, aisle)
+                  estimated row count: 1 (missing stats)
+                  table: supermarket@supermarket_pkey
+                  spans: /"matilda"/0
+                  locking strength: for update
+                  locking durability: guaranteed
+
+query T
+EXPLAIN (OPT)
+WITH names AS MATERIALIZED
+  (SELECT 'matilda' AS person)
+SELECT aisle
+  FROM names
+  NATURAL INNER LOOKUP JOIN supermarket
+  FOR UPDATE
+----
+with &1 (names)
+ ├── materialized
+ ├── values
+ │    └── ('matilda',)
+ └── lock supermarket
+      ├── locking: for-update,durability-guaranteed
+      └── project
+           └── inner-join (lookup supermarket)
+                ├── flags: force lookup join (into right side)
+                ├── lookup columns are key
+                ├── with-scan &1 (names)
+                └── filters (true)
+
+query T
+EXPLAIN (VERBOSE)
+WITH names AS MATERIALIZED
+  (SELECT 'matilda' AS person)
+SELECT aisle
+  FROM names
+  NATURAL INNER LOOKUP JOIN supermarket
+  FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (aisle)
+│
+├── • project
+│   │ columns: (aisle)
+│   │
+│   └── • lookup join (semi)
+│       │ columns: (person, aisle)
+│       │ estimated row count: 1 (missing stats)
+│       │ table: supermarket@supermarket_pkey
+│       │ equality: (person) = (person)
+│       │ equality cols are key
+│       │ locking strength: for update
+│       │ locking durability: guaranteed
+│       │
+│       └── • project
+│           │ columns: (person, aisle)
+│           │
+│           └── • lookup join (inner)
+│               │ columns: (person, person, aisle)
+│               │ estimated row count: 1 (missing stats)
+│               │ table: supermarket@supermarket_pkey
+│               │ equality: (person) = (person)
+│               │ equality cols are key
+│               │
+│               └── • scan buffer
+│                     columns: (person)
+│                     estimated row count: 1
+│                     label: buffer 1 (names)
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: SELECT 'matilda' AS person
+    │ exec mode: all rows
+    │
+    └── • buffer
+        │ columns: (person)
+        │ label: buffer 1 (names)
+        │
+        └── • values
+              columns: (person)
+              size: 1 column, 1 row
+              row 0, expr 0: 'matilda'
+
+query T
+EXPLAIN (OPT)
+SELECT aisle
+  FROM supermarket@supermarket_starts_with_idx
+  WHERE starts_with = 'm'
+  FOR UPDATE
+----
+lock supermarket
+ ├── locking: for-update,durability-guaranteed
+ └── project
+      └── index-join supermarket
+           └── scan supermarket@supermarket_starts_with_idx
+                ├── constraint: /3/1: [/'m' - /'m']
+                └── flags: force-index=supermarket_starts_with_idx
+
+query T
+EXPLAIN (VERBOSE)
+SELECT aisle
+  FROM supermarket@supermarket_starts_with_idx
+  WHERE starts_with = 'm'
+  FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (aisle)
+│
+└── • lookup join (semi)
+    │ columns: (person, aisle)
+    │ estimated row count: 10 (missing stats)
+    │ table: supermarket@supermarket_pkey
+    │ equality: (person) = (person)
+    │ equality cols are key
+    │ locking strength: for update
+    │ locking durability: guaranteed
+    │
+    └── • project
+        │ columns: (person, aisle)
+        │
+        └── • index join
+            │ columns: (person, aisle, starts_with)
+            │ estimated row count: 10 (missing stats)
+            │ table: supermarket@supermarket_pkey
+            │ key columns: person
+            │
+            └── • scan
+                  columns: (person, starts_with)
+                  estimated row count: 10 (missing stats)
+                  table: supermarket@supermarket_starts_with_idx
+                  spans: /"m"-/"m"/PrefixEnd
+
+statement ok
+SET enable_zigzag_join = true
+
+query T
+EXPLAIN (OPT)
+SELECT aisle
+  FROM supermarket@{FORCE_ZIGZAG}
+  WHERE starts_with = 'm' AND ends_with = 'lda'
+  FOR UPDATE
+----
+lock supermarket
+ ├── locking: for-update,durability-guaranteed
+ └── project
+      └── inner-join (lookup supermarket)
+           ├── lookup columns are key
+           ├── inner-join (zigzag supermarket@supermarket_starts_with_idx supermarket@supermarket_ends_with_idx)
+           │    └── filters
+           │         ├── starts_with = 'm'
+           │         └── ends_with = 'lda'
+           └── filters (true)
+
+query T
+EXPLAIN (VERBOSE)
+SELECT aisle
+  FROM supermarket@{FORCE_ZIGZAG}
+  WHERE starts_with = 'm' AND ends_with = 'lda'
+  FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (aisle)
+│
+└── • lookup join (semi)
+    │ columns: (person, aisle)
+    │ estimated row count: 1 (missing stats)
+    │ table: supermarket@supermarket_pkey
+    │ equality: (person) = (person)
+    │ equality cols are key
+    │ locking strength: for update
+    │ locking durability: guaranteed
+    │
+    └── • project
+        │ columns: (person, aisle)
+        │
+        └── • lookup join (inner)
+            │ columns: (person, starts_with, ends_with, aisle)
+            │ estimated row count: 1 (missing stats)
+            │ table: supermarket@supermarket_pkey
+            │ equality: (person) = (person)
+            │ equality cols are key
+            │
+            └── • project
+                │ columns: (person, starts_with, ends_with)
+                │
+                └── • zigzag join
+                      columns: (person, starts_with, person, ends_with)
+                      estimated row count: 1 (missing stats)
+                      pred: (starts_with = 'm') AND (ends_with = 'lda')
+                      left table: supermarket@supermarket_starts_with_idx
+                      left columns: (person, starts_with)
+                      left fixed values: 1 column
+                      right table: supermarket@supermarket_ends_with_idx
+                      right columns: (person, ends_with)
+                      right fixed values: 1 column
+
+statement ok
+RESET enable_zigzag_join

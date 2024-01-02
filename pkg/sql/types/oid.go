@@ -83,7 +83,9 @@ var OidToType = map[oid.Oid]*T{
 	oid.T_numeric:      Decimal,
 	oid.T_oid:          Oid,
 	oid.T_oidvector:    OidVector,
+	oid.T_pg_lsn:       PGLSN,
 	oid.T_record:       AnyTuple,
+	oid.T_refcursor:    RefCursor,
 	oid.T_regclass:     RegClass,
 	oid.T_regnamespace: RegNamespace,
 	oid.T_regproc:      RegProc,
@@ -130,7 +132,9 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oid.T_numeric:      oid.T__numeric,
 	oid.T_oid:          oid.T__oid,
 	oid.T_oidvector:    oid.T__oidvector,
+	oid.T_pg_lsn:       oid.T__pg_lsn,
 	oid.T_record:       oid.T__record,
+	oid.T_refcursor:    oid.T__refcursor,
 	oid.T_regclass:     oid.T__regclass,
 	oid.T_regnamespace: oid.T__regnamespace,
 	oid.T_regproc:      oid.T__regproc,
@@ -169,6 +173,8 @@ var familyToOid = map[Family]oid.Oid{
 	TimestampTZFamily:    oid.T_timestamptz,
 	CollatedStringFamily: oid.T_text,
 	OidFamily:            oid.T_oid,
+	PGLSNFamily:          oid.T_pg_lsn,
+	RefCursorFamily:      oid.T_refcursor,
 	UnknownFamily:        oid.T_unknown,
 	UuidFamily:           oid.T_uuid,
 	ArrayFamily:          oid.T_anyarray,
@@ -244,7 +250,7 @@ func CalcArrayOid(elemTyp *T) oid.Oid {
 		o = oidToArrayOid[o]
 	}
 	if o == 0 {
-		panic(errors.AssertionFailedf("oid %d couldn't be mapped to array oid", o))
+		panic(errors.AssertionFailedf("oid %d couldn't be mapped to array oid", elemTyp.Oid()))
 	}
 	return o
 }

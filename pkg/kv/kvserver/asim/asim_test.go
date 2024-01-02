@@ -18,7 +18,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/scheduled"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/stretchr/testify/require"
@@ -34,21 +36,21 @@ func TestRunAllocatorSimulator(t *testing.T) {
 	m := metrics.NewTracker(settings.MetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, settings)
 
-	sim := asim.NewSimulator(duration, rwg, s, settings, m)
+	sim := asim.NewSimulator(duration, rwg, s, settings, m, scheduled.NewExecutorWithNoEvents())
 	sim.RunSim(ctx)
 }
 
-func TestAllocatorSimulatorDeterministic(t *testing.T) {
-
+func TestAsimDeterministic(t *testing.T) {
 	settings := config.DefaultSimulationSettings()
 
 	runs := 3
 	duration := 15 * time.Minute
 	settings.TickInterval = 2 * time.Second
 
-	stores := 7
+	stores := 21
 	replsPerRange := 3
-	replicasPerStore := 100
+	replicasPerStore := 600
+
 	// NB: We want 100 replicas per store, so the number of ranges required
 	// will be 1/3 of the total replicas.
 	ranges := (replicasPerStore * stores) / replsPerRange
@@ -57,7 +59,7 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 	// be larger than 3 keys per range.
 	keyspace := 3 * ranges
 	// Track the run to compare against for determinism.
-	var refRun asim.History
+	var refRun history.History
 
 	for run := 0; run < runs; run++ {
 		rwg := make([]workload.Generator, 1)
@@ -77,7 +79,7 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 		}
 
 		s := state.NewStateWithDistribution(replicaDistribution, ranges, replsPerRange, keyspace, settings)
-		sim := asim.NewSimulator(duration, rwg, s, settings, m)
+		sim := asim.NewSimulator(duration, rwg, s, settings, m, scheduled.NewExecutorWithNoEvents())
 
 		ctx := context.Background()
 		sim.RunSim(ctx)
@@ -87,6 +89,6 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 			refRun = history
 			continue
 		}
-		require.Equal(t, refRun, history)
+		require.Equal(t, refRun.Recorded, history.Recorded)
 	}
 }

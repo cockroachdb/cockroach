@@ -33,6 +33,8 @@ $$;
   {descriptorId: 110, owner: root}
 - [[UserPrivileges:{DescID: 110, Name: admin}, PUBLIC], ABSENT]
   {descriptorId: 110, privileges: "2", userName: admin, withGrantOption: "2"}
+- [[UserPrivileges:{DescID: 110, Name: public}, PUBLIC], ABSENT]
+  {descriptorId: 110, privileges: "1048576", userName: public}
 - [[UserPrivileges:{DescID: 110, Name: root}, PUBLIC], ABSENT]
   {descriptorId: 110, privileges: "2", userName: root, withGrantOption: "2"}
 - [[FunctionBody:{DescID: 110}, PUBLIC], ABSENT]

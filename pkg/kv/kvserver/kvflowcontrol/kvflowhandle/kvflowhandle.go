@@ -17,7 +17,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowtokentracker"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,6 +33,8 @@ type Handle struct {
 	controller kvflowcontrol.Controller
 	metrics    *Metrics
 	clock      *hlc.Clock
+	rangeID    roachpb.RangeID
+	tenantID   roachpb.TenantID
 
 	mu struct {
 		syncutil.Mutex
@@ -42,14 +46,31 @@ type Handle struct {
 		perStreamTokenTracker map[kvflowcontrol.Stream]*kvflowtokentracker.Tracker
 		closed                bool
 	}
+	knobs *kvflowcontrol.TestingKnobs
 }
 
 // New constructs a new Handle.
-func New(controller kvflowcontrol.Controller, metrics *Metrics, clock *hlc.Clock) *Handle {
+func New(
+	controller kvflowcontrol.Controller,
+	metrics *Metrics,
+	clock *hlc.Clock,
+	rangeID roachpb.RangeID,
+	tenantID roachpb.TenantID,
+	knobs *kvflowcontrol.TestingKnobs,
+) *Handle {
+	if metrics == nil { // only nil in tests
+		metrics = NewMetrics(nil)
+	}
+	if knobs == nil {
+		knobs = &kvflowcontrol.TestingKnobs{}
+	}
 	h := &Handle{
 		controller: controller,
 		metrics:    metrics,
 		clock:      clock,
+		rangeID:    rangeID,
+		tenantID:   tenantID,
+		knobs:      knobs,
 	}
 	h.mu.perStreamTokenTracker = map[kvflowcontrol.Stream]*kvflowtokentracker.Tracker{}
 	return h
@@ -58,7 +79,9 @@ func New(controller kvflowcontrol.Controller, metrics *Metrics, clock *hlc.Clock
 var _ kvflowcontrol.Handle = &Handle{}
 
 // Admit is part of the kvflowcontrol.Handle interface.
-func (h *Handle) Admit(ctx context.Context, pri admissionpb.WorkPriority, ct time.Time) error {
+func (h *Handle) Admit(
+	ctx context.Context, pri admissionpb.WorkPriority, ct time.Time,
+) (bool, error) {
 	if h == nil {
 		// TODO(irfansharif): This can happen if we're proposing immediately on
 		// a newly split off RHS that doesn't know it's a leader yet (so we
@@ -71,14 +94,22 @@ func (h *Handle) Admit(ctx context.Context, pri admissionpb.WorkPriority, ct tim
 		// As for cluster settings that disable flow control entirely or only
 		// for regular traffic, that can be dealt with at the caller by not
 		// calling .Admit() and ensuring we use the right raft entry encodings.
-		return nil
+		return false, nil
 	}
 
 	h.mu.Lock()
 	if h.mu.closed {
+		h.mu.Unlock()
 		log.Errorf(ctx, "operating on a closed handle")
-		return nil
+		return false, nil
 	}
+
+	// NB: We're using a copy-on-write scheme elsewhere to maintain this slice
+	// of sorted connections. Here (the performance critical read path) we
+	// simply grab a reference to the connections slice under the mutex before
+	// iterating through them further below and invoking the blocking
+	// kvflowcontrol.Controller.Admit() for each one, something we want to do
+	// without holding the mutex.
 	connections := h.mu.connections
 	h.mu.Unlock()
 
@@ -86,15 +117,20 @@ func (h *Handle) Admit(ctx context.Context, pri admissionpb.WorkPriority, ct tim
 	h.metrics.onWaiting(class)
 	tstart := h.clock.PhysicalTime()
 
+	// NB: We track whether the last stream was subject to flow control, this
+	// helps us decide later if we should be deducting tokens for this work.
+	var admitted bool
 	for _, c := range connections {
-		if err := h.controller.Admit(ctx, pri, ct, c); err != nil {
+		var err error
+		admitted, err = h.controller.Admit(ctx, pri, ct, c)
+		if err != nil {
 			h.metrics.onErrored(class, h.clock.PhysicalTime().Sub(tstart))
-			return err
+			return false, err
 		}
 	}
 
 	h.metrics.onAdmitted(class, h.clock.PhysicalTime().Sub(tstart))
-	return nil
+	return admitted, nil
 }
 
 // DeductTokensFor is part of the kvflowcontrol.Handle interface.
@@ -125,10 +161,22 @@ func (h *Handle) deductTokensForInner(
 		return nil // unused return value in production code
 	}
 
+	if h.knobs.OverrideTokenDeduction != nil {
+		tokens = h.knobs.OverrideTokenDeduction()
+	}
+
 	for _, c := range h.mu.connections {
-		h.controller.DeductTokens(ctx, pri, tokens, c.Stream())
-		h.mu.perStreamTokenTracker[c.Stream()].Track(ctx, pri, tokens, pos)
-		streams = append(streams, c.Stream())
+		if h.mu.perStreamTokenTracker[c.Stream()].Track(ctx, pri, tokens, pos) {
+			// Only deduct tokens if we're able to track them for subsequent
+			// returns. We risk leaking flow tokens otherwise.
+			h.controller.DeductTokens(ctx, pri, tokens, c.Stream())
+
+			// TODO(irfansharif,aaditya): This accounts for 0.4% of
+			// alloc_objects when running kv0/enc=false/nodes=3/cpu=9. Except
+			// this return type is not used in production code. Clean it up as
+			// part of #104154.
+			streams = append(streams, c.Stream())
+		}
 	}
 	return streams
 }
@@ -160,14 +208,27 @@ func (h *Handle) ReturnTokensUpto(
 		return
 	}
 
+	if !stream.TenantID.IsSet() {
+		// NB: The tenant ID is set in the local fast path for token returns,
+		// through the kvflowcontrol.Dispatch. Tecnically we could set the
+		// tenant ID by looking up the local replica and reading it, but it's
+		// easier to do it this way having captured it when the handle was
+		// instantiated.
+		stream.TenantID = h.tenantID
+	}
+
+	// TODO(irfansharif,aaditya): This mutex still shows up in profiles, ~0.3%
+	// for kv0/enc=false/nodes=3/cpu=9. Maybe clean it up as part of #104154.
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	if h.mu.closed {
+		h.mu.Unlock()
 		log.Errorf(ctx, "operating on a closed handle")
 		return
 	}
 
 	tokens := h.mu.perStreamTokenTracker[stream].Untrack(ctx, pri, upto)
+	h.mu.Unlock()
+
 	h.controller.ReturnTokens(ctx, pri, tokens, stream)
 }
 
@@ -175,6 +236,13 @@ func (h *Handle) ReturnTokensUpto(
 func (h *Handle) ConnectStream(
 	ctx context.Context, pos kvflowcontrolpb.RaftLogPosition, stream kvflowcontrol.Stream,
 ) {
+	if !stream.TenantID.IsSet() {
+		// See comment in (*Handle).ReturnTokensUpto above where this same check
+		// exists. The callers here do typically have this set, but it doesn't
+		// hurt to be defensive.
+		stream.TenantID = h.tenantID
+	}
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.mu.closed {
@@ -182,27 +250,89 @@ func (h *Handle) ConnectStream(
 		return
 	}
 
+	h.connectStreamLocked(ctx, pos, stream)
+}
+
+func (h *Handle) connectStreamLocked(
+	ctx context.Context, pos kvflowcontrolpb.RaftLogPosition, stream kvflowcontrol.Stream,
+) {
 	if _, ok := h.mu.perStreamTokenTracker[stream]; ok {
 		log.Fatalf(ctx, "reconnecting already connected stream: %s", stream)
 	}
-	h.mu.connections = append(h.mu.connections, newConnectedStream(stream))
-	sort.Slice(h.mu.connections, func(i, j int) bool {
+
+	connections := make([]*connectedStream, len(h.mu.connections)+1)
+	copy(connections, h.mu.connections)
+	connections[len(connections)-1] = newConnectedStream(stream)
+	sort.Slice(connections, func(i, j int) bool {
 		// Sort connections based on store IDs (this is the order in which we
 		// invoke Controller.Admit) for predictability. If in the future we use
 		// flow tokens for raft log catchup (see I11 and [^9] in
 		// kvflowcontrol/doc.go), we may want to introduce an Admit-variant that
 		// both blocks and deducts tokens before sending catchup MsgApps. In
 		// that case, this sorting will help avoid deadlocks.
-		return h.mu.connections[i].Stream().StoreID < h.mu.connections[j].Stream().StoreID
+		return connections[i].Stream().StoreID < connections[j].Stream().StoreID
 	})
-	h.mu.perStreamTokenTracker[stream] = kvflowtokentracker.New(pos, nil /* knobs */)
+	// NB: We use a copy-on-write scheme when appending to the connections slice
+	// -- the read path is what's performance critical.
+	h.mu.connections = connections
+
+	h.mu.perStreamTokenTracker[stream] = kvflowtokentracker.New(pos, stream, h.knobs)
+	h.metrics.StreamsConnected.Inc(1)
+	log.VInfof(ctx, 1, "connected to stream: %s", stream)
 }
 
 // DisconnectStream is part of the kvflowcontrol.Handle interface.
 func (h *Handle) DisconnectStream(ctx context.Context, stream kvflowcontrol.Stream) {
+	if !stream.TenantID.IsSet() {
+		// See comment in (*Handle).ReturnTokensUpto above where this same check
+		// exists. The callers here do typically have this set, but it doesn't
+		// hurt to be defensive.
+		stream.TenantID = h.tenantID
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.disconnectStreamLocked(ctx, stream)
+}
+
+// ResetStreams is part of the kvflowcontrol.Handle interface.
+func (h *Handle) ResetStreams(ctx context.Context) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.mu.closed {
+		log.Errorf(ctx, "operating on a closed handle")
+		return
+	}
+
+	var streams []kvflowcontrol.Stream
+	var lowerBounds []kvflowcontrolpb.RaftLogPosition
+	for stream, tracker := range h.mu.perStreamTokenTracker {
+		streams = append(streams, stream)
+		lowerBounds = append(lowerBounds, tracker.LowerBound())
+	}
+	for i := range streams {
+		h.disconnectStreamLocked(ctx, streams[i])
+	}
+	for i := range streams {
+		h.connectStreamLocked(ctx, lowerBounds[i], streams[i])
+	}
+}
+
+// Inspect is part of the kvflowcontrol.Handle interface.
+func (h *Handle) Inspect(ctx context.Context) kvflowinspectpb.Handle {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	handle := kvflowinspectpb.Handle{
+		RangeID: h.rangeID,
+	}
+	for _, c := range h.mu.connections {
+		connected := kvflowinspectpb.ConnectedStream{
+			Stream:            h.controller.InspectStream(ctx, c.Stream()),
+			TrackedDeductions: h.mu.perStreamTokenTracker[c.Stream()].Inspect(ctx),
+		}
+		handle.ConnectedStreams = append(handle.ConnectedStreams, connected)
+	}
+	return handle
 }
 
 func (h *Handle) disconnectStreamLocked(ctx context.Context, stream kvflowcontrol.Stream) {
@@ -211,7 +341,7 @@ func (h *Handle) disconnectStreamLocked(ctx context.Context, stream kvflowcontro
 		return
 	}
 	if _, ok := h.mu.perStreamTokenTracker[stream]; !ok {
-		log.Fatalf(ctx, "disconnecting non-existent stream: %s", stream)
+		return
 	}
 
 	h.mu.perStreamTokenTracker[stream].Iter(ctx,
@@ -221,17 +351,20 @@ func (h *Handle) disconnectStreamLocked(ctx context.Context, stream kvflowcontro
 	)
 	delete(h.mu.perStreamTokenTracker, stream)
 
-	streamIdx := -1
+	connections := make([]*connectedStream, 0, len(h.mu.connections)-1)
 	for i := range h.mu.connections {
 		if h.mu.connections[i].Stream() == stream {
-			streamIdx = i
-			break
+			h.mu.connections[i].Disconnect()
+		} else {
+			connections = append(connections, h.mu.connections[i])
 		}
 	}
-	connection := h.mu.connections[streamIdx]
-	connection.Disconnect()
-	h.mu.connections = append(h.mu.connections[:streamIdx], h.mu.connections[streamIdx+1:]...)
+	// NB: We use a copy-on-write scheme when splicing the connections slice --
+	// the read path is what's performance critical.
+	h.mu.connections = connections
 
+	log.VInfof(ctx, 1, "disconnected stream: %s", stream)
+	h.metrics.StreamsDisconnected.Inc(1)
 	// TODO(irfansharif): Optionally record lower bound raft log positions for
 	// disconnected streams to guard against regressions when (re-)connecting --
 	// it must be done with higher positions.
@@ -250,8 +383,12 @@ func (h *Handle) Close(ctx context.Context) {
 		return
 	}
 
-	for _, connection := range h.mu.connections {
-		h.disconnectStreamLocked(ctx, connection.Stream())
+	var streams []kvflowcontrol.Stream
+	for stream := range h.mu.perStreamTokenTracker {
+		streams = append(streams, stream)
+	}
+	for _, stream := range streams {
+		h.disconnectStreamLocked(ctx, stream)
 	}
 	h.mu.closed = true
 }

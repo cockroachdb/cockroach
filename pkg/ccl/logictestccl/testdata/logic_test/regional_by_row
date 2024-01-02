@@ -1,4 +1,3 @@
-# tenant-cluster-setting-override-opt: sql.zone_configs.allow_for_secondary_tenant.enabled=true sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
 
 statement ok
@@ -261,7 +260,7 @@ regional_by_row_table_pkey   crdb_region  true
 regional_by_row_table_pkey   pk           false
 
 query TTTTIT colnames
-SHOW TABLES
+SELECT * FROM [SHOW TABLES] ORDER BY table_name
 ----
 schema_name  table_name                                         type   owner  estimated_row_count  locality
 public       parent_table                                       table  root   0                    REGIONAL BY TABLE IN PRIMARY REGION
@@ -390,7 +389,7 @@ statement ok
 ALTER TABLE regional_by_row_table DROP COLUMN unique_col
 
 # Insert some rows into the regional_by_row_table.
-query TI
+query TI rowsort
 INSERT INTO regional_by_row_table (pk, pk2, a, b, j) VALUES
 (1, 1, 2, 3, '{"a": "b"}'), (4, 4, 5, 6, '{"c": "d"}')
 RETURNING crdb_region, pk
@@ -531,12 +530,12 @@ CREATE TABLE public.regional_by_row_table (
   j JSONB NULL,
   crdb_region multi_region_test_db.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::multi_region_test_db.public.crdb_internal_region,
   CONSTRAINT regional_by_row_table_pkey PRIMARY KEY (pk2 ASC),
-  UNIQUE INDEX regional_by_row_table_pk_key (pk ASC),
   INDEX regional_by_row_table_a_idx (a ASC),
   UNIQUE INDEX regional_by_row_table_b_key (b ASC),
   INVERTED INDEX regional_by_row_table_j_idx (j),
   UNIQUE INDEX uniq_idx (a ASC) WHERE b > 0:::INT8,
   UNIQUE INDEX unique_b_a (b ASC, a ASC),
+  UNIQUE INDEX regional_by_row_table_pk_key (pk ASC),
   FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
 ) LOCALITY REGIONAL BY ROW;
 ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table@regional_by_row_table_a_idx CONFIGURE ZONE USING "gc.ttlseconds" = 10
@@ -682,7 +681,7 @@ DATABASE multi_region_test_db  ALTER DATABASE multi_region_test_db CONFIGURE ZON
                                  voter_constraints = '{+region=ca-central-1: 2}',
                                  lease_preferences = '[[+region=ca-central-1]]'
 
-query TI
+query TI rowsort
 INSERT INTO regional_by_row_table_as (pk) VALUES (1), (10), (20)
 RETURNING crdb_region_col, pk
 ----
@@ -1700,7 +1699,7 @@ OFFSET
 ----
 7  7  8  9  ca-central-1
 
-query IIII
+query IIII rowsort
 SELECT
     pk, pk2, a, b
 FROM
@@ -1790,7 +1789,7 @@ CREATE TABLE regional_by_row_table_as1 (
 statement ok
 INSERT INTO regional_by_row_table_as1 (pk) VALUES (1), (2), (3), (10), (20)
 
-query IIITT
+query IIITT rowsort
 SELECT pk, a, b, crdb_region_col, crdb_region_col1 FROM regional_by_row_table_as1 LIMIT 3
 ----
 1  NULL  NULL  ca-central-1  ca-central-1

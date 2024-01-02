@@ -12,6 +12,7 @@ package schemadesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -93,7 +94,7 @@ func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges() (err error) 
 	// Set the ModificationTime field before doing anything else.
 	// Other changes may depend on it.
 	mustSetModTime, err := descpb.MustSetModificationTime(
-		sdb.original.ModificationTime, sdb.mvccTimestamp, sdb.original.Version,
+		sdb.original.ModificationTime, sdb.mvccTimestamp, sdb.original.Version, sdb.original.State,
 	)
 	if err != nil {
 		return err
@@ -122,9 +123,18 @@ func (sdb *schemaDescriptorBuilder) RunRestoreChanges(
 	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) error {
 	// Upgrade the declarative schema changer state.
-	if scpb.MigrateDescriptorState(version, sdb.maybeModified.DeclarativeSchemaChangerState) {
+	if scpb.MigrateDescriptorState(version, sdb.maybeModified.ParentID, sdb.maybeModified.DeclarativeSchemaChangerState) {
 		sdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
 	}
+	return nil
+}
+
+// StripDanglingBackReferences implements the catalog.DescriptorBuilder
+// interface.
+func (sdb *schemaDescriptorBuilder) StripDanglingBackReferences(
+	descIDMightExist func(id descpb.ID) bool, nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
+) error {
+	// There's nothing we can do for schemas here.
 	return nil
 }
 

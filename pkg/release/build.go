@@ -131,7 +131,7 @@ func SharedLibraryExtensionFromPlatform(platform Platform) string {
 }
 
 // MakeWorkload makes the bin/workload binary. It is only ever built in the
-// crosslinux configuration.
+// crosslinux and crosslinuxarm configurations.
 func MakeWorkload(platform Platform, opts BuildOptions, pkgDir string) error {
 	if opts.Release {
 		return errors.Newf("cannot build workload in Release mode")
@@ -151,7 +151,7 @@ func MakeWorkload(platform Platform, opts BuildOptions, pkgDir string) error {
 	if err != nil {
 		return err
 	}
-	return stageBinary("//pkg/cmd/workload", platform, bazelBin, filepath.Join(pkgDir, "bin"), false)
+	return stageBinary("//pkg/cmd/workload", platform, bazelBin, filepath.Join(pkgDir, "bin"), platform == PlatformLinuxArm)
 }
 
 // MakeRelease makes the release binary and associated files.
@@ -160,11 +160,14 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		return errors.Newf("cannot set the telemetry channel to %s, supported channels: %s and %s", opts.Channel, build.DefaultTelemetryChannel, build.FIPSTelemetryChannel)
 	}
 	buildArgs := []string{"build", "//pkg/cmd/cockroach", "//pkg/cmd/cockroach-sql"}
-	if platform != PlatformMacOSArm {
+	if platform != PlatformMacOSArm && platform != PlatformWindows {
 		buildArgs = append(buildArgs, "//c-deps:libgeos")
 	}
 	targetTriple := TargetTripleFromPlatform(platform)
 	var stampCommand string
+	if platform == PlatformWindows {
+		buildArgs = append(buildArgs, "--enable_runfiles")
+	}
 	if opts.Release {
 		if opts.BuildTag == "" {
 			stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s release", targetTriple, opts.Channel)
@@ -178,7 +181,7 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s", targetTriple, opts.Channel)
 	}
 	buildArgs = append(buildArgs, stampCommand)
-	configs := []string{"-c", "opt", "--config=ci", "--config=force_build_cdeps", "--config=with_ui", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
+	configs := []string{"-c", "opt", "--config=ci", "--config=force_build_cdeps", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
 	buildArgs = append(buildArgs, configs...)
 	cmd := exec.Command("bazel", buildArgs...)
 	cmd.Dir = pkgDir
@@ -337,7 +340,7 @@ func stageBinary(
 }
 
 func stageLibraries(platform Platform, bazelBin string, dir string) error {
-	if platform == PlatformMacOSArm {
+	if platform == PlatformMacOSArm || platform == PlatformWindows {
 		return nil
 	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -345,12 +348,7 @@ func stageLibraries(platform Platform, bazelBin string, dir string) error {
 	}
 	ext := SharedLibraryExtensionFromPlatform(platform)
 	for _, lib := range CRDBSharedLibraries {
-		libDir := "lib"
-		if platform == PlatformWindows {
-			// NB: On Windows these libs end up in the `bin` subdir.
-			libDir = "bin"
-		}
-		src := filepath.Join(bazelBin, "c-deps", "libgeos_foreign", libDir, lib+ext)
+		src := filepath.Join(bazelBin, "c-deps", "libgeos_foreign", "lib", lib+ext)
 		srcF, err := os.Open(src)
 		if err != nil {
 			return err

@@ -222,7 +222,8 @@ func New(
 		int(bufferMemLimit/spanConfigurationsTableRowSize),
 		[]roachpb.Span{spanConfigTableSpan},
 		true, // withPrevValue
-		newSpanConfigDecoder().translateEvent,
+		true, // withRowTSInInitialScan
+		NewSpanConfigDecoder().TranslateEvent,
 		s.handleUpdate,
 		rfCacheKnobs,
 	)
@@ -373,6 +374,15 @@ func (s *KVSubscriber) GetProtectionTimestamps(
 	if err := s.mu.internal.ForEachOverlappingSpanConfig(ctx, sp,
 		func(sp roachpb.Span, config roachpb.SpanConfig) error {
 			for _, protection := range config.GCPolicy.ProtectionPolicies {
+				// If the current span is a subset of the key space we exclude from full
+				// cluster backups, then we ignore it. This avoids placing a protected
+				// timestamp and hold up GC on spans not needed for backup (i.e.
+				// NodeLiveness, Timeseries). These spans tend to be high churn,
+				// accumulating high amounts of MVCC garbage. Placing a PTS on these
+				// spans can thus be detrimental.
+				if keys.ExcludeFromBackupSpan.Contains(sp) {
+					continue
+				}
 				// If the SpanConfig that applies to this span indicates that the span
 				// is going to be excluded from backup, and the protection policy was
 				// written by a backup, then ignore it. This prevents the
@@ -404,13 +414,16 @@ func (s *KVSubscriber) handleCompleteUpdate(
 ) {
 	freshStore := spanconfigstore.New(s.fallback, s.settings, s.boundsReader, s.knobs)
 	for _, ev := range events {
-		freshStore.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
+		freshStore.Apply(ctx, false /* dryrun */, ev.(*BufferEvent).Update)
 	}
-	s.mu.Lock()
-	s.mu.internal = freshStore
-	s.setLastUpdatedLocked(ts)
-	handlers := s.mu.handlers
-	s.mu.Unlock()
+	handlers := func() []handler {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.mu.internal = freshStore
+		s.setLastUpdatedLocked(ts)
+		return s.mu.handlers
+	}()
+
 	for i := range handlers {
 		handler := &handlers[i] // mutated by invoke
 		handler.invoke(ctx, keys.EverythingSpan)
@@ -426,21 +439,23 @@ func (s *KVSubscriber) setLastUpdatedLocked(ts hlc.Timestamp) {
 func (s *KVSubscriber) handlePartialUpdate(
 	ctx context.Context, ts hlc.Timestamp, events []rangefeedbuffer.Event,
 ) {
-	s.mu.Lock()
-	for _, ev := range events {
-		// TODO(irfansharif): We can apply a batch of updates atomically
-		// now that the StoreWriter interface supports it; it'll let us
-		// avoid this mutex.
-		s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
-	}
-	s.setLastUpdatedLocked(ts)
-	handlers := s.mu.handlers
-	s.mu.Unlock()
+	handlers := func() []handler {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for _, ev := range events {
+			// TODO(irfansharif): We can apply a batch of updates atomically
+			// now that the StoreWriter interface supports it; it'll let us
+			// avoid this mutex.
+			s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*BufferEvent).Update)
+		}
+		s.setLastUpdatedLocked(ts)
+		return s.mu.handlers
+	}()
 
 	for i := range handlers {
 		handler := &handlers[i] // mutated by invoke
 		for _, ev := range events {
-			target := ev.(*bufferEvent).Update.GetTarget()
+			target := ev.(*BufferEvent).Update.GetTarget()
 			handler.invoke(ctx, target.KeyspaceTargeted())
 		}
 	}
@@ -464,14 +479,14 @@ func (h *handler) invoke(ctx context.Context, update roachpb.Span) {
 	h.fn(ctx, update)
 }
 
-type bufferEvent struct {
+type BufferEvent struct {
 	spanconfig.Update
 	ts hlc.Timestamp
 }
 
 // Timestamp implements the rangefeedbuffer.Event interface.
-func (w *bufferEvent) Timestamp() hlc.Timestamp {
+func (w *BufferEvent) Timestamp() hlc.Timestamp {
 	return w.ts
 }
 
-var _ rangefeedbuffer.Event = &bufferEvent{}
+var _ rangefeedbuffer.Event = &BufferEvent{}

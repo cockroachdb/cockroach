@@ -55,6 +55,8 @@ func Encode(appendTo []byte, colID ColumnIDDelta, val tree.Datum, scratch []byte
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.UnsafeBytes()), nil
 	case *tree.DDate:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), t.UnixEpochDaysWithOrig()), nil
+	case *tree.DPGLSN:
+		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.LSN)), nil
 	case *tree.DBox2D:
 		return encoding.EncodeBox2DValue(appendTo, uint32(colID), t.CartesianBoundingBox.BoundingBox)
 	case *tree.DGeography:

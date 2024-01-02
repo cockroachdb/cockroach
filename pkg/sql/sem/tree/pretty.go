@@ -157,13 +157,13 @@ func (p *PrettyCfg) bracketKeyword(
 }
 
 // Pretty pretty prints stmt with default options.
-func Pretty(stmt NodeFormatter) string {
+func Pretty(stmt NodeFormatter) (string, error) {
 	cfg := DefaultPrettyCfg()
 	return cfg.Pretty(stmt)
 }
 
 // Pretty pretty prints stmt with specified options.
-func (p *PrettyCfg) Pretty(stmt NodeFormatter) string {
+func (p *PrettyCfg) Pretty(stmt NodeFormatter) (string, error) {
 	doc := p.Doc(stmt)
 	return pretty.Pretty(doc, p.LineWidth, p.UseTabs, p.TabWidth, p.Case)
 }
@@ -1173,8 +1173,16 @@ func (node *Update) doc(p *PrettyCfg) pretty.Doc {
 func (node *Delete) doc(p *PrettyCfg) pretty.Doc {
 	items := make([]pretty.TableRow, 0, 7)
 	items = append(items,
-		node.With.docRow(p),
-		p.row("DELETE FROM", p.Doc(node.Table)))
+		node.With.docRow(p))
+	tableLbl := "DELETE FROM"
+	batch := node.Batch
+	if batch != nil {
+		tableLbl = "FROM"
+		items = append(items,
+			p.row("DELETE", p.Doc(batch)))
+	}
+	items = append(items,
+		p.row(tableLbl, p.Doc(node.Table)))
 	if len(node.Using) > 0 {
 		items = append(items, p.row("USING", p.Doc(&node.Using)))
 	}
@@ -1676,12 +1684,12 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	if node.Predicate != nil {
 		clauses = append(clauses, p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.Predicate)))
 	}
-	if invisibility := node.Invisibility; invisibility != 0.0 {
-		if invisibility == 1.0 {
-			clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
-		} else {
-			clauses = append(clauses, pretty.Keyword(" VISIBILITY "+fmt.Sprintf("%.2f", 1-invisibility)))
-		}
+	switch {
+	case node.Invisibility.FloatProvided:
+		clauses = append(clauses,
+			pretty.Keyword(" VISIBILITY "+fmt.Sprintf("%.2f", 1-node.Invisibility.Value)))
+	case node.Invisibility.Value == 1.0:
+		clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
 	}
 	return p.nestUnder(
 		pretty.Fold(pretty.ConcatSpace, title...),
@@ -1753,14 +1761,13 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	if node.Predicate != nil {
 		clauses = append(clauses, p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.Predicate)))
 	}
-	if invisibility := node.Invisibility; invisibility != 0.0 {
-		if invisibility == 1.0 {
-			clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
-		} else {
-			clauses = append(clauses, pretty.Keyword(" VISIBILITY "+fmt.Sprintf("%.2f", 1-invisibility)))
-		}
+	switch {
+	case node.Invisibility.FloatProvided:
+		clauses = append(clauses,
+			pretty.Keyword(" VISIBILITY "+fmt.Sprintf("%.2f", 1-node.Invisibility.Value)))
+	case node.Invisibility.Value == 1.0:
+		clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
 	}
-
 	if len(clauses) == 0 {
 		return title
 	}
@@ -1817,15 +1824,13 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	if node.Predicate != nil {
 		clauses = append(clauses, p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.Predicate)))
 	}
-
-	if invisibility := node.Invisibility; invisibility != 0.0 {
-		if invisibility == 1.0 {
-			clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
-		} else {
-			clauses = append(clauses, pretty.Keyword(" VISIBILITY "+fmt.Sprintf("%.2f", 1-invisibility)))
-		}
+	switch {
+	case node.Invisibility.FloatProvided:
+		clauses = append(clauses,
+			pretty.Keyword(" VISIBILITY "+fmt.Sprintf("%.2f", 1-node.Invisibility.Value)))
+	case node.Invisibility.Value == 1.0:
+		clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
 	}
-
 	if node.StorageParams != nil {
 		clauses = append(clauses, p.bracketKeyword(
 			"WITH", "(",

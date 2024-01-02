@@ -19,23 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 func init() {
-	// Add all windows to the builtins map after a few sanity checks.
 	for k, v := range windows {
-		for _, w := range v.overloads {
-			if w.Class != tree.WindowClass {
-				panic(errors.AssertionFailedf("%s: window functions should be marked with the tree.WindowClass "+
-					"function class, found %v", k, v))
-			}
-			if w.WindowFunc == nil {
-				panic(errors.AssertionFailedf("%s: window functions should have eval.WindowFunc constructors, "+
-					"found %v", k, w))
-			}
-		}
-		registerBuiltin(k, v)
+		const enforceClass = true
+		registerBuiltin(k, v, tree.WindowClass, enforceClass)
 	}
 }
 

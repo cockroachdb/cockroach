@@ -56,6 +56,12 @@ fi
 
 tc_end_block "Variable Setup"
 
+tc_start_block "Verify binaries SHA"
+# Make sure that the linux/amd64 source docker image is built using the same version and SHA. 
+# This is a quick check and it assumes that the docker image was built correctly and based on the tarball binaries.
+docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
+verify_docker_image "${gcr_staged_repository}:${version}" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" false
+tc_end_block "Verify binaries SHA"
 
 tc_start_block "Check remote tag and tag"
 if [[ -z "${DRY_RUN}" ]]; then
@@ -76,7 +82,6 @@ tc_start_block "Setup dockerhub credentials"
 configure_docker_creds
 docker_login
 tc_end_block "Setup dockerhub credentials"
-
 
 tc_start_block "Copy binaries"
 export google_credentials="$gcs_credentials"

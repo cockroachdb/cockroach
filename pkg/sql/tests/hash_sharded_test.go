@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -76,9 +75,11 @@ func verifyTableDescriptorState(
 func TestBasicHashShardedIndexes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
+	codec := s.ApplicationLayer().Codec()
 	if _, err := db.Exec(`CREATE DATABASE d`); err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +100,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 		if _, err := db.Exec(`CREATE INDEX foo ON kv_primary (v)`); err != nil {
 			t.Fatal(err)
 		}
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_primary`)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, `d`, `kv_primary`)
 		verifyTableDescriptorState(t, tableDesc, "kv_primary_pkey" /* shardedIndexName */)
 		shardColID := getShardColumnID(t, tableDesc, "kv_primary_pkey" /* shardedIndexName */)
 
@@ -133,7 +134,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary`)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, `d`, `kv_secondary`)
 		verifyTableDescriptorState(t, tableDesc, "sharded_secondary" /* shardedIndexName */)
 	})
 
@@ -150,7 +151,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 		if _, err := db.Exec(`CREATE INDEX sharded_secondary2 ON kv_secondary2 (k) USING HASH WITH (bucket_count=12)`); err != nil {
 			t.Fatal(err)
 		}
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary2`)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, `d`, `kv_secondary2`)
 		verifyTableDescriptorState(t, tableDesc, "sharded_secondary2" /* shardedIndexName */)
 	})
 }

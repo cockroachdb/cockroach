@@ -136,10 +136,10 @@ func MakeAzureKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS,
 	}
 
 	if len(missingParams) != 0 {
-		return nil, errors.Errorf("kms explicit auth URI expected but did not receive: %s", strings.Join(missingParams, ", "))
+		return nil, errors.Errorf("kms URI expected but did not receive: %s", strings.Join(missingParams, ", "))
 	}
 	if len(extraParams) != 0 {
-		return nil, errors.Errorf("kms implicit auth URI does not support: %s", strings.Join(missingParams, ", "))
+		return nil, errors.Errorf("kms URI does not support: %s", strings.Join(missingParams, ", "))
 	}
 
 	if kmsURIParams.environment == "" {
@@ -170,12 +170,10 @@ func MakeAzureKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS,
 			return nil, errors.New(
 				"implicit credentials disallowed for azure due to --external-io-disable-implicit-credentials flag")
 		}
-		// The Default credential supports env vars and managed identity magic.
-		// We rely on the former for testing and the latter in prod.
-		// https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential
-		credential, err = azidentity.NewDefaultAzureCredential(nil)
+
+		credential, err = NewDefaultAzureCredentialWithFile(nil)
 		if err != nil {
-			return nil, errors.Wrap(err, "azure managed identity credential")
+			return nil, errors.Wrap(err, "azure default credential")
 		}
 	default:
 		return nil, errors.Errorf("azure kms unsupported auth value: %v", kmsURIParams.auth)
@@ -183,7 +181,7 @@ func MakeAzureKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS,
 
 	client, err := kms.NewClient(u.String(), credential, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "azure kms vault client")
+		return nil, cloud.KMSInaccessible(errors.Wrap(err, "azure kms vault client"))
 	}
 
 	keyTokens := strings.Split(strings.TrimPrefix(kmsURI.Path, "/"), "/")
@@ -198,8 +196,8 @@ func MakeAzureKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS,
 	}, nil
 }
 
-func (k *azureKMS) MasterKeyID() (string, error) {
-	return k.customerMasterKeyID, nil
+func (k *azureKMS) MasterKeyID() string {
+	return k.customerMasterKeyID
 }
 
 func (k *azureKMS) Encrypt(ctx context.Context, data []byte) ([]byte, error) {
@@ -208,7 +206,7 @@ func (k *azureKMS) Encrypt(ctx context.Context, data []byte) ([]byte, error) {
 		Algorithm: &encryptionAlgorithm,
 	}, nil)
 	if err != nil {
-		return nil, err
+		return nil, cloud.KMSInaccessible(err)
 	}
 	return val.Result, nil
 }
@@ -219,7 +217,7 @@ func (k *azureKMS) Decrypt(ctx context.Context, data []byte) ([]byte, error) {
 		Algorithm: &encryptionAlgorithm,
 	}, nil)
 	if err != nil {
-		return nil, err
+		return nil, cloud.KMSInaccessible(err)
 	}
 	return val.Result, nil
 }

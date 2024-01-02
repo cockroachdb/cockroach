@@ -9,13 +9,12 @@
 // licenses/APL.txt.
 
 import {
-  generateTableID,
   databaseRequestPayloadToID,
   tableRequestToID,
   createSelectorForCachedDataField,
   createSelectorForKeyedCachedDataField,
 } from "./apiReducers";
-import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import { api as clusterUiApi, util } from "@cockroachlabs/cluster-ui";
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { createMemoryHistory } from "history";
 import { merge } from "lodash";
@@ -23,19 +22,20 @@ import moment from "moment-timezone";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { RouteComponentProps } from "react-router";
 import { queryByName } from "src/util/query";
+import { indexUnusedDuration } from "../util/constants";
 
 describe("table id generator", function () {
   it("generates encoded db/table id", function () {
     const db = "&a.a.a/a.a/";
     const table = "/a.a/a.a.a&";
-    expect(generateTableID(db, table)).toEqual(
+    expect(util.generateTableID(db, table)).toEqual(
       encodeURIComponent(db) + "/" + encodeURIComponent(table),
     );
     expect(
-      decodeURIComponent(generateTableID(db, table).split("/")[0]),
+      decodeURIComponent(util.generateTableID(db, table).split("/")[0]),
     ).toEqual(db);
     expect(
-      decodeURIComponent(generateTableID(db, table).split("/")[1]),
+      decodeURIComponent(util.generateTableID(db, table).split("/")[1]),
     ).toEqual(table);
   });
 });
@@ -43,7 +43,12 @@ describe("table id generator", function () {
 describe("request to string functions", function () {
   it("correctly generates a string from a database details request", function () {
     const database = "testDatabase";
-    expect(databaseRequestPayloadToID(database)).toEqual(database);
+    expect(
+      databaseRequestPayloadToID({
+        database,
+        csIndexUnusedDuration: indexUnusedDuration,
+      }),
+    ).toEqual(database);
   });
   it("correctly generates a string from a table details request", function () {
     const database = "testDatabase";
@@ -51,9 +56,10 @@ describe("request to string functions", function () {
     const tableRequest: clusterUiApi.TableDetailsReqParams = {
       database,
       table,
+      csIndexUnusedDuration: indexUnusedDuration,
     };
     expect(tableRequestToID(tableRequest)).toEqual(
-      generateTableID(database, table),
+      util.generateTableID(database, table),
     );
   });
 });

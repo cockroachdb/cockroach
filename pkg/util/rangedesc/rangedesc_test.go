@@ -16,13 +16,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -66,8 +67,9 @@ func TestEverythingScanner(t *testing.T) {
 	ctx := context.Background()
 	for _, s := range splits {
 		t.Run(fmt.Sprintf("with-splits-at=%s", s), func(t *testing.T) {
-			params, _ := tests.CreateTestServerParams()
-			server, _, kvDB := serverutils.StartServer(t, params)
+			server, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			})
 			defer server.Stopper().Stop(context.Background())
 
 			for _, split := range s {
@@ -111,11 +113,13 @@ func TestEverythingScanner(t *testing.T) {
 //   - "split" [set=<int>]
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		ctx := context.Background()
-		params, _ := tests.CreateTestServerParams()
-		server, _, kvDB := serverutils.StartServer(t, params)
+		server, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		})
 		defer server.Stopper().Stop(context.Background())
 
 		scanner := rangedesc.NewScanner(kvDB)
@@ -185,8 +189,9 @@ func TestIterator(t *testing.T) {
 	ctx := context.Background()
 	for _, s := range splits {
 		t.Run(fmt.Sprintf("with-splits-at=%s", s), func(t *testing.T) {
-			params, _ := tests.CreateTestServerParams()
-			server, _, kvDB := serverutils.StartServer(t, params)
+			server, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			})
 			defer server.Stopper().Stop(context.Background())
 
 			for _, split := range s {

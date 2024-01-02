@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
@@ -202,6 +203,15 @@ func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData)
 	}
 }
 
+var ieRowsAffectedRetryLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.internal_executor.rows_affected_retry_limit",
+	"limit on the number of retries that can be transparently performed "+
+		"by the InternalExecutor's Exec{Ex} methods",
+	5,
+	settings.NonNegativeInt,
+)
+
 func (ie *InternalExecutor) runWithEx(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -219,7 +229,12 @@ func (ie *InternalExecutor) runWithEx(
 	}
 	wg.Add(1)
 	go func() {
-		if err := ex.run(ctx, ie.mon, &mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
+		if err := ex.run(
+			ctx,
+			ie.mon,
+			&mon.BoundAccount{}, /*reserved*/
+			nil,                 /* cancel */
+		); err != nil {
 			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
 			errCallback(err)
 		}
@@ -258,11 +273,12 @@ func (ie *InternalExecutor) initConnEx(
 		w:    w,
 		mode: mode,
 		sync: syncCallback,
-		resetRowsAffected: func() {
-			var zero int
-			_ = w.addResult(ctx, ieIteratorResult{rowsAffected: &zero})
-		},
 	}
+	clientComm.rowsAffectedState.rewind = func() {
+		var zero int
+		_ = w.addResult(ctx, ieIteratorResult{rowsAffected: &zero})
+	}
+	clientComm.rowsAffectedState.numRewindsLimit = ieRowsAffectedRetryLimit.Get(&ie.s.cfg.Settings.SV)
 
 	applicationStats := ie.s.sqlStats.GetApplicationStats(sd.ApplicationName, true /* internal */)
 	sds := sessiondata.NewStack(sd)
@@ -273,6 +289,14 @@ func (ie *InternalExecutor) initConnEx(
 	var ex *connExecutor
 	var err error
 	if txn == nil {
+		postSetupFn := func(ex *connExecutor) {
+			// Inject any synthetic descriptors into the internal
+			// executor after its created
+			if ie.syntheticDescriptors != nil {
+				ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
+				ex.extraTxnState.shouldResetSyntheticDescriptors = true
+			}
+		}
 		ex = ie.s.newConnExecutor(
 			ctx,
 			sdMutIterator,
@@ -281,7 +305,8 @@ func (ie *InternalExecutor) initConnEx(
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
 			applicationStats,
-			nil, /* postSetupFn */
+			ie.s.cfg.GenerateID(),
+			postSetupFn,
 		)
 	} else {
 		ex, err = ie.newConnExecutorWithTxn(
@@ -357,6 +382,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		ie.memMetrics,
 		&ie.s.InternalMetrics,
 		applicationStats,
+		ie.s.cfg.GenerateID(),
 		postSetupFn,
 	)
 
@@ -397,6 +423,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		ex.transitionCtx,
 		ex.QualityOfService(),
 		isolation.Serializable,
+		txn.GetOmitInRangefeeds(),
 	)
 
 	// Modify the Collection to match the parent executor's Collection.
@@ -418,6 +445,10 @@ type ieIteratorResult struct {
 
 type rowsIterator struct {
 	r ieResultReader
+
+	// depth tracks the current depth of recursion in Next(). Once it exceeds
+	// iteratorDepthLimit, an error is returned to prevent stack overflow.
+	depth int64
 
 	rowsAffected int
 	resultCols   colinfo.ResultColumns
@@ -454,6 +485,13 @@ type rowsIterator struct {
 var _ isql.Rows = &rowsIterator{}
 var _ eval.InternalRows = &rowsIterator{}
 
+// iteratorDepthLimit is maximum allowed depth of recursion in Next(). It is set
+// to be sufficiently large to not matter under normal circumstances while
+// preventing the possibility of the stack overflow (as we've seen in #109197).
+const iteratorDepthLimit = 1000
+
+var iteratorDepthLimitExceededErr = errors.New("rowsIterator exceeded recursion depth limit")
+
 func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
 	// Due to recursive calls to Next() below, this deferred function might get
 	// executed multiple times, yet it is not a problem because Close() is
@@ -471,7 +509,15 @@ func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
 			r.errCallback = nil
 		}
 		retErr = r.lastErr
+		r.depth--
 	}()
+
+	r.depth++
+	if r.depth > iteratorDepthLimit {
+		r.lastErr = iteratorDepthLimitExceededErr
+		r.done = true
+		return false, r.lastErr
+	}
 
 	if r.done {
 		return false, r.lastErr
@@ -1298,11 +1344,20 @@ type internalClientComm struct {
 	// mode determines how the results of the query execution are consumed.
 	mode ieExecutionMode
 
-	// resetRowsAffected is a callback that sends a single ieIteratorResult
-	// object to w in order to set the number of rows affected to zero. Only
-	// used in rowsAffectedIEExecutionMode when discarding a result (indicating
-	// that a command will be retried).
-	resetRowsAffected func()
+	// rowsAffectedState is only used in rowsAffectedIEExecutionMode.
+	rowsAffectedState struct {
+		// rewind is a callback that sends a single ieIteratorResult object to w
+		// in order to set the number of rows affected to zero. Used when
+		// discarding a result (indicating that a command will be retried).
+		rewind func()
+		// numRewinds tracks the number of times rewind() has been called.
+		numRewinds int64
+		// numRewindsLimit is the limit on the number of times we will perform
+		// the transparent retry. Once numRewinds reaches numRewindsLimit, the
+		// internal executor machinery will no longer retry and, instead, will
+		// return the error to the client.
+		numRewindsLimit int64
+	}
 
 	// sync, if set, is called whenever a Sync is executed with all accumulated
 	// results since the last Sync.
@@ -1342,7 +1397,8 @@ func (icc *internalClientComm) createRes(pos CmdPos) *streamingCommandResult {
 			// "finalized").
 			icc.results = icc.results[:len(icc.results)-1]
 			if icc.mode == rowsAffectedIEExecutionMode {
-				icc.resetRowsAffected()
+				icc.rowsAffectedState.numRewinds++
+				icc.rowsAffectedState.rewind()
 			}
 		},
 	}
@@ -1439,12 +1495,18 @@ func (icc *internalClientComm) Close() {}
 
 // ClientPos is part of the ClientLock interface.
 func (icc *internalClientComm) ClientPos() CmdPos {
-	if icc.mode == rowsAffectedIEExecutionMode {
+	if icc.mode == rowsAffectedIEExecutionMode &&
+		icc.rowsAffectedState.numRewinds < icc.rowsAffectedState.numRewindsLimit {
 		// With the "rows affected" mode, any command can be rewound since we
 		// assume that only a single command results in actual "rows affected",
 		// and in Discard we will reset the number to zero (if we were in
 		// process of evaluation that command when we encountered the retry
 		// error).
+		//
+		// However, to prevent stack overflow due to large (infinite?) number of
+		// retries we also need to check that we haven't reached the limit yet.
+		// If we have, then we fall back to the general logic below of
+		// determining whether we can retry.
 		return -1
 	}
 	// Find the latest result that cannot be rewound.
@@ -1688,27 +1750,35 @@ func (ief *InternalDB) txn(
 		modifiedDescriptors []lease.IDVersion,
 		deletedDescs catalog.DescriptorIDSet,
 	) error {
+		// No descriptors to wait for.
+		if len(modifiedDescriptors) == 0 && deletedDescs.Len() == 0 {
+			return nil
+		}
 		retryOpts := retry.Options{
 			InitialBackoff: time.Millisecond,
 			Multiplier:     1.5,
 			MaxBackoff:     time.Second,
 		}
 		lm := ief.server.cfg.LeaseManager
+		cachedRegions, err := regions.NewCachedDatabaseRegions(ctx, ief.server.cfg.DB, ief.server.cfg.LeaseManager)
+		if err != nil {
+			return err
+		}
 		for _, ld := range modifiedDescriptors {
 			if deletedDescs.Contains(ld.ID) { // we'll wait below
 				continue
 			}
-			_, err := lm.WaitForOneVersion(ctx, ld.ID, retryOpts)
+			_, err := lm.WaitForOneVersion(ctx, ld.ID, cachedRegions, retryOpts)
 			// If the descriptor has been deleted, just wait for leases to drain.
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
-				err = lm.WaitForNoVersion(ctx, ld.ID, retryOpts)
+				err = lm.WaitForNoVersion(ctx, ld.ID, cachedRegions, retryOpts)
 			}
 			if err != nil {
 				return err
 			}
 		}
 		for _, id := range deletedDescs.Ordered() {
-			if err := lm.WaitForNoVersion(ctx, id, retryOpts); err != nil {
+			if err := lm.WaitForNoVersion(ctx, id, cachedRegions, retryOpts); err != nil {
 				return err
 			}
 		}
@@ -1757,8 +1827,14 @@ func (ief *InternalDB) txn(
 			if err != nil {
 				return err
 			}
+			// We check this testing condition here since a retry cannot be generated
+			// after a successful commit. Since we commit below, this is our last
+			// chance to generate a retry for users of (*InternalDB).Txn.
+			if kvTxn.TestingShouldRetry() {
+				return kvTxn.GenerateForcedRetryableErr(ctx, "injected retriable error")
+			}
 			return commitTxnFn(ctx)
-		}); descs.IsTwoVersionInvariantViolationError(err) {
+		}); errIsRetriable(err) {
 			continue
 		} else {
 			if err == nil {

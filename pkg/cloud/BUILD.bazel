@@ -1,5 +1,4 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "cloud",
@@ -37,4 +36,17 @@ go_library(
     ],
 )
 
-get_x_data(name = "get_x_data")
+go_test(
+    name = "cloud_test",
+    srcs = [
+        "cloud_io_test.go",
+        "uris_test.go",
+    ],
+    embed = [":cloud"],
+    deps = [
+        "//pkg/cloud/cloudpb",
+        "//pkg/util/ioctx",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

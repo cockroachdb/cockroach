@@ -34,9 +34,9 @@ func newCDCFunctionResolver(wrapped tree.FunctionReferenceResolver) tree.Functio
 
 // ResolveFunction implements FunctionReferenceResolver interface.
 func (rs *cdcFunctionResolver) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	fn, err := name.ToFunctionName()
+	fn, err := name.UnresolvedName().ToRoutineName()
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (rs *cdcFunctionResolver) ResolveFunction(
 // ResolveFunctionByOID implements FunctionReferenceResolver interface.
 func (rs *cdcFunctionResolver) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (*tree.FunctionName, *tree.Overload, error) {
+) (*tree.RoutineName, *tree.Overload, error) {
 	fnName, overload, err := rs.wrapped.ResolveFunctionByOID(ctx, oid)
 	if err != nil {
 		return nil, nil, err

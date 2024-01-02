@@ -24,6 +24,7 @@ query TT colnames
 SELECT *
 FROM [SHOW ALL]
 WHERE variable NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled', 'direct_columnar_scans_enabled', 'multiple_active_portals_enabled')
+ORDER BY variable
 ----
 variable                                                   value
 allow_ordinal_column_references                            off
@@ -38,6 +39,8 @@ client_encoding                                            UTF8
 client_min_messages                                        notice
 copy_from_atomic_enabled                                   on
 copy_from_retries_enabled                                  on
+copy_transaction_quality_of_service                        background
+copy_write_pipelining_enabled                              off
 cost_scans_with_default_col_size                           off
 database                                                   test
 datestyle                                                  ISO, MDY
@@ -53,28 +56,31 @@ default_transaction_read_only                              off
 default_transaction_use_follower_reads                     off
 default_with_oids                                          off
 descriptor_validation                                      on
+disable_changefeed_replication                             off
 disable_hoist_projection_in_join_limitation                off
 disable_partially_distributed_plans                        off
 disable_plan_gists                                         off
 disallow_full_table_scans                                  off
 distsql                                                    off
+distsql_plan_gateway_bias                                  2
 enable_auto_rehoming                                       off
 enable_create_stats_using_extremes                         off
+enable_durable_locking_for_serializable                    off
 enable_experimental_alter_column_type_general              off
+enable_implicit_fk_locking_for_serializable                off
 enable_implicit_select_for_update                          on
 enable_implicit_transaction_for_batch_statements           on
 enable_insert_fast_path                                    on
 enable_multiple_modifications_of_table                     off
 enable_multiregion_placement_policy                        off
 enable_seqscan                                             on
+enable_shared_locking_for_serializable                     off
 enable_super_regions                                       off
-enable_zigzag_join                                         on
+enable_zigzag_join                                         off
 enforce_home_region                                        off
 enforce_home_region_follower_reads_enabled                 off
 escape_string_warning                                      on
 expect_and_ignore_not_visible_columns_in_copy              off
-experimental_distsql_planning                              off
-experimental_enable_auto_rehoming                          off
 experimental_enable_implicit_column_partitioning           off
 experimental_enable_temp_tables                            off
 experimental_enable_unique_without_index_constraints       off
@@ -82,7 +88,6 @@ experimental_hash_group_join_enabled                       off
 extra_float_digits                                         1
 force_savepoint_restart                                    off
 foreign_key_cascades_limit                                 10000
-idle_in_session_timeout                                    0
 idle_in_transaction_session_timeout                        0
 idle_session_timeout                                       0
 index_join_streamer_batch_size                             8.0 MiB
@@ -106,8 +111,10 @@ locality                                                   region=test,dc=dc1
 locality_optimized_partitioned_index_scan                  on
 lock_timeout                                               0
 log_timezone                                               UTC
+max_connections                                            -1
 max_identifier_length                                      128
 max_index_keys                                             32
+max_retries_for_read_committed                             10
 node_id                                                    1
 null_ordered_last                                          off
 on_update_rehome_row_enabled                               on
@@ -118,10 +125,13 @@ optimizer_use_forecasts                                    on
 optimizer_use_histograms                                   on
 optimizer_use_improved_computed_column_filters_derivation  on
 optimizer_use_improved_disjunction_stats                   on
+optimizer_use_improved_join_elimination                    on
 optimizer_use_improved_split_disjunction_for_joins         on
 optimizer_use_limit_ordering_for_streaming_group_by        on
+optimizer_use_lock_op_for_serializable                     off
 optimizer_use_multicol_stats                               on
 optimizer_use_not_visible_indexes                          off
+optimizer_use_provided_ordering_fix                        on
 override_multi_region_zone_config                          off
 parallelize_multi_key_lookup_joins_enabled                 off
 password_encryption                                        scram-sha-256
@@ -139,12 +149,17 @@ serial_normalization                                       rowid
 server_encoding                                            UTF8
 server_version                                             13.0.0
 server_version_num                                         130000
-session_user                                               root
 show_primary_key_constraint_on_not_visible_columns         on
 sql_safe_updates                                           off
+ssl                                                        on
 standard_conforming_strings                                on
 statement_timeout                                          0
+streamer_always_maintain_ordering                          off
 streamer_enabled                                           on
+streamer_head_of_line_only_fraction                        0.8
+streamer_in_order_eager_memory_usage_fraction              0.5
+streamer_out_of_order_eager_memory_usage_fraction          0.8
+strict_ddl_atomicity                                       off
 stub_catalog_tables                                        on
 synchronize_seqscans                                       on
 synchronous_commit                                         on
@@ -179,23 +194,21 @@ SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
 sql.defaults.distsql
 off
 
-query TTTBT colnames
-SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+query TTTBTTT colnames
+SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE 'cluster%label'
 ----
-variable              value  setting_type  public  description
-cluster.organization  ·      s             true    organization name
+variable       value  setting_type  public  description                       default_value  origin
+cluster.label  ·      s             false   cluster specific free-form label  ·              default
 
-query TTTT colnames
-SELECT * FROM [SHOW CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+query TTTTTT colnames
+SELECT * FROM [SHOW CLUSTER SETTINGS] WHERE variable LIKE 'cluster%label'
 ----
-variable              value  setting_type  description
-cluster.organization  ·      s             organization name
+variable  value  setting_type  description  default_value  origin
 
-query TTTT colnames
-SELECT * FROM [SHOW PUBLIC CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+query TTTTTT colnames
+SELECT * FROM [SHOW PUBLIC CLUSTER SETTINGS] WHERE variable LIKE 'cluster%label'
 ----
-variable              value  setting_type  description
-cluster.organization  ·      s             organization name
+variable  value  setting_type  description  default_value  origin
 
 query T colnames
 SELECT * FROM [SHOW SESSION_USER]
@@ -219,7 +232,7 @@ SELECT * FROM [SHOW ZONE CONFIGURATION FOR TABLE system.users] LIMIT 0
 ----
 target  raw_config_sql
 
-query TTTTTT colnames
+query TTTTTT colnames,rowsort
 SHOW DATABASES
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal
@@ -235,7 +248,7 @@ database_name  schema_name  table_name  grantee  privilege_type  is_grantable
 system         public       descriptor  admin    SELECT          true
 system         public       descriptor  root     SELECT          true
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SELECT * FROM [SHOW INDEX FROM system.descriptor]
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -248,7 +261,7 @@ SELECT * FROM [SHOW CONSTRAINT FROM system.descriptor]
 table_name  constraint_name  constraint_type  details               validated
 descriptor  primary          PRIMARY KEY      PRIMARY KEY (id ASC)  true
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SELECT * FROM [SHOW KEYS FROM system.descriptor]
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -260,12 +273,12 @@ SELECT * FROM [SHOW SCHEMAS FROM system]
 ----
 schema_name         owner
 public              admin
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
+crdb_internal       node
+pg_extension        node
+pg_catalog          node
+information_schema  node
 
-query TT colnames
+query TT colnames,rowsort
 SELECT * FROM [SHOW SEQUENCES FROM system]
 ----
 sequence_schema  sequence_name
@@ -290,11 +303,13 @@ public       join_tokens                      table     node   NULL
 public       lease                            table     node   NULL
 public       locations                        table     node   NULL
 public       migrations                       table     node   NULL
+public       mvcc_statistics                  table     node   NULL
 public       namespace                        table     node   NULL
 public       privileges                       table     node   NULL
 public       protected_ts_meta                table     node   NULL
 public       protected_ts_records             table     node   NULL
 public       rangelog                         table     node   NULL
+public       region_liveness                  table     node   NULL
 public       replication_constraint_stats     table     node   NULL
 public       replication_critical_localities  table     node   NULL
 public       replication_stats                table     node   NULL
@@ -315,6 +330,7 @@ public       statement_activity               table     node   NULL
 public       statement_bundle_chunks          table     node   NULL
 public       statement_diagnostics            table     node   NULL
 public       statement_diagnostics_requests   table     node   NULL
+public       statement_execution_insights     table     node   NULL
 public       statement_statistics             table     node   NULL
 public       table_statistics                 table     node   NULL
 public       task_payloads                    table     node   NULL
@@ -324,6 +340,7 @@ public       tenant_tasks                     table     node   NULL
 public       tenant_usage                     table     node   NULL
 public       tenants                          table     node   NULL
 public       transaction_activity             table     node   NULL
+public       transaction_execution_insights   table     node   NULL
 public       transaction_statistics           table     node   NULL
 public       ui                               table     node   NULL
 public       users                            table     node   NULL
@@ -347,11 +364,13 @@ public       join_tokens                      table     node   NULL      ·
 public       lease                            table     node   NULL      ·
 public       locations                        table     node   NULL      ·
 public       migrations                       table     node   NULL      ·
+public       mvcc_statistics                  table     node   NULL      ·
 public       namespace                        table     node   NULL      ·
 public       privileges                       table     node   NULL      ·
 public       protected_ts_meta                table     node   NULL      ·
 public       protected_ts_records             table     node   NULL      ·
 public       rangelog                         table     node   NULL      ·
+public       region_liveness                  table     node   NULL      ·
 public       replication_constraint_stats     table     node   NULL      ·
 public       replication_critical_localities  table     node   NULL      ·
 public       replication_stats                table     node   NULL      ·
@@ -372,6 +391,7 @@ public       statement_activity               table     node   NULL      ·
 public       statement_bundle_chunks          table     node   NULL      ·
 public       statement_diagnostics            table     node   NULL      ·
 public       statement_diagnostics_requests   table     node   NULL      ·
+public       statement_execution_insights     table     node   NULL      ·
 public       statement_statistics             table     node   NULL      ·
 public       table_statistics                 table     node   NULL      ·
 public       task_payloads                    table     node   NULL      ·
@@ -381,6 +401,7 @@ public       tenant_tasks                     table     node   NULL      ·
 public       tenant_usage                     table     node   NULL      ·
 public       tenants                          table     node   NULL      ·
 public       transaction_activity             table     node   NULL      ·
+public       transaction_execution_insights   table     node   NULL      ·
 public       transaction_statistics           table     node   NULL      ·
 public       ui                               table     node   NULL      ·
 public       users                            table     node   NULL      ·
@@ -412,10 +433,10 @@ SELECT * FROM [SHOW SCHEMAS]
 ----
 schema_name         owner
 public              admin
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
+crdb_internal       node
+pg_extension        node
+pg_catalog          node
+information_schema  node
 
 query TTTTIT colnames
 CREATE TABLE foo(x INT); SELECT * FROM [SHOW TABLES]
@@ -492,7 +513,7 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM CURRENT_CATALOG WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
-/Table/62  /Max     {1}       1
+/Table/65  /Max     {1}       1
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE system.descriptor WITH DETAILS]
@@ -526,6 +547,7 @@ job_id  job_type  description  statement  user_name  status  running_status  cre
 
 query TT colnames
 SELECT * FROM [SHOW SYNTAX 'select 1; select 2']
+ORDER BY message
 ----
 field  message
 sql    SELECT 1
@@ -535,14 +557,15 @@ sql    SELECT 2
 # here because that is highly likely to change as code is edited.
 query TT colnames
 SELECT field, replace(message, e'\n', ' ') AS message FROM [SHOW SYNTAX 'foo']
- WHERE field != 'line'
+WHERE field != 'line'
+ORDER BY field
 ----
 field     message
-error     at or near "foo": syntax error
 code      42601
+detail    source SQL: foo ^
+error     at or near "foo": syntax error
 file      lexer.go
 function  Error
-detail    source SQL: foo ^
 
 # Test the SHOW TRANSFER STATE statement.
 statement error pgcode 0A000 cannot use SHOW TRANSFER STATE as a statement source
@@ -561,7 +584,7 @@ CREATE TABLE showdbindexestest.table1 (key1 INT PRIMARY KEY);
 statement ok
 CREATE TABLE showdbindexestest.table2 (key2 INT PRIMARY KEY);
 
-query TTTBITTTBBBF
+query TTTBITTTBBBF rowsort
 SHOW INDEXES FROM DATABASE showdbindexestest;
 ----
 table1  table1_pkey  public  false  1  key1  key1  ASC  false  false  true  1
@@ -576,7 +599,7 @@ CREATE TABLE "$peci@l".table1 (key1 INT PRIMARY KEY);
 statement ok
 CREATE TABLE "$peci@l".table2 (key2 INT PRIMARY KEY);
 
-query TTTBITTTBBBF
+query TTTBITTTBBBF rowsort
 SHOW INDEXES FROM DATABASE "$peci@l";
 ----
 table1  table1_pkey  public  false  1  key1  key1  ASC  false  false  true  1
@@ -652,7 +675,7 @@ CREATE TABLE t (
 COMMENT ON COLUMN t.z IS 'comm"en"t2';
 COMMENT ON INDEX t@i2 IS 'comm''ent3'
 
-query TTBITTTBBBFT
+query TTBITTTBBBFT rowsort
 SHOW INDEXES FROM t WITH COMMENT
 ----
 t  i1      true   1  x      x      ASC  false  false  true  1  NULL
@@ -666,7 +689,7 @@ t  t_pkey  false  2  x      x      N/A  true   false  true  1  NULL
 t  t_pkey  false  3  y      y      N/A  true   false  true  1  NULL
 t  t_pkey  false  4  z      z      N/A  true   false  true  1  NULL
 
-query TTBITTTBBBFT
+query TTBITTTBBBFT rowsort
 SHOW INDEXES FROM t2 WITH COMMENT
 ----
 t2  i1       true   1  x      x      ASC  false  false  true  1  NULL
@@ -679,3 +702,23 @@ t2  t2_pkey  false  1  rowid  rowid  ASC  false  false  true  1  NULL
 t2  t2_pkey  false  2  x      x      N/A  true   false  true  1  NULL
 t2  t2_pkey  false  3  y      y      N/A  true   false  true  1  NULL
 t2  t2_pkey  false  4  z      z      N/A  true   false  true  1  NULL
+
+subtest show_timezones
+
+statement ok
+SET TIME ZONE 'EST'
+
+query B
+SELECT session_start::STRING LIKE '%-05' FROM [SHOW SESSIONS] WHERE status = 'ACTIVE'
+----
+true
+
+query B
+SELECT start::STRING LIKE '%-05' FROM [SHOW QUERIES] WHERE phase = 'executing'
+----
+true
+
+statement ok
+RESET TIME ZONE
+
+subtest end

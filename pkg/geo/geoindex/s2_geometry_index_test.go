@@ -13,10 +13,12 @@ package geoindex
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -32,6 +34,16 @@ func TestS2GeometryIndexBasic(t *testing.T) {
 	var index GeometryIndex
 	shapes := make(map[string]geo.Geometry)
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "s2_geometry"), func(t *testing.T, d *datadriven.TestData) string {
+		skipARM64 := false
+		for _, arg := range d.CmdArgs {
+			switch arg.Key {
+			case "skip-arm64":
+				skipARM64 = true
+			}
+		}
+		if skipARM64 && runtime.GOARCH == "arm64" {
+			return d.Expected
+		}
 		switch d.Cmd {
 		case "init":
 			cfg := s2Config(t, d)
@@ -40,7 +52,7 @@ func TestS2GeometryIndexBasic(t *testing.T) {
 			d.ScanArgs(t, "miny", &minY)
 			d.ScanArgs(t, "maxx", &maxX)
 			d.ScanArgs(t, "maxy", &maxY)
-			index = NewS2GeometryIndex(S2GeometryConfig{
+			index = NewS2GeometryIndex(geopb.S2GeometryConfig{
 				MinX:     float64(minX),
 				MinY:     float64(minY),
 				MaxX:     float64(maxX),

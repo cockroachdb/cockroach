@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s2"
-	"github.com/twpayne/go-geom"
+	geom "github.com/twpayne/go-geom"
 )
 
 // CartesianBoundingBox is the cartesian BoundingBox representation,
@@ -71,28 +71,30 @@ func ParseCartesianBoundingBox(s string) (CartesianBoundingBox, error) {
 
 // Compare returns the comparison between two bounding boxes.
 // Compare lower dimensions before higher ones, i.e. X, then Y.
+// In SQL, NaN is treated as less than all other float values. In Go, any
+// comparison with NaN returns false.
 func (b *CartesianBoundingBox) Compare(o *CartesianBoundingBox) int {
-	if b.LoX < o.LoX {
+	if b.LoX < o.LoX || (math.IsNaN(b.LoX) && !math.IsNaN(o.LoX)) {
 		return -1
-	} else if b.LoX > o.LoX {
+	} else if b.LoX > o.LoX || (!math.IsNaN(b.LoX) && math.IsNaN(o.LoX)) {
 		return 1
 	}
 
-	if b.HiX < o.HiX {
+	if b.HiX < o.HiX || (math.IsNaN(b.HiX) && !math.IsNaN(o.HiX)) {
 		return -1
-	} else if b.HiX > o.HiX {
+	} else if b.HiX > o.HiX || (!math.IsNaN(b.HiX) && math.IsNaN(o.HiX)) {
 		return 1
 	}
 
-	if b.LoY < o.LoY {
+	if b.LoY < o.LoY || (math.IsNaN(b.LoY) && !math.IsNaN(o.LoY)) {
 		return -1
-	} else if b.LoY > o.LoY {
+	} else if b.LoY > o.LoY || (!math.IsNaN(b.LoY) && math.IsNaN(o.LoY)) {
 		return 1
 	}
 
-	if b.HiY < o.HiY {
+	if b.HiY < o.HiY || (math.IsNaN(b.HiY) && !math.IsNaN(o.HiY)) {
 		return -1
-	} else if b.HiY > o.HiY {
+	} else if b.HiY > o.HiY || (!math.IsNaN(b.HiY) && math.IsNaN(o.HiY)) {
 		return 1
 	}
 

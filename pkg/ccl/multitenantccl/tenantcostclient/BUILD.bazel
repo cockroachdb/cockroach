@@ -1,10 +1,10 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "tenantcostclient",
     srcs = [
         "limiter.go",
+        "metrics.go",
         "tenant_side.go",
         "test_utils.go",
         "token_bucket.go",
@@ -21,8 +21,10 @@ go_library(
         "//pkg/server",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/execinfra",
         "//pkg/sql/sqlliveness",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/quotapool",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
@@ -43,7 +45,6 @@ go_test(
         "tenant_side_test.go",
         "token_bucket_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":tenantcostclient"],
     tags = [
@@ -64,6 +65,7 @@ go_test(
         "//pkg/keys",
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver",
         "//pkg/multitenant",
         "//pkg/multitenant/multitenantio",
         "//pkg/multitenant/tenantcostmodel",
@@ -72,11 +74,13 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/distsql",
         "//pkg/sql/execinfra",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slinstance",
         "//pkg/sql/stats",
@@ -90,6 +94,7 @@ go_test(
         "//pkg/util/ioctx",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/stop",
@@ -101,5 +106,3 @@ go_test(
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
-
-get_x_data(name = "get_x_data")

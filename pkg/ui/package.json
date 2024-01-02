@@ -4,7 +4,439 @@
   "private": true,
   "repository": "github.com/cockroachdb/cockroach",
   "license": "MIT",
-  "scripts": {
-    "postinstall": "./not-yarn-workspace.sh"
+  "engines": {
+    "pnpm": ">=8.6.10"
+  },
+  "pnpm": {
+    "neverBuiltDependencies": [
+      "contextify"
+    ],
+    "packageExtensions": {
+      "// meta": [
+        "Comment markers (like the '// meta' object you're currently reading)",
+        "must be unique within the 'packageExtensions' object, or the next",
+        "'pnpm' command that changes this file will remove all duplicate keys."
+      ],
+      "// dev+peer": [
+        "pnpm marks a dev+peer dependency as a regular 'dependency' in its",
+        "lockfile. That leaves rules_js unable to determine whether to expose",
+        "that dependency to its consumer, for some reason.",
+        "These would typically be dev+peer dependencies in their package.json",
+        "but are only listed in peerDependencies with an augmentation here.",
+        "See: https://github.com/aspect-build/rules_js/issues/1092#issuecomment-1629819833"
+      ],
+      "@cockroachlabs/crdb-protobuf-client@*": {
+        "devDependencies": {
+          "protobufjs": "6.8.6"
+        }
+      },
+      "@cockroachlabs/crdb-protobuf-client-ccl@*": {
+        "devDependencies": {
+          "protobufjs": "6.8.6"
+        }
+      },
+      "@cockroachlabs/eslint-plugin-crdb@*": {
+        "devDependencies": {
+          "@typescript-eslint/parser": "^5.26.0",
+          "@typescript-eslint/utils": "^5.26.0"
+        }
+      },
+      "@cockroachlabs/cluster-ui@*": {
+        "devDependencies": {
+          "protobufjs": "6.x",
+          "react": "16.12.0",
+          "react-dom": "16.12.0",
+          "react-router-dom": "^5.3.1",
+          "react-redux": "^7.2.4",
+          "redux": "^4.1.0",
+          "redux-saga": "1.1.3"
+        }
+      },
+      "// rc-* deps": [
+        "The old copies of rc-* that antd requires have phantom (undeclared)",
+        "dependencies on react and react-dom. Normally this could be handled",
+        "centrally with pnpm's public-hoist-pattern [1], but rules_js is firm",
+        "in its stance here [2]:",
+        "> rules_js does not and will not support pnpm 'phantom' hoisting which",
+        "> allows for packages to depend on undeclared dependencies. All",
+        "> dependencies between packages must be declared under rules_js in",
+        "> order to support lazy fetching and lazy linking of npm dependencies.",
+        "> If a 3rd party npm package is relying on 'phantom' dependencies to",
+        "> work, the recommended fix for rules_js is to use",
+        "> pnpm.packageExtensions in your package.json to add the missing",
+        "> dependencies or peerDependencies.",
+        "[1] https://pnpm.io/npmrc#public-hoist-pattern",
+        "[2] https://docs.aspect.build/rules/aspect_rules_js/docs/pnpm/#hoisting"
+      ],
+      "rc-align@2.4.5": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-animate@2.11.1": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-animate@3.1.1": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-calendar@9.15.11": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-cascader@0.17.5": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-checkbox@2.1.8": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-collapse@1.11.8": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-dialog@7.x": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-drawer@3.1.3": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-dropdown@2.4.1": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-editor-core@0.8.10": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-editor-mention@1.1.13": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-form@2.4.11": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-hammerjs@0.6.10": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-input-number@4.5.9": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-mentions@0.4.2": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-menu@7.5.5": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-notification@3.3.1": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-pagination@1.20.15": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-progress@2.5.3": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-rate@2.5.1": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-resize-observer@0.1.3": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-select@9.2.3": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-slider@8.7.1": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-steps@3.5.0": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-switch@1.9.2": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-table@6.x": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-tabs@9.x": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-time-picker@3.7.3": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-tooltip@3.7.3": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-tree-select@2.9.4": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-tree@2.1.4": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-trigger@2.6.5": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-trigger@3.0.0": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-upload@2.9.4": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rc-util@4.21.1": {
+        "peerDependencies": {
+          "react": "16.12.0",
+          "react-dom": "16.12.0"
+        }
+      },
+      "rmc-feedback@2.0.0": {
+        "peerDependencies": {
+          "react": "16.x",
+          "react-dom": "16.x"
+        }
+      },
+      "// more phantom deps": [
+        "Likewise, a few other packages have 'phantom' dependencies."
+      ],
+      "@storybook/builder-webpack4@6.3.1": {
+        "devDependencies": {
+          "react-dom": "16.12.0"
+        }
+      },
+      "antd@3.x": {
+        "peerDependencies": {
+          "@babel/runtime": "7.x",
+          "identity-obj-proxy": "3.x"
+        }
+      },
+      "create-react-class@15.7.0": {
+        "peerDependencies": {
+          "react": "16.x",
+          "react-dom": "16.x"
+        }
+      },
+      "jest-environment-enzyme@7.1.2": {
+        "peerDependencies": {
+          "enzyme-adapter-react-16": "1.x"
+        }
+      },
+      "mini-store@2.0.0": {
+        "peerDependencies": {
+          "react": "16.x"
+        }
+      },
+      "redux-saga-test-plan@4.0.0-beta.2": {
+        "peerDependencies": {
+          "@redux-saga/is": "1.x",
+          "@redux-saga/symbols": "1.x"
+        }
+      },
+      "stylus-loader@3.0.2": {
+        "peerDependencies": {
+          "webpack": "*"
+        }
+      },
+      "// babel transformations": [
+        "Babel transformation that occurs during Jest testing can result in",
+        "require('@babel/runtime') appearing in transpiled source. This is",
+        "technically a 'phantom' dependency as well, and must be declared here."
+      ],
+      "jest-enzyme@7.1.2": {
+        "peerDependencies": {
+          "@babel/runtime": "7.x"
+        }
+      },
+      "jest-runner@27.5.1": {
+        "peerDependencies": {
+          "@babel/runtime": "7.x"
+        }
+      },
+      "jest-environment-jsdom@27.5.1": {
+        "peerDependencies": {
+          "@babel/runtime": "7.x"
+        }
+      },
+      "enzyme-matchers@7.1.2": {
+        "peerDependencies": {
+          "@babel/runtime": "7.x"
+        }
+      },
+      "pretty-format@27.3.1": {
+        "peerDependencies": {
+          "@babel/runtime": "7.x"
+        }
+      },
+      "// protobufjs cliDependencies": [
+        "protobufjs@6 includes its CLI in a subdirectory. At startup, that CLI",
+        "reads its own package.json for a non-standard '.cliDependencies'",
+        "object, checks for their installation, and manually exec's",
+        "'npm install' to install them. That qualifies them as 'phantom'",
+        "dependencies"
+      ],
+      "protobufjs@6.8.6": {
+        "dependencies": {
+          "chalk": "^1.1.3",
+          "escodegen": "^1.9.0",
+          "espree": "^3.5.3",
+          "estraverse": "^4.2.0",
+          "glob": "^7.1.2",
+          "jsdoc": "^3.5.5",
+          "minimist": "^1.2.0",
+          "semver": "^5.5.0",
+          "tmp": "0.0.33",
+          "uglify-js": "^2.8.29"
+        }
+      },
+      "// @protobufjs/inquire hacks": [
+        "@protobufjs/inquire (used by protobufjs@6) uses eval() to require",
+        "packages while hiding them from bundlers. Since inquire is a separate",
+        "package from protobufjs and doesn't declare all of protobufjs'",
+        "direct dependencies, any call to inquire() for packages not provided",
+        "by the node stdlib is a 'phantom' dependency. Currently only 'long'",
+        "fits into this category."
+      ],
+      "@protobufjs/inquire@1.x": {
+        "dependencies": {
+          "long": "4.0.0"
+        }
+      }
+    },
+    "overrides": {
+      "@types/react": "16.14.8",
+      "@types/react-dom": "16.9.3",
+      "@typescript-eslint/eslint-plugin": "4.29.1",
+      "@typescript-eslint/parser": "4.29.1",
+      "aria-query": "5.0.1",
+      "chokidar": "3.5.2",
+      "antd>core-js": "2.6.12",
+      "csstype": "3.0.8",
+      "deep-extend": "0.5.1",
+      "elliptic": "6.5.4",
+      "es-abstract": "1.20.1",
+      "esbuild": "0.14.43",
+      "extend": "3.0.2",
+      "http-proxy": "1.18.1",
+      "jest-environment-jsdom": "27.5.1",
+      "lodash": "4.17.20",
+      "markdown-to-jsx": "6.11.4",
+      "node-fetch": "2.6.7",
+      "protobufjs": "6.8.6",
+      "react": "16.12.0",
+      "react-dom": "16.12.0",
+      "redux": "4.1.0",
+      "serialize-javascript": "3.1.0",
+      "ua-parser-js": "0.7.24",
+      "url-parse": "1.5.1",
+      "db-console>yargs-parser": "20.2.9",
+      "nwsapi": "2.2.0",
+      "@cockroachlabs/cluster-ui>yargs-parser": "13.1.2",
+      "@cockroachlabs/cluster-ui>antd": "3.26.20",
+      "analytics-node>axios-retry": "3.1.9"
+    },
+    "// patchedDependencies": {
+      "topojson@3.0.2": [
+        "topojson aliases related packages' bin entries as its own by assuming",
+        "'node_modules/related-pkg/bin/foo' exists. This is wholely",
+        "incompatible with pnpm and causes spurious warnings during"
+      ]
+    },
+    "patchedDependencies": {
+      "topojson@3.0.2": "patches/topojson@3.0.2.patch"
+    }
   }
 }

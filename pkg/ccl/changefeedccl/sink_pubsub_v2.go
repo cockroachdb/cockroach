@@ -20,14 +20,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/impersonate"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
 
@@ -45,12 +50,13 @@ func isPubsubSink(u *url.URL) bool {
 }
 
 type pubsubSinkClient struct {
-	ctx       context.Context
-	client    *pubsub.PublisherClient
-	projectID string
-	format    changefeedbase.FormatType
-	batchCfg  sinkBatchConfig
-	mu        struct {
+	ctx                    context.Context
+	client                 *pubsub.PublisherClient
+	projectID              string
+	format                 changefeedbase.FormatType
+	batchCfg               sinkBatchConfig
+	withTableNameAttribute bool
+	mu                     struct {
 		syncutil.RWMutex
 
 		// Topic creation errors may not be an actual issue unless the Publish call
@@ -73,6 +79,7 @@ func makePubsubSinkClient(
 	targets changefeedbase.Targets,
 	batchCfg sinkBatchConfig,
 	unordered bool,
+	withTableNameAttribute bool,
 	knobs *TestingKnobs,
 ) (SinkClient, error) {
 	if u.Scheme != GcpScheme {
@@ -117,25 +124,36 @@ func makePubsubSinkClient(
 	}
 
 	sinkClient := &pubsubSinkClient{
-		ctx:       ctx,
-		format:    formatType,
-		client:    publisherClient,
-		batchCfg:  batchCfg,
-		projectID: projectID,
+		ctx:                    ctx,
+		format:                 formatType,
+		client:                 publisherClient,
+		batchCfg:               batchCfg,
+		projectID:              projectID,
+		withTableNameAttribute: withTableNameAttribute,
 	}
 	sinkClient.mu.topicCache = make(map[string]struct{})
 
 	return sinkClient, nil
 }
 
-// MakeResolvedPayload implements the SinkClient interface
-func (sc *pubsubSinkClient) MakeResolvedPayload(body []byte, topic string) (SinkPayload, error) {
-	return &pb.PublishRequest{
-		Topic: sc.gcPubsubTopic(topic),
-		Messages: []*pb.PubsubMessage{{
-			Data: body,
-		}},
-	}, nil
+// FlushResolvedPayload implements the SinkClient interface.
+func (sc *pubsubSinkClient) FlushResolvedPayload(
+	ctx context.Context,
+	body []byte,
+	forEachTopic func(func(topic string) error) error,
+	retryOpts retry.Options,
+) error {
+	return forEachTopic(func(topic string) error {
+		pl := &pb.PublishRequest{
+			Topic: sc.gcPubsubTopic(topic),
+			Messages: []*pb.PubsubMessage{{
+				Data: body,
+			}},
+		}
+		return retry.WithMaxAttempts(ctx, retryOpts, retryOpts.MaxRetries+1, func() error {
+			return sc.Flush(ctx, pl)
+		})
+	})
 }
 
 func (sc *pubsubSinkClient) maybeCreateTopic(topic string) error {
@@ -198,12 +216,16 @@ type pubsubBuffer struct {
 	topicEncoded []byte
 	messages     []*pb.PubsubMessage
 	numBytes     int
+	// Cache for attributes which are sent along with each message.
+	// This lets us re-use expensive map allocs for messages in the batch
+	// with the same attributes.
+	attributesCache map[attributes]map[string]string
 }
 
 var _ BatchBuffer = (*pubsubBuffer)(nil)
 
 // Append implements the BatchBuffer interface
-func (psb *pubsubBuffer) Append(key []byte, value []byte) {
+func (psb *pubsubBuffer) Append(key []byte, value []byte, attributes attributes) {
 	var content []byte
 	switch psb.sc.format {
 	case changefeedbase.OptFormatJSON:
@@ -222,7 +244,15 @@ func (psb *pubsubBuffer) Append(key []byte, value []byte) {
 		content = value
 	}
 
-	psb.messages = append(psb.messages, &pb.PubsubMessage{Data: content})
+	msg := &pb.PubsubMessage{Data: content}
+	if psb.sc.withTableNameAttribute {
+		if _, ok := psb.attributesCache[attributes]; !ok {
+			psb.attributesCache[attributes] = map[string]string{"TABLE_NAME": attributes.tableName}
+		}
+		msg.Attributes = psb.attributesCache[attributes]
+	}
+
+	psb.messages = append(psb.messages, msg)
 	psb.numBytes += len(content)
 }
 
@@ -243,12 +273,16 @@ func (psb *pubsubBuffer) ShouldFlush() bool {
 func (sc *pubsubSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
 	var topicBuffer bytes.Buffer
 	json.FromString(topic).Format(&topicBuffer)
-	return &pubsubBuffer{
+	psb := &pubsubBuffer{
 		sc:           sc,
 		topic:        topic,
 		topicEncoded: topicBuffer.Bytes(),
 		messages:     make([]*pb.PubsubMessage, 0, sc.batchCfg.Messages),
 	}
+	if sc.withTableNameAttribute {
+		psb.attributesCache = make(map[attributes]map[string]string)
+	}
+	return psb
 }
 
 // Close implements the SinkClient interface
@@ -279,11 +313,19 @@ func makePublisherClient(
 		return nil, err
 	}
 
-	client, err := pubsub.NewPublisherClient(
-		ctx,
-		option.WithEndpoint(endpoint),
-		creds,
-	)
+	opts := []option.ClientOption{creds, option.WithEndpoint(endpoint)}
+
+	// See https://pkg.go.dev/cloud.google.com/go/pubsub#hdr-Emulator for emulator information.
+	if addr, _ := envutil.ExternalEnvString("PUBSUB_EMULATOR_HOST", 1); addr != "" {
+		log.Infof(ctx, "Establishing connection to pubsub emulator at %s", addr)
+		conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			return nil, errors.Newf("grpc.Dial: %w", err)
+		}
+		opts = append(opts, option.WithGRPCConn(conn), option.WithTelemetryDisabled())
+	}
+
+	client, err := pubsub.NewPublisherClient(ctx, opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "opening client")
 	}
@@ -392,12 +434,18 @@ func makePubsubSink(
 		return nil, err
 	}
 
-	sinkClient, err := makePubsubSinkClient(ctx, u, encodingOpts, targets, batchCfg, unordered, knobs)
+	pubsubURL := sinkURL{URL: u, q: u.Query()}
+	var includeTableNameAttribute bool
+	_, err = pubsubURL.consumeBool(changefeedbase.SinkParamTableNameAttribute, &includeTableNameAttribute)
+	if err != nil {
+		return nil, err
+	}
+	sinkClient, err := makePubsubSinkClient(ctx, u, encodingOpts, targets, batchCfg, unordered,
+		includeTableNameAttribute, knobs)
 	if err != nil {
 		return nil, err
 	}
 
-	pubsubURL := sinkURL{URL: u, q: u.Query()}
 	pubsubTopicName := pubsubURL.consumeParam(changefeedbase.SinkParamTopicName)
 	topicNamer, err := MakeTopicNamer(targets, WithSingleName(pubsubTopicName))
 	if err != nil {

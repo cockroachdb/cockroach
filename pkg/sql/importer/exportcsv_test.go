@@ -19,7 +19,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,9 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -41,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -64,17 +64,14 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	tc := testcluster.StartTestCluster(t, nodes,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				// Disabled due to underlying tests' use of SCATTER.
-				DefaultTestTenant:  base.TestTenantDisabled,
-				ExternalIODir:      dir,
-				UseDatabase:        "test",
-				DisableSpanConfigs: true,
+				ExternalIODir: dir,
 			},
 		},
 	)
-	conn := tc.Conns[0]
+	s := tc.ApplicationLayer(0)
+	tenantSettings := s.ClusterSettings()
+	conn := s.SQLConn(t, serverutils.DBName("defaultdb"))
 	db := sqlutils.MakeSQLRunner(conn)
-	db.Exec(t, "CREATE DATABASE test")
 
 	wk := bank.FromRows(rows)
 	l := workloadsql.InsertsDataLoader{BatchSize: 100, Concurrency: 3}
@@ -83,13 +80,12 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	}
 
 	config.TestingSetupZoneConfigHook(tc.Stopper())
-	s := tc.Servers[0]
-	idgen := descidgen.NewGenerator(s.ClusterSettings(), keys.SystemSQLCodec, s.DB())
-	v, err := idgen.PeekNextUniqueDescID(context.Background())
-
+	idgen := descidgen.NewGenerator(tenantSettings, s.Codec(), s.DB())
+	v, err := idgen.PeekNextUniqueDescID(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	last := config.ObjectID(v)
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(5000)
@@ -106,6 +102,8 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 func TestExportImportBank(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "probable OOM")
 
 	db, _, cleanup := setupExportableBank(t, 3, 100)
 	defer cleanup()
@@ -194,6 +192,8 @@ func TestExportNullWithEmptyNullAs(t *testing.T) {
 func TestMultiNodeExportStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "probable OOM")
 
 	nodes := 5
 	exportRows := 100
@@ -475,30 +475,21 @@ func TestExportPrivileges(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER testuser`)
 	sqlDB.Exec(t, `CREATE TABLE privs (a INT)`)
 
-	pgURL, cleanup := sqlutils.PGUrl(t, srv.ServingSQLAddr(),
-		"TestExportPrivileges-testuser", url.User("testuser"))
-	defer cleanup()
-	startTestUser := func() *gosql.DB {
-		testuser, err := gosql.Open("postgres", pgURL.String())
-		require.NoError(t, err)
-		return testuser
-	}
-	testuser := startTestUser()
+	testuser := srv.ApplicationLayer().SQLConn(t, serverutils.User("testuser"))
 	_, err := testuser.Exec(`EXPORT INTO CSV 'nodelocal://1/privs' FROM TABLE privs`)
 	require.True(t, testutils.IsError(err, "testuser does not have SELECT privilege"))
 
 	dest := "nodelocal://1/privs_placeholder"
 	_, err = testuser.Exec(`EXPORT INTO CSV $1 FROM TABLE privs`, dest)
 	require.True(t, testutils.IsError(err, "testuser does not have SELECT privilege"))
-	testuser.Close()
+
+	// The below SELECT GRANT hangs if we leave the user conn open.
+	_ = testuser.Close()
 
 	// Grant SELECT privilege.
 	sqlDB.Exec(t, `GRANT SELECT ON TABLE privs TO testuser`)
 
-	// The above SELECT GRANT hangs if we leave the user conn open. Thus, we need
-	// to reinitialize it here.
-	testuser = startTestUser()
-	defer testuser.Close()
+	testuser = srv.ApplicationLayer().SQLConn(t, serverutils.User("testuser"))
 
 	_, err = testuser.Exec(`EXPORT INTO CSV 'nodelocal://1/privs' FROM TABLE privs`)
 	require.True(t, testutils.IsError(err,
@@ -548,10 +539,10 @@ func populateRangeCache(t *testing.T, db *gosql.DB, tableName string) {
 }
 
 func getPGXConnAndCleanupFunc(
-	ctx context.Context, t *testing.T, servingSQLAddr string,
+	ctx context.Context, t *testing.T, app serverutils.ApplicationLayerInterface,
 ) (*pgx.Conn, func()) {
 	t.Helper()
-	pgURL, cleanup := sqlutils.PGUrl(t, servingSQLAddr, t.Name(), url.User(username.RootUser))
+	pgURL, cleanup := app.PGUrl(t, serverutils.CertsDirPrefix(t.Name()), serverutils.User(username.RootUser))
 	pgURL.Path = "test"
 	pgxConfig, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
@@ -614,7 +605,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 	}))
 	defer s.Close()
 
-	tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
+	tc := serverutils.StartCluster(t, 3, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -624,14 +615,15 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 				0: {
 					Knobs: base.TestingKnobs{
 						SQLExecutor: &sql.ExecutorTestingKnobs{
-							DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
+							DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 								if strings.Contains(query, "EXPORT") {
-									return func(_ rowenc.EncDatumRow, _ coldata.Batch, meta *execinfrapb.ProducerMetadata) {
+									return func(row rowenc.EncDatumRow, batch coldata.Batch, meta *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 										if meta != nil && meta.Err != nil {
 											if testutils.IsError(meta.Err, "ReadWithinUncertaintyIntervalError") {
 												close(gotRWUIOnGateway)
 											}
 										}
+										return row, batch, meta
 									}
 								}
 								return nil
@@ -675,6 +667,14 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
+	if tc.StartedDefaultTestTenant() {
+		systemSqlDB := tc.Server(0).SystemLayer().SQLConn(t, serverutils.DBName("system"))
+		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
+		require.NoError(t, err)
+		serverutils.WaitForTenantCapabilities(t, tc.Server(0), serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanAdminRelocateRange: "true",
+		}, "")
+	}
 	origDB0 := tc.ServerConn(0)
 
 	sqlutils.CreateTable(t, origDB0, "t",
@@ -714,7 +714,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 		_, err := origDB0.Exec("SET CLUSTER SETTING sql.defaults.results_buffer.size = '0'")
 		require.NoError(t, err)
 		// Create a new connection that will use the new result buffer size.
-		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).ServingSQLAddr())
+		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.ApplicationLayer(0))
 		defer cleanup()
 
 		atomic.StoreInt64(&trapRead, 1)
@@ -760,7 +760,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 		_, err := origDB0.Exec("SET CLUSTER SETTING sql.defaults.results_buffer.size = '524288'")
 		require.NoError(t, err)
 		// Create a new connection that will use the new results buffer size.
-		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).ServingSQLAddr())
+		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.ApplicationLayer(0))
 		defer cleanup()
 
 		// Reads are trapped but not blocked, so node 1 should immediately return a

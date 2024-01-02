@@ -81,7 +81,9 @@ func (s *StringSetting) Validate(sv *Values, v string) error {
 // Override sets the setting to the given value, assuming
 // it passes validation.
 func (s *StringSetting) Override(ctx context.Context, sv *Values, v string) {
+	sv.setValueOrigin(ctx, s.slot, OriginOverride)
 	_ = s.set(ctx, sv, v)
+	sv.setDefaultOverride(s.slot, v)
 }
 
 func (s *StringSetting) set(ctx context.Context, sv *Values, v string) error {
@@ -95,31 +97,36 @@ func (s *StringSetting) set(ctx context.Context, sv *Values, v string) error {
 }
 
 func (s *StringSetting) setToDefault(ctx context.Context, sv *Values) {
+	// See if the default value was overridden.
+	if val := sv.getDefaultOverride(s.slot); val != nil {
+		// As per the semantics of override, these values don't go through
+		// validation.
+		_ = s.set(ctx, sv, val.(string))
+		return
+	}
 	if err := s.set(ctx, sv, s.defaultValue); err != nil {
 		panic(err)
 	}
 }
 
-// WithPublic sets public visibility and can be chained.
-func (s *StringSetting) WithPublic() *StringSetting {
-	s.SetVisibility(Public)
-	return s
-}
-
 // RegisterStringSetting defines a new setting with type string.
-func RegisterStringSetting(class Class, key, desc string, defaultValue string) *StringSetting {
-	return RegisterValidatedStringSetting(class, key, desc, defaultValue, nil)
-}
-
-// RegisterValidatedStringSetting defines a new setting with type string with a
-// validation function.
-func RegisterValidatedStringSetting(
-	class Class, key, desc string, defaultValue string, validateFn func(*Values, string) error,
+func RegisterStringSetting(
+	class Class, key InternalKey, desc string, defaultValue string, opts ...SettingOption,
 ) *StringSetting {
-	if validateFn != nil {
-		if err := validateFn(nil, defaultValue); err != nil {
-			panic(errors.Wrap(err, "invalid default"))
+	validateFn := func(sv *Values, val string) error {
+		for _, opt := range opts {
+			switch {
+			case opt.commonOpt != nil:
+				continue
+			case opt.validateStringFn != nil:
+			default:
+				panic(errors.AssertionFailedf("wrong validator type"))
+			}
+			if err := opt.validateStringFn(sv, val); err != nil {
+				return err
+			}
 		}
+		return nil
 	}
 	setting := &StringSetting{
 		defaultValue: defaultValue,
@@ -128,7 +135,8 @@ func RegisterValidatedStringSetting(
 	// By default all string settings are considered to perhaps contain
 	// PII and are thus non-reportable (to exclude them from telemetry
 	// reports).
-	setting.SetReportable(false)
+	setting.setReportable(false)
 	register(class, key, desc, setting)
+	setting.apply(opts)
 	return setting
 }

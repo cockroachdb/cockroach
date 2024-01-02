@@ -38,13 +38,17 @@ import (
 	"go.etcd.io/raft/v3/raftpb"
 )
 
-var disableSyncRaftLog = settings.RegisterBoolSetting(
+// DisableSyncRaftLog disables raft log synchronization and can cause data loss.
+var DisableSyncRaftLog = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.raft_log.disable_synchronization_unsafe",
-	"set to true to disable synchronization on Raft log writes to persistent storage. "+
-		"Setting to true risks data loss or data corruption on server crashes. "+
+	"disables synchronization of Raft log writes to persistent storage. "+
+		"Setting to true risks data loss or data corruption on process or OS crashes. "+
+		"This not only disables fsync, but also disables flushing writes to the OS buffer. "+
 		"The setting is meant for internal testing only and SHOULD NOT be used in production.",
 	envutil.EnvOrDefaultBool("COCKROACH_DISABLE_RAFT_LOG_SYNCHRONIZATION_UNSAFE", false),
+	settings.WithName("kv.raft_log.synchronization.unsafe.disabled"),
+	settings.WithUnsafe,
 )
 
 var enableNonBlockingRaftLogSync = settings.RegisterBoolSetting(
@@ -111,6 +115,8 @@ type LogStore struct {
 	EntryCache  *raftentry.Cache
 	Settings    *cluster.Settings
 	Metrics     Metrics
+
+	DisableSyncLogWriteToss bool // for testing only
 }
 
 // SyncCallback is a callback that is notified when a raft log write has been
@@ -230,7 +236,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	stats.PebbleBegin = timeutil.Now()
 	stats.PebbleBytes = int64(batch.Len())
 	wantsSync := len(m.Responses) > 0
-	willSync := wantsSync && !disableSyncRaftLog.Get(&s.Settings.SV)
+	willSync := wantsSync && !DisableSyncRaftLog.Get(&s.Settings.SV)
 	// Use the non-blocking log sync path if we are performing a log sync ...
 	nonBlockingSync := willSync &&
 		// and the cluster setting is enabled ...
@@ -243,8 +249,9 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		// optimizing for.
 		!overwriting &&
 		// Also, randomly disable non-blocking sync in test builds to exercise the
-		// interleaved blocking and non-blocking syncs.
-		!(buildutil.CrdbTestBuild && rand.Intn(2) == 0)
+		// interleaved blocking and non-blocking syncs (unless the testing knobs
+		// disable this randomization explicitly).
+		!(buildutil.CrdbTestBuild && !s.DisableSyncLogWriteToss && rand.Intn(2) == 0)
 	if nonBlockingSync {
 		// If non-blocking synchronization is enabled, apply the batched updates to
 		// the engine and initiate a synchronous disk write, but don't wait for the
@@ -356,8 +363,13 @@ var nonBlockingSyncWaiterCallbackPool = sync.Pool{
 	New: func() interface{} { return new(nonBlockingSyncWaiterCallback) },
 }
 
-var valPool = sync.Pool{
-	New: func() interface{} { return &roachpb.Value{} },
+var logAppendPool = sync.Pool{
+	New: func() interface{} {
+		return new(struct {
+			roachpb.Value
+			enginepb.MVCCStats
+		})
+	},
 }
 
 // logAppend adds the given entries to the raft log. Takes the previous log
@@ -378,10 +390,21 @@ func logAppend(
 	if len(entries) == 0 {
 		return prev, nil
 	}
-	var diff enginepb.MVCCStats
-	value := valPool.Get().(*roachpb.Value)
+
+	// NB: the Value and MVCCStats lifetime is this function, so we coalesce their
+	// allocation into the same pool.
+	// TODO(pavelkalinnikov): figure out why they escape into the heap, and find a
+	// way to avoid the pool.
+	v := logAppendPool.Get().(*struct {
+		roachpb.Value
+		enginepb.MVCCStats
+	})
+	defer logAppendPool.Put(v)
+	value, diff := &v.Value, &v.MVCCStats
 	value.RawBytes = value.RawBytes[:0]
-	defer valPool.Put(value)
+	diff.Reset()
+
+	opts := storage.MVCCWriteOptions{Stats: diff, Category: storage.ReplicationReadCategory}
 	for i := range entries {
 		ent := &entries[i]
 		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, kvpb.RaftIndex(ent.Index))
@@ -392,9 +415,9 @@ func logAppend(
 		value.InitChecksum(key)
 		var err error
 		if kvpb.RaftIndex(ent.Index) > prev.LastIndex {
-			err = storage.MVCCBlindPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, *value, nil /* txn */)
+			_, err = storage.MVCCBlindPut(ctx, rw, key, hlc.Timestamp{}, *value, opts)
 		} else {
-			err = storage.MVCCPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, *value, nil /* txn */)
+			_, err = storage.MVCCPut(ctx, rw, key, hlc.Timestamp{}, *value, opts)
 		}
 		if err != nil {
 			return RaftState{}, err
@@ -407,8 +430,8 @@ func logAppend(
 		for i := newLastIndex + 1; i <= prev.LastIndex; i++ {
 			// Note that the caller is in charge of deleting any sideloaded payloads
 			// (which they must only do *after* the batch has committed).
-			_, err := storage.MVCCDelete(ctx, rw, &diff, keys.RaftLogKeyFromPrefix(raftLogPrefix, i),
-				hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
+			_, _, err := storage.MVCCDelete(ctx, rw, keys.RaftLogKeyFromPrefix(raftLogPrefix, i),
+				hlc.Timestamp{}, opts)
 			if err != nil {
 				return RaftState{}, err
 			}
@@ -439,7 +462,7 @@ func LoadTerm(
 	reader := eng.NewReadOnly(storage.StandardDurability)
 	defer reader.Close()
 
-	if err := raftlog.Visit(reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
+	if err := raftlog.Visit(ctx, reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
 		if found {
 			return errors.Errorf("found more than one entry in [%d,%d)", index, index+1)
 		}
@@ -571,7 +594,7 @@ func LoadEntries(
 
 	reader := eng.NewReadOnly(storage.StandardDurability)
 	defer reader.Close()
-	if err := raftlog.Visit(reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
+	if err := raftlog.Visit(ctx, reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
 		return nil, 0, 0, err
 	}
 	eCache.Add(rangeID, ents, false /* truncate */)

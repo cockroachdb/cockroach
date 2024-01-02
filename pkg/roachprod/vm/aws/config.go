@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"os"
 	"sort"
-	"strings"
 )
 
 // The below directives create two files, the first is a terraform main file
@@ -23,9 +22,6 @@ import (
 // `terraform output`.
 
 //go:generate terraformgen -o terraform/main.tf
-//go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg aws -o embedded.go config.json old.json
-//go:generate gofmt -s -w embedded.go
-//go:generate goimports -w embedded.go
 
 // awsConfig holds all of the required information to create and manage aws
 // cloud resources.
@@ -179,8 +175,10 @@ func (c *awsConfigValue) Set(path string) (err error) {
 	}
 	c.path = path
 	var data []byte
-	if strings.HasPrefix(path, "embedded:") {
-		data, err = Asset(path[strings.Index(path, ":")+1:])
+	if path == "embedded:config.json" {
+		data = configJson
+	} else if path == "embedded:old.json" {
+		data = oldJson
 	} else {
 		data, err = os.ReadFile(path)
 	}

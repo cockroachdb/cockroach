@@ -1,0 +1,31 @@
+@import "src/core/index.module";
+
+.crl-job-profiler-view {
+    &__actions-column {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        justify-content: flex-end;
+    }
+}
+
+.column-size-medium {
+    width: 230px;
+}
+
+.download-execution-detail-button {
+    white-space: nowrap;
+
+    >svg {
+        margin-right: $spacing-x-small;
+    }
+}
+
+.sorted-table {
+    width: 100%;
+}
+
+.gutter-row {
+  display: flex;
+  justify-content: right;
+}

@@ -68,10 +68,10 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 		Settings:    st,
 		Metrics: Metrics{
 			RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:     metric.HistogramModePrometheus,
-				Metadata: metric.Metadata{},
-				Duration: 10 * time.Second,
-				Buckets:  metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePrometheus,
+				Metadata:     metric.Metadata{},
+				Duration:     10 * time.Second,
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 		},
 	}
@@ -87,7 +87,7 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 		Term:  1,
 		Index: 1,
 		Type:  raftpb.EntryNormal,
-		Data:  raftlog.EncodeRaftCommand(raftlog.EntryEncodingStandardWithoutAC, "deadbeef", data),
+		Data:  raftlog.EncodeCommandBytes(raftlog.EntryEncodingStandardWithoutAC, "deadbeef", data),
 	})
 	stats := &AppendStats{}
 

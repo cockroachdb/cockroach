@@ -205,7 +205,7 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 			}
 		}
 
-	case NOT, WITH, AS, GENERATED, NULLS, RESET, ROLE, USER, ON, TENANT, SET:
+	case NOT, WITH, AS, GENERATED, NULLS, RESET, ROLE, USER, ON, TENANT, CLUSTER, SET:
 		nextToken := sqlSymType{}
 		if l.lastPos+1 < len(l.tokens) {
 			nextToken = l.tokens[l.lastPos+1]
@@ -224,7 +224,10 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 		case AS:
 			switch nextToken.id {
 			case OF:
-				lval.id = AS_LA
+				switch secondToken.id {
+				case SYSTEM:
+					lval.id = AS_LA
+				}
 			}
 		case NOT:
 			switch nextToken.id {
@@ -278,6 +281,11 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 			switch nextToken.id {
 			case ALL:
 				lval.id = TENANT_ALL
+			}
+		case CLUSTER:
+			switch nextToken.id {
+			case ALL:
+				lval.id = CLUSTER_ALL
 			}
 		case SET:
 			switch nextToken.id {

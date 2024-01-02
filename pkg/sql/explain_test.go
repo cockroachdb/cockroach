@@ -40,9 +40,9 @@ func TestStatementReuses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 
 	initStmts := []string{
 		`CREATE DATABASE d`,
@@ -235,6 +235,7 @@ func TestPrepareExplain(t *testing.T) {
 		"EXPLAIN (TYPES) SELECT * FROM abc WHERE c=1",
 		"EXPLAIN (DISTSQL) SELECT * FROM abc WHERE c=1",
 		"EXPLAIN (VEC) SELECT * FROM abc WHERE c=1",
+		"EXPLAIN ANALYZE SELECT * FROM abc WHERE c=1",
 	}
 
 	for _, sql := range statements {
@@ -508,16 +509,17 @@ func TestExplainRedact(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderDeadlock(t, "the test is too slow")
+
 	const numStatements = 10
 
 	ctx := context.Background()
 	rng, seed := randutil.NewTestRand()
 	t.Log("seed:", seed)
 
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-	defer sqlDB.Close()
+	params, _ := createTestServerParams()
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
 
 	query := func(sql string) (*gosql.Rows, error) {
 		return sqlDB.QueryContext(ctx, sql)

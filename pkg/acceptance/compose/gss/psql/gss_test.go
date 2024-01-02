@@ -18,10 +18,15 @@
 package gss
 
 import (
+	"bytes"
+	"crypto/tls"
 	gosql "database/sql"
 	"fmt"
+	"io"
+	"net/http"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -185,17 +190,8 @@ func TestGSS(t *testing.T) {
 }
 
 func TestGSSFileDescriptorCount(t *testing.T) {
-	// When the docker-compose.yml added a ulimit for the cockroach
-	// container the open file count would just stop there, it wouldn't
-	// cause cockroach to panic or error like I had hoped since it would
-	// allow a test to assert that multiple gss connections didn't leak
-	// file descriptors. Another possibility would be to have something
-	// track the open file count in the cockroach container, but that seems
-	// brittle and probably not worth the effort. However this test is
-	// useful when doing manual tracking of file descriptor count.
-	t.Skip("#51791")
-
-	rootConnector, err := pq.NewConnector("user=root sslmode=require")
+	t.Skip("#110194")
+	rootConnector, err := pq.NewConnector("user=root password=rootpw sslmode=require")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,6 +206,10 @@ func TestGSSFileDescriptorCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	cookie := rootAuthCookie(t)
+	const adminURL = "https://localhost:8080"
+	origFDCount := openFDCount(t, adminURL, cookie)
+
 	start := now()
 	for i := 0; i < 1000; i++ {
 		fmt.Println(i, time.Since(start))
@@ -218,6 +218,11 @@ func TestGSSFileDescriptorCount(t *testing.T) {
 			t.Log(string(out))
 			t.Fatal(err)
 		}
+	}
+
+	newFDCount := openFDCount(t, adminURL, cookie)
+	if origFDCount != newFDCount {
+		t.Fatalf("expected open file descriptor count to be the same: %d != %d", origFDCount, newFDCount)
 	}
 }
 
@@ -233,6 +238,67 @@ func IsError(err error, re string) bool {
 		return false
 	}
 	return matched
+}
+
+// rootAuthCookie returns a cookie for the root user that can be used to
+// authentication a web session.
+func rootAuthCookie(t *testing.T) string {
+	t.Helper()
+	out, err := exec.Command("/cockroach/cockroach", "auth-session", "login", "root", "--only-cookie").CombinedOutput()
+	if err != nil {
+		t.Log(string(out))
+		t.Fatal(errors.Wrap(err, "auth-session failed"))
+	}
+	return strings.Trim(string(out), "\n")
+}
+
+// openFDCount returns the number of open file descriptors for the node
+// at the given URL.
+func openFDCount(t *testing.T, adminURL, cookie string) int {
+	t.Helper()
+
+	const fdMetricName = "sys_fd_open"
+	client := http.Client{
+		Timeout: 3 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+
+	req, err := http.NewRequest("GET", adminURL+"/_status/vars", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Cookie", cookie)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	metrics, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if http.StatusOK != resp.StatusCode {
+		t.Fatalf("GET: expected %d, but got %d", http.StatusOK, resp.StatusCode)
+	}
+
+	for _, line := range bytes.Split(metrics, []byte("\n")) {
+		if bytes.HasPrefix(line, []byte(fdMetricName)) {
+			fields := bytes.Fields(line)
+			count, err := strconv.Atoi(string(fields[len(fields)-1]))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return count
+		}
+	}
+	t.Fatalf("metric %s not found", fdMetricName)
+	return 0
 }
 
 // This is copied from pkg/util/timeutil.

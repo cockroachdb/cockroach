@@ -23,7 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -62,7 +65,7 @@ func (tq *testQueueImpl) shouldQueue(
 func (tq *testQueueImpl) process(
 	_ context.Context, _ *Replica, _ spanconfig.StoreReader,
 ) (bool, error) {
-	atomic.AddInt32(&tq.processed, 1)
+	defer atomic.AddInt32(&tq.processed, 1)
 	if tq.err != nil {
 		return false, tq.err
 	}
@@ -103,9 +106,11 @@ func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfi
 	}
 	cfg.successes = metric.NewCounter(metric.Metadata{Name: "processed"})
 	cfg.failures = metric.NewCounter(metric.Metadata{Name: "failures"})
+	cfg.storeFailures = metric.NewCounter(metric.Metadata{Name: "store_failures"})
 	cfg.pending = metric.NewGauge(metric.Metadata{Name: "pending"})
 	cfg.processingNanos = metric.NewCounter(metric.Metadata{Name: "processingnanos"})
 	cfg.purgatory = metric.NewGauge(metric.Metadata{Name: "purgatory"})
+	cfg.disabledConfig = &settings.BoolSetting{}
 	return newBaseQueue(name, impl, store, cfg)
 }
 
@@ -694,36 +699,23 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		stopper)
 
 	maxWontSplitAddr, err := keys.Addr(keys.SystemPrefix)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	minWillSplitAddr, err := keys.Addr(keys.TableDataMin)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
 	repl1, err := s.GetReplica(1)
-	if err != nil {
-		t.Error(err)
-	}
-	if err := s.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{DestroyData: true}))
 
 	// This range can never be split due to zone configs boundaries.
 	neverSplits := createReplica(s, 2, roachpb.RKeyMin, maxWontSplitAddr)
-	if err := s.AddReplica(neverSplits); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, s.AddReplica(neverSplits))
 
 	// This range will need to be split after user db/table entries are created.
 	willSplit := createReplica(s, 3, minWillSplitAddr, roachpb.RKeyMax)
-	if err := s.AddReplica(willSplit); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, s.AddReplica(willSplit))
 
 	testQueue := &testQueueImpl{
 		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
@@ -736,27 +728,18 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	bq.Start(stopper)
 
 	// Check our config.
-	var cfg spanconfig.StoreReader
-	testutils.SucceedsSoon(t, func() error {
-		cfg, err = bq.store.GetConfReader(ctx)
-		require.NoError(t, err)
-		if cfg == nil {
-			return errors.New("system config not yet present")
-		}
-		return nil
-	})
+	cfg, err := bq.store.GetConfReader(ctx)
+	require.NoError(t, err)
+
 	neverSplitsDesc := neverSplits.Desc()
 	needsSplit, err := cfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey)
 	require.NoError(t, err)
-	if needsSplit {
-		t.Fatal("System config says range needs to be split")
-	}
+	require.False(t, needsSplit)
+
 	willSplitDesc := willSplit.Desc()
 	needsSplit, err = cfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey)
 	require.NoError(t, err)
-	if needsSplit {
-		t.Fatal("System config says range needs to be split")
-	}
+	require.False(t, needsSplit)
 
 	// There are no user db/table entries, everything should be added and
 	// processed as usual.
@@ -788,15 +771,12 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	neverSplitsDesc = neverSplits.Desc()
 	needsSplit, err = cfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey)
 	require.NoError(t, err)
-	if needsSplit {
-		t.Fatal("System config says range needs to be split")
-	}
+	require.False(t, needsSplit)
+
 	willSplitDesc = willSplit.Desc()
 	needsSplit, err = cfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey)
 	require.NoError(t, err)
-	if !needsSplit {
-		t.Fatal("System config says range does not need to be split")
-	}
+	require.True(t, needsSplit)
 
 	bq.maybeAdd(ctx, neverSplits, hlc.ClockTimestamp{})
 	bq.maybeAdd(ctx, willSplit, hlc.ClockTimestamp{})
@@ -924,17 +904,28 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		return nil
 	})
 
+	// Change the replicaID of the first the replica and destroy the second
+	// replica. These replicas should not be processed and should be removed from
+	// the replica set. The number of processed replicas will be 2 less.
+	const rmReplCount = 2
+	repls[0].replicaID = 2
+	if err := tc.store.RemoveReplica(ctx, repls[1], repls[1].Desc().NextReplicaID, RemoveOptions{
+		DestroyData: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
 	// Remove error and reprocess.
 	testQueue.err = nil
 	testQueue.pChan <- timeutil.Now()
 
 	testutils.SucceedsSoon(t, func() error {
-		if pc := testQueue.getProcessed(); pc != replicaCount*3 {
-			return errors.Errorf("expected %d processed replicas; got %d", replicaCount*3, pc)
+		if pc := testQueue.getProcessed(); pc != replicaCount*3-rmReplCount {
+			return errors.Errorf("expected %d processed replicas; got %d", replicaCount*3-rmReplCount, pc)
 		}
 		// Check metrics.
-		if v := bq.successes.Count(); v != int64(replicaCount) {
-			return errors.Errorf("expected %d processed replicas; got %d", replicaCount, v)
+		if v := bq.successes.Count(); v != int64(replicaCount)-rmReplCount {
+			return errors.Errorf("expected %d processed replicas; got %d", replicaCount-rmReplCount, v)
 		}
 		if v := bq.failures.Count(); v != int64(replicaCount*2) {
 			return errors.Errorf("expected %d failed replicas; got %d", replicaCount*2, v)
@@ -944,6 +935,15 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		}
 		if v := bq.purgatory.Value(); v != 0 {
 			return errors.Errorf("expected 0 purgatory replicas; got %d", v)
+		}
+		// Verify there are no replicas left in the replica set after finishing
+		// processing. This is within the retry loop as the above conditions can
+		// pass without considering the removed replicas.
+		bq.mu.Lock()
+		replicasCount := len(bq.mu.replicas)
+		bq.mu.Unlock()
+		if replicasCount != 0 {
+			return errors.Errorf("expected no replicas in the replica set: got %d", replicasCount)
 		}
 		return nil
 	})
@@ -956,6 +956,30 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	if l := bq.Length(); l != 0 {
 		t.Errorf("expected empty priorityQ; got %d", l)
 	}
+
+	// Verify that the replica with a changed replicaID can be processed.
+	beforeProcessCount := testQueue.getProcessed()
+	beforeSuccessCount := bq.successes.Count()
+	beforeFailureCount := bq.failures.Count()
+	bq.maybeAdd(ctx, repls[0], hlc.ClockTimestamp{})
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != beforeProcessCount+1 {
+			return errors.Errorf("expected %d processed replicas; got %d", beforeProcessCount+1, pc)
+		}
+		if v := bq.successes.Count(); v != beforeSuccessCount+1 {
+			return errors.Errorf("expected %d processed replicas; got %d", beforeSuccessCount+1, v)
+		}
+		if v := bq.failures.Count(); v != beforeFailureCount {
+			return errors.Errorf("expected %d failed replicas; got %d", beforeFailureCount, v)
+		}
+		if v := bq.pending.Value(); v != 0 {
+			return errors.Errorf("expected 0 pending replicas; got %d", v)
+		}
+		if v := bq.purgatory.Value(); v != 0 {
+			return errors.Errorf("expected 0 purgatory replicas; got %d", v)
+		}
+		return nil
+	})
 }
 
 type processTimeoutQueueImpl struct {
@@ -1224,6 +1248,92 @@ func TestBaseQueueDisable(t *testing.T) {
 	}
 }
 
+// TestQueueDisable verifies that setting the set of queue.enabled cluster
+// settings actually disables the base queue. This test works alongside
+// TestBaseQueueDisable to verify the entire disable workflow.
+func TestQueueDisable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	testCases := []struct {
+		name           string
+		clusterSetting *settings.BoolSetting
+		queue          *baseQueue
+	}{
+		{
+			name:           "Merge Queue",
+			clusterSetting: kvserverbase.MergeQueueEnabled,
+			queue:          tc.store.mergeQueue.baseQueue,
+		},
+		{
+			name:           "Replicate Queue",
+			clusterSetting: kvserverbase.ReplicateQueueEnabled,
+			queue:          tc.store.replicateQueue.baseQueue,
+		},
+		{
+			name:           "Replica GC Queue",
+			clusterSetting: kvserverbase.ReplicaGCQueueEnabled,
+			queue:          tc.store.replicaGCQueue.baseQueue,
+		},
+		{
+			name:           "Raft Log Queue",
+			clusterSetting: kvserverbase.RaftLogQueueEnabled,
+			queue:          tc.store.raftLogQueue.baseQueue,
+		},
+		{
+			name:           "Raft Snapshot Queue",
+			clusterSetting: kvserverbase.RaftSnapshotQueueEnabled,
+			queue:          tc.store.raftSnapshotQueue.baseQueue,
+		},
+		{
+			name:           "Consistency Queue",
+			clusterSetting: kvserverbase.ConsistencyQueueEnabled,
+			queue:          tc.store.consistencyQueue.baseQueue,
+		},
+		{
+			name:           "Split Queue",
+			clusterSetting: kvserverbase.SplitQueueEnabled,
+			queue:          tc.store.splitQueue.baseQueue,
+		},
+		{
+			name:           "MVCC GC Queue",
+			clusterSetting: kvserverbase.MVCCGCQueueEnabled,
+			queue:          tc.store.mvccGCQueue.baseQueue,
+		},
+	}
+
+	if tc.store.tsMaintenanceQueue != nil {
+		testCases = append(testCases, struct {
+			name           string
+			clusterSetting *settings.BoolSetting
+			queue          *baseQueue
+		}{
+			name:           "Timeseries Maintenance Queue",
+			clusterSetting: kvserverbase.TimeSeriesMaintenanceQueueEnabled,
+			queue:          tc.store.tsMaintenanceQueue.baseQueue,
+		})
+	}
+
+	// Disable and verify all queues are disabled
+	for _, testCase := range testCases {
+		testCase.clusterSetting.Override(ctx, &tc.store.ClusterSettings().SV, false)
+		if testCase.queue == nil {
+			continue
+		}
+		testCase.queue.mu.Lock()
+		disabled := testCase.queue.mu.disabled
+		testCase.queue.mu.Unlock()
+		if disabled != true {
+			t.Errorf("%s should be disabled", testCase.name)
+		}
+	}
+}
+
 type parallelQueueImpl struct {
 	testQueueImpl
 	processBlocker chan struct{}
@@ -1343,11 +1453,11 @@ func TestBaseQueueChangeReplicaID(t *testing.T) {
 	bq.mu.Unlock()
 	require.Equal(t, 0, testQueue.getProcessed())
 	bq.maybeAdd(ctx, r, tc.store.Clock().NowAsClockTimestamp())
-	bq.DrainQueue(tc.store.Stopper())
+	bq.DrainQueue(ctx, tc.store.Stopper())
 	require.Equal(t, 1, testQueue.getProcessed())
 	bq.maybeAdd(ctx, r, tc.store.Clock().NowAsClockTimestamp())
 	r.replicaID = 2
-	bq.DrainQueue(tc.store.Stopper())
+	bq.DrainQueue(ctx, tc.store.Stopper())
 	require.Equal(t, 1, testQueue.getProcessed())
 	require.Equal(t, 0, bq.Length())
 	require.Equal(t, 0, bq.PurgatoryLength())
@@ -1447,4 +1557,18 @@ func TestBaseQueueRequeue(t *testing.T) {
 	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	assertShouldQueueCount(6)
 	assertProcessedAndProcessing(2, 0)
+
+	// Reset shouldQueueCount so we actually process the replica. Then return
+	// a StoreBenign error. It should requeue the replica.
+	atomic.StoreInt64(&shouldQueueCount, 0)
+	pQueue.err = benignerror.NewStoreBenign(errors.New("test"))
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	assertShouldQueueCount(1)
+	assertProcessedAndProcessing(2, 1)
+	// Let the first processing attempt finish. It should requeue.
+	pQueue.processBlocker <- struct{}{}
+	assertProcessedAndProcessing(3, 1)
+	pQueue.err = nil
+	pQueue.processBlocker <- struct{}{}
+	assertProcessedAndProcessing(4, 0)
 }

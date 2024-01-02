@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -26,6 +25,7 @@ go_library(
         "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@io_etcd_go_raft_v3//raftpb",
@@ -38,7 +38,6 @@ go_test(
         "cluster_version_test.go",
         "datadriven_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":kvstorage"],
     deps = [
@@ -61,5 +60,3 @@ go_test(
         "@io_etcd_go_raft_v3//raftpb",
     ],
 )
-
-get_x_data(name = "get_x_data")

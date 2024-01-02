@@ -11,24 +11,30 @@
 package pgwire
 
 import (
+	"bufio"
 	"context"
 	"io"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -37,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -56,7 +63,7 @@ import (
 // The "results_buffer_size" connection parameter can be used to override this
 // default for an individual connection.
 var connResultsBufferSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.results_buffer.size",
 	"default size of the buffer that accumulates results for a statement or a batch "+
 		"of statements before they are sent to the client. This can be overridden on "+
@@ -68,56 +75,21 @@ var connResultsBufferSize = settings.RegisterByteSizeSetting(
 		"Updating the setting only affects new connections. "+
 		"Setting to 0 disables any buffering.",
 	16<<10, // 16 KiB
-).WithPublic()
+	settings.WithPublic)
 
 var logConnAuth = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	sql.ConnAuditingClusterSettingName,
 	"if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)",
-	false).WithPublic()
+	false,
+	settings.WithPublic)
 
 var logSessionAuth = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	sql.AuthAuditingClusterSettingName,
 	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
-	false).WithPublic()
-
-var maxNumNonAdminConnections = settings.RegisterIntSetting(
-	settings.TenantWritable,
-	"server.max_connections_per_gateway",
-	"the maximum number of SQL connections per gateway allowed at a given time "+
-		"(note: this will only limit future connection attempts and will not affect already established connections). "+
-		"Negative values result in unlimited number of connections. Superusers are not affected by this limit.",
-	-1, // Postgres defaults to 100, but we default to -1 to match our previous behavior of unlimited.
-).WithPublic()
-
-// Note(alyshan): This setting is not public. It is intended to be used by Cockroach Cloud to limit
-// connections to serverless clusters while still being able to connect from the Cockroach Cloud control plane.
-// This setting may be extended one day to include an arbitrary list of users to exclude from connection limiting.
-// This setting may be removed one day.
-var maxNumNonRootConnections = settings.RegisterIntSetting(
-	settings.TenantWritable,
-	"server.cockroach_cloud.max_client_connections_per_gateway",
-	"this setting is intended to be used by Cockroach Cloud for limiting connections to serverless clusters. "+
-		"The maximum number of SQL connections per gateway allowed at a given time "+
-		"(note: this will only limit future connection attempts and will not affect already established connections). "+
-		"Negative values result in unlimited number of connections. Cockroach Cloud internal users (including root user) "+
-		"are not affected by this limit.",
-	-1,
-)
-
-// maxNumNonRootConnectionsReason is used to supplement the error message for connections that denied due to
-// server.cockroach_cloud.max_client_connections_per_gateway.
-// Note(alyshan): This setting is not public. It is intended to be used by Cockroach Cloud when limiting
-// connections to serverless clusters.
-// This setting may be removed one day.
-var maxNumNonRootConnectionsReason = settings.RegisterStringSetting(
-	settings.TenantWritable,
-	"server.cockroach_cloud.max_client_connections_per_gateway_reason",
-	"a reason to provide in the error message for connections that are denied due to "+
-		"server.cockroach_cloud.max_client_connections_per_gateway",
-	"",
-)
+	false,
+	settings.WithPublic)
 
 const (
 	// ErrSSLRequired is returned when a client attempts to connect to a
@@ -142,7 +114,7 @@ var (
 	}
 	MetaNewConns = metric.Metadata{
 		Name:        "sql.new_conns",
-		Help:        "Counter of the number of SQL connections created",
+		Help:        "Number of SQL connections created",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -178,19 +150,19 @@ var (
 	}
 	MetaPGWireCancelTotal = metric.Metadata{
 		Name:        "sql.pgwire_cancel.total",
-		Help:        "Counter of the number of pgwire query cancel requests",
+		Help:        "Number of pgwire query cancel requests",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaPGWireCancelIgnored = metric.Metadata{
 		Name:        "sql.pgwire_cancel.ignored",
-		Help:        "Counter of the number of pgwire query cancel requests that were ignored due to rate limiting",
+		Help:        "Number of pgwire query cancel requests that were ignored due to rate limiting",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaPGWireCancelSuccessful = metric.Metadata{
 		Name:        "sql.pgwire_cancel.successful",
-		Help:        "Counter of the number of pgwire query cancel requests that were successful",
+		Help:        "Number of pgwire query cancel requests that were successful",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -242,7 +214,7 @@ type Server struct {
 	SQLServer  *sql.Server
 	execCfg    *sql.ExecutorConfig
 
-	tenantMetrics tenantSpecificMetrics
+	tenantMetrics *tenantSpecificMetrics
 
 	mu struct {
 		syncutil.Mutex
@@ -253,12 +225,12 @@ type Server struct {
 		connCancelMap cancelChanMap
 		// draining is set to true when the server starts draining the SQL layer.
 		// When set to true, remaining SQL connections will be closed.
-		// After the timeout set by server.shutdown.query_wait,
-		// all connections will be closed regardless any queries in flight.
+		// After the timeout set by server.shutdown.transactions.timeout,
+		// all connections will be closed regardless any txns in flight.
 		draining bool
 		// rejectNewConnections is set true when the server does not accept new
 		// SQL connections, e.g. when the draining process enters the phase whose
-		// duration is specified by the server.shutdown.connection_wait.
+		// duration is specified by the server.shutdown.connections.timeout.
 		rejectNewConnections bool
 	}
 
@@ -279,8 +251,8 @@ type Server struct {
 	// testing{Conn,Auth}LogEnabled is used in unit tests in this
 	// package to force-enable conn/auth logging without dancing around
 	// the asynchronicity of cluster settings.
-	testingConnLogEnabled int32
-	testingAuthLogEnabled int32
+	testingConnLogEnabled syncutil.AtomicBool
+	testingAuthLogEnabled syncutil.AtomicBool
 }
 
 // tenantSpecificMetrics is the set of metrics for a pgwire server
@@ -300,20 +272,20 @@ type tenantSpecificMetrics struct {
 	SQLMemMetrics               sql.MemoryMetrics
 }
 
-func makeTenantSpecificMetrics(
+func newTenantSpecificMetrics(
 	sqlMemMetrics sql.MemoryMetrics, histogramWindow time.Duration,
-) tenantSpecificMetrics {
-	return tenantSpecificMetrics{
+) *tenantSpecificMetrics {
+	return &tenantSpecificMetrics{
 		BytesInCount:       metric.NewCounter(MetaBytesIn),
 		BytesOutCount:      metric.NewCounter(MetaBytesOut),
 		Conns:              metric.NewGauge(MetaConns),
 		NewConns:           metric.NewCounter(MetaNewConns),
 		ConnsWaitingToHash: metric.NewGauge(MetaConnsWaitingToHash),
 		ConnLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:     metric.HistogramModePreferHdrLatency,
-			Metadata: MetaConnLatency,
-			Duration: histogramWindow,
-			Buckets:  metric.IOLatencyBuckets,
+			Mode:         metric.HistogramModePreferHdrLatency,
+			Metadata:     MetaConnLatency,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		ConnFailures:                metric.NewCounter(MetaConnFailures),
 		PGWireCancelTotalCount:      metric.NewCounter(MetaPGWireCancelTotal),
@@ -344,6 +316,7 @@ func MakeServer(
 	sqlMemMetrics sql.MemoryMetrics,
 	parentMemoryMonitor *mon.BytesMonitor,
 	histogramWindow time.Duration,
+	eventsExporter obs.EventsExporterInterface,
 	executorConfig *sql.ExecutorConfig,
 ) *Server {
 	ctx := ambientCtx.AnnotateCtx(context.Background())
@@ -352,7 +325,7 @@ func MakeServer(
 		cfg:        cfg,
 		execCfg:    executorConfig,
 
-		tenantMetrics: makeTenantSpecificMetrics(sqlMemMetrics, histogramWindow),
+		tenantMetrics: newTenantSpecificMetrics(sqlMemMetrics, histogramWindow),
 	}
 	server.sqlMemoryPool = mon.NewMonitor("sql",
 		mon.MemoryResource,
@@ -366,7 +339,7 @@ func MakeServer(
 		nil, /* maxHist */
 		0, noteworthySQLMemoryUsageBytes, st)
 	server.sqlMemoryPool.StartNoReserved(ctx, parentMemoryMonitor)
-	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
+	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool, eventsExporter)
 
 	server.tenantSpecificConnMonitor = mon.NewMonitor("conn",
 		mon.MemoryResource,
@@ -424,7 +397,7 @@ func (s *Server) IsDraining() bool {
 // Metrics returns the set of metrics structs.
 func (s *Server) Metrics() []interface{} {
 	return []interface{}{
-		&s.tenantMetrics,
+		s.tenantMetrics,
 		&s.SQLServer.Metrics.StartedStatementCounters,
 		&s.SQLServer.Metrics.ExecutedStatementCounters,
 		&s.SQLServer.Metrics.EngineMetrics,
@@ -480,6 +453,14 @@ func (s *Server) setDrainingLocked(drain bool) bool {
 	}
 	s.mu.draining = drain
 	return true
+}
+
+// setDraining sets the server's draining state and returns whether the
+// state changed (i.e. drain != s.mu.draining).
+func (s *Server) setDraining(drain bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.setDrainingLocked(drain)
 }
 
 // setRejectNewConnectionsLocked sets the server's rejectNewConnections state.
@@ -599,13 +580,10 @@ func (s *Server) drainImpl(
 	stopper *stop.Stopper,
 ) error {
 
-	s.mu.Lock()
-	if !s.setDrainingLocked(true) {
+	if !s.setDraining(true) {
 		// We are already draining.
-		s.mu.Unlock()
 		return nil
 	}
-	s.mu.Unlock()
 
 	// If there is no open SQL connections to drain, just return.
 	if s.GetConnCancelMapLen() == 0 {
@@ -703,17 +681,17 @@ func (s SocketType) asConnType() (hba.ConnType, error) {
 }
 
 func (s *Server) connLogEnabled() bool {
-	return atomic.LoadInt32(&s.testingConnLogEnabled) != 0 || logConnAuth.Get(&s.execCfg.Settings.SV)
+	return s.testingConnLogEnabled.Get() || logConnAuth.Get(&s.execCfg.Settings.SV)
 }
 
 // TestingEnableConnLogging is exported for use in tests.
 func (s *Server) TestingEnableConnLogging() {
-	atomic.StoreInt32(&s.testingConnLogEnabled, 1)
+	s.testingConnLogEnabled.Set(true)
 }
 
 // TestingEnableAuthLogging is exported for use in tests.
 func (s *Server) TestingEnableAuthLogging() {
-	atomic.StoreInt32(&s.testingAuthLogEnabled, 1)
+	s.testingAuthLogEnabled.Set(true)
 }
 
 // ServeConn serves a single connection, driving the handshake process and
@@ -743,10 +721,12 @@ func (s *Server) ServeConn(
 	ctx, rejectNewConnections, onCloseFn := s.registerConn(ctx)
 	defer onCloseFn()
 
+	sessionID := s.execCfg.GenerateID()
 	connDetails := eventpb.CommonConnectionDetails{
 		InstanceID:    int32(s.execCfg.NodeInfo.NodeID.SQLInstanceID()),
 		Network:       conn.RemoteAddr().Network(),
 		RemoteAddress: conn.RemoteAddr().String(),
+		SessionID:     sessionID.String(),
 	}
 
 	// Some bookkeeping, for security-minded administrators.
@@ -816,10 +796,25 @@ func (s *Server) ServeConn(
 
 	// Defer the rest of the processing to the connection handler.
 	// This includes authentication.
-	s.serveConn(
-		ctx, conn, sArgs,
-		&tenantReserved,
+	if log.V(2) {
+		log.Infof(ctx, "new connection with options: %+v", sArgs)
+	}
+
+	ctx, cancelConn := context.WithCancel(ctx)
+	defer cancelConn()
+	c := s.newConn(
+		ctx,
+		cancelConn,
+		conn,
+		sArgs,
 		connStart,
+	)
+
+	// Do the reading of commands from the network.
+	s.serveImpl(
+		ctx,
+		c,
+		&tenantReserved,
 		authOptions{
 			connType:        preServeStatus.ConnType,
 			connDetails:     connDetails,
@@ -828,22 +823,480 @@ func (s *Server) ServeConn(
 			identMap:        identMap,
 			testingAuthHook: testingAuthHook,
 		},
+		sessionID,
 	)
 	return nil
 }
 
-// readCancelKeyAndCloseConn retrieves the "backend data" key that identifies
+func (s *Server) newConn(
+	ctx context.Context,
+	cancelConn context.CancelFunc,
+	netConn net.Conn,
+	sArgs sql.SessionArgs,
+	connStart time.Time,
+) *conn {
+	// The net.Conn is switched to a conn that exits if the ctx is canceled.
+	rtc := &readTimeoutConn{
+		Conn: netConn,
+	}
+	sv := &s.execCfg.Settings.SV
+	c := &conn{
+		conn:                  rtc,
+		cancelConn:            cancelConn,
+		sessionArgs:           sArgs,
+		metrics:               s.tenantMetrics,
+		startTime:             connStart,
+		rd:                    *bufio.NewReader(rtc),
+		sv:                    sv,
+		readBuf:               pgwirebase.MakeReadBuffer(pgwirebase.ReadBufferOptionWithClusterSettings(sv)),
+		alwaysLogAuthActivity: s.testingAuthLogEnabled.Get(),
+	}
+	c.stmtBuf.Init()
+	c.res.released = true
+	c.writerState.fi.buf = &c.writerState.buf
+	c.writerState.fi.lastFlushed = -1
+	c.msgBuilder.init(s.tenantMetrics.BytesOutCount)
+	c.errWriter.sv = sv
+	c.errWriter.msgBuilder = &c.msgBuilder
+
+	var sentDrainSignal bool
+	rtc.checkExitConds = func() error {
+		// If the context was canceled, it's time to stop reading. Either a
+		// higher-level server or the command processor have canceled us.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		// If the server is draining, we'll let the processor know by pushing a
+		// DrainRequest. This will make the processor quit whenever it finds a good
+		// time.
+		if !sentDrainSignal && s.IsDraining() {
+			_ /* err */ = c.stmtBuf.Push(ctx, sql.DrainRequest{})
+			sentDrainSignal = true
+		}
+		return nil
+	}
+	return c
+}
+
+// maxRepeatedErrorCount is the number of times an error can be received
+// while reading from the network connection before the server decides to give
+// up and abort the connection.
+const maxRepeatedErrorCount = 1 << 15
+
+// serveImpl continuously reads from the network connection and pushes execution
+// instructions into a sql.StmtBuf, from where they'll be processed by a command
+// "processor" goroutine (a connExecutor).
+// The method returns when the pgwire termination message is received, when
+// network communication fails, when the server is draining or when ctx is
+// canceled (which also happens when draining (but not from the get-go), and
+// when the processor encounters a fatal error).
+//
+// serveImpl always closes the network connection before returning.
+//
+// sqlServer is used to create the command processor. As a special facility for
+// tests, sqlServer can be nil, in which case the command processor and the
+// write-side of the connection will not be created.
+//
+// Internally, a connExecutor will be created to execute commands. Commands read
+// from the network are buffered in a stmtBuf which is consumed by the
+// connExecutor. The connExecutor produces results which are buffered and
+// sometimes synchronously flushed to the network.
+//
+// The reader goroutine (this one) outlives the connExecutor's goroutine (the
+// "processor goroutine").
+// However, they can both signal each other to stop. Here's how the different
+// cases work:
+// 1) The reader receives a ClientMsgTerminate protocol packet: the reader
+// closes the stmtBuf and also cancels the command processing context. These
+// actions will prompt the command processor to finish.
+// 2) The reader gets a read error from the network connection: like above, the
+// reader closes the command processor.
+// 3) The reader's context is canceled (happens when the server is draining but
+// the connection was busy and hasn't quit yet): the reader notices the canceled
+// context and, like above, closes the processor.
+// 4) The processor encounters an error. This error can come from various fatal
+// conditions encountered internally by the processor, or from a network
+// communication error encountered while flushing results to the network.
+// The processor will cancel the reader's context and terminate.
+// Note that query processing errors are different; they don't cause the
+// termination of the connection.
+//
+// Draining notes:
+//
+// The reader notices that the server is draining by polling the IsDraining
+// closure passed to serveImpl. At that point, the reader delegates the
+// responsibility of closing the connection to the statement processor: it will
+// push a DrainRequest to the stmtBuf which signals the processor to quit ASAP.
+// The processor will quit immediately upon seeing that command if it's not
+// currently in a transaction. If it is in a transaction, it will wait until the
+// first time a Sync command is processed outside of a transaction - the logic
+// being that we want to stop when we're both outside transactions and outside
+// batches.
+func (s *Server) serveImpl(
+	ctx context.Context,
+	c *conn,
+	reserved *mon.BoundAccount,
+	authOpt authOptions,
+	sessionID clusterunique.ID,
+) {
+	if c.sessionArgs.User.IsRootUser() || c.sessionArgs.User.IsNodeUser() {
+		ctx = logtags.AddTag(ctx, "user", redact.Safe(c.sessionArgs.User))
+	} else {
+		ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
+	}
+	tracing.SpanFromContext(ctx).SetTag("user", attribute.StringValue(c.sessionArgs.User.Normalized()))
+
+	sqlServer := s.SQLServer
+	inTestWithoutSQL := sqlServer == nil
+	if !inTestWithoutSQL {
+		sessionStart := timeutil.Now()
+		defer func() {
+			if c.authLogEnabled() {
+				endTime := timeutil.Now()
+				ev := &eventpb.ClientSessionEnd{
+					CommonEventDetails:      logpb.CommonEventDetails{Timestamp: endTime.UnixNano()},
+					CommonConnectionDetails: authOpt.connDetails,
+					Duration:                endTime.Sub(sessionStart).Nanoseconds(),
+				}
+				log.StructuredEvent(ctx, ev)
+			}
+		}()
+	}
+
+	// NOTE: We're going to write a few messages to the connection in this method,
+	// for the handshake. After that, all writes are done async, in the
+	// startWriter() goroutine.
+
+	// the authPipe below logs authentication messages iff its auth
+	// logger is non-nil. We define this here.
+	logAuthn := !inTestWithoutSQL && c.authLogEnabled()
+
+	// We'll build an authPipe to communicate with the authentication process.
+	systemIdentity := c.sessionArgs.SystemIdentity
+	if systemIdentity.Undefined() {
+		systemIdentity = c.sessionArgs.User
+	}
+	authPipe := newAuthPipe(c, logAuthn, authOpt, systemIdentity)
+
+	// procWg waits for the command processor to return.
+	var procWg sync.WaitGroup
+
+	// We need a value for the unqualified int size here, but it is controlled
+	// by a session variable, and this layer doesn't have access to the session
+	// data. The callback below is called whenever default_int_size changes.
+	// It happens in a different goroutine, so it has to be changed atomically.
+	var atomicUnqualifiedIntSize = new(int32)
+	onDefaultIntSizeChange := func(newSize int32) {
+		atomic.StoreInt32(atomicUnqualifiedIntSize, newSize)
+	}
+
+	if !inTestWithoutSQL {
+		// Spawn the command processing goroutine, which also handles connection
+		// authentication). It will notify us when it's done through procWg, and
+		// we'll also interact with the authentication process through authPipe.
+		procWg.Add(1)
+		go func() {
+			// Inform the connection goroutine.
+			defer procWg.Done()
+			c.processCommands(
+				ctx,
+				authOpt,
+				authPipe,
+				sqlServer,
+				reserved,
+				onDefaultIntSizeChange,
+				sessionID,
+			)
+		}()
+	} else {
+		// sqlServer == nil means we are in a local test. In this case
+		// we only need the minimum to make pgx happy.
+		defer reserved.Close(ctx)
+		var err error
+		for param, value := range testingStatusReportParams {
+			err = c.bufferParamStatus(param, value)
+			if err != nil {
+				break
+			}
+		}
+		if err != nil {
+			return
+		}
+		// Simulate auth succeeding.
+		authPipe.AuthOK(ctx)
+
+		if err := c.bufferInitialReadyForQuery(0 /* queryCancelKey */); err != nil {
+			return
+		}
+		// We don't have a CmdPos to pass in, since we haven't received any commands
+		// yet, so we just use the initial lastFlushed value.
+		if err := c.Flush(c.writerState.fi.lastFlushed); err != nil {
+			return
+		}
+	}
+
+	var terminateSeen bool
+	var authDone, ignoreUntilSync bool
+	var repeatedErrorCount int
+	for {
+		breakLoop, isSimpleQuery, err := func() (bool, bool, error) {
+			typ, n, err := c.readBuf.ReadTypedMsg(&c.rd)
+			c.metrics.BytesInCount.Inc(int64(n))
+			if err == nil {
+				if knobs := s.execCfg.PGWireTestingKnobs; knobs != nil {
+					if afterReadMsgTestingKnob := knobs.AfterReadMsgTestingKnob; afterReadMsgTestingKnob != nil {
+						err = afterReadMsgTestingKnob(ctx)
+					}
+				}
+			}
+			isSimpleQuery := typ == pgwirebase.ClientMsgSimpleQuery
+			if err != nil {
+				if pgwirebase.IsMessageTooBigError(err) {
+					log.VInfof(ctx, 1, "pgwire: found big error message; attempting to slurp bytes and return error: %s", err)
+
+					// Slurp the remaining bytes.
+					slurpN, slurpErr := c.readBuf.SlurpBytes(&c.rd, pgwirebase.GetMessageTooBigSize(err))
+					c.metrics.BytesInCount.Inc(int64(slurpN))
+					if slurpErr != nil {
+						return false, isSimpleQuery, errors.Wrap(slurpErr, "pgwire: error slurping remaining bytes")
+					}
+				}
+
+				// Write out the error over pgwire.
+				if err := c.stmtBuf.Push(ctx, sql.SendError{Err: err}); err != nil {
+					return false, isSimpleQuery, errors.New("pgwire: error writing too big error message to the client")
+				}
+
+				// If this is a simple query, we have to send the sync message back as
+				// well.
+				if isSimpleQuery {
+					if err := c.stmtBuf.Push(ctx, sql.Sync{
+						// CRDB is implicitly generating this Sync during the simple
+						// protocol.
+						ExplicitFromClient: false,
+					}); err != nil {
+						return false, isSimpleQuery, errors.New("pgwire: error writing sync to the client whilst message is too big")
+					}
+				}
+
+				// We need to continue processing here for pgwire clients to be able to
+				// successfully read the error message off pgwire.
+				//
+				// If break here, we terminate the connection. The client will instead see that
+				// we terminated the connection prematurely (as opposed to seeing a ClientMsgTerminate
+				// packet) and instead return a broken pipe or io.EOF error message.
+				return false, isSimpleQuery, errors.Wrap(err, "pgwire: error reading input")
+			}
+			timeReceived := timeutil.Now()
+			log.VEventf(ctx, 2, "pgwire: processing %s", typ)
+
+			if ignoreUntilSync {
+				if typ != pgwirebase.ClientMsgSync {
+					log.VInfof(ctx, 1, "pgwire: skipping non-sync message after encountering error")
+					return false, isSimpleQuery, nil
+				}
+				ignoreUntilSync = false
+			}
+
+			if !authDone {
+				if typ == pgwirebase.ClientMsgPassword {
+					var pwd []byte
+					if pwd, err = c.readBuf.GetBytes(n - 4); err != nil {
+						return false, isSimpleQuery, err
+					}
+					// Pass the data to the authenticator. This hopefully causes it to finish
+					// authentication in the background and give us an intSizer when we loop
+					// around.
+					if err = authPipe.sendPwdData(pwd); err != nil {
+						return false, isSimpleQuery, err
+					}
+					return false, isSimpleQuery, nil
+				}
+				// Wait for the auth result.
+				if err = authPipe.authResult(); err != nil {
+					// The error has already been sent to the client.
+					return true, isSimpleQuery, nil //nolint:returnerrcheck
+				}
+				authDone = true
+			}
+
+			switch typ {
+			case pgwirebase.ClientMsgPassword:
+				// This messages are only acceptable during the auth phase, handled above.
+				err = pgwirebase.NewProtocolViolationErrorf("unexpected authentication data")
+				return true, isSimpleQuery, c.writeErr(ctx, err, &c.writerState.buf)
+			case pgwirebase.ClientMsgSimpleQuery:
+				if err = c.handleSimpleQuery(
+					ctx, &c.readBuf, timeReceived, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)),
+				); err != nil {
+					return false, isSimpleQuery, err
+				}
+				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{
+					// CRDB is implicitly generating this Sync during the simple
+					// protocol.
+					ExplicitFromClient: false,
+				})
+
+			case pgwirebase.ClientMsgExecute:
+				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
+					return false, isSimpleQuery, err
+				}
+				// To support the 1PC txn fast path, we peek at the next command to
+				// see if it is a Sync. This is because in the extended protocol, an
+				// implicit transaction cannot commit until the Sync is seen. If there's
+				// an error while peeking (for example, there are no bytes in the
+				// buffer), the error is ignored since it will be handled on the next
+				// loop iteration.
+				followedBySync := false
+				if nextMsgType, err := c.rd.Peek(1); err == nil &&
+					pgwirebase.ClientMessageType(nextMsgType[0]) == pgwirebase.ClientMsgSync {
+					followedBySync = true
+				}
+				return false, isSimpleQuery, c.handleExecute(ctx, timeReceived, followedBySync)
+
+			case pgwirebase.ClientMsgParse:
+				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
+					return false, isSimpleQuery, err
+				}
+				return false, isSimpleQuery, c.handleParse(ctx, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
+
+			case pgwirebase.ClientMsgDescribe:
+				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
+					return false, isSimpleQuery, err
+				}
+				return false, isSimpleQuery, c.handleDescribe(ctx)
+
+			case pgwirebase.ClientMsgBind:
+				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
+					return false, isSimpleQuery, err
+				}
+				return false, isSimpleQuery, c.handleBind(ctx)
+
+			case pgwirebase.ClientMsgClose:
+				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
+					return false, isSimpleQuery, err
+				}
+				return false, isSimpleQuery, c.handleClose(ctx)
+
+			case pgwirebase.ClientMsgTerminate:
+				terminateSeen = true
+				return true, isSimpleQuery, nil
+
+			case pgwirebase.ClientMsgSync:
+				// We're starting a batch here. If the client continues using the extended
+				// protocol and encounters an error, everything until the next sync
+				// message has to be skipped. See:
+				// https://www.postgresql.org/docs/current/10/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
+				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{
+					// The client explicitly sent this Sync as part of the extended
+					// protocol.
+					ExplicitFromClient: true,
+				})
+
+			case pgwirebase.ClientMsgFlush:
+				return false, isSimpleQuery, c.handleFlush(ctx)
+
+			case pgwirebase.ClientMsgCopyData, pgwirebase.ClientMsgCopyDone, pgwirebase.ClientMsgCopyFail:
+				// We're supposed to ignore these messages, per the protocol spec. This
+				// state will happen when an error occurs on the server-side during a copy
+				// operation: the server will send an error and a ready message back to
+				// the client, and must then ignore further copy messages. See:
+				// https://github.com/postgres/postgres/blob/6e1dd2773eb60a6ab87b27b8d9391b756e904ac3/src/backend/tcop/postgres.c#L4295
+				return false, isSimpleQuery, nil
+			default:
+				return false, isSimpleQuery, c.stmtBuf.Push(
+					ctx,
+					sql.SendError{Err: pgwirebase.NewUnrecognizedMsgTypeErr(typ)})
+			}
+		}()
+		if err != nil {
+			log.VEventf(ctx, 1, "pgwire: error processing message: %s", err)
+			if !isSimpleQuery {
+				// In the extended protocol, after seeing an error, we ignore all
+				// messages until receiving a sync.
+				ignoreUntilSync = true
+			}
+			repeatedErrorCount++
+			// If we can't read data because of any one of the following conditions,
+			// then we should break:
+			// 1. the connection was closed.
+			// 2. the context was canceled (e.g. during authentication).
+			// 3. we reached an arbitrary threshold of repeated errors.
+			if netutil.IsClosedConnection(err) ||
+				errors.Is(err, context.Canceled) ||
+				repeatedErrorCount > maxRepeatedErrorCount {
+				break
+			}
+		} else {
+			repeatedErrorCount = 0
+		}
+		if breakLoop {
+			break
+		}
+	}
+
+	// We're done reading data from the client, so make the communication
+	// goroutine stop. Depending on what that goroutine is currently doing (or
+	// blocked on), we cancel and close all the possible channels to make sure we
+	// tickle it in the right way.
+
+	// Signal command processing to stop. It might be the case that the processor
+	// canceled our context and that's how we got here; in that case, this will
+	// be a no-op.
+	c.stmtBuf.Close()
+	// Cancel the processor's context.
+	c.cancelConn()
+	// In case the authenticator is blocked on waiting for data from the client,
+	// tell it that there's no more data coming. This is a no-op if authentication
+	// was completed already.
+	authPipe.noMorePwdData()
+
+	// Wait for the processor goroutine to finish, if it hasn't already.
+	procWg.Wait()
+
+	if terminateSeen {
+		return
+	}
+	// If we're draining, let the client know by piling on an AdminShutdownError
+	// and flushing the buffer.
+	if s.IsDraining() {
+		// The error here is also sent with pgcode.AdminShutdown, to indicate that
+		// the connection is being closed. Clients are expected to be able to handle
+		// this even when not waiting for a query result. See the discussion at
+		// https://github.com/cockroachdb/cockroach/issues/22630.
+		// NOTE: If a query is canceled due to draining, the conn_executor already
+		// will have sent a QueryCanceled error as a response to the query.
+		log.Ops.Info(ctx, "closing existing connection while server is draining")
+		_ /* err */ = c.writeErr(ctx, newAdminShutdownErr(ErrDrainingExistingConn), &c.writerState.buf)
+		_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
+	}
+}
+
+// From https://github.com/postgres/postgres/blob/28b5726561841556dc3e00ffe26b01a8107ee654/src/backend/tcop/postgres.c#L4891-L4891
+func (c *conn) prohibitUnderReplicationMode(ctx context.Context) error {
+	if c.sessionArgs.ReplicationMode == sessiondatapb.ReplicationMode_REPLICATION_MODE_DISABLED {
+		return nil
+	}
+	pgErr := pgerror.New(
+		pgcode.ProtocolViolation,
+		"extended query protocol not supported in a replication connection",
+	)
+	if err := c.stmtBuf.Push(ctx, sql.SendError{
+		Err: pgErr,
+	}); err != nil {
+		return err
+	}
+	// return the same error so that ignoreUntilSync is hit.
+	return pgErr
+}
+
+// readCancelKey retrieves the "backend data" key that identifies
 // a cancellable query, then closes the connection.
-func readCancelKeyAndCloseConn(
-	ctx context.Context, conn net.Conn, buf *pgwirebase.ReadBuffer,
+func readCancelKey(
+	ctx context.Context, buf *pgwirebase.ReadBuffer,
 ) (ok bool, cancelKey pgwirecancel.BackendKeyData) {
 	telemetry.Inc(sqltelemetry.CancelRequestCounter)
 	backendKeyDataBits, err := buf.GetUint64()
-	// The connection that issued the cancel is not a SQL session -- it's an
-	// entirely new connection that's created just to send the cancel. We close
-	// the connection as soon as possible after reading the data, since there
-	// is nothing to send back to the client.
-	_ = conn.Close()
 	// The client is also unwilling to read an error payload, so we just log it locally.
 	if err != nil {
 		log.Sessions.Warningf(ctx, "%v", errors.Wrap(err, "reading cancel key from client"))
@@ -957,7 +1410,6 @@ func (s *Server) sendErr(
 	// receive error payload are highly correlated with clients
 	// disconnecting abruptly.
 	_ /* err */ = w.writeErr(ctx, err, conn)
-	_ = conn.Close()
 	return err
 }
 

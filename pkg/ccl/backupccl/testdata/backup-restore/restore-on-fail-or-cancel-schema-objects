@@ -64,10 +64,10 @@ query-sql
 USE restore;
 SHOW SCHEMAS;
 ----
-crdb_internal <nil>
-information_schema <nil>
-pg_catalog <nil>
-pg_extension <nil>
+crdb_internal node
+information_schema node
+pg_catalog node
+pg_extension node
 public admin
 
 # Ensure that a database level restore also cleans up after itself. We do this

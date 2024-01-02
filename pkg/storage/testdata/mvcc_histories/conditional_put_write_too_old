@@ -32,7 +32,7 @@ with t=a
   cput k=k v=v2 cond=v1
 ----
 >> at end:
-txn: "a" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
+txn: "a" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
 data: "k"/10.000000000,0 -> /BYTES/v1
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 1.000000000,0 too old; must write at or above 10.000000000,1
 

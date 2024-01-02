@@ -1,0 +1,73 @@
+# Test MVCCBlindPutInlineWithPrev -- in particular, MVCC stats updates.
+
+# Populate some initial data.
+run stats ok
+put k=%sys v=system
+put k=i v=value
+----
+>> put k=%sys v=system
+stats: sys_bytes=+31 sys_count=+1
+>> put k=i v=value
+stats: key_count=+1 key_bytes=+2 val_count=+1 val_bytes=+24 live_count=+1 live_bytes=+26
+>> at end:
+meta: /Local/Range/"sys"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/system mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/value mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=1 key_bytes=2 val_count=1 val_bytes=24 live_count=1 live_bytes=26 sys_bytes=31 sys_count=1
+
+# Replace existing keys.
+run stats ok
+put_blind_inline k=%sys v=new prev=system
+put_blind_inline k=i v=new prev=value
+----
+>> put_blind_inline k=%sys v=new prev=system
+stats: sys_bytes=-3
+>> put_blind_inline k=i v=new prev=value
+stats: val_bytes=-2 live_bytes=-2
+>> at end:
+meta: /Local/Range/"sys"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/new mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/new mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=1 key_bytes=2 val_count=1 val_bytes=22 live_count=1 live_bytes=24 sys_bytes=28 sys_count=1
+
+# Write new keys.
+run stats ok
+put_blind_inline k=%foo v=bar
+put_blind_inline k=foo v=bar
+----
+>> put_blind_inline k=%foo v=bar
+stats: sys_bytes=+28 sys_count=+1
+>> put_blind_inline k=foo v=bar
+stats: key_count=+1 key_bytes=+4 val_count=+1 val_bytes=+22 live_count=+1 live_bytes=+26
+>> at end:
+meta: /Local/Range/"foo"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/bar mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: /Local/Range/"sys"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/new mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "foo"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/bar mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/new mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=2 key_bytes=6 val_count=2 val_bytes=44 live_count=2 live_bytes=50 sys_bytes=56 sys_count=2
+
+# Delete existing keys.
+run stats ok
+put_blind_inline k=%foo prev=bar
+put_blind_inline k=foo prev=bar
+----
+>> put_blind_inline k=%foo prev=bar
+stats: sys_bytes=-28 sys_count=-1
+>> put_blind_inline k=foo prev=bar
+stats: key_count=-1 key_bytes=-4 val_count=-1 val_bytes=-22 live_count=-1 live_bytes=-26
+>> at end:
+meta: /Local/Range/"sys"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/new mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/new mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=1 key_bytes=2 val_count=1 val_bytes=22 live_count=1 live_bytes=24 sys_bytes=28 sys_count=1
+
+# Delete non-existant keys.
+run stats ok
+put_blind_inline k=%foo
+put_blind_inline k=foo
+----
+>> put_blind_inline k=%foo
+stats: no change
+>> put_blind_inline k=foo
+stats: no change
+>> at end:
+meta: /Local/Range/"sys"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/new mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/new mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=1 key_bytes=2 val_count=1 val_bytes=22 live_count=1 live_bytes=24 sys_bytes=28 sys_count=1

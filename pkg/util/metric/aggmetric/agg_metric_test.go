@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package aggmetric_test
+package aggmetric
 
 import (
 	"bufio"
@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	prometheusgo "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,7 +39,7 @@ func TestAggMetric(t *testing.T) {
 		scrape := func(ex *metric.PrometheusExporter) {
 			ex.ScrapeRegistry(r, true /* includeChildMetrics */)
 		}
-		require.NoError(t, ex.ScrapeAndPrintAsText(&in, scrape))
+		require.NoError(t, ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape))
 		var lines []string
 		for sc := bufio.NewScanner(&in); sc.Scan(); {
 			if !bytes.HasPrefix(sc.Bytes(), []byte{'#'}) {
@@ -49,33 +50,33 @@ func TestAggMetric(t *testing.T) {
 		return strings.Join(lines, "\n")
 	}
 
-	c := aggmetric.NewCounter(metric.Metadata{
+	c := NewCounter(metric.Metadata{
 		Name: "foo_counter",
 	}, "tenant_id")
 	r.AddMetric(c)
 
-	d := aggmetric.NewCounterFloat64(metric.Metadata{
+	d := NewCounterFloat64(metric.Metadata{
 		Name: "fob_counter",
 	}, "tenant_id")
 	r.AddMetric(d)
 
-	g := aggmetric.NewGauge(metric.Metadata{
+	g := NewGauge(metric.Metadata{
 		Name: "bar_gauge",
 	}, "tenant_id")
 	r.AddMetric(g)
 
-	f := aggmetric.NewGaugeFloat64(metric.Metadata{
+	f := NewGaugeFloat64(metric.Metadata{
 		Name: "baz_gauge",
 	}, "tenant_id")
 	r.AddMetric(f)
-	h := aggmetric.NewHistogram(metric.HistogramOptions{
+	h := NewHistogram(metric.HistogramOptions{
 		Metadata: metric.Metadata{
 			Name: "histo_gram",
 		},
-		Duration: base.DefaultHistogramWindowInterval(),
-		MaxVal:   100,
-		SigFigs:  1,
-		Buckets:  metric.Count1KBuckets,
+		Duration:     base.DefaultHistogramWindowInterval(),
+		MaxVal:       100,
+		SigFigs:      1,
+		BucketConfig: metric.Count1KBuckets,
 	}, "tenant_id")
 	r.AddMetric(h)
 
@@ -169,17 +170,17 @@ type Eacher interface {
 func TestAggMetricBuilder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	b := aggmetric.MakeBuilder("tenant_id")
+	b := MakeBuilder("tenant_id")
 	c := b.Counter(metric.Metadata{Name: "foo_counter"})
 	d := b.CounterFloat64(metric.Metadata{Name: "fob_counter"})
 	g := b.Gauge(metric.Metadata{Name: "bar_gauge"})
 	f := b.GaugeFloat64(metric.Metadata{Name: "baz_gauge"})
 	h := b.Histogram(metric.HistogramOptions{
-		Metadata: metric.Metadata{Name: "histo_gram"},
-		Duration: base.DefaultHistogramWindowInterval(),
-		MaxVal:   100,
-		SigFigs:  1,
-		Buckets:  metric.Count1KBuckets,
+		Metadata:     metric.Metadata{Name: "histo_gram"},
+		Duration:     base.DefaultHistogramWindowInterval(),
+		MaxVal:       100,
+		SigFigs:      1,
+		BucketConfig: metric.Count1KBuckets,
 	})
 
 	for i := 5; i < 10; i++ {
@@ -200,5 +201,60 @@ func TestAggMetricBuilder(t *testing.T) {
 			numChildren += 1
 		})
 		require.Equal(t, 5, numChildren)
+	}
+}
+
+func TestAggHistogramRotate(t *testing.T) {
+	now := time.UnixMicro(1699565116)
+	defer TestingSetNow(func() time.Time {
+		return now
+	})()
+
+	b := MakeBuilder("test")
+	h := b.Histogram(metric.HistogramOptions{
+		Mode:     metric.HistogramModePrometheus,
+		Metadata: metric.Metadata{Name: "hist"},
+		Duration: 10 * time.Second,
+	})
+	child1 := h.AddChild("child-1")
+	child2 := h.AddChild("child-2")
+	for i := 0; i < 4; i++ {
+		// Windowed histogram is initially empty.
+		h.Inspect(func(interface{}) {}) // triggers ticking
+		// Verify new histogram windows have a 0 sum.
+		_, parentSum := h.WindowedSnapshot().Total()
+		_, child1Sum := child1.h.WindowedSnapshot().Total()
+		_, child2Sum := child2.h.WindowedSnapshot().Total()
+		require.Zero(t, parentSum)
+		require.Zero(t, child1Sum)
+		require.Zero(t, child2Sum)
+		// But cumulative histogram has history (if i > 0).
+		parentCount, _ := h.CumulativeSnapshot().Total()
+		child1Count, _ := child1.h.CumulativeSnapshot().Total()
+		child2Count, _ := child2.h.CumulativeSnapshot().Total()
+		require.EqualValues(t, i, child1Count)
+		require.EqualValues(t, i, child2Count)
+		// The children aggregate into the parent.
+		require.EqualValues(t, child1Count+child2Count, parentCount)
+		// Add a measurement and verify it's there.
+		{
+			child1RecVal := int64(12345)
+			child2RecVal := int64(56789)
+			child1.RecordValue(child1RecVal)
+			child2.RecordValue(child2RecVal)
+			child1SumExp := float64(child1RecVal) + child1Sum
+			child2SumExp := float64(child2RecVal) + child2Sum
+			// The children should aggregate to the parent.
+			parentSumExp := float64(child1RecVal) + float64(child2RecVal) + parentSum
+			_, parentWindowSum := h.WindowedSnapshot().Total()
+			_, child1WindowSum := child1.h.WindowedSnapshot().Total()
+			_, child2WindowSum := child2.h.WindowedSnapshot().Total()
+			require.Equal(t, parentSumExp, parentWindowSum)
+			require.Equal(t, child1SumExp, child1WindowSum)
+			require.Equal(t, child2SumExp, child2WindowSum)
+		}
+		// Tick. This rotates the histogram.
+		now = now.Add(time.Duration(i+1) * 10 * time.Second)
+		// Go to beginning.
 	}
 }

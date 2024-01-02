@@ -14,12 +14,19 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/redact"
 )
 
 // IsolationLevel holds the isolation level for a transaction.
 type IsolationLevel int
+
+var _ redact.SafeValue = IsolationLevel(0)
+
+// SafeValue makes Kind a redact.SafeValue.
+func (k IsolationLevel) SafeValue() {}
 
 // IsolationLevel values
 const (
@@ -55,6 +62,24 @@ func (i IsolationLevel) String() string {
 		return fmt.Sprintf("IsolationLevel(%d)", i)
 	}
 	return isolationLevelNames[i]
+}
+
+// IsolationLevelFromKVTxnIsolationLevel converts a kv level isolation.Level to
+// its SQL semantic equivalent.
+func IsolationLevelFromKVTxnIsolationLevel(level isolation.Level) IsolationLevel {
+	var ret IsolationLevel
+	switch level {
+	case isolation.Serializable:
+		ret = SerializableIsolation
+	case isolation.ReadCommitted:
+		ret = ReadCommittedIsolation
+	case isolation.Snapshot:
+		ret = SnapshotIsolation
+	default:
+		panic("What to do here? Log is a banned import")
+		// log.Fatalf(context.Background(), "unknown isolation level: %s", level)
+	}
+	return ret
 }
 
 // UserPriority holds the user priority for a transaction.
@@ -233,12 +258,20 @@ func (node *TransactionModes) Merge(other TransactionModes) error {
 
 // BeginTransaction represents a BEGIN statement
 type BeginTransaction struct {
-	Modes TransactionModes
+	// FormatWithStart says whether this statement must be formatted with
+	// "START" rather than "BEGIN". This is needed if this statement is in a
+	// BEGIN ATOMIC block of a procedure or function.
+	FormatWithStart bool
+	Modes           TransactionModes
 }
 
 // Format implements the NodeFormatter interface.
 func (node *BeginTransaction) Format(ctx *FmtCtx) {
-	ctx.WriteString("BEGIN TRANSACTION")
+	if node.FormatWithStart {
+		ctx.WriteString("START TRANSACTION")
+	} else {
+		ctx.WriteString("BEGIN TRANSACTION")
+	}
 	ctx.FormatNode(&node.Modes)
 }
 

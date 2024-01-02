@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
@@ -45,8 +46,7 @@ import (
 func TestColdStartLatency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "too slow")
-	skip.UnderStress(t, "too slow")
+	skip.UnderDuress(t, "too slow")
 
 	// We'll need to make some per-node args to assign the different
 	// KV nodes to different regions and AZs. We'll want to do it to
@@ -78,8 +78,7 @@ func TestColdStartLatency(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		i := i
 		args := base.TestServerArgs{
-			DefaultTestTenant: base.TestTenantDisabled,
-			Locality:          localities[i],
+			Locality: localities[i],
 		}
 		signalAfter[i] = make(chan struct{})
 		serverKnobs := &server.TestingKnobs{
@@ -119,6 +118,9 @@ func TestColdStartLatency(t *testing.T) {
 	tc := testcluster.NewTestCluster(t, numNodes, base.TestClusterArgs{
 		ParallelStart:     true,
 		ServerArgsPerNode: perServerArgs,
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TODOTestTenantDisabled,
+		},
 	})
 	go func() {
 		for _, c := range signalAfter {
@@ -145,6 +147,7 @@ func TestColdStartLatency(t *testing.T) {
 	// Shorten the closed timestamp target duration so that span configs
 	// propagate more rapidly.
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '200ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`)
 	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '10ms'")
 	// Lengthen the lead time for the global tables to prevent overload from
@@ -161,8 +164,6 @@ func TestColdStartLatency(t *testing.T) {
 		var stmts []string
 		if !isTenant {
 			stmts = []string{
-				"ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
-				"ALTER TENANT ALL SET CLUSTER SETTING sql.multi_region.allow_abstractions_for_secondary_tenants.enabled = true",
 				`alter range meta configure zone using constraints = '{"+region=us-east1": 1, "+region=us-west1": 1, "+region=europe-west1": 1}';`,
 			}
 		} else {
@@ -282,13 +283,13 @@ COMMIT;`}
 SELECT checkpoint > extract(epoch from after)
   FROM checkpoint, after`,
 			[][]string{{"true"}})
-		tenant.Stopper().Stop(ctx)
+		tenant.AppStopper().Stop(ctx)
 	}
 
 	// Wait for the configs to be applied.
 	testutils.SucceedsWithin(t, func() error {
 		for _, server := range tc.Servers {
-			reporter := server.Server.SpanConfigReporter()
+			reporter := server.SpanConfigReporter().(spanconfig.Reporter)
 			report, err := reporter.SpanConfigConformance(ctx, []roachpb.Span{
 				{Key: keys.TableDataMin, EndKey: keys.TenantTableDataMax},
 			})
@@ -314,7 +315,7 @@ SELECT checkpoint > extract(epoch from after)
 		defer r.Release()
 		start := timeutil.Now()
 		sn := tenantServerKnobs(i)
-		tenant, err := tc.Server(i).StartTenant(ctx, base.TestTenantArgs{
+		tenant, err := tc.Server(i).TenantController().StartTenant(ctx, base.TestTenantArgs{
 			TenantID:            serverutils.TestTenantID(),
 			DisableCreateTenant: true,
 			SkipTenantCheck:     true,
@@ -324,9 +325,9 @@ SELECT checkpoint > extract(epoch from after)
 			Locality: localities[i],
 		})
 		require.NoError(t, err)
-		defer tenant.Stopper().Stop(ctx)
+		defer tenant.AppStopper().Stop(ctx)
 		pgURL, cleanup, err := sqlutils.PGUrlWithOptionalClientCertsE(
-			tenant.SQLAddr(), "tenantdata", url.UserPassword("foo", password),
+			tenant.AdvSQLAddr(), "tenantdata", url.UserPassword("foo", password),
 			false, // withClientCerts
 		)
 		if !assert.NoError(t, err) {

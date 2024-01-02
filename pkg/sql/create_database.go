@@ -17,8 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -41,7 +42,7 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 	}
 
 	if n.Name == "" {
-		return nil, errEmptyDatabaseName
+		return nil, sqlerrors.ErrEmptyDatabaseName
 	}
 
 	if tmpl := n.Template; tmpl != "" {
@@ -148,7 +149,7 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 // CanCreateDatabase verifies that the current user has the CREATEDB
 // role option.
 func (p *planner) CanCreateDatabase(ctx context.Context) error {
-	hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
+	hasCreateDB, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEDB)
 	if err != nil {
 		return err
 	}

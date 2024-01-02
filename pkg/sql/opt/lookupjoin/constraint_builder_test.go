@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	tu "github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -102,10 +103,10 @@ func TestLookupConstraints(t *testing.T) {
 							return 0, opt.ColSet{}, err
 						}
 						b := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, &f)
-						if err := b.Build(expr); err != nil {
+						compExpr, err := b.Build(expr)
+						if err != nil {
 							return 0, opt.ColSet{}, err
 						}
-						compExpr := f.Memo().RootExpr().(opt.ScalarExpr)
 						var sharedProps props.Shared
 						memo.BuildSharedProps(compExpr, &sharedProps, &evalCtx)
 						md.TableMeta(tableID).AddComputedCol(colID, compExpr, sharedProps.OuterCols)
@@ -311,11 +312,10 @@ func makeFiltersExpr(
 	}
 
 	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
-	if err := b.Build(expr); err != nil {
+	root, err := b.Build(expr)
+	if err != nil {
 		return nil, err
 	}
-
-	root := f.Memo().RootExpr().(opt.ScalarExpr)
 
 	return memo.FiltersExpr{f.ConstructFiltersItem(root)}, nil
 }
@@ -356,7 +356,7 @@ func makeFilterBuilder(t *testing.T) testFilterBuilder {
 	if _, err := cat.ExecuteDDL("CREATE TABLE a (i INT PRIMARY KEY, b BOOL)"); err != nil {
 		t.Fatal(err)
 	}
-	tn := tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "a")
+	tn := tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "a")
 	tbl := f.Metadata().AddTable(cat.Table(tn), tn)
 	return testFilterBuilder{
 		t:       t,

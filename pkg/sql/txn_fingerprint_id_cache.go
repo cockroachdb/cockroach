@@ -25,12 +25,12 @@ import (
 // capacity of the txn fingerprint ID cache. The cache will be resized
 // on the next insert or get operation.
 var TxnFingerprintIDCacheCapacity = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.txn_fingerprint_id_cache.capacity",
 	"the maximum number of txn fingerprint IDs stored",
 	100,
 	settings.NonNegativeInt,
-).WithPublic()
+	settings.WithPublic)
 
 // TxnFingerprintIDCache is a thread-safe cache tracking transaction
 // fingerprint IDs at the session level.

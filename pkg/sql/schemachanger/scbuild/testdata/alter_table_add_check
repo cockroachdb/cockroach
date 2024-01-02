@@ -5,6 +5,10 @@ CREATE TABLE t (i INT PRIMARY KEY)
 build
 ALTER TABLE t ADD CHECK (i > 0)
 ----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 - [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC], ABSENT]
   {columnIds: [1], constraintId: 2, expr: 'i > 0:::INT8', referencedColumnIds: [1], tableId: 104}
 - [[ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}, PUBLIC], ABSENT]

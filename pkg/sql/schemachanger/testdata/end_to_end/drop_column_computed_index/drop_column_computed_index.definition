@@ -1,0 +1,32 @@
+setup
+create table t (i INT PRIMARY KEY, j INT, INDEX((j+1)));
+----
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t VALUES($stageKey);
+INSERT INTO t VALUES($stageKey + 1);
+----
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM t;
+----
+true
+
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t VALUES($stageKey);
+INSERT INTO t VALUES($stageKey + 1);
+----
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM t;
+----
+true
+
+test
+ALTER TABLE t DROP COLUMN j CASCADE;
+----

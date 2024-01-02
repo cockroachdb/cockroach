@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"path/filepath"
 	"runtime"
 	"time"
 
@@ -26,10 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 )
 
 type versionFeatureTest struct {
@@ -98,19 +100,33 @@ DROP TABLE splitmerge.t;
 }
 
 func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All())
-	mvt.OnStartup("setup schema changer workload", func(ctx context.Context, l *logger.Logger, r *rand.Rand, helper *mixedversion.Helper) error {
-		// Execute the workload init.
-		return c.RunE(ctx, c.All(), "./workload init schemachange")
-	})
-	mvt.InMixedVersion("run backup", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-		// Verify that backups can be created in various configurations. This is
-		// important to test because changes in system tables might cause backups to
-		// fail in mixed-version clusters.
-		dest := fmt.Sprintf("nodelocal://1/%d", timeutil.Now().UnixNano())
-		return h.Exec(rng, `BACKUP TO $1`, dest)
-	})
+	mvt := mixedversion.NewTest(
+		ctx, t, t.L(), c, c.All(),
+		mixedversion.AlwaysUseFixtures, mixedversion.AlwaysUseLatestPredecessors,
+	)
+	mvt.OnStartup(
+		"setup schema changer workload",
+		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			node := h.RandomNode(rng, c.All())
+			workloadPath, _, err := clusterupgrade.UploadWorkload(
+				ctx, t, l, c, c.Node(node), h.Context.ToVersion,
+			)
+			if err != nil {
+				return errors.Wrap(err, "uploading workload binary")
+			}
+
+			l.Printf("executing workload init on node %d", node)
+			return c.RunE(ctx, c.Node(node), fmt.Sprintf("%s init schemachange {pgurl%s}", workloadPath, c.All()))
+		})
+	mvt.InMixedVersion(
+		"run backup",
+		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			// Verify that backups can be created in various configurations. This is
+			// important to test because changes in system tables might cause backups to
+			// fail in mixed-version clusters.
+			dest := fmt.Sprintf("nodelocal://1/%d", timeutil.Now().UnixNano())
+			return h.Exec(rng, `BACKUP TO $1`, dest)
+		})
 	mvt.InMixedVersion(
 		"test features",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
@@ -129,10 +145,38 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.InMixedVersion(
 		"test schema change step",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			l.Printf("running schema workload step")
-			runCmd := roachtestutil.NewCommand("./workload run schemachange").Flag("verbose", 1).Flag("max-ops", 10).Flag("concurrency", 2).Arg("{pgurl:1-%d}", len(c.All()))
+			// TODO: re-enable once #116586 is addressed.
+			if h.Context.Finalizing {
+				l.Printf("schemachange workload has been flaking when run during upgrades; skipping")
+				return nil
+			}
+
 			randomNode := h.RandomNode(rng, c.All())
-			return c.RunE(ctx, option.NodeListOption{randomNode}, runCmd.String())
+			// The schemachange workload is designed to work up to one
+			// version back. Therefore, we upload a compatible `workload`
+			// binary to `randomNode`, where the workload will run.
+			workloadPath, uploaded, err := clusterupgrade.UploadWorkload(
+				ctx, t, l, c, c.Node(randomNode), h.Context.ToVersion,
+			)
+			if err != nil {
+				return errors.Wrap(err, "uploading workload binary")
+			}
+
+			if !uploaded {
+				l.Printf("Version being upgraded is too old, no workload binary available. Skipping")
+				return nil
+			}
+
+			l.Printf("running schemachange workload")
+			runCmd := roachtestutil.
+				NewCommand("%s run schemachange", workloadPath).
+				Flag("verbose", 1).
+				Flag("max-ops", 10).
+				Flag("concurrency", 2).
+				Arg("{pgurl:1-%d}", len(c.All())).
+				String()
+
+			return c.RunE(ctx, c.Node(randomNode), runCmd)
 		},
 	)
 
@@ -187,40 +231,22 @@ func (u *versionUpgradeTest) conn(ctx context.Context, t test.Test, i int) *gosq
 	return db
 }
 
-// uploadVersion is a thin wrapper around
-// `clusterupgrade.UploadVersion` that calls t.Fatal if that call
-// returns an error
-func uploadVersion(
+// uploadCockroach is a thin wrapper around
+// `clusterupgrade.UploadCockroach` that calls t.Fatal if that call
+// returns an error.
+func uploadCockroach(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
 	nodes option.NodeListOption,
-	newVersion string,
+	newVersion *clusterupgrade.Version,
 ) string {
-	path, err := clusterupgrade.UploadVersion(ctx, t, t.L(), c, nodes, newVersion)
+	path, err := clusterupgrade.UploadCockroach(ctx, t, t.L(), c, nodes, newVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	return path
-}
-
-// upgradeNodes is a thin wrapper around
-// `clusterupgrade.RestartNodesWithNewBinary` that calls t.Fatal if
-// that call returns an errror.
-func upgradeNodes(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	nodes option.NodeListOption,
-	startOpts option.StartOpts,
-	newVersion string,
-) {
-	if err := clusterupgrade.RestartNodesWithNewBinary(
-		ctx, t, t.L(), c, nodes, startOpts, newVersion,
-	); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func (u *versionUpgradeTest) binaryVersion(
@@ -238,28 +264,18 @@ func (u *versionUpgradeTest) binaryVersion(
 // versionStep is an isolated version migration on a running cluster.
 type versionStep func(ctx context.Context, t test.Test, u *versionUpgradeTest)
 
-func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) versionStep {
+func uploadAndStartFromCheckpointFixture(
+	nodes option.NodeListOption, v *clusterupgrade.Version,
+) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		if err := clusterupgrade.InstallFixtures(ctx, t.L(), u.c, nodes, v); err != nil {
 			t.Fatal(err)
 		}
-		binary := uploadVersion(ctx, t, u.c, nodes, v)
+		binary := uploadCockroach(ctx, t, u.c, nodes, v)
 		startOpts := option.DefaultStartOpts()
-		// NB: can't start sequentially since cluster already bootstrapped.
-		startOpts.RoachprodOpts.Sequential = false
-		if err := clusterupgrade.StartWithBinary(ctx, t.L(), u.c, nodes, binary, startOpts); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		binary := uploadVersion(ctx, t, u.c, nodes, v)
-		startOpts := option.DefaultStartOpts()
-		// NB: can't start sequentially since cluster already bootstrapped.
-		startOpts.RoachprodOpts.Sequential = false
-		if err := clusterupgrade.StartWithBinary(ctx, t.L(), u.c, nodes, binary, startOpts); err != nil {
+		if err := clusterupgrade.StartWithSettings(
+			ctx, t.L(), u.c, nodes, startOpts, install.BinaryOption(binary),
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -268,10 +284,12 @@ func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 // binaryUpgradeStep rolling-restarts the given nodes into the new binary
 // version. Note that this does *not* wait for the cluster version to upgrade.
 // Use a waitForUpgradeStep() for that.
-func binaryUpgradeStep(nodes option.NodeListOption, newVersion string) versionStep {
+func binaryUpgradeStep(
+	nodes option.NodeListOption, newVersion *clusterupgrade.Version,
+) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		if err := clusterupgrade.RestartNodesWithNewBinary(
-			ctx, t, t.L(), u.c, nodes, option.DefaultStartOpts(), newVersion,
+			ctx, t, t.L(), u.c, nodes, option.DefaultStartOptsNoBackups(), newVersion,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -306,7 +324,9 @@ func allowAutoUpgradeStep(node int) versionStep {
 func waitForUpgradeStep(nodes option.NodeListOption) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		dbFunc := func(node int) *gosql.DB { return u.conn(ctx, t, node) }
-		if err := clusterupgrade.WaitForClusterUpgrade(ctx, t.L(), nodes, dbFunc); err != nil {
+		if err := clusterupgrade.WaitForClusterUpgrade(
+			ctx, t.L(), nodes, dbFunc, clusterupgrade.DefaultUpgradeTimeout,
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -323,13 +343,14 @@ func waitForUpgradeStep(nodes option.NodeListOption) versionStep {
 func makeVersionFixtureAndFatal(
 	ctx context.Context, t test.Test, c cluster.Cluster, makeFixtureVersion string,
 ) {
-	predecessorVersion, err := version.PredecessorVersion(*version.MustParse(makeFixtureVersion))
+	predecessorVersionStr, err := release.LatestPredecessor(version.MustParse(makeFixtureVersion))
 	if err != nil {
 		t.Fatal(err)
 	}
+	predecessorVersion := clusterupgrade.MustParseVersion(predecessorVersionStr)
 
 	t.L().Printf("making fixture for %s (starting at %s)", makeFixtureVersion, predecessorVersion)
-	fixtureVersion := makeFixtureVersion[1:] // drop the leading v
+	fixtureVersion := clusterupgrade.MustParseVersion(makeFixtureVersion)
 
 	newVersionUpgradeTest(c,
 		// Start the cluster from a fixture. That fixture's cluster version may
@@ -368,7 +389,7 @@ func makeVersionFixtureAndFatal(
 			name := clusterupgrade.CheckpointName(u.binaryVersion(ctx, t, 1).String())
 			u.c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.All())
 
-			binaryPath := clusterupgrade.BinaryPathFromVersion(fixtureVersion)
+			binaryPath := clusterupgrade.CockroachPathForVersion(t, fixtureVersion)
 			c.Run(ctx, c.All(), binaryPath, "debug", "pebble", "db", "checkpoint",
 				"{store-dir}", "{store-dir}/"+name)
 			// The `cluster-bootstrapped` marker can already be found within
@@ -392,56 +413,6 @@ for i in 1 2 3 4; do
 done
 `)
 		}).run(ctx, t)
-}
-
-// importTPCCStep runs a TPCC import import on the first crdbNode (monitoring them all for
-// crashes during the import). If oldV is nil, this runs the import using the specified
-// version (for example "19.2.1", as provided by PredecessorVersion()) using the location
-// used by c.Stage(). An empty oldV uses the main cockroach binary.
-func importTPCCStep(
-	oldV string, headroomWarehouses int, crdbNodes option.NodeListOption,
-) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		// We need to use the predecessor binary to load into the
-		// predecessor cluster to avoid random breakage. For example, you
-		// can't use 21.1 to import into 20.2 due to some flag changes.
-		//
-		// TODO(tbg): also import a large dataset (for example 2TB bank)
-		// that will provide cold data that may need to be migrated.
-		var cmd string
-		if oldV == "" {
-			cmd = tpccImportCmd(headroomWarehouses)
-		} else {
-			cmd = tpccImportCmdWithCockroachBinary(filepath.Join("v"+oldV, "cockroach"), headroomWarehouses, "--checks=false")
-		}
-		// Use a monitor so that we fail cleanly if the cluster crashes
-		// during import.
-		m := u.c.NewMonitor(ctx, crdbNodes)
-		m.Go(func(ctx context.Context) error {
-			return u.c.RunE(ctx, u.c.Node(crdbNodes[0]), cmd)
-		})
-		m.Wait()
-	}
-}
-
-func importLargeBankStep(oldV string, rows int, crdbNodes option.NodeListOption) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		// Use the predecessor binary to load into the predecessor
-		// cluster to avoid random breakage due to flag changes, etc.
-		binary := "./cockroach"
-		if oldV != "" {
-			binary = filepath.Join("v"+oldV, "cockroach")
-		}
-
-		// Use a monitor so that we fail cleanly if the cluster crashes
-		// during import.
-		m := u.c.NewMonitor(ctx, crdbNodes)
-		m.Go(func(ctx context.Context) error {
-			return u.c.RunE(ctx, u.c.Node(crdbNodes[0]), binary, "workload", "fixtures", "import", "bank",
-				"--payload-bytes=10240", "--rows="+fmt.Sprint(rows), "--seed=4", "--db=bigbank")
-		})
-		m.Wait()
-	}
 }
 
 func sleepStep(d time.Duration) versionStep {

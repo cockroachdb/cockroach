@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -37,7 +38,7 @@ import (
 // TestProtectedTimestampsDuringImportInto ensures that the timestamp at which
 // a table is taken offline is protected during an IMPORT INTO job to ensure
 // that if data is imported into a range it can be reverted in the case of
-// cancelation or failure.
+// cancellation or failure.
 func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -59,12 +60,14 @@ func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 	defer cancel()
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			//  Test hangs within a test tenant. More investigation is required.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(107141),
 		},
 	}
 	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
+	s := tc.Server(0).ApplicationLayer()
+	tenantSettings := s.ClusterSettings()
+	protectedts.PollInterval.Override(ctx, &tenantSettings.SV, 100*time.Millisecond)
 
 	tc.WaitForNodeLiveness(t)
 	require.NoError(t, tc.WaitForFullReplication())
@@ -72,7 +75,6 @@ func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 	conn := tc.ServerConn(0)
 	runner := sqlutils.MakeSQLRunner(conn)
 	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
-	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
 	runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
 	rRand, _ := randutil.NewTestRand()
 	writeGarbage := func(from, to int) {
@@ -112,9 +114,9 @@ func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 		importErrCh <- err
 	}()
 
-	var jobID string
 	testutils.SucceedsSoon(t, func() error {
 		row := conn.QueryRow("SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1")
+		var jobID string
 		return row.Scan(&jobID)
 	})
 
@@ -130,11 +132,7 @@ ORDER BY raw_start_key ASC`)
 		for rows.Next() {
 			var startKey roachpb.Key
 			require.NoError(t, rows.Scan(&startKey))
-			r := tc.LookupRangeOrFatal(t, startKey)
-			l, _, err := tc.FindRangeLease(r, nil)
-			require.NoError(t, err)
-			lhServer := tc.Server(int(l.Replica.NodeID) - 1)
-			s, repl := getFirstStoreReplica(t, lhServer, startKey)
+			s, repl := getFirstStoreReplica(t, tc.Server(0), startKey)
 			trace, _, err := s.Enqueue(ctx, "mvccGC", repl, skipShouldQueue, false /* async */)
 			require.NoError(t, err)
 			fmt.Fprintf(&traceBuf, "%s\n", trace.String())
@@ -186,4 +184,62 @@ func getFirstStoreReplica(
 		return nil
 	})
 	return store, repl
+}
+
+// TestImportIntoWithUDTArray verifies that we can support importing data into a
+// table with a column typed as an array of user-defined types.
+func TestImportIntoWithUDTArray(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dir,
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(db)
+	runner.Exec(t, `
+CREATE TYPE weekday AS ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday');
+CREATE TABLE shifts (employee STRING, days weekday[]);
+INSERT INTO shifts VALUES ('John', ARRAY['Monday', 'Wednesday', 'Friday']);
+INSERT INTO shifts VALUES ('Bob', ARRAY['Tuesday', 'Thursday']);
+`)
+	// Sanity check that we currently have the expected state.
+	expected := [][]string{
+		{"John", "{Monday,Wednesday,Friday}"},
+		{"Bob", "{Tuesday,Thursday}"},
+	}
+	runner.CheckQueryResults(t, "SELECT * FROM shifts;", expected)
+	// Export has to run in a separate implicit txn.
+	runner.Exec(t, `EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM shifts;`)
+	// Now clear the table since we'll be importing into it.
+	runner.Exec(t, `DELETE FROM shifts WHERE true;`)
+	runner.CheckQueryResults(t, "SELECT count(*) FROM shifts;", [][]string{{"0"}})
+	// Import two rows once.
+	runner.Exec(t, "IMPORT INTO shifts CSV DATA ('nodelocal://1/export1/export*-n*.0.csv');")
+	runner.CheckQueryResults(t, "SELECT * FROM shifts;", expected)
+	// Import two rows again - we'll now have four rows in the table.
+	runner.Exec(t, "IMPORT INTO shifts CSV DATA ('nodelocal://1/export1/export*-n*.0.csv');")
+	runner.CheckQueryResults(t, "SELECT * FROM shifts;", append(expected, expected...))
+
+	// We currently don't support importing into a table that has columns with
+	// UDTs with the same name but different schemas.
+	runner.Exec(t, `
+CREATE SCHEMA short;
+CREATE TYPE short.weekday AS ENUM('M', 'Tu', 'W', 'Th', 'F');
+DROP TABLE shifts;
+CREATE TABLE shifts (employee STRING, days weekday[], days_short short.weekday[]);
+INSERT INTO shifts VALUES ('John', ARRAY['Monday', 'Wednesday', 'Friday'], ARRAY['M', 'W', 'F']);
+INSERT INTO shifts VALUES ('Bob', ARRAY['Tuesday', 'Thursday'], ARRAY['Tu', 'Th']);
+`)
+	runner.Exec(t, `EXPORT INTO CSV 'nodelocal://1/export2/' FROM SELECT * FROM shifts;`)
+	runner.ExpectErr(
+		t,
+		".*tables with multiple user-defined types with the same name are currently unsupported.*",
+		"IMPORT INTO shifts CSV DATA ('nodelocal://1/export2/export*-n*.0.csv');",
+	)
 }

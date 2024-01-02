@@ -93,6 +93,18 @@ func parseClientProvidedSessionParameters(
 			// initialization information.
 			args.IsSuperuser = args.User.IsRootUser()
 
+		case "replication":
+			// We chose to make the "replication" connection parameter to be
+			// represented by a session variable.
+			if err := loadParameter(ctx, key, value, &args.SessionArgs); err != nil {
+				return args, pgerror.Wrapf(err, pgerror.GetPGCode(err), "replication parameter")
+			}
+			// Cache the value into session args.
+			args.ReplicationMode, err = sql.ReplicationModeFromString(args.SessionArgs.SessionDefaults["replication"])
+			if err != nil {
+				return args, err
+			}
+
 		case "crdb:session_revival_token_base64":
 			token, err := base64.StdEncoding.DecodeString(value)
 			if err != nil {

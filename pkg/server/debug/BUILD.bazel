@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -18,6 +17,7 @@ go_library(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts/sidetransport",
         "//pkg/kv/kvserver/kvstorage",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
         "//pkg/server/debug/goroutineui",
         "//pkg/server/debug/pprofui",
@@ -49,12 +49,23 @@ go_library(
 go_test(
     name = "debug_test",
     size = "small",
-    srcs = ["logspy_test.go"],
-    args = ["-test.timeout=55s"],
+    srcs = [
+        "debug_test.go",
+        "logspy_test.go",
+        "main_test.go",
+    ],
     embed = [":debug"],
     deps = [
+        "//pkg/base",
+        "//pkg/kv/kvclient/kvtenant",
         "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/server/srvtestutils",
         "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/logpb",
@@ -63,5 +74,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

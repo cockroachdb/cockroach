@@ -368,6 +368,13 @@ func TestValueChecksumWithBytes(t *testing.T) {
 	}
 }
 
+func TestValueGetErrorsRedacted(t *testing.T) {
+	v := MakeValueFromString("Hello world")
+	_, err := v.GetInt()
+	require.EqualError(t, err, "value type is not INT: BYTES")
+	require.Equal(t, string(redact.Sprintf("%s %s", err, "sensitive").Redact()), "value type is not INT: BYTES ‹×›")
+}
+
 func TestSetGetChecked(t *testing.T) {
 	v := Value{}
 
@@ -438,7 +445,7 @@ func TestSetGetChecked(t *testing.T) {
 
 func TestTransactionBumpEpoch(t *testing.T) {
 	origNow := makeTS(10, 1)
-	txn := MakeTransaction("test", Key("a"), isolation.Serializable, 1, origNow, 0, 99)
+	txn := MakeTransaction("test", Key("a"), isolation.Serializable, 1, origNow, 0, 99, 0, false /* omitInRangefeeds */)
 	// Advance the txn timestamp.
 	txn.WriteTimestamp = txn.WriteTimestamp.Add(10, 2)
 	txn.BumpEpoch()
@@ -563,11 +570,13 @@ var nonZeroTxn = Transaction{
 			Synthetic: true, // normally not set, but needed for zerofields.NoZeroField
 		},
 	}},
-	WriteTooOld:          true,
-	LockSpans:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
-	InFlightWrites:       []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
-	CommitTimestampFixed: true,
-	IgnoredSeqNums:       []enginepb.IgnoredSeqNumRange{{Start: 888, End: 999}},
+	WriteTooOld:        true,
+	LockSpans:          []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	InFlightWrites:     []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
+	ReadTimestampFixed: true,
+	IgnoredSeqNums:     []enginepb.IgnoredSeqNumRange{{Start: 888, End: 999}},
+	AdmissionPriority:  1,
+	OmitInRangefeeds:   true,
 }
 
 func TestTransactionUpdate(t *testing.T) {
@@ -657,7 +666,7 @@ func TestTransactionUpdate(t *testing.T) {
 	expTxn5.InFlightWrites = nil
 	expTxn5.IgnoredSeqNums = nil
 	expTxn5.WriteTooOld = false
-	expTxn5.CommitTimestampFixed = false
+	expTxn5.ReadTimestampFixed = false
 	require.Equal(t, expTxn5, txn5)
 
 	// Updating a different transaction fatals.
@@ -733,21 +742,35 @@ func TestTransactionUpdateStaging(t *testing.T) {
 
 // TestTransactionUpdateAbortedOldEpoch tests that Transaction.Update propagates
 // an ABORTED status even when that status comes from a proto with an old epoch.
-// Once a transaction is ABORTED, it will stay aborted, even if its coordinator
-// doesn't know this at the time that it increments its epoch and retries.
+// It also tests that Transaction.Update retains an ABORTED status even when it
+// is updated with a new epoch with a PENDING status. Either way, once a
+// transaction is ABORTED, it will stay aborted, even if its coordinator doesn't
+// know this at the time that it increments its epoch and retries.
 func TestTransactionUpdateAbortedOldEpoch(t *testing.T) {
-	txn := nonZeroTxn
-	txn.Status = ABORTED
+	txnAbort := nonZeroTxn
+	txnAbort.Status = ABORTED
 
-	txnRestart := txn
+	txnRestart := nonZeroTxn
 	txnRestart.Epoch++
 	txnRestart.Status = PENDING
-	txnRestart.Update(&txn)
 
-	expTxn := txn
-	expTxn.Epoch++
-	expTxn.Status = ABORTED
-	require.Equal(t, expTxn, txnRestart)
+	testCases := []struct {
+		name      string
+		recv, arg Transaction
+	}{
+		{name: "aborted receiver", recv: txnAbort, arg: txnRestart},
+		{name: "aborted argument", recv: txnRestart, arg: txnAbort},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.recv.Update(&tc.arg)
+
+			expTxn := nonZeroTxn
+			expTxn.Epoch++
+			expTxn.Status = ABORTED
+			require.Equal(t, expTxn, tc.recv)
+		})
+	}
 }
 
 func TestTransactionClone(t *testing.T) {
@@ -788,7 +811,7 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn.WriteTimestamp = makeTS(25, 1)
 	expTxn.ReadTimestamp = makeTS(25, 1)
 	expTxn.WriteTooOld = false
-	expTxn.CommitTimestampFixed = false
+	expTxn.ReadTimestampFixed = false
 	expTxn.LockSpans = nil
 	expTxn.InFlightWrites = nil
 	expTxn.IgnoredSeqNums = nil
@@ -915,7 +938,7 @@ func TestMakePriority(t *testing.T) {
 	}
 
 	// Generate values for all priorities.
-	const trials = 100000
+	const trials = 750000
 	values := make([][trials]enginepb.TxnPriority, len(userPs))
 	for i, userPri := range userPs {
 		for tr := 0; tr < trials; tr++ {
@@ -1426,15 +1449,9 @@ func TestSpansMemUsage(t *testing.T) {
 			s[j].Key = []byte(test.spans[j].start)
 			s[j].EndKey = []byte(test.spans[j].end)
 		}
-		for j := 0; j <= len(s); j++ {
-			// Test that we account for all memory used even when we reduce the length
-			// below the capacity.
-			reduced := s[:j]
-
-			if actual := reduced.MemUsage(); test.expected != actual {
-				t.Errorf("%d.%d: expected spans %v (sliced from %v) to return %d for MemUsage, instead got %d",
-					i, j, reduced, test.spans, test.expected, actual)
-			}
+		if actual := s.MemUsageUpToLen(); test.expected != actual {
+			t.Errorf("%d: expected spans %v to return %d for MemUsageUpToLen, instead got %d",
+				i, test.spans, test.expected, actual)
 		}
 	}
 }
@@ -2114,7 +2131,7 @@ func TestTxnLocksAsLockUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ts := hlc.Timestamp{WallTime: 1}
-	txn := MakeTransaction("hello", Key("k"), isolation.Serializable, 0, ts, 0, 99)
+	txn := MakeTransaction("hello", Key("k"), isolation.Serializable, 0, ts, 0, 99, 0, false /* omitInRangefeeds */)
 
 	txn.Status = COMMITTED
 	txn.IgnoredSeqNums = []enginepb.IgnoredSeqNumRange{{Start: 0, End: 0}}

@@ -12,6 +12,7 @@ package kvpb
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -54,7 +55,7 @@ func TestNewErrorNil(t *testing.T) {
 // TestSetTxn verifies that SetTxn updates the error message.
 func TestSetTxn(t *testing.T) {
 	e := NewError(NewTransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND))
-	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), isolation.Serializable, 1, hlc.Timestamp{}, 0, 99)
+	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), isolation.Serializable, 1, hlc.Timestamp{}, 0, 99, 0, false /* omitInRangefeeds */)
 	e.SetTxn(&txn)
 	if !strings.HasPrefix(
 		e.String(), "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND): \"test\"") {
@@ -75,13 +76,13 @@ func TestErrPriority(t *testing.T) {
 	{
 		id1 := uuid.Must(uuid.NewV4())
 		require.Equal(t, ErrorScoreTxnRestart, ErrPriority(&TransactionRetryWithProtoRefreshError{
-			TxnID:       id1,
-			Transaction: roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: id1}},
+			PrevTxnID:       id1,
+			NextTransaction: roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: id1}},
 		}))
 		id2 := uuid.Nil
 		require.Equal(t, ErrorScoreTxnAbort, ErrPriority(&TransactionRetryWithProtoRefreshError{
-			TxnID:       id1,
-			Transaction: roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: id2}},
+			PrevTxnID:       id1,
+			NextTransaction: roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: id2}},
 		}))
 	}
 	require.Equal(t, ErrorScoreUnambiguousError, ErrPriority(&ConditionFailedError{}))
@@ -173,7 +174,7 @@ func TestErrorRedaction(t *testing.T) {
 			hlc.Timestamp{WallTime: 2},
 			hlc.ClockTimestamp{WallTime: 1, Logical: 2},
 		))
-		txn := roachpb.MakeTransaction("foo", roachpb.Key("bar"), isolation.Serializable, 1, hlc.Timestamp{WallTime: 1}, 1, 99)
+		txn := roachpb.MakeTransaction("foo", roachpb.Key("bar"), isolation.Serializable, 1, hlc.Timestamp{WallTime: 1}, 1, 99, 0, false /* omitInRangefeeds */)
 		txn.ID = uuid.Nil
 		txn.Priority = 1234
 		wrappedPErr.UnexposedTxn = &txn
@@ -224,11 +225,15 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &TransactionStatusError{},
-			expect: "TransactionStatusError: ‹› (REASON_UNKNOWN)",
+			expect: "TransactionStatusError:  (REASON_UNKNOWN)",
+		},
+		{
+			err:    &LockConflictError{},
+			expect: "conflicting locks on ",
 		},
 		{
 			err:    &WriteIntentError{},
-			expect: "conflicting intents on ",
+			expect: "conflicting locks on ",
 		},
 		{
 			err:    &WriteTooOldError{},
@@ -244,7 +249,7 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &LeaseRejectedError{},
-			expect: "cannot replace lease <empty> with <empty>: ‹›",
+			expect: "cannot replace lease <empty> with <empty>: ",
 		},
 		{err: &NodeUnavailableError{}, expect: "node unavailable; try another peer"},
 		{
@@ -285,7 +290,7 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &TxnAlreadyEncounteredErrorError{},
-			expect: "txn already encountered an error; cannot be used anymore (previous err: ‹›)",
+			expect: "txn already encountered an error; cannot be used anymore (previous err: )",
 		},
 		{
 			err:    &IntentMissingError{},
@@ -355,11 +360,19 @@ func TestErrorGRPCStatus(t *testing.T) {
 }
 
 func TestRefreshSpanError(t *testing.T) {
-	e1 := NewRefreshFailedError(RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("foo"), hlc.Timestamp{WallTime: 3})
+	ctx := context.Background()
+	txn := &enginepb.TxnMeta{
+		ID:             uuid.UUID{2},
+		Key:            roachpb.Key("foo"),
+		WriteTimestamp: hlc.Timestamp{WallTime: 3},
+		MinTimestamp:   hlc.Timestamp{WallTime: 4},
+	}
+	e1 := NewRefreshFailedError(ctx, RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("foo"), hlc.Timestamp{WallTime: 3})
 	require.Equal(t, "encountered recently written committed value \"foo\" @0.000000003,0", e1.Error())
 
-	e2 := NewRefreshFailedError(RefreshFailedError_REASON_INTENT, roachpb.Key("bar"), hlc.Timestamp{WallTime: 4})
+	e2 := NewRefreshFailedError(ctx, RefreshFailedError_REASON_INTENT, roachpb.Key("bar"), hlc.Timestamp{WallTime: 4}, WithConflictingTxn(txn))
 	require.Equal(t, "encountered recently written intent \"bar\" @0.000000004,0", e2.Error())
+	require.Equal(t, txn, e2.ConflictingTxn)
 }
 
 func TestNotLeaseholderError(t *testing.T) {
@@ -401,4 +414,17 @@ func TestNotLeaseholderError(t *testing.T) {
 			require.Equal(t, tc.exp, tc.err.Error())
 		})
 	}
+}
+
+func TestDescNotFoundError(t *testing.T) {
+	t.Run("store not found", func(t *testing.T) {
+		err := NewStoreDescNotFoundError(42)
+		require.Equal(t, `store descriptor with store ID 42 was not found`, err.Error())
+		require.True(t, errors.HasType(err, &DescNotFoundError{}))
+	})
+	t.Run("node not found", func(t *testing.T) {
+		err := NewNodeDescNotFoundError(42)
+		require.Equal(t, `node descriptor with node ID 42 was not found`, err.Error())
+		require.True(t, errors.HasType(err, &DescNotFoundError{}))
+	})
 }

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -31,17 +32,18 @@ func init() {
 }
 
 var enableRPCCircuitBreakers = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"rpc.circuit_breaker.enabled",
 	"enables stateful management of failed connections, including circuit breaking "+
-		"when in unhealthy state; only use in case of issues - logging may be suboptimal "+
-		"and metrics related to connection errors will not be populated correctly",
+		"when in unhealthy state; only use in case of issues - logging may be suboptimal, "+
+		"metrics related to connection errors will not be populated correctly, and the "+
+		"'rpc.dialback.enabled' setting will be overridden to 'false'",
 	envutil.EnvOrDefaultBool("COCKROACH_RPC_CIRCUIT_BREAKERS_ENABLED", true),
 )
 
 // TODO(baptist): Remove in 23.2 (or 24.1) once validating dialback works for all scenarios.
 var useDialback = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"rpc.dialback.enabled",
 	"if true, require bidirectional RPC connections between nodes to prevent one-way network unavailability",
 	true,
@@ -49,37 +51,71 @@ var useDialback = settings.RegisterBoolSetting(
 
 var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRESSION", true)
 
-func getWindowSize(name string, c ConnectionClass, defaultSize int) int32 {
-	const maxWindowSize = defaultWindowSize * 32
+func getWindowSize(ctx context.Context, name string, c ConnectionClass, defaultSize int) int32 {
 	s := envutil.EnvOrDefaultInt(name, defaultSize)
-	if s > maxWindowSize {
-		log.Warningf(context.Background(), "%s value too large; trimmed to %d", name, maxWindowSize)
-		s = maxWindowSize
+	if s > maximumWindowSize {
+		log.Warningf(ctx, "%s value too large; trimmed to %d", name, maximumWindowSize)
+		s = maximumWindowSize
 	}
 	if s <= defaultWindowSize {
-		log.Warningf(context.Background(),
+		log.Warningf(ctx,
 			"%s RPC will use dynamic window sizes due to %s value lower than %d", c, name, defaultSize)
 	}
 	return int32(s)
 }
 
 const (
-	defaultWindowSize = 65535
+	defaultWindowSize        = 65535                         // from gRPC
+	defaultInitialWindowSize = defaultWindowSize * 32        // 2MB
+	maximumWindowSize        = defaultInitialWindowSize * 32 // 64MB
 	// The coefficient by which the tolerated offset is multiplied to determine
 	// the maximum acceptable measurement latency.
 	maximumPingDurationMult = 2
 )
 
-var (
-	// for an RPC
-	initialWindowSize = getWindowSize(
-		"COCKROACH_RPC_INITIAL_WINDOW_SIZE", DefaultClass, defaultWindowSize*32)
-	initialConnWindowSize = initialWindowSize * 16 // for a connection
+// windowSizeSettings memoizes the window size configuration for a Context.
+type windowSizeSettings struct {
+	values struct {
+		init sync.Once
+		// initialWindowSize is the initial window size for a gRPC stream.
+		initialWindowSize int32
+		// initialConnWindowSize is the initial window size for a connection.
+		initialConnWindowSize int32
+		// rangefeedInitialWindowSize is the initial window size for a RangeFeed RPC.
+		rangefeedInitialWindowSize int32
+	}
+}
 
-	// for RangeFeed RPC
-	rangefeedInitialWindowSize = getWindowSize(
-		"COCKROACH_RANGEFEED_RPC_INITIAL_WINDOW_SIZE", RangefeedClass, 2*defaultWindowSize /* 128K */)
-)
+func (s *windowSizeSettings) maybeInit(ctx context.Context) {
+	s.values.init.Do(func() {
+		s.values.initialWindowSize = getWindowSize(ctx,
+			"COCKROACH_RPC_INITIAL_WINDOW_SIZE", DefaultClass, defaultInitialWindowSize)
+		s.values.initialConnWindowSize = s.values.initialWindowSize * 16
+		if s.values.initialConnWindowSize > maximumWindowSize {
+			s.values.initialConnWindowSize = maximumWindowSize
+		}
+		s.values.rangefeedInitialWindowSize = getWindowSize(ctx,
+			"COCKROACH_RANGEFEED_RPC_INITIAL_WINDOW_SIZE", RangefeedClass, 2*defaultWindowSize /* 128KB */)
+	})
+}
+
+// For an RPC.
+func (s *windowSizeSettings) initialWindowSize(ctx context.Context) int32 {
+	s.maybeInit(ctx)
+	return s.values.initialWindowSize
+}
+
+// For a connection.
+func (s *windowSizeSettings) initialConnWindowSize(ctx context.Context) int32 {
+	s.maybeInit(ctx)
+	return s.values.initialConnWindowSize
+}
+
+// For a RangeFeed RPC.
+func (s *windowSizeSettings) rangefeedInitialWindowSize(ctx context.Context) int32 {
+	s.maybeInit(ctx)
+	return s.values.rangefeedInitialWindowSize
+}
 
 // sourceAddr is the environment-provided local address for outgoing
 // connections.

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func intToEncodedInvertedVal(v int64) []byte {
@@ -38,6 +39,7 @@ func intSpanToEncodedSpan(start, end int64) inverted.SpanExpressionProto_Span {
 
 func TestInvertedFilterer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Tests do simple intersection and reordering of columns, to exercise the
 	// plumbing in invertedFilterer -- all the heavy lifting for filtering is
@@ -123,7 +125,7 @@ func TestInvertedFilterer(t *testing.T) {
 	}
 	// Setup test environment.
 	ctx := context.Background()
-	server, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	server := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer server.Stopper().Stop(ctx)
 	testConfig := DefaultProcessorTestConfig()
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, testConfig.FlowCtx.Cfg.Settings)

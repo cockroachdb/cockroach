@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestLookupJoinProvided(t *testing.T) {
@@ -46,6 +47,9 @@ func TestLookupJoinProvided(t *testing.T) {
 	md := f.Metadata()
 	tn := tree.NewUnqualifiedTableName("t")
 	tab := md.AddTable(tc.Table(tn), tn)
+	for i := 0; i < 4; i++ {
+		md.AddColumn(fmt.Sprintf("input_col%d", i), types.Int)
+	}
 
 	if c1 := tab.ColumnID(0); c1 != 1 {
 		t.Fatalf("unexpected ID for column c1: %d\n", c1)
@@ -153,10 +157,10 @@ func TestLookupJoinProvided(t *testing.T) {
 	for tcIdx, tc := range testCases {
 		t.Run(fmt.Sprintf("case%d", tcIdx+1), func(t *testing.T) {
 			inputFDs := props.FuncDepSet{}
-			inputFDs.AddStrictKey(tc.inputKey, c(5, 6))
+			inputFDs.AddStrictKey(tc.inputKey, c(5, 6, 7, 8))
 			input := &testexpr.Instance{
 				Rel: &props.Relational{
-					OutputCols: c(5, 6),
+					OutputCols: c(5, 6, 7, 8),
 					FuncDeps:   inputFDs,
 				},
 				Provided: &physical.Provided{

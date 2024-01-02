@@ -18,9 +18,11 @@ import {
   filters,
   lastUpdated,
   nodeRegions,
+  requestTime,
   routeProps,
   sortSetting,
   timeScale,
+  timestamp,
 } from "./transactions.fixture";
 
 import { TransactionsPage } from ".";
@@ -61,6 +63,7 @@ storiesOf("Transactions Page", module)
         filters={filters}
         nodeRegions={nodeRegions}
         hasAdminRole={true}
+        oldestDataAvailable={timestamp}
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
@@ -69,6 +72,8 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
         {...defaultLimitAndSortProps}
       />
     );
@@ -91,6 +96,7 @@ storiesOf("Transactions Page", module)
         filters={filters}
         nodeRegions={nodeRegions}
         hasAdminRole={true}
+        oldestDataAvailable={timestamp}
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
@@ -99,6 +105,8 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
         {...defaultLimitAndSortProps}
       />
     );
@@ -128,6 +136,7 @@ storiesOf("Transactions Page", module)
         history={history}
         nodeRegions={nodeRegions}
         hasAdminRole={true}
+        oldestDataAvailable={timestamp}
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
@@ -136,6 +145,8 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
         {...defaultLimitAndSortProps}
       />
     );
@@ -158,6 +169,7 @@ storiesOf("Transactions Page", module)
         filters={filters}
         nodeRegions={nodeRegions}
         hasAdminRole={true}
+        oldestDataAvailable={timestamp}
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
@@ -166,6 +178,8 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
         {...defaultLimitAndSortProps}
       />
     );
@@ -192,6 +206,7 @@ storiesOf("Transactions Page", module)
         filters={filters}
         nodeRegions={nodeRegions}
         hasAdminRole={true}
+        oldestDataAvailable={timestamp}
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
@@ -200,6 +215,8 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
         {...defaultLimitAndSortProps}
       />
     );

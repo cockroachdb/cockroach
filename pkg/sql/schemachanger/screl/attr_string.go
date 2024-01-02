@@ -18,14 +18,15 @@ func _() {
 	_ = x[Comment-8]
 	_ = x[TemporaryIndexID-9]
 	_ = x[SourceIndexID-10]
-	_ = x[TargetStatus-11]
-	_ = x[CurrentStatus-12]
-	_ = x[Element-13]
-	_ = x[Target-14]
-	_ = x[ReferencedTypeIDs-15]
-	_ = x[ReferencedSequenceIDs-16]
-	_ = x[ReferencedFunctionIDs-17]
-	_ = x[AttrMax-17]
+	_ = x[RecreateSourceIndexID-11]
+	_ = x[TargetStatus-12]
+	_ = x[CurrentStatus-13]
+	_ = x[Element-14]
+	_ = x[Target-15]
+	_ = x[ReferencedTypeIDs-16]
+	_ = x[ReferencedSequenceIDs-17]
+	_ = x[ReferencedFunctionIDs-18]
+	_ = x[AttrMax-18]
 }
 
 func (i Attr) String() string {
@@ -50,6 +51,8 @@ func (i Attr) String() string {
 		return "TemporaryIndexID"
 	case SourceIndexID:
 		return "SourceIndexID"
+	case RecreateSourceIndexID:
+		return "RecreateSourceIndexID"
 	case TargetStatus:
 		return "TargetStatus"
 	case CurrentStatus:

@@ -11,6 +11,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -56,6 +57,17 @@ func (d *dev) builder(cmd *cobra.Command, extraArgs []string) error {
 	return d.exec.CommandContextInheritingStdStreams(ctx, "docker", args...)
 }
 
+func (d *dev) dockerIsPodman(ctx context.Context) (bool, error) {
+	output, err := d.exec.CommandContextSilent(ctx, "docker", "help")
+	if err != nil {
+		return false, err
+	}
+	if bytes.Contains(output, []byte("podman")) {
+		return true, nil
+	}
+	return false, nil
+}
+
 func (d *dev) getDockerRunArgs(
 	ctx context.Context, volume string, tty bool, extraArgs []string,
 ) (args []string, err error) {
@@ -64,8 +76,6 @@ func (d *dev) getDockerRunArgs(
 		return
 	}
 
-	// Apply the same munging for the UID/GID that we do in build/builder.sh.
-	// Quoth a comment from there:
 	// Attempt to run in the container with the same UID/GID as we have on the host,
 	// as this results in the correct permissions on files created in the shared
 	// volumes. This isn't always possible, however, as IDs less than 100 are
@@ -119,10 +129,30 @@ func (d *dev) getDockerRunArgs(
 	}
 
 	args = append(args, "run", "--rm")
+	isPodman, err := d.dockerIsPodman(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if isPodman {
+		args = append(args, "--passwd=false")
+	}
 	if tty {
 		args = append(args, "-it")
 	} else {
 		args = append(args, "-i")
+	}
+	gitDir, err := d.exec.CommandContextSilent(ctx, "git", "rev-parse", "--git-dir")
+	if err != nil {
+		return nil, err
+	}
+	gitCommonDir, err := d.exec.CommandContextSilent(ctx, "git", "rev-parse", "--git-common-dir")
+	if err != nil {
+		return nil, err
+	}
+	// If run from inside a git worktree
+	if string(gitDir) != string(gitCommonDir) {
+		mountPath := strings.TrimSpace(string(gitCommonDir))
+		args = append(args, "-v", mountPath+":"+mountPath)
 	}
 	args = append(args, "-v", workspace+":/cockroach")
 	args = append(args, "--workdir=/cockroach")
@@ -133,6 +163,9 @@ func (d *dev) getDockerRunArgs(
 	if err != nil {
 		return
 	}
+	// We want to at least try to update the permissions here. If we fail to
+	// do so, there's not *necessarily* a reason to freak out yet.
+	_ = d.os.Chmod(artifacts, 0777)
 	args = append(args, "-v", artifacts+":/artifacts")
 	// The `delegated` switch ensures that the container's view of the cache
 	// is authoritative. This can result in writes to the actual underlying

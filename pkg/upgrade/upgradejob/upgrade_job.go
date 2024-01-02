@@ -66,7 +66,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	db := execCtx.ExecCfg().InternalDB
 	ex := db.Executor()
 	enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(
-		execCtx.ExecCfg().Settings, execCtx.ExecCfg().NodeInfo.LogicalClusterID())
+		execCtx.ExecCfg().Settings)
 	alreadyCompleted, err := migrationstable.CheckIfMigrationCompleted(
 		ctx, v, nil /* txn */, ex,
 		enterpriseEnabled, migrationstable.ConsistentRead,
@@ -96,10 +96,8 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			JobRegistry:      execCtx.ExecCfg().JobRegistry,
 			TestingKnobs:     execCtx.ExecCfg().UpgradeTestingKnobs,
 			SessionData:      execCtx.SessionData(),
+			ClusterID:        execCtx.ExtendedEvalContext().ClusterID,
 		}
-		tenantDeps.SpanConfig.KVAccessor = execCtx.ExecCfg().SpanConfigKVAccessor
-		tenantDeps.SpanConfig.Splitter = execCtx.ExecCfg().SpanConfigSplitter
-		tenantDeps.SpanConfig.Default = execCtx.ExecCfg().DefaultZoneConfig.AsSpanConfig()
 
 		tenantDeps.SchemaResolverConstructor = func(
 			txn *kv.Txn, descriptors *descs.Collection, currDb string,
@@ -142,5 +140,10 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 
 // The long-running upgrade resumer has no reverting logic.
 func (r resumer) OnFailOrCancel(ctx context.Context, execCtx interface{}, _ error) error {
+	return nil
+}
+
+// CollectProfile implements the jobs.Resumer interface.
+func (r resumer) CollectProfile(_ context.Context, _ interface{}) error {
 	return nil
 }

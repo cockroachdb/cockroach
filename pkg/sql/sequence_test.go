@@ -35,7 +35,8 @@ import (
 func BenchmarkSequenceIncrement(b *testing.B) {
 	runSubBenchMark := func(b *testing.B, cacheSize int, parallelism int) {
 		subBenchMark := func(b *testing.B) {
-			cluster := serverutils.StartNewTestCluster(b, 3, base.TestClusterArgs{})
+			defer log.Scope(b).Close(b)
+			cluster := serverutils.StartCluster(b, 3, base.TestClusterArgs{})
 			defer cluster.Stopper().Stop(context.Background())
 
 			sqlDB := cluster.ServerConn(0)
@@ -79,7 +80,8 @@ func BenchmarkSequenceIncrement(b *testing.B) {
 }
 
 func BenchmarkUniqueRowID(b *testing.B) {
-	cluster := serverutils.StartNewTestCluster(b, 3, base.TestClusterArgs{})
+	defer log.Scope(b).Close(b)
+	cluster := serverutils.StartCluster(b, 3, base.TestClusterArgs{})
 	defer cluster.Stopper().Stop(context.Background())
 
 	sqlDB := cluster.ServerConn(0)
@@ -115,6 +117,7 @@ func BenchmarkUniqueRowID(b *testing.B) {
 // - ownership removal
 func TestSequenceOwnershipDependencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params := base.TestServerArgs{}

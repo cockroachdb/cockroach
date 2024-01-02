@@ -40,7 +40,6 @@ func registerAcceptance(r registry.Registry) {
 				encryptionSupport: registry.EncryptionAlwaysDisabled,
 			},
 			{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
-			{name: "reset-quorum", fn: runResetQuorum, numNodes: 8},
 			{
 				name: "many-splits", fn: runManySplits,
 				encryptionSupport: registry.EncryptionMetamorphic,
@@ -77,19 +76,21 @@ func registerAcceptance(r registry.Registry) {
 				numNodes: 3,
 			},
 		},
+		registry.OwnerSQLFoundations: {
+			{
+				name:          "validate-system-schema-after-version-upgrade",
+				fn:            runValidateSystemSchemaAfterVersionUpgrade,
+				timeout:       30 * time.Minute,
+				defaultLeases: true,
+				numNodes:      1,
+			},
+			{
+				name:     "mismatched-locality",
+				fn:       runMismatchedLocalityTest,
+				numNodes: 3,
+			},
+		},
 	}
-	specTemplate := registry.TestSpec{
-		// NB: teamcity-post-failures.py relies on the acceptance tests
-		// being named acceptance/<testname> and will avoid posting a
-		// blank issue for the "acceptance" parent test. Make sure to
-		// teach that script (if it's still used at that point) should
-		// this naming scheme ever change (or issues such as #33519)
-		// will be posted.
-		Name:    "acceptance",
-		Timeout: 10 * time.Minute,
-		Tags:    registry.Tags("default", "quick"),
-	}
-
 	for owner, tests := range testCases {
 		for _, tc := range tests {
 			tc := tc // copy for closure
@@ -98,15 +99,20 @@ func registerAcceptance(r registry.Registry) {
 				numNodes = tc.numNodes
 			}
 
-			spec := specTemplate
-			spec.Owner = owner
-			spec.Cluster = r.MakeClusterSpec(numNodes)
-			spec.Skip = tc.skip
-			spec.Name = specTemplate.Name + "/" + tc.name
+			spec := registry.TestSpec{
+				Name:              "acceptance/" + tc.name,
+				Owner:             owner,
+				Cluster:           r.MakeClusterSpec(numNodes),
+				Skip:              tc.skip,
+				EncryptionSupport: tc.encryptionSupport,
+				Timeout:           10 * time.Minute,
+				CompatibleClouds:  registry.AllExceptAWS,
+				Suites:            registry.Suites(registry.Nightly, registry.Quick),
+			}
+
 			if tc.timeout != 0 {
 				spec.Timeout = tc.timeout
 			}
-			spec.EncryptionSupport = tc.encryptionSupport
 			if !tc.defaultLeases {
 				spec.Leases = registry.MetamorphicLeases
 			}

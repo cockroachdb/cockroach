@@ -88,16 +88,16 @@ func TestCancelQueryOtherNode(t *testing.T) {
 			},
 		},
 	}
-	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 
 	proxy, err := net.Listen("tcp", util.TestAddr.String())
 	require.NoError(t, err)
 
-	node0, err := net.Dial("tcp", tc.Server(0).ServingSQLAddr())
+	node0, err := net.Dial("tcp", tc.Server(0).AdvSQLAddr())
 	require.NoError(t, err)
 	defer node0.Close()
-	node1, err := net.Dial("tcp", tc.Server(1).ServingSQLAddr())
+	node1, err := net.Dial("tcp", tc.Server(1).AdvSQLAddr())
 	require.NoError(t, err)
 	defer node1.Close()
 
@@ -174,12 +174,12 @@ func TestCancelCopyTo(t *testing.T) {
 	ctx := context.Background()
 	skip.UnderStress(t, "flaky")
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	pgURL, cleanup := sqlutils.PGUrl(
 		t,
-		s.ServingSQLAddr(),
+		s.AdvSQLAddr(),
 		"TestCancelCopyTo",
 		url.User(username.RootUser),
 	)
@@ -190,7 +190,7 @@ func TestCancelCopyTo(t *testing.T) {
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		_, err = conn.Exec(ctx, "COPY (SELECT pg_sleep(1) FROM ROWS FROM (generate_series(1, 60)) AS i) TO STDOUT")
+		_, err := conn.Exec(ctx, "COPY (SELECT pg_sleep(1) FROM ROWS FROM (generate_series(1, 60)) AS i) TO STDOUT")
 		return err
 	})
 

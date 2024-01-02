@@ -22,8 +22,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	kv2 "github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -66,11 +66,6 @@ func newKVNative(b *testing.B) kvInterface {
 
 func newKVNativeAndEngine(tb testing.TB, valueBlocks bool) (*kvNative, storage.Engine) {
 	st := cluster.MakeTestingClusterSettings()
-	version := st.Version.ActiveVersionOrEmpty(context.Background())
-	if version.Less(clusterversion.ByKey(
-		clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks)) {
-		tb.Fatalf("cluster version is too old %s", version.String())
-	}
 	storage.ValueBlocksEnabled.Override(context.Background(), &st.SV, valueBlocks)
 	s, _, db := serverutils.StartServer(tb, base.TestServerArgs{Settings: st})
 	engines := s.Engines()
@@ -105,7 +100,7 @@ func (kv *kvNative) Update(rows, run int) error {
 		// Don't permute the rows, to be similar to SQL which sorts the spans in a
 		// batch.
 		for i := 0; i < rows; i++ {
-			b.GetForUpdate(fmt.Sprintf("%s%08d", kv.prefix, i))
+			b.GetForUpdate(fmt.Sprintf("%s%08d", kv.prefix, i), kvpb.BestEffort)
 		}
 		if err := txn.Run(ctx, b); err != nil {
 			return err

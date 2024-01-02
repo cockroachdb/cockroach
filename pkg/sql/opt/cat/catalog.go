@@ -83,6 +83,14 @@ type Flags struct {
 // returned by the Resolve methods (schemas and data sources) *must* be
 // immutable after construction, and therefore also thread-safe.
 type Catalog interface {
+	// LookupDatabaseName locates a database with the given name and returns
+	// the name if found. If no name is provided, it will return the name of
+	// the current database. An error is returned if no database with the given
+	// name exists or in the case of an empty name, there is no current database.
+	// TODO(yang): This function can be extended if needed in the future
+	// to return a new cat.Database type similar to ResolveSchema.
+	LookupDatabaseName(ctx context.Context, flags Flags, name string) (tree.Name, error)
+
 	// ResolveSchema locates a schema with the given name and returns it along
 	// with the resolved SchemaName (which has all components filled in).
 	// If the SchemaName is empty, returns the current database/schema (if one is
@@ -151,11 +159,11 @@ type Catalog interface {
 
 	// ResolveFunction resolves a function by name.
 	ResolveFunction(
-		ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+		ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 	) (*tree.ResolvedFunctionDefinition, error)
 
 	// ResolveFunctionByOID resolves a function overload by OID.
-	ResolveFunctionByOID(ctx context.Context, oid oid.Oid) (*tree.FunctionName, *tree.Overload, error)
+	ResolveFunctionByOID(ctx context.Context, oid oid.Oid) (*tree.RoutineName, *tree.Overload, error)
 
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.
@@ -165,13 +173,14 @@ type Catalog interface {
 	// the given catalog object. If not, then CheckAnyPrivilege returns an error.
 	CheckAnyPrivilege(ctx context.Context, o Object) error
 
+	// CheckExecutionPrivilege verifies that the current user has execution
+	// privileges for the UDF with the given OID. If not, then CheckPrivilege
+	// returns an error.
+	CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error
+
 	// HasAdminRole checks that the current user has admin privileges. If yes,
 	// returns true. Returns an error if query on the `system.users` table failed
 	HasAdminRole(ctx context.Context) (bool, error)
-
-	// RequireAdminRole checks that the current user has admin privileges. If not,
-	// returns an error.
-	RequireAdminRole(ctx context.Context, action string) error
 
 	// HasRoleOption converts the roleoption to its SQL column name and checks if
 	// the user belongs to a role where the option has value true. Requires a
@@ -190,6 +199,10 @@ type Catalog interface {
 	//    object itself changing (e.g. when a database is renamed).
 	FullyQualifiedName(ctx context.Context, ds DataSource) (DataSourceName, error)
 
-	// RoleExists returns true if the role exists.
-	RoleExists(ctx context.Context, role username.SQLUsername) (bool, error)
+	// CheckRoleExists returns an error if the role does not exist.
+	CheckRoleExists(ctx context.Context, role username.SQLUsername) error
+
+	// Optimizer returns the query Optimizer used to optimize SQL statements
+	// referencing objects in this catalog, if any.
+	Optimizer() interface{}
 }

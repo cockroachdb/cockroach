@@ -11,11 +11,15 @@
 package insights
 
 import (
+	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 )
 
 // This registry is the central object in the insights subsystem. It observes
@@ -86,8 +90,13 @@ func addProblem(arr []Problem, n Problem) []Problem {
 	return append(arr, n)
 }
 
-func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction) {
+func (r *lockingRegistry) ObserveTransaction(
+	ctx context.Context, sessionID clusterunique.ID, transaction *Transaction,
+) {
 	if !r.enabled() {
+		return
+	}
+	if transaction.ID.String() == "00000000-0000-0000-0000-000000000000" {
 		return
 	}
 	statements, ok := r.statements[sessionID]
@@ -113,8 +122,9 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 		highContention = transaction.Contention.Seconds() >= LatencyThreshold.Get(&r.causes.st.SV).Seconds()
 	}
 
-	if slowOrFailedStatements.Empty() && !highContention {
-		// We only record an insight if we have slow or failed statements or high txn contention.
+	txnFailed := transaction.Status == Transaction_Failed
+	if slowOrFailedStatements.Empty() && !highContention && !txnFailed {
+		// We only record an insight if we have slow statements, high txn contention, or failed executions.
 		return
 	}
 
@@ -127,11 +137,15 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 		insight.Transaction.Causes = addCause(insight.Transaction.Causes, Cause_HighContention)
 	}
 
-	var lastErrorCode string
+	if txnFailed {
+		insight.Transaction.Problems = addProblem(insight.Transaction.Problems, Problem_FailedExecution)
+	}
+
 	// The transaction status will reflect the status of its statements; it will
 	// default to completed unless a failed statement status is found. Note that
 	// this does not take into account the "Cancelled" transaction status.
-	var lastStatus = Transaction_Completed
+	var lastStmtErr redact.RedactableString
+	var lastStmtErrCode string
 	for i, s := range *statements {
 		if slowOrFailedStatements.Contains(i) {
 			switch s.Status {
@@ -139,9 +153,11 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 				s.Problem = Problem_SlowExecution
 				s.Causes = r.causes.examine(s.Causes, s)
 			case Statement_Failed:
-				lastErrorCode = s.ErrorCode
-				lastStatus = Transaction_Status(s.Status)
 				s.Problem = Problem_FailedExecution
+				if transaction.LastErrorCode == "" {
+					lastStmtErr = s.ErrorMsg
+					lastStmtErrCode = s.ErrorCode
+				}
 			}
 
 			// Bubble up stmt problems and causes.
@@ -155,9 +171,22 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 		insight.Statements = append(insight.Statements, s)
 	}
 
-	insight.Transaction.LastErrorCode = lastErrorCode
-	insight.Transaction.Status = lastStatus
+	if transaction.LastErrorCode == "" && lastStmtErrCode != "" {
+		// Stmt failure equates to transaction failure. Sometimes we
+		// can't propagate the error up to the transaction level so
+		// we manually set the transaction's failure info here.
+		transaction.LastErrorMsg = lastStmtErr
+		transaction.LastErrorCode = lastStmtErrCode
+	}
+
 	r.sink.AddInsight(insight)
+	// Exporting Insights to Observability Service.
+	if SQLInsightsStatsExportEnabled.Get(&r.causes.st.SV) {
+		err := r.sink.ExportInsight(ctx, insight)
+		if err != nil {
+			log.Errorf(ctx, "encountered an error at insights export: %v", err)
+		}
+	}
 }
 
 // TODO(todd):
@@ -177,4 +206,96 @@ func newRegistry(st *cluster.Settings, detector detector, sink sink) *lockingReg
 		causes:     &causes{st: st},
 		sink:       sink,
 	}
+}
+
+func (s *Statement) CopyTo(
+	ctx context.Context, t *Transaction, session *Session, other *obspb.StatementInsightsStatistics,
+) {
+	if other == nil {
+		log.Errorf(ctx, "no object passed from pool for Insights exporter")
+		return
+	}
+
+	other.AutoRetryReason = s.AutoRetryReason
+	other.Contention = s.Contention
+	other.CPUSQLNanos = s.CPUSQLNanos
+	other.Database = s.Database
+	other.EndTime = &s.EndTime
+	other.ErrorCode = s.ErrorCode
+	other.FingerprintID = uint64(s.FingerprintID)
+	other.FullScan = s.FullScan
+	other.IndexRecommendations = s.IndexRecommendations
+	other.Nodes = s.Nodes
+	other.PlanGist = s.PlanGist
+	other.Query = s.Query
+	other.Retries = s.Retries
+	other.RowsRead = s.RowsRead
+	other.RowsWritten = s.RowsWritten
+	other.ServiceLatSeconds = s.LatencyInSeconds
+	other.StartTime = &s.StartTime
+	other.LastErrorRedactable = string(s.ErrorMsg.Redact())
+	var err error
+	other.ID, err = s.ID.MarshalJSON()
+	if err != nil {
+		log.Errorf(ctx, "marshalling statement insights ID for Insights exporter")
+	}
+
+	other.ApplicationName = t.ApplicationName
+	other.ImplicitTxn = t.ImplicitTxn
+	other.TxnFingerprintID = uint64(t.FingerprintID)
+	other.User = t.User
+	other.UserPriority = t.UserPriority
+
+	txnID, err := t.ID.MarshalJSON()
+	if err != nil {
+		log.Errorf(ctx, "marshalling transaction insights ID for Insights exporter")
+	} else {
+		other.TransactionID = txnID
+		other.ID = txnID
+	}
+	other.SessionID, err = session.ID.MarshalJSON()
+	if err != nil {
+		log.Errorf(ctx, "marshalling sessions ID for Insights exporter")
+	}
+
+	switch s.Status {
+	case Statement_Completed:
+		other.Status = obspb.StatementInsightsStatistics_Completed
+	case Statement_Failed:
+		other.Status = obspb.StatementInsightsStatistics_Failed
+	default:
+		other.Status = obspb.StatementInsightsStatistics_Completed
+	}
+
+	switch s.Problem {
+	case Problem_FailedExecution:
+		other.Problem = obspb.StatementInsightsStatistics_FailedExecution
+	case Problem_SlowExecution:
+		other.Problem = obspb.StatementInsightsStatistics_SlowExecution
+	default:
+		other.Problem = obspb.StatementInsightsStatistics_None
+	}
+
+	other.Causes = []obspb.StatementInsightsStatistics_Cause{}
+	for _, c := range s.Causes {
+		switch c {
+		case Cause_SuboptimalPlan:
+			other.Causes = append(other.Causes, obspb.StatementInsightsStatistics_SuboptimalPlan)
+		case Cause_HighRetryCount:
+			other.Causes = append(other.Causes, obspb.StatementInsightsStatistics_HighRetryCount)
+		case Cause_PlanRegression:
+			other.Causes = append(other.Causes, obspb.StatementInsightsStatistics_PlanRegression)
+		case Cause_HighContention:
+			other.Causes = append(other.Causes, obspb.StatementInsightsStatistics_HighContention)
+		default:
+			other.Causes = append(other.Causes, obspb.StatementInsightsStatistics_Unset)
+		}
+	}
+
+	// TODO(maryliag): add information about Contention Events
+	// and Idle/Parse/Run Latencies.
+	//other.ContentionEvents
+	//other.IdleLatSeconds
+	//other.ParseLatSeconds
+	//other.RunLatSeconds
 }

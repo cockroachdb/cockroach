@@ -10,11 +10,7 @@
 
 package storage
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/pebble"
-)
+import "github.com/cockroachdb/pebble"
 
 // verifyingMVCCIterator is an MVCC iterator that wraps a pebbleIterator and
 // verifies roachpb.Value checksums for encountered values.
@@ -82,12 +78,6 @@ func (i *verifyingMVCCIterator) Prev() {
 // SeekGE implements MVCCIterator.
 func (i *verifyingMVCCIterator) SeekGE(key MVCCKey) {
 	i.pebbleIterator.SeekGE(key)
-	i.saveAndVerify()
-}
-
-// SeekIntentGE implements MVCCIterator.
-func (i *verifyingMVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
-	i.pebbleIterator.SeekIntentGE(key, txnUUID)
 	i.saveAndVerify()
 }
 

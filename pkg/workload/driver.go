@@ -28,12 +28,12 @@ import (
 // simplistic setups where nodes in the cluster are stable and do not go up and
 // down.
 type cockroachDriver struct {
-	idx uint32
+	idx atomic.Uint32
 }
 
 func (d *cockroachDriver) Open(name string) (driver.Conn, error) {
 	urls := strings.Split(name, " ")
-	i := atomic.AddUint32(&d.idx, 1) - 1
+	i := d.idx.Add(1) - 1
 	return pq.Open(urls[i%uint32(len(urls))])
 }
 

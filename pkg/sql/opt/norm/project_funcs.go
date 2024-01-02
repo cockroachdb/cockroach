@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -848,4 +849,57 @@ func (c *CustomFuncs) IsStaticTuple(expr opt.ScalarExpr) bool {
 		}
 	}
 	return false
+}
+
+// ProjectRemappedCols creates a projection for each column in the "from" set
+// that is not in the "to" set, mapping it to an equivalent column in the "to"
+// set. ProjectRemappedCols panics if this is not possible.
+func (c *CustomFuncs) ProjectRemappedCols(
+	from, to opt.ColSet, fds *props.FuncDepSet,
+) (projections memo.ProjectionsExpr) {
+	for col, ok := from.Next(0); ok; col, ok = from.Next(col + 1) {
+		if !to.Contains(col) {
+			toCol, ok := c.remapColWithIdenticalType(col, to, fds)
+			if !ok {
+				panic(errors.AssertionFailedf("cannot remap column %v", col))
+			}
+			projections = append(
+				projections,
+				c.f.ConstructProjectionsItem(c.f.ConstructVariable(toCol), col),
+			)
+		}
+	}
+	return projections
+}
+
+// RemapProjectionCols remaps column references in the given projections to
+// refer to the "to" set.
+func (c *CustomFuncs) RemapProjectionCols(
+	projections memo.ProjectionsExpr, to opt.ColSet, fds *props.FuncDepSet,
+) memo.ProjectionsExpr {
+	// Use the projection outer columns to filter out columns that are synthesized
+	// within the projections themselves (e.g. in a subquery).
+	outerCols := c.ProjectionOuterCols(projections)
+
+	// Replace any references to the "from" columns in the projections.
+	var replace ReplaceFunc
+	replace = func(e opt.Expr) opt.Expr {
+		if v, ok := e.(*memo.VariableExpr); ok && !to.Contains(v.Col) && outerCols.Contains(v.Col) {
+			// This variable needs to be remapped.
+			toCol, ok := c.remapColWithIdenticalType(v.Col, to, fds)
+			if !ok {
+				panic(errors.AssertionFailedf("cannot remap column %v", v.Col))
+			}
+			return c.f.ConstructVariable(toCol)
+		}
+		return c.f.Replace(e, replace)
+	}
+	return *(replace(&projections).(*memo.ProjectionsExpr))
+}
+
+// CanUseImprovedJoinElimination returns true if either no column remapping is
+// required in order to eliminate the join, or column remapping is enabled by
+// OptimizerUseImprovedJoinElimination.
+func (c *CustomFuncs) CanUseImprovedJoinElimination(from, to opt.ColSet) bool {
+	return c.f.evalCtx.SessionData().OptimizerUseImprovedJoinElimination || from.SubsetOf(to)
 }

@@ -12,17 +12,15 @@ package sql
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -30,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -44,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -56,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -67,50 +67,65 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const n = 100
+
+	// NB: this test uses StartCluster because it depends on some
+	// cluster setting initializations that only testcluster does.
 	const numNodes = 1
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{UseDatabase: "test"},
 	})
-
 	defer tc.Stopper().Stop(context.Background())
 
+	s := tc.Server(0)
+	ts := s.ApplicationLayer()
+	cdb := ts.DB()
+	db := ts.SQLConn(t, serverutils.DBName("test"))
+
 	sqlutils.CreateTable(
-		t, tc.ServerConn(0), "t", "x INT PRIMARY KEY, xsquared INT",
+		t, db, "t", "x INT PRIMARY KEY, xsquared INT",
 		n,
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, func(row int) tree.Datum {
 			return tree.NewDInt(tree.DInt(row * row))
 		}),
 	)
 
-	ctx := tc.Server(0).AnnotateCtx(context.Background())
-
 	// Start a worker that continuously performs splits in the background.
-	_ = tc.Stopper().RunAsyncTask(ctx, "splitter", func(ctx context.Context) {
+	stopSplitter := make(chan struct{})
+	splitterDone := make(chan struct{})
+	go func() {
+		defer t.Logf("splitter done")
+		defer close(splitterDone)
 		rng, _ := randutil.NewTestRand()
-		cdb := tc.Server(0).DB()
 		for {
 			select {
-			case <-tc.Stopper().ShouldQuiesce():
+			case <-stopSplitter:
 				return
 			default:
-				// Split the table at a random row.
-				tableDesc := desctestutils.TestingGetTableDescriptor(
-					cdb, keys.SystemSQLCodec, "test", "public", "t",
-				)
+			}
 
-				val := rng.Intn(n)
-				t.Logf("splitting at %d", val)
-				pik, err := randgen.TestingMakePrimaryIndexKey(tableDesc, val)
-				if err != nil {
-					panic(err)
-				}
+			// Split the table at a random row.
+			tableDesc := desctestutils.TestingGetTableDescriptor(
+				cdb, ts.Codec(), "test", "public", "t",
+			)
 
-				if _, _, err := tc.Server(0).SplitRange(pik); err != nil {
-					panic(err)
-				}
+			val := rng.Intn(n)
+			t.Logf("splitting at %d", val)
+			pik, err := randgen.TestingMakePrimaryIndexKey(tableDesc, val)
+			if err != nil {
+				panic(err)
+			}
+
+			if _, _, err := s.SplitRange(pik); err != nil {
+				panic(err)
 			}
 		}
-	})
+	}()
+	defer func() {
+		close(stopSplitter)
+		t.Logf("waiting for splitter to finish")
+		<-splitterDone
+		t.Logf("done waiting on splitter to finish")
+	}()
 
 	sumX, sumXSquared := 0, 0
 	for x := 1; x <= n; x++ {
@@ -131,23 +146,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 			defer wg.Done()
 
 			// Create a gosql.DB for this worker.
-			pgURL, cleanupGoDB := sqlutils.PGUrl(
-				t, tc.Server(0).ServingSQLAddr(), fmt.Sprintf("%d", idx), url.User(username.RootUser),
-			)
-			defer cleanupGoDB()
-
-			pgURL.Path = "test"
-			goDB, err := gosql.Open("postgres", pgURL.String())
-			if err != nil {
-				t.Error(err)
-				return
-			}
-
-			defer func() {
-				if err := goDB.Close(); err != nil {
-					t.Error(err)
-				}
-			}()
+			goDB := ts.SQLConn(t, serverutils.DBName("test"))
 
 			// Limit to 1 connection because we set a session variable.
 			goDB.SetMaxOpenConns(1)
@@ -177,13 +176,15 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 					return
 				}
 				if rows.Next() {
-					t.Errorf("more than one row")
+					t.Error("more than one row")
 					return
 				}
+				time.Sleep(10 * time.Millisecond)
 			}
 		}(i)
 	}
 	wg.Wait()
+	t.Logf("queriers done")
 }
 
 // Test that DistSQLReceiver uses inbound metadata to update the
@@ -272,7 +273,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	// We're going to setup a cluster with 4 nodes. The last one will not be a
 	// target of any replication so that its caches stay virgin.
 
-	tc := serverutils.StartNewTestCluster(t, 4, /* numNodes */
+	tc := serverutils.StartCluster(t, 4, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -393,7 +394,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 	const n = 100
 	const numNodes = 5
 
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs:      base.TestServerArgs{UseDatabase: "test"},
 	})
@@ -455,8 +456,8 @@ func TestDistSQLDeadHosts(t *testing.T) {
 
 	// Verify the plan (should include all 5 nodes).
 	r.CheckQueryResults(t,
-		"SELECT info FROM [EXPLAIN (DISTSQL) SELECT sum(xsquared) FROM t] WHERE info LIKE 'Diagram%'",
-		[][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslG-Lm0AQxt_3U8hAuQQ2uBqT83x1x52l0tyfxpQWDinbOBWpcb3dFa6EfPeitsSEu9XGe-nuPPM8v3GZLcinDDwI_YV_vTLS_Cc3Pizvb41H_9vD4iq4M0Y3QbgKPy_Gxt8aWW5Gz_KpZALjcVOsIuPrR3_pN_pF8Mk3zm5Slgi2eX8GBHIe4x3boATvESwgYAOBKRBwgMAMIgKF4GuUkouqZFsLgvgZPEogzYtSVccRgTUXCN4WVKoyBA9W7EeGS2QxCpMCgRgVS7PaRl2q78Uv_A0ErnlWbnLpGf9iA4GwYNXJxLQpRDsCvFR7G6lYguBZO9I_ylWSCEyY4sKcHSYJv9yOLq3xqzb2qzb77mXORYxN9H3raKcPYtH_SzI9SGL1n711yuxNm05Mp-_4O9K0qOdDxm_3h7ZPgnboxJz3he5I04I-HwI97Q89PQl6Tiem2xe6I00L2h0C7fSHdk6CdumkJ3FHlBbxxVutlhdsligLnks8WjEvd6bV6sE4wWZPSV6KNT4Ivq5tms_7WlcfxChVc2s1H0HeXFUB22JLK7YPxNax2NY7d1hPtWpHL3aG5J5pxXO983yI87lW7Oqd3SHOF_p_RTueif6RHXtHu3d_AgAA___Fl-el"}},
+		"SELECT info FROM [EXPLAIN (DISTSQL, SHAPE) SELECT sum(xsquared) FROM t] WHERE info LIKE 'Diagram%'",
+		[][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyklV9ro0wUxu_fTyEHXtrCiI4aY7xqaVwaNv2zMcsulFBm46krNU46M9KWku--GNutcRtR40XAceZ5fvOcmZNXkI8p-BAG0-B8riXZPde-zK4vtdvg5830bHKlHY8n4Tz8NiVaeHF2E5xob1Nlvjp-lo85ExidlGvUQvtxEcyCUmY6-RpoR-OExYKt_j8CAhmP8IqtUIJ_CxQIWEDABgIOEBjAgsBa8CVKyUUx5XW7YBI9g28SSLJ1rorhBYElFwj-K6hEpQg-zNmvFGfIIhSGCQQiVCxJtzbqVN2tH_AFCJzzNF9l0tfesYFAuGbFiG5YJiw2BHiuPmykYjGCTytckzH45oa0RzuLY4ExU1wYg12y8Pvl8Sk92Wtr1WwHe20_3PKMiwjLrX1YLTbNYNTsRmbXyOhuIrR9sWifYhmWqRtO-3rRLnSVWNzD6uXu2FrtQ7F6heKYuuG2D8XqQlcJZXhYKMMdW7t9KHavUFxTN7z2odhd6CqheIeF4u3YOu1DcXqF4pl660ScLmiVREaHJTLq0mJnKNc8k1jreZ87mTUnnRbNEaMYy04qeS6WeCP4cju3fL3eCm0HIpSq_ErLl0n2_kkqgWz19x-iqkQblawdJVpVGtSVrGamLlB2o5SzX4nWlZy-23PrSoNGJXc_k1VXcvsyDetKw0Ylbz-TXVfy-jJ5daVR8zEw90M5_5zN5mPeQDUqrs59yp_ukgh8MN8e_ZOf9weKBSyWxf0Nf_Onrez8ZV3cvnuWSiRwyR5wjArFKskSqZIl-ErkuNn89ycAAP__hKt0rw=="}},
 	)
 
 	// Stop node 5.
@@ -465,9 +466,9 @@ func TestDistSQLDeadHosts(t *testing.T) {
 	testutils.SucceedsSoon(t, runQuery)
 
 	// The leaseholder for the last range should have moved to either node 2 or 3.
-	query := "SELECT info FROM [EXPLAIN (DISTSQL) SELECT sum(xsquared) FROM t] WHERE info LIKE 'Diagram%'"
-	exp2 := [][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk29r2zAQxt_vU4iD0QQUbDmum_lVS-sxs_TP4owNihladPPMHMuVZOgI-e7D9kaS0ipuspeW7rnn95x8K9APBYSQRNPock7y8ock72e31-Q--no3vYhvyOAqTubJp-mQ_K3R9XLwqB9qrlAMu2KTki8folnU6afxx4icXOU8U3z59gQolFLgDV-ihvAeGFDwgMIYKPiQUqiUXKDWUjXXq7Y4Fo8QuhTysqpNc5xSWEiFEK7A5KZACGHOvxc4Qy5QOS5QEGh4XrQW5tx8q37hb6BwKYt6WeqQ_EMGCknFm5OR47mQrinI2mxstOEZQsjWtD_KRZYpzLiRyvF3SZLP14NzNnzRxnvRZtO9LqUS2KFvWqdrO8jkdSDjHRDWf_TskNE7njtyfJfwUhBGpPmJqudL7CHbGsDpMS_h9R-Ad9AAfHfkBH1_vz00W6GDY0KP-4ceHxQ6cEfOpG_oPTRboc_-1849YzNDXclS45Pde76z2-wkigy7BdayVgu8U3LR2nSft62uPRCoTXfLuo-47K4awG0xs4q9HTF7Kvas4nd257FV7NvF_jHYp1ZxYHcOjnE-s4ondufJq5zT9Zs_AQAA__9QI3J0"}}
-	exp3 := [][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk29r2zAQxt_vU4iD0QQUbDmum_lVS-sxs_TP4owNihladPPMHMuVZOgI-e7D9kaS0ipuspfW3XPP7x5zK9APBYSQRNPock7y8ock72e31-Q--no3vYhvyOAqTubJp-mQ_O3R9XLwqB9qrlAMu2aTki8folnU6afxx4icXOU8U3z59gQolFLgDV-ihvAeGFDwgMIYKPiQUqiUXKDWUjXlVdsci0cIXQp5WdWmeU4pLKRCCFdgclMghDDn3wucIReoHBcoCDQ8L1oLc26-Vb_wN1C4lEW9LHVI_iEDhaTizcvI8VxI1xRkbTY22vAMIWRr2h_lIssUZtxI5fi7JMnn68E5G75o471os5lel1IJ7NA3o9O1HWTyOpDxDgjrHz07JHrHc0eO3zf9PTRbS58ek77Xf2nvoKV9d-QELuGlIIxI8xNVzwD2kG0FEBwTwLh_AOODAgjckTPp-9f30Gwtffa_bu4ZmxnqSpYan9ze85Pd5iZRZNgdsJa1WuCdkovWpvu8bXXtg0BtuirrPuKyKzWA22JmFXs7YvZU7FnF7-zOY6vYt4v9Y7BPreLA7hwc43xmFU_szpNXOafrN38CAAD__0dtcnQ="}}
+	query := "SELECT info FROM [EXPLAIN (DISTSQL, SHAPE) SELECT sum(xsquared) FROM t] WHERE info LIKE 'Diagram%'"
+	exp2 := [][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyklF9vmzAUxd_3KawrTW0lR2AgJOOpVcPUaOmfhUybVEWVF24pKsGpbdRWVb77BLQrQQ0CygMStvmd43Pt-wLqIQEPAn_mny5InN4K8n1-eU6u_T9Xs5PpBTmcTINF8HNGSXB2cuUfkdelKlsfPqmHjEsMj8p_9JL8PvPnfomZTX_45GAS80jy9dcDoJCKEC_4GhV418CAggUUbKDgwJLCRooVKiVkPv1SLJ6GT-CZFOJ0k-l8eElhJSSC9wI61gmCBwv-N8E58hClYQKFEDWPk0JCH-ubzT0-A4VTkWTrVHnkzTJQCDY8HxkYlgnLLQWR6XcZpXmE4LGKr-kEPHNL21s7iSKJEddCGs6us-DX-eExO9ora9Vknb2y72pZKmSI5dbepZbbZmPjbsbsmrHxjjHWvlSsT6kMyxwYTvtqsS7uKqEMP1et4Y6s1T4Uq1cojjkwXJPwNCSMCH2HsnVAVhenlYDczwXk7sja7QOyewXkmgNj3P7U2F3cVUIZfS6UUZfWMke1EanC2l3_WMmsKQ1Y3hQwjLDsIEpkcoVXUqyKteXnZQEqBkJUupxl5cc0fZtSWiJf_--MVRJrJFk7JFYlOXWS1Uj61sGT3Uhy9pNYneT03d2wTho2ktz9nqw6ye3rya2TRo2k8X5Pdp007utplJ_R20Q83sQheGC-PoMPXm8P5D_wSOUXJbgTjwV28bzJj_ktTxRSOOf3OEGNch2nsdLxCjwtM9xuv_wLAAD__6oi7LA="}}
+	exp3 := [][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyklF9vmzAUxd_3KawrTW0lR2AgJOOpVcPUaOmfhUybVEWVF24pKsGpbdRWVb77BLQrQQ0CygMStvmd43Pt-wLqIQEPAn_mny5InN4K8n1-eU6u_T9Xs5PpBTmcTINF8HNGSXB2cuUfkdelKlsfPqmHjEsMj8p_9JL8PvPnfomZTX_45GAS80jy9dcDoJCKEC_4GhV418CAggUUbKDgwJLCRooVKiVkPv1SLJ6GT-CZFOJ0k-l8eElhJSSC9wI61gmCBwv-N8E58hClYQKFEDWPk0JCH-ubzT0-A4VTkWTrVHnkzTJQCDY8HxkYlgnLLQWR6XcZpXmE4LGKr-kEPHNL21s7iSKJEddCGs6us-DX-eExO9ora9Vknb2y72pZKmSI5dbepZbbZmPjbsbsmrHxjjHWvlSsT6kMyxwYjkl4GhJGhL5D2bpyrIvTSkDDz1VuuCNrtQ_I6hWQYw4Mt_1xtrq4q4Tifi4Ud0fWbh-K3SsU1xwY4_ah2F3cVUIZfS6UUZfWMke1EanC2l3_WMmsKQ1Y3hQwjLDsIEpkcoVXUqyKteXnZQEqBkJUupxl5cc0fZtSWiJf_--MVRJrJFk7JFYlOXWS1Uj61sGT3Uhy9pNYneT03d2wTho2ktz9nqw6ye3rya2TRo2k8X5Pdp007utplJ_R20Q83sQheGC-PoMPXm8P5D_wSOUXJbgTjwV28bzJj_ktTxRSOOf3OEGNch2nsdLxCjwtM9xuv_wLAAD__7Co7LA="}}
 
 	res := r.QueryStr(t, query)
 	if !reflect.DeepEqual(res, exp2) && !reflect.DeepEqual(res, exp3) {
@@ -487,7 +488,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numNodes = 2
-	tc := serverutils.StartNewTestCluster(
+	tc := serverutils.StartCluster(
 		t,
 		numNodes,
 		base.TestClusterArgs{
@@ -534,7 +535,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 	const query = "SELECT count(*) FROM NUMS"
 	expectPlan := func(expectedPlan [][]string) {
 		t.Helper()
-		planQuery := fmt.Sprintf(`SELECT info FROM [EXPLAIN (DISTSQL) %s] WHERE info LIKE 'Diagram%%'`, query)
+		planQuery := fmt.Sprintf(`SELECT info FROM [EXPLAIN (DISTSQL, SHAPE) %s] WHERE info LIKE 'Diagram%%'`, query)
 		testutils.SucceedsSoon(t, func() error {
 			resultPlan := r.QueryStr(t, planQuery)
 			if !reflect.DeepEqual(resultPlan, expectedPlan) {
@@ -545,14 +546,14 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 	}
 
 	// Verify distribution.
-	expectPlan([][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskVFr2zAQx9_3KcTBaDJUEjnZi55aUo-ZpXFnu3RQTNCsmzGzJU-SYSP4uw_bg9al8RLoi0HS_e7_890B7K8SOMT-1t8kpFA_NPkUhbfk0f92t70OdmR2E8RJ_HU7J_9qMt0oN_swH-pUU9mUPHz2I3-gt8EXn1zcFCI3onp_ARSUlrgTFVrgj8CAggcphdroDK3Vprs-9EWB_A18SaFQdeO665RCpg0CP4ArXInAIRHfS4xQSDSLJVCQ6ERR9q07lavus69_4h-gsNFlUynLgUJcC2U5uVwwSFsKunFPEdaJHIGzlp6ucZ3nBnPhtFl4Y4tNeL9L9lH4EM_mR7O8o1lPEY3SRqJBOeqfttM267FNfH-7D3bJ7Iodl1mNZNjp82dnz3_BLk-c_380nv3x6k3n_0pWhLbWyuKLPbzeedntB2WOwzKtbkyGd0ZnfcxwDHuuv5Bo3fDKhkOghqdO8DnMJmFvBLOXsDcJf5xOXk3C62l4fZZ22r77GwAA__-hBX17"}})
+	expectPlan([][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskl9r2zAUxd_3KcyF0XQoJHKyFz01JB41y7_FLh0UEzT7xjO1JU-S6Urwdx-22zU2TUjG9CDQ1fXvHOvcPehfKTDwnLkz9a1E7KT1ZbNaWA_O9_V84i6t3sz1fO_bnFje7WTtXFsvraEshOl9um7aRZHpwLq_dTZOA5m7Xx3rapbwWPHs4xUQEDLCJc9QA3sACgRsCAjkSoaotVRVeV83udFvYEMCicgLU5UDAqFUCGwPJjEpAgOf_0hxgzxCNRgCgQgNT9IaXVm5qbZt_ojPQGAq0yITmgEBL-dCM6s_oBCUBGRh3iS04TECowee3BmwYUnOtzWJY4UxN1IN7Lar6epu6W83q3uvd31U2-5o20e13yQLIVWECqOWXlCedjduu_PuFlt36fdu6HFzo465ccscPT8venFeA9o_Oy96ia2DFxn9h7xGl8zKBnUuhcZObu8rDTtKfVoFjFGMzTRoWagQ10qGdW9zXNWguhChNs0tbQ6ueL3SRiHP_o76IYmeJNktEj0k2V2SfZL0-QJPo5Ok8XES7ZLG__p3o-rtd6l82iYRMBi-rP472-uC6gMe62oAvJ_yqcb6z3kV346nGgks-CPO0KDKEpFok4TAjCqwLD_8CQAA__-76dKf"}})
 
 	// Drain the second node and expect the query to be planned on only the
 	// first node.
 	distServer := tc.Server(1).DistSQLServer().(*distsql.ServerImpl)
 	distServer.Drain(ctx, 0 /* flowDrainWait */, nil /* reporter */)
 
-	expectPlan([][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkF9LwzAUxd_9FOGCbJPI1j3mybFVLNZ1tpUJo4zYXkuxTWr-gDL63aWNoBMm-hK4555zf4ccQL_WwCDxQ3-Zkko8S3IdR3dk5z9uwkWwJuNVkKTJfTghn55cWmHGFxPnE7bRGdne-LHv0mFw65PRquKl4s35CCgIWeCaN6iB7cCDjEKrZI5aS9VLh8EQFG_AZhQq0VrTyxmFXCoEdgBTmRqBQcqfaoyRF6imM6BQoOFVPZzta1z1z759wXegsJS1bYRmQCFpudCMXELWUZDWfAG04SUC8zr69xKLslRYciPV1DvusIwe1uk-jrbJeHKSNf8PK0bdSqHxiHPq8qzLKGBRovtULa3KcaNkPmDcGA25QShQG7f13BAIt-oLfg97v4bnP8JZd_YRAAD___rywTs="}})
+	expectPlan([][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVFr2z4Uxd__n0Ic-NNkKNTuo54WEo-apUlme3RQTNDsG0_UljxJpivB333Ybre2rGXTg-Dee3x-x1cnuO81BNJoE60ypvTRsA_J7ordRF_2m2W8ZbN1nGbppw1n6eVyH83Zg7Qwnfazd_NJrrvG5ez6MkqiyWQTf4zY2VrJysrm_zNwaFPSVjbkIG4QIudorSnIOWOH1mkUxOUPiIBD6bbzQzvnKIwliBO88jVBIJNfa0pIlmTPA3CU5KWqR9shxvvhOrS3dA-Olam7RjsBjrSV2gm2QN5zmM7_BjgvK4IInySK1xBBz_8-1LKqLFXSG3sePs-02n3eZodkd53O5q-yL16ww39hJ-Raox09475GCl6QFmGfc1BZ0fQKznS2oL01xaidyt1oNDZKcn6ahlMR68eR85Zk82t1T53CN50u3nLKOY61uTuoEgLBw1n84Xo8GD6QlRtWlH4zd6Ntdt8OP3iUtSOOK3lLa_JkG6WV86qA8Lajvv_vZwAAAP__7rz6og=="}})
 
 	// Verify correctness.
 	var res int
@@ -672,7 +673,9 @@ func TestPartitionSpans(t *testing.T) {
 		locFilter string
 
 		// expected result: a map of node to list of spans.
-		partitions map[int][][2]string
+		partitions      map[int][][2]string
+		partitionStates []string
+		partitionState  spanPartitionState
 	}{
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
@@ -684,6 +687,25 @@ func TestPartitionSpans(t *testing.T) {
 				1: {{"A1", "B"}, {"C", "C1"}},
 				2: {{"B", "C"}},
 				3: {{"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 2,
+					2: 1,
+					3: 1,
+				},
+				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 4,
+				},
+				totalPartitionSpans: 4,
 			},
 		},
 
@@ -699,6 +721,25 @@ func TestPartitionSpans(t *testing.T) {
 				2: {{"B", "C"}},
 				3: {{"D1", "X"}},
 			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 2,
+					2: 1,
+					3: 1,
+				},
+				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 4,
+				},
+				totalPartitionSpans: 4,
+			},
 		},
 
 		{
@@ -711,6 +752,25 @@ func TestPartitionSpans(t *testing.T) {
 			partitions: map[int][][2]string{
 				1: {{"A1", "C1"}},
 				3: {{"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {B-C}, instance ID: 1, reason: gossip-gateway-target-unhealthy",
+				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 3,
+					3: 1,
+				},
+				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           3,
+					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 1,
+				},
+				totalPartitionSpans: 4,
 			},
 		},
 
@@ -725,6 +785,25 @@ func TestPartitionSpans(t *testing.T) {
 				1: {{"A1", "B"}, {"C", "C1"}, {"D1", "X"}},
 				2: {{"B", "C"}},
 			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {D1-X}, instance ID: 1, reason: gossip-gateway-target-unhealthy",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 3,
+					2: 1,
+				},
+				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           3,
+					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 1,
+				},
+				totalPartitionSpans: 4,
+			},
 		},
 
 		{
@@ -737,6 +816,25 @@ func TestPartitionSpans(t *testing.T) {
 			partitions: map[int][][2]string{
 				2: {{"A1", "C1"}},
 				3: {{"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 2, reason: gossip-gateway-target-unhealthy",
+				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: C{-1}, instance ID: 2, reason: gossip-gateway-target-unhealthy",
+				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					2: 3,
+					3: 1,
+				},
+				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           2,
+					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 2,
+				},
+				totalPartitionSpans: 4,
 			},
 		},
 
@@ -751,6 +849,25 @@ func TestPartitionSpans(t *testing.T) {
 				2: {{"B", "C"}},
 				3: {{"A1", "B"}, {"C", "C1"}, {"D1", "X"}},
 			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 3, reason: gossip-gateway-target-unhealthy",
+				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: C{-1}, instance ID: 3, reason: gossip-gateway-target-unhealthy",
+				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					2: 1,
+					3: 3,
+				},
+				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           2,
+					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 2,
+				},
+				totalPartitionSpans: 4,
+			},
 		},
 
 		// Test point lookups in isolation.
@@ -763,6 +880,23 @@ func TestPartitionSpans(t *testing.T) {
 			partitions: map[int][][2]string{
 				1: {{"A2", ""}, {"A1", ""}},
 				2: {{"B1", ""}},
+			},
+
+			partitionStates: []string{
+				"partition span: A2, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: A1, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: B1, instance ID: 2, reason: gossip-target-healthy",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 2,
+					2: 1,
+				},
+				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 3,
+				},
+				totalPartitionSpans: 3,
 			},
 		},
 
@@ -777,6 +911,30 @@ func TestPartitionSpans(t *testing.T) {
 				1: {{"A1", ""}, {"A1", "A2"}, {"A2", ""}, {"A2", "C"}, {"B1", ""}, {"A3", "B3"}, {"B2", ""}},
 				2: {{"C", "C2"}},
 			},
+
+			partitionStates: []string{
+				"partition span: A1, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: A{1-2}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: A2, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {A2-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {B-C}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: C{-2}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: B1, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {A3-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: B{-3}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: B2, instance ID: 1, reason: gossip-target-healthy",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 9,
+					2: 1,
+				},
+				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 10,
+				},
+				totalPartitionSpans: 10,
+			},
 		},
 
 		// A single span touching multiple ranges but on the same node results
@@ -790,8 +948,28 @@ func TestPartitionSpans(t *testing.T) {
 			partitions: map[int][][2]string{
 				1: {{"A", "B"}},
 			},
+
+			partitionStates: []string{
+				"partition span: A{-1}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 2,
+				},
+				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 2,
+				},
+				totalPartitionSpans: 2,
+			},
 		},
 		// Test some locality-filtered planning too.
+		//
+		// Since this test is run on a system tenant but there is a locality filter,
+		// the spans are resolved in a mixed process mode. As a result, the
+		// partition states include a mix of locality and target reasons, which is
+		// expected.
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			gatewayNode: 1,
@@ -799,8 +977,30 @@ func TestPartitionSpans(t *testing.T) {
 			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
 			locFilter: "x=1",
 			partitions: map[int][][2]string{
-				1: {{"A1", "B"}, {"C", "C1"}, {"D1", "X"}},
-				2: {{"B", "C"}},
+				1: {{"A1", "B"}, {"C", "C1"}},
+				2: {{"B", "C"}, {"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {D1-X}, instance ID: 2, reason: locality-filtered-random-gateway-overloaded",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 2,
+					2: 2,
+				},
+				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+					SpanPartitionReason_TARGET_HEALTHY:                              3,
+					SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED: 1,
+				},
+				testingOverrideRandomSelection: func() base.SQLInstanceID {
+					return 2
+				},
+				totalPartitionSpans: 4,
 			},
 		},
 		{
@@ -813,6 +1013,25 @@ func TestPartitionSpans(t *testing.T) {
 				2: {{"A1", "C1"}},
 				4: {{"D1", "X"}},
 			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 2, reason: closest-locality-match",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 2, reason: closest-locality-match",
+				"partition span: {D1-X}, instance ID: 4, reason: closest-locality-match",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					2: 3,
+					4: 1,
+				},
+				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+					SpanPartitionReason_TARGET_HEALTHY:         1,
+					SpanPartitionReason_CLOSEST_LOCALITY_MATCH: 3,
+				},
+				totalPartitionSpans: 4,
+			},
 		},
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
@@ -821,7 +1040,30 @@ func TestPartitionSpans(t *testing.T) {
 			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
 			locFilter: "x=3",
 			partitions: map[int][][2]string{
-				7: {{"A1", "C1"}, {"D1", "X"}},
+				6: {{"B", "C1"}},
+				7: {{"A1", "B"}, {"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 7, reason: gateway-no-locality-match",
+				"partition span: {B-C}, instance ID: 6, reason: locality-filtered-random-gateway-overloaded",
+				"partition span: C{-1}, instance ID: 6, reason: locality-filtered-random-gateway-overloaded",
+				"partition span: {D1-X}, instance ID: 7, reason: gateway-no-locality-match",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					6: 2,
+					7: 2,
+				},
+				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+					SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH:                   2,
+					SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED: 2,
+				},
+				totalPartitionSpans: 4,
+				testingOverrideRandomSelection: func() base.SQLInstanceID {
+					return 6
+				},
 			},
 		},
 		{
@@ -833,14 +1075,38 @@ func TestPartitionSpans(t *testing.T) {
 			partitions: map[int][][2]string{
 				7: {{"A1", "C1"}, {"D1", "X"}},
 			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 7, reason: locality-filtered-random",
+				"partition span: {B-C}, instance ID: 7, reason: locality-filtered-random",
+				"partition span: C{-1}, instance ID: 7, reason: locality-filtered-random",
+				"partition span: {D1-X}, instance ID: 7, reason: locality-filtered-random",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					7: 4,
+				},
+				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+					SpanPartitionReason_LOCALITY_FILTERED_RANDOM: 4,
+				},
+				totalPartitionSpans: 4,
+			},
 		},
 	}
 
 	// We need a mock Gossip to contain addresses for the nodes. Otherwise the
 	// DistSQLPlanner will not plan flows on them.
-	testStopper := stop.NewStopper()
-	defer testStopper.Stop(context.Background())
-	mockGossip := gossip.NewTest(roachpb.NodeID(1), testStopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				MinimumNumberOfGatewayPartitions: 1,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	mockGossip := gossip.NewTest(roachpb.NodeID(1), s.Stopper(), metric.NewRegistry())
 	var nodeDescs []*roachpb.NodeDescriptor
 	mockInstances := make(mockAddressResolver)
 	for i := 1; i <= 10; i++ {
@@ -872,6 +1138,9 @@ func TestPartitionSpans(t *testing.T) {
 
 	for testIdx, tc := range testCases {
 		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
+			ctx := context.Background()
+			ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, s.Tracer(), "PartitionSpans")
+
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.Background())
 
@@ -906,19 +1175,32 @@ func TestPartitionSpans(t *testing.T) {
 					},
 				},
 				sqlAddressResolver: mockInstances,
-				distSQLSrv:         &distsql.ServerImpl{ServerConfig: execinfra.ServerConfig{NodeID: base.NewSQLIDContainerForNode(nID)}},
-				codec:              keys.SystemSQLCodec,
-				nodeDescs:          mockGossip,
+				distSQLSrv: &distsql.ServerImpl{
+					ServerConfig: execinfra.ServerConfig{
+						NodeID:       base.NewSQLIDContainerForNode(nID),
+						TestingKnobs: execinfra.TestingKnobs{MinimumNumberOfGatewayPartitions: 1},
+					},
+				},
+				codec:     keys.SystemSQLCodec,
+				nodeDescs: mockGossip,
 			}
 
-			ctx := context.Background()
 			var locFilter roachpb.Locality
 			if tc.locFilter != "" {
 				require.NoError(t, locFilter.Set(tc.locFilter))
 			}
+			evalCtx := &eval.Context{
+				Codec: keys.SystemSQLCodec,
+				SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
+					SessionData: sessiondatapb.SessionData{
+						DistsqlPlanGatewayBias: 2,
+					},
+				}),
+			}
 			planCtx := dsp.NewPlanningCtxWithOracle(ctx, &extendedEvalContext{
-				Context: eval.Context{Codec: keys.SystemSQLCodec},
+				Context: *evalCtx,
 			}, nil, nil, DistributionTypeSystemTenantOnly, physicalplan.DefaultReplicaChooser, locFilter)
+			planCtx.spanPartitionState.testingOverrideRandomSelection = tc.partitionState.testingOverrideRandomSelection
 			var spans []roachpb.Span
 			for _, s := range tc.spans {
 				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
@@ -927,6 +1209,14 @@ func TestPartitionSpans(t *testing.T) {
 			partitions, err := dsp.PartitionSpans(ctx, planCtx, spans)
 			if err != nil {
 				t.Fatal(err)
+			}
+
+			// Assert that the PartitionState is what we expect it to be.
+			tc.partitionState.testingOverrideRandomSelection = nil
+			planCtx.spanPartitionState.testingOverrideRandomSelection = nil
+			if !reflect.DeepEqual(*planCtx.spanPartitionState, tc.partitionState) {
+				t.Errorf("expected partition state:\n  %v\ngot:\n  %v",
+					tc.partitionState, *planCtx.spanPartitionState)
 			}
 
 			resMap := make(map[int][][2]string)
@@ -941,9 +1231,213 @@ func TestPartitionSpans(t *testing.T) {
 				resMap[int(p.SQLInstanceID)] = spans
 			}
 
+			recording := getRecAndFinish()
+			t.Logf("recording is %s", recording)
+			for _, expectedMsg := range tc.partitionStates {
+				require.NotEqual(t, -1, tracing.FindMsgInRecording(recording, expectedMsg))
+			}
+
 			if !reflect.DeepEqual(resMap, tc.partitions) {
 				t.Errorf("expected partitions:\n  %v\ngot:\n  %v", tc.partitions, resMap)
 			}
+		})
+	}
+}
+
+// TestShouldPickGatewayNode is a unit test of the shouldPickGateway method.
+func TestShouldPickGatewayNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name            string
+		gatewayInstance base.SQLInstanceID
+		instances       []sqlinstance.InstanceInfo
+		partitionState  *spanPartitionState
+		shouldPick      bool
+	}{
+		{
+			name:            "no_instances",
+			gatewayInstance: 1,
+			instances:       []sqlinstance.InstanceInfo{},
+			partitionState: &spanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 5,
+			}},
+			shouldPick: true,
+		},
+		{
+			name:            "only_gateway",
+			gatewayInstance: 1,
+			instances: []sqlinstance.InstanceInfo{
+				{
+					InstanceID: base.SQLInstanceID(1),
+				},
+			},
+			partitionState: &spanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 5,
+			}},
+			shouldPick: true,
+		},
+		{
+			name:            "gateway_0",
+			gatewayInstance: 1,
+			instances: []sqlinstance.InstanceInfo{
+				{
+					InstanceID: base.SQLInstanceID(1),
+				},
+				{
+					InstanceID: base.SQLInstanceID(2),
+				},
+				{
+					InstanceID: base.SQLInstanceID(3),
+				},
+			},
+			partitionState: &spanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 0,
+				2: 0,
+				3: 0,
+			}},
+			shouldPick: true,
+		},
+		{
+			name:            "gateway_0_others_non_zero",
+			gatewayInstance: 1,
+			instances: []sqlinstance.InstanceInfo{
+				{
+					InstanceID: base.SQLInstanceID(1),
+				},
+				{
+					InstanceID: base.SQLInstanceID(2),
+				},
+				{
+					InstanceID: base.SQLInstanceID(3),
+				},
+			},
+			partitionState: &spanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 0,
+				2: 1,
+				3: 1,
+			}},
+			shouldPick: true,
+		},
+		{
+			name:            "below_threshold_1",
+			gatewayInstance: 1,
+			instances: []sqlinstance.InstanceInfo{
+				{
+					InstanceID: base.SQLInstanceID(1),
+				},
+				{
+					InstanceID: base.SQLInstanceID(2),
+				},
+				{
+					InstanceID: base.SQLInstanceID(3),
+				},
+			},
+			partitionState: &spanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 1,
+				2: 1,
+				3: 1,
+			}},
+			shouldPick: true,
+		},
+		{
+			name:            "above_threshold_1",
+			gatewayInstance: 1,
+			instances: []sqlinstance.InstanceInfo{
+				{
+					InstanceID: base.SQLInstanceID(1),
+				},
+				{
+					InstanceID: base.SQLInstanceID(2),
+				},
+				{
+					InstanceID: base.SQLInstanceID(3),
+				},
+			},
+			partitionState: &spanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 1,
+				2: 1,
+				3: 0,
+			}},
+			shouldPick: false,
+		},
+		{
+			name:            "above_threshold_2",
+			gatewayInstance: 1,
+			instances: []sqlinstance.InstanceInfo{
+				{
+					InstanceID: base.SQLInstanceID(1),
+				},
+				{
+					InstanceID: base.SQLInstanceID(2),
+				},
+				{
+					InstanceID: base.SQLInstanceID(3),
+				},
+			},
+			partitionState: &spanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 2,
+				2: 1,
+				3: 1,
+			}},
+			shouldPick: false,
+		},
+		{
+			name:            "above_threshold_3",
+			gatewayInstance: 1,
+			instances: []sqlinstance.InstanceInfo{
+				{
+					InstanceID: base.SQLInstanceID(1),
+				},
+				{
+					InstanceID: base.SQLInstanceID(2),
+				},
+				{
+					InstanceID: base.SQLInstanceID(3),
+				},
+				{
+					InstanceID: base.SQLInstanceID(4),
+				},
+			},
+			partitionState: &spanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 4,
+				2: 1,
+				3: 0,
+				4: 5,
+			}},
+			shouldPick: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		mockDsp := &DistSQLPlanner{
+			gatewaySQLInstanceID: tc.gatewayInstance,
+			distSQLSrv: &distsql.ServerImpl{
+				ServerConfig: execinfra.ServerConfig{
+					TestingKnobs: execinfra.TestingKnobs{MinimumNumberOfGatewayPartitions: 1},
+				},
+			},
+		}
+		evalCtx := &eval.Context{
+			SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
+				SessionData: sessiondatapb.SessionData{
+					DistsqlPlanGatewayBias: 2,
+				},
+			}),
+		}
+		mockPlanCtx := &PlanningCtx{
+			ExtendedEvalCtx: &extendedEvalContext{
+				Context: *evalCtx,
+			},
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			mockPlanCtx.spanPartitionState = tc.partitionState
+			for _, partitionCount := range tc.partitionState.partitionSpans {
+				mockPlanCtx.spanPartitionState.totalPartitionSpans += partitionCount
+			}
+			shouldPick := mockDsp.shouldPickGateway(mockPlanCtx, tc.instances)
+			require.Equal(t, tc.shouldPick, shouldPick)
 		})
 	}
 }
@@ -1050,7 +1544,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			// reflect tc.nodesNotAdvertisingDistSQLVersion.
 			testStopper := stop.NewStopper()
 			defer testStopper.Stop(context.Background())
-			mockGossip := gossip.NewTest(roachpb.NodeID(1), testStopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+			mockGossip := gossip.NewTest(roachpb.NodeID(1), testStopper, metric.NewRegistry())
 			var nodeDescs []*roachpb.NodeDescriptor
 			for i := 1; i <= 2; i++ {
 				sqlInstanceID := base.SQLInstanceID(i)
@@ -1144,7 +1638,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	mockGossip := gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	mockGossip := gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry())
 	var nodeDescs []*roachpb.NodeDescriptor
 	for i := 1; i <= 2; i++ {
 		sqlInstanceID := base.SQLInstanceID(i)
@@ -1239,8 +1733,7 @@ func TestCheckNodeHealth(t *testing.T) {
 
 	const sqlInstanceID = base.SQLInstanceID(5)
 
-	mockGossip := gossip.NewTest(roachpb.NodeID(sqlInstanceID),
-		stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	mockGossip := gossip.NewTest(roachpb.NodeID(sqlInstanceID), stopper, metric.NewRegistry())
 
 	desc := &roachpb.NodeDescriptor{
 		NodeID:  roachpb.NodeID(sqlInstanceID),
@@ -1478,21 +1971,25 @@ func TestClosestInstances(t *testing.T) {
 	type picked []int
 
 	for _, tc := range []struct {
-		instances instances
-		loc       string
-		expected  []int
+		instances                instances
+		loc                      string
+		expected                 []int
+		expectedLocalityStrength int
 	}{
-		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "z=z", picked{}},
-		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "", picked{}},
+		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "z=z", picked{}, 0},
+		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "", picked{}, 0},
 
-		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "a=x", picked{1}},
-		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "a=z", picked{3}},
-		{instances{1: "a=x", 2: "a=x", 3: "a=z", 4: "a=z"}, "a=x", picked{1, 2}},
-		{instances{1: "a=x", 2: "a=x", 3: "a=z", 4: "a=z"}, "a=z", picked{3, 4}},
+		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "a=x", picked{1}, 1},
+		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "a=z", picked{3}, 1},
+		{instances{1: "a=x", 2: "a=x", 3: "a=z", 4: "a=z"}, "a=x", picked{1, 2}, 1},
+		{instances{1: "a=x", 2: "a=x", 3: "a=z", 4: "a=z"}, "a=z", picked{3, 4}, 1},
 
-		{instances{1: "a=x,b=1", 2: "a=x,b=2", 3: "a=x,b=3", 4: "a=y,b=1", 5: "a=z,b=1"}, "a=x", picked{1, 2, 3}},
-		{instances{1: "a=x,b=1", 2: "a=x,b=2", 3: "a=x,b=3", 4: "a=y,b=1", 5: "a=z,b=1"}, "a=x,b=2", picked{2}},
-		{instances{1: "a=x,b=1", 2: "a=x,b=2", 3: "a=x,b=3", 4: "a=y,b=1", 5: "a=z,b=1"}, "a=z", picked{5}},
+		{instances{1: "a=x,b=1", 2: "a=x,b=2", 3: "a=x,b=3", 4: "a=y,b=1", 5: "a=z,b=1"}, "a=x",
+			picked{1, 2, 3}, 1},
+		{instances{1: "a=x,b=1", 2: "a=x,b=2", 3: "a=x,b=3", 4: "a=y,b=1", 5: "a=z,b=1"}, "a=x,b=2",
+			picked{2}, 2},
+		{instances{1: "a=x,b=1", 2: "a=x,b=2", 3: "a=x,b=3", 4: "a=y,b=1", 5: "a=z,b=1"}, "a=z",
+			picked{5}, 1},
 	} {
 		t.Run("", func(t *testing.T) {
 			var l roachpb.Locality
@@ -1508,10 +2005,12 @@ func TestClosestInstances(t *testing.T) {
 				infos = append(infos, info)
 			}
 			var got picked
-			for _, i := range closestInstances(infos, l) {
+			instances, strength := ClosestInstances(infos, l)
+			for _, i := range instances {
 				got = append(got, int(i))
 			}
 			require.ElementsMatch(t, tc.expected, got)
+			require.Equal(t, tc.expectedLocalityStrength, strength)
 		})
 	}
 }

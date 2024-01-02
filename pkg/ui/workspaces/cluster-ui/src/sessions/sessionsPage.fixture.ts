@@ -50,6 +50,7 @@ export const idleSession: SessionInfo = {
     num_txns_executed: 1,
     txn_fingerprint_ids: [],
     status: Status.IDLE,
+    pg_backend_pid: 123,
   },
 };
 
@@ -89,6 +90,7 @@ export const idleTransactionSession: SessionInfo = {
     num_txns_executed: 1,
     txn_fingerprint_ids: [],
     status: Status.IDLE,
+    pg_backend_pid: 123,
   },
 };
 
@@ -142,6 +144,7 @@ export const activeSession: SessionInfo = {
     status: Status.ACTIVE,
     num_txns_executed: 1,
     txn_fingerprint_ids: [],
+    pg_backend_pid: 123,
   },
 };
 
@@ -168,6 +171,7 @@ export const closedSession: SessionInfo = {
     status: Status.CLOSED,
     num_txns_executed: 1,
     txn_fingerprint_ids: [],
+    pg_backend_pid: 123,
   },
 };
 
@@ -210,8 +214,8 @@ export const sessionsPagePropsFixture: SessionsPageProps = {
   columns: null,
   internalAppNamePrefix: "$ internal",
   refreshSessions: () => {},
-  cancelSession: (req: CancelSessionRequestMessage) => {},
-  cancelQuery: (req: CancelQueryRequestMessage) => {},
+  cancelSession: (_req: CancelSessionRequestMessage) => {},
+  cancelQuery: (_req: CancelQueryRequestMessage) => {},
   onSortingChange: () => {},
 };
 
@@ -239,7 +243,7 @@ export const sessionsPagePropsEmptyFixture: SessionsPageProps = {
   columns: null,
   internalAppNamePrefix: "$ internal",
   refreshSessions: () => {},
-  cancelSession: (req: CancelSessionRequestMessage) => {},
-  cancelQuery: (req: CancelQueryRequestMessage) => {},
+  cancelSession: (_req: CancelSessionRequestMessage) => {},
+  cancelQuery: (_req: CancelQueryRequestMessage) => {},
   onSortingChange: () => {},
 };

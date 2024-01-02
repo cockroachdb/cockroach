@@ -8,7 +8,7 @@ statement ok
 CREATE USER target
 
 # Check privileges that `public` has by default, ignoring types and virtual tables.
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SELECT * FROM [SHOW GRANTS FOR public] WHERE relation_name IS NULL
 ----
 database_name  schema_name         relation_name  grantee  privilege_type  is_grantable
@@ -60,7 +60,7 @@ user testuser
 statement ok
 GRANT SELECT, INSERT ON TABLE t TO testuser2
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser2
 ----
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
@@ -74,7 +74,7 @@ GRANT INSERT, SELECT ON TABLE t TO target
 
 user testuser
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser2
 ----
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
@@ -107,7 +107,7 @@ GRANT DELETE, UPDATE ON TABLE t TO testuser2 WITH GRANT OPTION
 statement ok
 REVOKE INSERT ON TABLE t FROM testuser2
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser2
 ----
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
@@ -119,7 +119,7 @@ statement ok
 REVOKE GRANT OPTION FOR SELECT ON TABLE t FROM testuser2
 
 # revoking GRANT OPTION FOR does not take away the privilege for the user
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser2
 ----
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
@@ -186,7 +186,7 @@ database_name  schema_name  relation_name  grantee    privilege_type  is_grantab
 statement ok
 GRANT UPDATE, DELETE ON TABLE t to testuser WITH GRANT OPTION
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser
 ----
 database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
@@ -230,7 +230,7 @@ GRANT UPDATE ON TABLE t TO testuser2 WITH GRANT OPTION
 statement error user testuser missing WITH GRANT OPTION privilege on DELETE
 GRANT DELETE ON TABLE t TO testuser2 WITH GRANT OPTION
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser2
 ----
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
@@ -275,7 +275,7 @@ GRANT DELETE ON TABLE t TO testuser
 statement ok
 REVOKE DELETE ON TABLE t FROM testuser
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser
 ----
 database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
@@ -392,7 +392,7 @@ CREATE DATABASE d
 statement ok
 GRANT ALL PRIVILEGES ON DATABASE d TO testuser WITH GRANT OPTION
 
-query TTTB colnames
+query TTTB colnames,rowsort
 SHOW GRANTS ON DATABASE d
 ----
 database_name  grantee   privilege_type  is_grantable
@@ -413,7 +413,7 @@ user testuser2
 statement ok
 GRANT CONNECT ON DATABASE d TO TARGET
 
-query TTTB colnames
+query TTTB colnames,rowsort
 SHOW GRANTS ON DATABASE d
 ----
 database_name  grantee   privilege_type  is_grantable
@@ -447,7 +447,7 @@ GRANT CREATE ON DATABASE d TO target WITH GRANT OPTION
 
 user root
 
-query TTTB colnames
+query TTTB colnames,rowsort
 SHOW GRANTS ON DATABASE d
 ----
 database_name  grantee    privilege_type  is_grantable
@@ -462,7 +462,7 @@ d              testuser2  CREATE          false
 statement ok
 REVOKE ALL PRIVILEGES ON DATABASE d FROM testuser2
 
-query TTTB colnames
+query TTTB colnames,rowsort
 SHOW GRANTS ON DATABASE d
 ----
 database_name  grantee   privilege_type  is_grantable
@@ -519,7 +519,7 @@ CREATE TABLE t1()
 
 # testuser should have is_grantable = true as the table owner
 # see https://github.com/cockroachdb/cockroach/issues/82162
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t1;
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -536,7 +536,7 @@ REVOKE ALL PRIVILEGES ON TABLE t1 FROM testuser
 ----
 NOTICE: testuser is the owner of t1 and still has all privileges implicitly
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t1;
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -553,7 +553,7 @@ GRANT INSERT ON TABLE t1 TO testuser2
 statement ok
 GRANT ALL PRIVILEGES ON TABLE t1 TO testuser2 WITH GRANT OPTION
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t1;
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -562,7 +562,7 @@ test           public       t1          root       ALL             true
 test           public       t1          testuser   ALL             true
 test           public       t1          testuser2  ALL             true
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t1;
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -575,7 +575,7 @@ test           public       t1          testuser2  ALL             true
 statement ok
 GRANT ALL PRIVILEGES ON TABLE t1 TO testuser
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t1;
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -612,7 +612,7 @@ test           public       grant_ordering_table  grant_ordering_user  ALL      
 statement ok
 GRANT SELECT ON TABLE grant_ordering_table TO grant_ordering_user WITH GRANT OPTION
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON grant_ordering_table FOR grant_ordering_user
 ----
 database_name  schema_name  table_name            grantee              privilege_type  is_grantable
@@ -644,7 +644,7 @@ CREATE TABLE owner_grant_option()
 statement ok
 GRANT SELECT ON TABLE owner_grant_option TO owner_grant_option_child
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE owner_grant_option
 ----
 database_name  schema_name  table_name          grantee                   privilege_type  is_grantable
@@ -663,7 +663,7 @@ CREATE ROLE other_owner
 statement ok
 ALTER TABLE owner_grant_option OWNER TO other_owner
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE owner_grant_option
 ----
 database_name  schema_name  table_name          grantee                   privilege_type  is_grantable

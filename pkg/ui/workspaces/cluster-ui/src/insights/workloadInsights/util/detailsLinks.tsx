@@ -37,15 +37,15 @@ export function StatementDetailsLink(
 ): React.ReactElement {
   const linkProps = {
     statementFingerprintID: HexStringToInt64String(
-      insightDetails.statementFingerprintID,
+      insightDetails?.statementFingerprintID,
     ),
-    appNames: [insightDetails.application],
-    implicitTxn: insightDetails.implicitTxn,
+    appNames: [insightDetails?.application],
+    implicitTxn: insightDetails?.implicitTxn,
   };
 
   return (
     <Link to={StatementLinkTarget(linkProps)}>
-      <div>{String(insightDetails.statementFingerprintID)}</div>
+      <div>{String(insightDetails?.statementFingerprintID)}</div>
     </Link>
   );
 }

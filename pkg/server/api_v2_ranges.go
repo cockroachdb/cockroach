@@ -18,7 +18,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/gorilla/mux"
 )
@@ -108,11 +111,11 @@ type nodesResponse struct {
 func (a *apiV2SystemServer) listNodes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	limit, offset := getSimplePaginationValues(r)
-	ctx = forwardHTTPAuthInfoToRPCCalls(ctx, r)
+	ctx = authserver.ForwardHTTPAuthInfoToRPCCalls(ctx, r)
 
 	nodes, next, err := a.systemStatus.nodesHelper(ctx, limit, offset)
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
 	var resp nodesResponse
@@ -140,11 +143,11 @@ func (a *apiV2SystemServer) listNodes(w http.ResponseWriter, r *http.Request) {
 			LivenessStatus:    int32(nodes.LivenessByNodeID[n.Desc.NodeID]),
 		})
 	}
-	writeJSONResponse(ctx, w, 200, resp)
+	apiutil.WriteJSONResponse(ctx, w, 200, resp)
 }
 
 func (a *apiV2Server) listNodes(w http.ResponseWriter, r *http.Request) {
-	writeJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
+	apiutil.WriteJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
 }
 
 func parseRangeIDs(input string, w http.ResponseWriter) (ranges []roachpb.RangeID, ok bool) {
@@ -202,7 +205,7 @@ type rangeResponse struct {
 //	    "$ref": "#/definitions/rangeResponse"
 func (a *apiV2Server) listRange(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx = forwardHTTPAuthInfoToRPCCalls(ctx, r)
+	ctx = authserver.ForwardHTTPAuthInfoToRPCCalls(ctx, r)
 	vars := mux.Vars(r)
 	rangeID, err := strconv.ParseInt(vars["range_id"], 10, 64)
 	if err != nil {
@@ -218,12 +221,7 @@ func (a *apiV2Server) listRange(w http.ResponseWriter, r *http.Request) {
 		RangeIDs: []roachpb.RangeID{roachpb.RangeID(rangeID)},
 	}
 
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := a.status.dialNode(ctx, nodeID)
-		return client, err
-	}
-	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
-		status := client.(serverpb.StatusClient)
+	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return status.Ranges(ctx, rangesRequest)
 	}
 	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
@@ -243,13 +241,20 @@ func (a *apiV2Server) listRange(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := a.status.iterateNodes(
-		ctx, fmt.Sprintf("details about range %d", rangeID), dialFn, nodeFn, responseFn, errorFn,
+	if err := iterateNodes(
+		ctx,
+		a.status.serverIterator,
+		a.status.stopper,
+		fmt.Sprintf("details about range %d", rangeID),
+		noTimeout,
+		a.status.dialNode,
+		nodeFn,
+		responseFn, errorFn,
 	); err != nil {
-		apiV2InternalError(ctx, err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
-	writeJSONResponse(ctx, w, 200, response)
+	apiutil.WriteJSONResponse(ctx, w, 200, response)
 }
 
 // rangeDescriptorInfo contains a subset of fields from the Cockroach-internal
@@ -385,7 +390,7 @@ type nodeRangesResponse struct {
 //	    "$ref": "#/definitions/nodeRangesResponse"
 func (a *apiV2SystemServer) listNodeRanges(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx = forwardHTTPAuthInfoToRPCCalls(ctx, r)
+	ctx = authserver.ForwardHTTPAuthInfoToRPCCalls(ctx, r)
 	vars := mux.Vars(r)
 	nodeIDStr := vars["node_id"]
 	if nodeIDStr != "local" {
@@ -407,7 +412,7 @@ func (a *apiV2SystemServer) listNodeRanges(w http.ResponseWriter, r *http.Reques
 	limit, offset := getSimplePaginationValues(r)
 	statusResp, next, err := a.systemStatus.rangesHelper(ctx, req, limit, offset)
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
 	resp := nodeRangesResponse{
@@ -419,11 +424,11 @@ func (a *apiV2SystemServer) listNodeRanges(w http.ResponseWriter, r *http.Reques
 		ri.init(r)
 		resp.Ranges = append(resp.Ranges, ri)
 	}
-	writeJSONResponse(ctx, w, 200, resp)
+	apiutil.WriteJSONResponse(ctx, w, 200, resp)
 }
 
 func (a *apiV2Server) listNodeRanges(w http.ResponseWriter, r *http.Request) {
-	writeJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
+	apiutil.WriteJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
 }
 
 type responseError struct {
@@ -504,7 +509,7 @@ type hotRangeInfo struct {
 //	    "$ref": "#/definitions/hotRangesResponse"
 func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx = forwardHTTPAuthInfoToRPCCalls(ctx, r)
+	ctx = authserver.ForwardHTTPAuthInfoToRPCCalls(ctx, r)
 	nodeIDStr := r.URL.Query().Get("node_id")
 	limit, start := getRPCPaginationValues(r)
 
@@ -519,13 +524,8 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 		requestedNodes = []roachpb.NodeID{requestedNodeID}
 	}
 
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := a.status.dialNode(ctx, nodeID)
-		return client, err
-	}
 	remoteRequest := serverpb.HotRangesRequest{NodeID: "local"}
-	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
-		status := client.(serverpb.StatusClient)
+	nodeFn := func(ctx context.Context, status serverpb.StatusClient, nodeID roachpb.NodeID) ([]hotRangeInfo, error) {
 		resp, err := status.HotRangesV2(ctx, &remoteRequest)
 		if err != nil || resp == nil {
 			return nil, err
@@ -553,8 +553,8 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 		}
 		return hotRangeInfos, nil
 	}
-	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
-		response.Ranges = append(response.Ranges, resp.([]hotRangeInfo)...)
+	responseFn := func(nodeID roachpb.NodeID, resp []hotRangeInfo) {
+		response.Ranges = append(response.Ranges, resp...)
 	}
 	errorFn := func(nodeID roachpb.NodeID, err error) {
 		response.Errors = append(response.Errors, responseError{
@@ -563,12 +563,13 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	next, err := a.status.paginatedIterateNodes(
-		ctx, "hot ranges", limit, start, requestedNodes, dialFn,
+	timeout := HotRangesRequestNodeTimeout.Get(&a.status.st.SV)
+	next, err := paginatedIterateNodes(
+		ctx, a.status, "hot ranges", limit, start, requestedNodes, timeout,
 		nodeFn, responseFn, errorFn)
 
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
 	var nextBytes []byte
@@ -577,5 +578,5 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 	} else {
 		response.Next = string(nextBytes)
 	}
-	writeJSONResponse(ctx, w, 200, response)
+	apiutil.WriteJSONResponse(ctx, w, 200, response)
 }

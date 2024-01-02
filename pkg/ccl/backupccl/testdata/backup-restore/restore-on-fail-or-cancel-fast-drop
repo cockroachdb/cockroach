@@ -1,4 +1,4 @@
-new-cluster name=s1 nodes=1 disable-tenant
+new-cluster name=s1 nodes=1
 ----
 
 subtest restore-cleanup-with-range-tombstones
@@ -16,11 +16,7 @@ exec-sql
 BACKUP INTO 'nodelocal://1/cluster_backup';
 ----
 
-new-cluster name=s2 nodes=1 share-io-dir=s1 disable-tenant
-----
-
-exec-sql
-SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true;
+new-cluster name=s2 nodes=1 share-io-dir=s1
 ----
 
 # Restore's OnFailOrCancel deletes descriptors which requires us to wait for no
@@ -33,15 +29,23 @@ SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '1s';
 
 # The GC Job sleeps between checking if a range being empty. Lowering this
 # speeds up the test.
-exec-sql
+exec-sql vc=system
 SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '250ms';
+----
+
+exec-sql vc=system
+SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true;
+----
+
+exec-sql vc=system
+SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled = true;
 ----
 
 # The protected timestamp poll interval controls how often our cache of
 # protected timestamps is updated. The GC threshold can only advance as far as
 # the time at which the cache was updated. We set this low so our cache is
 # fresh and our range deletions are eligible for GC faster.
-exec-sql
+exec-sql vc=system
 SET CLUSTER SETTING kv.protectedts.poll_interval = '250ms';
 ----
 
@@ -71,7 +75,7 @@ job cancel=a
 sleep ms=2000
 ----
 
-exec-sql
+exec-sql vc=system
 SELECT crdb_internal.kv_enqueue_replica(range_id, 'mvccGC', true) FROM (SELECT range_id FROM crdb_internal.ranges);
 ----
 

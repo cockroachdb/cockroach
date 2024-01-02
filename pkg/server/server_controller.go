@@ -16,8 +16,9 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/redact"
 )
 
@@ -72,22 +74,24 @@ type serverController struct {
 	// st refers to the applicable cluster settings.
 	st *cluster.Settings
 
-	// testArgs is used when creating new tenant servers.
-	testArgs map[roachpb.TenantName]base.TestSharedProcessTenantArgs
-
 	// sendSQLRoutingError is a callback to use to report
 	// a tenant routing error to the incoming client.
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName)
 
+	tenantWaiter *singleflight.Group
+
 	// draining is set when the surrounding server starts draining, and
 	// prevents further creation of new tenant servers.
 	draining syncutil.AtomicBool
+	drainCh  chan struct{}
 
 	// orchestrator is the orchestration method to use.
 	orchestrator serverOrchestrator
 
+	watcher *tenantcapabilitieswatcher.Watcher
+
 	mu struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 
 		// servers maps tenant names to the server for that tenant.
 		//
@@ -95,9 +99,16 @@ type serverController struct {
 		// changed, and invalidate the entry.
 		servers map[roachpb.TenantName]serverState
 
+		// testArgs is used when creating new tenant servers.
+		testArgs map[roachpb.TenantName]base.TestSharedProcessTenantArgs
+
 		// nextServerIdx is the index to provide to the next call to
 		// newServerFn.
 		nextServerIdx int
+
+		// newServerCh is closed anytime a server is added to
+		// the servers list.
+		newServerCh chan struct{}
 	}
 }
 
@@ -112,36 +123,36 @@ func newServerController(
 	systemServer onDemandServer,
 	systemTenantNameContainer *roachpb.TenantNameContainer,
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName),
+	watcher *tenantcapabilitieswatcher.Watcher,
 ) *serverController {
 	c := &serverController{
 		AmbientContext:      ambientCtx,
 		nodeID:              parentNodeID,
 		logger:              logger,
 		st:                  st,
-		testArgs:            make(map[roachpb.TenantName]base.TestSharedProcessTenantArgs),
 		stopper:             parentStopper,
 		tenantServerCreator: tenantServerCreator,
 		sendSQLRoutingError: sendSQLRoutingError,
+		watcher:             watcher,
+		tenantWaiter:        singleflight.NewGroup("tenant server poller", "poll"),
+		drainCh:             make(chan struct{}),
 	}
 	c.orchestrator = newServerOrchestrator(parentStopper, c)
 	c.mu.servers = map[roachpb.TenantName]serverState{
 		catconstants.SystemTenantName: c.orchestrator.makeServerStateForSystemTenant(systemTenantNameContainer, systemServer),
 	}
+	c.mu.testArgs = make(map[roachpb.TenantName]base.TestSharedProcessTenantArgs)
+	c.mu.newServerCh = make(chan struct{})
 	parentStopper.AddCloser(c)
 	return c
 }
 
-// DefaultTenantSelectSettingName is the name of the setting that
-// configures the default tenant to use when a client does not specify
-// a specific tenant.
-var DefaultTenantSelectSettingName = "server.controller.default_tenant"
-
-var defaultTenantSelect = settings.RegisterStringSetting(
-	settings.SystemOnly,
-	DefaultTenantSelectSettingName,
-	"name of the tenant to use to serve requests when clients don't specify a tenant",
-	catconstants.SystemTenantName,
-).WithPublic()
+func (s *serverController) SetDraining() {
+	if !s.draining.Get() {
+		s.draining.Set(true)
+		close(s.drainCh)
+	}
+}
 
 // tenantServerWrapper implements the onDemandServer interface for SQLServerWrapper.
 type tenantServerWrapper struct {
@@ -188,7 +199,7 @@ func (s *tenantServerWrapper) getInstanceID() base.SQLInstanceID {
 	return s.server.sqlServer.sqlIDContainer.SQLInstanceID()
 }
 
-func (s *tenantServerWrapper) shutdownRequested() <-chan ShutdownRequest {
+func (s *tenantServerWrapper) shutdownRequested() <-chan serverctl.ShutdownRequest {
 	return s.server.sqlServer.ShutdownRequested()
 }
 
@@ -209,7 +220,7 @@ func (s *tenantServerWrapper) gracefulDrain(
 // We do not implement the onDemandServer interface methods on *Server
 // directly so as to not add noise to its go documentation.
 type systemServerWrapper struct {
-	server *Server
+	server *topLevelServer
 }
 
 var _ onDemandServer = (*systemServerWrapper)(nil)
@@ -249,7 +260,7 @@ func (s *systemServerWrapper) getInstanceID() base.SQLInstanceID {
 	return base.SQLInstanceID(s.server.nodeIDContainer.Get())
 }
 
-func (s *systemServerWrapper) shutdownRequested() <-chan ShutdownRequest {
+func (s *systemServerWrapper) shutdownRequested() <-chan serverctl.ShutdownRequest {
 	return nil
 }
 

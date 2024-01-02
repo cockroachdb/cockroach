@@ -13,7 +13,6 @@ package tenantcapabilitiesauthorizer
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
@@ -42,6 +41,7 @@ var authorizerMode = settings.RegisterEnumSetting(
 		int64(authorizerModeAllowAll): "allow-all",
 		int64(authorizerModeV222):     "v222",
 	},
+	settings.WithName("server.virtual_cluster_authorization.mode"),
 )
 
 type authorizerModeType int64
@@ -354,14 +354,6 @@ func (a *Authorizer) getMode(
 ) (cp *tenantcapabilitiespb.TenantCapabilities, selectedMode authorizerModeType) {
 	// We prioritize what the cluster setting tells us.
 	selectedMode = authorizerModeType(authorizerMode.Get(&a.settings.SV))
-	if selectedMode == authorizerModeOn {
-		if !a.settings.Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities) {
-			// If the cluster hasn't been upgraded to v23.1 with
-			// capabilities yet, the capabilities won't be ready for use. In
-			// that case, fall back to the previous behavior.
-			selectedMode = authorizerModeV222
-		}
-	}
 
 	// If the mode is "on", we need to check the capabilities. Are they
 	// available?
@@ -389,4 +381,33 @@ func (a *Authorizer) getMode(
 		}
 	}
 	return cp, selectedMode
+}
+
+func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachpb.TenantID) error {
+	if tenID.IsSystem() {
+		return nil
+	}
+	errFn := func() error {
+		return errors.New("client tenant does not have capability to debug the process")
+	}
+	cp, mode := a.getMode(ctx, tenID)
+	switch mode {
+	case authorizerModeOn:
+		break // fallthrough to the next check.
+	case authorizerModeAllowAll:
+		return nil
+	case authorizerModeV222:
+		return errFn()
+	default:
+		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
+		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
+		return err
+	}
+
+	if !tenantcapabilities.MustGetBoolByID(
+		cp, tenantcapabilities.CanDebugProcess,
+	) {
+		return errFn()
+	}
+	return nil
 }

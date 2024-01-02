@@ -26,7 +26,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -47,7 +46,7 @@ func benchmarkCockroach(b *testing.B, f BenchmarkFn) {
 	s, db, _ := serverutils.StartServer(
 		b, base.TestServerArgs{
 			UseDatabase:       "bench",
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(83461),
 		})
 	defer s.Stopper().Stop(context.TODO())
 
@@ -65,13 +64,13 @@ func benchmarkSharedProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(
 		b, base.TestServerArgs{
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		})
 	defer s.Stopper().Stop(ctx)
 
 	// Create our own test tenant with a known name.
 	tenantName := "benchtenant"
-	_, tenantDB, err := s.(*server.TestServer).StartSharedProcessTenant(ctx,
+	_, tenantDB, err := s.TenantController().StartSharedProcessTenant(ctx,
 		base.TestSharedProcessTenantArgs{
 			TenantName:  roachpb.TenantName(tenantName),
 			UseDatabase: "bench",
@@ -88,7 +87,7 @@ func benchmarkSharedProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 	require.NoError(b, db.QueryRow(`SELECT id FROM [SHOW TENANT benchtenant]`).Scan(&tenantID))
 
 	err = testutils.SucceedsSoonError(func() error {
-		capabilities, found := s.(*server.TestServer).Server.TenantCapabilitiesReader().GetCapabilities(roachpb.MustMakeTenantID(tenantID))
+		capabilities, found := s.StorageLayer().TenantCapabilitiesReader().GetCapabilities(roachpb.MustMakeTenantID(tenantID))
 		if !found {
 			return errors.Newf("capabilities not yet ready")
 		}
@@ -114,7 +113,7 @@ func benchmarkSepProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(
 		b, base.TestServerArgs{
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		})
 	defer s.Stopper().Stop(ctx)
 
@@ -128,7 +127,7 @@ func benchmarkSepProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 	// The benchmarks sometime hit the default span limit, so we increase it.
 	// NOTE(andrei): Benchmarks drop the tables they're creating, so I'm not sure
 	// if hitting this limit is expected.
-	_, err := db.Exec(`ALTER TENANT ALL SET CLUSTER SETTING "spanconfig.tenant_limit" = 10000000`)
+	_, err := db.Exec(`SET CLUSTER SETTING spanconfig.virtual_cluster.max_spans = 10000000`)
 	require.NoError(b, err)
 
 	_, err = tenantDB.Exec(`CREATE DATABASE bench`)
@@ -143,7 +142,7 @@ func benchmarkMultinodeCockroach(b *testing.B, f BenchmarkFn) {
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
 				UseDatabase:       "bench",
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(83461),
 			},
 		})
 	if _, err := tc.Conns[0].Exec(`CREATE DATABASE bench`); err != nil {

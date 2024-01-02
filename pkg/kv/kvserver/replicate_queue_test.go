@@ -32,18 +32,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -67,6 +68,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	// This test was seen taking north of 20m under race.
 	skip.UnderRace(t)
 	skip.UnderShort(t)
+	skip.UnderDeadlock(t)
 
 	const numNodes = 5
 
@@ -120,7 +122,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	countReplicas := func() []int {
 		counts := make([]int, len(tc.Servers))
 		for _, s := range tc.Servers {
-			err := s.Stores().VisitStores(func(s *kvserver.Store) error {
+			err := s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 				counts[s.StoreID()-1] += s.ReplicaCount()
 				return nil
 			})
@@ -192,8 +194,8 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 
 	// Speed up the test.
 	allocatorimpl.MinLeaseTransferStatsDuration = 1 * time.Millisecond
-	allocatorimpl.LeaseRebalanceThreshold = 0.01
 	allocatorimpl.LeaseRebalanceThresholdMin = 0.0
+	const leaseRebalanceThreshold = 0.01
 
 	const useDisk = false // for debugging purposes
 	spec := func(node int, store int) base.StoreSpec {
@@ -242,6 +244,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 			for _, server := range tc.Servers {
 				st := server.ClusterSettings()
 				st.Manual.Store(true)
+				allocatorimpl.LeaseRebalanceThreshold.Override(ctx, &st.SV, leaseRebalanceThreshold)
 			}
 
 			// Add a few ranges per store.
@@ -278,7 +281,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 			countReplicas := func() (total int, perStore []int) {
 				perStore = make([]int, numStores)
 				for _, s := range tc.Servers {
-					err := s.Stores().VisitStores(func(s *kvserver.Store) error {
+					err := s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 						require.Zero(t, perStore[s.StoreID()-1])
 						perStore[s.StoreID()-1] = s.ReplicaCount()
 						total += s.ReplicaCount()
@@ -291,7 +294,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 			countLeases := func() (total int, perStore []int) {
 				perStore = make([]int, numStores)
 				for _, s := range tc.Servers {
-					err := s.Stores().VisitStores(func(s *kvserver.Store) error {
+					err := s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 						c, err := s.Capacity(ctx, false)
 						require.NoError(t, err)
 						leases := int(c.LeaseCount)
@@ -391,7 +394,7 @@ func TestReplicateQueueUpReplicateOddVoters(t *testing.T) {
 
 	tc.AddAndStartServer(t, base.TestServerArgs{})
 
-	if err := tc.Servers[0].Stores().VisitStores(func(s *kvserver.Store) error {
+	if err := tc.Servers[0].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 		return s.ForceReplicationScanAndProcess()
 	}); err != nil {
 		t.Fatal(err)
@@ -405,7 +408,7 @@ func TestReplicateQueueUpReplicateOddVoters(t *testing.T) {
 	}
 
 	var store *kvserver.Store
-	_ = tc.Servers[0].Stores().VisitStores(func(s *kvserver.Store) error {
+	_ = tc.Servers[0].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 		store = s
 		return nil
 	})
@@ -482,7 +485,7 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, s := range tc.Servers {
-		require.NoError(t, s.Stores().VisitStores(func(s *kvserver.Store) error {
+		require.NoError(t, s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 			require.NoError(t, s.ForceReplicationScanAndProcess())
 			return nil
 		}))
@@ -511,7 +514,7 @@ func scanAndGetNumNonVoters(
 ) (numNonVoters int) {
 	for _, s := range tc.Servers {
 		// Nudge internal queues to up/down-replicate our scratch range.
-		require.NoError(t, s.Stores().VisitStores(func(s *kvserver.Store) error {
+		require.NoError(t, s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 			require.NoError(t, s.ForceSplitScanAndProcess())
 			require.NoError(t, s.ForceReplicationScanAndProcess())
 			require.NoError(t, s.ForceRaftSnapshotQueueProcess())
@@ -538,9 +541,7 @@ func TestReplicateQueueUpAndDownReplicateNonVoters(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
-				// Test fails with the default tenant. Disabling and
-				// tracking with #76378.
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 				Knobs: base.TestingKnobs{
 					SpanConfig: &spanconfig.TestingKnobs{
 						ConfigureScratchRange: true,
@@ -839,7 +840,7 @@ func TestReplicateQueueTracingOnError(t *testing.T) {
 		t, 4, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-				ReceiveSnapshot: func(_ *kvserverpb.SnapshotRequest_Header) error {
+				ReceiveSnapshot: func(_ context.Context, _ *kvserverpb.SnapshotRequest_Header) error {
 					if atomic.LoadInt64(&rejectSnapshots) == 1 {
 						return errors.Newf("boom")
 					}
@@ -859,10 +860,8 @@ func TestReplicateQueueTracingOnError(t *testing.T) {
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx))
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx+1))
 	adminSrv := tc.Server(decomNodeIdx)
-	conn, err := adminSrv.RPCContext().GRPCDialNode(adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
-	require.NoError(t, err)
-	adminClient := serverpb.NewAdminClient(conn)
-	_, err = adminClient.Decommission(
+	adminClient := adminSrv.GetAdminClient(t)
+	_, err := adminClient.Decommission(
 		ctx, &serverpb.DecommissionRequest{
 			NodeIDs:          []roachpb.NodeID{decomNodeID},
 			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
@@ -887,7 +886,7 @@ func TestReplicateQueueTracingOnError(t *testing.T) {
 
 	// Flush logs and get log messages from replicate_queue.go since just
 	// before calling store.Enqueue(..).
-	log.Flush()
+	log.FlushFiles()
 	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
 		math.MaxInt64, 100, regexp.MustCompile(`replicate_queue\.go`), log.WithMarkedSensitiveData)
 	require.NoError(t, err)
@@ -966,7 +965,7 @@ func TestReplicateQueueDecommissionPurgatoryError(t *testing.T) {
 		t, 4, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-				ReceiveSnapshot: func(_ *kvserverpb.SnapshotRequest_Header) error {
+				ReceiveSnapshot: func(_ context.Context, _ *kvserverpb.SnapshotRequest_Header) error {
 					if atomic.LoadInt64(&rejectSnapshots) == 1 {
 						return errors.Newf("boom")
 					}
@@ -986,10 +985,8 @@ func TestReplicateQueueDecommissionPurgatoryError(t *testing.T) {
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx))
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx+1))
 	adminSrv := tc.Server(decomNodeIdx)
-	conn, err := adminSrv.RPCContext().GRPCDialNode(adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
-	require.NoError(t, err)
-	adminClient := serverpb.NewAdminClient(conn)
-	_, err = adminClient.Decommission(
+	adminClient := adminSrv.GetAdminClient(t)
+	_, err := adminClient.Decommission(
 		ctx, &serverpb.DecommissionRequest{
 			NodeIDs:          []roachpb.NodeID{decomNodeID},
 			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
@@ -1023,7 +1020,7 @@ func getLeaseholderStore(
 		return nil, err
 	}
 	leaseHolderSrv := tc.Servers[leaseHolder.NodeID-1]
-	store, err := leaseHolderSrv.Stores().GetStore(leaseHolder.StoreID)
+	store, err := leaseHolderSrv.GetStores().(*kvserver.Stores).GetStore(leaseHolder.StoreID)
 	if err != nil {
 		return nil, err
 	}
@@ -1035,32 +1032,32 @@ func getLeaseholderStore(
 func TestReplicateQueueDeadNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 76996)
 	skip.UnderRace(t, "takes a long time or times out under race")
 
 	ctx := context.Background()
 
+	// Disable the replicate queue for all ranges except the scratch range. This
+	// speeds up the test, as the queue only needs to up-replicate the dead
+	// replica (non-voter) for a single range.
+	var scratchRangeID int64
+	atomic.StoreInt64(&scratchRangeID, -1)
 	var livenessTrap atomic.Value
 	setupFn := func(t *testing.T) (*testcluster.TestCluster, roachpb.RangeDescriptor) {
 		tc := testcluster.StartTestCluster(t, 5,
 			base.TestClusterArgs{
-				ReplicationMode: base.ReplicationAuto,
+				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
-					ScanMinIdleTime: time.Millisecond,
-					ScanMaxIdleTime: time.Millisecond,
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
-							ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
-								DisableReplicaRebalancing: true,
+							BaseQueueDisabledBypassFilter: func(rangeID roachpb.RangeID) bool {
+								return rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID))
 							},
 						},
 						SpanConfig: &spanconfig.TestingKnobs{
 							ConfigureScratchRange: true,
 						},
 						NodeLiveness: kvserver.NodeLivenessTestingKnobs{
-							StorePoolNodeLivenessFn: func(
-								id roachpb.NodeID, now hlc.Timestamp, duration time.Duration,
-							) livenesspb.NodeLivenessStatus {
+							StorePoolNodeLivenessFn: func(id roachpb.NodeID) livenesspb.NodeLivenessStatus {
 								val := livenessTrap.Load()
 								if val == nil {
 									return livenesspb.NodeLivenessStatus_LIVE
@@ -1072,14 +1069,11 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 				},
 			},
 		)
-		_, err := tc.ServerConn(0).Exec(
-			`SET CLUSTER SETTING server.failed_reservation_timeout='1ms'`)
-		require.NoError(t, err)
-
 		// Setup a scratch range on a test cluster with 2 non-voters and 1 voter.
 		scratchKey := tc.ScratchRange(t)
 		scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
-		_, err = tc.ServerConn(0).Exec(
+		atomic.StoreInt64(&scratchRangeID, int64(scratchRange.RangeID))
+		_, err := tc.ServerConn(0).Exec(
 			`ALTER RANGE DEFAULT CONFIGURE ZONE USING num_replicas = 3, num_voters = 1`,
 		)
 		require.NoError(t, err)
@@ -1181,18 +1175,18 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 	// AllocatorRemoveDeadNonVoter` code path. The test does the following:
 	//
 	// 1. Instantiate a range with 1 voter and 2 non-voters on a 5-node cluster.
-	// 2. Turn off the replicateQueue
+	// 2. Turn off the queue bypasss (disable replicate queue processing).
 	// 3. Change the zone configs such that there should be no non-voters --
 	// the two existing non-voters should now be considered "over-replicated"
 	// by the system.
 	// 4. Kill the nodes that have non-voters.
-	// 5. Turn on the replicateQueue
+	// 5. Turn on the queue bypass (enable the replicate queue processing).
 	// 6. Make sure that the non-voters are downreplicated from the dead nodes.
 	t.Run("remove", func(t *testing.T) {
 		tc, scratchRange := setupFn(t)
 		defer tc.Stopper().Stop(ctx)
 
-		toggleReplicationQueues(tc, false)
+		atomic.StoreInt64(&scratchRangeID, -1)
 		_, err := tc.ServerConn(0).Exec(
 			// Remove all non-voters.
 			"ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1",
@@ -1222,8 +1216,8 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 
 		beforeNodeIDs := getNonVoterNodeIDs(scratchRange)
 		markDead(beforeNodeIDs)
+		atomic.StoreInt64(&scratchRangeID, int64(scratchRange.RangeID))
 
-		toggleReplicationQueues(tc, true)
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 0 /* nonVoterCount */)
 			if err != nil {
@@ -1408,7 +1402,7 @@ func getAggregateMetricCounts(
 ) (currentCount int64, currentVoterCount int64) {
 	for _, s := range tc.Servers {
 		if storeId, exists := voterMap[s.NodeID()]; exists {
-			store, err := s.Stores().GetStore(storeId)
+			store, err := s.GetStores().(*kvserver.Stores).GetStore(storeId)
 			if err != nil {
 				log.Errorf(ctx, "error finding store: %s", err)
 				continue
@@ -1440,6 +1434,7 @@ func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes a long time or times out under race")
+	skip.UnderDeadlock(t, "takes a long time or times out under deadlock")
 
 	ctx := context.Background()
 	serverArgs := make(map[int]base.TestServerArgs)
@@ -1585,6 +1580,10 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// The zone config change leads to snapshot timeouts under stress race which
+	// make the test take 300+s.
+	skip.UnderStressRace(t)
+
 	ctx := context.Background()
 	serverArgs := make(map[int]base.TestServerArgs)
 	// Assign each store a rack number so we can constrain individual voting and
@@ -1653,6 +1652,7 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 		" constraints='{\"+rack=3\": 1}', voter_constraints='{\"+rack=1\": 1}'")
 	require.NoError(t, err)
 
+	matchString := "rebalance target found for non-voter, enqueuing"
 	require.Eventually(t, func() bool {
 		// NB: Manually enqueuing the replica on server 0 (i.e. rack 1) is copacetic
 		// because we know that it is the leaseholder (since it is the only voting
@@ -1669,8 +1669,10 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 			log.Errorf(ctx, "processErr: %s", processErr.Error())
 			return false
 		}
-		if matched, err := regexp.Match("rebalance target found for non-voter, enqueuing",
+		if matched, err := regexp.Match(matchString,
 			[]byte(recording.String())); !matched {
+			log.Infof(ctx, "didn't find matching string '%s' in trace %s",
+				matchString, recording.String())
 			require.NoError(t, err)
 			return false
 		}
@@ -1729,7 +1731,7 @@ func filterRangeLog(
 
 func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
 	for _, s := range tc.Servers {
-		_ = s.Stores().VisitStores(func(store *kvserver.Store) error {
+		_ = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			store.SetReplicateQueueActive(active)
 			return nil
 		})
@@ -1738,7 +1740,7 @@ func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
 
 func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
 	for _, s := range tc.Servers {
-		err = s.Stores().VisitStores(func(store *kvserver.Store) error {
+		err = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			return store.ForceReplicationScanAndProcess()
 		})
 	}
@@ -1747,7 +1749,7 @@ func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
 
 func toggleSplitQueues(tc *testcluster.TestCluster, active bool) {
 	for _, s := range tc.Servers {
-		_ = s.Stores().VisitStores(func(store *kvserver.Store) error {
+		_ = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			store.SetSplitQueueActive(active)
 			return nil
 		})
@@ -1774,8 +1776,6 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
-				ScanMinIdleTime: time.Millisecond,
-				ScanMaxIdleTime: time.Millisecond,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						DefaultZoneConfigOverride: &zcfg,
@@ -1788,11 +1788,12 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 
 	// We're going to create a table with many versions of a big row and a small
 	// row. We'll split the table in between the rows, to produce a large range
-	// and a small one. Then we'll increase the replication factor to 5 and check
-	// that both ranges behave the same - i.e. they both get up-replicated. For
-	// the purposes of this test we're only worried about the large one
-	// up-replicating, but we test the small one as a control so that we don't
-	// fool ourselves.
+	// and a small one. We'll also split the first row into its own range, to
+	// avoid the range inheriting 5 replicas from the system ranges. Then we'll
+	// increase the replication factor to 5 and check that both ranges behave the
+	// same - i.e. they both get up-replicated. For the purposes of this test
+	// we're only worried about the large one up-replicating, but we test the
+	// small one as a control so that we don't fool ourselves.
 
 	// Disable the queues so they don't mess with our manual relocation. We'll
 	// re-enable them later.
@@ -1804,6 +1805,8 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = db.Exec(`ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 1)`)
+	require.NoError(t, err)
+	_, err = db.Exec(`ALTER TABLE t SPLIT AT VALUES (1)`)
 	require.NoError(t, err)
 	_, err = db.Exec(`ALTER TABLE t SPLIT AT VALUES (2)`)
 	require.NoError(t, err)
@@ -1835,7 +1838,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	forceProcess := func() {
 		// Speed up the queue processing.
 		for _, s := range tc.Servers {
-			err := s.Stores().VisitStores(func(store *kvserver.Store) error {
+			err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 				return store.ForceReplicationScanAndProcess()
 			})
 			require.NoError(t, err)
@@ -1862,7 +1865,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		forceProcess()
 		r := db.QueryRow(
-			"SELECT replicas FROM [SHOW RANGES FROM TABLE t] WHERE start_key LIKE '%TableMin%'")
+			"SELECT replicas FROM [SHOW RANGES FROM TABLE t] WHERE start_key LIKE '%/1'")
 		var repl string
 		if err := r.Scan(&repl); err != nil {
 			return err
@@ -1875,7 +1878,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 }
 
 type delayingRaftMessageHandler struct {
-	kvserver.RaftMessageHandler
+	kvserver.IncomingRaftMessageHandler
 	leaseHolderNodeID uint64
 	rangeID           roachpb.RangeID
 }
@@ -1891,11 +1894,11 @@ func (h delayingRaftMessageHandler) HandleRaftRequest(
 	respStream kvserver.RaftMessageResponseStream,
 ) *kvpb.Error {
 	if h.rangeID != req.RangeID {
-		return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+		return h.IncomingRaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
 	}
 	go func() {
 		time.Sleep(raftDelay)
-		err := h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+		err := h.IncomingRaftMessageHandler.HandleRaftRequest(context.Background(), req, respStream)
 		if err != nil {
 			log.Infof(ctx, "HandleRaftRequest returned err %s", err)
 		}
@@ -1960,7 +1963,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 		rangeID, remoteNodeID, leaseHolderNodeID)
 	leaseHolderSrv := tc.Servers[leaseHolderNodeID-1]
 	leaseHolderStoreID := leaseHolderSrv.GetFirstStoreID()
-	leaseHolderStore, err := leaseHolderSrv.Stores().GetStore(leaseHolderStoreID)
+	leaseHolderStore, err := leaseHolderSrv.GetStores().(*kvserver.Stores).GetStore(leaseHolderStoreID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1968,11 +1971,11 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	// Start delaying Raft messages to the remote node
 	remoteSrv := tc.Servers[remoteNodeID-1]
 	remoteStoreID := remoteSrv.GetFirstStoreID()
-	remoteStore, err := remoteSrv.Stores().GetStore(remoteStoreID)
+	remoteStore, err := remoteSrv.GetStores().(*kvserver.Stores).GetStore(remoteStoreID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	remoteStore.Transport().Listen(
+	remoteStore.Transport().ListenIncomingRaftMessages(
 		remoteStoreID,
 		delayingRaftMessageHandler{remoteStore, leaseHolderNodeID, rangeID},
 	)
@@ -2059,7 +2062,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 			return nil
 		}
 		currentSrv := tc.Servers[leaseBefore.Replica.NodeID-1]
-		leaseStore, err := currentSrv.Stores().GetStore(currentSrv.GetFirstStoreID())
+		leaseStore, err := currentSrv.GetStores().(*kvserver.Stores).GetStore(currentSrv.GetFirstStoreID())
 		if err != nil {
 			return err
 		}
@@ -2090,8 +2093,8 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
 
 	zcfg := zonepb.DefaultZoneConfig()
 	zcfg.NumReplicas = proto.Int32(1)
@@ -2099,15 +2102,16 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 		base.TestClusterArgs{
 			// Disable the replication queue initially, to assert on the lease
 			// statuses pre and post enabling the replicate queue.
-			ReplicationMode: base.ReplicationManual,
+			ReplicationMode:     base.ReplicationManual,
+			ReusableListenerReg: lisReg,
 			ServerArgs: base.TestServerArgs{
 				Settings:          st,
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 				ScanMinIdleTime:   time.Millisecond,
 				ScanMaxIdleTime:   time.Millisecond,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyEngineRegistry:      stickyEngineRegistry,
+						StickyVFSRegistry:         server.NewStickyVFSRegistry(),
 						DefaultZoneConfigOverride: &zcfg,
 					},
 				},
@@ -2159,7 +2163,7 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 	forceProcess := func() {
 		// Speed up the queue processing.
 		for _, s := range tc.Servers {
-			err := s.Stores().VisitStores(func(store *kvserver.Store) error {
+			err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 				return store.ForceReplicationScanAndProcess()
 			})
 			require.NoError(t, err)
@@ -2188,7 +2192,7 @@ func iterateOverAllStores(
 	t *testing.T, tc *testcluster.TestCluster, f func(*kvserver.Store) error,
 ) {
 	for _, server := range tc.Servers {
-		require.NoError(t, server.Stores().VisitStores(f))
+		require.NoError(t, server.GetStores().(*kvserver.Stores).VisitStores(f))
 	}
 }
 
@@ -2212,10 +2216,11 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// This test is slow under stress and can time out when upreplicating /
+	// This test is slow under stress/race and can time out when upreplicating /
 	// rebalancing to ensure all stores have the same range count initially, due
 	// to slow heartbeats.
 	skip.UnderStress(t)
+	skip.UnderRace(t)
 
 	ctx := context.Background()
 
@@ -2493,4 +2498,123 @@ func TestReplicateQueueExpirationLeasesOnly(t *testing.T) {
 		t.Logf("disabling: epochLeases=%d expLeases=%d", epochLeases, expLeases)
 		return epochLeases > 0 && expLeases > 0 && expLeases <= initialExpLeases
 	}, 30*time.Second, 500*time.Millisecond)
+}
+
+// TestReplicateQueueLeasePreferencePurgatoryError tests that not finding a
+// lease transfer target whilst violating lease preferences, will put the
+// replica in the replicate queue purgatory.
+func TestReplicateQueueLeasePreferencePurgatoryError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	skip.UnderRace(t) // too slow under stressrace
+	skip.UnderDeadlock(t)
+	skip.UnderShort(t)
+
+	const initialPreferredNode = 1
+	const nextPreferredNode = 2
+	const numRanges = 40
+	const numNodes = 3
+
+	var blockTransferTarget atomic.Bool
+
+	blockTransferTargetFn := func() bool {
+		block := blockTransferTarget.Load()
+		return block
+	}
+
+	knobs := base.TestingKnobs{
+		Store: &kvserver.StoreTestingKnobs{
+			AllocatorKnobs: &allocator.TestingKnobs{
+				BlockTransferTarget: blockTransferTargetFn,
+			},
+		},
+	}
+
+	serverArgs := make(map[int]base.TestServerArgs, numNodes)
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Knobs: knobs,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{{Key: "rack", Value: fmt.Sprintf("%d", i+1)}},
+			},
+		}
+	}
+
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgsPerNode: serverArgs,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.Conns[0]
+	setLeasePreferences := func(node int) {
+		_, err := db.Exec(fmt.Sprintf(`ALTER TABLE t CONFIGURE ZONE USING
+      num_replicas=3, num_voters=3, voter_constraints='[]', lease_preferences='[[+rack=%d]]'`,
+			node))
+		require.NoError(t, err)
+	}
+
+	leaseCount := func(node int) int {
+		var count int
+		err := db.QueryRow(fmt.Sprintf(
+			"SELECT count(*) FROM [SHOW RANGES FROM TABLE t WITH DETAILS] WHERE lease_holder = %d", node),
+		).Scan(&count)
+		require.NoError(t, err)
+		return count
+	}
+
+	checkLeaseCount := func(node, expectedLeaseCount int) error {
+		if count := leaseCount(node); count != expectedLeaseCount {
+			return errors.Errorf("expected %d leases on node %d, found %d",
+				expectedLeaseCount, node, count)
+		}
+		return nil
+	}
+
+	// Create a test table with numRanges-1 splits, to end up with numRanges
+	// ranges. We will use the test table ranges to assert on the purgatory lease
+	// preference behavior.
+	_, err := db.Exec("CREATE TABLE t (i int);")
+	require.NoError(t, err)
+	_, err = db.Exec(
+		fmt.Sprintf("INSERT INTO t(i) select generate_series(1,%d)", numRanges-1))
+	require.NoError(t, err)
+	_, err = db.Exec("ALTER TABLE t SPLIT AT SELECT i FROM t;")
+	require.NoError(t, err)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	// Set a preference on the initial node, then wait until all the leases for
+	// the test table are on that node.
+	setLeasePreferences(initialPreferredNode)
+	testutils.SucceedsSoon(t, func() error {
+		for serverIdx := 0; serverIdx < numNodes; serverIdx++ {
+			require.NoError(t, tc.GetFirstStoreFromServer(t, serverIdx).
+				ForceReplicationScanAndProcess())
+		}
+		return checkLeaseCount(initialPreferredNode, numRanges)
+	})
+
+	// Block returning transfer targets from the allocator, then update the
+	// preferred node. We expect that every range for the test table will end up
+	// in purgatory on the initially preferred node.
+	store := tc.GetFirstStoreFromServer(t, 0)
+	blockTransferTarget.Store(true)
+	setLeasePreferences(nextPreferredNode)
+	testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, store.ForceReplicationScanAndProcess())
+		if purgLen := store.ReplicateQueuePurgatoryLength(); purgLen != numRanges {
+			return errors.Errorf("expected %d in purgatory but got %v", numRanges, purgLen)
+		}
+		return nil
+	})
+
+	// Lastly, unblock returning transfer targets. Expect that the leases from
+	// the test table all move to the new preference. Note we don't force a
+	// replication queue scan, as the purgatory retry should handle the
+	// transfers.
+	blockTransferTarget.Store(false)
+	testutils.SucceedsSoon(t, func() error {
+		return checkLeaseCount(nextPreferredNode, numRanges)
+	})
 }

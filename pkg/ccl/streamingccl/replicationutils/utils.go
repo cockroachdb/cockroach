@@ -10,10 +10,10 @@ package replicationutils
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -21,10 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -36,6 +37,7 @@ import (
 func ScanSST(
 	sst *kvpb.RangeFeedSSTable,
 	scanWithin roachpb.Span,
+	// TODO (msbutler): I think we can use a roachpb.kv instead, avoiding EncodeDecode roundtrip.
 	mvccKeyValOp func(key storage.MVCCKeyValue) error,
 	mvccRangeKeyValOp func(rangeKeyVal storage.MVCCRangeKeyValue) error,
 ) error {
@@ -129,7 +131,7 @@ func ScanSST(
 	return nil
 }
 
-func GetStreamIngestionStatsNoHeartbeat(
+func GetStreamIngestionStats(
 	ctx context.Context,
 	streamIngestionDetails jobspb.StreamIngestionDetails,
 	jobProgress jobspb.Progress,
@@ -173,23 +175,8 @@ func ReplicatedTimeFromProgress(p *jobspb.Progress) hlc.Timestamp {
 func LoadIngestionProgress(
 	ctx context.Context, db isql.DB, jobID jobspb.JobID,
 ) (*jobspb.StreamIngestionProgress, error) {
-	var (
-		progressBytes []byte
-		exists        bool
-	)
-	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		infoStorage := jobs.InfoStorageForJob(txn, jobID)
-		var err error
-		progressBytes, exists, err = infoStorage.GetLegacyProgress(ctx)
-		return err
-	}); err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, nil
-	}
-	progress := &jobspb.Progress{}
-	if err := protoutil.Unmarshal(progressBytes, progress); err != nil {
+	progress, err := jobs.LoadJobProgress(ctx, db, jobID)
+	if err != nil || progress == nil {
 		return nil, err
 	}
 
@@ -201,58 +188,92 @@ func LoadIngestionProgress(
 	return sp.StreamIngest, nil
 }
 
-func GetStreamIngestionStats(
-	ctx context.Context,
-	streamIngestionDetails jobspb.StreamIngestionDetails,
-	jobProgress jobspb.Progress,
-) (*streampb.StreamIngestionStats, error) {
-	stats, err := GetStreamIngestionStatsNoHeartbeat(ctx, streamIngestionDetails, jobProgress)
-	if err != nil {
+// LoadReplicationProgress loads the latest persisted stream replication progress.
+// The method returns nil if the progress does not exist yet.
+func LoadReplicationProgress(
+	ctx context.Context, db isql.DB, jobID jobspb.JobID,
+) (*jobspb.StreamReplicationProgress, error) {
+	progress, err := jobs.LoadJobProgress(ctx, db, jobID)
+	if err != nil || progress == nil {
 		return nil, err
 	}
-	client, err := streamclient.GetFirstActiveClient(ctx, stats.IngestionProgress.StreamAddresses)
-	if err != nil {
-		return nil, err
+
+	sp, ok := progress.GetDetails().(*jobspb.Progress_StreamReplication)
+	if !ok {
+		return nil, errors.Newf("unknown progress details type %T in stream replication job %d",
+			progress.GetDetails(), jobID)
 	}
-	streamStatus, err := client.Heartbeat(ctx, streampb.StreamID(stats.IngestionDetails.StreamID), hlc.MaxTimestamp)
-	if err != nil {
-		stats.ProducerError = err.Error()
-	} else {
-		stats.ProducerStatus = &streamStatus
-	}
-	return stats, client.Close(ctx)
+	return sp.StreamReplication, nil
 }
 
-func TestingGetStreamIngestionStatsNoHeartbeatFromReplicationJob(
-	t *testing.T, ctx context.Context, sqlRunner *sqlutils.SQLRunner, ingestionJobID int,
-) *streampb.StreamIngestionStats {
-	var payloadBytes []byte
-	var progressBytes []byte
-	var payload jobspb.Payload
-	var progress jobspb.Progress
-	stmt := fmt.Sprintf(`SELECT payload, progress FROM (%s)`, jobutils.InternalSystemJobsBaseQuery)
-	sqlRunner.QueryRow(t, stmt, ingestionJobID).Scan(&payloadBytes, &progressBytes)
-	require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
-	require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
-	details := payload.GetStreamIngestion()
-	stats, err := GetStreamIngestionStatsNoHeartbeat(ctx, *details, progress)
-	require.NoError(t, err)
-	return stats
+// InvestigateFingerprints checks that the src and dst cluster data match, table
+// by table. It first computes and compares their stripped fingerprints to check
+// that all the latest data matches; then it computes and compares their
+// revision history fingerprints.
+func InvestigateFingerprints(
+	ctx context.Context, srcConn, dstConn *gosql.DB, startTime,
+	cutoverTime hlc.Timestamp,
+) error {
+	strippedOpts := []func(*fingerprintutils.FingerprintOption){
+		fingerprintutils.Stripped(),
+		fingerprintutils.AOST(cutoverTime),
+	}
+	if err := fingerprintClustersByTable(ctx, srcConn, dstConn, strippedOpts...); err != nil {
+		return fmt.Errorf("failed stripped fingerprint: %w", err)
+	}
+
+	opts := []func(*fingerprintutils.FingerprintOption){
+		fingerprintutils.RevisionHistory(),
+		fingerprintutils.StartTime(startTime),
+		fingerprintutils.AOST(cutoverTime),
+	}
+	if err := fingerprintClustersByTable(ctx, srcConn, dstConn, opts...); err != nil {
+		return fmt.Errorf("failed revision history fingerprint: %w", err)
+	}
+	return nil
+}
+
+func fingerprintClustersByTable(
+	ctx context.Context,
+	srcConn, dstConn *gosql.DB,
+	optFuncs ...func(*fingerprintutils.FingerprintOption),
+) error {
+	g := ctxgroup.WithContext(ctx)
+	var (
+		srcFingerprints, dstFingerprints map[string]map[string]int64
+	)
+	g.Go(func() error {
+		var err error
+		srcFingerprints, err = fingerprintutils.FingerprintAllDatabases(ctx, srcConn, true,
+			optFuncs...)
+		if err != nil {
+			return fmt.Errorf("failed getting src fingerprint: %w", err)
+		}
+		return nil
+	})
+	g.Go(func() error {
+		var err error
+		dstFingerprints, err = fingerprintutils.FingerprintAllDatabases(ctx, dstConn, true,
+			optFuncs...)
+		if err != nil {
+			return fmt.Errorf("failed getting dst fingerprint: %w", err)
+		}
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		return err
+	}
+	return fingerprintutils.CompareMultipleDatabaseFingerprints(srcFingerprints,
+		dstFingerprints)
 }
 
 func TestingGetStreamIngestionStatsFromReplicationJob(
 	t *testing.T, ctx context.Context, sqlRunner *sqlutils.SQLRunner, ingestionJobID int,
 ) *streampb.StreamIngestionStats {
-	var payloadBytes []byte
-	var progressBytes []byte
-	var payload jobspb.Payload
-	var progress jobspb.Progress
-	stmt := fmt.Sprintf(`SELECT payload, progress FROM (%s)`, jobutils.InternalSystemJobsBaseQuery)
-	sqlRunner.QueryRow(t, stmt, ingestionJobID).Scan(&payloadBytes, &progressBytes)
-	require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
-	require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
+	payload := jobutils.GetJobPayload(t, sqlRunner, jobspb.JobID(ingestionJobID))
+	progress := jobutils.GetJobProgress(t, sqlRunner, jobspb.JobID(ingestionJobID))
 	details := payload.GetStreamIngestion()
-	stats, err := GetStreamIngestionStats(ctx, *details, progress)
+	stats, err := GetStreamIngestionStats(ctx, *details, *progress)
 	require.NoError(t, err)
 	return stats
 }

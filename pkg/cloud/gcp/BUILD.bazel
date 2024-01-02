@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -19,7 +18,6 @@ go_library(
         "//pkg/cloud/externalconn",
         "//pkg/cloud/externalconn/connectionpb",
         "//pkg/cloud/externalconn/utils",
-        "//pkg/clusterversion",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -50,7 +48,6 @@ go_test(
         "gcp_kms_test.go",
         "gcs_storage_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":gcp"],
     deps = [
         "//pkg/base",
@@ -73,5 +70,3 @@ go_test(
         "@org_golang_x_oauth2//google",
     ],
 )
-
-get_x_data(name = "get_x_data")

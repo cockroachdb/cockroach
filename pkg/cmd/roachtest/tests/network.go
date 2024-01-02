@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -36,8 +37,6 @@ import (
 func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluster) {
 	n := c.Spec().NodeCount
 	serverNodes, clientNode := c.Range(1, n-1), c.Node(n)
-
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 
 	t.L().Printf("starting nodes to initialize TLS certs...")
 	// NB: we need to start two times, because when we use
@@ -135,9 +134,12 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 			if timeutil.Since(tStart) > 30*time.Second {
 				t.L().Printf("still waiting for leases to move")
 				// The leases have not moved yet, so display some progress.
-				dumpRangesCmd := fmt.Sprintf(`./cockroach sql --certs-dir %s -e 'TABLE crdb_internal.ranges'`, certsDir)
+				dumpRangesCmd := roachtestutil.NewCommand("./cockroach sql -e 'TABLE crdb_internal.ranges'").
+					Flag("certs-dir", certsDir).
+					Flag("port", "{pgport:1}").
+					String()
 				t.L().Printf("SQL: %s", dumpRangesCmd)
-				err := c.RunE(ctx, c.Node(1), dumpRangesCmd)
+				err = c.RunE(ctx, c.Node(1), dumpRangesCmd)
 				require.NoError(t, err)
 			}
 
@@ -298,10 +300,12 @@ sudo iptables-save
 func registerNetwork(r registry.Registry) {
 	const numNodes = 4
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("network/authentication/nodes=%d", numNodes),
-		Owner:   registry.OwnerKV, // Should be moved to new security team once one exists.
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("network/authentication/nodes=%d", numNodes),
+		Owner:            registry.OwnerKV, // Should be moved to new security team once one exists.
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNetworkAuthentication(ctx, t, c)
 		},

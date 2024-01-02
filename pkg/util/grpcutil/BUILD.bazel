@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -17,7 +16,6 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/severity",
         "//pkg/util/netutil",
-        "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//errbase",
         "@com_github_cockroachdb_redact//:redact",
@@ -38,26 +36,20 @@ go_test(
         "grpc_log_test.go",
         "grpc_util_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":grpcutil"],
     deps = [
         "//pkg/server",
-        "//pkg/testutils",
-        "//pkg/testutils/skip",
+        "//pkg/util/circuit",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/severity",
-        "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
+        "//pkg/util/netutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_status//:status",
         "@com_github_stretchr_testify//require",
-        "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//codes",
-        "@org_golang_google_grpc//health/grpc_health_v1",
         "@org_golang_google_grpc//metadata",
         "@org_golang_google_grpc//status",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -29,11 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	. "github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -50,19 +51,19 @@ func makeIndexDescriptor(name string, columnNames []string) descpb.IndexDescript
 		Name:                name,
 		KeyColumnNames:      columnNames,
 		KeyColumnDirections: dirs,
-		Version:             descpb.EmptyArraysInInvertedIndexesVersion,
+		Version:             descpb.LatestIndexDescriptorVersion,
 	}
 	return idx
 }
 
 func TestAllocateIDs(t *testing.T) {
-	// TODO(postamar): bump idx versions to LatestIndexDescriptorVersion in 22.2
-	// This is not possible until then because of a limitation in 21.2 which
-	// affects mixed-21.2-22.1-version clusters (issue #78426).
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
 	desc := NewBuilder(&descpb.TableDescriptor{
+		DeclarativeSchemaChangerState: &scpb.DescriptorState{
+			JobID: catpb.JobID(1),
+		},
 		ParentID: descpb.ID(bootstrap.TestingUserDescID(0)),
 		ID:       descpb.ID(bootstrap.TestingUserDescID(1)),
 		Name:     "foo",
@@ -95,6 +96,9 @@ func TestAllocateIDs(t *testing.T) {
 	}
 
 	expected := NewBuilder(&descpb.TableDescriptor{
+		DeclarativeSchemaChangerState: &scpb.DescriptorState{
+			JobID: catpb.JobID(1),
+		},
 		ParentID: descpb.ID(bootstrap.TestingUserDescID(0)),
 		ID:       descpb.ID(bootstrap.TestingUserDescID(1)),
 		Version:  1,
@@ -130,7 +134,7 @@ func TestAllocateIDs(t *testing.T) {
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				KeyColumnNames:      []string{"b", "a"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.LatestIndexDescriptorVersion,
 			},
 			{
 				ID:                  3,
@@ -139,7 +143,7 @@ func TestAllocateIDs(t *testing.T) {
 				KeyColumnNames:      []string{"b"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.LatestIndexDescriptorVersion,
 			},
 			{
 				ID:                  4,
@@ -148,7 +152,7 @@ func TestAllocateIDs(t *testing.T) {
 				KeyColumnNames:      []string{"c"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				EncodingType:        catenumpb.PrimaryIndexEncoding,
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.LatestIndexDescriptorVersion,
 			},
 		},
 		Privileges:       catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
@@ -638,6 +642,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 	ctx := context.Background()
 
 	desc := NewBuilder(&descpb.TableDescriptor{
+		ID:               2,
 		Name:             "test",
 		ParentID:         descpb.ID(1),
 		NextConstraintID: 2,
@@ -650,10 +655,13 @@ func TestUnvalidateConstraints(t *testing.T) {
 		Privileges:    catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
 		OutboundFKs: []descpb.ForeignKeyConstraint{
 			{
-				Name:              "fk",
-				ReferencedTableID: descpb.ID(1),
-				Validity:          descpb.ConstraintValidity_Validated,
-				ConstraintID:      1,
+				Name:                "fk",
+				ReferencedTableID:   descpb.ID(1),
+				Validity:            descpb.ConstraintValidity_Validated,
+				ConstraintID:        1,
+				OriginTableID:       2,
+				OriginColumnIDs:     []descpb.ColumnID{1},
+				ReferencedColumnIDs: []descpb.ColumnID{1},
 			},
 		},
 	}).BuildCreatedMutableTable()
@@ -673,14 +681,120 @@ func TestUnvalidateConstraints(t *testing.T) {
 	}
 }
 
+func TestMaybeFixSecondaryIndexEncodingType(t *testing.T) {
+	tests := []struct {
+		desc       descpb.TableDescriptor
+		expUpgrade bool
+		verify     func(*testing.T, int, catalog.TableDescriptor) // nil means no extra verification.
+	}{
+		{ // 1
+			desc: descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+					{ID: 2, Name: "baz"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1, 2}, ColumnNames: []string{"bar", "baz"}},
+				},
+				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				PrimaryIndex: descpb.IndexDescriptor{ID: 1, Name: "primary",
+					KeyColumnIDs:        []descpb.ColumnID{1, 2},
+					KeyColumnNames:      []string{"bar", "baz"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+					EncodingType:        catenumpb.PrimaryIndexEncoding,
+					Version:             descpb.LatestIndexDescriptorVersion,
+					ConstraintID:        1,
+				},
+				Indexes: []descpb.IndexDescriptor{{
+					ID:                  2,
+					Name:                "secondary",
+					KeyColumnIDs:        []descpb.ColumnID{2},
+					KeyColumnNames:      []string{"baz"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+					EncodingType:        catenumpb.PrimaryIndexEncoding,
+				}},
+				NextColumnID:     3,
+				NextFamilyID:     1,
+				NextIndexID:      3,
+				NextConstraintID: 2,
+			},
+			expUpgrade: true,
+			verify: func(t *testing.T, _ int, newDesc catalog.TableDescriptor) {
+				require.Equal(t, catenumpb.SecondaryIndexEncoding, newDesc.TableDesc().Indexes[0].EncodingType)
+			},
+		},
+		{ // 2
+			desc: descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+					{ID: 2, Name: "baz"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1, 2}, ColumnNames: []string{"bar", "baz"}},
+				},
+				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				PrimaryIndex: descpb.IndexDescriptor{ID: 1, Name: "primary",
+					KeyColumnIDs:        []descpb.ColumnID{1, 2},
+					KeyColumnNames:      []string{"bar", "baz"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+					EncodingType:        catenumpb.PrimaryIndexEncoding,
+					Version:             descpb.LatestIndexDescriptorVersion,
+					ConstraintID:        1,
+				},
+				Indexes: []descpb.IndexDescriptor{{
+					ID:                  2,
+					Name:                "secondary",
+					KeyColumnIDs:        []descpb.ColumnID{2},
+					KeyColumnNames:      []string{"baz"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+					EncodingType:        catenumpb.PrimaryIndexEncoding,
+				}},
+				DeclarativeSchemaChangerState: &scpb.DescriptorState{
+					JobID: catpb.JobID(1),
+				},
+				NextColumnID:     3,
+				NextFamilyID:     1,
+				NextIndexID:      3,
+				NextConstraintID: 2,
+			},
+			expUpgrade: false,
+		},
+	}
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			b := NewBuilder(&test.desc)
+			require.NoError(t, b.RunPostDeserializationChanges())
+			desc := b.BuildImmutableTable()
+			changes, err := GetPostDeserializationChanges(desc)
+			require.NoError(t, err)
+			upgraded := changes.Contains(catalog.FixSecondaryIndexEncodingType)
+			if upgraded != test.expUpgrade {
+				t.Fatalf("%d: expected upgraded=%t, but got upgraded=%t", i, test.expUpgrade, upgraded)
+			}
+			if test.verify != nil {
+				test.verify(t, i, desc)
+			}
+		})
+	}
+}
+
 func TestKeysPerRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// TODO(dan): This server is only used to turn a CREATE TABLE statement into
 	// a descpb.TableDescriptor. It should be possible to move MakeTableDesc into
 	// sqlbase. If/when that happens, use it here instead of this server.
-	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, conn, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	codec := srv.ApplicationLayer().Codec()
 	if _, err := conn.Exec(`CREATE DATABASE d`); err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -741,7 +855,7 @@ func TestKeysPerRow(t *testing.T) {
 			tableName := fmt.Sprintf("t%d", i)
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE d.%s %s`, tableName, test.createTable))
 
-			desc := desctestutils.TestingGetPublicTableDescriptor(db, keys.SystemSQLCodec, "d", tableName)
+			desc := desctestutils.TestingGetPublicTableDescriptor(db, codec, "d", tableName)
 			require.NotNil(t, desc)
 			idx, err := catalog.MustFindIndexByID(desc, test.indexID)
 			require.NoError(t, err)
@@ -856,12 +970,50 @@ func TestDefaultExprNil(t *testing.T) {
 	})
 }
 
+// TestStrippedDanglingSelfBackReferences checks the proper behavior of the
+// catalog.StrippedDanglingSelfBackReferences post-deserialization change.
+func TestStrippedDanglingSelfBackReferences(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	codec := srv.ApplicationLayer().Codec()
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create a table.
+	tdb.Exec(t, `CREATE DATABASE t`)
+	tdb.Exec(t, `CREATE TABLE t.tbl (a INT PRIMARY KEY)`)
+
+	// Get the descriptor for the table.
+	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "tbl")
+
+	// Inject some nonsense into the mutation_jobs slice.
+	mut := NewBuilder(tbl.TableDesc()).BuildExistingMutableTable()
+	mut.MutationJobs = append(mut.MutationJobs, descpb.TableDescriptor_MutationJob{
+		MutationID: 12345,
+		JobID:      6789,
+	})
+
+	// Check that it's properly removed.
+	b := NewBuilder(mut.TableDesc())
+	require.NoError(t, b.RunPostDeserializationChanges())
+	desc := b.BuildExistingMutableTable()
+	require.Empty(t, desc.MutationJobs)
+	require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingSelfBackReferences))
+}
+
 // TestRemoveDefaultExprFromComputedColumn tests that default expressions are
 // correctly removed from descriptors of computed columns as part of the
 // RunPostDeserializationChanges suite.
 func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	codec := srv.ApplicationLayer().Codec()
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
 	const expectedErrRE = `.*: computed column \"b\" cannot also have a DEFAULT expression`
@@ -870,7 +1022,7 @@ func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE t.tbl (a INT PRIMARY KEY, b INT AS (1) STORED)`)
 
 	// Get the descriptor for the table.
-	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tbl")
+	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "tbl")
 
 	// Setting a default value on the computed column should fail.
 	tdb.ExpectErr(t, expectedErrRE, `ALTER TABLE t.tbl ALTER COLUMN b SET DEFAULT 2`)

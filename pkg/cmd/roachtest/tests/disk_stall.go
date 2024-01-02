@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -35,28 +37,26 @@ func registerDiskStalledDetection(r registry.Registry) {
 	stallers := map[string]func(test.Test, cluster.Cluster) diskStaller{
 		"dmsetup": func(t test.Test, c cluster.Cluster) diskStaller { return &dmsetupDiskStaller{t: t, c: c} },
 		"cgroup/read-write/logs-too=false": func(t test.Test, c cluster.Cluster) diskStaller {
-			return &cgroupDiskStaller{t: t, c: c, readOrWrite: []string{"write", "read"}}
+			return &cgroupDiskStaller{t: t, c: c, readOrWrite: []bandwidthReadWrite{writeBandwidth, readBandwidth}}
 		},
 		"cgroup/read-write/logs-too=true": func(t test.Test, c cluster.Cluster) diskStaller {
-			return &cgroupDiskStaller{t: t, c: c, readOrWrite: []string{"write", "read"}, logsToo: true}
+			return &cgroupDiskStaller{t: t, c: c, readOrWrite: []bandwidthReadWrite{writeBandwidth, readBandwidth}, logsToo: true}
 		},
 		"cgroup/write-only/logs-too=true": func(t test.Test, c cluster.Cluster) diskStaller {
-			return &cgroupDiskStaller{t: t, c: c, readOrWrite: []string{"write"}, logsToo: true}
+			return &cgroupDiskStaller{t: t, c: c, readOrWrite: []bandwidthReadWrite{writeBandwidth}, logsToo: true}
 		},
 	}
-	makeSpec := func() spec.ClusterSpec {
-		s := r.MakeClusterSpec(4, spec.ReuseNone())
-		// Use PDs in an attempt to work around flakes encountered when using SSDs.
-		// See #97968.
-		s.PreferLocalSSD = false
-		return s
-	}
+
 	for name, makeStaller := range stallers {
 		name, makeStaller := name, makeStaller
 		r.Add(registry.TestSpec{
-			Name:                fmt.Sprintf("disk-stalled/%s", name),
-			Owner:               registry.OwnerStorage,
-			Cluster:             makeSpec(),
+			Name:  fmt.Sprintf("disk-stalled/%s", name),
+			Owner: registry.OwnerStorage,
+			// Use PDs in an attempt to work around flakes encountered when using SSDs.
+			// See #97968.
+			Cluster:             r.MakeClusterSpec(4, spec.ReuseNone(), spec.DisableLocalSSD()),
+			CompatibleClouds:    registry.AllExceptAWS,
+			Suites:              registry.Suites(registry.Nightly),
 			Timeout:             30 * time.Minute,
 			SkipPostValidations: registry.PostValidationNoDeadNodes,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -92,7 +92,6 @@ func runDiskStalledDetection(
 	defer s.Cleanup(ctx)
 
 	t.Status("starting cluster")
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), startOpts, startSettings, c.Range(1, 3))
 
 	// Assert the process monotonic times are as expected.
@@ -136,6 +135,7 @@ func runDiskStalledDetection(
 			`{pgurl:1-3}`)
 		return nil
 	})
+	defer m.Wait()
 
 	// Wait between [3m,6m) before stalling the disk.
 	pauseDur := 3*time.Minute + time.Duration(rand.Intn(3))*time.Minute
@@ -148,12 +148,12 @@ func runDiskStalledDetection(
 	}
 
 	stallAt := timeutil.Now()
-	response := mustGetMetrics(t, adminURL, workloadStartAt, stallAt, []tsQuery{
-		{name: "cr.node.txn.commits", queryType: total},
+	response := mustGetMetrics(ctx, t, adminURL, workloadStartAt, stallAt, []tsQuery{
+		{name: "cr.node.sql.query.count", queryType: total},
 	})
 	cum := response.Results[0].Datapoints
-	totalTxnsPreStall := cum[len(cum)-1].Value - cum[0].Value
-	t.L().PrintfCtx(ctx, "%.2f transactions completed before stall", totalTxnsPreStall)
+	totalQueriesPreStall := cum[len(cum)-1].Value - cum[0].Value
+	t.L().PrintfCtx(ctx, "%.2f queries completed before stall", totalQueriesPreStall)
 
 	t.Status("inducing write stall")
 	if doStall {
@@ -200,17 +200,17 @@ func runDiskStalledDetection(
 
 	{
 		now := timeutil.Now()
-		response := mustGetMetrics(t, adminURL, workloadStartAt, now, []tsQuery{
-			{name: "cr.node.txn.commits", queryType: total},
+		response := mustGetMetrics(ctx, t, adminURL, workloadStartAt, now, []tsQuery{
+			{name: "cr.node.sql.query.count", queryType: total},
 		})
 		cum := response.Results[0].Datapoints
-		totalTxnsPostStall := cum[len(cum)-1].Value - totalTxnsPreStall
-		preStallTPS := totalTxnsPreStall / stallAt.Sub(workloadStartAt).Seconds()
-		postStallTPS := totalTxnsPostStall / workloadAfterDur.Seconds()
-		t.L().PrintfCtx(ctx, "%.2f total transactions committed after stall\n", totalTxnsPostStall)
-		t.L().PrintfCtx(ctx, "pre-stall tps: %.2f, post-stall tps: %.2f\n", preStallTPS, postStallTPS)
-		if postStallTPS < preStallTPS/2 {
-			t.Fatalf("post-stall TPS %.2f is less than 50%% of pre-stall TPS %.2f", postStallTPS, preStallTPS)
+		totalQueriesPostStall := cum[len(cum)-1].Value - totalQueriesPreStall
+		preStallQPS := totalQueriesPreStall / stallAt.Sub(workloadStartAt).Seconds()
+		postStallQPS := totalQueriesPostStall / workloadAfterDur.Seconds()
+		t.L().PrintfCtx(ctx, "%.2f total queries committed after stall\n", totalQueriesPostStall)
+		t.L().PrintfCtx(ctx, "pre-stall qps: %.2f, post-stall qps: %.2f\n", preStallQPS, postStallQPS)
+		if postStallQPS < preStallQPS/2 {
+			t.Fatalf("post-stall QPS %.2f is less than 50%% of pre-stall QPS %.2f", postStallQPS, preStallQPS)
 		}
 	}
 
@@ -253,8 +253,8 @@ func getProcessExitMonotonic(
 func getProcessMonotonicTimestamp(
 	ctx context.Context, t test.Test, c cluster.Cluster, nodeID int, prop string,
 ) (time.Duration, bool) {
-	details, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID),
-		"systemctl show cockroach.service --property="+prop)
+	details, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID), fmt.Sprintf(
+		"systemctl show %s --property=%s", roachtestutil.SystemInterfaceSystemdUnitName(), prop))
 	require.NoError(t, err)
 	require.NoError(t, details.Err)
 	parts := strings.Split(details.Stdout, "=")
@@ -291,14 +291,24 @@ type dmsetupDiskStaller struct {
 
 var _ diskStaller = (*dmsetupDiskStaller)(nil)
 
-func (s *dmsetupDiskStaller) device() string { return getDevice(s.t, s.c.Spec()) }
+func (s *dmsetupDiskStaller) device() string { return getDevice(s.t, s.c) }
 
 func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
 	dev := s.device()
+	// snapd will run "snapd auto-import /dev/dm-0" via udev triggers when
+	// /dev/dm-0 is created. This possibly interferes with the dmsetup create
+	// reload, so uninstall snapd.
+	s.c.Run(ctx, s.c.All(), `sudo apt-get purge -y snapd`)
 	s.c.Run(ctx, s.c.All(), `sudo umount -f /mnt/data1 || true`)
 	s.c.Run(ctx, s.c.All(), `sudo dmsetup remove_all`)
-	s.c.Run(ctx, s.c.All(), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
+	err := s.c.RunE(ctx, s.c.All(), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
 		`sudo dmsetup create data1`)
+	if err != nil {
+		// This has occasionally been seen to fail with "Device or resource busy",
+		// with no clear explanation. Try to find out who it is.
+		s.c.Run(ctx, s.c.All(), "sudo bash -c 'ps aux; dmsetup status; mount; lsof'")
+		s.t.Fatal(err)
+	}
 	s.c.Run(ctx, s.c.All(), `sudo mount /dev/mapper/data1 /mnt/data1`)
 }
 
@@ -307,6 +317,8 @@ func (s *dmsetupDiskStaller) Cleanup(ctx context.Context) {
 	s.c.Run(ctx, s.c.All(), `sudo umount /mnt/data1`)
 	s.c.Run(ctx, s.c.All(), `sudo dmsetup remove_all`)
 	s.c.Run(ctx, s.c.All(), `sudo mount /mnt/data1`)
+	// Reinstall snapd in case subsequent tests need it.
+	s.c.Run(ctx, s.c.All(), `sudo apt-get install -y snapd`)
 }
 
 func (s *dmsetupDiskStaller) Stall(ctx context.Context, nodes option.NodeListOption) {
@@ -323,7 +335,7 @@ func (s *dmsetupDiskStaller) LogDir() string  { return "logs" }
 type cgroupDiskStaller struct {
 	t           test.Test
 	c           cluster.Cluster
-	readOrWrite []string
+	readOrWrite []bandwidthReadWrite
 	logsToo     bool
 }
 
@@ -347,53 +359,91 @@ func (s *cgroupDiskStaller) Stall(ctx context.Context, nodes option.NodeListOpti
 		s.readOrWrite[i], s.readOrWrite[j] = s.readOrWrite[j], s.readOrWrite[i]
 	})
 	for _, rw := range s.readOrWrite {
-		s.setThroughput(ctx, nodes, rw, 1)
+		// NB: I don't understand why, but attempting to set a
+		// bytesPerSecond={0,1} results in Invalid argument from the io.max
+		// cgroupv2 API.
+		if err := s.setThroughput(ctx, nodes, rw, throughput{limited: true, bytesPerSecond: 4}); err != nil {
+			s.t.Fatal(err)
+		}
 	}
 }
 
 func (s *cgroupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) {
 	for _, rw := range s.readOrWrite {
-		s.setThroughput(ctx, nodes, rw, 0)
+		err := s.setThroughput(ctx, nodes, rw, throughput{limited: false})
+		s.t.L().PrintfCtx(ctx, "error unstalling the disk; stumbling on: %v", err)
+		// NB: We log the error and continue on because unstalling may not
+		// succeed if the process has successfully exited.
 	}
 }
 
 func (s *cgroupDiskStaller) device() (major, minor int) {
 	// TODO(jackson): Programmatically determine the device major,minor numbers.
 	// eg,:
-	//    deviceName := getDevice(s.t, s.c.Spec())
+	//    deviceName := getDevice(s.t, s.c)
 	//    `cat /proc/partitions` and find `deviceName`
-	switch s.c.Spec().Cloud {
+	switch s.c.Cloud() {
 	case spec.GCE:
 		// ls -l /dev/sdb
 		// brw-rw---- 1 root disk 8, 16 Mar 27 22:08 /dev/sdb
 		return 8, 16
 	default:
-		s.t.Fatalf("unsupported cloud %q", s.c.Spec().Cloud)
+		s.t.Fatalf("unsupported cloud %q", s.c.Cloud())
 		return 0, 0
 	}
 }
 
+type throughput struct {
+	limited        bool
+	bytesPerSecond int
+}
+
+type bandwidthReadWrite int8
+
+const (
+	readBandwidth bandwidthReadWrite = iota
+	writeBandwidth
+)
+
+func (rw bandwidthReadWrite) cgroupV2BandwidthProp() string {
+	switch rw {
+	case readBandwidth:
+		return "rbps"
+	case writeBandwidth:
+		return "wbps"
+	default:
+		panic("unreachable")
+	}
+}
+
 func (s *cgroupDiskStaller) setThroughput(
-	ctx context.Context, nodes option.NodeListOption, readOrWrite string, bytesPerSecond int,
-) {
-	major, minor := s.device()
-	s.c.Run(ctx, nodes, "sudo", "/bin/bash", "-c", fmt.Sprintf(
-		"'echo %d:%d %d > /sys/fs/cgroup/blkio/blkio.throttle.%s_bps_device'",
-		major,
-		minor,
-		bytesPerSecond,
-		readOrWrite,
+	ctx context.Context, nodes option.NodeListOption, rw bandwidthReadWrite, bw throughput,
+) error {
+	maj, min := s.device()
+	cockroachIOController := filepath.Join("/sys/fs/cgroup/system.slice", roachtestutil.SystemInterfaceSystemdUnitName()+".service", "io.max")
+
+	bytesPerSecondStr := "max"
+	if bw.limited {
+		bytesPerSecondStr = fmt.Sprintf("%d", bw.bytesPerSecond)
+	}
+	return s.c.RunE(ctx, nodes, "sudo", "/bin/bash", "-c", fmt.Sprintf(
+		`'echo %d:%d %s=%s > %s'`,
+		maj,
+		min,
+		rw.cgroupV2BandwidthProp(),
+		bytesPerSecondStr,
+		cockroachIOController,
 	))
 }
 
-func getDevice(t test.Test, s spec.ClusterSpec) string {
-	switch s.Cloud {
+func getDevice(t test.Test, c cluster.Cluster) string {
+	switch c.Cloud() {
 	case spec.GCE:
 		return "/dev/sdb"
 	case spec.AWS:
 		return "/dev/nvme1n1"
 	default:
-		t.Fatalf("unsupported cloud %q", s.Cloud)
+		t.Fatalf("unsupported cloud %q", c.Cloud())
 		return ""
 	}
 }

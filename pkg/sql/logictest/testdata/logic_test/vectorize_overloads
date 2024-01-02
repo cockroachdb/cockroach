@@ -487,3 +487,9 @@ NULL
 statement ok
 RESET testing_optimizer_random_seed;
 RESET testing_optimizer_disable_rule_probability;
+
+query T rowsort
+SELECT _interval + _timestamp FROM many_types WHERE _timestamp - _interval IS NOT NULL
+----
+2018-01-01 13:34:56.124456 +0000 +0000
+2018-01-01 02:23:45.468345 +0000 +0000

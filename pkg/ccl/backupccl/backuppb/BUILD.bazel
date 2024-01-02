@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
@@ -46,6 +45,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cloud",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
         "//pkg/multitenant/mtinfopb",
         "//pkg/sql/parser",
         "//pkg/sql/protoreflect",
@@ -55,6 +56,7 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//jsonpb",
+        "@com_github_gogo_protobuf//proto",
         "@io_opentelemetry_go_otel//attribute",
     ],
 )
@@ -62,7 +64,6 @@ go_library(
 go_test(
     name = "backuppb_test",
     srcs = ["backup_test.go"],
-    args = ["-test.timeout=295s"],
     tags = ["ccl_test"],
     deps = [
         ":backuppb",
@@ -70,5 +71,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

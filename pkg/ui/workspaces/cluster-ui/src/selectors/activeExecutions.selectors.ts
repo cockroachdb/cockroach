@@ -9,11 +9,7 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import {
-  ActiveExecutions,
-  ActiveTransaction,
-  ExecutionStatus,
-} from "src/activeExecutions/types";
+import { ActiveExecutions } from "src/activeExecutions/types";
 import { AppState } from "src/store";
 import { selectActiveExecutionsCombiner } from "src/selectors/activeExecutionsCommon.selectors";
 import { selectExecutionID } from "src/selectors/common";
@@ -45,14 +41,6 @@ export const selectActiveStatements = createSelector(
   selectActiveExecutions,
   (executions: ActiveExecutions) => executions.statements,
 );
-
-export const selectExecutionStatus = () => {
-  const execStatuses: string[] = [];
-  for (const execStatus in ExecutionStatus) {
-    execStatuses.push(execStatus);
-  }
-  return execStatuses;
-};
 
 export const selecteActiveStatement = createSelector(
   selectActiveStatements,

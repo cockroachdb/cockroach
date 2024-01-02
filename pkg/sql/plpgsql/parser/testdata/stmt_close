@@ -6,7 +6,21 @@ END
 ----
 DECLARE
 BEGIN
-CLOSE a cursor
-<NOT DONE YET>
+CLOSE some_cursor;
 END
-<NOT DONE YET>
+ -- normalized!
+DECLARE
+BEGIN
+CLOSE some_cursor;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+CLOSE some_cursor;
+END
+ -- literals removed
+DECLARE
+BEGIN
+CLOSE _;
+END
+ -- identifiers removed

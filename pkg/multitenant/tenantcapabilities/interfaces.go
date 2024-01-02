@@ -15,8 +15,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // Reader provides access to the global tenant capability state. The global
@@ -70,18 +72,31 @@ type Authorizer interface {
 	// IsExemptFromRateLimiting returns true of the tenant should
 	// not be subject to rate limiting.
 	IsExemptFromRateLimiting(ctx context.Context, tenID roachpb.TenantID) bool
+
+	// HasProcessDebugCapability returns an error if a tenant, referenced by its ID,
+	// is not allowed to debug the running process.
+	HasProcessDebugCapability(ctx context.Context, tenID roachpb.TenantID) error
 }
 
 // Entry ties together a tenantID with its capabilities.
 type Entry struct {
 	TenantID           roachpb.TenantID
 	TenantCapabilities *tenantcapabilitiespb.TenantCapabilities
+	Name               roachpb.TenantName
+	DataState          mtinfopb.TenantDataState
+	ServiceMode        mtinfopb.TenantServiceMode
+}
+
+// Ready indicates whether the metadata record is populated.
+func (e Entry) Ready() bool {
+	return e.TenantCapabilities != nil
 }
 
 // Update represents an update to the global tenant capability state.
 type Update struct {
 	Entry
-	Deleted bool // whether the entry was deleted or not
+	Deleted   bool // whether the entry was deleted or not
+	Timestamp hlc.Timestamp
 }
 
 func (u Update) String() string {
@@ -93,9 +108,4 @@ func (u Update) String() string {
 
 func (u Entry) String() string {
 	return fmt.Sprintf("ten=%v cap=%v", u.TenantID, u.TenantCapabilities)
-}
-
-// DefaultCapabilities returns the default state of capabilities.
-func DefaultCapabilities() *tenantcapabilitiespb.TenantCapabilities {
-	return &tenantcapabilitiespb.TenantCapabilities{}
 }

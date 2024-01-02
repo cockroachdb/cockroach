@@ -36,9 +36,10 @@ func declareKeysQueryTransaction(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	qr := req.(*kvpb.QueryTxnRequest)
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.TransactionKey(qr.Txn.Key, qr.Txn.ID)})
+	return nil
 }
 
 // QueryTxn fetches the current state of a transaction.
@@ -72,7 +73,8 @@ func QueryTxn(
 
 	// Fetch transaction record; if missing, attempt to synthesize one.
 	ok, err := storage.MVCCGetProto(
-		ctx, reader, key, hlc.Timestamp{}, &reply.QueriedTxn, storage.MVCCGetOptions{},
+		ctx, reader, key, hlc.Timestamp{}, &reply.QueriedTxn,
+		storage.MVCCGetOptions{ReadCategory: storage.BatchEvalReadCategory},
 	)
 	if err != nil {
 		return result.Result{}, err

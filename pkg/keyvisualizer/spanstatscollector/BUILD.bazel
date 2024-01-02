@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -11,6 +10,7 @@ go_library(
         "//pkg/keyvisualizer/keyvissettings",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
+        "//pkg/util/container/ring",
         "//pkg/util/interval",
         "//pkg/util/log",
         "//pkg/util/stop",
@@ -19,5 +19,3 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
-
-get_x_data(name = "get_x_data")

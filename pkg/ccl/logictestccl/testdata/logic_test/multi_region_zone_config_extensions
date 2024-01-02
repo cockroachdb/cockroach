@@ -1,7 +1,6 @@
-# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant
 
-query TTTTT
+query TTTTT rowsort
 SHOW REGIONS
 ----
 ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}  {}  {}

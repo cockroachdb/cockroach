@@ -1,9 +1,9 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "allocator2",
     srcs = [
+        "allocator.go",
         "allocator_state.go",
         "cluster_state.go",
         "constraint.go",
@@ -28,7 +28,6 @@ go_test(
         "load_test.go",
         "memo_helper_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":allocator2"],
     deps = [
@@ -38,5 +37,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

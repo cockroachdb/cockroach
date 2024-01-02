@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"runtime/pprof"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -45,7 +46,7 @@ func newChannelOrchestrator(
 
 // serverStateUsingChannels coordinates the lifecycle of a tenant
 // server. It ensures sane concurrent behavior between:
-// - requests to start a server manually, e.g. via TestServer;
+// - requests to start a server manually, e.g. via testServer;
 // - async changes to the tenant service mode;
 // - quiescence of the outer stopper;
 // - RPC drain requests on the tenant server;
@@ -74,8 +75,14 @@ type serverStateUsingChannels struct {
 	// features that label data with the current tenant name.
 	nc *roachpb.TenantNameContainer
 
-	// server is the server that is being controlled.
-	server orchestratedServer
+	startedMu struct {
+		syncutil.Mutex
+
+		// server is the server that is being controlled.
+		// This is only set when the corresponding orchestratedServer
+		// instance is ready.
+		server orchestratedServer
+	}
 
 	// startedOrStopped is closed when the server has either started or
 	// stopped. This can be used to wait for a server start.
@@ -84,10 +91,6 @@ type serverStateUsingChannels struct {
 	// startErr, once startedOrStopped is closed, reports the error
 	// during server creation if any.
 	startErr error
-
-	// started is marked true when the server has started. This can
-	// be used to observe the start state without waiting.
-	started syncutil.AtomicBool
 
 	// requestImmediateStop can be called to request a server to stop
 	// ungracefully.
@@ -106,7 +109,9 @@ var _ serverState = (*serverStateUsingChannels)(nil)
 
 // getServer is part of the serverState interface.
 func (s *serverStateUsingChannels) getServer() (orchestratedServer, bool) {
-	return s.server, s.started.Get()
+	s.startedMu.Lock()
+	defer s.startedMu.Unlock()
+	return s.startedMu.server, s.startedMu.server != nil
 }
 
 // nameContainer is part of the serverState interface.
@@ -154,14 +159,13 @@ func (o *channelOrchestrator) makeServerStateForSystemTenant(
 	closeCtx, cancelFn := context.WithCancel(context.Background())
 	st := &serverStateUsingChannels{
 		nc:                   nc,
-		server:               systemSrv,
 		startedOrStoppedCh:   closedChan,
 		requestImmediateStop: cancelFn,
 		requestGracefulStop:  cancelFn,
 		stoppedCh:            closeCtx.Done(),
 	}
 
-	st.started.Set(true)
+	st.startedMu.server = systemSrv
 	return st
 }
 
@@ -301,7 +305,11 @@ func (o *channelOrchestrator) startControlledServer(
 			// the goroutine above to call tenantStopper.Stop() and
 			// terminate.
 			state.requestImmediateStop()
-			state.started.Set(false)
+			func() {
+				state.startedMu.Lock()
+				defer state.startedMu.Unlock()
+				state.startedMu.server = nil
+			}()
 			close(stoppedCh)
 			if !startedOrStoppedChAlreadyClosed {
 				state.startErr = errors.New("server stop before successful start")
@@ -318,6 +326,14 @@ func (o *channelOrchestrator) startControlledServer(
 		// RunAsyncTask, because this stopper will be assigned its own
 		// different tracer.
 		ctx := tenantCtx
+
+		// Set the pprof label to more easily identify
+		// goroutines related to this virtual cluster. The
+		// calls here are exactly what pprof.Do does.
+		defer pprof.SetGoroutineLabels(ctx)
+		ctx = pprof.WithLabels(ctx, pprof.Labels("cluster", string(tenantName)))
+		pprof.SetGoroutineLabels(ctx)
+
 		// We want a context that gets cancelled when the server is
 		// shutting down, for the possible few cases in
 		// newServerInternal/preStart/acceptClients which are not looking at the
@@ -413,21 +429,31 @@ func (o *channelOrchestrator) startControlledServer(
 		}
 
 		// Indicate the server has started.
-		state.server = tenantServer
 		startedOrStoppedChAlreadyClosed = true
-		state.started.Set(true)
+		func() {
+			state.startedMu.Lock()
+			defer state.startedMu.Unlock()
+			state.startedMu.server = tenantServer
+		}()
 		close(startedOrStoppedCh)
 
 		// Wait for a request to shut down.
-		select {
-		case <-tenantStopper.ShouldQuiesce():
-			log.Infof(ctx, "tenant %q finishing their own control loop", tenantName)
+		for {
+			select {
+			case <-tenantStopper.ShouldQuiesce():
+				log.Infof(ctx, "tenant %q finishing their own control loop", tenantName)
+				return
 
-		case shutdownRequest := <-tenantServer.shutdownRequested():
-			log.Infof(ctx, "tenant %q requesting their own shutdown: %v",
-				tenantName, shutdownRequest.ShutdownCause())
-			// Make the async stop goroutine above pick up the task of shutting down.
-			state.requestImmediateStop()
+			case shutdownRequest := <-tenantServer.shutdownRequested():
+				log.Infof(ctx, "tenant %q requesting their own shutdown: %v",
+					tenantName, shutdownRequest.ShutdownCause())
+				// Make the async stop goroutine above pick up the task of shutting down.
+				if shutdownRequest.TerminateUsingGracefulDrain() {
+					state.requestGracefulStop()
+				} else {
+					state.requestImmediateStop()
+				}
+			}
 		}
 	}); err != nil {
 		// Clean up the task we just started before.

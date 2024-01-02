@@ -76,12 +76,8 @@ func BenchmarkConcurrentSelect1(b *testing.B) {
 				for i := 0; i < numOfConcurrentConn; i++ {
 					totalLat += <-latencyChan
 				}
-				b.ReportMetric(
-					sqlServer.ServerMetrics.
-						StatsMetrics.
-						SQLTxnStatsCollectionOverhead.
-						Mean(),
-					"overhead(ns/op)")
+				histogram := sqlServer.ServerMetrics.StatsMetrics.SQLTxnStatsCollectionOverhead
+				b.ReportMetric(histogram.CumulativeSnapshot().Mean(), "overhead(ns/op)")
 			})
 	}
 }

@@ -25,8 +25,8 @@ import (
 func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())
 }
 

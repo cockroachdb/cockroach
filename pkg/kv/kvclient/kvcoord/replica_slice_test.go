@@ -17,9 +17,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
@@ -39,7 +40,7 @@ func (ns *mockNodeStore) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.Node
 			return &nd, nil
 		}
 	}
-	return nil, errorutil.NewNodeNotFoundError(nodeID)
+	return nil, kvpb.NewNodeDescNotFoundError(nodeID)
 }
 
 // GetNodeDescriptorCount is part of the NodeDescStore interface.
@@ -51,7 +52,7 @@ func (ns *mockNodeStore) GetNodeDescriptorCount() int {
 func (ns *mockNodeStore) GetStoreDescriptor(
 	storeID roachpb.StoreID,
 ) (*roachpb.StoreDescriptor, error) {
-	return nil, errorutil.NewStoreNotFoundError(storeID)
+	return nil, kvpb.NewStoreDescNotFoundError(storeID)
 }
 
 func TestNewReplicaSlice(t *testing.T) {
@@ -83,9 +84,6 @@ func TestNewReplicaSlice(t *testing.T) {
 	rs, err := NewReplicaSlice(ctx, ns, rd, nil, OnlyPotentialLeaseholders)
 	require.NoError(t, err)
 	require.Equal(t, 3, rs.Len())
-	rs, err = NewReplicaSlice(ctx, ns, rd, nil, AllReplicas)
-	require.NoError(t, err)
-	require.Equal(t, 3, rs.Len())
 
 	// Check that learners are not included.
 	rd.InternalReplicas[2].Type = roachpb.LEARNER
@@ -95,9 +93,6 @@ func TestNewReplicaSlice(t *testing.T) {
 	rs, err = NewReplicaSlice(ctx, ns, rd, nil, AllExtantReplicas)
 	require.NoError(t, err)
 	require.Equal(t, 2, rs.Len())
-	rs, err = NewReplicaSlice(ctx, ns, rd, nil, AllReplicas)
-	require.NoError(t, err)
-	require.Equal(t, 3, rs.Len())
 
 	// Check that non-voters are included iff we ask for them to be.
 	rd.InternalReplicas[2].Type = roachpb.NON_VOTER
@@ -107,18 +102,11 @@ func TestNewReplicaSlice(t *testing.T) {
 	rs, err = NewReplicaSlice(ctx, ns, rd, nil, OnlyPotentialLeaseholders)
 	require.NoError(t, err)
 	require.Equal(t, 2, rs.Len())
-	rs, err = NewReplicaSlice(ctx, ns, rd, nil, AllReplicas)
-	require.NoError(t, err)
-	require.Equal(t, 3, rs.Len())
 
 	// Check that, if the leaseholder points to a learner, that learner is
 	// included.
-	rd.InternalReplicas[2].Type = roachpb.LEARNER
 	leaseholder := &roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3}
 	rs, err = NewReplicaSlice(ctx, ns, rd, leaseholder, OnlyPotentialLeaseholders)
-	require.NoError(t, err)
-	require.Equal(t, 3, rs.Len())
-	rs, err = NewReplicaSlice(ctx, ns, rd, leaseholder, AllReplicas)
 	require.NoError(t, err)
 	require.Equal(t, 3, rs.Len())
 }
@@ -182,7 +170,7 @@ func locality(t *testing.T, locStrs []string) roachpb.Locality {
 func info(t *testing.T, nid roachpb.NodeID, sid roachpb.StoreID, locStrs []string) ReplicaInfo {
 	return ReplicaInfo{
 		ReplicaDescriptor: desc(nid, sid),
-		Tiers:             locality(t, locStrs).Tiers,
+		Locality:          locality(t, locStrs),
 	}
 }
 
@@ -197,12 +185,15 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 		locality roachpb.Locality
 		// map from node address (see nodeDesc()) to latency to that node.
 		latencies map[roachpb.NodeID]time.Duration
+		// map of unhealthy nodes
+		unhealthy map[roachpb.NodeID]struct{}
 		slice     ReplicaSlice
 		// expOrder is the expected order in which the replicas sort. Replicas are
 		// only identified by their node. If multiple replicas are on different
 		// stores of the same node, the node only appears once in this list (as the
 		// ordering between replicas on the same node is not deterministic).
-		expOrdered []roachpb.NodeID
+		expOrdered              []roachpb.NodeID
+		dontSortByLocalityFirst bool
 	}{
 		{
 			name:     "order by locality matching",
@@ -218,7 +209,42 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 			expOrdered: []roachpb.NodeID{1, 2, 4, 3},
 		},
 		{
-			name:     "order by latency",
+			// Same test as above, but mark nodes 2 and 4 as unhealthy.
+			name:     "order by health",
+			nodeID:   1,
+			locality: locality(t, []string{"country=us", "region=west", "city=la"}),
+			slice: ReplicaSlice{
+				info(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
+				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
+				info(t, 3, 3, []string{"country=uk", "city=london"}),
+				info(t, 3, 33, []string{"country=uk", "city=london"}),
+				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
+			},
+			unhealthy: map[roachpb.NodeID]struct{}{
+				1: {},
+				4: {},
+			},
+			expOrdered: []roachpb.NodeID{2, 3, 1, 4},
+		},
+		{
+			name:     "order by latency only",
+			nodeID:   1,
+			locality: locality(t, []string{"country=us"}),
+			latencies: map[roachpb.NodeID]time.Duration{
+				2: time.Hour,
+				3: time.Minute,
+				4: time.Second,
+			},
+			slice: ReplicaSlice{
+				info(t, 2, 2, []string{"country=us"}),
+				info(t, 4, 4, []string{"country=us"}),
+				info(t, 4, 44, []string{"country=us"}),
+				info(t, 3, 3, []string{"country=us"}),
+			},
+			expOrdered: []roachpb.NodeID{4, 3, 2},
+		},
+		{
+			name:     "order by locality then latency",
 			nodeID:   1,
 			locality: locality(t, []string{"country=us", "region=west", "city=la"}),
 			latencies: map[roachpb.NodeID]time.Duration{
@@ -232,7 +258,25 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 				info(t, 4, 44, []string{"country=us", "region=east", "city=ny"}),
 				info(t, 3, 3, []string{"country=uk", "city=london"}),
 			},
-			expOrdered: []roachpb.NodeID{4, 3, 2},
+			expOrdered: []roachpb.NodeID{2, 4, 3},
+		},
+		{
+			name:     "disable locality setting",
+			nodeID:   1,
+			locality: locality(t, []string{"country=us", "region=west", "city=la"}),
+			latencies: map[roachpb.NodeID]time.Duration{
+				2: time.Hour,
+				3: time.Minute,
+				4: time.Second,
+			},
+			slice: ReplicaSlice{
+				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
+				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
+				info(t, 4, 44, []string{"country=us", "region=east", "city=ny"}),
+				info(t, 3, 3, []string{"country=uk", "city=london"}),
+			},
+			expOrdered:              []roachpb.NodeID{4, 3, 2},
+			dontSortByLocalityFirst: true,
 		},
 		{
 			// Test that replicas on the local node sort first, regardless of factors
@@ -259,6 +303,13 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 	}
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettings()
+			// TODO(baptist): Remove this if we make this the default.
+			FollowerReadsUnhealthy.Override(context.Background(), &st.SV, false)
+			if test.dontSortByLocalityFirst {
+				sortByLocalityFirst.Override(context.Background(), &st.SV, false)
+			}
+
 			var latencyFn LatencyFunc
 			if test.latencies != nil {
 				latencyFn = func(id roachpb.NodeID) (time.Duration, bool) {
@@ -266,9 +317,16 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 					return lat, ok
 				}
 			}
+			healthFn := func(id roachpb.NodeID) bool {
+				if test.unhealthy == nil {
+					return true
+				}
+				_, ok := test.unhealthy[id]
+				return !ok
+			}
 			// Randomize the input order, as it's not supposed to matter.
 			shuffle.Shuffle(test.slice)
-			test.slice.OptimizeReplicaOrder(test.nodeID, latencyFn, test.locality)
+			test.slice.OptimizeReplicaOrder(st, test.nodeID, healthFn, latencyFn, test.locality)
 			var sortedNodes []roachpb.NodeID
 			sortedNodes = append(sortedNodes, test.slice[0].NodeID)
 			for i := 1; i < len(test.slice); i++ {
@@ -282,14 +340,4 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestReplicaInfoLocalityValue(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ri := info(t, 1, 1, []string{"country=us", "region=west", "city=la"})
-	require.Equal(t, "", ri.LocalityValue("foo"))
-	require.Equal(t, "us", ri.LocalityValue("country"))
-	require.Equal(t, "west", ri.LocalityValue("region"))
-	require.Equal(t, "la", ri.LocalityValue("city"))
 }

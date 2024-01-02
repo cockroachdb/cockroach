@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -27,7 +27,7 @@ func schemaExists(
 	ctx context.Context, txn *kv.Txn, col *descs.Collection, parentID descpb.ID, schema string,
 ) (bool, descpb.ID, error) {
 	// Check statically known schemas.
-	if schema == tree.PublicSchema {
+	if schema == catconstants.PublicSchemaName {
 		return true, descpb.InvalidID, nil
 	}
 	for _, s := range virtualSchemas {
@@ -73,6 +73,7 @@ func (p *planner) writeSchemaDescChange(
 				// The version distinction for database jobs doesn't matter for schema
 				// jobs.
 				FormatVersion: jobspb.DatabaseJobFormatVersion,
+				SessionData:   &p.SessionData().SessionData,
 			},
 			Progress:      jobspb.SchemaChangeProgress{},
 			NonCancelable: true,

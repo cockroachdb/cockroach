@@ -55,7 +55,7 @@ WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
 statement ok
 CREATE TABLE num_ref (a INT PRIMARY KEY, xx INT, b INT, c INT, INDEX bc (b,c))
 
-let $t_id 
+let $t_id
 SELECT id FROM system.namespace WHERE name='num_ref'
 
 statement ok
@@ -540,7 +540,7 @@ CREATE TABLE t (
   FAMILY (a, b, c, d)
 )
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -1371,7 +1371,6 @@ vectorized: true
 │
 └── • sort
     │ columns: ("?column?", b)
-    │ ordering: +b
     │ estimated row count: 1,000 (missing stats)
     │ order: +b
     │

@@ -323,9 +323,7 @@ func normalizeConstraints(
 	if haveZero {
 		nc[0].NumReplicas = numReplicas
 	} else {
-		for i := range constraints {
-			nc = append(nc, constraints[i])
-		}
+		nc = append(nc, constraints...)
 		if sumReplicas < numReplicas {
 			cc := roachpb.ConstraintsConjunction{
 				NumReplicas: numReplicas - sumReplicas,

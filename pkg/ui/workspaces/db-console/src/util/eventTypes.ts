@@ -10,8 +10,6 @@
 
 // NOTE: This file is kept in sync manually with sql/event_log.go
 
-import _ from "lodash";
-
 // Recorded when a database is created.
 export const CREATE_DATABASE = "create_database";
 // Recorded when a database is dropped.

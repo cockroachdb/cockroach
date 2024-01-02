@@ -1,5 +1,5 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "lease",
@@ -14,18 +14,19 @@ go_library(
         "name_cache.go",
         "storage.go",
         "testutils.go",
+        ":gen-lease-mode-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/lease",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvpb",
         "//pkg/multitenant",
         "//pkg/roachpb",
+        "//pkg/server/serverpb",
         "//pkg/server/settingswatcher",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -43,6 +44,7 @@ go_library(
         "//pkg/sql/isql",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/regionliveness",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/storage",
@@ -63,6 +65,12 @@ go_library(
     ],
 )
 
+stringer(
+    name = "gen-lease-mode-stringer",
+    src = "lease.go",
+    typ = "SessionBasedLeasingMode",
+)
+
 go_test(
     name = "lease_test",
     size = "large",
@@ -74,10 +82,12 @@ go_test(
         "lease_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=895s"],
     embed = [":lease"],
+    exec_properties = {"Pool": "large"},
+    shard_count = 4,
     deps = [
         "//pkg/base",
+        "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
@@ -103,11 +113,10 @@ go_test(
         "//pkg/sql/enum",
         "//pkg/sql/isql",
         "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/regions",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
-        "//pkg/sql/sqltestutils",
-        "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/testutils",
@@ -115,7 +124,6 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
-        "//pkg/util",
         "//pkg/util/admission",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
@@ -123,7 +131,6 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/retry",
-        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
@@ -135,5 +142,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

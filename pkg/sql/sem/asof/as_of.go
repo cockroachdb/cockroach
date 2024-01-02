@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -224,8 +224,15 @@ const (
 	Split
 
 	// ReplicationCutover is when the DatumToHLC() is used for an
-	// ALTER TENANT ... COMPLETE REPLICATION statement.
+	// ALTER VIRTUAL CLUSTER ... COMPLETE REPLICATION statement.
 	ReplicationCutover
+
+	// ShowTenantFingerprint is when the DatumToHLC() is used for an SHOW
+	// EXPERIMENTAL_FINGERPRINTS FROM TENANT ... WITH START TIMESTAMP statement.
+	//
+	// ShowTenantFingerprint has the same constraints as AsOf, and so we use the
+	// same value.
+	ShowTenantFingerprint = AsOf
 )
 
 // DatumToHLC performs the conversion from a Datum to an HLC timestamp.
@@ -259,11 +266,7 @@ func DatumToHLC(
 		if iv, err := tree.ParseDInterval(evalCtx.GetIntervalStyle(), s); err == nil {
 			if (iv.Duration == duration.Duration{}) {
 				convErr = errors.Errorf("interval value %v too small, absolute value must be >= %v", d, time.Microsecond)
-			} else if (usage == AsOf && iv.Duration.Compare(duration.Duration{}) > 0 && !syn) {
-				convErr = errors.Errorf("interval value %v too large, AS OF interval must be <= -%v", d, time.Microsecond)
 			} else if (usage == Split && iv.Duration.Compare(duration.Duration{}) < 0) {
-				// Do we need to consider if the timestamp is synthetic (see
-				// hlc.Timestamp.Synthetic), as for AS OF stmt?
 				convErr = errors.Errorf("interval value %v too small, SPLIT AT interval must be >= %v", d, time.Microsecond)
 			}
 			ts.WallTime = duration.Add(stmtTimestamp, iv.Duration).UnixNano()
@@ -280,9 +283,7 @@ func DatumToHLC(
 	case *tree.DDecimal:
 		ts, convErr = hlc.DecimalToHLC(&d.Decimal)
 	case *tree.DInterval:
-		if (usage == AsOf && d.Duration.Compare(duration.Duration{}) > 0) {
-			convErr = errors.Errorf("interval value %v too large, AS OF interval must be <= -%v", d, time.Microsecond)
-		} else if (usage == Split && d.Duration.Compare(duration.Duration{}) < 0) {
+		if (usage == Split && d.Duration.Compare(duration.Duration{}) < 0) {
 			convErr = errors.Errorf("interval value %v too small, SPLIT interval must be >= %v", d, time.Microsecond)
 		}
 		ts.WallTime = duration.Add(stmtTimestamp, d.Duration).UnixNano()

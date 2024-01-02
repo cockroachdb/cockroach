@@ -40,14 +40,9 @@ message TTLSpec {
     (gogoproto.customname) = "RowLevelTTLDetails"
   ];
 
-  // Deprecated: AOST has been replaced with AOSTDuration.
-  // TODO(ewall): remove in 24.1
   // AOST is the AS OF SYSTEM TIME value the ttlProcessor uses to select records.
-  optional google.protobuf.Timestamp aost = 3 [
-    (gogoproto.nullable) = false,
-    (gogoproto.customname) = "AOST",
-    (gogoproto.stdtime) = true
-  ];
+  // It has been replaced with AOSTDuration.
+  reserved 3;
 
   // TTLExpr is compared against jobspb.RowLevelTTLDetails.Cutoff by the
   // ttlProcessor to determine what records to delete. Records are deleted
@@ -92,4 +87,11 @@ message TTLSpec {
     (gogoproto.customname) = "AOSTDuration",
     (gogoproto.stdduration) = true
   ];
+
+  // SelectRateLimit controls how many records can be selected per second.
+  optional int64 select_rate_limit = 14 [(gogoproto.nullable) = false];
+
+  // DisableChangefeedReplication controls whether the deletes performed
+  // should not be replicated via changefeed.
+  optional bool disable_changefeed_replication = 15 [(gogoproto.nullable) = false];
 }

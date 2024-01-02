@@ -112,6 +112,50 @@ const (
 	SQLClass
 )
 
+// String returns the string representation of the function class.
+func (c FunctionClass) String() string {
+	switch c {
+	case NormalClass:
+		return "normal"
+	case AggregateClass:
+		return "aggregate"
+	case WindowClass:
+		return "window"
+	case GeneratorClass:
+		return "generator"
+	case SQLClass:
+		return "SQL"
+	default:
+		panic(errors.AssertionFailedf("unexpected class %d", c))
+	}
+}
+
+// RoutineType specifies the type of routine represented by an overload.
+type RoutineType uint8
+
+const (
+	// BuiltinRoutine is a builtin function.
+	BuiltinRoutine RoutineType = 1 << iota
+	// UDFRoutine is a user-defined function.
+	UDFRoutine
+	// ProcedureRoutine is a user-defined procedure.
+	ProcedureRoutine
+)
+
+// String returns the string representation of the routine type.
+func (t RoutineType) String() string {
+	switch t {
+	case BuiltinRoutine:
+		return "builtin"
+	case UDFRoutine:
+		return "udf"
+	case ProcedureRoutine:
+		return "procedure"
+	default:
+		panic(errors.AssertionFailedf("unexpected routine type %d", t))
+	}
+}
+
 // Overload is one of the overloads of a built-in function.
 // Each FunctionDefinition may contain one or more overloads.
 type Overload struct {
@@ -208,11 +252,11 @@ type Overload struct {
 	// FunctionProperties are the properties of this overload.
 	FunctionProperties
 
-	// IsUDF is set to true when this is a user-defined function overload built
-	// using CREATE FUNCTION. Note: Body can be empty even if IsUDF is true.
-	IsUDF bool
-	// Body is the SQL string body of a function. It can be set even if IsUDF is
-	// false if a builtin function is defined using a SQL string.
+	// Type indicates if the overload represents a built-in function, a
+	// user-defined function, or a user-define procedure.
+	Type RoutineType
+	// Body is the SQL string body of a function. It can be set even if Type is
+	// BuiltinRoutine if a builtin function is defined using a SQL string.
 	Body string
 	// UDFContainsOnlySignature is only set to true for Overload signatures cached
 	// in a Schema descriptor, which means that the full UDF descriptor need to be
@@ -224,6 +268,9 @@ type Overload struct {
 	// Version is the descriptor version of the descriptor used to construct
 	// this version of the function overload. Only used for UDFs.
 	Version uint64
+	// Language is the function language that was used to define the UDF.
+	// This is currently either SQL or PL/pgSQL.
+	Language RoutineLanguage
 }
 
 // params implements the overloadImpl interface.
@@ -277,7 +324,7 @@ func (b Overload) IsGenerator() bool {
 // HasSQLBody returns true if the function was defined using a SQL string body.
 // This is the case for user-defined functions and some builtins.
 func (b Overload) HasSQLBody() bool {
-	return b.IsUDF || b.Body != ""
+	return b.Type == UDFRoutine || b.Type == ProcedureRoutine || b.Body != ""
 }
 
 // Signature returns a human-readable signature.
@@ -397,9 +444,6 @@ func (p ParamTypes) MatchAt(typ *types.T, i int) bool {
 
 // MatchAtIdentical is part of the TypeList interface.
 func (p ParamTypes) MatchAtIdentical(typ *types.T, i int) bool {
-	if typ.Family() == types.TupleFamily {
-		typ = types.AnyTuple
-	}
 	return i < len(p) && (typ.Family() == types.UnknownFamily || p[i].Typ.Identical(typ))
 }
 
@@ -807,6 +851,7 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 
 	// Filter out overloads on resolved types. This includes resolved placeholders
 	// and any other resolvable exprs.
+	ambiguousCollatedTypes := false
 	var typeableIdxs intsets.Fast
 	for i, ok := s.resolvableIdxs.Next(0); ok; i, ok = s.resolvableIdxs.Next(i + 1) {
 		typeableIdxs.Add(i)
@@ -833,6 +878,8 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 				break
 			}
 		}
+		// Don't allow ambiguous types to be desired, this prevents for instance
+		// AnyCollatedString from trumping the concrete collated type.
 		if sameType != nil {
 			paramDesired = sameType
 		}
@@ -841,12 +888,41 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			return err
 		}
 		s.typedExprs[i] = typ
+		if typ.ResolvedType() == types.AnyCollatedString {
+			ambiguousCollatedTypes = true
+		}
 		rt := typ.ResolvedType()
 		s.overloadIdxs = filterParams(s.overloadIdxs, s.params, func(
 			params TypeList,
 		) bool {
 			return params.MatchAt(rt, i)
 		})
+	}
+
+	// If we typed any exprs as AnyCollatedString but have a concrete collated
+	// string type, redo the types using the contrete type. Note we're probably
+	// still lacking full compliance with PG on collation handling:
+	// https://www.postgresql.org/docs/current/collation.html#id-1.6.11.4.4
+	if ambiguousCollatedTypes {
+		var concreteType *types.T
+		for i, ok := typeableIdxs.Next(0); ok; i, ok = typeableIdxs.Next(i + 1) {
+			typ := s.typedExprs[i].ResolvedType()
+			if typ != types.AnyCollatedString {
+				concreteType = typ
+				break
+			}
+		}
+		if concreteType != nil {
+			for i, ok := typeableIdxs.Next(0); ok; i, ok = typeableIdxs.Next(i + 1) {
+				if s.typedExprs[i].ResolvedType() == types.AnyCollatedString {
+					typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, concreteType)
+					if err != nil {
+						return err
+					}
+					s.typedExprs[i] = typ
+				}
+			}
+		}
 	}
 
 	// At this point, all remaining overload candidates accept the argument list,

@@ -4,7 +4,7 @@ load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain")
 
 # NB: URL_TMPL and LOC are used by generate-distdir. Don't change the format or
 # name of these definitions unless you update generate-distdir accordingly.
-LOC = "20230105-170607"
+LOC = "20230718-202534"
 URL_TMPL = "https://storage.googleapis.com/public-bazel-artifacts/c-deps/{loc}/{lib}_foreign.{config}.{loc}.tar.gz"
 
 # NB: When we link with the krb5 libraries, we want the linker to see them in
@@ -92,8 +92,15 @@ _archived_cdep = rule(
 )
 
 def archived_cdeps():
-    for lib in ["libgeos", "libjemalloc", "libproj"]:
+    for lib in ["libjemalloc", "libproj"]:
         for config in ["linux", "linuxarm", "macos", "macosarm", "windows"]:
+            _archived_cdep(
+                name = "archived_cdep_{}_{}".format(lib, config),
+                headers = "@archived_cdep_{}_{}//:headers".format(lib, config),
+                libs = "@archived_cdep_{}_{}//:libs".format(lib, config),
+            )
+    for lib in ["libgeos"]:
+        for config in ["linux", "linuxarm", "macos", "macosarm"]:  # No libgeos for windows.
             _archived_cdep(
                 name = "archived_cdep_{}_{}".format(lib, config),
                 headers = "@archived_cdep_{}_{}//:headers".format(lib, config),
@@ -136,14 +143,15 @@ filegroup(
 def cdep_alias(lib):
     actual = {
         "//build/toolchains:force_build_cdeps": ":{}_foreign".format(lib),
-        "@io_bazel_rules_go//go/platform:linux_amd64": ":archived_cdep_{}_linux".format(lib),
-        "@io_bazel_rules_go//go/platform:linux_arm64": ":archived_cdep_{}_linuxarm".format(lib),
+        "//build/toolchains:is_linux_amd64_no_force_build_cdeps": ":archived_cdep_{}_linux".format(lib),
+        "//build/toolchains:is_linux_arm64_no_force_build_cdeps": ":archived_cdep_{}_linuxarm".format(lib),
         "//conditions:default": ":{}_foreign".format(lib),
     }
     if lib != "libkrb5":
-        actual["@io_bazel_rules_go//go/platform:darwin_amd64"] = ":archived_cdep_{}_macos".format(lib)
-        actual["@io_bazel_rules_go//go/platform:darwin_arm64"] = ":archived_cdep_{}_macosarm".format(lib)
-        actual["@io_bazel_rules_go//go/platform:windows"] = ":archived_cdep_{}_windows".format(lib)
+        actual["//build/toolchains:is_darwin_amd64_no_force_build_cdeps"] = ":archived_cdep_{}_macos".format(lib)
+        actual["//build/toolchains:is_darwin_arm64_no_force_build_cdeps"] = ":archived_cdep_{}_macosarm".format(lib)
+        if lib != "libgeos":
+            actual["//build/toolchains:is_windows_amd64_no_force_build_cdeps"] = ":archived_cdep_{}_windows".format(lib)
     native.alias(
         name = lib,
         actual = select(actual),

@@ -2,9 +2,13 @@ artifacts
 bin
 build/builder_home
 lib
+pkg/cmd/mirror/npm/node_modules
 pkg/ui/node_modules
 pkg/ui/workspaces/cluster-ui/node_modules
 pkg/ui/workspaces/db-console/node_modules
+pkg/ui/workspaces/db-console/src/js/node_modules
+pkg/ui/workspaces/db-console/ccl/src/js/node_modules
+pkg/ui/workspaces/e2e-tests/node_modules
 pkg/ui/workspaces/eslint-plugin-crdb/node_modules
 tmp
 vendor

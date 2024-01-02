@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,7 +37,7 @@ func TestTypeSchemaChangeRetriesTransparently(t *testing.T) {
 	// Protects errorReturned.
 	var mu syncutil.Mutex
 	errorReturned := false
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
 		RunBeforeExec: func() error {
 			mu.Lock()
@@ -83,7 +82,7 @@ func TestFailedTypeSchemaChangeRetriesTransparently(t *testing.T) {
 	var mu syncutil.Mutex
 	// Ensures just the first try to cleanup returns a retryable error.
 	errReturned := false
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	cleanupSuccessfullyFinished := make(chan struct{})
 	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
 		RunBeforeExec: func() error {
@@ -141,7 +140,7 @@ func TestAddDropValuesInTransaction(t *testing.T) {
 
 	ctx := context.Background()
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	// Decrease the adopt loop interval so that retries happen quickly.
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
@@ -281,7 +280,7 @@ func TestEnumMemberTransitionIsolation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	// Protects blocker.
 	var mu syncutil.Mutex
 	blocker := make(chan struct{})
@@ -421,7 +420,7 @@ func TestTypeChangeJobCancelSemantics(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 
-			params, _ := tests.CreateTestServerParams()
+			params, _ := createTestServerParams()
 
 			// Wait groups for synchronizing various parts of the test.
 			typeSchemaChangeStarted := make(chan struct{})

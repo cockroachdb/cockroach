@@ -866,10 +866,26 @@ func (desc *immutable) HasConcurrentSchemaChanges() bool {
 		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID {
 		return true
 	}
+	// Check if any enum members are transitioning, which should
+	// block declarative jobs.
+	for _, member := range desc.EnumMembers {
+		if member.Direction != descpb.TypeDescriptor_EnumMember_NONE {
+			return true
+		}
+	}
 	// TODO(fqazi): In the future we may not have concurrent declarative schema
 	// changes without a job ID. So, we should scan the elements involved for
 	// types.
 	return false
+}
+
+// ConcurrentSchemaChangeJobIDs implements catalog.Descriptor.
+func (desc *immutable) ConcurrentSchemaChangeJobIDs() (ret []catpb.JobID) {
+	if desc.DeclarativeSchemaChangerState != nil &&
+		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID {
+		ret = append(ret, desc.DeclarativeSchemaChangerState.JobID)
+	}
+	return ret
 }
 
 // SkipNamespace implements the descriptor interface.
@@ -926,6 +942,11 @@ func (desc *immutable) GetIDClosure() (ret catalog.DescriptorIDSet) {
 // GetObjectType implements the Object interface.
 func (desc *immutable) GetObjectType() privilege.ObjectType {
 	return privilege.Type
+}
+
+// GetObjectTypeString implements the Object interface.
+func (desc *immutable) GetObjectTypeString() string {
+	return string(privilege.Type)
 }
 
 // GetTypeDescriptorClosure returns all type descriptor IDs that are

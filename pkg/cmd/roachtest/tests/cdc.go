@@ -11,8 +11,9 @@
 package tests
 
 import (
+	"bytes"
 	"context"
-	"crypto/rand"
+	cryptorand "crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -21,10 +22,12 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"math/rand"
 	"net"
 	"net/url"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -73,6 +76,13 @@ const (
 	nullSink         sinkType = "null"
 )
 
+var envVars = []string{
+	// Setting COCKROACH_CHANGEFEED_TESTING_FAST_RETRY helps tests run quickly.
+	// NB: This is crucial for chaos tests as we expect changefeeds to see
+	// many retries.
+	"COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true",
+}
+
 type cdcTester struct {
 	ctx          context.Context
 	t            test.Test
@@ -88,6 +98,16 @@ type cdcTester struct {
 
 	workloadWg *sync.WaitGroup
 	doneCh     chan struct{}
+}
+
+// The node on which the webhook sink will be installed and run on.
+func (ct *cdcTester) webhookSinkNode() option.NodeListOption {
+	return ct.cluster.Node(ct.cluster.Spec().NodeCount)
+}
+
+// The node on which the kafka sink will be installed and run on.
+func (ct *cdcTester) kafkaSinkNode() option.NodeListOption {
+	return ct.cluster.Node(ct.cluster.Spec().NodeCount)
 }
 
 // startStatsCollection sets the start point of the stats collection window
@@ -141,6 +161,7 @@ func (ct *cdcTester) startCRDBChaos() {
 		Timer:   Periodic{Period: 2 * time.Minute, DownTime: 20 * time.Second},
 		Target:  ct.crdbNodes.RandNode,
 		Stopper: chaosStopper,
+		Env:     envVars,
 	}
 	ct.mon.Go(ch.Runner(ct.cluster, ct.t, ct.mon))
 }
@@ -157,7 +178,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts + "?AUTH=implicit"
 	case webhookSink:
 		ct.t.Status("webhook install")
-		webhookNode := ct.cluster.Node(ct.cluster.Spec().NodeCount)
+		webhookNode := ct.webhookSinkNode()
 		rootFolder := `/home/ubuntu`
 		nodeIPs, _ := ct.cluster.ExternalIP(ct.ctx, ct.logger, webhookNode)
 
@@ -183,8 +204,6 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 			ct.t.Fatal(err)
 		}
 
-		ct.cluster.Run(ct.ctx, webhookNode, `sudo apt --yes install golang-go;`)
-
 		// Start the server in its own monitor to not block ct.mon.Wait()
 		serverExecCmd := fmt.Sprintf(`go run webhook-server-%d.go`, webhookPort)
 		m := ct.cluster.NewMonitor(ct.ctx, ct.workloadNode)
@@ -205,7 +224,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 	case pubsubSink:
 		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest&region=us-east1"
 	case kafkaSink:
-		kafkaNode := ct.cluster.Node(ct.cluster.Spec().NodeCount)
+		kafkaNode := ct.kafkaSinkNode()
 		kafka := kafkaManager{
 			t:     ct.t,
 			c:     ct.cluster,
@@ -238,6 +257,17 @@ type tpccArgs struct {
 	warehouses     int
 	duration       string
 	tolerateErrors bool
+	conns          int
+	noWait         bool
+	cdcFeatureFlags
+}
+
+func (ct *cdcTester) lockSchema(targets []string) {
+	for _, target := range targets {
+		if _, err := ct.DB().Exec(fmt.Sprintf("ALTER TABLE %s SET (schema_locked=true)", target)); err != nil {
+			ct.t.Fatal(err)
+		}
+	}
 }
 
 func (ct *cdcTester) runTPCCWorkload(args tpccArgs) {
@@ -245,6 +275,8 @@ func (ct *cdcTester) runTPCCWorkload(args tpccArgs) {
 		sqlNodes:           ct.crdbNodes,
 		workloadNodes:      ct.workloadNode,
 		tpccWarehouseCount: args.warehouses,
+		conns:              args.conns,
+		noWait:             args.noWait,
 		// TolerateErrors if crdbChaos is true; otherwise, the workload will fail
 		// if it attempts to use the node which was brought down by chaos.
 		tolerateErrors: args.tolerateErrors,
@@ -253,6 +285,10 @@ func (ct *cdcTester) runTPCCWorkload(args tpccArgs) {
 	if !ct.t.SkipInit() {
 		ct.t.Status("installing TPCC workload")
 		tpcc.install(ct.ctx, ct.cluster)
+		if args.SchemaLockTables.enabled(globalEnthropy) == featureEnabled {
+			ct.t.Status(fmt.Sprintf("Setting schema_locked for %s", allTpccTargets))
+			ct.lockSchema(allTpccTargets)
+		}
 	} else {
 		ct.t.Status("skipping TPCC installation")
 	}
@@ -356,6 +392,89 @@ var allLedgerTargets []string = []string{
 	`ledger.session`,
 }
 
+type featureFlag struct {
+	v *featureState
+}
+
+type featureState int
+
+var (
+	featureUnset    featureState = 0
+	featureDisabled featureState = 1
+	featureEnabled  featureState = 2
+)
+
+func (s featureState) bool() bool {
+	return s == featureEnabled
+}
+
+type enthropy struct {
+	*rand.Rand
+}
+
+func (r *enthropy) Bool() bool {
+	if r.Rand == nil {
+		return rand.Int()%2 == 0
+	}
+	return r.Rand.Int()%2 == 0
+}
+
+func (r *enthropy) Intn(n int) int {
+	if r.Rand == nil {
+		return rand.Intn(n)
+	}
+	return r.Rand.Intn(n)
+}
+
+var globalRand *rand.Rand
+var globalEnthropy enthropy
+
+func (f *featureFlag) enabled(r enthropy) featureState {
+	if f.v != nil {
+		return *f.v
+	}
+
+	if r.Bool() {
+		f.v = &featureEnabled
+		return featureEnabled
+	}
+	f.v = &featureDisabled
+	return featureDisabled
+}
+
+type enumFeatureFlag struct {
+	state string
+	v     *featureState
+}
+
+// enabled returns a valid string if the returned featureState is featureEnabled.
+func (f *enumFeatureFlag) enabled(r enthropy, choose func(enthropy) string) (string, featureState) {
+	if f.v != nil {
+		return f.state, *f.v
+	}
+
+	if r.Bool() {
+		f.v = &featureEnabled
+		f.state = choose(r)
+		return f.state, featureEnabled
+	}
+	f.v = &featureDisabled
+	return f.state, featureDisabled
+}
+
+// cdcFeatureFlags describes various cdc feature flags.
+// zero value cdcFeatureFlags uses metamorphic settings for features.
+type cdcFeatureFlags struct {
+	MuxRangefeed         featureFlag
+	RangeFeedScheduler   featureFlag
+	SchemaLockTables     featureFlag
+	DistributionStrategy enumFeatureFlag
+}
+
+func makeDefaultFeatureFlags() cdcFeatureFlags {
+	return cdcFeatureFlags{}
+}
+
 type feedArgs struct {
 	sinkType        sinkType
 	targets         []string
@@ -364,6 +483,7 @@ type feedArgs struct {
 	assumeRole      string
 	tolerateErrors  bool
 	sinkURIOverride string
+	cdcFeatureFlags
 }
 
 // TODO: Maybe move away from feedArgs since its only 3 things
@@ -404,7 +524,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		args.sinkType, args.targets, feedOptions,
 	))
 	db := ct.DB()
-	jobID, err := newChangefeedCreator(db, targetsStr, sinkURI).
+	jobID, err := newChangefeedCreator(db, ct.logger, globalRand, targetsStr, sinkURI, makeDefaultFeatureFlags()).
 		With(feedOptions).Create()
 	if err != nil {
 		ct.t.Fatalf("failed to create changefeed: %s", err.Error())
@@ -426,7 +546,15 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	return cj
 }
 
-func (ct *cdcTester) runFeedLatencyVerifier(cj changefeedJob, targets latencyTargets) {
+// runFeedLatencyVerifier runs a goroutine which polls the various latencies
+// for a changefeed job (initial scan latency, etc) and asserts that they
+// are below the specified targets.
+//
+// It returns a function which blocks until the job succeeds and verification
+// on the succeeded job completes.
+func (ct *cdcTester) runFeedLatencyVerifier(
+	cj changefeedJob, targets latencyTargets,
+) (waitForCompletion func()) {
 	info, err := getChangefeedInfo(ct.DB(), cj.jobID)
 	if err != nil {
 		ct.t.Fatalf("failed to get changefeed info: %s", err.Error())
@@ -443,8 +571,10 @@ func (ct *cdcTester) runFeedLatencyVerifier(cj changefeedJob, targets latencyTar
 	)
 	verifier.statementTime = info.statementTime
 
+	finished := make(chan struct{})
 	ct.mon.Go(func(ctx context.Context) error {
-		err := verifier.pollLatency(ctx, ct.DB(), cj.jobID, time.Second, ct.doneCh)
+		defer close(finished)
+		err := verifier.pollLatencyUntilJobSucceeds(ctx, ct.DB(), cj.jobID, time.Second, ct.doneCh)
 		if err != nil {
 			return err
 		}
@@ -453,6 +583,13 @@ func (ct *cdcTester) runFeedLatencyVerifier(cj changefeedJob, targets latencyTar
 		verifier.maybeLogLatencyHist()
 		return nil
 	})
+
+	return func() {
+		select {
+		case <-ct.ctx.Done():
+		case <-finished:
+		}
+	}
 }
 
 func (cj *changefeedJob) runFeedPoller(
@@ -523,30 +660,17 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	}
 	tester.logger = changefeedLogger
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	startOpts, settings := makeCDCBenchOptions(c)
 
-	settings := install.MakeClusterSettings()
-	settings.Env = append(settings.Env, "COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, tester.crdbNodes)
-
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", tester.workloadNode)
-
-	db := tester.DB()
 	// With a target_duration of 10s, we won't see slow span logs from changefeeds untils we are > 100s
 	// behind, which is well above the 60s targetSteadyLatency we have in some tests.
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING changefeed.slow_span_log_threshold='30s'`,
-	); err != nil {
-		// We don't hard fail here because, not all versions support this setting
-		t.L().Printf("failed to set cluster setting: %s", err)
-	}
-	if _, err := db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
-		t.L().Printf("failed to set cluster setting: %s", err)
-	}
-	if _, err := db.Exec("SET CLUSTER SETTING server.child_metrics.enabled = true"); err != nil {
-		t.L().Printf("failed to set cluster setting: %s", err)
-	}
+	settings.ClusterSettings["changefeed.slow_span_log_threshold"] = "30s"
+	settings.ClusterSettings["server.child_metrics.enabled"] = "true"
 
+	settings.Env = append(settings.Env, envVars...)
+
+	c.Start(ctx, t.L(), startOpts, settings, tester.crdbNodes)
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", tester.workloadNode)
 	tester.startGrafana()
 	return tester
 }
@@ -588,7 +712,6 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Run(ctx, c.All(), `mkdir -p logs`)
 
 	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
@@ -617,14 +740,14 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"min_checkpoint_frequency": "'2s'",
 		"diff":                     "",
 	}
-	_, err := newChangefeedCreator(db, "bank.bank", kafka.sinkURL(ctx)).
+	_, err := newChangefeedCreator(db, t.L(), globalRand, "bank.bank", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
 		With(options).
 		Create()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	tc, err := kafka.consumer(ctx, "bank")
+	tc, err := kafka.newConsumer(ctx, "bank")
 	if err != nil {
 		t.Fatal(errors.Wrap(err, "could not create kafka consumer"))
 	}
@@ -757,7 +880,6 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 // compatibility within a topic).
 func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 	crdbNodes, kafkaNode := c.Node(1), c.Node(1)
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 	kafka := kafkaManager{
 		t:     t,
@@ -783,7 +905,7 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"diff":                      "",
 	}
 
-	_, err := newChangefeedCreator(db, "foo", kafka.sinkURL(ctx)).
+	_, err := newChangefeedCreator(db, t.L(), globalRand, "foo", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
 		With(options).
 		Args(kafka.schemaRegistryURL(ctx)).
 		Create()
@@ -873,7 +995,6 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	crdbNodes, kafkaNode := c.Range(1, lastCrdbNode), c.Node(c.Spec().NodeCount)
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
 	kafka := kafkaManager{
@@ -923,11 +1044,15 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 			"create changefeed with TLS transport and SASL/SCRAM-SHA-512",
 			fmt.Sprintf("%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=scram512&sasl_password=scram512-secret&sasl_mechanism=SCRAM-SHA-512", saslURL, caCert),
 		},
+		{
+			"create changefeed with confluent-cloud scheme",
+			fmt.Sprintf("%s&api_key=plain&api_secret=plain-secret", kafka.sinkURLAsConfluentCloudUrl(ctx)),
+		},
 	}
 
 	for _, f := range feeds {
 		t.Status(f.desc)
-		_, err := newChangefeedCreator(db, "auth_test_table", f.queryArg).Create()
+		_, err := newChangefeedCreator(db, t.L(), globalRand, "auth_test_table", f.queryArg, makeDefaultFeatureFlags()).Create()
 		if err != nil {
 			t.Fatalf("%s: %s", f.desc, err.Error())
 		}
@@ -936,12 +1061,13 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:      "cdc/initial-scan-only",
-		Owner:     registry.OwnerCDC,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
-		RequiresLicense: true,
+		Name:             "cdc/initial-scan-only",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		RequiresLicense:  true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -954,21 +1080,23 @@ func registerCDC(r registry.Registry) {
 				targets:  allTpccTargets,
 				opts:     map[string]string{"initial_scan": "'only'"},
 			})
-			ct.runFeedLatencyVerifier(feed, latencyTargets{
+			waitForCompletion := ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 30 * time.Minute,
 			})
-			feed.waitForCompletion()
+			waitForCompletion()
+
 			exportStatsFile()
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/tpcc-1000",
-		Owner:     registry.OwnerCDC,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/tpcc-1000",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		RequiresLicense:  true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -988,14 +1116,41 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
+		Name:             "cdc/initial-scan-only/parquet",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		RequiresLicense:  true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 200})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: cloudStorageSink,
+				targets:  allTpccTargets,
+				opts:     map[string]string{"initial_scan": "'only'", "format": "'parquet'"},
+			})
+			waitForCompletion := ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+			})
+			waitForCompletion()
+
+		},
+	})
+	r.Add(registry.TestSpec{
 		Name:      "cdc/tpcc-1000/sink=null",
 		Owner:     registry.OwnerCDC,
 		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
-		Leases:          registry.MetamorphicLeases,
-		Tags:            registry.Tags("manual"),
-		RequiresLicense: true,
+		Cluster:   r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:    registry.MetamorphicLeases,
+		// TODO(radu): fix this.
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.ManualOnly,
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1015,13 +1170,14 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/initial-scan",
-		Owner:     registry.OwnerCDC,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/initial-scan",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1037,13 +1193,14 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/sink-chaos",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/sink-chaos",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1064,13 +1221,14 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/crdb-chaos",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/crdb-chaos",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1098,11 +1256,12 @@ func registerCDC(r registry.Registry) {
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1130,13 +1289,14 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/cloud-sink-gcs/rangefeed=true",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/cloud-sink-gcs/rangefeed=true",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1159,13 +1319,14 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/pubsub-sink",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/pubsub-sink",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1193,22 +1354,25 @@ func registerCDC(r registry.Registry) {
 	// the first account on the assume-role chain:
 	// cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com. See
 	// https://cloud.google.com/iam/docs/create-short-lived-credentials-direct.
-	//
-	// TODO(rui): Change to a shorter test as it just needs to validate
-	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
-		Name:      "cdc/pubsub-sink/assume-role",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/pubsub-sink/assume-role",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30m"})
+			// Bump memory limit (too low in 22.2)
+			if _, err := ct.DB().Exec("SET CLUSTER SETTING changefeed.memory.per_changefeed_limit = '512MiB';"); err != nil {
+				ct.t.Fatal(err)
+			}
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "5m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType:   pubsubSink,
@@ -1228,22 +1392,25 @@ func registerCDC(r registry.Registry) {
 	// the first account on the assume-role chain:
 	// cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com. See
 	// https://cloud.google.com/iam/docs/create-short-lived-credentials-direct.
-	//
-	// TODO(rui): Change to a shorter test as it just needs to validate
-	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
-		Name:      "cdc/cloud-sink-gcs/assume-role",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/cloud-sink-gcs/assume-role",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 50, duration: "30m"})
+			// Bump memory limit (too low in 22.2)
+			if _, err := ct.DB().Exec("SET CLUSTER SETTING changefeed.memory.per_changefeed_limit = '512MiB';"); err != nil {
+				ct.t.Fatal(err)
+			}
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 50, duration: "5m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType:   cloudStorageSink,
@@ -1258,16 +1425,24 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/webhook-sink",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/webhook-sink",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
+
+			// Consider an installation failure to be a flake which is out of
+			// our control. This should be rare.
+			err := c.Install(ctx, t.L(), ct.webhookSinkNode(), "go")
+			if err != nil {
+				t.Skip(err)
+			}
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
@@ -1293,11 +1468,13 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/kafka-auth",
-		Owner:           `cdc`,
-		Cluster:         r.MakeClusterSpec(1),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/kafka-auth",
+		Owner:            `cdc`,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCKafkaAuth(ctx, t, c)
 		},
@@ -1306,22 +1483,34 @@ func registerCDC(r registry.Registry) {
 		Name:      "cdc/kafka-oauth",
 		Owner:     `cdc`,
 		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		// Only Kafka 3 supports Arm64, but the broker setup for Oauth used only works with Kafka 2
+		Cluster:          r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			if c.Cloud() == spec.Local && runtime.GOARCH == "arm64" {
+				// N.B. We have to skip locally since amd64 emulation may not be available everywhere.
+				t.L().PrintfCtx(ctx, "Skipping test under ARM64")
+				return
+			}
+
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1})
+			// Run tpcc workload for tiny bit.  Roachtest monitor does not
+			// like when there are no tasks that were started with the monitor
+			// (This can be removed once #108530 resolved).
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30s"})
 
-			kafkaNode := ct.cluster.Node(ct.cluster.Spec().NodeCount)
+			kafkaNode := ct.kafkaSinkNode()
 			kafka := kafkaManager{
-				t:     ct.t,
-				c:     ct.cluster,
-				nodes: kafkaNode,
-				mon:   ct.mon,
+				t:         ct.t,
+				c:         ct.cluster,
+				nodes:     kafkaNode,
+				mon:       ct.mon,
+				useKafka2: true, // The broker-side oauth configuration used only works with Kafka 2
 			}
 			kafka.install(ct.ctx)
 
@@ -1340,23 +1529,98 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:  "cdc/bank",
-		Owner: `cdc`,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
-		Timeout:         30 * time.Minute,
+		Name:             "cdc/kafka-topics",
+		Owner:            `cdc`,
+		Skip:             "#116872",
+		Cluster:          r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			// Run minimal level of tpcc workload and changefeed.
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30s"})
+
+			kafka, cleanup := setupKafka(ctx, t, c, c.Node(c.Spec().NodeCount))
+			defer cleanup()
+
+			db := c.Conn(ctx, t.L(), 1)
+			defer stopFeeds(db)
+			const ignoreTopicPrefix = "ignore_topic_do_not_fetch"
+
+			// Create lots of topics and make sure that sarama client is not fetching
+			// metadata for all.
+			t.Status("creating kafka topics")
+			for i := 0; i < 100; i++ {
+				if err := kafka.createTopic(ctx, ignoreTopicPrefix+fmt.Sprintf("%d", i)); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: kafkaSink,
+				targets:  allTpccTargets,
+				opts:     map[string]string{"initial_scan": "'only'"},
+			})
+			feed.waitForCompletion()
+
+			// Check logs on cockroach nodes (skip the last node running workload and
+			// kafka). This test verifies that sarama does mot fetch metadata for all
+			// topics but fetch metadata only for a minimal set of necessary topics.
+			// client/metadata fetching metadata for all topics from broker
+			results, err := ct.cluster.RunWithDetails(ct.ctx, t.L(),
+				ct.cluster.Range(1, c.Spec().NodeCount-1),
+				"grep \"client/metadata fetching metadata for\" logs/cockroach.log")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(results) != 3 {
+				t.Fatal("expected three nodes")
+			}
+
+			// This test verifies that sarama is not fetching metadata for all topics
+			// or fetching metadata for topics with ignore_topic_do_not_fetch prefix
+			// but fetching metadata for tpcc target tables.
+			for _, res := range results {
+				if strings.Contains(res.Stdout, ignoreTopicPrefix) {
+					t.Fatalf("did not expect to fetch metadata for %s", ignoreTopicPrefix)
+				}
+				if strings.Contains(res.Stdout, "all topics") {
+					t.Fatal("did not expect to fetch metadata for all topics")
+				}
+				for _, target := range allTpccTargets {
+					trimmedTargetName := strings.TrimPrefix(target, `tpcc.`)
+					if !strings.Contains(res.Stdout, trimmedTargetName) {
+						t.Fatalf("expected fetching metadata for %s but did not", trimmedTargetName)
+					}
+				}
+			}
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/bank",
+		Owner:            `cdc`,
+		Cluster:          r.MakeClusterSpec(4),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
+		Timeout:          30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCBank(ctx, t, c)
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/schemareg",
-		Owner:           `cdc`,
-		Cluster:         r.MakeClusterSpec(1),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/schemareg",
+		Owner:            `cdc`,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCSchemaRegistry(ctx, t, c)
 		},
@@ -1386,12 +1650,12 @@ func (t *testCerts) CACertBase64() string {
 }
 
 func makeTestCerts(sinkNodeIP string) (*testCerts, error) {
-	CAKey, err := rsa.GenerateKey(rand.Reader, keyLength)
+	CAKey, err := rsa.GenerateKey(cryptorand.Reader, keyLength)
 	if err != nil {
 		return nil, errors.Wrap(err, "CA private key")
 	}
 
-	SinkKey, err := rsa.GenerateKey(rand.Reader, keyLength)
+	SinkKey, err := rsa.GenerateKey(cryptorand.Reader, keyLength)
 	if err != nil {
 		return nil, errors.Wrap(err, "sink private key")
 	}
@@ -1463,7 +1727,7 @@ func generateSinkCert(
 		IPAddresses: []net.IP{ip},
 	}
 
-	return x509.CreateCertificate(rand.Reader, certSpec, CACert, &priv.PublicKey, CAKey)
+	return x509.CreateCertificate(cryptorand.Reader, certSpec, CACert, &priv.PublicKey, CAKey)
 }
 
 func generateCACert(priv *rsa.PrivateKey) ([]byte, *x509.Certificate, error) {
@@ -1487,7 +1751,7 @@ func generateCACert(priv *rsa.PrivateKey) ([]byte, *x509.Certificate, error) {
 		BasicConstraintsValid: true,
 		MaxPathLenZero:        true,
 	}
-	cert, err := x509.CreateCertificate(rand.Reader, certSpec, certSpec, &priv.PublicKey, priv)
+	cert, err := x509.CreateCertificate(cryptorand.Reader, certSpec, certSpec, &priv.PublicKey, priv)
 	return cert, certSpec, err
 }
 
@@ -1511,7 +1775,7 @@ func pemEncodeCert(cert []byte) (string, error) {
 
 func randomSerial() (*big.Int, error) {
 	limit := new(big.Int).Lsh(big.NewInt(1), 128)
-	ret, err := rand.Int(rand.Reader, limit)
+	ret, err := cryptorand.Int(cryptorand.Reader, limit)
 	if err != nil {
 		return nil, errors.Wrap(err, "generate random serial")
 	}
@@ -1536,15 +1800,6 @@ func main() {
 `, port)
 }
 
-const (
-	confluentDownloadURL = "https://storage.googleapis.com/cockroach-fixtures/tools/confluent-community-6.1.0.tar.gz"
-	confluentSHA256      = "53b0e2f08c4cfc55087fa5c9120a614ef04d306db6ec3bcd7710f89f05355355"
-	confluentInstallBase = "confluent-6.1.0"
-
-	confluentCLIVersion         = "1.26.0"
-	confluentCLIDownloadURLBase = "https://s3-us-west-2.amazonaws.com/confluent.cloud/confluent-cli/archives"
-)
-
 var hydraServerStartScript = `
 export SECRETS_SYSTEM=arbitrarySystemSecret
 export OAUTH2_ISSUER_URL=http://localhost:4444
@@ -1558,100 +1813,6 @@ export DSN=memory
 
 ./hydra serve all --dev
 `
-
-// TODO(ssd): Perhaps something like this could be a roachprod command?
-var confluentDownloadScript = fmt.Sprintf(`#!/usr/bin/env bash
-set -euo pipefail
-
-CONFLUENT_URL="%s"
-CONFLUENT_SHA256="%s"
-CONFLUENT_INSTALL_BASE="%s"
-
-CONFLUENT_CLI_VERSION="%s"
-CONFLUENT_CLI_URL_BASE="%s"
-
-
-CONFLUENT_CLI_TAR_PATH="/tmp/confluent-cli-$CONFLUENT_CLI_VERSION.tar.gz"
-CONFLUENT_TAR_PATH=/tmp/confluent.tar.gz
-
-CONFLUENT_DIR="$1"
-
-os() {
-  uname -s | tr '[:upper:]' '[:lower:]'
-}
-
-arch() {
-  local arch
-  arch=$(uname -m)
-  case "$arch" in
-    x86_64)
-      echo "amd64"
-      ;;
-    *)
-      echo "$arch"
-      ;;
-  esac
-}
-
-checkFile() {
-  local file_name="${1}"
-  local expected_shasum="${2}"
-
-  local actual_shasum=""
-  if command -v sha256sum > /dev/null 2>&1; then
-    actual_shasum=$(sha256sum "$file_name" | cut -f1 -d' ')
-  elif command -v shasum > /dev/null 2>&1; then
-    actual_shasum=$(shasum -a 256 "$file_name" | cut -f1 -d' ')
-  else
-    echo "sha256sum or shasum not found" >&2
-    return 1
-  fi
-
-  if [[ "$actual_shasum" == "$expected_shasum" ]]; then
-     return 0
-  else
-    return 1
-  fi
-}
-
-download() {
-  URL="$1"
-  OUTPUT_FILE="$2"
-  for i in $(seq 1 5); do
-    if curl --retry 3 --retry-delay 1 --fail --show-error -o "$OUTPUT_FILE" "$URL"; then
-      break
-    fi
-    sleep 15;
-  done
-}
-
-PLATFORM="$(os)/$(arch)"
-case "$PLATFORM" in
-    linux/amd64)
-      CONFLUENT_CLI_URL="${CONFLUENT_CLI_URL_BASE}/${CONFLUENT_CLI_VERSION}/confluent_v${CONFLUENT_CLI_VERSION}_linux_amd64.tar.gz"
-      ;;
-    darwin/amd64)
-      CONFLUENT_CLI_URL="${CONFLUENT_CLI_URL_BASE}/${CONFLUENT_CLI_VERSION}/confluent_v${CONFLUENT_CLI_VERSION}_darwin_amd64.tar.gz"
-      ;;
-    *)
-      echo "We don't know how to install the confluent CLI for \"${PLATFORM}\""
-      exit 1
-      ;;
-esac
-
-if ! [[ -f "$CONFLUENT_TAR_PATH" ]] || ! checkFile "$CONFLUENT_TAR_PATH" "$CONFLUENT_SHA256"; then
-  download "$CONFLUENT_URL" "$CONFLUENT_TAR_PATH"
-fi
-
-tar xvf "$CONFLUENT_TAR_PATH" -C "$CONFLUENT_DIR"
-
-if ! [[ -f "$CONFLUENT_DIR/bin/confluent" ]]; then
-  if ! [[ -f "$CONFLUENT_CLI_TAR_PATH" ]]; then
-    download "$CONFLUENT_CLI_URL" "$CONFLUENT_CLI_TAR_PATH"
-  fi
-  tar xvf "$CONFLUENT_CLI_TAR_PATH" -C "$CONFLUENT_DIR/$CONFLUENT_INSTALL_BASE/bin/" --strip-components=1 confluent/confluent
-fi
-`, confluentDownloadURL, confluentSHA256, confluentInstallBase, confluentCLIVersion, confluentCLIDownloadURLBase)
 
 const (
 	// kafkaJAASConfig is a JAAS configuration file that creates a
@@ -1768,6 +1929,9 @@ type kafkaManager struct {
 	c     cluster.Cluster
 	nodes option.NodeListOption
 	mon   cluster.Monitor
+
+	// Our method of requiring OAuth on the broker only works with Kafka 2
+	useKafka2 bool
 }
 
 func (k kafkaManager) basePath() string {
@@ -1777,16 +1941,142 @@ func (k kafkaManager) basePath() string {
 	return `/mnt/data1/confluent`
 }
 
+func (k kafkaManager) confluentInstallBase() string {
+	if k.useKafka2 {
+		return "confluent-6.1.0"
+	} else {
+		return "confluent-7.4.0"
+	}
+}
+
+func (k kafkaManager) confluentDownloadScript() string {
+	var downloadURL string
+	var downloadSHA string
+	if k.useKafka2 {
+		downloadURL = "https://storage.googleapis.com/cockroach-test-artifacts/confluent/confluent-community-6.1.0.tar.gz"
+		downloadSHA = "53b0e2f08c4cfc55087fa5c9120a614ef04d306db6ec3bcd7710f89f05355355"
+	} else {
+		downloadURL = "https://packages.confluent.io/archive/7.4/confluent-community-7.4.0.tar.gz"
+		downloadSHA = "cc3066e9b55c211664c6fb9314c553521a0cb0d5b78d163e74480bdc60256d75"
+	}
+
+	// Confluent CLI Versions 3 and above do not support a local schema registry,
+	// and while confluent-7.4.0 does include a cli with a schema-registry it
+	// requires logging in to Confluent Cloud, so instead the latest 2.x cli
+	// version is used.
+	confluentCLIVersion := "2.38.1"
+	confluentCLIDownloadURLBase := "https://s3-us-west-2.amazonaws.com/confluent.cloud/confluent-cli/archives"
+
+	return fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+
+CONFLUENT_URL="%s"
+CONFLUENT_SHA256="%s"
+CONFLUENT_INSTALL_BASE="%s"
+
+CONFLUENT_CLI_VERSION="%s"
+CONFLUENT_CLI_URL_BASE="%s"
+
+
+CONFLUENT_CLI_TAR_PATH="/tmp/confluent-cli-$CONFLUENT_CLI_VERSION.tar.gz"
+CONFLUENT_TAR_PATH=/tmp/confluent.tar.gz
+
+CONFLUENT_DIR="$1"
+
+os() {
+  uname -s | tr '[:upper:]' '[:lower:]'
+}
+
+arch() {
+  local arch
+  arch=$(uname -m)
+  case "$arch" in
+    x86_64)
+      echo "amd64"
+      ;;
+    aarch64)
+      echo "arm64"
+      ;;
+    *)
+      echo "$arch"
+      ;;
+  esac
+}
+
+checkFile() {
+  local file_name="${1}"
+  local expected_shasum="${2}"
+
+  local actual_shasum=""
+  if command -v sha256sum > /dev/null 2>&1; then
+    actual_shasum=$(sha256sum "$file_name" | cut -f1 -d' ')
+  elif command -v shasum > /dev/null 2>&1; then
+    actual_shasum=$(shasum -a 256 "$file_name" | cut -f1 -d' ')
+  else
+    echo "sha256sum or shasum not found" >&2
+    return 1
+  fi
+
+  if [[ "$actual_shasum" == "$expected_shasum" ]]; then
+     return 0
+  else
+    return 1
+  fi
+}
+
+download() {
+  URL="$1"
+  OUTPUT_FILE="$2"
+  for i in $(seq 1 5); do
+    if curl --retry 3 --retry-delay 1 --fail --show-error -o "$OUTPUT_FILE" "$URL"; then
+      break
+    fi
+    sleep 15;
+  done
+}
+
+PLATFORM="$(os)/$(arch)"
+case "$PLATFORM" in
+    linux/amd64)
+      CONFLUENT_CLI_URL="${CONFLUENT_CLI_URL_BASE}/${CONFLUENT_CLI_VERSION}/confluent_v${CONFLUENT_CLI_VERSION}_linux_amd64.tar.gz"
+      ;;
+    darwin/amd64)
+      CONFLUENT_CLI_URL="${CONFLUENT_CLI_URL_BASE}/${CONFLUENT_CLI_VERSION}/confluent_v${CONFLUENT_CLI_VERSION}_darwin_amd64.tar.gz"
+      ;;
+    linux/arm64)
+      CONFLUENT_CLI_URL="${CONFLUENT_CLI_URL_BASE}/${CONFLUENT_CLI_VERSION}/confluent_v${CONFLUENT_CLI_VERSION}_linux_arm64.tar.gz"
+      ;;
+    *)
+      echo "We don't know how to install the confluent CLI for \"${PLATFORM}\""
+      exit 1
+      ;;
+esac
+
+if ! [[ -f "$CONFLUENT_TAR_PATH" ]] || ! checkFile "$CONFLUENT_TAR_PATH" "$CONFLUENT_SHA256"; then
+  download "$CONFLUENT_URL" "$CONFLUENT_TAR_PATH"
+fi
+
+tar xvf "$CONFLUENT_TAR_PATH" -C "$CONFLUENT_DIR"
+
+if ! [[ -f "$CONFLUENT_DIR/bin/confluent" ]]; then
+  if ! [[ -f "$CONFLUENT_CLI_TAR_PATH" ]]; then
+    download "$CONFLUENT_CLI_URL" "$CONFLUENT_CLI_TAR_PATH"
+  fi
+  tar xvf "$CONFLUENT_CLI_TAR_PATH" -C "$CONFLUENT_DIR/$CONFLUENT_INSTALL_BASE/bin/" --strip-components=1 confluent/confluent
+fi
+`, downloadURL, downloadSHA, k.confluentInstallBase(), confluentCLIVersion, confluentCLIDownloadURLBase)
+}
+
 func (k kafkaManager) confluentHome() string {
-	return filepath.Join(k.basePath(), confluentInstallBase)
+	return filepath.Join(k.basePath(), k.confluentInstallBase())
 }
 
 func (k kafkaManager) configDir() string {
-	return filepath.Join(k.basePath(), confluentInstallBase, "etc/kafka")
+	return filepath.Join(k.basePath(), k.confluentInstallBase(), "etc/kafka")
 }
 
 func (k kafkaManager) binDir() string {
-	return filepath.Join(k.basePath(), confluentInstallBase, "bin")
+	return filepath.Join(k.basePath(), k.confluentInstallBase(), "bin")
 }
 
 func (k kafkaManager) confluentBin() string {
@@ -1804,7 +2094,8 @@ func (k kafkaManager) install(ctx context.Context) {
 	k.c.Run(ctx, k.nodes, `mkdir -p `+folder)
 
 	downloadScriptPath := filepath.Join(folder, "install.sh")
-	err := k.c.PutString(ctx, confluentDownloadScript, downloadScriptPath, 0700, k.nodes)
+	downloadScript := k.confluentDownloadScript()
+	err := k.c.PutString(ctx, downloadScript, downloadScriptPath, 0700, k.nodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -2138,6 +2429,20 @@ func (k kafkaManager) sinkURLSASL(ctx context.Context) string {
 	return `kafka://` + ips[0] + `:9094`
 }
 
+// sinkURLAsConfluentCloudUrl allows the test to connect to the kafka brokers
+// as if it was connecting to kafka hosted in confluent cloud.
+func (k kafkaManager) sinkURLAsConfluentCloudUrl(ctx context.Context) string {
+	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
+	if err != nil {
+		k.t.Fatal(err)
+	}
+	// Confluent cloud does not use TLS 1.2 and instead uses PLAIN username/password
+	// authentication (see https://docs.confluent.io/platform/current/security/security_tutorial.html#overview).
+	// Because the kafka manager has certs configured, connecting without a ca_cert will raise an error.
+	// To connect without a cert, we set insecure_tls_skip_verify=true.
+	return `confluent-cloud://` + ips[0] + `:9094?insecure_tls_skip_verify=true`
+}
+
 func (k kafkaManager) sinkURLOAuth(ctx context.Context, creds clientcredentials.Config) string {
 	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
 	if err != nil {
@@ -2191,7 +2496,7 @@ func (k kafkaManager) createTopic(ctx context.Context, topic string) error {
 	})
 }
 
-func (k kafkaManager) consumer(ctx context.Context, topic string) (*topicConsumer, error) {
+func (k kafkaManager) newConsumer(ctx context.Context, topic string) (*topicConsumer, error) {
 	kafkaAddrs := []string{k.consumerURL(ctx)}
 	config := sarama.NewConfig()
 	// I was seeing "error processing FetchRequest: kafka: error decoding
@@ -2218,6 +2523,8 @@ type tpccWorkload struct {
 	sqlNodes           option.NodeListOption
 	tpccWarehouseCount int
 	tolerateErrors     bool
+	conns              int
+	noWait             bool
 }
 
 func (tw *tpccWorkload) install(ctx context.Context, c cluster.Cluster) {
@@ -2231,14 +2538,20 @@ func (tw *tpccWorkload) install(ctx context.Context, c cluster.Cluster) {
 }
 
 func (tw *tpccWorkload) run(ctx context.Context, c cluster.Cluster, workloadDuration string) {
-	tolerateErrors := ""
+	var cmd bytes.Buffer
+	fmt.Fprintf(&cmd, "./workload run tpcc --warehouses=%d --duration=%s ", tw.tpccWarehouseCount, workloadDuration)
 	if tw.tolerateErrors {
-		tolerateErrors = "--tolerate-errors"
+		cmd.WriteString("--tolerate-errors ")
 	}
-	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
-		`./workload run tpcc --warehouses=%d --duration=%s %s {pgurl%s} `,
-		tw.tpccWarehouseCount, workloadDuration, tolerateErrors, tw.sqlNodes,
-	))
+	if tw.conns > 0 {
+		fmt.Fprintf(&cmd, " --conns=%d ", tw.conns)
+	}
+	if tw.noWait {
+		cmd.WriteString("--wait=0 ")
+	}
+	fmt.Fprintf(&cmd, "{pgurl%s}", tw.sqlNodes)
+
+	c.Run(ctx, tw.workloadNodes, cmd.String())
 }
 
 type ledgerWorkload struct {
@@ -2266,19 +2579,28 @@ func (lw *ledgerWorkload) run(ctx context.Context, c cluster.Cluster, workloadDu
 // changefeedCreator wraps the process of creating a changefeed with
 // different options and sinks
 type changefeedCreator struct {
-	db        *gosql.DB
-	targets   string
-	sinkURL   string
-	options   map[string]string
-	extraArgs []interface{}
+	db              *gosql.DB
+	logger          *logger.Logger
+	targets         string
+	sinkURL         string
+	options         map[string]string
+	extraArgs       []interface{}
+	flags           cdcFeatureFlags
+	rng             enthropy
+	settingsApplied bool
 }
 
-func newChangefeedCreator(db *gosql.DB, targets, sinkURL string) *changefeedCreator {
+func newChangefeedCreator(
+	db *gosql.DB, logger *logger.Logger, r *rand.Rand, targets, sinkURL string, flags cdcFeatureFlags,
+) *changefeedCreator {
 	return &changefeedCreator{
 		db:      db,
+		logger:  logger,
 		targets: targets,
 		sinkURL: sinkURL,
 		options: make(map[string]string),
+		flags:   flags,
+		rng:     enthropy{Rand: r},
 	}
 }
 
@@ -2286,8 +2608,8 @@ func newChangefeedCreator(db *gosql.DB, targets, sinkURL string) *changefeedCrea
 // `value` is passed in one of the options, the option will be passed
 // as {option}={value}.
 func (cfc *changefeedCreator) With(opts map[string]string) *changefeedCreator {
-	for option, value := range opts {
-		cfc.options[option] = value
+	for opt, value := range opts {
+		cfc.options[opt] = value
 	}
 	return cfc
 }
@@ -2301,12 +2623,60 @@ func (cfc *changefeedCreator) Args(args ...interface{}) *changefeedCreator {
 	return cfc
 }
 
+func chooseDistributionStrategy(r enthropy) string {
+	vals := changefeedccl.RangeDistributionStrategy.GetAvailableValues()
+	return vals[r.Intn(len(vals))]
+}
+
+// applySettings aplies various settings to the cluster -- once per the
+// lifetime of changefeedCreator
+func (cfc *changefeedCreator) applySettings() error {
+	if cfc.settingsApplied {
+		return nil
+	}
+	// kv.rangefeed.enabled is required for changefeeds to run
+	if _, err := cfc.db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+		return err
+	}
+
+	muxEnabled := cfc.flags.MuxRangefeed.enabled(cfc.rng)
+	if muxEnabled != featureUnset {
+		cfc.logger.Printf("Setting changefeed.mux_rangefeed.enabled to %t", muxEnabled.bool())
+		if _, err := cfc.db.Exec(
+			"SET CLUSTER SETTING changefeed.mux_rangefeed.enabled = $1", muxEnabled.bool(),
+		); err != nil {
+			return err
+		}
+	}
+
+	schedEnabled := cfc.flags.RangeFeedScheduler.enabled(cfc.rng)
+	if schedEnabled != featureUnset {
+		cfc.logger.Printf("Setting kv.rangefeed.scheduler.enabled to %t", schedEnabled.bool())
+		if _, err := cfc.db.Exec(
+			"SET CLUSTER SETTING kv.rangefeed.scheduler.enabled = $1", schedEnabled.bool(),
+		); err != nil {
+			return err
+		}
+	}
+
+	rangeDistribution, rangeDistributionEnabled := cfc.flags.DistributionStrategy.enabled(cfc.rng,
+		chooseDistributionStrategy)
+	if rangeDistributionEnabled == featureEnabled {
+		cfc.logger.Printf("Setting changefeed.default_range_distribution_strategy to %s", rangeDistribution)
+		if _, err := cfc.db.Exec(fmt.Sprintf(
+			"SET CLUSTER SETTING changefeed.default_range_distribution_strategy = '%s'", rangeDistribution)); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // Create builds the SQL statement that creates the changefeed job,
 // and executes it. Returns the job ID corresponding to the
 // changefeed, and any errors that occurred in the process
 func (cfc *changefeedCreator) Create() (int, error) {
-	// kv.rangefeed.enabled is required for changefeeds to run
-	if _, err := cfc.db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+	if err := cfc.applySettings(); err != nil {
 		return -1, err
 	}
 
@@ -2336,6 +2706,7 @@ func (cfc *changefeedCreator) Create() (int, error) {
 type changefeedInfo struct {
 	status        string
 	errMsg        string
+	startedTime   time.Time
 	statementTime time.Time
 	highwaterTime time.Time
 	finishedTime  time.Time
@@ -2371,6 +2742,7 @@ func getChangefeedInfo(db *gosql.DB, jobID int) (*changefeedInfo, error) {
 	return &changefeedInfo{
 		status:        status,
 		errMsg:        payload.Error,
+		startedTime:   time.UnixMicro(payload.StartedMicros),
 		statementTime: payload.GetChangefeed().StatementTime.GoTime(),
 		highwaterTime: highwaterTime,
 		finishedTime:  time.UnixMicro(payload.FinishedMicros),

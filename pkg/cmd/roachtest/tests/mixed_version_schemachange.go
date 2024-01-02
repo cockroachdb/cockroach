@@ -13,128 +13,85 @@ package tests
 import (
 	"context"
 	"fmt"
+	//"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
 func registerSchemaChangeMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:  "schemachange/mixed-versions",
-		Owner: registry.OwnerSQLFoundations,
-		// This tests the work done for 20.1 that made schema changes jobs and in
-		// addition prevented making any new schema changes on a mixed cluster in
-		// order to prevent bugs during upgrades.
-		Cluster:    r.MakeClusterSpec(4),
-		NativeLibs: registry.LibGEOS,
+		// schemachange/mixed-versions tests random schema changes (via the schemachange workload)
+		// in a mixed version state, validating that the cluster is still healthy (via debug doctor examine).
+		Name:             "schemachange/mixed-versions",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		NativeLibs:       registry.LibGEOS,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			maxOps := 100
+			maxOps := 1000
 			concurrency := 5
 			if c.IsLocal() {
 				maxOps = 10
 				concurrency = 2
 			}
-			runSchemaChangeMixedVersions(ctx, t, c, maxOps, concurrency, *t.BuildVersion())
+			runSchemaChangeMixedVersions(ctx, t, c, maxOps, concurrency)
 		},
 	})
 }
 
-func uploadAndInitSchemaChangeWorkload() versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		// Stage workload on all nodes as the load node to run workload is chosen
-		// randomly.
-		u.c.Put(ctx, t.DeprecatedWorkload(), "./workload", u.c.All())
-		u.c.Run(ctx, u.c.All(), "./workload init schemachange")
-	}
-}
-
-func runSchemaChangeWorkloadStep(loadNode, maxOps, concurrency int) versionStep {
-	var numFeatureRuns int
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		numFeatureRuns++
-		t.L().Printf("Workload step run: %d", numFeatureRuns)
-		runCmd := []string{
-			"./workload run schemachange --verbose=1",
-			fmt.Sprintf("--max-ops %d", maxOps),
-			fmt.Sprintf("--concurrency %d", concurrency),
-			fmt.Sprintf("{pgurl:1-%d}", u.c.Spec().NodeCount),
-		}
-		u.c.Run(ctx, u.c.Node(loadNode), runCmd...)
-	}
-}
-
 func runSchemaChangeMixedVersions(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	maxOps int,
-	concurrency int,
-	buildVersion version.Version,
+	ctx context.Context, t test.Test, c cluster.Cluster, maxOps int, concurrency int,
 ) {
-	predecessorVersion, err := version.PredecessorVersion(buildVersion)
-	if err != nil {
-		t.Fatal(err)
+	numFeatureRuns := 0
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), mixedversion.NumUpgrades(1))
+
+	workloadNode := c.Node(c.Spec().NodeCount)
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
+
+	// Run the schemachange workload on a random node, along with validating the schema changes for the cluster on a random node.
+	schemaChangeAndValidationStep := func(
+		ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
+	) error {
+		numFeatureRuns += 1
+		l.Printf("Workload step run: %d", numFeatureRuns)
+		workloadSeed := r.Int63()
+		runCmd := roachtestutil.NewCommand("COCKROACH_RANDOM_SEED=%d ./workload run schemachange", workloadSeed).
+			Flag("verbose", 1).
+			Flag("max-ops", maxOps).
+			Flag("concurrency", concurrency).
+			Arg("{pgurl%s}", c.All()).
+			String()
+		if err := c.RunE(ctx, workloadNode, runCmd); err != nil {
+			return err
+		}
+
+		randomNode := h.RandomNode(r, c.All())
+		doctorURL := fmt.Sprintf("{pgurl:%d}", randomNode)
+		// Now we validate that nothing is broken after the random schema changes have been run.
+		runCmd = roachtestutil.NewCommand("%s debug doctor examine cluster", test.DefaultCockroachPath).
+			Flag("url", doctorURL).
+			String()
+		return c.RunE(ctx,
+			workloadNode,
+			//option.NodeListOption{randomNode},
+			runCmd)
 	}
 
-	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().RandNode()[0], maxOps, concurrency)
-	if buildVersion.Major() < 20 {
-		// Schema change workload is meant to run only on versions 19.2 or higher.
-		// If the main version is below 20.1 then then predecessor version will be
-		// below 19.2.
-		schemaChangeStep = nil
-	}
+	// Stage our workload node with the schemachange workload.
+	mvt.OnStartup("set up schemachange workload", func(ctx context.Context, l *logger.Logger, r *rand.Rand, helper *mixedversion.Helper) error {
+		return c.RunE(ctx, workloadNode, fmt.Sprintf("./workload init schemachange {pgurl%s}", workloadNode))
+	})
 
-	u := newVersionUpgradeTest(c,
-		uploadAndStartFromCheckpointFixture(c.All(), predecessorVersion),
-		uploadAndInitSchemaChangeWorkload(),
-		waitForUpgradeStep(c.All()),
+	mvt.InMixedVersion("run schemachange workload and validation in mixed version", schemaChangeAndValidationStep)
 
-		// NB: at this point, cluster and binary version equal predecessorVersion,
-		// and auto-upgrades are on.
+	mvt.AfterUpgradeFinalized("run schemachange workload and validation after upgrade has finalized", schemaChangeAndValidationStep)
 
-		preventAutoUpgradeStep(1),
-		schemaChangeStep,
-
-		// Roll the nodes into the new version one by one, while repeatedly running
-		// schema changes. We use an empty string for the version below, which means
-		// use the main ./cockroach binary (i.e. the one being tested in this run).
-		binaryUpgradeStep(c.Node(3), clusterupgrade.MainVersion),
-		schemaChangeStep,
-		binaryUpgradeStep(c.Node(2), clusterupgrade.MainVersion),
-		schemaChangeStep,
-		binaryUpgradeStep(c.Node(1), clusterupgrade.MainVersion),
-		schemaChangeStep,
-		binaryUpgradeStep(c.Node(4), clusterupgrade.MainVersion),
-		schemaChangeStep,
-
-		// Roll back again, which ought to be fine because the cluster upgrade was
-		// not finalized.
-		binaryUpgradeStep(c.Node(2), predecessorVersion),
-		schemaChangeStep,
-		binaryUpgradeStep(c.Node(4), predecessorVersion),
-		schemaChangeStep,
-		binaryUpgradeStep(c.Node(3), predecessorVersion),
-		schemaChangeStep,
-		binaryUpgradeStep(c.Node(1), predecessorVersion),
-		schemaChangeStep,
-
-		// Roll nodes forward and finalize upgrade.
-		binaryUpgradeStep(c.Node(4), clusterupgrade.MainVersion),
-		schemaChangeStep,
-		binaryUpgradeStep(c.Node(3), clusterupgrade.MainVersion),
-		schemaChangeStep,
-		binaryUpgradeStep(c.Node(1), clusterupgrade.MainVersion),
-		schemaChangeStep,
-		binaryUpgradeStep(c.Node(2), clusterupgrade.MainVersion),
-		schemaChangeStep,
-
-		allowAutoUpgradeStep(1),
-		waitForUpgradeStep(c.All()),
-		schemaChangeStep,
-	)
-
-	u.run(ctx, t)
+	mvt.Run()
 }

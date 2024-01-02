@@ -12,6 +12,7 @@ package distsql
 
 import (
 	"context"
+	crypto_rand "crypto/rand"
 	"io"
 	"time"
 
@@ -42,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tochar"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
+	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -371,6 +373,7 @@ func (ds *ServerImpl) setupFlow(
 			SchemaTelemetryController: ds.ServerConfig.SchemaTelemetryController,
 			IndexUsageStatsController: ds.ServerConfig.IndexUsageStatsController,
 			RangeStatsFetcher:         ds.ServerConfig.RangeStatsFetcher,
+			ULIDEntropy:               ulid.Monotonic(crypto_rand.Reader, 0),
 		}
 		// Most processors will override this Context with their own context in
 		// ProcessorBase. StartInternal().
@@ -499,9 +502,9 @@ func (ds *ServerImpl) newFlowContext(
 	}
 
 	if localState.IsLocal && localState.Collection != nil {
-		// If we were passed a descs.Collection to use, then take it. In this case,
-		// the caller will handle releasing the used descriptors, so we don't need
-		// to cleanup the descriptors when cleaning up the flow.
+		// If we were passed a descs.Collection to use, then take it. In this
+		// case, the caller will handle releasing the used descriptors, so we
+		// don't need to clean up the descriptors when cleaning up the flow.
 		flowCtx.Descriptors = localState.Collection
 	} else {
 		// If we weren't passed a descs.Collection, then make a new one. We are
@@ -713,11 +716,13 @@ func (ds *ServerImpl) flowStreamInt(
 		if err == io.EOF {
 			return errors.AssertionFailedf("missing header message")
 		}
+		log.VEventf(ctx, 2, "FlowStream (server) error while receiving header: %v", err)
 		return err
 	}
 	if msg.Header == nil {
 		return errors.AssertionFailedf("no header in first message")
 	}
+	log.VEvent(ctx, 2, "FlowStream (server) received header")
 	flowID := msg.Header.FlowID
 	streamID := msg.Header.StreamID
 	if log.V(1) {

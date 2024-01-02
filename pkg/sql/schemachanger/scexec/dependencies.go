@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -94,6 +95,9 @@ type Catalog interface {
 	// transaction so far, assuming that they haven't been persisted yet
 	// by calling Run.
 	Reset(ctx context.Context) error
+
+	// InitializeSequence initializes the initial value for a sequence.
+	InitializeSequence(id descpb.ID, startVal int64)
 }
 
 // Telemetry encapsulates metrics gather for the declarative schema changer.
@@ -135,10 +139,6 @@ type TransactionalJobRegistry interface {
 	// See (*jobs.Registry).CheckPausepoint
 	CheckPausepoint(name string) error
 
-	// UseLegacyGCJob indicate whether the legacy GC job should be used.
-	// This only matters for setting the initial RunningStatus.
-	UseLegacyGCJob(ctx context.Context) bool
-
 	// TODO(ajwerner): Deal with setting the running status to indicate
 	// validating, backfilling, or generally performing metadata changes
 	// and waiting for lease draining.
@@ -173,6 +173,7 @@ type Backfiller interface {
 		context.Context,
 		BackfillProgress,
 		BackfillerProgressWriter,
+		*jobs.Job,
 		catalog.TableDescriptor,
 	) error
 }
@@ -184,12 +185,7 @@ type Merger interface {
 
 	// MergeIndexes will merge the specified indexes in the table, from each
 	// temporary index into each adding index.
-	MergeIndexes(
-		context.Context,
-		MergeProgress,
-		BackfillerProgressWriter,
-		catalog.TableDescriptor,
-	) error
+	MergeIndexes(context.Context, *jobs.Job, MergeProgress, BackfillerProgressWriter, catalog.TableDescriptor) error
 }
 
 // Validator provides interfaces that allow indexes and check constraints to be validated.
@@ -348,7 +344,11 @@ type DescriptorMetadataUpdater interface {
 	DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error
 
 	// DeleteSchedule deletes the given schedule.
-	DeleteSchedule(ctx context.Context, id int64) error
+	DeleteSchedule(ctx context.Context, id jobspb.ScheduleID) error
+
+	// UpdateTTLScheduleLabel updates the schedule_name for the TTL Scheduled Job
+	// of the given table.
+	UpdateTTLScheduleLabel(ctx context.Context, tbl *tabledesc.Mutable) error
 }
 
 // StatsRefreshQueue queues table for stats refreshes.

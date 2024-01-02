@@ -14,9 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -53,14 +51,6 @@ func (r *recordResolvedWriter) AcquireMemory(ctx context.Context, n int64) (kvev
 	return kvevent.Alloc{}, nil
 }
 
-func tenantOrSystemCodec(s serverutils.TestServerInterface) keys.SQLCodec {
-	var codec = s.Codec()
-	if len(s.TestTenants()) > 0 {
-		codec = s.TestTenants()[0].Codec()
-	}
-	return codec
-}
-
 var _ kvevent.Writer = (*recordResolvedWriter)(nil)
 
 func TestEmitsResolvedDuringScan(t *testing.T) {
@@ -68,8 +58,9 @@ func TestEmitsResolvedDuringScan(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `
@@ -77,7 +68,7 @@ CREATE TABLE t (a INT PRIMARY KEY);
 INSERT INTO t VALUES (1), (2), (3);
 `)
 
-	codec := tenantOrSystemCodec(s)
+	codec := s.Codec()
 	descr := desctestutils.TestingGetPublicTableDescriptor(kvdb, codec, "defaultdb", "t")
 	span := tableSpan(codec, uint32(descr.GetID()))
 
@@ -95,7 +86,6 @@ INSERT INTO t VALUES (1), (2), (3);
 
 	scanner := &scanRequestScanner{
 		settings: s.ClusterSettings(),
-		gossip:   gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		db:       kvdb,
 	}
 

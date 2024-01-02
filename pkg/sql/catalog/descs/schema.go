@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 )
 
 // InsertDescriptorlessPublicSchemaToBatch adds the creation of a new descriptorless public
@@ -25,7 +25,7 @@ import (
 func (tc *Collection) InsertDescriptorlessPublicSchemaToBatch(
 	ctx context.Context, kvTrace bool, db catalog.DatabaseDescriptor, b *kv.Batch,
 ) error {
-	return tc.InsertTempSchemaToBatch(ctx, kvTrace, db, tree.PublicSchema, keys.PublicSchemaID, b)
+	return tc.InsertTempSchemaToBatch(ctx, kvTrace, db, catconstants.PublicSchemaName, keys.PublicSchemaID, b)
 }
 
 // DeleteDescriptorlessPublicSchemaToBatch adds the deletion of a new descriptorless public
@@ -33,7 +33,7 @@ func (tc *Collection) InsertDescriptorlessPublicSchemaToBatch(
 func (tc *Collection) DeleteDescriptorlessPublicSchemaToBatch(
 	ctx context.Context, kvTrace bool, db catalog.DatabaseDescriptor, b *kv.Batch,
 ) error {
-	return tc.DeleteTempSchemaToBatch(ctx, kvTrace, db, tree.PublicSchema, b)
+	return tc.DeleteTempSchemaToBatch(ctx, kvTrace, db, catconstants.PublicSchemaName, b)
 }
 
 // InsertTempSchemaToBatch adds the creation of a new temporary schema to

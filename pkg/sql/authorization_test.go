@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -29,11 +28,9 @@ func TestCheckAnyPrivilegeForNodeUser(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
 
-	defer s.Stopper().Stop(ctx)
-
-	ts := s.(*server.TestServer)
+	defer ts.Stopper().Stop(ctx)
 
 	require.NotNil(t, ts.InternalExecutor())
 

@@ -18,12 +18,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
 
 var gormReleaseTag = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+
+// WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
+// This is used by docs automation to produce a list of supported versions for ORM's.
 var gormSupportedTag = "v1.24.1"
 
 func registerGORM(r registry.Registry) {
@@ -33,8 +37,7 @@ func registerGORM(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
 			t.Fatal(err)
@@ -76,6 +79,11 @@ func registerGORM(r registry.Registry) {
 		); err != nil {
 			t.Fatal(err)
 		}
+		// It's safer to clean up dependencies this way than it is to give the cluster
+		// wipe root access.
+		defer func() {
+			c.Run(ctx, c.All(), "go clean -modcache")
+		}()
 
 		if err := repeatGitCloneE(
 			ctx,
@@ -97,7 +105,11 @@ func registerGORM(r registry.Registry) {
 		ignorelistName, ignoredFailures := "gormIgnorelist", gormIgnorelist
 		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
 
-		err = c.RunE(ctx, node, `./cockroach sql -e "CREATE DATABASE gorm" --insecure`)
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = c.RunE(ctx, node, fmt.Sprintf(`./cockroach sql -e "CREATE DATABASE gorm" --insecure --url=%s`, pgurl))
 		require.NoError(t, err)
 
 		t.Status("downloading go dependencies for tests")
@@ -118,7 +130,7 @@ func registerGORM(r registry.Registry) {
 			ctx,
 			node,
 			fmt.Sprintf(`cd %s && rm migrate_test.go &&
-				GORM_DIALECT="postgres" GORM_DSN="user=root password= dbname=gorm host=localhost port=26257 sslmode=disable"
+				GORM_DIALECT="postgres" GORM_DSN="user=root password= dbname=gorm host=localhost port={pgport:1} sslmode=disable"
 				go test -v ./... 2>&1 | %s/bin/go-junit-report > %s`,
 				gormTestPath, goPath, resultsPath),
 		)
@@ -133,11 +145,12 @@ func registerGORM(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "gorm",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `orm`),
-		Run:     runGORM,
+		Name:             "gorm",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.ORM),
+		Run:              runGORM,
 	})
 }

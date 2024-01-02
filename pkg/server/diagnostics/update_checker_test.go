@@ -39,7 +39,7 @@ func TestCheckVersion(t *testing.T) {
 		defer r.Close()
 
 		url := r.URL()
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DiagnosticsTestingKnobs: diagnostics.TestingKnobs{
@@ -55,7 +55,7 @@ func TestCheckVersion(t *testing.T) {
 		require.Equal(t, 1, r.NumRequests())
 
 		last := r.LastRequestData()
-		require.Equal(t, s.(*server.TestServer).StorageClusterID().String(), last.UUID)
+		require.Equal(t, s.StorageLayer().StorageClusterID().String(), last.UUID)
 		require.Equal(t, "system", last.TenantID)
 		require.Equal(t, build.GetInfo().Tag, last.Version)
 		require.Equal(t, "OSS", last.LicenseType)
@@ -66,7 +66,7 @@ func TestCheckVersion(t *testing.T) {
 		// Ensure nil, which happens when an empty env override URL is used, does not
 		// cause a crash.
 		var nilURL *url.URL
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DiagnosticsTestingKnobs: diagnostics.TestingKnobs{

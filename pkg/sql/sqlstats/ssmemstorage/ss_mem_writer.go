@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var (
@@ -137,7 +138,9 @@ func (s *Container) RecordStatement(
 	stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))
 	stats.mu.data.LastExecTimestamp = s.getTimeNow()
 	stats.mu.data.Nodes = util.CombineUnique(stats.mu.data.Nodes, value.Nodes)
-	stats.mu.data.Regions = util.CombineUnique(stats.mu.data.Regions, value.Regions)
+	if value.ExecStats != nil {
+		stats.mu.data.Regions = util.CombineUnique(stats.mu.data.Regions, value.ExecStats.Regions)
+	}
 	stats.mu.data.PlanGists = util.CombineUnique(stats.mu.data.PlanGists, []string{value.PlanGist})
 	stats.mu.data.IndexRecommendations = value.IndexRecommendations
 	stats.mu.data.Indexes = util.CombineUnique(stats.mu.data.Indexes, value.Indexes)
@@ -203,8 +206,10 @@ func (s *Container) RecordStatement(
 	}
 
 	var errorCode string
+	var errorMsg redact.RedactableString
 	if value.StatementError != nil {
 		errorCode = pgerror.GetPGCode(value.StatementError).String()
+		errorMsg = redact.Sprint(value.StatementError)
 	}
 
 	s.insights.ObserveStatement(value.SessionID, &insights.Statement{
@@ -227,6 +232,7 @@ func (s *Container) RecordStatement(
 		Database:             value.Database,
 		CPUSQLNanos:          cpuSQLNanos,
 		ErrorCode:            errorCode,
+		ErrorMsg:             errorMsg,
 	})
 
 	return stats.ID, nil
@@ -303,17 +309,21 @@ func (s *Container) RecordTransaction(
 	if created {
 		estimatedMemAllocBytes :=
 			stats.sizeUnsafe() + key.Size() + 8 /* hash of transaction key */
-		s.mu.Lock()
+		if err := func() error {
+			s.mu.Lock()
+			defer s.mu.Unlock()
 
-		// If the monitor is nil, we do not track memory usage.
-		if s.mu.acc.Monitor() != nil {
-			if err := s.mu.acc.Grow(ctx, estimatedMemAllocBytes); err != nil {
-				delete(s.mu.txns, key)
-				s.mu.Unlock()
-				return ErrMemoryPressure
+			// If the monitor is nil, we do not track memory usage.
+			if s.mu.acc.Monitor() != nil {
+				if err := s.mu.acc.Grow(ctx, estimatedMemAllocBytes); err != nil {
+					delete(s.mu.txns, key)
+					return ErrMemoryPressure
+				}
 			}
+			return nil
+		}(); err != nil {
+			return err
 		}
-		s.mu.Unlock()
 	}
 
 	stats.mu.data.Count++
@@ -364,7 +374,19 @@ func (s *Container) RecordTransaction(
 		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
 	}
 
-	s.insights.ObserveTransaction(value.SessionID, &insights.Transaction{
+	var errorCode string
+	var errorMsg redact.RedactableString
+	if value.TxnErr != nil {
+		errorCode = pgerror.GetPGCode(value.TxnErr).String()
+		errorMsg = redact.Sprint(value.TxnErr)
+	}
+
+	status := insights.Transaction_Failed
+	if value.Committed {
+		status = insights.Transaction_Completed
+	}
+
+	s.insights.ObserveTransaction(ctx, value.SessionID, &insights.Transaction{
 		ID:              value.TransactionID,
 		FingerprintID:   key,
 		UserPriority:    value.Priority.String(),
@@ -379,6 +401,9 @@ func (s *Container) RecordTransaction(
 		RetryCount:      value.RetryCount,
 		AutoRetryReason: retryReason,
 		CPUSQLNanos:     cpuSQLNanos,
+		LastErrorCode:   errorCode,
+		LastErrorMsg:    errorMsg,
+		Status:          status,
 	})
 	return nil
 }

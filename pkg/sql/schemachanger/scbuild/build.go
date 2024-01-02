@@ -16,9 +16,9 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
@@ -59,15 +59,18 @@ func Build(
 		redact.Safe(n.StatementTag()),
 	).HandlePanicAndLogError(ctx, &err)
 
-	// localMemAcc is opened to track memory allocation for local objects
-	// and should be cleared before this function returns.
-	localMemAcc := makeBoundAccount(memAcc.Monitor())
+	// localMemAcc tracks memory allocations for local objects.
+	var localMemAcc *mon.BoundAccount
 	defer func() {
 		localMemAcc.Clear(ctx)
 	}()
-
+	if monitor := memAcc.Monitor(); monitor != nil {
+		acc := monitor.MakeBoundAccount()
+		localMemAcc = &acc
+	}
 	bs := newBuilderState(ctx, dependencies, incumbent, localMemAcc)
 	els := newEventLogState(dependencies, incumbent, n)
+
 	// TODO(fqazi): The optimizer can end up already modifying the statement above
 	// to fully resolve names. We need to take this into account for CTAS/CREATE
 	// VIEW statements.
@@ -84,86 +87,92 @@ func Build(
 		SchemaFeatureChecker: dependencies.FeatureChecker(),
 	}
 	scbuildstmt.Process(b, an.GetStatement())
-	an.ValidateAnnotations()
-	currentStatementID := uint32(len(els.statements) - 1)
-	els.statements[currentStatementID].RedactedStatement = string(
-		dependencies.AstFormatter().FormatAstAsRedactableString(an.GetStatement(), &an.annotation))
 
-	// estimatedTargetStateSize is an estimated memory usage of the to-be-return scpb.TargetState.
-	estimatedTargetStateSize := int(unsafe.Sizeof(scpb.Target{})+2*unsafe.Sizeof(scpb.Status(0))) * len(bs.output)
-	if err := memAcc.Grow(ctx, int64(estimatedTargetStateSize)); err != nil {
-		return scpb.CurrentState{}, err
-	}
-	ts := scpb.TargetState{
-		Targets:       make([]scpb.Target, 0, len(bs.output)),
-		Statements:    els.statements,
-		Authorization: els.authorization,
-		NameMappings:  makeNameMappings(b),
-	}
-	initial := make([]scpb.Status, 0, len(bs.output))
-	current := make([]scpb.Status, 0, len(bs.output))
-	version := dependencies.ClusterSettings().Version.ActiveVersion(ctx)
-	withLogEvent := make([]scpb.Target, 0, len(bs.output))
-	for _, e := range bs.output {
-		if e.metadata.Size() == 0 {
-			// Exclude targets which weren't explicitly set.
-			// Explicitly-set targets have non-zero values in the target metadata.
-			continue
-		}
-		if !version.IsActive(screl.MinElementVersion(e.element)) {
-			// Exclude targets which are not yet usable in the currently active
-			// cluster version.
-			continue
-		}
-		maxVersion := screl.MaxElementVersion(e.element)
-		if maxVersion != nil && version.IsActive(*maxVersion) {
-			// Exclude the target which are no longer allowed at the active
-			// max version.
-			continue
-		}
-		t := scpb.MakeTarget(e.target, e.element, &e.metadata)
-		ts.Targets = append(ts.Targets, t)
-		initial = append(initial, e.initial)
-		current = append(current, e.current)
-		if e.withLogEvent {
-			withLogEvent = append(withLogEvent, t)
-		}
+	// Generate redacted statement.
+	{
+		an.ValidateAnnotations()
+		currentStatementID := uint32(len(els.statements) - 1)
+		els.statements[currentStatementID].RedactedStatement = string(
+			dependencies.AstFormatter().FormatAstAsRedactableString(an.GetStatement(), &an.annotation))
 	}
 
-	// Ensure none of the involving descriptors have an ongoing schema change,
-	// unless it's newly created.
-	ensureNoConcurrentSchemaChange(&ts, bs)
+	// Generate returned state.
+	ret, loggedTargets := makeState(dependencies.ClusterSettings().Version.ActiveVersion(ctx), bs)
+	ret.Statements = els.statements
+	ret.Authorization = els.authorization
+
+	// Update memory accounting.
+	if err := memAcc.Grow(ctx, ret.ByteSize()); err != nil {
+		panic(err)
+	}
 
 	// Write to event log and return.
-	logEvents(b, ts, withLogEvent)
-
-	return scpb.CurrentState{
-		TargetState: ts,
-		Initial:     initial,
-		Current:     current,
-	}, nil
+	logEvents(b, ret.TargetState, loggedTargets)
+	return ret, nil
 }
 
-// ensureNoConcurrentSchemaChange panics if any involving descriptor has an
-// ongoing schema changer, unless the descriptor is being added.
-func ensureNoConcurrentSchemaChange(ts *scpb.TargetState, bs *builderState) {
-	screl.AllTargetDescIDs(*ts).ForEach(func(id descpb.ID) {
-		bs.ensureDescriptor(id)
-		cached := bs.descCache[id]
-		if !cached.isBeingCreated() && cached.desc.HasConcurrentSchemaChanges() {
-			panic(scerrors.ConcurrentSchemaChangeError(cached.desc))
-		}
-	})
-}
-
-// makeBoundAccount is the same as `monitor.MakeBountAccount`
-// except that it returns a pointer.
-func makeBoundAccount(monitor *mon.BytesMonitor) (ret *mon.BoundAccount) {
-	if monitor != nil {
-		memAcc := monitor.MakeBoundAccount()
-		ret = &memAcc
+// makeState populates the declarative schema changer state returned by Build
+// with the targets and the statuses present in the builderState.
+func makeState(
+	version clusterversion.ClusterVersion, bs *builderState,
+) (s scpb.CurrentState, loggedTargets []scpb.Target) {
+	s = scpb.CurrentState{
+		TargetState: scpb.TargetState{
+			Targets:      make([]scpb.Target, 0, len(bs.output)),
+			NameMappings: makeNameMappings(bs.output),
+		},
+		Initial: make([]scpb.Status, 0, len(bs.output)),
+		Current: make([]scpb.Status, 0, len(bs.output)),
 	}
-	return ret
+	loggedTargets = make([]scpb.Target, 0, len(bs.output))
+	isElementAllowedInVersion := func(e scpb.Element) bool {
+		if !screl.VersionSupportsElementUse(e, version) {
+			// Exclude targets which are not yet usable in the currently active
+			// cluster version.
+			return false
+		}
+		if maxVersion, exists := screl.MaxElementVersion(e); exists && version.IsActive(maxVersion) {
+			// Exclude the target which are no longer allowed at the active
+			// max version.
+			return false
+		}
+		return true
+	}
+	// Collect the set of IDs of descriptors involved in the schema change.
+	// This is used to add targets which aren't explicitly set but which are
+	// necessary for execution plan correctness, typically in order to skip
+	// certain transitions and fences like the two version invariant.
+	// This only applies for cluster at or beyond version 23.2.
+	var descriptorIDsInSchemaChange catalog.DescriptorIDSet
+	if version.IsActive(clusterversion.V23_2) {
+		for _, e := range bs.output {
+			if isElementAllowedInVersion(e.element) && e.metadata.IsLinkedToSchemaChange() {
+				descriptorIDsInSchemaChange.Add(screl.GetDescID(e.element))
+			}
+		}
+	}
+	for _, e := range bs.output {
+		if !isElementAllowedInVersion(e.element) {
+			continue
+		}
+		if !e.metadata.IsLinkedToSchemaChange() {
+			// Exclude targets which weren't explicitly set, minus exceptions.
+			if !descriptorIDsInSchemaChange.Contains(screl.GetDescID(e.element)) {
+				continue
+			}
+			if !shouldElementBeRetainedWithoutMetadata(e.element, e.current) {
+				continue
+			}
+		}
+		t := scpb.MakeTarget(e.target, e.element, &e.metadata)
+		s.Targets = append(s.Targets, t)
+		s.Initial = append(s.Initial, e.initial)
+		s.Current = append(s.Current, e.current)
+		if e.withLogEvent {
+			loggedTargets = append(loggedTargets, t)
+		}
+	}
+	return s, loggedTargets
 }
 
 // IsFullySupportedWithFalsePositive returns if a statement is fully supported
@@ -174,15 +183,6 @@ func IsFullySupportedWithFalsePositive(
 ) bool {
 	return scbuildstmt.IsFullySupportedWithFalsePositive(statement, version, sessiondatapb.UseNewSchemaChangerOn)
 }
-
-// Export dependency interfaces.
-// These are defined in the scbuildstmts package instead of scbuild to avoid
-// circular import dependencies.
-type (
-	// FeatureChecker contains operations for checking if a schema change
-	// feature is allowed by the database administrator.
-	FeatureChecker = scbuildstmt.SchemaFeatureChecker
-)
 
 type elementState struct {
 	// element is the element which identifies this structure.
@@ -241,7 +241,8 @@ type cachedDesc struct {
 	desc             catalog.Descriptor
 	prefix           tree.ObjectNamePrefix
 	backrefs         catalog.DescriptorIDSet
-	ers              *elementResultSet
+	outputIndexes    []int
+	cachedCollection *scpb.ElementCollection[scpb.Element]
 	privileges       map[privilege.Kind]error
 	hasOwnership     bool
 	backrefsResolved bool
@@ -255,10 +256,6 @@ type cachedDesc struct {
 	// This map ends up being very important to make sure that Ensure does
 	// not become O(N) where N is the number of elements in the descriptor.
 	elementIndexMap map[string]int
-}
-
-func (c *cachedDesc) isBeingCreated() bool {
-	return c.desc == nil
 }
 
 // newBuilderState constructs a builderState.
@@ -288,7 +285,7 @@ func newBuilderState(
 		panic(err)
 	}
 	for _, t := range incumbent.TargetState.Targets {
-		bs.ensureDescriptor(screl.GetDescID(t.Element()))
+		bs.ensureDescriptors(t.Element())
 	}
 	for i, t := range incumbent.TargetState.Targets {
 		bs.upsertElementState(elementState{
@@ -302,7 +299,7 @@ func newBuilderState(
 	return &bs
 }
 
-func makeNameMappings(b scbuildstmt.BuildCtx) (ret scpb.NameMappings) {
+func makeNameMappings(elementStates []elementState) (ret scpb.NameMappings) {
 	id2Idx := make(map[catid.DescID]int)
 	getOrCreate := func(id catid.DescID) (_ *scpb.NameMapping, isNew bool) {
 		if idx, ok := id2Idx[id]; ok {
@@ -322,39 +319,39 @@ func makeNameMappings(b scbuildstmt.BuildCtx) (ret scpb.NameMappings) {
 	isNotDropping := func(ts scpb.TargetStatus) bool {
 		return ts != scpb.ToAbsent && ts != scpb.Transient
 	}
-	scpb.ForEachNamespace(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.Namespace) {
-		dnm, isNew := getOrCreate(e.DescriptorID)
-		if isNew || isNotDropping(ts) {
-			dnm.Name = e.Name
-		}
-	})
-	scpb.ForEachFunctionName(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.FunctionName) {
-		dnm, isNew := getOrCreate(e.FunctionID)
-		if isNew || isNotDropping(ts) {
-			dnm.Name = e.Name
-		}
-	})
-	scpb.ForEachIndexName(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.IndexName) {
-		if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
-			ret[idx].Indexes[e.IndexID] = e.Name
-		}
-	})
-	scpb.ForEachColumnName(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.ColumnName) {
-		if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
-			ret[idx].Columns[e.ColumnID] = e.Name
-		}
-	})
-	scpb.ForEachColumnFamily(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.ColumnFamily) {
-		if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
-			ret[idx].Families[e.FamilyID] = e.Name
-		}
-	})
-	scpb.ForEachConstraintWithoutIndexName(b,
-		func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName) {
-			if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
-				ret[idx].Constraints[e.ConstraintID] = e.Name
+	for _, es := range elementStates {
+		switch e := es.element.(type) {
+		case *scpb.Namespace:
+			dnm, isNew := getOrCreate(e.DescriptorID)
+			if isNew || isNotDropping(es.target) {
+				dnm.Name = e.Name
 			}
-		})
+		case *scpb.FunctionName:
+			dnm, isNew := getOrCreate(e.FunctionID)
+			if isNew || isNotDropping(es.target) {
+				dnm.Name = e.Name
+			}
+		}
+	}
+	for _, es := range elementStates {
+		if !isNotDropping(es.target) {
+			continue
+		}
+		idx, ok := id2Idx[screl.GetDescID(es.element)]
+		if !ok {
+			continue
+		}
+		switch e := es.element.(type) {
+		case *scpb.IndexName:
+			ret[idx].Indexes[e.IndexID] = e.Name
+		case *scpb.ColumnName:
+			ret[idx].Columns[e.ColumnID] = e.Name
+		case *scpb.ColumnFamily:
+			ret[idx].Families[e.FamilyID] = e.Name
+		case *scpb.ConstraintWithoutIndexName:
+			ret[idx].Constraints[e.ConstraintID] = e.Name
+		}
+	}
 	sort.Sort(ret)
 	return ret
 }
@@ -440,4 +437,22 @@ func (b buildCtx) WithNewSourceElementID() scbuildstmt.BuildCtx {
 		TreeAnnotator: b.TreeAnnotator,
 		EventLogState: b.EventLogStateWithNewSourceElementID(),
 	}
+}
+
+// Codec implements the scbuildstmt.BuildCtx interface.
+func (b buildCtx) Codec() keys.SQLCodec {
+	return b.Dependencies.Codec()
+}
+
+// shouldElementBeRetainedWithoutMetadata tracks which elements should
+// be retained even if no metadata exists. These elements may contain
+// other hints that are used for planning such as TableData/IndexData elements
+// that allow us to skip the two version invariant or backfills/validation
+// at runtime.
+func shouldElementBeRetainedWithoutMetadata(element scpb.Element, status scpb.Status) bool {
+	switch element.(type) {
+	case *scpb.TableData, *scpb.IndexData:
+		return status == scpb.Status_PUBLIC
+	}
+	return false
 }

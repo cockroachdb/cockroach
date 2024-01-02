@@ -16,7 +16,7 @@ ALTER TABLE t RENAME TO t.*
 statement ok
 ALTER TABLE t ADD b INT
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices           is_hidden
@@ -48,7 +48,7 @@ ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 statement error pq: multiple primary keys for table "t" are not allowed
 ALTER TABLE t ADD CONSTRAINT bar PRIMARY KEY (b)
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -102,7 +102,7 @@ a f b    c
 2 9 1    1
 3 9 2    1
 
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t
 ----
 table_name  constraint_name  constraint_type  details                              validated
@@ -132,7 +132,7 @@ ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS check_a CHECK (a > 0)
 statement error CHECK
 INSERT INTO t (a) VALUES (-3)
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  check_a   CHECK        CHECK ((a > 0))                      true
@@ -161,7 +161,7 @@ ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS t_f_fkey CHECK (a < 0)
 statement ok
 ALTER TABLE t ADD CHECK (a > 0)
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  check_a   CHECK        CHECK ((a > 0))                      true
@@ -183,7 +183,7 @@ ALTER TABLE t VALIDATE CONSTRAINT typo
 statement ok
 ALTER TABLE t VALIDATE CONSTRAINT check_a
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  check_a   CHECK        CHECK ((a > 0))                      true
@@ -229,7 +229,6 @@ SCHEMA CHANGE     DROP INDEX test.public.t@foo CASCADE         root  succeeded  
 
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 query TTTTRT retry
 SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
@@ -242,7 +241,7 @@ NEW SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE         root  succeeded 
 
 
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -329,7 +328,6 @@ SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@t_f_idx  root  running    0  �
 SCHEMA CHANGE     DROP INDEX test.public.t@t_f_idx         root  succeeded  1  ·
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 query TTTTRT retry
 SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
@@ -339,8 +337,6 @@ LIMIT 2
 ----
 SCHEMA CHANGE GC   GC for DROP INDEX test.public.t@t_f_idx  node  running    0  ·
 NEW SCHEMA CHANGE  DROP INDEX test.public.t@t_f_idx         root  succeeded  1  ·
-
-
 
 statement ok
 ALTER TABLE t DROP COLUMN f
@@ -393,7 +389,9 @@ ALTER TABLE t DROP COLUMN IF EXISTS q
 statement error cannot drop column "e" because view "v" depends on it
 ALTER TABLE t DROP COLUMN IF EXISTS e
 
-statement ok
+# Negative test to assert that NOTICEs are NOT emitted if there are no indexes
+# being dropped.
+statement notice ^$
 ALTER TABLE t DROP COLUMN IF EXISTS e CASCADE
 
 statement ok
@@ -405,15 +403,19 @@ CREATE TABLE o (gf INT REFERENCES t (g), h INT, i INT, INDEX oi (i), INDEX oh (h
 statement error "t_g_key" is referenced by foreign key from table "o"
 ALTER TABLE t DROP COLUMN g
 
-statement ok
+statement notice NOTICE: dropping index "t_g_key" which depends on column "g"
 ALTER TABLE t DROP COLUMN g CASCADE
 
 # Dropping columns that are indexed or stored in indexes drops those indexes
-# too.
-statement ok
+# too. Excuse the nasty regex, the legacy schema changer emits additional
+# NOTICEs about GCing. We're not testing for that, so we just "eat" them.
+# Example: "NOTICE: the data for dropped indexes is reclaimed
+# asynchronously\nHINT: The reclamation delay can be customized in the zone
+# configuration for the table."
+statement notice (NOTICE: dropping index "(oh|oih)" which depends on column "h"(\nNOTICE: .+\nHINT: .+\n)?\n?){2}
 ALTER TABLE o DROP COLUMN h
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM o
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -441,7 +443,7 @@ ALTER TABLE t ADD i INT DEFAULT 1 CHECK (i < g)
 statement error pq: validation of CHECK "i > 0:::INT8" failed on row:.* g=1.* i=0
 ALTER TABLE t ADD i INT AS (g - 1) STORED CHECK (i > 0)
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  check_f   CHECK        CHECK ((f > 1))      true
@@ -479,7 +481,7 @@ ALTER TABLE t ADD g INT DEFAULT 3, ADD h INT DEFAULT 2 CHECK (g = h)
 statement ok
 ALTER TABLE t ADD COLUMN u INT UNIQUE, ADD COLUMN v INT UNIQUE, ADD CONSTRAINT ck CHECK (a > 0);
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  check_c_b  CHECK        CHECK ((c > b))      true
@@ -511,7 +513,7 @@ ALTER TABLE tt ADD COLUMN s DECIMAL UNIQUE NOT NULL
 statement ok
 ALTER TABLE tt ADD t DECIMAL UNIQUE DEFAULT 4.0
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM tt
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices                      is_hidden
@@ -715,7 +717,7 @@ ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
 user root
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM privs
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices       is_hidden
@@ -733,7 +735,7 @@ ALTER TABLE privs ADD c INT
 statement ok
 ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM privs
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices           is_hidden
@@ -1016,7 +1018,7 @@ ALTER TABLE t ADD CONSTRAINT a_auto_not_null1 CHECK (a IS NOT NULL), ALTER COLUM
 statement error null value in column "a" violates not-null constraint
 INSERT INTO t VALUES (NULL)
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  a_auto_not_null   CHECK        CHECK ((a IS NOT NULL))  true
@@ -1042,7 +1044,7 @@ ALTER TABLE t ADD CHECK (a < 100)
 statement ok
 ALTER TABLE t ADD CHECK (a < 16) NOT VALID
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  check_a   CHECK        CHECK ((a < 100))           true
@@ -1061,7 +1063,7 @@ DELETE FROM t WHERE a = 17
 statement ok
 ALTER TABLE t VALIDATE CONSTRAINT check_a1
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  check_a   CHECK        CHECK ((a < 100))        true
@@ -1643,7 +1645,7 @@ ALTER TABLE unique_without_index_partial VALIDATE CONSTRAINT uniq_a_1;
 statement ok
 ALTER TABLE unique_without_index_partial ADD CONSTRAINT uniq_a_2 UNIQUE WITHOUT INDEX (a) WHERE b > 0 OR c > 0
 
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
 table_name            constraint_name             constraint_type  details                                 validated
@@ -1672,7 +1674,7 @@ ALTER TABLE unique_without_index RENAME CONSTRAINT unique_b TO unique_b_1
 statement ok
 ALTER TABLE unique_without_index RENAME CONSTRAINT unique_b TO unique_b_2
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
 unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
@@ -1702,7 +1704,7 @@ ALTER TABLE unique_without_index DROP CONSTRAINT unique_b_2
 statement ok
 ALTER TABLE unique_without_index DROP CONSTRAINT my_unique_e2
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
 unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
@@ -1720,7 +1722,7 @@ unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowi
 statement ok
 ALTER TABLE unique_without_index DROP COLUMN b
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
 unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
@@ -1732,7 +1734,7 @@ unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT IN
 unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
 unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM uwi_child
 ----
 uwi_child  fk_d_e            FOREIGN KEY  FOREIGN KEY (d, e) REFERENCES unique_without_index(d, e)  true
@@ -1748,7 +1750,7 @@ ALTER TABLE unique_without_index DROP COLUMN d
 statement ok
 ALTER TABLE unique_without_index DROP COLUMN d CASCADE
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
 unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
@@ -1782,9 +1784,9 @@ query I
 SELECT count(descriptor_id)
   FROM (
         SELECT json_array_elements_text(
-                crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->'descriptorIds'
+                crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', value)->'descriptorIds'
                )::INT8 AS descriptor_id
-          FROM system.jobs
+          FROM system.job_info WHERE info_key = 'legacy_payload'
        )
  WHERE descriptor_id = ('test.public.t45985'::REGCLASS)::INT8;
 ----
@@ -2108,7 +2110,6 @@ statement ok
 ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 query TT
 SHOW CREATE TABLE t
 ----
@@ -2206,11 +2207,8 @@ COMMIT
 subtest add_multiple_in_txn
 
 statement ok
-CREATE SEQUENCE IF NOT EXISTS multipleinstmt_seq MAXVALUE 9007199254740991;
-
-statement ok
 CREATE TABLE IF NOT EXISTS multipleinstmt (
-	id INT8 DEFAULT nextval('multipleinstmt_seq') PRIMARY KEY, key STRING, value STRING
+	key STRING PRIMARY KEY, value STRING
 );
 
 statement ok
@@ -2225,23 +2223,23 @@ ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS a BOOL DEFAULT false;
 ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS b STRING;
 COMMIT;
 
-query ITTBT
-SELECT * FROM multipleinstmt ORDER BY id ASC;
+query TTBT
+SELECT * FROM multipleinstmt ORDER BY key ASC;
 ----
-1  a  a  false  NULL
-2  b  b  false  NULL
-3  c  c  false  NULL
+a  a  false  NULL
+b  b  false  NULL
+c  c  false  NULL
 
 statement ok
 ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS c BOOL DEFAULT true,
                            ADD COLUMN IF NOT EXISTS d STRING;
 
-query ITTBTBT
-SELECT * FROM multipleinstmt ORDER BY id ASC;
+query TTBTBT
+SELECT * FROM multipleinstmt ORDER BY key ASC;
 ----
-1  a  a  false  NULL  true  NULL
-2  b  b  false  NULL  true  NULL
-3  c  c  false  NULL  true  NULL
+a  a  false  NULL  true  NULL
+b  b  false  NULL  true  NULL
+c  c  false  NULL  true  NULL
 
 skip_on_retry
 
@@ -2398,7 +2396,7 @@ CREATE TABLE test_serial (
 statement ok
 ALTER TABLE test_serial ADD COLUMN b SERIAL;
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SELECT l.table_id, l.name, l.state, r.refobjid
 FROM (
   SELECT table_id, name, state
@@ -2408,8 +2406,8 @@ FROM (
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
 table_id  name               state   refobjid
-202       test_serial_b_seq  PUBLIC  201
-201       test_serial        PUBLIC  NULL
+201       test_serial_b_seq  PUBLIC  200
+200       test_serial        PUBLIC  NULL
 
 statement ok
 DROP TABLE test_serial;
@@ -2433,7 +2431,7 @@ CREATE TABLE test_serial (
 statement ok
 ALTER TABLE test_serial ADD COLUMN b SERIAL;
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SELECT l.table_id, l.name, l.state, r.refobjid
 FROM (
   SELECT table_id, name, state
@@ -2443,8 +2441,8 @@ FROM (
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
 table_id  name               state   refobjid
-204       test_serial_b_seq  PUBLIC  203
-203       test_serial        PUBLIC  NULL
+203       test_serial_b_seq  PUBLIC  202
+202       test_serial        PUBLIC  NULL
 
 statement ok
 ALTER TABLE test_serial DROP COLUMN b;
@@ -2459,7 +2457,7 @@ FROM (
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
 table_id  name         state   refobjid
-203       test_serial  PUBLIC  NULL
+202       test_serial  PUBLIC  NULL
 
 statement ok
 DROP TABLE test_serial;
@@ -2684,7 +2682,7 @@ ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL:::I
 statement error pgcode 23502 null value in column "j" violates not-null constraint
 ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL::INT) VIRTUAL NOT NULL UNIQUE;
 
-statement error validation of NOT NULL constraint failed: validation of CHECK "j IS NOT NULL" failed on row: i=1, j=NULL
+statement error pgcode 23502 validation of column "j" NOT NULL failed on row: i=1, j=NULL
 ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL::INT) VIRTUAL NOT NULL;
 
 statement ok
@@ -2805,7 +2803,6 @@ statement ok
 ALTER TABLE t_96115 ADD CHECK (i > nextval('seq_96115') AND j::typ_96115 = 'a'::typ_96115);
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 query TTTB colnames
 SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
@@ -2819,7 +2816,6 @@ statement ok
 ALTER TABLE t_96115 DROP CONSTRAINT check_i_j;
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 query TTTB colnames
 SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
@@ -2832,7 +2828,6 @@ statement ok
 ALTER TABLE t_96115 ADD CHECK (i > nextval('seq_96115') AND j::typ_96115 = 'a'::typ_96115);
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 query TTTB colnames
 SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
@@ -2846,7 +2841,6 @@ statement ok
 DROP SEQUENCE seq_96115 CASCADE;
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 query TTTB colnames
 SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
@@ -2966,7 +2960,7 @@ DROP INDEX t_97538_2_j_key;
 
 # Ensure that only the unique index is dropped but not the FK
 # because we have replacement (the other unique without index constraint).
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t_97538_1
 ----
 table_name  constraint_name   constraint_type  details                                  validated
@@ -2982,7 +2976,7 @@ ALTER TABLE t_97538_2 DROP CONSTRAINT unique_j;
 
 # Similarly, ensure that only the constraint is dropped but not the FK
 # because we have replacement (the other unique index).
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t_97538_1
 ----
 table_name  constraint_name   constraint_type  details                                  validated
@@ -3082,10 +3076,10 @@ CREATE FUNCTION f3() RETURNS INT AS 'SELECT a FROM t_twocol' LANGUAGE SQL;
 statement ok
 ALTER TABLE t_twocol DROP COLUMN b CASCADE;
 
-statement error pq: unknown function: f1\(\): function undefined
+statement error pq: unknown function: f1\(\)
 SELECT f1();
 
-statement error pq: unknown function: f2\(\): function undefined
+statement error pq: unknown function: f2\(\)
 SELECT f2();
 
 query T
@@ -3167,12 +3161,185 @@ ALTER TABLE t_96728 ADD UNIQUE (j) NOT VALID;
 statement ok
 ALTER TABLE t_96728 ADD UNIQUE (j, k) WHERE (i > 0);
 
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t_96728
 ----
 table_name  constraint_name  constraint_type  details                              validated
 t_96728     t_96728_j_k_key  UNIQUE           UNIQUE (j ASC, k ASC) WHERE (i > 0)  true
 t_96728     t_96728_pkey     PRIMARY KEY      PRIMARY KEY (i ASC)                  true
+
+# This subtest tests behavior when there are multiple commands (ADD COLUMN, DROP COLUMN,
+# ALTER PRIMARY KEY, ADD CONSTRAINT) in one ALTER TABLE statement.
+# 1). add column + drop column
+# 2). add column + alter primary key
+# 3). drop column + alter primary key
+# 4). add column + drop column + alter primary key
+# 5). add column(s) + drop column(s) + alter primary key
+# 6). add column(s) + drop column(s) + alter primary key + add check + add fk
+# This is only supported in declarative schema changer starting from V23_2.
+subtest alter_table_with_multiple_commands_99035
+
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements = "+ALTER TABLE";
+
+statement ok
+DROP TABLE IF EXISTS t_99035;
+CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
+INSERT INTO t_99035 VALUES (0,0);
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), DROP COLUMN j;
+
+skipif config local-legacy-schema-changer
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  i INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
+)
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t_99035 ADD COLUMN j INT DEFAULT unique_rowid(), DROP COLUMN j; -- noop
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t_99035 ADD COLUMN j INT, DROP COLUMN j;  -- noop
+
+skipif config local-legacy-schema-changer
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  i INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
+)
+
+statement ok
+DROP TABLE IF EXISTS t_99035;
+CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
+INSERT INTO t_99035 VALUES (0,0);
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j);
+
+skipif config local-legacy-schema-changer
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
+  UNIQUE INDEX t_99035_i_key (i ASC)
+)
+
+statement ok
+DROP TABLE IF EXISTS t_99035;
+CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
+INSERT INTO t_99035 VALUES (0,0);
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t_99035 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
+
+skipif config local-legacy-schema-changer
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  j INT8 NOT NULL,
+  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
+)
+
+statement ok
+DROP TABLE IF EXISTS t_99035;
+CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
+INSERT INTO t_99035 VALUES (0,0);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.1
+statement ok
+ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.1
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  j INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
+)
+
+statement ok
+DROP TABLE IF EXISTS t_99035;
+CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
+INSERT INTO t_99035 VALUES (0,0);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.1
+statement error validation of CHECK "j > 0:::INT8" failed on row: j=0, k=[0-9]+, p=30
+ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN p INT DEFAULT 30, ADD CHECK (j>0);
+
+query II
+SELECT * FROM t_99035
+----
+0 0
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.1
+statement ok
+ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN p INT DEFAULT 30, ADD CHECK (j>=0);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.1
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  j INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  p INT8 NULL DEFAULT 30:::INT8,
+  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
+  CONSTRAINT check_j CHECK (j >= 0:::INT8)
+)
+
+statement ok
+DROP TABLE IF EXISTS t_99035;
+CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
+INSERT INTO t_99035 VALUES (0,0);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.1
+statement ok
+ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN p INT DEFAULT 0, ADD CHECK (j>=0), ADD FOREIGN KEY (p) REFERENCES t_99035(j);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.1
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  j INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  p INT8 NULL DEFAULT 0:::INT8,
+  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
+  CONSTRAINT t_99035_p_fkey FOREIGN KEY (p) REFERENCES public.t_99035(j),
+  CONSTRAINT check_j CHECK (j >= 0:::INT8)
+)
+
+statement ok
+RESET CLUSTER SETTING sql.schema.force_declarative_statements;
+
+subtest end
 
 # This subtest disallows using builtin function `cluster_logical_timestamp()`
 # as the default expression when backfilling a column.
@@ -3211,7 +3378,7 @@ ALTER TABLE t_99281 ADD COLUMN p INT DEFAULT unique_rowid(), ADD UNIQUE WITHOUT 
 
 # The following statement will cause the stmt to hang using the legacy schema changer.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement error pq: could not create unique constraint ".*"
 ALTER TABLE t_99281 DROP COLUMN k, ADD UNIQUE WITHOUT INDEX (j);
 
@@ -3229,7 +3396,7 @@ ALTER TABLE t_99281 ADD COLUMN p INT DEFAULT unique_rowid(), ADD FOREIGN KEY (j)
 
 # The following statement is not supported using the legacy schema changer.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement error pq: foreign key violation: "t_99281" row j=0, i=[0-1] has no match in "t_99281_other"
 ALTER TABLE t_99281 ALTER PRIMARY KEY USING COLUMNS (k), ADD FOREIGN KEY (j) REFERENCES t_99281_other;
 
@@ -3263,3 +3430,74 @@ t_99764  CREATE TABLE public.t_99764 (
              i INT8 NOT NULL,
              CONSTRAINT t_99764_pkey PRIMARY KEY (i ASC)
          )
+
+# Validate that DROP COLUMN CASCADE generates the proper error if we attempt
+# to drop a key column
+subtest alter_table_drop_cascade_with_key
+
+statement ok
+create table t_drop_cascade_with_key(n int primary key, k int);
+
+statement ok
+alter table t_drop_cascade_with_key add column j int as (n) stored null;
+
+statement ok
+set sql_safe_updates=false
+
+statement error pgcode 42P10 column "n" is referenced by.*
+alter table t_drop_cascade_with_key drop column n cascade;
+
+subtest end
+
+# This subtest ensures that if a schema change requires dropping an index,
+# primary or secondary, and that index is referenced in a UDF body or a view
+# query via index hinting, then we disallow such schema changes.
+subtest 108974
+
+statement ok
+CREATE TABLE t_108974_f(i INT PRIMARY KEY, j INT NOT NULL, k INT, INDEX (i,j));
+INSERT INTO t_108974_f SELECT p,p+1,p+2 FROM generate_series(1,100) AS tmp(p);
+CREATE TABLE t_108974_v(i INT PRIMARY KEY, j INT NOT NULL, k INT, INDEX (i,j));
+INSERT INTO t_108974_v SELECT p,p+1,p+2 FROM generate_series(1,100) AS tmp(p);
+CREATE FUNCTION f_108974() RETURNS RECORD LANGUAGE SQL AS
+$$
+SELECT i, j FROM t_108974_f;
+SELECT i, j FROM t_108974_f@t_108974_f_pkey;
+SELECT i, j FROM t_108974_f@t_108974_f_i_j_idx;
+SELECT i, j FROM t_108974_f@[0];
+SELECT i, j FROM t_108974_f@[1];
+SELECT i, j FROM t_108974_f@[2];
+$$;
+CREATE VIEW v_108974 AS SELECT i, j FROM t_108974_v@t_108974_v_pkey;
+SET sql_safe_updates = false;
+
+statement error pgcode 2BP01 pq: cannot drop index "t_108974_f_i_j_idx" because function "f_108974" depends on it
+DROP INDEX t_108974_f@t_108974_f_i_j_idx;
+
+statement error pgcode 2BP01 pq: cannot drop index "t_108974_f_pkey" because function "f_108974" depends on it
+ALTER TABLE t_108974_f ALTER PRIMARY KEY USING COLUMNS (j);
+
+statement error pgcode 2BP01 pq: cannot drop index "t_108974_v_pkey" because view "v_108974" depends on it
+ALTER TABLE t_108974_v ALTER PRIMARY KEY USING COLUMNS (j);
+
+statement error pgcode 2BP01 pq: cannot drop index "t_108974_f_pkey" because function "f_108974" depends on it
+ALTER TABLE t_108974_f ADD COLUMN p INT DEFAULT 30;
+
+statement error pgcode 2BP01 pq: cannot drop index "t_108974_v_pkey" because view "v_108974" depends on it
+ALTER TABLE t_108974_v ADD COLUMN p INT DEFAULT 30;
+
+statement error pgcode 2BP01 pq: cannot drop index "t_108974_f_pkey" because function "f_108974" depends on it
+ALTER TABLE t_108974_f DROP COLUMN k;
+
+statement error pgcode 2BP01 pq: cannot drop index "t_108974_v_pkey" because view "v_108974" depends on it
+ALTER TABLE t_108974_v DROP COLUMN k;
+
+subtest end
+
+# Regression test for https://github.com/cockroachdb/cockroach/issues/110629.
+# Subqueries are not allowed in storage parameters.
+statement ok
+CREATE TABLE t_110629 (a INT PRIMARY KEY);
+
+statement error subqueries are not allowed in table storage parameters
+ALTER TABLE t SET ( 'string' = EXISTS ( TABLE error ) );

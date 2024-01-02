@@ -18,11 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
 
-const supportedKnexTag = "2.0.0"
+// WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
+// This is used by docs automation to produce a list of supported versions for ORM's.
+const supportedKnexTag = "2.5.1"
 
 // This test runs one of knex's test suite against a single cockroach
 // node.
@@ -38,8 +41,9 @@ func registerKnex(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		startOpts := option.DefaultStartOptsInMemory()
+		startOpts.RoachprodOpts.SQLPort = config.DefaultSQLPort
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		require.NoError(t, err)
@@ -57,25 +61,39 @@ func registerKnex(r registry.Registry) {
 		)
 		require.NoError(t, err)
 
-		err = repeatRunE(
-			ctx,
-			t,
-			c,
-			node,
-			"add nodesource repository",
-			`sudo apt install ca-certificates && curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -`,
+		// In case we are running into a state where machines are being reused, we first check to see if we
+		// can use npm to reduce the potential of trying to add another nodesource key
+		// (preventing gpg: dearmoring failed: File exists) errors.
+		err = c.RunE(
+			ctx, node, `sudo npm i -g npm`,
 		)
-		require.NoError(t, err)
 
-		err = repeatRunE(
-			ctx, t, c, node, "install nodejs and npm", `sudo apt-get -qq install nodejs`,
-		)
-		require.NoError(t, err)
+		if err != nil {
+			err = repeatRunE(
+				ctx,
+				t,
+				c,
+				node,
+				"add nodesource key and deb repository",
+				`
+sudo apt-get update && \
+sudo apt-get install -y ca-certificates curl gnupg && \
+sudo mkdir -p /etc/apt/keyrings && \
+curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --batch --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list`,
+			)
+			require.NoError(t, err)
 
-		err = repeatRunE(
-			ctx, t, c, node, "update npm", `sudo npm i -g npm`,
-		)
-		require.NoError(t, err)
+			err = repeatRunE(
+				ctx, t, c, node, "install nodejs and npm", `sudo apt-get update && sudo apt-get -qq install nodejs`,
+			)
+			require.NoError(t, err)
+
+			err = repeatRunE(
+				ctx, t, c, node, "update npm", `sudo npm i -g npm`,
+			)
+			require.NoError(t, err)
+		}
 
 		err = repeatRunE(
 			ctx, t, c, node, "install mocha", `sudo npm i -g mocha`,
@@ -127,12 +145,13 @@ func registerKnex(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:       "knex",
-		Owner:      registry.OwnerSQLFoundations,
-		Cluster:    r.MakeClusterSpec(1),
-		Leases:     registry.MetamorphicLeases,
-		NativeLibs: registry.LibGEOS,
-		Tags:       registry.Tags(`default`, `orm`),
+		Name:             "knex",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		NativeLibs:       registry.LibGEOS,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.ORM),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKnex(ctx, t, c)
 		},

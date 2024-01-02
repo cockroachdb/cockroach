@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/redact"
 )
@@ -90,7 +91,7 @@ type orchestratedServer interface {
 	// shutdownRequested returns the shutdown request channel,
 	// which is triggered when the server encounters an internal
 	// condition or receives an external RPC that requires it to shut down.
-	shutdownRequested() <-chan ShutdownRequest
+	shutdownRequested() <-chan serverctl.ShutdownRequest
 
 	// gracefulDrain drains the server. It should be called repeatedly
 	// until the first value reaches zero.

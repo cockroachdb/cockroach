@@ -132,7 +132,7 @@ SELECT * FROM [
 │
 └── • lookup join
     │ table: t@t_lower_c_a_plus_b_idx
-    │ equality: (n, m) = (crdb_internal_idx_expr_1,crdb_internal_idx_expr)
+    │ equality: (n, m) = (crdb_internal_idx_expr_1, crdb_internal_idx_expr)
     │
     └── • scan
           missing stats

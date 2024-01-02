@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -88,8 +89,25 @@ var rng struct {
 // strconv.ParseBool then metamorphic testing will not be enabled.
 const DisableMetamorphicEnvVar = "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING"
 
+// Returns true iff the current process is eligible to enable metamorphic
+// variables. When run under Bazel, checking if we are in the Go test wrapper
+// ensures that metamorphic variables are not initialized and logged twice
+// from both the wrapper and the main test process, as both will perform
+// initialization of the test module and its dependencies.
+func metamorphicEligible() bool {
+	if !buildutil.CrdbTestBuild {
+		return false
+	}
+
+	if bazel.InTestWrapper() {
+		return false
+	}
+
+	return true
+}
+
 func init() {
-	if buildutil.CrdbTestBuild {
+	if metamorphicEligible() {
 		if !disableMetamorphicTesting {
 			rng.r, _ = randutil.NewTestRand()
 			metamorphicBuild = rng.r.Float64() < metamorphicBuildProbability
@@ -123,16 +141,30 @@ func ConstantWithMetamorphicTestRange(name string, defaultValue, min, max int) i
 //
 // The given name is used for logging.
 func ConstantWithMetamorphicTestBool(name string, defaultValue bool) bool {
+	return constantWithMetamorphicTestBoolInternal(name, defaultValue, true /* doLog */)
+}
+
+func constantWithMetamorphicTestBoolInternal(name string, defaultValue bool, doLog bool) bool {
 	if metamorphicBuild {
 		rng.Lock()
 		defer rng.Unlock()
 		if rng.r.Float64() < metamorphicBoolProbability {
 			ret := !defaultValue
-			logMetamorphicValue(name, ret)
+			if doLog {
+				logMetamorphicValue(name, ret)
+			}
 			return ret
 		}
 	}
 	return defaultValue
+}
+
+// ConstantWithMetamorphicTestBoolWithoutLogging is like ConstantWithMetamorphicTestBool
+// except it does not log the value. This is necessary to work around this issue:
+// https://github.com/cockroachdb/cockroach/issues/106667
+// TODO(test-eng): Remove this variant when the issue above is addressed.
+func ConstantWithMetamorphicTestBoolWithoutLogging(name string, defaultValue bool) bool {
+	return constantWithMetamorphicTestBoolInternal(name, defaultValue, false /* doLog */)
 }
 
 // ConstantWithMetamorphicTestChoice is like ConstantWithMetamorphicTestValue except

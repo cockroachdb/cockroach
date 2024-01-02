@@ -11,6 +11,7 @@ package spanconfigsqltranslatorccl
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -78,44 +80,69 @@ import (
 //   - "release" [record-id=<int>]
 //     Releases the protected timestamp record with id.
 func TestDataDriven(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+	t.Cleanup(leaktest.AfterTest(t))
+
+	skip.UnderRace(t, "likely to time out")
+
+	scope := log.Scope(t)
+	t.Cleanup(func() {
+		scope.Close(t)
+	})
 
 	ctx := context.Background()
-
-	gcWaiter := sync.NewCond(&syncutil.Mutex{})
-	allowGC := true
-	gcTestingKnobs := &sql.GCJobTestingKnobs{
-		RunBeforeResume: func(_ jobspb.JobID) error {
-			gcWaiter.L.Lock()
-			for !allowGC {
-				gcWaiter.Wait()
-			}
-			gcWaiter.L.Unlock()
-			return nil
-		},
-		SkipWaitingForMVCCGC: true,
-	}
-	scKnobs := &spanconfig.TestingKnobs{
-		// Instead of relying on the GC job to wait out TTLs and clear out
-		// descriptors, let's simply exclude dropped tables to simulate
-		// descriptors no longer existing. See comment on
-		// ExcludeDroppedDescriptorsFromLookup for more details.
-		ExcludeDroppedDescriptorsFromLookup: true,
-		// We run the reconciler manually in this test (through the span config
-		// test cluster).
-		ManagerDisableJobCreation: true,
-	}
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				// Test fails when run within a tenant. More investigation
-				// is required. Tracked with #76378.
-				DefaultTestTenant: base.TestTenantDisabled,
+		t.Parallel() // SAFE FOR TESTING
+		gcWaiter := sync.NewCond(&syncutil.Mutex{})
+		allowGC := true
+		gcTestingKnobs := &sql.GCJobTestingKnobs{
+			RunBeforeResume: func(_ jobspb.JobID) error {
+				gcWaiter.L.Lock()
+				for !allowGC {
+					gcWaiter.Wait()
+				}
+				gcWaiter.L.Unlock()
+				return nil
+			},
+			SkipWaitingForMVCCGC: true,
+		}
+		scKnobs := &spanconfig.TestingKnobs{
+			// Instead of relying on the GC job to wait out TTLs and clear out
+			// descriptors, let's simply exclude dropped tables to simulate
+			// descriptors no longer existing. See comment on
+			// ExcludeDroppedDescriptorsFromLookup for more details.
+			ExcludeDroppedDescriptorsFromLookup: true,
+			// We run the reconciler manually in this test (through the span config
+			// test cluster).
+			ManagerDisableJobCreation: true,
+		}
+		sqlExecutorKnobs := &sql.ExecutorTestingKnobs{
+			UseTransactionalDescIDGenerator: true,
+		}
+		tsArgs := func(attr string) base.TestServerArgs {
+			return base.TestServerArgs{
 				Knobs: base.TestingKnobs{
-					GCJob:      gcTestingKnobs,
-					SpanConfig: scKnobs,
+					GCJob:       gcTestingKnobs,
+					SpanConfig:  scKnobs,
+					SQLExecutor: sqlExecutorKnobs,
 				},
+				StoreSpecs: []base.StoreSpec{
+					{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{attr}}},
+				},
+			}
+		}
+		// Use 1 node by default to make tests run faster.
+		nodes := 1
+		if strings.Contains(path, "3node") {
+			nodes = 3
+		}
+		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			},
+			ServerArgsPerNode: map[int]base.TestServerArgs{
+				0: tsArgs("n1"),
+				1: tsArgs("n2"),
+				2: tsArgs("n3"),
 			},
 		})
 		defer tc.Stopper().Stop(ctx)
@@ -127,14 +154,14 @@ func TestDataDriven(t *testing.T) {
 		if strings.Contains(path, "tenant") {
 			tenantID := roachpb.MustMakeTenantID(10)
 			tenant = spanConfigTestCluster.InitializeTenant(ctx, tenantID)
-			spanConfigTestCluster.AllowSecondaryTenantToSetZoneConfigurations(t, tenantID)
 			spanConfigTestCluster.EnsureTenantCanSetZoneConfigurationsOrFatal(t, tenant)
 		} else {
 			tenant = spanConfigTestCluster.InitializeTenant(ctx, roachpb.SystemTenantID)
 		}
 		execCfg := tenant.ExecCfg()
 
-		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+		var f func(t *testing.T, d *datadriven.TestData) string
+		f = func(t *testing.T, d *datadriven.TestData) string {
 			var generateSystemSpanConfigs bool
 			var descIDs []descpb.ID
 			switch d.Cmd {
@@ -286,11 +313,26 @@ func TestDataDriven(t *testing.T) {
 				allowGC = true
 				gcWaiter.Signal()
 				gcWaiter.L.Unlock()
+
+			case "repartition":
+				var fromRelativePath, toRelativePath string
+				d.ScanArgs(t, "from", &fromRelativePath)
+				d.ScanArgs(t, "to", &toRelativePath)
+				parentDir := filepath.Dir(path)
+
+				fromAbsolutePath := filepath.Join(parentDir, fromRelativePath)
+				datadriven.RunTest(t, fromAbsolutePath, f)
+
+				toAbsolutePath := filepath.Join(parentDir, toRelativePath)
+				datadriven.RunTest(t, toAbsolutePath, f)
+
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 			}
 
 			return ""
-		})
+		}
+
+		datadriven.RunTest(t, path, f)
 	})
 }

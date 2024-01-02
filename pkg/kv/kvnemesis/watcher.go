@@ -42,7 +42,7 @@ type Watcher struct {
 	mu  struct {
 		syncutil.Mutex
 		kvs             *Engine
-		frontier        *span.Frontier
+		frontier        span.Frontier
 		frontierWaiters map[hlc.Timestamp][]chan error
 	}
 	cancel func()
@@ -124,6 +124,8 @@ func (w *Watcher) Finish() *Engine {
 		// Finish was already called.
 		return w.mu.kvs
 	}
+	defer w.mu.frontier.Release()
+
 	w.cancel()
 	w.cancel = nil
 	// Only WaitForFrontier cares about errors.

@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
@@ -9,7 +8,7 @@ go_library(
         "errors.go",
         "expr_walker.go",
         "fetcher.go",
-        "fk_spans.go",
+        "fk_uniq_spans.go",
         "helper.go",
         "inserter.go",
         "kv_batch_fetcher.go",
@@ -102,7 +101,6 @@ go_test(
         "fetcher_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":row"],
     deps = [
         "//pkg/base",
@@ -133,7 +131,6 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/storage",
         "//pkg/testutils",
-        "//pkg/testutils/keysutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/encoding",
@@ -152,5 +149,3 @@ disallowed_imports_test(
     "row",
     ["//pkg/sql/execinfra"],
 )
-
-get_x_data(name = "get_x_data")

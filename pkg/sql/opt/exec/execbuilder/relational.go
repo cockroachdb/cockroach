@@ -17,6 +17,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
@@ -290,6 +292,12 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.DeleteExpr:
 		ep, err = b.buildDelete(t)
 
+	case *memo.LockExpr:
+		ep, err = b.buildLock(t)
+
+	case *memo.BarrierExpr:
+		ep, err = b.buildBarrier(t)
+
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
 
@@ -307,6 +315,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	case *memo.RecursiveCTEExpr:
 		ep, err = b.buildRecursiveCTE(t)
+
+	case *memo.CallExpr:
+		ep, err = b.buildCall(t)
 
 	case *memo.ExplainExpr:
 		ep, err = b.buildExplain(t)
@@ -620,6 +631,7 @@ func (b *Builder) scanParams(
 	}
 
 	locking, err := b.buildLocking(scan.Locking)
+
 	if err != nil {
 		return exec.ScanParams{}, opt.ColMap{}, err
 	}
@@ -1204,7 +1216,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 				// Enhance the error with the EXPLAIN (OPT, VERBOSE) of the inner
 				// expression.
 				fmtFlags := memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes |
-					memo.ExprFmtHideNotVisibleIndexInfo
+					memo.ExprFmtHideNotVisibleIndexInfo | memo.ExprFmtHideFastPathChecks
 				explainOpt := o.FormatExpr(newRightSide, fmtFlags, false /* redactableValues */)
 				err = errors.WithDetailf(err, "newRightSide:\n%s", explainOpt)
 			}
@@ -2311,7 +2323,8 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 	if lookupTable.IsGlobalTable() || join.LocalityOptimized || join.ChildOfLocalityOptimizedSearch {
 		// HomeRegion() does not automatically fill in the home region of a global
 		// table as the gateway region, so let's manually set it here.
-		// Locality optimized joins are considered local in phase 1.
+		// Locality optimized joins are considered local for static
+		// enforce_home_region checks.
 		homeRegion = gatewayRegion
 	} else {
 		homeRegion, _ = lookupTable.HomeRegion()
@@ -2343,7 +2356,19 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 			}
 		}
 	}
-
+	// If the specialized methods of setting the home region above don't succeed,
+	// see if `GetLookupJoinLookupTableDistribution` can find the lookup table's
+	// distribution.
+	// TODO(msirek): Check if the specialized methods above are even needed any
+	// more.
+	if homeRegion == "" && b.optimizer != nil && b.optimizer.Coster() != nil {
+		_, physicalDistribution := distribution.BuildLookupJoinLookupTableDistribution(
+			b.ctx, b.evalCtx, join, join.RequiredPhysical(), b.optimizer.MaybeGetBestCostRelation,
+		)
+		if len(physicalDistribution.Regions) == 1 {
+			homeRegion = physicalDistribution.Regions[0]
+		}
+	}
 	if homeRegion != "" {
 		if foundLocalRegion {
 			if queryHasHomeRegion {
@@ -2892,15 +2917,28 @@ func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
 		// Raise error if row-level locking is part of a read-only transaction.
 		if b.evalCtx.TxnReadOnly {
 			return opt.Locking{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
-				"cannot execute %s in a read-only transaction", locking.Strength.String(),
+				"cannot execute SELECT %s in a read-only transaction", locking.Strength.String(),
 			)
 		}
-		if locking.Durability == tree.LockDurabilityGuaranteed &&
-			b.evalCtx.TxnIsoLevel != isolation.Serializable {
+		if locking.Form == tree.LockPredicate {
 			return opt.Locking{}, unimplemented.NewWithIssuef(
-				100144, "cannot execute SELECT FOR UPDATE statements under %s isolation",
-				b.evalCtx.TxnIsoLevel,
+				110873, "explicit unique checks are not yet supported under read committed isolation",
 			)
+		}
+		// Check if we can actually use shared locks here, or we need to use
+		// non-locking reads instead.
+		if locking.Strength == tree.ForShare || locking.Strength == tree.ForKeyShare {
+			// Shared locks weren't a thing prior to v23.2, so we must use non-locking
+			// reads.
+			if !b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2) ||
+				// And in >= v23.2, their locking behavior for serializable transactions
+				// is dictated by session setting.
+				(b.evalCtx.TxnIsoLevel == isolation.Serializable &&
+					!b.evalCtx.SessionData().SharedLockingForSerializable) {
+				// Reset locking information as we've determined we're going to be
+				// performing a non-locking read.
+				return opt.Locking{}, nil // early return; do not set b.ContainsNonDefaultKeyLocking
+			}
 		}
 		b.ContainsNonDefaultKeyLocking = true
 	}
@@ -3098,6 +3136,65 @@ func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, er
 		return execPlan{}, err
 	}
 
+	return ep, nil
+}
+
+func (b *Builder) buildCall(c *memo.CallExpr) (execPlan, error) {
+	udf := c.Proc.(*memo.UDFCallExpr)
+	if udf.Def == nil {
+		return execPlan{}, errors.AssertionFailedf("expected non-nil UDF definition")
+	}
+
+	// Build the argument expressions.
+	var err error
+	var args tree.TypedExprs
+	ctx := buildScalarCtx{}
+	if len(udf.Args) > 0 {
+		args = make(tree.TypedExprs, len(udf.Args))
+		for i := range udf.Args {
+			args[i], err = b.buildScalar(&ctx, udf.Args[i])
+			if err != nil {
+				return execPlan{}, err
+			}
+		}
+	}
+
+	for _, s := range udf.Def.Body {
+		if s.Relational().CanMutate {
+			b.ContainsMutation = true
+			break
+		}
+	}
+
+	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
+	planGen := b.buildRoutinePlanGenerator(
+		udf.Def.Params,
+		udf.Def.Body,
+		udf.Def.BodyProps,
+		false, /* allowOuterWithRefs */
+		nil,   /* wrapRootExpr */
+	)
+
+	r := tree.NewTypedRoutineExpr(
+		udf.Def.Name,
+		args,
+		planGen,
+		udf.Typ,
+		true, /* enableStepping */
+		udf.Def.CalledOnNullInput,
+		udf.Def.MultiColDataSource,
+		udf.Def.SetReturning,
+		udf.TailCall,
+		true, /* procedure */
+		nil,  /* blockState */
+		nil,  /* cursorDeclaration */
+	)
+
+	var ep execPlan
+	ep.root, err = b.factory.ConstructCall(r)
+	if err != nil {
+		return execPlan{}, err
+	}
 	return ep, nil
 }
 
@@ -3401,7 +3498,7 @@ func (b *Builder) buildSequenceSelect(seqSel *memo.SequenceSelectExpr) (execPlan
 func (b *Builder) applySaveTable(
 	input execPlan, e memo.RelExpr, saveTableName string,
 ) (execPlan, error) {
-	name := tree.NewTableNameWithSchema(tree.Name(opt.SaveTablesDatabase), tree.PublicSchemaName, tree.Name(saveTableName))
+	name := tree.NewTableNameWithSchema(tree.Name(opt.SaveTablesDatabase), catconstants.PublicSchemaName, tree.Name(saveTableName))
 
 	// Ensure that the column names are unique and match the names used by the
 	// opttester.
@@ -3433,6 +3530,12 @@ func (b *Builder) buildOpaque(opaque *memo.OpaqueRelPrivate) (execPlan, error) {
 	}
 
 	return ep, nil
+}
+
+func (b *Builder) buildBarrier(barrier *memo.BarrierExpr) (execPlan, error) {
+	// BarrierExpr is only used as an optimization barrier. In the execution plan,
+	// it is replaced with its input.
+	return b.buildRelational(barrier.Input)
 }
 
 // needProjection figures out what projection is needed on top of the input plan
@@ -3525,6 +3628,7 @@ func (b *Builder) getEnvData() (exec.ExplainEnvData, error) {
 		func(ds cat.DataSource) (cat.DataSourceName, error) {
 			return b.catalog.FullyQualifiedName(context.TODO(), ds)
 		},
+		true, /* includeVirtualTables */
 	)
 	return envOpts, err
 }
@@ -3535,7 +3639,8 @@ func (b *Builder) statementTag(expr memo.RelExpr) string {
 	switch expr.Op() {
 	case opt.OpaqueRelOp, opt.OpaqueMutationOp, opt.OpaqueDDLOp:
 		return expr.Private().(*memo.OpaqueRelPrivate).Metadata.String()
-
+	case opt.LockOp:
+		return "SELECT " + expr.Private().(*memo.LockPrivate).Locking.Strength.String()
 	default:
 		return expr.Op().SyntaxTag()
 	}

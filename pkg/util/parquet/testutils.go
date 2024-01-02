@@ -13,8 +13,6 @@ package parquet
 import (
 	"bytes"
 	"fmt"
-	"io"
-	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -31,45 +29,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// NewWriterWithReaderMeta constructs a Writer that writes additional metadata
-// required to use the reader utility functions below.
-func NewWriterWithReaderMeta(
-	sch *SchemaDefinition, sink io.Writer, opts ...Option,
-) (*Writer, error) {
-	opts = append(opts, WithMetadata(MakeReaderMetadata(sch)))
-	return NewWriter(sch, sink, opts...)
-}
-
 // ReadFileAndVerifyDatums asserts that a parquet file's metadata matches the
 // metadata from the writer and its data matches writtenDatums.
+//
+// It returns a ReadDatumsMetadata struct with metadata about the file.
+// This function will assert the number of rows and columns in the metadata
+// match, but the remaining fields are left for the caller to assert.
 func ReadFileAndVerifyDatums(
 	t *testing.T,
 	parquetFile string,
 	expectedNumRows int,
 	expectedNumCols int,
-	writer *Writer,
 	writtenDatums [][]tree.Datum,
-) {
+) ReadDatumsMetadata {
 	meta, readDatums, err := ReadFile(parquetFile)
 
 	require.NoError(t, err)
 	require.Equal(t, expectedNumRows, meta.NumRows)
 	require.Equal(t, expectedNumCols, meta.NumCols)
 
-	expectedNumRowGroups := int(math.Ceil(float64(expectedNumRows) / float64(writer.cfg.maxRowGroupLength)))
-	require.EqualValues(t, expectedNumRowGroups, meta.NumRowGroups)
-
 	for i := 0; i < expectedNumRows; i++ {
 		for j := 0; j < expectedNumCols; j++ {
 			ValidateDatum(t, writtenDatums[i][j], readDatums[i][j])
 		}
 	}
+	return meta
 }
 
 // ReadFile reads a parquet file and returns the contained metadata and datums.
 //
 // To use this function, the Writer must be configured to write CRDB-specific
-// metadata for the reader. See NewWriterWithReaderMeta.
+// metadata for the reader. See NewWriter() and buildutil.CrdbTestBuild.
 //
 // NB: The returned datums may not be hydrated or identical to the ones
 // which were written. See comment on ValidateDatum for more info.
@@ -95,7 +85,7 @@ func ReadFile(parquetFile string) (meta ReadDatumsMetadata, datums [][]tree.Datu
 	if typFamiliesMeta == nil {
 		return ReadDatumsMetadata{}, nil,
 			errors.AssertionFailedf("missing type family metadata. ensure the writer is configured" +
-				" to write reader metadata. see NewWriterWithReaderMeta()")
+				" to write reader metadata. see NewWriter() and buildutil.CrdbTestBuild")
 	}
 	typFamilies, err := deserializeIntArray(*typFamiliesMeta)
 	if err != nil {
@@ -112,13 +102,14 @@ func ReadFile(parquetFile string) (meta ReadDatumsMetadata, datums [][]tree.Datu
 	if typOidsMeta == nil {
 		return ReadDatumsMetadata{}, nil,
 			errors.AssertionFailedf("missing type oid metadata. ensure the writer is configured" +
-				" to write reader metadata. see NewWriterWithReaderMeta()")
+				" to write reader metadata. see NewWriter() and buildutil.CrdbTestBuild)")
 	}
 	typOids, err := deserializeIntArray(*typOidsMeta)
 	if err != nil {
 		return ReadDatumsMetadata{}, nil, err
 	}
 
+	var colNames []string
 	startingRowIdx := 0
 	for rg := 0; rg < reader.NumRowGroups(); rg++ {
 		rgr := reader.RowGroup(rg)
@@ -126,11 +117,18 @@ func ReadFile(parquetFile string) (meta ReadDatumsMetadata, datums [][]tree.Datu
 		for i := int64(0); i < rowsInRowGroup; i++ {
 			readDatums = append(readDatums, make([]tree.Datum, rgr.NumColumns()))
 		}
+		if rg == 0 {
+			colNames = make([]string, 0, rgr.NumColumns())
+		}
 
 		for colIdx := 0; colIdx < rgr.NumColumns(); colIdx++ {
 			col, err := rgr.Column(colIdx)
 			if err != nil {
 				return ReadDatumsMetadata{}, nil, err
+			}
+
+			if rg == 0 {
+				colNames = append(colNames, col.Descriptor().Name())
 			}
 
 			dec, err := decoderFromFamilyAndType(oid.Oid(typOids[colIdx]), types.Family(typFamilies[colIdx]))
@@ -154,7 +152,7 @@ func ReadFile(parquetFile string) (meta ReadDatumsMetadata, datums [][]tree.Datu
 	}
 
 	for i := 0; i < len(readDatums); i++ {
-		readDatums[i] = squashTuples(readDatums[i], tupleColumns)
+		readDatums[i] = squashTuples(readDatums[i], tupleColumns, colNames)
 	}
 
 	return makeDatumMeta(reader, readDatums), readDatums, nil
@@ -384,6 +382,7 @@ func ValidateDatum(t *testing.T, expected tree.Datum, actual tree.Datum) {
 	// we should unwrap them. We unwrap at this stage as opposed to when
 	// generating datums to test that the writer can handle wrapped datums.
 	expected = unwrapDatum(expected)
+	actual = unwrapDatum(actual)
 
 	switch expected.ResolvedType().Family() {
 	case types.JsonFamily:
@@ -411,11 +410,14 @@ func ValidateDatum(t *testing.T, expected tree.Datum, actual tree.Datum) {
 			ValidateDatum(t, arr1[i], arr2[i])
 		}
 	case types.TupleFamily:
-		arr1 := expected.(*tree.DTuple).D
-		arr2 := actual.(*tree.DTuple).D
-		require.Equal(t, len(arr1), len(arr2))
-		for i := 0; i < len(arr1); i++ {
-			ValidateDatum(t, arr1[i], arr2[i])
+		t1 := expected.(*tree.DTuple)
+		t2 := actual.(*tree.DTuple)
+		require.Equal(t, len(t1.D), len(t2.D))
+		for i := 0; i < len(t1.D); i++ {
+			ValidateDatum(t, t1.D[i], t2.D[i])
+		}
+		if t1.ResolvedType().TupleLabels() != nil {
+			require.Equal(t, t1.ResolvedType().TupleLabels(), t2.ResolvedType().TupleLabels())
 		}
 	case types.EnumFamily:
 		require.Equal(t, expected.(*tree.DEnum).LogicalRep, actual.(*tree.DEnum).LogicalRep)
@@ -488,6 +490,13 @@ func serializeIntArray[I int | int32 | uint32](ints []I) string {
 // 32]" to an array of ints.
 func deserializeIntArray(s string) ([]int, error) {
 	vals := strings.Split(strings.Trim(s, "[]"), " ")
+
+	// If there are no values, strings.Split returns an array of length 1
+	// containing the empty string.
+	if len(vals) == 0 || (len(vals) == 1 && vals[0] == "") {
+		return []int{}, nil
+	}
+
 	result := make([]int, 0, len(vals))
 	for _, val := range vals {
 		intVal, err := strconv.Atoi(val)
@@ -544,14 +553,25 @@ type dNullTupleType struct {
 }
 
 // squashTuples takes an array of datums and merges groups of adjacent datums
-// into tuples using the passed intervals. Example:
+// into tuples using the supplied intervals. The provided column names will be
+// used as tuple labels.
 //
-// Input: ["0", "1", "2", "3", "4", "5", "6"] [[0, 1], [3, 3], [4, 6]]
-// Output: [("0", "1"), "2", ("3"), ("4", "5", "6")]
+// For example:
+//
+// Input:
+//
+//	datumRow = ["0", "1", "2", "3", "4", "5", "6"]
+//	tupleColIndexes = [[0, 1], [3, 3], [4, 6]]
+//	colNames = ["a", "b", "c", "d", "e", "f", "g"]
+//
+// Output:
+//
+//	[(a: "0", b: "1"), "2", (d: "3"), (e: "4", f: "5", g: "6")]
 //
 // Behavior is undefined if the intervals are not sorted, not disjoint,
-// not ascending, or out of bounds.
-func squashTuples(datumRow []tree.Datum, tupleColIndexes [][]int) []tree.Datum {
+// not ascending, or out of bounds. The number of elements in datumRow
+// should be equal to the number of labels in colNames.
+func squashTuples(datumRow []tree.Datum, tupleColIndexes [][]int, colNames []string) []tree.Datum {
 	if len(tupleColIndexes) == 0 {
 		return datumRow
 	}
@@ -559,6 +579,7 @@ func squashTuples(datumRow []tree.Datum, tupleColIndexes [][]int) []tree.Datum {
 	var updatedDatums []tree.Datum
 	var currentTupleDatums []tree.Datum
 	var currentTupleTypes []*types.T
+	var currentTupleLabels []string
 	for i, d := range datumRow {
 		if tupleIdx < len(tupleColIndexes) {
 			tupleUpperIdx := tupleColIndexes[tupleIdx][1]
@@ -567,18 +588,19 @@ func squashTuples(datumRow []tree.Datum, tupleColIndexes [][]int) []tree.Datum {
 			if i >= tupleLowerIdx && i <= tupleUpperIdx {
 				currentTupleDatums = append(currentTupleDatums, d)
 				currentTupleTypes = append(currentTupleTypes, d.ResolvedType())
-
+				currentTupleLabels = append(currentTupleLabels, colNames[i])
 				if i == tupleUpperIdx {
 					// Check for marker that indicates the entire tuple is NULL.
 					if currentTupleDatums[0] == dNullTuple {
 						updatedDatums = append(updatedDatums, tree.DNull)
 					} else {
-						tupleDatum := tree.MakeDTuple(types.MakeTuple(currentTupleTypes), currentTupleDatums...)
+						tupleDatum := tree.MakeDTuple(types.MakeLabeledTuple(currentTupleTypes, currentTupleLabels), currentTupleDatums...)
 						updatedDatums = append(updatedDatums, &tupleDatum)
 					}
 
 					currentTupleTypes = []*types.T{}
 					currentTupleDatums = []tree.Datum{}
+					currentTupleLabels = []string{}
 
 					tupleIdx += 1
 				}

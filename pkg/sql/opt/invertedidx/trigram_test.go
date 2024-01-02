@@ -114,7 +114,8 @@ func TestTryFilterTrigram(t *testing.T) {
 			nil, /* optionalFilters */
 			tab,
 			md.Table(tab).Index(trigramOrd),
-			nil, /* computedColumns */
+			nil,       /* computedColumns */
+			func() {}, /* checkCancellation */
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)

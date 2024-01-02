@@ -16,11 +16,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
@@ -29,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,7 +67,9 @@ func TestRangeFeed(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	host, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
+	host := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly},
+	)
 	defer host.Stopper().Stop(ctx)
 
 	tenant, tenantSQL := serverutils.StartTenant(t, host, base.TestTenantArgs{
@@ -92,7 +91,7 @@ func TestRangeFeed(t *testing.T) {
 
 		require.NoError(t, storage.generateAvailableInstanceRows(ctx, [][]byte{enum.One}, tenant.Clock().Now().Add(int64(time.Minute), 0)))
 
-		feed, err := storage.newInstanceCache(ctx, tenant.Stopper())
+		feed, err := storage.newInstanceCache(ctx)
 		require.NoError(t, err)
 		require.NotNil(t, feed)
 		defer feed.Close()
@@ -105,7 +104,7 @@ func TestRangeFeed(t *testing.T) {
 
 	t.Run("auth_error", func(t *testing.T) {
 		storage := newStorage(t, keys.SystemSQLCodec)
-		_, err := storage.newInstanceCache(ctx, tenant.Stopper())
+		_, err := storage.newInstanceCache(ctx)
 		require.True(t, grpcutil.IsAuthError(err), "expected %+v to be an auth error", err)
 	})
 
@@ -115,146 +114,8 @@ func TestRangeFeed(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		cancel()
 
-		_, err := storage.newInstanceCache(ctx, tenant.Stopper())
+		_, err := storage.newInstanceCache(ctx)
 		require.Error(t, err)
 		require.ErrorIs(t, err, ctx.Err())
-	})
-}
-
-func TestMigrationCache(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	makeVersion := func(key clusterversion.Key) clusterversion.ClusterVersion {
-		return clusterversion.ClusterVersion{
-			Version: clusterversion.ByKey(key),
-		}
-	}
-
-	makeCache := func(id int) instanceCache {
-		return &singletonInstanceFeed{instance: instancerow{
-			instanceID: base.SQLInstanceID(id),
-		}}
-	}
-
-	requireCache := func(t *testing.T, expectedID int, cache instanceCache) {
-		_, ok := cache.getInstance(base.SQLInstanceID(expectedID))
-		require.True(t, ok, "expected %v to contain instance id %d", cache, expectedID)
-	}
-
-	waitForIdle := func(t *testing.T, s *stop.Stopper) {
-		require.Eventually(
-			t,
-			func() bool {
-				return s.NumTasks() == 0
-			},
-			30*time.Second,
-			10*time.Millisecond,
-			"waiting for stopper to have no active tasks",
-		)
-	}
-
-	t.Run("setting_changed_before_initialization", func(t *testing.T) {
-		stopper := stop.NewStopper()
-		defer stopper.Stop(ctx)
-
-		settings := cluster.MakeClusterSettings()
-		require.NoError(t, settings.Version.SetActiveVersion(ctx, makeVersion(clusterversion.V23_1_SystemRbrReadNew)))
-
-		oldCache := 1
-		newCache := 2
-
-		cache, err := newMigrationCache(
-			context.Background(),
-			stopper,
-			settings,
-			func(ctx context.Context) (instanceCache, error) {
-				return makeCache(oldCache), nil
-			},
-			func(ctx context.Context) (instanceCache, error) {
-				return makeCache(newCache), nil
-			})
-
-		require.NoError(t, err)
-		requireCache(t, newCache, cache)
-	})
-
-	t.Run("setting_changed_after_initialization", func(t *testing.T) {
-		stopper := stop.NewStopper()
-		defer stopper.Stop(ctx)
-
-		settings := cluster.MakeClusterSettings()
-		require.NoError(t, settings.Version.SetActiveVersion(ctx, makeVersion(clusterversion.V22_2)))
-
-		oldCache := 1
-		newCache := 2
-
-		cache, err := newMigrationCache(
-			context.Background(),
-			stopper,
-			settings,
-			func(ctx context.Context) (instanceCache, error) {
-				return makeCache(oldCache), nil
-			},
-			func(ctx context.Context) (instanceCache, error) {
-				return makeCache(newCache), nil
-			})
-
-		require.NoError(t, err)
-		waitForIdle(t, stopper)
-		requireCache(t, oldCache, cache)
-
-		// At this point we should still be using the old cache
-		require.NoError(t, settings.Version.SetActiveVersion(ctx, makeVersion(clusterversion.V23_1_SystemRbrDualWrite)))
-		waitForIdle(t, stopper)
-		requireCache(t, oldCache, cache)
-
-		// At this point we should be using the new cache
-		require.NoError(t, settings.Version.SetActiveVersion(ctx, makeVersion(clusterversion.V23_1_SystemRbrReadNew)))
-		time.Sleep(time.Second)
-		waitForIdle(t, stopper)
-		requireCache(t, newCache, cache)
-	})
-
-	t.Run("setting_changed_during_initialization", func(t *testing.T) {
-		stopper := stop.NewStopper()
-		defer stopper.Stop(ctx)
-
-		start := make(chan struct{})
-		block := make(chan struct{})
-
-		settings := cluster.MakeClusterSettings()
-		require.NoError(t, settings.Version.SetActiveVersion(ctx, makeVersion(clusterversion.V22_2)))
-
-		oldCache := 1
-		newCache := 2
-
-		go func() {
-			<-start
-			require.NoError(t, settings.Version.SetActiveVersion(ctx, makeVersion(clusterversion.V23_1_SystemRbrReadNew)))
-		}()
-
-		cache, err := newMigrationCache(
-			context.Background(),
-			stopper,
-			settings,
-			func(ctx context.Context) (instanceCache, error) {
-				close(start)
-				<-block
-				return makeCache(oldCache), nil
-			},
-			func(ctx context.Context) (instanceCache, error) {
-				return makeCache(newCache), nil
-			})
-
-		require.NoError(t, err)
-		requireCache(t, newCache, cache)
-
-		close(block)
-		waitForIdle(t, stopper)
-
-		requireCache(t, newCache, cache)
 	})
 }

@@ -32,6 +32,16 @@ type provider struct {
 	unimplemented string
 }
 
+func (p *provider) SupportsSpotVMs() bool {
+	return false
+}
+
+func (p *provider) GetPreemptedSpotVMs(
+	l *logger.Logger, vms vm.List, since time.Time,
+) ([]vm.PreemptedVM, error) {
+	return nil, nil
+}
+
 func (p *provider) CreateVolumeSnapshot(
 	l *logger.Logger, volume vm.Volume, vsco vm.VolumeSnapshotCreateOpts,
 ) (vm.VolumeSnapshot, error) {
@@ -71,6 +81,14 @@ func (p *provider) CleanSSH(l *logger.Logger) error {
 
 // ConfigSSH implements vm.Provider and is a no-op.
 func (p *provider) ConfigSSH(l *logger.Logger, zones []string) error {
+	return nil
+}
+
+func (p *provider) AddLabels(l *logger.Logger, vms vm.List, labels map[string]string) error {
+	return nil
+}
+
+func (p *provider) RemoveLabels(l *logger.Logger, vms vm.List, labels []string) error {
 	return nil
 }
 

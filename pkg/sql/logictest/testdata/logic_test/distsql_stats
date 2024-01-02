@@ -32,7 +32,7 @@ query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data WITH DETAILS]
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  …/1/1         {1}       1
+<before:/Table/65>  …/1/1         {1}       1
 …/1/1               …/1/2         {2}       2
 …/1/2               …/1/3         {3}       3
 …/1/3               …/1/4         {4}       4
@@ -89,7 +89,7 @@ s1               {a}           256        4               0           true
 let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's1'
 
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_1
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
@@ -131,7 +131,7 @@ CREATE STATISTICS s2 ON a FROM data
 let $hist_id_2
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's2'
 
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_2
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
@@ -148,7 +148,7 @@ CREATE STATISTICS s3 ON a FROM data
 let $hist_id_3
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's3'
 
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_3
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
@@ -482,7 +482,7 @@ SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE simple]
 WHERE statistics_name = 'default_stat3' AND column_names = '{y}'
 
 # The counts in each bucket should not include null values.
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_3
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
@@ -1084,7 +1084,7 @@ let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE prim]
 WHERE statistics_name = 's' AND column_names = '{a}'
 
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_1
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
@@ -1125,7 +1125,7 @@ let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE sec]
 WHERE statistics_name = 's' AND column_names = '{a}'
 
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_1
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
@@ -1176,7 +1176,7 @@ let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE partial]
 WHERE statistics_name = 's' AND column_names = '{a}'
 
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_1
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
@@ -1293,7 +1293,7 @@ let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE noind]
 WHERE statistics_name = 's' AND column_names = '{a}'
 
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_1
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
@@ -1379,7 +1379,7 @@ let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE geo_table]
 WHERE statistics_name = 's' AND column_names = '{geog}'
 
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_1
 ----
 upper_bound                                                                                 range_rows  distinct_range_rows  equal_rows
@@ -1397,7 +1397,7 @@ let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE geo_table]
 WHERE statistics_name = 's' AND column_names = '{geog}'
 
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_1
 ----
 upper_bound                                                                                 range_rows  distinct_range_rows  equal_rows
@@ -1657,8 +1657,8 @@ ANALYZE system.lease
 statement error pq: cannot create statistics on system.table_statistics
 ANALYZE system.table_statistics
 
-# Collecting stats on system.jobs is disallowed.
-statement error pq: cannot create statistics on system.jobs
+# Collecting stats on system.jobs is allowed.
+statement ok
 ANALYZE system.jobs
 
 # Collecting stats on system.scheduled_jobs is disallowed.
@@ -2109,7 +2109,7 @@ SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE abcd] WHERE statistics_name 
 let $hist_xy_x_partial
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE xy] WHERE statistics_name = 'xy_x_partial';
 
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_abcd_a_partial
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
@@ -2117,14 +2117,14 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 -1           0           0                    1
 0            0           0                    1
 
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_abcd_c_partial
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
 900          0           0                    1
 920          0           0                    2
 
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_xy_x_partial
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
@@ -2156,7 +2156,9 @@ statement ok
 CREATE STATISTICS xy_x_partial_2 ON x FROM xy USING EXTREMES
 
 query TTII colnames
-SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE xy];
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE xy]
+ORDER BY statistics_name
 ----
 statistics_name  partial_predicate                                  row_count  null_count
 xy_x             NULL                                               4          0
@@ -2170,7 +2172,10 @@ let $statistics_id
 SELECT "histogram_id" FROM [SHOW STATISTICS FOR TABLE xy] WHERE "statistics_name" = 'xy_x'
 
 query TTII colnames
-SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE xy] WHERE full_histogram_id = '$statistics_id'
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE xy]
+WHERE full_histogram_id = '$statistics_id'
+ORDER BY statistics_name
 ----
 statistics_name  partial_predicate                                  row_count  null_count
 xy_x_partial     (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
@@ -2211,7 +2216,9 @@ SHOW HISTOGRAM $hist_a_null_stat_partial
 upper_bound  range_rows  distinct_range_rows  equal_rows
 
 query TTII colnames
-SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE a_null];
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE a_null]
+ORDER BY statistics_name
 ----
 statistics_name      partial_predicate                                  row_count  null_count
 a_null_stat          NULL                                               3          1
@@ -2246,7 +2253,7 @@ CREATE STATISTICS sdp ON a FROM d_desc USING EXTREMES;
 let $hist_d_desc
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE d_desc] WHERE statistics_name = 'sdp';
 
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_d_desc
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
@@ -2254,7 +2261,9 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 5            0           0                    1
 
 query TTII colnames
-SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE d_desc];
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE d_desc]
+ORDER BY statistics_name
 ----
 statistics_name  partial_predicate                                  row_count  null_count
 sd               NULL                                               4          0
@@ -2281,7 +2290,9 @@ statement ok
 CREATE STATISTICS sdnp ON a FROM d_desc USING EXTREMES;
 
 query TTII colnames
-SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE d_desc];
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE d_desc]
+ORDER BY statistics_name
 ----
 statistics_name  partial_predicate                                  row_count  null_count
 sdn              NULL                                               8          2
@@ -2322,11 +2333,13 @@ statement ok
 CREATE STATISTICS s_partial ON s FROM s USING EXTREMES;
 
 query TTII colnames
-SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE s];
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE s]
+ORDER BY statistics_name
 ----
 statistics_name  partial_predicate                                          row_count  null_count
-str              NULL                                                       3          0
 s_partial        (s IS NULL) OR ((s < 'c':::STRING) OR (s > 'e':::STRING))  3          0
+str              NULL                                                       3          0
 
 # Verify that inverted index columns return an error.
 statement ok
@@ -2403,9 +2416,78 @@ CREATE STATISTICS s1 ON y FROM t100909;
 let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t100909] WHERE statistics_name = 's1'
 
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_1
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
 'hello'      0           0                    2
 'hi'         0           0                    1
+
+# Test that SHOW STATISTICS displays created_at in the session timezone.
+
+statement ok
+CREATE TABLE t107651 (i INT PRIMARY KEY)
+
+statement ok
+SET TIME ZONE -7
+
+statement ok
+ALTER TABLE t107651 INJECT STATISTICS '[
+    {
+        "avg_size": 0,
+        "columns": [
+            "i"
+        ],
+        "created_at": "2023-09-15 21:00:00.000000",
+        "distinct_count": 0,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 0
+    }
+]'
+
+query TT
+SELECT statistics_name, created FROM
+[SHOW STATISTICS FOR TABLE t107651]
+----
+__auto__  2023-09-15 14:00:00 -0700 -0700
+
+statement ok
+SET TIME ZONE -4
+
+query TT
+SELECT statistics_name, created FROM
+[SHOW STATISTICS FOR TABLE t107651]
+----
+__auto__  2023-09-15 17:00:00 -0400 -0400
+
+# Test that a non-admin can use SHOW STATISTICS.
+
+statement ok
+CREATE TABLE tab_test_privileges (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO tab_test_privileges VALUES (1);
+
+statement ok
+CREATE STATISTICS tab_test_privileges_stat ON a FROM tab_test_privileges;
+
+user testuser
+
+query error testuser has no privileges on relation tab_test_privileges
+SELECT statistics_name, created FROM [SHOW STATISTICS FOR TABLE tab_test_privileges]
+
+user root
+
+statement ok
+GRANT SELECT ON tab_test_privileges TO testuser
+
+user testuser
+
+query T
+SELECT statistics_name FROM [SHOW STATISTICS FOR TABLE tab_test_privileges]
+----
+tab_test_privileges_stat
+
+user root

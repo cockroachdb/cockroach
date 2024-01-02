@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -61,7 +60,7 @@ const (
 // gcsChunkingEnabled is used to enable and disable chunking of file upload to
 // Google Cloud Storage.
 var gcsChunkingEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.gs.chunking.enabled",
 	"enable chunking of file upload to Google Cloud Storage",
 	true, /* default */
@@ -70,13 +69,14 @@ var gcsChunkingEnabled = settings.RegisterBoolSetting(
 // gcsChunkRetryTimeout is used to configure the per-chunk retry deadline when
 // uploading chunks to Google Cloud Storage.
 var gcsChunkRetryTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.gs.chunking.retry_timeout",
 	"per-chunk retry deadline when chunking of file upload to Google Cloud Storage",
 	60*time.Second,
+	settings.WithName("cloudstorage.gs.chunking.per_chunk_retry.timeout"),
 )
 
-func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.ExternalStorage, error) {
+func parseGSURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	gsURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_gs
@@ -131,7 +131,7 @@ func (g *gcsStorage) Settings() *cluster.Settings {
 }
 
 func makeGCSStorage(
-	ctx context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
+	ctx context.Context, args cloud.EarlyBootExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.google_cloud")
 	conf := dest.GoogleCloudConfig
@@ -181,10 +181,6 @@ func makeGCSStorage(
 	if conf.AssumeRole == "" {
 		opts = append(opts, credentialsOpt...)
 	} else {
-		if !args.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SupportAssumeRoleAuth) {
-			return nil, errors.New("cannot authenticate to cloud storage via assume role until cluster has fully upgraded to 22.2")
-		}
-
 		assumeOpt, err := createImpersonateCredentials(ctx, conf.AssumeRole, conf.AssumeRoleDelegates, []string{scope}, credentialsOpt...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to assume role")
@@ -286,18 +282,23 @@ func (g *gcsStorage) ReadFile(
 	}
 
 	r := cloud.NewResumingReader(ctx,
-		func(ctx context.Context, pos int64) (io.ReadCloser, error) {
+		func(ctx context.Context, pos int64) (io.ReadCloser, int64, error) {
 			length := int64(-1)
 			if endPos != 0 {
 				length = endPos - pos
 				if length <= 0 {
-					return nil, io.EOF
+					return nil, 0, io.EOF
 				}
 			}
-			return g.bucket.Object(object).NewRangeReader(ctx, pos, length)
+			r, err := g.bucket.Object(object).NewRangeReader(ctx, pos, length)
+			if err != nil {
+				return nil, 0, err
+			}
+			return r, r.Attrs.Size, nil
 		}, // opener
 		nil, //  reader
 		opts.Offset,
+		0,
 		object,
 		cloud.ResumingReaderRetryOnErrFnForSettings(ctx, g.settings),
 		nil, // errFn
@@ -404,5 +405,10 @@ func shouldRetry(err error) bool {
 
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_gs,
-		parseGSURL, makeGCSStorage, cloud.RedactedParams(CredentialsParam, BearerTokenParam), gcsScheme)
+		cloud.RegisteredProvider{
+			EarlyBootParseFn:     parseGSURL,
+			EarlyBootConstructFn: makeGCSStorage,
+			RedactedParams:       cloud.RedactedParams(CredentialsParam, BearerTokenParam),
+			Schemes:              []string{gcsScheme},
+		})
 }

@@ -75,7 +75,8 @@ func TestFindUpdateDescriptor(t *testing.T) {
 			return srk
 		},
 		func(t *testing.T, ctx context.Context, reader storage.Reader) {
-			seq, err := loqrecovery.GetDescriptorChangesFromRaftLog(testRangeID, 0, math.MaxInt64, reader)
+			seq, err := loqrecovery.GetDescriptorChangesFromRaftLog(
+				ctx, testRangeID, 0, math.MaxInt64, reader)
 			require.NoError(t, err, "failed to read raft log data")
 
 			requireContainsDescriptor(t, loqrecoverypb.DescriptorChangeInfo{
@@ -125,7 +126,8 @@ func TestFindUpdateRaft(t *testing.T) {
 			return srk
 		},
 		func(t *testing.T, ctx context.Context, reader storage.Reader) {
-			seq, err := loqrecovery.GetDescriptorChangesFromRaftLog(sRD.RangeID, 0, math.MaxInt64, reader)
+			seq, err := loqrecovery.GetDescriptorChangesFromRaftLog(
+				ctx, sRD.RangeID, 0, math.MaxInt64, reader)
 			require.NoError(t, err, "failed to read raft log data")
 			requireContainsDescriptor(t, loqrecoverypb.DescriptorChangeInfo{
 				ChangeType: loqrecoverypb.DescriptorChangeType_ReplicaChange,
@@ -248,8 +250,7 @@ func TestCollectLeaseholderStatus(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	require.NoError(t, tc.WaitForFullReplication())
 
-	adm, err := tc.GetAdminClient(ctx, t, 0)
-	require.NoError(t, err, "failed to get admin client")
+	adm := tc.GetAdminClient(t, 0)
 
 	// Note: we need to retry because replica collection is not atomic and
 	// leaseholder could move around so we could see none or more than one.

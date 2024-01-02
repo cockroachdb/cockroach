@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -20,6 +19,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cli/cliflags",
+        "//pkg/obs",
+        "//pkg/obsservice/obspb",
+        "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:common",
+        "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:logs",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/appstatspb",
@@ -27,10 +31,14 @@ go_library(
         "//pkg/sql/contention/contentionutils",
         "//pkg/util/cache",
         "//pkg/util/intsets",
+        "//pkg/util/log",
         "//pkg/util/metric",
+        "//pkg/util/protoutil",
         "//pkg/util/quantile",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_prometheus_client_model//go",
     ],
 )
@@ -44,18 +52,22 @@ go_test(
         "insights_test.go",
         "provider_test.go",
         "registry_test.go",
-        "sink_test.go",
         "store_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
     embed = [":insights"],
     deps = [
+        "//pkg/obs",
+        "//pkg/obsservice/obspb",
         "//pkg/settings/cluster",
         "//pkg/sql/appstatspb",
         "//pkg/sql/clusterunique",
+        "//pkg/util/leaktest",
         "//pkg/util/stop",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//require",
     ],
 )
@@ -83,5 +95,3 @@ go_proto_library(
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
-
-get_x_data(name = "get_x_data")

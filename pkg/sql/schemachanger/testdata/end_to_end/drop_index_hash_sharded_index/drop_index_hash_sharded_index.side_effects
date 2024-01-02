@@ -1,0 +1,549 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+CREATE INDEX idx ON t(j) USING HASH;
+INSERT INTO t VALUES(-1);
+INSERT INTO t VALUES(-2);
+INSERT INTO t VALUES(-3);
+----
+...
++object {100 101 t} -> 104
+
+/* test */
+DROP INDEX idx CASCADE;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: DROP INDEX
+getting all objects in schema: 101
+increment telemetry for sql.schema.drop_index
+write *eventpb.DropIndex to event log:
+  indexName: idx
+  mutationId: 1
+  sql:
+    descriptorId: 104
+    statement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+    tag: DROP INDEX
+    user: root
+  tableName: defaultdb.public.t
+## StatementPhase stage 1 of 1 with 6 MutationType ops
+upsert descriptor #104
+  ...
+       - 3
+       constraintId: 2
+  -    expr: '"crdb_internal_j_shard_16" IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)'
+  +    expr: crdb_internal_column_3_name_placeholder IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+       fromHashShardedColumn: true
+  -    name: check_crdb_internal_j_shard_16
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Dropping
+  +  - columnIds:
+  +    - 3
+  +    expr: crdb_internal_column_3_name_placeholder IS NOT NULL
+  +    isNonNullConstraint: true
+  +    name: crdb_internal_j_shard_16_auto_not_null
+  +    validity: Dropping
+     columns:
+     - id: 1
+  ...
+         oid: 20
+         width: 64
+  -  - computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 16:::INT8)
+  -    hidden: true
+  -    id: 3
+  -    name: crdb_internal_j_shard_16
+  -    type:
+  -      family: IntFamily
+  -      oid: 20
+  -      width: 64
+  -    virtual: true
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  ...
+     formatVersion: 3
+     id: 104
+  -  indexes:
+  -  - createdAtNanos: "1640995200000000000"
+  -    createdExplicitly: true
+  -    foreignKey: {}
+  -    geoConfig: {}
+  -    id: 2
+  -    interleave: {}
+  -    keyColumnDirections:
+  -    - ASC
+  -    - ASC
+  -    keyColumnIds:
+  -    - 3
+  -    - 2
+  -    keyColumnNames:
+  -    - crdb_internal_j_shard_16
+  -    - j
+  -    keySuffixColumnIds:
+  -    - 1
+  -    name: idx
+  -    partitioning: {}
+  -    sharded:
+  -      columnNames:
+  -      - j
+  -      isSharded: true
+  -      name: crdb_internal_j_shard_16
+  -      shardBuckets: 16
+  -    version: 4
+  +  indexes: []
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 3
+  +        expr: crdb_internal_column_3_name_placeholder IS NOT NULL
+  +        isNonNullConstraint: true
+  +        name: crdb_internal_j_shard_16_auto_not_null
+  +        validity: Dropping
+  +      constraintType: NOT_NULL
+  +      foreignKey: {}
+  +      name: crdb_internal_j_shard_16_auto_not_null
+  +      notNullColumn: 3
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - direction: DROP
+  +    index:
+  +      createdAtNanos: "1640995200000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      - 2
+  +      keyColumnNames:
+  +      - crdb_internal_column_3_name_placeholder
+  +      - j
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: idx
+  +      partitioning: {}
+  +      sharded:
+  +        columnNames:
+  +        - j
+  +        isSharded: true
+  +        name: crdb_internal_j_shard_16
+  +        shardBuckets: 16
+  +      version: 4
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 3
+  +        constraintId: 2
+  +        expr: crdb_internal_column_3_name_placeholder IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+  +        fromHashShardedColumn: true
+  +        name: check_crdb_internal_j_shard_16
+  +        validity: Dropping
+  +      foreignKey: {}
+  +      name: check_crdb_internal_j_shard_16
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - column:
+  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 16:::INT8)
+  +      hidden: true
+  +      id: 3
+  +      name: crdb_internal_column_3_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +      virtual: true
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "7"
+  +  version: "8"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 8 MutationType ops
+upsert descriptor #104
+  ...
+       - 3
+       constraintId: 2
+  -    expr: '"crdb_internal_j_shard_16" IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)'
+  +    expr: crdb_internal_column_3_name_placeholder IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+       fromHashShardedColumn: true
+  -    name: check_crdb_internal_j_shard_16
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Dropping
+  +  - columnIds:
+  +    - 3
+  +    expr: crdb_internal_column_3_name_placeholder IS NOT NULL
+  +    isNonNullConstraint: true
+  +    name: crdb_internal_j_shard_16_auto_not_null
+  +    validity: Dropping
+     columns:
+     - id: 1
+  ...
+         oid: 20
+         width: 64
+  -  - computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 16:::INT8)
+  -    hidden: true
+  -    id: 3
+  -    name: crdb_internal_j_shard_16
+  -    type:
+  -      family: IntFamily
+  -      oid: 20
+  -      width: 64
+  -    virtual: true
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": j
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "1": t_pkey
+  +      name: t
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+  +        statement: DROP INDEX idx CASCADE
+  +        statementTag: DROP INDEX
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 104
+  -  indexes:
+  -  - createdAtNanos: "1640995200000000000"
+  -    createdExplicitly: true
+  -    foreignKey: {}
+  -    geoConfig: {}
+  -    id: 2
+  -    interleave: {}
+  -    keyColumnDirections:
+  -    - ASC
+  -    - ASC
+  -    keyColumnIds:
+  -    - 3
+  -    - 2
+  -    keyColumnNames:
+  -    - crdb_internal_j_shard_16
+  -    - j
+  -    keySuffixColumnIds:
+  -    - 1
+  -    name: idx
+  -    partitioning: {}
+  -    sharded:
+  -      columnNames:
+  -      - j
+  -      isSharded: true
+  -      name: crdb_internal_j_shard_16
+  -      shardBuckets: 16
+  -    version: 4
+  +  indexes: []
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 3
+  +        expr: crdb_internal_column_3_name_placeholder IS NOT NULL
+  +        isNonNullConstraint: true
+  +        name: crdb_internal_j_shard_16_auto_not_null
+  +        validity: Dropping
+  +      constraintType: NOT_NULL
+  +      foreignKey: {}
+  +      name: crdb_internal_j_shard_16_auto_not_null
+  +      notNullColumn: 3
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - direction: DROP
+  +    index:
+  +      createdAtNanos: "1640995200000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      - 2
+  +      keyColumnNames:
+  +      - crdb_internal_column_3_name_placeholder
+  +      - j
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: idx
+  +      partitioning: {}
+  +      sharded:
+  +        columnNames:
+  +        - j
+  +        isSharded: true
+  +        name: crdb_internal_j_shard_16
+  +        shardBuckets: 16
+  +      version: 4
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 3
+  +        constraintId: 2
+  +        expr: crdb_internal_column_3_name_placeholder IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+  +        fromHashShardedColumn: true
+  +        name: check_crdb_internal_j_shard_16
+  +        validity: Dropping
+  +      foreignKey: {}
+  +      name: check_crdb_internal_j_shard_16
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - column:
+  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 16:::INT8)
+  +      hidden: true
+  +      id: 3
+  +      name: crdb_internal_column_3_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +      virtual: true
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "7"
+  +  version: "8"
+persist all catalog changes to storage
+create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.t@idx CASCADE"
+  descriptor IDs: [104]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 2 with 10 MutationType ops
+upsert descriptor #104
+   table:
+  -  checks:
+  -  - columnIds:
+  -    - 3
+  -    constraintId: 2
+  -    expr: crdb_internal_column_3_name_placeholder IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+  -    fromHashShardedColumn: true
+  -    name: crdb_internal_constraint_2_name_placeholder
+  -    validity: Dropping
+  -  - columnIds:
+  -    - 3
+  -    expr: crdb_internal_column_3_name_placeholder IS NOT NULL
+  -    isNonNullConstraint: true
+  -    name: crdb_internal_j_shard_16_auto_not_null
+  -    validity: Dropping
+  +  checks: []
+     columns:
+     - id: 1
+  ...
+     modificationTime: {}
+     mutations:
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 3
+  -        expr: crdb_internal_column_3_name_placeholder IS NOT NULL
+  -        isNonNullConstraint: true
+  -        name: crdb_internal_j_shard_16_auto_not_null
+  -        validity: Dropping
+  -      constraintType: NOT_NULL
+  -      foreignKey: {}
+  -      name: crdb_internal_j_shard_16_auto_not_null
+  -      notNullColumn: 3
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     - direction: DROP
+       index:
+  ...
+         keySuffixColumnIds:
+         - 1
+  -      name: idx
+  +      name: crdb_internal_index_2_name_placeholder
+         partitioning: {}
+         sharded:
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 3
+  -        constraintId: 2
+  -        expr: crdb_internal_column_3_name_placeholder IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+  -        fromHashShardedColumn: true
+  -        name: check_crdb_internal_j_shard_16
+  -        validity: Dropping
+  -      foreignKey: {}
+  -      name: check_crdb_internal_j_shard_16
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - column:
+         computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 16:::INT8)
+  ...
+       direction: DROP
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "8"
+  +  version: "9"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops pending"
+commit transaction #3
+begin transaction #4
+## PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": j
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "1": t_pkey
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+  -        statement: DROP INDEX idx CASCADE
+  -        statementTag: DROP INDEX
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     indexes: []
+     modificationTime: {}
+  -  mutations:
+  -  - direction: DROP
+  -    index:
+  -      createdAtNanos: "1640995200000000000"
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      - ASC
+  -      keyColumnIds:
+  -      - 3
+  -      - 2
+  -      keyColumnNames:
+  -      - crdb_internal_column_3_name_placeholder
+  -      - j
+  -      keySuffixColumnIds:
+  -      - 1
+  -      name: crdb_internal_index_2_name_placeholder
+  -      partitioning: {}
+  -      sharded:
+  -        columnNames:
+  -        - j
+  -        isSharded: true
+  -        name: crdb_internal_j_shard_16
+  -        shardBuckets: 16
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - column:
+  -      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 16:::INT8)
+  -      hidden: true
+  -      id: 3
+  -      name: crdb_internal_column_3_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
+  -      virtual: true
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  +  mutations: []
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "9"
+  +  version: "10"
+persist all catalog changes to storage
+create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.t@idx CASCADE"
+  descriptor IDs: [104]
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+commit transaction #4
+notified job registry to adopt jobs: [2]
+# end PostCommitPhase

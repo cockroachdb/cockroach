@@ -18,11 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -32,8 +32,8 @@ var showCreateTableColumns = colinfo.ResultColumns{
 }
 
 const (
-	scheduleID = iota
-	createStmt
+	scheduleIDIdx = iota
+	createStmtIdx
 )
 
 func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.ScheduledJob, error) {
@@ -85,12 +85,9 @@ func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.Sched
 func (p *planner) ShowCreateSchedule(
 	ctx context.Context, n *tree.ShowCreateSchedules,
 ) (planNode, error) {
-	// Only admin users can execute SHOW CREATE SCHEDULE
-	if userIsAdmin, err := p.UserHasAdminRole(ctx, p.User()); err != nil {
+	// Only privileged users can execute SHOW CREATE SCHEDULE
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 		return nil, err
-	} else if !userIsAdmin {
-		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-			"user %s does not have admin role", p.User())
 	}
 
 	sqltelemetry.IncrementShowCounter(sqltelemetry.CreateSchedule)
@@ -118,8 +115,8 @@ func (p *planner) ShowCreateSchedule(
 				}
 
 				row := tree.Datums{
-					scheduleID: tree.NewDInt(tree.DInt(sj.ScheduleID())),
-					createStmt: tree.NewDString(createStmtStr),
+					scheduleIDIdx: tree.NewDInt(tree.DInt(sj.ScheduleID())),
+					createStmtIdx: tree.NewDString(createStmtStr),
 				}
 				rows = append(rows, row)
 			}

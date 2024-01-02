@@ -19,19 +19,20 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -47,6 +48,8 @@ import (
 func TestEvalAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderDeadlock(t, "probable OOM")
 
 	storage.DisableMetamorphicSimpleValueEncoding(t)
 
@@ -90,15 +93,15 @@ func TestEvalAddSSTable(t *testing.T) {
 			requireReqTS: true,
 			expectErr:    "AddSSTable requests must set SSTTimestampToRequestTimestamp",
 		},
-		"blind returns WriteIntentError on conflict": {
+		"blind returns LockConflictError on conflict": {
 			data:      kvs{pointKV("b", intentTS, "b0")},
 			sst:       kvs{pointKV("b", 1, "sst")},
-			expectErr: &kvpb.WriteIntentError{},
+			expectErr: &kvpb.LockConflictError{},
 		},
-		"blind returns WriteIntentError in span": {
+		"blind returns LockConflictError in span": {
 			data:      kvs{pointKV("b", intentTS, "b0")},
 			sst:       kvs{pointKV("a", 1, "sst"), pointKV("c", 1, "sst")},
-			expectErr: &kvpb.WriteIntentError{},
+			expectErr: &kvpb.LockConflictError{},
 		},
 		"blind ignores intent outside span": {
 			data:           kvs{pointKV("b", intentTS, "b0")},
@@ -212,12 +215,12 @@ func TestEvalAddSSTable(t *testing.T) {
 			expect:         kvs{pointKV("a", 5, "sst"), pointKV("b", 7, "b7"), pointKV("b", 5, "sst")},
 			expectStatsEst: true,
 		},
-		"SSTTimestampToRequestTimestamp returns WriteIntentError for intents": {
+		"SSTTimestampToRequestTimestamp returns LockConflictError for intents": {
 			reqTS:     10,
 			toReqTS:   1,
 			data:      kvs{pointKV("a", intentTS, "intent")},
 			sst:       kvs{pointKV("a", 1, "a@1")},
-			expectErr: &kvpb.WriteIntentError{},
+			expectErr: &kvpb.LockConflictError{},
 		},
 		"SSTTimestampToRequestTimestamp errors with DisallowConflicts below existing": {
 			reqTS:      5,
@@ -363,23 +366,23 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:        kvs{pointKV("b", 1, "sst"), pointKV("d", 1, "sst"), pointKV("f", 1, "sst")},
 			expectErr:  &kvpb.WriteTooOldError{},
 		},
-		"DisallowConflicts returns WriteIntentError below intent": {
+		"DisallowConflicts returns LockConflictError below intent": {
 			noConflict: true,
 			data:       kvs{pointKV("a", intentTS, "intent")},
 			sst:        kvs{pointKV("a", 3, "sst")},
-			expectErr:  &kvpb.WriteIntentError{},
+			expectErr:  &kvpb.LockConflictError{},
 		},
-		"DisallowConflicts returns WriteIntentError below intent above range key": {
+		"DisallowConflicts returns LockConflictError below intent above range key": {
 			noConflict: true,
 			data:       kvs{pointKV("b", intentTS, "intent"), rangeKV("a", "d", 2, ""), pointKV("b", 1, "b1")},
 			sst:        kvs{pointKV("b", 3, "sst")},
-			expectErr:  &kvpb.WriteIntentError{},
+			expectErr:  &kvpb.LockConflictError{},
 		},
-		"DisallowConflicts ignores intents in span": { // inconsistent with blind writes
+		"DisallowConflicts returns LockConflictError in span": {
 			noConflict: true,
 			data:       kvs{pointKV("b", intentTS, "intent")},
 			sst:        kvs{pointKV("a", 3, "sst"), pointKV("c", 3, "sst")},
-			expect:     kvs{pointKV("a", 3, "sst"), pointKV("b", intentTS, "intent"), pointKV("c", 3, "sst")},
+			expectErr:  &kvpb.LockConflictError{},
 		},
 		"DisallowConflicts is not idempotent": {
 			noConflict: true,
@@ -467,23 +470,23 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:      kvs{pointKV("a", 4, "sst")},
 			expect:   kvs{pointKV("a", 4, "sst"), pointKV("a", 3, "")},
 		},
-		"DisallowShadowing returns WriteIntentError below intent": {
+		"DisallowShadowing returns LockConflictError below intent": {
 			noShadow:  true,
 			data:      kvs{pointKV("a", intentTS, "intent")},
 			sst:       kvs{pointKV("a", 3, "sst")},
-			expectErr: &kvpb.WriteIntentError{},
+			expectErr: &kvpb.LockConflictError{},
 		},
-		"DisallowShadowing returns WriteIntentError below intent above range key": {
+		"DisallowShadowing returns LockConflictError below intent above range key": {
 			noShadow:  true,
 			data:      kvs{pointKV("b", intentTS, "intent"), rangeKV("a", "d", 2, ""), pointKV("b", 1, "b1")},
 			sst:       kvs{pointKV("b", 3, "sst")},
-			expectErr: &kvpb.WriteIntentError{},
+			expectErr: &kvpb.LockConflictError{},
 		},
-		"DisallowShadowing ignores intents in span": { // inconsistent with blind writes
-			noShadow: true,
-			data:     kvs{pointKV("b", intentTS, "intent")},
-			sst:      kvs{pointKV("a", 3, "sst"), pointKV("c", 3, "sst")},
-			expect:   kvs{pointKV("a", 3, "sst"), pointKV("b", intentTS, "intent"), pointKV("c", 3, "sst")},
+		"DisallowShadowing returns LockConflictError in span": {
+			noShadow:  true,
+			data:      kvs{pointKV("b", intentTS, "intent")},
+			sst:       kvs{pointKV("a", 3, "sst"), pointKV("c", 3, "sst")},
+			expectErr: &kvpb.LockConflictError{},
 		},
 		"DisallowShadowing is idempotent": {
 			noShadow: true,
@@ -595,23 +598,23 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:           kvs{pointKV("a", 4, "sst")},
 			expect:        kvs{pointKV("a", 4, "sst"), pointKV("a", 3, "")},
 		},
-		"DisallowShadowingBelow returns WriteIntentError below intent": {
+		"DisallowShadowingBelow returns LockConflictError below intent": {
 			noShadowBelow: 5,
 			data:          kvs{pointKV("a", intentTS, "intent")},
 			sst:           kvs{pointKV("a", 3, "sst")},
-			expectErr:     &kvpb.WriteIntentError{},
+			expectErr:     &kvpb.LockConflictError{},
 		},
-		"DisallowShadowingBelow returns WriteIntentError below intent above range key": {
+		"DisallowShadowingBelow returns LockConflictError below intent above range key": {
 			noShadowBelow: 5,
 			data:          kvs{pointKV("b", intentTS, "intent"), rangeKV("a", "d", 2, ""), pointKV("b", 1, "b1")},
 			sst:           kvs{pointKV("b", 3, "sst")},
-			expectErr:     &kvpb.WriteIntentError{},
+			expectErr:     &kvpb.LockConflictError{},
 		},
-		"DisallowShadowingBelow ignores intents in span": { // inconsistent with blind writes
+		"DisallowShadowingBelow returns LockConflictError in span": {
 			noShadowBelow: 5,
 			data:          kvs{pointKV("b", intentTS, "intent")},
 			sst:           kvs{pointKV("a", 3, "sst"), pointKV("c", 3, "sst")},
-			expect:        kvs{pointKV("a", 3, "sst"), pointKV("b", intentTS, "intent"), pointKV("c", 3, "sst")},
+			expectErr:     &kvpb.LockConflictError{},
 		},
 		"DisallowShadowingBelow is not generally idempotent": {
 			noShadowBelow: 5,
@@ -885,11 +888,11 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:        kvs{rangeKV("a", "b", 8, ""), rangeKV("c", "d", 8, "")},
 			expect:     kvs{rangeKV("a", "b", 8, ""), rangeKV("a", "b", 6, ""), rangeKV("c", "d", 8, ""), rangeKV("e", "f", 6, "")},
 		},
-		"DisallowConflicts returns engine intents below sst range keys as write intent errors": {
+		"DisallowConflicts returns engine intents below sst range keys as lock conflict errors": {
 			noConflict: true,
 			data:       kvs{pointKV("b", intentTS, "intent")},
 			sst:        kvs{rangeKV("a", "c", intentTS+8, "")},
-			expectErr:  &kvpb.WriteIntentError{},
+			expectErr:  &kvpb.LockConflictError{},
 		},
 		"DisallowConflicts disallows sst range keys below engine point key": {
 			noConflict: true,
@@ -1115,21 +1118,21 @@ func TestEvalAddSSTable(t *testing.T) {
 		},
 	}
 	testutils.RunTrueAndFalse(t, "IngestAsWrites", func(t *testing.T, ingestAsWrites bool) {
-		testutils.RunValues(t, "RewriteConcurrency", []interface{}{0, 8}, func(t *testing.T, c interface{}) {
-			testutils.RunValues(t, "ApproximateDiskBytes", []interface{}{0, 1000000}, func(t *testing.T, approxBytes interface{}) {
-				approxDiskBytes := uint64(approxBytes.(int))
+		testutils.RunValues(t, "RewriteConcurrency", []int64{0, 8}, func(t *testing.T, c int64) {
+			testutils.RunValues(t, "ApproximateDiskBytes", []int{0, 1000000}, func(t *testing.T, approxBytes int) {
+				approxDiskBytes := uint64(approxBytes)
 				for name, tc := range testcases {
 					t.Run(name, func(t *testing.T) {
 						ctx := context.Background()
 						st := cluster.MakeTestingClusterSettings()
-						batcheval.AddSSTableRewriteConcurrency.Override(ctx, &st.SV, int64(c.(int)))
+						batcheval.AddSSTableRewriteConcurrency.Override(ctx, &st.SV, c)
 						batcheval.AddSSTableRequireAtRequestTimestamp.Override(ctx, &st.SV, tc.requireReqTS)
 
 						engine := storage.NewDefaultInMemForTesting()
 						defer engine.Close()
 
 						// Write initial data.
-						intentTxn := roachpb.MakeTransaction("intentTxn", nil, 0, 0, hlc.Timestamp{WallTime: intentTS * 1e9}, 0, 1)
+						intentTxn := roachpb.MakeTransaction("intentTxn", nil, 0, 0, hlc.Timestamp{WallTime: intentTS * 1e9}, 0, 1, 0, false /* omitInRangefeeds */)
 						b := engine.NewBatch()
 						defer b.Close()
 						for i := len(tc.data) - 1; i >= 0; i-- { // reverse, older timestamps first
@@ -1142,7 +1145,8 @@ func TestEvalAddSSTable(t *testing.T) {
 								kv.Key.Timestamp.WallTime *= 1e9
 								v, err := storage.DecodeMVCCValue(kv.Value)
 								require.NoError(t, err)
-								require.NoError(t, storage.MVCCPut(ctx, b, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v.Value, txn))
+								_, err = storage.MVCCPut(ctx, b, kv.Key.Key, kv.Key.Timestamp, v.Value, storage.MVCCWriteOptions{Txn: txn})
+								require.NoError(t, err)
 							case storage.MVCCRangeKeyValue:
 								v, err := storage.DecodeMVCCValue(kv.Value)
 								require.NoError(t, err)
@@ -1250,7 +1254,7 @@ func TestEvalAddSSTable(t *testing.T) {
 						} else {
 							require.NotNil(t, result.Replicated.AddSSTable)
 							require.NoError(t, fs.WriteFile(engine, "sst", result.Replicated.AddSSTable.Data))
-							require.NoError(t, engine.IngestExternalFiles(ctx, []string{"sst"}))
+							require.NoError(t, engine.IngestLocalFiles(ctx, []string{"sst"}))
 						}
 
 						var expect kvs
@@ -1389,37 +1393,44 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 // and on disk.
 func TestDBAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	t.Run("store=in-memory", func(t *testing.T) {
+		defer log.Scope(t).Close(t)
 		ctx := context.Background()
-		s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
-		defer s.Stopper().Stop(ctx)
-		tr := s.TracerI().(*tracing.Tracer)
-		runTestDBAddSSTable(ctx, t, db, tr, nil)
+		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
+		s := srv.ApplicationLayer()
+		runTestDBAddSSTable(ctx, t, db, s, nil)
 	})
 
 	t.Run("store=on-disk", func(t *testing.T) {
+		defer log.Scope(t).Close(t)
 		ctx := context.Background()
 		storeSpec := base.DefaultTestStoreSpec
 		storeSpec.InMemory = false
 		storeSpec.Path = t.TempDir()
-		s, _, db := serverutils.StartServer(t, base.TestServerArgs{
-			Insecure:   true,
+		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{storeSpec},
 		})
-		defer s.Stopper().Stop(ctx)
-		tr := s.TracerI().(*tracing.Tracer)
-		store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+		defer srv.Stopper().Stop(ctx)
+		s := srv.ApplicationLayer()
+
+		store, err := srv.StorageLayer().GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 		require.NoError(t, err)
-		runTestDBAddSSTable(ctx, t, db, tr, store)
+
+		runTestDBAddSSTable(ctx, t, db, s, store)
 	})
 }
 
 // if store != nil, assume it is on-disk and check ingestion semantics.
 func runTestDBAddSSTable(
-	ctx context.Context, t *testing.T, db *kv.DB, tr *tracing.Tracer, store *kvserver.Store,
+	ctx context.Context,
+	t *testing.T,
+	db *kv.DB,
+	srv serverutils.ApplicationLayerInterface,
+	store *kvserver.Store,
 ) {
+	tr := srv.TracerI().(*tracing.Tracer)
 	tr.TestingRecordAsyncSpans() // we assert on async span traces in this test
 	const ingestAsWrites, ingestAsSST = true, false
 	const allowConflicts = false
@@ -1429,18 +1440,24 @@ func runTestDBAddSSTable(
 	var noTS hlc.Timestamp
 	cs := cluster.MakeTestingClusterSettings()
 
+	k := func(s string) roachpb.Key {
+		k, err := keys.RewriteKeyToTenantPrefix(roachpb.Key(s), srv.Codec().TenantPrefix())
+		require.NoError(t, err)
+		return k
+	}
+
 	{
-		sst, start, end := storageutils.MakeSST(t, cs, kvs{pointKV("bb", 2, "1")})
+		sst, start, end := storageutils.MakeSSTWithPrefix(t, cs, srv.Codec().TenantPrefix(), kvs{pointKV("bb", 2, "1")})
 
 		// Key is before the range in the request span.
 		_, _, err := db.AddSSTable(
-			ctx, "d", "e", sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+			ctx, k("d"), k("e"), sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not in request range")
 
 		// Key is after the range in the request span.
 		_, _, err = db.AddSSTable(
-			ctx, "a", "b", sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+			ctx, k("a"), k("b"), sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not in request range")
 
@@ -1455,7 +1472,9 @@ func runTestDBAddSSTable(
 		require.Contains(t, trace, "sideloadable proposal detected")
 		require.Contains(t, trace, "ingested SSTable at index")
 
-		if store != nil {
+		if store != nil && srv.Codec().ForSystemTenant() {
+			// If this request was made by the system tenant to an on-disk store, we
+			// should have the un-redacted on-disk path to the file that was ingested;
 			// Look for the ingested path and verify it still exists.
 			re := regexp.MustCompile(`ingested SSTable at index \d+, term \d+: (\S+)`)
 			match := re.FindStringSubmatch(trace)
@@ -1465,7 +1484,7 @@ func runTestDBAddSSTable(
 			_, err = os.Stat(strings.TrimSuffix(match[1], ".ingested"))
 			require.NoError(t, err, "%q file missing after ingest: %+v", match[1], err)
 		}
-		r, err := db.Get(ctx, "bb")
+		r, err := db.Get(ctx, k("bb"))
 		require.NoError(t, err)
 		require.Equal(t, []byte("1"), r.ValueBytes())
 	}
@@ -1473,11 +1492,11 @@ func runTestDBAddSSTable(
 	// Check that ingesting a key with an earlier mvcc timestamp doesn't affect
 	// the value returned by Get.
 	{
-		sst, start, end := storageutils.MakeSST(t, cs, kvs{pointKV("bb", 1, "2")})
+		sst, start, end := storageutils.MakeSSTWithPrefix(t, cs, srv.Codec().TenantPrefix(), kvs{pointKV("bb", 1, "2")})
 		_, _, err := db.AddSSTable(
 			ctx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.NoError(t, err)
-		r, err := db.Get(ctx, "bb")
+		r, err := db.Get(ctx, k("bb"))
 		require.NoError(t, err)
 		require.Equal(t, []byte("1"), r.ValueBytes())
 		if store != nil {
@@ -1488,7 +1507,7 @@ func runTestDBAddSSTable(
 	// Key range in request span is not empty. First time through a different
 	// key is present. Second time through checks the idempotency.
 	{
-		sst, start, end := storageutils.MakeSST(t, cs, kvs{pointKV("bc", 1, "3")})
+		sst, start, end := storageutils.MakeSSTWithPrefix(t, cs, srv.Codec().TenantPrefix(), kvs{pointKV("bc", 1, "3")})
 
 		var before int64
 		if store != nil {
@@ -1506,11 +1525,11 @@ func runTestDBAddSSTable(
 			require.Contains(t, trace, "sideloadable proposal detected")
 			require.Contains(t, trace, "ingested SSTable at index")
 
-			r, err := db.Get(ctx, "bb")
+			r, err := db.Get(ctx, k("bb"))
 			require.NoError(t, err)
 			require.Equal(t, []byte("1"), r.ValueBytes())
 
-			r, err = db.Get(ctx, "bc")
+			r, err = db.Get(ctx, k("bc"))
 			require.NoError(t, err)
 			require.Equal(t, []byte("3"), r.ValueBytes())
 		}
@@ -1525,7 +1544,7 @@ func runTestDBAddSSTable(
 
 	// ... and doing the same thing but via write-batch works the same.
 	{
-		sst, start, end := storageutils.MakeSST(t, cs, kvs{pointKV("bd", 1, "3")})
+		sst, start, end := storageutils.MakeSSTWithPrefix(t, cs, srv.Codec().TenantPrefix(), kvs{pointKV("bd", 1, "3")})
 
 		var before int64
 		if store != nil {
@@ -1542,11 +1561,11 @@ func runTestDBAddSSTable(
 			require.Contains(t, trace, "evaluating AddSSTable")
 			require.Contains(t, trace, "via regular write batch")
 
-			r, err := db.Get(ctx, "bb")
+			r, err := db.Get(ctx, k("bb"))
 			require.NoError(t, err)
 			require.Equal(t, []byte("1"), r.ValueBytes())
 
-			r, err = db.Get(ctx, "bd")
+			r, err = db.Get(ctx, k("bd"))
 			require.NoError(t, err)
 			require.Equal(t, []byte("3"), r.ValueBytes())
 		}
@@ -1557,7 +1576,7 @@ func runTestDBAddSSTable(
 
 	// Invalid key/value entry checksum.
 	{
-		key := storage.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := storage.MVCCKey{Key: k("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		value := roachpb.MakeValueFromString("1")
 		value.InitChecksum([]byte("foo"))
 
@@ -1568,7 +1587,7 @@ func runTestDBAddSSTable(
 		require.NoError(t, w.Finish())
 
 		_, _, err := db.AddSSTable(
-			ctx, "b", "c", sstFile.Bytes(), allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+			ctx, k("b"), k("c"), sstFile.Bytes(), allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid checksum")
 	}
@@ -1653,7 +1672,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, fs.WriteFile(engine, "sst", sst))
-	require.NoError(t, engine.IngestExternalFiles(ctx, []string{"sst"}))
+	require.NoError(t, engine.IngestLocalFiles(ctx, []string{"sst"}))
 
 	statsEvaled := statsBefore
 	statsEvaled.Add(*cArgs.Stats)
@@ -1831,8 +1850,11 @@ func TestAddSSTableIntentResolution(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Start a transaction that writes an intent at b.
 	txn := db.NewTxn(ctx, "intent")
@@ -1871,16 +1893,19 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsTSCache(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{},
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
+		Knobs:             base.TestingKnobs{},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Write key.
 	txn := db.NewTxn(ctx, "txn")
 	require.NoError(t, txn.Put(ctx, "key", "txn"))
 	require.NoError(t, txn.Commit(ctx))
-	txnTS := txn.CommitTimestamp()
+	txnTS, err := txn.CommitTimestamp()
+	require.NoError(t, err)
 
 	// Add an SST writing below the previous write.
 	sst, start, end := storageutils.MakeSST(t, s.ClusterSettings(), kvs{pointKV("key", 1, "sst")})
@@ -1924,15 +1949,15 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) 
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	si, _, db := serverutils.StartServer(t, base.TestServerArgs{
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableCanAckBeforeApplication: true,
 			},
 		},
 	})
-	defer si.Stopper().Stop(ctx)
-	s := si.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
 
 	// Issue a write to trigger a closed timestamp.
 	require.NoError(t, db.Put(ctx, "someKey", "someValue"))
@@ -1965,7 +1990,7 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) 
 	require.True(t, closedTS.LessEq(writeTS), "timestamp %s below closed timestamp %s", result.Timestamp, closedTS)
 
 	// Check that the value was in fact written at the write timestamp.
-	kvs, err := storage.Scan(store.TODOEngine(), roachpb.Key("key"), roachpb.Key("key").Next(), 0)
+	kvs, err := storage.Scan(context.Background(), store.TODOEngine(), roachpb.Key("key"), roachpb.Key("key").Next(), 0)
 	require.NoError(t, err)
 	require.Len(t, kvs, 1)
 	require.Equal(t, storage.MVCCKey{Key: roachpb.Key("key"), Timestamp: writeTS}, kvs[0].Key)

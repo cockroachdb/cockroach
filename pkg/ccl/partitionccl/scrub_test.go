@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -27,22 +26,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func tenantOrSystemCodec(s serverutils.TestServerInterface) keys.SQLCodec {
-	var codec = s.Codec()
-	if len(s.TestTenants()) > 0 {
-		codec = s.TestTenants()[0].Codec()
-	}
-	return codec
-}
-
 // TestScrubUniqueIndex tests SCRUB on a table that violates a UNIQUE
 // constraint.
 func TestScrubUniqueIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	utilccl.TestingEnableEnterprise()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Create the table and row entries.
 	if _, err := db.Exec(`
@@ -64,7 +56,7 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2);
 
 	// Overwrite the value on partition one with a duplicate unique index value.
 	values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(3), tree.NewDInt(1)}
-	codec := tenantOrSystemCodec(s)
+	codec := s.Codec()
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
 	primaryIndex := tableDesc.GetPrimaryIndex()
 	var colIDtoRowIndex catalog.TableColMap
@@ -126,8 +118,9 @@ func TestScrubUniqueIndexWithNulls(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	utilccl.TestingEnableEnterprise()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Create the table and row entries.
 	if _, err := db.Exec(`
@@ -149,7 +142,7 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, NULL, 2);
 
 	// Overwrite the value on partition one with a NULL index value.
 	values := []tree.Datum{tree.NewDInt(1), tree.DNull, tree.NewDInt(1)}
-	codec := tenantOrSystemCodec(s)
+	codec := s.Codec()
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
 	primaryIndex := tableDesc.GetPrimaryIndex()
 	var colIDtoRowIndex catalog.TableColMap
@@ -197,8 +190,9 @@ func TestScrubUniqueIndexExplicitPartition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	utilccl.TestingEnableEnterprise()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Create the table and row entries.
 	if _, err := db.Exec(`
@@ -220,7 +214,7 @@ INSERT INTO db.t VALUES (1, 3), (2, 4);
 
 	// Overwrite the value on partition one with a duplicate unique value.
 	values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(4)}
-	codec := tenantOrSystemCodec(s)
+	codec := s.Codec()
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
 	primaryIndex := tableDesc.GetPrimaryIndex()
 	var colIDtoRowIndex catalog.TableColMap
@@ -234,11 +228,18 @@ INSERT INTO db.t VALUES (1, 3), (2, 4);
 		t.Fatalf("expected 1 index entry, got %d", len(primaryIndexKey))
 	}
 
-	// Add the primary key via the KV API.
+	// Add the primary key via the KV API. This will overwrite the old primary
+	// index KV, so no need to perform a Del.
 	if err := kvDB.Put(context.Background(), primaryIndexKey[0].Key, &primaryIndexKey[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
+	oldValues := []tree.Datum{tree.NewDInt(1), tree.NewDInt(3)}
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
+	secondaryIndexDelKey, err := rowenc.EncodeSecondaryIndex(
+		codec, tableDesc, secondaryIndex, colIDtoRowIndex, oldValues, true /* includeEmpty */)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
 	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
 		codec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
@@ -246,6 +247,10 @@ INSERT INTO db.t VALUES (1, 3), (2, 4);
 	}
 	if len(secondaryIndexKey) != 1 {
 		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
+	}
+	// Delete the old secondary index KV before inserting the new one.
+	if _, err := kvDB.Del(context.Background(), secondaryIndexDelKey[0].Key); err != nil {
+		t.Fatalf("unexpected error: %s", err)
 	}
 	if err := kvDB.Put(context.Background(), secondaryIndexKey[0].Key, &secondaryIndexKey[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -263,8 +268,9 @@ func TestScrubPartialUniqueIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	utilccl.TestingEnableEnterprise()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Create the table and row entries.
 	if _, err := db.Exec(`
@@ -290,7 +296,7 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2), (3, 5, 1), (4, 6, 2);
 	// falls under the unique index constraint, and one that does not.
 	valuesConstrained := []tree.Datum{tree.NewDInt(3), tree.NewDInt(6), tree.NewDInt(1)}
 	valuesNotConstrained := []tree.Datum{tree.NewDInt(1), tree.NewDInt(3), tree.NewDInt(1)}
-	codec := tenantOrSystemCodec(s)
+	codec := s.Codec()
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
 	primaryIndex := tableDesc.GetPrimaryIndex()
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
@@ -380,8 +386,9 @@ func TestScrubUniqueIndexMultiCol(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	utilccl.TestingEnableEnterprise()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Create the table and row entries.
 	if _, err := db.Exec(`
@@ -406,7 +413,7 @@ INSERT INTO db.t VALUES (1, 1, 2, 1);
 
 	// Insert a row on partition 2 with a duplicate unique index value.
 	values := []tree.Datum{tree.NewDInt(2), tree.NewDInt(1), tree.NewDInt(2), tree.NewDInt(2)}
-	codec := tenantOrSystemCodec(s)
+	codec := s.Codec()
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
 	primaryIndex := tableDesc.GetPrimaryIndex()
 	var colIDtoRowIndex catalog.TableColMap
@@ -469,8 +476,9 @@ func TestScrubPrimaryKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	utilccl.TestingEnableEnterprise()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Create the table and row entries.
 	if _, err := db.Exec(`
@@ -492,7 +500,7 @@ INSERT INTO db.t VALUES (1, 1);
 
 	// Insert a duplicate primary key into a different partition.
 	values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(2)}
-	codec := tenantOrSystemCodec(s)
+	codec := s.Codec()
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
 	primaryIndex := tableDesc.GetPrimaryIndex()
 	var colIDtoRowIndex catalog.TableColMap

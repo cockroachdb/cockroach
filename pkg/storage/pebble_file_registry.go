@@ -11,14 +11,18 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -26,13 +30,24 @@ import (
 	"github.com/cockroachdb/pebble/record"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/pebble/vfs/atomicfs"
+	"github.com/cockroachdb/redact"
 )
+
+// DefaultNumOldFileRegistryFiles is the default number of old registry files
+// kept for debugging. Production callers should use this to initialize
+// PebbleFileRegistry.NumOldRegistryFiles. The value of two is meant to
+// slightly align the history with what we keep for the Pebble MANIFEST. We
+// keep one Pebble MANIFEST, which is also 128MB in size, however the entry
+// size per file in the MANIFEST is smaller (based on some unit test data it
+// is about half), so we keep double the history for the file registry.
+var DefaultNumOldFileRegistryFiles = envutil.EnvOrDefaultInt(
+	"COCKROACH_STORE_NUM_OLD_FILE_REGISTRY_FILES", 2)
 
 // CanRegistryElideFunc is a function that returns true for entries that can be
 // elided instead of being written to the registry.
 var CanRegistryElideFunc func(entry *enginepb.FileEntry) bool
 
-const maxRegistrySize = 128 << 20 // 128 MB
+const defaultSoftMaxRegistrySize = 128 << 20 // 128 MB
 
 // PebbleFileRegistry keeps track of files for the data-FS and store-FS
 // for Pebble (see encrypted_fs.go for high-level comment).
@@ -51,15 +66,19 @@ type PebbleFileRegistry struct {
 
 	// The FS to write the file registry file.
 	FS vfs.FS
-
 	// The directory used by the DB. It is used to construct the name of the file registry file and
 	// to turn absolute path names of files in this directory into relative path names. The latter
 	// is done for compatibility with the file registry implemented for RocksDB, even though it
 	// currently requires some potentially non-portable filepath manipulation.
 	DBDir string
-
 	// Is the DB read only.
 	ReadOnly bool
+	// The number of old file registry files to keep for debugging purposes.
+	NumOldRegistryFiles int
+	// SoftMaxSize configures the "soft max" file size of a registry file. Once
+	// exceeded the registry may consider rolling over to a new file. Defaults
+	// to defaultSoftMaxRegistrySize.
+	SoftMaxSize int64
 
 	// Implementation.
 
@@ -71,6 +90,9 @@ type PebbleFileRegistry struct {
 		registryFile vfs.File
 		// registryWriter is a record.Writer for registryFile.
 		registryWriter *record.Writer
+		// rotationHelper holds state for deciding when to rotate to a new file
+		// registry file and write a snapshot.
+		rotationHelper record.RotationHelper
 		// registryMarker is an atomic file marker used to denote which
 		// of the records-based registry files is the current one. When
 		// we rotate files, the marker is atomically moved to the new
@@ -80,6 +102,9 @@ type PebbleFileRegistry struct {
 		// records-based registry file. If no file has been written yet,
 		// this may be the empty string.
 		registryFilename string
+
+		// Obsolete files, ordered from oldest to newest.
+		obsoleteRegistryFiles []string
 	}
 }
 
@@ -108,9 +133,12 @@ func CheckNoRegistryFile(fs vfs.FS, dbDir string) error {
 // Load loads the contents of the file registry from a file, if the file
 // exists, else it is a noop.  Load should be called exactly once if the
 // file registry will be used.
-func (r *PebbleFileRegistry) Load() error {
+func (r *PebbleFileRegistry) Load(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.SoftMaxSize == 0 {
+		r.SoftMaxSize = defaultSoftMaxRegistrySize
+	}
 
 	// Initialize private fields needed when the file registry will be used.
 	r.mu.entries = make(map[string]*enginepb.FileEntry)
@@ -119,8 +147,52 @@ func (r *PebbleFileRegistry) Load() error {
 		return err
 	}
 
+	// Find all old registry files, and remove some of them.
+	if r.mu.registryFilename != "" {
+		registryFileNum, err := r.parseRegistryFileName(r.mu.registryFilename)
+		if err != nil {
+			return err
+		}
+		files, err := r.FS.List(r.DBDir)
+		if err != nil {
+			return err
+		}
+		var obsoleteFiles []uint64
+		for _, f := range files {
+			f = r.FS.PathBase(f)
+			if !strings.HasPrefix(f, registryFilenameBase) {
+				continue
+			}
+			fileNum, err := r.parseRegistryFileName(f)
+			if err != nil {
+				return err
+			}
+			if fileNum > registryFileNum {
+				// Delete it immediately, since newer than current registry file, so
+				// must have crashed while creating it.
+				err := r.FS.Remove(r.FS.PathJoin(r.DBDir, f))
+				if err != nil {
+					log.Errorf(ctx, "unable to remove registry file %s", f)
+				}
+			}
+			if fileNum < registryFileNum {
+				obsoleteFiles = append(obsoleteFiles, fileNum)
+			}
+		}
+		sort.Slice(obsoleteFiles, func(i, j int) bool {
+			return obsoleteFiles[i] < obsoleteFiles[j]
+		})
+		r.mu.obsoleteRegistryFiles = make([]string, 0, r.NumOldRegistryFiles+1)
+		for _, f := range obsoleteFiles {
+			r.mu.obsoleteRegistryFiles = append(r.mu.obsoleteRegistryFiles, makeRegistryFilename(f))
+		}
+		if err := r.tryRemoveOldRegistryFilesLocked(); err != nil {
+			return err
+		}
+	}
+
 	// Delete all unnecessary entries to reduce registry size.
-	if err := r.maybeElideEntries(); err != nil {
+	if err := r.maybeElideEntries(ctx); err != nil {
 		return err
 	}
 
@@ -209,7 +281,7 @@ func (r *PebbleFileRegistry) maybeLoadExistingRegistry() (bool, error) {
 	return true, nil
 }
 
-func (r *PebbleFileRegistry) maybeElideEntries() error {
+func (r *PebbleFileRegistry) maybeElideEntries(ctx context.Context) error {
 	if r.ReadOnly {
 		return nil
 	}
@@ -250,6 +322,7 @@ func (r *PebbleFileRegistry) maybeElideEntries() error {
 			path = r.FS.PathJoin(r.DBDir, filename)
 		}
 		if _, err := r.FS.Stat(path); oserror.IsNotExist(err) {
+			log.Infof(ctx, "eliding file registry entry %s", redact.SafeString(filename))
 			batch.DeleteEntry(filename)
 		}
 	}
@@ -398,11 +471,41 @@ func (r *PebbleFileRegistry) applyBatch(batch *enginepb.RegistryUpdateBatch) {
 }
 
 func (r *PebbleFileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateBatch) error {
-	// Create a new file registry file if one doesn't exist yet.
-	if r.mu.registryWriter == nil {
+	nilWriter := r.mu.registryWriter == nil
+
+	// Create a new file registry file if one doesn't exist yet, or the current
+	// one is too large.
+	//
+	// For largeness, we do not exclusively use r.SoftMaxSize size threshold
+	// since a large store may have a large enough volume of files that a single
+	// snapshot exceeds the size, resulting in rotation on every edit. This
+	// slows the system down since each file creation or deletion writes a new
+	// file registry snapshot. The primary goal of the size-based rollover logic
+	// is to ensure that when reopening a DB, the number of edits that need to
+	// be replayed on top of the snapshot is "sane". Rolling over to a new file
+	// registry after each edit is not relevant to that goal.
+	r.mu.rotationHelper.AddRecord(int64(len(batch.Updates)))
+
+	// If we don't have a file yet, we need to create one. If we do and its size
+	// exceeds the soft max, we may want to rotate. The record.RotationHelper
+	// implements logic to determine when we should rotate.
+	shouldRotate := nilWriter
+	if !shouldRotate && r.mu.registryWriter.Size() > r.SoftMaxSize {
+		shouldRotate = r.mu.rotationHelper.ShouldRotate(int64(len(r.mu.entries)))
+	}
+
+	if shouldRotate {
+		// If !nilWriter, exceeded the size threshold: create a new file registry
+		// file to hopefully shrink the size of the file.
 		if err := r.createNewRegistryFile(); err != nil {
-			return errors.Wrap(err, "creating new registry file")
+			if nilWriter {
+				return errors.Wrap(err, "creating new registry file")
+			} else {
+				return errors.Wrap(err, "rotating registry file")
+			}
 		}
+		// Successfully rotated.
+		r.mu.rotationHelper.Rotate(int64(len(r.mu.entries)))
 	}
 	w, err := r.mu.registryWriter.Next()
 	if err != nil {
@@ -418,17 +521,7 @@ func (r *PebbleFileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateB
 	if err := r.mu.registryWriter.Flush(); err != nil {
 		return err
 	}
-	if err := r.mu.registryFile.Sync(); err != nil {
-		return err
-	}
-	// Create a new file registry file to hopefully shrink the size of the file
-	// if we have exceeded the max registry size.
-	if r.mu.registryWriter.Size() > maxRegistrySize {
-		if err := r.createNewRegistryFile(); err != nil {
-			return errors.Wrap(err, "rotating registry file")
-		}
-	}
-	return nil
+	return r.mu.registryFile.Sync()
 }
 
 func makeRegistryFilename(iter uint64) string {
@@ -503,8 +596,9 @@ func (r *PebbleFileRegistry) createNewRegistryFile() error {
 		// function, after we update the internal state to point to the
 		// new filename (since we've already successfully installed it).
 		err = r.closeRegistry()
-		if err == nil && r.mu.registryFilename != "" {
-			rmErr := r.FS.Remove(r.FS.PathJoin(r.DBDir, r.mu.registryFilename))
+		if r.mu.registryFilename != "" {
+			r.mu.obsoleteRegistryFiles = append(r.mu.obsoleteRegistryFiles, r.mu.registryFilename)
+			rmErr := r.tryRemoveOldRegistryFilesLocked()
 			if rmErr != nil && !oserror.IsNotExist(rmErr) {
 				err = errors.CombineErrors(err, rmErr)
 			}
@@ -543,6 +637,32 @@ func (r *PebbleFileRegistry) List() map[string]*enginepb.FileEntry {
 		m[k] = v
 	}
 	return m
+}
+
+func (r *PebbleFileRegistry) parseRegistryFileName(f string) (uint64, error) {
+	fileNum, err := strconv.ParseUint(f[len(registryFilenameBase)+1:], 10, 64)
+	if err != nil {
+		return 0, errors.Errorf("could not parse number from file registry filename %s", f)
+	}
+	return fileNum, nil
+}
+
+func (r *PebbleFileRegistry) tryRemoveOldRegistryFilesLocked() error {
+	n := len(r.mu.obsoleteRegistryFiles)
+	if n <= r.NumOldRegistryFiles {
+		return nil
+	}
+	m := n - r.NumOldRegistryFiles
+	toDelete := r.mu.obsoleteRegistryFiles[:m]
+	r.mu.obsoleteRegistryFiles = r.mu.obsoleteRegistryFiles[m:]
+	var err error
+	for _, f := range toDelete {
+		rmErr := r.FS.Remove(r.FS.PathJoin(r.DBDir, f))
+		if rmErr != nil {
+			err = errors.CombineErrors(err, rmErr)
+		}
+	}
+	return err
 }
 
 // Close closes the record writer and record file used for the registry.

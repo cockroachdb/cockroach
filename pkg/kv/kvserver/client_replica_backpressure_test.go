@@ -42,6 +42,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes >1m under race")
+	skip.UnderRemoteExecutionWithIssue(t, 113032, "probable OOM")
 
 	rRand, _ := randutil.NewTestRand()
 	ctx := context.Background()
@@ -99,6 +100,11 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 
 		// Create the table, split it off, and load it up with data.
 		tdb = sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+		// speeds up the test
+		//		tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+		//		tdb.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'`)
+
 		tdb.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES NOT NULL)")
 
 		var tableID int
@@ -138,7 +144,10 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 			for i := 0; i < tc.NumServers(); i++ {
 				s := tc.Server(i)
 				_, r := getFirstStoreReplica(t, s, tablePrefix)
-				conf := r.SpanConfig()
+				conf, err := r.LoadSpanConfig(ctx)
+				if err != nil {
+					return err
+				}
 				if conf.RangeMaxBytes != exp {
 					return fmt.Errorf("expected %d, got %d", exp, conf.RangeMaxBytes)
 				}
@@ -277,7 +286,10 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		// Ensure that the new replica has applied the same config.
 		testutils.SucceedsSoon(t, func() error {
 			_, r := getFirstStoreReplica(t, tc.Server(1), tablePrefix)
-			conf := r.SpanConfig()
+			conf, err := r.LoadSpanConfig(ctx)
+			if err != nil {
+				return err
+			}
 			if conf.RangeMaxBytes != newMax {
 				return fmt.Errorf("expected %d, got %d", newMax, conf.RangeMaxBytes)
 			}
@@ -297,7 +309,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 
 		// Observe backpressure now that the range is just over the limit.
 		// Use pgx so that cancellation does something reasonable.
-		url, cleanup := sqlutils.PGUrl(t, tc.Server(1).ServingSQLAddr(), "", url.User("root"))
+		url, cleanup := sqlutils.PGUrl(t, tc.Server(1).AdvSQLAddr(), "", url.User("root"))
 		defer cleanup()
 		conf, err := pgx.ParseConfig(url.String())
 		require.NoError(t, err)

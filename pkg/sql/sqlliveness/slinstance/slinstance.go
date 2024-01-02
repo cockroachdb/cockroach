@@ -39,7 +39,7 @@ import (
 var (
 	// DefaultTTL specifies the time to expiration when a session is created.
 	DefaultTTL = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"server.sqlliveness.ttl",
 		"default sqlliveness session ttl",
 		40*time.Second,
@@ -47,7 +47,7 @@ var (
 	)
 	// DefaultHeartBeat specifies the period between attempts to extend a session.
 	DefaultHeartBeat = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"server.sqlliveness.heartbeat",
 		"duration heart beats to push session expiration further out in time",
 		5*time.Second,
@@ -457,7 +457,7 @@ func (l *Instance) Release(ctx context.Context) (sqlliveness.SessionID, error) {
 	}()
 
 	if session == nil {
-		return sqlliveness.SessionID(""), errors.New("no session to release")
+		return "", nil
 	}
 
 	if err := l.storage.Delete(ctx, session.ID()); err != nil {

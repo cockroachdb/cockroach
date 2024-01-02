@@ -1,0 +1,125 @@
+# knob-opt: sync-event-log
+# LogicTest: multiregion-9node-3region-3azs-tenant
+
+# Only the root user can modify the system database's regions.
+user root
+
+statement ok
+CREATE FUNCTION get_db_survival_goal() RETURNS SETOF RECORD
+LANGUAGE SQL
+AS $$
+ SELECT
+ name,
+ survival_goal
+ FROM crdb_internal.databases
+ WHERE name IN ('system', 'alter_survive_db', 'create_survive_db', 'survive_zone_db')
+ ORDER BY name;
+$$;
+
+query T
+SELECT get_db_survival_goal()
+----
+(system,)
+
+statement ok
+CREATE DATABASE alter_survive_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1";
+CREATE DATABASE survive_zone_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1";
+
+# Make sure that system db survival goal is not affected when it's not multi-regional.
+statement ok
+ALTER DATABASE alter_survive_db SURVIVE REGION FAILURE;
+
+query T nosort
+SELECT get_db_survival_goal()
+----
+(alter_survive_db,region)
+(survive_zone_db,zone)
+(system,)
+
+statement ok
+ALTER DATABASE alter_survive_db SURVIVE ZONE FAILURE;
+
+query T nosort
+SELECT get_db_survival_goal()
+----
+(alter_survive_db,zone)
+(survive_zone_db,zone)
+(system,)
+
+# Make system db multi-regional
+statement ok
+ALTER DATABASE system PRIMARY REGION "ca-central-1";
+ALTER DATABASE system ADD REGION "ap-southeast-2";
+ALTER DATABASE system ADD REGION "us-east-1";
+
+query T nosort
+SELECT get_db_survival_goal()
+----
+(alter_survive_db,zone)
+(survive_zone_db,zone)
+(system,zone)
+
+# Make sure system db survival goal is upgraded.
+statement ok
+ALTER DATABASE alter_survive_db SURVIVE REGION FAILURE;
+
+query T nosort
+SELECT get_db_survival_goal()
+----
+(alter_survive_db,region)
+(survive_zone_db,zone)
+(system,region)
+
+# Make sure system db survival goal is downgraded.
+statement ok
+ALTER DATABASE alter_survive_db SURVIVE ZONE FAILURE;
+
+query T nosort
+SELECT get_db_survival_goal()
+----
+(alter_survive_db,zone)
+(survive_zone_db,zone)
+(system,zone)
+
+# Make sure a database created with a surival goal upgrades the systemdb.
+statement ok
+CREATE DATABASE create_survive_db PRIMARY REGION "us-east-1" REGIONS "ap-southeast-2", "ca-central-1" SURVIVE REGION FAILURE;
+
+query T nosort
+SELECT get_db_survival_goal()
+----
+(alter_survive_db,zone)
+(create_survive_db,region)
+(survive_zone_db,zone)
+(system,region)
+
+# Make sure dropping the database downgrades the survival goal.
+statement ok
+DROP DATABASE create_survive_db;
+
+query T nosort
+SELECT get_db_survival_goal()
+----
+(alter_survive_db,zone)
+(survive_zone_db,zone)
+(system,zone)
+
+statement ok
+ALTER DATABASE system SURVIVE REGION FAILURE;
+
+query T nosort
+SELECT get_db_survival_goal()
+----
+(alter_survive_db,zone)
+(survive_zone_db,zone)
+(system,region)
+
+statement ok
+ALTER DATABASE system SURVIVE ZONE FAILURE;
+
+query T nosort
+SELECT get_db_survival_goal()
+----
+(alter_survive_db,zone)
+(survive_zone_db,zone)
+(system,zone)

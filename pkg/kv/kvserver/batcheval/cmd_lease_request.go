@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func init() {
@@ -34,12 +35,13 @@ func declareKeysRequestLease(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	// NOTE: RequestLease is run on replicas that do not hold the lease, so
 	// acquiring latches would not help synchronize with other requests. As
 	// such, the request does not declare latches. See also
 	// concurrency.shouldIgnoreLatches().
 	latchSpans.DisableUndeclaredAccessAssertions()
+	return nil
 }
 
 // RequestLease sets the range lease for this range. The command fails
@@ -159,6 +161,7 @@ func RequestLease(
 		priorReadSum = &worstCaseSum
 	}
 
+	log.VEventf(ctx, 2, "lease request: prev lease: %+v, new lease: %+v", prevLease, newLease)
 	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
 		newLease, prevLease, priorReadSum, isExtension, false /* isTransfer */)
 }

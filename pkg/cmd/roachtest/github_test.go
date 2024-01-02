@@ -12,8 +12,13 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -21,7 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -76,7 +84,7 @@ func TestShouldPost(t *testing.T) {
 		{false, 1, "token", "master", true, ""},
 	}
 
-	reg := makeTestRegistry(spec.GCE, "", "", false, false)
+	reg := makeTestRegistry()
 	for _, c := range testCases {
 		t.Setenv("GITHUB_API_TOKEN", c.envGithubAPIToken)
 		t.Setenv("TC_BUILD_BRANCH", c.envTcBuildBranch)
@@ -100,130 +108,271 @@ func TestShouldPost(t *testing.T) {
 	}
 }
 
+func TestGenerateHelpCommand(t *testing.T) {
+	start := time.Date(2023, time.July, 21, 16, 34, 3, 817, time.UTC)
+	end := time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC)
+
+	r := &issues.Renderer{}
+	generateHelpCommand("acceptance/gossip/locality-address", "foo-cluster", spec.GCE, start, end)(r)
+
+	echotest.Require(t, r.String(), filepath.Join("testdata", "help_command.txt"))
+
+	r = &issues.Renderer{}
+	generateHelpCommand("acceptance/gossip/locality-address", "foo-cluster", spec.AWS, start, end)(r)
+
+	echotest.Require(t, r.String(), filepath.Join("testdata", "help_command_non_gce.txt"))
+}
+
 func TestCreatePostRequest(t *testing.T) {
+	createFailure := func(ref error) failure {
+		return failure{squashedErr: ref}
+	}
+
+	// TODO(radu): these tests should be converted to datadriven tests which
+	// output the full rendering of the github issue message along with the
+	// metadata.
 	testCases := []struct {
-		nonReleaseBlocker      bool
-		clusterCreationFailed  bool
-		loadTeamsFailed        bool
-		localSSD               bool
-		arch                   vm.CPUArch
-		category               issueCategory
-		expectedPost           bool
-		expectedReleaseBlocker bool
-		expectedParams         map[string]string
+		nonReleaseBlocker       bool
+		clusterCreationFailed   bool
+		loadTeamsFailed         bool
+		localSSD                bool
+		metamorphicBuild        bool
+		coverageBuild           bool
+		extraLabels             []string
+		arch                    vm.CPUArch
+		failure                 failure
+		expectedPost            bool
+		expectedLabels          []string
+		expectedReleaseBlocker  bool
+		expectedSkipTestFailure bool
+		expectedParams          map[string]string
 	}{
-		{true, false, false, false, "", otherErr, true, false,
-			prefixAll(map[string]string{
-				"cloud":     "gce",
-				"encrypted": "false",
-				"fs":        "ext4",
-				"ssd":       "0",
-				"cpu":       "4",
-				"arch":      "amd64",
-				"localSSD":  "false",
+		// 1.
+		{
+			nonReleaseBlocker: true,
+			failure:           createFailure(errors.New("other")),
+			expectedPost:      true,
+			expectedLabels:    []string{"C-test-failure"},
+			expectedParams: prefixAll(map[string]string{
+				"cloud":            "gce",
+				"encrypted":        "false",
+				"fs":               "ext4",
+				"ssd":              "0",
+				"cpu":              "4",
+				"arch":             "amd64",
+				"localSSD":         "false",
+				"metamorphicBuild": "false",
+				"coverageBuild":    "false",
 			}),
 		},
-		{true, false, false, true, vm.ArchARM64, clusterCreationErr, true, false,
-			prefixAll(map[string]string{
-				"cloud":     "gce",
-				"encrypted": "false",
-				"fs":        "ext4",
-				"ssd":       "0",
-				"cpu":       "4",
-				"arch":      "arm64",
-				"localSSD":  "true",
+		// 2.
+		{
+			localSSD:         true,
+			metamorphicBuild: true,
+			arch:             vm.ArchARM64,
+			failure:          createFailure(errClusterProvisioningFailed),
+			expectedPost:     true,
+			expectedLabels:   []string{"T-testeng", "X-infra-flake"},
+			expectedParams: prefixAll(map[string]string{
+				"cloud":            "gce",
+				"encrypted":        "false",
+				"fs":               "ext4",
+				"ssd":              "0",
+				"cpu":              "4",
+				"arch":             "arm64",
+				"localSSD":         "true",
+				"metamorphicBuild": "true",
+				"coverageBuild":    "false",
 			}),
 		},
-		// Assert that release-blocker label doesn't exist when
+		// 3. Assert that release-blocker label doesn't exist when
 		// !nonReleaseBlocker and issue is an SSH flake. Also ensure that
 		// in the event of a failed cluster creation, nil `vmOptions` and
 		// `clusterImpl` are not dereferenced
-		{false, true, false, false, "", sshErr, true, false,
-			prefixAll(map[string]string{
-				"cloud": "gce",
-				"ssd":   "0",
-				"cpu":   "4",
+		{
+			clusterCreationFailed: true,
+			failure:               createFailure(rperrors.ErrSSH255),
+			expectedPost:          true,
+			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
+			expectedParams: prefixAll(map[string]string{
+				"cloud":            "gce",
+				"ssd":              "0",
+				"cpu":              "4",
+				"metamorphicBuild": "false",
+				"coverageBuild":    "false",
 			}),
 		},
-		//Simulate failure loading TEAMS.yaml
-		{true, false, true, false, "", otherErr, false, false, nil},
+		// 4. Simulate failure loading TEAMS.yaml
+		{
+			nonReleaseBlocker: true,
+			loadTeamsFailed:   true,
+			failure:           createFailure(errors.New("other")),
+			expectedLabels:    []string{"C-test-failure"},
+		},
+		// 5. Error during post test assertions
+		{
+			nonReleaseBlocker: true,
+			failure:           createFailure(errDuringPostAssertions),
+			expectedLabels:    []string{"C-test-failure"},
+		},
+		// 6. Error during dns operation.
+		{
+			nonReleaseBlocker: true,
+			failure:           createFailure(gce.ErrDNSOperation),
+			expectedPost:      true,
+			expectedLabels:    []string{"T-testeng", "X-infra-flake"},
+		},
+		// 7. Assert that extra labels in the test spec are added to the issue.
+		{
+			extraLabels:    []string{"foo-label"},
+			failure:        createFailure(errors.New("other")),
+			expectedPost:   true,
+			expectedLabels: []string{"C-test-failure", "release-blocker", "foo-label"},
+			expectedParams: prefixAll(map[string]string{
+				"cloud":            "gce",
+				"encrypted":        "false",
+				"fs":               "ext4",
+				"ssd":              "0",
+				"cpu":              "4",
+				"arch":             "amd64",
+				"localSSD":         "false",
+				"metamorphicBuild": "false",
+				"coverageBuild":    "false",
+			}),
+		},
+		// 8. Verify that release-blocker label is not applied on metamorphic builds
+		// (for now).
+		{
+			metamorphicBuild: true,
+			failure:          createFailure(errors.New("other")),
+			expectedPost:     true,
+			expectedLabels:   []string{"C-test-failure", "B-metamorphic-enabled"},
+			expectedParams: prefixAll(map[string]string{
+				"cloud":            "gce",
+				"encrypted":        "false",
+				"fs":               "ext4",
+				"ssd":              "0",
+				"cpu":              "4",
+				"arch":             "amd64",
+				"localSSD":         "false",
+				"metamorphicBuild": "true",
+				"coverageBuild":    "false",
+			}),
+		},
+		// 9. Verify that release-blocker label is not applied on coverage builds (for
+		// now).
+		{
+			extraLabels:    []string{"foo-label"},
+			coverageBuild:  true,
+			failure:        createFailure(errors.New("other")),
+			expectedPost:   true,
+			expectedLabels: []string{"C-test-failure", "B-coverage-enabled", "foo-label"},
+			expectedParams: prefixAll(map[string]string{
+				"cloud":            "gce",
+				"encrypted":        "false",
+				"fs":               "ext4",
+				"ssd":              "0",
+				"cpu":              "4",
+				"arch":             "amd64",
+				"localSSD":         "false",
+				"metamorphicBuild": "false",
+				"coverageBuild":    "true",
+			}),
+		},
 	}
 
-	reg := makeTestRegistry(spec.GCE, "", "", false, false)
-	for _, c := range testCases {
-		clusterSpec := reg.MakeClusterSpec(1, spec.Arch(c.arch))
+	reg := makeTestRegistry()
+	for idx, c := range testCases {
+		t.Run(fmt.Sprintf("%d", idx+1), func(t *testing.T) {
+			clusterSpec := reg.MakeClusterSpec(1, spec.Arch(c.arch))
 
-		testSpec := &registry.TestSpec{
-			Name:              "github_test",
-			Owner:             OwnerUnitTest,
-			Cluster:           clusterSpec,
-			NonReleaseBlocker: c.nonReleaseBlocker,
-		}
-
-		ti := &testImpl{
-			spec: testSpec,
-			l:    nilLogger(),
-		}
-
-		testClusterImpl := &clusterImpl{spec: clusterSpec, arch: vm.ArchAMD64}
-		vo := vm.DefaultCreateOpts()
-		vmOpts := &vo
-
-		if c.clusterCreationFailed {
-			testClusterImpl = nil
-			vmOpts = nil
-		} else if !c.localSSD {
-			// The default is true set in `vm.DefaultCreateOpts`
-			vmOpts.SSDOpts.UseLocalSSD = false
-		}
-
-		teamLoadFn := validTeamsFn
-
-		if c.loadTeamsFailed {
-			teamLoadFn = invalidTeamsFn
-		}
-
-		github := &githubIssues{
-			vmCreateOpts: vmOpts,
-			cluster:      testClusterImpl,
-			teamLoader:   teamLoadFn,
-		}
-
-		if c.loadTeamsFailed {
-			// Assert that if TEAMS.yaml cannot be loaded then function panics.
-			assert.Panics(t, func() { github.createPostRequest(ti, c.category, "message") })
-		} else {
-			req := github.createPostRequest(ti, c.category, "message")
-
-			if c.expectedParams != nil {
-				require.Equal(t, c.expectedParams, req.ExtraParams)
+			testSpec := &registry.TestSpec{
+				Name:              "github_test",
+				Owner:             OwnerUnitTest,
+				Cluster:           clusterSpec,
+				NonReleaseBlocker: c.nonReleaseBlocker,
+				ExtraLabels:       c.extraLabels,
 			}
 
-			require.True(t, contains(req.ExtraLabels, nil, "O-roachtest"))
-			require.Equal(t, c.expectedReleaseBlocker, contains(req.ExtraLabels, nil, "release-blocker"))
-
-			expectedTeam := "@cockroachdb/unowned"
-			expectedName := "github_test"
-			expectedLabel := ""
-			expectedMessagePrefix := ""
-
-			if c.category == clusterCreationErr {
-				expectedTeam = "@cockroachdb/dev-inf"
-				expectedName = "cluster_creation"
-				expectedMessagePrefix = "test github_test was skipped due to "
-			} else if c.category == sshErr {
-				expectedTeam = "@cockroachdb/test-eng"
-				expectedLabel = "T-testeng"
-				expectedName = "ssh_problem"
-				expectedMessagePrefix = "test github_test failed due to "
+			ti := &testImpl{
+				spec:  testSpec,
+				l:     nilLogger(),
+				start: time.Date(2023, time.July, 21, 16, 34, 3, 817, time.UTC),
+				end:   time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC),
 			}
 
-			require.Contains(t, req.MentionOnCreate, expectedTeam)
-			require.Equal(t, expectedName, req.TestName)
-			require.True(t, strings.HasPrefix(req.Message, expectedMessagePrefix), req.Message)
-			if expectedLabel != "" {
-				require.Contains(t, req.ExtraLabels, expectedLabel)
+			testClusterImpl := &clusterImpl{spec: clusterSpec, arch: vm.ArchAMD64, name: "foo"}
+			vo := vm.DefaultCreateOpts()
+			vmOpts := &vo
+
+			if c.clusterCreationFailed {
+				testClusterImpl = nil
+				vmOpts = nil
+			} else if !c.localSSD {
+				// The default is true set in `vm.DefaultCreateOpts`
+				vmOpts.SSDOpts.UseLocalSSD = false
 			}
-		}
+
+			teamLoadFn := validTeamsFn
+
+			if c.loadTeamsFailed {
+				teamLoadFn = invalidTeamsFn
+			}
+
+			github := &githubIssues{
+				vmCreateOpts: vmOpts,
+				cluster:      testClusterImpl,
+				teamLoader:   teamLoadFn,
+			}
+
+			if c.loadTeamsFailed {
+				// Assert that if TEAMS.yaml cannot be loaded then function errors.
+				_, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild, c.coverageBuild)
+				assert.Error(t, err, "Expected an error in createPostRequest when loading teams fails, but got nil")
+			} else {
+				req, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild, c.coverageBuild)
+				assert.NoError(t, err, "Expected no error in createPostRequest")
+
+				r := &issues.Renderer{}
+				req.HelpCommand(r)
+				file := fmt.Sprintf("help_command_createpost_%d.txt", idx+1)
+				echotest.Require(t, r.String(), filepath.Join("testdata", file))
+
+				if c.expectedParams != nil {
+					require.Equal(t, c.expectedParams, req.ExtraParams)
+				}
+
+				expLabels := append([]string{"O-roachtest"}, c.expectedLabels...)
+				sort.Strings(expLabels)
+				labels := append([]string{}, req.Labels...)
+				sort.Strings(expLabels)
+				sort.Strings(labels)
+				require.Equal(t, expLabels, labels)
+
+				expectedTeam := "@cockroachdb/unowned"
+				expectedName := "github_test"
+				expectedMessagePrefix := ""
+
+				if errors.Is(c.failure.squashedErr, gce.ErrDNSOperation) {
+					expectedTeam = "@cockroachdb/test-eng"
+					expectedName = "dns_problem"
+					expectedMessagePrefix = "test github_test failed due to "
+				} else if errors.Is(c.failure.squashedErr, errClusterProvisioningFailed) {
+					expectedTeam = "@cockroachdb/test-eng"
+					expectedName = "cluster_creation"
+					expectedMessagePrefix = "test github_test was skipped due to "
+				} else if errors.Is(c.failure.squashedErr, rperrors.ErrSSH255) {
+					expectedTeam = "@cockroachdb/test-eng"
+					expectedName = "ssh_problem"
+					expectedMessagePrefix = "test github_test failed due to "
+				} else if errors.Is(c.failure.squashedErr, errDuringPostAssertions) {
+					expectedMessagePrefix = "test github_test failed during post test assertions (see test-post-assertions.log) due to "
+				}
+
+				require.Contains(t, req.MentionOnCreate, expectedTeam)
+				require.Equal(t, expectedName, req.TestName)
+				require.True(t, strings.HasPrefix(req.Message, expectedMessagePrefix), req.Message)
+			}
+		})
 	}
 }

@@ -535,10 +535,7 @@ func (tc *Collection) WriteZoneConfigToBatch(
 		return err
 	}
 
-	if descID != keys.RootNamespaceID && !keys.IsPseudoTableID(uint32(descID)) {
-		return tc.AddUncommittedZoneConfig(descID, zc.ZoneConfigProto())
-	}
-	return nil
+	return tc.AddUncommittedZoneConfig(descID, zc.ZoneConfigProto())
 }
 
 // DeleteZoneConfigInBatch deletes zone config of the table.
@@ -555,9 +552,7 @@ func (tc *Collection) DeleteZoneConfigInBatch(
 		return err
 	}
 
-	if descID != keys.RootNamespaceID && !keys.IsPseudoTableID(uint32(descID)) {
-		tc.MarkUncommittedZoneConfigDeleted(descID)
-	}
+	tc.MarkUncommittedZoneConfigDeleted(descID)
 	return nil
 }
 
@@ -732,13 +727,14 @@ func (tc *Collection) GetAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, 
 	return ret.Catalog, nil
 }
 
-// GetAllComments gets all comments for all descriptors. This method never
-// returns the underlying catalog, since it will be incomplete and only
+// GetAllComments gets all comments for all descriptors in the given database.
+// This method never returns the underlying catalog, since it will be incomplete and only
 // contain comments.
+// If the dbContext is nil, we return the database-level comments.
 func (tc *Collection) GetAllComments(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (nstree.CommentCatalog, error) {
-	kvComments, err := tc.cr.ScanAllComments(ctx, txn)
+	kvComments, err := tc.cr.ScanAllComments(ctx, txn, db)
 	if err != nil {
 		return nil, err
 	}
@@ -871,8 +867,9 @@ func (tc *Collection) GetAllInDatabase(
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
+
 	var inDatabaseIDs catalog.DescriptorIDSet
-	_ = ret.ForEachDescriptor(func(desc catalog.Descriptor) error {
+	if err := ret.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		if desc.DescriptorType() == catalog.Schema {
 			if dbID := desc.GetParentID(); dbID != descpb.InvalidID && dbID != db.GetID() {
 				return nil
@@ -884,7 +881,10 @@ func (tc *Collection) GetAllInDatabase(
 		}
 		inDatabaseIDs.Add(desc.GetID())
 		return nil
-	})
+	}); err != nil {
+		return nstree.Catalog{}, err
+	}
+
 	return ret.FilterByIDs(inDatabaseIDs.Ordered()), nil
 }
 

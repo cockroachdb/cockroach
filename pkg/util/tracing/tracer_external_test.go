@@ -20,7 +20,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl" // For tenant functionality.
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -106,11 +105,12 @@ func TestTraceForTenantWithLocalKVServer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	st := cluster.MakeTestingClusterSettings()
-	server.RedactServerTracesForSecondaryTenants.Override(ctx, &st.SV, false)
-	args := base.TestServerArgs{Settings: st}
-	s, _, _ := serverutils.StartServer(t, args)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
 	defer s.Stopper().Stop(ctx)
+
+	server.RedactServerTracesForSecondaryTenants.Override(ctx, &s.SystemLayer().ClusterSettings().SV, false)
 
 	// Create our own test tenant with a known name.
 	const tenantName = "test-tenant"
@@ -118,7 +118,7 @@ func TestTraceForTenantWithLocalKVServer(t *testing.T) {
 	testStmt := "SELECT 1 FROM t WHERE id=1"
 	var testStmtTrace tracingpb.Recording
 
-	_, tenantDB, err := s.StartSharedProcessTenant(ctx,
+	_, tenantDB, err := s.TenantController().StartSharedProcessTenant(ctx,
 		base.TestSharedProcessTenantArgs{
 			TenantName:  tenantName,
 			UseDatabase: "test",

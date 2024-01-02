@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -36,9 +36,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -58,7 +60,6 @@ type ttlServer interface {
 type rowLevelTTLTestJobTestHelper struct {
 	server           ttlServer
 	env              *jobstest.JobSchedulerTestEnv
-	cfg              *scheduledjobs.JobExecutionConfig
 	testCluster      serverutils.TestClusterInterface
 	sqlDB            *sqlutils.SQLRunner
 	kvDB             *kv.DB
@@ -76,17 +77,19 @@ func newRowLevelTTLTestJobTestHelper(
 		),
 	}
 
+	requestFilter, _ := testutils.TestingRequestFilterRetryTxnWithPrefix(t, "ttljob-", 1)
 	baseTestingKnobs := base.TestingKnobs{
+		Store: &kvserver.StoreTestingKnobs{
+			TestingRequestFilter: requestFilter,
+		},
 		JobsTestingKnobs: &jobs.TestingKnobs{
 			JobSchedulerEnv: th.env,
 			TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
 				th.executeSchedules = func() error {
+					th.env.SetTime(timeutil.Now().Add(time.Hour * 24))
 					defer th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 					return fn(context.Background(), 0 /* allSchedules */)
 				}
-			},
-			CaptureJobExecutionConfig: func(config *scheduledjobs.JobExecutionConfig) {
-				th.cfg = config
 			},
 		},
 		TTL: testingKnobs,
@@ -97,16 +100,10 @@ func newRowLevelTTLTestJobTestHelper(
 		replicationMode = base.ReplicationManual
 	}
 
-	var defaultTestTenant base.DefaultTestTenantOptions
-	// Disable the default test tenant when running multi-tenant tests.
-	if testMultiTenant {
-		defaultTestTenant = base.TestTenantDisabled
-	}
-
-	testCluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: replicationMode,
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: defaultTestTenant,
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109391),
 			Knobs:             baseTestingKnobs,
 			InsecureWebAccess: true,
 		},
@@ -125,17 +122,10 @@ func newRowLevelTTLTestJobTestHelper(
 		th.sqlDB = sqlutils.MakeSQLRunner(db)
 		th.server = tenantServer
 	} else {
-		db := serverutils.OpenDBConn(
-			t,
-			ts.ServingSQLAddr(),
-			"",    /* useDatabase */
-			false, /* insecure */
-			ts.Stopper(),
-		)
+		db := ts.SystemLayer().SQLConn(t)
 		th.sqlDB = sqlutils.MakeSQLRunner(db)
 		th.server = ts
 	}
-	require.NotNil(t, th.cfg)
 
 	th.kvDB = ts.DB()
 
@@ -147,11 +137,10 @@ func newRowLevelTTLTestJobTestHelper(
 func (h *rowLevelTTLTestJobTestHelper) waitForScheduledJob(
 	t *testing.T, expectedStatus jobs.Status, expectedErrorRe string,
 ) {
-	h.env.SetTime(timeutil.Now().Add(time.Hour * 24))
 	require.NoError(t, h.executeSchedules())
 
 	query := fmt.Sprintf(
-		`SELECT status, error FROM [SHOW JOBS] 
+		`SELECT status, error FROM [SHOW JOBS]
 		WHERE job_id IN (
 			SELECT id FROM %s
 			WHERE created_by_id IN (SELECT schedule_id FROM %s WHERE executor_type = 'scheduled-row-level-ttl-executor')
@@ -583,6 +572,10 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// This test is very slow.
+	skip.UnderDeadlock(t)
+	skip.UnderRace(t)
+
 	rng, _ := randutil.NewTestRand()
 
 	var indexableTyps []*types.T
@@ -697,7 +690,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	"quote-kw-col" TIMESTAMPTZ,
 	text TEXT,
 	PRIMARY KEY (id, other_col, "quote-kw-col")
-) WITH (ttl_expire_after = '30 days', ttl_delete_rate_limit = 350)`,
+) WITH (ttl_expire_after = '30 days', ttl_select_rate_limit = 350, ttl_delete_rate_limit = 350)`,
 			numExpiredRows:    1001,
 			numNonExpiredRows: 5,
 		},
@@ -1033,4 +1026,63 @@ func TestInboundForeignKeyOnDeleteRestrictNull(t *testing.T) {
 
 	results = sqlDB.QueryStr(t, "SELECT * FROM child")
 	require.Len(t, results, 1)
+}
+
+func TestMakeTTLJobDescription(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		desc                 string
+		tableSelectBatchSize int
+		jobSelectBatchSize   int
+	}{
+		{
+			desc:                 "default ttl_select_batch_size",
+			tableSelectBatchSize: 0,
+			jobSelectBatchSize:   ttlbase.DefaultSelectBatchSizeValue,
+		},
+		{
+			desc:                 "override ttl_select_batch_size",
+			tableSelectBatchSize: 1,
+			jobSelectBatchSize:   1,
+		},
+	}
+
+	getCreateTable := func(selectBatchSize int) string {
+		const createTable = `CREATE TABLE t (
+    id INT PRIMARY KEY,
+    expire_at TIMESTAMPTZ
+) WITH (
+    %s
+    ttl_expiration_expression = 'expire_at',
+    ttl_job_cron = '* * * * *'
+)`
+		selectBatchSizeClause := ""
+		if selectBatchSize > 0 {
+			selectBatchSizeClause = fmt.Sprintf("ttl_select_batch_size = %d,", selectBatchSize)
+		}
+		return fmt.Sprintf(createTable, selectBatchSizeClause)
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.desc, func(t *testing.T) {
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+				t,
+				&sql.TTLTestingKnobs{
+					AOSTDuration: &zeroDuration,
+				},
+				false, /* testMultiTenant */
+				1,     /* numNodes */
+			)
+			defer cleanupFunc()
+			createTable := getCreateTable(testCase.tableSelectBatchSize)
+			th.sqlDB.Exec(t, createTable)
+			th.waitForScheduledJob(t, jobs.StatusSucceeded, "")
+			rows := th.sqlDB.QueryStr(t, "SELECT description FROM [SHOW JOBS] WHERE job_type = 'ROW LEVEL TTL'")
+			require.Len(t, rows, 1)
+			row := rows[0]
+			require.Contains(t, row[0], fmt.Sprintf("LIMIT %d", testCase.jobSelectBatchSize))
+		})
+	}
 }

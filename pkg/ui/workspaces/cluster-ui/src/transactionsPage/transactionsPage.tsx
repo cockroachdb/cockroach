@@ -33,7 +33,7 @@ import {
   filterTransactions,
 } from "./utils";
 import { flatMap, merge } from "lodash";
-import { unique, syncHistory } from "src/util";
+import { Timestamp, TimestampToMoment, syncHistory, unique } from "src/util";
 import { EmptyTransactionsPlaceholder } from "./emptyTransactionsPlaceholder";
 import { Loading } from "../loading";
 import { Delayed } from "../delayed";
@@ -82,8 +82,9 @@ import {
 } from "src/util/sqlActivityConstants";
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
-import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
 import { RequestState } from "../api";
+import moment from "moment-timezone";
+import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
 
 const cx = classNames.bind(styles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
@@ -108,6 +109,8 @@ export interface TransactionsPageStateProps {
   search: string;
   sortSetting: SortSetting;
   hasAdminRole?: UIConfigState["hasAdminRole"];
+  requestTime: moment.Moment;
+  oldestDataAvailable: Timestamp;
 }
 
 export interface TransactionsPageDispatchProps {
@@ -127,6 +130,7 @@ export interface TransactionsPageDispatchProps {
     ascending: boolean,
   ) => void;
   onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) => void;
+  onRequestTimeChange: (t: moment.Moment) => void;
 }
 
 export type TransactionsPageProps = TransactionsPageStateProps &
@@ -178,7 +182,7 @@ export class TransactionsPage extends React.Component<
 
     // Search query.
     const searchQuery = searchParams.get("q") || undefined;
-    if (onSearchComplete && searchQuery && search != searchQuery) {
+    if (onSearchComplete && searchQuery && search !== searchQuery) {
       onSearchComplete(searchQuery);
     }
 
@@ -241,7 +245,7 @@ export class TransactionsPage extends React.Component<
     const searchParams = new URLSearchParams(history.location.search);
     const currentTab = searchParams.get("tab") || "";
     const searchQueryString = searchParams.get("q") || "";
-    if (currentTab === tab && search && search != searchQueryString) {
+    if (currentTab === tab && search && search !== searchQueryString) {
       syncHistory(
         {
           q: search,
@@ -287,7 +291,7 @@ export class TransactionsPage extends React.Component<
 
   isSortSettingSameAsReqSort = (): boolean => {
     return (
-      getSortColumn(this.props.reqSortSetting) ==
+      getSortColumn(this.props.reqSortSetting) ===
       this.props.sortSetting.columnTitle
     );
   };
@@ -415,6 +419,7 @@ export class TransactionsPage extends React.Component<
         getSortLabel(this.state.reqSortSetting, "Transaction"),
       );
     }
+    this.props.onRequestTimeChange(moment());
     this.refreshData();
     const ss: SortSetting = {
       ascending: false,
@@ -437,7 +442,7 @@ export class TransactionsPage extends React.Component<
   hasReqSortOption = (): boolean => {
     let found = false;
     Object.values(SqlStatsSortOptions).forEach((option: SqlStatsSortType) => {
-      if (getSortColumn(option) == this.props.sortSetting.columnTitle) {
+      if (getSortColumn(option) === this.props.sortSetting.columnTitle) {
         found = true;
       }
     });
@@ -502,7 +507,7 @@ export class TransactionsPage extends React.Component<
 
     // Creates a list of all possible columns,
     // hiding nodeRegions if is not multi-region and
-    // hiding columns that won't be displayed for tenants.
+    // hiding columns that won't be displayed for virtual clusters.
     const columns = makeTransactionsColumns(
       transactionsToDisplay,
       statements,
@@ -531,7 +536,6 @@ export class TransactionsPage extends React.Component<
       isSelectedColumn(userSelectedColumnsToShow, c),
     );
 
-    const period = <FormattedTimescale ts={this.props.timeScale} />;
     const sortSettingLabel = getSortLabel(
       this.props.reqSortSetting,
       "Transaction",
@@ -539,7 +543,7 @@ export class TransactionsPage extends React.Component<
     const showSortWarning =
       !this.isSortSettingSameAsReqSort() &&
       this.hasReqSortOption() &&
-      transactionsToDisplay.length == this.props.limit;
+      transactionsToDisplay.length === this.props.limit;
 
     return (
       <>
@@ -578,8 +582,14 @@ export class TransactionsPage extends React.Component<
           <PageConfig className={cx("float-right")}>
             <PageConfigItem>
               <p className={timeScaleStylesCx("time-label")}>
-                Showing aggregated stats from{" "}
-                <span className={timeScaleStylesCx("bold")}>{period}</span>
+                <TimeScaleLabel
+                  timeScale={this.props.timeScale}
+                  requestTime={moment(this.props.requestTime)}
+                  oldestDataTime={
+                    this.props.oldestDataAvailable &&
+                    TimestampToMoment(this.props.oldestDataAvailable)
+                  }
+                />
                 {", "}
                 <ResultsPerPageLabel
                   pagination={{
@@ -679,9 +689,11 @@ export class TransactionsPage extends React.Component<
             renderError={() =>
               LoadingError({
                 statsType: "transactions",
-                timeout: this.props.txnsResp?.error?.name
-                  ?.toLowerCase()
-                  .includes("timeout"),
+                error: this.props.txnsResp.error,
+                sourceTables: this.props.txnsResp?.data?.txns_source_table && [
+                  this.props.txnsResp?.data?.txns_source_table,
+                  this.props.txnsResp?.data?.stmts_source_table,
+                ],
               })
             }
           />

@@ -74,12 +74,12 @@ var _ lockTableGuard = &mockLockTableGuard{}
 // mockLockTableGuard implements the lockTableGuard interface.
 func (g *mockLockTableGuard) ShouldWait() bool            { return true }
 func (g *mockLockTableGuard) NewStateChan() chan struct{} { return g.signal }
-func (g *mockLockTableGuard) CurState() waitingState {
+func (g *mockLockTableGuard) CurState() (waitingState, error) {
 	s := g.state
 	if g.stateObserved != nil {
 		g.stateObserved <- struct{}{}
 	}
-	return s
+	return s, nil
 }
 func (g *mockLockTableGuard) ResolveBeforeScanning() []roachpb.LockUpdate {
 	return g.toResolve
@@ -89,7 +89,7 @@ func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*lockspanset.LockSpanSet
 }
 func (g *mockLockTableGuard) IsKeyLockedByConflictingTxn(
 	roachpb.Key, lock.Strength,
-) (bool, *enginepb.TxnMeta) {
+) (bool, *enginepb.TxnMeta, error) {
 	panic("unimplemented")
 }
 func (g *mockLockTableGuard) notify() { g.signal <- struct{}{} }
@@ -101,7 +101,7 @@ type mockLockTable struct {
 	txnFinalizedFn func(txn *roachpb.Transaction)
 }
 
-func (lt *mockLockTable) TransactionIsFinalized(txn *roachpb.Transaction) {
+func (lt *mockLockTable) TransactionUpdated(txn *roachpb.Transaction) {
 	lt.txnFinalizedFn(txn)
 }
 
@@ -133,7 +133,7 @@ func setupLockTableWaiterTest() (
 }
 
 func makeTxnProto(name string) roachpb.Transaction {
-	return roachpb.MakeTransaction(name, []byte("key"), 0, 0, hlc.Timestamp{WallTime: 10}, 0, 6)
+	return roachpb.MakeTransaction(name, []byte("key"), 0, 0, hlc.Timestamp{WallTime: 10}, 0, 6, 0, false /* omitInRangefeeds */)
 }
 
 // TestLockTableWaiterWithTxn tests the lockTableWaiter's behavior under
@@ -447,6 +447,11 @@ func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 			WaitPolicy: lock.WaitPolicy_Error,
 		}
 	}
+	makeHighPriReq := func() Request {
+		req := makeReq()
+		req.Txn.Priority = enginepb.MaxTxnPriority
+		return req
+	}
 
 	// NOTE: lockTableWaiterTestClock < uncertaintyLimit
 	expPushTS := lockTableWaiterTestClock
@@ -454,6 +459,10 @@ func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 	t.Run("state", func(t *testing.T) {
 		t.Run("waitFor", func(t *testing.T) {
 			testErrorWaitPush(t, waitFor, makeReq, expPushTS, reasonWaitPolicy)
+		})
+
+		t.Run("waitFor high priority", func(t *testing.T) {
+			testErrorWaitPush(t, waitFor, makeHighPriReq, expPushTS, reasonWaitPolicy)
 		})
 
 		t.Run("waitForDistinguished", func(t *testing.T) {
@@ -518,19 +527,21 @@ func testErrorWaitPush(
 			}
 			g.notify()
 
-			// If the lock is not held or expPushTS is empty, expect an error
-			// immediately. The one exception to this is waitElsewhere, which
-			// expects no error.
-			if !lockHeld || expPushTS == dontExpectPush {
+			// If expPushTS is empty, expect an error immediately.
+			if expPushTS == dontExpectPush {
 				err := w.WaitOn(ctx, req, g)
-				if k == waitElsewhere {
-					require.Nil(t, err)
-				} else {
-					require.NotNil(t, err)
-					wiErr := new(kvpb.WriteIntentError)
-					require.True(t, errors.As(err.GoError(), &wiErr))
-					require.Equal(t, errReason, wiErr.Reason)
-				}
+				require.NotNil(t, err)
+				wiErr := new(kvpb.WriteIntentError)
+				require.True(t, errors.As(err.GoError(), &wiErr))
+				require.Equal(t, errReason, wiErr.Reason)
+				return
+			}
+
+			// waitElsewhere does not cause a push if the lock is not held.
+			// It returns immediately.
+			if k == waitElsewhere && !lockHeld {
+				err := w.WaitOn(ctx, req, g)
+				require.Nil(t, err)
 				return
 			}
 
@@ -543,7 +554,7 @@ func testErrorWaitPush(
 				require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
 				require.Equal(t, req.Txn, h.Txn)
 				require.Equal(t, expPushTS, h.Timestamp)
-				require.Equal(t, kvpb.PUSH_TOUCH, pushType)
+				require.Equal(t, kvpb.PUSH_TIMESTAMP, pushType)
 
 				resp := &roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.PENDING}
 				if pusheeActive {
@@ -694,17 +705,6 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 					return
 				}
 
-				// If the lock is not held and the request hits its lock timeout
-				// before a deadlock push, an error is returned immediately.
-				if !lockHeld && timeoutBeforePush {
-					err := w.WaitOn(ctx, req, g)
-					require.NotNil(t, err)
-					wiErr := new(kvpb.WriteIntentError)
-					require.True(t, errors.As(err.GoError(), &wiErr))
-					require.Equal(t, reasonLockTimeout, wiErr.Reason)
-					return
-				}
-
 				expBlockingPush := !timeoutBeforePush
 				sawBlockingPush := false
 				sawNonBlockingPush := false
@@ -729,10 +729,11 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 						return nil, kvpb.NewError(ctx.Err())
 					}
 
-					require.Equal(t, kvpb.PUSH_TOUCH, pushType)
+					require.Equal(t, kvpb.PUSH_ABORT, pushType)
 					_, hasDeadline := ctx.Deadline()
 					require.False(t, hasDeadline)
 					sawNonBlockingPush = true
+					require.Equal(t, lock.WaitPolicy_Error, h.WaitPolicy)
 
 					resp := &roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.PENDING}
 					if pusheeActive {
@@ -772,7 +773,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 					require.Nil(t, err)
 				}
 				require.Equal(t, !timeoutBeforePush, sawBlockingPush)
-				require.Equal(t, lockHeld, sawNonBlockingPush)
+				require.True(t, sawNonBlockingPush)
 			})
 		})
 	})
@@ -924,6 +925,33 @@ func TestTxnCache(t *testing.T) {
 	for i, txnInCache := range c.txns {
 		require.Equal(t, &txns[i+overflow], txnInCache)
 	}
+}
+
+func TestTxnCacheUpdatesTxn(t *testing.T) {
+	var c txnCache
+
+	// Add txn to cache.
+	txnOrig := makeTxnProto("txn")
+	c.add(txnOrig.Clone())
+	txnInCache, ok := c.get(txnOrig.ID)
+	require.True(t, ok)
+	require.Equal(t, txnOrig.WriteTimestamp, txnInCache.WriteTimestamp)
+
+	// Add pushed txn with higher write timestamp.
+	txnPushed := txnOrig.Clone()
+	txnPushed.WriteTimestamp.Forward(txnPushed.WriteTimestamp.Add(1, 0))
+	c.add(txnPushed)
+	txnInCache, ok = c.get(txnOrig.ID)
+	require.True(t, ok)
+	require.NotEqual(t, txnOrig.WriteTimestamp, txnInCache.WriteTimestamp)
+	require.Equal(t, txnPushed.WriteTimestamp, txnInCache.WriteTimestamp)
+
+	// Re-add txn with lower timestamp. Timestamp should not regress.
+	c.add(txnOrig.Clone())
+	txnInCache, ok = c.get(txnOrig.ID)
+	require.True(t, ok)
+	require.NotEqual(t, txnOrig.WriteTimestamp, txnInCache.WriteTimestamp)
+	require.Equal(t, txnPushed.WriteTimestamp, txnInCache.WriteTimestamp)
 }
 
 func BenchmarkTxnCache(b *testing.B) {

@@ -369,9 +369,9 @@ message LocalOnlySessionData {
   int64 prepared_statements_cache_size = 97;
   // StreamerEnabled controls whether the Streamer API can be used.
   bool streamer_enabled = 98;
-  // DisableDropTenant causes errors when the client
-  // attempts to drop tenants or tenant records.
-  bool disable_drop_tenant = 99;
+  // DisableDropVirtualCluster causes errors when the client
+  // attempts to drop virtual clusters or tenant records.
+  bool disable_drop_virtual_cluster = 99;
   // MultipleActivePortalEnabled determines if the pgwire portal execution
   // for certain queries can be paused. If true, portals with read-only SELECT
   // query without sub/post queries can be executed in interleaving manner, but
@@ -402,12 +402,90 @@ message LocalOnlySessionData {
   // NOTE: we'd prefer to use tree.IsolationLevel here, but doing so would
   // introduce a package dependency cycle.
   int64 default_txn_isolation_level = 105;
+  // ReplicationMode represents the replication parameter passed in during
+  // connection time.
+  ReplicationMode replication_mode = 106;
+  // OptimizerUseImprovedJoinElimination, when true, allows the optimizer to
+  // eliminate joins in more cases by remapping columns from the eliminated
+  // input of the join to equivalent columns from the preserved input.
+  bool optimizer_use_improved_join_elimination = 107;
+  // ImplicitFKLockingForSerializable is true if FOR SHARE locking may be used
+  // while checking the referenced table during an insert or update to a table
+  // with a foreign key under serializable isolation. (Under weaker isolation
+  // levels foreign key checks of the parent table always use FOR SHARE
+  // locking.)
+  bool implicit_fk_locking_for_serializable = 108 [
+    (gogoproto.customname) = "ImplicitFKLockingForSerializable"
+  ];
+  // DurableLockingForSerializable is true if we should use durable locking for
+  // SELECT FOR UPDATE statements, SELECT FOR SHARE statements, and constraint
+  // checks under serializable isolation. (Serializable isolation does not
+  // require locking for correctness, so by default we use best-effort locks for
+  // better performance.) Weaker isolation levels always use durable locking.
+  bool durable_locking_for_serializable = 109;
+  // SharedLockingForSerializable, if set to true, means SELECT FOR SHARE and
+  // SELECT FOR KEY SHARE statements issued by transactions that run with
+  // serializable isolation will acquire shared locks; otherwise, they'll
+  // perform non-locking reads.
+  //
+  // Weaker isolation levels always acquire shared locks for SELECT FOR SHARE
+  // and SELECT FOR KEY SHARE statements, regardless of this session setting.
+  bool shared_locking_for_serializable = 112;
+  // MaxRetriesForReadCommitted indicates the maximum number of
+  // automatic retries to perform for statements in explicit READ COMMITTED
+  // transactions that see a transaction retry error.
+  int32 max_retries_for_read_committed = 110;
+  // StrictDDLAtomicity causes errors when the client attempts DDL
+  // operations inside an explicit txn and CockroachDB cannot
+  // guarantee the DDL to be performed atomically.
+  //
+  // When this is not set, a transaction may commit its DML
+  // statements but fail its DDL statements, resulting
+  // in error XXA00 - TransactionCommittedWithSchemaChangeFailure.
+  //
+  // When this is set, that particular atomicity violation should
+  // not occur any more (at the expense of disabling certain
+  // forms of DDL inside explicit txns).
+  bool strict_ddl_atomicity = 111 [(gogoproto.customname) = "StrictDDLAtomicity"];
+  // UnsafeSettingInterlockKey needs to be set to a special string
+  // before SET CLUSTER SETTING is allowed on an unsafe setting.
+  string unsafe_setting_interlock_key = 113;
+  // OptimizerUseLockOpForSerializable, when true, instructs the optimizer to
+  // implement SELECT FOR UPDATE and SELECT FOR SHARE statements using the Lock
+  // operator under serializable isolation.
+  //
+  // For correctness, under weaker isolation levels the optimizer always
+  // implements SELECT FOR UPDATE and SELECT FOR SHARE using the Lock operator,
+  // regardless of this setting.
+  bool optimizer_use_lock_op_for_serializable = 114;
+  // OptimizerUseProvidedOrderingFix, when true, causes the optimizer to
+  // reconcile provided orderings with required ordering choices. This prevents
+  // internal errors due to incomplete functional dependencies, and also
+  // fixes a bug that incorrectly truncated the provided ordering (see #113072).
+  bool optimizer_use_provided_ordering_fix = 115;
+  // DisableChangefeedReplication, when true, disables changefeed events from
+  // being emitted for changes to data made in a session.
+  bool disable_changefeed_replication = 116;
+  // CopyTxnQualityOfService indicates the default QoSLevel/WorkPriority of the
+  // transactions used to evaluate COPY commands.
+  int32 copy_txn_quality_of_service = 117 [(gogoproto.casttype)="QoSLevel"];
+  // CopyWritePipeliningEnabled indicates whether the write pipelining is
+  // enabled for implicit txns used by COPY.
+  bool copy_write_pipelining_enabled = 118;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
   // in the SessionData message instead.                                   //
   ///////////////////////////////////////////////////////////////////////////
+}
+
+// ReplicationMode represents the replication={0,1,on,off,database} connection
+// parameter in PostgreSQL.
+enum ReplicationMode {
+  REPLICATION_MODE_DISABLED = 0;
+  REPLICATION_MODE_ENABLED = 1;
+  REPLICATION_MODE_DATABASE = 2;
 }
 
 // SequenceCacheEntry is an entry in a SequenceCache.

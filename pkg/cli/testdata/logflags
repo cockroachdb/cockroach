@@ -383,7 +383,8 @@ redactable: true,
 exit-on-error: false,
 buffering: {max-staleness: 5s,
 flush-trigger-size: 1.0MiB,
-max-buffer-size: 50MiB}}},
+max-buffer-size: 50MiB,
+format: newline}}},
 <stderrDisabled>},
 <stdCaptureFd2(<defaultLogDir>)>}
 

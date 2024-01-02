@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -25,16 +25,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -50,7 +55,10 @@ type Catalog struct {
 	testSchema Schema
 	counter    int
 	enumTypes  map[string]*types.T
-	udfs       map[string]*tree.ResolvedFunctionDefinition
+
+	udfs           map[string]*tree.ResolvedFunctionDefinition
+	currUDFOid     oid.Oid
+	revokedUDFOids intsets.Fast
 }
 
 type dataSource interface {
@@ -67,13 +75,22 @@ func New() *Catalog {
 			SchemaID: 1,
 			SchemaName: cat.SchemaName{
 				CatalogName:     testDB,
-				SchemaName:      tree.PublicSchemaName,
+				SchemaName:      catconstants.PublicSchemaName,
 				ExplicitSchema:  true,
 				ExplicitCatalog: true,
 			},
 			dataSources: make(map[string]dataSource),
 		},
 	}
+}
+
+func (tc *Catalog) LookupDatabaseName(
+	_ context.Context, _ cat.Flags, name string,
+) (tree.Name, error) {
+	if name != testDB {
+		return "", sqlerrors.NewUndefinedDatabaseError(name)
+	}
+	return tree.Name(name), nil
 }
 
 // ResolveSchema is part of the cat.Catalog interface.
@@ -99,14 +116,14 @@ func (tc *Catalog) ResolveSchema(
 		// No luck so far. Compatibility with CockroachDB v1.1: use D.public
 		// instead.
 		toResolve.CatalogName = name.SchemaName
-		toResolve.SchemaName = tree.PublicSchemaName
+		toResolve.SchemaName = catconstants.PublicSchemaName
 		toResolve.ExplicitCatalog = true
 		return tc.resolveSchema(&toResolve)
 	}
 
 	// Neither schema or catalog was specified, so use t.public.
 	toResolve.CatalogName = tree.Name(testDB)
-	toResolve.SchemaName = tree.PublicSchemaName
+	toResolve.SchemaName = catconstants.PublicSchemaName
 	return tc.resolveSchema(&toResolve)
 }
 
@@ -116,7 +133,7 @@ func (tc *Catalog) GetAllSchemaNamesForDB(
 ) ([]cat.SchemaName, error) {
 	var schemaNames []cat.SchemaName
 	var scName cat.SchemaName
-	scName.SchemaName = tree.PublicSchemaName
+	scName.SchemaName = catconstants.PublicSchemaName
 	scName.ExplicitSchema = true
 	scName.CatalogName = tree.Name(dbName)
 	scName.ExplicitCatalog = true
@@ -151,7 +168,7 @@ func (tc *Catalog) ResolveDataSource(
 		// No luck so far. Compatibility with CockroachDB v1.1: try D.public.T
 		// instead.
 		toResolve.CatalogName = name.SchemaName
-		toResolve.SchemaName = tree.PublicSchemaName
+		toResolve.SchemaName = catconstants.PublicSchemaName
 		toResolve.ExplicitCatalog = true
 		ds, err = tc.resolveDataSource(&toResolve)
 		if err == nil {
@@ -160,7 +177,7 @@ func (tc *Catalog) ResolveDataSource(
 	} else {
 		// This is a naked data source name. Use the current database.
 		toResolve.CatalogName = tree.Name(testDB)
-		toResolve.SchemaName = tree.PublicSchemaName
+		toResolve.SchemaName = catconstants.PublicSchemaName
 		ds, err = tc.resolveDataSource(&toResolve)
 		if err == nil {
 			return ds, toResolve, nil
@@ -173,6 +190,11 @@ func (tc *Catalog) ResolveDataSource(
 		// We rely on the check in CreateTable against this table's schema to infer
 		// that this is a virtual table.
 		return tc.CreateTable(table), *name, nil
+	}
+	if view, ok := resolveVirtualView(name); ok {
+		// We rely on the check in CreateView against this table's schema to infer
+		// that this is a virtual table.
+		return tc.CreateView(view), *name, nil
 	}
 
 	// If this didn't end up being a virtual table, then return the original
@@ -267,8 +289,18 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 		if t.Revoked {
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "user does not have privilege to access %v", t.SeqName)
 		}
+	case *syntheticprivilege.GlobalPrivilege:
+
 	default:
 		panic("invalid Object")
+	}
+	return nil
+}
+
+// CheckExecutionPrivilege is part of the cat.Catalog interface.
+func (tc *Catalog) CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error {
+	if tc.revokedUDFOids.Contains(int(oid)) {
+		return pgerror.Newf(pgcode.InsufficientPrivilege, "user does not have privilege to execute function with OID %d", oid)
 	}
 	return nil
 }
@@ -276,11 +308,6 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 // HasAdminRole is part of the cat.Catalog interface.
 func (tc *Catalog) HasAdminRole(ctx context.Context) (bool, error) {
 	return true, nil
-}
-
-// RequireAdminRole is part of the cat.Catalog interface.
-func (tc *Catalog) RequireAdminRole(ctx context.Context, action string) error {
-	return nil
 }
 
 // HasRoleOption is part of the cat.Catalog interface.
@@ -295,9 +322,14 @@ func (tc *Catalog) FullyQualifiedName(
 	return ds.(dataSource).fqName(), nil
 }
 
-// RoleExists is part of the cat.Catalog interface.
-func (tc *Catalog) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
-	return true, nil
+// CheckRoleExists is part of the cat.Catalog interface.
+func (tc *Catalog) CheckRoleExists(ctx context.Context, role username.SQLUsername) error {
+	return nil
+}
+
+// Optimizer is part of the cat.Catalog interface.
+func (tc *Catalog) Optimizer() interface{} {
+	return nil
 }
 
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
@@ -306,7 +338,7 @@ func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.Sch
 			"target database or schema does not exist")
 	}
 
-	if string(toResolve.SchemaName) != tree.PublicSchema {
+	if string(toResolve.SchemaName) != catconstants.PublicSchemaName {
 		return nil, cat.SchemaName{}, pgerror.Newf(pgcode.InvalidName,
 			"schema cannot be modified: %q", tree.ErrString(toResolve))
 	}
@@ -449,6 +481,21 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 	if err != nil {
 		return "", err
 	}
+	return tc.executeDDLStmtWithIndexVersion(stmt, indexVersion)
+}
+
+// ExecuteDDLStmtWithIndexVersion statement and creates objects in the test
+// catalog from the given statement. This is used to test without spinning up a
+// cluster.
+func (tc *Catalog) ExecuteDDLStmt(stmt statements.Statement[tree.Statement]) (string, error) {
+	return tc.executeDDLStmtWithIndexVersion(stmt, descpb.LatestIndexDescriptorVersion)
+}
+
+// executeDDLStmtWithIndexVersion statement and creates objects in the test
+// catalog from the given statement.
+func (tc *Catalog) executeDDLStmtWithIndexVersion(
+	stmt statements.Statement[tree.Statement], indexVersion descpb.IndexDescriptorVersion,
+) (string, error) {
 
 	switch stmt := stmt.AST.(type) {
 	case *tree.CreateTable:
@@ -483,8 +530,8 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 		tc.CreateType(stmt)
 		return "", nil
 
-	case *tree.CreateFunction:
-		tc.CreateFunction(stmt)
+	case *tree.CreateRoutine:
+		tc.CreateRoutine(stmt)
 		return "", nil
 
 	case *tree.SetZoneConfig:
@@ -499,8 +546,8 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 		}
 		return ds.(fmt.Stringer).String(), nil
 
-	case *tree.ShowCreateFunction:
-		fn := stmt.Name.FunctionReference.(*tree.UnresolvedName)
+	case *tree.ShowCreateRoutine:
+		fn := tree.MakeUnresolvedFunctionName(stmt.Name.FunctionReference.(*tree.UnresolvedName))
 		def, err := tc.ResolveFunction(context.Background(), fn, tree.EmptySearchPath)
 		if err != nil {
 			return "", err
@@ -536,7 +583,7 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 			return
 		}
 
-		if name.SchemaName == tree.PublicSchemaName {
+		if name.SchemaName == catconstants.PublicSchemaName {
 			// Use the current database.
 			name.CatalogName = testDB
 			return
@@ -544,13 +591,13 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 
 		// Compatibility with CockroachDB v1.1: use D.public.T.
 		name.CatalogName = name.SchemaName
-		name.SchemaName = tree.PublicSchemaName
+		name.SchemaName = catconstants.PublicSchemaName
 		return
 	}
 
 	// Use the current database.
 	name.CatalogName = testDB
-	name.SchemaName = tree.PublicSchemaName
+	name.SchemaName = catconstants.PublicSchemaName
 }
 
 // Schema implements the cat.Schema interface for testing purposes.
@@ -910,6 +957,11 @@ func (tt *Table) GetDatabaseID() descpb.ID {
 	return tt.DatabaseID
 }
 
+// IsHypothetical is part of the cat.Table interface.
+func (tt *Table) IsHypothetical() bool {
+	return false
+}
+
 // FindOrdinal returns the ordinal of the column with the given name.
 func (tt *Table) FindOrdinal(name string) int {
 	for i, col := range tt.Columns {
@@ -1026,7 +1078,7 @@ type Index struct {
 
 	// geoConfig is the geospatial index configuration, if this is a geospatial
 	// inverted index.
-	geoConfig geoindex.Config
+	geoConfig geopb.Config
 
 	// version is the index descriptor version of the index.
 	version descpb.IndexDescriptorVersion
@@ -1140,7 +1192,7 @@ func (ti *Index) ImplicitPartitioningColumnCount() int {
 }
 
 // GeoConfig is part of the cat.Index interface.
-func (ti *Index) GeoConfig() geoindex.Config {
+func (ti *Index) GeoConfig() geopb.Config {
 	return ti.geoConfig
 }
 
@@ -1191,6 +1243,36 @@ func (p *Partition) PartitionByListPrefixes() []tree.Datums {
 // SetDatums manually sets the partitioning values.
 func (p *Partition) SetDatums(datums []tree.Datums) {
 	p.datums = datums
+}
+
+// CheckConstraint implements cat.CheckConstraint. See that interface
+// for more information on the fields.
+type CheckConstraint struct {
+	constraint     string
+	validated      bool
+	columnOrdinals []int
+}
+
+var _ cat.CheckConstraint = &CheckConstraint{}
+
+// Constraint is part of the cat.CheckConstraint interface.
+func (c *CheckConstraint) Constraint() string {
+	return c.constraint
+}
+
+// Validated is part of the cat.CheckConstraint interface.
+func (c *CheckConstraint) Validated() bool {
+	return c.validated
+}
+
+// ColumnCount is part of the cat.CheckConstraint interface.
+func (c *CheckConstraint) ColumnCount() int {
+	return len(c.columnOrdinals)
+}
+
+// ColumnOrdinal is part of the cat.CheckConstraint interface.
+func (c *CheckConstraint) ColumnOrdinal(i int) int {
+	return c.columnOrdinals[i]
 }
 
 // TableStat implements the cat.TableStatistic interface for testing purposes.
@@ -1287,7 +1369,7 @@ func (ts *TableStat) Histogram() []cat.HistogramBucket {
 
 	for i := offset; i < len(ts.histogram); i++ {
 		bucket := &ts.js.HistogramBuckets[i-offset]
-		datum, err := rowenc.ParseDatumStringAs(context.Background(), colType, bucket.UpperBound, evalCtx)
+		datum, err := rowenc.ParseDatumStringAs(context.Background(), colType, bucket.UpperBound, evalCtx, nil /* semaCtx */)
 		if err != nil {
 			panic(err)
 		}

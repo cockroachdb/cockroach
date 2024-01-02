@@ -27,9 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -111,6 +114,10 @@ func TableDescs(
 		// Walk view query and remap sequence IDs.
 		if table.IsView() {
 			viewQuery, err := rewriteSequencesInView(table.ViewQuery, descriptorRewrites)
+			if err != nil {
+				return err
+			}
+			viewQuery, err = rewriteTypesInView(viewQuery, descriptorRewrites)
 			if err != nil {
 				return err
 			}
@@ -323,27 +330,46 @@ func rewriteViewQueryDBNames(table *tabledesc.Mutable, newDB string) error {
 	return nil
 }
 
-func rewriteFunctionBodyDBNames(fnBody string, newDB string) (string, error) {
-	stmts, err := parser.Parse(fnBody)
-	if err != nil {
-		return "", err
-	}
+func rewriteFunctionBodyDBNames(
+	fnBody string, newDB string, lang catpb.Function_Language,
+) (string, error) {
 	replaceFunc := makeDBNameReplaceFunc(newDB)
-
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	for i, stmt := range stmts {
-		if i > 0 {
-			fmtCtx.WriteString("\n")
+	switch lang {
+	case catpb.Function_SQL:
+		fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+		stmts, err := parser.Parse(fnBody)
+		if err != nil {
+			return "", err
 		}
-		f := tree.NewFmtCtx(
+		for i, stmt := range stmts {
+			if i > 0 {
+				fmtCtx.WriteString("\n")
+			}
+			f := tree.NewFmtCtx(
+				tree.FmtParsable,
+				tree.FmtReformatTableNames(replaceFunc),
+			)
+			f.FormatNode(stmt.AST)
+			fmtCtx.WriteString(f.CloseAndGetString())
+			fmtCtx.WriteString(";")
+		}
+		return fmtCtx.CloseAndGetString(), nil
+
+	case catpb.Function_PLPGSQL:
+		stmt, err := plpgsqlparser.Parse(fnBody)
+		if err != nil {
+			return "", err
+		}
+		fmtCtx := tree.NewFmtCtx(
 			tree.FmtParsable,
 			tree.FmtReformatTableNames(replaceFunc),
 		)
-		f.FormatNode(stmt.AST)
-		fmtCtx.WriteString(f.CloseAndGetString())
-		fmtCtx.WriteString(";")
+		fmtCtx.FormatNode(stmt.AST)
+		return fmtCtx.CloseAndGetString(), nil
+
+	default:
+		return "", errors.AssertionFailedf("unexpected function language %s", lang)
 	}
-	return fmtCtx.CloseAndGetString(), nil
 }
 
 // rewriteTypesInExpr rewrites all explicit ID type references in the input
@@ -353,8 +379,62 @@ func rewriteTypesInExpr(expr string, rewrites jobspb.DescRewriteMap) (string, er
 	if err != nil {
 		return "", err
 	}
+	ctx := makeTypeReplaceFmtCtx(rewrites)
+	ctx.FormatNode(parsed)
+	return ctx.CloseAndGetString(), nil
+}
 
-	ctx := tree.NewFmtCtx(
+// rewriteTypesInView rewrites all explicit ID type references in the input view
+// query string according to rewrites.
+func rewriteTypesInView(viewQuery string, rewrites jobspb.DescRewriteMap) (string, error) {
+	stmt, err := parser.ParseOne(viewQuery)
+	if err != nil {
+		return "", err
+	}
+	ctx := makeTypeReplaceFmtCtx(rewrites)
+	ctx.FormatNode(stmt.AST)
+	return ctx.CloseAndGetString(), nil
+}
+
+func rewriteTypesInRoutine(
+	fnBody string, rewrites jobspb.DescRewriteMap, lang catpb.Function_Language,
+) (string, error) {
+	switch lang {
+	case catpb.Function_SQL:
+		fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+		stmts, err := parser.Parse(fnBody)
+		if err != nil {
+			return "", err
+		}
+		for i, stmt := range stmts {
+			if i > 0 {
+				fmtCtx.WriteString("\n")
+			}
+			typeReplaceCtx := makeTypeReplaceFmtCtx(rewrites)
+			typeReplaceCtx.FormatNode(stmt.AST)
+			fmtCtx.WriteString(typeReplaceCtx.CloseAndGetString())
+			fmtCtx.WriteString(";")
+		}
+		return fmtCtx.CloseAndGetString(), nil
+
+	case catpb.Function_PLPGSQL:
+		stmt, err := plpgsqlparser.Parse(fnBody)
+		if err != nil {
+			return "", err
+		}
+		typeReplaceCtx := makeTypeReplaceFmtCtx(rewrites)
+		typeReplaceCtx.FormatNode(stmt.AST)
+		return typeReplaceCtx.CloseAndGetString(), nil
+
+	default:
+		return "", errors.AssertionFailedf("unexpected function language: %v", lang)
+	}
+}
+
+// makeTypeReplaceFmtCtx returns a FmtCtx which rewrites explicit ID references
+// according to the rewrites map.
+func makeTypeReplaceFmtCtx(rewrites jobspb.DescRewriteMap) *tree.FmtCtx {
+	return tree.NewFmtCtx(
 		tree.FmtSerializable,
 		tree.FmtIndexedTypeFormat(func(ctx *tree.FmtCtx, ref *tree.OIDTypeReference) {
 			newRef := ref
@@ -365,8 +445,6 @@ func rewriteTypesInExpr(expr string, rewrites jobspb.DescRewriteMap) (string, er
 			ctx.WriteString(newRef.SQLString())
 		}),
 	)
-	ctx.FormatNode(parsed)
-	return ctx.CloseAndGetString(), nil
 }
 
 // rewriteSequencesInExpr rewrites all sequence IDs in the input expression
@@ -457,23 +535,40 @@ func rewriteSequencesInView(viewQuery string, rewrites jobspb.DescRewriteMap) (s
 	return newStmt.String(), nil
 }
 
-func rewriteSequencesInFunction(fnBody string, rewrites jobspb.DescRewriteMap) (string, error) {
-	stmts, err := parser.Parse(fnBody)
-	if err != nil {
-		return "", err
-	}
-
+func rewriteSequencesInFunction(
+	fnBody string, rewrites jobspb.DescRewriteMap, lang catpb.Function_Language,
+) (string, error) {
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	for i, stmt := range stmts {
-		newStmt, err := tree.SimpleStmtVisit(stmt.AST, makeSequenceReplaceFunc(rewrites))
+	replaceSeqFunc := makeSequenceReplaceFunc(rewrites)
+	switch lang {
+	case catpb.Function_SQL:
+		stmts, err := parser.Parse(fnBody)
 		if err != nil {
 			return "", err
 		}
-		if i > 0 {
-			fmtCtx.WriteString("\n")
+		for i, stmt := range stmts {
+			newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceSeqFunc)
+			if err != nil {
+				return "", err
+			}
+			if i > 0 {
+				fmtCtx.WriteString("\n")
+			}
+			fmtCtx.FormatNode(newStmt)
+			fmtCtx.WriteString(";")
 		}
+
+	case catpb.Function_PLPGSQL:
+		stmt, err := plpgsqlparser.Parse(fnBody)
+		if err != nil {
+			return "", err
+		}
+		v := utils.SQLStmtVisitor{Fn: replaceSeqFunc}
+		newStmt := plpgsqltree.Walk(&v, stmt.AST)
 		fmtCtx.FormatNode(newStmt)
-		fmtCtx.WriteString(";")
+
+	default:
+		return "", errors.AssertionFailedf("unexpected function language %s", lang)
 	}
 	return fmtCtx.CloseAndGetString(), nil
 }
@@ -651,6 +746,18 @@ func rewriteSchemaChangerState(
 	var droppedConstraints catalog.ConstraintIDSet
 	for i := 0; i < len(state.Targets); i++ {
 		t := &state.Targets[i]
+		// Since the parent database ID is never written in the descriptorRewrites
+		// map we need to special case certain elements that need their ParentID
+		// re-written.
+		if data := t.GetTableData(); data != nil {
+			rewrite, ok := descriptorRewrites[data.TableID]
+			if !ok {
+				return errors.Errorf("missing rewrite for id %d in %s", data.TableID, screl.ElementString(t.Element()))
+			}
+			data.TableID = rewrite.ID
+			data.DatabaseID = rewrite.ParentID
+			continue
+		}
 		if err := screl.WalkDescIDs(t.Element(), func(id *descpb.ID) error {
 			if *id == descpb.InvalidID {
 				// Some descriptor ID fields in elements may be deliberately unset.
@@ -901,13 +1008,17 @@ func FunctionDescs(
 		// Rewrite function body.
 		fnBody := fnDesc.FunctionBody
 		if overrideDB != "" {
-			dbNameReplaced, err := rewriteFunctionBodyDBNames(fnDesc.FunctionBody, overrideDB)
+			dbNameReplaced, err := rewriteFunctionBodyDBNames(fnBody, overrideDB, fnDesc.Lang)
 			if err != nil {
 				return err
 			}
 			fnBody = dbNameReplaced
 		}
-		fnBody, err := rewriteSequencesInFunction(fnBody, descriptorRewrites)
+		fnBody, err := rewriteSequencesInFunction(fnBody, descriptorRewrites, fnDesc.Lang)
+		if err != nil {
+			return err
+		}
+		fnBody, err = rewriteTypesInRoutine(fnBody, descriptorRewrites, fnDesc.Lang)
 		if err != nil {
 			return err
 		}

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -60,9 +59,8 @@ func WaitForNoIngestingNodes(
 		}
 
 		if timeutil.Since(lastStatusUpdate) > statusUpdateFrequency {
-			if statusErr := job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
-				return jobs.RunningStatus(fmt.Sprintf("waiting for all nodes to finish ingesting writing before proceeding: %s", err)), nil
-			}); statusErr != nil {
+			status := jobs.RunningStatus(fmt.Sprintf("waiting for all nodes to finish ingesting writing before proceeding: %s", err))
+			if statusErr := job.NoTxn().RunningStatus(ctx, status); statusErr != nil {
 				log.Warningf(ctx, "failed to update running status of job %d: %s", job.ID(), statusErr)
 			} else {
 				lastStatusUpdate = timeutil.Now()

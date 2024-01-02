@@ -166,7 +166,7 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var newVersion = clusterversion.TestingBinaryVersion
+	var newVersion = clusterversion.Latest.Version()
 	var oldVersion = prev(newVersion)
 
 	// Starts 3 nodes that have cluster versions set to be oldVersion and
@@ -208,10 +208,11 @@ func TestClusterVersionUpgrade(t *testing.T) {
 
 	skip.UnderShort(t, "test takes minutes")
 	skip.UnderRace(t, "takes >5mn under race")
+	skip.UnderStress(t, "takes >3mn under stress")
 
 	ctx := context.Background()
 
-	var newVersion = clusterversion.TestingBinaryVersion
+	var newVersion = clusterversion.Latest.Version()
 	var oldVersion = prev(newVersion)
 
 	disableUpgradeCh := make(chan struct{})
@@ -349,7 +350,7 @@ func TestAllVersionsAgree(t *testing.T) {
 		TestCluster: tcRaw,
 	}
 
-	exp := clusterversion.TestingBinaryVersion.String()
+	exp := clusterversion.Latest.String()
 
 	// The node bootstrapping the cluster starts at TestingBinaryVersion, the
 	// others start at TestingMinimumSupportedVersion and it takes them a gossip
@@ -375,8 +376,8 @@ func TestAllVersionsAgree(t *testing.T) {
 // equal the TestingBinaryMinSupportedVersion to avoid rot in tests using this
 // (as we retire old versions).
 func v0v1() (roachpb.Version, roachpb.Version) {
-	v1 := clusterversion.TestingBinaryMinSupportedVersion
-	v0 := clusterversion.TestingBinaryMinSupportedVersion
+	v1 := clusterversion.MinSupported.Version()
+	v0 := clusterversion.MinSupported.Version()
 	if v0.Minor > 0 {
 		v0.Minor--
 	} else {
@@ -432,7 +433,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 						ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 					) error {
 						return nil
-					}), true
+					}, "test"), true
 			},
 		},
 	}

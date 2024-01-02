@@ -248,8 +248,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	// Test uses sticky registry to have persistent pebble state that could
 	// be analyzed for existence of snapshots and to verify snapshot content
 	// after failures.
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	stickyVFSRegistry := server.NewStickyVFSRegistry()
 
 	// The cluster has 3 nodes, one store per node. The test writes a few KVs to a
 	// range, which gets replicated to all 3 stores. Then it manually replaces an
@@ -270,11 +269,11 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		serverArgsPerNode[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store:  &testKnobs,
-				Server: &server.TestingKnobs{StickyEngineRegistry: stickyEngineRegistry},
+				Server: &server.TestingKnobs{StickyVFSRegistry: stickyVFSRegistry},
 			},
 			StoreSpecs: []base.StoreSpec{{
-				InMemory:               true,
-				StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+				InMemory:    true,
+				StickyVFSID: strconv.FormatInt(int64(i), 10),
 			}},
 		}
 	}
@@ -307,9 +306,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	}
 
 	onDiskCheckpointPaths := func(nodeIdx int) []string {
-		fs, err := stickyEngineRegistry.GetUnderlyingFS(
-			base.StoreSpec{StickyInMemoryEngineID: strconv.FormatInt(int64(nodeIdx), 10)})
-		require.NoError(t, err)
+		fs := stickyVFSRegistry.Get(strconv.FormatInt(int64(nodeIdx), 10))
 		store := tc.GetFirstStoreFromServer(t, nodeIdx)
 		checkpointPath := filepath.Join(store.TODOEngine().GetAuxiliaryDir(), "checkpoints")
 		checkpoints, _ := fs.List(checkpointPath)
@@ -340,11 +337,13 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	// Write some arbitrary data only to store on n2. Inconsistent key "e"!
 	s2 := tc.GetFirstStoreFromServer(t, 1)
+	s2AuxDir := s2.TODOEngine().GetAuxiliaryDir()
 	var val roachpb.Value
 	val.SetInt(42)
 	// Put an inconsistent key "e" to s2, and have s1 and s3 still agree.
-	require.NoError(t, storage.MVCCPut(context.Background(), s2.TODOEngine(), nil,
-		roachpb.Key("e"), tc.Server(0).Clock().Now(), hlc.ClockTimestamp{}, val, nil))
+	_, err := storage.MVCCPut(context.Background(), s2.TODOEngine(),
+		roachpb.Key("e"), tc.Server(0).Clock().Now(), val, storage.MVCCWriteOptions{})
+	require.NoError(t, err)
 
 	// Run consistency check again, this time it should find something.
 	resp = runConsistencyCheck()
@@ -388,8 +387,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 		// Create a new store on top of checkpoint location inside existing in-mem
 		// VFS to verify its contents.
-		fs, err := stickyEngineRegistry.GetUnderlyingFS(base.StoreSpec{StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10)})
-		require.NoError(t, err)
+		fs := stickyVFSRegistry.Get(strconv.FormatInt(int64(i), 10))
 		cpEng := storage.InMemFromFS(context.Background(), fs, cps[0], cluster.MakeClusterSettings(),
 			storage.ForTesting, storage.MustExist, storage.ReadOnly, storage.CacheSize(1<<20))
 		defer cpEng.Close()
@@ -407,7 +405,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 		// Compute a checksum over the content of the problematic range.
 		rd, err := kvserver.CalcReplicaDigest(context.Background(), *desc, cpEng,
-			kvpb.ChecksumMode_CHECK_FULL, quotapool.NewRateLimiter("test", quotapool.Inf(), 0))
+			kvpb.ChecksumMode_CHECK_FULL, quotapool.NewRateLimiter("test", quotapool.Inf(), 0), nil /* settings */)
 		require.NoError(t, err)
 		hashes[i] = rd.SHA512[:]
 	}
@@ -415,9 +413,10 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	assert.Equal(t, hashes[0], hashes[2])    // s1 and s3 agree
 	assert.NotEqual(t, hashes[0], hashes[1]) // s2 diverged
 
-	// A death rattle should have been written on s2.
-	eng := s2.TODOEngine()
-	f, err := eng.Open(base.PreventedStartupFile(eng.GetAuxiliaryDir()))
+	// A death rattle should have been written on s2. Note that the VFSes are
+	// zero-indexed whereas store IDs are one-indexed.
+	fs := stickyVFSRegistry.Get("1")
+	f, err := fs.Open(base.PreventedStartupFile(s2AuxDir))
 	require.NoError(t, err)
 	b, err := io.ReadAll(f)
 	require.NoError(t, err)
@@ -440,6 +439,14 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 func TestConsistencyQueueRecomputeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// This test relies on repeated sequential storage.EventuallyFileOnlySnapshot
+	// acquisitions. Reduce the max wait time for each acquisition to speed up
+	// this test.
+	origEFOSWait := storage.MaxEFOSWait
+	storage.MaxEFOSWait = 30 * time.Millisecond
+	defer func() {
+		storage.MaxEFOSWait = origEFOSWait
+	}()
 	testutils.RunTrueAndFalse(t, "hadEstimates", testConsistencyQueueRecomputeStatsImpl)
 }
 
@@ -611,7 +618,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 
 	// The stats should magically repair themselves. We'll first do a quick check
 	// and then a full recomputation.
-	repl, _, err := tc.Servers[0].Stores().GetReplicaForRangeID(ctx, rangeID)
+	repl, _, err := tc.Servers[0].GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, rangeID)
 	require.NoError(t, err)
 	ms := repl.GetMVCCStats()
 	if ms.SysCount >= sysCountGarbage {

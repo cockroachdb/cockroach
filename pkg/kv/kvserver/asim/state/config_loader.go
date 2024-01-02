@@ -12,10 +12,17 @@ package state
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"google.golang.org/protobuf/proto"
 )
+
+var SingleRegionClusterOptions = [...]string{"single_region", "single_region_multi_store"}
+var MultiRegionClusterOptions = [...]string{"multi_region", "complex"}
+var AllClusterOptions = [...]string{"single_region", "single_region_multi_store", "multi_region", "complex"}
 
 // TODO(kvoli): Add a loader/translator for the existing
 // []*roachpb.StoreDescriptor configurations in kvserver/*_test.go and
@@ -29,9 +36,9 @@ var SingleRegionConfig = ClusterInfo{
 		{
 			Name: "US",
 			Zones: []Zone{
-				{Name: "US_1", NodeCount: 5},
-				{Name: "US_2", NodeCount: 5},
-				{Name: "US_3", NodeCount: 5},
+				NewZoneWithSingleStore("US_1", 5),
+				NewZoneWithSingleStore("US_2", 5),
+				NewZoneWithSingleStore("US_3", 5),
 			},
 		},
 	},
@@ -45,9 +52,9 @@ var SingleRegionMultiStoreConfig = ClusterInfo{
 		{
 			Name: "US",
 			Zones: []Zone{
-				{Name: "US_1", NodeCount: 1, StoresPerNode: 5},
-				{Name: "US_2", NodeCount: 1, StoresPerNode: 5},
-				{Name: "US_3", NodeCount: 1, StoresPerNode: 5},
+				NewZone("US_1", 1, 5),
+				NewZone("US_2", 1, 5),
+				NewZone("US_3", 1, 5),
 			},
 		},
 	},
@@ -60,25 +67,25 @@ var MultiRegionConfig = ClusterInfo{
 		{
 			Name: "US_East",
 			Zones: []Zone{
-				{Name: "US_East_1", NodeCount: 4},
-				{Name: "US_East_2", NodeCount: 4},
-				{Name: "US_East_3", NodeCount: 4},
+				NewZoneWithSingleStore("US_East_1", 4),
+				NewZoneWithSingleStore("US_East_2", 4),
+				NewZoneWithSingleStore("US_East_3", 4),
 			},
 		},
 		{
 			Name: "US_West",
 			Zones: []Zone{
-				{Name: "US_West_1", NodeCount: 4},
-				{Name: "US_West_2", NodeCount: 4},
-				{Name: "US_West_3", NodeCount: 4},
+				NewZoneWithSingleStore("US_West_1", 4),
+				NewZoneWithSingleStore("US_West_2", 4),
+				NewZoneWithSingleStore("US_West_3", 4),
 			},
 		},
 		{
 			Name: "EU",
 			Zones: []Zone{
-				{Name: "EU_1", NodeCount: 4},
-				{Name: "EU_2", NodeCount: 4},
-				{Name: "EU_3", NodeCount: 4},
+				NewZoneWithSingleStore("EU_1", 4),
+				NewZoneWithSingleStore("EU_2", 4),
+				NewZoneWithSingleStore("EU_3", 4),
 			},
 		},
 	},
@@ -91,24 +98,24 @@ var ComplexConfig = ClusterInfo{
 		{
 			Name: "US_East",
 			Zones: []Zone{
-				{Name: "US_East_1", NodeCount: 1},
-				{Name: "US_East_2", NodeCount: 2},
-				{Name: "US_East_3", NodeCount: 3},
-				{Name: "US_East_3", NodeCount: 10},
+				NewZoneWithSingleStore("US_East_1", 1),
+				NewZoneWithSingleStore("US_East_2", 2),
+				NewZoneWithSingleStore("US_East_3", 3),
+				NewZoneWithSingleStore("US_East_3", 10),
 			},
 		},
 		{
 			Name: "US_West",
 			Zones: []Zone{
-				{Name: "US_West_1", NodeCount: 2},
+				NewZoneWithSingleStore("US_West_1", 2),
 			},
 		},
 		{
 			Name: "EU",
 			Zones: []Zone{
-				{Name: "EU_1", NodeCount: 3},
-				{Name: "EU_2", NodeCount: 3},
-				{Name: "EU_3", NodeCount: 4},
+				NewZoneWithSingleStore("EU_1", 3),
+				NewZoneWithSingleStore("EU_2", 3),
+				NewZoneWithSingleStore("EU_3", 4),
 			},
 		},
 	},
@@ -198,6 +205,23 @@ var MultiRangeConfig = []RangeInfo{
 	},
 }
 
+// GetClusterInfo returns ClusterInfo for a given configName and panics if no
+// match is found in existing configurations.
+func GetClusterInfo(configName string) ClusterInfo {
+	switch configName {
+	case "single_region":
+		return SingleRegionConfig
+	case "single_region_multi_store":
+		return SingleRegionMultiStoreConfig
+	case "multi_region":
+		return MultiRegionConfig
+	case "complex":
+		return ComplexConfig
+	default:
+		panic(fmt.Sprintf("no matching cluster info found for %s", configName))
+	}
+}
+
 // RangeInfoWithReplicas returns a new RangeInfo using the supplied arguments.
 func RangeInfoWithReplicas(
 	startKey Key, voters, nonVoters []StoreID, leaseholder StoreID, config *roachpb.SpanConfig,
@@ -229,6 +253,25 @@ type Zone struct {
 	StoresPerNode int
 }
 
+// NewZoneWithSingleStore is a constructor for a simulated availability zone,
+// taking zone name, node count, and a default of one store per node.
+func NewZoneWithSingleStore(name string, nodeCount int) Zone {
+	return NewZone(name, nodeCount, 1)
+}
+
+// NewZone is a constructor for a simulated availability zone, taking zone name,
+// node count, and custom stores per node.
+func NewZone(name string, nodeCount int, storesPerNode int) Zone {
+	if storesPerNode < 1 {
+		panic(fmt.Sprintf("storesPerNode cannot be less than one but found %v", storesPerNode))
+	}
+	return Zone{
+		Name:          name,
+		NodeCount:     nodeCount,
+		StoresPerNode: storesPerNode,
+	}
+}
+
 // Region is a simulated region which contains one or more zones.
 type Region struct {
 	Name  string
@@ -240,6 +283,27 @@ type Region struct {
 type ClusterInfo struct {
 	DiskCapacityGB int
 	Regions        []Region
+}
+
+func (c ClusterInfo) String() (s string) {
+	buf := &strings.Builder{}
+	for i, r := range c.Regions {
+		buf.WriteString(fmt.Sprintf("\t\tregion:%s [", r.Name))
+		if len(r.Zones) == 0 {
+			panic(fmt.Sprintf("number of zones within region %s is zero", r.Name))
+		}
+		for j, z := range r.Zones {
+			buf.WriteString(fmt.Sprintf("zone=%s(nodes=%d,stores=%d)", z.Name, z.NodeCount, z.StoresPerNode))
+			if j != len(r.Zones)-1 {
+				buf.WriteString(", ")
+			}
+		}
+		buf.WriteString("]")
+		if i != len(c.Regions)-1 {
+			buf.WriteString("\n")
+		}
+	}
+	return buf.String()
 }
 
 type RangeInfo struct {
@@ -283,7 +347,7 @@ func LoadClusterInfo(c ClusterInfo, settings *config.SimulationSettings) State {
 				s.SetNodeLocality(node.NodeID(), locality)
 				storesRequired := z.StoresPerNode
 				if storesRequired < 1 {
-					storesRequired = 1
+					panic(fmt.Sprintf("storesPerNode cannot be less than one but found %v", storesRequired))
 				}
 				for store := 0; store < storesRequired; store++ {
 					if newStore, ok := s.AddStore(node.NodeID()); !ok {
@@ -332,7 +396,7 @@ func LoadRangeInfo(s State, rangeInfos ...RangeInfo) {
 			))
 		}
 
-		if !s.SetSpanConfigForRange(rng.RangeID(), *r.Config) {
+		if !s.SetSpanConfigForRange(rng.RangeID(), r.Config) {
 			panic(fmt.Sprintf(
 				"Unable to load config: cannot set span config for range %s",
 				rng,
@@ -364,4 +428,89 @@ func LoadRangeInfo(s State, rangeInfos ...RangeInfo) {
 			}
 		}
 	}
+}
+
+func GetRegionSurvivalConfig(
+	regionOne string, regionTwo string, regionThree string,
+) zonepb.ZoneConfig {
+	zoneConfig := zonepb.DefaultZoneConfig()
+	zoneConfig.NumReplicas = proto.Int32(5)
+	zoneConfig.NumVoters = proto.Int32(5)
+	zoneConfig.LeasePreferences = []zonepb.LeasePreference{
+		{
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionOne}},
+		},
+	}
+	zoneConfig.Constraints = []zonepb.ConstraintsConjunction{
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionOne},
+			},
+		},
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionTwo},
+			},
+		},
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionThree},
+			},
+		},
+	}
+	zoneConfig.VoterConstraints = []zonepb.ConstraintsConjunction{
+		{
+			NumReplicas: 2,
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionOne},
+			},
+		},
+	}
+	return zoneConfig
+}
+
+func GetZoneSurvivalConfig(
+	regionOne string, regionTwo string, regionThree string,
+) zonepb.ZoneConfig {
+	zoneConfig := zonepb.DefaultZoneConfig()
+	zoneConfig.NumReplicas = proto.Int32(5)
+	zoneConfig.NumVoters = proto.Int32(3)
+	zoneConfig.LeasePreferences = []zonepb.LeasePreference{{
+		Constraints: []zonepb.Constraint{
+			{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionOne},
+		},
+	}}
+
+	zoneConfig.Constraints = []zonepb.ConstraintsConjunction{
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionOne},
+			},
+		},
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionTwo},
+			},
+		},
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionThree},
+			},
+		},
+	}
+
+	zoneConfig.VoterConstraints = []zonepb.ConstraintsConjunction{{
+		Constraints: []zonepb.Constraint{
+			{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionOne},
+		},
+	},
+	}
+	return zoneConfig
 }

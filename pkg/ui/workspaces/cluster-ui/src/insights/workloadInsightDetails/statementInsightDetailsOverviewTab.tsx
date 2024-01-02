@@ -33,7 +33,6 @@ import {
   StatementDetailsLink,
   TransactionDetailsLink,
 } from "../workloadInsights/util";
-import { TimeScale } from "../../timeScaleDropdown";
 import { getStmtInsightRecommendations } from "../utils";
 import { ContentionStatementDetailsTable } from "./insightDetailsTables";
 import { WaitTimeInsightsLabels } from "../../detailsPanels/waitTimeInsightsPanel";
@@ -77,12 +76,12 @@ export const StatementInsightDetailsOverviewTab: React.FC<
         <Col className="gutter-row">
           <Heading type="h5">
             {WaitTimeInsightsLabels.BLOCKED_TXNS_TABLE_TITLE(
-              insightDetails.statementExecutionID,
+              insightDetails?.statementExecutionID,
               "statement",
             )}
           </Heading>
           <ContentionStatementDetailsTable
-            data={insightDetails.contentionEvents}
+            data={insightDetails?.contentionEvents}
             sortSetting={insightsDetailsContentionSortSetting}
             onChangeSortSetting={setDetailsContentionSortSetting}
           />
@@ -105,7 +104,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
               label="Start Time"
               value={
                 <Timestamp
-                  time={insightDetails.startTime}
+                  time={insightDetails?.startTime}
                   format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
                 />
               }
@@ -114,34 +113,34 @@ export const StatementInsightDetailsOverviewTab: React.FC<
               label="End Time"
               value={
                 <Timestamp
-                  time={insightDetails.endTime}
+                  time={insightDetails?.endTime}
                   format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
                 />
               }
             />
             <SummaryCardItem
               label="Elapsed Time"
-              value={Duration(insightDetails.elapsedTimeMillis * 1e6)}
+              value={Duration(insightDetails?.elapsedTimeMillis * 1e6)}
             />
             <SummaryCardItem
-              label={"CPU Time"}
-              value={Duration(insightDetails.cpuSQLNanos)}
+              label={"SQL CPU Time"}
+              value={Duration(insightDetails?.cpuSQLNanos)}
             />
             <SummaryCardItem
               label="Rows Read"
-              value={Count(insightDetails.rowsRead)}
+              value={Count(insightDetails?.rowsRead)}
             />
             <SummaryCardItem
               label="Rows Written"
-              value={Count(insightDetails.rowsWritten)}
+              value={Count(insightDetails?.rowsWritten)}
             />
             <SummaryCardItem
               label="Transaction Priority"
-              value={capitalize(insightDetails.priority)}
+              value={capitalize(insightDetails?.priority)}
             />
             <SummaryCardItem
               label="Full Scan"
-              value={capitalize(String(insightDetails.isFullScan))}
+              value={capitalize(String(insightDetails?.isFullScan))}
             />
           </SummaryCard>
         </Col>
@@ -149,29 +148,29 @@ export const StatementInsightDetailsOverviewTab: React.FC<
           <SummaryCard>
             <SummaryCardItem
               label="Transaction Retries"
-              value={Count(insightDetails.retries)}
+              value={Count(insightDetails?.retries)}
             />
-            {insightDetails.lastRetryReason && (
+            {insightDetails?.lastRetryReason && (
               <SummaryCardItem
                 label="Last Retry Reason"
-                value={insightDetails.lastRetryReason.toString()}
+                value={insightDetails?.lastRetryReason.toString()}
               />
             )}
             <p className={summaryCardStylesCx("summary--card__divider")} />
             <SummaryCardItem
               label="Session ID"
-              value={String(insightDetails.sessionID)}
+              value={String(insightDetails?.sessionID)}
             />
             <SummaryCardItem
               label="Transaction Fingerprint ID"
               value={TransactionDetailsLink(
-                insightDetails.transactionFingerprintID,
-                insightDetails.application,
+                insightDetails?.transactionFingerprintID,
+                insightDetails?.application,
               )}
             />
             <SummaryCardItem
               label="Transaction Execution ID"
-              value={String(insightDetails.transactionExecutionID)}
+              value={String(insightDetails?.transactionExecutionID)}
             />
             <SummaryCardItem
               label="Statement Fingerprint ID"

@@ -430,3 +430,41 @@ EXPLAIN (VEC) SELECT _int4 // _int FROM many_types WHERE _int <> 0
   └ *colexecproj.projFloorDivInt32Int64Op
     └ *colexecsel.selNEInt64Int64ConstOp
       └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (VEC) SELECT _interval + _timestamp FROM many_types WHERE _timestamp - _interval IS NOT NULL
+----
+│
+└ Node 1
+  └ *colexecproj.projPlusIntervalTimestampOp
+    └ *colexec.isNullSelOp
+      └ *colexecproj.projMinusTimestampIntervalOp
+        └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (VEC) SELECT 1 FROM many_types WHERE _string::BOOL
+----
+│
+└ Node 1
+  └ *colexecbase.constInt64Op
+    └ *colexecbase.castStringBoolOp
+      └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (VEC) SELECT 1 FROM many_types WHERE COALESCE(_string::BOOL, _bool)
+----
+│
+└ Node 1
+  └ *colexecbase.constInt64Op
+    └ *colexec.caseOp
+      ├ *colexec.bufferOp
+      │ └ *colfetcher.ColBatchScan
+      ├ *colexecbase.castStringBoolOp
+      │ └ *colexec.isNullProjOp
+      │   └ *colexecbase.castStringBoolOp
+      │     └ *colexec.bufferOp
+      ├ *colexec.isNullProjOp
+      │ └ *colexec.bufferOp
+      └ *colexecbase.castOpNullAny
+        └ *colexecbase.constNullOp
+          └ *colexec.bufferOp

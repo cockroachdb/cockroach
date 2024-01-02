@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -27,6 +26,7 @@ go_library(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/kvstorage",
+        "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
         "//pkg/kv/kvserver/raftlog",
@@ -69,7 +69,6 @@ go_test(
         "store_test.go",
         "version_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":loqrecovery"],
     deps = [
@@ -96,6 +95,7 @@ go_test(
         "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/listenerutil",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",
@@ -105,6 +105,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "//pkg/util/stop",
         "//pkg/util/strutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
@@ -116,5 +117,3 @@ go_test(
         "@io_etcd_go_raft_v3//raftpb",
     ],
 )
-
-get_x_data(name = "get_x_data")

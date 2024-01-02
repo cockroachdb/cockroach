@@ -1,0 +1,202 @@
+/* setup */
+CREATE DATABASE multi_region_test_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
+CREATE TABLE multi_region_test_db.public.table_regional_by_row (
+  k INT PRIMARY KEY
+) LOCALITY REGIONAL BY ROW;
+
+/* test */
+EXPLAIN (DDL) DROP TABLE multi_region_test_db.public.table_regional_by_row;
+----
+Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 29 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db)}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108 (table_regional_by_row-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED Table:{DescID: 108 (table_regional_by_row-)}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 108 (table_regional_by_row-), ReferencedDescID: 105 (public)}
+ │         │    ├── PUBLIC → ABSENT  TablePartitioning:{DescID: 108 (table_regional_by_row-)}
+ │         │    ├── PUBLIC → ABSENT  TableLocalityRegionalByRow:{DescID: 108 (table_regional_by_row-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 108 (table_regional_by_row-), Name: "primary", ColumnFamilyID: 0 (primary-)}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "k", ColumnID: 1 (k-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (k-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-), IndexID: 0}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_region", ColumnID: 2 (crdb_region-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnFamilyID: 0 (primary-), ColumnID: 2 (crdb_region-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 0}
+ │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnID: 2 (crdb_region-)}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 1 (table_regional_by_row_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-), IndexID: 1 (table_regional_by_row_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
+ │         │    ├── PUBLIC → ABSENT  IndexPartitioning:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-)}
+ │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
+ │         └── 38 Mutation operations
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
+ │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
+ │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.TablePartit..."}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":108}
+ │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":108}
+ │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
+ │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
+ │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
+ │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":108}
+ │              ├── RemoveDroppedColumnType {"ColumnID":2,"TableID":108}
+ │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
+ │              ├── RemoveColumnNotNull {"ColumnID":2,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":108}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
+ │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":108}
+ │              ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"TableID":108}
+ │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"Ordinal":1,"TableID":108}
+ │              ├── MakeIndexAbsent {"IndexID":1,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
+ │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":108}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 29 elements transitioning toward ABSENT
+ │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db)}
+ │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 108 (table_regional_by_row-)}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "admin"}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "root"}
+ │    │    │    ├── DROPPED → PUBLIC Table:{DescID: 108 (table_regional_by_row-)}
+ │    │    │    ├── ABSENT  → PUBLIC SchemaChild:{DescID: 108 (table_regional_by_row-), ReferencedDescID: 105 (public)}
+ │    │    │    ├── ABSENT  → PUBLIC TablePartitioning:{DescID: 108 (table_regional_by_row-)}
+ │    │    │    ├── ABSENT  → PUBLIC TableLocalityRegionalByRow:{DescID: 108 (table_regional_by_row-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnFamily:{DescID: 108 (table_regional_by_row-), Name: "primary", ColumnFamilyID: 0 (primary-)}
+ │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "k", ColumnID: 1 (k-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (k-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnNotNull:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-), IndexID: 0}
+ │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_region", ColumnID: 2 (crdb_region-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnFamilyID: 0 (primary-), ColumnID: 2 (crdb_region-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnNotNull:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 0}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnDefaultExpression:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnID: 2 (crdb_region-)}
+ │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967294 (tableoid-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+ │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 1 (table_regional_by_row_pkey-)}
+ │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-), IndexID: 1 (table_regional_by_row_pkey-)}
+ │    │    │    ├── ABSENT  → PUBLIC PrimaryIndex:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
+ │    │    │    ├── ABSENT  → PUBLIC IndexPartitioning:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-)}
+ │    │    │    └── ABSENT  → PUBLIC IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 29 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db)}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108 (table_regional_by_row-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED Table:{DescID: 108 (table_regional_by_row-)}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 108 (table_regional_by_row-), ReferencedDescID: 105 (public)}
+ │         │    ├── PUBLIC → ABSENT  TablePartitioning:{DescID: 108 (table_regional_by_row-)}
+ │         │    ├── PUBLIC → ABSENT  TableLocalityRegionalByRow:{DescID: 108 (table_regional_by_row-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 108 (table_regional_by_row-), Name: "primary", ColumnFamilyID: 0 (primary-)}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "k", ColumnID: 1 (k-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (k-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-), IndexID: 0}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_region", ColumnID: 2 (crdb_region-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnFamilyID: 0 (primary-), ColumnID: 2 (crdb_region-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 0}
+ │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnID: 2 (crdb_region-)}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 1 (table_regional_by_row_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-), IndexID: 1 (table_regional_by_row_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
+ │         │    ├── PUBLIC → ABSENT  IndexPartitioning:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-)}
+ │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
+ │         └── 42 Mutation operations
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
+ │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
+ │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.TablePartit..."}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":108}
+ │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":108}
+ │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
+ │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
+ │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
+ │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":108}
+ │              ├── RemoveDroppedColumnType {"ColumnID":2,"TableID":108}
+ │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
+ │              ├── RemoveColumnNotNull {"ColumnID":2,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":108}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
+ │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":108}
+ │              ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"TableID":108}
+ │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"Ordinal":1,"TableID":108}
+ │              ├── MakeIndexAbsent {"IndexID":1,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":108}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ └── PostCommitNonRevertiblePhase
+      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
+           ├── 3 elements transitioning toward ABSENT
+           │    ├── DROPPED → ABSENT Table:{DescID: 108 (table_regional_by_row-)}
+           │    ├── PUBLIC  → ABSENT IndexData:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-)}
+           │    └── PUBLIC  → ABSENT TableData:{DescID: 108 (table_regional_by_row-), ReferencedDescID: 104 (multi_region_test_db)}
+           └── 6 Mutation operations
+                ├── CreateGCJobForTable {"DatabaseID":104,"TableID":108}
+                ├── CreateGCJobForIndex {"IndexID":1,"TableID":108}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":107}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":108}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

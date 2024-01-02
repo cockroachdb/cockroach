@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -24,7 +25,12 @@ import (
 )
 
 var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedTypeORMRelease = "0.3.5"
+
+// Use 0.3.18 from the upstream repo once it is released.
+// WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
+// This is used by docs automation to produce a list of supported versions for ORM's.
+const supportedTypeORMRelease = "remove-unsafe-crdb-setting"
+const typeORMRepo = "https://github.com/rafiss/typeorm.git"
 
 // This test runs TypeORM's full test suite against a single cockroach node.
 func registerTypeORM(r registry.Registry) {
@@ -38,8 +44,7 @@ func registerTypeORM(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 
 		cockroachVersion, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -77,33 +82,45 @@ func registerTypeORM(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get install -y make python3 libpq-dev python-dev gcc g++ `+
+			`sudo apt-get install -y make python3 libpq-dev gcc g++ `+
 				`software-properties-common build-essential`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx,
-			t,
-			c,
-			node,
-			"add nodesource repository",
-			`sudo apt install ca-certificates && curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -`,
+		// In case we are running into a state where machines are being reused, we first check to see if we
+		// can use npm to reduce the potential of trying to add another nodesource key
+		// (preventing gpg: dearmoring failed: File exists) errors.
+		if err := c.RunE(
+			ctx, node, `sudo npm i -g npm`,
 		); err != nil {
-			t.Fatal(err)
-		}
+			if err := repeatRunE(
+				ctx,
+				t,
+				c,
+				node,
+				"add nodesource key and deb repository",
+				`
+sudo apt-get update && \
+sudo apt-get install -y ca-certificates curl gnupg && \
+sudo mkdir -p /etc/apt/keyrings && \
+curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --batch --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list`,
+			); err != nil {
+				t.Fatal(err)
+			}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "install nodejs and npm", `sudo apt-get install -y nodejs`,
-		); err != nil {
-			t.Fatal(err)
-		}
+			if err := repeatRunE(
+				ctx, t, c, node, "install nodejs and npm", `sudo apt-get update && sudo apt-get -qq install nodejs`,
+			); err != nil {
+				t.Fatal(err)
+			}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "update npm", `sudo npm i -g npm`,
-		); err != nil {
-			t.Fatal(err)
+			if err := repeatRunE(
+				ctx, t, c, node, "update npm", `sudo npm i -g npm`,
+			); err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		if err := repeatRunE(
@@ -116,7 +133,7 @@ func registerTypeORM(r registry.Registry) {
 			ctx,
 			t,
 			c,
-			"https://github.com/typeorm/typeorm.git",
+			typeORMRepo,
 			"/mnt/data1/typeorm",
 			supportedTypeORMRelease,
 			node,
@@ -166,12 +183,27 @@ func registerTypeORM(r registry.Registry) {
 		rawResults := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResults)
 		if err != nil {
+			// We don't have a good way of parsing test results from javascript, so we
+			// use substring matching and regexp instead of using a blocklist like
+			// we use for other ORM tests.
+			numFailingRegex := regexp.MustCompile(`(\d+) failing`)
+			matches := numFailingRegex.FindStringSubmatch(rawResults)
+			numFailing, convErr := strconv.Atoi(matches[1])
+			if convErr != nil {
+				t.Fatal(convErr)
+			}
+
+			// One test is known to flake during setup.
+			if strings.Contains(rawResults, `"before each" hook for "should select specific columns":`) {
+				numFailing -= 1
+			}
+
+			// Tests are allowed to flake due to transaction retry errors.
 			txnRetryErrCount := strings.Count(rawResults, "restart transaction")
-			if strings.Contains(rawResults, "1 failing") && txnRetryErrCount == 1 {
-				err = nil
-			} else if strings.Contains(rawResults, "2 failing") && txnRetryErrCount == 2 {
+			if numFailing == txnRetryErrCount {
 				err = nil
 			}
+
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -179,11 +211,12 @@ func registerTypeORM(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "typeorm",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `orm`),
+		Name:             "typeorm",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.ORM),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTypeORM(ctx, t, c)
 		},
@@ -261,7 +294,7 @@ const typeORMConfigJSON = `
     "name": "cockroachdb",
     "type": "cockroachdb",
     "host": "localhost",
-    "port": 26257,
+    "port": {pgport:1},
     "username": "root",
     "password": "",
     "database": "defaultdb"

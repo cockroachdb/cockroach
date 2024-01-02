@@ -12,10 +12,4 @@ package plpgsqltree
 
 import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
-type PLpgSQLVariable = tree.Name
-
-// Scope contains all the variables defined in the DECLARE section of current statement block.
-type VariableScope struct {
-	Variables    []*PLpgSQLVariable
-	VarNameToIdx map[string]int // mapping from variable
-}
+type Variable = tree.Name

@@ -37,11 +37,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -61,6 +61,14 @@ func TestStorage(t *testing.T) {
 			t.Run(name, test.run)
 		}
 	}
+}
+
+func setMaxSpans(ctx context.Context, tCtx *testContext, value int64) {
+	// We could've opened up a connection to the system tenant and set the
+	// setting via SQL, but then we'd need to wait until it's propagated to the
+	// tenant (if we're running with secondary tenants). To avoid that we'll
+	// simply override the setting instead.
+	protectedts.MaxSpans.Override(ctx, &tCtx.tc.ApplicationLayer(0).ClusterSettings().SV, value)
 }
 
 var testCases = []testCase{
@@ -118,8 +126,7 @@ var testCases = []testCase{
 				// max_bytes or max_spans has been exceeded.
 				_, err := tCtx.tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.protectedts.max_bytes = $1", 0)
 				require.NoError(t, err)
-				_, err = tCtx.tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.protectedts.max_spans = $1", 0)
-				require.NoError(t, err)
+				setMaxSpans(ctx, tCtx, 0)
 			}),
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
 				rec := newRecord(tCtx, tCtx.tc.Server(0).Clock().Now(), "", nil, tableTarget(42), tableSpan(42))
@@ -136,8 +143,7 @@ var testCases = []testCase{
 		ops: []op{
 			protectOp{spans: tableSpans(42)},
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
-				_, err := tCtx.tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.protectedts.max_spans = $1", 3)
-				require.NoError(t, err)
+				setMaxSpans(ctx, tCtx, 3)
 			}),
 			protectOp{
 				metaType: "asdf",
@@ -214,8 +220,7 @@ var testCases = []testCase{
 		ops: []op{
 			protectOp{spans: tableSpans(42)},
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
-				_, err := tCtx.tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.protectedts.max_spans = $1", 0)
-				require.NoError(t, err)
+				setMaxSpans(ctx, tCtx, 0)
 			}),
 			protectOp{
 				spans: func() []roachpb.Span {
@@ -478,6 +483,7 @@ type testCase struct {
 }
 
 func (test testCase) run(t *testing.T) {
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	var params base.TestServerArgs
 
@@ -489,7 +495,7 @@ func (test testCase) run(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
 
-	s := tc.Server(0)
+	s := tc.Server(0).ApplicationLayer()
 	ptm := ptstorage.New(s.ClusterSettings(), ptsKnobs)
 	tCtx := testContext{
 		pts:                    ptm,
@@ -645,7 +651,7 @@ func TestCorruptData(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		log.Flush()
+		log.FlushFiles()
 		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg,
 			log.WithFlattenedSensitiveData)
 		require.NoError(t, err)
@@ -685,7 +691,7 @@ func TestCorruptData(t *testing.T) {
 		scope := log.Scope(t)
 		defer scope.Close(t)
 
-		params, _ := tests.CreateTestServerParams()
+		var params base.TestServerArgs
 		params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 		defer tc.Stopper().Stop(ctx)
@@ -702,7 +708,7 @@ func TestCorruptData(t *testing.T) {
 		scope := log.Scope(t)
 		defer scope.Close(t)
 
-		params, _ := tests.CreateTestServerParams()
+		var params base.TestServerArgs
 		params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 		defer tc.Stopper().Stop(ctx)
@@ -732,7 +738,7 @@ func TestCorruptData(t *testing.T) {
 		require.Nil(t, got)
 		_, err = pts.GetState(ctx)
 		require.NoError(t, err)
-		log.Flush()
+		log.FlushFiles()
 
 		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg,
 			log.WithFlattenedSensitiveData)
@@ -747,13 +753,14 @@ func TestCorruptData(t *testing.T) {
 // TestErrorsFromSQL ensures that errors from the underlying Executor
 // are properly transmitted back to the client.
 func TestErrorsFromSQL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
-	defer tc.Stopper().Stop(ctx)
-
-	s := tc.Server(0)
 	pts := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{})
 	db := s.InternalDB().(isql.DB)
 	errFunc := func(string) error { return errors.New("boom") }

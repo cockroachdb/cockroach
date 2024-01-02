@@ -38,7 +38,7 @@ export const insightsColumnLabels = {
   databaseName: "Database Name",
   tableName: "Table Name",
   indexName: "Index Name",
-  cpu: "CPU Time",
+  cpu: "SQL CPU Time",
 };
 
 export type InsightsTableColumnKeys = keyof typeof insightsColumnLabels;
@@ -123,7 +123,7 @@ export const insightsTableTitles: InsightsTableTitleType = {
   },
   query: (execType: InsightExecEnum) => {
     let tooltipText = `The ${execType} query.`;
-    if (execType == InsightExecEnum.TRANSACTION) {
+    if (execType === InsightExecEnum.TRANSACTION) {
       tooltipText = "The queries attempted in the transaction.";
     }
     return makeToolTip(<p>{tooltipText}</p>, "query", execType);
@@ -166,19 +166,19 @@ export const insightsTableTitles: InsightsTableTitleType = {
       "username",
     );
   },
-  schemaName: (execType: InsightExecEnum) => {
+  schemaName: (_execType: InsightExecEnum) => {
     return makeToolTip(<p>The name of the contended schema.</p>, "schemaName");
   },
-  databaseName: (execType: InsightExecEnum) => {
+  databaseName: (_execType: InsightExecEnum) => {
     return makeToolTip(
       <p>The name of the contended database.</p>,
       "databaseName",
     );
   },
-  tableName: (execType: InsightExecEnum) => {
+  tableName: (_execType: InsightExecEnum) => {
     return makeToolTip(<p>The name of the contended table.</p>, "tableName");
   },
-  indexName: (execType: InsightExecEnum) => {
+  indexName: (_execType: InsightExecEnum) => {
     return makeToolTip(<p>The name of the contended index.</p>, "indexName");
   },
   applicationName: (execType: InsightExecEnum) => {
@@ -238,7 +238,8 @@ export const insightsTableTitles: InsightsTableTitleType = {
   },
   cpu: (_: InsightExecEnum) => {
     return makeToolTip(
-      <p>{`CPU Time spent executing within the specified time interval.`}</p>,
+      <p>{`SQL CPU Time spent executing within the specified time interval. It
+      does not include SQL planning time nor KV execution time.`}</p>,
       "cpu",
     );
   },

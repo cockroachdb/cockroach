@@ -18,11 +18,11 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud/userfile/filetable"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -104,9 +104,9 @@ func TestListAndDeleteFiles(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, _, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	executor := filetable.MakeInternalFileToTableExecutor(
 		s.InternalDB().(isql.DB),
@@ -157,9 +157,9 @@ func TestReadWriteFile(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	executor := filetable.MakeInternalFileToTableExecutor(
 		s.InternalDB().(isql.DB),
@@ -332,9 +332,9 @@ func TestUserGrants(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	conn, err := sqlDB.Conn(ctx)
 	require.NoError(t, err)
@@ -412,9 +412,9 @@ func TestDifferentUserDisallowed(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	conn, err := sqlDB.Conn(ctx)
 	require.NoError(t, err)
@@ -466,9 +466,9 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	conn, err := sqlDB.Conn(ctx)
 	require.NoError(t, err)
@@ -525,9 +525,9 @@ func TestDatabaseScope(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	executor := filetable.MakeInternalFileToTableExecutor(
 		s.InternalDB().(isql.DB),

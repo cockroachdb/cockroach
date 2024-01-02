@@ -19,7 +19,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/google/shlex"
@@ -27,15 +26,12 @@ import (
 )
 
 const (
-	stressTarget = "@com_github_cockroachdb_stress//:stress"
-
 	// General testing flags.
 	changedFlag      = "changed"
 	countFlag        = "count"
 	vFlag            = "verbose"
 	showLogsFlag     = "show-logs"
 	stressFlag       = "stress"
-	stressArgsFlag   = "stress-args"
 	raceFlag         = "race"
 	deadlockFlag     = "deadlock"
 	ignoreCacheFlag  = "ignore-cache"
@@ -45,6 +41,15 @@ const (
 	vModuleFlag      = "vmodule"
 	showDiffFlag     = "show-diff"
 )
+
+// List of bazel integration tests that will fail when running `dev test pkg/...`
+var integrationTests = map[string]struct{ testName, commandToRun string }{
+	"pkg/acceptance":              {"acceptance_test", "dev acceptance"},
+	"pkg/compose":                 {"compose_test", "dev compose"},
+	"pkg/compose/compare/compare": {"compare_test", "dev compose"},
+	"pkg/testutils/docker":        {"docker_test", ""},
+	"pkg/testutils/lint":          {"lint_test", "dev lint"},
+}
 
 func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
 	// testCmd runs the specified cockroachdb tests.
@@ -66,19 +71,36 @@ pkg/kv/kvserver:kvserver_test) instead.`,
     dev test pkg/spanconfig/... pkg/ccl/spanconfigccl/...
         Test multiple packages recursively
 
-    dev test --stress --timeout=1m --test-args='-test.timeout 5s'
-        Stress for 1m until a test runs longer than 5s
-
     dev test --race --count 250 ...
         Run a test under race, 250 times in parallel
 
     dev test pkg/spanconfig/... --test-args '-test.trace=trace.out'
         Pass arguments to go test (see 'go help testflag'; prefix args with '-test.{arg}')
 
-    dev test pkg/spanconfig --stress --stress-args '-maxruns 1000 -p 4' --timeout=10m
-        Pass arguments to github.com/cockroachdb/stress, run for 10 min
+    dev test pkg/spanconfig --stress
+        Run pkg/spanconfig test repeatedly in parallel up to 1000 times until it fails
+
+    dev test pkg/spanconfig --stress --count 2000
+        Same as above, but run 2000 times instead of 1000
+
+    timeout 60 dev test pkg/spanconfig --stress --count 2000
+        Same as above, but time out after 60 seconds if no test has failed
+          (Note: the timeout command is called "gtimeout" on macOS and can be installed with "brew install coreutils")
+
+    dev test pkg/cmd/dev:dev_test --stress --timeout 5s
+        Run a test repeatedly until it runs longer than 5s
+
+    end=$((SECONDS+N))
+    while [ $SECONDS -lt $end ]; do
+        dev test pkg/cmd/dev:dev_test --stress
+    done
+        Run a test repeatedly until at least N seconds have passed (useful if "dev test --stress" ends too quickly and you want to keep the test running for a while)
 
     dev test pkg/server -f=TestSpanStatsResponse -v --count=5 --vmodule='raft=1'
+        Run a specific test, multiple times, with increased logging verbosity
+
+    dev test pkg/server -- --test_env=COCKROACH_RANDOM_SEED=1234
+        Run a test with a specified seed by passing the --test_env flag directly to bazel
 `,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
@@ -97,10 +119,9 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	// visible.
 	testCmd.Flags().BoolP(vFlag, "v", false, "show testing process output")
 	testCmd.Flags().Bool(changedFlag, false, "automatically determine tests to run. This is done on a best-effort basis by asking git which files have changed. Only .go files and files in testdata/ directories are factored into this analysis.")
-	testCmd.Flags().Int(countFlag, 1, "run test the given number of times")
+	testCmd.Flags().Int(countFlag, 0, "run test the given number of times")
 	testCmd.Flags().BoolP(showLogsFlag, "", false, "show crdb logs in-line")
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
-	testCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(deadlockFlag, false, "run tests using the deadlock detector")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
@@ -125,8 +146,8 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	defer func() {
 		if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
 			// Retry.
-			if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
-				log.Printf("Interal Error: Sending BEP file to beaver hub failed - %v", err)
+			if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil && d.debug {
+				log.Printf("Internal Error: Sending BEP file to beaver hub failed - %v", err)
 			}
 		}
 		if !buildutil.CrdbTestBuild {
@@ -136,23 +157,22 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	var (
-		filter        = mustGetFlagString(cmd, filterFlag)
-		ignoreCache   = mustGetFlagBool(cmd, ignoreCacheFlag)
-		race          = mustGetFlagBool(cmd, raceFlag)
-		deadlock      = mustGetFlagBool(cmd, deadlockFlag)
-		rewrite       = mustGetFlagBool(cmd, rewriteFlag)
-		streamOutput  = mustGetFlagBool(cmd, streamOutputFlag)
-		testArgs      = mustGetFlagString(cmd, testArgsFlag)
-		short         = mustGetFlagBool(cmd, shortFlag)
-		stress        = mustGetFlagBool(cmd, stressFlag)
-		stressCmdArgs = mustGetFlagString(cmd, stressArgsFlag)
-		timeout       = mustGetFlagDuration(cmd, timeoutFlag)
-		verbose       = mustGetFlagBool(cmd, vFlag)
-		changed       = mustGetFlagBool(cmd, changedFlag)
-		showLogs      = mustGetFlagBool(cmd, showLogsFlag)
-		count         = mustGetFlagInt(cmd, countFlag)
-		vModule       = mustGetFlagString(cmd, vModuleFlag)
-		showDiff      = mustGetFlagBool(cmd, showDiffFlag)
+		filter       = mustGetFlagString(cmd, filterFlag)
+		ignoreCache  = mustGetFlagBool(cmd, ignoreCacheFlag)
+		race         = mustGetFlagBool(cmd, raceFlag)
+		deadlock     = mustGetFlagBool(cmd, deadlockFlag)
+		rewrite      = mustGetFlagBool(cmd, rewriteFlag)
+		streamOutput = mustGetFlagBool(cmd, streamOutputFlag)
+		testArgs     = mustGetFlagString(cmd, testArgsFlag)
+		short        = mustGetFlagBool(cmd, shortFlag)
+		stress       = mustGetFlagBool(cmd, stressFlag)
+		timeout      = mustGetFlagDuration(cmd, timeoutFlag)
+		verbose      = mustGetFlagBool(cmd, vFlag)
+		changed      = mustGetFlagBool(cmd, changedFlag)
+		showLogs     = mustGetFlagBool(cmd, showLogsFlag)
+		count        = mustGetFlagInt(cmd, countFlag)
+		vModule      = mustGetFlagString(cmd, vModuleFlag)
+		showDiff     = mustGetFlagBool(cmd, showDiffFlag)
 
 		// These are tests that require access to another directory for
 		// --rewrite. These can either be single directories or
@@ -191,6 +211,10 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		}
 	}
 
+	if stress && streamOutput {
+		return fmt.Errorf("cannot combine --%s and --%s", stressFlag, streamOutputFlag)
+	}
+
 	if rewrite {
 		ignoreCache = true
 		disableTestSharding = true
@@ -209,9 +233,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
 	if race {
-		args = append(args, "--config=race")
-	} else if stress {
-		disableTestSharding = true
+		args = append(args, "--config=race", "--test_sharding_strategy=disabled")
 	}
 	if deadlock {
 		goTags = append(goTags, "deadlock")
@@ -230,40 +252,42 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		pkg = strings.TrimPrefix(pkg, "./")
 		pkg = strings.TrimRight(pkg, "/")
 
-		if !strings.HasPrefix(pkg, "pkg/") {
+		if !strings.HasPrefix(pkg, "pkg/") && !strings.HasPrefix(pkg, "pkg:") {
 			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
 		}
 
-		var target string
-		if strings.Contains(pkg, ":") || strings.HasSuffix(pkg, "/...") {
-			// For parity with bazel, we allow specifying named build targets.
-			target = pkg
-		} else {
-			target = fmt.Sprintf("%s:all", pkg)
+		if !strings.Contains(pkg, ":") && !strings.HasSuffix(pkg, "/...") {
+			pkg = fmt.Sprintf("%s:all", pkg)
 		}
-		testTargets = append(testTargets, target)
+		// Filter out only test targets.
+		queryArgs := []string{"query", fmt.Sprintf("kind(.*_test, %s)", pkg)}
+		labels, err := d.exec.CommandContextSilent(ctx, "bazel", queryArgs...)
+		if err != nil {
+			return fmt.Errorf("could not query for tests within %s: got error %w", pkg, err)
+		}
+		testTargets = append(testTargets, strings.Split(strings.TrimSpace(string(labels)), "\n")...)
 	}
 
-	// Stressing is specifically for go tests. Take a second here to filter
-	// only the go_test targets so we don't end up stressing e.g. a
-	// disallowed_imports_test.
-	if stress {
-		query := fmt.Sprintf("kind('go_test', %s)", strings.Join(testTargets, " + "))
-		goTestLines, err := d.exec.CommandContextSilent(ctx, "bazel", "query", "--output=label", query)
-		if err != nil {
-			return err
+	for _, target := range testTargets {
+		testTarget := strings.Split(target, ":")
+		integrationTest, ok := integrationTests[testTarget[0]]
+		if ok {
+			// If the test targets all tests in the package or the individual test, warn the user
+			if testTarget[1] == "all" || testTarget[1] == integrationTest.testName {
+				if integrationTest.commandToRun == "" {
+					return fmt.Errorf("%s:%s will fail since it is an integration test", testTarget[0], integrationTest.testName)
+				}
+				return fmt.Errorf("%s:%s will fail since it is an integration test. To run this test, run `%s`", testTarget[0], integrationTest.testName, integrationTest.commandToRun)
+			}
 		}
-		testTargets = strings.Split(strings.TrimSpace(string(goTestLines)), "\n")
-		if len(testTargets) == 0 {
-			log.Printf("WARNING: no tests found")
-			return nil
-		}
+	}
+
+	if len(testTargets) == 0 {
+		log.Printf("WARNING: no matching test targets were found")
+		return nil
 	}
 
 	args = append(args, testTargets...)
-	if ignoreCache {
-		args = append(args, "--nocache_test_results")
-	}
 	args = append(args, "--test_env=GOTRACEBACK=all")
 
 	if rewrite {
@@ -303,22 +327,19 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if showDiff {
 		args = append(args, "--test_arg", "-show-diff")
 	}
-	if timeout > 0 && !stress {
-		// If stress is specified, we'll pad the timeout differently below.
-
-		// The bazel timeout should be higher than the timeout passed to the
-		// test binary (giving it ample time to clean up, 5 seconds is probably
-		// enough).
-		args = append(args, fmt.Sprintf("--test_timeout=%d", 5+int(timeout.Seconds())))
-		args = append(args, "--test_arg", fmt.Sprintf("-test.timeout=%s", timeout.String()))
-
-		// If --test-args '-test.timeout=X' is specified as well, or
-		// -- --test_arg '-test.timeout=X', that'll take precedence further
-		// below.
+	if timeout > 0 {
+		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
 	}
 
 	if stress {
-		args = append(args, d.getStressArgs(stressCmdArgs, timeout)...)
+		if count == 0 {
+			// Default to 1000 unless a different count was provided.
+			count = 1000
+		}
+		args = append(args,
+			"--test_env=COCKROACH_STRESS=true",
+			"--notest_keep_going",
+		)
 	}
 
 	if filter != "" {
@@ -337,8 +358,10 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if showLogs {
 		args = append(args, "--test_arg", "-show-logs")
 	}
-	if count != 1 {
-		args = append(args, fmt.Sprintf("--runs_per_test=%d", count))
+	if count == 1 {
+		ignoreCache = true
+	} else if count != 0 {
+		args = append(args, fmt.Sprintf("--runs_per_test=%d", count), "--runs_per_test=.*disallowed_imports_test@1")
 	}
 	if vModule != "" {
 		args = append(args, "--test_arg", fmt.Sprintf("-vmodule=%s", vModule))
@@ -354,12 +377,19 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_sharding_strategy=disabled")
 	}
 
+	if ignoreCache {
+		args = append(args, "--nocache_test_results")
+	}
+
 	if len(goTags) > 0 {
 		args = append(args, "--define", "gotags=bazel,gss,"+strings.Join(goTags, ","))
 	}
-	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
+	args = append(args, d.getTestOutputArgs(verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
 	logCommand("bazel", args...)
+	if stress {
+		d.warnAboutChangeInStressBehavior(timeout)
+	}
 
 	// Do not log --build_event_binary_file=... because it is not relevant to the actual call
 	// from the user perspective.
@@ -376,9 +406,10 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			// If the exit code is 4, the build was successful but no tests were found.
 			// ref: https://docs.bazel.build/versions/0.21.0/guide.html#what-exit-code-will-i-get
 			log.Printf("WARNING: the build succeeded but no tests were found.")
-			return nil
+			err = nil
 		}
 	}
+
 	return err
 
 	// TODO(irfansharif): Both here and in `dev bench`, if the command is
@@ -420,9 +451,9 @@ func (d *dev) getGoTestArgs(ctx context.Context, testArgs string) ([]string, err
 	return goTestArgs, nil
 }
 
-func (d *dev) getTestOutputArgs(stress, verbose, showLogs, streamOutput bool) []string {
+func (d *dev) getTestOutputArgs(verbose, showLogs, streamOutput bool) []string {
 	testOutputArgs := []string{"--test_output", "errors"}
-	if stress || streamOutput {
+	if streamOutput {
 		// Stream the output to continually observe the number of successful
 		// test iterations.
 		testOutputArgs = []string{"--test_output", "streamed"}
@@ -430,38 +461,6 @@ func (d *dev) getTestOutputArgs(stress, verbose, showLogs, streamOutput bool) []
 		testOutputArgs = []string{"--test_output", "all"}
 	}
 	return testOutputArgs
-}
-
-func (d *dev) getStressArgs(stressCmdArg string, timeout time.Duration) []string {
-	var stressArgs, stressCmdArgs []string
-	if timeout > 0 {
-		stressCmdArgs = append(stressCmdArgs, fmt.Sprintf("-maxtime=%s", timeout))
-		// The bazel timeout should be higher than the stress duration, lets
-		// generously give it an extra minute.
-		stressArgs = append(stressArgs, fmt.Sprintf("--test_timeout=%d", int((timeout+time.Minute).Seconds())))
-	} else {
-		// We're running under stress and no timeout is specified. We want
-		// to respect the timeout passed down to stress[1]. Similar to above
-		// we want the bazel timeout to be longer, so lets just set it to
-		// 24h.
-		//
-		// [1]: Through --stress-arg=-maxtime or if nothing is specified,
-		//      -maxtime=0 is taken as "run forever".
-		stressArgs = append(stressArgs, fmt.Sprintf("--test_timeout=%.0f", 24*time.Hour.Seconds()))
-	}
-	if numCPUs > 0 {
-		stressCmdArgs = append(stressCmdArgs, fmt.Sprintf("-p=%d", numCPUs))
-	}
-	if stressCmdArg != "" {
-		stressCmdArgs = append(stressCmdArgs, stressCmdArg)
-	}
-	stressArgs = append(stressArgs, "--test_env=COCKROACH_STRESS=true")
-	stressArgs = append(stressArgs, "--run_under",
-		// NB: Run with -bazel, which propagates `TEST_TMPDIR` to `TMPDIR`,
-		// and -shardable-artifacts set such that we can merge the XML output
-		// files.
-		fmt.Sprintf("%s -bazel -shardable-artifacts 'XML_OUTPUT_FILE=%s merge-test-xmls' %s", stressTarget, d.getDevBin(), strings.Join(stressCmdArgs, " ")))
-	return stressArgs
 }
 
 func getDirectoryFromTarget(target string) string {
@@ -477,28 +476,10 @@ func getDirectoryFromTarget(target string) string {
 }
 
 func (d *dev) determineAffectedTargets(ctx context.Context) ([]string, error) {
-	// List files changed against `master`.
-	remotes, err := d.exec.CommandContextSilent(ctx, "git", "remote", "-v")
+	base, err := d.getMergeBaseHash(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var upstream string
-	for _, remote := range strings.Split(strings.TrimSpace(string(remotes)), "\n") {
-		if (strings.Contains(remote, "github.com/cockroachdb/cockroach") || strings.Contains(remote, "github.com:cockroachdb/cockroach")) && strings.HasSuffix(remote, "(fetch)") {
-			upstream = strings.Fields(remote)[0]
-			break
-		}
-	}
-	if upstream == "" {
-		return nil, fmt.Errorf("could not find git upstream")
-	}
-
-	baseBytes, err := d.exec.CommandContextSilent(ctx, "git", "merge-base", fmt.Sprintf("%s/master", upstream), "HEAD")
-	if err != nil {
-		return nil, err
-	}
-	base := strings.TrimSpace(string(baseBytes))
-
 	changedFiles, err := d.exec.CommandContextSilent(ctx, "git", "diff", "--no-ext-diff", "--name-only", base, "--", "*.go", "**/testdata/**")
 	if err != nil {
 		return nil, err

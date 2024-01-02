@@ -29,7 +29,7 @@ func (p *planner) alterRenameTenant(
 	// Even though the call to renameTenant in startExec also
 	// performs this check, we need to do this early because otherwise
 	// the lookup of the ID from the name will fail.
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "rename"); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "rename", p.execCfg.Settings); err != nil {
 		return nil, err
 	}
 
@@ -41,12 +41,12 @@ func (p *planner) alterRenameTenant(
 		e = tree.NewStrVal(tree.AsStringWithFlags(s, tree.FmtBareIdentifiers))
 	}
 	tname, err := p.analyzeExpr(
-		ctx, e, nil, tree.IndexedVarHelper{}, types.String, true, "ALTER TENANT RENAME")
+		ctx, e, nil, tree.IndexedVarHelper{}, types.String, true, "ALTER VIRTUAL CLUSTER RENAME")
 	if err != nil {
 		return nil, err
 	}
 
-	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "ALTER TENANT RENAME")
+	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "ALTER VIRTUAL CLUSTER RENAME")
 	if err != nil {
 		return nil, err
 	}

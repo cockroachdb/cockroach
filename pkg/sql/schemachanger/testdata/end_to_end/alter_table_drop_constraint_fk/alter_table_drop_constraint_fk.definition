@@ -1,0 +1,46 @@
+setup
+CREATE TABLE t2 (i INT PRIMARY KEY);
+CREATE TABLE t1 (i INT PRIMARY KEY REFERENCES t2(i));
+----
+
+# Constraint is still enforced in this stage, so the second
+# insert will fail.
+stage-exec phase=PostCommitNonRevertiblePhase stage=1
+INSERT INTO t1 VALUES (0);
+----
+pq: insert on table "t1" violates foreign key constraint "crdb_internal_constraint_2_name_placeholder"
+
+stage-query phase=PostCommitNonRevertiblePhase stage=1
+SELECT count(*) FROM t1;
+----
+0
+
+# A dropping FK is only enforced for incoming writes, as demonstrated above,
+# but not validated on existing rows. We hence use the following explain
+# statement to ensure the optimizer effective ignores the FK constraint.
+# This is proved by t1 using a *full scan*, rather than a limited scan.
+stage-query phase=PostCommitNonRevertiblePhase stage=1
+EXPLAIN SELECT * FROM t1 JOIN t2 ON t1.i = t2.i LIMIT 1
+----
+----
+distribution: local
+vectorized: true
+
+• limit
+│ count: 1
+│
+└── • lookup join
+    │ table: t2@t2_pkey
+    │ equality: (i) = (i)
+    │ equality cols are key
+    │
+    └── • scan
+          missing stats
+          table: t1@t1_pkey
+          spans: FULL SCAN (SOFT LIMIT)
+----
+----
+
+test
+ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
+----

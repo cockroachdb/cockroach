@@ -27,7 +27,6 @@ import {
   SortedTable,
   SortSetting,
 } from "src/sortedtable";
-import * as format from "src/util/format";
 import styles from "./databasesPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
@@ -46,7 +45,20 @@ import {
 import { merge } from "lodash";
 import { UIConfigState } from "src/store";
 import { TableStatistics } from "../tableStatistics";
-import { DatabaseNameCell, IndexRecCell } from "./helperComponents";
+import {
+  DatabaseNameCell,
+  IndexRecCell,
+  DiskSizeCell,
+} from "./databaseTableCells";
+import {
+  DatabaseSpanStatsRow,
+  DatabaseTablesResponse,
+  isMaxSizeError,
+  SqlApiQueryResponse,
+  SqlExecutionErrorMessage,
+} from "../api";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+import { checkInfoAvailable } from "../databases";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -58,33 +70,13 @@ const booleanSettingCx = classnames.bind(booleanSettingStyles);
 //
 // The loading and loaded flags help us know when to dispatch the appropriate
 // refresh actions.
-//
-// The overall structure is:
-//
-//   interface DatabasesPageData {
-//     loading: boolean;
-//     loaded: boolean;
-//     lastError: Error;
-//     sortSetting: SortSetting;
-//     search: string;
-//     filters: Filters;
-//     nodeRegions: { [nodeId: string]: string };
-//     isTenant: boolean;
-//     databases: { // DatabasesPageDataDatabase[]
-//       loading: boolean;
-//       loaded: boolean;
-//       name: string;
-//       sizeInBytes: number;
-//       tableCount: number;
-//       rangeCount: number;
-//       nodes: number[];
-//       nodesByRegionString: string;
-//     }[];
-//   }
 export interface DatabasesPageData {
   loading: boolean;
   loaded: boolean;
-  lastError: Error;
+  // Request error when getting database names.
+  requestError: Error;
+  // Query error when getting database names.
+  queryError: SqlExecutionErrorMessage;
   databases: DatabasesPageDataDatabase[];
   sortSetting: SortSetting;
   search: string;
@@ -94,16 +86,25 @@ export interface DatabasesPageData {
   automaticStatsCollectionEnabled?: boolean;
   indexRecommendationsEnabled: boolean;
   showNodeRegionsColumn?: boolean;
+  csIndexUnusedDuration: string;
 }
 
 export interface DatabasesPageDataDatabase {
-  loading: boolean;
-  loaded: boolean;
-  lastError: Error;
+  detailsLoading: boolean;
+  detailsLoaded: boolean;
+
+  spanStatsLoading: boolean;
+  spanStatsLoaded: boolean;
+
+  // Request error when getting database details.
+  detailsRequestError: Error;
+  spanStatsRequestError: Error;
+  // Query error when getting database details.
+  detailsQueryError: SqlExecutionErrorMessage;
+  spanStatsQueryError: SqlExecutionErrorMessage;
   name: string;
-  sizeInBytes: number;
-  tableCount: number;
-  rangeCount: number;
+  spanStats?: SqlApiQueryResponse<DatabaseSpanStatsRow>;
+  tables?: SqlApiQueryResponse<DatabaseTablesResponse>;
   // Array of node IDs used to unambiguously filter by node and region.
   nodes?: number[];
   // String of nodes grouped by region in alphabetical order, e.g.
@@ -115,7 +116,11 @@ export interface DatabasesPageDataDatabase {
 
 export interface DatabasesPageActions {
   refreshDatabases: () => void;
-  refreshDatabaseDetails: (database: string) => void;
+  refreshDatabaseDetails: (
+    database: string,
+    csIndexUnusedDuration: string,
+  ) => void;
+  refreshDatabaseSpanStats: (database: string) => void;
   refreshSettings: () => void;
   refreshNodes?: () => void;
   onFilterChange?: (value: Filters) => void;
@@ -135,7 +140,6 @@ interface DatabasesPageState {
   pagination: ISortedTablePagination;
   filters?: Filters;
   activeFilters?: number;
-  lastDetailsError: Error;
   columns: ColumnDescriptor<DatabasesPageDataDatabase>[];
 }
 
@@ -176,7 +180,6 @@ export class DatabasesPage extends React.Component<
         current: 1,
         pageSize: tablePageSize,
       },
-      lastDetailsError: null,
       columns: this.columns(),
     };
 
@@ -192,8 +195,8 @@ export class DatabasesPage extends React.Component<
     if (
       this.props.onSortingChange &&
       columnTitle &&
-      (sortSetting.columnTitle != columnTitle ||
-        sortSetting.ascending != ascending)
+      (sortSetting.columnTitle !== columnTitle ||
+        sortSetting.ascending !== ascending)
     ) {
       this.props.onSortingChange("Databases", columnTitle, ascending);
     }
@@ -213,7 +216,7 @@ export class DatabasesPage extends React.Component<
     const searchParams = new URLSearchParams(history.location.search);
 
     const searchQuery = searchParams.get("q") || undefined;
-    if (onSearchComplete && searchQuery && search != searchQuery) {
+    if (onSearchComplete && searchQuery && search !== searchQuery) {
       onSearchComplete(searchQuery);
     }
 
@@ -248,7 +251,7 @@ export class DatabasesPage extends React.Component<
     if (
       !this.props.loaded &&
       !this.props.loading &&
-      this.props.lastError === undefined
+      this.props.requestError === undefined
     ) {
       return this.props.refreshDatabases();
     } else {
@@ -265,7 +268,7 @@ export class DatabasesPage extends React.Component<
     // Search
     const searchParams = new URLSearchParams(history.location.search);
     const searchQueryString = searchParams.get("q") || "";
-    if (search && search != searchQueryString) {
+    if (search && search !== searchQueryString) {
       syncHistory(
         {
           q: search,
@@ -276,26 +279,25 @@ export class DatabasesPage extends React.Component<
   }
 
   componentDidUpdate(
-    prevProp: Readonly<DatabasesPageProps>,
+    prevProps: Readonly<DatabasesPageProps>,
     prevState: Readonly<DatabasesPageState>,
   ): void {
-    if (this.shouldRefreshDatabaseInformation(prevState, prevProp)) {
+    if (this.shouldRefreshDatabaseInformation(prevState, prevProps)) {
       this.updateQueryParams();
       this.refresh();
     }
     if (
-      prevProp.indexRecommendationsEnabled !==
-      this.props.indexRecommendationsEnabled
+      prevProps.indexRecommendationsEnabled !==
+        this.props.indexRecommendationsEnabled ||
+      prevProps.showNodeRegionsColumn !== this.props.showNodeRegionsColumn
     ) {
       this.setState({ columns: this.columns() });
     }
   }
 
   private refresh(): void {
-    let lastDetailsError: Error;
-
     // load everything by default
-    let filteredDbs = this.props.databases;
+    let filteredDbs: DatabasesPageDataDatabase[] = this.props.databases;
 
     // Loading only the first page if there are more than
     // 40 dbs. If there is more than 40 dbs sort will be disabled.
@@ -319,23 +321,22 @@ export class DatabasesPage extends React.Component<
     }
 
     filteredDbs.forEach(database => {
-      if (database.lastError) {
-        lastDetailsError = database.lastError;
-      }
-
       if (
-        lastDetailsError &&
-        this.state.lastDetailsError?.name != lastDetailsError?.name
+        !database.detailsLoaded &&
+        !database.detailsLoading &&
+        database.detailsRequestError == null
       ) {
-        this.setState({ lastDetailsError: lastDetailsError });
+        this.props.refreshDatabaseDetails(
+          database.name,
+          this.props.csIndexUnusedDuration,
+        );
       }
-
       if (
-        !database.loaded &&
-        !database.loading &&
-        database.lastError === undefined
+        !database.spanStatsLoaded &&
+        !database.spanStatsLoading &&
+        database.spanStatsRequestError == null
       ) {
-        this.props.refreshDatabaseDetails(database.name);
+        this.props.refreshDatabaseSpanStats(database.name);
       }
     });
   }
@@ -449,11 +450,11 @@ export class DatabasesPage extends React.Component<
     return databases
       .filter(db => (search ? filterBySearchQuery(db, search) : true))
       .filter(db => {
-        if (regionsSelected.length == 0 && nodesSelected.length == 0)
+        if (regionsSelected.length === 0 && nodesSelected.length === 0)
           return true;
 
-        let foundRegion = regionsSelected.length == 0;
-        let foundNode = nodesSelected.length == 0;
+        let foundRegion = regionsSelected.length === 0;
+        let foundNode = nodesSelected.length === 0;
 
         db.nodes?.forEach(node => {
           const n = node?.toString() || "";
@@ -477,17 +478,23 @@ export class DatabasesPage extends React.Component<
     // No new dbs to update
     if (
       !this.props.databases ||
-      this.props.databases.length == 0 ||
-      this.props.databases.every(x => x.loaded || x.loading)
+      this.props.databases.length === 0 ||
+      this.props.databases.every(
+        x =>
+          x.detailsLoading ||
+          x.detailsLoaded ||
+          x.spanStatsLoaded ||
+          x.spanStatsLoading,
+      )
     ) {
       return false;
     }
 
-    if (this.state.pagination.current != prevState.pagination.current) {
+    if (this.state.pagination.current !== prevState.pagination.current) {
       return true;
     }
 
-    if (prevProps && this.props.search != prevProps.search) {
+    if (prevProps && this.props.search !== prevProps.search) {
       return true;
     }
 
@@ -498,7 +505,18 @@ export class DatabasesPage extends React.Component<
       i++
     ) {
       const db = filteredDatabases[i];
-      if (db.loaded || db.loading || db.lastError != undefined) {
+      if (
+        db.detailsLoaded ||
+        db.detailsLoading ||
+        db.detailsRequestError != null
+      ) {
+        continue;
+      }
+      if (
+        db.spanStatsLoading ||
+        db.spanStatsLoaded ||
+        db.spanStatsRequestError != null
+      ) {
         continue;
       }
       // Info is not loaded for a visible database.
@@ -507,19 +525,6 @@ export class DatabasesPage extends React.Component<
 
     return false;
   }
-
-  checkInfoAvailable = (
-    database: DatabasesPageDataDatabase,
-    cell: React.ReactNode,
-  ): React.ReactNode => {
-    if (
-      database.lastError &&
-      database.lastError.name !== "GetDatabaseInfoError"
-    ) {
-      return "(unavailable)";
-    }
-    return cell;
-  };
 
   private columns(): ColumnDescriptor<DatabasesPageDataDatabase>[] {
     const columns: ColumnDescriptor<DatabasesPageDataDatabase>[] = [
@@ -543,9 +548,8 @@ export class DatabasesPage extends React.Component<
             Size
           </Tooltip>
         ),
-        cell: database =>
-          this.checkInfoAvailable(database, format.Bytes(database.sizeInBytes)),
-        sort: database => database.sizeInBytes,
+        cell: database => <DiskSizeCell database={database} />,
+        sort: database => database.spanStats?.approximate_disk_bytes,
         className: cx("databases-table__col-size"),
         name: "size",
       },
@@ -559,8 +563,12 @@ export class DatabasesPage extends React.Component<
           </Tooltip>
         ),
         cell: database =>
-          this.checkInfoAvailable(database, database.tableCount),
-        sort: database => database.tableCount,
+          checkInfoAvailable(
+            database.detailsRequestError,
+            database.tables?.error,
+            database.tables?.tables?.length,
+          ),
+        sort: database => database.tables?.tables.length ?? 0,
         className: cx("databases-table__col-table-count"),
         name: "tableCount",
       },
@@ -574,8 +582,12 @@ export class DatabasesPage extends React.Component<
           </Tooltip>
         ),
         cell: database =>
-          this.checkInfoAvailable(database, database.rangeCount),
-        sort: database => database.rangeCount,
+          checkInfoAvailable(
+            database.spanStatsRequestError,
+            database.spanStats?.error,
+            database.spanStats?.range_count,
+          ),
+        sort: database => database.spanStats?.range_count,
         className: cx("databases-table__col-range-count"),
         name: "rangeCount",
       },
@@ -589,9 +601,10 @@ export class DatabasesPage extends React.Component<
           </Tooltip>
         ),
         cell: database =>
-          this.checkInfoAvailable(
-            database,
-            database.nodesByRegionString || "None",
+          checkInfoAvailable(
+            database.detailsRequestError,
+            null,
+            database.nodesByRegionString ? database.nodesByRegionString : null,
           ),
         sort: database => database.nodesByRegionString,
         className: cx("databases-table__col-node-regions"),
@@ -707,57 +720,54 @@ export class DatabasesPage extends React.Component<
           <Loading
             loading={this.props.loading}
             page={"databases"}
-            error={this.props.lastError}
-            render={() => (
-              <DatabasesSortedTable
-                className={cx("databases-table")}
-                tableWrapperClassName={cx("sorted-table")}
-                data={databasesToDisplay}
-                columns={displayColumns}
-                sortSetting={this.props.sortSetting}
-                onChangeSortSetting={this.changeSortSetting}
-                pagination={this.state.pagination}
-                loading={this.props.loading}
-                disableSortSizeLimit={disableTableSortSize}
-                renderNoResult={
-                  <div
-                    className={cx(
-                      "databases-table__no-result",
-                      "icon__container",
-                    )}
-                  >
-                    <StackIcon className={cx("icon--s")} />
-                    This cluster has no databases.
-                  </div>
-                }
-              />
-            )}
+            error={
+              isMaxSizeError(this.props.queryError?.message)
+                ? new Error(this.props.queryError?.message)
+                : this.props.requestError
+            }
             renderError={() =>
               LoadingError({
                 statsType: "databases",
-                timeout: this.props.lastError?.name
-                  ?.toLowerCase()
-                  .includes("timeout"),
+                error: isMaxSizeError(this.props.queryError?.message)
+                  ? new Error(this.props.queryError?.message)
+                  : this.props.requestError,
               })
             }
-          />
-          {!this.props.loading && (
-            <Loading
+          >
+            {isMaxSizeError(this.props.queryError?.message) && (
+              <InlineAlert
+                intent="info"
+                title={
+                  <>
+                    Not all databases are displayed because the maximum number
+                    of databases was reached in the console.&nbsp;
+                  </>
+                }
+              />
+            )}
+            <DatabasesSortedTable
+              className={cx("databases-table")}
+              tableWrapperClassName={cx("sorted-table")}
+              data={databasesToDisplay}
+              columns={displayColumns}
+              sortSetting={this.props.sortSetting}
+              onChangeSortSetting={this.changeSortSetting}
+              pagination={this.state.pagination}
               loading={this.props.loading}
-              page={"databases"}
-              error={this.state.lastDetailsError}
-              render={() => <></>}
-              renderError={() =>
-                LoadingError({
-                  statsType: "part of the information",
-                  timeout: this.state.lastDetailsError?.name
-                    ?.toLowerCase()
-                    .includes("timeout"),
-                  error: this.state.lastDetailsError,
-                })
+              disableSortSizeLimit={disableTableSortSize}
+              renderNoResult={
+                <div
+                  className={cx(
+                    "databases-table__no-result",
+                    "icon__container",
+                  )}
+                >
+                  <StackIcon className={cx("icon--s")} />
+                  This cluster has no databases.
+                </div>
               }
             />
-          )}
+          </Loading>
         </section>
 
         <Pagination

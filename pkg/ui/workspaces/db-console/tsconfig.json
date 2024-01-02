@@ -22,8 +22,15 @@
     "outDir": "./dist/types",
     "target": "es6",
     "baseUrl": ".",
+    "preserveSymlinks": true,
     "paths": {
       "oss/*": ["*"],
+      "src/js/protos": [
+        "./node_modules/@cockroachlabs/crdb-protobuf-client"
+      ],
+      "ccl/src/js/protos": [
+        "./node_modules/@cockroachlabs/crdb-protobuf-client-ccl"
+      ],
       "src/*": [
         "ccl/src/*",
         "src/*"

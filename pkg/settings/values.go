@@ -30,7 +30,7 @@ const MaxSettings = 1023
 type Values struct {
 	container valuesContainer
 
-	nonSystemTenant bool
+	classCheck classCheck
 
 	defaultOverridesMu struct {
 		syncutil.Mutex
@@ -51,6 +51,30 @@ type Values struct {
 	opaque interface{}
 }
 
+type classCheck uint32
+
+const (
+	// classCheckUndefined is used when the settings.Values hasn't been
+	// specialized yet.
+	classCheckUndefined classCheck = iota
+	// classCheckSystemInterface is used when the settings.Values is
+	// specialized for the system interface and SystemOnly settings can
+	// be used.
+	classCheckSystemInterface
+	// classCheckVirtualCluster is used when the settings.Values is
+	// specialized for a virtual cluster and SystemOnly settings cannot
+	// be used.
+	classCheckVirtualCluster
+)
+
+func (ck *classCheck) get() classCheck {
+	return classCheck(atomic.LoadUint32((*uint32)(ck)))
+}
+
+func (ck *classCheck) set(nv classCheck) {
+	atomic.StoreUint32((*uint32)(ck), uint32(nv))
+}
+
 const numSlots = MaxSettings + 1
 
 type valuesContainer struct {
@@ -61,6 +85,9 @@ type valuesContainer struct {
 	// current context (i.e. it is a SystemOnly setting and the container is for a
 	// tenant). Reading or writing such a setting causes panics in test builds.
 	forbidden [numSlots]bool
+
+	// hasValue contains the origin of the current value of the setting.
+	hasValue [numSlots]uint32
 }
 
 func (c *valuesContainer) setGenericVal(slot slotIdx, newVal interface{}) {
@@ -93,7 +120,14 @@ func (c *valuesContainer) getGeneric(slot slotIdx) interface{} {
 func (c *valuesContainer) checkForbidden(slot slotIdx) bool {
 	if c.forbidden[slot] {
 		if buildutil.CrdbTestBuild {
-			panic(errors.AssertionFailedf("attempted to set forbidden setting %s", slotTable[slot].Key()))
+			const msg = `programming error: invalid access to SystemOnly setting %s from a virtual cluster!
+
+TIP: use class ApplicationLevel for settings that configure just 1
+virtual cluster; SystemOnly for settings that affect only the shared
+storage layer; and SystemVisible for settings that affect the storage
+layer and also must be visible to all virtual clusters.
+`
+			panic(errors.AssertionFailedf(msg, slotTable[slot].Name()))
 		}
 		return false
 	}
@@ -117,10 +151,28 @@ func (sv *Values) Init(ctx context.Context, opaque interface{}) {
 	}
 }
 
-// SetNonSystemTenant marks this container as pertaining to a non-system tenant,
-// after which use of SystemOnly values is disallowed.
-func (sv *Values) SetNonSystemTenant() {
-	sv.nonSystemTenant = true
+const alreadySpecializedError = `programming error: setting value container is already specialized!
+
+TIP: avoid using the same cluster.Settings or settings.Value object across multiple servers.
+`
+
+// SpecializeForSystemInterface marks the values container as
+// pertaining to the system interface.
+func (sv *Values) SpecializeForSystemInterface() {
+	if ck := sv.classCheck.get(); ck != classCheckUndefined && ck != classCheckSystemInterface {
+		panic(errors.AssertionFailedf(alreadySpecializedError))
+	}
+	sv.classCheck.set(classCheckSystemInterface)
+}
+
+// SpecializeForVirtualCluster marks this container as pertaining to
+// a virtual cluster, after which use of SystemOnly values is
+// disallowed.
+func (sv *Values) SpecializeForVirtualCluster() {
+	if ck := sv.classCheck.get(); ck != classCheckUndefined && ck != classCheckVirtualCluster {
+		panic(errors.AssertionFailedf(alreadySpecializedError))
+	}
+	sv.classCheck.set(classCheckVirtualCluster)
 	for slot, setting := range slotTable {
 		if setting != nil && setting.Class() == SystemOnly {
 			sv.container.forbidden[slot] = true
@@ -128,10 +180,10 @@ func (sv *Values) SetNonSystemTenant() {
 	}
 }
 
-// NonSystemTenant returns true if this container is for a non-system tenant
-// (i.e. SetNonSystemTenant() was called).
-func (sv *Values) NonSystemTenant() bool {
-	return sv.nonSystemTenant
+// SpecializedToVirtualCluster returns true if this container is for a
+// virtual cluster (i.e. SpecializeToVirtualCluster() was called).
+func (sv *Values) SpecializedToVirtualCluster() bool {
+	return sv.classCheck.get() == classCheckVirtualCluster
 }
 
 // Opaque returns the argument passed to Init.
@@ -152,6 +204,14 @@ func (sv *Values) setInt64(ctx context.Context, slot slotIdx, newVal int64) {
 	if sv.container.setInt64Val(slot, newVal) {
 		sv.settingChanged(ctx, slot)
 	}
+}
+
+func (sv *Values) setValueOrigin(ctx context.Context, slot slotIdx, origin ValueOrigin) {
+	atomic.StoreUint32(&sv.container.hasValue[slot], uint32(origin))
+}
+
+func (sv *Values) getValueOrigin(ctx context.Context, slot slotIdx) ValueOrigin {
+	return ValueOrigin(atomic.LoadUint32(&sv.container.hasValue[slot]))
 }
 
 // setDefaultOverride overrides the default value for the respective setting to
@@ -193,4 +253,55 @@ func (sv *Values) setOnChange(slot slotIdx, fn func(ctx context.Context)) {
 	sv.changeMu.Lock()
 	sv.changeMu.onChange[slot] = append(sv.changeMu.onChange[slot], fn)
 	sv.changeMu.Unlock()
+}
+
+// TestingCopyForVirtualCluster makes a copy of the input Values in
+// the target Values for use when initializing a server for a virtual
+// cluster in tests. This is meant to propagate overrides
+// to ApplicationLevel settings.
+func (sv *Values) TestingCopyForVirtualCluster(input *Values) {
+	for slot := slotIdx(0); slot < slotIdx(len(registry)); slot++ {
+		s := slotTable[slot]
+		if s.Class() != ApplicationLevel && s.Class() != SystemVisible {
+			continue
+		}
+
+		// Copy the value.
+		sv.container.intVals[slot] = input.container.intVals[slot]
+		if v := input.container.genericVals[slot].Load(); v != nil {
+			sv.container.genericVals[slot].Store(v)
+		}
+
+		// Copy the default.
+		input.defaultOverridesMu.Lock()
+		v, hasVal := input.defaultOverridesMu.defaultOverrides[slot]
+		input.defaultOverridesMu.Unlock()
+		if !hasVal {
+			continue
+		}
+		sv.setDefaultOverride(slot, v)
+	}
+}
+
+// TestingCopyForServer makes a copy of the input Values in the target Values
+// for use when initializing a server in a test cluster. This is meant to
+// propagate initial values and overrides.
+func (sv *Values) TestingCopyForServer(input *Values, newOpaque interface{}) {
+	sv.opaque = newOpaque
+	for slot := slotIdx(0); slot < slotIdx(len(registry)); slot++ {
+		// Copy the value.
+		sv.container.intVals[slot] = input.container.intVals[slot]
+		if v := input.container.genericVals[slot].Load(); v != nil {
+			sv.container.genericVals[slot].Store(v)
+		}
+
+		// Copy the default.
+		input.defaultOverridesMu.Lock()
+		v, hasVal := input.defaultOverridesMu.defaultOverrides[slot]
+		input.defaultOverridesMu.Unlock()
+		if !hasVal {
+			continue
+		}
+		sv.setDefaultOverride(slot, v)
+	}
 }

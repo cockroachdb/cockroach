@@ -26,7 +26,7 @@ import { defaultTimeScaleOptions, findClosestTimeScale } from "./utils";
 
 import styles from "./timeScale.module.scss";
 import { TimezoneContext } from "../contexts";
-import { FormatWithTimezone } from "../util";
+import { FormatWithTimezone, getLogger } from "../util";
 
 const cx = classNames.bind(styles);
 
@@ -183,10 +183,15 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
       case ArrowDirection.CENTER:
         // CENTER is used to set the time window to the current time.
         endTime = now;
-        isMoving = true;
+        // Only predefined time ranges are considered to be moving window (ie Past Hour, Past 3 days, etc).
+        // Custom time window has specific start/end time and constant duration, and in this case we
+        // move time window with the same duration with end time = now() and keep it fixed as before.
+        if (key !== "Custom") {
+          isMoving = true;
+        }
         break;
       default:
-        console.error("Unknown direction: ", direction);
+        getLogger().error("Unknown direction: ", direction);
     }
 
     // If the timescale extends into the future then fallback to a default

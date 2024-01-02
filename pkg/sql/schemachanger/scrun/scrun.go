@@ -36,7 +36,7 @@ import (
 )
 
 var enforcePlannerSanityCheck = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.schemachanger.strict_planning_sanity_check.enabled",
 	"enforce strict sanity checks in the declarative schema changer planner",
 	buildutil.CrdbTestBuild,
@@ -118,6 +118,11 @@ func RunSchemaChangesInJob(
 	descriptorIDs []descpb.ID,
 	rollbackCause error,
 ) error {
+	if knobs != nil && knobs.RunBeforeMakingPostCommitPlan != nil {
+		if err := knobs.RunBeforeMakingPostCommitPlan(rollbackCause != nil); err != nil {
+			return err
+		}
+	}
 	p, err := makePostCommitPlan(ctx, deps, jobID, descriptorIDs, rollbackCause)
 	if err != nil {
 		if knobs != nil && knobs.OnPostCommitPlanError != nil {
@@ -190,13 +195,14 @@ func executeStage(
 		// cancelation.
 		if !errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) &&
 			!errors.Is(err, context.Canceled) &&
-			!scerrors.HasSchemaChangerUserError(err) {
+			!scerrors.HasSchemaChangerUserError(err) &&
+			!pgerror.HasCandidateCode(err) {
 			err = p.DecorateErrorWithPlanDetails(err)
 		}
 		// Certain errors are aimed to be user consumable and should never be
 		// wrapped.
-		if scerrors.HasSchemaChangerUserError(err) {
-			return errors.Unwrap(err)
+		if userError := scerrors.UnwrapSchemaChangerUserError(err); userError != nil {
+			return userError
 		}
 		return errors.Wrapf(err, "error executing %s", stage)
 	}
@@ -273,7 +279,8 @@ func logSchemaChangeEvents(
 ) error {
 	var ids catalog.DescriptorIDSet
 	for _, t := range state.TargetState.Targets {
-		if t.Metadata.SourceElementID > 1 {
+		if t.Metadata.SourceElementID > 1 ||
+			!t.IsLinkedToSchemaChange() { // Ignore empty metadata
 			// Ignore targets which are the product of CASCADEs.
 			continue
 		}
@@ -334,7 +341,7 @@ func makeState(
 		// but TXN_DROPPED is special and should be cleaned up in memory before
 		// executing on a newer node.
 		cs = protoutil.Clone(cs).(*scpb.DescriptorState)
-		scpb.MigrateDescriptorState(version, cs)
+		scpb.MigrateDescriptorState(version, desc.GetParentID(), cs)
 		if cs == nil {
 			return errors.New("missing schema changer state")
 		}

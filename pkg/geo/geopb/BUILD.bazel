@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -6,6 +5,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "geopb",
     srcs = [
+        "config.go",
         "geopb.go",
         "types.go",
     ],
@@ -16,7 +16,10 @@ go_library(
 
 proto_library(
     name = "geopb_proto",
-    srcs = ["geopb.proto"],
+    srcs = [
+        "config.proto",
+        "geopb.proto",
+    ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
@@ -34,9 +37,6 @@ go_proto_library(
 go_test(
     name = "geopb_test",
     srcs = ["types_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":geopb"],
     deps = ["@com_github_stretchr_testify//require"],
 )
-
-get_x_data(name = "get_x_data")

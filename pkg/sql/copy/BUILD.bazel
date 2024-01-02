@@ -1,33 +1,33 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "copy_test",
+    size = "large",
     srcs = [
         "copy_in_test.go",
         "copy_out_test.go",
         "copy_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
+    shard_count = 4,
     deps = [
         "//pkg/base",
         "//pkg/cli/clisqlclient",
-        "//pkg/keys",
+        "//pkg/kv",
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
-        "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/parser",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltestutils",
-        "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
@@ -35,6 +35,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
         "//pkg/util/encoding/csv",
@@ -55,5 +56,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -28,10 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -90,27 +90,12 @@ func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bo
 		test.Start(t, serverArgs)
 		defer test.Close()
 
-		if testTenant || test.cluster.StartedDefaultTestTenant() {
-			// TODO(andyk): Re-enable these tests once tenant clusters fully
-			// support the features they're using.
-			switch path {
-			case "testdata/telemetry/execution",
-				// Index & multiregion are disabled because it requires
-				// multi-region syntax to be enabled for secondary tenants.
-				"testdata/telemetry/multiregion",
-				"testdata/telemetry/index",
-				"testdata/telemetry/planning",
-				"testdata/telemetry/sql-stats":
-				skip.WithIssue(t, 47893, "tenant clusters do not support SQL features used by this test")
-			}
-		}
-
 		// Run test against physical CRDB cluster.
 		t.Run("server", func(t *testing.T) {
 			datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
-				sqlServer := test.server.SQLServer().(*sql.Server)
 				reporter := test.server.DiagnosticsReporter().(*diagnostics.Reporter)
-				return test.RunTest(td, test.serverDB, reporter.ReportDiagnostics, sqlServer)
+				statsController := test.server.SQLServer().(*sql.Server).GetSQLStatsController()
+				return test.RunTest(td, test.serverDB, reporter.ReportDiagnostics, statsController)
 			})
 		})
 
@@ -118,9 +103,9 @@ func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bo
 			// Run test against logical tenant cluster.
 			t.Run("tenant", func(t *testing.T) {
 				datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
-					sqlServer := test.server.SQLServer().(*sql.Server)
 					reporter := test.tenant.DiagnosticsReporter().(*diagnostics.Reporter)
-					return test.RunTest(td, test.tenantDB, reporter.ReportDiagnostics, sqlServer)
+					statsController := test.tenant.SQLServer().(*sql.Server).GetSQLStatsController()
+					return test.RunTest(td, test.tenantDB, reporter.ReportDiagnostics, statsController)
 				})
 			})
 		}
@@ -133,7 +118,7 @@ type telemetryTest struct {
 	cluster        serverutils.TestClusterInterface
 	server         serverutils.TestServerInterface
 	serverDB       *gosql.DB
-	tenant         serverutils.TestTenantInterface
+	tenant         serverutils.ApplicationLayerInterface
 	tenantDB       *gosql.DB
 	tempDirCleanup func()
 	allowlist      featureAllowlist
@@ -157,7 +142,6 @@ func (tt *telemetryTest) Start(t *testing.T, serverArgs []base.TestServerArgs) {
 	diagSrvURL := tt.diagSrv.URL()
 	mapServerArgs := make(map[int]base.TestServerArgs, len(serverArgs))
 	for i, v := range serverArgs {
-		v.DefaultTestTenant = base.TestTenantDisabled
 		v.Knobs.Server = &server.TestingKnobs{
 			DiagnosticsTestingKnobs: diagnostics.TestingKnobs{
 				OverrideReportingURL: &diagSrvURL,
@@ -166,10 +150,15 @@ func (tt *telemetryTest) Start(t *testing.T, serverArgs []base.TestServerArgs) {
 		v.ExternalIODir = tempExternalIODir
 		mapServerArgs[i] = v
 	}
-	tt.cluster = serverutils.StartNewTestCluster(
+	tt.cluster = serverutils.StartCluster(
 		tt.t,
 		len(serverArgs),
-		base.TestClusterArgs{ServerArgsPerNode: mapServerArgs},
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			},
+			ServerArgsPerNode: mapServerArgs,
+		},
 	)
 	tt.server = tt.cluster.Server(0)
 	tt.serverDB = tt.cluster.ServerConn(0)
@@ -192,7 +181,7 @@ func (tt *telemetryTest) RunTest(
 	td *datadriven.TestData,
 	db *gosql.DB,
 	reportDiags func(ctx context.Context),
-	sqlServer *sql.Server,
+	statsController *persistedsqlstats.Controller,
 ) (out string) {
 	defer func() {
 		if out == "" {
@@ -271,7 +260,7 @@ func (tt *telemetryTest) RunTest(
 
 	case "sql-stats":
 		// Report diagnostics once to reset the stats.
-		sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+		statsController.ResetLocalSQLStats(ctx)
 		reportDiags(ctx)
 
 		_, err := db.Exec(td.Input)
@@ -279,7 +268,7 @@ func (tt *telemetryTest) RunTest(
 		if err != nil {
 			fmt.Fprintf(&buf, "error: %v\n", err)
 		}
-		sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+		statsController.ResetLocalSQLStats(ctx)
 		reportDiags(ctx)
 		last := tt.diagSrv.LastRequestData()
 		buf.WriteString(formatSQLStats(last.SqlStats))
@@ -310,7 +299,7 @@ func (tt *telemetryTest) prepareCluster(db *gosql.DB) {
 	runner := sqlutils.MakeSQLRunner(db)
 	// Disable automatic reporting so it doesn't interfere with the test.
 	runner.Exec(tt.t, "SET CLUSTER SETTING diagnostics.reporting.enabled = false")
-	runner.Exec(tt.t, "SET CLUSTER SETTING diagnostics.reporting.send_crash_reports = false")
+	runner.Exec(tt.t, "SET CLUSTER SETTING diagnostics.reporting.send_crash_reports.enabled = false")
 	// Disable plan caching to get accurate counts if the same statement is
 	// issued multiple times.
 	runner.Exec(tt.t, "SET CLUSTER SETTING sql.query_cache.enabled = false")
@@ -372,7 +361,9 @@ func formatSQLStats(stats []appstatspb.CollectedStatementStatistics) string {
 	for i := range stats {
 		s := &stats[i]
 
-		if strings.HasPrefix(s.Key.App, catconstants.InternalAppNamePrefix) {
+		if strings.HasPrefix(s.Key.App,
+			catconstants.InternalAppNamePrefix) || strings.HasPrefix(s.Key.App,
+			catconstants.DelegatedAppNamePrefix) {
 			// Let's ignore all internal queries for this test.
 			continue
 		}

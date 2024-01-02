@@ -52,6 +52,11 @@ func (p *GlobalPrivilege) GetObjectType() privilege.ObjectType {
 	return privilege.Global
 }
 
+// GetObjectTypeString implements the Object interface.
+func (p *GlobalPrivilege) GetObjectTypeString() string {
+	return string(privilege.Global)
+}
+
 // GetName implements the Object interface.
 func (p *GlobalPrivilege) GetName() string {
 	// TODO(richardjcai): Turn this into a const map somewhere.

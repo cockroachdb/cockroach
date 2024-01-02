@@ -69,7 +69,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 0
 │ table: def@def_pkey
-│ equality: (b, c) = (f,e)
+│ equality: (b, c) = (f, e)
 │ equality cols are key
 │
 └── • scan
@@ -429,7 +429,7 @@ SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE d
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  …/1/1         {1}       1
+<before:/Table/65>  …/1/1         {1}       1
 …/1/1               …/1/2         {2}       2
 …/1/2               …/1/3         {3}       3
 …/1/3               …/1/4         {4}       4
@@ -456,7 +456,7 @@ vectorized: true
     │ columns: (a, b, c, d, a, b, c, d)
     │ estimated row count: 0
     │ table: data@data_pkey
-    │ equality: (a, b, c, d) = (a,b,c,d)
+    │ equality: (a, b, c, d) = (a, b, c, d)
     │ equality cols are key
     │ pred: c > 0
     │
@@ -483,7 +483,7 @@ vectorized: true
 • lookup join
 │ estimated row count: 0
 │ table: data@data_pkey
-│ equality: (a, b, c, d) = (a,b,c,d)
+│ equality: (a, b, c, d) = (a, b, c, d)
 │ equality cols are key
 │ pred: c > 0
 │
@@ -496,7 +496,7 @@ vectorized: true
           table: data@data_pkey
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMll9rm1AYxu_3KV7eq3acoMc_bXpgYOhSlpKZLsnYYAvD6qFztR53VNgo-e5D3dJYmnNczEVuAh59fJ73_T0QHzH_mSDD8eeb6Wjiw8nbyWK5-DA9hcV4Or5cwmu4ms_ew0n7MgqKAD69G8_HEMIboKcwWkAC_mj5cT6awvWsepVC8rU0TZuDWeskEkxFxP3ggefIviBFghYStJGggwRdXBHMpAh5ngtZPfJYCybRL2QmwTjNyqI6XhEMheTIHrGIi4Qjw2Vwm_A5DyIuDRMJRrwI4qS2qRJ51c-37J7_RoKXIikf0pxBQOCWQEggQoKLLKjOBgaFII2Agii-c4mrNUFRFk_OeRHccWR0Tbqnu4qTgksuDbcdrTln4NnVdhljE3853Glp_Y_ltYjTv_uguoVMhbgvM_gh4hREysCjxLOIZxOvwjLzwTvfoPwXctcaZ2XRfsGuaeyd0zwNUaZCRlzyqDXAav3CvL4YiMyg7rMnX_Z2Wt60e7Von2oZdGBYe5RLk29TrrPDlUtjuV0u3UqOoFxWd8BWL8DWwLD3AKzJtwF8fjjAGsttwLqVHAFguztguxdge2A4ewDW5NsAHh4OsMZyG7BuJUcA2OkO2OkF2BkY7h6ANfk2gC8OB1hjuQ1Yt5IjAKz5mpnzPBNpzjv9u5vV9wGP7njzMZGLUob8RoqwtmkuZ7WuPoh4XjR3aXMxSZtbVcBtMVWKLbXYUortlpg-F9vq2Gdqa0epdtViVynWOJ_1GfpcKR6qnYdK8YVafNEnNtV0TFcydcuopma0V8-opmiOxlzdNKqpGlV37Xn21frVnwAAAP__SgWtFg==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlt1u2jAYhs93FdZ31E6OEueHH0uTQC3VqCh0wLRJG6pS4rZZQ5w5jrqq4t6nQEtJ0hgCHMABUkz85vleHkV-gfhvABQ6P6977W4fnZx3R-PRt94pGnV6nbMx-owuhoMrdJK99Fzpoh9fO8MOmqIviJyi9ggFqN8efx-2e-hykEYptvxODMNiyFjsE4Ah5B7ruzMWA_0FBDCYgMECDDZgcGCCIRJ8yuKYi_SWl8WGrvcPqIHBD6NEpssTDFMuGNAXkL4MGFAYu7cBGzLXY0I3AIPHpOsHi8ekRK306yZ6ZM-A4YwHySyMKXIxusVoipEHGEaRm65pOkFu6CGCuHxgAiZzDDyR70-OpXvPgJI11O45UGOOt6e98APJBBO6k0VdrlPUstK2KaXd_rhRimDmEJwqCJfcD1_7IpsK63H-mEToD_dDxEOKWgS3TNyycCv92wZ91Kqv_uo36LKaB4nMBpRNZ-WmI-UNv0-VhFx4TDAvM9Fk_kEBfa7xSCdO7s6PYew8TLZrsr2cZB85daLp5k56kiq8Kz1rh9SzVgVhXc9NlR2HntmGze2NMPcywtR0aycjzCq8KyPqhzSiXgVh3YhNlR2HEdmGre2NsPYywtJ0eycjrCq8KyMahzSiUQVh3YhNlR2HEdmG7e2NsPcywtZ0Zycj7Cq8KyOahzSiWQVh3YhNlR2HEXaVM9uQxREPY7bVkcXIPUoj6SmIefdseWSKeSKm7Frw6eLe5eVgEbRY8Fgsl7-S5UU3fPsploK5s9Wpdz2JKJPM8iQnn2Qqk6xMEllPIgUoSz1ercJ8tjLKKU8i-SRHmaRgquWTajs3VYCqK6Ma5VBmPqmhTGqWJ9XzSc2dxytAkQ2iK0y3Cllq1YnC9UYha3fZi1wbbLfLuexCllp3ovC9WchSC6-a0U7fXHcBf7rxPaBgvH60D77ePpBucO_j9PU5euBPi9zxc5S-_O7cIGYYrtxHds4kEzM_9GPpT4FKkbD5_NP_AAAA___qRmiI
 
 statement ok
 CREATE TABLE books (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition))
@@ -643,7 +643,7 @@ vectorized: true
               table: authors@authors_pkey
               spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck2-L2k4Qx5__XsX85lGErZpN9EHgYEUtZ7F6VaGFIiUxc5oas2l2Ay3iey-7Ua5aTc97ojs785n9zp_sUf1IMcDhl6dxbzQBZzCaL-afxg2YD8fD_gKMPZr0FxCWeiML1czCHcH72fQjRFJuFfTmELmsMri1ODsFw-fH4WwIjhO5TZ3olOABIl4dG9CbDMA5pTW88R4DG0d35DbVhtJn-N-S9txAhpmMaRLuSGHwFV1cMswLuSKlZGGu9jZgFP_EoM0wyfJSm-slw5UsCIM92lcwwEUYpTSjMKai1UaGMekwSW1aW5Kwv9_yLf1Chn2ZlrtMBWBxBlYPMpznobl9h8sDQ1nql_eUDteEgXtgb9Pknms6tksc___SZaZTDeM1qvhNVS9iykwWMRUUnwlZGvJfIVdKewzV5oNMMipa_LyylJ61I9zGQ5GsN9oR3Ix5WuoAhMsEZ8Jjwr9ZiXdPf42AY3u9KyPn1cz5qbljKbdlDt9lkoHMAhC-UTYBwc1Wim7NXlT6vZuy_XtkDxKlk2ylW_65aOHezN95U_7Oq_N378k_I5XLTNHlIl3N3DbbQ_Gaqm1UsixW9FTIlX2mMqeWsxcxKV15eWWMMuuy392fsHsHzC9hXgt7Z3D7EvZqYb8e9mvhTj3cqYW7F_Dy8N_vAAAA___MoPuW
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck19v2jwUxu_fT-H3XIHktrETehGpUqrCVCZKO0DapAlVhhwgI8SZ7airEN99sgMrZISV5iLEf87veY79sAb9M4UQOt-eerfdPmm0u8PR8EuvSYadXuduROy4278bEVGYhVT6MhMrJJ8Gjw9kIuVSk9shmTBaDrgbcbrbTL7edwYd0mhM2KVJTIrkhkx4-dkkt_02aeywtt6ubjc2t8sTdqkXmM7I_67SfTeBQiZj7IsVagi_A4MxhVzJKWotlZ1auw3d-BeEHoUkywtjp8cUplIhhGtwKhDCSExSHKCIUV15QCFGI5LUYV1LkXs_50t8BQp3Mi1WmQ6JK6fE-QEKw1zY2QsYbyjIwrzpaSPmCCHbM9htQ-ht6Mc8skOP2-OLtr9_-bS3VV7Oe1zyiktW6_LNXJFJFaPC-MDY2Fb-a8uRVu-FXnyWSYbqih92muLMNCLWvFHJfGEaEbcxeCxMSCJGI04jn0ZBbWd-pTN-zvlbQ9vj949EhJcZ4bvD70m5LHLyQyYZkVlIosA67ZOI2xRH1ydyVPbj17YRVNrwz2mjnWiTZFNzFRw2EbFavVZFL_iQXuvdetcVvdY5egPUucw0VoN4VMmrKF0wG0eM51jGW8tCTfFJyanbWw4fHchNxKhNucrLQTdzS8wqKBSrP__yfRI7g8T3SaxK4idJ_gHJ2yfxKsk_SQrqSX6VFJwktepJQZXUOkm6rid59hZnqXx5TmIIwds-F0deuwdsgZhrG6XhQr447Og1t0GYiVQjhQexxDYaVKsks6GeQmhUgZvNf78DAAD__zBpWE8=
 
 query T
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
@@ -664,7 +664,6 @@ vectorized: true
     │
     └── • sort
         │ columns: (name, book)
-        │ ordering: +name
         │ estimated row count: 100
         │ order: +name
         │
@@ -706,7 +705,7 @@ vectorized: true
 • lookup join
 │ estimated row count: 99
 │ table: books2@books2_pkey
-│ equality: (book, lookup_join_const_col_@7) = (title,edition)
+│ equality: (book, lookup_join_const_col_@7) = (title, edition)
 │ equality cols are key
 │
 └── • render
@@ -716,7 +715,7 @@ vectorized: true
           table: authors@authors_pkey
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkm9r1EAQxt_7KYZ5pTJtb3MqslBYqRFTzqTmDhQkSHoZ23i5nbi7AeW47y75c9gKPdpXm3kmzzO_SXaH_leDGuOvV4t3SQrP3yfL1fLz4gUs40V8sYKX8CHPPkHZhVtxHpI0jXO4zJIUrkU2PoLs8HTKVR1qsXAOCr58jPP40Ah1aBjODyGnvYyEVipOyy171N9QYUHYOlmz9-J6aTe8kFS_Uc8Ia9t2oZcLwrU4Rr3DIRc1rsrrhnMuK3ZnMySsOJR1M8ROI810fm83_AcJL6TpttZrsOWWCSagZVv22gkS5mwrdhqU1jpJV28JjCIwERZ7QunCPxgfyhtGrfb0eOBLqe3Eq-7zjl_MjMeBdiGy6Vr4KbUFsRrMnIy6u8WQSzD9AAJ_y80PJMy6oMFE1BtekXlN5s2DC0RPWSCVE2nPonvsDwXPnxKcs2_Fen5U8mxfEHJ1w-N18dK5NV85WQ9jxjIbfINQsQ9jV41FYsdWD3jXrI6ao-Pm6Kh5_p-52D_7GwAA___rWSOM
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkm9r2zAQxt_vUxz3ahtKG7nbGIKCR-sxl9TpnMAGIxQ1viZeHJ0nyXQl5LsP_9vSsIRWL6LoJP2e5zl5g-5XgQqj7zejT3ECry_jyXTydfQGJtEoupjCW_icjq9BV37J1kGcJFEKV-M4gTvmlQtg3P87oSz3ORs4BwnfvkRp1G_43BcE5z3kpC6jQMMZJXpNDtUPlDgTWFqek3Ns69KmORBnv1ENBeamrHxdngmcsyVUG2y4qHCq7wpKSWdkT4coMCOv86LBdpJhN9-WK3pEgRdcVGvjFBi9JgGdoUmp69oABaZkMrIKpFIqTqYfBYRSQBjgbCuQK__PjPN6Qajkjvv4EtVwK54f4Ipz0_mXT_23HQzbqXc_Yl5VJfzk3AAbBeGZCOVuqoYroHsQAW5JxT0KHFdeQRiI-sI7Eb4X4YeDgYK9QPIlgRIecHkaPMlySOhsTyh4iVBKrmTj6FlKwz2lgdzOBFK2oPZ7c1zZOd1Ynjdn2-W4ATWFjJxvd2W7iE2_5bwlvf778LskeZQUHCbJfVJwlHR2zNNM4H3BD7d5hgqH3Rj856cfWF_QC1c3e7LkhwY7fSzrVt3rwpHAa72iS_Jk17nJnc_nqLytaLt99ScAAP__SEVkcw==
 
 ####################################
 #  LOOKUP JOIN ON SECONDARY INDEX  #
@@ -798,7 +797,7 @@ vectorized: true
         │ columns: (a, a, b, d)
         │ estimated row count: 1,000
         │ table: large@large_pkey
-        │ equality: (a, b) = (a,b)
+        │ equality: (a, b) = (a, b)
         │ equality cols are key
         │
         └── • lookup join (inner)
@@ -879,7 +878,7 @@ vectorized: true
       table: small@small_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlV9r2zAUxd_3KS4XBglT6sh20lRQcNe64JLZnePBxgjDjUWX1bU8W4aVku8-JHc0LosdnJe8GP3x0Tn3dwV6xvJ3igzdr7fzC8-HwZW3iBaf50NYuHP3MgJJT2IC0jy5g-sw-ATlY5ymcLEASWHuXkdwE3g-pHFxz_WqCYEPA6WCcyWLh3DhX8FgoI94D9MhnMN4CEF45Ybw8Zs2QIKZSLgfP_IS2XekSNBEghYStJHgBJcE80KseFmKQv3yrAVe8gfZmOA6yyuplpcEV6LgyJ5RrmXKkWEU36U85HHCC2OMBBMu43WqbXQtjv7-yB_4ExK8FGn1mJUMVKZFHqvhyKAQZwlQEPInL3C5ISgq-WpZyvieI6Mbsn-sG7HOXlJNmqmip5yzmm3wJXJDTRgJasaO_v5LOxfiocrhl1hnIDIGjgKn-DuWQs0Y8_xopom_jBslErjbWYy5s5jXGkSR8IInzfgO_YDLzX8q9sVI5AZ904Ogkio3caydUaxGFLp_u2mvdht0ZJg9Gt4RbKvh0-NvuLk_ZbMfZXNkWD0odwTbonx6_JSt_Slb_ShbI8PuQbkj2Bbl2fFTtvenbPejbI-MSQ_KHcG2KJ8dP-WO9y7kZS6ykjcK2XXyWL0fPLnn9XtTiqpY8dtCrLRNPQ20Ti8kvJT1Lq0nXlZvqYDbYtoqNhti-lZstjt3WFutartdbB-Se9IqnrY7Tw9xPm0Vz9qdZ4c4n7X3atxxTdov2Vvv5ebd3wAAAP__UXyRgQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUlm9r4koUxt_fT3E4cEG5k8ZJ4r-Bgr3VgsVqr3phl0VKaqY225jJZka6pfjdlxnbrck2QfPOvAjJJPPM7znPieMryh8RMhx8uR1dDMdQ6w9n89l_ozrMBqPB5RwUPfMJKOfsHq6mkxuQaz-K4GIGisJocDWH68lwDJGfrrgZdWAyhpqeBed6ml-Hi3EfajUj8Te06nAOjTpMpv3BFP79ahZAgrEI-Nhfc4nsG1Ik6CBBFwl6SLCJC4JJKpZcSpHqV17NhGHwE1mDYBgnG6WHFwSXIuXIXlGFKuLIcO7fR3zK_YCndgMJBlz5YWSWMV565nyXPPEXJHgpos06lgw00yzx9aVlU_DjACgI9chTXGwJio36WFIqf8WR0T3GYR9ZY0sOx7wWYfxG2cxSzl8Szna1nvw_H0xNxZGgqXnPnN_pR0I8bRL4LsIYRMygpwup8-i5uvSMseF43jEJvF1nLBO4LzTn5Mw1C819eBJpwFMeZO306D-42H5SgbGwRGLTXEaTjdI-SM8tRHNzaDRbeHp4f9BK_WFTy3YqdQg9BnSvQ1qn0CGtjDnn8BScaik4lu1WSsE5BnQvhfYppNDOmHMPT8GtloJr2V6lFNxjQPdS6JxCCp2MOe_wFLxqKXiW3ayUgncM6F4K3VNIoXvMhjzlMhGx5BljRSs1citZVO9wPFjx3Y4oxSZd8ttULM27u9uJETIDAZdq95Tubobx-yOpUu6vf_-f2FeipUpORonuKzXzSk450zFQbqmUV6xE80peVXutvFKzVKlVzOTklVpVmdp5pXapUqeYyc0rdaoydfJK3fI2aBRDeX_0Znmbl1B19afzEInnuzBAho23w_rk9H6gnuCvpP5-Z4_i2cjq3yCJ7MGPJCd44z_xPlc8XYdxKFW4RKbSDd9u__oVAAD__zKPHM4=
 
 # Left join against covering secondary index
 query T
@@ -920,7 +919,7 @@ vectorized: true
         │ columns: (c, a, b, d)
         │ estimated row count: 1,000
         │ table: large@large_pkey
-        │ equality: (a, b) = (a,b)
+        │ equality: (a, b) = (a, b)
         │ equality cols are key
         │
         └── • lookup join (left outer)
@@ -975,7 +974,7 @@ vectorized: true
         │ columns: (c, a, b, cont, b, d)
         │ estimated row count: 336
         │ table: large@large_pkey
-        │ equality: (a, b) = (a,b)
+        │ equality: (a, b) = (a, b)
         │ equality cols are key
         │ pred: d < 30
         │
@@ -1005,7 +1004,7 @@ vectorized: true
     │ columns: (c, a, b, cont)
     │ estimated row count: 100
     │ table: large@large_pkey
-    │ equality: (a, b) = (a,b)
+    │ equality: (a, b) = (a, b)
     │ equality cols are key
     │ pred: d < 30
     │
@@ -1035,7 +1034,7 @@ vectorized: true
     │ columns: (c, a, b, cont)
     │ estimated row count: 0
     │ table: large@large_pkey
-    │ equality: (a, b) = (a,b)
+    │ equality: (a, b) = (a, b)
     │ equality cols are key
     │ pred: d < 30
     │
@@ -1078,7 +1077,7 @@ vectorized: true
     │ columns: (a, d, e, a, d)
     │ estimated row count: 1 (missing stats)
     │ table: u@idx
-    │ equality: (d, a) = (d,a)
+    │ equality: (d, a) = (d, a)
     │
     └── • filter
         │ columns: (a, d, e)
@@ -1146,7 +1145,7 @@ vectorized: true
     │ columns: (a, b, d, e, a, b, d)
     │ estimated row count: 0 (missing stats)
     │ table: u@idx
-    │ equality: (d, a, b) = (d,a,b)
+    │ equality: (d, a, b) = (d, a, b)
     │
     └── • filter
         │ columns: (a, b, d, e)
@@ -1179,7 +1178,7 @@ vectorized: true
     │ columns: (a, b, d, e, a, b, d)
     │ estimated row count: 0 (missing stats)
     │ table: u@idx
-    │ equality: (d, b, a) = (d,b,a)
+    │ equality: (d, b, a) = (d, b, a)
     │
     └── • filter
         │ columns: (a, b, d, e)
@@ -1283,7 +1282,6 @@ vectorized: true
 ·
 • sort
 │ columns: (d, e, f, a, b, c)
-│ ordering: +f
 │ estimated row count: 100
 │ order: +f
 │
@@ -1351,7 +1349,7 @@ vectorized: true
 │ columns: (a, b, c)
 │ estimated row count: 100
 │ table: def@def_pkey
-│ equality: (a, c) = (f,e)
+│ equality: (a, c) = (f, e)
 │ equality cols are key
 │
 └── • scan
@@ -1370,7 +1368,7 @@ vectorized: true
 │ columns: (a, b, c)
 │ estimated row count: 0
 │ table: def@def_pkey
-│ equality: (a, c) = (f,e)
+│ equality: (a, c) = (f, e)
 │ equality cols are key
 │
 └── • scan
@@ -1434,7 +1432,7 @@ vectorized: true
       table: small@small_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlNFr2zAQxt_3Vxz31DK5jmwnTQ2DbK3LXNKkcwLrGGGo8dFldSzPcmAl5H8ftlsal0Y2zkP6IpB0H99P34lbo_oboYve7c3wsz-Cowt_Mp18Gx7DxBt651MQDO7gMhhfg1qKKILvX73AA-82L4Oj56KyIhSZeCooik8EfCoOT8QxjIMLL4AvP0Agw1iGNBJLUuj-RI4MLWRoI0MHGXZxxjBJ5ZyUkmlesi4EfvgP3Q7DRZyssvx4xnAuU0J3jdkiiwhdnIq7iAISIaVmBxmGlIlFVNgUSINi_ZU80CMyPJfRahkrt3glMpwkIt8ZJgcRh8BBZr8pxdmGoVxlL64qE_eELt-w5mRXchE_gXWrYNPHhFwYepdTmHjXPlyN_VFeITIxyJdn2qGUD6sE_shFDDJ2YcArT9iJae3EfKGTaUgphVWwAf-Is80bbxlJQyYmrwa8y96u2PPm_eNt-2dyw7RadLCGbauDvUN20GoeodU6Qssw7RYR1rBtRXh6yAjt5hHarSO0DdNpEWEN21aE_UNG6DSP0GkdoWOY3RYR1rBtRXj2XkbxG5gBqUTGihpN2U4-pym8p3KuK7lK53STynlhU27Hha44CEll5S0vN35cXuWA22KuFVsVMX8ttvTONda2Vu3oxc4-3F2tuKd37u3jfKoV9_XO_X2cz_S96tR8E_0ne-0923z4HwAA__-XZmPv
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV9vmzoYxu_Pp7Deq1bHlBjIP0tHyllDNao06ZJI6zRFlRvetqwEM-yoq6p89wnSrMAKSrgJF5ZsHh7__LzGfgX1MwQO7s316H9vTE6G3mw--zI6JTN35J7PiaDkjlxMJ1dErUQYkq-f3alL3JtURk52oq3CF1q8CTLxmSD_ZYNn4pRMpkN3Sj59IwIoRNLHsVihAv4dGFCwgIINFByg0IYFhTiRS1RKJqnkNfvA838Bb1EIonit0-EFhaVMEPgr6ECHCBzm4i7EKQofE7MFFHzUIgizaTKkQdbexk_4AhTOZbheRYpnqwQKs1ikPcNkREQ-YUTqR0xgsaEg1_p9VqXFAwJnOUxvCLy1ofuTXsogegNtF0HnLzFyMnIv5mTmXnnkcuKNU4XQYpA2O_qRlE_rmPyQQURkxMmAFZZUiW2VsNuV2O-0MvExQb8IOmD_wmLzwdrG0pCxyYoFqMKxSzisGCPbv-CsacFNZphWo5KzQ1hzJe8ct-SdAra1f8RW44gtw7QbRWwdwpqLuHvciLsFbHv_iO3GEduG6TSK2D6ENRdx77gR9wrYzv4RO40jdgyz3Shi5xDWXMT940bcP-RKm6KKZaRwr2O_VZrJYOlNgv4Dbm8eJdfJEq8Tucy02-4kM8oGfFR6-5ZtO160e6V0gmL150bOO7FaJ6vgxPJO7bKTVc90CJRda-VUO7Gyk9N0eZ2yU7vWqVPNZJWdOk2ZumWnbq1Tr5rJLjv1mjL1yk79-m3QqoZy_tqb9du8hqqf_jr3oXy-DXzg0Hp7jA-a3QPpB-JBpf_v7FE-Z7bp6aKA34tQIYUr8YRD1JisgihQOlgC18kaN5t_fgcAAP__88fvLQ==
 
 query T
  EXPLAIN (DISTSQL)
@@ -1458,7 +1456,7 @@ vectorized: true
           table: small@small_pkey
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlmFrm14Uxt__P8XhvDLkpuaqaVPhD3atZZbUdElgHVsYN3rpslqvUwMrJd99qE1qynJvZgjkTcCjj89zz--B-ILZrwhtdO_vBheeD9qVN56MPw1aMHYH7uUEGIEZXI-Gt5A9sSiCzx_dkQuaxqANsxZ8W3S7ZgBGtwUX_hW494UctJW4UoYsZyth-ZYTBv-X0xNW6bTX-Qza1Tx4fTUH2mu1YDi6ckfw4QswJBiLkPvsiWdof0WKBA0kaCJBCwn2cEowSUXAs0ykxSMvpcALf6PdJTiPk0VejKcEA5FytF8wn-cRRxsnbBbxEWchT_UuEgx5zuZRaVPGc8rf78kjf0aClyJaPMWZXa4ICY4TVlx1dAosDoGCyH_wFKdLgmKRv7lmOXvgaNMl2T3Z9TzKecpTvbcZq5rboDkU2uAYNSC2bXv-pL_V3_gX_xsxj18XQ99tZvKccBsG7vUExu6tBzdDzy-eYDlzip_VugZCPC4S-CnmMYjYBqcgN_RBc4wiulUDvoq-ueNg61HMrUd5O4FIQ57ycDO7Q9s4Xf7lvL7oiESnm9veZm9t2NPdO0abdkynHd1o0DJFtnXLTg_UMoV_vWX0yFtm7I7ZaIzZ6OhmA8yKbGvMZwfCrPCvYzaOHLO5O2azMWazo1sNMCuyrTH3D4RZ4V_HbB45Zmt3zFZjzFZH7zXArMi2xnx-IMwK_zpm68gxK75yRjxLRJzxnf71u8V3Aw8fePWdkYlFGvC7VASlTXU5LHXlIORZXt2l1YUXV7eKgHUxlYoNudiQis0NMX0vNuWxT-XWllTdk4t7UrHC-XSfQ59JxX25c18qPpeLz_eJTRUdU5VM3jKqqBndq2dUUTRLYS5vGlVUjcq79j77dPnfnwAAAP__dDHHAA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMll2Pm0YUhu_7K47Ola3FgeHDa49UyWnMqkReO7UtNVW7imZhsqGLGcpgpdHK_z0C1g4fgTVIK9kXSIw5D-8588ieJ5T_BUjR_vhh8dZZwmDubLabPxZD2NgL-90WmAL3cLNe3YLcsSCAP3-31zYMBgyu4H4I_-w1zXBB14bwdjkH-2NaDoNjcV7psYQdCzPKGwa_ZqtvWF43eF6_h6t83X1GcyDWcAir9dxew29_AUMFQ-HxJdtxifRvJKigjgoaqKCJClp4p2AUC5dLKeL0kaeswPH-R6op6IfRPkmX7xR0RcyRPmHiJwFHilt2H_A1Zx6PVQ0V9HjC_CB7TRZvll0_RY_8Gyr4TgT7XShpNiJUcBOx9G6kEmChBwRE8oXHeHdQUOyTH2-VCXvgSEkhpjNHqh2U85Pe-EHCYx6rVjlmvk5hMCNwBTO9sEGUUme5nTTm0St5rC553gs_fB4cqUxu-y3iFBb2zRY29q0D71fOMn2CJWyWXo7jXAjxuI_gX-GHIEIKs3RnV0sYzPS0FbMgxLGV8h64ja0ZldZI86x_tCRij8fcKzczI1d4d_jJAJZiJCKVlLejKY9ZzVOeNTnfUtLXUpWMVL2Xp6RL1pOn41fzdNwlT9FTcvmelmetn--F3tsLfaQavbzQu2Q9eXH9al5cd8lT9EK_fC_KszbO98Lo7YUxUs1eXhhdsp68mLyaF5MueYpeGJfvRXnW5vlemL29MEeq1csLs0vWkxfTV_Ni2iVP0Qvz8r0wu5zl1lxGIpT8rKOMVnnViKSnI-498Pw0JcU-dvmHWLjZs_ntKgNlCx6XSf4tyW-c8PiVTGLOdqejcZFEWkl6M8mqkvRWklEikSKJ1EIZ7e2NO_RntqKsZhKpkqxWUkumcZU07j2pWqjrVtSkOZReJU1aSdNm0nWVNO3dXi0UeUH0FtONGqtdddLi-qTG6i97PdcLtpvNucwaq1130uL7tMZqF76tRzP95fociK-ffA8pas-f0U8uxw-mBexBpj-fmy_ia8ZN_wAk0s8skFzBW_bI5zzh8c4PfZn4LtIk3vPD4ZfvAQAA__9jwoJy
 
 # Regression test for #40562.
 
@@ -2045,7 +2043,7 @@ vectorized: true
                 └── • lookup join
                     │ estimated row count: 80,016
                     │ table: lineitem@lineitem_pkey
-                    │ equality: (l_orderkey, l_linenumber) = (l_orderkey,l_linenumber)
+                    │ equality: (l_orderkey, l_linenumber) = (l_orderkey, l_linenumber)
                     │ equality cols are key
                     │ pred: l_receiptdate > l_commitdate
                     │
@@ -2098,7 +2096,7 @@ vectorized: true
         │ columns: ("lookup_join_const_col_@15", pk, col0, col3)
         │ estimated row count: 10 (missing stats)
         │ table: tab4@tab4_col3_col4_key
-        │ equality: (col0, lookup_join_const_col_@15) = (col3,col4)
+        │ equality: (col0, lookup_join_const_col_@15) = (col3, col4)
         │ equality cols are key
         │
         └── • render
@@ -2148,7 +2146,7 @@ vectorized: true
 └── • values
       size: 1 column, 2 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkdFr1TAUxt_9Kw7nKZWw3XRONDDodeugo7az7YYgRUp7mPV2SW0SWL3c_13aCDrhij6155x858vvyx7NtwElxh9v022SAbtKyqr8kAZQxml8WcFLuC7y98Dut-ldXAITAQcWBgFsS3DA5gDS-LqCmzzJwJ6_fS3Ol4mFPAN3MsMF2JMZOSrdUdY8kkH5CQXWHMdJt2SMnpbWfj2QdE8oNxx7NTq7tGuOrZ4I5R5tbwdCiffN4MicbpBjR7bph3XjK3gHLIT2i1M7E2B94Kid_bXF2OaBUG4O_N-dbnSvCmo6mk7Fc7dqHkl67vyuiouVHjl6_sh_Po87WshTrXduhK-6V6CVBBaFsAQtpJRJVr3hcPbzbwk1uwIWCbiA6CxAjpd6cI_KSHjiMHP4fpRM_A9ZQWbUytAzquOZ1RypeyD_Tka7qaXbSberjS_zVbc2OjLWT4UvEuVHywV_F4u_isM_xPXhxY8AAAD__xke0OM=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVFPnEAQgN_7KybzBM2qt2dt2k1M7uphgkHOHmiaNMQQGE963C5ld6P0wn9vFtTWpjV2H4CdGb7JfLND_b1GgcGXi2gexuAtwiRNPkc-JEEUnKTwFk5Xy3PwrubRZZCAx30G3tT3YZ6ABa_zIQpOUzhbhjGYo4_v-ZHLGFjGYPc7OAaz3yFDqUqK8y1pFF-RY8awaVVBWqvWhXZDQVjeo5gwrGRjjQtnDAvVEoodmsrUhAKv8tqSPpggw5JMXtUD8R18Am8Kxa2VG-1j1jNU1vyiaJOvaWA_tQ0XKCY9e33nM1XJFeUltQf8efe0a0iMHpaXabAabCDD0cdsfF03G3ImIqU2toFvqpKgpABvNgUnngshwjj9wODw4ctJjhfgzTgcw-zQR4YnqrZbqQXcM-gY_PjnpPyPSfn_TLoi3Sip6dmUr3W6x_uMIZVrGherlW0LumhVMdSO1-UAGgIlaTNm-XgJ5WNKm5by7dOififxF0nTl0gZw5ta3V1XJQqcPJy9vzweD7of8rV2ipJbdTdg3c41ipu81sTwPN_Qggy120pW2lQFCtNa6vs3PwMAAP__Rz0InA==
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) WHERE NOT EXISTS (
@@ -2165,7 +2163,7 @@ vectorized: true
 └── • values
       size: 1 column, 2 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkW9r1EAQxt_7KYZ5tZGlvb1a0YXCne0WU2KuJrEWJEhIhhov3Y3ZXWg47rvLJgU94URfJfPnN7PPMzu0PzqUqO5vk3WcAruK8yL_mESQq0RdFvASrrPNB2B36-STyoGJiANbRhGsc_DAxgg-v1eZgnRTgLoPMLBD1J2_fS3OQ7977vUnI1yAOxkj5KhNQ2n1SBblFxRYcuwHU5O1Zgip3dQQN08oFxxb3XsX0iXH2gyEcoeudR2hxLuq82RPF8ixIVe13TTxFbwDtoT6m9dbG2G552i8-zXFuuqBUC72_N833ZhWZ1Q1NJyKw23F2JOERF0XsE6LGG42cYocZwtW8-drv6UROSbGbH0P302rwWgJbLWEcAEhpYzT4g2Hs-e_4HZ6BWwl4AJWZ8G1S9P5R20lPHEYj6oS_6MqI9sbbelA0XG_So7UPNB8I2v8UNPtYOppzRxuJm5KNGTdXBVzEOu5FB74Oyz-Ci__gMv9i58BAAD__yZh1ng=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkV9P2zwUxu_fT3F0rpJXBuoyps0SUjsatKCQsiZjSFOFouRQsqZ2FtuCqMp3n5wUtk4bYr5I7PPnd3SeZ4v6e4UCg5uraBrG4M3CJE0-RT4kQRScpfA_nC_ml-BdT6PPQQIe9xl4Y9-HaQIWvNaHLx-DRQDxPIXgxjWDt99qTt6_5Seu3uxq7WELp2AOWx8ZSlVQnG1Io_iKHJcM60blpLVqXGjbF4TFI4oRw1LW1rjwkmGuGkKxRVOailDgdVZZ0kcjZFiQycqqJ76BD-CNIb-3cq19XHYMlTU_KdpkK-rZz2PDGYpRx14_-UKVckFZQc0R35-etjUJiILzFKZxGsLFPIyR4SDJZPjd1mtqkWGk1NrW8E2VEpQU4E3G4BzhQogwTt8xON7dnPrxDLwJh1OYHDsVz1RlN1ILeGTQ_nVL_tuW_F-2XJCuldS0t-Fr9Tzg3ZIhFSsaTNXKNjldNSrva4fnvAf1gYK0GbJ8eITyKaVNQ9nm2aRfSfxF0vgl0pLhXaUebssCBY525-APn6eDriFbaSdRcq8eeqzzW6O4yypNDC-zNc3IULMpZalNmaMwjaWu--9HAAAA__9KHg4x
 
 statement ok
 CREATE TABLE lookup_expr (
@@ -2195,7 +2193,7 @@ vectorized: true
     └── • values
           size: 2 columns, 3 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkm9rnEAQxt_3UwzzJlqG5PTydyGw18QUg9VUvVAoh8g5pDbGta72vBz33YvaXi-FlPbdPDPz7Ay_nQ3qbwUKdD7deTPXB-PajeLoo2dC5HjOVQxv4SYMPoBxP_PmTgSGRWBNTALDJrCHYErgzz3PNGEWQQvGiqAzwXNuYrgNXB8KpR7bKuGuqvuOBgIfjPZwBZfQHK5MmPnXve4G3ZlIWKqM_fSJNYrPaOGCsKrVkrVWdZ_aDA1u1qGYEOZl1TZ9ekG4VDWj2GCTNwWjwPu0aFkfTZAw4ybNi_FFC96BMYXll7Z81P3AkMuMawEnQgjXj88JpEUgbVxsCVXb_J6gm_SBUUy29O9b3Kq8DDnNuD6yXm4SrysWI6pgHjvhAAwJ95DJvTipky5ZJ8_JKsmzDgm9oQZfVV6CKgUYhmHIY-j_8YBT3RwIIaI4dP33BAcr3k-YP8HLKVyCPNvJ88FtTXYk7F-hueuxesvFTtq9PO05XqmifSq1gJrgO0F_CQRrgmckDNpGgLRJTkkekzwheUryjOQ5yYtXOVv_wzlkXalS8wvGr__ggpCzBx4vSqu2XvJdrZbDmFEGg29IZKybsWqNwi3HUr_gvtn6q9n-w7zYvvkRAAD__74CCoU=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUm1P20AM_r5fYfkLyWSgaXk9Cek6WqagkLImoElTFUWNgYw01-UuawD1v0-XQlemDbH7cPLjl8fWYz-h_lGgwOHXy6Dvh-AM_CiOvgQuRMNgeBrDRzgbjy7Aue4HV8MIHI_A67gETpeg2xo9gvAqCFwX-hHU4CwIGheC4VkM5yM_hEKp-3qecDOvbIaBUQhOvbOAEzA7Cxf64cDipsWNi4SlyjhMZ6xRfEMPJ4TzSk1Za1VZ11Ob4GcNig5hXs5rY90TwqmqGMUTmtwUjAKv06JmvdtBwoxNmhcrRg8-gdOD6V1d3mvbcMxlxpWAfSGEH8ZHBNIjkF2cLAlVbX530Ca95bbveiR_gKKzpPdPda7ycsxpxtWu93qy-GHOYiXd6CoejlsBkXBDQrlhJ1XSJA_JY7JI8qxBwqCNwXeVl6BKAY7jOHIP7F63ONVmSwgRxWM__EywteBNh_u8CNmDE5CHa3jUVnudtTLdF9Nd53i25HgNuxYeWF1PVVHPSi2gIvhJYC-D4IHgEQlHtREguyR7JPdI7pM8IHlI8ojk8T919_7Q3fsf3ces56rU_Erz925421tOCDm75dUJalVXU76s1LTNXcFRS9Q6MtZmFfVWwC9fQtpUnM7WZ7PJ5L3J1H2LaUJ4Uyh7CSiw8_y2__K9PLQF6a22EkV3atHS2gvUKG7SQjPhRXrPAzZczfIy1yafojBVzcvlh18BAAD__1_7Qi8=
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) WHERE NOT EXISTS (
@@ -2214,7 +2212,7 @@ vectorized: true
     └── • values
           size: 2 columns, 3 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUklFrnEAQx9_7KYZ5yVqG5PSaNiwEvCamNVgvVZMGyiFyDqmNca2rnMlx372spte7Qkr7Nv-Z_c0M_5016h8lSvRur4KZH4I49-Mk_hxYEHuBd5bAa7iI5p9A3MyCay8GYRPYE4tAOATOEEwJwusgsCyYxdCBWBH0Fnz56EUehPMEvFvTEsR-w1Kp-65Oua8bw7XPgOgOV3AK7eHKgll4bnQ_6N6ykLBSOYfZA2uUX9HGBWHdqCVrrRqTWg8P_LxHOSEsqrprTXpBuFQNo1xjW7Qlo8SbrOxYH02QMOc2K8qxow3vQUxh-a2r7rUZGHGVcyPhWErph8kJgWsTuA4uNoSqa39P0G12xygnG_r3LS5VUUWc5dwc2fubJI81Swi8iwRmYeLD5dwPkXDHNXcnTpu0Tx_Tp3SVFnmPhMFQg--qqEBVEoQQwn0D5oMPONPtgZQyTiI__EBwsOLdhPVsvDuFU3DfbuW7gbYnWyOcX6G1fWMb5GQrHSOPjY1nquweKi2hITD3QfBI8ISE866V4DrkTl901P4fRyPWtao077n58l8tCDm_4_F2tOqaJV81ajmMGeV84IZEzrodq_Yo_GosmQV3YfuvsPMHvNi8-hkAAP__j1EMSw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUt1O20wQvf-eYjQ32J8WyDqlRSshOSWmNTIOjQ1FqiLLigdwcbzp7loxoLx7tQ64oWoR3YvVnPk5Mzozj6h_VCgwuDqPRmEMzjhM0uRL5EISRMFxCv_DyXRyBs7lKLoIEnA4Az5wGTgeA68zhgziiyhyXRgl0ICzYtC68PVzMA0gnqQQXFlKcF4SVlLeNcuM2qWydeapwGn2VnAEZm_lwigeW9x2uHVdZFjLguJ8QRrFN-Q4Y7hUck5aS2Vdj11CWLQoBgzLetkY654xnEtFKB7RlKYiFHiZVw3p_QEyLMjkZbVh5PARnCHMb5v6TtuGU6oLUgIOhBBhnB4y8DkD38PZmqFszK8O2uQ31PXtRwrHKAZr9vapTmVZTykvSO3zl5Ol90sSEAUnKYziNITTSRgjwy0V_S07U1mb3WcP2SorixYZRl0MvsuyBlkLcBzH8d-BXfgO5drsCCGSdBrGnxjsrGjb4T4twh_CEfjve_ihq-aDXhjv2XT7HG5LDnvoWXhgZT2WVbOotQDFwN4Lg3sGD8hw0hgBvsf84V8V5r8pzP9F4Snppaw1vVD3rbvc5esZQypuaHNsWjZqTudKzrvcDZx0RJ2jIG02Ub4BYf0c0kZRvugPZJuJv8rkvcY0Y3hdSbt0FDh4ert_-J4f2oL8RluJklu56mjtrWkU13mlieFZfkdjMqQWZV1qU85RGNXQev3fzwAAAP__T4ND9Q==
 
 # The following tests check that if the joiners can separate a row request
 # into separate families that it does, and generates spans for each family

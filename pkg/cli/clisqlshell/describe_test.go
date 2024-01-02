@@ -39,8 +39,7 @@ func TestDescribe(t *testing.T) {
 	c := cli.NewCLITest(cli.TestCLIParams{T: t})
 	defer c.Cleanup()
 
-	db := serverutils.OpenDBConn(
-		t, c.TestServer.ServingSQLAddr(), "defaultdb", false /* insecure */, c.TestServer.Stopper())
+	db := c.Server.SQLConn(t, serverutils.DBName("defaultdb"))
 
 	var commonArgs []string
 

@@ -17,7 +17,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -51,13 +53,25 @@ func TestDrainingAfterRemoteError(t *testing.T) {
 	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(1))
 
 	// Set up a two node cluster.
-	tempStorageConfig := base.TempStorageConfig{InMemory: true, Mon: diskMonitor, Settings: st}
+	tempStorageConfig := base.TempStorageConfig{InMemory: true, Mon: diskMonitor, Settings: st, Spec: base.DefaultTestStoreSpec}
 	args := base.TestClusterArgs{
-		ServerArgs:      base.TestServerArgs{TempStorageConfig: tempStorageConfig},
+		ServerArgs: base.TestServerArgs{
+			Settings:          st,
+			TempStorageConfig: tempStorageConfig,
+		},
 		ReplicationMode: base.ReplicationManual,
 	}
 	tc := testcluster.StartTestCluster(t, 2 /* nodes */, args)
 	defer tc.Stopper().Stop(ctx)
+
+	if srv := tc.Server(0); srv.TenantController().StartedDefaultTestTenant() {
+		systemSqlDB := srv.SystemLayer().SQLConn(t, serverutils.DBName("system"))
+		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
+		require.NoError(t, err)
+		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanAdminRelocateRange: "true",
+		}, "")
+	}
 
 	// Create two tables, one with small values, and another with large rows.
 	// Relocate the range for the small table to node 2.

@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -204,11 +205,11 @@ var allowedIntoFormats = map[string]struct{}{
 
 // featureImportEnabled is used to enable and disable the IMPORT feature.
 var featureImportEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"feature.import.enabled",
 	"set to true to enable imports, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
-).WithPublic()
+	settings.WithPublic)
 
 func validateFormatOptions(
 	format string, specified map[string]string, formatAllowed map[string]struct{},
@@ -885,7 +886,7 @@ func importPlanHook(
 
 			// Due to how we generate and rewrite descriptor ID's for import, we run
 			// into problems when using user defined schemas.
-			publicSchemaID := db.GetSchemaID(tree.PublicSchema)
+			publicSchemaID := db.GetSchemaID(catconstants.PublicSchemaName)
 			if sc.GetID() != publicSchemaID && sc.GetID() != keys.PublicSchemaID {
 				err := errors.New("cannot use IMPORT with a user defined schema")
 				hint := errors.WithHint(err, "create the table with CREATE TABLE and use IMPORT INTO instead")

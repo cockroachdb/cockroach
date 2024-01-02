@@ -1,0 +1,156 @@
+# LogicTest: cockroach-go-testserver-upgrade-to-master
+
+statement ok
+CREATE TABLE xy (x INT, y INT);
+
+# ----------------------------------------------------------------------
+# Test PG_LSN references with all nodes running old binaries.
+# ----------------------------------------------------------------------
+
+subtest all_old_cast
+
+# Cast to PG_LSN.
+statement error pgcode 0A000 unimplemented: this syntax
+SELECT 'A01F0/1AAA'::PG_LSN;
+
+# Cast to PG_LSN using the vectorized engine.
+statement error pgcode 0A000 unimplemented: this syntax
+SELECT 'a01f0/1aaa'::PG_LSN FROM generate_series(1, 100) LIMIT 1;
+
+subtest all_old_table
+
+# Table that references PG_LSN.
+statement error pgcode 0A000 unimplemented: this syntax
+CREATE TABLE t (x PG_LSN);
+
+# Add a PG_LSN column.
+statement error pgcode 0A000 unimplemented: this syntax
+ALTER TABLE xy ADD COLUMN curs PG_LSN;
+
+# Alter a column type to PG_LSN.
+statement ok
+SET enable_experimental_alter_column_type_general=true;
+
+statement error pgcode 0A000 unimplemented: this syntax
+ALTER TABLE xy ALTER COLUMN y TYPE PG_LSN;
+
+# Create a partial index that uses the PG_LSN type.
+statement error pgcode 0A000 unimplemented: this syntax
+CREATE INDEX part ON xy (x) WHERE y::PG_LSN < 'a01f0/1aaa';
+
+# Add a check constraint that uses the PG_LSN type.
+statement error pgcode 0A000 unimplemented: this syntax
+ALTER TABLE xy ADD CONSTRAINT bar CHECK (y::PG_LSN < 'fffff100/100');
+
+subtest all_old_type
+
+# UDT that references PG_LSN.
+statement error pgcode 0A000 unimplemented: this syntax
+CREATE TYPE typ AS (x INT, y PG_LSN);
+
+subtest all_old_function
+
+# Function that returns PG_LSN.
+statement error pgcode 0A000 unimplemented: this syntax
+CREATE OR REPLACE FUNCTION f() RETURNS PG_LSN AS $$
+  SELECT 'a01f0/1aaa';
+$$ LANGUAGE SQL;
+
+# Function that takes PG_LSN argument.
+statement error pgcode 0A000 unimplemented: this syntax
+CREATE OR REPLACE FUNCTION f(curs PG_LSN) RETURNS STRING AS $$
+  SELECT curs;
+$$ LANGUAGE SQL;
+
+# Function that references PG_LSN internally.
+statement error pgcode 0A000 unimplemented: this syntax
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  SELECT 'a01f0/1aaa'::PG_LSN;
+  SELECT 0;
+$$ LANGUAGE SQL;
+
+# Function that returns a composite type with PG_LSN component.
+statement error pgcode 0A000 unimplemented: this syntax
+CREATE FUNCTION f() RETURNS RECORD AS $$
+  SELECT (1, 'a01f0/1aaa'::PG_LSN, true);
+$$ LANGUAGE SQL;
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Verify that PG_LSN is not allowed after upgrading the gateway.
+# ----------------------------------------------------------------------
+
+upgrade 0
+
+user root nodeidx=0
+
+subtest upgrade_one_cast
+
+# Cast to PG_LSN.
+statement error pgcode 0A000 pq: pg_lsn not supported until version 23.2
+SELECT 'a01f0/1aaa'::PG_LSN;
+
+# Cast to PG_LSN using the vectorized engine.
+statement error pgcode 0A000 pq: pg_lsn not supported until version 23.2
+SELECT 'a01f0/1aaa'::PG_LSN FROM generate_series(1, 100) LIMIT 1;
+
+subtest upgrade_one_table
+
+# Table that references PG_LSN.
+statement error pgcode 0A000 pq: pg_lsn not supported until version 23.2
+CREATE TABLE t (x PG_LSN);
+
+# Add a PG_LSN column.
+statement error pgcode 0A000 pq: pg_lsn not supported until version 23.2
+ALTER TABLE xy ADD COLUMN curs PG_LSN;
+
+# Alter a column type to PG_LSN.
+statement ok
+SET enable_experimental_alter_column_type_general=true;
+
+statement error pgcode 0A000 pq: pg_lsn not supported until version 23.2
+ALTER TABLE xy ALTER COLUMN y TYPE PG_LSN;
+
+# Create a partial index that uses the PG_LSN type.
+statement error pgcode 0A000 pq: pg_lsn not supported until version 23.2
+CREATE INDEX part ON xy (x) WHERE y::PG_LSN < 'a01f0/1aaa';
+
+# Add a check constraint that uses the PG_LSN type.
+statement error pgcode 0A000 pq: pg_lsn not supported until version 23.2
+ALTER TABLE xy ADD CONSTRAINT bar CHECK (y::PG_LSN < 'fffff100/100');
+
+subtest upgrade_one_type
+
+# UDT that references PG_LSN.
+statement error pgcode 0A000 pq: pg_lsn not supported until version 23.2
+CREATE TYPE typ AS (x INT, y PG_LSN);
+
+subtest upgrade_one_function
+
+# Function that returns PG_LSN.
+statement error pgcode 0A000 pq: pg_lsn not supported until version 23.2
+CREATE OR REPLACE FUNCTION f() RETURNS PG_LSN AS $$
+  SELECT 'a01f0/1aaa';
+$$ LANGUAGE SQL;
+
+# Function that takes PG_LSN argument.
+statement error pgcode 0A000 pq: pg_lsn not supported until version 23.2
+CREATE OR REPLACE FUNCTION f(curs PG_LSN) RETURNS INT AS $$
+  SELECT 0;
+$$ LANGUAGE SQL;
+
+# Function that references PG_LSN internally.
+statement error pgcode 0A000 pq: pg_lsn not supported until version 23.2
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  SELECT 'a01f0/1aaa'::PG_LSN;
+  SELECT 0;
+$$ LANGUAGE SQL;
+
+# Function that returns a composite type with PG_LSN component.
+statement error pgcode 0A000 pq: pg_lsn not supported until version 23.2
+CREATE FUNCTION f() RETURNS RECORD AS $$
+  SELECT (1, 'a01f0/1aaa'::PG_LSN, true);
+$$ LANGUAGE SQL;
+
+subtest end

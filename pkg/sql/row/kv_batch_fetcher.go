@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
@@ -56,6 +57,32 @@ var defaultKVBatchSize = rowinfra.KeyLimit(util.ConstantWithMetamorphicTestValue
 	int(rowinfra.ProductionKVBatchSize), /* defaultValue */
 	1,                                   /* metamorphicValue */
 ))
+
+var logAdmissionPacerErr = log.Every(100 * time.Millisecond)
+
+// elasticCPUDurationPerLowPriReadResponse controls how many CPU tokens are allotted
+// each time we seek admission for response handling during internally submitted
+// low priority reads (like row-level TTL selects).
+var elasticCPUDurationPerLowPriReadResponse = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"sqladmission.elastic_cpu.duration_per_low_pri_read_response",
+	"controls how many CPU tokens are allotted for handling responses for internally submitted low priority reads",
+	// NB: Experimentally, during TTL reads, we observed cumulative on-CPU time
+	// by SQL processors >> 100ms, over the course of a single select fetching
+	// many rows. So we pick a relatively high duration here.
+	100*time.Millisecond,
+	settings.DurationInRange(admission.MinElasticCPUDuration, admission.MaxElasticCPUDuration),
+)
+
+// internalLowPriReadElasticControlEnabled determines whether the sql portion of
+// internally submitted low-priority reads (like row-level TTL selects)
+// integrate with elastic CPU control.
+var internalLowPriReadElasticControlEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"sqladmission.low_pri_read_response_elastic_control.enabled",
+	"determines whether the sql portion of internally submitted reads integrate with elastic CPU controller",
+	true,
+)
 
 // sendFunc is the function used to execute a KV batch; normally
 // wraps (*kv.Txn).Send.
@@ -153,6 +180,8 @@ type txnKVFetcher struct {
 	// lockWaitPolicy represents the policy to be used for handling conflicting
 	// locks held by other active transactions.
 	lockWaitPolicy lock.WaitPolicy
+	// lockDurability represents the locking durability to use.
+	lockDurability lock.Durability
 	// lockTimeout specifies the maximum amount of time that the fetcher will
 	// wait while attempting to acquire a lock on a key or while blocking on an
 	// existing lock in order to perform a non-locking read on a key.
@@ -186,6 +215,7 @@ type txnKVFetcher struct {
 	// For request and response admission control.
 	requestAdmissionHeader kvpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
+	admissionPacer         *admission.Pacer
 }
 
 var _ KVBatchFetcher = &txnKVFetcher{}
@@ -259,13 +289,19 @@ type newTxnKVFetcherArgs struct {
 	reverse                    bool
 	lockStrength               descpb.ScanLockingStrength
 	lockWaitPolicy             descpb.ScanLockingWaitPolicy
+	lockDurability             descpb.ScanLockingDurability
 	lockTimeout                time.Duration
 	acc                        *mon.BoundAccount
 	forceProductionKVBatchSize bool
 	kvPairsRead                *int64
 	batchRequestsIssued        *int64
-	requestAdmissionHeader     kvpb.AdmissionHeader
-	responseAdmissionQ         *admission.WorkQueue
+
+	admission struct { // groups AC-related fields
+		requestHeader  kvpb.AdmissionHeader
+		responseQ      *admission.WorkQueue
+		pacerFactory   admission.PacerFactory
+		settingsValues *settings.Values
+	}
 }
 
 // newTxnKVFetcherInternal initializes a txnKVFetcher.
@@ -280,13 +316,20 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		scanFormat:                 kvpb.BATCH_RESPONSE,
 		reverse:                    args.reverse,
 		lockStrength:               GetKeyLockingStrength(args.lockStrength),
-		lockWaitPolicy:             getWaitPolicy(args.lockWaitPolicy),
+		lockWaitPolicy:             GetWaitPolicy(args.lockWaitPolicy),
+		lockDurability:             GetKeyLockingDurability(args.lockDurability),
 		lockTimeout:                args.lockTimeout,
 		acc:                        args.acc,
 		forceProductionKVBatchSize: args.forceProductionKVBatchSize,
-		requestAdmissionHeader:     args.requestAdmissionHeader,
-		responseAdmissionQ:         args.responseAdmissionQ,
+		requestAdmissionHeader:     args.admission.requestHeader,
+		responseAdmissionQ:         args.admission.responseQ,
 	}
+
+	f.maybeInitAdmissionPacer(
+		args.admission.requestHeader,
+		args.admission.pacerFactory,
+		args.admission.settingsValues,
+	)
 	f.kvBatchFetcherHelper.init(f.nextBatch, args.kvPairsRead, args.batchRequestsIssued)
 	return f
 }
@@ -297,6 +340,40 @@ func (f *txnKVFetcher) setTxnAndSendFn(txn *kv.Txn, sendFn sendFunc) {
 	f.sendFn = sendFn
 	f.requestAdmissionHeader = txn.AdmissionHeader()
 	f.responseAdmissionQ = txn.DB().SQLKVResponseAdmissionQ
+
+	f.admissionPacer.Close()
+	f.maybeInitAdmissionPacer(txn.AdmissionHeader(), txn.DB().AdmissionPacerFactory, txn.DB().SettingsValues)
+}
+
+// maybeInitAdmissionPacer selectively initializes an admission.Pacer for work
+// done as part of internally submitted low-priority reads (like row-level TTL
+// selects).
+func (f *txnKVFetcher) maybeInitAdmissionPacer(
+	admissionHeader kvpb.AdmissionHeader, pacerFactory admission.PacerFactory, sv *settings.Values,
+) {
+	if sv == nil {
+		// Only nil in tests and in SQL pods (we don't have admission pacing in
+		// the latter anyway).
+		return
+	}
+	admissionPri := admissionpb.WorkPriority(admissionHeader.Priority)
+	if internalLowPriReadElasticControlEnabled.Get(sv) &&
+		admissionPri < admissionpb.UserLowPri &&
+		pacerFactory != nil {
+
+		f.admissionPacer = pacerFactory.NewPacer(
+			elasticCPUDurationPerLowPriReadResponse.Get(sv),
+			admission.WorkInfo{
+				// NB: This is either code that runs in physically isolated SQL
+				// pods for secondary tenants, or for the system tenant, in
+				// nodes running colocated SQL+KV code where all SQL code is run
+				// on behalf of the one tenant. So from an AC perspective, the
+				// tenant ID we pass through here is irrelevant.
+				TenantID:   roachpb.SystemTenantID,
+				Priority:   admissionPri,
+				CreateTime: admissionHeader.CreateTime,
+			})
+	}
 }
 
 // SetupNextFetch sets up the Fetcher for the next set of spans.
@@ -414,7 +491,7 @@ func (f *txnKVFetcher) SetupNextFetch(
 
 	// Account for the memory of the spans that we're taking the ownership of.
 	if f.acc != nil {
-		newSpansAccountedFor := spans.MemUsage()
+		newSpansAccountedFor := spans.MemUsageUpToLen()
 		if err := f.acc.Grow(ctx, newSpansAccountedFor); err != nil {
 			return err
 		}
@@ -452,6 +529,12 @@ func (f *txnKVFetcher) SetupNextFetch(
 
 // fetch retrieves spans from the kv layer.
 func (f *txnKVFetcher) fetch(ctx context.Context) error {
+	// Note that spansToRequests below might modify spans, so we need to log the
+	// spans before that.
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "Scan %s", f.spans.BoundedString(1024 /* bytesHint */))
+	}
+
 	ba := &kvpb.BatchRequest{}
 	ba.Header.WaitPolicy = f.lockWaitPolicy
 	ba.Header.LockTimeout = f.lockTimeout
@@ -471,11 +554,9 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		ba.Header.WholeRowsOfSize = int32(f.indexFetchSpec.MaxKeysPerRow)
 	}
 	ba.AdmissionHeader = f.requestAdmissionHeader
-	ba.Requests = spansToRequests(f.spans.Spans, f.scanFormat, f.reverse, f.lockStrength, f.reqsScratch)
-
-	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.VEventf(ctx, 2, "Scan %s", f.spans)
-	}
+	ba.Requests = spansToRequests(
+		f.spans.Spans, f.scanFormat, f.reverse, f.lockStrength, f.lockDurability, f.reqsScratch,
+	)
 
 	monitoring := f.acc != nil
 
@@ -539,16 +620,10 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		}
 		f.batchResponseAccountedFor = returnedBytes
 	}
+
 	// Do admission control after we've accounted for the response bytes.
-	if br != nil && f.responseAdmissionQ != nil {
-		responseAdmission := admission.WorkInfo{
-			TenantID:   roachpb.SystemTenantID,
-			Priority:   admissionpb.WorkPriority(f.requestAdmissionHeader.Priority),
-			CreateTime: f.requestAdmissionHeader.CreateTime,
-		}
-		if _, err := f.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
-			return err
-		}
+	if err := f.maybeAdmitBatchResponse(ctx, br); err != nil {
+		return err
 	}
 
 	f.batchIdx++
@@ -573,6 +648,58 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	// TODO(radu): We should fetch the next chunk in the background instead of waiting for the next
 	// call to fetch(). We can use a pool of workers to issue the KV ops which will also limit the
 	// total number of fetches that happen in parallel (and thus the amount of resources we use).
+	return nil
+}
+
+func (f *txnKVFetcher) maybeAdmitBatchResponse(ctx context.Context, br *kvpb.BatchResponse) error {
+	if br == nil {
+		return nil // nothing to do
+	}
+
+	if f.admissionPacer != nil {
+		// If admissionPacer is initialized, we're using the elastic CPU control
+		// mechanism (the work is elastic in nature and using the slots based
+		// mechanism would permit high scheduling latencies). We want to limit
+		// the CPU% used by SQL during internally submitted reads, like
+		// row-level TTL selects. All that work happens on the same goroutine
+		// doing this fetch, so is accounted for when invoking .Pace() as we
+		// fetch KVs as part of our volcano operator iteration. See CPU profiles
+		// posted on #98722.
+		//
+		// TODO(irfansharif): At the time of writing, SELECTs done by the TTL
+		// job are not distributed at SQL level (since our DistSQL physical
+		// planning heuristics deems it not worthy of distribution), and with
+		// the local plan we only have a single goroutine (unless
+		// maybeParallelizeLocalScans splits up the single scan into multiple
+		// TableReader processors). This may change as part of
+		// https://github.com/cockroachdb/cockroach/issues/82164 where CPU
+		// intensive SQL work will happen on a different goroutine from the ones
+		// that evaluate the BatchRequests, so the integration is tricker there.
+		// If we're unable to integrate it well, we could disable usage of the
+		// streamer to preserve this current form of pacing.
+		//
+		// TODO(irfansharif): Add tests for the SELECT queries issued by the TTL
+		// to ensure that they have local plans with a single TableReader
+		// processor in multi-node clusters.
+		if err := f.admissionPacer.Pace(ctx); err != nil {
+			// We're unable to pace things automatically -- shout loudly
+			// semi-infrequently but don't fail the kv fetcher itself. At
+			// worst we'd be over-admitting.
+			if logAdmissionPacerErr.ShouldLog() {
+				log.Errorf(ctx, "automatic pacing: %v", err)
+			}
+		}
+	} else if f.responseAdmissionQ != nil {
+		responseAdmission := admission.WorkInfo{
+			TenantID:   roachpb.SystemTenantID,
+			Priority:   admissionpb.WorkPriority(f.requestAdmissionHeader.Priority),
+			CreateTime: f.requestAdmissionHeader.CreateTime,
+		}
+		if _, err := f.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -721,7 +848,7 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 		// We have some resume spans.
 		f.spans = f.scratchSpans
 		if f.acc != nil {
-			newSpansMemUsage := f.spans.MemUsage()
+			newSpansMemUsage := f.spans.MemUsageUpToLen()
 			if err := f.acc.Resize(ctx, f.spansAccountedFor, newSpansMemUsage); err != nil {
 				return KVBatchFetcherResponse{}, err
 			}
@@ -754,6 +881,7 @@ func (f *txnKVFetcher) reset(ctx context.Context) {
 // Close releases the resources of this txnKVFetcher.
 func (f *txnKVFetcher) Close(ctx context.Context) {
 	f.reset(ctx)
+	f.admissionPacer.Close()
 }
 
 const requestUnionOverhead = int64(unsafe.Sizeof(kvpb.RequestUnion{}))
@@ -765,11 +893,16 @@ const requestUnionOverhead = int64(unsafe.Sizeof(kvpb.RequestUnion{}))
 //
 // The provided reqsScratch is reused if it has enough capacity for all spans,
 // if not, a new slice is allocated.
+//
+// NOTE: any span that results in a Scan or a ReverseScan request is nil-ed out.
+// This is because both callers of this method no longer need the original span
+// unless it resulted in a Get request.
 func spansToRequests(
 	spans roachpb.Spans,
 	scanFormat kvpb.ScanFormat,
 	reverse bool,
-	keyLocking lock.Strength,
+	lockStrength lock.Strength,
+	lockDurability lock.Durability,
 	reqsScratch []kvpb.RequestUnion,
 ) []kvpb.RequestUnion {
 	var reqs []kvpb.RequestUnion
@@ -803,7 +936,8 @@ func spansToRequests(
 				// A span without an EndKey indicates that the caller is requesting a
 				// single key fetch, which can be served using a GetRequest.
 				gets[curGet].req.Key = spans[i].Key
-				gets[curGet].req.KeyLocking = keyLocking
+				gets[curGet].req.KeyLockingStrength = lockStrength
+				gets[curGet].req.KeyLockingDurability = lockDurability
 				gets[curGet].union.Get = &gets[curGet].req
 				reqs[i].Value = &gets[curGet].union
 				curGet++
@@ -811,8 +945,10 @@ func spansToRequests(
 			}
 			curScan := i - curGet
 			scans[curScan].req.SetSpan(spans[i])
+			spans[i] = roachpb.Span{}
 			scans[curScan].req.ScanFormat = scanFormat
-			scans[curScan].req.KeyLocking = keyLocking
+			scans[curScan].req.KeyLockingStrength = lockStrength
+			scans[curScan].req.KeyLockingDurability = lockDurability
 			scans[curScan].union.ReverseScan = &scans[curScan].req
 			reqs[i].Value = &scans[curScan].union
 		}
@@ -826,7 +962,8 @@ func spansToRequests(
 				// A span without an EndKey indicates that the caller is requesting a
 				// single key fetch, which can be served using a GetRequest.
 				gets[curGet].req.Key = spans[i].Key
-				gets[curGet].req.KeyLocking = keyLocking
+				gets[curGet].req.KeyLockingStrength = lockStrength
+				gets[curGet].req.KeyLockingDurability = lockDurability
 				gets[curGet].union.Get = &gets[curGet].req
 				reqs[i].Value = &gets[curGet].union
 				curGet++
@@ -834,8 +971,10 @@ func spansToRequests(
 			}
 			curScan := i - curGet
 			scans[curScan].req.SetSpan(spans[i])
+			spans[i] = roachpb.Span{}
 			scans[curScan].req.ScanFormat = scanFormat
-			scans[curScan].req.KeyLocking = keyLocking
+			scans[curScan].req.KeyLockingStrength = lockStrength
+			scans[curScan].req.KeyLockingDurability = lockDurability
 			scans[curScan].union.Scan = &scans[curScan].req
 			reqs[i].Value = &scans[curScan].union
 		}

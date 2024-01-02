@@ -1,0 +1,112 @@
+## A simple test of inline operations.
+
+run ok
+put k=i1 v=inline1
+put k=i2 v=inline2
+put k=i3 v=inline3
+----
+>> at end:
+meta: "i1"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline1 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i2"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline2 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i3"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline3 mergeTs=<nil> txnDidNotUpdateMeta=false
+
+run ok
+get k=i1
+get k=i2
+get k=i3
+----
+get: "i1" -> /BYTES/inline1 @0,0
+get: "i2" -> /BYTES/inline2 @0,0
+get: "i3" -> /BYTES/inline3 @0,0
+
+run ok
+scan k=i1 end=i4
+----
+scan: "i1" -> /BYTES/inline1 @0,0
+scan: "i2" -> /BYTES/inline2 @0,0
+scan: "i3" -> /BYTES/inline3 @0,0
+
+run ok
+del k=i1
+----
+del: "i1": found key true
+>> at end:
+meta: "i2"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline2 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i3"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline3 mergeTs=<nil> txnDidNotUpdateMeta=false
+
+run error
+cput k=i2 v=inline2b cond=incorrect
+----
+>> at end:
+meta: "i2"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline2 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i3"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline3 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*kvpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003inline2" timestamp:<> 
+
+run ok
+cput k=i2 v=inline2b cond=inline2
+----
+>> at end:
+meta: "i2"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline2b mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i3"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline3 mergeTs=<nil> txnDidNotUpdateMeta=false
+
+run error
+initput k=i3 v=inline3b
+----
+>> at end:
+meta: "i2"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline2b mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i3"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline3 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*kvpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003inline3" timestamp:<> 
+
+run ok
+initput k=i3 v=inline3
+----
+>> at end:
+meta: "i2"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline2b mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i3"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline3 mergeTs=<nil> txnDidNotUpdateMeta=false
+
+run error
+increment k=i3
+----
+>> at end:
+meta: "i2"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline2b mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i3"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline3 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*withstack.withStack:) key "i3" does not contain an integer value
+
+run ok
+del_range k=i1 end=i4
+----
+del_range: "i1"-"i4" -> deleted 2 key(s)
+>> at end:
+<no data>
+
+# Non-inline put.
+run ok
+put k=i4 v=v4 ts=5,0
+----
+>> at end:
+data: "i4"/5.000000000,0 -> /BYTES/v4
+
+# Inline put for a key that is not inline.
+run error
+put k=i4 v=inline4
+----
+>> at end:
+data: "i4"/5.000000000,0 -> /BYTES/v4
+error: (*withstack.withStack:) "i4"/0,0: put is inline=true, but existing value is inline=false
+
+# Inline put.
+run ok
+put k=i5 v=inline5
+----
+>> at end:
+data: "i4"/5.000000000,0 -> /BYTES/v4
+meta: "i5"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline5 mergeTs=<nil> txnDidNotUpdateMeta=false
+
+# Non-inline put for a key that is inline.
+run error
+put notxn k=i5 v=v5 ts=5,0
+----
+>> at end:
+data: "i4"/5.000000000,0 -> /BYTES/v4
+meta: "i5"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline5 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*withstack.withStack:) "i5"/0,0: put is inline=false, but existing value is inline=true

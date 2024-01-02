@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -16,12 +15,9 @@ go_test(
     name = "cache_test",
     size = "small",
     srcs = ["cache_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":cache"],
     deps = [
         "//pkg/util/log",
         "@com_github_biogo_store//llrb",
     ],
 )
-
-get_x_data(name = "get_x_data")

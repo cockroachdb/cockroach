@@ -12,6 +12,7 @@
 package raftlog
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -49,7 +50,7 @@ func ents(inds ...uint64) []raftpb.Entry {
 			if ind%2 == 0 {
 				enc = EntryEncodingSideloadedWithAC
 			}
-			data = EncodeRaftCommand(enc, cmdID, b)
+			data = EncodeCommandBytes(enc, cmdID, b)
 		case raftpb.EntryConfChangeV2:
 			c := kvserverpb.ConfChangeContext{
 				CommandID: string(cmdID),
@@ -153,8 +154,10 @@ func TestIteratorEmptyLog(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
 	for _, hi := range []kvpb.RaftIndex{0, 1} {
-		it := NewIterator(rangeID, eng, IterOptions{Hi: hi})
+		it, err := NewIterator(context.Background(), rangeID, eng, IterOptions{Hi: hi})
+		require.NoError(t, err)
 		ok, err := it.SeekGE(0)
 		it.Close()
 		require.NoError(t, err)
@@ -249,7 +252,8 @@ func TestIterator(t *testing.T) {
 						hi = 0
 					}
 					t.Run(fmt.Sprintf("lo=%s,hi=%s", indToName(lo), indToName(hi)), func(t *testing.T) {
-						it := NewIterator(rangeID, eng, IterOptions{Hi: hi})
+						it, err := NewIterator(context.Background(), rangeID, eng, IterOptions{Hi: hi})
+						require.NoError(t, err)
 						sl, err := consumeIter(it, lo)
 						it.Close()
 						require.NoError(t, err)

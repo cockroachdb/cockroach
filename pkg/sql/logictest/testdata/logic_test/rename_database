@@ -4,7 +4,7 @@ SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
 statement ok
 SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = TRUE
 
-query TTTTTT
+query TTTTTT rowsort
 SHOW DATABASES
 ----
 defaultdb  root  NULL  NULL  {}  NULL
@@ -12,7 +12,7 @@ postgres   root  NULL  NULL  {}  NULL
 system     node  NULL  NULL  {}  NULL
 test       root  NULL  NULL  {}  NULL
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE test
 ----
 test  admin   ALL      true
@@ -52,7 +52,7 @@ SELECT * FROM kv
 statement error target database or schema does not exist
 SHOW GRANTS ON DATABASE test
 
-query TTTTTT
+query TTTTTT rowsort
 SHOW DATABASES
 ----
 defaultdb  root  NULL  NULL  {}  NULL
@@ -61,7 +61,7 @@ system     node  NULL  NULL  {}  NULL
 u          root  NULL  NULL  {}  NULL
 
 # check the name in descriptor is also changed
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE u
 ----
 u  admin   ALL      true
@@ -102,7 +102,7 @@ user testuser
 statement error must be owner of database t
 ALTER DATABASE t RENAME TO v
 
-query TTTTTT
+query TTTTTT rowsort
 SHOW DATABASES
 ----
 defaultdb  root  NULL  NULL  {}  NULL
@@ -163,7 +163,7 @@ ALTER DATABASE u RENAME TO v
 statement ok
 CREATE VIEW v.v AS SELECT k,v FROM v.kv
 
-statement error cannot rename database because relation "v.public.v" depends on relation "v.public.kv"\s.*you can drop "v.public.v" instead
+statement error pq: cannot rename database because relation "v.public.v" depends on relation "v.public.kv"\s.*consider dropping "v.public.v" first
 ALTER DATABASE v RENAME TO u
 
 # Check that the default databases can be renamed like any other.
@@ -172,7 +172,7 @@ ALTER DATABASE defaultdb RENAME TO w;
   ALTER DATABASE postgres RENAME TO defaultdb;
   ALTER DATABASE w RENAME TO postgres
 
-query TTTTTT
+query TTTTTT rowsort
 SHOW DATABASES
 ----
 defaultdb  root  NULL  NULL  {}  NULL
@@ -196,7 +196,7 @@ statement ok
 RESET vectorize
 
 # Verify that the EXPLAIN above does not actually rename the database (#30543)
-query TTTTTT colnames
+query TTTTTT colnames,rowsort
 SHOW DATABASES
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal

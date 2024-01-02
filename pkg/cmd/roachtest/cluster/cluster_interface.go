@@ -49,6 +49,10 @@ type Cluster interface {
 		ctx context.Context, content, dest string, mode os.FileMode, opts ...option.Option,
 	) error
 
+	// SetRandomSeed allows tests to set their own random seed to be
+	// used by builds with runtime assertions enabled.
+	SetRandomSeed(seed int64)
+
 	// Starting and stopping CockroachDB.
 
 	StartE(ctx context.Context, l *logger.Logger, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option) error
@@ -60,6 +64,11 @@ type Cluster interface {
 	StopCockroachGracefullyOnNode(ctx context.Context, l *logger.Logger, node int) error
 	NewMonitor(context.Context, ...option.Option) Monitor
 
+	// Starting virtual clusters.
+
+	StartServiceForVirtualClusterE(ctx context.Context, l *logger.Logger, externalNodes option.NodeListOption, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option) error
+	StartServiceForVirtualCluster(ctx context.Context, l *logger.Logger, externalNodes option.NodeListOption, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option)
+
 	// Hostnames and IP addresses of the nodes.
 
 	InternalAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
@@ -69,10 +78,11 @@ type Cluster interface {
 
 	// SQL connection strings.
 
-	InternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string) ([]string, error)
-	ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string) ([]string, error)
+	InternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]string, error)
+	ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]string, error)
 
 	// SQL clients to nodes.
+
 	Conn(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) *gosql.DB
 	ConnE(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) (*gosql.DB, error)
 
@@ -107,16 +117,21 @@ type Cluster interface {
 
 	Spec() spec.ClusterSpec
 	Name() string
+	Cloud() string
 	IsLocal() bool
 	// IsSecure returns true iff the cluster uses TLS.
 	IsSecure() bool
-	// Returns CPU architecture of the nodes.
+	// Architecture returns CPU architecture of the nodes.
 	Architecture() vm.CPUArch
 
 	// Deleting CockroachDB data and logs on nodes.
 
-	WipeE(ctx context.Context, l *logger.Logger, opts ...option.Option) error
-	Wipe(ctx context.Context, opts ...option.Option)
+	WipeE(ctx context.Context, l *logger.Logger, preserveCerts bool, opts ...option.Option) error
+	Wipe(ctx context.Context, preserveCerts bool, opts ...option.Option)
+
+	// DNS
+
+	DestroyDNS(ctx context.Context, l *logger.Logger) error
 
 	// Internal niche tools.
 
@@ -134,6 +149,7 @@ type Cluster interface {
 	) error
 
 	FetchTimeseriesData(ctx context.Context, l *logger.Logger) error
+	FetchDebugZip(ctx context.Context, l *logger.Logger, dest string, opts ...option.Option) error
 	RefetchCertsFromNode(ctx context.Context, node int) error
 
 	StartGrafana(ctx context.Context, l *logger.Logger, promCfg *prometheus.Config) error
@@ -168,4 +184,7 @@ type Cluster interface {
 	// per-node, but this could be changed. Another assumption is that all
 	// volumes are created identically.
 	ApplySnapshots(ctx context.Context, snapshots []vm.VolumeSnapshot) error
+
+	// GetPreemptedVMs gets any VMs that were part of the cluster but preempted by cloud vendor.
+	GetPreemptedVMs(ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error)
 }

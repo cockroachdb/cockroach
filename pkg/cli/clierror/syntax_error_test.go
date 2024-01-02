@@ -34,7 +34,7 @@ func TestIsSQLSyntaxError(t *testing.T) {
 	c := cli.NewCLITest(p)
 	defer c.Cleanup()
 
-	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.Server.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 
 	var sqlConnCtx clisqlclient.Context

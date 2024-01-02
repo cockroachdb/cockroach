@@ -14,9 +14,13 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -27,12 +31,11 @@ const (
 	// TenantSelectHeader is the HTTP header used to select a particular tenant.
 	TenantSelectHeader = `X-Cockroach-Tenant`
 
-	// TenantNameParamInQueryURL is the HTTP query URL parameter used to select a particular tenant.
-	TenantNameParamInQueryURL = "tenant_name"
+	// ClusterNameParamInQueryURL is the HTTP query URL parameter used
+	// to select a particular virtual cluster.
+	ClusterNameParamInQueryURL = "cluster"
 
-	// TenantSelectCookieName is the name of the HTTP cookie used to select a particular tenant,
-	// if the custom header is not specified.
-	TenantSelectCookieName = `tenant`
+	NoFallbackParam = "nofallback"
 
 	// AcceptHeader is the canonical header name for accept.
 	AcceptHeader = "Accept"
@@ -42,6 +45,17 @@ const (
 
 	// JSONContentType is the JSON content type.
 	JSONContentType = "application/json"
+)
+
+// ServerHTTPBasePath is a cluster setting that contains the path to
+// route the user to after successful login. It is intended to be
+// overridden in cases where DB Console is being proxied.
+var ServerHTTPBasePath = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"server.http.base_path",
+	"path to redirect the user to upon succcessful login",
+	"/",
+	settings.WithPublic,
 )
 
 // httpMux redirects incoming HTTP requests to the server selected by
@@ -57,10 +71,10 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 	// routed to a specific node and skip the fanout, creating inconsistent
 	// outcomes that were path-dependent on the user's existing cookies.
 	switch r.URL.Path {
-	case loginPath, DemoLoginPath:
+	case authserver.LoginPath, authserver.DemoLoginPath:
 		c.attemptLoginToAllTenants().ServeHTTP(w, r)
 		return
-	case logoutPath:
+	case authserver.LogoutPath:
 		// Since we do not support per-tenant logout until
 		// https://github.com/cockroachdb/cockroach/issues/92855
 		// is completed, we should always fanout a logout
@@ -70,19 +84,29 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tenantName := getTenantNameFromHTTPRequest(c.st, r)
-	s, err := c.getServer(ctx, tenantName)
+	noFallback := false
+	if noFallbackValue := r.URL.Query().Get(NoFallbackParam); noFallbackValue != "" {
+		noFallback, _ = strconv.ParseBool(noFallbackValue)
+	}
+
+	s, _, err := c.getServer(ctx, tenantName)
 	if err != nil {
+		if noFallback {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+
 		log.Warningf(ctx, "unable to find server for tenant %q: %v", tenantName, err)
 		// Clear session and tenant cookies since it appears they reference invalid state.
 		http.SetCookie(w, &http.Cookie{
-			Name:     SessionCookieName,
+			Name:     authserver.SessionCookieName,
 			Value:    "",
 			Path:     "/",
 			HttpOnly: true,
 			Expires:  timeutil.Unix(0, 0),
 		})
 		http.SetCookie(w, &http.Cookie{
-			Name:     TenantSelectCookieName,
+			Name:     authserver.TenantSelectCookieName,
 			Value:    "",
 			Path:     "/",
 			HttpOnly: false,
@@ -93,8 +117,8 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 		// tenant names or sessions (common during development). Otherwise the user can
 		// get into a state where they cannot load DB Console assets at all due to invalid
 		// cookies.
-		defaultTenantName := roachpb.TenantName(defaultTenantSelect.Get(&c.st.SV))
-		s, err = c.getServer(ctx, defaultTenantName)
+		defaultTenantName := roachpb.TenantName(multitenant.DefaultTenantSelect.Get(&c.st.SV))
+		s, _, err = c.getServer(ctx, defaultTenantName)
 		if err != nil {
 			log.Warningf(ctx, "unable to find server for default tenant %q: %v", defaultTenantName, err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -108,7 +132,7 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 
 func getTenantNameFromHTTPRequest(st *cluster.Settings, r *http.Request) roachpb.TenantName {
 	// Highest priority is manual override on the URL query parameters.
-	if tenantName := r.URL.Query().Get(TenantNameParamInQueryURL); tenantName != "" {
+	if tenantName := r.URL.Query().Get(ClusterNameParamInQueryURL); tenantName != "" {
 		return roachpb.TenantName(tenantName)
 	}
 
@@ -118,12 +142,12 @@ func getTenantNameFromHTTPRequest(st *cluster.Settings, r *http.Request) roachpb
 	}
 
 	// No parameter, no explicit header. Is there a cookie?
-	if c, _ := r.Cookie(TenantSelectCookieName); c != nil && c.Value != "" {
+	if c, _ := r.Cookie(authserver.TenantSelectCookieName); c != nil && c.Value != "" {
 		return roachpb.TenantName(c.Value)
 	}
 
 	// No luck so far. Use the configured default.
-	return roachpb.TenantName(defaultTenantSelect.Get(&st.SV))
+	return roachpb.TenantName(multitenant.DefaultTenantSelect.Get(&st.SV))
 }
 
 func getSessionFromCookie(sessionStr string, name roachpb.TenantName) string {
@@ -144,7 +168,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		tenantNames := c.getCurrentTenantNames()
-		var tenantNameToSetCookieSlice []sessionCookieValue
+		var tenantNameToSetCookieSlice []authserver.SessionCookieValue
 		// The request body needs to be cloned since r.Clone() does not do it.
 		clonedBody, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -158,7 +182,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 		redirectLocation := "/" // default to home page
 		collectedErrors := make([]string, len(tenantNames))
 		for i, name := range tenantNames {
-			server, err := c.getServer(ctx, name)
+			server, _, err := c.getServer(ctx, name)
 			if err != nil {
 				if errors.Is(err, errNoTenantServerRunning) {
 					// Server has stopped after the call to
@@ -186,10 +210,10 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 				collectedErrors[i] = sw.buf.String()
 				log.Warningf(ctx, "unable to find session cookie for tenant %q: HTTP %d - %s", name, sw.code, &sw.buf)
 			} else {
-				tenantNameToSetCookieSlice = append(tenantNameToSetCookieSlice, sessionCookieValue{
-					name:      string(name),
-					setCookie: setCookieHeader,
-				})
+				tenantNameToSetCookieSlice = append(tenantNameToSetCookieSlice, authserver.MakeSessionCookieValue(
+					string(name),
+					setCookieHeader,
+				))
 				// In the case of /demologin, we want to redirect to the provided location
 				// in the header. If we get back a cookie along with an
 				// http.StatusTemporaryRedirect code, be sure to transfer the response code
@@ -206,9 +230,9 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 		// be called and cookies should be set. Otherwise, login was not successful
 		// for any of the tenants.
 		if len(tenantNameToSetCookieSlice) > 0 {
-			sessionsStr := createAggregatedSessionCookieValue(tenantNameToSetCookieSlice)
+			sessionsStr := authserver.CreateAggregatedSessionCookieValue(tenantNameToSetCookieSlice)
 			cookie := http.Cookie{
-				Name:     SessionCookieName,
+				Name:     authserver.SessionCookieName,
 				Value:    sessionsStr,
 				Path:     "/",
 				HttpOnly: false,
@@ -220,16 +244,16 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 			// We only set the default selection from the cluster setting
 			// if it's one of the valid logins. Otherwise, we just use the
 			// first one in the list.
-			tenantSelection := tenantNameToSetCookieSlice[0].name
-			defaultName := defaultTenantSelect.Get(&c.st.SV)
+			tenantSelection := tenantNameToSetCookieSlice[0].Name()
+			defaultName := multitenant.DefaultTenantSelect.Get(&c.st.SV)
 			for _, t := range tenantNameToSetCookieSlice {
-				if t.name == defaultName {
-					tenantSelection = t.name
+				if t.Name() == defaultName {
+					tenantSelection = t.Name()
 					break
 				}
 			}
 			cookie = http.Cookie{
-				Name:     TenantSelectCookieName,
+				Name:     authserver.TenantSelectCookieName,
 				Value:    tenantSelection,
 				Path:     "/",
 				HttpOnly: false,
@@ -275,9 +299,9 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		sessionCookie, err := r.Cookie(SessionCookieName)
+		sessionCookie, err := r.Cookie(authserver.SessionCookieName)
 		if errors.Is(err, http.ErrNoCookie) {
-			sessionCookie, err = r.Cookie(SessionCookieName)
+			sessionCookie, err = r.Cookie(authserver.SessionCookieName)
 			if err != nil {
 				log.Warningf(ctx, "unable to find session cookie: %v", err)
 				w.WriteHeader(http.StatusInternalServerError)
@@ -290,7 +314,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 			return
 		}
 		for _, name := range tenantNames {
-			server, err := c.getServer(ctx, name)
+			server, _, err := c.getServer(ctx, name)
 			if err != nil {
 				if errors.Is(err, errNoTenantServerRunning) {
 					// Server has stopped after the call to
@@ -326,7 +350,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 		}
 		// Clear session and tenant cookies after all logouts have completed.
 		cookie := http.Cookie{
-			Name:     SessionCookieName,
+			Name:     authserver.SessionCookieName,
 			Value:    "",
 			Path:     "/",
 			HttpOnly: false,
@@ -334,7 +358,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 		}
 		http.SetCookie(w, &cookie)
 		cookie = http.Cookie{
-			Name:     TenantSelectCookieName,
+			Name:     authserver.TenantSelectCookieName,
 			Value:    "",
 			Path:     "/",
 			HttpOnly: false,

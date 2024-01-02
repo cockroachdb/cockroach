@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
@@ -7,7 +6,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/gossipsim",
     visibility = ["//visibility:private"],
     deps = [
-        "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/gossip/simulation",
         "//pkg/roachpb",
@@ -23,5 +21,3 @@ go_binary(
     embed = [":gossipsim_lib"],
     visibility = ["//visibility:public"],
 )
-
-get_x_data(name = "get_x_data")

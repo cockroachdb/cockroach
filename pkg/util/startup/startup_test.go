@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -137,10 +137,9 @@ func runCircuitBreakerTestForKey(
 	)
 	ctx := context.Background()
 
-	lReg := testutils.NewListenerRegistry()
+	lReg := listenerutil.NewListenerRegistry()
 	defer lReg.Close()
-	reg := server.NewStickyInMemEnginesRegistry()
-	defer reg.CloseAllStickyInMemEngines()
+	reg := server.NewStickyVFSRegistry()
 
 	// TODO: Disable expiration based leases metamorphism since it currently
 	// breaks closed timestamps and prevent rangefeeds from advancing checkpoint
@@ -149,8 +148,8 @@ func runCircuitBreakerTestForKey(
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
 
 	args := base.TestClusterArgs{
-		ServerArgsPerNode: make(map[int]base.TestServerArgs),
-		ReusableListeners: true,
+		ServerArgsPerNode:   make(map[int]base.TestServerArgs),
+		ReusableListenerReg: lReg,
 	}
 	var enableFaults atomic.Bool
 	for i := 0; i < nodes; i++ {
@@ -158,7 +157,7 @@ func runCircuitBreakerTestForKey(
 			Settings: st,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: reg,
+					StickyVFSRegistry: reg,
 				},
 				SpanConfig: &spanconfig.TestingKnobs{
 					ConfigureScratchRange: true,
@@ -166,11 +165,11 @@ func runCircuitBreakerTestForKey(
 			},
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
-			Listener: lReg.GetOrFail(t, i),
+			Listener: lReg.MustGetOrCreate(t, i),
 		}
 		args.ServerArgsPerNode[i] = a
 	}
@@ -180,7 +179,7 @@ func runCircuitBreakerTestForKey(
 	require.NoError(t, tc.WaitFor5NodeReplication(), "failed to succeed 5x replication")
 
 	tc.ToggleReplicateQueues(false)
-	c := tc.ServerConn(0)
+	c := tc.Server(0).SystemLayer().SQLConn(t)
 	_, err := c.ExecContext(ctx, "set cluster setting kv.allocator.load_based_rebalancing='off'")
 	require.NoError(t, err, "failed to disable load rebalancer")
 	_, err = c.ExecContext(ctx,
@@ -278,7 +277,7 @@ func runCircuitBreakerTestForKey(
 
 	// Restart node and check that it succeeds in reestablishing range quorum
 	// necessary for startup actions.
-	lReg.ReopenOrFail(t, 5)
+	require.NoError(t, lReg.MustGet(t, 5).Reopen())
 	err = tc.RestartServer(5)
 	require.NoError(t, err, "restarting server with range(s) %s tripping circuit breaker", rangesList)
 

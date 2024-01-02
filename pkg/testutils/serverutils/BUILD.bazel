@@ -1,45 +1,155 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "serverutils",
     srcs = [
+        "api.go",
+        "conditional_wrap.go",
+        "options.go",
         "test_cluster_shim.go",
         "test_cluster_utils.go",
         "test_server_shim.go",
         "test_tenant_shim.go",
+        ":gen-app-forwarder-go",  # keep
+        ":gen-storage-forwarder-go",  # keep
+        ":gen-tenant-control-forwarder-go",  # keep
+        ":gen-ts-control-forwarder-go",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/serverutils",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
         "//pkg/config",
+        "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvprober",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/security",
+        "//pkg/security/securitytest",
         "//pkg/security/username",
+        "//pkg/server/decommissioning",
         "//pkg/server/serverpb",
         "//pkg/server/status",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
         "//pkg/storage",
-        "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
+        "//pkg/util",
         "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/httputil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_google_grpc//:go_default_library",
     ],
 )
 
-get_x_data(name = "get_x_data")
+genrule(
+    name = "gen-app-forwarder-go",
+    srcs = ["api.go"],
+    outs = ["app_forwarder_generated.go"],
+    cmd = """$(location //pkg/testutils/serverutils/fwgen:fwgen) \
+       -type wrap -nodef \
+       -output $@ $(location api.go) \
+       ApplicationLayerInterface
+$(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
+""",
+    exec_tools = [
+        "//pkg/testutils/serverutils/fwgen:fwgen",
+        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+genrule(
+    name = "gen-storage-forwarder-go",
+    srcs = ["api.go"],
+    outs = ["storage_forwarder_generated.go"],
+    cmd = """$(location //pkg/testutils/serverutils/fwgen:fwgen) \
+       -type wrap -nodef \
+       -output $@ $(location api.go) \
+       StorageLayerInterface
+$(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
+""",
+    exec_tools = [
+        "//pkg/testutils/serverutils/fwgen:fwgen",
+        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+genrule(
+    name = "gen-tenant-control-forwarder-go",
+    srcs = ["api.go"],
+    outs = ["tenant_control_forwarder_generated.go"],
+    cmd = """$(location //pkg/testutils/serverutils/fwgen:fwgen) \
+       -type wrap -nodef \
+       -output $@ $(location api.go) \
+       TenantControlInterface
+$(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
+""",
+    exec_tools = [
+        "//pkg/testutils/serverutils/fwgen:fwgen",
+        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+genrule(
+    name = "gen-ts-control-forwarder-go",
+    srcs = ["api.go"],
+    outs = ["ts_control_forwarder_generated.go"],
+    cmd = """$(location //pkg/testutils/serverutils/fwgen:fwgen) \
+       -type wrap -nodef \
+       -output $@ $(location api.go) \
+       TestServerController
+$(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
+""",
+    exec_tools = [
+        "//pkg/testutils/serverutils/fwgen:fwgen",
+        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+go_test(
+    name = "serverutils_test",
+    srcs = [
+        "conditional_wrap_internal_test.go",
+        "conditional_wrap_test.go",
+        "test_url_test.go",
+    ],
+    embed = [":serverutils"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)

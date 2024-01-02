@@ -8,7 +8,7 @@ fi
 set -euo pipefail
 
 # Bump this counter to force rebuilding `dev` on all machines.
-DEV_VERSION=73
+DEV_VERSION=91
 
 THIS_DIR=$(cd "$(dirname "$0")" && pwd)
 BINARY_DIR=$THIS_DIR/bin/dev-versions
@@ -27,7 +27,7 @@ if [[ ! -f "$BINARY_PATH" ]]; then
     chmod a+w $BINARY_PATH
 fi
 
-source "$(dirname "${0}")/tools/claim_output_base.sh"
+source "$(dirname "${0}")/tools/claim_output_base.sh" || true
 
 cd $THIS_DIR
 $BINARY_PATH "$@"

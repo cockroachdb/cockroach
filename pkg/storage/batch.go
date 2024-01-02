@@ -19,34 +19,12 @@ import (
 	"github.com/cockroachdb/pebble/rangekey"
 )
 
-// BatchType represents the type of an entry in an encoded Pebble batch.
-type BatchType byte
-
-// From github.com/cockroachdb/pebble/internal/base/internal.go.
-const (
-	BatchTypeDeletion BatchType = 0x0
-	BatchTypeValue    BatchType = 0x1
-	BatchTypeMerge    BatchType = 0x2
-	BatchTypeLogData  BatchType = 0x3
-	// BatchTypeColumnFamilyDeletion       BatchType = 0x4
-	// BatchTypeColumnFamilyValue          BatchType = 0x5
-	// BatchTypeColumnFamilyMerge          BatchType = 0x6
-	BatchTypeSingleDeletion BatchType = 0x7
-	// BatchTypeColumnFamilySingleDeletion BatchType = 0x8
-	// BatchTypeBeginPrepareXID            BatchType = 0x9
-	// BatchTypeEndPrepareXID              BatchType = 0xA
-	// BatchTypeCommitXID                  BatchType = 0xB
-	// BatchTypeRollbackXID                BatchType = 0xC
-	// BatchTypeNoop                       BatchType = 0xD
-	// BatchTypeColumnFamilyRangeDeletion  BatchType = 0xE
-	BatchTypeRangeDeletion BatchType = 0xF
-	// BatchTypeColumnFamilyBlobIndex      BatchType = 0x10
-	// BatchTypeBlobIndex                  BatchType = 0x11
-	// BatchMaxValue                       BatchType = 0x7F
-	BatchTypeRangeKeyDelete BatchType = 0x13
-	BatchTypeRangeKeyUnset  BatchType = 0x14
-	BatchTypeRangeKeySet    BatchType = 0x15
-)
+// Ensure that we always update the batch reader to consider any necessary
+// updates when a new key kind is introduced. To do this, we assert
+// InternalKeyKindMax=23, ensuring that compilation will fail if it's not.
+// Unfortunately, this doesn't protect against reusing a currently unused
+// RocksDB key kind.
+const _ = uint(pebble.InternalKeyKindDeleteSized - pebble.InternalKeyKindMax)
 
 const (
 	// The batch header is composed of an 8-byte sequence number (all zeroes) and
@@ -55,10 +33,10 @@ const (
 	countPos   int = 8
 )
 
-// decodePebbleBatchHeader decodes the header of Pebble batch repr, returning
+// decodeBatchHeader decodes the header of Pebble batch represenation, returning
 // both the count of the entries in the batch and the suffix of data remaining
 // in the batch.
-func decodePebbleBatchHeader(repr []byte) (count int, orepr pebble.BatchReader, err error) {
+func decodeBatchHeader(repr []byte) (count int, orepr pebble.BatchReader, err error) {
 	if len(repr) < headerSize {
 		return 0, nil, errors.Errorf("batch repr too small: %d < %d", len(repr), headerSize)
 	}
@@ -73,35 +51,34 @@ func decodePebbleBatchHeader(repr []byte) (count int, orepr pebble.BatchReader, 
 	return int(c), r, nil
 }
 
-// PebbleBatchReader is used to iterate the entries in a Pebble batch
+// BatchReader is used to iterate the entries in a Pebble batch
 // representation.
 //
 // Example:
-// r, err := NewPebbleBatchReader(...)
 //
+//	r, err := NewBatchReader(...)
 //	if err != nil {
 //	  return err
 //	}
-//
 //	for r.Next() {
-//		 switch r.BatchType() {
-//		 case BatchTypeDeletion:
-//		   fmt.Printf("delete(%x)", r.Key())
-//		 case BatchTypeValue:
-//		   fmt.Printf("put(%x,%x)", r.Key(), r.Value())
-//		 case BatchTypeMerge:
-//		   fmt.Printf("merge(%x,%x)", r.Key(), r.Value())
-//	  case BatchTypeSingleDeletion:
-//		   fmt.Printf("single_delete(%x)", r.Key())
-//	  case BatchTypeRangeDeletion:
-//		   fmt.Printf("delete_range(%x,%x)", r.Key(), r.Value())
+//		switch r.KeyKind() {
+//		case pebble.InternalKeyKindDelete:
+//			fmt.Printf("delete(%x)", r.Key())
+//		case pebble.InternalKeyKindSet:
+//			fmt.Printf("put(%x,%x)", r.Key(), r.Value())
+//		case pebble.InternalKeyKindMerge:
+//			fmt.Printf("merge(%x,%x)", r.Key(), r.Value())
+//		case pebble.InternalKeyKindSingleDelete:
+//			fmt.Printf("single_delete(%x)", r.Key())
+//		case pebble.InternalKeyKindRangeDelete:
+//			fmt.Printf("delete_range(%x,%x)", r.Key(), r.Value())
 //		 }
 //	}
 //
 //	if err := r.Error(); err != nil {
 //	  return err
 //	}
-type PebbleBatchReader struct {
+type BatchReader struct {
 	batchReader pebble.BatchReader
 
 	// The error encountered during iterator, if any
@@ -111,50 +88,50 @@ type PebbleBatchReader struct {
 	count int
 
 	// The following all represent the current entry and are updated by Next.
-	// `value` is not applicable for BatchTypeDeletion or BatchTypeSingleDeletion.
-	// `value` indicates the end key for BatchTypeRangeDeletion.
-	typ   BatchType
+	// `value` is not applicable for all key kinds. For RangeDelete, value
+	// indicates the end key for the range deletion.
+	kind  pebble.InternalKeyKind
 	key   []byte
 	value []byte
 }
 
-// NewPebbleBatchReader creates a PebbleBatchReader from the given batch repr
-// and verifies the header.
-func NewPebbleBatchReader(repr []byte) (*PebbleBatchReader, error) {
-	count, batchReader, err := decodePebbleBatchHeader(repr)
+// NewBatchReader creates a BatchReader from the given batch repr and
+// verifies the header.
+func NewBatchReader(repr []byte) (*BatchReader, error) {
+	count, batchReader, err := decodeBatchHeader(repr)
 	if err != nil {
 		return nil, err
 	}
-	return &PebbleBatchReader{batchReader: batchReader, count: count}, nil
+	return &BatchReader{batchReader: batchReader, count: count}, nil
 }
 
 // Count returns the declared number of entries in the batch.
-func (r *PebbleBatchReader) Count() int {
+func (r *BatchReader) Count() int {
 	return r.count
 }
 
 // Error returns the error, if any, which the iterator encountered.
-func (r *PebbleBatchReader) Error() error {
+func (r *BatchReader) Error() error {
 	return r.err
 }
 
-// BatchType returns the type of the current batch entry.
-func (r *PebbleBatchReader) BatchType() BatchType {
-	return r.typ
+// KeyKind returns the kind of the current entry.
+func (r *BatchReader) KeyKind() pebble.InternalKeyKind {
+	return r.kind
 }
 
 // Key returns the key of the current batch entry.
-func (r *PebbleBatchReader) Key() []byte {
+func (r *BatchReader) Key() []byte {
 	return r.key
 }
 
 // MVCCKey returns the MVCC key of the current batch entry.
-func (r *PebbleBatchReader) MVCCKey() (MVCCKey, error) {
+func (r *BatchReader) MVCCKey() (MVCCKey, error) {
 	return DecodeMVCCKey(r.Key())
 }
 
 // EngineKey returns the EngineKey for the current batch entry.
-func (r *PebbleBatchReader) EngineKey() (EngineKey, error) {
+func (r *BatchReader) EngineKey() (EngineKey, error) {
 	key, ok := DecodeEngineKey(r.Key())
 	if !ok {
 		return key, errors.Errorf("invalid encoded engine key: %x", r.Key())
@@ -163,33 +140,42 @@ func (r *PebbleBatchReader) EngineKey() (EngineKey, error) {
 }
 
 // Value returns the value of the current batch entry. Value panics if the
-// BatchType is a point key deletion.
-func (r *PebbleBatchReader) Value() []byte {
-	switch r.typ {
-	case BatchTypeDeletion, BatchTypeSingleDeletion:
+// kind is a point key deletion.
+func (r *BatchReader) Value() []byte {
+	switch r.kind {
+	case pebble.InternalKeyKindDelete, pebble.InternalKeyKindSingleDelete:
 		panic("cannot call Value on a deletion entry")
 	default:
 		return r.value
 	}
 }
 
-// EngineEndKey returns the engine end key of the current ranged batch entry.
-func (r *PebbleBatchReader) EngineEndKey() (EngineKey, error) {
+// EndKey returns the raw end key of the current ranged batch entry.
+func (r *BatchReader) EndKey() ([]byte, error) {
 	var rawKey []byte
-	switch r.typ {
-	case BatchTypeRangeDeletion, BatchTypeRangeKeyDelete:
+	switch r.kind {
+	case pebble.InternalKeyKindRangeDelete:
 		rawKey = r.Value()
 
-	case BatchTypeRangeKeySet, BatchTypeRangeKeyUnset:
+	case pebble.InternalKeyKindRangeKeySet, pebble.InternalKeyKindRangeKeyUnset, pebble.InternalKeyKindRangeKeyDelete:
 		rangeKeys, err := r.rangeKeys()
 		if err != nil {
-			return EngineKey{}, err
+			return nil, err
 		}
 		rawKey = rangeKeys.End
 
 	default:
-		return EngineKey{}, errors.AssertionFailedf(
-			"can only ask for EndKey on a ranged entry, got %v", r.typ)
+		return nil, errors.AssertionFailedf(
+			"can only ask for EndKey on a ranged entry, got %v", r.kind)
+	}
+	return rawKey, nil
+}
+
+// EngineEndKey returns the engine end key of the current ranged batch entry.
+func (r *BatchReader) EngineEndKey() (EngineKey, error) {
+	rawKey, err := r.EndKey()
+	if err != nil {
+		return EngineKey{}, err
 	}
 
 	key, ok := DecodeEngineKey(rawKey)
@@ -199,13 +185,28 @@ func (r *PebbleBatchReader) EngineEndKey() (EngineKey, error) {
 	return key, nil
 }
 
-// EngineRangeKeys returns the engine range key values at the current entry.
-func (r *PebbleBatchReader) EngineRangeKeys() ([]EngineRangeKeyValue, error) {
-	switch r.typ {
-	case BatchTypeRangeKeySet, BatchTypeRangeKeyUnset:
+// RawRangeKeys returns the raw range key values at the current entry.
+func (r *BatchReader) RawRangeKeys() ([]rangekey.Key, error) {
+	switch r.kind {
+	case pebble.InternalKeyKindRangeKeySet, pebble.InternalKeyKindRangeKeyUnset:
 	default:
 		return nil, errors.AssertionFailedf(
-			"can only ask for range keys on a range key entry, got %v", r.typ)
+			"can only ask for range keys on a range key entry, got %v", r.kind)
+	}
+	rangeKeys, err := r.rangeKeys()
+	if err != nil {
+		return nil, err
+	}
+	return rangeKeys.Keys, nil
+}
+
+// EngineRangeKeys returns the engine range key values at the current entry.
+func (r *BatchReader) EngineRangeKeys() ([]EngineRangeKeyValue, error) {
+	switch r.kind {
+	case pebble.InternalKeyKindRangeKeySet, pebble.InternalKeyKindRangeKeyUnset:
+	default:
+		return nil, errors.AssertionFailedf(
+			"can only ask for range keys on a range key entry, got %v", r.kind)
 	}
 	rangeKeys, err := r.rangeKeys()
 	if err != nil {
@@ -219,25 +220,21 @@ func (r *PebbleBatchReader) EngineRangeKeys() ([]EngineRangeKeyValue, error) {
 }
 
 // rangeKeys decodes and returns the current Pebble range key.
-func (r *PebbleBatchReader) rangeKeys() (rangekey.Span, error) {
-	return rangekey.Decode(pebble.InternalKey{UserKey: r.key, Trailer: uint64(r.typ)}, r.value, nil)
+func (r *BatchReader) rangeKeys() (rangekey.Span, error) {
+	return rangekey.Decode(pebble.InternalKey{UserKey: r.key, Trailer: uint64(r.kind)}, r.value, nil)
 }
 
 // Next advances to the next entry in the batch, returning false when the batch
 // is empty.
-func (r *PebbleBatchReader) Next() bool {
-	kind, ukey, value, ok := r.batchReader.Next()
-
-	r.typ = BatchType(kind)
-	r.key = ukey
-	r.value = value
-
+func (r *BatchReader) Next() bool {
+	var ok bool
+	r.kind, r.key, r.value, ok, r.err = r.batchReader.Next()
 	return ok
 }
 
-// PebbleBatchCount provides an efficient way to get the count of mutations in a
-// Pebble batch representation.
-func PebbleBatchCount(repr []byte) (int, error) {
+// BatchCount provides an efficient way to get the count of mutations in a batch
+// representation.
+func BatchCount(repr []byte) (int, error) {
 	if len(repr) < headerSize {
 		return 0, errors.Errorf("batch repr too small: %d < %d", len(repr), headerSize)
 	}

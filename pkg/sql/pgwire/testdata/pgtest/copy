@@ -1078,7 +1078,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"08P01","Message":"bind message supplies 1 parameters, but prepared statement \"\" requires 0"}
+{"Type":"ErrorResponse","Code":"08P01","Message":"bind message supplies 1 parameters, but requires 0","Detail":"statement summary \"COPY (SELECT) TO STDOUT\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # And it's also an error to _not_ bind a placeholder.
@@ -1107,4 +1107,35 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"CopyOutResponse","ColumnFormatCodes":null}
 {"Type":"ErrorResponse","Code":"42P02","Message":"COPY (SELECT $1::INT8) TO STDOUT: no value provided for placeholder: $1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Regression test for unsetting the eval context on the COPY's planner
+# incorrectly (#104456).
+send
+Query {"String": "CREATE TABLE t104456 (i INT8, t TEXT, ts TIMESTAMP DEFAULT now())"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "COPY t104456 (i, t) FROM STDIN"}
+CopyData {"Data": "1\tblah\n"}
+CopyData {"Data": "\\.\n"}
+CopyDone
+Query {"String": "SELECT i, t FROM t104456 ORDER BY i"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"blah"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

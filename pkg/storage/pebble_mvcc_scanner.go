@@ -408,12 +408,12 @@ type pebbleMVCCScanner struct {
 	// allowEmpty is false, and the partial row is the first row in the result,
 	// the row will instead be completed by fetching additional KV pairs.
 	wholeRows bool
-	// Stop adding intents and abort scan once maxIntents threshold is reached.
-	// This limit is only applicable to consistent scans since they return
-	// intents as an error.
+	// Stop adding intents and abort scan once maxLockConflicts threshold is
+	// reached. This limit is only applicable to consistent scans since they
+	// return intents as an error.
 	// Not used in inconsistent scans.
 	// Ignored if zero.
-	maxIntents int64
+	maxLockConflicts int64
 	// Resume fields describe the resume span to return. resumeReason must be set
 	// to a non-zero value to return a resume span, the others are optional.
 	resumeReason    kvpb.ResumeReason
@@ -461,7 +461,7 @@ type pebbleMVCCScanner struct {
 	// Stores any error returned. If non-nil, iteration short circuits.
 	err error
 	// Number of iterations to try before we do a Seek/SeekReverse. Stays within
-	// [0, maxItersBeforeSeek] and defaults to maxItersBeforeSeek/2 .
+	// [0, maxItersBeforeSeek] and defaults to maxItersBeforeSeek/2.
 	itersBeforeSeek int
 	// machine is the state machine for how the iterator should be advanced in
 	// order to handle scans and reverse scans.
@@ -711,7 +711,7 @@ func (p *pebbleMVCCScanner) afterScan() (*roachpb.Span, kvpb.ResumeReason, int64
 	return nil, 0, 0, nil
 }
 
-// Increments itersBeforeSeek while ensuring it stays <= maxItersBeforeSeek
+// Increments itersBeforeSeek while ensuring it stays <= maxItersBeforeSeek.
 func (p *pebbleMVCCScanner) incrementItersBeforeSeek() {
 	p.itersBeforeSeek++
 	if p.itersBeforeSeek > maxItersBeforeSeek {
@@ -980,9 +980,9 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 			// intents written by other transactions and seek to the next key.
 			// However, we return the intent separately if we have room; the caller
 			// may want to resolve it. Unlike below, this intent will not result in
-			// a WriteIntentError because MVCC{Scan,Get}Options.errOnIntents returns
+			// a LockConflictError because MVCC{Scan,Get}Options.errOnIntents returns
 			// false when skipLocked in enabled.
-			if p.maxIntents == 0 || int64(p.intents.Count()) < p.maxIntents {
+			if p.maxLockConflicts == 0 || int64(p.intents.Count()) < p.maxLockConflicts {
 				if !p.addCurIntent(ctx) {
 					return false, false
 				}
@@ -1004,8 +1004,8 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 		if !p.addCurIntent(ctx) {
 			return false, false
 		}
-		// Limit number of intents returned in write intent error.
-		if p.maxIntents > 0 && int64(p.intents.Count()) >= p.maxIntents {
+		// Limit number of intents returned in lock conflict error.
+		if p.maxLockConflicts > 0 && int64(p.intents.Count()) >= p.maxLockConflicts {
 			p.resumeReason = kvpb.RESUME_INTENT_LIMIT
 			return false, false
 		}
@@ -1809,9 +1809,14 @@ func (p *pebbleMVCCScanner) isKeyLockedByConflictingTxn(
 	if p.failOnMoreRecent {
 		strength = lock.Exclusive
 	}
-	if ok, txn := p.lockTable.IsKeyLockedByConflictingTxn(key, strength); ok {
+	ok, txn, err := p.lockTable.IsKeyLockedByConflictingTxn(key, strength)
+	if err != nil {
+		p.err = err
+		return false, false
+	}
+	if ok {
 		// The key is locked or reserved, so ignore it.
-		if txn != nil && (p.maxIntents == 0 || int64(p.intents.Count()) < p.maxIntents) {
+		if txn != nil && (p.maxLockConflicts == 0 || int64(p.intents.Count()) < p.maxLockConflicts) {
 			// However, if the key is locked, we return the lock holder separately
 			// (if we have room); the caller may want to resolve it.
 			if !p.addKeyAndMetaAsIntent(ctx, key, txn) {

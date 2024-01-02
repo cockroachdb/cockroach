@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 )
 
 // ZoneRow represents a row returned by SHOW ZONE CONFIGURATION.
@@ -27,13 +27,17 @@ type ZoneRow struct {
 }
 
 func (row ZoneRow) sqlRowString() ([]string, error) {
-	configProto, err := protoutil.Marshal(&row.Config)
+	// Make the JSON comparable with the output of crdb_internal.pb_to_json.
+	configJSON, err := protoreflect.MessageToJSON(
+		&row.Config,
+		protoreflect.FmtFlags{EmitDefaults: false, EmitRedacted: false},
+	)
 	if err != nil {
 		return nil, err
 	}
 	return []string{
 		fmt.Sprintf("%d", row.ID),
-		string(configProto),
+		configJSON.String(),
 	}, nil
 }
 
@@ -83,8 +87,8 @@ func VerifyZoneConfigForTarget(t testing.TB, sqlDB *SQLRunner, target string, ro
 		t.Fatal(err)
 	}
 	sqlDB.CheckQueryResults(t, fmt.Sprintf(`
-SELECT zone_id, raw_config_protobuf
-  FROM [SHOW ZONE CONFIGURATION FOR %s]`, target),
+SELECT zone_id, crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', raw_config_protobuf)::STRING
+FROM [SHOW ZONE CONFIGURATION FOR %s]`, target),
 		[][]string{sqlRow})
 }
 
@@ -100,7 +104,9 @@ func VerifyAllZoneConfigs(t testing.TB, sqlDB *SQLRunner, rows ...ZoneRow) {
 			t.Fatal(err)
 		}
 	}
-	sqlDB.CheckQueryResults(t, `SELECT zone_id, raw_config_protobuf FROM crdb_internal.zones`, expected)
+	sqlDB.CheckQueryResults(t, `
+SELECT zone_id, crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', raw_config_protobuf)::STRING
+FROM crdb_internal.zones`, expected)
 }
 
 // ZoneConfigExists returns whether a zone config with the provided name exists.

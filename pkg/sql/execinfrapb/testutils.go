@@ -13,7 +13,6 @@ package execinfrapb
 import (
 	"context"
 	"net"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
@@ -33,16 +31,12 @@ import (
 func newInsecureRPCContext(ctx context.Context, stopper *stop.Stopper) *rpc.Context {
 	nc := &base.NodeIDContainer{}
 	ctx = logtags.AddTag(ctx, "n", nc)
-	return rpc.NewContext(ctx,
-		rpc.ContextOptions{
-			TenantID:        roachpb.SystemTenantID,
-			NodeID:          nc,
-			Config:          &base.Config{Insecure: true},
-			Clock:           &timeutil.DefaultTimeSource{},
-			ToleratedOffset: time.Nanosecond,
-			Stopper:         stopper,
-			Settings:        cluster.MakeTestingClusterSettings(),
-		})
+	opts := rpc.DefaultContextOptions()
+	opts.Insecure = true
+	opts.Stopper = stopper
+	opts.Settings = cluster.MakeTestingClusterSettings()
+	opts.NodeID = nc
+	return rpc.NewContext(ctx, opts)
 }
 
 // StartMockDistSQLServer starts a MockDistSQLServer and returns the address on
@@ -53,7 +47,7 @@ func StartMockDistSQLServer(
 ) (uuid.UUID, *MockDistSQLServer, net.Addr, error) {
 	rpcContext := newInsecureRPCContext(ctx, stopper)
 	rpcContext.NodeID.Set(context.TODO(), roachpb.NodeID(sqlInstanceID))
-	server, err := rpc.NewServer(rpcContext)
+	server, err := rpc.NewServer(ctx, rpcContext)
 	if err != nil {
 		return uuid.Nil, nil, nil, err
 	}

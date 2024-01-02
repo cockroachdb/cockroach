@@ -1,0 +1,40 @@
+setup
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY, k INT);
+----
+
+build
+CREATE SEQUENCE db.public.sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32 OWNED BY db.public.tbl.k;
+----
+- [[Sequence:{DescID: 107}, PUBLIC], ABSENT]
+  {sequenceId: 107}
+- [[Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 104}, PUBLIC], ABSENT]
+  {databaseId: 104, descriptorId: 107, name: sq1, schemaId: 105}
+- [[SequenceOption:{DescID: 107, Name: START}, PUBLIC], ABSENT]
+  {key: START, sequenceId: 107, value: "32"}
+- [[IndexData:{DescID: 106, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 106}
+- [[TableData:{DescID: 106, ReferencedDescID: 104}, PUBLIC], PUBLIC]
+  {databaseId: 104, tableId: 106}
+- [[SequenceOwner:{DescID: 106, ColumnID: 2, ReferencedDescID: 107}, PUBLIC], ABSENT]
+  {columnId: 2, sequenceId: 107, tableId: 106}
+- [[Column:{DescID: 107, ColumnID: 1}, PUBLIC], ABSENT]
+  {columnId: 1, tableId: 107}
+- [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC], ABSENT]
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true}, tableId: 107, type: {family: IntFamily, oid: 20, width: 64}}
+- [[ColumnNotNull:{DescID: 107, ColumnID: 1, IndexID: 0}, PUBLIC], ABSENT]
+  {columnId: 1, tableId: 107}
+- [[ColumnName:{DescID: 107, Name: value, ColumnID: 1}, PUBLIC], ABSENT]
+  {columnId: 1, name: value, tableId: 107}
+- [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 0}, PUBLIC], ABSENT]
+  {indexId: 1, isUnique: true, tableId: 107}
+- [[IndexName:{DescID: 107, Name: primary, IndexID: 1}, PUBLIC], ABSENT]
+  {indexId: 1, name: primary, tableId: 107}
+- [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 1, tableId: 107}
+- [[Owner:{DescID: 107}, PUBLIC], ABSENT]
+  {descriptorId: 107, owner: root}
+- [[UserPrivileges:{DescID: 107, Name: admin}, PUBLIC], ABSENT]
+  {descriptorId: 107, privileges: "2", userName: admin, withGrantOption: "2"}
+- [[UserPrivileges:{DescID: 107, Name: root}, PUBLIC], ABSENT]
+  {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}

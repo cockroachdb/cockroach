@@ -27,14 +27,14 @@ import (
 )
 
 var maxCombinedCPUProfFileSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.cpu_profile.total_dump_size_limit",
 	"maximum combined disk size of preserved CPU profiles",
 	128<<20, // 128MiB
 )
 
 var cpuUsageCombined = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.cpu_profile.cpu_usage_combined_threshold",
 	"a threshold beyond which if the combined cpu usage is above, "+
 		"then a cpu profile can be triggered. If a value over 100 is set, "+
@@ -45,7 +45,7 @@ var cpuUsageCombined = settings.RegisterIntSetting(
 )
 
 var cpuProfileInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.cpu_profile.interval",
 	// NB: this is not the entire explanation - it's when we stop taking into
 	// account the high water mark seen. Without this, if CPU ever reaches 100%,
@@ -55,19 +55,10 @@ var cpuProfileInterval = settings.RegisterDurationSetting(
 )
 
 var cpuProfileDuration = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.cpu_profile.duration",
 	"the duration for how long a cpu profile is taken",
 	10*time.Second, settings.PositiveDuration,
-)
-
-var cpuProfileEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"server.cpu_profile.enabled",
-	"a bool which indicates whether cpu profiles should be taken by the cpu profiler. "+
-		"in order to have the profiler function, server.cpu_profile.cpu_usage_combined_threshold "+
-		"must also be set to a realistic value",
-	false,
 )
 
 const cpuProfFileNamePrefix = "cpuprof"
@@ -100,7 +91,7 @@ func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*CPU
 	dumpStore := dumpstore.NewStore(dir, maxCombinedCPUProfFileSize, st)
 	cp := &CPUProfiler{
 		profiler: makeProfiler(
-			newProfileStore(dumpStore, cpuProfFileNamePrefix, HeapFileNameSuffix, st),
+			newProfileStore(dumpStore, cpuProfFileNamePrefix, heapFileNameSuffix, st),
 			func() int64 { return cpuUsageCombined.Get(&st.SV) },
 			func() time.Duration { return cpuProfileInterval.Get(&st.SV) },
 		),
@@ -116,13 +107,12 @@ func (cp *CPUProfiler) MaybeTakeProfile(ctx context.Context, currentCpuUsage int
 			logcrash.ReportPanic(ctx, &cp.st.SV, p, 1)
 		}
 	}()
-	if !cpuProfileEnabled.Get(&cp.st.SV) {
-		return
-	}
 	cp.profiler.maybeTakeProfile(ctx, currentCpuUsage, cp.takeCPUProfile)
 }
 
-func (cp *CPUProfiler) takeCPUProfile(ctx context.Context, path string) (success bool) {
+func (cp *CPUProfiler) takeCPUProfile(
+	ctx context.Context, path string, _ ...interface{},
+) (success bool) {
 	if err := debug.CPUProfileDo(cp.st, cluster.CPUProfileWithLabels, func() error {
 		// Try writing a CPU profile.
 		f, err := os.Create(path)

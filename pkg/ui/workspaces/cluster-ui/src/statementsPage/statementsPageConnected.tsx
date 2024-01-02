@@ -33,6 +33,7 @@ import {
   selectSortSetting,
   selectFilters,
   selectSearch,
+  selectRequestTime,
 } from "./statementsPage.selectors";
 import {
   selectTimeScale,
@@ -96,10 +97,14 @@ export const ConnectedStatementsPage = withRouter(
         search: selectSearch(state),
         sortSetting: selectSortSetting(state),
         limit: selectStmtsPageLimit(state),
+        requestTime: selectRequestTime(state),
         reqSortSetting: selectStmtsPageReqSort(state),
         stmtsTotalRuntimeSecs:
           state.adminUI?.statements?.data?.stmts_total_runtime_secs ?? 0,
         statementsResponse: state.adminUI.statements,
+        statementDiagnostics: state.adminUI.statementDiagnostics?.data,
+        oldestDataAvailable:
+          state.adminUI?.statements?.data?.oldest_aggregated_ts_returned,
       },
       activePageProps: mapStateToActiveStatementsPageProps(state),
     }),
@@ -217,6 +222,14 @@ export const ConnectedStatementsPage = withRouter(
             localStorageActions.update({
               key: "sortSetting/StatementsPage",
               value: { columnTitle: columnName, ascending: ascending },
+            }),
+          );
+        },
+        onRequestTimeChange: (t: moment.Moment) => {
+          dispatch(
+            localStorageActions.update({
+              key: "requestTime/StatementsPage",
+              value: t,
             }),
           );
         },

@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createSelector } from "reselect";
 import {
   IndexDetailsPageData,
   util,
@@ -23,7 +22,6 @@ import {
   indexNameAttr,
 } from "src/util/constants";
 import {
-  generateTableID,
   refreshIndexStats,
   refreshNodes,
   refreshUserSQLRoles,
@@ -41,74 +39,64 @@ import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
 const { RecommendationType } = cockroach.sql.IndexRecommendation;
 
-export const mapStateToProps = createSelector(
-  (_state: AdminUIState, props: RouteComponentProps): string =>
-    getMatchParamByName(props.match, databaseNameAttr),
-  (_state: AdminUIState, props: RouteComponentProps): string =>
-    getMatchParamByName(props.match, tableNameAttr),
-  (_state: AdminUIState, props: RouteComponentProps): string =>
-    getMatchParamByName(props.match, indexNameAttr),
-  state => state.cachedData.indexStats,
-  state => selectHasViewActivityRedactedRole(state),
-  state => nodeRegionsByIDSelector(state),
-  state => selectHasAdminRole(state),
-  state => selectTimeScale(state),
-  (
-    database,
-    table,
-    index,
-    indexStats,
-    hasViewActivityRedactedRole,
-    nodeRegions,
-    hasAdminRole,
-    timeScale,
-  ): IndexDetailsPageData => {
-    const stats = indexStats[generateTableID(database, table)];
-    const details = stats?.data?.statistics.filter(
-      stat => stat.index_name === index, // index names must be unique for a table
-    )[0];
-    const filteredIndexRecommendations =
-      stats?.data?.index_recommendations.filter(
-        indexRec => indexRec.index_id === details?.statistics.key.index_id,
-      ) || [];
-    const indexRecommendations = filteredIndexRecommendations.map(indexRec => {
-      let type: RecType = "Unknown";
-      switch (RecommendationType[indexRec.type].toString()) {
-        case "DROP_UNUSED":
-          type = "DROP_UNUSED";
-      }
-
-      return {
-        type: type,
-        reason: indexRec.reason,
-      };
-    });
-
+export const mapStateToProps = (
+  state: AdminUIState,
+  props: RouteComponentProps,
+): IndexDetailsPageData => {
+  const database = getMatchParamByName(props.match, databaseNameAttr);
+  const table = getMatchParamByName(props.match, tableNameAttr);
+  const index = getMatchParamByName(props.match, indexNameAttr);
+  const indexStats = state.cachedData.indexStats;
+  const hasViewActivityRedactedRole = selectHasViewActivityRedactedRole(state);
+  const nodeRegions = nodeRegionsByIDSelector(state);
+  const hasAdminRole = selectHasAdminRole(state);
+  const timeScale = selectTimeScale(state);
+  const stats = indexStats[util.generateTableID(database, table)];
+  const details = stats?.data?.statistics.filter(
+    stat => stat.index_name === index, // index names must be unique for a table
+  )[0];
+  const filteredIndexRecommendations =
+    stats?.data?.index_recommendations.filter(
+      indexRec => indexRec.index_id === details?.statistics.key.index_id,
+    ) || [];
+  const indexRecommendations = filteredIndexRecommendations.map(indexRec => {
+    let type: RecType = "Unknown";
+    switch (RecommendationType[indexRec.type].toString()) {
+      case "DROP_UNUSED":
+        type = "DROP_UNUSED";
+    }
     return {
-      databaseName: database,
-      tableName: table,
-      indexName: index,
-      isTenant: false,
-      hasViewActivityRedactedRole: hasViewActivityRedactedRole,
-      hasAdminRole: hasAdminRole,
-      nodeRegions: nodeRegions,
-      timeScale: timeScale,
-      details: {
-        loading: !!stats?.inFlight,
-        loaded: !!stats?.valid,
-        createStatement: details?.create_statement || "",
-        tableID: details?.statistics.key.table_id.toString(),
-        indexID: details?.statistics.key.index_id.toString(),
-        totalReads:
-          longToInt(details?.statistics?.stats?.total_read_count) || 0,
-        lastRead: util.TimestampToMoment(details?.statistics?.stats?.last_read),
-        lastReset: util.TimestampToMoment(stats?.data?.last_reset),
-        indexRecommendations,
-      },
-      breadcrumbItems: null,
+      type: type,
+      reason: indexRec.reason,
     };
-  },
-);
+  });
+
+  return {
+    databaseName: database,
+    tableName: table,
+    indexName: index,
+    isTenant: false,
+    hasViewActivityRedactedRole: hasViewActivityRedactedRole,
+    hasAdminRole: hasAdminRole,
+    nodeRegions: nodeRegions,
+    timeScale: timeScale,
+    details: {
+      loading: !!stats?.inFlight,
+      loaded: !!stats?.valid,
+      createStatement: details?.create_statement || "",
+      tableID: details?.statistics.key.table_id.toString(),
+      indexID: details?.statistics.key.index_id.toString(),
+      totalReads: longToInt(details?.statistics?.stats?.total_read_count) || 0,
+      lastRead: util.TimestampToMoment(
+        details?.statistics?.stats?.last_read,
+        util.minDate,
+      ),
+      lastReset: util.TimestampToMoment(stats?.data?.last_reset, util.minDate),
+      indexRecommendations,
+    },
+    breadcrumbItems: null,
+  };
+};
 
 export const mapDispatchToProps = {
   refreshIndexStats: (database: string, table: string) => {

@@ -14,12 +14,15 @@
 #   BENCH_TIMEOUT: timeout for each microbenchmark on a function level (default: 20m)
 #   BENCH_EXCLUDE: comma-separated list of benchmarks to exclude (default: none)
 #   TEST_ARGS: additional arguments to pass to the test binary (default: none)
+#   ROACHPROD_CREATE_ARGS: additional arguments to pass to `roachprod create` (default: none)
+#   MICROBENCH_SLACK_TOKEN: token to use to post to slack (default: none)
 
 set -exuo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
 source "$dir/teamcity-support.sh"
 output_dir="./artifacts/microbench"
+exit_status=0
 
 # Set up credentials
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
@@ -61,12 +64,13 @@ fi
 ./dev test-binaries "$BENCH_PACKAGE" --docker-args="$docker_args"
 
 # Create roachprod cluster
-./bin/roachprod create "$ROACHPROD_CLUSTER" -n "$GCE_NODE_COUNT" \
+./bin/roachprod create "$ROACHPROD_CLUSTER" -n "$GCE_NODE_COUNT" $ROACHPROD_CREATE_ARGS \
   --lifetime "$CLUSTER_LIFETIME" \
   --clouds gce \
   --gce-machine-type "$GCE_MACHINE_TYPE" \
   --gce-zones="$GCE_ZONE" \
   --os-volume-size=128
+
 
 # Execute microbenchmarks
 ./bin/roachprod-microbench run "$ROACHPROD_CLUSTER" \
@@ -78,10 +82,20 @@ fi
   ${BENCH_TIMEOUT:+--timeout="$BENCH_TIMEOUT"} \
   ${BENCH_EXCLUDE:+--exclude="$BENCH_EXCLUDE"} \
   --quiet \
-  -- "$TEST_ARGS"
+  -- "$TEST_ARGS" \
+  || exit_status=$?
 
 # Generate sheets if comparing
-if [[ -n "${GCS_COMPARE_BINARIES}" ]] ; then
-  ./bin/roachprod-microbench compare "$output_dir/0" "$output_dir/1" \
-    --sheet-desc="$SHEET_DESCRIPTION" 2>&1 | tee "$output_dir/sheets.txt"
+if [[ -n "${GCS_COMPARE_BINARIES}" ]]; then
+  if [ -d "$output_dir/0" ] && [ "$(ls -A "$output_dir/0")" ] \
+  && [ -d "$output_dir/1" ] && [ "$(ls -A "$output_dir/1")" ]; then
+    ./bin/roachprod-microbench compare "$output_dir/0" "$output_dir/1" \
+      ${MICROBENCH_SLACK_TOKEN:+--slack-token="$MICROBENCH_SLACK_TOKEN"} \
+      --sheet-desc="$SHEET_DESCRIPTION" 2>&1 | tee "$output_dir/sheets.txt"
+  else
+    echo "No microbenchmarks were run. Skipping comparison."
+  fi
 fi
+
+# Exit with the code from roachprod-microbench
+exit $exit_status

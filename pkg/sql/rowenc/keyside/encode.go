@@ -76,6 +76,11 @@ func Encode(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, error) {
 		return encoding.EncodeStringDescending(b, string(*t)), nil
 	case *tree.DVoid:
 		return encoding.EncodeVoidAscendingOrDescending(b), nil
+	case *tree.DPGLSN:
+		if dir == encoding.Ascending {
+			return encoding.EncodeUvarintAscending(b, uint64(t.LSN)), nil
+		}
+		return encoding.EncodeUvarintDescending(b, uint64(t.LSN)), nil
 	case *tree.DBox2D:
 		if dir == encoding.Ascending {
 			return encoding.EncodeBox2DAscending(b, t.CartesianBoundingBox.BoundingBox)

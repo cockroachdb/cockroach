@@ -11,15 +11,28 @@
 package schematestutils
 
 import (
+	"context"
 	"strconv"
+	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
 )
 
 // MakeTableDesc makes a generic table descriptor with the provided properties.
@@ -123,4 +136,88 @@ func AddDropIndexMutation(desc catalog.TableDescriptor) catalog.TableDescriptor 
 		Descriptor_: &descpb.DescriptorMutation_Index{Index: &descpb.IndexDescriptor{}},
 	})
 	return tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable()
+}
+
+// FetchDescVersionModificationTime fetches the `ModificationTime` of the
+// specified `version` of `tableName`'s table descriptor.
+func FetchDescVersionModificationTime(
+	t testing.TB,
+	s serverutils.ApplicationLayerInterface,
+	dbName string,
+	schemaName string,
+	tableName string,
+	version int,
+) hlc.Timestamp {
+	db := serverutils.OpenDBConn(
+		t, s.SQLAddr(), dbName, false, s.AppStopper())
+
+	tblKey := s.Codec().TablePrefix(keys.DescriptorTableID)
+	header := kvpb.RequestHeader{
+		Key:    tblKey,
+		EndKey: tblKey.PrefixEnd(),
+	}
+	dropColTblID := sqlutils.QueryTableID(t, db, dbName, schemaName, tableName)
+	req := &kvpb.ExportRequest{
+		RequestHeader: header,
+		MVCCFilter:    kvpb.MVCCFilter_All,
+		StartTime:     hlc.Timestamp{},
+	}
+	hh := kvpb.Header{Timestamp: hlc.NewClockForTesting(nil).Now()}
+	res, pErr := kv.SendWrappedWith(context.Background(),
+		s.DB().NonTransactionalSender(), hh, req)
+	if pErr != nil {
+		t.Fatal(pErr.GoError())
+	}
+	for _, file := range res.(*kvpb.ExportResponse).Files {
+		it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsAndRanges,
+			LowerBound: keys.MinKey,
+			UpperBound: keys.MaxKey,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer it.Close()
+		for it.SeekGE(storage.NilKey); ; it.Next() {
+			if ok, err := it.Valid(); err != nil {
+				t.Fatal(err)
+			} else if !ok {
+				continue
+			}
+			k := it.UnsafeKey()
+			if _, hasRange := it.HasPointAndRange(); hasRange {
+				t.Fatalf("unexpected MVCC range key at %s", k)
+			}
+			remaining, _, _, err := s.Codec().DecodeIndexPrefix(k.Key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, tableID, err := encoding.DecodeUvarintAscending(remaining)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tableID != uint64(dropColTblID) {
+				continue
+			}
+			unsafeValue, err := it.UnsafeValue()
+			require.NoError(t, err)
+			if unsafeValue == nil {
+				t.Fatal(errors.New(`value was dropped or truncated`))
+			}
+			value := roachpb.Value{RawBytes: unsafeValue, Timestamp: k.Timestamp}
+			b, err := descbuilder.FromSerializedValue(&value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			require.NotNil(t, b)
+			if b.DescriptorType() == catalog.Table {
+				tbl := b.BuildImmutable().(catalog.TableDescriptor)
+				if int(tbl.GetVersion()) == version {
+					return tbl.GetModificationTime()
+				}
+			}
+		}
+	}
+	t.Fatal(errors.New(`couldn't find table desc for given version`))
+	return hlc.Timestamp{}
 }

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/testutils/keysutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -82,9 +81,9 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	evalCtx := &eval.Context{
 		Codec: s.ExecutorConfig().(sql.ExecutorConfig).Codec,
@@ -202,7 +201,7 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 			}
 
 			for id, val := range test.seqIDToExpectedVal {
-				seqDesc := createAndIncrementSeqDescriptor(ctx, t, id, keysutils.TestingSQLCodec,
+				seqDesc := createAndIncrementSeqDescriptor(ctx, t, id, evalCtx.Codec,
 					test.incrementBy, test.seqIDToOpts[id], kvDB)
 				seqMetadata := &row.SequenceMetadata{
 					SeqDesc:         seqDesc,

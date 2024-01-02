@@ -15,39 +15,45 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
-func makeTenantSpan(tenantID uint64) *roachpb.Span {
-	prefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenantID))
-	return &roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+func makeTenantSpan(tenantID uint64) roachpb.Span {
+	tenID := roachpb.MustMakeTenantID(tenantID)
+	return keys.MakeTenantSpan(tenID)
 }
 
 func makeProducerJobRecord(
 	registry *jobs.Registry,
-	tenantID uint64,
+	tenantInfo *mtinfopb.TenantInfo,
 	timeout time.Duration,
 	user username.SQLUsername,
 	ptsID uuid.UUID,
 ) jobs.Record {
+	tenantID := tenantInfo.ID
+	tenantName := tenantInfo.Name
 	return jobs.Record{
 		JobID:       registry.MakeJobID(),
-		Description: fmt.Sprintf("stream replication for tenant %d", tenantID),
+		Description: fmt.Sprintf("Physical replication stream producer for %q (%d)", tenantName, tenantID),
 		Username:    user,
 		Details: jobspb.StreamReplicationDetails{
 			ProtectedTimestampRecordID: ptsID,
-			Spans:                      []*roachpb.Span{makeTenantSpan(tenantID)},
+			Spans:                      []roachpb.Span{makeTenantSpan(tenantID)},
 			TenantID:                   roachpb.MustMakeTenantID(tenantID),
 		},
 		Progress: jobspb.StreamReplicationProgress{
@@ -93,19 +99,33 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 		case <-p.timer.Ch():
 			p.timer.MarkRead()
 			p.timer.Reset(streamingccl.StreamReplicationStreamLivenessTrackFrequency.Get(execCfg.SV()))
-			j, err := execCfg.JobRegistry.LoadJob(ctx, p.job.ID())
+			progress, err := replicationutils.LoadReplicationProgress(ctx, execCfg.InternalDB, p.job.ID())
+			if knobs := execCfg.StreamingTestingKnobs; knobs != nil && knobs.AfterResumerJobLoad != nil {
+				err = knobs.AfterResumerJobLoad(err)
+			}
 			if err != nil {
-				return err
+				if jobs.HasJobNotFoundError(err) {
+					return errors.Wrapf(err, "replication stream %d failed loading producer job progress", p.job.ID())
+				}
+				log.Errorf(ctx,
+					"replication stream %d failed loading producer job progress (retrying): %v", p.job.ID(), err)
+				continue
+			}
+			if progress == nil {
+				log.Errorf(ctx, "replication stream %d cannot find producer job progress (retrying)", p.job.ID())
+				continue
 			}
 
-			prog := j.Progress()
-			switch prog.GetStreamReplication().StreamIngestionStatus {
+			switch progress.StreamIngestionStatus {
 			case jobspb.StreamReplicationProgress_FINISHED_SUCCESSFULLY:
+				if err := p.removeJobFromTenantRecord(ctx, execCfg); err != nil {
+					return err
+				}
 				return p.releaseProtectedTimestamp(ctx, execCfg)
 			case jobspb.StreamReplicationProgress_FINISHED_UNSUCCESSFULLY:
 				return errors.New("destination cluster job finished unsuccessfully")
 			case jobspb.StreamReplicationProgress_NOT_FINISHED:
-				expiration := prog.GetStreamReplication().Expiration
+				expiration := progress.Expiration
 				log.VEventf(ctx, 1, "checking if stream replication expiration %s timed out", expiration)
 				if expiration.Before(p.timeSource.Now()) {
 					return errors.Errorf("replication stream %d timed out", p.job.ID())
@@ -123,13 +143,56 @@ func (p *producerJobResumer) OnFailOrCancel(
 ) error {
 	jobExec := execCtx.(sql.JobExecContext)
 	execCfg := jobExec.ExecCfg()
-	// Releases the protected timestamp record.
+
+	if err := p.removeJobFromTenantRecord(ctx, execCfg); err != nil {
+		return err
+	}
+
 	return p.releaseProtectedTimestamp(ctx, execCfg)
+}
+
+func (p *producerJobResumer) removeJobFromTenantRecord(
+	ctx context.Context, execCfg *sql.ExecutorConfig,
+) error {
+	tenantID := p.job.Details().(jobspb.StreamReplicationDetails).TenantID
+	jobID := p.job.ID()
+	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		tenantRecord, err := sql.GetTenantRecordByID(ctx, txn, tenantID, execCfg.Settings)
+		if err != nil {
+			if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+				// Tenant is already gone. Nothing more to do here.
+				return nil
+			}
+			return err
+		}
+
+		ourIdx := -1
+		for i, jid := range tenantRecord.PhysicalReplicationProducerJobIDs {
+			if jobID == jid {
+				ourIdx = i
+				break
+			}
+		}
+		if ourIdx != -1 {
+			l := len(tenantRecord.PhysicalReplicationProducerJobIDs)
+			tenantRecord.PhysicalReplicationProducerJobIDs[ourIdx] = tenantRecord.PhysicalReplicationProducerJobIDs[l-1]
+			tenantRecord.PhysicalReplicationProducerJobIDs = tenantRecord.PhysicalReplicationProducerJobIDs[:l-1]
+		}
+		if err := sql.UpdateTenantRecord(ctx, execCfg.Settings, txn, tenantRecord); err != nil {
+			return err
+		}
+		return err
+	})
+}
+
+// CollectProfile implements jobs.Resumer interface
+func (p *producerJobResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
 }
 
 func init() {
 	jobs.RegisterConstructor(
-		jobspb.TypeStreamReplication,
+		jobspb.TypeReplicationStreamProducer,
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			ts := timeutil.DefaultTimeSource{}
 			return &producerJobResumer{

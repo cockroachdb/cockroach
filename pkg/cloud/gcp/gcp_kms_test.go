@@ -12,6 +12,7 @@ package gcp
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -230,4 +231,86 @@ func TestGCSKMSDisallowImplicitCredentials(t *testing.T) {
 	require.True(t, testutils.IsError(err,
 		"implicit credentials disallowed for gcs due to --external-io-disable-implicit-credentials flag"),
 	)
+}
+
+func TestGCPKMSInaccessibleError(t *testing.T) {
+	envVars := []string{
+		"GOOGLE_CREDENTIALS_JSON",
+		"GOOGLE_APPLICATION_CREDENTIALS",
+		"ASSUME_SERVICE_ACCOUNT_CHAIN",
+		"GOOGLE_LIMITED_KEY_ID",
+	}
+	for _, env := range envVars {
+		v := os.Getenv(env)
+		if v == "" {
+			skip.IgnoreLintf(t, "%s env var must be set", env)
+		}
+	}
+
+	ctx := context.Background()
+	roleChainStr := os.Getenv("ASSUME_SERVICE_ACCOUNT_CHAIN")
+	roleChain := strings.Split(roleChainStr, ",")
+	limitedKeyID := os.Getenv("GOOGLE_LIMITED_KEY_ID")
+
+	t.Run("success-sanity-check", func(t *testing.T) {
+		q := make(url.Values)
+		q.Set(cloud.AuthParam, cloud.AuthParamImplicit)
+		q.Set(AssumeRoleParam, roleChainStr)
+
+		uriImplicit := fmt.Sprintf("%s:///%s?%s", gcpScheme, limitedKeyID, q.Encode())
+		cloudtestutils.RequireSuccessfulKMS(ctx, t, uriImplicit)
+
+		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(CredentialsParam, base64.StdEncoding.EncodeToString([]byte(os.Getenv("GOOGLE_CREDENTIALS_JSON"))))
+		uriSpecified := fmt.Sprintf("%s:///%s?%s", gcpScheme, limitedKeyID, q.Encode())
+		cloudtestutils.RequireSuccessfulKMS(ctx, t, uriSpecified)
+	})
+
+	t.Run("incorrect-credentials", func(t *testing.T) {
+		credentialsJSON := os.Getenv("GOOGLE_CREDENTIALS_JSON")
+		var credsKeyValues map[string]interface{}
+		err := json.Unmarshal([]byte(credentialsJSON), &credsKeyValues)
+		require.NoError(t, err)
+
+		credsKeyValues["client_email"] = fmt.Sprintf("%s%s", "non-existent-sa-", credsKeyValues["client_email"])
+		badCreds, err := json.Marshal(credsKeyValues)
+		require.NoError(t, err)
+
+		encodedCredentials := base64.StdEncoding.EncodeToString(badCreds)
+
+		q := make(url.Values)
+		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(CredentialsParam, encodedCredentials)
+		uri := fmt.Sprintf("%s:///%s?%s", gcpScheme, limitedKeyID, q.Encode())
+
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "Request had invalid authentication credentials")
+	})
+
+	t.Run("incorrect-kms", func(t *testing.T) {
+		q := make(url.Values)
+		q.Set(cloud.AuthParam, cloud.AuthParamImplicit)
+		q.Set(AssumeRoleParam, roleChainStr)
+		incorrectKey := limitedKeyID + "-non-existent"
+
+		uri := fmt.Sprintf("%s:///%s?%s", gcpScheme, incorrectKey, q.Encode())
+
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "NotFound")
+	})
+
+	t.Run("no-kms-permission", func(t *testing.T) {
+		q := make(url.Values)
+		q.Set(cloud.AuthParam, cloud.AuthParamImplicit)
+		uri := fmt.Sprintf("%s:///%s?%s", gcpScheme, limitedKeyID, q.Encode())
+
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "PermissionDenied")
+	})
+
+	t.Run("cannot-assume-role", func(t *testing.T) {
+		q := make(url.Values)
+		q.Set(cloud.AuthParam, cloud.AuthParamImplicit)
+		q.Set(AssumeRoleParam, roleChain[len(roleChain)-1])
+
+		uri := fmt.Sprintf("%s:///%s?%s", gcpScheme, limitedKeyID, q.Encode())
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "impersonate: status code 403")
+	})
 }

@@ -113,7 +113,9 @@ func checkStorage(
 	}
 
 	buf := make([]byte, chunkSize)
-	_, _ = rand.Read(buf)
+	// This doesn't need to be cryptographic; pseudo-rand is enough to make the
+	// payload not completely compress away.
+	_, _ = rand.New(rand.NewSource(rand.Int63())).Read(buf)
 
 	var res result
 

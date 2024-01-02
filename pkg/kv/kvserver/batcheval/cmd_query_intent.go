@@ -34,11 +34,12 @@ func declareKeysQueryIntent(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	// QueryIntent requests read the specified keys at the maximum timestamp in
 	// order to read any intent present, if one exists, regardless of the
 	// timestamp it was written at.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, req.Header().Span())
+	return nil
 }
 
 // QueryIntent checks if an intent exists for the specified transaction at the
@@ -74,9 +75,7 @@ func QueryIntent(
 	}
 
 	// Read from the lock table to see if an intent exists.
-	// Iterate over the lock key space with this key as a lower bound.
-	// With prefix set to true there should be at most one result.
-	intent, err := storage.GetIntent(reader, args.Key)
+	intent, err := storage.GetIntent(ctx, reader, args.Key, storage.BatchEvalReadCategory)
 	if err != nil {
 		return result.Result{}, err
 	}

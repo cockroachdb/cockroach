@@ -21,7 +21,7 @@ CREATE TYPE public.status AS ENUM ('open', 'closed', 'inactive');
 statement ok
 CREATE TYPE tableObj AS ENUM('row', 'col');
 
-query T colnames
+query T colnames,rowsort
 SHOW CREATE ALL TYPES
 ----
 create_statement
@@ -44,7 +44,7 @@ CREATE SCHEMA s
 statement ok
 CREATE TYPE s.status AS ENUM ('a', 'b', 'c');
 
-query T colnames
+query T colnames,rowsort
 SHOW CREATE ALL TYPES
 ----
 create_statement

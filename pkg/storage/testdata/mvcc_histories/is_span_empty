@@ -18,13 +18,14 @@ with t=A
 del_range_ts k=d end=f ts=2
 ----
 del: "b": found key false
+put: lock acquisition = {c id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
 rangekey: {d-f}/[2.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /BYTES/a4
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
-meta: "c"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=8 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "c"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=8 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "c"/10.000000000,0 -> /BYTES/c10
 
 # Span is not empty.

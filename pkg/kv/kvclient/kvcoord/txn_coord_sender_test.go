@@ -65,7 +65,7 @@ func createTestDBWithKnobs(
 	s := &localtestcluster.LocalTestCluster{
 		StoreTestingKnobs: knobs,
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), kvcoord.InitFactoryForLocalTestCluster)
+	s.Start(t, kvcoord.InitFactoryForLocalTestCluster)
 	return s
 }
 
@@ -267,7 +267,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 // can be idle and aborted by a heartbeat failure. This test verifies that in
 // those cases the state of the handle ends up as txnRetryableError.
 // This is important to verify because if the handle stays in txnPending then
-// GetTxnRetryableErr() returns nil, and PrepareForRetry() will not reset the
+// GetRetryableErr() returns nil, and PrepareForRetry() will not reset the
 // handle.
 func TestDB_PrepareForRetryAfterHeartbeatFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -336,11 +336,11 @@ func TestDB_PrepareForRetryAfterHeartbeatFailure(t *testing.T) {
 
 	// At this point the handle should be in state txnRetryableError - verify we
 	// can read the error.
-	pErr := tc.GetTxnRetryableErr(ctx)
+	pErr := tc.GetRetryableErr(ctx)
 	require.NotNil(t, pErr)
-	require.Equal(t, txn.ID(), pErr.TxnID)
+	require.Equal(t, txn.ID(), pErr.PrevTxnID)
 	// The transaction was aborted, therefore we should have a new transaction ID.
-	require.NotEqual(t, pErr.TxnID, pErr.Transaction.ID)
+	require.NotEqual(t, pErr.PrevTxnID, pErr.NextTransaction.ID)
 }
 
 // getTxn fetches the requested key and returns the transaction info.
@@ -661,7 +661,8 @@ func TestTxnCoordSenderCleanupOnCommitAfterRestart(t *testing.T) {
 	}
 
 	// Restart the transaction with a new epoch.
-	txn.Sender().ManualRestart(ctx, txn.UserPriority(), s.Clock.Now())
+	require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, s.Clock.Now(), true /* mustRestart */, "force retry"))
+	require.NoError(t, txn.Sender().ClearRetryableErr(ctx))
 
 	// Now immediately commit.
 	require.NoError(t, txn.Commit(ctx))
@@ -726,6 +727,10 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	isolation.RunEachLevel(t, testTxnCoordSenderTxnUpdatedOnError)
+}
+
+func testTxnCoordSenderTxnUpdatedOnError(t *testing.T, isoLevel isolation.Level) {
 	ctx := context.Background()
 	origTS := makeTS(123, 0)
 	plus10 := origTS.Add(10, 10).WithSynthetic(false)
@@ -752,8 +757,10 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			expReadTS:  origTS,
 		},
 		{
-			// On uncertainty error, new epoch begins. Timestamp moves ahead of
-			// the existing write and LocalUncertaintyLimit, if one exists.
+			// On uncertainty error, the read timestamp moves ahead of the existing
+			// write and LocalUncertaintyLimit, if one exists. Also, a new epoch
+			// begins for isolation levels that cannot move their read timestamp
+			// between operations.
 			name: "ReadWithinUncertaintyIntervalError without LocalUncertaintyLimit",
 			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
 				pErr := kvpb.NewErrorWithTxn(
@@ -767,14 +774,21 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 					txn)
 				return pErr
 			},
-			expEpoch:   1,
+			expEpoch: func() enginepb.TxnEpoch {
+				if isoLevel == isolation.ReadCommitted {
+					return 0 // PerStatementReadSnapshot
+				}
+				return 1
+			}(),
 			expPri:     1,
 			expWriteTS: plus10.Next(),
 			expReadTS:  plus10.Next(),
 		},
 		{
-			// On uncertainty error, new epoch begins. Timestamp moves ahead of
-			// the existing write and LocalUncertaintyLimit, if one exists.
+			// On uncertainty error, the read timestamp moves ahead of the existing
+			// write and LocalUncertaintyLimit, if one exists. Also, a new epoch
+			// begins for isolation levels that cannot move their read timestamp
+			// between operations.
 			name: "ReadWithinUncertaintyIntervalError with LocalUncertaintyLimit",
 			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
 				pErr := kvpb.NewErrorWithTxn(
@@ -788,7 +802,12 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 					txn)
 				return pErr
 			},
-			expEpoch:   1,
+			expEpoch: func() enginepb.TxnEpoch {
+				if isoLevel == isolation.ReadCommitted {
+					return 0 // PerStatementReadSnapshot
+				}
+				return 1
+			}(),
 			expPri:     1,
 			expWriteTS: plus20,
 			expReadTS:  plus20,
@@ -822,8 +841,10 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			expReadTS:           plus20,
 		},
 		{
-			// On failed push, new epoch begins just past the pushed timestamp.
-			// Additionally, priority ratchets up to just below the pusher's.
+			// On failed push, read timestamp advances just past the pushed timestamp.
+			// Additionally, priority ratchets up to just below the pusher's. Finally,
+			// a new epoch begins for isolation levels that cannot move their read
+			// timestamp between operations.
 			name: "TransactionPushError",
 			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
 				return kvpb.NewErrorWithTxn(&kvpb.TransactionPushError{
@@ -832,23 +853,53 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 					},
 				}, txn)
 			},
-			expEpoch:   1,
+			expEpoch: func() enginepb.TxnEpoch {
+				if isoLevel == isolation.ReadCommitted {
+					return 0
+				}
+				return 1
+			}(),
 			expPri:     9,
 			expWriteTS: plus10,
 			expReadTS:  plus10,
 		},
 		{
-			// On retry, restart with new epoch, timestamp and priority.
+			// On retry, advance timestamp and priority. Also, restart with new epoch
+			// for isolation levels that cannot move their read timestamp between
+			// operations.
 			name: "TransactionRetryError",
 			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
 				txn.WriteTimestamp = plus10
 				txn.Priority = 10
 				return kvpb.NewErrorWithTxn(&kvpb.TransactionRetryError{}, txn)
 			},
-			expEpoch:   1,
+			expEpoch: func() enginepb.TxnEpoch {
+				if isoLevel == isolation.ReadCommitted {
+					return 0
+				}
+				return 1
+			}(),
 			expPri:     10,
 			expWriteTS: plus10,
 			expReadTS:  plus10,
+		},
+		{
+			// On retry, advance timestamp and priority. Also, restart with new epoch,
+			// even for isolation levels that can move their read timestamp between
+			// operations. This is because PrepareForRetry is called instead of
+			// PrepareForPartialRetry, indicating that the client wants to promote
+			// what could be a partial retry to a full retry.
+			name: "TransactionRetryError with PrepareForRetry",
+			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
+				txn.WriteTimestamp = plus10
+				txn.Priority = 10
+				return kvpb.NewErrorWithTxn(&kvpb.TransactionRetryError{}, txn)
+			},
+			expEpoch:            1,
+			callPrepareForRetry: true,
+			expPri:              10,
+			expWriteTS:          plus10,
+			expReadTS:           plus10,
 		},
 	}
 
@@ -886,15 +937,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			db := kv.NewDB(ambient, tsf, clock, stopper)
 			key := roachpb.Key("test-key")
 			now := clock.NowAsClockTimestamp()
-			origTxnProto := roachpb.MakeTransaction(
-				"test txn",
-				key,
-				isolation.Serializable,
-				roachpb.UserPriority(0),
-				now.ToTimestamp(),
-				clock.MaxOffset().Nanoseconds(),
-				0, /* coordinatorNodeID */
-			)
+			origTxnProto := roachpb.MakeTransaction("test txn", key, isoLevel, roachpb.UserPriority(0), now.ToTimestamp(), clock.MaxOffset().Nanoseconds(), 0, 0, false /* omitInRangefeeds */)
 			// TODO(andrei): I've monkeyed with the priorities on this initial
 			// Transaction to keep the test happy from a previous version in which the
 			// Transaction was not initialized before use (which became insufficient
@@ -906,12 +949,17 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			origTxnProto.Priority = 1
 			txn := kv.NewTxnFromProto(ctx, db, 0 /* gatewayNodeID */, now, kv.RootTxn, &origTxnProto)
 			txn.TestingSetPriority(1)
+			// Enable stepping so that Read Committed transactions don't advance their
+			// read timestamp on each operation.
+			txn.ConfigureStepping(ctx, kv.SteppingEnabled)
 
 			err := txn.Put(ctx, key, []byte("value"))
 			stopper.Stop(ctx)
 
 			if test.callPrepareForRetry {
-				txn.PrepareForRetry(ctx)
+				if err := txn.PrepareForRetry(ctx); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if test.name != "nil" && err == nil {
 				t.Fatalf("expected an error")
@@ -1091,7 +1139,9 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
 	// Acquire locks on a-b, c, m, u-w before the final batch.
-	_, pErr := txn.ReverseScanForUpdate(ctx, roachpb.Key("a"), roachpb.Key("b"), 0)
+	_, pErr := txn.ScanForShare(
+		ctx, roachpb.Key("a"), roachpb.Key("b"), 0, kvpb.GuaranteedDurability,
+	)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1099,7 +1149,7 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	_, pErr = txn.GetForUpdate(ctx, roachpb.Key("m"))
+	_, pErr = txn.GetForUpdate(ctx, roachpb.Key("m"), kvpb.GuaranteedDurability)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1113,8 +1163,8 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	b.Put(roachpb.Key("b"), []byte("value"))
 	b.Put(roachpb.Key("c"), []byte("value"))
 	b.Put(roachpb.Key("d"), []byte("value"))
-	b.GetForUpdate(roachpb.Key("n"))
-	b.ReverseScanForUpdate(roachpb.Key("v"), roachpb.Key("z"))
+	b.GetForUpdate(roachpb.Key("n"), kvpb.GuaranteedDurability)
+	b.ReverseScanForShare(roachpb.Key("v"), roachpb.Key("z"), kvpb.GuaranteedDurability)
 
 	// The expected locks are a-b, c, m, n, and u-z.
 	expectedLockSpans = []roachpb.Span{
@@ -1139,24 +1189,27 @@ func checkTxnMetrics(
 	t *testing.T,
 	metrics kvcoord.TxnMetrics,
 	name string,
-	commits, commits1PC, aborts, restarts int64,
+	commits, commits1PC, commitsReadOnly, aborts, restarts int64,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		return checkTxnMetricsOnce(metrics, name, commits, commits1PC, aborts, restarts)
+		return checkTxnMetricsOnce(metrics, name, commits, commits1PC, commitsReadOnly, aborts, restarts)
 	})
 }
 
 func checkTxnMetricsOnce(
-	metrics kvcoord.TxnMetrics, name string, commits, commits1PC, aborts, restarts int64,
+	metrics kvcoord.TxnMetrics,
+	name string,
+	commits, commits1PC, commitReadOnly, aborts, restarts int64,
 ) error {
-	durationCounts, _ := metrics.Durations.Total()
-	restartsCounts, _ := metrics.Restarts.Total()
+	durationCounts, _ := metrics.Durations.CumulativeSnapshot().Total()
+	restartsCounts, _ := metrics.Restarts.CumulativeSnapshot().Total()
 	testcases := []struct {
 		name string
 		a, e int64
 	}{
 		{"commits", metrics.Commits.Count(), commits},
 		{"commits1PC", metrics.Commits1PC.Count(), commits1PC},
+		{"commitsReadOnly", metrics.CommitsReadOnly.Count(), commitReadOnly},
 		{"aborts", metrics.Aborts.Count(), aborts},
 		{"durations", durationCounts, commits + aborts},
 		{"restarts", restartsCounts, restarts},
@@ -1182,7 +1235,7 @@ func setupMetricsTest(
 		DisableLivenessHeartbeat: true,
 		DontCreateSystemRanges:   true,
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), kvcoord.InitFactoryForLocalTestCluster)
+	s.Start(t, kvcoord.InitFactoryForLocalTestCluster)
 
 	metrics := kvcoord.MakeTxnMetrics(metric.TestSampleInterval)
 	s.DB.GetFactory().(*kvcoord.TxnCoordSenderFactory).TestingSetMetrics(metrics)
@@ -1206,9 +1259,9 @@ func TestTxnCommit(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	checkTxnMetrics(t, metrics, "commit txn", 1 /* commits */, 0 /* commits1PC */, 0, 0)
+	checkTxnMetrics(t, metrics, "commit txn", 1 /* commits */, 0 /* commits1PC */, 0 /* commitsReadOnly */, 0, 0)
 
-	// Test a read-only txn.
+	// Test a read-only get txn.
 	if err := s.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		key := []byte("key-commit")
 		_, err := txn.Get(ctx, key)
@@ -1217,7 +1270,19 @@ func TestTxnCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	checkTxnMetrics(t, metrics, "commit txn", 2 /* commits */, 0 /* commits1PC */, 0, 0)
+	checkTxnMetrics(t, metrics, "commit txn", 2 /* commits */, 0 /* commits1PC */, 1 /* commitsReadOnly */, 0, 0)
+
+	// Test a read-only scan txn.
+	if err := s.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+		key := []byte("key-commit")
+		endKey := []byte("key-commit2")
+		_, err := txn.Scan(ctx, key, endKey, 5)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	checkTxnMetrics(t, metrics, "commit txn", 3 /* commits */, 0 /* commits1PC */, 2 /* commitsReadOnly */, 0, 0)
 }
 
 // TestTxnOnePhaseCommit verifies that 1PC metric tracking works.
@@ -1252,7 +1317,7 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 	if !bytes.Equal(val, value) {
 		t.Fatalf("expected: %s, got: %s", value, val)
 	}
-	checkTxnMetrics(t, metrics, "commit 1PC txn", 1 /* commits */, 1 /* 1PC */, 0, 0)
+	checkTxnMetrics(t, metrics, "commit 1PC txn", 1 /* commits */, 1 /* 1PC */, 0, 0, 0)
 }
 
 func TestTxnAbortCount(t *testing.T) {
@@ -1272,7 +1337,7 @@ func TestTxnAbortCount(t *testing.T) {
 	}); !testutils.IsError(err, intentionalErrText) {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	checkTxnMetrics(t, metrics, "abort txn", 0, 0, 1 /* aborts */, 0)
+	checkTxnMetrics(t, metrics, "abort txn", 0, 0, 0, 1 /* aborts */, 0)
 
 	// Test aborted read-only transaction.
 	if err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -1283,7 +1348,7 @@ func TestTxnAbortCount(t *testing.T) {
 	}); !testutils.IsError(err, intentionalErrText) {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	checkTxnMetrics(t, metrics, "abort txn", 0, 0, 2 /* aborts */, 0)
+	checkTxnMetrics(t, metrics, "abort txn", 0, 0, 0, 2 /* aborts */, 0)
 }
 
 func TestTxnRestartCount(t *testing.T) {
@@ -1344,7 +1409,7 @@ func TestTxnRestartCount(t *testing.T) {
 		require.NoError(t, txn.Rollback(ctx))
 	}
 	assertTransactionRetryError(t, err)
-	checkTxnMetrics(t, metrics, "restart txn", 0, 0, 1 /* aborts */, 1 /* restarts */)
+	checkTxnMetrics(t, metrics, "restart txn", 0, 0, 0, 1 /* aborts */, 1 /* restarts */)
 }
 
 func TestTxnDurations(t *testing.T) {
@@ -1369,14 +1434,14 @@ func TestTxnDurations(t *testing.T) {
 		}
 	}
 
-	checkTxnMetrics(t, metrics, "txn durations", puts, 0, 0, 0)
+	checkTxnMetrics(t, metrics, "txn durations", puts, 0, 0, 0, 0)
 
 	hist := metrics.Durations
 	// The clock is a bit odd in these tests, so I can't test the mean without
 	// introducing spurious errors or being overly lax.
 	//
 	// TODO(cdo): look into cause of variance.
-	count, _ := hist.Total()
+	count, _ := hist.CumulativeSnapshot().Total()
 	if a, e := count, int64(puts); a != e {
 		t.Fatalf("durations %d != expected %d", a, e)
 	}
@@ -1824,7 +1889,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 	}
 	b := txn.NewBatch()
 	b.Put(keyA, "test value")
-	b.ScanForUpdate(keyB, keyC)
+	b.ScanForUpdate(keyB, keyC, kvpb.BestEffort)
 	if err := txn.CommitInBatch(ctx, b); !testutils.IsError(err, "injected err") {
 		t.Fatal(err)
 	}
@@ -2102,7 +2167,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 					if write {
 						err = txn.Put(ctx, "consider", "phlebas")
 					} else /* locking read */ {
-						_, err = txn.ScanForUpdate(ctx, "a", "b", 0)
+						_, err = txn.ScanForUpdate(ctx, "a", "b", 0, kvpb.BestEffort)
 					}
 					if err == nil {
 						t.Fatal("missing injected retriable error")
@@ -2770,14 +2835,16 @@ func TestTxnCoordSenderSetFixedTimestamp(t *testing.T) {
 			before: func(t *testing.T, txn *kv.Txn) {
 				_, err := txn.Get(ctx, "k")
 				require.NoError(t, err)
-				txn.Sender().ManualRestart(ctx, txn.UserPriority(), txn.ReadTimestamp().Next())
+				require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, txn.ReadTimestamp().Next(), true /* mustRestart */, "force retry"))
+				require.NoError(t, txn.Sender().ClearRetryableErr(ctx))
 			},
 		},
 		{
 			name: "write before, in prior epoch",
 			before: func(t *testing.T, txn *kv.Txn) {
 				require.NoError(t, txn.Put(ctx, "k", "v"))
-				txn.Sender().ManualRestart(ctx, txn.UserPriority(), txn.ReadTimestamp().Next())
+				require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, txn.ReadTimestamp().Next(), true /* mustRestart */, "force retry"))
+				require.NoError(t, txn.Sender().ClearRetryableErr(ctx))
 			},
 		},
 		{
@@ -2786,7 +2853,8 @@ func TestTxnCoordSenderSetFixedTimestamp(t *testing.T) {
 				_, err := txn.Get(ctx, "k")
 				require.NoError(t, err)
 				require.NoError(t, txn.Put(ctx, "k", "v"))
-				txn.Sender().ManualRestart(ctx, txn.UserPriority(), txn.ReadTimestamp().Next())
+				require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, txn.ReadTimestamp().Next(), true /* mustRestart */, "force retry"))
+				require.NoError(t, txn.Sender().ClearRetryableErr(ctx))
 			},
 		},
 	} {
@@ -2802,11 +2870,11 @@ func TestTxnCoordSenderSetFixedTimestamp(t *testing.T) {
 			if test.expErr != "" {
 				require.Error(t, err)
 				require.Regexp(t, test.expErr, err)
-				require.False(t, txn.CommitTimestampFixed())
+				require.False(t, txn.ReadTimestampFixed())
 			} else {
 				require.NoError(t, err)
-				require.True(t, txn.CommitTimestampFixed())
-				require.Equal(t, ts, txn.CommitTimestamp())
+				require.True(t, txn.ReadTimestampFixed())
+				require.Equal(t, ts, txn.ReadTimestamp())
 			}
 		})
 	}
@@ -2826,21 +2894,79 @@ func TestTxnTypeCompatibleWithBatchRequest(t *testing.T) {
 	require.NoError(t, err)
 	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, leafInputState)
 
-	// a LeafTxn is not compatible with a locking request
-	_, err = leafTxn.GetForUpdate(ctx, roachpb.Key("a"))
+	// A LeafTxn is not compatible with locking requests.
+	// 1. Locking Get requests.
+	_, err = leafTxn.GetForUpdate(ctx, roachpb.Key("a"), kvpb.GuaranteedDurability)
 	require.Error(t, err)
 	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
+	_, err = leafTxn.GetForShare(ctx, roachpb.Key("a"), kvpb.GuaranteedDurability)
+	require.Error(t, err)
+	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
+	// 2. Locking Scan requests.
+	_, err = leafTxn.ScanForUpdate(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.Error(t, err)
+	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
+	_, err = leafTxn.ScanForShare(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.Error(t, err)
+	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
+	// 3. Locking ReverseScan requests.
+	_, err = leafTxn.ReverseScanForUpdate(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.Error(t, err)
+	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
+	_, err = leafTxn.ReverseScanForShare(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.Error(t, err)
+	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
+	// 4. Writes.
 	err = leafTxn.Put(ctx, roachpb.Key("a"), []byte("b"))
 	require.Error(t, err)
 	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
-	// a LeafTxn is compatible with a non-locking request
+	// A LeafTxn is compatible with non-locking requests.
 	_, err = leafTxn.Get(ctx, roachpb.Key("a"))
 	require.NoError(t, err)
+	_, err = leafTxn.Scan(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	require.NoError(t, err)
+	_, err = leafTxn.ReverseScan(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	require.NoError(t, err)
 
-	// a RootTxn is compatible with all requests
-	_, err = rootTxn.GetForUpdate(ctx, roachpb.Key("a"))
+	// A RootTxn is compatible with all requests.
+	// 1. All types of Get requests.
+	_, err = rootTxn.GetForUpdate(ctx, roachpb.Key("a"), kvpb.GuaranteedDurability)
+	require.NoError(t, err)
+	_, err = rootTxn.GetForShare(ctx, roachpb.Key("a"), kvpb.GuaranteedDurability)
 	require.NoError(t, err)
 	_, err = rootTxn.Get(ctx, roachpb.Key("a"))
+	require.NoError(t, err)
+	// 2. All types of Scan requests.
+	_, err = rootTxn.ScanForUpdate(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.NoError(t, err)
+	_, err = rootTxn.ScanForShare(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.NoError(t, err)
+	_, err = rootTxn.Scan(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	require.NoError(t, err)
+	// 3. All types of ReverseScan requests.
+	_, err = rootTxn.ReverseScanForUpdate(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.NoError(t, err)
+	_, err = rootTxn.ReverseScanForShare(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.NoError(t, err)
+	_, err = rootTxn.ReverseScan(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	require.NoError(t, err)
+	// 4. And writes.
 	require.NoError(t, err)
 	err = rootTxn.Put(ctx, roachpb.Key("a"), []byte("b"))
 	require.NoError(t, err)
@@ -2885,4 +3011,64 @@ func TestTxnSetIsoLevel(t *testing.T) {
 		// The isolation level should not have changed.
 		require.Equal(t, prev, txn.IsoLevel())
 	}
+}
+
+// TestRefreshWithSavepoint is an integration test that ensures the correct
+// behavior of refreshes under savepoint rollback. The test sets up a write-skew
+// example where txn1 reads keyA and writes to keyB, while concurrently txn2
+// reads keyB and writes to keyA. The two txns can't be serialized so one is
+// expected to get a serialization error upon commit.
+//
+// However, with the old behavior of discarding refresh spans upon savepoint
+// rollback, the read corresponding to the discarded refresh span is not
+// refreshed, so the conflict goes unnoticed and both txns commit successfully.
+// See #111228 for more details.
+func TestRefreshWithSavepoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "keep-refresh-spans", func(t *testing.T, keepRefreshSpans bool) {
+		s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+		ctx := context.Background()
+		defer s.Stopper().Stop(context.Background())
+
+		if keepRefreshSpans {
+			kvcoord.KeepRefreshSpansOnSavepointRollback.Override(ctx, &s.ClusterSettings().SV, true)
+		} else {
+			kvcoord.KeepRefreshSpansOnSavepointRollback.Override(ctx, &s.ClusterSettings().SV, false)
+		}
+
+		keyA := roachpb.Key("a")
+		keyB := roachpb.Key("b")
+		txn1 := kvDB.NewTxn(ctx, "txn1")
+		txn2 := kvDB.NewTxn(ctx, "txn2")
+
+		spt1, err := txn1.CreateSavepoint(ctx)
+		require.NoError(t, err)
+
+		_, err = txn1.Get(ctx, keyA)
+		require.NoError(t, err)
+
+		err = txn1.RollbackToSavepoint(ctx, spt1)
+		require.NoError(t, err)
+
+		_, err = txn2.Get(ctx, keyB)
+		require.NoError(t, err)
+
+		err = txn1.Put(ctx, keyB, "bb")
+		require.NoError(t, err)
+
+		err = txn2.Put(ctx, keyA, "aa")
+		require.NoError(t, err)
+
+		err = txn1.Commit(ctx)
+		if keepRefreshSpans {
+			require.Regexp(t, ".*RETRY_SERIALIZABLE - failed preemptive refresh due to conflicting locks on \"a\"*", err)
+		} else {
+			require.NoError(t, err)
+		}
+
+		err = txn2.Commit(ctx)
+		require.NoError(t, err)
+	})
 }

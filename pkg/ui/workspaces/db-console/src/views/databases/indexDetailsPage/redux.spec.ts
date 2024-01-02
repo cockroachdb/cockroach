@@ -108,13 +108,14 @@ class TestDriver {
       ).toBe(true);
     }
     // Assert objects without moments are equal.
-    delete this.properties().details.lastRead;
+    const props = this.properties();
+    delete props.details.lastRead;
     delete expected.details.lastRead;
-    delete this.properties().details.lastReset;
+    delete props.details.lastReset;
     delete expected.details.lastReset;
-    delete this.properties().timeScale;
+    delete props.timeScale;
     delete expected.timeScale;
-    expect(this.properties()).toEqual(expected);
+    expect(props).toEqual(expected);
   }
 
   async refreshIndexStats() {
@@ -154,11 +155,11 @@ describe("Index Details Page", function () {
           loaded: false,
           createStatement: "",
           totalReads: 0,
-          lastRead: moment(),
-          lastReset: moment(),
           indexRecommendations: [],
           tableID: undefined,
           indexID: undefined,
+          lastRead: util.minDate,
+          lastReset: util.minDate,
         },
         breadcrumbItems: null,
       },

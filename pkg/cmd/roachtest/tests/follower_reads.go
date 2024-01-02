@@ -26,10 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -37,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgtype"
 	"github.com/lib/pq"
@@ -61,14 +61,15 @@ func registerFollowerReads(r registry.Registry) {
 				6, /* nodeCount */
 				spec.CPU(4),
 				spec.Geo(),
-				spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
+				spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
 			),
-			Leases: registry.MetamorphicLeases,
+			CompatibleClouds: registry.OnlyGCE,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud == spec.GCE && c.Spec().Arch == vm.ArchARM64 {
+				if c.Cloud() == spec.GCE && c.Spec().Arch == vm.ArchARM64 {
 					t.Skip("arm64 in GCE is available only in us-central1")
 				}
-				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 				topology := topologySpec{
 					multiRegion:       true,
@@ -102,12 +103,12 @@ func registerFollowerReads(r registry.Registry) {
 		Owner:           registry.OwnerKV,
 		RequiresLicense: true,
 		Cluster: r.MakeClusterSpec(
-			3, /* nodeCount */
+			4, /* nodeCount */
 			spec.CPU(2),
 		),
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, *t.BuildVersion())
-		},
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Run:              runFollowerReadsMixedVersionSingleRegionTest,
 	})
 }
 
@@ -204,7 +205,7 @@ func runFollowerReadsTest(
 	verifySelect := func(ctx context.Context, node, k int, expectedVal int64) func() error {
 		return func() error {
 			nodeDB := conns[node-1]
-			q := fmt.Sprintf("SELECT v FROM test.test %s WHERE k = $1", aost)
+			q := fmt.Sprintf("SELECT v FROM mr_db.test %s WHERE k = $1", aost)
 			r := nodeDB.QueryRowContext(ctx, q, k)
 			var got int64
 			if err := r.Scan(&got); err != nil {
@@ -361,11 +362,14 @@ func runFollowerReadsTest(
 	// perform follower reads.
 	var expectedLowRatioNodes int
 	if !topology.multiRegion {
-		// We expect one node - the leaseholder - to have a low ratio because it
-		// doesn't perform follower reads; the other 2 replicas should serve
-		// follower reads. We assume single-region tests to have 3 nodes.
-		expectedLowRatioNodes = 1
+		require.Equal(t, 4, c.Spec().NodeCount)
+		// We expect single-region tests to have 4 nodes but only 3 replicas. We
+		// expect all replicas to serve follower reads except the leaseholder.
+		// There's also one node in the cluster that doesn't have a replica - so
+		// that node also won't serve follower reads either.
+		expectedLowRatioNodes = 2
 	} else {
+		require.Equal(t, 6, c.Spec().NodeCount)
 		// We expect all the replicas to serve follower reads, except the
 		// leaseholder. In both the zone and the region-survival cases, there's one
 		// node in the cluster that doesn't have a replica - so that node also won't
@@ -405,6 +409,7 @@ func initFollowerReadsDB(
 	ctx context.Context, t test.Test, c cluster.Cluster, topology topologySpec,
 ) (data map[int]int64) {
 	db := c.Conn(ctx, t.L(), 1)
+	defer db.Close()
 	// Disable load based splitting and range merging because splits and merges
 	// interfere with follower reads. This test's workload regularly triggers load
 	// based splitting in the first phase creating small ranges which later
@@ -441,22 +446,22 @@ func initFollowerReadsDB(
 	}
 
 	// Create a multi-region database and table.
-	_, err = db.ExecContext(ctx, `CREATE DATABASE test`)
+	_, err = db.ExecContext(ctx, `CREATE DATABASE mr_db`)
 	require.NoError(t, err)
 	if topology.multiRegion {
-		_, err = db.ExecContext(ctx, `ALTER DATABASE test SET PRIMARY REGION "us-east1"`)
+		_, err = db.ExecContext(ctx, `ALTER DATABASE mr_db SET PRIMARY REGION "us-east1"`)
 		require.NoError(t, err)
-		_, err = db.ExecContext(ctx, `ALTER DATABASE test ADD REGION "us-west1"`)
+		_, err = db.ExecContext(ctx, `ALTER DATABASE mr_db ADD REGION "us-west1"`)
 		require.NoError(t, err)
-		_, err = db.ExecContext(ctx, `ALTER DATABASE test ADD REGION "europe-west2"`)
+		_, err = db.ExecContext(ctx, `ALTER DATABASE mr_db ADD REGION "europe-west2"`)
 		require.NoError(t, err)
-		_, err = db.ExecContext(ctx, fmt.Sprintf(`ALTER DATABASE test SURVIVE %s FAILURE`, topology.survival))
+		_, err = db.ExecContext(ctx, fmt.Sprintf(`ALTER DATABASE mr_db SURVIVE %s FAILURE`, topology.survival))
 		require.NoError(t, err)
 	}
-	_, err = db.ExecContext(ctx, `CREATE TABLE test.test ( k INT8, v INT8, PRIMARY KEY (k) )`)
+	_, err = db.ExecContext(ctx, `CREATE TABLE mr_db.test ( k INT8, v INT8, PRIMARY KEY (k) )`)
 	require.NoError(t, err)
 	if topology.multiRegion {
-		_, err = db.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE test.test SET LOCALITY %s`, topology.locality))
+		_, err = db.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE mr_db.test SET LOCALITY %s`, topology.locality))
 		require.NoError(t, err)
 	}
 
@@ -471,7 +476,7 @@ func initFollowerReadsDB(
 		var votersCount, nonVotersCount int
 		var votersSet, nonVotersSet []int
 		if !topology.multiRegion {
-			votersCount, votersSet = 3, []int{1, 2, 3}
+			votersCount, votersSet = 3, []int{1, 2, 3, 4}
 			nonVotersCount, nonVotersSet = 0, []int{}
 		} else if topology.survival == zone {
 			// Expect 3 voting replicas in the primary region and 2 non-voting
@@ -501,7 +506,7 @@ func initFollowerReadsDB(
 			FROM
 			  crdb_internal.ranges_no_leases
 			WHERE
-			  range_id = (SELECT range_id FROM [SHOW RANGES FROM TABLE test.test])`
+			  range_id = (SELECT range_id FROM [SHOW RANGES FROM TABLE mr_db.test])`
 
 		var ok bool
 		var voters, nonVoters pq.Int64Array
@@ -529,9 +534,11 @@ func initFollowerReadsDB(
 			// parsing the replica_localities array using the same pattern as the
 			// one used by SHOW REGIONS.
 			const q2 = `
-			SELECT
-				count(distinct substring(unnest(replica_localities), 'region=([^,]*)'))
-			FROM [SHOW RANGES FROM TABLE test.test]`
+			SELECT count(DISTINCT substring(unnested, 'region=([^,]*)'))
+			FROM (
+				SELECT unnest(replica_localities) AS unnested
+				FROM [SHOW RANGES FROM TABLE mr_db.test]
+			)`
 
 			var distinctRegions int
 			require.NoError(t, db.QueryRowContext(ctx, q2).Scan(&distinctRegions))
@@ -591,7 +598,7 @@ func initFollowerReadsDB(
 		return func() error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			_, err := db.ExecContext(ctx, "INSERT INTO test.test VALUES ( $1, $2 )", k, v)
+			_, err := db.ExecContext(ctx, "INSERT INTO mr_db.test VALUES ( $1, $2 )", k, v)
 			return err
 		}
 	}
@@ -883,35 +890,33 @@ func parsePrometheusMetric(s string) (*prometheusMetric, bool) {
 // sufficient for this purpose; we're not testing non-voting replicas here
 // (which are used in multi-region tests).
 func runFollowerReadsMixedVersionSingleRegionTest(
-	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
+	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
-	predecessorVersion, err := version.PredecessorVersion(buildVersion)
-	require.NoError(t, err)
-
-	// Start the cluster at the old version.
-	settings := install.MakeClusterSettings()
-	settings.Binary = uploadVersion(ctx, t, c, c.All(), predecessorVersion)
-	startOpts := option.DefaultStartOpts()
-	c.Start(ctx, t.L(), startOpts, settings, c.All())
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(),
+		// The http requests to the admin UI performed by the test don't play
+		// well with secure clusters. As of the time of writing, they return
+		// either of the following errors:
+		//  tls: failed to verify certificate: x509: “node” certificate is not standards compliant
+		//  tls: failed to verify certificate: x509: certificate signed by unknown authority
+		//
+		// Disable secure mode for simplicity.
+		mixedversion.ClusterSettingOption(install.SecureOption(false)),
+	)
 	topology := topologySpec{multiRegion: false}
-	data := initFollowerReadsDB(ctx, t, c, topology)
 
-	// Upgrade one node to the new version and run the test.
-	randNode := 1 + rand.Intn(c.Spec().NodeCount)
-	t.L().Printf("upgrading n%d to current version", randNode)
-	nodeToUpgrade := c.Node(randNode)
-	upgradeNodes(ctx, t, c, nodeToUpgrade, startOpts, clusterupgrade.MainVersion)
-	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
-
-	// Upgrade the remaining nodes to the new version and run the test.
-	var remainingNodes option.NodeListOption
-	for i := 0; i < c.Spec().NodeCount; i++ {
-		if i+1 == randNode {
-			continue
-		}
-		remainingNodes = remainingNodes.Merge(c.Node(i + 1))
+	var data map[int]int64
+	runInit := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+		data = initFollowerReadsDB(ctx, t, c, topology)
+		return nil
 	}
-	t.L().Printf("upgrading nodes %s to current version", remainingNodes)
-	upgradeNodes(ctx, t, c, remainingNodes, startOpts, clusterupgrade.MainVersion)
-	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
+
+	runFollowerReads := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+		runFollowerReadsTest(ctx, t, c, topology, exactStaleness, data)
+		return nil
+	}
+
+	mvt.OnStartup("init database", runInit)
+	mvt.InMixedVersion("run follower reads", runFollowerReads)
+	mvt.AfterUpgradeFinalized("run follower reads", runFollowerReads)
+	mvt.Run()
 }

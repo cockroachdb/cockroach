@@ -16,9 +16,11 @@ import (
 )
 
 type ConnOption struct {
-	User       string
-	TenantName string
-	Options    map[string]string
+	User        string
+	DBName      string
+	TenantName  string
+	SQLInstance int
+	Options     map[string]string
 }
 
 func User(user string) func(*ConnOption) {
@@ -30,6 +32,12 @@ func User(user string) func(*ConnOption) {
 func TenantName(tenantName string) func(*ConnOption) {
 	return func(option *ConnOption) {
 		option.TenantName = tenantName
+	}
+}
+
+func SQLInstance(sqlInstance int) func(*ConnOption) {
+	return func(option *ConnOption) {
+		option.SQLInstance = sqlInstance
 	}
 }
 
@@ -48,4 +56,10 @@ func ConnectTimeout(t time.Duration) func(*ConnOption) {
 		sec = 1
 	}
 	return ConnectionOption("connect_timeout", fmt.Sprintf("%d", sec))
+}
+
+func DBName(dbName string) func(*ConnOption) {
+	return func(option *ConnOption) {
+		option.DBName = dbName
+	}
 }

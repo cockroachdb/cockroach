@@ -23,15 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -165,7 +162,7 @@ func TestShowCreateTable(t *testing.T) {
 		{
 			CreateStatement: `CREATE TABLE %s (
 	pk int8 PRIMARY KEY
-) WITH (ttl_expire_after = '10 minutes')`,
+) WITH (ttl_expire_after = '10 minutes', ttl_job_cron = '@hourly')`,
 			Expect: `CREATE TABLE public.%[1]s (
 	pk INT8 NOT NULL,
 	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
@@ -273,7 +270,7 @@ func TestShowCreateTable(t *testing.T) {
 			)`,
 			Expect: `CREATE TABLE public.%[1]s (
 	a INT8 NULL,
-	crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
+	crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) VIRTUAL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	INDEX %[1]s_a_idx (a ASC) USING HASH WITH (bucket_count=8)
@@ -301,7 +298,7 @@ func TestShowCreateView(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -398,7 +395,7 @@ func TestShowCreateSequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -600,7 +597,7 @@ func TestShowQueries(t *testing.T) {
 		}
 	}
 
-	tc := serverutils.StartNewTestCluster(t, 2, /* numNodes */
+	tc := serverutils.StartCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -666,12 +663,12 @@ func TestShowQueriesDelegatesInternal(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	pgURL, cleanup := sqlutils.PGUrl(
 		t,
-		s.ServingSQLAddr(),
+		s.AdvSQLAddr(),
 		"TestShowQueriesDelegatesInternal",
 		url.User(username.RootUser),
 	)
@@ -769,7 +766,7 @@ func TestShowQueriesFillsInValuesForPlaceholders(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartNewTestCluster(t, 3,
+	tc := serverutils.StartCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      testServerArgs,
@@ -868,7 +865,7 @@ func TestShowSessions(t *testing.T) {
 
 	var conn *gosql.DB
 
-	tc := serverutils.StartNewTestCluster(t, 2 /* numNodes */, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 2 /* numNodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
 	conn = tc.ServerConn(0)
@@ -978,7 +975,7 @@ func TestShowSessionPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Insecure = true
 	s, rawSQLDBroot, _ := serverutils.StartServer(t, params)
 	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
@@ -1011,7 +1008,7 @@ func TestShowSessionPrivileges(t *testing.T) {
 		pgURL := url.URL{
 			Scheme:   "postgres",
 			User:     url.User(tc.username),
-			Host:     s.ServingSQLAddr(),
+			Host:     s.AdvSQLAddr(),
 			RawQuery: "sslmode=disable",
 		}
 		db, err := gosql.Open("postgres", pgURL.String())
@@ -1055,136 +1052,143 @@ func TestShowSessionPrivileges(t *testing.T) {
 	}
 }
 
-func TestLintClusterSettingNames(t *testing.T) {
+// TestShowRedactedActiveStatements tests the crdb_internal.cluster_queries table for system permissions.
+func TestShowRedactedActiveStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "lint only test")
-	skip.UnderDeadlock(t, "lint only test")
-	skip.UnderStress(t, "lint only test")
-
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	params, _ := createTestServerParams()
+	params.Insecure = true
+	ctx, cancel := context.WithCancel(context.Background())
+	s, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
 	defer s.Stopper().Stop(context.Background())
 
-	rows, err := sqlDB.Query(`SELECT variable, setting_type, description FROM [SHOW ALL CLUSTER SETTINGS]`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
+	// Create four users: one with no special permissions, one with the
+	// VIEWACTIVITY role option, one with VIEWACTIVITYREDACTED option,
+	// and one with both permissions.
+	_ = sqlDBroot.Exec(t, `CREATE USER noperms`)
+	_ = sqlDBroot.Exec(t, `CREATE USER onlyviewactivity`)
+	_ = sqlDBroot.Exec(t, `CREATE USER onlyviewactivityredacted`)
+	_ = sqlDBroot.Exec(t, `CREATE USER bothperms`)
+	_ = sqlDBroot.Exec(t, `GRANT SYSTEM VIEWACTIVITY TO onlyviewactivity`)
+	_ = sqlDBroot.Exec(t, `GRANT SYSTEM VIEWACTIVITYREDACTED TO onlyviewactivityredacted`)
+	_ = sqlDBroot.Exec(t, `GRANT SYSTEM VIEWACTIVITY TO bothperms`)
+	_ = sqlDBroot.Exec(t, `GRANT SYSTEM VIEWACTIVITYREDACTED TO bothperms`)
 
-	for rows.Next() {
-		var varName, sType, desc string
-		if err := rows.Scan(&varName, &sType, &desc); err != nil {
+	type user struct {
+		username        string
+		canViewTable    bool // Can the user view the `cluster_queries` table?
+		isQueryRedacted bool // Is the user's query redacted?
+		sqlRunner       *sqlutils.SQLRunner
+	}
+
+	// A user with no permissions should not see the table. A user with only
+	// VIEWACTIVITY should be able to see the whole query. A user with only
+	// VIEWACTIVITYREDACTED should see a redacted query. A user with both should
+	// see the redacted query, as VIEWACTIVITYREDACTED takes precedence.
+	users := []user{
+		{"onlyviewactivityredacted", true, true, nil},
+		{"onlyviewactivity", true, false, nil},
+		{"noperms", false, false, nil},
+		{"bothperms", true, true, nil},
+	}
+	for i, tc := range users {
+		pgURL := url.URL{
+			Scheme:   "postgres",
+			User:     url.User(tc.username),
+			Host:     s.AdvSQLAddr(),
+			RawQuery: "sslmode=disable",
+		}
+		db, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
 			t.Fatal(err)
 		}
+		defer db.Close()
+		users[i].sqlRunner = sqlutils.MakeSQLRunner(db)
 
-		if strings.ToLower(varName) != varName {
-			t.Errorf("%s: variable name must be all lowercase", varName)
-		}
-
-		suffixSuggestions := map[string]string{
-			"_ttl":     ".ttl",
-			"_enabled": ".enabled",
-			"_timeout": ".timeout",
-		}
-
-		nameErr := func() error {
-			segments := strings.Split(varName, ".")
-			for _, segment := range segments {
-				if strings.TrimSpace(segment) != segment {
-					return errors.Errorf("%s: part %q has heading or trailing whitespace", varName, segment)
-				}
-				tokens, ok := parser.Tokens(segment)
-				if !ok {
-					return errors.Errorf("%s: part %q does not scan properly", varName, segment)
-				}
-				if len(tokens) == 0 || len(tokens) > 1 {
-					return errors.Errorf("%s: part %q has invalid structure", varName, segment)
-				}
-				if tokens[0].TokenID != parser.IDENT {
-					cat, ok := lexbase.KeywordsCategories[tokens[0].Str]
-					if !ok {
-						return errors.Errorf("%s: part %q has invalid structure", varName, segment)
-					}
-					if cat == "R" {
-						return errors.Errorf("%s: part %q is a reserved keyword", varName, segment)
-					}
-				}
-			}
-
-			for suffix, repl := range suffixSuggestions {
-				if strings.HasSuffix(varName, suffix) {
-					return errors.Errorf("%s: use %q instead of %q", varName, repl, suffix)
-				}
-			}
-
-			if sType == "b" && !strings.HasSuffix(varName, ".enabled") {
-				return errors.Errorf("%s: use .enabled for booleans", varName)
-			}
-
-			return nil
-		}()
-		if nameErr != nil {
-			var grandFathered = map[string]string{
-				"server.declined_reservation_timeout":                `server.declined_reservation_timeout: use ".timeout" instead of "_timeout"`,
-				"server.failed_reservation_timeout":                  `server.failed_reservation_timeout: use ".timeout" instead of "_timeout"`,
-				"server.web_session_timeout":                         `server.web_session_timeout: use ".timeout" instead of "_timeout"`,
-				"sql.distsql.flow_stream_timeout":                    `sql.distsql.flow_stream_timeout: use ".timeout" instead of "_timeout"`,
-				"debug.panic_on_failed_assertions":                   `debug.panic_on_failed_assertions: use .enabled for booleans`,
-				"diagnostics.reporting.send_crash_reports":           `diagnostics.reporting.send_crash_reports: use .enabled for booleans`,
-				"kv.closed_timestamp.follower_reads_enabled":         `kv.closed_timestamp.follower_reads_enabled: use ".enabled" instead of "_enabled"`,
-				"kv.raft_log.disable_synchronization_unsafe":         `kv.raft_log.disable_synchronization_unsafe: use .enabled for booleans`,
-				"kv.range_merge.queue_enabled":                       `kv.range_merge.queue_enabled: use ".enabled" instead of "_enabled"`,
-				"kv.range_split.by_load_enabled":                     `kv.range_split.by_load_enabled: use ".enabled" instead of "_enabled"`,
-				"kv.transaction.parallel_commits_enabled":            `kv.transaction.parallel_commits_enabled: use ".enabled" instead of "_enabled"`,
-				"kv.transaction.write_pipelining_enabled":            `kv.transaction.write_pipelining_enabled: use ".enabled" instead of "_enabled"`,
-				"server.clock.forward_jump_check_enabled":            `server.clock.forward_jump_check_enabled: use ".enabled" instead of "_enabled"`,
-				"sql.defaults.experimental_optimizer_mutations":      `sql.defaults.experimental_optimizer_mutations: use .enabled for booleans`,
-				"sql.distsql.distribute_index_joins":                 `sql.distsql.distribute_index_joins: use .enabled for booleans`,
-				"sql.metrics.statement_details.dump_to_logs":         `sql.metrics.statement_details.dump_to_logs: use .enabled for booleans`,
-				"sql.metrics.statement_details.sample_logical_plans": `sql.metrics.statement_details.sample_logical_plans: use .enabled for booleans`,
-				"sql.trace.log_statement_execute":                    `sql.trace.log_statement_execute: use .enabled for booleans`,
-				"trace.debug.enable":                                 `trace.debug.enable: use .enabled for booleans`,
-				// These two settings have been deprecated in favor of a new (better named) setting
-				// but the old name is still around to support migrations.
-				// TODO(knz): remove these cases when these settings are retired.
-				"timeseries.storage.10s_resolution_ttl": `timeseries.storage.10s_resolution_ttl: part "10s_resolution_ttl" has invalid structure`,
-				"timeseries.storage.30m_resolution_ttl": `timeseries.storage.30m_resolution_ttl: part "30m_resolution_ttl" has invalid structure`,
-
-				// These use the _timeout suffix to stay consistent with the
-				// corresponding session variables.
-				"sql.defaults.statement_timeout":                   `sql.defaults.statement_timeout: use ".timeout" instead of "_timeout"`,
-				"sql.defaults.lock_timeout":                        `sql.defaults.lock_timeout: use ".timeout" instead of "_timeout"`,
-				"sql.defaults.idle_in_session_timeout":             `sql.defaults.idle_in_session_timeout: use ".timeout" instead of "_timeout"`,
-				"sql.defaults.idle_in_transaction_session_timeout": `sql.defaults.idle_in_transaction_session_timeout: use ".timeout" instead of "_timeout"`,
-				"cloudstorage.gs.chunking.retry_timeout":           `cloudstorage.gs.chunking.retry_timeout: use ".timeout" instead of "_timeout"`,
-			}
-			expectedErr, found := grandFathered[varName]
-			if !found || expectedErr != nameErr.Error() {
-				t.Error(nameErr)
-			}
-		}
-
-		if strings.TrimSpace(desc) != desc {
-			t.Errorf("%s: description %q has heading or trailing whitespace", varName, desc)
-		}
-
-		if len(desc) == 0 {
-			t.Errorf("%s: description is empty", varName)
-		}
-
-		if len(desc) > 0 {
-			if strings.ToLower(desc[0:1]) != desc[0:1] {
-				t.Errorf("%s: description %q must not start with capital", varName, desc)
-			}
-			if sType != "e" && (desc[len(desc)-1] == '.') && !strings.Contains(desc, ". ") {
-				// TODO(knz): this check doesn't work with the way enum values are added to their descriptions.
-				t.Errorf("%s: description %q must end with period only if it contains a secondary sentence", varName, desc)
-			}
-		}
+		// Ensure the session is open.
+		users[i].sqlRunner.Exec(t, `SELECT version()`)
 	}
 
+	// Run a long-running sleep query in the background.
+	startSignal := make(chan struct{})
+	waiter := make(chan struct{})
+	go func() {
+		// Signal that we have started the query.
+		close(startSignal)
+		_, _ = rawSQLDBroot.ExecContext(ctx, `SELECT pg_sleep(30)`)
+		// Signal that we have finished the query.
+		close(waiter)
+	}()
+
+	// Wait for the start signal.
+	<-startSignal
+
+	selectQuery := `SELECT query FROM [SHOW CLUSTER QUERIES] WHERE query LIKE 'SELECT pg_sleep%'`
+
+	testutils.SucceedsSoon(t, func() error {
+		rows := sqlDBroot.Query(t, selectQuery)
+		defer rows.Close()
+		count := 0
+		for rows.Next() {
+			count++
+			var query string
+			if err := rows.Scan(&query); err != nil {
+				return err
+			}
+			if query != "SELECT pg_sleep(30)" {
+				return errors.Errorf("Expected `SELECT pg_sleep(30)`, got %s", query)
+			}
+		}
+		if count != 1 {
+			return errors.Errorf("expected 1 row, got %d", count)
+		}
+		return nil
+	})
+
+	for _, u := range users {
+		t.Run(u.username, func(t *testing.T) {
+			// Make sure that if the user can't view the table, they get an error.
+			if !u.canViewTable {
+				u.sqlRunner.ExpectErr(t, "does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege", selectQuery)
+			} else {
+				rows := u.sqlRunner.Query(t, selectQuery)
+				defer rows.Close()
+				if err := rows.Err(); err != nil {
+					t.Fatal(err)
+				}
+				count := 0
+				for rows.Next() {
+					count++
+
+					var query string
+					if err := rows.Scan(&query); err != nil {
+						t.Fatal(err)
+					}
+
+					t.Log(query)
+					// Make sure that if the user is supposed to see a redacted query, they do.
+					if u.isQueryRedacted {
+						if !strings.HasPrefix(query, "SELECT pg_sleep(_)") {
+							t.Fatalf("Expected `SELECT pg_sleep(_)`, got %s", query)
+						}
+						// Make sure that if the user is supposed to see the full query, they do.
+					} else {
+						if !strings.HasPrefix(query, "SELECT pg_sleep(30)") {
+							t.Fatalf("Expected `SELECT pg_sleep(30)`, got %s", query)
+						}
+					}
+				}
+				if count != 1 {
+					t.Fatalf("expected 1 row, got %d", count)
+				}
+			}
+		})
+	}
+
+	cancel()
+	<-waiter
 }
 
 // TestCancelQueriesRace can be stressed to try and reproduce a race
@@ -1202,12 +1206,18 @@ func TestCancelQueriesRace(t *testing.T) {
 		_, _ = sqlDB.ExecContext(ctx, `SELECT pg_sleep(10)`)
 		close(waiter)
 	}()
-	_, _ = sqlDB.ExecContext(ctx, `CANCEL QUERIES (
+	_, err1 := sqlDB.ExecContext(ctx, `CANCEL QUERIES (
 		SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'SELECT pg_sleep%'
 	)`)
-	_, _ = sqlDB.ExecContext(ctx, `CANCEL QUERIES (
+
+	_, err2 := sqlDB.ExecContext(ctx, `CANCEL QUERIES (
 		SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'SELECT pg_sleep%'
 	)`)
+	// At least one query cancellation is expected to succeed.
+	require.Truef(
+		t,
+		err1 == nil || err2 == nil,
+		"Both query cancellations failed with errors: %v and %v", err1, err2)
 
 	cancel()
 	<-waiter

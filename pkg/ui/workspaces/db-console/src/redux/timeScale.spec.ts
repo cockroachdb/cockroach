@@ -49,8 +49,8 @@ describe("time scale reducer", function () {
         timeScale.timeScaleReducer(undefined, { type: "unknown" }),
       ).toEqual(new timeScale.TimeScaleState());
       expect(new timeScale.TimeScaleState().scale).toEqual({
-        ...defaultTimeScaleOptions["Past 10 Minutes"],
-        key: "Past 10 Minutes",
+        ...defaultTimeScaleOptions["Past Hour"],
+        key: "Past Hour",
         fixedWindowEnd: false,
       });
     });

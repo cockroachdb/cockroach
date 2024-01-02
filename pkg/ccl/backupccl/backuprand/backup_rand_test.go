@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -35,9 +36,7 @@ import (
 // randomly generated tables and verifies their data and schema are preserved.
 // It tests that full database backup as well as all subsets of per-table backup
 // roundtrip properly. 50% of the time, the test runs the restore with the
-// schema_only parameter, which does not restore any rows from user tables. The
-// test will also run with bulkio.restore.use_simple_import_spans set to true
-// 50% of the time.
+// schema_only parameter, which does not restore any rows from user tables.
 func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -49,7 +48,7 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Fails with the default test tenant due to span limits. Tracked
 			// with #76378.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			UseDatabase:       "rand",
 			ExternalIODir:     dir,
 		},
@@ -76,10 +75,6 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 		runSchemaOnlyExtension = ", schema_only"
 	}
 
-	if rng.Intn(2) == 0 {
-		sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.use_simple_import_spans = true")
-	}
-
 	tables := sqlDB.Query(t, `SELECT name FROM crdb_internal.tables WHERE 
 database_name = 'rand' AND schema_name = 'public'`)
 	var tableNames []string
@@ -98,13 +93,16 @@ database_name = 'rand' AND schema_name = 'public'`)
 	}
 
 	expectedCreateTableStmt := make(map[string]string)
-	expectedData := make(map[string]int)
+	expectedData := make(map[string]int64)
 	for _, tableName := range tableNames {
 		expectedCreateTableStmt[tableName] = sqlDB.QueryStr(t,
 			fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s]`, tree.NameString(tableName)))[0][0]
 		if runSchemaOnlyExtension == "" {
+			var err error
 			tableID := sqlutils.QueryTableID(t, sqlDB.DB, "rand", "public", tableName)
-			expectedData[tableName] = sqlutils.FingerprintTable(t, sqlDB, tableID)
+			expectedData[tableName], err = fingerprintutils.FingerprintTable(ctx, tc.Conns[0], tableID,
+				fingerprintutils.Stripped())
+			require.NoError(t, err)
 		}
 	}
 
@@ -138,7 +136,10 @@ database_name = 'rand' AND schema_name = 'public'`)
 				"SHOW CREATE %s not equal after RESTORE", tableName)
 			if runSchemaOnlyExtension == "" {
 				tableID := sqlutils.QueryTableID(t, sqlDB.DB, "restoredb", "public", tableName)
-				require.Equal(t, expectedData[tableName], sqlutils.FingerprintTable(t, sqlDB, tableID))
+				fingerpint, err := fingerprintutils.FingerprintTable(ctx, tc.Conns[0], tableID,
+					fingerprintutils.Stripped())
+				require.NoError(t, err)
+				require.Equal(t, expectedData[tableName], fingerpint)
 			} else {
 				sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT count(*) FROM %s`, restoreTable),
 					[][]string{{"0"}})

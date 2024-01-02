@@ -1,11 +1,14 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "jobspb",
-    srcs = ["wrap.go"],
+    srcs = [
+        "jobs.go",
+        "schedule.go",
+        "wrap.go",
+    ],
     embed = [":jobspb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb",
     visibility = ["//visibility:public"],
@@ -14,6 +17,7 @@ go_library(
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/protoreflect",
+        "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//jsonpb",
     ],
@@ -36,6 +40,7 @@ proto_library(
         "//pkg/sql/catalog/descpb:descpb_proto",
         "//pkg/sql/sessiondatapb:sessiondatapb_proto",
         "//pkg/util/hlc:hlc_proto",
+        "//pkg/util/tracing/tracingpb:tracingpb_proto",
         "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:any_proto",
@@ -71,11 +76,8 @@ go_proto_library(
 go_test(
     name = "jobspb_test",
     srcs = ["wrap_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":jobspb",
         "@com_github_stretchr_testify//assert",
     ],
 )
-
-get_x_data(name = "get_x_data")

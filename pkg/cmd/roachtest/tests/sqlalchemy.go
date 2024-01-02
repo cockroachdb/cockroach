@@ -30,17 +30,18 @@ import (
 var sqlAlchemyResultRegex = regexp.MustCompile(`^(?P<test>test.*::.*::[^ \[\]]*(?:\[.*])?) (?P<result>\w+)\s+\[.+]$`)
 var sqlAlchemyReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<minor>\d+)_(?P<point>\d+)$`)
 
-var supportedSQLAlchemyTag = "2.0.2"
+var supportedSQLAlchemyTag = "2.0.23"
 
 // This test runs the SQLAlchemy dialect test suite against a single Cockroach
 // node.
 func registerSQLAlchemy(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "sqlalchemy",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `orm`),
+		Name:             "sqlalchemy",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.ORM),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSQLAlchemy(ctx, t, c)
 		},
@@ -70,7 +71,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	if err := repeatRunE(ctx, t, c, node, "install dependencies", `
-		sudo apt-get -qq install make python3.7 libpq-dev python3.7-dev gcc python3-setuptools python-setuptools build-essential python3.7-distutils python3-virtualenv
+		sudo apt-get -qq install make python3.7 libpq-dev python3.7-dev gcc python3-setuptools python-setuptools build-essential python3.7-distutils python3-virtualenv python3-typing-extensions
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +98,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	if err := repeatRunE(ctx, t, c, node, "install pytest", fmt.Sprintf(`
 		source venv/bin/activate &&
-			pip3 install --upgrade --force-reinstall setuptools pytest==7.2.1 pytest-xdist psycopg2 alembic sqlalchemy==%s`,
+			pip3 install --upgrade --force-reinstall setuptools pytest==7.2.1 pytest-xdist psycopg2 psycopg alembic sqlalchemy==%s`,
 		supportedSQLAlchemyTag)); err != nil {
 		t.Fatal(err)
 	}
@@ -124,8 +125,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Phew, after having setup all that, let's actually run the test.
 
 	t.Status("setting up cockroach")
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+	c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 
 	version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 	if err != nil {
@@ -146,7 +146,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// will fail. And it is safe to swallow it here.
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
 		`source venv/bin/activate && cd /mnt/data1/sqlalchemy-cockroachdb/ && pytest --maxfail=0 \
-		--dburi='cockroachdb://root@localhost:26257/defaultdb?sslmode=disable&disable_cockroachdb_telemetry=true' \
+		--dburi='cockroachdb://root@localhost:{pgport:1}/defaultdb?sslmode=disable&disable_cockroachdb_telemetry=true' \
 		test/test_suite_sqlalchemy.py
 	`)
 

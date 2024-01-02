@@ -1,17 +1,31 @@
 parse
 DECLARE
 BEGIN
-  IMPORT TABLE employees
-  FROM PGDUMP 's3://{BUCKET NAME}/{employees-full.sql}?AWS_ACCESS_KEY_ID={ACCESS KEY}&AWS_SECRET_ACCESS_KEY={SECRET ACCESS KEY}'
-  WITH skip_foreign_keys WITH ignore_unsupported_statements;
+  IMPORT TABLE foo
+  FROM PGDUMP 'userfile://defaultdb.public.userfiles_root/db.sql'
+  WITH max_row_size='524288';
 END
 ----
 DECLARE
 BEGIN
-EXECUTE bare sql query
-<NOT DONE YET>
+IMPORT TABLE foo FROM PGDUMP 'userfile://defaultdb.public.userfiles_root/db.sql' WITH OPTIONS (max_row_size = '524288');
 END
-<NOT DONE YET>
+ -- normalized!
+DECLARE
+BEGIN
+IMPORT TABLE foo FROM PGDUMP ('userfile://defaultdb.public.userfiles_root/db.sql') WITH OPTIONS (max_row_size = ('524288'));
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+IMPORT TABLE foo FROM PGDUMP '_' WITH OPTIONS (max_row_size = '_');
+END
+ -- literals removed
+DECLARE
+BEGIN
+IMPORT TABLE _ FROM PGDUMP 'userfile://defaultdb.public.userfiles_root/db.sql' WITH OPTIONS (_ = '524288');
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -21,10 +35,24 @@ END
 ----
 DECLARE
 BEGIN
-EXECUTE bare sql query
-<NOT DONE YET>
+INSERT INTO t1 VALUES (1, 2);
 END
-<NOT DONE YET>
+ -- normalized!
+DECLARE
+BEGIN
+INSERT INTO t1 VALUES ((1), (2));
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+INSERT INTO t1 VALUES (_, _);
+END
+ -- literals removed
+DECLARE
+BEGIN
+INSERT INTO _ VALUES (1, 2);
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -34,10 +62,24 @@ END
 ----
 DECLARE
 BEGIN
-EXECUTE bare sql query WITH INTO
-<NOT DONE YET>
+INSERT INTO t1 VALUES (1, 2) RETURNING x INTO y;
 END
-<NOT DONE YET>
+ -- normalized!
+DECLARE
+BEGIN
+INSERT INTO t1 VALUES ((1), (2)) RETURNING (x) INTO y;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+INSERT INTO t1 VALUES (_, _) RETURNING x INTO y;
+END
+ -- literals removed
+DECLARE
+BEGIN
+INSERT INTO _ VALUES (1, 2) RETURNING _ INTO _;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -47,33 +89,340 @@ END
 ----
 DECLARE
 BEGIN
-EXECUTE bare sql query WITH INTO STRICT
-<NOT DONE YET>
+INSERT INTO t1 VALUES (1, 2) RETURNING x INTO STRICT y;
 END
-<NOT DONE YET>
+ -- normalized!
+DECLARE
+BEGIN
+INSERT INTO t1 VALUES ((1), (2)) RETURNING (x) INTO STRICT y;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+INSERT INTO t1 VALUES (_, _) RETURNING x INTO STRICT y;
+END
+ -- literals removed
+DECLARE
+BEGIN
+INSERT INTO _ VALUES (1, 2) RETURNING _ INTO STRICT _;
+END
+ -- identifiers removed
+
+error
+DECLARE
+BEGIN
+  INSERT INTO t1 VALUES (1,2) INTO y;
+END
+----
+at or near ";": syntax error: INTO used with a command that cannot return data
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  INSERT INTO t1 VALUES (1,2) INTO y;
+                                    ^
 
 parse
 DECLARE
 BEGIN
-  MERGE INTO whatever;
+  IMPORT INTO foo (k, v) CSV DATA ($1, $2);
 END
 ----
 DECLARE
 BEGIN
-EXECUTE bare sql query
-<NOT DONE YET>
+IMPORT INTO foo(k, v) CSV DATA ($1, $2);
 END
-<NOT DONE YET>
+ -- normalized!
+DECLARE
+BEGIN
+IMPORT INTO foo(k, v) CSV DATA (($1), ($2));
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+IMPORT INTO foo(k, v) CSV DATA ($1, $1);
+END
+ -- literals removed
+DECLARE
+BEGIN
+IMPORT INTO _(_, _) CSV DATA ($1, $2);
+END
+ -- identifiers removed
 
 parse
 DECLARE
 BEGIN
-  IMPORT xxxx INTO whatever;
+  SELECT x, y FROM xy;
 END
 ----
 DECLARE
 BEGIN
-EXECUTE bare sql query
-<NOT DONE YET>
+SELECT x, y FROM xy;
 END
-<NOT DONE YET>
+ -- normalized!
+DECLARE
+BEGIN
+SELECT (x), (y) FROM xy;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+SELECT x, y FROM xy;
+END
+ -- literals removed
+DECLARE
+BEGIN
+SELECT _, _ FROM _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+  SELECT x, y INTO a, b FROM xy;
+END
+----
+DECLARE
+BEGIN
+SELECT x, y FROM xy INTO a, b;
+END
+ -- normalized!
+DECLARE
+BEGIN
+SELECT (x), (y) FROM xy INTO a, b;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+SELECT x, y FROM xy INTO a, b;
+END
+ -- literals removed
+DECLARE
+BEGIN
+SELECT _, _ FROM _ INTO _, _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+  SELECT x, y FROM xy INTO a, b;
+END
+----
+DECLARE
+BEGIN
+SELECT x, y FROM xy INTO a, b;
+END
+ -- normalized!
+DECLARE
+BEGIN
+SELECT (x), (y) FROM xy INTO a, b;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+SELECT x, y FROM xy INTO a, b;
+END
+ -- literals removed
+DECLARE
+BEGIN
+SELECT _, _ FROM _ INTO _, _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+  SET testing_optimizer_disable_rule_probability = 0;
+END
+----
+DECLARE
+BEGIN
+SET testing_optimizer_disable_rule_probability = 0;
+END
+ -- normalized!
+DECLARE
+BEGIN
+SET testing_optimizer_disable_rule_probability = (0);
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+SET testing_optimizer_disable_rule_probability = _;
+END
+ -- literals removed
+DECLARE
+BEGIN
+SET testing_optimizer_disable_rule_probability = 0;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+  i INT;
+BEGIN
+  SET testing_optimizer_disable_rule_probability = 0;
+  INSERT INTO xy VALUES (1, 2);
+  SELECT 1 + 1;
+  SELECT 100 INTO i;
+  SELECT max(x) INTO i FROM xy;
+  INSERT INTO xy VALUES (10, 10) RETURNING x INTO i;
+  RETURN i;
+END
+----
+DECLARE
+i INT8;
+BEGIN
+SET testing_optimizer_disable_rule_probability = 0;
+INSERT INTO xy VALUES (1, 2);
+SELECT 1 + 1;
+SELECT 100 INTO i;
+SELECT max(x) FROM xy INTO i;
+INSERT INTO xy VALUES (10, 10) RETURNING x INTO i;
+RETURN i;
+END
+ -- normalized!
+DECLARE
+i INT8;
+BEGIN
+SET testing_optimizer_disable_rule_probability = (0);
+INSERT INTO xy VALUES ((1), (2));
+SELECT ((1) + (1));
+SELECT (100) INTO i;
+SELECT (max((x))) FROM xy INTO i;
+INSERT INTO xy VALUES ((10), (10)) RETURNING (x) INTO i;
+RETURN (i);
+END
+ -- fully parenthesized
+DECLARE
+i INT8;
+BEGIN
+SET testing_optimizer_disable_rule_probability = _;
+INSERT INTO xy VALUES (_, _);
+SELECT _ + _;
+SELECT _ INTO i;
+SELECT max(x) FROM xy INTO i;
+INSERT INTO xy VALUES (_, _) RETURNING x INTO i;
+RETURN i;
+END
+ -- literals removed
+DECLARE
+i INT8;
+BEGIN
+SET testing_optimizer_disable_rule_probability = 0;
+INSERT INTO _ VALUES (1, 2);
+SELECT 1 + 1;
+SELECT 100 INTO _;
+SELECT _(_) FROM _ INTO _;
+INSERT INTO _ VALUES (10, 10) RETURNING _ INTO _;
+RETURN _;
+END
+ -- identifiers removed
+
+error
+DECLARE
+BEGIN
+  INSERT INTO t1 VALUES 1,2);
+END
+----
+at or near "2": syntax error: mismatched parentheses
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  INSERT INTO t1 VALUES 1,2);
+                          ^
+
+error
+DECLARE
+BEGIN
+  INSERT INTO t1 VALUES (1,2;
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  INSERT INTO t1 VALUES (1,2;
+END
+   ^
+
+error
+DECLARE
+BEGIN
+  INSERT INTO t1 (VALUES (1,2);
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  INSERT INTO t1 (VALUES (1,2);
+END
+   ^
+
+# Regression test for #112940 - UPSERT INTO should be allowed.
+parse
+DECLARE
+BEGIN
+  UPSERT INTO t1 VALUES (1,2) RETURNING x INTO y;
+END
+----
+DECLARE
+BEGIN
+UPSERT INTO t1 VALUES (1, 2) RETURNING x INTO y;
+END
+ -- normalized!
+DECLARE
+BEGIN
+UPSERT INTO t1 VALUES ((1), (2)) RETURNING (x) INTO y;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+UPSERT INTO t1 VALUES (_, _) RETURNING x INTO y;
+END
+ -- literals removed
+DECLARE
+BEGIN
+UPSERT INTO _ VALUES (1, 2) RETURNING _ INTO _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+  UPSERT INTO t1 VALUES (1,2) RETURNING x INTO STRICT y;
+END
+----
+DECLARE
+BEGIN
+UPSERT INTO t1 VALUES (1, 2) RETURNING x INTO STRICT y;
+END
+ -- normalized!
+DECLARE
+BEGIN
+UPSERT INTO t1 VALUES ((1), (2)) RETURNING (x) INTO STRICT y;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+UPSERT INTO t1 VALUES (_, _) RETURNING x INTO STRICT y;
+END
+ -- literals removed
+DECLARE
+BEGIN
+UPSERT INTO _ VALUES (1, 2) RETURNING _ INTO STRICT _;
+END
+ -- identifiers removed
+
+error
+DECLARE
+BEGIN
+  UPSERT INTO t1 VALUES (1,2) INTO y;
+END
+----
+at or near ";": syntax error: INTO used with a command that cannot return data
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  UPSERT INTO t1 VALUES (1,2) INTO y;
+                                    ^

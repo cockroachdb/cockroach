@@ -58,12 +58,12 @@ type NodeStatusGenerator interface {
 }
 
 var reportFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"diagnostics.reporting.interval",
 	"interval at which diagnostics data should be reported",
 	time.Hour,
 	settings.NonNegativeDuration,
-).WithPublic()
+	settings.WithPublic)
 
 // Reporter is a helper struct that phones home to report usage and diagnostics.
 type Reporter struct {
@@ -213,9 +213,9 @@ func (r *Reporter) CreateReport(
 		var ok bool
 		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 			row := it.Cur()
-			name := string(tree.MustBeDString(row[0]))
-			info.AlteredSettings[name] = settings.RedactedValue(
-				name, &r.Settings.SV, r.TenantID == roachpb.SystemTenantID,
+			internalKey := string(tree.MustBeDString(row[0]))
+			info.AlteredSettings[internalKey] = settings.RedactedValue(
+				settings.InternalKey(internalKey), &r.Settings.SV, r.TenantID == roachpb.SystemTenantID,
 			)
 		}
 		if err != nil {
@@ -320,6 +320,10 @@ func (r *Reporter) populateSQLInfo(uptime int64, sql *diagnosticspb.SQLInstanceI
 	sql.Uptime = uptime
 }
 
+// collectSchemaInfo is the "old" way of collecting schema information, and it
+// redacted all `*string` type fields in the table descriptors but not `string`
+// type fields. Check out `schematelemetry` package for a better data source for
+// collecting redacted schema information.
 func (r *Reporter) collectSchemaInfo(ctx context.Context) ([]descpb.TableDescriptor, error) {
 	startKey := keys.MakeSQLCodec(r.TenantID).TablePrefix(keys.DescriptorTableID)
 	endKey := startKey.PrefixEnd()
@@ -442,7 +446,7 @@ func anonymizeZoneConfig(dst *zonepb.ZoneConfig, src zonepb.ZoneConfig, secret s
 type stringRedactor struct{}
 
 func (stringRedactor) Primitive(v reflect.Value) error {
-	if v.Kind() == reflect.String && v.String() != "" {
+	if v.Kind() == reflect.String && v.String() != "" && v.CanSet() {
 		v.Set(reflect.ValueOf("_").Convert(v.Type()))
 	}
 	return nil

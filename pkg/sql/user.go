@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -79,6 +80,7 @@ func GetUserSessionInitInfo(
 	exists bool,
 	canLoginSQL bool,
 	canLoginDBConsole bool,
+	canUseReplicationMode bool,
 	isSuperuser bool,
 	defaultSettings []sessioninit.SettingsCacheEntry,
 	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
@@ -108,7 +110,7 @@ func GetUserSessionInitInfo(
 
 		// Root user cannot have password expiry and must have login.
 		// It also never has default settings applied to it.
-		return true, true, true, true, nil, rootFn, nil
+		return true, true, true, true, true, nil, rootFn, nil
 	}
 
 	var authInfo sessioninit.AuthInfo
@@ -123,10 +125,13 @@ func GetUserSessionInitInfo(
 		if err != nil {
 			return err
 		}
+		if !authInfo.UserExists {
+			return nil
+		}
 
-		// Find whether the user is an admin and has the NOSQLLOGIN global
-		// privilege. These calls have their own caches, so it's OK to make them
-		// outside of the retrieveSessionInitInfoWithCache call above.
+		// Find whether the user is an admin and has the NOSQLLOGIN or REPLICATION
+		// global privilege. These calls have their own caches, so it's OK to make
+		// them outside of the retrieveSessionInitInfoWithCache call above.
 		return execCfg.InternalDB.DescsTxn(ctx, func(
 			ctx context.Context, txn descs.Txn,
 		) error {
@@ -159,9 +164,33 @@ func GetUserSessionInitInfo(
 				}
 			}
 
+			// Only check for replication if the user can login.
+			if canLoginSQL {
+				canUseReplicationMode = authInfo.CanUseReplicationRoleOpt || isSuperuser
+				// Only check the global privilege if we do not already have replication
+				// privileges.
+				if !canUseReplicationMode {
+					privs, err := execCfg.SyntheticPrivilegeCache.Get(
+						ctx, txn, txn.Descriptors(), syntheticprivilege.GlobalPrivilegeObject,
+					)
+					if err != nil {
+						return err
+					}
+					if privs.CheckPrivilege(user, privilege.REPLICATION) {
+						canUseReplicationMode = true
+					} else {
+						for parentRole := range memberships {
+							if privs.CheckPrivilege(parentRole, privilege.REPLICATION) {
+								canUseReplicationMode = true
+								break
+							}
+						}
+					}
+				}
+			}
+
 			return nil
-		},
-		)
+		})
 	}); err != nil {
 		log.Warningf(ctx, "user membership lookup for %q failed: %v", user, err)
 		err = errors.Wrap(errors.Handled(err), "internal error while retrieving user account memberships")
@@ -170,6 +199,7 @@ func GetUserSessionInitInfo(
 	return authInfo.UserExists,
 		canLoginSQL,
 		authInfo.CanLoginDBConsoleRoleOpt,
+		canUseReplicationMode,
 		isSuperuser,
 		settingsEntries,
 		func(ctx context.Context) (expired bool, ret password.PasswordHash, err error) {
@@ -285,7 +315,7 @@ func retrieveAuthInfo(
 
 	// Use fully qualified table name to avoid looking up "".system.role_options.
 	const getLoginDependencies = `SELECT option, value FROM system.public.role_options ` +
-		`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL', 'NOSQLLOGIN')`
+		`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL', 'NOSQLLOGIN', 'REPLICATION')`
 
 	roleOptsIt, err := ie.QueryIteratorEx(
 		ctx, "get-login-dependencies", nil, /* txn */
@@ -310,16 +340,15 @@ func retrieveAuthInfo(
 	for ok, err = roleOptsIt.Next(ctx); ok; ok, err = roleOptsIt.Next(ctx) {
 		row := roleOptsIt.Cur()
 		option := string(tree.MustBeDString(row[0]))
-
-		if option == "NOLOGIN" {
+		switch option {
+		case "NOLOGIN":
 			aInfo.CanLoginSQLRoleOpt = false
 			aInfo.CanLoginDBConsoleRoleOpt = false
-		}
-		if option == "NOSQLLOGIN" {
+		case "NOSQLLOGIN":
 			aInfo.CanLoginSQLRoleOpt = false
-		}
-
-		if option == "VALID UNTIL" {
+		case "REPLICATION":
+			aInfo.CanUseReplicationRoleOpt = true
+		case "VALID UNTIL":
 			if tree.DNull.Compare(nil, row[1]) != 0 {
 				ts := string(tree.MustBeDString(row[1]))
 				// This is okay because the VALID UNTIL is stored as a string
@@ -415,12 +444,12 @@ WHERE
 }
 
 var userLoginTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.user_login.timeout",
 	"timeout after which client authentication times out if some system range is unavailable (0 = no timeout)",
 	10*time.Second,
 	settings.NonNegativeDuration,
-).WithPublic()
+	settings.WithPublic)
 
 // GetAllRoles returns a "set" (map) of Roles -> true.
 func (p *planner) GetAllRoles(ctx context.Context) (map[username.SQLUsername]bool, error) {
@@ -446,13 +475,21 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[username.SQLUsername]boo
 	return users, nil
 }
 
-// RoleExists returns true if the role exists.
-func (p *planner) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
-	return RoleExists(ctx, p.InternalSQLTxn(), role)
+// CheckRoleExists returns an error if the role does not exist. It uses the
+// role membership cache to avoid performing system table lookups in a hot path.
+func (p *planner) CheckRoleExists(ctx context.Context, role username.SQLUsername) error {
+	if _, err := p.MemberOfWithAdminOption(ctx, role); err != nil {
+		return err
+	}
+	return nil
 }
 
-// RoleExists returns true if the role exists.
+// RoleExists returns true if the role exists. This function does not use
+// any cache.
 func RoleExists(ctx context.Context, txn isql.Txn, role username.SQLUsername) (bool, error) {
+	if role.IsNodeUser() || role.IsRootUser() || role.IsAdminRole() || role.IsPublicRole() {
+		return true, nil
+	}
 	query := `SELECT username FROM system.users WHERE username = $1`
 	row, err := txn.QueryRowEx(
 		ctx, "read-users", txn.KV(),
@@ -466,7 +503,7 @@ func RoleExists(ctx context.Context, txn isql.Txn, role username.SQLUsername) (b
 	return row != nil, nil
 }
 
-var roleMembersTableName = tree.MakeTableNameWithSchema("system", tree.PublicSchemaName, "role_members")
+var roleMembersTableName = tree.MakeTableNameWithSchema("system", catconstants.PublicSchemaName, "role_members")
 
 // BumpRoleMembershipTableVersion increases the table version for the
 // role membership table.
@@ -540,12 +577,8 @@ func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsernam
 	if !s.IsNoneRole() && s != sessionUser {
 		becomeUser = s
 
-		exists, err := p.RoleExists(ctx, becomeUser)
-		if err != nil {
+		if err := p.CheckRoleExists(ctx, becomeUser); err != nil {
 			return err
-		}
-		if !exists {
-			return sqlerrors.NewUndefinedUserError(becomeUser)
 		}
 	}
 
@@ -605,6 +638,10 @@ func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser username.SQ
 	// Switching to None can always succeed.
 	if becomeUser.IsNoneRole() {
 		return nil
+	}
+	// No one, not even root, can become the public or node role.
+	if becomeUser.IsPublicRole() || becomeUser.IsNodeUser() {
+		return sqlerrors.NewUndefinedUserError(becomeUser)
 	}
 	// Root users are able to become anyone.
 	if sessionUser.IsRootUser() {

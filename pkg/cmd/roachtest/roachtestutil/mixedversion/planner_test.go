@@ -15,14 +15,19 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,7 +37,7 @@ var (
 			Stdout: io.Discard,
 			Stderr: io.Discard,
 		}
-		l, err := cfg.NewLogger("" /* path */)
+		l, err := cfg.NewLogger("/dev/null" /* path */)
 		if err != nil {
 			panic(err)
 		}
@@ -45,118 +50,65 @@ var (
 
 	// Hardcode build and previous versions so that the test won't fail
 	// when new versions are released.
-	buildVersion = func() version.Version {
-		bv, err := version.Parse("v23.1.0")
-		if err != nil {
-			panic(err)
-		}
-		return *bv
-	}()
-	previousVersion = func() string {
-		pv, err := version.PredecessorVersion(buildVersion)
-		if err != nil {
-			panic(err)
-		}
-		return pv
-	}()
+	buildVersion       = version.MustParse("v23.1.0")
+	predecessorVersion = "v22.2.8"
 )
 
-const (
-	seed        = 12345 // expectations are based on this seed
-	mainVersion = clusterupgrade.MainVersion
-)
+const seed = 12345 // expectations are based on this seed
 
 func TestTestPlanner(t *testing.T) {
-	mvt := newTest(t)
-	mvt.InMixedVersion("mixed-version 1", dummyHook)
-	mvt.InMixedVersion("mixed-version 2", dummyHook)
-	initBank := roachtestutil.NewCommand("./cockroach workload bank init")
-	runBank := roachtestutil.NewCommand("./cockroach workload run bank").Flag("max-ops", 100)
-	mvt.Workload("bank", nodes, initBank, runBank)
-	runRand := roachtestutil.NewCommand("./cockroach run rand").Flag("seed", 321)
-	mvt.Workload("rand", nodes, nil /* initCmd */, runRand)
-	csvServer := roachtestutil.NewCommand("./cockroach workload csv-server").Flag("port", 9999)
-	mvt.BackgroundCommand("csv server", nodes, csvServer)
+	reset := setBuildVersion()
+	defer reset()
 
-	plan, err := mvt.plan()
-	require.NoError(t, err)
-	require.Len(t, plan.steps, 12)
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "planner"), func(t *testing.T, path string) {
+		mvt := newTest()
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			if d.Cmd == "plan" {
+				plan, err := mvt.plan()
+				require.NoError(t, err)
 
-	// Assert on the pretty-printed version of the test plan as that
-	// asserts the ordering of the steps we want to take, and as a bonus
-	// tests the printing function itself.
-	expectedPrettyPlan := fmt.Sprintf(`
-mixed-version test plan for upgrading from %[1]s to <current>:
-├── starting cluster from fixtures for version "%[1]s" (1)
-├── upload current binary to all cockroach nodes (:1-4) (2)
-├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (3)
-├── preventing auto-upgrades by setting `+"`preserve_downgrade_option`"+` (4)
-├── run "initialize bank workload" (5)
-├── start background hooks concurrently
-│   ├── run "bank workload", after 50ms delay (6)
-│   ├── run "rand workload", after 50ms delay (7)
-│   └── run "csv server", after 200ms delay (8)
-├── upgrade nodes :1-4 from "%[1]s" to "<current>"
-│   ├── restart node 4 with binary version <current> (9)
-│   ├── run mixed-version hooks concurrently
-│   │   ├── run "mixed-version 1", after 100ms delay (10)
-│   │   └── run "mixed-version 2", after 100ms delay (11)
-│   ├── restart node 3 with binary version <current> (12)
-│   ├── restart node 2 with binary version <current> (13)
-│   └── restart node 1 with binary version <current> (14)
-├── downgrade nodes :1-4 from "<current>" to "%[1]s"
-│   ├── restart node 2 with binary version %[1]s (15)
-│   ├── run "mixed-version 1" (16)
-│   ├── restart node 1 with binary version %[1]s (17)
-│   ├── run "mixed-version 2" (18)
-│   ├── restart node 3 with binary version %[1]s (19)
-│   └── restart node 4 with binary version %[1]s (20)
-├── upgrade nodes :1-4 from "%[1]s" to "<current>"
-│   ├── restart node 4 with binary version <current> (21)
-│   ├── restart node 3 with binary version <current> (22)
-│   ├── restart node 1 with binary version <current> (23)
-│   ├── run mixed-version hooks concurrently
-│   │   ├── run "mixed-version 1", after 0s delay (24)
-│   │   └── run "mixed-version 2", after 0s delay (25)
-│   └── restart node 2 with binary version <current> (26)
-├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+` (27)
-├── run mixed-version hooks concurrently
-│   ├── run "mixed-version 1", after 100ms delay (28)
-│   └── run "mixed-version 2", after 0s delay (29)
-└── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (30)
-`, previousVersion,
-	)
+				var debug bool
+				if len(d.CmdArgs) > 0 && d.CmdArgs[0].Vals[0] == "true" {
+					debug = true
+				}
 
-	expectedPrettyPlan = expectedPrettyPlan[1:] // remove leading newline
-	require.Equal(t, expectedPrettyPlan, plan.PrettyPrint())
+				return plan.prettyPrintInternal(debug)
+			}
 
-	// Assert that startup hooks are scheduled to run before any
-	// upgrades, i.e., after cluster is initialized (step 1), and after
-	// we wait for the cluster version to match on all nodes (step 2).
-	mvt = newTest(t)
-	mvt.OnStartup("startup 1", dummyHook)
-	mvt.OnStartup("startup 2", dummyHook)
-	plan, err = mvt.plan()
-	require.NoError(t, err)
-	requireConcurrentHooks(t, plan.steps[4], "startup 1", "startup 2")
+			switch d.Cmd {
+			case "mixed-version-test":
+				mvt = createDataDrivenMixedVersionTest(t, d.CmdArgs)
+			case "on-startup":
+				mvt.OnStartup(d.CmdArgs[0].Vals[0], dummyHook)
+			case "in-mixed-version":
+				mvt.InMixedVersion(d.CmdArgs[0].Vals[0], dummyHook)
+			case "after-upgrade-finalized":
+				mvt.AfterUpgradeFinalized(d.CmdArgs[0].Vals[0], dummyHook)
+			case "workload":
+				initCmd := roachtestutil.NewCommand("./cockroach workload init some-workload")
+				runCmd := roachtestutil.NewCommand("./cockroach workload run some-workload")
+				mvt.Workload(d.CmdArgs[0].Vals[0], nodes, initCmd, runCmd)
+			case "background-command":
+				cmd := roachtestutil.NewCommand("./cockroach some-command")
+				mvt.BackgroundCommand(d.CmdArgs[0].Vals[0], nodes, cmd)
+			case "require-concurrent-hooks":
+				plan, err := mvt.plan()
+				require.NoError(t, err)
+				require.NoError(t, requireConcurrentHooks(t, plan.Steps(), d.CmdArgs[0].Vals...))
+			default:
+				t.Fatalf("unknown directive: %s", d.Cmd)
+			}
 
-	// Assert that AfterUpgradeFinalized hooks are scheduled to run in
-	// the last step of the test.
-	mvt = newTest(t)
-	mvt.AfterUpgradeFinalized("finalizer 1", dummyHook)
-	mvt.AfterUpgradeFinalized("finalizer 2", dummyHook)
-	mvt.AfterUpgradeFinalized("finalizer 3", dummyHook)
-	plan, err = mvt.plan()
-	require.NoError(t, err)
-	require.Len(t, plan.steps, 10)
-	requireConcurrentHooks(t, plan.steps[9], "finalizer 1", "finalizer 2", "finalizer 3")
+			return "ok"
+		})
+	})
 }
 
 // TestDeterministicTestPlan tests that generating a test plan with
 // the same seed multiple times yields the same plan every time.
 func TestDeterministicTestPlan(t *testing.T) {
 	makePlan := func() *TestPlan {
-		mvt := newTest(t)
+		mvt := newTest()
 		mvt.InMixedVersion("mixed-version 1", dummyHook)
 		mvt.InMixedVersion("mixed-version 2", dummyHook)
 
@@ -185,7 +137,7 @@ var unused float64
 func TestDeterministicHookSeeds(t *testing.T) {
 	generateData := func(generateMoreRandomNumbers bool) [][]int {
 		var generatedData [][]int
-		mvt := newTest(t)
+		mvt := newTest()
 		mvt.InMixedVersion("do something", func(_ context.Context, _ *logger.Logger, rng *rand.Rand, _ *Helper) error {
 			var data []int
 			for j := 0; j < 5; j++ {
@@ -214,32 +166,29 @@ func TestDeterministicHookSeeds(t *testing.T) {
 		plan, err := mvt.plan()
 		require.NoError(t, err)
 
+		upgradeStep := plan.Steps()[3].(sequentialRunStep)
+
 		// We can hardcode these paths since we are using a fixed seed in
 		// these tests.
-		firstRun := plan.steps[4].(sequentialRunStep).steps[2].(runHookStep)
+		firstRun := upgradeStep.steps[1].(sequentialRunStep).steps[3].(singleStep).impl.(runHookStep)
 		require.Equal(t, "do something", firstRun.hook.name)
 		require.NoError(t, firstRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		secondRun := plan.steps[5].(sequentialRunStep).steps[3].(runHookStep)
+		secondRun := upgradeStep.steps[2].(sequentialRunStep).steps[2].(singleStep).impl.(runHookStep)
 		require.Equal(t, "do something", secondRun.hook.name)
 		require.NoError(t, secondRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		thirdRun := plan.steps[6].(sequentialRunStep).steps[1].(runHookStep)
+		thirdRun := upgradeStep.steps[3].(sequentialRunStep).steps[2].(singleStep).impl.(runHookStep)
 		require.Equal(t, "do something", thirdRun.hook.name)
 		require.NoError(t, thirdRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		fourthRun := plan.steps[8].(runHookStep)
-		require.Equal(t, "do something", fourthRun.hook.name)
-		require.NoError(t, fourthRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
-
-		require.Len(t, generatedData, 4)
+		require.Len(t, generatedData, 3)
 		return generatedData
 	}
 
 	expectedData := [][]int{
-		{82, 1, 17, 3, 87},
-		{73, 17, 6, 37, 43},
-		{82, 35, 57, 54, 8},
+		{50, 22, 11, 95, 55},
+		{30, 17, 84, 24, 33},
 		{7, 95, 26, 31, 65},
 	}
 	const numRums = 50
@@ -250,33 +199,201 @@ func TestDeterministicHookSeeds(t *testing.T) {
 	}
 }
 
-func newTest(t *testing.T) *Test {
+// Test_startClusterID tests that the plan generated by the test
+// planner keeps track of the correct ID for the test's start step.
+func Test_startClusterID(t *testing.T) {
+	// When fixtures are disabled, the startStep should always be the
+	// first step of the test (ID = 1).
+	mvt := newTest(NeverUseFixtures)
+	plan, err := mvt.plan()
+	require.NoError(t, err)
+
+	step, isStartStep := plan.Steps()[0].(singleStep).impl.(startStep)
+	require.True(t, isStartStep)
+	require.Equal(t, 1, step.ID())
+	require.Equal(t, 1, plan.startClusterID)
+
+	// Overwrite probability to 1 so that our test plan will always
+	// start the cluster from fixtures.
+	origProbability := defaultTestOptions.useFixturesProbability
+	defaultTestOptions.useFixturesProbability = 1
+	defer func() { defaultTestOptions.useFixturesProbability = origProbability }()
+
+	// When fixtures are used, the startStep should always be the second
+	// step of the test (ID = 2), after fixtures are installed.
+	mvt = newTest()
+	plan, err = mvt.plan()
+	require.NoError(t, err)
+	step, isStartStep = plan.Steps()[1].(singleStep).impl.(startStep)
+	require.True(t, isStartStep)
+	require.Equal(t, 2, step.ID())
+	require.Equal(t, 2, plan.startClusterID)
+}
+
+// Test_upgradeTimeout tests the behaviour of upgrade timeouts in
+// mixedversion tests. If no custom value is passed, the default
+// timeout in the clusterupgrade package is used; otherwise, the
+// custom value is enforced.
+func Test_upgradeTimeout(t *testing.T) {
+	findUpgradeWaitSteps := func(plan *TestPlan) []waitForStableClusterVersionStep {
+		var steps []waitForStableClusterVersionStep
+		for _, s := range plan.Steps() {
+			if ss, isSingle := s.(singleStep); isSingle {
+				if step, isUpgrade := ss.impl.(waitForStableClusterVersionStep); isUpgrade {
+					steps = append(steps, step)
+				}
+			}
+		}
+		if len(steps) == 0 {
+			require.Fail(t, "could not find any waitForStableClusterVersionStep in the plan")
+		}
+		return steps
+	}
+
+	assertTimeout := func(expectedTimeout time.Duration, opts ...CustomOption) {
+		mvt := newTest(opts...)
+		plan, err := mvt.plan()
+		require.NoError(t, err)
+		waitUpgrades := findUpgradeWaitSteps(plan)
+
+		for _, s := range waitUpgrades {
+			require.Equal(t, expectedTimeout, s.timeout)
+		}
+	}
+
+	assertTimeout(10 * time.Minute)                               // using default settings, the default timeout applies
+	assertTimeout(30*time.Minute, UpgradeTimeout(30*time.Minute)) // custom timeout applies.
+}
+
+func setBuildVersion() func() {
+	previousV := clusterupgrade.TestBuildVersion
+	clusterupgrade.TestBuildVersion = buildVersion
+
+	return func() { clusterupgrade.TestBuildVersion = previousV }
+}
+
+func newTest(options ...CustomOption) *Test {
+	testOptions := defaultTestOptions
+	for _, fn := range options {
+		fn(&testOptions)
+	}
+
 	prng := rand.New(rand.NewSource(seed))
 	return &Test{
-		ctx:           ctx,
-		logger:        nilLogger,
-		crdbNodes:     nodes,
-		_buildVersion: buildVersion,
-		prng:          prng,
-		hooks:         &testHooks{prng: prng, crdbNodes: nodes},
+		ctx:             ctx,
+		logger:          nilLogger,
+		crdbNodes:       nodes,
+		options:         testOptions,
+		_arch:           archP(vm.ArchAMD64),
+		prng:            prng,
+		hooks:           &testHooks{prng: prng, crdbNodes: nodes},
+		predecessorFunc: testPredecessorFunc,
 	}
 }
 
-// requireConcurrentHooks asserts that the given step is a concurrent
-// run of multiple user-provided hooks with the names passed as
-// parameter.
-func requireConcurrentHooks(t *testing.T, step testStep, names ...string) {
-	require.IsType(t, concurrentRunStep{}, step)
-	crs := step.(concurrentRunStep)
-	require.Len(t, crs.delayedSteps, len(names))
+func archP(a vm.CPUArch) *vm.CPUArch {
+	return &a
+}
 
-	for j, concurrentStep := range crs.delayedSteps {
-		require.IsType(t, delayedStep{}, concurrentStep)
-		ds := concurrentStep.(delayedStep)
-		require.IsType(t, runHookStep{}, ds.step)
-		rhs := ds.step.(runHookStep)
-		require.Equal(t, names[j], rhs.hook.name, "j = %d", j)
+// Always use the same predecessor version to make this test
+// deterministic even as changes continue to happen in the
+// cockroach_releases.yaml file.
+func testPredecessorFunc(
+	rng *rand.Rand, v *clusterupgrade.Version, n int,
+) ([]*clusterupgrade.Version, error) {
+	return parseVersions([]string{predecessorVersion}), nil
+}
+
+// createDataDrivenMixedVersionTest creates a `*Test` instance based
+// on the parameters passed to the `mixed-version-test` datadriven
+// directive.
+func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *Test {
+	var opts []CustomOption
+	var predecessors predecessorFunc
+
+	for _, arg := range args {
+		switch arg.Key {
+		case "predecessors":
+			arg := arg // copy range variable
+			predecessors = func(rng *rand.Rand, v *clusterupgrade.Version, n int) ([]*clusterupgrade.Version, error) {
+				return parseVersions(arg.Vals), nil
+			}
+
+		case "num_upgrades":
+			n, err := strconv.Atoi(arg.Vals[0])
+			require.NoError(t, err)
+			opts = append(opts, NumUpgrades(n))
+		}
 	}
+
+	mvt := newTest(opts...)
+	if predecessors != nil {
+		mvt.predecessorFunc = predecessors
+	}
+
+	return mvt
+}
+
+// requireConcurrentHooks asserts that there is a concurrent step with
+// user-provided hooks of the given names.
+func requireConcurrentHooks(t *testing.T, steps []testStep, names ...string) error {
+	// We first flatten all sequential steps since the concurrent step
+	// might be within a series of sequential steps.
+	var flattenSequentialSteps func(s testStep) []testStep
+	flattenSequentialSteps = func(s testStep) []testStep {
+		if seqStep, ok := s.(sequentialRunStep); ok {
+			var result []testStep
+			for _, s := range seqStep.steps {
+				result = append(result, flattenSequentialSteps(s)...)
+			}
+
+			return result
+		}
+
+		return []testStep{s}
+	}
+
+	var allSteps []testStep
+	for _, step := range steps {
+		allSteps = append(allSteps, flattenSequentialSteps(step)...)
+	}
+
+NEXT_STEP:
+	for _, step := range allSteps {
+		if crs, ok := step.(concurrentRunStep); ok {
+			if len(crs.delayedSteps) != len(names) {
+				continue NEXT_STEP
+			}
+
+			stepNames := map[string]struct{}{}
+			for _, concurrentStep := range crs.delayedSteps {
+				ds := concurrentStep.(delayedStep)
+				ss, ok := ds.step.(singleStep)
+				if !ok {
+					continue NEXT_STEP
+				}
+				rhs, ok := ss.impl.(runHookStep)
+				if !ok {
+					continue NEXT_STEP
+				}
+
+				stepNames[rhs.hook.name] = struct{}{}
+			}
+
+			// Check if this concurrent step has all the steps passed as
+			// parameter, if not, we move on to the next concurrent step, if
+			// any.
+			for _, requiredName := range names {
+				if _, exists := stepNames[requiredName]; !exists {
+					continue NEXT_STEP
+				}
+			}
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf("no concurrent step that includes: %#v", names)
 }
 
 func dummyHook(context.Context, *logger.Logger, *rand.Rand, *Helper) error {

@@ -20,16 +20,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -50,11 +49,13 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-// adoptedJobs represents a the epoch and cancelation of a job id being run
-// by the registry.
+// adoptedJobs represents the epoch and cancellation of a job id being run by
+// the registry.
 type adoptedJob struct {
 	session sqlliveness.Session
 	isIdle  bool
+	// Reference to the Resumer that is currently running the job.
+	resumer Resumer
 	// Calling the func will cancel the context the job was resumed with.
 	cancel context.CancelFunc
 }
@@ -104,7 +105,6 @@ type Registry struct {
 	settings  *cluster.Settings
 	execCtx   jobExecCtxMaker
 	metrics   Metrics
-	td        *tracedumper.TraceDumper
 	knobs     TestingKnobs
 
 	// adoptionChan is used to nudge the registry to resume claimed jobs and
@@ -180,8 +180,11 @@ type Registry struct {
 	creationKnobs sync.Map
 }
 
+// UpdateJobWithTxn calls the Update method on an existing job with
+// jobID, using a transaction passed in the txn argument. Passing a
+// nil transaction means that a txn will be automatically created.
 func (r *Registry) UpdateJobWithTxn(
-	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, useReadLock bool, updateFunc UpdateFn,
+	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, updateFunc UpdateFn,
 ) error {
 	job, err := r.LoadJobWithTxn(ctx, jobID, txn)
 	if err != nil {
@@ -223,7 +226,6 @@ func MakeRegistry(
 	histogramWindowInterval time.Duration,
 	execCtxFn jobExecCtxMaker,
 	preventAdoptionFile string,
-	td *tracedumper.TraceDumper,
 	knobs *TestingKnobs,
 ) *Registry {
 	r := &Registry{
@@ -238,7 +240,6 @@ func MakeRegistry(
 		execCtx:                 execCtxFn,
 		preventAdoptionFile:     preventAdoptionFile,
 		preventAdoptionLogEvery: log.Every(time.Minute),
-		td:                      td,
 		// Use a non-zero buffer to allow queueing of notifications.
 		// The writing method will use a default case to avoid blocking
 		// if a notification is already queued.
@@ -319,6 +320,8 @@ const (
 
 	// SqlActivityUpdaterJobID A static job ID is used for the SQL activity tables.
 	SqlActivityUpdaterJobID = jobspb.JobID(103)
+
+	MVCCStatisticsJobID = jobspb.JobID(104)
 )
 
 // MakeJobID generates a new job ID.
@@ -428,15 +431,8 @@ func createJobsInBatchWithTxn(
 		return nil, err
 	}
 
-	// Insert the job payload and details into the system.jobs_info table if the
-	// associated cluster version is active.
-	//
-	// TODO(adityamaru): Stop writing the payload and details to the system.jobs
-	// table once we are outside the compatability window for 22.2.
-	if r.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
-		if err := batchJobWriteToJobInfo(ctx, txn, jobs, modifiedMicros); err != nil {
-			return nil, err
-		}
+	if err := batchJobWriteToJobInfo(ctx, txn, jobs, modifiedMicros); err != nil {
+		return nil, err
 	}
 
 	return jobIDs, nil
@@ -478,66 +474,23 @@ func batchJobInsertStmt(
 	jobs []*Job,
 	modifiedMicros int64,
 ) (string, []interface{}, []jobspb.JobID, error) {
-	marshalPanic := func(m protoutil.Message) []byte {
-		data, err := protoutil.Marshal(m)
-		if err != nil {
-			panic(err)
-		}
-		return data
-	}
-
 	created, err := tree.MakeDTimestamp(timeutil.FromUnixMicros(modifiedMicros), time.Microsecond)
 	if err != nil {
 		return "", nil, nil, errors.NewAssertionErrorWithWrappedErrf(err, "failed to make timestamp for creation of job")
 	}
 	instanceID := r.ID()
-	columns := []string{`id`, `created`, `status`, `payload`, `progress`, `claim_session_id`, `claim_instance_id`, `job_type`}
+	columns := []string{`id`, `created`, `status`, `claim_session_id`, `claim_instance_id`, `job_type`}
 	valueFns := map[string]func(*Job) (interface{}, error){
 		`id`:                func(job *Job) (interface{}, error) { return job.ID(), nil },
 		`created`:           func(job *Job) (interface{}, error) { return created, nil },
 		`status`:            func(job *Job) (interface{}, error) { return StatusRunning, nil },
 		`claim_session_id`:  func(job *Job) (interface{}, error) { return sessionID.UnsafeBytes(), nil },
 		`claim_instance_id`: func(job *Job) (interface{}, error) { return instanceID, nil },
-		`payload`: func(job *Job) (interface{}, error) {
-			payload := job.Payload()
-			return marshalPanic(&payload), nil
-		},
-		`progress`: func(job *Job) (interface{}, error) {
-			progress := job.Progress()
-			progress.ModifiedMicros = modifiedMicros
-			return marshalPanic(&progress), nil
-		},
 		`job_type`: func(job *Job) (interface{}, error) {
 			payload := job.Payload()
 			return payload.Type().String(), nil
 		},
 	}
-
-	// TODO(adityamaru: Remove this once we are outside the compatability
-	// window for 22.2.
-	if r.settings.Version.IsActive(ctx, clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs) {
-		columns = []string{`id`, `created`, `status`, `claim_session_id`, `claim_instance_id`, `job_type`}
-		valueFns = map[string]func(*Job) (interface{}, error){
-			`id`:                func(job *Job) (interface{}, error) { return job.ID(), nil },
-			`created`:           func(job *Job) (interface{}, error) { return created, nil },
-			`status`:            func(job *Job) (interface{}, error) { return StatusRunning, nil },
-			`claim_session_id`:  func(job *Job) (interface{}, error) { return sessionID.UnsafeBytes(), nil },
-			`claim_instance_id`: func(job *Job) (interface{}, error) { return instanceID, nil },
-			`job_type`: func(job *Job) (interface{}, error) {
-				payload := job.Payload()
-				return payload.Type().String(), nil
-			},
-		}
-	}
-	numColumns := len(columns)
-
-	// TODO(jayant): remove this version gate in 24.1
-	// To run the upgrade below, migration and schema change jobs will need to be
-	// created using the old schema, which does not have the job_type column.
-	if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
-		numColumns -= 1
-	}
-
 	appendValues := func(job *Job, vals *[]interface{}) (err error) {
 		defer func() {
 			switch r := recover(); r.(type) {
@@ -548,7 +501,7 @@ func batchJobInsertStmt(
 				panic(r)
 			}
 		}()
-		for j := 0; j < numColumns; j++ {
+		for j := range columns {
 			c := columns[j]
 			val, err := valueFns[c](job)
 			if err != nil {
@@ -558,11 +511,11 @@ func batchJobInsertStmt(
 		}
 		return nil
 	}
-	args := make([]interface{}, 0, len(jobs)*numColumns)
+	args := make([]interface{}, 0, len(jobs)*len(columns))
 	jobIDs := make([]jobspb.JobID, 0, len(jobs))
 	var buf strings.Builder
 	buf.WriteString(`INSERT INTO system.jobs (`)
-	buf.WriteString(strings.Join(columns[:numColumns], ", "))
+	buf.WriteString(strings.Join(columns, ", "))
 	buf.WriteString(`) VALUES `)
 	argIdx := 1
 	for i, job := range jobs {
@@ -570,7 +523,7 @@ func batchJobInsertStmt(
 			buf.WriteString(", ")
 		}
 		buf.WriteString("(")
-		for j := 0; j < numColumns; j++ {
+		for j := range columns {
 			if j > 0 {
 				buf.WriteString(", ")
 			}
@@ -626,12 +579,8 @@ func (r *Registry) CreateJobWithTxn(
 			return errors.NewAssertionErrorWithWrappedErrf(err, "failed to construct job created timestamp")
 		}
 
-		cols := []string{"id", "created", "status", "payload", "progress", "claim_session_id", "claim_instance_id", "job_type"}
-		vals := []interface{}{jobID, created, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
-		if r.settings.Version.IsActive(ctx, clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs) {
-			cols = []string{"id", "created", "status", "claim_session_id", "claim_instance_id", "job_type"}
-			vals = []interface{}{jobID, created, StatusRunning, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
-		}
+		cols := []string{"id", "created", "status", "claim_session_id", "claim_instance_id", "job_type"}
+		vals := []interface{}{jobID, created, StatusRunning, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
 		totalNumCols := len(cols)
 		numCols := totalNumCols
 		placeholders := func() string {
@@ -649,22 +598,6 @@ func (r *Registry) CreateJobWithTxn(
 		// database in question is being dropped.
 		override := sessiondata.RootUserSessionDataOverride
 		override.Database = catconstants.SystemDatabaseName
-		hasJobTypeColumn := r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable)
-		if hasJobTypeColumn {
-			// Relying on the version gate may not be sufficient.
-			const pgAttributeStmt = `
-			SELECT * FROM system.pg_catalog.pg_attribute
-			         WHERE attrelid = 'system.public.jobs'::REGCLASS
-			         AND attname = 'job_type'`
-			row, err := txn.QueryRowEx(ctx, "job-columns-get", txn.KV(), override, pgAttributeStmt)
-			if err != nil {
-				return err
-			}
-			hasJobTypeColumn = row != nil
-		}
-		if !hasJobTypeColumn {
-			numCols -= 1
-		}
 		insertStmt := fmt.Sprintf(`INSERT INTO system.jobs (%s) VALUES (%s)`,
 			strings.Join(cols[:numCols], ","), placeholders())
 		_, err = txn.ExecEx(
@@ -676,19 +609,12 @@ func (r *Registry) CreateJobWithTxn(
 			return err
 		}
 
-		// Insert the job payload and details into the system.jobs_info table if the
-		// associated cluster version is active.
-		//
-		// TODO(adityamaru): Stop writing the payload and details to the system.jobs
-		// table once we are outside the compatability window for 22.2.
-		if r.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
-			infoStorage := j.InfoStorage(txn)
-			if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
-				return err
-			}
-			if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
-				return err
-			}
+		infoStorage := j.InfoStorage(txn)
+		if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
+			return err
+		}
+		if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
+			return err
 		}
 
 		return nil
@@ -783,19 +709,10 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 		}
 		typ := j.mu.payload.Type().String()
 
-		nCols := 7
-		cols := []string{"id", "status", "payload", "progress", "created_by_type", "created_by_id", "job_type"}
-		placeholders := []string{"$1", "$2", "$3", "$4", "$5", "$6", "$7"}
-		values := []interface{}{jobID, StatusRunning, payloadBytes, progressBytes, createdByType, createdByID, typ}
-		if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
-			nCols -= 1
-		}
-		if r.settings.Version.IsActive(ctx, clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs) {
-			cols = []string{"id", "status", "created_by_type", "created_by_id", "job_type"}
-			placeholders = []string{"$1", "$2", "$3", "$4", "$5"}
-			values = []interface{}{jobID, StatusRunning, createdByType, createdByID, typ}
-			nCols = 5
-		}
+		cols := []string{"id", "status", "created_by_type", "created_by_id", "job_type"}
+		placeholders := []string{"$1", "$2", "$3", "$4", "$5"}
+		values := []interface{}{jobID, StatusRunning, createdByType, createdByID, typ}
+		nCols := len(cols)
 		// Insert the job row, but do not set a `claim_session_id`. By not
 		// setting the claim, the job can be adopted by any node and will
 		// be adopted by the node which next runs the adoption loop.
@@ -811,19 +728,12 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 			return err
 		}
 
-		// Insert the job payload and details into the system.jobs_info table if the
-		// associated cluster version is active.
-		//
-		// TODO(adityamaru): Stop writing the payload and details to the system.jobs
-		// table once we are outside the compatability window for 22.2.
-		if r.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
-			infoStorage := j.InfoStorage(txn)
-			if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
-				return err
-			}
-			if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
-				return err
-			}
+		infoStorage := j.InfoStorage(txn)
+		if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
+			return err
+		}
+		if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
+			return err
 		}
 
 		return nil
@@ -898,7 +808,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 		// Using a new context allows for independent lifetimes and cancellation.
 		resumerCtx, cancel = r.makeCtx()
 
-		if alreadyAdopted := r.addAdoptedJob(jobID, j.session, cancel); alreadyAdopted {
+		if alreadyAdopted := r.addAdoptedJob(jobID, j.session, cancel, resumer); alreadyAdopted {
 			log.Fatalf(
 				ctx,
 				"job %d: was just created but found in registered adopted jobs",
@@ -961,15 +871,6 @@ func (r *Registry) LoadJobWithTxn(
 	}
 	return j, nil
 }
-
-// UpdateJobWithTxn calls the Update method on an existing job with jobID, using
-// a transaction passed in the txn argument. Passing a nil transaction means
-// that a txn will be automatically created. The useReadLock parameter will
-// have the update acquire an exclusive lock on the job row when reading. This
-// can help eliminate restarts in the face of concurrent updates at the cost of
-// locking the row from readers. Most updates of a job do not expect contention
-// and may do extra work and thus should not do locking. Cases where the job
-// is used to coordinate resources from multiple nodes may benefit from locking.
 
 // TODO (sajjad): make maxAdoptionsPerLoop a cluster setting.
 var maxAdoptionsPerLoop = envutil.EnvOrDefaultInt(`COCKROACH_JOB_ADOPTIONS_PER_PERIOD`, 10)
@@ -1254,12 +1155,24 @@ func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) erro
 }
 
 // The ordering is important as we keep track of the maximum ID we've seen.
-const expiredJobsQuery = `
-SELECT id, payload, status, created FROM "".crdb_internal.system_jobs
-WHERE (created < $1) AND (id > $2)
-ORDER BY id
-LIMIT $3
-	`
+const expiredJobsQueryWithJobInfoTable = `
+WITH
+latestpayload AS (
+    SELECT job_id, value
+    FROM system.job_info AS payload
+    WHERE job_id > $2 AND info_key = 'legacy_payload'
+    ORDER BY written desc
+),
+jobpage AS (
+    SELECT id, status
+    FROM system.jobs
+    WHERE (created < $1) and (id > $2)
+    ORDER BY id
+    LIMIT $3
+)
+SELECT distinct (id), latestpayload.value AS payload, status
+FROM jobpage AS j
+INNER JOIN latestpayload ON j.id = latestpayload.job_id`
 
 // cleanupOldJobsPage deletes up to cleanupPageSize job rows with ID > minID.
 // minID is supposed to be the maximum ID returned by the previous page (0 if no
@@ -1267,8 +1180,10 @@ LIMIT $3
 func (r *Registry) cleanupOldJobsPage(
 	ctx context.Context, olderThan time.Time, minID jobspb.JobID, pageSize int,
 ) (done bool, maxID jobspb.JobID, retErr error) {
+	query := expiredJobsQueryWithJobInfoTable
+
 	it, err := r.db.Executor().QueryIterator(ctx, "gc-jobs", nil, /* txn */
-		expiredJobsQuery, olderThan, minID, pageSize)
+		query, olderThan, minID, pageSize)
 	if err != nil {
 		return false, 0, err
 	}
@@ -1356,7 +1271,7 @@ func (r *Registry) cancelRequested(ctx context.Context, txn isql.Txn, id jobspb.
 	if err != nil {
 		return err
 	}
-	return job.maybeWithTxn(txn).CancelRequested(ctx)
+	return job.WithTxn(txn).CancelRequested(ctx)
 }
 
 // PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).
@@ -1438,6 +1353,11 @@ type Resumer interface {
 	// cannot assume that any other methods have been called on this Resumer
 	// object.
 	OnFailOrCancel(ctx context.Context, execCtx interface{}, jobErr error) error
+
+	// CollectProfile is called when a job has been requested to collect a job
+	// profile. This profile may contain any information that provides enhanced
+	// observability into a job's execution.
+	CollectProfile(ctx context.Context, execCtx interface{}) error
 }
 
 // RegisterOption is the template for options passed to the RegisterConstructor
@@ -1543,6 +1463,30 @@ func getRegisterOptions(typ jobspb.Type) (registerOptions, bool) {
 	return opts, ok
 }
 
+// TestingClearConstructors clears all previously registered
+// constructors. This is useful in tests when you want to ensure that
+// the job system will only run a particular job.
+//
+// The returned function should be called at the end of the test to
+// restore the constructors.
+func TestingClearConstructors() func() {
+	globalMu.Lock()
+	defer globalMu.Unlock()
+
+	oldConstructors := globalMu.constructors
+	oldOptions := globalMu.options
+
+	globalMu.constructors = make(map[jobspb.Type]Constructor)
+	globalMu.options = make(map[jobspb.Type]registerOptions)
+	return func() {
+		globalMu.Lock()
+		defer globalMu.Unlock()
+		globalMu.constructors = oldConstructors
+		globalMu.options = oldOptions
+	}
+
+}
+
 // RegisterConstructor registers a Resumer constructor for a certain job type.
 //
 // NOTE: You must pass either jobs.UsesTenantCostControl or
@@ -1596,7 +1540,11 @@ func (r *Registry) stepThroughStateMachine(
 	payload := job.Payload()
 	jobType := payload.Type()
 	if jobErr != nil {
-		log.Errorf(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
+		if pgerror.HasCandidateCode(jobErr) {
+			log.Infof(ctx, "%s job %d: stepping through state %s with error: %v", jobType, job.ID(), status, jobErr)
+		} else {
+			log.Errorf(ctx, "%s job %d: stepping through state %s with unexpected error: %+v", jobType, job.ID(), status, jobErr)
+		}
 	} else {
 		log.Infof(ctx, "%s job %d: stepping through state %s", jobType, job.ID(), status)
 	}
@@ -1869,6 +1817,19 @@ func (r *Registry) cancelRegisteredJobContext(jobID jobspb.JobID) bool {
 		aj.cancel()
 	}
 	return ok
+}
+
+// GetResumerForClaimedJob returns the resumer of the jobID if the registry has
+// a claim on the job.
+func (r *Registry) GetResumerForClaimedJob(jobID jobspb.JobID) (Resumer, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	aj, ok := r.mu.adoptedJobs[jobID]
+	if !ok {
+		return nil, &JobNotFoundError{jobID: jobID}
+	}
+	return aj.resumer, nil
 }
 
 func (r *Registry) getClaimedJob(jobID jobspb.JobID) (*Job, error) {

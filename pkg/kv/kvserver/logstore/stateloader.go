@@ -57,7 +57,12 @@ func (sl StateLoader) LoadLastIndex(
 ) (kvpb.RaftIndex, error) {
 	prefix := sl.RaftLogPrefix()
 	// NB: raft log has no intents.
-	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{LowerBound: prefix})
+	iter, err := reader.NewMVCCIterator(
+		ctx, storage.MVCCKeyIterKind, storage.IterOptions{
+			LowerBound: prefix, ReadCategory: storage.ReplicationReadCategory})
+	if err != nil {
+		return 0, err
+	}
 	defer iter.Close()
 
 	var lastIndex kvpb.RaftIndex
@@ -93,7 +98,8 @@ func (sl StateLoader) LoadRaftTruncatedState(
 ) (kvserverpb.RaftTruncatedState, error) {
 	var truncState kvserverpb.RaftTruncatedState
 	if _, err := storage.MVCCGetProto(
-		ctx, reader, sl.RaftTruncatedStateKey(), hlc.Timestamp{}, &truncState, storage.MVCCGetOptions{},
+		ctx, reader, sl.RaftTruncatedStateKey(), hlc.Timestamp{}, &truncState,
+		storage.MVCCGetOptions{ReadCategory: storage.ReplicationReadCategory},
 	); err != nil {
 		return kvserverpb.RaftTruncatedState{}, err
 	}
@@ -107,16 +113,14 @@ func (sl StateLoader) SetRaftTruncatedState(
 	if (*truncState == kvserverpb.RaftTruncatedState{}) {
 		return errors.New("cannot persist empty RaftTruncatedState")
 	}
-	// "Blind" because ms == nil and timestamp.IsEmpty().
+	// "Blind" because opts.Stats == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
 		ctx,
 		writer,
-		nil, /* ms */
 		sl.RaftTruncatedStateKey(),
-		hlc.Timestamp{},      /* timestamp */
-		hlc.ClockTimestamp{}, /* localTimestamp */
+		hlc.Timestamp{}, /* timestamp */
 		truncState,
-		nil, /* txn */
+		storage.MVCCWriteOptions{}, /* txn */
 	)
 }
 
@@ -126,7 +130,7 @@ func (sl StateLoader) LoadHardState(
 ) (raftpb.HardState, error) {
 	var hs raftpb.HardState
 	found, err := storage.MVCCGetProto(ctx, reader, sl.RaftHardStateKey(),
-		hlc.Timestamp{}, &hs, storage.MVCCGetOptions{})
+		hlc.Timestamp{}, &hs, storage.MVCCGetOptions{ReadCategory: storage.ReplicationReadCategory})
 
 	if !found || err != nil {
 		return raftpb.HardState{}, err
@@ -138,16 +142,14 @@ func (sl StateLoader) LoadHardState(
 func (sl StateLoader) SetHardState(
 	ctx context.Context, writer storage.Writer, hs raftpb.HardState,
 ) error {
-	// "Blind" because ms == nil and timestamp.IsEmpty().
+	// "Blind" because opts.Stats == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
 		ctx,
 		writer,
-		nil, /* ms */
 		sl.RaftHardStateKey(),
-		hlc.Timestamp{},      /* timestamp */
-		hlc.ClockTimestamp{}, /* localTimestamp */
+		hlc.Timestamp{}, /* timestamp */
 		&hs,
-		nil, /* txn */
+		storage.MVCCWriteOptions{}, /* opts */
 	)
 }
 
@@ -191,16 +193,14 @@ func (sl StateLoader) SetRaftReplicaID(
 	ctx context.Context, writer storage.Writer, replicaID roachpb.ReplicaID,
 ) error {
 	rid := kvserverpb.RaftReplicaID{ReplicaID: replicaID}
-	// "Blind" because ms == nil and timestamp.IsEmpty().
+	// "Blind" because opts.Stats == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
 		ctx,
 		writer,
-		nil, /* ms */
 		sl.RaftReplicaIDKey(),
-		hlc.Timestamp{},      /* timestamp */
-		hlc.ClockTimestamp{}, /* localTimestamp */
+		hlc.Timestamp{}, /* timestamp */
 		&rid,
-		nil, /* txn */
+		storage.MVCCWriteOptions{}, /* opts */
 	)
 }
 
@@ -210,7 +210,7 @@ func (sl StateLoader) LoadRaftReplicaID(
 ) (*kvserverpb.RaftReplicaID, error) {
 	var replicaID kvserverpb.RaftReplicaID
 	found, err := storage.MVCCGetProto(ctx, reader, sl.RaftReplicaIDKey(),
-		hlc.Timestamp{}, &replicaID, storage.MVCCGetOptions{})
+		hlc.Timestamp{}, &replicaID, storage.MVCCGetOptions{ReadCategory: storage.ReplicationReadCategory})
 	if err != nil {
 		return nil, err
 	}

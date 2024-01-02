@@ -51,37 +51,18 @@ const (
 	MaxTxnPriority TxnPriority = math.MaxInt32
 )
 
-// TxnSeqIsIgnored returns true iff the sequence number overlaps with
-// any range in the ignored array.
+// TxnSeqIsIgnored returns true iff the supplied sequence number overlaps with
+// any range in the ignored array. The caller should ensure that the ignored
+// array is non-overlapping, non-contiguous, and sorted in (increasing) sequence
+// number order.
 func TxnSeqIsIgnored(seq TxnSeq, ignored []IgnoredSeqNumRange) bool {
-	// The ignored seqnum ranges are guaranteed to be
-	// non-overlapping, non-contiguous, and guaranteed to be
-	// sorted in seqnum order. We're going to look from the end to
-	// see if the current intent seqnum is ignored.
-	for i := len(ignored) - 1; i >= 0; i-- {
-		if seq < ignored[i].Start {
-			// The history entry's sequence number is lower/older than
-			// the current ignored range. Go to the previous range
-			// and try again.
-			continue
-		}
-
-		// Here we have a range where the start seqnum is lower than the current
-		// intent seqnum. Does it include it?
-		if seq > ignored[i].End {
-			// Here we have a range where the current history entry's seqnum
-			// is higher than the range's end seqnum. Given that the
-			// ranges are sorted, we're guaranteed that there won't
-			// be any further overlapping range at a lower value of i.
-			return false
-		}
-		// Yes, it's included. We're going to skip over this
-		// intent seqnum and retry the search above.
-		return true
-	}
-
-	// Exhausted the ignore list. Not ignored.
-	return false
+	i := sort.Search(len(ignored), func(i int) bool {
+		return seq <= ignored[i].End
+	})
+	// Did we find the smallest index i, such that seq <= ignored[i].End?
+	return i != len(ignored) &&
+		// AND does seq lie within with the range [start, end] at index i?
+		ignored[i].Start <= seq
 }
 
 // Short returns a prefix of the transaction's ID.
@@ -111,16 +92,16 @@ func (ms MVCCStats) HasNoUserData() bool {
 	return ms.ContainsEstimates == 0 && ms.RangeKeyCount == 0 && ms.KeyCount == 0 && ms.IntentCount == 0
 }
 
-// AvgIntentAge returns the average age of outstanding intents,
+// AvgLockAge returns the average age of outstanding locks,
 // based on current wall time specified via nowNanos.
-func (ms MVCCStats) AvgIntentAge(nowNanos int64) float64 {
-	if ms.IntentCount == 0 {
+func (ms MVCCStats) AvgLockAge(nowNanos int64) float64 {
+	if ms.LockCount == 0 {
 		return 0
 	}
 	// Advance age by any elapsed time since last computed. Note that
 	// we operate on a copy.
 	ms.AgeTo(nowNanos)
-	return float64(ms.IntentAge) / float64(ms.IntentCount)
+	return float64(ms.LockAge) / float64(ms.LockCount)
 }
 
 // GCByteAge returns the total age of outstanding gc'able
@@ -153,7 +134,7 @@ func (ms *MVCCStats) AgeTo(nowNanos int64) {
 	diffSeconds := nowNanos/1e9 - ms.LastUpdateNanos/1e9
 
 	ms.GCBytesAge += ms.GCBytes() * diffSeconds
-	ms.IntentAge += ms.IntentCount * diffSeconds
+	ms.LockAge += ms.LockCount * diffSeconds
 	ms.LastUpdateNanos = nowNanos
 }
 
@@ -168,7 +149,7 @@ func (ms *MVCCStats) Add(oms MVCCStats) {
 	ms.ContainsEstimates += oms.ContainsEstimates
 
 	// Now that we've done that, we may just add them.
-	ms.IntentAge += oms.IntentAge
+	ms.LockAge += oms.LockAge
 	ms.GCBytesAge += oms.GCBytesAge
 	ms.LiveBytes += oms.LiveBytes
 	ms.KeyBytes += oms.KeyBytes
@@ -178,7 +159,8 @@ func (ms *MVCCStats) Add(oms MVCCStats) {
 	ms.KeyCount += oms.KeyCount
 	ms.ValCount += oms.ValCount
 	ms.IntentCount += oms.IntentCount
-	ms.SeparatedIntentCount += oms.SeparatedIntentCount
+	ms.LockBytes += oms.LockBytes
+	ms.LockCount += oms.LockCount
 	ms.RangeKeyCount += oms.RangeKeyCount
 	ms.RangeKeyBytes += oms.RangeKeyBytes
 	ms.RangeValCount += oms.RangeValCount
@@ -199,7 +181,7 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.ContainsEstimates -= oms.ContainsEstimates
 
 	// Now that we've done that, we may subtract.
-	ms.IntentAge -= oms.IntentAge
+	ms.LockAge -= oms.LockAge
 	ms.GCBytesAge -= oms.GCBytesAge
 	ms.LiveBytes -= oms.LiveBytes
 	ms.KeyBytes -= oms.KeyBytes
@@ -209,7 +191,8 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.KeyCount -= oms.KeyCount
 	ms.ValCount -= oms.ValCount
 	ms.IntentCount -= oms.IntentCount
-	ms.SeparatedIntentCount -= oms.SeparatedIntentCount
+	ms.LockBytes -= oms.LockBytes
+	ms.LockCount -= oms.LockCount
 	ms.RangeKeyCount -= oms.RangeKeyCount
 	ms.RangeKeyBytes -= oms.RangeKeyBytes
 	ms.RangeValCount -= oms.RangeValCount
@@ -222,12 +205,6 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 // IsInline returns true if the value is inlined in the metadata.
 func (meta MVCCMetadata) IsInline() bool {
 	return meta.RawBytes != nil
-}
-
-// AddToIntentHistory adds the sequence and value to the intent history.
-func (meta *MVCCMetadata) AddToIntentHistory(seq TxnSeq, val []byte) {
-	meta.IntentHistory = append(meta.IntentHistory,
-		MVCCMetadata_SequencedIntent{Sequence: seq, Value: val})
 }
 
 // GetPrevIntentSeq goes through the intent history and finds the previous

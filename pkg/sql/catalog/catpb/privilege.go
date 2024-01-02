@@ -13,7 +13,6 @@ package catpb
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -41,6 +40,11 @@ const (
 	// These descriptors should have all the correct privileges and the owner field
 	// explicitly set. These descriptors should be strictly validated.
 	Version21_2
+
+	// Version23_2 corresponds to descriptors created in 23.2 and onwards. These
+	// descriptors that are function descriptions should have EXECUTE privileges
+	// for the public role.
+	Version23_2
 )
 
 // Owner accesses the owner field.
@@ -123,7 +127,7 @@ func NewCustomSuperuserPrivilegeDescriptor(
 				WithGrantOption: priv.ToBitField(),
 			},
 		},
-		Version: Version21_2,
+		Version: Version23_2,
 	}
 }
 
@@ -162,7 +166,7 @@ func NewPrivilegeDescriptor(
 				WithGrantOption: grantOption.ToBitField(),
 			},
 		},
-		Version: Version21_2,
+		Version: Version23_2,
 	}
 }
 
@@ -200,6 +204,14 @@ func NewPublicSchemaPrivilegeDescriptor(includeCreatePriv bool) *PrivilegeDescri
 	} else {
 		p.Grant(username.PublicRoleName(), privilege.List{privilege.USAGE}, false)
 	}
+	return p
+}
+
+// NewBaseFunctionPrivilegeDescriptor returns a privilege descriptor
+// with default privileges for a function descriptor.
+func NewBaseFunctionPrivilegeDescriptor(owner username.SQLUsername) *PrivilegeDescriptor {
+	p := NewBasePrivilegeDescriptor(owner)
+	p.Grant(username.PublicRoleName(), privilege.List{privilege.EXECUTE}, false)
 	return p
 }
 
@@ -376,7 +388,7 @@ func (p PrivilegeDescriptor) ValidateSuperuserPrivileges(
 			return fmt.Errorf(
 				"user %s must have exactly %s privileges on %s",
 				user,
-				allowedSuperuserPrivileges,
+				allowedSuperuserPrivileges.SortedDisplayNames(),
 				privilegeObject(parentID, objectType, objectName),
 			)
 		}
@@ -413,7 +425,7 @@ func (p PrivilegeDescriptor) Validate(
 		return errors.AssertionFailedf(
 			"user %s must not have %s privileges on %s",
 			u.User(),
-			privList,
+			privList.SortedDisplayNames(),
 			privilegeObject(parentID, objectType, objectName),
 		)
 	}
@@ -483,7 +495,7 @@ func (p PrivilegeDescriptor) Show(
 			return nil, err
 		}
 		sort.Slice(privileges, func(i, j int) bool {
-			return strings.Compare(privileges[i].Kind.String(), privileges[j].Kind.String()) < 0
+			return privileges[i].Kind.DisplayName() < privileges[j].Kind.DisplayName()
 		})
 		ret = append(ret, UserPrivilege{
 			User:       userPriv.User(),
@@ -513,7 +525,10 @@ func (p PrivilegeDescriptor) CheckPrivilege(user username.SQLUsername, priv priv
 		return user.IsNodeUser()
 	}
 
-	if privilege.ALL.IsSetIn(userPriv.Privileges) {
+	if privilege.ALL.IsSetIn(userPriv.Privileges) && priv != privilege.NOSQLLOGIN {
+		// Since NOSQLLOGIN is a "negative" privilege, it's ignored for the ALL
+		// check. It's poor UX for someone with ALL privileges to not be able to
+		// log in.
 		return true
 	}
 	return priv.IsSetIn(userPriv.Privileges)

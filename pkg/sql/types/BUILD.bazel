@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -40,7 +39,6 @@ go_test(
         "types_test.go",
         "types_text_marshal_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":types"],
     deps = [
         "//pkg/geo/geopb",
@@ -84,5 +82,3 @@ disallowed_imports_test(
         "//pkg/roachpb",
     ],
 )
-
-get_x_data(name = "get_x_data")

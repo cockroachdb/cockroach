@@ -14,10 +14,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -30,8 +30,11 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serverParams, _ := tests.CreateTestServerParams()
-	s, goDB, _ := serverutils.StartServer(t, serverParams)
+	s, goDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: sqlstats.CreateTestingKnobs(),
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 
 	testCases := map[string]string{
@@ -51,7 +54,7 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 	// transaction stats later.
 	fingerprintIDs := make(map[appstatspb.StmtFingerprintID]struct{})
 	require.NoError(t,
-		sqlStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{},
+		sqlStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{},
 			func(_ context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 				fingerprintIDs[statistics.ID] = struct{}{}
 				return nil
@@ -61,7 +64,7 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 		require.NoError(t,
 			sqlStats.IterateStatementStats(
 				ctx,
-				&sqlstats.IteratorOptions{},
+				sqlstats.IteratorOptions{},
 				func(_ context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 					require.NotNil(t, statistics)
 					// If we are running our test case, we reset the SQL Stats. The iterator
@@ -80,7 +83,7 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 		require.NoError(t,
 			sqlStats.IterateTransactionStats(
 				ctx,
-				&sqlstats.IteratorOptions{},
+				sqlstats.IteratorOptions{},
 				func(
 					ctx context.Context,
 					statistics *appstatspb.CollectedTransactionStatistics,

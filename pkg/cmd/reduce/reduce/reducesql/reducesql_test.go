@@ -13,18 +13,14 @@ package reducesql_test
 import (
 	"context"
 	"flag"
-	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce/reducesql"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/jackc/pgx/v4"
-	"github.com/stretchr/testify/require"
 )
 
 var printUnknown = flag.Bool("unknown", false, "print unknown types during walk")
@@ -48,22 +44,12 @@ func isInterestingSQL(t *testing.T, contains string) reduce.InterestingFn {
 			Insecure: true,
 		}
 
-		serv, err := serverutils.StartServerRaw(t, args)
-		require.NoError(t, err)
+		serv := serverutils.StartServerOnly(t, args)
 		defer serv.Stopper().Stop(ctx)
 
-		options := url.Values{}
-		options.Add("sslmode", "disable")
-		url := url.URL{
-			Scheme:   "postgres",
-			User:     url.User(username.RootUser),
-			Host:     serv.ServingSQLAddr(),
-			RawQuery: options.Encode(),
-		}
+		db := serv.ApplicationLayer().SQLConn(t)
 
-		db, err := pgx.Connect(ctx, url.String())
-		require.NoError(t, err)
-		_, err = db.Exec(ctx, f)
+		_, err := db.Exec(f)
 		if err == nil {
 			return false, nil
 		}

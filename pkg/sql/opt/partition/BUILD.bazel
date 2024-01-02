@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -22,7 +21,6 @@ go_library(
 go_test(
     name = "partition_test",
     srcs = ["locality_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":partition"],
     deps = [
         "//pkg/settings/cluster",
@@ -34,5 +32,3 @@ go_test(
         "//pkg/util/leaktest",
     ],
 )
-
-get_x_data(name = "get_x_data")

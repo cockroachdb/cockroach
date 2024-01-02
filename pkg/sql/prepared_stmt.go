@@ -126,6 +126,27 @@ type preparedStatementsAccessor interface {
 	DeleteAll(ctx context.Context)
 }
 
+// emptyPreparedStatements is the default impl used by the planner when the
+// connExecutor is not available.
+type emptyPreparedStatements struct{}
+
+var _ preparedStatementsAccessor = emptyPreparedStatements{}
+
+func (e emptyPreparedStatements) List() map[string]*PreparedStatement {
+	return nil
+}
+
+func (e emptyPreparedStatements) Get(string, bool) (*PreparedStatement, bool) {
+	return nil, false
+}
+
+func (e emptyPreparedStatements) Delete(context.Context, string) bool {
+	return false
+}
+
+func (e emptyPreparedStatements) DeleteAll(context.Context) {
+}
+
 // PortalPausablity mark if the portal is pausable and the reason. This is
 // needed to give the correct error for usage of multiple active portals.
 type PortalPausablity int64
@@ -187,16 +208,11 @@ func (ex *connExecutor) makePreparedPortal(
 
 	if ex.sessionData().MultipleActivePortalsEnabled && ex.executorType != executorTypeInternal {
 		telemetry.Inc(sqltelemetry.StmtsTriedWithPausablePortals)
-		if tree.IsAllowedToPause(stmt.AST) {
-			portal.pauseInfo = &portalPauseInfo{}
-			portal.pauseInfo.dispatchToExecutionEngine.queryStats = &topLevelQueryStats{}
-			portal.portalPausablity = PausablePortal
-		} else {
-			telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
-			// We have set the session variable multiple_active_portals_enabled  to
-			// true, but we don't support the underlying query for a pausable portal.
-			portal.portalPausablity = NotPausablePortalForUnsupportedStmt
-		}
+		// We will check whether the statement itself is pausable (i.e., that it
+		// doesn't contain DDL or mutations) when we build the plan.
+		portal.pauseInfo = &portalPauseInfo{}
+		portal.pauseInfo.dispatchToExecutionEngine.queryStats = &topLevelQueryStats{}
+		portal.portalPausablity = PausablePortal
 	}
 	return portal, portal.accountForCopy(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 }

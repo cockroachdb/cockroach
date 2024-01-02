@@ -657,13 +657,6 @@ func (h *hasher) HashRelExpr(val RelExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
-func (h *hasher) HashRelListExpr(val RelListExpr) {
-	for i := range val {
-		h.HashRelExpr(val[i].RelExpr)
-		h.HashPhysProps(val[i].PhysProps)
-	}
-}
-
 func (h *hasher) HashScalarExpr(val opt.ScalarExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
@@ -725,6 +718,21 @@ func (h *hasher) HashUniqueChecksExpr(val UniqueChecksExpr) {
 	}
 }
 
+func (h *hasher) HashFastPathUniqueChecksExpr(val FastPathUniqueChecksExpr) {
+	for i := range val {
+		h.HashRelExpr(val[i].Check)
+		h.HashTableID(val[i].ReferencedTableID)
+		h.HashIndexOrdinal(val[i].ReferencedIndexOrdinal)
+		h.HashInt(val[i].CheckOrdinal)
+		h.HashColList(val[i].InsertCols)
+		h.HashLocking(val[i].Locking)
+		for _, scalarListExpr := range val[i].DatumsFromConstraint {
+			tuple := *(scalarListExpr.(*TupleExpr))
+			h.HashScalarListExpr(tuple.Elems)
+		}
+	}
+}
+
 func (h *hasher) HashKVOptionsExpr(val KVOptionsExpr) {
 	for i := range val {
 		h.HashString(val[i].Key)
@@ -762,6 +770,10 @@ func (h *hasher) HashVolatility(val volatility.V) {
 }
 
 func (h *hasher) HashLiteralRows(val *opt.LiteralRows) {
+	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
+}
+
+func (h *hasher) HashUDFDefinition(val *UDFDefinition) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
@@ -1076,19 +1088,6 @@ func (h *hasher) IsRelExprEqual(l, r RelExpr) bool {
 	return l == r
 }
 
-func (h *hasher) IsRelListExprEqual(l, r RelListExpr) bool {
-	if len(l) != len(r) {
-		return false
-	}
-	for i := range l {
-		if !h.IsRelExprEqual(l[i].RelExpr, r[i].RelExpr) ||
-			!h.IsPhysPropsEqual(l[i].PhysProps, r[i].PhysProps) {
-			return false
-		}
-	}
-	return true
-}
-
 func (h *hasher) IsScalarExprEqual(l, r opt.ScalarExpr) bool {
 	return l == r
 }
@@ -1191,6 +1190,41 @@ func (h *hasher) IsUniqueChecksExprEqual(l, r UniqueChecksExpr) bool {
 	return true
 }
 
+func (h *hasher) IsFastPathUniqueChecksExprEqual(l, r FastPathUniqueChecksExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if !h.IsRelExprEqual(l[i].Check, r[i].Check) {
+			return false
+		}
+		if l[i].ReferencedTableID != r[i].ReferencedTableID {
+			return false
+		}
+		if l[i].ReferencedIndexOrdinal != r[i].ReferencedIndexOrdinal {
+			return false
+		}
+		if l[i].CheckOrdinal != r[i].CheckOrdinal {
+			return false
+		}
+		if !h.IsLockingEqual(l[i].Locking, r[i].Locking) {
+			return false
+		}
+		if !h.IsColListEqual(l[i].InsertCols, r[i].InsertCols) {
+			return false
+		}
+		if len(l[i].DatumsFromConstraint) != len(r[i].DatumsFromConstraint) {
+			return false
+		}
+		for j := range l[i].DatumsFromConstraint {
+			if l[i].DatumsFromConstraint[j] != r[i].DatumsFromConstraint[j] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func (h *hasher) IsKVOptionsExprEqual(l, r KVOptionsExpr) bool {
 	if len(l) != len(r) {
 		return false
@@ -1233,6 +1267,48 @@ func (h *hasher) IsVolatilityEqual(l, r volatility.V) bool {
 
 func (h *hasher) IsLiteralRowsEqual(l, r *opt.LiteralRows) bool {
 	return l == r
+}
+
+func (h *hasher) IsUDFDefinitionEqual(l, r *UDFDefinition) bool {
+	if len(l.Body) != len(r.Body) {
+		return false
+	}
+	for i := range l.Body {
+		if !h.IsRelExprEqual(l.Body[i], r.Body[i]) {
+			return false
+		}
+		if !h.IsPhysPropsEqual(l.BodyProps[i], r.BodyProps[i]) {
+			return false
+		}
+	}
+	if l.ExceptionBlock != nil {
+		if r.ExceptionBlock == nil || len(l.ExceptionBlock.Actions) != len(r.ExceptionBlock.Actions) {
+			return false
+		}
+		for i := range l.ExceptionBlock.Actions {
+			if !h.IsUDFDefinitionEqual(l.ExceptionBlock.Actions[i], r.ExceptionBlock.Actions[i]) {
+				return false
+			}
+			if l.ExceptionBlock.Codes[i] != r.ExceptionBlock.Codes[i] {
+				return false
+			}
+		}
+	} else if r.ExceptionBlock != nil {
+		return false
+	}
+	if l.CursorDeclaration != nil {
+		if r.CursorDeclaration == nil {
+			return false
+		}
+		if l.CursorDeclaration.NameArgIdx != r.CursorDeclaration.NameArgIdx ||
+			l.CursorDeclaration.Scroll != r.CursorDeclaration.Scroll ||
+			l.CursorDeclaration.CursorSQL != r.CursorDeclaration.CursorSQL {
+			return false
+		}
+	} else if r.CursorDeclaration != nil {
+		return false
+	}
+	return h.IsColListEqual(l.Params, r.Params) && l.IsRecursive == r.IsRecursive
 }
 
 // encodeDatum turns the given datum into an encoded string of bytes. If two

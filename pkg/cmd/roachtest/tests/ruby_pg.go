@@ -22,9 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -32,6 +35,9 @@ import (
 var rubyPGTestFailureRegex = regexp.MustCompile(`^rspec ./.*# .*`)
 var testFailureFilenameRegexp = regexp.MustCompile("^rspec .*.rb.*([0-9]|]) # ")
 var testSummaryRegexp = regexp.MustCompile("^([0-9]+) examples, [0-9]+ failures")
+
+// WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
+// This is used by docs automation to produce a list of supported versions for ORM's.
 var rubyPGVersion = "v1.3.5"
 
 // This test runs Ruby PG's full test suite against a single cockroach node.
@@ -46,8 +52,9 @@ func registerRubyPG(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		startOpts := option.DefaultStartOptsInMemory()
+		startOpts.RoachprodOpts.SQLPort = config.DefaultSQLPort
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -166,7 +173,6 @@ func registerRubyPG(r registry.Registry) {
 
 		// Find all the failed and errored tests.
 		results := newORMTestsResults()
-		blocklistName, expectedFailures := "rubyPGBlocklist", rubyPGBlocklist
 
 		scanner := bufio.NewScanner(bytes.NewReader(rawResults))
 		totalTests := int64(0)
@@ -199,8 +205,12 @@ func registerRubyPG(r registry.Registry) {
 			}
 			test = strs[1]
 
-			issue, expectedFailure := expectedFailures[test]
+			issue, expectedFailure := rubyPGBlocklist[test]
+			ignoredReason, expectedIgnored := rubyPGIgnorelist[test]
 			switch {
+			case expectedIgnored:
+				results.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, ignoredReason)
+				results.ignoredCount++
 			case expectedFailure:
 				results.results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
 					test, maybeAddGithubLink(issue),
@@ -221,20 +231,25 @@ func registerRubyPG(r registry.Registry) {
 			t.Fatalf("failed to find total number of tests run")
 		}
 		totalPasses := int(totalTests) - (results.failUnexpectedCount + results.failExpectedCount)
-		results.passUnexpectedCount = len(expectedFailures) - results.failExpectedCount
+		results.passUnexpectedCount = len(rubyPGBlocklist) - results.failExpectedCount
 		results.passExpectedCount = totalPasses - results.passUnexpectedCount
 
-		results.summarizeAll(t, "ruby-pg", blocklistName, expectedFailures, version, rubyPGVersion)
+		const blocklistName = "rubyPGBlocklist"
+		results.summarizeAll(t, "ruby-pg", blocklistName, rubyPGBlocklist, version, rubyPGVersion)
 	}
 
 	r.Add(registry.TestSpec{
-		Name:       "ruby-pg",
-		Timeout:    1 * time.Hour,
-		Owner:      registry.OwnerSQLFoundations,
-		Cluster:    r.MakeClusterSpec(1),
-		Leases:     registry.MetamorphicLeases,
-		NativeLibs: registry.LibGEOS,
-		Tags:       registry.Tags(`default`, `orm`),
+		Name:    "ruby-pg",
+		Timeout: 1 * time.Hour,
+		Owner:   registry.OwnerSQLFoundations,
+		// TODO(DarrylWong): This test currently fails on Ubuntu 22.04 so we run it on 20.04.
+		// See: https://github.com/cockroachdb/cockroach/issues/112109
+		// Once this issue is fixed we should remove this Ubuntu Version override.
+		Cluster:          r.MakeClusterSpec(1, spec.UbuntuVersion(vm.FocalFossa)),
+		Leases:           registry.MetamorphicLeases,
+		NativeLibs:       registry.LibGEOS,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.ORM),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRubyPGTest(ctx, t, c)
 		},

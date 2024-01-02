@@ -1,4 +1,3 @@
-# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
 
 statement ok
@@ -58,7 +57,7 @@ SHOW CREATE DATABASE multi_region_test_placement_restricted_db
 database_name                                     create_statement
 multi_region_test_placement_restricted_db         CREATE DATABASE multi_region_test_placement_restricted_db PRIMARY REGION "ap-southeast-2" REGIONS = "ap-southeast-2", "ca-central-1", "us-east-1" SURVIVE ZONE FAILURE PLACEMENT RESTRICTED
 
-statement error target database or schema does not exist
+statement error database "foo" does not exist
 SHOW CREATE DATABASE foo
 
 # Test that showing localities works for databases and schemas with weird
@@ -75,7 +74,7 @@ CREATE TABLE "A delightful name for a schema!".rbr (i INT PRIMARY KEY) LOCALITY 
 CREATE TABLE sc.rbt (i INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE;
 
 query TTTTIT
-SHOW TABLES
+SELECT * FROM [SHOW TABLES] ORDER BY 1
 ----
 A delightful name for a schema!  rbr  table  root  0  REGIONAL BY ROW
 public                           g    table  root  0  GLOBAL
@@ -85,7 +84,7 @@ statement ok
 use defaultdb
 
 query TTTTIT
-SHOW TABLES FROM "This is a fun name, no?"
+SELECT * FROM [SHOW TABLES FROM "This is a fun name, no?"] ORDER BY 1
 ----
 A delightful name for a schema!  rbr  table  root  0  REGIONAL BY ROW
 public                           g    table  root  0  GLOBAL

@@ -15,6 +15,7 @@ package dbdesc
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -23,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -212,7 +213,7 @@ func (desc *immutable) HasPublicSchemaWithDescriptor() bool {
 	if desc.ID == keys.SystemDatabaseID {
 		return false
 	}
-	_, found := desc.Schemas[tree.PublicSchema]
+	_, found := desc.Schemas[catconstants.PublicSchemaName]
 	return found
 }
 
@@ -253,6 +254,8 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	if desc.IsMultiRegion() {
 		desc.validateMultiRegion(vea)
 	}
+
+	desc.maybeValidateSystemDatabaseSchemaVersion(vea)
 }
 
 // validateMultiRegion performs checks specific to multi-region DBs.
@@ -264,6 +267,40 @@ func (desc *immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulato
 	if desc.RegionConfig.PrimaryRegion == desc.RegionConfig.SecondaryRegion {
 		vea.Report(errors.AssertionFailedf(
 			"primary region is same as secondary region on multi-region db %d", desc.GetID()))
+	}
+}
+
+func (desc *immutable) maybeValidateSystemDatabaseSchemaVersion(
+	vea catalog.ValidationErrorAccumulator,
+) {
+	sv := desc.GetSystemDatabaseSchemaVersion()
+	if sv == nil {
+		return
+	}
+
+	if id := desc.GetID(); id != keys.SystemDatabaseID {
+		vea.Report(errors.AssertionFailedf(
+			`attempting to set system database schema version for non-system database descriptor (%d)`,
+			id,
+		))
+	}
+
+	binaryMinSupportedVersion := clusterversion.MinSupported.Version()
+	if !binaryMinSupportedVersion.LessEq(*sv) {
+		vea.Report(errors.AssertionFailedf(
+			`attempting to set system database schema version to version lower than binary min supported version (%#v): %#v`,
+			binaryMinSupportedVersion,
+			*sv,
+		))
+	}
+
+	binaryVersion := clusterversion.Latest.Version()
+	if !sv.LessEq(binaryVersion) {
+		vea.Report(errors.AssertionFailedf(
+			`attempting to set system database schema version to version higher than binary version (%#v): %#v`,
+			binaryVersion,
+			*sv,
+		))
 	}
 }
 
@@ -466,6 +503,15 @@ func (desc *immutable) HasConcurrentSchemaChanges() bool {
 		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID
 }
 
+// ConcurrentSchemaChangeJobIDs implements catalog.Descriptor.
+func (desc *immutable) ConcurrentSchemaChangeJobIDs() (ret []catpb.JobID) {
+	if desc.DeclarativeSchemaChangerState != nil &&
+		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID {
+		ret = append(ret, desc.DeclarativeSchemaChangerState.JobID)
+	}
+	return ret
+}
+
 // GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.
 func (desc *immutable) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
 	defaultPrivilegeDescriptor := desc.GetDefaultPrivileges()
@@ -521,6 +567,11 @@ func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorStat
 // GetObjectType implements the Object interface.
 func (desc *immutable) GetObjectType() privilege.ObjectType {
 	return privilege.Database
+}
+
+// GetObjectTypeString implements the Object interface.
+func (desc *immutable) GetObjectTypeString() string {
+	return string(privilege.Database)
 }
 
 // SkipNamespace implements the descriptor interface.

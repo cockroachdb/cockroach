@@ -26,10 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -63,6 +63,10 @@ func TestCollectInfoFromMultipleStores(t *testing.T) {
 	defer c.Cleanup()
 
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// This logic is specific to the storage layer.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
 			1: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-2"}}},
@@ -88,7 +92,7 @@ func TestCollectInfoFromMultipleStores(t *testing.T) {
 		stores[r.StoreID] = struct{}{}
 	}
 	require.Equal(t, 2, len(stores), "collected replicas from stores")
-	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), replicas.Version,
+	require.Equal(t, clusterversion.Latest.Version(), replicas.Version,
 		"collected version info from stores")
 }
 
@@ -112,6 +116,8 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{{InMemory: true}},
 			Insecure:   true,
+			// This logic is specific to the storage layer.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		},
 	})
 	tc.Start(t)
@@ -132,7 +138,7 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 		"collect-info",
 		"--insecure",
 		"--host",
-		tc.Server(2).ServingRPCAddr(),
+		tc.Server(2).AdvRPCAddr(),
 		replicaInfoFileName,
 	})
 
@@ -151,7 +157,7 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 	require.Equal(t, totalRanges*2, totalReplicas, "number of collected replicas")
 	require.Equal(t, totalRanges, len(replicas.Descriptors),
 		"number of collected descriptors from metadata")
-	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), replicas.Version,
+	require.Equal(t, clusterversion.Latest.Version(), replicas.Version,
 		"collected version info from stores")
 }
 
@@ -180,13 +186,17 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	// mark on replicas on node 1 as designated survivors. After that, starting
 	// single node should succeed.
 	tcBefore := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// This logic is specific to the storage layer.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
 		},
 	})
 	tcBefore.Start(t)
 	s := sqlutils.MakeSQLRunner(tcBefore.Conns[0])
-	s.Exec(t, "set cluster setting cluster.organization='remove dead replicas test'")
+	s.Exec(t, "SET CLUSTER SETTING cluster.organization = 'remove dead replicas test'")
 	defer tcBefore.Stopper().Stop(ctx)
 
 	// We use scratch range to test special case for pending update on the
@@ -242,6 +252,10 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 		"apply plan was not executed on requested node")
 
 	tcAfter := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// This logic is specific to the storage layer.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ReplicationMode: base.ReplicationManual,
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
@@ -257,10 +271,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	// attempt. That would increase number of replicas on system ranges to 5 and we
 	// would not be able to upreplicate properly. So we need to decommission old nodes
 	// first before proceeding.
-	grpcConn, err := tcAfter.Server(0).RPCContext().GRPCDialNode(
-		tcAfter.Server(0).ServingRPCAddr(), tcAfter.Server(0).NodeID(), rpc.DefaultClass).Connect(ctx)
-	require.NoError(t, err, "Failed to create test cluster after recovery")
-	adminClient := serverpb.NewAdminClient(grpcConn)
+	adminClient := tcAfter.Server(0).GetAdminClient(t)
 
 	require.NoError(t, runDecommissionNodeImpl(
 		ctx, adminClient, nodeDecommissionWaitNone, nodeDecommissionChecksSkip, false,
@@ -268,7 +279,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 		"Failed to decommission removed nodes")
 
 	for i := 0; i < len(tcAfter.Servers); i++ {
-		require.NoError(t, tcAfter.Servers[i].Stores().VisitStores(func(store *kvserver.Store) error {
+		require.NoError(t, tcAfter.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			store.SetReplicateQueueActive(true)
 			return nil
 		}), "Failed to activate replication queue")
@@ -278,7 +289,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	require.NoError(t, tcAfter.WaitForFullReplication(), "Failed to perform full replication")
 
 	for i := 0; i < len(tcAfter.Servers); i++ {
-		require.NoError(t, tcAfter.Servers[i].Stores().VisitStores(func(store *kvserver.Store) error {
+		require.NoError(t, tcAfter.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			return store.ForceConsistencyQueueProcess()
 		}), "Failed to force replicas to consistency queue")
 	}
@@ -331,32 +342,36 @@ func TestStageVersionCheck(t *testing.T) {
 	})
 	defer c.Cleanup()
 
-	storeReg := server.NewStickyInMemEnginesRegistry()
-	defer storeReg.CloseAllStickyInMemEngines()
+	listenerReg := listenerutil.NewListenerRegistry()
+	defer listenerReg.Close()
+
+	storeReg := server.NewStickyVFSRegistry()
 	tc := testcluster.NewTestCluster(t, 4, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// This logic is specific to the storage layer.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ReplicationMode: base.ReplicationManual,
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyEngineRegistry: storeReg,
+						StickyVFSRegistry: storeReg,
 					},
 				},
 				StoreSpecs: []base.StoreSpec{
-					{InMemory: true, StickyInMemoryEngineID: "1"},
+					{InMemory: true, StickyVFSID: "1"},
 				},
 			},
 		},
+		ReusableListenerReg: listenerReg,
 	})
 	tc.Start(t)
 	defer tc.Stopper().Stop(ctx)
 	tc.StopServer(3)
 
-	grpcConn, err := tc.Server(0).RPCContext().GRPCDialNode(tc.Server(0).ServingRPCAddr(),
-		tc.Server(0).NodeID(), rpc.DefaultClass).Connect(ctx)
-	require.NoError(t, err, "Failed to create test cluster after recovery")
-	adminClient := serverpb.NewAdminClient(grpcConn)
-	v := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	adminClient := tc.Server(0).GetAdminClient(t)
+	v := clusterversion.Latest.Version()
 	v.Internal++
 	// To avoid crafting real replicas we use StaleLeaseholderNodeIDs to force
 	// node to stage plan for verification.
@@ -368,7 +383,7 @@ func TestStageVersionCheck(t *testing.T) {
 		StaleLeaseholderNodeIDs: []roachpb.NodeID{1},
 	}
 	// Attempts to stage plan with different internal version must fail.
-	_, err = adminClient.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+	_, err := adminClient.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
 		Plan:                      &p,
 		AllNodes:                  true,
 		ForcePlan:                 false,
@@ -384,13 +399,11 @@ func TestStageVersionCheck(t *testing.T) {
 	})
 	require.NoError(t, err, "force local must fix incorrect version")
 	// Check that stored plan has version matching cluster version.
-	fs, err := storeReg.GetUnderlyingFS(base.StoreSpec{InMemory: true, StickyInMemoryEngineID: "1"})
-	require.NoError(t, err, "failed to get shared store fs")
-	ps := loqrecovery.NewPlanStore("", fs)
+	ps := loqrecovery.NewPlanStore("", storeReg.Get("1"))
 	p, ok, err := ps.LoadPlan()
 	require.NoError(t, err, "failed to read node 0 plan")
 	require.True(t, ok, "plan was not staged")
-	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), p.Version,
+	require.Equal(t, clusterversion.Latest.Version(), p.Version,
 		"plan version was not updated")
 }
 
@@ -437,11 +450,8 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	})
 	defer c.Cleanup()
 
-	listenerReg := testutils.NewListenerRegistry()
+	listenerReg := listenerutil.NewListenerRegistry()
 	defer listenerReg.Close()
-
-	storeReg := server.NewStickyInMemEnginesRegistry()
-	defer storeReg.CloseAllStickyInMemEngines()
 
 	// Test cluster contains 3 nodes that we would turn into a single node
 	// cluster using loss of quorum recovery. To do that, we will terminate
@@ -458,10 +468,9 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		sa[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: storeReg,
+					StickyVFSRegistry: server.NewStickyVFSRegistry(),
 				},
 			},
-			Listener: listenerReg.GetOrFail(t, i),
 			StoreSpecs: []base.StoreSpec{
 				{
 					InMemory: true,
@@ -470,12 +479,16 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		}
 	}
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
-		ReusableListeners: true,
-		ServerArgsPerNode: sa,
+		ServerArgs: base.TestServerArgs{
+			// This logic is specific to the storage layer.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+		ReusableListenerReg: listenerReg,
+		ServerArgsPerNode:   sa,
 	})
 	tc.Start(t)
 	s := sqlutils.MakeSQLRunner(tc.Conns[0])
-	s.Exec(t, "set cluster setting cluster.organization='remove dead replicas test'")
+	s.Exec(t, "SET CLUSTER SETTING cluster.organization = 'remove dead replicas test'")
 	defer tc.Stopper().Stop(ctx)
 
 	// We use scratch range to test special case for pending update on the
@@ -509,7 +522,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 			"make-plan",
 			"--confirm=y",
 			"--certs-dir=test_certs",
-			"--host=" + tc.Server(0).ServingRPCAddr(),
+			"--host=" + tc.Server(0).AdvRPCAddr(),
 			"--plan=" + planFile,
 		})
 	require.NoError(t, err, "failed to run make-plan")
@@ -528,7 +541,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		[]string{
 			"debug", "recover", "apply-plan",
 			"--certs-dir=test_certs",
-			"--host=" + tc.Server(0).ServingRPCAddr(),
+			"--host=" + tc.Server(0).AdvRPCAddr(),
 			"--confirm=y", planFile,
 		})
 	require.NoError(t, err, "failed to run apply plan")
@@ -543,7 +556,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		[]string{
 			"debug", "recover", "verify",
 			"--certs-dir=test_certs",
-			"--host=" + tc.Server(0).ServingRPCAddr(),
+			"--host=" + tc.Server(0).AdvRPCAddr(),
 			planFile,
 		})
 	require.NoError(t, err, "failed to run verify plan")
@@ -554,14 +567,12 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	// NB: If recovery is not performed, server will just hang on startup.
 	// This is caused by liveness range becoming unavailable and preventing any
 	// progress. So it is likely that test will timeout if basic workflow fails.
-	listenerReg.ReopenOrFail(t, 0)
 	require.NoError(t, tc.RestartServer(0), "restart failed")
 	s = sqlutils.MakeSQLRunner(tc.Conns[0])
 
 	// Verifying that post start cleanup performed node decommissioning that
 	// prevents old nodes from rejoining.
-	ac, err := tc.GetAdminClient(ctx, t, 0)
-	require.NoError(t, err, "failed to get admin client")
+	ac := tc.GetAdminClient(t, 0)
 	testutils.SucceedsSoon(t, func() error {
 		dr, err := ac.DecommissionStatus(ctx,
 			&serverpb.DecommissionStatusRequest{NodeIDs: []roachpb.NodeID{2, 3}})
@@ -594,7 +605,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		[]string{
 			"debug", "recover", "verify",
 			"--certs-dir=test_certs",
-			"--host=" + tc.Server(0).ServingRPCAddr(),
+			"--host=" + tc.Server(0).AdvRPCAddr(),
 			planFile,
 		})
 	require.NoError(t, err, "failed to run verify plan")

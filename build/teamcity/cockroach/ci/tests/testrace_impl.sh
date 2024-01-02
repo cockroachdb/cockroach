@@ -20,20 +20,20 @@ do
     do
         size="${kv%%:*}"
         timeout="${kv#*:}"
-        go_timeout=$(($timeout - 5))
         tests=$(bazel query "attr(size, $size, kind("go_test", tests($pkg)))" --output=label)
         # Run affected tests.
         for test in $tests
         do
-            if [[ ! -z $(bazel query "attr(tags, \"broken_in_bazel\", $test)") ]] || [[ ! -z $(bazel query "attr(tags, \"integration\", $test)") ]]
+            if [[ ! -z $(bazel query "attr(tags, \"integration\", $test)") ]]
             then
                 echo "Skipping test $test"
                 continue
             fi
             $(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci -- test --config=ci --config=race "$test" \
                                 --test_env=COCKROACH_LOGIC_TESTS_SKIP=true \
-                                --test_env=GOMAXPROCS=8 \
-                                --test_arg=-test.timeout="${go_timeout}s"
+                                --test_timeout $timeout \
+                                --test_sharding_strategy=disabled \
+                                --test_env=GOMAXPROCS=8
         done
     done
 done

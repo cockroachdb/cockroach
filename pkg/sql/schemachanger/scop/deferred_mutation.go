@@ -81,7 +81,7 @@ type RemoveDatabaseRoleSettings struct {
 // DeleteSchedule is used to delete a schedule ID from the database.
 type DeleteSchedule struct {
 	deferredMutationOp
-	ScheduleID int64
+	ScheduleID jobspb.ScheduleID
 }
 
 // RefreshStats is used to queue a table for stats refresh.

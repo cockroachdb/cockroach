@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -75,12 +75,12 @@ const (
 	// DefaultReplicaIOOverloadThreshold is used to avoid allocating to stores with an
 	// IO overload score greater than what's set. This is typically used in
 	// conjunction with IOOverloadMeanThreshold below.
-	DefaultReplicaIOOverloadThreshold = 0.8
+	DefaultReplicaIOOverloadThreshold = 0.4
 
-	// DefaultLeaseIOOverloadThreshold is used to shed leases from stores with an
-	// IO overload score greater than this threshold. This is typically used in
-	// conjunction with IOOverloadMeanThreshold below.
-	DefaultLeaseIOOverloadThreshold = 0.5
+	// DefaultLeaseIOOverloadThreshold is used to block lease transfers to stores
+	// with an IO overload score greater than this threshold. This is typically
+	// used in conjunction with IOOverloadMeanThreshold below.
+	DefaultLeaseIOOverloadThreshold = 0.3
 
 	// DefaultLeaseIOOverloadShedThreshold is used to shed leases from stores
 	// with an IO overload score greater than the this threshold. This is
@@ -124,18 +124,15 @@ const (
 // RangeRebalanceThreshold is the minimum ratio of a store's range count to
 // the mean range count at which that store is considered overfull or underfull
 // of ranges.
-var RangeRebalanceThreshold = func() *settings.FloatSetting {
-	s := settings.RegisterFloatSetting(
-		settings.SystemOnly,
-		"kv.allocator.range_rebalance_threshold",
-		"minimum fraction away from the mean a store's range count can be before "+
-			"it is considered overfull or underfull",
-		0.05,
-		settings.NonNegativeFloat,
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
+var RangeRebalanceThreshold = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.allocator.range_rebalance_threshold",
+	"minimum fraction away from the mean a store's range count can be before "+
+		"it is considered overfull or underfull",
+	0.05,
+	settings.NonNegativeFloat,
+	settings.WithPublic,
+)
 
 // ReplicaIOOverloadThreshold is the maximum IO overload score of a candidate
 // store before being excluded as a candidate for rebalancing replicas or
@@ -236,18 +233,7 @@ var maxDiskUtilizationThreshold = settings.RegisterFloatSetting(
 		"this should be set higher than "+
 		"`kv.allocator.rebalance_to_max_disk_utilization_threshold`",
 	defaultMaxDiskUtilizationThreshold,
-	func(f float64) error {
-		if f > 0.99 {
-			return errors.Errorf(
-				"Cannot set kv.allocator.max_disk_utilization_threshold " +
-					"greater than 0.99")
-		}
-		if f < 0.0 {
-			return errors.Errorf(
-				"Cannot set kv.allocator.max_disk_utilization_threshold less than 0")
-		}
-		return nil
-	},
+	settings.FloatInRange(0, 0.99),
 )
 
 // rebalanceToMaxDiskUtilizationThreshold: if the fraction used of a store
@@ -264,19 +250,7 @@ var rebalanceToMaxDiskUtilizationThreshold = settings.RegisterFloatSetting(
 		"target; this should be set lower than "+
 		"`kv.allocator.max_disk_utilization_threshold`",
 	defaultRebalanceToMaxDiskUtilizationThreshold,
-	func(f float64) error {
-		if f > 0.99 {
-			return errors.Errorf(
-				"Cannot set kv.allocator.rebalance_to_max_disk_utilization_threshold " +
-					"greater than 0.99")
-		}
-		if f < 0.0 {
-			return errors.Errorf(
-				"Cannot set kv.allocator.rebalance_to_max_disk_utilization_threshold " +
-					"less than 0")
-		}
-		return nil
-	},
+	settings.FloatInRange(0, 0.99),
 )
 
 // ScorerOptions defines the interface for the two heuristics that trigger
@@ -720,6 +694,7 @@ type candidate struct {
 	valid           bool
 	fullDisk        bool
 	necessary       bool
+	voterNecessary  bool
 	diversityScore  float64
 	ioOverloaded    bool
 	ioOverloadScore float64
@@ -731,16 +706,24 @@ type candidate struct {
 }
 
 func (c candidate) String() string {
-	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, necessary:%t, diversity:%.2f, ioOverloaded: %t, ioOverload: %.2f, converges:%d, "+
-		"balance:%d, hasNonVoter:%t, rangeCount:%d, queriesPerSecond:%.2f",
-		c.store.StoreID, c.valid, c.fullDisk, c.necessary, c.diversityScore, c.ioOverloaded, c.ioOverloadScore, c.convergesScore,
-		c.balanceScore, c.hasNonVoter, c.rangeCount, c.store.Capacity.QueriesPerSecond)
-	if c.details != "" {
-		return fmt.Sprintf("%s, details:(%s)", str, c.details)
-	}
-	return str
+	return redact.StringWithoutMarkers(c)
 }
 
+// SafeFormat implements the redact.SafeFormatter interface.
+func (c candidate) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("s%d, valid:%t, fulldisk:%t, necessary:%t, "+
+		"voterNecessary:%t, diversity:%.2f, ioOverloaded: %t, ioOverload: %.2f, "+
+		"converges:%d, balance:%d, hasNonVoter:%t, rangeCount:%d, queriesPerSecond:%.2f",
+		c.store.StoreID, c.valid, c.fullDisk, c.necessary, c.voterNecessary,
+		c.diversityScore, c.ioOverloaded, c.ioOverloadScore, c.convergesScore,
+		c.balanceScore, c.hasNonVoter, c.rangeCount, c.store.Capacity.QueriesPerSecond)
+	if c.details != "" {
+		w.Printf(", details:(%s)", c.details)
+	}
+}
+
+// compactString returns a compact represntation of the candidate. Note this
+// method is currently only used to populate the range log via details.
 func (c candidate) compactString() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "s%d", c.store.StoreID)
@@ -752,6 +735,9 @@ func (c candidate) compactString() string {
 	}
 	if c.necessary {
 		fmt.Fprintf(&buf, ", necessary:%t", c.necessary)
+	}
+	if c.voterNecessary {
+		fmt.Fprintf(&buf, ", voterNecessary:%t", c.voterNecessary)
 	}
 	if c.diversityScore != 0 {
 		fmt.Fprintf(&buf, ", diversity:%.2f", c.diversityScore)
@@ -798,6 +784,12 @@ func (c candidate) compare(o candidate) float64 {
 			return 400
 		}
 		return -400
+	}
+	if c.voterNecessary != o.voterNecessary {
+		if c.voterNecessary {
+			return 350
+		}
+		return -350
 	}
 	if !scoresAlmostEqual(c.diversityScore, o.diversityScore) {
 		if c.diversityScore > o.diversityScore {
@@ -852,17 +844,23 @@ func (c candidate) compare(o candidate) float64 {
 type candidateList []candidate
 
 func (cl candidateList) String() string {
+	return redact.StringWithoutMarkers(cl)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (cl candidateList) SafeFormat(w redact.SafePrinter, r rune) {
 	if len(cl) == 0 {
-		return "[]"
+		w.Printf("[]")
+		return
 	}
-	var buffer bytes.Buffer
-	buffer.WriteRune('[')
+	var buf redact.StringBuilder
+	buf.SafeRune('[')
 	for _, c := range cl {
-		buffer.WriteRune('\n')
-		buffer.WriteString(c.String())
+		buf.SafeRune('\n')
+		buf.Print(c)
 	}
-	buffer.WriteRune(']')
-	return buffer.String()
+	buf.SafeRune(']')
+	w.Print(buf)
 }
 
 // byScore implements sort.Interface to sort by scores.
@@ -887,6 +885,7 @@ func (c byScoreAndID) Less(i, j int) bool {
 		c[i].hasNonVoter == c[j].hasNonVoter &&
 		c[i].rangeCount == c[j].rangeCount &&
 		c[i].necessary == c[j].necessary &&
+		c[i].voterNecessary == c[j].voterNecessary &&
 		c[i].fullDisk == c[j].fullDisk &&
 		c[i].ioOverloaded == c[j].ioOverloaded &&
 		c[i].valid == c[j].valid {
@@ -917,6 +916,7 @@ func (cl candidateList) best() candidateList {
 	}
 	for i := 1; i < len(cl); i++ {
 		if cl[i].necessary == cl[0].necessary &&
+			cl[i].voterNecessary == cl[0].voterNecessary &&
 			scoresAlmostEqual(cl[i].diversityScore, cl[0].diversityScore) &&
 			cl[i].convergesScore == cl[0].convergesScore &&
 			cl[i].balanceScore == cl[0].balanceScore &&
@@ -937,6 +937,7 @@ func (cl candidateList) good() candidateList {
 	}
 	for i := 1; i < len(cl); i++ {
 		if cl[i].necessary == cl[0].necessary &&
+			cl[i].voterNecessary == cl[0].voterNecessary &&
 			scoresAlmostEqual(cl[i].diversityScore, cl[0].diversityScore) {
 			continue
 		}
@@ -982,6 +983,7 @@ func (cl candidateList) worst() candidateList {
 	// Find the worst constraint/locality/converges/balanceScore values.
 	for i := len(cl) - 2; i >= 0; i-- {
 		if cl[i].necessary == cl[len(cl)-1].necessary &&
+			cl[i].voterNecessary == cl[len(cl)-1].voterNecessary &&
 			scoresAlmostEqual(cl[i].diversityScore, cl[len(cl)-1].diversityScore) &&
 			cl[i].convergesScore == cl[len(cl)-1].convergesScore &&
 			cl[i].balanceScore == cl[len(cl)-1].balanceScore {
@@ -1503,7 +1505,8 @@ func rankedCandidateListForRebalancing(
 	allStores storepool.StoreList,
 	removalConstraintsChecker constraintsCheckFn,
 	rebalanceConstraintsChecker rebalanceConstraintsCheckFn,
-	existingReplicasForType, replicasOnExemptedStores []roachpb.ReplicaDescriptor,
+	existingVotingReplicas, existingNonVotingReplicas []roachpb.ReplicaDescriptor,
+	targetType TargetReplicaType,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	isStoreValidForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool,
 	options ScorerOptions,
@@ -1511,6 +1514,13 @@ func rankedCandidateListForRebalancing(
 ) []rebalanceOptions {
 	// 1. Determine whether existing replicas are valid and/or necessary.
 	existingStores := make(map[roachpb.StoreID]candidate)
+	var existingReplicasForType []roachpb.ReplicaDescriptor
+	if targetType == VoterTarget {
+		existingReplicasForType = existingVotingReplicas
+	} else {
+		existingReplicasForType = existingNonVotingReplicas
+	}
+
 	var needRebalanceFrom bool
 	curDiversityScore := RangeDiversityScore(existingStoreLocalities)
 	for _, store := range allStores.Stores {
@@ -1590,7 +1600,6 @@ func rankedCandidateListForRebalancing(
 			if store.StoreID == existing.store.StoreID {
 				continue
 			}
-
 			// Ignore any stores on dead nodes or stores that contain any of the
 			// replicas within `replicasOnExemptedStores`.
 			if !isStoreValidForRoutineReplicaTransfer(ctx, store.StoreID) {
@@ -1604,24 +1613,43 @@ func rankedCandidateListForRebalancing(
 				continue
 			}
 
-			// `replsOnExemptedStores` is used during non-voting replica rebalancing
-			// to ignore stores that already have a voting replica for the same range.
-			// When rebalancing a voter, `replsOnExemptedStores` is empty since voters
-			// are allowed to "displace" non-voting replicas (we correctly turn such
-			// actions into non-voter promotions, see replicationChangesForRebalance()).
-			var exempted bool
-			for _, replOnExemptedStore := range replicasOnExemptedStores {
-				if store.StoreID == replOnExemptedStore.StoreID {
-					log.KvDistribution.VEventf(
-						ctx,
-						6,
-						"s%d is not a possible rebalance candidate for non-voters because it already has a voter of the range; ignoring",
-						store.StoreID,
-					)
-					exempted = true
-					break
+			var exempted, promotionCandidate bool
+			if targetType == NonVoterTarget {
+				// During non-voting replica rebalancing we ignore stores that already
+				// have a voting replica for the same range. Voters are allowed to
+				// "displace" non-voting replicas (we correctly turn such actions into
+				// non-voter promotions, see replicationChangesForRebalance()).
+				for _, replOnExemptedStore := range existingVotingReplicas {
+					if store.StoreID == replOnExemptedStore.StoreID {
+						log.KvDistribution.VEventf(
+							ctx,
+							6,
+							"s%d is not a possible rebalance candidate for non-voters because it already has a voter of the range; ignoring",
+							store.StoreID,
+						)
+						exempted = true
+						break
+					}
 				}
+			} else if targetType == VoterTarget {
+				// During voting replica rebalancing, we check whether the candidate
+				// already has a non-voting replica, if so it may be necessary to
+				// promote this candidate to a voter, in order to satisfy a voter
+				// constraint (assume there are already a correct number of voting and
+				// non-voting replicas).
+				for _, repl := range existingNonVotingReplicas {
+					if store.StoreID == repl.StoreID {
+						if repl.Type == roachpb.NON_VOTER {
+							promotionCandidate = true
+							break
+						}
+					}
+				}
+			} else {
+				log.KvDistribution.Fatalf(ctx,
+					"unsupported targetReplicaType: %v", targetType)
 			}
+
 			if exempted {
 				continue
 			}
@@ -1631,20 +1659,20 @@ func rankedCandidateListForRebalancing(
 			// this stage, in additon to hard checks and validation.
 			// TODO(kvoli,ayushshah15): Refactor this to make it harder to
 			// inadvertently break the invariant above,
-			constraintsOK, necessary := rebalanceConstraintsChecker(store, existing.store)
+			constraintsOK, necessary, voterNecessary := rebalanceConstraintsChecker(store, existing.store)
 			diversityScore := diversityRebalanceFromScore(
 				store, existing.store.StoreID, existingStoreLocalities)
 			cand := candidate{
 				store:          store,
 				valid:          constraintsOK,
 				necessary:      necessary,
+				voterNecessary: promotionCandidate && voterNecessary,
 				fullDisk:       !options.getDiskOptions().maxCapacityCheck(store),
 				diversityScore: diversityScore,
 			}
 			if !cand.less(existing) {
 				// If `cand` is not worse than `existing`, add it to the list.
 				comparableCands = append(comparableCands, cand)
-
 				if !needRebalanceFrom && !needRebalanceTo && existing.less(cand) {
 					needRebalanceTo = true
 					log.KvDistribution.VEventf(ctx, 2,
@@ -1871,7 +1899,9 @@ type constraintsCheckFn func(roachpb.StoreDescriptor) (valid, necessary bool)
 // rebalanceConstraintsCheckFn determines whether `toStore` is a valid and/or
 // necessary replacement candidate for `fromStore` (which must contain an
 // existing replica).
-type rebalanceConstraintsCheckFn func(toStore, fromStore roachpb.StoreDescriptor) (valid, necessary bool)
+type rebalanceConstraintsCheckFn func(toStore, fromStore roachpb.StoreDescriptor) (
+	valid, necessary, voterNecessary bool,
+)
 
 // voterConstraintsCheckerForAllocation returns a constraintsCheckFn that
 // determines whether a candidate for a new voting replica is valid and/or
@@ -1946,11 +1976,16 @@ func nonVoterConstraintsCheckerForRemoval(
 func voterConstraintsCheckerForRebalance(
 	overallConstraints, voterConstraints constraint.AnalyzedConstraints,
 ) rebalanceConstraintsCheckFn {
-	return func(toStore, fromStore roachpb.StoreDescriptor) (valid, necessary bool) {
+	return func(toStore, fromStore roachpb.StoreDescriptor) (valid, necessary, voterNecessary bool) {
 		overallConstraintsOK, necessaryOverall := rebalanceFromConstraintsCheck(toStore, fromStore, overallConstraints)
 		voterConstraintsOK, necessaryForVoters := rebalanceFromConstraintsCheck(toStore, fromStore, voterConstraints)
 
-		return overallConstraintsOK && voterConstraintsOK, necessaryOverall || necessaryForVoters
+		// If toStore is necessary to satisfy a voter constraint, whilst fromStore
+		// is not necessary to satisfy a voter constraint, then also include that
+		// this is a voterNecessary rebalance.
+		_, removeNecessaryForVoters := removeConstraintsCheck(fromStore, voterConstraints)
+		return overallConstraintsOK && voterConstraintsOK, necessaryOverall || necessaryForVoters,
+			necessaryForVoters && !removeNecessaryForVoters
 	}
 }
 
@@ -1960,8 +1995,9 @@ func voterConstraintsCheckerForRebalance(
 func nonVoterConstraintsCheckerForRebalance(
 	overallConstraints constraint.AnalyzedConstraints,
 ) rebalanceConstraintsCheckFn {
-	return func(toStore, fromStore roachpb.StoreDescriptor) (valid, necessary bool) {
-		return rebalanceFromConstraintsCheck(toStore, fromStore, overallConstraints)
+	return func(toStore, fromStore roachpb.StoreDescriptor) (valid, necessary, necessaryPromo bool) {
+		valid, necessary = rebalanceFromConstraintsCheck(toStore, fromStore, overallConstraints)
+		return valid, necessary, false /* voterNecessary */
 	}
 }
 
@@ -2010,7 +2046,7 @@ func allocateConstraintsCheck(
 	}
 
 	for i, constraints := range analyzed.Constraints {
-		if constraintsOK := constraint.ConjunctionsCheck(
+		if constraintsOK := constraint.CheckStoreConjunction(
 			store, constraints.Constraints,
 		); constraintsOK {
 			valid = true
@@ -2050,9 +2086,7 @@ func replaceConstraintsCheck(
 	for i, constraints := range analyzed.Constraints {
 		matchingStores := analyzed.SatisfiedBy[i]
 		satisfiedByExistingStore := containsStore(matchingStores, existingStore.StoreID)
-		satisfiedByCandidateStore := constraint.ConjunctionsCheck(
-			store, constraints.Constraints,
-		)
+		satisfiedByCandidateStore := constraint.CheckStoreConjunction(store, constraints.Constraints)
 		if satisfiedByCandidateStore {
 			valid = true
 		}
@@ -2147,7 +2181,7 @@ func rebalanceFromConstraintsCheck(
 	// satisfied by existing replicas or that is only fully satisfied because of
 	// fromStoreID, then it's necessary.
 	for i, constraints := range analyzed.Constraints {
-		if constraintsOK := constraint.ConjunctionsCheck(
+		if constraintsOK := constraint.CheckStoreConjunction(
 			store, constraints.Constraints,
 		); constraintsOK {
 			valid = true

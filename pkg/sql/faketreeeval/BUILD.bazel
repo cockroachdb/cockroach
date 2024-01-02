@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -23,11 +22,10 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/duration",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/hlc",
         "//pkg/util/mon",
         "//pkg/util/rangedesc",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",
     ],
 )
-
-get_x_data(name = "get_x_data")

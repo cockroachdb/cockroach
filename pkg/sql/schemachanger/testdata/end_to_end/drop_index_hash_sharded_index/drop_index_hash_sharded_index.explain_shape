@@ -1,0 +1,12 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+CREATE INDEX idx ON t(j) USING HASH;
+INSERT INTO t VALUES(-1);
+INSERT INTO t VALUES(-2);
+INSERT INTO t VALUES(-3);
+
+/* test */
+EXPLAIN (DDL, SHAPE) DROP INDEX idx CASCADE;
+----
+Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE;
+ └── execute 3 system table mutations transactions

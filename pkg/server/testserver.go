@@ -17,56 +17,66 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
-	"github.com/cenkalti/backoff"
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/deprecatedshowranges"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	addrutil "github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
+	"google.golang.org/grpc"
 )
 
 // makeTestConfig returns a config for testing. It overrides the
@@ -100,8 +110,8 @@ func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	baseCfg.SSLCertsDir = certnames.EmbeddedCertsDir
 	// Addr defaults to localhost with port set at time of call to
 	// Start() to an available port. May be overridden later (as in
-	// makeTestConfigFromParams). Call TestServer.ServingRPCAddr() and
-	// .ServingSQLAddr() for the full address (including bound port).
+	// makeTestConfigFromParams). Call testServer.AdvRPCAddr() and
+	// .AdvSQLAddr() for the full address (including bound port).
 	baseCfg.Addr = util.TestAddr.String()
 	baseCfg.AdvertiseAddr = util.TestAddr.String()
 	baseCfg.SQLAddr = util.TestAddr.String()
@@ -166,6 +176,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.RetryOptions = params.RetryOptions
 	cfg.Locality = params.Locality
 	cfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
+	cfg.DisableSQLServer = params.DisableSQLServer
 	if params.TraceDir != "" {
 		if err := initTraceDir(params.TraceDir); err == nil {
 			cfg.InflightTraceDirName = params.TraceDir
@@ -225,8 +236,11 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.SQLAdvertiseAddr = util.IsolatedTestAddr.String()
 		cfg.HTTPAddr = util.IsolatedTestAddr.String()
 	}
-	if params.SecondaryTenantPortOffset != 0 {
-		cfg.SecondaryTenantPortOffset = params.SecondaryTenantPortOffset
+	if params.ApplicationInternalRPCPortMin != 0 {
+		cfg.ApplicationInternalRPCPortMin = params.ApplicationInternalRPCPortMin
+	}
+	if params.ApplicationInternalRPCPortMax != 0 {
+		cfg.ApplicationInternalRPCPortMax = params.ApplicationInternalRPCPortMax
 	}
 	if params.Addr != "" {
 		cfg.Addr = params.Addr
@@ -244,9 +258,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.TestingInsecureWebAccess = params.InsecureWebAccess
 	if params.EnableDemoLoginEndpoint {
 		cfg.EnableDemoLoginEndpoint = true
-	}
-	if params.DisableSpanConfigs {
-		cfg.SpanConfigsDisabled = true
 	}
 	if params.SnapshotApplyLimit != 0 {
 		cfg.SnapshotApplyLimit = params.SnapshotApplyLimit
@@ -274,7 +285,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			// one specific test must have requested it. A failure is returned if
 			// the Path field is empty, which means the test is then forced to pick
 			// the dir (and the test is then responsible for cleaning it up, not
-			// TestServer).
+			// testServer).
 
 			// HeapProfileDirName and GoroutineDumpDirName are normally set by the
 			// cli, once, to the path of the first store.
@@ -298,8 +309,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TempStorageConfig.Settings = st
 	}
 
-	cfg.DisableDefaultTestTenant = params.DefaultTestTenant == base.TestTenantDisabled
-
 	if cfg.TestingKnobs.Store == nil {
 		cfg.TestingKnobs.Store = &kvserver.StoreTestingKnobs{}
 	}
@@ -309,8 +318,8 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{}
 	}
 
-	if params.Knobs.AdmissionControl == nil {
-		cfg.TestingKnobs.AdmissionControl = &admission.Options{}
+	if params.Knobs.AdmissionControlOptions == nil {
+		cfg.TestingKnobs.AdmissionControlOptions = &admission.Options{}
 	}
 
 	cfg.ObsServiceAddr = params.ObsServiceAddr
@@ -318,30 +327,28 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	return cfg
 }
 
-// A TestServer encapsulates an in-memory instantiation of a cockroach node with
+// A testServer encapsulates an in-memory instantiation of a cockroach node with
 // a single store. It provides tests with access to Server internals.
 // Where possible, it should be used through the
-// testingshim.TestServerInterface.
+// serverutils.TestServerInterface.
 //
-// Example usage of a TestServer:
+// Example usage of a testServer:
 //
 //	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 //	defer s.Stopper().Stop()
-//	// If really needed, in tests that can depend on server, downcast to
-//	// server.TestServer:
-//	ts := s.(*server.TestServer)
-type TestServer struct {
+type testServer struct {
 	Cfg    *Config
 	params base.TestServerArgs
 	// server is the embedded Cockroach server struct.
-	*Server
-	// httpTestServer provides the HTTP APIs of TestTenantInterface.
+	*topLevelServer
+	// httpTestServer provides the HTTP APIs of the
+	// serverutils.ApplicationLayerInterface.
 	*httpTestServer
 	// The test tenants associated with this server, and used for probabilistic
 	// testing within tenants. Currently, there is only one test tenant created
 	// by default, but longer term we may allow for the creation of multiple
 	// test tenants for more advanced testing.
-	testTenants []serverutils.TestTenantInterface
+	testTenants []serverutils.ApplicationLayerInterface
 	// disableStartTenantError is set to an error if the test server should
 	// prevent starting any tenants manually. This is used to prevent tests that
 	// have not explicitly disabled probabilistic testing, or opted in to it, from
@@ -349,46 +356,43 @@ type TestServer struct {
 	disableStartTenantError error
 }
 
-var _ serverutils.TestServerInterface = &TestServer{}
+var _ serverutils.TestServerInterfaceRaw = &testServer{}
 
 // Node returns the Node as an interface{}.
-func (ts *TestServer) Node() interface{} {
+func (ts *testServer) Node() interface{} {
 	return ts.node
 }
 
 // NodeID returns the ID of this node within its cluster.
-func (ts *TestServer) NodeID() roachpb.NodeID {
+func (ts *testServer) NodeID() roachpb.NodeID {
 	return ts.rpcContext.NodeID.Get()
 }
 
 // Stopper returns the embedded server's Stopper.
-func (ts *TestServer) Stopper() *stop.Stopper {
+func (ts *testServer) Stopper() *stop.Stopper {
 	return ts.stopper
 }
 
-// GossipI is part of TestServerInterface.
-func (ts *TestServer) GossipI() interface{} {
-	return ts.Gossip()
+// AppStopper is part of serverutils.ApplicationLayerInterface.
+func (ts *testServer) AppStopper() *stop.Stopper {
+	return ts.stopper
 }
 
-// Gossip is like GossipI but returns the real type instead of interface{}.
-func (ts *TestServer) Gossip() *gossip.Gossip {
-	if ts != nil {
-		return ts.gossip
-	}
-	return nil
+// GossipI is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) GossipI() interface{} {
+	return ts.topLevelServer.gossip
 }
 
-// RangeFeedFactory is part of serverutils.TestServerInterface.
-func (ts *TestServer) RangeFeedFactory() interface{} {
+// RangeFeedFactory is part of serverutils.ApplicationLayerInterface.
+func (ts *testServer) RangeFeedFactory() interface{} {
 	if ts != nil {
 		return ts.sqlServer.execCfg.RangeFeedFactory
 	}
 	return (*rangefeed.Factory)(nil)
 }
 
-// Clock returns the clock used by the TestServer.
-func (ts *TestServer) Clock() *hlc.Clock {
+// Clock returns the clock used by the testServer.
+func (ts *testServer) Clock() *hlc.Clock {
 	if ts != nil {
 		return ts.clock
 	}
@@ -396,7 +400,7 @@ func (ts *TestServer) Clock() *hlc.Clock {
 }
 
 // SQLLivenessProvider returns the sqlliveness.Provider as an interface{}.
-func (ts *TestServer) SQLLivenessProvider() interface{} {
+func (ts *testServer) SQLLivenessProvider() interface{} {
 	if ts != nil {
 		return ts.sqlServer.execCfg.SQLLiveness
 	}
@@ -404,32 +408,29 @@ func (ts *TestServer) SQLLivenessProvider() interface{} {
 }
 
 // JobRegistry returns the *jobs.Registry as an interface{}.
-func (ts *TestServer) JobRegistry() interface{} {
+func (ts *testServer) JobRegistry() interface{} {
 	if ts != nil {
 		return ts.sqlServer.jobRegistry
 	}
 	return nil
 }
 
-// NodeLiveness exposes the NodeLiveness instance used by the TestServer as an
+// NodeLiveness exposes the NodeLiveness instance used by the testServer as an
 // interface{}.
-func (ts *TestServer) NodeLiveness() interface{} {
+func (ts *testServer) NodeLiveness() interface{} {
 	if ts != nil {
 		return ts.nodeLiveness
 	}
 	return nil
 }
 
-// NodeDialer returns the NodeDialer used by the TestServer.
-func (ts *TestServer) NodeDialer() interface{} {
-	if ts != nil {
-		return ts.nodeDialer
-	}
-	return nil
+// NodeDialer returns the NodeDialer used by the testServer.
+func (ts *testServer) NodeDialer() interface{} {
+	return ts.kvNodeDialer
 }
 
 // HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
-func (ts *TestServer) HeartbeatNodeLiveness() error {
+func (ts *testServer) HeartbeatNodeLiveness() error {
 	if ts == nil {
 		return errors.New("no node liveness instance")
 	}
@@ -449,43 +450,98 @@ func (ts *TestServer) HeartbeatNodeLiveness() error {
 	return err
 }
 
-// SQLInstanceID is part of TestServerInterface.
-func (ts *TestServer) SQLInstanceID() base.SQLInstanceID {
+// SQLInstanceID is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SQLInstanceID() base.SQLInstanceID {
 	return ts.sqlServer.sqlIDContainer.SQLInstanceID()
 }
 
-// StatusServer is part of TestServerInterface.
-func (ts *TestServer) StatusServer() interface{} {
+// StatusServer is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) StatusServer() interface{} {
 	return ts.status
 }
 
-// RPCContext returns the rpc context used by the TestServer.
-func (ts *TestServer) RPCContext() *rpc.Context {
+// RPCContext returns the rpc context used by the testServer.
+func (ts *testServer) RPCContext() *rpc.Context {
 	if ts != nil {
 		return ts.rpcContext
 	}
 	return nil
 }
 
-// TsDB returns the ts.DB instance used by the TestServer.
-func (ts *TestServer) TsDB() *ts.DB {
-	if ts != nil {
-		return ts.tsDB
-	}
-	return nil
+// TsDB returns the ts.DB instance used by the testServer.
+func (ts *testServer) TsDB() interface{} {
+	return ts.tsDB
 }
 
-// DB returns the client.DB instance used by the TestServer.
-func (ts *TestServer) DB() *kv.DB {
+// SQLConn is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SQLConn(
+	test serverutils.TestFataler, opts ...serverutils.SQLConnOption,
+) *gosql.DB {
+	db, err := ts.SQLConnE(opts...)
+	if err != nil {
+		test.Fatal(err)
+	}
+	return db
+}
+
+// SQLConnE is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SQLConnE(opts ...serverutils.SQLConnOption) (*gosql.DB, error) {
+	options := serverutils.DefaultSQLConnOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+	return openTestSQLConn(
+		options.DBName,
+		options.User,
+		catconstants.SystemTenantName,
+		ts.Stopper(),
+		ts.topLevelServer.loopbackPgL,
+		ts.cfg.SQLAdvertiseAddr,
+		ts.cfg.Insecure,
+		options.ClientCerts,
+		options.CertsDirPrefix,
+	)
+}
+
+// PGUrl is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) PGUrl(
+	test serverutils.TestFataler, opts ...serverutils.SQLConnOption,
+) (url.URL, func()) {
+	u, cleanupFn, err := ts.PGUrlE(opts...)
+	if err != nil {
+		test.Fatal(err)
+	}
+	return u, cleanupFn
+}
+
+// PGUrlE is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) PGUrlE(opts ...serverutils.SQLConnOption) (url.URL, func(), error) {
+	options := serverutils.DefaultSQLConnOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+	return pgURL(
+		options.DBName,
+		options.User,
+		catconstants.SystemTenantName,
+		ts.cfg.SQLAdvertiseAddr,
+		ts.cfg.Insecure,
+		options.ClientCerts,
+		options.CertsDirPrefix,
+	)
+}
+
+// DB returns the client.DB instance used by the testServer.
+func (ts *testServer) DB() *kv.DB {
 	if ts != nil {
 		return ts.db
 	}
 	return nil
 }
 
-// PGServer exposes the pgwire.Server instance used by the TestServer as an
+// PGServer exposes the pgwire.Server instance used by the testServer as an
 // interface{}.
-func (ts *TestServer) PGServer() interface{} {
+func (ts *testServer) PGServer() interface{} {
 	if ts != nil {
 		return ts.sqlServer.pgServer
 	}
@@ -493,69 +549,73 @@ func (ts *TestServer) PGServer() interface{} {
 }
 
 // PGPreServer exposes the pgwire.PreServeConnHandler instance used by
-// the TestServer.
-func (ts *TestServer) PGPreServer() *pgwire.PreServeConnHandler {
+// the testServer.
+func (ts *testServer) PGPreServer() interface{} {
 	if ts != nil {
 		return ts.pgPreServer
 	}
 	return nil
 }
 
-// RaftTransport returns the RaftTransport used by the TestServer.
-func (ts *TestServer) RaftTransport() *kvserver.RaftTransport {
+// RaftTransport is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) RaftTransport() interface{} {
 	if ts != nil {
 		return ts.raftTransport
 	}
 	return nil
 }
 
-// AmbientCtx implements serverutils.TestTenantInterface. This
+// AmbientCtx implements serverutils.ApplicationLayerInterface. This
 // retrieves the ambient context for this server. This is intended for
 // exclusive use by test code.
-func (ts *TestServer) AmbientCtx() log.AmbientContext {
+func (ts *testServer) AmbientCtx() log.AmbientContext {
 	return ts.Cfg.AmbientCtx
 }
 
-// TestingKnobs returns the TestingKnobs used by the TestServer.
-func (ts *TestServer) TestingKnobs() *base.TestingKnobs {
+// TestingKnobs returns the TestingKnobs used by the testServer.
+func (ts *testServer) TestingKnobs() *base.TestingKnobs {
 	if ts != nil {
 		return &ts.Cfg.TestingKnobs
 	}
 	return nil
 }
 
-// TenantStatusServer returns the TenantStatusServer used by the TestServer.
-func (ts *TestServer) TenantStatusServer() interface{} {
+// SQLServerInternal is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SQLServerInternal() interface{} {
+	return ts.sqlServer
+}
+
+// TenantStatusServer returns the TenantStatusServer used by the testServer.
+func (ts *testServer) TenantStatusServer() interface{} {
 	return ts.status
 }
 
-// TestTenants provides information to tenant(s) that _may_ have been created
-func (ts *TestServer) TestTenants() []serverutils.TestTenantInterface {
-	return ts.testTenants
+// TestTenant is part of serverutils.TenantControlInterface.
+func (ts *testServer) TestTenant() serverutils.ApplicationLayerInterface {
+	return ts.testTenants[0]
 }
 
-// maybeStartDefaultTestTenant might start a test tenant. This can then be used
-// for multi-tenant testing, where the default SQL connection will be made to
-// this tenant instead of to the system tenant. Note that we will
-// currently only attempt to start a test tenant if we're running in an
-// enterprise enabled build. This is due to licensing restrictions on the MT
-// capabilities.
-func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
-	clusterID := ts.sqlServer.execCfg.NodeInfo.LogicalClusterID
-	if err := base.CheckEnterpriseEnabled(ts.st, clusterID(), "SQL servers"); err != nil {
-		// If not enterprise enabled, we won't be able to use SQL Servers so eat
-		// the error and return without creating/starting a SQL server.
-		ts.cfg.DisableDefaultTestTenant = true
-		return nil // nolint:returnerrcheck
+func (ts *testServer) startDefaultTestTenant(
+	ctx context.Context,
+) (serverutils.ApplicationLayerInterface, error) {
+	tenantSettings := cluster.MakeTestingClusterSettings()
+	if st := ts.params.Settings; st != nil {
+		// Copy overrides and other test-specific configuration,
+		// as a convenience for test writers that do the following:
+		// - create a new Settings
+		// - add some overrides
+		// - call serverutils.StartServer
+		// - expect the overrides to propagate to the application layer.
+		tenantSettings.SV.TestingCopyForVirtualCluster(&st.SV)
 	}
 
-	// If the flag has been set to disable the default test tenant, don't start
-	// it here.
-	if ts.params.DefaultTestTenant == base.TestTenantDisabled || ts.cfg.DisableDefaultTestTenant {
-		return nil
+	var tempStorageConfig base.TempStorageConfig
+	if tsc := ts.params.TempStorageConfig; tsc.Settings != nil {
+		tempStorageConfig = base.InheritTempStorageConfig(ctx, tenantSettings, tsc)
+	} else {
+		tempStorageConfig = base.DefaultTestTempStorageConfig(tenantSettings)
 	}
 
-	tempStorageConfig := base.DefaultTestTempStorageConfig(cluster.MakeTestingClusterSettings())
 	params := base.TestTenantArgs{
 		// Currently, all the servers leverage the same tenant ID. We may
 		// want to change this down the road, for more elaborate testing.
@@ -570,14 +630,66 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		SSLCertsDir:               ts.params.SSLCertsDir,
 		TestingKnobs:              ts.params.Knobs,
 		StartDiagnosticsReporting: ts.params.StartDiagnosticsReporting,
-		Settings:                  ts.params.Settings,
+		Settings:                  tenantSettings,
 	}
 
 	// Since we're creating a tenant, it doesn't make sense to pass through the
 	// Server testing knobs, since the bulk of them only apply to the system
 	// tenant. Any remaining knobs which are required by the tenant should be
-	// setup in StartTenant below.
+	// passed through here.
 	params.TestingKnobs.Server = &TestingKnobs{}
+
+	if ts.params.Knobs.Server != nil {
+		params.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
+	}
+	return ts.StartTenant(ctx, params)
+}
+
+func (ts *testServer) getSharedProcessDefaultTenantArgs() base.TestSharedProcessTenantArgs {
+	args := base.TestSharedProcessTenantArgs{
+		TenantName:  "test-tenant",
+		TenantID:    serverutils.TestTenantID(),
+		Knobs:       ts.params.Knobs,
+		UseDatabase: ts.params.UseDatabase,
+	}
+	// See comment above on separate process tenant regarding the testing knobs.
+	args.Knobs.Server = &TestingKnobs{}
+	if ts.params.Knobs.Server != nil {
+		args.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
+	}
+	return args
+}
+
+func (ts *testServer) startSharedProcessDefaultTestTenant(
+	ctx context.Context,
+) (serverutils.ApplicationLayerInterface, error) {
+	tenant, _, err := ts.StartSharedProcessTenant(ctx, ts.getSharedProcessDefaultTenantArgs())
+	if err != nil {
+		return nil, err
+	}
+	return tenant, nil
+}
+
+// maybeStartDefaultTestTenant might start a test tenant. This can then be used
+// for multi-tenant testing, where the default SQL connection will be made to
+// this tenant instead of to the system tenant.
+func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
+	if ts.params.DefaultTestTenant.TestTenantNoDecisionMade() {
+		return errors.WithHint(
+			errors.AssertionFailedf(
+				"programming error: no decision taken about starting the default test tenant or which mode to use",
+			), "Maybe add the missing call to serverutils.ShouldStartDefaultTestTenant()?")
+	}
+
+	// If the flag has been set to disable the default test tenant, don't start
+	// it here.
+	if ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() {
+		return nil
+	}
+
+	if ts.params.DisableSQLServer {
+		return serverutils.PreventDisableSQLForTenantError()
+	}
 
 	// Temporarily disable the error that is returned if a tenant should not be started manually,
 	// so that we can start the default test tenant internally here.
@@ -591,265 +703,619 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		}
 	}()
 
-	tenant, err := ts.StartTenant(ctx, params)
+	var startTenantFn func(context.Context) (serverutils.ApplicationLayerInterface, error)
+	switch {
+	case ts.params.DefaultTestTenant.ExternalProcessMode():
+		startTenantFn = ts.startDefaultTestTenant
+	case ts.params.DefaultTestTenant.SharedProcessMode():
+		startTenantFn = ts.startSharedProcessDefaultTestTenant
+	default:
+		return errors.AssertionFailedf("invalid default test tenant mode %v", ts.params.DefaultTestTenant)
+	}
+
+	tenant, err := startTenantFn(ctx)
 	if err != nil {
 		return err
 	}
 
 	if len(ts.testTenants) == 0 {
-		ts.testTenants = make([]serverutils.TestTenantInterface, 1)
+		ts.testTenants = make([]serverutils.ApplicationLayerInterface, 1)
 		ts.testTenants[0] = tenant
 	} else {
 		// We restrict the creation of multiple default tenants because if
 		// we allow for more than one to be created, it's not clear what we
-		// should return in ServingSQLAddr() as the default SQL address. Panic
+		// should return in AdvSQLAddr() as the default SQL address. Panic
 		// here to prevent more than one from being added. If you're hitting
 		// this panic it's likely that you're trying to expose multiple default
 		// test tenants, in which case, you should evaluate what to do about
-		// returning a default SQL address in ServingSQLAddr().
+		// returning a default SQL address in AdvSQLAddr().
 		return errors.AssertionFailedf("invalid number of test SQL servers %d", len(ts.testTenants))
 	}
 	return nil
 }
 
-// Start starts the TestServer by bootstrapping an in-memory store
-// (defaults to maximum of 100M). The server is started, launching the
-// node RPC server and all HTTP endpoints. Use the value of
-// TestServer.ServingRPCAddr() after Start() for client connections.
-// Use TestServer.Stopper().Stop() to shutdown the server after the test
-// completes.
-func (ts *TestServer) Start(ctx context.Context) error {
-	if err := ts.Server.PreStart(ctx); err != nil {
-		return err
+func (ts *testServer) grantDefaultTenantCapabilities(
+	ctx context.Context, tenantID roachpb.TenantID, skipTenantCheck bool,
+) error {
+	ie := ts.InternalExecutor().(*sql.InternalExecutor)
+	for _, setting := range []settings.Setting{
+		sql.SecondaryTenantScatterEnabled,
+		sql.SecondaryTenantSplitAtEnabled,
+		sql.SecondaryTenantZoneConfigsEnabled,
+		sql.SecondaryTenantsMultiRegionAbstractionsEnabled,
+	} {
+		// Update the override for this setting. We need to do this
+		// instead of calling .Override() on the setting directly: certain
+		// tests expect to be able to change the value afterwards using
+		// another ALTER VC SET CLUSTER SETTING statement, which is not
+		// possible with regular overrides.
+		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
+			fmt.Sprintf("ALTER VIRTUAL CLUSTER [$1] SET CLUSTER SETTING %s = true", setting.Name()), tenantID.ToUint64())
+		if err != nil {
+			if skipTenantCheck {
+				log.Infof(ctx, "ignoring error changing setting because SkipTenantCheck is true: %v", err)
+			} else {
+				return err
+			}
+		}
 	}
-	if err := ts.Server.AcceptInternalClients(ctx); err != nil {
+
+	// Waiting for capabilities can take time. To avoid paying this cost in all
+	// cases, we only set the nodelocal storage capability if the caller has
+	// configured an ExternalIODir since nodelocal storage only works with that
+	// configured.
+	shouldGrantNodelocalCap := ts.params.ExternalIODir != ""
+	if shouldGrantNodelocalCap {
+		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
+			"ALTER TENANT [$1] GRANT CAPABILITY can_use_nodelocal_storage", tenantID.ToUint64())
+		if err != nil {
+			if skipTenantCheck {
+				log.Infof(ctx, "ignoring error granting capability because SkipTenantCheck is true: %v", err)
+			} else {
+				return err
+			}
+		} else {
+			if err := ts.WaitForTenantCapabilities(ctx, tenantID, map[tenantcapabilities.ID]string{
+				tenantcapabilities.CanUseNodelocalStorage: "true",
+			}, ""); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// PreStart calls the PreStart() method on the underlying server.
+// Call this before calling Start().
+// The caller is responsible for calling .Stopper().Stop() even
+// when PreStart() returns an error.
+func (ts *testServer) PreStart(ctx context.Context) error {
+	// In case we'll need to start the shared-process default test tenant later
+	// down the line, make sure that we set the correct arguments. This matters
+	// in multi-node clusters where we need this to happen before the first call
+	// to Activate in order to prevent the race between testServer.Activate
+	// explicitly starting the shared-process tenant with the correct args and
+	// the server controller realizing that it's missing a tenant and starting
+	// one with no test args.
+	func(args base.TestSharedProcessTenantArgs) {
+		ts.topLevelServer.serverController.mu.Lock()
+		defer ts.topLevelServer.serverController.mu.Unlock()
+		ts.topLevelServer.serverController.mu.testArgs[args.TenantName] = args
+	}(ts.getSharedProcessDefaultTenantArgs())
+	return ts.topLevelServer.PreStart(ctx)
+}
+
+// Activate runs post-init server initialization and enables
+// clients to connect.
+// The caller is responsible for calling .Stopper().Stop() even
+// when PreStart() returns an error.
+func (ts *testServer) Activate(ctx context.Context) error {
+	if err := ts.topLevelServer.AcceptInternalClients(ctx); err != nil {
 		return err
 	}
 	// In tests we need some, but not all of RunInitialSQL functionality.
-	if err := ts.Server.RunInitialSQL(
-		ctx, false /* startSingleNode */, "" /* adminUser */, "", /* adminPassword */
+	if err := ts.topLevelServer.RunInitialSQL(
+		ctx, !ts.params.PartOfCluster, "" /* adminUser */, "", /* adminPassword */
 	); err != nil {
 		return err
 	}
-	if err := ts.Server.AcceptClients(ctx); err != nil {
+
+	maybeRunVersionUpgrade := func(layer serverutils.ApplicationLayerInterface) error {
+		if v := ts.BinaryVersionOverride(); v != (roachpb.Version{}) {
+			ie := layer.InternalExecutor().(isql.Executor)
+			if _, err := ie.Exec(context.Background(), "set-cluster-version", nil, /* txn */
+				`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := maybeRunVersionUpgrade(ts); err != nil {
+		return err
+	}
+
+	// Let clients connect.
+	if err := ts.topLevelServer.AcceptClients(ctx); err != nil {
 		return err
 	}
 
 	if err := ts.maybeStartDefaultTestTenant(ctx); err != nil {
-		// We're failing the call to this function but we've already started
-		// the TestServer above. Stop it here to avoid leaking the server.
-		ts.Stopper().Stop(context.Background())
 		return err
 	}
+
+	if ts.StartedDefaultTestTenant() {
+		if err := maybeRunVersionUpgrade(ts.TestTenant()); err != nil {
+			return err
+		}
+	}
+
 	go func() {
 		// If the server requests a shutdown, do that simply by stopping the
 		// stopper.
 		select {
-		case <-ts.Server.ShutdownRequested():
-			ts.Stopper().Stop(ts.Server.AnnotateCtx(context.Background()))
+		case req := <-ts.topLevelServer.ShutdownRequested():
+			shutdownCtx := ts.topLevelServer.AnnotateCtx(context.Background())
+			log.Infof(shutdownCtx, "server requesting spontaneous shutdown: %v", req.ShutdownCause())
+			// TODO(knz): evaluate whether there is value in shutting down
+			// test servers using a graceful drain when
+			// req.TerminateUsingGracefulDrain() is true.
+			ts.Stopper().Stop(shutdownCtx)
 		case <-ts.Stopper().ShouldQuiesce():
 		}
 	}()
 	return nil
 }
 
-// TestTenant is an in-memory instantiation of the SQL-only process created for
-// each active Cockroach tenant. TestTenant provides tests with access to
+// Start calls PreStart() and Activate().
+// For convenience, it also ensures .Stopper().Stop() has been
+// called if an error is returned.
+func (ts *testServer) Start(ctx context.Context) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			// Use a separate context to avoid using an already-cancelled
+			// context in closers.
+			ts.Stopper().Stop(context.Background())
+		}
+	}()
+
+	if err := ts.PreStart(ctx); err != nil {
+		return err
+	}
+	return ts.Activate(ctx)
+}
+
+// Stop is part of the serverutils.TestServerInterface.
+func (ts *testServer) Stop(ctx context.Context) {
+	ctx = ts.topLevelServer.AnnotateCtx(ctx)
+	ts.topLevelServer.stopper.Stop(ctx)
+}
+
+// testTenant is an in-memory instantiation of the SQL-only process created for
+// each active Cockroach tenant. testTenant provides tests with access to
 // internal methods and state on SQLServer. It is typically started in tests by
 // calling the TestServerInterface.StartTenant method or by calling the wrapper
 // serverutils.StartTenant method.
-type TestTenant struct {
-	*SQLServer
+type testTenant struct {
+	sql    *SQLServer
 	Cfg    *BaseConfig
 	SQLCfg *SQLConfig
 	*httpTestServer
 	drain *drainServer
+	http  *httpServer
+
+	pgL *netutil.LoopbackListener
 
 	// pgPreServer handles SQL connections prior to routing them to a
 	// specific tenant.
 	pgPreServer *pgwire.PreServeConnHandler
 }
 
-var _ serverutils.TestTenantInterface = &TestTenant{}
+var _ serverutils.ApplicationLayerInterface = &testTenant{}
 
-// SQLAddr is part of TestTenantInterface interface.
-func (t *TestTenant) SQLAddr() string {
+// AnnotateCtx is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) AnnotateCtx(ctx context.Context) context.Context {
+	return t.sql.AnnotateCtx(ctx)
+}
+
+// SQLInstanceID is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SQLInstanceID() base.SQLInstanceID {
+	return t.sql.SQLInstanceID()
+}
+
+// AdvRPCAddr is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) AdvRPCAddr() string {
+	return t.Cfg.AdvertiseAddr
+}
+
+// AdvSQLAddr is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) AdvSQLAddr() string {
+	return t.Cfg.SQLAdvertiseAddr
+}
+
+// SQLAddr is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SQLAddr() string {
 	return t.Cfg.SQLAddr
 }
 
-// HTTPAddr is part of TestTenantInterface interface.
-func (t *TestTenant) HTTPAddr() string {
+// HTTPAddr is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) HTTPAddr() string {
 	return t.Cfg.HTTPAddr
 }
 
-// RPCAddr is part of the TestTenantInterface interface.
-func (t *TestTenant) RPCAddr() string {
+// RPCAddr is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) RPCAddr() string {
 	return t.Cfg.Addr
 }
 
-// DB is part of the TestTenantInterface.
-func (t *TestTenant) DB() *kv.DB {
-	return t.execCfg.DB
+// SQLConn is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SQLConn(
+	test serverutils.TestFataler, opts ...serverutils.SQLConnOption,
+) *gosql.DB {
+	db, err := t.SQLConnE(opts...)
+	if err != nil {
+		test.Fatal(err)
+	}
+	return db
 }
 
-// PGServer is part of TestTenantInterface.
-func (t *TestTenant) PGServer() interface{} {
-	return t.pgServer
+// SQLConnE is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SQLConnE(opts ...serverutils.SQLConnOption) (*gosql.DB, error) {
+	options := serverutils.DefaultSQLConnOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+	tenantName := t.t.tenantName
+	if !t.Cfg.DisableSQLListener {
+		// This tenant server has its own SQL listener. It will not accept
+		// a "cluster" connection parameter.
+		tenantName = ""
+	}
+	return openTestSQLConn(
+		options.DBName,
+		options.User,
+		tenantName,
+		t.AppStopper(),
+		t.pgL,
+		t.Cfg.SQLAdvertiseAddr,
+		t.Cfg.Insecure,
+		options.ClientCerts,
+		options.CertsDirPrefix,
+	)
+}
+
+// PGUrl is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) PGUrl(
+	test serverutils.TestFataler, opts ...serverutils.SQLConnOption,
+) (url.URL, func()) {
+	u, cleanupFn, err := t.PGUrlE(opts...)
+	if err != nil {
+		test.Fatal(err)
+	}
+	return u, cleanupFn
+}
+
+// PGUrlE is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) PGUrlE(opts ...serverutils.SQLConnOption) (url.URL, func(), error) {
+	options := serverutils.DefaultSQLConnOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+	tenantName := t.t.tenantName
+	if !t.Cfg.DisableSQLListener {
+		// This tenant server has its own SQL listener. It will not accept
+		// a "cluster" connection parameter.
+		tenantName = ""
+	}
+	return pgURL(
+		options.DBName,
+		options.User,
+		tenantName,
+		t.Cfg.SQLAdvertiseAddr,
+		t.Cfg.Insecure,
+		options.ClientCerts,
+		options.CertsDirPrefix,
+	)
+}
+
+// DB is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) DB() *kv.DB {
+	return t.sql.execCfg.DB
+}
+
+// PGServer is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) PGServer() interface{} {
+	return t.sql.pgServer
 }
 
 // PGPreServer exposes the pgwire.PreServeConnHandler instance used by
-// the TestServer.
-func (ts *TestTenant) PGPreServer() *pgwire.PreServeConnHandler {
-	if ts != nil {
-		return ts.pgPreServer
+// the testServer.
+func (t *testTenant) PGPreServer() interface{} {
+	if t != nil {
+		return t.pgPreServer
 	}
 	return nil
 }
 
-// DiagnosticsReporter is part of TestTenantInterface.
-func (t *TestTenant) DiagnosticsReporter() interface{} {
-	return t.diagnosticsReporter
+// DiagnosticsReporter is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) DiagnosticsReporter() interface{} {
+	return t.sql.diagnosticsReporter
 }
 
-// StatusServer is part of TestTenantInterface.
-func (t *TestTenant) StatusServer() interface{} {
-	return t.execCfg.SQLStatusServer
+// StatusServer is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) StatusServer() interface{} {
+	return t.t.status
 }
 
-// TenantStatusServer is part of TestTenantInterface.
-func (t *TestTenant) TenantStatusServer() interface{} {
-	return t.execCfg.TenantStatusServer
+// TenantStatusServer is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) TenantStatusServer() interface{} {
+	return t.t.status
 }
 
-// DistSQLServer is part of TestTenantInterface.
-func (t *TestTenant) DistSQLServer() interface{} {
-	return t.SQLServer.distSQLServer
+// SQLServer is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SQLServer() interface{} {
+	return t.sql.pgServer.SQLServer
 }
 
-// DistSenderI is part of the TestTenantInterface.
-func (t *TestTenant) DistSenderI() interface{} {
-	return t.SQLServer.execCfg.DistSender
+// DistSQLServer is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) DistSQLServer() interface{} {
+	return t.sql.distSQLServer
 }
 
-// RPCContext is part of TestTenantInterface.
-func (t *TestTenant) RPCContext() *rpc.Context {
-	return t.execCfg.RPCContext
+// SetDistSQLSpanResolver is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SetDistSQLSpanResolver(spanResolver interface{}) {
+	t.sql.execCfg.DistSQLPlanner.SetSpanResolver(spanResolver.(physicalplan.SpanResolver))
 }
 
-// JobRegistry is part of TestTenantInterface.
-func (t *TestTenant) JobRegistry() interface{} {
-	return t.SQLServer.jobRegistry
+// DistSenderI is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) DistSenderI() interface{} {
+	return t.sql.execCfg.DistSender
 }
 
-// ExecutorConfig is part of TestTenantInterface.
-func (t *TestTenant) ExecutorConfig() interface{} {
-	return *t.SQLServer.execCfg
+// NodeDescStoreI is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) NodeDescStoreI() interface{} {
+	return t.sql.execCfg.DistSQLPlanner.NodeDescStore()
 }
 
-// RangeFeedFactory is part of TestTenantInterface.
-func (t *TestTenant) RangeFeedFactory() interface{} {
-	return t.SQLServer.execCfg.RangeFeedFactory
+// InternalDB is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) InternalDB() interface{} {
+	return t.sql.internalDB
 }
 
-// ClusterSettings is part of TestTenantInterface.
-func (t *TestTenant) ClusterSettings() *cluster.Settings {
+// Locality is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) Locality() roachpb.Locality {
+	return t.Cfg.Locality
+}
+
+// DistSQLPlanningNodeID is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) DistSQLPlanningNodeID() roachpb.NodeID {
+	// See comments on replicaoracle.Config.
+	return 0
+}
+
+// LeaseManager is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) LeaseManager() interface{} {
+	return t.sql.leaseMgr
+}
+
+// InternalExecutor is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) InternalExecutor() interface{} {
+	return t.sql.internalExecutor
+}
+
+// RPCContext is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) RPCContext() *rpc.Context {
+	return t.sql.execCfg.RPCContext
+}
+
+// JobRegistry is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) JobRegistry() interface{} {
+	return t.sql.jobRegistry
+}
+
+// NodeDialer returns the NodeDialer used by the testServer.
+func (t *testTenant) NodeDialer() interface{} {
+	return t.sql.sqlInstanceDialer
+}
+
+// ExecutorConfig is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) ExecutorConfig() interface{} {
+	return *t.sql.execCfg
+}
+
+// RangeFeedFactory is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) RangeFeedFactory() interface{} {
+	return t.sql.execCfg.RangeFeedFactory
+}
+
+// ClusterSettings is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) ClusterSettings() *cluster.Settings {
 	return t.Cfg.Settings
 }
 
-// Stopper is part of TestTenantInterface.
-func (t *TestTenant) Stopper() *stop.Stopper {
-	return t.stopper
+// AppStopper is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) AppStopper() *stop.Stopper {
+	return t.sql.stopper
 }
 
-// Clock is part of TestTenantInterface.
-func (t *TestTenant) Clock() *hlc.Clock {
-	return t.SQLServer.execCfg.Clock
+// Clock is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) Clock() *hlc.Clock {
+	return t.sql.execCfg.Clock
 }
 
-// AmbientCtx implements serverutils.TestTenantInterface. This
+// AmbientCtx implements serverutils.ApplicationLayerInterface. This
 // retrieves the ambient context for this server. This is intended for
 // exclusive use by test code.
-func (t *TestTenant) AmbientCtx() log.AmbientContext {
+func (t *testTenant) AmbientCtx() log.AmbientContext {
 	return t.Cfg.AmbientCtx
 }
 
-// TestingKnobs is part TestTenantInterface.
-func (t *TestTenant) TestingKnobs() *base.TestingKnobs {
+// TestingKnobs is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) TestingKnobs() *base.TestingKnobs {
 	return &t.Cfg.TestingKnobs
 }
 
-// SpanConfigKVAccessor is part TestTenantInterface.
-func (t *TestTenant) SpanConfigKVAccessor() interface{} {
-	return t.SQLServer.tenantConnect
+// SQLServerInternal is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SQLServerInternal() interface{} {
+	return t.sql
 }
 
-// SpanConfigReporter is part TestTenantInterface.
-func (t *TestTenant) SpanConfigReporter() interface{} {
-	return t.SQLServer.tenantConnect
+// SpanConfigKVAccessor is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SpanConfigKVAccessor() interface{} {
+	return t.sql.tenantConnect
 }
 
-// SpanConfigReconciler is part TestTenantInterface.
-func (t *TestTenant) SpanConfigReconciler() interface{} {
-	return t.SQLServer.spanconfigMgr.Reconciler
+// SpanConfigReporter is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SpanConfigReporter() interface{} {
+	return t.sql.tenantConnect
 }
 
-// SpanConfigSQLTranslatorFactory is part TestTenantInterface.
-func (t *TestTenant) SpanConfigSQLTranslatorFactory() interface{} {
-	return t.SQLServer.spanconfigSQLTranslatorFactory
+// SpanConfigReconciler is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SpanConfigReconciler() interface{} {
+	return t.sql.spanconfigMgr.Reconciler
 }
 
-// SpanConfigSQLWatcher is part TestTenantInterface.
-func (t *TestTenant) SpanConfigSQLWatcher() interface{} {
-	return t.SQLServer.spanconfigSQLWatcher
+// SpanConfigSQLTranslatorFactory is part of the
+// serverutils.ApplicationLayerInterface.
+func (t *testTenant) SpanConfigSQLTranslatorFactory() interface{} {
+	return t.sql.spanconfigSQLTranslatorFactory
 }
 
-// SystemConfigProvider is part TestTenantInterface.
-func (t *TestTenant) SystemConfigProvider() config.SystemConfigProvider {
-	return t.SQLServer.systemConfigWatcher
+// SpanConfigSQLWatcher is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SpanConfigSQLWatcher() interface{} {
+	return t.sql.spanconfigSQLWatcher
+}
+
+// SystemConfigProvider is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SystemConfigProvider() config.SystemConfigProvider {
+	return t.sql.systemConfigWatcher
 }
 
 // DrainClients exports the drainClients() method for use by tests.
-func (t *TestTenant) DrainClients(ctx context.Context) error {
+func (t *testTenant) DrainClients(ctx context.Context) error {
 	return t.drain.drainClients(ctx, nil /* reporter */)
 }
 
-// MustGetSQLCounter implements TestTenantInterface.
-func (t *TestTenant) MustGetSQLCounter(name string) int64 {
-	return mustGetSQLCounterForRegistry(t.metricsRegistry, name)
+// Readiness is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) Readiness(ctx context.Context) error {
+	return t.t.admin.checkReadinessForHealthCheck(ctx)
 }
 
-// RangeDescIteratorFactory implements the TestTenantInterface.
-func (t *TestTenant) RangeDescIteratorFactory() interface{} {
-	return t.SQLServer.execCfg.RangeDescIteratorFactory
+// MustGetSQLCounter implements the serverutils.ApplicationLayerInterface.
+func (t *testTenant) MustGetSQLCounter(name string) int64 {
+	return mustGetSQLCounterForRegistry(t.sql.metricsRegistry, name)
 }
 
-// Codec is part of the TestTenantInterface.
-func (t *TestTenant) Codec() keys.SQLCodec {
-	return t.execCfg.Codec
+// MustGetSQLNetworkCounter implements the serverutils.ApplicationLayerInterface.
+func (t *testTenant) MustGetSQLNetworkCounter(name string) int64 {
+	reg := metric.NewRegistry()
+	for _, m := range t.sql.pgServer.Metrics() {
+		reg.AddMetricStruct(m)
+	}
+	return mustGetSQLCounterForRegistry(reg, name)
 }
 
-// Tracer is part of the TestTenantInterface.
-func (t *TestTenant) Tracer() *tracing.Tracer {
-	return t.SQLServer.ambientCtx.Tracer
+// RangeDescIteratorFactory implements the serverutils.ApplicationLayerInterface.
+func (t *testTenant) RangeDescIteratorFactory() interface{} {
+	return t.sql.execCfg.RangeDescIteratorFactory
 }
 
-// SettingsWatcher is part of the TestTenantInterface.
-func (t *TestTenant) SettingsWatcher() interface{} {
-	return t.SQLServer.settingsWatcher
+// Codec is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) Codec() keys.SQLCodec {
+	return t.sql.execCfg.Codec
 }
 
-// StartSharedProcessTenant is part of TestServerInterface.
-func (ts *TestServer) StartSharedProcessTenant(
+// Tracer is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) Tracer() *tracing.Tracer {
+	return t.sql.ambientCtx.Tracer
+}
+
+// TracerI is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) TracerI() interface{} {
+	return t.Tracer()
+}
+
+// ForceTableGC is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) ForceTableGC(
+	ctx context.Context, database, table string, timestamp hlc.Timestamp,
+) error {
+	return internalForceTableGC(ctx, t, database, table, timestamp)
+}
+
+// DefaultZoneConfig is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) DefaultZoneConfig() zonepb.ZoneConfig {
+	return *t.SystemConfigProvider().GetSystemConfig().DefaultZoneConfig
+}
+
+// SettingsWatcher is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SettingsWatcher() interface{} {
+	return t.sql.settingsWatcher
+}
+
+// WaitForTenantCapabilities is part of the serverutils.TenantControlInterface.
+func (ts *testServer) WaitForTenantCapabilities(
+	ctx context.Context,
+	tenID roachpb.TenantID,
+	targetCaps map[tenantcapabilities.ID]string,
+	errPrefix string,
+) error {
+	if tenID.IsSystem() {
+		return nil
+	}
+	if len(targetCaps) == 0 {
+		return nil
+	}
+
+	if errPrefix != "" && !strings.HasSuffix(errPrefix, ": ") {
+		errPrefix += ": "
+	}
+
+	missingCapabilityError := func(capID tenantcapabilities.ID) error {
+		return errors.Newf("%stenant %s cap %q not at expected value", errPrefix, tenID, capID)
+	}
+
+	// Restart the capabilities watcher. Restarting the watcher
+	// forces a new initial scan which is faster than waiting out
+	// the closed timestamp interval required to see new updates.
+	ts.tenantCapabilitiesWatcher.TestingRestart()
+
+	return testutils.SucceedsSoonError(func() error {
+		capabilities, found := ts.TenantCapabilitiesReader().GetCapabilities(tenID)
+		if !found {
+			return errors.Newf("%scapabilities not ready for tenant %v", errPrefix, tenID)
+		}
+
+		for capID, expectedValue := range targetCaps {
+			curVal := tenantcapabilities.MustGetValueByID(capabilities, capID).String()
+			if curVal != expectedValue {
+				return missingCapabilityError(capID)
+			}
+		}
+
+		return nil
+	})
+}
+
+// StartSharedProcessTenant is part of the serverutils.TenantControlInterface.
+func (ts *testServer) StartSharedProcessTenant(
 	ctx context.Context, args base.TestSharedProcessTenantArgs,
-) (serverutils.TestTenantInterface, *gosql.DB, error) {
+) (serverutils.ApplicationLayerInterface, *gosql.DB, error) {
 	if err := args.TenantName.IsValid(); err != nil {
 		return nil, nil, err
 	}
-
+	// Helper function to execute SQL statements.
+	ie := ts.InternalExecutor().(*sql.InternalExecutor)
+	execSQL := func(opName, stmt string, qargs ...interface{}) error {
+		_, err := ie.ExecEx(ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride, stmt, qargs...)
+		return err
+	}
 	// Save the args for use if the server needs to be created.
-	ts.Server.serverController.testArgs[args.TenantName] = args
+	func() {
+		ts.topLevelServer.serverController.mu.Lock()
+		defer ts.topLevelServer.serverController.mu.Unlock()
+		ts.topLevelServer.serverController.mu.testArgs[args.TenantName] = args
+	}()
 
-	tenantRow, err := ts.InternalExecutor().(*sql.InternalExecutor).QueryRow(
+	tenantRow, err := ie.QueryRow(
 		ctx, "testserver-check-tenant-active", nil, /* txn */
 		"SELECT id FROM system.tenants WHERE name=$1 AND active=true",
 		args.TenantName,
@@ -859,6 +1325,7 @@ func (ts *TestServer) StartSharedProcessTenant(
 	}
 	tenantExists := tenantRow != nil
 
+	var tenantID roachpb.TenantID
 	if tenantExists {
 		// A tenant with the given name already exists; let's check that
 		// it matches the ID that this call wants (if any).
@@ -867,24 +1334,21 @@ func (ts *TestServer) StartSharedProcessTenant(
 			return nil, nil, errors.Newf("a tenant with name %q exists, but its ID is %d instead of %d",
 				args.TenantName, id, args.TenantID)
 		}
+		tenantID = roachpb.MustMakeTenantID(id)
 	} else {
 		// The tenant doesn't exist; let's create it.
 		if args.TenantID.IsSet() {
 			// Create with name and ID.
-			_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
-				ctx,
-				"create-tenant",
-				nil, /* txn */
-				sessiondata.NodeUserSessionDataOverride,
-				"SELECT crdb_internal.create_tenant($1,$2)",
-				args.TenantID.ToUint64(), args.TenantName,
+			err := execSQL(
+				"create-tenant", "SELECT crdb_internal.create_tenant($1,$2)", args.TenantID.ToUint64(), args.TenantName,
 			)
 			if err != nil {
 				return nil, nil, err
 			}
+			tenantID = args.TenantID
 		} else {
 			// Create with name alone; allocate an ID automatically.
-			_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
+			row, err := ie.QueryRowEx(
 				ctx,
 				"create-tenant",
 				nil, /* txn */
@@ -895,23 +1359,32 @@ func (ts *TestServer) StartSharedProcessTenant(
 			if err != nil {
 				return nil, nil, err
 			}
-		}
-		// Also mark it for shared-process execution.
-		_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
-			ctx,
-			"start-tenant-shared-service",
-			nil, /* txn */
-			sessiondata.NodeUserSessionDataOverride,
-			"ALTER TENANT $1 START SERVICE SHARED",
-			args.TenantName,
-		)
-		if err != nil {
-			return nil, nil, err
+			id := uint64(*row[0].(*tree.DInt))
+			tenantID = roachpb.MustMakeTenantID(id)
 		}
 	}
 
+	if err = ts.grantDefaultTenantCapabilities(ctx, tenantID, args.SkipTenantCheck); err != nil {
+		return nil, nil, err
+	}
+
+	// Also mark it for shared-process execution.
+	err = execSQL(
+		"start-tenant-shared-service",
+		"ALTER TENANT $1 START SERVICE SHARED",
+		args.TenantName,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Wait for the rangefeed to catch up.
+	if err := ts.WaitForTenantReadiness(ctx, tenantID); err != nil {
+		return nil, nil, err
+	}
+
 	// Instantiate the tenant server.
-	s, err := ts.Server.serverController.startAndWaitForRunningServer(ctx, args.TenantName)
+	s, err := ts.topLevelServer.serverController.startAndWaitForRunningServer(ctx, args.TenantName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -921,37 +1394,160 @@ func (ts *TestServer) StartSharedProcessTenant(
 	hts := &httpTestServer{}
 	hts.t.authentication = sqlServerWrapper.authentication
 	hts.t.sqlServer = sqlServer
-	testTenant := &TestTenant{
-		SQLServer:      sqlServer,
-		Cfg:            sqlServer.cfg,
-		SQLCfg:         sqlServerWrapper.sqlCfg,
-		pgPreServer:    sqlServerWrapper.pgPreServer,
+	hts.t.tenantName = args.TenantName
+	hts.t.admin = sqlServerWrapper.tenantAdmin
+	hts.t.status = sqlServerWrapper.tenantStatus
+
+	tt := &testTenant{
+		sql:    sqlServer,
+		Cfg:    sqlServer.cfg,
+		SQLCfg: sqlServerWrapper.sqlCfg,
+		// Shared process tenants do not create their own SQL servers. Instead, we
+		// use the `pgPreServer` from the server this tenant is serviced from.
+		pgPreServer:    ts.pgPreServer,
+		pgL:            sqlServerWrapper.loopbackPgL,
 		httpTestServer: hts,
 		drain:          sqlServerWrapper.drainServer,
 	}
 
-	sqlDB, err := serverutils.OpenDBConnE(
-		ts.SQLAddr(), "cluster:"+string(args.TenantName)+"/"+args.UseDatabase, false /* insecure */, ts.stopper)
+	sqlDB, err := ts.SQLConnE(serverutils.DBName("cluster:" + string(args.TenantName) + "/" + args.UseDatabase))
 	if err != nil {
 		return nil, nil, err
 	}
-	return testTenant, sqlDB, err
+	return tt, sqlDB, err
 }
 
-// DisableStartTenant is part of TestServerInterface.
-func (ts *TestServer) DisableStartTenant(reason error) {
+// DisableStartTenant is part of the serverutils.TenantControlInterface.
+func (ts *testServer) DisableStartTenant(reason error) {
 	ts.disableStartTenantError = reason
 }
 
-// MigrationServer is part of the TestTenantInterface.
-func (t *TestTenant) MigrationServer() interface{} {
-	return t.migrationServer
+// MigrationServer is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) MigrationServer() interface{} {
+	return t.sql.migrationServer
 }
 
-// StartTenant is part of TestServerInterface.
-func (ts *TestServer) StartTenant(
+// CollectionFactory is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) CollectionFactory() interface{} {
+	return t.sql.execCfg.CollectionFactory
+}
+
+// SystemTableIDResolver is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SystemTableIDResolver() interface{} {
+	return t.sql.execCfg.SystemTableIDResolver
+}
+
+// QueryDatabaseID is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) QueryDatabaseID(
+	ctx context.Context, userName username.SQLUsername, dbName string,
+) (descpb.ID, error) {
+	return t.t.admin.queryDatabaseID(ctx, userName, dbName)
+}
+
+// QueryTableID is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) QueryTableID(
+	ctx context.Context, userName username.SQLUsername, dbName, tbName string,
+) (descpb.ID, error) {
+	return t.t.admin.queryTableID(ctx, userName, dbName, tbName)
+}
+
+// StatsForSpans is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) StatsForSpan(
+	ctx context.Context, span roachpb.Span,
+) (*serverpb.TableStatsResponse, error) {
+	return t.t.admin.statsForSpan(ctx, span)
+}
+
+// SetReady is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SetReady(ready bool) {
+	t.sql.isReady.Set(ready)
+}
+
+// SetAcceptSQLWithoutTLS is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SetAcceptSQLWithoutTLS(accept bool) {
+	t.Cfg.AcceptSQLWithoutTLS = accept
+}
+
+// PrivilegeChecker is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) PrivilegeChecker() interface{} {
+	return t.t.admin.privilegeChecker
+}
+
+// HTTPAuthServer is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) HTTPAuthServer() interface{} {
+	return t.t.authentication
+}
+
+// HTTPServer is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) HTTPServer() interface{} {
+	return t.http
+}
+
+// SQLLoopbackListener is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SQLLoopbackListener() interface{} {
+	return t.pgL
+}
+
+func (ts *testServer) waitForTenantReadinessImpl(
+	ctx context.Context, tenantID roachpb.TenantID,
+) error {
+	_, infoWatcher, err := ts.node.waitForTenantWatcherReadiness(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Ignore the tenant capabilities entry as it may be served from a stale
+	// version of the in-RAM cache. We use the returned channel to monitor when
+	// the watcher has completed its initial scan and hydrated the in-RAM cache
+	// with the most up-to-date values.
+	_, infoCh, _ := infoWatcher.GetInfo(tenantID)
+
+	// Restarting the watcher forces a new initial scan which is faster than
+	// waiting out the closed timestamp interval required to see new updates.
+	ts.node.tenantInfoWatcher.TestingRestart()
+
+	// Ditto for cluster settings and setting overrides.
+	ts.sqlServer.settingsWatcher.TestingRestart()
+	ts.node.tenantSettingsWatcher.TestingRestart()
+
+	log.Infof(ctx, "waiting for rangefeed to catch up with record for tenant %v", tenantID)
+
+	// Wait for the watcher to handle the complete update from the initial scan
+	// and notify our previously registered listener.
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-infoCh:
+	}
+	for {
+		info, infoCh, found := infoWatcher.GetInfo(tenantID)
+		if found && info.ServiceMode != mtinfopb.ServiceModeNone {
+			log.Infof(ctx, "cached record found for tenant %v", tenantID)
+			return nil
+		}
+		// Not found: wait and try again.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-infoCh:
+			continue
+		}
+	}
+}
+
+// WaitForTenantReadiness is part of serverutils.TenantControlInterface..
+func (ts *testServer) WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error {
+	// Two minutes should be sufficient for the in-RAM caches to be hydrated with
+	// the tenant record.
+	return timeutil.RunWithTimeout(ctx, "waitForTenantReadiness", 2*time.Minute, func(ctx context.Context) error {
+		return ts.waitForTenantReadinessImpl(ctx, tenantID)
+	})
+}
+
+// StartTenant is part of the serverutils.TenantControlInterface.
+func (ts *testServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,
-) (serverutils.TestTenantInterface, error) {
+) (serverutils.ApplicationLayerInterface, error) {
 	if ts.disableStartTenantError != nil {
 		return nil, ts.disableStartTenantError
 	}
@@ -982,6 +1578,14 @@ func (ts *TestServer) StartTenant(
 			if err != nil {
 				return nil, err
 			}
+		}
+		// Mark it for external execution. This is needed before we can spawn a server.
+		if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
+			ctx, "testserver-set-tenant-service-mode", nil, /* txn */
+			"ALTER TENANT [$1] START SERVICE EXTERNAL",
+			params.TenantID.ToUint64(),
+		); err != nil {
+			return nil, err
 		}
 	} else if !params.SkipTenantCheck {
 		requestedID := uint64(0)
@@ -1027,22 +1631,17 @@ func (ts *TestServer) StartTenant(
 		}
 	}
 
+	if !params.SkipWaitForTenantCache {
+		// Wait until the rangefeed has caught up with the tenant creation.
+		if err := ts.WaitForTenantReadiness(ctx, params.TenantID); err != nil {
+			return nil, err
+		}
+	}
+
 	st := params.Settings
 	if st == nil {
 		st = cluster.MakeTestingClusterSettings()
 	}
-	// Verify that the settings object that was passed in has
-	// initialized the version setting. This is pretty much necessary
-	// for secondary tenants. See the comments at the beginning of
-	// `runStartSQL()` in cli/mt_start_sql.go and
-	// `makeSharedProcessTenantServerConfig()` in
-	// server_controller_new_server.go.
-	//
-	// The version is initialized in MakeTestingClusterSettings(). This
-	// assertion is there to prevent inadvertent changes to
-	// MakeTestingClusterSettings() and as a guardrail for tests that
-	// pass a custom params.Settings.
-	clusterversion.AssertInitialized(ctx, &st.SV)
 
 	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
 	// Remove in v23.2.
@@ -1053,8 +1652,7 @@ func (ts *TestServer) StartTenant(
 
 	st.ExternalIODir = params.ExternalIODir
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)
-	sqlCfg.TenantKVAddrs = []string{ts.ServingRPCAddr()}
-	sqlCfg.ExternalIODirConfig = params.ExternalIODirConfig
+	sqlCfg.TenantLoopbackAddr = ts.AdvRPCAddr()
 	if params.MemoryPoolSize != 0 {
 		sqlCfg.MemoryPoolSize = params.MemoryPoolSize
 	}
@@ -1099,32 +1697,15 @@ func (ts *TestServer) StartTenant(
 	baseCfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
 	baseCfg.DisableTLSForHTTP = params.DisableTLSForHTTP
 	baseCfg.EnableDemoLoginEndpoint = params.EnableDemoLoginEndpoint
+	baseCfg.TestingInsecureWebAccess = ts.Cfg.TestingInsecureWebAccess
+	baseCfg.DefaultZoneConfig = ts.Cfg.DefaultZoneConfig
+	baseCfg.HeapProfileDirName = ts.Cfg.BaseConfig.HeapProfileDirName
+	baseCfg.GoroutineDumpDirName = ts.Cfg.BaseConfig.GoroutineDumpDirName
+	baseCfg.ExternalIODirConfig = params.ExternalIODirConfig
 
-	if ts.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities) {
-		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
-			"ALTER TENANT [$1] GRANT CAPABILITY can_use_nodelocal_storage", params.TenantID.ToUint64())
-		if err != nil {
-			if params.SkipTenantCheck {
-				log.Infof(ctx, "ignoring error granting capability because SkipTenantCheck is true: %v", err)
-			} else {
-				return nil, err
-			}
-		} else {
-			if err := testutils.SucceedsSoonError(func() error {
-				capabilities, found := ts.TenantCapabilitiesReader().GetCapabilities(params.TenantID)
-				if !found {
-					return errors.Newf("capabilities not yet ready")
-				}
-				if !tenantcapabilities.MustGetBoolByID(
-					capabilities, tenantcapabilities.CanUseNodelocalStorage,
-				) {
-					return errors.Newf("capabilities not yet ready")
-				}
-				return nil
-			}); err != nil {
-				return nil, err
-			}
-		}
+	// Grant the tenant the default capabilities.
+	if err := ts.grantDefaultTenantCapabilities(ctx, params.TenantID, params.SkipTenantCheck); err != nil {
+		return nil, err
 	}
 
 	// For now, we don't support split RPC/SQL ports for secondary tenants
@@ -1177,8 +1758,10 @@ func (ts *TestServer) StartTenant(
 		// If the server requests a shutdown, do that simply by stopping the
 		// tenant's stopper.
 		select {
-		case <-sw.ShutdownRequested():
-			stopper.Stop(sw.AnnotateCtx(context.Background()))
+		case req := <-sw.ShutdownRequested():
+			shutdownCtx := sw.AnnotateCtx(context.Background())
+			log.Infof(shutdownCtx, "server requesting spontaneous shutdown: %v", req.ShutdownCause())
+			stopper.Stop(shutdownCtx)
 		case <-stopper.ShouldQuiesce():
 		}
 	}()
@@ -1190,14 +1773,18 @@ func (ts *TestServer) StartTenant(
 	hts := &httpTestServer{}
 	hts.t.authentication = sw.authentication
 	hts.t.sqlServer = sw.sqlServer
+	hts.t.admin = sw.tenantAdmin
+	hts.t.status = sw.tenantStatus
 
-	return &TestTenant{
-		SQLServer:      sw.sqlServer,
+	return &testTenant{
+		sql:            sw.sqlServer,
 		Cfg:            &baseCfg,
 		SQLCfg:         &sqlCfg,
 		pgPreServer:    sw.pgPreServer,
 		httpTestServer: hts,
+		http:           sw.http,
 		drain:          sw.drainServer,
+		pgL:            sw.loopbackPgL,
 	}, err
 }
 
@@ -1205,7 +1792,7 @@ func (ts *TestServer) StartTenant(
 // be on the server after initial (asynchronous) splits have been completed,
 // assuming no additional information is added outside of the normal bootstrap
 // process.
-func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
+func (ts *testServer) ExpectedInitialRangeCount() (int, error) {
 	return ExpectedInitialRangeCount(
 		ts.sqlServer.execCfg.Codec,
 		&ts.cfg.DefaultZoneConfig,
@@ -1225,111 +1812,81 @@ func ExpectedInitialRangeCount(
 	return len(config.StaticSplits()) + len(splits) + 1, nil
 }
 
-// Stores returns the collection of stores from this TestServer's node.
-func (ts *TestServer) Stores() *kvserver.Stores {
-	return ts.node.stores
-}
-
-// GetStores is part of TestServerInterface.
-func (ts *TestServer) GetStores() interface{} {
+// GetStores is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) GetStores() interface{} {
 	return ts.node.stores
 }
 
 // ClusterSettings returns the ClusterSettings.
-func (ts *TestServer) ClusterSettings() *cluster.Settings {
+func (ts *testServer) ClusterSettings() *cluster.Settings {
 	return ts.Cfg.Settings
 }
 
-// SettingsWatcher is part of the TestTenantInterface.
-func (ts *TestServer) SettingsWatcher() interface{} {
+// SettingsWatcher is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SettingsWatcher() interface{} {
 	return ts.sqlServer.settingsWatcher
 }
 
-// Engines returns the TestServer's engines.
-func (ts *TestServer) Engines() []storage.Engine {
+// Engines returns the testServer's engines.
+func (ts *testServer) Engines() []storage.Engine {
 	return ts.engines
 }
 
-// ServingRPCAddr returns the server's RPC address. Should be used by clients.
-func (ts *TestServer) ServingRPCAddr() string {
+// AdvRPCAddr returns the server's RPC address. Should be used by clients.
+func (ts *testServer) AdvRPCAddr() string {
 	return ts.cfg.AdvertiseAddr
 }
 
-// HostSQLAddr returns the host cluster's SQL address.
-func (ts *TestServer) HostSQLAddr() string {
+// AdvSQLAddr returns the server's SQL address. Should be used by clients.
+func (ts *testServer) AdvSQLAddr() string {
 	return ts.cfg.SQLAdvertiseAddr
 }
 
-// ServingSQLAddr returns the server's SQL address. Should be used by clients.
-// If a test tenant is started, return the first test tenant's address.
-func (ts *TestServer) ServingSQLAddr() string {
-	if len(ts.testTenants) == 0 {
-		return ts.cfg.SQLAdvertiseAddr
-	}
-	if len(ts.testTenants) != 1 {
-		// If the number of test tenants is not equal to 1, it's not clear what
-		// to return here. This isn't currently possible, but panic here to
-		// alert anyone down the road who changes the number of default test
-		// tenants to the fact that they'll need to reconsider this function
-		// along with their change.
-		panic(fmt.Sprintf("invalid number of test SQL servers %d", len(ts.testTenants)))
-	}
-	return ts.testTenants[0].SQLAddr()
-}
-
 // HTTPAddr returns the server's HTTP address. Should be used by clients.
-func (ts *TestServer) HTTPAddr() string {
+func (ts *testServer) HTTPAddr() string {
 	return ts.cfg.HTTPAddr
 }
 
 // RPCAddr returns the server's listening RPC address.
-// Note: use ServingRPCAddr() instead unless there is a specific reason not to.
-func (ts *TestServer) RPCAddr() string {
+// Note: use AdvRPCAddr() instead unless there is a specific reason not to.
+func (ts *testServer) RPCAddr() string {
 	return ts.cfg.Addr
 }
 
 // SQLAddr returns the server's listening SQL address.
-// Note: use ServingSQLAddr() instead unless there is a specific reason not to.
-func (ts *TestServer) SQLAddr() string {
+// Note: use AdvSQLAddr() instead unless there is a specific reason not to.
+func (ts *testServer) SQLAddr() string {
 	return ts.cfg.SQLAddr
 }
 
 // DrainClients exports the drainClients() method for use by tests.
-func (ts *TestServer) DrainClients(ctx context.Context) error {
+func (ts *testServer) DrainClients(ctx context.Context) error {
 	return ts.drain.drainClients(ctx, nil /* reporter */)
 }
 
-// Readiness returns nil when the server's health probe reports
-// readiness, a readiness error otherwise.
-func (ts *TestServer) Readiness(ctx context.Context) error {
+// Readiness is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) Readiness(ctx context.Context) error {
 	return ts.admin.checkReadinessForHealthCheck(ctx)
 }
 
-// WriteSummaries implements TestServerInterface.
-func (ts *TestServer) WriteSummaries() error {
+// SetReadyFn is part of TestServerInterface.
+func (ts *testServer) SetReadyFn(fn func(bool)) {
+	ts.topLevelServer.cfg.ReadyFn = fn
+}
+
+// WriteSummaries implements the serverutils.StorageLayerInterface.
+func (ts *testServer) WriteSummaries() error {
 	return ts.node.writeNodeStatus(context.TODO(), time.Hour, false)
 }
 
-// UpdateChecker implements TestServerInterface.
-func (ts *TestServer) UpdateChecker() interface{} {
-	return ts.Server.updates
+// UpdateChecker implements the serverutils.StorageLayerInterface.
+func (ts *testServer) UpdateChecker() interface{} {
+	return ts.topLevelServer.updates
 }
 
-// DiagnosticsReporter implements TestServerInterface.
-func (ts *TestServer) DiagnosticsReporter() interface{} {
-	return ts.Server.sqlServer.diagnosticsReporter
-}
-
-const authenticatedUser = "authentic_user"
-
-func authenticatedUserName() username.SQLUsername {
-	return username.MakeSQLUsernameFromPreNormalizedString(authenticatedUser)
-}
-
-const authenticatedUserNoAdmin = "authentic_user_noadmin"
-
-func authenticatedUserNameNoAdmin() username.SQLUsername {
-	return username.MakeSQLUsernameFromPreNormalizedString(authenticatedUserNoAdmin)
+// DiagnosticsReporter implements the serverutils.ApplicationLayerInterface.
+func (ts *testServer) DiagnosticsReporter() interface{} {
+	return ts.topLevelServer.sqlServer.diagnosticsReporter
 }
 
 type v2AuthDecorator struct {
@@ -1339,136 +1896,122 @@ type v2AuthDecorator struct {
 }
 
 func (v *v2AuthDecorator) RoundTrip(r *http.Request) (*http.Response, error) {
-	r.Header.Add(apiV2AuthHeader, v.session)
+	r.Header.Add(authserver.APIV2AuthHeader, v.session)
 	return v.RoundTripper.RoundTrip(r)
 }
 
-// MustGetSQLCounter implements TestTenantInterface.
-func (ts *TestServer) MustGetSQLCounter(name string) int64 {
-	return mustGetSQLCounterForRegistry(ts.registry, name)
+// MustGetSQLCounter implements serverutils.ApplicationLayerInterface.
+func (ts *testServer) MustGetSQLCounter(name string) int64 {
+	return mustGetSQLCounterForRegistry(ts.appRegistry, name)
 }
 
-// MustGetSQLNetworkCounter implements TestServerInterface.
-func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
-	var c int64
-	var found bool
-
+// MustGetSQLNetworkCounter implements the serverutils.ApplicationLayerInterface.
+func (ts *testServer) MustGetSQLNetworkCounter(name string) int64 {
 	reg := metric.NewRegistry()
 	for _, m := range ts.sqlServer.pgServer.Metrics() {
 		reg.AddMetricStruct(m)
 	}
-	reg.Each(func(n string, v interface{}) {
-		if name == n {
-			switch t := v.(type) {
-			case *metric.Counter:
-				c = t.Count()
-				found = true
-			case *metric.Gauge:
-				c = t.Value()
-				found = true
-			}
-		}
-	})
-	if !found {
-		panic(fmt.Sprintf("couldn't find metric %s", name))
-	}
-	return c
+	return mustGetSQLCounterForRegistry(reg, name)
 }
 
-// Locality returns the Locality used by the TestServer.
-func (ts *TestServer) Locality() *roachpb.Locality {
-	return &ts.cfg.Locality
+// Locality is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) Locality() roachpb.Locality {
+	return ts.cfg.Locality
 }
 
-// LeaseManager is part of TestServerInterface.
-func (ts *TestServer) LeaseManager() interface{} {
+// DistSQLPlanningNodeID is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) DistSQLPlanningNodeID() roachpb.NodeID {
+	return ts.NodeID()
+}
+
+// LeaseManager is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) LeaseManager() interface{} {
 	return ts.sqlServer.leaseMgr
 }
 
-// InternalExecutor is part of TestServerInterface.
-func (ts *TestServer) InternalExecutor() interface{} {
+// InternalExecutor is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) InternalExecutor() interface{} {
 	return ts.sqlServer.internalExecutor
 }
 
-// InternalDB is part of TestServerInterface.
-func (ts *TestServer) InternalDB() interface{} {
+// InternalDB is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) InternalDB() interface{} {
 	return ts.sqlServer.internalDB
 }
 
 // GetNode exposes the Server's Node.
-func (ts *TestServer) GetNode() *Node {
+func (ts *testServer) GetNode() *Node {
 	return ts.node
 }
 
 // DistSenderI is part of DistSenderInterface.
-func (ts *TestServer) DistSenderI() interface{} {
+func (ts *testServer) DistSenderI() interface{} {
 	return ts.distSender
 }
 
-// DistSender is like DistSenderI(), but returns the real type instead of
-// interface{}.
-func (ts *TestServer) DistSender() *kvcoord.DistSender {
-	return ts.DistSenderI().(*kvcoord.DistSender)
+// NodeDescStoreI is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) NodeDescStoreI() interface{} {
+	return ts.sqlServer.execCfg.DistSQLPlanner.NodeDescStore()
 }
 
-// MigrationServer is part of TestServerInterface.
-func (ts *TestServer) MigrationServer() interface{} {
-	return ts.migrationServer
+// MigrationServer is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) MigrationServer() interface{} {
+	return ts.topLevelServer.migrationServer
 }
 
-// SpanConfigKVAccessor is part of TestServerInterface.
-func (ts *TestServer) SpanConfigKVAccessor() interface{} {
-	return ts.Server.node.spanConfigAccessor
+// SpanConfigKVAccessor is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) SpanConfigKVAccessor() interface{} {
+	return ts.topLevelServer.node.spanConfigAccessor
 }
 
-// SpanConfigReporter is part of TestServerInterface.
-func (ts *TestServer) SpanConfigReporter() interface{} {
-	return ts.Server.node.spanConfigReporter
+// SpanConfigReporter is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) SpanConfigReporter() interface{} {
+	return ts.topLevelServer.node.spanConfigReporter
 }
 
-// SpanConfigReconciler is part of TestServerInterface.
-func (ts *TestServer) SpanConfigReconciler() interface{} {
+// SpanConfigReconciler is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SpanConfigReconciler() interface{} {
 	if ts.sqlServer.spanconfigMgr == nil {
 		panic("uninitialized; see EnableSpanConfigs testing knob to use span configs")
 	}
 	return ts.sqlServer.spanconfigMgr.Reconciler
 }
 
-// SpanConfigSQLTranslatorFactory is part of TestServerInterface.
-func (ts *TestServer) SpanConfigSQLTranslatorFactory() interface{} {
+// SpanConfigSQLTranslatorFactory is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SpanConfigSQLTranslatorFactory() interface{} {
 	if ts.sqlServer.spanconfigSQLTranslatorFactory == nil {
 		panic("uninitialized; see EnableSpanConfigs testing knob to use span configs")
 	}
 	return ts.sqlServer.spanconfigSQLTranslatorFactory
 }
 
-// SpanConfigSQLWatcher is part of TestServerInterface.
-func (ts *TestServer) SpanConfigSQLWatcher() interface{} {
+// SpanConfigSQLWatcher is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SpanConfigSQLWatcher() interface{} {
 	if ts.sqlServer.spanconfigSQLWatcher == nil {
 		panic("uninitialized; see EnableSpanConfigs testing knob to use span configs")
 	}
 	return ts.sqlServer.spanconfigSQLWatcher
 }
 
-// SQLServer is part of TestServerInterface.
-func (ts *TestServer) SQLServer() interface{} {
+// SQLServer is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SQLServer() interface{} {
 	return ts.sqlServer.pgServer.SQLServer
 }
 
-// DistSQLServer is part of TestServerInterface.
-func (ts *TestServer) DistSQLServer() interface{} {
+// DistSQLServer is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) DistSQLServer() interface{} {
 	return ts.sqlServer.distSQLServer
 }
 
-// SetDistSQLSpanResolver is part of TestServerInterface.
-func (s *Server) SetDistSQLSpanResolver(spanResolver interface{}) {
-	s.sqlServer.execCfg.DistSQLPlanner.SetSpanResolver(spanResolver.(physicalplan.SpanResolver))
+// SetDistSQLSpanResolver is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SetDistSQLSpanResolver(spanResolver interface{}) {
+	ts.sqlServer.execCfg.DistSQLPlanner.SetSpanResolver(spanResolver.(physicalplan.SpanResolver))
 }
 
-// GetFirstStoreID is part of TestServerInterface.
-func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
+// GetFirstStoreID is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) GetFirstStoreID() roachpb.StoreID {
 	firstStoreID := roachpb.StoreID(-1)
-	err := ts.Stores().VisitStores(func(s *kvserver.Store) error {
+	err := ts.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 		if firstStoreID == -1 {
 			firstStoreID = s.Ident.StoreID
 		}
@@ -1481,7 +2024,7 @@ func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 }
 
 // LookupRange returns the descriptor of the range containing key.
-func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
+func (ts *testServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
 	rs, _, err := kv.RangeLookup(context.Background(), ts.DB().NonTransactionalSender(),
 		key, kvpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 	if err != nil {
@@ -1492,7 +2035,7 @@ func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, err
 }
 
 // MergeRanges merges the range containing leftKey with the range to its right.
-func (ts *TestServer) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor, error) {
+func (ts *testServer) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor, error) {
 
 	ctx := context.Background()
 	mergeReq := kvpb.AdminMergeRequest{
@@ -1509,15 +2052,8 @@ func (ts *TestServer) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor,
 	return ts.LookupRange(leftKey)
 }
 
-// SplitRangeWithExpiration splits the range containing splitKey with a sticky
-// bit expiring at expirationTime.
-// The right range created by the split starts at the split key and extends to the
-// original range's end key.
-// Returns the new descriptors of the left and right ranges.
-//
-// splitKey must correspond to a SQL table key (it must end with a family ID /
-// col ID).
-func (ts *TestServer) SplitRangeWithExpiration(
+// SplitRangeWithExpiration is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) SplitRangeWithExpiration(
 	splitKey roachpb.Key, expirationTime hlc.Timestamp,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	ctx := context.Background()
@@ -1589,52 +2125,16 @@ func (ts *TestServer) SplitRangeWithExpiration(
 
 // SplitRange is exactly like SplitRangeWithExpiration, except that it creates a
 // split with a sticky bit that never expires.
-func (ts *TestServer) SplitRange(
+func (ts *testServer) SplitRange(
 	splitKey roachpb.Key,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	return ts.SplitRangeWithExpiration(splitKey, hlc.MaxTimestamp)
 }
 
-// LeaseInfo describes a range's current and potentially future lease.
-type LeaseInfo struct {
-	cur, next roachpb.Lease
-}
-
-// Current returns the range's current lease.
-func (l LeaseInfo) Current() roachpb.Lease {
-	return l.cur
-}
-
-// CurrentOrProspective returns the range's potential next lease, if a lease
-// request is in progress, or the current lease otherwise.
-func (l LeaseInfo) CurrentOrProspective() roachpb.Lease {
-	if !l.next.Empty() {
-		return l.next
-	}
-	return l.cur
-}
-
-// LeaseInfoOpt enumerates options for GetRangeLease.
-type LeaseInfoOpt int
-
-const (
-	// AllowQueryToBeForwardedToDifferentNode specifies that, if the current node
-	// doesn't have a voter replica, the lease info can come from a different
-	// node.
-	AllowQueryToBeForwardedToDifferentNode LeaseInfoOpt = iota
-	// QueryLocalNodeOnly specifies that an error should be returned if the node
-	// is not able to serve the lease query (because it doesn't have a voting
-	// replica).
-	QueryLocalNodeOnly
-)
-
-// GetRangeLease returns information on the lease for the range containing key, and a
-// timestamp taken from the node. The lease is returned regardless of its status.
-//
-// queryPolicy specifies if its OK to forward the request to a different node.
-func (ts *TestServer) GetRangeLease(
-	ctx context.Context, key roachpb.Key, queryPolicy LeaseInfoOpt,
-) (_ LeaseInfo, now hlc.ClockTimestamp, _ error) {
+// GetRangeLease is part of severutils.StorageLayerInterface.
+func (ts *testServer) GetRangeLease(
+	ctx context.Context, key roachpb.Key, queryPolicy roachpb.LeaseInfoOpt,
+) (_ roachpb.LeaseInfo, now hlc.ClockTimestamp, _ error) {
 	leaseReq := kvpb.LeaseInfoRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key: key,
@@ -1654,79 +2154,65 @@ func (ts *TestServer) GetRangeLease(
 		&leaseReq,
 	)
 	if pErr != nil {
-		return LeaseInfo{}, hlc.ClockTimestamp{}, pErr.GoError()
+		return roachpb.LeaseInfo{}, hlc.ClockTimestamp{}, pErr.GoError()
 	}
 	// Adapt the LeaseInfoResponse format to LeaseInfo.
 	resp := leaseResp.(*kvpb.LeaseInfoResponse)
-	if queryPolicy == QueryLocalNodeOnly && resp.EvaluatedBy != ts.GetFirstStoreID() {
+	if queryPolicy == roachpb.QueryLocalNodeOnly && resp.EvaluatedBy != ts.GetFirstStoreID() {
 		// TODO(andrei): Figure out how to deal with nodes with multiple stores.
 		// This API should permit addressing the query to a particular store.
-		return LeaseInfo{}, hlc.ClockTimestamp{}, errors.Errorf(
+		return roachpb.LeaseInfo{}, hlc.ClockTimestamp{}, errors.Errorf(
 			"request not evaluated locally; evaluated by s%d instead of local s%d",
 			resp.EvaluatedBy, ts.GetFirstStoreID())
 	}
-	var l LeaseInfo
+	var l roachpb.LeaseInfo
 	if resp.CurrentLease != nil {
-		l.cur = *resp.CurrentLease
-		l.next = resp.Lease
+		l = roachpb.MakeLeaseInfo(*resp.CurrentLease, resp.Lease)
 	} else {
-		l.cur = resp.Lease
+		l = roachpb.MakeLeaseInfo(resp.Lease, roachpb.Lease{})
 	}
 	return l, ts.Clock().NowAsClockTimestamp(), nil
 }
 
-// ExecutorConfig is part of the TestServerInterface.
-func (ts *TestServer) ExecutorConfig() interface{} {
+// ExecutorConfig is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) ExecutorConfig() interface{} {
 	return *ts.sqlServer.execCfg
 }
 
-// StartedDefaultTestTenant is part of the TestServerInterface.
-func (ts *TestServer) StartedDefaultTestTenant() bool {
-	return !ts.cfg.DisableDefaultTestTenant
+// StartedDefaultTestTenant is part of the serverutils.TenantControlInterface.
+func (ts *testServer) StartedDefaultTestTenant() bool {
+	return len(ts.testTenants) > 0
 }
 
-// TenantOrServer is part of the TestServerInterface.
-func (ts *TestServer) TenantOrServer() serverutils.TestTenantInterface {
-	if ts.StartedDefaultTestTenant() {
-		return ts.testTenants[0]
-	}
-	return ts
-}
-
-// TracerI is part of the TestServerInterface.
-func (ts *TestServer) TracerI() interface{} {
+// TracerI is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) TracerI() interface{} {
 	return ts.Tracer()
 }
 
 // Tracer is like TracerI(), but returns the actual type.
-func (ts *TestServer) Tracer() *tracing.Tracer {
+func (ts *testServer) Tracer() *tracing.Tracer {
 	return ts.node.storeCfg.AmbientCtx.Tracer
 }
 
-// ForceTableGC is part of TestServerInterface.
-func (ts *TestServer) ForceTableGC(
+// ForceTableGC is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) ForceTableGC(
 	ctx context.Context, database, table string, timestamp hlc.Timestamp,
 ) error {
-	tableIDQuery := `
- SELECT tables.id FROM system.namespace tables
-   JOIN system.namespace dbs ON dbs.id = tables."parentID"
-   WHERE dbs.name = $1 AND tables.name = $2
- `
-	row, err := ts.sqlServer.internalExecutor.QueryRowEx(
-		ctx, "resolve-table-id", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
-		tableIDQuery, database, table)
+	return internalForceTableGC(ctx, ts, database, table, timestamp)
+}
+
+func internalForceTableGC(
+	ctx context.Context,
+	app serverutils.ApplicationLayerInterface,
+	database, table string,
+	timestamp hlc.Timestamp,
+) error {
+	tableID, err := app.QueryTableID(ctx, username.RootUserName(), database, table)
 	if err != nil {
 		return err
 	}
-	if row == nil {
-		return errors.Errorf("table not found")
-	}
-	if len(row) != 1 {
-		return errors.AssertionFailedf("expected 1 column from internal query")
-	}
-	tableID := uint32(*row[0].(*tree.DInt))
-	tblKey := keys.SystemSQLCodec.TablePrefix(tableID)
+
+	tblKey := app.Codec().TablePrefix(uint32(tableID))
 	gcr := kvpb.GCRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key:    tblKey,
@@ -1734,13 +2220,22 @@ func (ts *TestServer) ForceTableGC(
 		},
 		Threshold: timestamp,
 	}
-	_, pErr := kv.SendWrapped(ctx, ts.distSender, &gcr)
+	_, pErr := kv.SendWrapped(ctx, app.DistSenderI().(kv.Sender), &gcr)
 	return pErr.GoError()
 }
 
-// ScratchRange is like ScratchRangeEx, but only returns the start key of the
-// new range instead of the range descriptor.
-func (ts *TestServer) ScratchRange() (roachpb.Key, error) {
+// DefaultZoneConfig is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) DefaultZoneConfig() zonepb.ZoneConfig {
+	return *ts.SystemConfigProvider().GetSystemConfig().DefaultZoneConfig
+}
+
+// DefaultSystemZoneConfig is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) DefaultSystemZoneConfig() zonepb.ZoneConfig {
+	return ts.topLevelServer.cfg.DefaultSystemZoneConfig
+}
+
+// ScratchRange is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) ScratchRange() (roachpb.Key, error) {
 	_, desc, err := ts.ScratchRangeEx()
 	if err != nil {
 		return nil, err
@@ -1748,16 +2243,14 @@ func (ts *TestServer) ScratchRange() (roachpb.Key, error) {
 	return desc.StartKey.AsRawKey(), nil
 }
 
-// ScratchRangeEx splits off a range suitable to be used as KV scratch space.
-// (it doesn't overlap system spans or SQL tables).
-func (ts *TestServer) ScratchRangeEx() (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
+// ScratchRangeEx is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) ScratchRangeEx() (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	scratchKey := keys.ScratchRangeMin
 	return ts.SplitRange(scratchKey)
 }
 
-// ScratchRangeWithExpirationLease is like ScratchRangeWithExpirationLeaseEx but
-// returns a key for the RHS ranges, instead of both descriptors from the split.
-func (ts *TestServer) ScratchRangeWithExpirationLease() (roachpb.Key, error) {
+// ScratchRangeWithExpirationLease is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) ScratchRangeWithExpirationLease() (roachpb.Key, error) {
 	_, desc, err := ts.ScratchRangeWithExpirationLeaseEx()
 	if err != nil {
 		return nil, err
@@ -1765,9 +2258,8 @@ func (ts *TestServer) ScratchRangeWithExpirationLease() (roachpb.Key, error) {
 	return desc.StartKey.AsRawKey(), nil
 }
 
-// ScratchRangeWithExpirationLeaseEx is like ScratchRange but creates a range with
-// an expiration based lease.
-func (ts *TestServer) ScratchRangeWithExpirationLeaseEx() (
+// ScratchRangeWithExpirationLeaseEx is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) ScratchRangeWithExpirationLeaseEx() (
 	roachpb.RangeDescriptor,
 	roachpb.RangeDescriptor,
 	error,
@@ -1777,42 +2269,58 @@ func (ts *TestServer) ScratchRangeWithExpirationLeaseEx() (
 	return ts.SplitRange(scratchKey)
 }
 
+// RaftConfig is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) RaftConfig() base.RaftConfig {
+	return ts.Cfg.RaftConfig
+}
+
 // MetricsRecorder periodically records node-level and store-level metrics.
-func (ts *TestServer) MetricsRecorder() *status.MetricsRecorder {
+func (ts *testServer) MetricsRecorder() *status.MetricsRecorder {
 	return ts.node.recorder
 }
 
-// CollectionFactory is part of the TestServerInterface.
-func (ts *TestServer) CollectionFactory() interface{} {
+// CollectionFactory is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) CollectionFactory() interface{} {
 	return ts.sqlServer.execCfg.CollectionFactory
 }
 
-// SystemTableIDResolver is part of the TestServerInterface.
-func (ts *TestServer) SystemTableIDResolver() interface{} {
+// SystemTableIDResolver is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SystemTableIDResolver() interface{} {
 	return ts.sqlServer.execCfg.SystemTableIDResolver
 }
 
-// SpanConfigKVSubscriber is part of the TestServerInterface.
-func (ts *TestServer) SpanConfigKVSubscriber() interface{} {
+// SpanConfigKVSubscriber is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) SpanConfigKVSubscriber() interface{} {
 	return ts.node.storeCfg.SpanConfigSubscriber
 }
 
-// SystemConfigProvider is part of the TestServerInterface.
-func (ts *TestServer) SystemConfigProvider() config.SystemConfigProvider {
+// SystemConfigProvider is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SystemConfigProvider() config.SystemConfigProvider {
 	return ts.node.storeCfg.SystemConfigProvider
 }
 
-func (ts *TestServer) Codec() keys.SQLCodec {
+// KVFlowController is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) KVFlowController() interface{} {
+	return ts.node.storeCfg.KVFlowController
+}
+
+// KVFlowHandles is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) KVFlowHandles() interface{} {
+	return ts.node.storeCfg.KVFlowHandles
+}
+
+// Codec is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) Codec() keys.SQLCodec {
 	return ts.ExecutorConfig().(sql.ExecutorConfig).Codec
 }
 
-// RangeDescIteratorFactory is part of the TestServerInterface.
-func (ts *TestServer) RangeDescIteratorFactory() interface{} {
+// RangeDescIteratorFactory is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) RangeDescIteratorFactory() interface{} {
 	return ts.sqlServer.execCfg.RangeDescIteratorFactory
 }
 
-// BinaryVersionOverride is part of the TestServerInterface.
-func (ts *TestServer) BinaryVersionOverride() roachpb.Version {
+// BinaryVersionOverride is part of the serverutils.TestServerInterface.
+func (ts *testServer) BinaryVersionOverride() roachpb.Version {
 	knobs := ts.TestingKnobs().Server
 	if knobs == nil {
 		return roachpb.Version{}
@@ -1820,10 +2328,118 @@ func (ts *TestServer) BinaryVersionOverride() roachpb.Version {
 	return knobs.(*TestingKnobs).BinaryVersionOverride
 }
 
+// KvProber is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) KvProber() *kvprober.Prober {
+	return ts.topLevelServer.kvProber
+}
+
+// QueryDatabaseID is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) QueryDatabaseID(
+	ctx context.Context, userName username.SQLUsername, dbName string,
+) (descpb.ID, error) {
+	return ts.admin.queryDatabaseID(ctx, userName, dbName)
+}
+
+// QueryTableID is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) QueryTableID(
+	ctx context.Context, userName username.SQLUsername, dbName, tbName string,
+) (descpb.ID, error) {
+	return ts.admin.queryTableID(ctx, userName, dbName, tbName)
+}
+
+// StatsForSpans is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) StatsForSpan(
+	ctx context.Context, span roachpb.Span,
+) (*serverpb.TableStatsResponse, error) {
+	return ts.admin.statsForSpan(ctx, span)
+}
+
+// SetReady is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SetReady(ready bool) {
+	ts.sqlServer.isReady.Set(ready)
+}
+
+// SetAcceptSQLWithoutTLS is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SetAcceptSQLWithoutTLS(accept bool) {
+	ts.Cfg.AcceptSQLWithoutTLS = accept
+}
+
+// PrivilegeChecker is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) PrivilegeChecker() interface{} {
+	return ts.admin.privilegeChecker
+}
+
+// HTTPAuthServer is part of the ApplicationLayerInterface.
+func (ts *testServer) HTTPAuthServer() interface{} {
+	return ts.t.authentication
+}
+
+// HTTPServer is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) HTTPServer() interface{} {
+	return ts.topLevelServer.http
+}
+
+// SQLLoopbackListener is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SQLLoopbackListener() interface{} {
+	return ts.topLevelServer.loopbackPgL
+}
+
+// ServerController is part of the serverutils.TenantControlInterface.
+func (ts *testServer) ServerController() interface{} {
+	return ts.topLevelServer.serverController
+}
+
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to serverutils.InitTestServerFactory
+// and rangetestutils.InitTestServerFactory.
 var TestServerFactory = testServerFactoryImpl{}
+
+// MakeRangeTestServerargs is part of the rangetestutils.TestServerFactory interface.
+func (testServerFactoryImpl) MakeRangeTestServerArgs() base.TestServerArgs {
+	return base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+		},
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				// Now that we allow same node rebalances, disable it in these tests,
+				// as they dont expect replicas to move.
+				ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
+					DisableReplicaRebalancing: true,
+				},
+			},
+		},
+	}
+}
+
+// PrepareRangeTestServer is part of the rangetestutils.TestServerFactory interface.
+func (testServerFactoryImpl) PrepareRangeTestServer(srv interface{}) error {
+	ts := srv.(serverutils.TestServerInterface)
+	kvDB := ts.ApplicationLayer().DB()
+
+	// Make sure the range is spun up with an arbitrary read command. We do not
+	// expect a specific response.
+	scratchKey := append(ts.ApplicationLayer().Codec().TenantPrefix(), roachpb.Key("a")...)
+	if _, err := kvDB.Get(context.Background(), scratchKey); err != nil {
+		return err
+	}
+
+	// Make sure the node status is available. This is done by forcing stores to
+	// publish their status, synchronizing to the event feed with a canary
+	// event, and then forcing the server to write summaries immediately.
+	if err := ts.Node().(*Node).computeMetricsPeriodically(context.Background(), map[*kvserver.Store]*storage.MetricsForInterval{}, 0); err != nil {
+		return errors.Wrap(err, "error publishing store statuses")
+	}
+
+	if err := ts.WriteSummaries(); err != nil {
+		return errors.Wrap(err, "error writing summaries")
+	}
+
+	return nil
+}
 
 // New is part of TestServerFactory interface.
 func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error) {
@@ -1836,7 +2452,7 @@ func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error
 	}
 
 	cfg := makeTestConfigFromParams(params)
-	ts := &TestServer{Cfg: &cfg, params: params}
+	ts := &testServer{Cfg: &cfg, params: params}
 
 	if params.Stopper == nil {
 		params.Stopper = stop.NewStopper()
@@ -1853,29 +2469,23 @@ func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error
 		return nil, err
 	}
 
-	var err error
-	ts.Server, err = NewServer(*ts.Cfg, params.Stopper)
+	srv, err := NewServer(*ts.Cfg, params.Stopper)
 	if err != nil {
 		params.Stopper.Stop(ctx)
 		return nil, err
 	}
-
-	// Create a breaker which never trips and never backs off to avoid
-	// introducing timing-based flakes.
-	ts.rpcContext.BreakerFactory = func() *circuit.Breaker {
-		return circuit.NewBreakerWithOptions(&circuit.Options{
-			BackOff: &backoff.ZeroBackOff{},
-		})
-	}
+	ts.topLevelServer = srv.(*topLevelServer)
 
 	// Our context must be shared with our server.
-	ts.Cfg = &ts.Server.cfg
+	ts.Cfg = &ts.topLevelServer.cfg
 
-	// The HTTP APIs on TestTenantInterface are implemented by
+	// The HTTP APIs on ApplicationLayerInterface are implemented by
 	// httpTestServer.
 	ts.httpTestServer = &httpTestServer{}
-	ts.httpTestServer.t.authentication = ts.Server.authentication
-	ts.httpTestServer.t.sqlServer = ts.Server.sqlServer
+	ts.httpTestServer.t.authentication = ts.topLevelServer.authentication
+	ts.httpTestServer.t.sqlServer = ts.topLevelServer.sqlServer
+	ts.httpTestServer.t.admin = ts.topLevelServer.admin.adminServer
+	ts.httpTestServer.t.status = ts.topLevelServer.status.statusServer
 
 	return ts, nil
 }
@@ -1911,4 +2521,154 @@ func mustGetSQLCounterForRegistry(registry *metric.Registry, name string) int64 
 		panic(fmt.Sprintf("couldn't find metric %s", name))
 	}
 	return c
+}
+
+// TestingMakeLoggingContexts is exposed for use in tests.
+func TestingMakeLoggingContexts(
+	appTenantID roachpb.TenantID,
+) (sysContext, appContext context.Context) {
+	ctxSysTenant := context.Background()
+	ctxSysTenant = context.WithValue(ctxSysTenant, serverident.ServerIdentificationContextKey{}, &idProvider{
+		tenantID:   roachpb.SystemTenantID,
+		clusterID:  &base.ClusterIDContainer{},
+		serverID:   &base.NodeIDContainer{},
+		tenantName: roachpb.NewTenantNameContainer("system"),
+	})
+	ctxAppTenant := context.Background()
+	ctxAppTenant = context.WithValue(ctxAppTenant, serverident.ServerIdentificationContextKey{}, &idProvider{
+		tenantID:   appTenantID,
+		clusterID:  &base.ClusterIDContainer{},
+		serverID:   &base.NodeIDContainer{},
+		tenantName: roachpb.NewTenantNameContainer(""),
+	})
+	return ctxSysTenant, ctxAppTenant
+}
+
+// NewClientRPCContext is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) NewClientRPCContext(
+	ctx context.Context, user username.SQLUsername,
+) *rpc.Context {
+	return newClientRPCContext(ctx, user,
+		ts.topLevelServer.cfg.Config,
+		ts.topLevelServer.cfg.TestingKnobs.Server,
+		ts.topLevelServer.cfg.ClusterIDContainer,
+		ts)
+}
+
+// RPCClientConn is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) RPCClientConn(
+	test serverutils.TestFataler, user username.SQLUsername,
+) *grpc.ClientConn {
+	conn, err := ts.RPCClientConnE(user)
+	if err != nil {
+		test.Fatal(err)
+	}
+	return conn
+}
+
+// RPCClientConnE is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) RPCClientConnE(user username.SQLUsername) (*grpc.ClientConn, error) {
+	ctx := context.Background()
+	rpcCtx := ts.NewClientRPCContext(ctx, user)
+	return rpcCtx.GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), rpc.DefaultClass).Connect(ctx)
+}
+
+// GetAdminClient is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) GetAdminClient(test serverutils.TestFataler) serverpb.AdminClient {
+	conn := ts.RPCClientConn(test, username.RootUserName())
+	return serverpb.NewAdminClient(conn)
+}
+
+// GetStatusClient is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) GetStatusClient(test serverutils.TestFataler) serverpb.StatusClient {
+	conn := ts.RPCClientConn(test, username.RootUserName())
+	return serverpb.NewStatusClient(conn)
+}
+
+// NewClientRPCContext is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) NewClientRPCContext(
+	ctx context.Context, user username.SQLUsername,
+) *rpc.Context {
+	return newClientRPCContext(ctx, user,
+		t.Cfg.Config,
+		t.Cfg.TestingKnobs.Server,
+		t.Cfg.ClusterIDContainer,
+		t)
+}
+
+// RPCClientConn is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) RPCClientConn(
+	test serverutils.TestFataler, user username.SQLUsername,
+) *grpc.ClientConn {
+	conn, err := t.RPCClientConnE(user)
+	if err != nil {
+		test.Fatal(err)
+	}
+	return conn
+}
+
+// RPCClientConnE is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) RPCClientConnE(user username.SQLUsername) (*grpc.ClientConn, error) {
+	ctx := context.Background()
+	rpcCtx := t.NewClientRPCContext(ctx, user)
+	return rpcCtx.GRPCDialPod(t.AdvRPCAddr(), t.SQLInstanceID(), rpc.DefaultClass).Connect(ctx)
+}
+
+// GetAdminClient is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) GetAdminClient(test serverutils.TestFataler) serverpb.AdminClient {
+	conn := t.RPCClientConn(test, username.RootUserName())
+	return serverpb.NewAdminClient(conn)
+}
+
+// GetStatusClient is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) GetStatusClient(test serverutils.TestFataler) serverpb.StatusClient {
+	conn := t.RPCClientConn(test, username.RootUserName())
+	return serverpb.NewStatusClient(conn)
+}
+
+func newClientRPCContext(
+	ctx context.Context,
+	user username.SQLUsername,
+	cfg *base.Config,
+	sknobs base.ModuleTestingKnobs,
+	cid *base.ClusterIDContainer,
+	s serverutils.ApplicationLayerInterface,
+) *rpc.Context {
+	ctx = logtags.AddTag(ctx, "testclient", nil)
+	ctx = logtags.AddTag(ctx, "user", user)
+	ctx = logtags.AddTag(ctx, "nsql", s.SQLInstanceID())
+
+	stopper := s.AppStopper()
+	if ctx.Done() == nil {
+		// The RPCContext initialization wants a cancellable context,
+		// since that will be used to stop async goroutines. Help
+		// the test by making one.
+		cctx, cancel := context.WithCancel(ctx)
+		stopper.AddCloser(stop.CloserFn(cancel))
+		ctx = cctx
+	}
+	var knobs rpc.ContextTestingKnobs
+	if sknobs != nil {
+		knobs = sknobs.(*TestingKnobs).ContextTestingKnobs
+	}
+	ccfg := rpc.MakeClientConnConfigFromBaseConfig(*cfg,
+		user,
+		// We pass nil as tracer parameter below, instead of the server's
+		// tracer, because the tracer used for the incoming context and
+		// passed to NewClientContext may not be using the same tracer and
+		// we cannot mix and match tracers.
+		nil, /* tracer */
+		s.ClusterSettings(),
+		s.Clock(),
+		knobs,
+	)
+
+	rpcCtx, clientStopper := rpc.NewClientContext(ctx, ccfg)
+	// Ensure that the RPC client context validates the server cluster ID.
+	// This ensures that a test where the server is restarted will not let
+	// its test RPC client talk to a server started by an unrelated concurrent test.
+	rpcCtx.StorageClusterID.Set(ctx, cid.Get())
+
+	stopper.AddCloser(stop.CloserFn(func() { clientStopper.Stop(ctx) }))
+	return rpcCtx
 }

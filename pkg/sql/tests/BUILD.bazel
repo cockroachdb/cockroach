@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -7,7 +6,7 @@ go_library(
         "command_filters.go",
         "data.go",
         "explain_test_util.go",
-        "server_params.go",
+        "virtual_cluster_name.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/tests",
     visibility = ["//visibility:public"],
@@ -16,12 +15,15 @@ go_library(
         "//pkg/internal/sqlsmith",
         "//pkg/kv",
         "//pkg/kv/kvpb",
-        "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sqlstats",
+        "//pkg/storage",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
         "//pkg/testutils/storageutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@org_golang_x_text//cases",
@@ -31,12 +33,13 @@ go_library(
 
 go_test(
     name = "tests_test",
-    size = "large",
+    size = "enormous",
     srcs = [
         "allow_role_memberships_to_change_during_transaction_test.go",
         "autocommit_extended_protocol_test.go",
         "bank_test.go",
         "copy_file_upload_test.go",
+        "drop_role_concurrent_session_test.go",
         "empty_query_test.go",
         "enum_test.go",
         "hash_sharded_test.go",
@@ -46,11 +49,13 @@ go_test(
         "main_test.go",
         "monotonic_insert_test.go",
         "random_schema_test.go",
+        "read_committed_test.go",
         "rename_column_test.go",
         "repair_test.go",
         "rsg_test.go",
         "schema_changes_in_parallel_test.go",
         "search_path_test.go",
+        "set_cluster_setting_interlock_test.go",
         "show_commit_timestamp_test.go",
         "split_test.go",
         "system_table_test.go",
@@ -59,9 +64,11 @@ go_test(
         "truncate_test.go",
         "virtual_table_test.go",
     ],
-    args = ["-test.timeout=895s"],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "//c-deps:libgeos",  # keep
+    ],
     embed = [":tests"],
+    exec_properties = {"Pool": "large"},
     shard_count = 16,
     deps = [
         "//pkg/base",
@@ -69,7 +76,6 @@ go_test(
         "//pkg/ccl",
         "//pkg/cloud",
         "//pkg/cloud/impl:cloudimpl",
-        "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/internal/rsg",
         "//pkg/internal/sqlsmith",
@@ -77,14 +83,18 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/concurrency",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
+        "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
@@ -114,6 +124,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/allstacks",
         "//pkg/util/ctxgroup",
+        "//pkg/util/hlc",
         "//pkg/util/ioctx",
         "//pkg/util/json",
         "//pkg/util/leaktest",
@@ -122,7 +133,6 @@ go_test(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
-        "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_cockroach_go_v2//crdb/crdbpgx",
@@ -138,5 +148,3 @@ go_test(
         "@org_golang_x_sync//errgroup",
     ],
 )
-
-get_x_data(name = "get_x_data")

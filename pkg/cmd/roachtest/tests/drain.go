@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -37,20 +38,24 @@ import (
 func registerDrain(r registry.Registry) {
 	{
 		r.Add(registry.TestSpec{
-			Name:    "drain/early-exit-conn-wait",
-			Owner:   registry.OwnerSQLFoundations,
-			Cluster: r.MakeClusterSpec(1),
-			Leases:  registry.MetamorphicLeases,
+			Name:             "drain/early-exit-conn-wait",
+			Owner:            registry.OwnerSQLFoundations,
+			Cluster:          r.MakeClusterSpec(1),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runEarlyExitInConnectionWait(ctx, t, c)
 			},
 		})
 
 		r.Add(registry.TestSpec{
-			Name:    "drain/warn-conn-wait-timeout",
-			Owner:   registry.OwnerSQLFoundations,
-			Cluster: r.MakeClusterSpec(1),
-			Leases:  registry.MetamorphicLeases,
+			Name:             "drain/warn-conn-wait-timeout",
+			Owner:            registry.OwnerSQLFoundations,
+			Cluster:          r.MakeClusterSpec(1),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runWarningForConnWait(ctx, t, c)
 			},
@@ -60,6 +65,8 @@ func registerDrain(r registry.Registry) {
 			Name:                "drain/not-at-quorum",
 			Owner:               registry.OwnerSQLFoundations,
 			Cluster:             r.MakeClusterSpec(3),
+			CompatibleClouds:    registry.AllExceptAWS,
+			Suites:              registry.Suites(registry.Nightly),
 			Leases:              registry.MetamorphicLeases,
 			SkipPostValidations: registry.PostValidationNoDeadNodes,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -79,7 +86,7 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 		connectionWaitDuration = 100 * time.Second
 		queryWaitDuration      = 10 * time.Second
 
-		// server.shutdown.lease_transfer_wait defaults to 5 seconds.
+		// server.shutdown.lease_transfer_iteration.timeout defaults to 5 seconds.
 		leaseTransferWaitDuration = 5 * time.Second
 
 		// pokeDuringDrainWaitDelay is the amount of time after drain begins when we
@@ -120,16 +127,20 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 
 	m.Go(func(ctx context.Context) error {
 		t.Status(fmt.Sprintf("start draining node %d", nodeToDrain))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(nodeToDrain))
+		if err != nil {
+			t.Fatal(err)
+		}
 		results, err := c.RunWithDetailsSingleNode(
 			ctx,
 			t.L(),
 			c.Node(nodeToDrain),
 			// --drain-wait is set to a low value so that we can confirm that it
 			// gets automatically upgraded to use a higher value larger than the sum
-			// of server.shutdown.drain_wait, server.shutdown.connection_wait,
-			// server.shutdown.query_wait times two, and
-			// server.shutdown.lease_transfer_wait.
-			"./cockroach node drain --self --insecure --drain-wait=10s",
+			// of server.shutdown.initial_wait, server.shutdown.connections.timeout,
+			// server.shutdown.transactions.timeout times two, and
+			// server.shutdown.lease_transfer_iteration.timeout.
+			fmt.Sprintf("./cockroach node drain --self --insecure --drain-wait=10s --url=%s", pgurl),
 		)
 		if err != nil {
 			return err
@@ -237,7 +248,7 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 
 	prepareCluster(ctx, t, c, drainWaitDuration, connectionWaitDuration, queryWaitDuration)
 
-	pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(nodeToDrain), "" /* tenant */)
+	pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(nodeToDrain), "" /* tenant */, 0 /* sqlInstance */)
 	require.NoError(t, err)
 	connNoTxn, err := pgx.Connect(ctx, pgURL[0])
 	require.NoError(t, err)
@@ -249,9 +260,13 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 	m := c.NewMonitor(ctx, c.Node(nodeToDrain))
 	m.Go(func(ctx context.Context) error {
 		t.Status(fmt.Sprintf("draining node %d", nodeToDrain))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(nodeToDrain))
+		if err != nil {
+			t.Fatal(err)
+		}
 		return c.RunE(ctx,
 			c.Node(nodeToDrain),
-			"./cockroach node drain --self --insecure --drain-wait=600s",
+			fmt.Sprintf("./cockroach node drain --self --insecure --drain-wait=600s --url=%s", pgurl),
 		)
 	})
 
@@ -312,16 +327,11 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 // runClusterNotAtQuorum is to verify that draining works even when the cluster
 // is not at quorum.
 func runClusterNotAtQuorum(ctx context.Context, t test.Test, c cluster.Cluster) {
-	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 	db := c.Conn(ctx, t.L(), 1)
 	defer func() { _ = db.Close() }()
 
-	err = WaitFor3XReplication(ctx, t, db)
+	err := WaitFor3XReplication(ctx, t, db)
 	require.NoError(t, err)
 
 	stopOpts := option.DefaultStopOpts()
@@ -331,13 +341,15 @@ func runClusterNotAtQuorum(ctx context.Context, t test.Test, c cluster.Cluster) 
 	c.Stop(ctx, t.L(), stopOpts, c.Node(2))
 
 	t.Status("start draining node 3")
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(3))
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Ignore the error, since the command is expected to time out.
 	results, _ := c.RunWithDetailsSingleNode(
 		ctx,
 		t.L(),
-		c.Node(3),
-		"./cockroach node drain --self --insecure --drain-wait=10s",
-	)
+		c.Node(3), fmt.Sprintf("./cockroach node drain --self --insecure --drain-wait=10s --url=%s", pgurl))
 	t.L().Printf("drain output:\n%s\n%s\n", results.Stdout, results.Stderr)
 	require.Regexp(t, "(cluster settings require a value of at least|could not check drain related cluster settings)", results.Stderr)
 }
@@ -352,25 +364,19 @@ func prepareCluster(
 	connectionWait time.Duration,
 	queryWait time.Duration,
 ) {
-	var err error
-	err = c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
 	waitPhasesSettingStmts := []string{
-		"SET CLUSTER SETTING server.shutdown.jobs_wait = '0s';",
-		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.drain_wait = '%fs';", drainWait.Seconds()),
-		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.query_wait = '%fs'", queryWait.Seconds()),
-		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.connection_wait = '%fs'", connectionWait.Seconds()),
+		"SET CLUSTER SETTING server.shutdown.jobs.timeout = '0s';",
+		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.initial_wait = '%fs';", drainWait.Seconds()),
+		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.transactions.timeout = '%fs'", queryWait.Seconds()),
+		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.connections.timeout = '%fs'", connectionWait.Seconds()),
 	}
 	for _, stmt := range waitPhasesSettingStmts {
-		_, err = db.ExecContext(ctx, stmt)
+		_, err := db.ExecContext(ctx, stmt)
 		require.NoError(t, err, "cannot set cluster setting")
 	}
 }

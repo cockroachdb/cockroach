@@ -28,7 +28,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR NO KEY UPDATE
@@ -42,7 +41,26 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for no key update
-  locking durability: guaranteed
+
+# By default, SELECT FOR SHARE doesn't acquire any locks.
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+
+# However, if the session setting is configured to do so, SELECT FOR SHARE will
+# acquire shared locks.
+
+statement ok
+SET enable_shared_locking_for_serializable = true
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE
@@ -56,7 +74,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for share
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE
@@ -70,7 +87,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for key share
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE
@@ -84,7 +100,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for share
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
@@ -98,7 +113,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for no key update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
@@ -112,7 +126,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t
@@ -126,7 +139,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t2
@@ -147,7 +159,6 @@ vectorized: true
       table: t@t_pkey
       spans: FULL SCAN
       locking strength: for update
-      locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE
@@ -161,7 +172,6 @@ vectorized: true
   table: t@t_pkey
   spans: /1/0
   locking strength: for update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE
@@ -175,7 +185,6 @@ vectorized: true
   table: t@t_pkey
   spans: /1/0
   locking strength: for no key update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR SHARE
@@ -189,7 +198,6 @@ vectorized: true
   table: t@t_pkey
   spans: /1/0
   locking strength: for share
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE
@@ -203,7 +211,6 @@ vectorized: true
   table: t@t_pkey
   spans: /1/0
   locking strength: for key share
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE
@@ -217,7 +224,6 @@ vectorized: true
   table: t@t_pkey
   spans: /1/0
   locking strength: for share
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
@@ -231,7 +237,6 @@ vectorized: true
   table: t@t_pkey
   spans: /1/0
   locking strength: for no key update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
@@ -245,7 +250,6 @@ vectorized: true
   table: t@t_pkey
   spans: /1/0
   locking strength: for update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t
@@ -259,7 +263,6 @@ vectorized: true
   table: t@t_pkey
   spans: /1/0
   locking strength: for update
-  locking durability: guaranteed
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t2
@@ -280,7 +283,6 @@ vectorized: true
       table: t@t_pkey
       spans: /1/0
       locking strength: for update
-      locking durability: guaranteed
 
 # ------------------------------------------------------------------------------
 # Tests with table aliases.
@@ -298,7 +300,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 FOR UPDATE OF t
@@ -315,7 +316,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id AS t] FOR UPDATE
@@ -329,7 +329,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id AS t] FOR UPDATE OF t
@@ -343,7 +342,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id AS t] FOR UPDATE OF t2
@@ -364,7 +362,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE OF v
@@ -378,7 +375,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query error pgcode 42P01 relation "v2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE OF v2
@@ -405,7 +401,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query error pgcode 42P01 relation "v" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM v AS v2 FOR UPDATE OF v
@@ -422,11 +417,10 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 # ------------------------------------------------------------------------------
 # Tests with subqueries.
-# 
+#
 # Row-level locking clauses only apply to subqueries in the FROM clause of a
 # SELECT statement. They don't apply to subqueries in the projection or in
 # the filter.
@@ -444,7 +438,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE)
@@ -458,7 +451,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
@@ -472,7 +464,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for no key update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
@@ -486,7 +477,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for no key update
-  locking durability: guaranteed
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) FOR UPDATE OF t
@@ -503,7 +493,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE
@@ -517,7 +506,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE) AS r
@@ -531,7 +519,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE OF t
@@ -548,7 +535,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) FOR UPDATE
@@ -608,7 +594,6 @@ vectorized: true
               table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
-              locking durability: guaranteed
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) FOR UPDATE OF t
@@ -642,7 +627,6 @@ vectorized: true
               table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
-              locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) AS r FOR UPDATE
@@ -702,7 +686,6 @@ vectorized: true
               table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
-              locking durability: guaranteed
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) AS r FOR UPDATE OF t
@@ -736,7 +719,6 @@ vectorized: true
               table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
-              locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE
@@ -750,7 +732,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE)
@@ -776,7 +757,6 @@ vectorized: true
   table: t@t_pkey
   spans: FULL SCAN
   locking strength: for update
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE OF t)
@@ -806,7 +786,6 @@ vectorized: true
     │ equality: (b) = (a)
     │ equality cols are key
     │ locking strength: for update
-    │ locking durability: guaranteed
     │
     └── • distinct
         │ columns: (b)
@@ -846,7 +825,6 @@ vectorized: true
               table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
-              locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE OF t
@@ -864,7 +842,6 @@ vectorized: true
     │ equality: (b) = (a)
     │ equality cols are key
     │ locking strength: for update
-    │ locking durability: guaranteed
     │
     └── • distinct
         │ columns: (b)
@@ -904,7 +881,6 @@ vectorized: true
               table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
-              locking durability: guaranteed
 
 # ------------------------------------------------------------------------------
 # Tests with common-table expressions.
@@ -978,7 +954,6 @@ vectorized: true
               table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
-              locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
@@ -1009,7 +984,6 @@ vectorized: true
               table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
-              locking durability: guaranteed
 
 # Verify that the unused CTE doesn't get eliminated.
 # TODO(radu): we should at least not buffer the rows in this case.
@@ -1044,7 +1018,6 @@ vectorized: true
               table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
-              locking durability: guaranteed
 
 # ------------------------------------------------------------------------------
 # Tests with joins.
@@ -1074,7 +1047,6 @@ vectorized: true
     │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
-    │     locking durability: guaranteed
     │
     └── • scan
           columns: (a, b, c)
@@ -1083,7 +1055,6 @@ vectorized: true
           table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
-          locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
@@ -1109,7 +1080,6 @@ vectorized: true
     │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
-    │     locking durability: guaranteed
     │
     └── • scan
           columns: (a, b, c)
@@ -1149,7 +1119,6 @@ vectorized: true
           table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
-          locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
@@ -1175,7 +1144,6 @@ vectorized: true
     │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
-    │     locking durability: guaranteed
     │
     └── • scan
           columns: (a, b, c)
@@ -1184,7 +1152,6 @@ vectorized: true
           table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
-          locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
@@ -1210,7 +1177,6 @@ vectorized: true
     │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
-    │     locking durability: guaranteed
     │
     └── • scan
           columns: (a, b, c)
@@ -1219,7 +1185,6 @@ vectorized: true
           table: u@u_pkey
           spans: FULL SCAN
           locking strength: for share
-          locking durability: guaranteed
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
@@ -1248,7 +1213,6 @@ vectorized: true
     │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
-    │     locking durability: guaranteed
     │
     └── • scan
           columns: (a, b, c)
@@ -1257,7 +1221,6 @@ vectorized: true
           table: u@u_pkey
           spans: FULL SCAN
           locking strength: for share
-          locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
@@ -1283,7 +1246,6 @@ vectorized: true
     │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
-    │     locking durability: guaranteed
     │
     └── • scan
           columns: (a, b, c)
@@ -1292,7 +1254,6 @@ vectorized: true
           table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
-          locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
@@ -1318,7 +1279,6 @@ vectorized: true
     │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for no key update
-    │     locking durability: guaranteed
     │
     └── • scan
           columns: (a, b, c)
@@ -1327,7 +1287,6 @@ vectorized: true
           table: u@u_pkey
           spans: FULL SCAN
           locking strength: for key share
-          locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UPDATE OF u
@@ -1353,7 +1312,6 @@ vectorized: true
     │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for no key update
-    │     locking durability: guaranteed
     │
     └── • scan
           columns: (a, b, c)
@@ -1362,7 +1320,6 @@ vectorized: true
           table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
-          locking durability: guaranteed
 
 # ------------------------------------------------------------------------------
 # Tests with joins of aliased tables and aliased joins.
@@ -1392,7 +1349,6 @@ vectorized: true
     │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
-    │     locking durability: guaranteed
     │
     └── • scan
           columns: (a, b, c)
@@ -1401,7 +1357,6 @@ vectorized: true
           table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
-          locking durability: guaranteed
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t
@@ -1436,7 +1391,6 @@ vectorized: true
     │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
-    │     locking durability: guaranteed
     │
     └── • scan
           columns: (a, b, c)
@@ -1476,7 +1430,6 @@ vectorized: true
           table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
-          locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
@@ -1502,7 +1455,6 @@ vectorized: true
     │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
-    │     locking durability: guaranteed
     │
     └── • scan
           columns: (a, b, c)
@@ -1511,7 +1463,6 @@ vectorized: true
           table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
-          locking durability: guaranteed
 
 # Postgres doesn't support applying locking clauses to joins. The following
 # queries all return the error: "FOR UPDATE cannot be applied to a join".
@@ -1541,7 +1492,6 @@ vectorized: true
     │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
-    │     locking durability: guaranteed
     │
     └── • scan
           columns: (a, b, c)
@@ -1550,7 +1500,6 @@ vectorized: true
           table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
-          locking durability: guaranteed
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF t
@@ -1585,7 +1534,6 @@ vectorized: true
     │     table: t@t_pkey
     │     spans: FULL SCAN
     │     locking strength: for update
-    │     locking durability: guaranteed
     │
     └── • scan
           columns: (a, b, c)
@@ -1594,7 +1542,6 @@ vectorized: true
           table: u@u_pkey
           spans: FULL SCAN
           locking strength: for update
-          locking durability: guaranteed
 
 # ------------------------------------------------------------------------------
 # Tests with lateral joins.
@@ -1616,7 +1563,6 @@ vectorized: true
 │     table: t@t_pkey
 │     spans: FULL SCAN
 │     locking strength: for update
-│     locking durability: guaranteed
 │
 └── • scan
       columns: (a, b, c)
@@ -1624,7 +1570,6 @@ vectorized: true
       table: u@u_pkey
       spans: FULL SCAN
       locking strength: for update
-      locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t, u FOR UPDATE OF t
@@ -1642,7 +1587,6 @@ vectorized: true
 │     table: t@t_pkey
 │     spans: FULL SCAN
 │     locking strength: for update
-│     locking durability: guaranteed
 │
 └── • scan
       columns: (a, b, c)
@@ -1666,7 +1610,6 @@ vectorized: true
 │     table: t@t_pkey
 │     spans: FULL SCAN
 │     locking strength: for share
-│     locking durability: guaranteed
 │
 └── • scan
       columns: (a, b, c)
@@ -1674,7 +1617,6 @@ vectorized: true
       table: u@u_pkey
       spans: FULL SCAN
       locking strength: for update
-      locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE
@@ -1692,7 +1634,6 @@ vectorized: true
 │     table: t@t_pkey
 │     spans: FULL SCAN
 │     locking strength: for update
-│     locking durability: guaranteed
 │
 └── • scan
       columns: (a, b, c)
@@ -1700,7 +1641,6 @@ vectorized: true
       table: u@u_pkey
       spans: FULL SCAN
       locking strength: for update
-      locking durability: guaranteed
 
 query error pgcode 42P01 relation "u" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF u
@@ -1727,7 +1667,6 @@ vectorized: true
       table: u@u_pkey
       spans: FULL SCAN
       locking strength: for update
-      locking durability: guaranteed
 
 # ------------------------------------------------------------------------------
 # Tests with index joins.
@@ -1753,7 +1692,6 @@ vectorized: true
 │ table: indexed@indexed_pkey
 │ key columns: a
 │ locking strength: for update
-│ locking durability: guaranteed
 │
 └── • scan
       columns: (a, b)
@@ -1761,7 +1699,6 @@ vectorized: true
       table: indexed@b_idx
       spans: /2-/3
       locking strength: for update
-      locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM indexed WHERE b BETWEEN 2 AND 10 FOR UPDATE
@@ -1775,7 +1712,6 @@ vectorized: true
 │ table: indexed@indexed_pkey
 │ key columns: a
 │ locking strength: for update
-│ locking durability: guaranteed
 │
 └── • scan
       columns: (a, b)
@@ -1783,7 +1719,6 @@ vectorized: true
       table: indexed@b_idx
       spans: /2-/11
       locking strength: for update
-      locking durability: guaranteed
 
 # ------------------------------------------------------------------------------
 # Tests with lookup joins.
@@ -1805,7 +1740,6 @@ vectorized: true
     │ equality: (b) = (a)
     │ equality cols are key
     │ locking strength: for update
-    │ locking durability: guaranteed
     │
     └── • scan
           columns: (a, b)
@@ -1813,7 +1747,6 @@ vectorized: true
           table: t@t_pkey
           spans: /2/0
           locking strength: for update
-          locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a BETWEEN 2 AND 10 FOR UPDATE
@@ -1831,7 +1764,6 @@ vectorized: true
     │ equality: (b) = (a)
     │ equality cols are key
     │ locking strength: for update
-    │ locking durability: guaranteed
     │
     └── • scan
           columns: (a, b)
@@ -1840,7 +1772,6 @@ vectorized: true
           spans: /2-/11
           parallel
           locking strength: for update
-          locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN indexed ON t.b = indexed.b WHERE t.a = 2 FOR UPDATE
@@ -1855,7 +1786,6 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
-│ locking durability: guaranteed
 │
 └── • lookup join (inner)
     │ columns: (a, b, a, b)
@@ -1863,7 +1793,6 @@ vectorized: true
     │ table: indexed@b_idx
     │ equality: (b) = (b)
     │ locking strength: for update
-    │ locking durability: guaranteed
     │
     └── • scan
           columns: (a, b)
@@ -1871,11 +1800,13 @@ vectorized: true
           table: t@t_pkey
           spans: /2/0
           locking strength: for update
-          locking durability: guaranteed
 
 # ------------------------------------------------------------------------------
 # Tests with inverted filters and joins.
 # ------------------------------------------------------------------------------
+
+statement ok
+SET enable_zigzag_join = true
 
 statement ok
 CREATE TABLE inverted (
@@ -1898,7 +1829,6 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
-│ locking durability: guaranteed
 │
 └── • project
     │ columns: (a)
@@ -1910,12 +1840,10 @@ vectorized: true
           left columns: (a, b_inverted_key)
           left fixed values: 1 column
           left locking strength: for update
-          left locking durability: guaranteed
           right table: inverted@b_inv
           right columns: (a, b_inverted_key)
           right fixed values: 1 column
           right locking strength: for update
-          right locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM inverted WHERE b <@ '{1, 2}' FOR UPDATE
@@ -1934,7 +1862,6 @@ vectorized: true
     │ table: inverted@inverted_pkey
     │ key columns: a
     │ locking strength: for update
-    │ locking durability: guaranteed
     │
     └── • project
         │ columns: (a)
@@ -1951,7 +1878,6 @@ vectorized: true
                   table: inverted@b_inv
                   spans: /[]-/"D" /1-/3
                   locking strength: for update
-                  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM inverted@b_inv AS i1, inverted AS i2 WHERE i1.b @> i2.b FOR UPDATE
@@ -1970,7 +1896,6 @@ vectorized: true
     │ equality cols are key
     │ pred: b @> b
     │ locking strength: for update
-    │ locking durability: guaranteed
     │
     └── • project
         │ columns: (a, b, c, a)
@@ -1981,7 +1906,6 @@ vectorized: true
             │ table: inverted@b_inv
             │ inverted expr: b_inverted_key @> b
             │ locking strength: for update
-            │ locking durability: guaranteed
             │
             └── • scan
                   columns: (a, b, c)
@@ -1989,7 +1913,6 @@ vectorized: true
                   table: inverted@inverted_pkey
                   spans: FULL SCAN
                   locking strength: for update
-                  locking durability: guaranteed
 
 # ------------------------------------------------------------------------------
 # Tests with zigzag joins.
@@ -2023,12 +1946,10 @@ vectorized: true
       left columns: (a, b)
       left fixed values: 1 column
       left locking strength: for update
-      left locking durability: guaranteed
       right table: zigzag@c_idx
       right columns: (a, c)
       right fixed values: 1 column
       right locking strength: for update
-      right locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * from zigzag where d @> '{"a": {"b": "c"}, "f": "g"}' FOR UPDATE
@@ -2043,7 +1964,6 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
-│ locking durability: guaranteed
 │
 └── • project
     │ columns: (a)
@@ -2055,12 +1975,13 @@ vectorized: true
           left columns: (a, d_inverted_key)
           left fixed values: 1 column
           left locking strength: for update
-          left locking durability: guaranteed
           right table: zigzag@d_idx
           right columns: (a, d_inverted_key)
           right fixed values: 1 column
           right locking strength: for update
-          right locking durability: guaranteed
+
+statement ok
+RESET enable_zigzag_join
 
 # ------------------------------------------------------------------------------
 # Tests with the NOWAIT lock wait policy.
@@ -2079,7 +2000,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for update
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR NO KEY UPDATE NOWAIT
@@ -2094,7 +2014,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for no key update
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE NOWAIT
@@ -2109,7 +2028,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for share
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE NOWAIT
@@ -2124,7 +2042,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for key share
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT
@@ -2139,7 +2056,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for share
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE
@@ -2154,7 +2070,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for no key update
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE FOR UPDATE NOWAIT
@@ -2169,7 +2084,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for update
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t NOWAIT
@@ -2184,7 +2098,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for update
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t2 NOWAIT
@@ -2206,7 +2119,6 @@ vectorized: true
       spans: FULL SCAN
       locking strength: for update
       locking wait policy: nowait
-      locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE NOWAIT
@@ -2221,7 +2133,6 @@ vectorized: true
   spans: /1/0
   locking strength: for update
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE NOWAIT
@@ -2236,7 +2147,6 @@ vectorized: true
   spans: /1/0
   locking strength: for no key update
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR SHARE NOWAIT
@@ -2251,7 +2161,6 @@ vectorized: true
   spans: /1/0
   locking strength: for share
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE NOWAIT
@@ -2266,7 +2175,6 @@ vectorized: true
   spans: /1/0
   locking strength: for key share
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE NOWAIT
@@ -2281,7 +2189,6 @@ vectorized: true
   spans: /1/0
   locking strength: for share
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE NOWAIT
@@ -2296,7 +2203,6 @@ vectorized: true
   spans: /1/0
   locking strength: for no key update
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE NOWAIT
@@ -2311,7 +2217,6 @@ vectorized: true
   spans: /1/0
   locking strength: for update
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t NOWAIT
@@ -2326,7 +2231,6 @@ vectorized: true
   spans: /1/0
   locking strength: for update
   locking wait policy: nowait
-  locking durability: guaranteed
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t2 NOWAIT
@@ -2348,7 +2252,6 @@ vectorized: true
       spans: /1/0
       locking strength: for update
       locking wait policy: nowait
-      locking durability: guaranteed
 
 # ------------------------------------------------------------------------------
 # Tests with the SKIP LOCKED lock wait policy.
@@ -2367,7 +2270,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for update
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR NO KEY UPDATE SKIP LOCKED
@@ -2382,7 +2284,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for no key update
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE SKIP LOCKED
@@ -2397,7 +2298,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for share
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE SKIP LOCKED
@@ -2412,7 +2312,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for key share
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED
@@ -2427,7 +2326,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for share
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE
@@ -2442,7 +2340,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for no key update
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE FOR UPDATE SKIP LOCKED
@@ -2457,7 +2354,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for update
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t SKIP LOCKED
@@ -2472,7 +2368,6 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for update
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t2 SKIP LOCKED
@@ -2494,7 +2389,6 @@ vectorized: true
       spans: FULL SCAN
       locking strength: for update
       locking wait policy: skip locked
-      locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE SKIP LOCKED
@@ -2509,7 +2403,6 @@ vectorized: true
   spans: /1/0
   locking strength: for update
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE SKIP LOCKED
@@ -2524,7 +2417,6 @@ vectorized: true
   spans: /1/0
   locking strength: for no key update
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR SHARE SKIP LOCKED
@@ -2539,7 +2431,6 @@ vectorized: true
   spans: /1/0
   locking strength: for share
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE SKIP LOCKED
@@ -2554,7 +2445,6 @@ vectorized: true
   spans: /1/0
   locking strength: for key share
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE SKIP LOCKED
@@ -2569,7 +2459,6 @@ vectorized: true
   spans: /1/0
   locking strength: for share
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE SKIP LOCKED
@@ -2584,7 +2473,6 @@ vectorized: true
   spans: /1/0
   locking strength: for no key update
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE SKIP LOCKED
@@ -2599,7 +2487,6 @@ vectorized: true
   spans: /1/0
   locking strength: for update
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t SKIP LOCKED
@@ -2614,7 +2501,6 @@ vectorized: true
   spans: /1/0
   locking strength: for update
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t2 SKIP LOCKED
@@ -2636,7 +2522,6 @@ vectorized: true
       spans: /1/0
       locking strength: for update
       locking wait policy: skip locked
-      locking durability: guaranteed
 
 # Tests with a secondary index.
 
@@ -2653,7 +2538,6 @@ vectorized: true
   spans: /2-/3
   locking strength: for update
   locking wait policy: skip locked
-  locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM u WHERE b = 2 FOR UPDATE SKIP LOCKED
@@ -2668,7 +2552,6 @@ vectorized: true
 │ key columns: a
 │ locking strength: for update
 │ locking wait policy: skip locked
-│ locking durability: guaranteed
 │
 └── • scan
       columns: (a, b)
@@ -2677,7 +2560,6 @@ vectorized: true
       spans: /2-/3
       locking strength: for update
       locking wait policy: skip locked
-      locking durability: guaranteed
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM u WHERE b = 2 LIMIT 1 FOR UPDATE SKIP LOCKED
@@ -2696,7 +2578,6 @@ vectorized: true
     │ key columns: a
     │ locking strength: for update
     │ locking wait policy: skip locked
-    │ locking durability: guaranteed
     │
     └── • scan
           columns: (a, b)
@@ -2705,4 +2586,435 @@ vectorized: true
           spans: /2-/3
           locking strength: for update
           locking wait policy: skip locked
-          locking durability: guaranteed
+
+# ------------------------------------------------------------------------------
+# Tests with durable locking.
+# ------------------------------------------------------------------------------
+
+statement ok
+SET enable_durable_locking_for_serializable = true
+
+# TODO(michae2, 100194): Change these from EXPLAIN (OPT) to EXPLAIN (VERBOSE).
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR UPDATE
+----
+scan t
+ └── locking: for-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR NO KEY UPDATE
+----
+scan t
+ └── locking: for-no-key-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR SHARE
+----
+scan t
+ └── locking: for-share,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE
+----
+scan t
+ └── locking: for-key-share,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE FOR SHARE
+----
+scan t
+ └── locking: for-share,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
+----
+scan t
+ └── locking: for-no-key-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
+----
+scan t
+ └── locking: for-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR UPDATE OF t
+----
+scan t
+ └── locking: for-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT (SELECT a FROM t FOR UPDATE OF t)
+----
+values
+ └── tuple
+      └── subquery
+           └── max1-row
+                └── scan t
+                     └── locking: for-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE)
+----
+project
+ └── inner-join (lookup t)
+      ├── lookup columns are key
+      ├── distinct-on
+      │    └── scan t
+      │         └── locking: for-update,durability-guaranteed
+      └── filters (true)
+
+statement ok
+RESET enable_durable_locking_for_serializable
+
+# ------------------------------------------------------------------------------
+# Tests with optimizer_use_lock_op_for_serializable.
+# ------------------------------------------------------------------------------
+
+subtest lock_op_optimizations
+
+statement ok
+SET optimizer_use_lock_op_for_serializable = true
+
+# Push the locking down into the scan.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 5 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /5/0
+  locking strength: for update
+
+# Push the locking down into the scan.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a > 2 AND a < 7 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 4 (missing stats)
+  table: t@t_pkey
+  spans: /3-/7
+  parallel
+  locking strength: for update
+
+# Same as above but we can't push the locking down due to the filter.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a > 2 AND a < 7 AND b % 2 = 0 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b)
+│ estimated row count: 1 (missing stats)
+│ table: t@t_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • filter
+    │ columns: (a, b)
+    │ estimated row count: 1 (missing stats)
+    │ filter: (b % 2) = 0
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 4 (missing stats)
+          table: t@t_pkey
+          spans: /3-/7
+          parallel
+
+# Scan on a secondary index. In this case we can't push the locking down.
+query T
+EXPLAIN (VERBOSE) SELECT b, a FROM u WHERE b = 5 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (b, a)
+│ estimated row count: 10 (missing stats)
+│ table: u@u_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 10 (missing stats)
+      table: u@u_b_idx
+      spans: /5-/6
+
+# Push the locking down into the index join.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM u WHERE b = 5 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b, c)
+│ estimated row count: 10 (missing stats)
+│ table: u@u_pkey
+│ key columns: a
+│ locking strength: for update
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 10 (missing stats)
+      table: u@u_b_idx
+      spans: /5-/6
+
+# Push the locking down into the lookup join.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u ON u.a = t.b WHERE t.a = 5 FOR UPDATE OF u
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 1 (missing stats)
+│ table: u@u_pkey
+│ equality: (b) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1 (missing stats)
+      table: t@t_pkey
+      spans: /5/0
+
+# Same as above but with another predicate in the join. In this case we can't
+# push the locking down.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u ON u.a = t.b AND u.c < t.b WHERE t.a = 5 FOR UPDATE OF u
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 1 (missing stats)
+│ table: u@u_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1 (missing stats)
+    │ table: u@u_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │ pred: c < a
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
+
+# Lookup join on a secondary index. In this case we can't push the locking down.
+query T
+EXPLAIN (VERBOSE) SELECT t.*, u.b, u.a FROM t JOIN u ON u.b = t.b WHERE t.a = 5 FOR UPDATE OF u
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, b, a)
+│ estimated row count: 10 (missing stats)
+│ table: u@u_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, b)
+    │ estimated row count: 10 (missing stats)
+    │ table: u@u_b_idx
+    │ equality: (b) = (b)
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
+
+# Lookup join on a different table. In this case we can't push the locking down.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u ON u.a = t.b WHERE t.a = 5 FOR UPDATE OF t
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 1 (missing stats)
+│ table: t@t_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1 (missing stats)
+    │ table: u@u_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
+
+# Self-lookup join, locking the left side. Cannot push down locking.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t t1 INNER LOOKUP JOIN t t2 ON t2.a = t1.b WHERE t1.a = 5 FOR UPDATE OF t1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, a, b)
+│ estimated row count: 1 (missing stats)
+│ table: t@t_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, b)
+    │ estimated row count: 1 (missing stats)
+    │ table: t@t_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
+
+# Self-lookup join, locking the right side. Can push down locking.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t t1 INNER LOOKUP JOIN t t2 ON t2.a = t1.b WHERE t1.a = 5 FOR UPDATE OF t2
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, a, b)
+│ estimated row count: 1 (missing stats)
+│ table: t@t_pkey
+│ equality: (b) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1 (missing stats)
+      table: t@t_pkey
+      spans: /5/0
+
+# Table with multiple column families. Cannot push down locking.
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT NOT NULL,
+  z INT,
+  INDEX (z),
+  FAMILY (x, y),
+  FAMILY (z)
+)
+
+query T
+EXPLAIN (VERBOSE) SELECT y FROM xyz WHERE x = 1 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (y)
+│
+└── • lookup join (semi)
+    │ columns: (x, y)
+    │ estimated row count: 1 (missing stats)
+    │ table: xyz@xyz_pkey
+    │ equality: (x) = (x)
+    │ equality cols are key
+    │ locking strength: for update
+    │
+    └── • scan
+          columns: (x, y)
+          estimated row count: 1 (missing stats)
+          table: xyz@xyz_pkey
+          spans: /1/0
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM xyz WHERE z = 2 FOR SHARE
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (x, y, z)
+│ estimated row count: 10 (missing stats)
+│ table: xyz@xyz_pkey
+│ equality: (x) = (x)
+│ equality cols are key
+│ locking strength: for share
+│
+└── • index join
+    │ columns: (x, y, z)
+    │ estimated row count: 10 (missing stats)
+    │ table: xyz@xyz_pkey
+    │ key columns: x
+    │
+    └── • scan
+          columns: (x, z)
+          estimated row count: 10 (missing stats)
+          table: xyz@xyz_z_idx
+          spans: /2-/3
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t INNER LOOKUP JOIN xyz ON x = b WHERE a = 5 FOR UPDATE OF xyz
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, x, y, z)
+│ estimated row count: 1 (missing stats)
+│ table: xyz@xyz_pkey
+│ equality: (x) = (x)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • lookup join (inner)
+    │ columns: (a, b, x, y, z)
+    │ estimated row count: 1 (missing stats)
+    │ table: xyz@xyz_pkey
+    │ equality: (b) = (x)
+    │ equality cols are key
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
+
+statement ok
+RESET optimizer_use_lock_op_for_serializable

@@ -10,18 +10,11 @@
 
 package insights
 
+import "context"
+
 type sink interface {
 	AddInsight(*Insight)
-}
 
-type compositeSink struct {
-	sinks []sink
+	// ExportInsight export an Insight to obsservice.
+	ExportInsight(context.Context, *Insight) error
 }
-
-func (c *compositeSink) AddInsight(insight *Insight) {
-	for _, s := range c.sinks {
-		s.AddInsight(insight)
-	}
-}
-
-var _ sink = &compositeSink{}

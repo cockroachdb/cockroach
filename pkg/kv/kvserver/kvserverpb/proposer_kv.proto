@@ -193,6 +193,11 @@ message ReplicatedEvalResult {
     // taken place since 22.1, to make sure all Raft log entries from 21.2 or
     // older have been applied on all replicas.
     bool at_write_timestamp = 4;
+
+    // TODO(msbutler,dt): bikeshed the name of these fields.
+    string remote_file_loc = 5;
+    string remote_file_path = 6;
+    uint64 backing_file_size = 7;
   }
   AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
 
@@ -269,14 +274,6 @@ message RaftCommand {
   // - the command applies on replica 2
   uint64 proposer_lease_sequence = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseSequence"];
 
-  // deprecated_proposer_lease served the same purpose as proposer_lease_seq.
-  // As of VersionLeaseSequence, it is no longer in use.
-  //
-  // However, unless we add a check that all existing Raft logs on all nodes
-  // in the cluster contain only "new" leases, we won't be able to remove the
-  // legacy code.
-  roachpb.Lease deprecated_proposer_lease = 5;
-
   // When the command is applied, its result is an error if the lease log
   // counter has already reached (or exceeded) max_lease_index.
   //
@@ -336,7 +333,7 @@ message RaftCommand {
   // problem for sideloading, which reduces the size of the proto).
   util.hlc.Timestamp closed_timestamp = 17;
 
-  reserved 3;
+  reserved 3, 5;
 
   // replicated_eval_result is a set of structured information that instructs
   // replicated state changes to the part of a Range's replicated state machine

@@ -169,8 +169,9 @@ func (ef *execFactory) ConstructScan(
 	scan.estimatedRowCount = uint64(params.EstimatedRowCount)
 	scan.lockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
 	scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
+	scan.lockingDurability = descpb.ToScanLockingDurability(params.Locking.Durability)
 	scan.localityOptimized = params.LocalityOptimized
-	if !ef.isExplain && !(ef.planner.isInternalPlanner || ef.planner.SessionData().Internal) {
+	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
 			TableID: roachpb.TableID(tabDesc.GetID()),
 			IndexID: roachpb.IndexID(idx.GetID()),
@@ -665,8 +666,9 @@ func (ef *execFactory) ConstructIndexJoin(
 	tableScan.disableBatchLimit()
 	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
-	if !ef.isExplain && !(ef.planner.isInternalPlanner || ef.planner.SessionData().Internal) {
+	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
 			TableID: roachpb.TableID(tabDesc.GetID()),
 			IndexID: roachpb.IndexID(idx.GetID()),
@@ -725,8 +727,9 @@ func (ef *execFactory) ConstructLookupJoin(
 	tableScan.index = idx
 	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
-	if !ef.isExplain && !(ef.planner.isInternalPlanner || ef.planner.SessionData().Internal) {
+	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
 			TableID: roachpb.TableID(tabDesc.GetID()),
 			IndexID: roachpb.IndexID(idx.GetID()),
@@ -865,8 +868,9 @@ func (ef *execFactory) ConstructInvertedJoin(
 	tableScan.index = idx
 	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
-	if !ef.isExplain && !(ef.planner.isInternalPlanner || ef.planner.SessionData().Internal) {
+	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
 			TableID: roachpb.TableID(tabDesc.GetID()),
 			IndexID: roachpb.IndexID(idx.GetID()),
@@ -934,7 +938,7 @@ func (ef *execFactory) constructScanForZigzag(
 		return nil, nil, err
 	}
 
-	if !ef.isExplain && !(ef.planner.isInternalPlanner || ef.planner.SessionData().Internal) {
+	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
 			TableID: roachpb.TableID(tableDesc.GetID()),
 			IndexID: roachpb.IndexID(idxDesc.GetID()),
@@ -945,6 +949,7 @@ func (ef *execFactory) constructScanForZigzag(
 	scan.index = idxDesc
 	scan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	scan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	return scan, eqColOrdinals, nil
 }
@@ -1407,7 +1412,8 @@ func (ef *execFactory) ConstructInsertFastPath(
 	insertColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
-	fkChecks []exec.InsertFastPathFKCheck,
+	fkChecks []exec.InsertFastPathCheck,
+	uniqChecks []exec.InsertFastPathCheck,
 	autoCommit bool,
 ) (exec.Node, error) {
 	// Derive insert table and column descriptors.
@@ -1447,10 +1453,17 @@ func (ef *execFactory) ConstructInsertFastPath(
 
 	ins.run.regionLocalInfo.setupEnforceHomeRegion(ef.planner, table, cols, ins.run.ti.ri.InsertColIDtoRowIndex)
 
+	if len(uniqChecks) > 0 {
+		ins.run.uniqChecks = make([]insertFastPathCheck, len(uniqChecks))
+		for i := range uniqChecks {
+			ins.run.uniqChecks[i].InsertFastPathCheck = uniqChecks[i]
+		}
+	}
+
 	if len(fkChecks) > 0 {
-		ins.run.fkChecks = make([]insertFastPathFKCheck, len(fkChecks))
+		ins.run.fkChecks = make([]insertFastPathCheck, len(fkChecks))
 		for i := range fkChecks {
-			ins.run.fkChecks[i].InsertFastPathFKCheck = fkChecks[i]
+			ins.run.fkChecks[i].InsertFastPathCheck = fkChecks[i]
 		}
 	}
 
@@ -1778,9 +1791,7 @@ func (ef *execFactory) ConstructDeleteRange(
 	var sb span.Builder
 	sb.Init(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, tabDesc.GetPrimaryIndex())
 
-	splitter := span.MakeSplitterForDelete(
-		tabDesc, tabDesc.GetPrimaryIndex(), needed, true, /* forDelete */
-	)
+	splitter := span.MakeSplitterForDelete(tabDesc, tabDesc.GetPrimaryIndex(), needed)
 	spans, err := sb.SpansFromConstraint(indexConstraint, splitter)
 	if err != nil {
 		return nil, err
@@ -1833,17 +1844,12 @@ func (ef *execFactory) ConstructCreateTableAs(
 
 // ConstructCreateView is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCreateView(
+	createView *tree.CreateView,
 	schema cat.Schema,
-	viewName *cat.DataSourceName,
-	ifNotExists bool,
-	replace bool,
-	persistence tree.Persistence,
-	materialized bool,
 	viewQuery string,
 	columns colinfo.ResultColumns,
 	deps opt.SchemaDeps,
 	typeDeps opt.SchemaTypeDeps,
-	withData bool,
 ) (exec.Node, error) {
 
 	if err := checkSchemaChangeEnabled(
@@ -1860,23 +1866,18 @@ func (ef *execFactory) ConstructCreateView(
 	}
 
 	return &createViewNode{
-		viewName:     viewName,
-		ifNotExists:  ifNotExists,
-		replace:      replace,
-		materialized: materialized,
-		persistence:  persistence,
-		viewQuery:    viewQuery,
-		dbDesc:       schema.(*optSchema).database,
-		columns:      columns,
-		planDeps:     planDeps,
-		typeDeps:     typeDepSet,
-		withData:     withData,
+		createView: createView,
+		viewQuery:  viewQuery,
+		dbDesc:     schema.(*optSchema).database,
+		columns:    columns,
+		planDeps:   planDeps,
+		typeDeps:   typeDepSet,
 	}, nil
 }
 
 // ConstructCreateFunction is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCreateFunction(
-	schema cat.Schema, cf *tree.CreateFunction, deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps,
+	schema cat.Schema, cf *tree.CreateRoutine, deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps,
 ) (exec.Node, error) {
 
 	if err := checkSchemaChangeEnabled(
@@ -1984,7 +1985,7 @@ func (ef *execFactory) ConstructAlterTableSplit(
 		return nil, err
 	}
 
-	if err := execCfg.RequireSystemTenantOrClusterSetting(SecondaryTenantSplitAtEnabled); err != nil {
+	if err := requireSystemTenantOrClusterSetting(execCfg.Codec, execCfg.Settings, SecondaryTenantSplitAtEnabled); err != nil {
 		return nil, err
 	}
 
@@ -2182,6 +2183,11 @@ func (ef *execFactory) ConstructExplain(
 		plan:    plan.(*explain.Plan),
 	}
 	return n, nil
+}
+
+// ConstructCall is part of the exec.Factory interface.
+func (e *execFactory) ConstructCall(proc *tree.RoutineExpr) (exec.Node, error) {
+	return &callNode{proc: proc}, nil
 }
 
 // renderBuilder encapsulates the code to build a renderNode.

@@ -17,9 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -54,20 +52,13 @@ func (j *Job) WithTxn(txn isql.Txn) Updater {
 	return Updater{j: j, txn: txn}
 }
 
-func (j *Job) maybeWithTxn(txn isql.Txn) Updater {
-	if txn != nil {
-		return j.WithTxn(txn)
-	}
-	return j.NoTxn()
-}
-
-func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn) (retErr error) {
+func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 	if u.txn == nil {
 		return u.j.registry.db.Txn(ctx, func(
 			ctx context.Context, txn isql.Txn,
 		) error {
 			u.txn = txn
-			return u.update(ctx, useReadLock, updateFn)
+			return u.update(ctx, updateFn)
 		})
 	}
 	ctx, sp := tracing.ChildSpan(ctx, "update-job")
@@ -99,10 +90,31 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 		}
 	}()
 
+	const loadJobQuery = `
+WITH
+  latestpayload AS (
+    SELECT job_id, value
+    FROM system.job_info AS payload
+    WHERE info_key = 'legacy_payload' AND job_id = $1
+    ORDER BY written DESC LIMIT 1
+  ),
+  latestprogress AS (
+    SELECT job_id, value
+    FROM system.job_info AS progress
+    WHERE info_key = 'legacy_progress' AND job_id = $1
+    ORDER BY written DESC LIMIT 1
+  )
+SELECT status, payload.value AS payload, progress.value AS progress,
+       claim_session_id, COALESCE(last_run, created), COALESCE(num_runs, 0)
+FROM system.jobs AS j
+INNER JOIN latestpayload AS payload ON j.id = payload.job_id
+LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
+WHERE id = $1
+`
 	row, err := u.txn.QueryRowEx(
 		ctx, "select-job", u.txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
-		getSelectStmtForJobUpdate(ctx, j.session != nil, useReadLock, u.j.registry.settings.Version), j.ID(),
+		sessiondata.NodeUserSessionDataOverride,
+		loadJobQuery, j.ID(),
 	)
 	if err != nil {
 		return err
@@ -136,31 +148,24 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 		log.VInfof(ctx, 1, "job %d: update called with no session ID", j.ID())
 	}
 
+	lastRun, ok := row[4].(*tree.DTimestamp)
+	if !ok {
+		return errors.AssertionFailedf("expected timestamp last_run, but got %T", lastRun)
+	}
+	numRuns, ok := row[5].(*tree.DInt)
+	if !ok {
+		return errors.AssertionFailedf("expected int num_runs, but got %T", numRuns)
+	}
+
 	md := JobMetadata{
 		ID:       j.ID(),
 		Status:   status,
 		Payload:  payload,
 		Progress: progress,
-	}
-
-	offset := 0
-	if j.session != nil {
-		offset = 1
-	}
-	var lastRun *tree.DTimestamp
-	var ok bool
-	lastRun, ok = row[3+offset].(*tree.DTimestamp)
-	if !ok {
-		return errors.AssertionFailedf("expected timestamp last_run, but got %T", lastRun)
-	}
-	var numRuns *tree.DInt
-	numRuns, ok = row[4+offset].(*tree.DInt)
-	if !ok {
-		return errors.AssertionFailedf("expected int num_runs, but got %T", numRuns)
-	}
-	md.RunStats = &RunStats{
-		NumRuns: int(*numRuns),
-		LastRun: lastRun.Time,
+		RunStats: &RunStats{
+			NumRuns: int(*numRuns),
+			LastRun: lastRun.Time,
+		},
 	}
 
 	var ju JobUpdater
@@ -198,6 +203,11 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 	if ju.md.Status != "" {
 		addSetter("status", ju.md.Status)
 	}
+	if ju.md.RunStats != nil {
+		runStats = ju.md.RunStats
+		addSetter("last_run", ju.md.RunStats.LastRun)
+		addSetter("num_runs", ju.md.RunStats.NumRuns)
+	}
 
 	var payloadBytes []byte
 	if ju.md.Payload != nil {
@@ -220,22 +230,6 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 		}
 	}
 
-	if !u.j.registry.settings.Version.IsActive(ctx, clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs) {
-		if payloadBytes != nil {
-			addSetter("payload", payloadBytes)
-		}
-
-		if progressBytes != nil {
-			addSetter("progress", progressBytes)
-		}
-	}
-
-	if ju.md.RunStats != nil {
-		runStats = ju.md.RunStats
-		addSetter("last_run", ju.md.RunStats.LastRun)
-		addSetter("num_runs", ju.md.RunStats.NumRuns)
-	}
-
 	if len(setters) != 0 {
 		updateStmt := fmt.Sprintf(
 			"UPDATE system.jobs SET %s WHERE id = $1",
@@ -243,7 +237,7 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 		)
 		n, err := u.txn.ExecEx(
 			ctx, "job-update", u.txn.KV(),
-			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+			sessiondata.NodeUserSessionDataOverride,
 			updateStmt, params...,
 		)
 		if err != nil {
@@ -256,22 +250,17 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 		}
 	}
 
-	// Insert the job payload and details into the system.jobs_info table if the
-	// associated cluster version is active.
-	//
-	// TODO(adityamaru): Stop writing the payload and details to the system.jobs
-	// table once we are outside the compatability window for 22.2.
-	if u.j.registry.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
-		infoStorage := j.InfoStorage(u.txn)
-		if payloadBytes != nil {
-			if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
-				return err
-			}
+	// Insert the job payload and progress into the system.jobs_info table.
+	infoStorage := j.InfoStorage(u.txn)
+	infoStorage.claimChecked = true
+	if payloadBytes != nil {
+		if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
+			return err
 		}
-		if progressBytes != nil {
-			if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
-				return err
-			}
+	}
+	if progressBytes != nil {
+		if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
+			return err
 		}
 	}
 
@@ -339,7 +328,7 @@ func (ju *JobUpdater) UpdateRunStats(numRuns int, lastRun time.Time) {
 }
 
 // UpdateHighwaterProgressed updates job updater progress with the new high water mark.
-func UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobMetadata, ju *JobUpdater) error {
+func (ju *JobUpdater) UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobMetadata) error {
 	if err := md.CheckRunningOrReverting(); err != nil {
 		return err
 	}
@@ -374,65 +363,9 @@ func UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobMetadata, ju *JobU
 // Note that there are various convenience wrappers (like FractionProgressed)
 // defined in jobs.go.
 func (u Updater) Update(ctx context.Context, updateFn UpdateFn) error {
-	const useReadLock = false
-	return u.update(ctx, useReadLock, updateFn)
+	return u.update(ctx, updateFn)
 }
 
 func (u Updater) now() time.Time {
 	return u.j.registry.clock.Now().GoTime()
-}
-
-// getSelectStmtForJobUpdate constructs the select statement used in Job.update.
-func getSelectStmtForJobUpdate(
-	ctx context.Context, hasSession, useReadLock bool, version clusterversion.Handle,
-) string {
-	const (
-		selectWithoutSession = `
-WITH
-	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' AND job_id = $1 ORDER BY written DESC LIMIT 1),
-	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' AND job_id = $1 ORDER BY written DESC LIMIT 1)
-	SELECT
-		status, payload.value AS payload, progress.value AS progress`
-		selectWithSession = selectWithoutSession + `, claim_session_id`
-		from              = `
-	FROM system.jobs AS j
-	INNER JOIN latestpayload AS payload ON j.id = payload.job_id
-	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
-	WHERE id = $1
-`
-		fromForUpdate = from + `FOR UPDATE`
-
-		// TODO(adityamaru): Delete deprecated queries once we are outside the 22.2
-		// compatibility window.
-		deprecatedSelectWithoutSession = `SELECT status, payload, progress`
-		deprecatedSelectWithSession    = deprecatedSelectWithoutSession + `, claim_session_id`
-		deprecatedFrom                 = ` FROM system.jobs WHERE id = $1`
-		deprecatedFromForUpdate        = deprecatedFrom + ` FOR UPDATE`
-		backoffColumns                 = ", COALESCE(last_run, created), COALESCE(num_runs, 0)"
-	)
-
-	var stmt string
-	if version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
-		stmt = selectWithoutSession
-		if hasSession {
-			stmt = selectWithSession
-		}
-		stmt = stmt + backoffColumns
-		if useReadLock {
-			return stmt + fromForUpdate
-		}
-		stmt = stmt + from
-	} else {
-		stmt = deprecatedSelectWithoutSession
-		if hasSession {
-			stmt = deprecatedSelectWithSession
-		}
-		stmt = stmt + backoffColumns
-		if useReadLock {
-			return stmt + deprecatedFromForUpdate
-		}
-		stmt = stmt + deprecatedFrom
-	}
-
-	return stmt
 }

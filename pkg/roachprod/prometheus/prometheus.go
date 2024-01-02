@@ -31,8 +31,8 @@ const defaultWorkloadPort = 2112
 
 // Client is an interface allowing queries against Prometheus.
 type Client interface {
-	Query(ctx context.Context, query string, ts time.Time) (model.Value, promv1.Warnings, error)
-	QueryRange(ctx context.Context, query string, r promv1.Range) (model.Value, promv1.Warnings, error)
+	Query(ctx context.Context, query string, ts time.Time, opts ...promv1.Option) (model.Value, promv1.Warnings, error)
+	QueryRange(ctx context.Context, query string, r promv1.Range, opts ...promv1.Option) (model.Value, promv1.Warnings, error)
 }
 
 // ScrapeNode is a node to scrape from.
@@ -258,14 +258,14 @@ func Init(
 			fmt.Sprintf(`
 (sudo systemctl stop node_exporter || true) &&
 rm -rf node_exporter && mkdir -p node_exporter && curl -fsSL \
-  https://storage.googleapis.com/cockroach-fixtures/prometheus/node_exporter-1.2.2.linux-%s.tar.gz |
+  https://storage.googleapis.com/cockroach-test-artifacts/prometheus/node_exporter-1.2.2.linux-%s.tar.gz |
   tar zxv --strip-components 1 -C node_exporter
 `, binArch)); err != nil {
 			return nil, err
 		}
 
 		// Start node_exporter.
-		if err := c.Run(ctx, l, l.Stdout, l.Stderr, cfg.NodeExporter, "init node exporter",
+		if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.OnNodes(cfg.NodeExporter), "init node exporter",
 			`cd node_exporter &&
 sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		); err != nil {
@@ -294,7 +294,7 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		cfg.PrometheusNode,
 		"download prometheus",
 		fmt.Sprintf(`sudo rm -rf /tmp/prometheus && mkdir /tmp/prometheus && cd /tmp/prometheus &&
-			curl -fsSL https://storage.googleapis.com/cockroach-fixtures/prometheus/prometheus-2.27.1.linux-%s.tar.gz | tar zxv --strip-components=1`,
+			curl -fsSL https://storage.googleapis.com/cockroach-test-artifacts/prometheus/prometheus-2.27.1.linux-%s.tar.gz | tar zxv --strip-components=1`,
 			binArch)); err != nil {
 		return nil, err
 	}
@@ -325,7 +325,7 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		l,
 		l.Stdout,
 		l.Stderr,
-		cfg.PrometheusNode,
+		install.OnNodes(cfg.PrometheusNode),
 		"start-prometheus",
 		`cd /tmp/prometheus &&
 sudo systemd-run --unit prometheus --same-dir \
@@ -341,12 +341,13 @@ sudo systemd-run --unit prometheus --same-dir \
 			l.Stderr, cfg.PrometheusNode, "install grafana",
 			fmt.Sprintf(`
 sudo apt-get install -qqy apt-transport-https &&
-sudo apt-get install -qqy software-properties-common wget &&
+sudo apt-get install -qqy software-properties-common &&
 sudo apt-get install -y adduser libfontconfig1 &&
-wget https://dl.grafana.com/enterprise/release/grafana-enterprise_9.2.3_%s.deb -O grafana-enterprise_9.2.3_%s.deb &&
-sudo dpkg -i grafana-enterprise_9.2.3_%s.deb &&
+echo "Downloading https://dl.grafana.com/enterprise/release/grafana-enterprise_9.2.3_%[1]s.deb" &&
+curl https://dl.grafana.com/enterprise/release/grafana-enterprise_9.2.3_%[1]s.deb -sS -o grafana-enterprise_9.2.3_%[1]s.deb &&
+sudo dpkg -i grafana-enterprise_9.2.3_%[1]s.deb &&
 sudo mkdir -p /var/lib/grafana/dashboards`,
-				binArch, binArch, binArch)); err != nil {
+				binArch)); err != nil {
 			return nil, err
 		}
 
@@ -395,7 +396,7 @@ org_role = Admin
 
 		for idx, u := range cfg.Grafana.DashboardURLs {
 			cmd := fmt.Sprintf("curl -fsSL %s -o /var/lib/grafana/dashboards/%d.json", u, idx)
-			if err := c.Run(ctx, l, l.Stdout, l.Stderr, cfg.PrometheusNode, "download dashboard",
+			if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.OnNodes(cfg.PrometheusNode), "download dashboard",
 				cmd); err != nil {
 				l.PrintfCtx(ctx, "failed to download dashboard from %s: %s", u, err)
 			}
@@ -409,7 +410,7 @@ org_role = Admin
 		}
 
 		// Start Grafana. Default port is 3000.
-		if err := c.Run(ctx, l, l.Stdout, l.Stderr, cfg.PrometheusNode, "start grafana",
+		if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.OnNodes(cfg.PrometheusNode), "start grafana",
 			`sudo systemctl restart grafana-server`); err != nil {
 			return nil, err
 		}
@@ -433,7 +434,7 @@ func Snapshot(
 		l,
 		l.Stdout,
 		l.Stderr,
-		promNode,
+		install.OnNodes(promNode),
 		"prometheus snapshot",
 		`sudo rm -rf /tmp/prometheus/data/snapshots/* && curl -XPOST http://localhost:9090/api/v1/admin/tsdb/snapshot &&
 	cd /tmp/prometheus && tar cvf prometheus-snapshot.tar.gz data/snapshots`,
@@ -503,13 +504,13 @@ func Shutdown(
 			shutdownErr = errors.CombineErrors(shutdownErr, err)
 		}
 	}
-	if err := c.Run(ctx, l, l.Stdout, l.Stderr, nodes, "stop node exporter",
+	if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.OnNodes(nodes), "stop node exporter",
 		`sudo systemctl stop node_exporter || echo 'Stopped node exporter'`); err != nil {
 		l.Printf("Failed to stop node exporter: %v", err)
 		shutdownErr = errors.CombineErrors(shutdownErr, err)
 	}
 
-	if err := c.Run(ctx, l, l.Stdout, l.Stderr, promNode, "stop grafana",
+	if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.OnNodes(promNode), "stop grafana",
 		`sudo systemctl stop grafana-server || echo 'Stopped grafana'`); err != nil {
 		l.Printf("Failed to stop grafana server: %v", err)
 		shutdownErr = errors.CombineErrors(shutdownErr, err)

@@ -20,12 +20,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -83,7 +83,8 @@ func createTestTable(
 // of values.
 func verifyTables(
 	t *testing.T,
-	tc *testcluster.TestCluster,
+	kvDB *kv.DB,
+	codec keys.SQLCodec,
 	completed chan int,
 	expectedNumOfTables int,
 	descIDStart descpb.ID,
@@ -95,8 +96,7 @@ func verifyTables(
 	for id := range completed {
 		count++
 		tableName := fmt.Sprintf("table_%d", id)
-		kvDB := tc.Servers[count%tc.NumServers()].DB()
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", tableName)
 		if tableDesc.GetID() < descIDStart {
 			t.Fatalf(
 				"table %s's ID %d is too small. Expected >= %d",
@@ -123,12 +123,11 @@ func verifyTables(
 
 	// Check that no extra descriptors have been written in the range
 	// descIDStart..maxID.
-	kvDB := tc.Servers[0].DB()
 	for id := descIDStart; id < maxID; id++ {
 		if _, ok := tableIDs[id]; ok {
 			continue
 		}
-		descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
+		descKey := catalogkeys.MakeDescMetadataKey(codec, id)
 		desc := &descpb.Descriptor{}
 		if err := kvDB.GetProto(context.Background(), descKey, desc); err != nil {
 			t.Fatal(err)
@@ -157,8 +156,8 @@ func TestParallelCreateTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Get the id descriptor generator count.
-	s := tc.Servers[0]
-	idgen := descidgen.NewGenerator(s.ClusterSettings(), keys.SystemSQLCodec, s.DB())
+	s := tc.Servers[0].ApplicationLayer()
+	idgen := descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB())
 	descIDStart, err := idgen.PeekNextUniqueDescID(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -185,7 +184,8 @@ func TestParallelCreateTables(t *testing.T) {
 
 	verifyTables(
 		t,
-		tc,
+		s.DB(),
+		s.Codec(),
 		completed,
 		numberOfTables,
 		descIDStart,
@@ -211,8 +211,8 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 	}
 
 	// Get the id descriptor generator count.
-	s := tc.Servers[0]
-	idgen := descidgen.NewGenerator(s.ClusterSettings(), keys.SystemSQLCodec, s.DB())
+	s := tc.Servers[0].ApplicationLayer()
+	idgen := descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB())
 	descIDStart, err := idgen.PeekNextUniqueDescID(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -239,7 +239,8 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 
 	verifyTables(
 		t,
-		tc,
+		s.DB(),
+		s.Codec(),
 		completed,
 		1, /* expectedNumOfTables */
 		descIDStart,
@@ -250,7 +251,7 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 func TestTableReadErrorsBeforeTableCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -310,11 +311,13 @@ SELECT * FROM t.kv%d
 func TestCreateStatementType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	// This test does not use s.SQLConn() because it cares about looking
+	// at the statement tags in responses.
+	pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	pgxConfig, err := pgx.ParseConfig(pgURL.String())
 	if err != nil {

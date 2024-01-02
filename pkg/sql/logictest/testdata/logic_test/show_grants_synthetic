@@ -7,7 +7,7 @@ GRANT SYSTEM VIEWACTIVITY TO testuser
 statement ok
 GRANT SYSTEM EXTERNALCONNECTION TO testuser WITH GRANT OPTION
 
-query TTB colnames
+query TTB colnames,rowsort
 SHOW SYSTEM GRANTS
 ----
 grantee   privilege_type        is_grantable
@@ -15,7 +15,7 @@ testuser  EXTERNALCONNECTION    true
 testuser  MODIFYCLUSTERSETTING  false
 testuser  VIEWACTIVITY          false
 
-query TTB colnames
+query TTB colnames,rowsort
 SHOW SYSTEM GRANTS FOR testuser
 ----
 grantee   privilege_type        is_grantable
@@ -26,7 +26,7 @@ testuser  VIEWACTIVITY          false
 statement ok
 REVOKE SYSTEM VIEWACTIVITY FROM testuser
 
-query TTB colnames
+query TTB colnames,rowsort
 SHOW SYSTEM GRANTS
 ----
 grantee   privilege_type        is_grantable
@@ -42,7 +42,7 @@ GRANT SYSTEM VIEWACTIVITY TO testuser2 WITH GRANT OPTION
 statement ok
 GRANT SYSTEM EXTERNALCONNECTION TO testuser2
 
-query TTB colnames
+query TTB colnames,rowsort
 SHOW SYSTEM GRANTS
 ----
 grantee    privilege_type        is_grantable
@@ -51,14 +51,14 @@ testuser   MODIFYCLUSTERSETTING  false
 testuser2  EXTERNALCONNECTION    false
 testuser2  VIEWACTIVITY          true
 
-query TTB colnames
+query TTB colnames,rowsort
 SHOW SYSTEM GRANTS FOR testuser2
 ----
 grantee    privilege_type      is_grantable
 testuser2  EXTERNALCONNECTION  false
 testuser2  VIEWACTIVITY        true
 
-query TTB colnames
+query TTB colnames,rowsort
 SHOW SYSTEM GRANTS FOR testuser, testuser2
 ----
 grantee    privilege_type        is_grantable
@@ -66,3 +66,13 @@ testuser   EXTERNALCONNECTION    true
 testuser   MODIFYCLUSTERSETTING  false
 testuser2  EXTERNALCONNECTION    false
 testuser2  VIEWACTIVITY          true
+
+# SHOW SYSTEM GRANTS FOR <user> should not require admin/root privileges
+subtest show_system_grants_for_non_admin
+
+user testuser
+
+statement ok
+SHOW SYSTEM GRANTS FOR testuser
+
+subtest end

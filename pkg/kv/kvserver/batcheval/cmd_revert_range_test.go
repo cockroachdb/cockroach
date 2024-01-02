@@ -35,9 +35,9 @@ import (
 func hashRange(t *testing.T, reader storage.Reader, start, end roachpb.Key) []byte {
 	t.Helper()
 	h := sha256.New()
-	require.NoError(t, reader.MVCCIterate(
-		start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
-		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+	require.NoError(t, reader.MVCCIterate(context.Background(), start, end,
+		storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+		storage.UnknownReadCategory, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 			h.Write(kv.Key.Key)
 			h.Write(kv.Value)
 			return nil
@@ -55,7 +55,7 @@ func TestCmdRevertRange(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Run this test on both RocksDB and Pebble. Regression test for:
+	// Regression test for:
 	// https://github.com/cockroachdb/cockroach/pull/42386
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
@@ -69,7 +69,9 @@ func TestCmdRevertRange(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("%04d", i))
 		var value roachpb.Value
 		value.SetString(fmt.Sprintf("%d", i))
-		if err := storage.MVCCPut(ctx, eng, &stats, key, baseTime.Add(int64(i%10), 0), hlc.ClockTimestamp{}, value, nil); err != nil {
+		if _, err := storage.MVCCPut(
+			ctx, eng, key, baseTime.Add(int64(i%10), 0), value, storage.MVCCWriteOptions{Stats: &stats},
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -83,7 +85,9 @@ func TestCmdRevertRange(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("%04d", i))
 		var value roachpb.Value
 		value.SetString(fmt.Sprintf("%d-rev-a", i))
-		if err := storage.MVCCPut(ctx, eng, &stats, key, tsA.Add(int64(i%5), 1), hlc.ClockTimestamp{}, value, nil); err != nil {
+		if _, err := storage.MVCCPut(
+			ctx, eng, key, tsA.Add(int64(i%5), 1), value, storage.MVCCWriteOptions{Stats: &stats},
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -96,7 +100,9 @@ func TestCmdRevertRange(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("%04d", i))
 		var value roachpb.Value
 		value.SetString(fmt.Sprintf("%d-rev-b", i))
-		if err := storage.MVCCPut(ctx, eng, &stats, key, tsB.Add(1, int32(i%5)), hlc.ClockTimestamp{}, value, nil); err != nil {
+		if _, err := storage.MVCCPut(
+			ctx, eng, key, tsB.Add(1, int32(i%5)), value, storage.MVCCWriteOptions{Stats: &stats},
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -111,17 +117,18 @@ func TestCmdRevertRange(t *testing.T) {
 	cArgs := batcheval.CommandArgs{Header: kvpb.Header{RangeID: desc.RangeID, Timestamp: tsReq, MaxSpanRequestKeys: 2}}
 	evalCtx := &batcheval.MockEvalCtx{Desc: &desc, Clock: hlc.NewClockForTesting(nil), Stats: stats}
 	cArgs.EvalCtx = evalCtx.EvalContext()
-	afterStats, err := storage.ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
+	afterStats, err := storage.ComputeStats(ctx, eng, keys.LocalMax, keys.MaxKey, 0)
 	require.NoError(t, err)
 	for _, tc := range []struct {
 		name     string
 		ts       hlc.Timestamp
 		expected []byte
 		resumes  int
+		empty    bool
 	}{
-		{"revert revert to time A", tsA, sumA, 4},
-		{"revert revert to time B", tsB, sumB, 4},
-		{"revert revert to time C (nothing)", tsC, sumC, 0},
+		{"revert revert to time A", tsA, sumA, 4, false},
+		{"revert revert to time B", tsB, sumB, 4, false},
+		{"revert revert to time C (nothing)", tsC, sumC, 0, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			batch := &wrappedBatch{Batch: eng.NewBatch()}
@@ -140,9 +147,13 @@ func TestCmdRevertRange(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				require.NotNil(t, result.Replicated.MVCCHistoryMutation)
-				require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans,
-					[]roachpb.Span{{Key: req.RequestHeader.Key, EndKey: req.RequestHeader.EndKey}})
+				// If there's nothing to revert and the fast-path is hit,
+				// MVCCHistoryMutation will be empty.
+				if !tc.empty {
+					require.NotNil(t, result.Replicated.MVCCHistoryMutation)
+					require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans,
+						[]roachpb.Span{{Key: req.RequestHeader.Key, EndKey: req.RequestHeader.EndKey}})
+				}
 				if reply.ResumeSpan == nil {
 					break
 				}
@@ -161,15 +172,15 @@ func TestCmdRevertRange(t *testing.T) {
 			}
 			evalStats := afterStats
 			evalStats.Add(*cArgs.Stats)
-			realStats, err := storage.ComputeStats(batch, keys.LocalMax, keys.MaxKey, evalStats.LastUpdateNanos)
+			realStats, err := storage.ComputeStats(ctx, batch, keys.LocalMax, keys.MaxKey, evalStats.LastUpdateNanos)
 			require.NoError(t, err)
 			require.Equal(t, realStats, evalStats)
 		})
 	}
 
-	txn := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority, tsC, 1, 1)
-	if err := storage.MVCCPut(
-		ctx, eng, &stats, []byte("0012"), tsC, hlc.ClockTimestamp{}, roachpb.MakeValueFromBytes([]byte("i")), &txn,
+	txn := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority, tsC, 1, 1, 0, false /* omitInRangefeeds */)
+	if _, err := storage.MVCCPut(
+		ctx, eng, []byte("0012"), tsC, roachpb.MakeValueFromBytes([]byte("i")), storage.MVCCWriteOptions{Txn: &txn, Stats: &stats},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +191,9 @@ func TestCmdRevertRange(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("%04d", i))
 		var value roachpb.Value
 		value.SetString(fmt.Sprintf("%d-rev-b", i))
-		if err := storage.MVCCPut(ctx, eng, &stats, key, tsC.Add(10, int32(i%5)), hlc.ClockTimestamp{}, value, nil); err != nil {
+		if _, err := storage.MVCCPut(
+			ctx, eng, key, tsC.Add(10, int32(i%5)), value, storage.MVCCWriteOptions{Stats: &stats},
+		); err != nil {
 			t.Fatalf("writing key %s: %+v", key, err)
 		}
 	}
@@ -230,8 +243,8 @@ func TestCmdRevertRange(t *testing.T) {
 			}
 
 			if tc.expectErr {
-				if !testutils.IsError(err, "intents") {
-					t.Fatalf("expected write intent error; got: %T %+v", err, err)
+				if !testutils.IsError(err, "conflicting locks") {
+					t.Fatalf("expected lock conflict error; got: %T %+v", err, err)
 				}
 			} else {
 				if err != nil {

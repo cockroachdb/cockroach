@@ -462,7 +462,7 @@ query error column "k" must appear in the GROUP BY clause or be used in an aggre
 SELECT 3 FROM kv GROUP BY v HAVING k > 5
 
 # Special case for grouping on primary key.
-query I
+query I nosort
 SELECT 3 FROM kv GROUP BY k HAVING v > 2
 ----
 3
@@ -1166,7 +1166,7 @@ query error aggregate functions are not allowed in FILTER
 SELECT v, count(*) FILTER (WHERE count(*) > 5) FROM filter_test GROUP BY v
 
 # Tests with * inside GROUP BY.
-query I
+query I nosort
 SELECT 1 FROM kv GROUP BY kv.*
 ----
 1
@@ -1412,7 +1412,7 @@ statement error function reserved for internal use
 SELECT final_variance(1.2, 1.2, 123) FROM kv
 
 # Regression test for #25533 (crash when propagating filter through GROUP BY).
-query I
+query I nosort
 SELECT 1 FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1
 ----
 1
@@ -2880,10 +2880,8 @@ SELECT string_agg('foo', CAST ((SELECT NULL) AS BYTES)) OVER ();
 foo
 
 # Regression test for #30166.
-query T
+statement error pq: array_agg\(\): set-returning functions are not allowed in aggregate
 SELECT array_agg(generate_series(1, 2))
-----
-{1,2}
 
 # Regression test for #31882.
 
@@ -3970,3 +3968,17 @@ FROM t;
 
 statement ok
 RESET null_ordered_last
+
+# Regression test for #109629. Implicit casts should be added during
+# type-checking when necessary.
+query T
+SELECT array_cat_agg(ARRAY[(1::INT,), (1::FLOAT8,)]);
+----
+{(1),(1)}
+
+query T
+SELECT array_cat_agg(
+  ARRAY[(416644234484367676:::INT8,),(NULL,),((-0.12116245180368423):::FLOAT8,)]
+)
+----
+{(4.166442344843677e+17),(),(-0.12116245180368423)}

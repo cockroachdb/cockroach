@@ -15,14 +15,17 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
 
@@ -92,7 +95,7 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 
 // DeleteSchedule deletes specified schedule.
 func DeleteSchedule(
-	ctx context.Context, execCfg *ExecutorConfig, txn isql.Txn, scheduleID int64,
+	ctx context.Context, execCfg *ExecutorConfig, txn isql.Txn, scheduleID jobspb.ScheduleID,
 ) error {
 	env := JobSchedulerEnv(execCfg.JobsKnobs())
 	_, err := txn.ExecEx(
@@ -129,14 +132,17 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 			continue // not an error if schedule does not exist
 		}
 
-		isAdmin, err := params.p.UserHasAdminRole(params.ctx, params.p.User())
+		// Check that the user has privileges or is the owner of the schedules being altered.
+		hasPriv, err := params.p.HasPrivilege(
+			params.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA, params.p.User(),
+		)
 		if err != nil {
 			return err
 		}
 		isOwner := schedule.Owner() == params.p.User()
-		if !isAdmin && !isOwner {
-			return pgerror.Newf(pgcode.InsufficientPrivilege, "must be admin or owner of the "+
-				"schedule %d to %s it", schedule.ScheduleID(), n.command.String())
+		if !hasPriv && !isOwner {
+			return pgerror.Newf(pgcode.InsufficientPrivilege, "must have %s privilege or be owner of the "+
+				"schedule %d to %s it", privilege.REPAIRCLUSTERMETADATA, schedule.ScheduleID(), n.command.String())
 		}
 
 		switch n.command {

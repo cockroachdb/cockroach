@@ -1,3 +1,5 @@
+# LogicTest: !local-mixed-23.1
+
 subtest on_conflict_do_nothing
 
 statement ok
@@ -29,23 +31,27 @@ SELECT f_ocdn(1,2,1);
 ----
 NULL
 
-statement error pq: multiple modification subqueries of the same table \"t_ocdn\" are not supported
+query TTTT
 SELECT f_ocdn(1,1,1), f_ocdn(3,2,2), f_ocdn(6,6,2), f_ocdn(2,1,1);
+----
+NULL  (3,2,2)  (6,6,2)  NULL
 
-query T
-SELECT f_ocdn(x, y, z) FROM (VALUES (1, 1, 1), (2, 2, 1), (3, 3, 3), (3, 4, 4)) v(x, y, z)
+query T nosort
+SELECT f_ocdn(x, y, z) FROM (VALUES (1, 1, 1), (2, 2, 1), (3, 3, 3), (3, 4, 4), (5, 5, 5)) v(x, y, z)
 ----
 NULL
-(2,2,1)
-(3,3,3)
 NULL
+NULL
+NULL
+(5,5,5)
 
 query III rowsort
 SELECT * FROM t_ocdn
 ----
-1 1 1
-2 2 1
-3 3 3
+1  1  1
+3  2  2
+5  5  5
+6  6  2
 
 
 statement ok
@@ -55,23 +61,46 @@ $$
 $$ LANGUAGE SQL;
 
 statement ok
-SELECT f_ocdn_2vals(5,5,5,5,5,5);
+SELECT f_ocdn_2vals(7,7,7,7,7,7);
 
 query III rowsort
 SELECT * FROM t_ocdn;
 ----
-1 1 1
-2 2 1
-3 3 3
-5 5 5
+1  1  1
+3  2  2
+5  5  5
+6  6  2
+7  7  7
 
-statement error pq: multiple modification subqueries of the same table \"t_ocdn\" are not supported
-CREATE FUNCTION f_err(i INT, j INT, k INT, m INT, n INT, o INT) RETURNS RECORD AS
+statement ok
+CREATE FUNCTION f_multi_ins(i INT, j INT, k INT, m INT, n INT, o INT) RETURNS RECORD AS
 $$
   INSERT INTO t_ocdn VALUES (i, j, k) ON CONFLICT DO NOTHING;
   INSERT INTO t_ocdn VALUES (m, n, o) ON CONFLICT DO NOTHING;
-  SELECT * FROM t_ocdn WHERE t.a=i OR t.a=m;
+  SELECT * FROM t_ocdn WHERE a=i OR a=m ORDER BY a;
 $$ LANGUAGE SQL;
+
+query TT
+SELECT f_multi_ins(1, 1, 1, 1, 1, 1), f_multi_ins(1, 1, 1, 1, 1, 1)
+----
+(1,1,1)  (1,1,1)
+
+query TT
+SELECT f_multi_ins(2, 2, 2, 3, 3, 3), f_multi_ins(3, 3, 3, 4, 4, 4)
+----
+(3,2,2)  (3,2,2)
+
+query III rowsort
+SELECT * FROM t_ocdn
+----
+1  1  1
+3  2  2
+4  4  4
+5  5  5
+6  6  2
+7  7  7
+
+subtest end
 
 subtest on_conflict_do_update
 
@@ -99,9 +128,11 @@ SELECT f_ocdu(1,4,6);
 ----
 (1,4,3)
 
-statement error pq: duplicate key value violates unique constraint \"t_ocdu_b_key\"
+statement error pgcode 23505 pq: duplicate key value violates unique constraint \"t_ocdu_b_key\"
 SELECT f_ocdu(2,4,6);
 
+
+subtest end
 
 subtest upsert
 
@@ -138,6 +169,8 @@ SELECT f_upsert_2vals(1,9,2,8);
 (2,8)
 
 
+subtest end
+
 subtest constraints
 
 statement ok
@@ -149,7 +182,7 @@ $$
   UPSERT INTO t_check1(a) VALUES (NULL) RETURNING *;
 $$ LANGUAGE SQL;
 
-statement error failed to satisfy CHECK constraint
+statement error pgcode 23514 failed to satisfy CHECK constraint
 SELECT f_check_null();
 
 statement ok
@@ -158,7 +191,7 @@ $$
   UPSERT INTO t_check1(b) VALUES ('abcd') RETURNING *;
 $$ LANGUAGE SQL;
 
-statement error failed to satisfy CHECK constraint
+statement error pgcode 23514 failed to satisfy CHECK constraint
 SELECT f_check_len()
 
 statement ok
@@ -167,10 +200,10 @@ $$
   UPSERT INTO t_check1(b,a) VALUES (j,i) RETURNING *;
 $$ LANGUAGE SQL;
 
-statement error failed to satisfy CHECK constraint
+statement error pgcode 23514 failed to satisfy CHECK constraint
 SELECT f_check_vals(NULL, 'ab');
 
-statement error failed to satisfy CHECK constraint
+statement error pgcode 23514 failed to satisfy CHECK constraint
 SELECT f_check_vals(3, 'abcd');
 
 statement ok
@@ -182,7 +215,7 @@ $$
   UPSERT INTO t_check2(a) VALUES (NULL) RETURNING *;
 $$ LANGUAGE SQL;
 
-statement error null value in column "a" violates not-null constraint
+statement error pgcode 23502 null value in column "a" violates not-null constraint
 SELECT f_check_colerr_null();
 
 statement ok
@@ -191,7 +224,7 @@ $$
   UPSERT INTO t_check2(b) VALUES ('abcd') RETURNING *;
 $$ LANGUAGE SQL;
 
-statement error value too long for type CHAR\(3\)
+statement error pgcode 22001 value too long for type CHAR\(3\)
 SELECT f_check_colerr_len()
 
 statement ok
@@ -200,8 +233,10 @@ $$
   UPSERT INTO t_check2(a,b) VALUES (i,j) RETURNING *;
 $$ LANGUAGE SQL;
 
-statement error null value in column "a" violates not-null constraint
+statement error pgcode 23502 null value in column "a" violates not-null constraint
 SELECT f_check_colerr_vals(NULL, 'ab')
 
-statement error value too long for type CHAR\(3\)
+statement error pgcode 22001 value too long for type CHAR\(3\)
 SELECT f_check_colerr_vals(NULL, 'abcd')
+
+subtest end

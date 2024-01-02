@@ -51,24 +51,16 @@ var defaultReplicaCircuitBreakerSlowReplicationThreshold = envutil.EnvOrDefaultD
 	4*base.SlowRequestThreshold,
 )
 
-var replicaCircuitBreakerSlowReplicationThreshold = settings.RegisterPublicDurationSettingWithExplicitUnit(
+var replicaCircuitBreakerSlowReplicationThreshold = settings.RegisterDurationSettingWithExplicitUnit(
 	settings.SystemOnly,
 	"kv.replica_circuit_breaker.slow_replication_threshold",
 	"duration after which slow proposals trip the per-Replica circuit breaker (zero duration disables breakers)",
 	defaultReplicaCircuitBreakerSlowReplicationThreshold,
-	func(d time.Duration) error {
-		// Setting the breaker duration too low could be very dangerous to cluster
-		// health (breaking things to the point where the cluster setting can't be
-		// changed), so enforce a sane minimum.
-		const min = 500 * time.Millisecond
-		if d == 0 {
-			return nil
-		}
-		if d <= min {
-			return errors.Errorf("must specify a minimum of %s", min)
-		}
-		return nil
-	},
+	settings.WithPublic,
+	// Setting the breaker duration too low could be very dangerous to cluster
+	// health (breaking things to the point where the cluster setting can't be
+	// changed), so enforce a sane minimum.
+	settings.DurationWithMinimumOrZeroDisable(500*time.Millisecond),
 )
 
 // Telemetry counter to count number of trip events.
@@ -184,6 +176,8 @@ func (br *replicaCircuitBreaker) asyncProbe(report func(error), done func()) {
 	bgCtx := br.ambCtx.AnnotateCtx(context.Background())
 	if err := br.stopper.RunAsyncTask(bgCtx, "replica-probe", func(ctx context.Context) {
 		defer done()
+		ctx, cancel := br.stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
 
 		if !br.enabled() {
 			report(nil)
@@ -224,17 +218,13 @@ func sendProbe(ctx context.Context, r replicaInCircuitBreaker) error {
 	probeReq := &kvpb.ProbeRequest{}
 	probeReq.Key = desc.StartKey.AsRawKey()
 	ba.Add(probeReq)
-	thresh, ok := r.slowReplicationThreshold(ba)
+	_, ok := r.slowReplicationThreshold(ba)
 	if !ok {
 		// Breakers are disabled now.
 		return nil
 	}
-	if err := timeutil.RunWithTimeout(ctx, "probe", thresh,
-		func(ctx context.Context) error {
-			_, pErr := r.Send(ctx, ba)
-			return pErr.GoError()
-		},
-	); err != nil {
+	_, pErr := r.Send(ctx, ba)
+	if err := pErr.GoError(); err != nil {
 		return r.replicaUnavailableError(err)
 	}
 	return nil

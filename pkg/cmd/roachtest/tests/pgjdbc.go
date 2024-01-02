@@ -23,6 +23,9 @@ import (
 )
 
 var pgjdbcReleaseTagRegex = regexp.MustCompile(`^REL(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+
+// WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
+// This is used by docs automation to produce a list of supported versions for ORM's.
 var supportedPGJDBCTag = "REL42.3.3"
 
 // This test runs pgjdbc's full test suite against a single cockroach node.
@@ -38,8 +41,7 @@ func registerPgjdbc(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -65,6 +67,17 @@ func registerPgjdbc(r registry.Registry) {
 		for _, stmt := range stmts {
 			_, err = db.ExecContext(ctx, stmt)
 			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if UsingRuntimeAssertions(t) {
+			// This test assumes that multiple_active_portals_enabled is false, but through
+			// metamorphic constants, it is possible for them to be enabled.
+			if _, err = db.ExecContext(ctx, "SET multiple_active_portals_enabled=false"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = db.ExecContext(ctx, "ALTER DATABASE defaultdb SET multiple_active_portals_enabled=false"); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -210,11 +223,12 @@ func registerPgjdbc(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "pgjdbc",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `driver`),
+		Name:             "pgjdbc",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.Driver),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPgjdbc(ctx, t, c)
 		},
@@ -223,7 +237,7 @@ func registerPgjdbc(r registry.Registry) {
 
 const pgjdbcDatabaseParams = `
 server=localhost
-port=26257
+port={pgport:1}
 secondaryServer=localhost
 secondaryPort=5433
 secondaryServer2=localhost

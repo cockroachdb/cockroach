@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -23,7 +22,6 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
-        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
@@ -37,7 +35,6 @@ go_test(
         "license_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":utilccl"],
     tags = ["ccl_test"],
     deps = [
@@ -51,9 +48,6 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
-        "//pkg/util/uuid",
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

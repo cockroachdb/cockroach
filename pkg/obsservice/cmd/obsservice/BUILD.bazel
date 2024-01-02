@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
@@ -8,16 +7,23 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/cli/exit",
-        "//pkg/obsservice/obslib/httpproxy",
+        "//pkg/obsservice/obslib",
         "//pkg/obsservice/obslib/ingest",
         "//pkg/obsservice/obslib/migrations",
+        "//pkg/obsservice/obslib/obsutil",
+        "//pkg/obsservice/obslib/process",
+        "//pkg/obsservice/obslib/produce",
+        "//pkg/obsservice/obslib/queue",
+        "//pkg/obsservice/obslib/router",
+        "//pkg/obsservice/obslib/transform",
+        "//pkg/obsservice/obslib/validate",
+        "//pkg/obsservice/obspb",
         "//pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1:logs_service",
-        "//pkg/ui/distoss",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/sysutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_jackc_pgx_v4//pgxpool",
+        "@com_github_jackc_pgx_v5//pgxpool",
         "@com_github_spf13_cobra//:cobra",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_x_sys//unix",
@@ -29,5 +35,3 @@ go_binary(
     embed = [":obsservice_lib"],
     visibility = ["//visibility:public"],
 )
-
-get_x_data(name = "get_x_data")

@@ -1,13 +1,14 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "colbuilder",
-    srcs = ["execplan.go"],
+    srcs = [
+        "execplan.go",
+        "execplan_util.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/typeconv",
@@ -41,6 +42,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/util/buildutil",
+        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/intsets",
         "//pkg/util/log",
         "//pkg/util/mon",
@@ -56,11 +58,9 @@ go_test(
         "execplan_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":colbuilder"],
     deps = [
         "//pkg/base",
-        "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
@@ -88,5 +88,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

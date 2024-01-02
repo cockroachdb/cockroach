@@ -9,22 +9,16 @@
 // licenses/APL.txt.
 
 import { RouteComponentProps } from "react-router";
-import { createSelector } from "reselect";
 import { LocalSetting } from "src/redux/localsettings";
-import _ from "lodash";
 import {
   DatabaseDetailsPageData,
   defaultFilters,
   Filters,
   ViewMode,
-  combineLoadingErrors,
-  getNodesByRegionString,
-  normalizePrivileges,
-  normalizeRoles,
+  deriveTableDetailsMemoized,
 } from "@cockroachlabs/cluster-ui";
 
 import {
-  generateTableID,
   refreshDatabaseDetails,
   refreshTableDetails,
 } from "src/redux/apiReducers";
@@ -35,6 +29,10 @@ import {
   nodeRegionsByIDSelector,
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
+import {
+  selectDropUnusedIndexDuration,
+  selectIndexRecommendationsEnabled,
+} from "src/redux/clusterSettings";
 
 const sortSettingTablesLocalSetting = new LocalSetting(
   "sortSetting/DatabasesDetailsTablesPage",
@@ -69,114 +67,58 @@ const searchLocalTablesSetting = new LocalSetting(
   null,
 );
 
-export const mapStateToProps = createSelector(
-  (_state: AdminUIState, props: RouteComponentProps): string =>
-    getMatchParamByName(props.match, databaseNameAttr),
-
-  state => state.cachedData.databaseDetails,
-  state => state.cachedData.tableDetails,
-  state => nodeRegionsByIDSelector(state),
-  state => selectIsMoreThanOneNode(state),
-  state => viewModeLocalSetting.selector(state),
-  state => sortSettingTablesLocalSetting.selector(state),
-  state => sortSettingGrantsLocalSetting.selector(state),
-  state => filtersLocalTablesSetting.selector(state),
-  state => searchLocalTablesSetting.selector(state),
-  (_: AdminUIState) => isTenant,
-  (
-    database,
-    databaseDetails,
-    tableDetails,
+export const mapStateToProps = (
+  state: AdminUIState,
+  props: RouteComponentProps,
+): DatabaseDetailsPageData => {
+  const database = getMatchParamByName(props.match, databaseNameAttr);
+  const databaseDetails = state?.cachedData.databaseDetails;
+  const tableDetails = state?.cachedData.tableDetails;
+  const dbTables =
+    databaseDetails[database]?.data?.results.tablesResp.tables || [];
+  const nodeRegions = nodeRegionsByIDSelector(state);
+  return {
+    loading: !!databaseDetails[database]?.inFlight,
+    loaded: !!databaseDetails[database]?.valid,
+    requestError: databaseDetails[database]?.lastError,
+    queryError: databaseDetails[database]?.data?.results?.error,
+    name: database,
+    showNodeRegionsColumn: selectIsMoreThanOneNode(state),
+    viewMode: viewModeLocalSetting.selector(state),
+    sortSettingTables: sortSettingTablesLocalSetting.selector(state),
+    sortSettingGrants: sortSettingGrantsLocalSetting.selector(state),
+    filters: filtersLocalTablesSetting.selector(state),
+    search: searchLocalTablesSetting.selector(state),
     nodeRegions,
-    showNodeRegionsColumn,
-    viewMode,
-    sortSettingTables,
-    sortSettingGrants,
-    filtersLocalTables,
-    searchLocalTables,
     isTenant,
-  ): DatabaseDetailsPageData => {
-    return {
-      loading: !!databaseDetails[database]?.inFlight,
-      loaded: !!databaseDetails[database]?.valid,
-      lastError: combineLoadingErrors(
-        databaseDetails[database]?.lastError,
-        databaseDetails[database]?.data?.maxSizeReached,
-        null,
-      ),
-      name: database,
-      showNodeRegionsColumn,
-      viewMode,
-      sortSettingTables,
-      sortSettingGrants,
-      filters: filtersLocalTables,
-      search: searchLocalTables,
-      nodeRegions: nodeRegions,
-      isTenant: isTenant,
-      tables: _.map(
-        databaseDetails[database]?.data?.results.tablesResp.tables,
-        table => {
-          const tableId = generateTableID(database, table);
-          const details = tableDetails[tableId];
-
-          const roles = normalizeRoles(
-            _.map(details?.data?.results.grantsResp.grants, "user"),
-          );
-          const grants = normalizePrivileges(
-            _.flatMap(details?.data?.results.grantsResp.grants, "privileges"),
-          );
-          const nodes = details?.data?.results.stats.replicaData.nodeIDs || [];
-          const numIndexes = _.uniq(
-            details?.data?.results.schemaDetails.indexes,
-          ).length;
-          return {
-            name: table,
-            loading: !!details?.inFlight,
-            loaded: !!details?.valid,
-            lastError: details?.lastError,
-            details: {
-              columnCount:
-                details?.data?.results.schemaDetails.columns?.length || 0,
-              indexCount: numIndexes,
-              userCount: roles.length,
-              roles: roles,
-              grants: grants,
-              statsLastUpdated:
-                details?.data?.results.heuristicsDetails
-                  .stats_last_created_at || null,
-              hasIndexRecommendations:
-                details?.data?.results.stats.indexStats
-                  .has_index_recommendations || false,
-              totalBytes:
-                details?.data?.results.stats.spanStats.total_bytes || 0,
-              liveBytes: details?.data?.results.stats.spanStats.live_bytes || 0,
-              livePercentage:
-                details?.data?.results.stats.spanStats.live_percentage || 0,
-              replicationSizeInBytes:
-                details?.data?.results.stats.spanStats.approximate_disk_bytes ||
-                0,
-              nodes: nodes,
-              rangeCount:
-                details?.data?.results.stats.spanStats.range_count || 0,
-              nodesByRegionString: getNodesByRegionString(
-                nodes,
-                nodeRegions,
-                isTenant,
-              ),
-            },
-          };
-        },
-      ),
-    };
-  },
-);
+    tables: deriveTableDetailsMemoized({
+      dbName: database,
+      tables: dbTables,
+      tableDetails,
+      nodeRegions,
+      isTenant,
+    }),
+    showIndexRecommendations: selectIndexRecommendationsEnabled(state),
+    csIndexUnusedDuration: selectDropUnusedIndexDuration(state),
+  };
+};
 
 export const mapDispatchToProps = {
-  refreshDatabaseDetails,
-  refreshTableDetails: (database: string, table: string) => {
+  refreshDatabaseDetails: (database: string, csIndexUnusedDuration: string) => {
+    return refreshDatabaseDetails({
+      database,
+      csIndexUnusedDuration,
+    });
+  },
+  refreshTableDetails: (
+    database: string,
+    table: string,
+    csIndexUnusedDuration: string,
+  ) => {
     return refreshTableDetails({
       database,
       table,
+      csIndexUnusedDuration,
     });
   },
   onViewModeChange: (viewMode: ViewMode) => viewModeLocalSetting.set(viewMode),

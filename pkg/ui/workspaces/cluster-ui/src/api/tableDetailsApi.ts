@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import {
+  combineQueryErrors,
   executeInternalSql,
   formatApiResult,
   LARGE_RESULT_SIZE,
@@ -26,6 +27,7 @@ import { fromHexString, withTimeout } from "./util";
 import { Format, Identifier, Join, SQL } from "./safesql";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { IndexUsageStatistic, recommendDropUnusedIndex } from "../insights";
+import { getLogger, indexUnusedDuration } from "../util";
 
 const { ZoneConfig } = cockroach.config.zonepb;
 const { ZoneConfigurationLevel } = cockroach.server.serverpb;
@@ -110,7 +112,7 @@ const getTableId: TableDetailsQuery<TableIdRow> = {
 };
 
 // Table create statement.
-type TableCreateStatementRow = { create_statement: string };
+export type TableCreateStatementRow = { create_statement: string };
 
 const getTableCreateStatement: TableDetailsQuery<TableCreateStatementRow> = {
   createStmt: (dbName, tableName) => {
@@ -128,22 +130,22 @@ const getTableCreateStatement: TableDetailsQuery<TableCreateStatementRow> = {
     txn_result: SqlTxnResult<TableCreateStatementRow>,
     resp: TableDetailsResponse,
   ) => {
+    if (txn_result.error) {
+      resp.createStmtResp.error = txn_result.error;
+    }
     if (!txnResultIsEmpty(txn_result)) {
       resp.createStmtResp.create_statement =
         txn_result.rows[0].create_statement;
-    } else {
+    } else if (!txn_result.error) {
       txn_result.error = new Error(
         "getTableCreateStatement: unexpected empty results",
       );
-    }
-    if (txn_result.error) {
-      resp.createStmtResp.error = txn_result.error;
     }
   },
 };
 
 // Table grants.
-type TableGrantsResponse = {
+export type TableGrantsResponse = {
   grants: TableGrantsRow[];
 };
 
@@ -180,7 +182,7 @@ const getTableGrants: TableDetailsQuery<TableGrantsRow> = {
 };
 
 // Table schema details.
-type TableSchemaDetailsRow = {
+export type TableSchemaDetailsRow = {
   columns: string[];
   indexes: string[];
 };
@@ -314,8 +316,10 @@ const getTableZoneConfig: TableDetailsQuery<TableZoneConfigRow> = {
         );
         resp.zoneConfigResp.zone_config_level = configLevel;
       } catch (e) {
-        console.error(
+        getLogger().error(
           `Table Details API - encountered an error decoding zone config string: ${hexString}`,
+          /* additional context */ undefined,
+          e,
         );
         // Catch and assign the error if we encounter one decoding.
         resp.zoneConfigResp.error = e;
@@ -329,7 +333,7 @@ const getTableZoneConfig: TableDetailsQuery<TableZoneConfigRow> = {
 };
 
 // Table heuristics details.
-type TableHeuristicDetailsRow = {
+export type TableHeuristicDetailsRow = {
   stats_last_created_at: moment.Moment;
 };
 
@@ -368,7 +372,7 @@ type TableDetailsStats = {
 };
 
 // Table span stats.
-type TableSpanStatsRow = {
+export type TableSpanStatsRow = {
   approximate_disk_bytes: number;
   live_bytes: number;
   total_bytes: number;
@@ -415,7 +419,7 @@ const getTableSpanStats: TableDetailsQuery<TableSpanStatsRow> = {
   },
 };
 
-type TableReplicaData = SqlApiQueryResponse<{
+export type TableReplicaData = SqlApiQueryResponse<{
   nodeIDs: number[];
   nodeCount: number;
   replicaCount: number;
@@ -468,27 +472,26 @@ const getTableReplicas: TableDetailsQuery<TableReplicasRow> = {
 };
 
 // Table index usage stats.
-type TableIndexUsageStats = {
+export type TableIndexUsageStats = {
   has_index_recommendations: boolean;
 };
 
 const getTableIndexUsageStats: TableDetailsQuery<IndexUsageStatistic> = {
-  createStmt: (dbName, tableName) => {
+  createStmt: (dbName, tableName, csIndexUnusedDuration) => {
     const escFullTableName = Join(
       [new Identifier(dbName), new SQL(tableName)],
       new SQL("."),
     );
+    csIndexUnusedDuration = csIndexUnusedDuration ?? indexUnusedDuration;
     return {
       sql: Format(
-        `WITH 
-     cs AS (SELECT value FROM crdb_internal.cluster_settings WHERE variable = 'sql.index_recommendation.drop_unused_duration'),
-     tableId AS (SELECT $1::regclass::int as table_id)
+        `WITH tableId AS (SELECT $1::regclass::int as table_id)
           SELECT * FROM (SELECT
                   ti.created_at,
                   us.last_read,
                   us.total_reads,
-                  cs.value as unused_threshold,
-                  cs.value::interval as interval_threshold,
+                  '${csIndexUnusedDuration}' as unused_threshold,
+                  '${csIndexUnusedDuration}'::interval as interval_threshold,
                   now() - COALESCE(us.last_read AT TIME ZONE 'UTC', COALESCE(ti.created_at, '0001-01-01')) as unused_interval
                   FROM %1.crdb_internal.index_usage_statistics AS us
                   JOIN tableId ON us.table_id = tableId.table_id
@@ -496,7 +499,6 @@ const getTableIndexUsageStats: TableDetailsQuery<IndexUsageStatistic> = {
                       us.index_id = ti.index_id AND 
                       tableId.table_id = ti.descriptor_id
                   )
-                  CROSS JOIN cs
                  WHERE $2 != 'system' AND ti.is_unique IS false)
                WHERE unused_interval > interval_threshold
                ORDER BY total_reads DESC`,
@@ -519,7 +521,11 @@ const getTableIndexUsageStats: TableDetailsQuery<IndexUsageStatistic> = {
 };
 
 type TableDetailsQuery<RowType> = {
-  createStmt: (dbName: string, tableName: string) => SqlStatement;
+  createStmt: (
+    dbName: string,
+    tableName: string,
+    csIndexUnusedDuration: string,
+  ) => SqlStatement;
   addToTableDetail: (
     response: SqlTxnResult<RowType>,
     tableDetail: TableDetailsResponse,
@@ -554,15 +560,17 @@ const tableDetailQueries: TableDetailsQuery<TableDetailsRow>[] = [
 export function createTableDetailsReq(
   dbName: string,
   tableName: string,
+  csIndexUnusedDuration: string,
 ): SqlExecutionRequest {
   return {
     execute: true,
     statements: tableDetailQueries.map(query =>
-      query.createStmt(dbName, tableName),
+      query.createStmt(dbName, tableName, csIndexUnusedDuration),
     ),
     max_result_size: LARGE_RESULT_SIZE,
     timeout: LONG_TIMEOUT,
     database: dbName,
+    separate_txns: true,
   };
 }
 
@@ -570,38 +578,53 @@ export type TableDetailsReqParams = {
   database: string;
   // Note: table name is expected in the following format: "schemaName"."tableName"
   table: string;
+  csIndexUnusedDuration: string;
 };
 
 export async function getTableDetails(
   params: TableDetailsReqParams,
   timeout?: moment.Duration,
 ): Promise<SqlApiResponse<TableDetailsResponse>> {
-  return withTimeout(fetchTableDetails(params.database, params.table), timeout);
+  return withTimeout(
+    fetchTableDetails(
+      params.database,
+      params.table,
+      params.csIndexUnusedDuration,
+    ),
+    timeout,
+  );
 }
 
 async function fetchTableDetails(
   databaseName: string,
   tableName: string,
+  csIndexUnusedDuration: string,
 ): Promise<SqlApiResponse<TableDetailsResponse>> {
   const detailsResponse: TableDetailsResponse = newTableDetailsResponse();
   const req: SqlExecutionRequest = createTableDetailsReq(
     databaseName,
     tableName,
+    csIndexUnusedDuration,
   );
   const resp = await executeInternalSql<TableDetailsRow>(req);
+  const errs: Error[] = [];
   resp.execution.txn_results.forEach(txn_result => {
-    if (txn_result.rows) {
-      const query: TableDetailsQuery<TableDetailsRow> =
-        tableDetailQueries[txn_result.statement - 1];
-      query.addToTableDetail(txn_result, detailsResponse);
+    if (txn_result.error) {
+      errs.push(txn_result.error);
     }
+    const query: TableDetailsQuery<TableDetailsRow> =
+      tableDetailQueries[txn_result.statement - 1];
+    query.addToTableDetail(txn_result, detailsResponse);
   });
   if (resp.error) {
     detailsResponse.error = resp.error;
   }
+
+  detailsResponse.error = combineQueryErrors(errs, detailsResponse.error);
   return formatApiResult<TableDetailsResponse>(
     detailsResponse,
     detailsResponse.error,
-    "retrieving table details information",
+    `retrieving table details information for table '${tableName}'`,
+    false,
   );
 }

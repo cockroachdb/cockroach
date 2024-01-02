@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -143,32 +142,70 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 	if !b.allowInsertFastPath {
 		return execPlan{}, false, nil
 	}
-
-	//  - the input is Values with at most mutations.MaxBatchSize, and there are no
-	//    subqueries;
-	//    (note that mutations.MaxBatchSize() is a quantity of keys in the batch
-	//     that we send, not a number of rows. We use this as a guideline only,
-	//     and there is no guarantee that we won't produce a bigger batch.)
-	values, ok := ins.Input.(*memo.ValuesExpr)
-	if !ok ||
-		values.ChildCount() > mutations.MaxBatchSize(false /* forceProductionMaxBatchSize */) ||
-		values.Relational().HasSubquery ||
-		values.Relational().HasUDF {
+	// If there are unique checks required, there must be the same number of fast
+	// path unique checks.
+	if len(ins.UniqueChecks) != len(ins.FastPathUniqueChecks) {
 		return execPlan{}, false, nil
 	}
 
-	// We cannot use the fast path if any uniqueness checks are needed.
-	// TODO(rytaft): try to relax this restriction (see #58047).
-	if len(ins.UniqueChecks) > 0 {
+	insInput := ins.Input
+	values, ok := insInput.(*memo.ValuesExpr)
+	// Values expressions containing subqueries or UDFs, or having a size larger
+	// than the max mutation batch size are disallowed.
+	if !ok || !memo.ValuesLegalForInsertFastPath(values) {
 		return execPlan{}, false, nil
 	}
 
 	md := b.mem.Metadata()
 	tab := md.Table(ins.Table)
 
+	uniqChecks := make([]exec.InsertFastPathCheck, len(ins.UniqueChecks))
+	for i := range ins.FastPathUniqueChecks {
+		c := &ins.FastPathUniqueChecks[i]
+		if len(c.DatumsFromConstraint) == 0 {
+			// We need at least one DatumsFromConstraint in order to perform
+			// uniqueness checks during fast-path insert. Even if DatumsFromConstraint
+			// contains no Datums, that case indicates that all values to check come
+			// from the input row.
+			return execPlan{}, false, nil
+		}
+		execFastPathCheck := &uniqChecks[i]
+		// Set up the execbuilder structure from the elements built during
+		// exploration.
+		execFastPathCheck.ReferencedTable = md.Table(c.ReferencedTableID)
+		execFastPathCheck.ReferencedIndex = execFastPathCheck.ReferencedTable.Index(c.ReferencedIndexOrdinal)
+		execFastPathCheck.CheckOrdinal = c.CheckOrdinal
+		locking, err := b.buildLocking(c.Locking)
+		if err != nil {
+			return execPlan{}, false, err
+		}
+		execFastPathCheck.Locking = locking
+		execFastPathCheck.InsertCols = make([]exec.TableColumnOrdinal, len(c.InsertCols))
+		for j, insertCol := range c.InsertCols {
+			execFastPathCheck.InsertCols[j] = exec.TableColumnOrdinal(md.ColumnMeta(insertCol).Table.ColumnOrdinal(insertCol))
+		}
+		datumsFromConstraintSpec := c.DatumsFromConstraint
+		execFastPathCheck.DatumsFromConstraint = make([]tree.Datums, len(datumsFromConstraintSpec))
+		for j, row := range datumsFromConstraintSpec {
+			execFastPathCheck.DatumsFromConstraint[j] = make(tree.Datums, tab.ColumnCount())
+			tuple := row.(*memo.TupleExpr)
+			if len(c.InsertCols) != len(tuple.Elems) {
+				panic(errors.AssertionFailedf("expected %d tuple elements in insert fast path uniqueness check, found %d", len(c.InsertCols), len(tuple.Elems)))
+			}
+			for k := 0; k < len(tuple.Elems); k++ {
+				constExpr, _ := tuple.Elems[k].(*memo.ConstExpr)
+				execFastPathCheck.DatumsFromConstraint[j][execFastPathCheck.InsertCols[k]] = constExpr.Value
+			}
+		}
+		uniqCheck := &ins.UniqueChecks[i]
+		execFastPathCheck.MkErr = func(values tree.Datums) error {
+			return mkFastPathUniqueCheckErr(md, uniqCheck, values, execFastPathCheck.ReferencedIndex)
+		}
+	}
+
 	//  - there are no self-referencing foreign keys;
 	//  - all FK checks can be performed using direct lookups into unique indexes.
-	fkChecks := make([]exec.InsertFastPathFKCheck, len(ins.FKChecks))
+	fkChecks := make([]exec.InsertFastPathCheck, len(ins.FKChecks))
 	for i := range ins.FKChecks {
 		c := &ins.FKChecks[i]
 		if md.Table(c.ReferencedTable).ID() == md.Table(ins.Table).ID() {
@@ -200,26 +237,33 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 			return execPlan{}, false, nil
 		}
 
+		locking, err := b.buildLocking(lookupJoin.Locking)
+		if err != nil {
+			return execPlan{}, false, err
+		}
+
 		out := &fkChecks[i]
 		out.InsertCols = make([]exec.TableColumnOrdinal, len(lookupJoin.KeyCols))
-		for i, keyCol := range lookupJoin.KeyCols {
+		for j, keyCol := range lookupJoin.KeyCols {
 			// The keyCol comes from the WithScan operator. We must find the matching
 			// column in the mutation input.
-			withColOrd, ok := withScan.OutCols.Find(keyCol)
+			var withColOrd, inputColOrd int
+			withColOrd, ok = withScan.OutCols.Find(keyCol)
 			if !ok {
 				return execPlan{}, false, errors.AssertionFailedf("cannot find column %d", keyCol)
 			}
 			inputCol := withScan.InCols[withColOrd]
-			inputColOrd, ok := ins.InsertCols.Find(inputCol)
+			inputColOrd, ok = ins.InsertCols.Find(inputCol)
 			if !ok {
 				return execPlan{}, false, errors.AssertionFailedf("cannot find column %d", inputCol)
 			}
-			out.InsertCols[i] = exec.TableColumnOrdinal(inputColOrd)
+			out.InsertCols[j] = exec.TableColumnOrdinal(inputColOrd)
 		}
 
 		out.ReferencedTable = md.Table(lookupJoin.Table)
 		out.ReferencedIndex = out.ReferencedTable.Index(lookupJoin.Index)
 		out.MatchMethod = fk.MatchMethod()
+		out.Locking = locking
 		out.MkErr = func(values tree.Datums) error {
 			if len(values) != len(out.InsertCols) {
 				return errors.AssertionFailedf("invalid FK violation values")
@@ -269,6 +313,7 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		returnOrds,
 		checkOrds,
 		fkChecks,
+		uniqChecks,
 		b.allowAutoCommit,
 	)
 	if err != nil {
@@ -703,6 +748,13 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 	return colMap
 }
 
+// checkContainsLocking sets CheckContainsNonDefaultKeyLocking based on whether
+// we found non-default locking while building a check query plan.
+func (b *Builder) checkContainsLocking(mainContainsLocking bool) {
+	b.CheckContainsNonDefaultKeyLocking = b.CheckContainsNonDefaultKeyLocking || b.ContainsNonDefaultKeyLocking
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || mainContainsLocking
+}
+
 // buildUniqueChecks builds uniqueness check queries. These check queries are
 // used to enforce UNIQUE WITHOUT INDEX constraints.
 //
@@ -710,6 +762,8 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 // violated. Those queries are each wrapped in an ErrorIfRows operator, which
 // will throw an appropriate error in case the inner query returns any rows.
 func (b *Builder) buildUniqueChecks(checks memo.UniqueChecksExpr) error {
+	defer b.checkContainsLocking(b.ContainsNonDefaultKeyLocking)
+	b.ContainsNonDefaultKeyLocking = false
 	md := b.mem.Metadata()
 	for i := range checks {
 		c := &checks[i]
@@ -740,6 +794,8 @@ func (b *Builder) buildUniqueChecks(checks memo.UniqueChecksExpr) error {
 }
 
 func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
+	defer b.checkContainsLocking(b.ContainsNonDefaultKeyLocking)
+	b.ContainsNonDefaultKeyLocking = false
 	md := b.mem.Metadata()
 	for i := range checks {
 		c := &checks[i]
@@ -809,6 +865,42 @@ func mkUniqueCheckErr(md *opt.Metadata, c *memo.UniqueChecksItem, keyVals tree.D
 		),
 		details.String(),
 	)
+}
+
+// mkFastPathUniqueCheckErr is a wrapper for mkUniqueCheckErr in the insert fast
+// path flow, which reorders the keyVals row according to the ordering of the
+// key columns in index `idx`. This is needed because mkUniqueCheckErr assumes
+// the ordering of columns in `keyVals` matches the ordering of columns in
+// `cat.UniqueConstraint.ColumnOrdinal(tabMeta.Table, i)`.
+func mkFastPathUniqueCheckErr(
+	md *opt.Metadata, c *memo.UniqueChecksItem, keyVals tree.Datums, idx cat.Index,
+) error {
+
+	tabMeta := md.TableMeta(c.Table)
+	uc := tabMeta.Table.Unique(c.CheckOrdinal)
+
+	newKeyVals := make(tree.Datums, 0, uc.ColumnCount())
+
+	for i := 0; i < uc.ColumnCount(); i++ {
+		ord := uc.ColumnOrdinal(tabMeta.Table, i)
+		found := false
+		for j := 0; j < idx.ColumnCount(); j++ {
+			keyCol := idx.Column(j)
+			keyColOrd := keyCol.Column.Ordinal()
+			if ord == keyColOrd {
+				newKeyVals = append(newKeyVals, keyVals[j])
+				found = true
+				break
+			}
+		}
+		if !found {
+			// We still need to return an error, even if the key values could not be
+			// determined.
+			return errors.AssertionFailedf(
+				"insert fast path failed uniqueness check, but could not find unique columns for row, %v", keyVals)
+		}
+	}
+	return mkUniqueCheckErr(md, c, newKeyVals)
 }
 
 // mkFKCheckErr generates a user-friendly error describing a foreign key
@@ -916,59 +1008,6 @@ func (b *Builder) buildFKCascades(withID opt.WithID, cascades memo.FKCascades) e
 		b.cascades = append(b.cascades, cb.setupCascade(&cascades[i]))
 	}
 	return nil
-}
-
-// canAutoCommit determines if it is safe to auto commit the mutation contained
-// in the expression.
-//
-// Mutations can commit the transaction as part of the same KV request,
-// potentially taking advantage of the 1PC optimization. This is not ok to do in
-// general; a sufficient set of conditions is:
-//  1. There is a single mutation in the query.
-//  2. The mutation is the root operator, or it is directly under a Project
-//     with no side-effecting expressions. An example of why we can't allow
-//     side-effecting expressions: if the projection encounters a
-//     division-by-zero error, the mutation shouldn't have been committed.
-//
-// An extra condition relates to how the FK checks are run. If they run before
-// the mutation (via the insert fast path), auto commit is possible. If they run
-// after the mutation (the general path), auto commit is not possible. It is up
-// to the builder logic for each mutation to handle this.
-//
-// Note that there are other necessary conditions related to execution
-// (specifically, that the transaction is implicit); it is up to the exec
-// factory to take that into account as well.
-func (b *Builder) canAutoCommit(rel memo.RelExpr) bool {
-	if !rel.Relational().CanMutate {
-		// No mutations in the expression.
-		return false
-	}
-
-	switch rel.Op() {
-	case opt.InsertOp, opt.UpsertOp, opt.UpdateOp, opt.DeleteOp:
-		// Check that there aren't any more mutations in the input.
-		// TODO(radu): this can go away when all mutations are under top-level
-		// With ops.
-		return !rel.Child(0).(memo.RelExpr).Relational().CanMutate
-
-	case opt.ProjectOp:
-		// Allow Project on top, as long as the expressions are not side-effecting.
-		proj := rel.(*memo.ProjectExpr)
-		for i := 0; i < len(proj.Projections); i++ {
-			if !proj.Projections[i].ScalarProps().VolatilitySet.IsLeakproof() {
-				return false
-			}
-		}
-		return b.canAutoCommit(proj.Input)
-
-	case opt.DistributeOp:
-		// Distribute is currently a no-op, so check whether the input can
-		// auto-commit.
-		return b.canAutoCommit(rel.(*memo.DistributeExpr).Input)
-
-	default:
-		return false
-	}
 }
 
 // forUpdateLocking is the row-level locking mode used by mutations during their
@@ -1095,4 +1134,72 @@ func unwrapProjectExprs(input memo.RelExpr) memo.RelExpr {
 		return unwrapProjectExprs(proj.Input)
 	}
 	return input
+}
+
+func (b *Builder) buildLock(lock *memo.LockExpr) (execPlan, error) {
+	// Don't bother creating the lookup join if we don't need it.
+	locking, err := b.buildLocking(lock.Locking)
+	if err != nil {
+		return execPlan{}, err
+	}
+	if !locking.IsLocking() {
+		return b.buildRelational(lock.Input)
+	}
+
+	// In some simple cases we can push the locking down into the input operation
+	// instead of adding what would be a redundant lookup join. We only apply
+	// these optimizations for single-column-family tables.
+	//
+	// TODO(michae2): To optimize more complex cases, such as a Project on top of
+	// a Scan, or multiple Lock ops, etc, we need to do something similar to
+	// ordering. That is, make locking a physical property required by Lock, and
+	// make various operators provide the physical property, with a
+	// locking-semi-LookupJoin as the enforcer of last resort.
+	tab := b.mem.Metadata().Table(lock.Table)
+	if tab.FamilyCount() == 1 {
+		switch input := lock.Input.(type) {
+		case *memo.ScanExpr:
+			if input.Table == lock.KeySource && input.Index == cat.PrimaryIndex {
+				// Make a shallow copy of the scan to avoid mutating the original.
+				scan := *input
+				scan.Locking = scan.Locking.Max(locking)
+				return b.buildRelational(&scan)
+			}
+		case *memo.IndexJoinExpr:
+			if input.Table == lock.KeySource {
+				// Make a shallow copy of the join to avoid mutating the original.
+				join := *input
+				join.Locking = join.Locking.Max(locking)
+				return b.buildRelational(&join)
+			}
+		case *memo.LookupJoinExpr:
+			if input.Table == lock.KeySource && input.Index == cat.PrimaryIndex &&
+				(input.JoinType == opt.InnerJoinOp || input.JoinType == opt.SemiJoinOp) &&
+				!input.IsFirstJoinInPairedJoiner && !input.IsSecondJoinInPairedJoiner &&
+				// We con't push the locking down if the lookup join has additional on
+				// predicates that will filter out rows after the join.
+				len(input.On) == 0 {
+				// Make a shallow copy of the join to avoid mutating the original.
+				join := *input
+				join.Locking = join.Locking.Max(locking)
+				return b.buildRelational(&join)
+			}
+		}
+	}
+
+	// Perform the locking using a semi-lookup-join to the primary index.
+	join := &memo.LookupJoinExpr{
+		Input: lock.Input,
+		LookupJoinPrivate: memo.LookupJoinPrivate{
+			JoinType:              opt.SemiJoinOp,
+			Table:                 lock.Table,
+			Index:                 cat.PrimaryIndex,
+			KeyCols:               lock.KeyCols,
+			Cols:                  lock.LockCols.Union(lock.Cols),
+			LookupColsAreTableKey: true,
+			Locking:               locking,
+		},
+	}
+	join.CopyGroup(lock)
+	return b.buildLookupJoin(join)
 }

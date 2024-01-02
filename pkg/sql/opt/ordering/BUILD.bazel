@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -31,6 +30,7 @@ go_library(
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/props",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/util/buildutil",
         "@com_github_cockroachdb_errors//:errors",
@@ -50,7 +50,6 @@ go_test(
         "row_number_test.go",
         "scan_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":ordering"],
     deps = [
         "//pkg/settings/cluster",
@@ -69,5 +68,3 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
-
-get_x_data(name = "get_x_data")

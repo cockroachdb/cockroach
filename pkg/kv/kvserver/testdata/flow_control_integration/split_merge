@@ -1,0 +1,89 @@
+echo
+----
+----
+-- Flow token metrics from n1 after issuing + admitting the regular 1MiB 3x
+-- replicated write to the pre-split range. There should be 3MiB of
+-- {regular,elastic} tokens {deducted,returned}.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 24 MiB   
+  kvadmission.flow_controller.elastic_tokens_deducted    | 3.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 3.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B      
+  kvadmission.flow_controller.regular_tokens_available   | 48 MiB   
+  kvadmission.flow_controller.regular_tokens_deducted    | 3.0 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 3.0 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B      
+
+
+-- (Splitting range.)
+
+
+-- Flow token metrics from n1 after further issuing 2MiB and 3MiB writes to
+-- post-split LHS and RHS ranges respectively. We should see 15MiB extra tokens
+-- {deducted,returned}, which comes from (2MiB+3MiB)*3=15MiB. So we stand at
+-- 3MiB+15MiB=18MiB now.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 24 MiB  
+  kvadmission.flow_controller.elastic_tokens_deducted    | 18 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 18 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B     
+  kvadmission.flow_controller.regular_tokens_available   | 48 MiB  
+  kvadmission.flow_controller.regular_tokens_deducted    | 18 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 18 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B     
+
+
+-- Observe the newly split off replica, with its own three streams.
+SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles
+GROUP BY (range_id)
+ORDER BY streams DESC;
+
+  range_id | stream_count  
+-----------+---------------
+  68       | 3             
+  69       | 3             
+
+
+-- (Merging ranges.)
+
+
+-- Flow token metrics from n1 after issuing 4MiB of regular replicated writes to
+-- the post-merged range. We should see 12MiB extra tokens {deducted,returned},
+-- which comes from 4MiB*3=12MiB. So we stand at 18MiB+12MiB=30MiB now.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 24 MiB  
+  kvadmission.flow_controller.elastic_tokens_deducted    | 30 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 30 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B     
+  kvadmission.flow_controller.regular_tokens_available   | 48 MiB  
+  kvadmission.flow_controller.regular_tokens_deducted    | 30 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 30 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B     
+
+
+-- Observe only the merged replica with its own three streams.
+SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles
+GROUP BY (range_id)
+ORDER BY streams DESC;
+
+  range_id | stream_count  
+-----------+---------------
+  68       | 3             
+----
+----
+
+# vim:ft=sql

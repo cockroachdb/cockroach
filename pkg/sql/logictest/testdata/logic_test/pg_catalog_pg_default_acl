@@ -2,7 +2,7 @@ statement ok
 ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO PUBLIC;
 ALTER DEFAULT PRIVILEGES GRANT USAGE ON SCHEMAS TO PUBLIC;
 ALTER DEFAULT PRIVILEGES GRANT SELECT ON SEQUENCES TO PUBLIC;
-ALTER DEFAULT PRIVILEGES GRANT EXECUTE ON FUNCTIONS TO PUBLIC;
+ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 
 # Public should appear as an empty string with privileges.
 query OOOTT colnames,rowsort
@@ -12,7 +12,10 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 1451375629  1546506610  0                r              {=r/}
 1451375629  1546506610  0                S              {=r/}
 1451375629  1546506610  0                n              {=U/}
-1451375629  1546506610  0                f              {=X/}
+1451375629  1546506610  0                f              {root=X/}
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT EXECUTE ON FUNCTIONS TO PUBLIC;
 
 statement ok
 CREATE USER foo
@@ -35,7 +38,7 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 1451375629  1546506610  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/,=r/}
 1451375629  1546506610  0                T              {bar=U*/,foo=U*/}
 1451375629  1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
-1451375629  1546506610  0                f              {bar=X*/,foo=X*/,=X/}
+1451375629  1546506610  0                f              {bar=X*/,foo=X*/}
 
 statement ok
 GRANT foo, bar TO root;
@@ -47,7 +50,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SCHEMAS TO foo, bar WITH
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SEQUENCES TO foo, bar WITH GRANT OPTION;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON FUNCTIONS TO foo, bar WITH GRANT OPTION;
 
-# 12 rows should exist, 4 for each role, root, foo and bar.
+# 15 rows should exist, 5 for each of root, foo and bar.
 query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
@@ -56,17 +59,17 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 97389596    1791217281  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/}
 97389596    1791217281  0                T              {bar=U*/,foo=U*/,=U/}
 97389596    1791217281  0                n              {bar=C*U*/,foo=C*U*/}
-97389596    1791217281  0                f              {bar=X*/,foo=X*/}
+97389596    1791217281  0                f              {bar=X*/,foo=X*/,=X/}
 3755498903  2026795574  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
 3755498903  2026795574  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/}
 3755498903  2026795574  0                T              {bar=U*/,foo=U*/,=U/}
 3755498903  2026795574  0                n              {bar=C*U*/,foo=C*U*/}
-3755498903  2026795574  0                f              {bar=X*/,foo=X*/}
+3755498903  2026795574  0                f              {bar=X*/,foo=X*/,=X/}
 1451375629  1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
 1451375629  1546506610  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/,=r/}
 1451375629  1546506610  0                T              {bar=U*/,foo=U*/}
 1451375629  1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
-1451375629  1546506610  0                f              {bar=X*/,foo=X*/,=X/}
+1451375629  1546506610  0                f              {bar=X*/,foo=X*/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TABLES FROM foo, bar;
@@ -85,17 +88,17 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 97389596    1791217281  0                S              {}
 97389596    1791217281  0                T              {=U/}
 97389596    1791217281  0                n              {}
-97389596    1791217281  0                f              {}
+97389596    1791217281  0                f              {=X/}
 3755498903  2026795574  0                r              {}
 3755498903  2026795574  0                S              {}
 3755498903  2026795574  0                T              {=U/}
 3755498903  2026795574  0                n              {}
-3755498903  2026795574  0                f              {}
+3755498903  2026795574  0                f              {=X/}
 1451375629  1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
 1451375629  1546506610  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/,=r/}
 1451375629  1546506610  0                T              {bar=U*/,foo=U*/}
 1451375629  1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
-1451375629  1546506610  0                f              {bar=X*/,foo=X*/,=X/}
+1451375629  1546506610  0                f              {bar=X*/,foo=X*/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON TABLES TO foo WITH GRANT OPTION;
@@ -119,17 +122,17 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 97389596    1791217281  0                S              {bar=C*U*a*d*r*w*/}
 97389596    1791217281  0                T              {bar=U*/,=U/}
 97389596    1791217281  0                n              {bar=C*U*/}
-97389596    1791217281  0                f              {bar=X*/}
+97389596    1791217281  0                f              {bar=X*/,=X/}
 3755498903  2026795574  0                r              {foo=C*a*d*r*w*/}
 3755498903  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 3755498903  2026795574  0                T              {foo=U*/,=U/}
 3755498903  2026795574  0                n              {foo=C*U*/}
-3755498903  2026795574  0                f              {foo=X*/}
+3755498903  2026795574  0                f              {foo=X*/,=X/}
 1451375629  1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
 1451375629  1546506610  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/,=r/}
 1451375629  1546506610  0                T              {bar=U*/,foo=U*/}
 1451375629  1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
-1451375629  1546506610  0                f              {bar=X*/,foo=X*/,=X/}
+1451375629  1546506610  0                f              {bar=X*/,foo=X*/}
 
 # Revoke SELECT from foo and GRANT it back with foo being the creator role.
 # Ensure revoking a single privilege reflects correctly.
@@ -144,17 +147,17 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 97389596    1791217281  0                S              {bar=C*U*a*d*r*w*/}
 97389596    1791217281  0                T              {bar=U*/,=U/}
 97389596    1791217281  0                n              {bar=C*U*/}
-97389596    1791217281  0                f              {bar=X*/}
+97389596    1791217281  0                f              {bar=X*/,=X/}
 3755498903  2026795574  0                r              {foo=C*a*d*w*/}
 3755498903  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 3755498903  2026795574  0                T              {foo=U*/,=U/}
 3755498903  2026795574  0                n              {foo=C*U*/}
-3755498903  2026795574  0                f              {foo=X*/}
+3755498903  2026795574  0                f              {foo=X*/,=X/}
 1451375629  1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
 1451375629  1546506610  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/,=r/}
 1451375629  1546506610  0                T              {bar=U*/,foo=U*/}
 1451375629  1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
-1451375629  1546506610  0                f              {bar=X*/,foo=X*/,=X/}
+1451375629  1546506610  0                f              {bar=X*/,foo=X*/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT SELECT ON TABLES TO foo;
@@ -167,17 +170,17 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 97389596    1791217281  0                S              {bar=C*U*a*d*r*w*/}
 97389596    1791217281  0                T              {bar=U*/,=U/}
 97389596    1791217281  0                n              {bar=C*U*/}
-97389596    1791217281  0                f              {bar=X*/}
+97389596    1791217281  0                f              {bar=X*/,=X/}
 3755498903  2026795574  0                r              {foo=C*a*d*rw*/}
 3755498903  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 3755498903  2026795574  0                T              {foo=U*/,=U/}
 3755498903  2026795574  0                n              {foo=C*U*/}
-3755498903  2026795574  0                f              {foo=X*/}
+3755498903  2026795574  0                f              {foo=X*/,=X/}
 1451375629  1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
 1451375629  1546506610  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/,=r/}
 1451375629  1546506610  0                T              {bar=U*/,foo=U*/}
 1451375629  1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
-1451375629  1546506610  0                f              {bar=X*/,foo=X*/,=X/}
+1451375629  1546506610  0                f              {bar=X*/,foo=X*/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM foo, bar, public;
@@ -196,13 +199,14 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 97389596    1791217281  0                S              {bar=C*U*a*d*r*w*/}
 97389596    1791217281  0                T              {bar=U*/,=U/}
 97389596    1791217281  0                n              {bar=C*U*/}
-97389596    1791217281  0                f              {bar=X*/}
+97389596    1791217281  0                f              {bar=X*/,=X/}
 3755498903  2026795574  0                r              {foo=C*a*d*rw*/}
 3755498903  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 3755498903  2026795574  0                T              {foo=U*/,=U/}
 3755498903  2026795574  0                n              {foo=C*U*/}
-3755498903  2026795574  0                f              {foo=X*/}
+3755498903  2026795574  0                f              {foo=X*/,=X/}
 1451375629  1546506610  0                r              {bar=C*a*d*w*/,foo=C*a*d*w*/}
+1451375629  1546506610  0                f              {root=X/}
 
 # GRANT, DROP and ZONECONFIG should not show up in defaclacl.
 statement ok
@@ -217,13 +221,14 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 97389596    1791217281  0                S              {bar=C*U*a*d*r*w*/}
 97389596    1791217281  0                T              {bar=U*/,=U/}
 97389596    1791217281  0                n              {bar=C*U*/}
-97389596    1791217281  0                f              {bar=X*/}
+97389596    1791217281  0                f              {bar=X*/,=X/}
 3755498903  2026795574  0                r              {foo=C*a*d*rw*/}
 3755498903  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 3755498903  2026795574  0                T              {foo=U*/,=U/}
 3755498903  2026795574  0                n              {foo=C*U*/}
-3755498903  2026795574  0                f              {foo=X*/}
+3755498903  2026795574  0                f              {foo=X*/,=X/}
 1451375629  1546506610  0                r              {foo=/}
+1451375629  1546506610  0                f              {root=X/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE DROP, ZONECONFIG ON TABLES FROM foo;
@@ -245,12 +250,13 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 97389596    1791217281  0                S              {bar=C*U*a*d*r*w*/}
 97389596    1791217281  0                T              {bar=U*/,=U/}
 97389596    1791217281  0                n              {bar=C*U*/}
-97389596    1791217281  0                f              {bar=X*/}
+97389596    1791217281  0                f              {bar=X*/,=X/}
 3755498903  2026795574  0                r              {foo=C*a*d*rw*/}
 3755498903  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 3755498903  2026795574  0                T              {foo=U*/,=U/}
 3755498903  2026795574  0                n              {foo=C*U*/}
-3755498903  2026795574  0                f              {foo=X*/}
+3755498903  2026795574  0                f              {foo=X*/,=X/}
+1451375629  1546506610  0                f              {root=X/}
 880552153   0           0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
 880552153   0           0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/}
 880552153   0           0                T              {bar=U*/,foo=U*/}
@@ -272,12 +278,13 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 97389596    1791217281  0                S              {bar=C*U*a*d*r*w*/}
 97389596    1791217281  0                T              {bar=U*/,=U/}
 97389596    1791217281  0                n              {bar=C*U*/}
-97389596    1791217281  0                f              {bar=X*/}
+97389596    1791217281  0                f              {bar=X*/,=X/}
 3755498903  2026795574  0                r              {foo=C*a*d*rw*/}
 3755498903  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 3755498903  2026795574  0                T              {foo=U*/,=U/}
 3755498903  2026795574  0                n              {foo=C*U*/}
-3755498903  2026795574  0                f              {foo=X*/}
+3755498903  2026795574  0                f              {foo=X*/,=X/}
+1451375629  1546506610  0                f              {root=X/}
 
 user testuser
 
@@ -298,17 +305,18 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 97389596    1791217281  0                S              {bar=C*U*a*d*r*w*/}
 97389596    1791217281  0                T              {bar=U*/,=U/}
 97389596    1791217281  0                n              {bar=C*U*/}
-97389596    1791217281  0                f              {bar=X*/}
+97389596    1791217281  0                f              {bar=X*/,=X/}
 3755498903  2026795574  0                r              {foo=C*a*d*rw*/}
 3755498903  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 3755498903  2026795574  0                T              {foo=U*/,=U/}
 3755498903  2026795574  0                n              {foo=C*U*/}
-3755498903  2026795574  0                f              {foo=X*/}
+3755498903  2026795574  0                f              {foo=X*/,=X/}
+1451375629  1546506610  0                f              {root=X/}
 2709666228  2264919399  0                r              {}
 2709666228  2264919399  0                S              {}
 2709666228  2264919399  0                T              {=U/}
 2709666228  2264919399  0                n              {}
-2709666228  2264919399  0                f              {}
+2709666228  2264919399  0                f              {=X/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE USAGE ON TYPES FROM public;
@@ -322,17 +330,18 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 97389596    1791217281  0                S              {bar=C*U*a*d*r*w*/}
 97389596    1791217281  0                T              {bar=U*/,=U/}
 97389596    1791217281  0                n              {bar=C*U*/}
-97389596    1791217281  0                f              {bar=X*/}
+97389596    1791217281  0                f              {bar=X*/,=X/}
 3755498903  2026795574  0                r              {foo=C*a*d*rw*/}
 3755498903  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 3755498903  2026795574  0                T              {foo=U*/,=U/}
 3755498903  2026795574  0                n              {foo=C*U*/}
-3755498903  2026795574  0                f              {foo=X*/}
+3755498903  2026795574  0                f              {foo=X*/,=X/}
+1451375629  1546506610  0                f              {root=X/}
 2709666228  2264919399  0                r              {}
 2709666228  2264919399  0                S              {}
 2709666228  2264919399  0                T              {}
 2709666228  2264919399  0                n              {}
-2709666228  2264919399  0                f              {}
+2709666228  2264919399  0                f              {=X/}
 
 
 statement ok
@@ -348,17 +357,18 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 97389596    1791217281  0                S              {bar=C*U*a*d*r*w*/}
 97389596    1791217281  0                T              {bar=U*/,=U/}
 97389596    1791217281  0                n              {bar=C*U*/}
-97389596    1791217281  0                f              {bar=X*/}
+97389596    1791217281  0                f              {bar=X*/,=X/}
 3755498903  2026795574  0                r              {foo=C*a*d*rw*/}
 3755498903  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 3755498903  2026795574  0                T              {foo=U*/,=U/}
 3755498903  2026795574  0                n              {foo=C*U*/}
-3755498903  2026795574  0                f              {foo=X*/}
+3755498903  2026795574  0                f              {foo=X*/,=X/}
+1451375629  1546506610  0                f              {root=X/}
 2709666228  2264919399  0                r              {}
 2709666228  2264919399  0                S              {}
 2709666228  2264919399  0                T              {testuser=U*/}
 2709666228  2264919399  0                n              {}
-2709666228  2264919399  0                f              {}
+2709666228  2264919399  0                f              {=X/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO foo WITH GRANT OPTION;
@@ -377,14 +387,15 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 97389596    1791217281  0                S              {bar=C*U*a*d*r*w*/}
 97389596    1791217281  0                T              {bar=U*/,=U/}
 97389596    1791217281  0                n              {bar=C*U*/}
-97389596    1791217281  0                f              {bar=X*/}
+97389596    1791217281  0                f              {bar=X*/,=X/}
 3755498903  2026795574  0                r              {foo=C*a*d*rw*/}
 3755498903  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 3755498903  2026795574  0                T              {foo=U*/,=U/}
 3755498903  2026795574  0                n              {foo=C*U*/}
-3755498903  2026795574  0                f              {foo=X*/}
+3755498903  2026795574  0                f              {foo=X*/,=X/}
+1451375629  1546506610  0                f              {root=X/}
 2709666228  2264919399  0                r              {foo=C*a*d*r*w*/}
 2709666228  2264919399  0                S              {foo=C*U*a*d*r*w*/}
 2709666228  2264919399  0                T              {foo=U*/,testuser=U*/}
 2709666228  2264919399  0                n              {foo=C*U*/}
-2709666228  2264919399  0                f              {foo=X*/}
+2709666228  2264919399  0                f              {foo=X*/,=X/}

@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
+	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -119,6 +121,11 @@ type diagnosticsBundle struct {
 	// Stores any error in the collection, building, or insertion of the bundle.
 	collectionErr error
 
+	// errorStrings are all non-critical errors that we ran into when collecting
+	// the bundle. "Non-critical" in this context means that most of the bundle
+	// was still collected to be useful, but some parts might be missing.
+	errorStrings []string
+
 	// diagID is the diagnostics instance ID, populated by insert().
 	diagID stmtdiagnostics.CollectedInstanceID
 }
@@ -138,11 +145,15 @@ func buildStatementBundle(
 	placeholders *tree.PlaceholderInfo,
 	queryErr, payloadErr, commErr error,
 	sv *settings.Values,
+	c inFlightTraceCollector,
 ) diagnosticsBundle {
 	if plan == nil {
 		return diagnosticsBundle{collectionErr: errors.AssertionFailedf("execution terminated early")}
 	}
-	b := makeStmtBundleBuilder(explainFlags, db, ie, stmtRawSQL, plan, trace, placeholders, sv)
+	b, err := makeStmtBundleBuilder(explainFlags, db, ie, stmtRawSQL, plan, trace, placeholders, sv)
+	if err != nil {
+		return diagnosticsBundle{collectionErr: err}
+	}
 
 	b.addStatement()
 	b.addOptPlans(ctx)
@@ -150,14 +161,15 @@ func buildStatementBundle(
 	b.addDistSQLDiagrams()
 	b.addExplainVec()
 	b.addTrace()
+	b.addInFlightTrace(c)
 	b.addEnv(ctx)
 	b.addErrors(queryErr, payloadErr, commErr)
 
 	buf, err := b.finalize()
 	if err != nil {
-		return diagnosticsBundle{collectionErr: err}
+		return diagnosticsBundle{collectionErr: err, errorStrings: b.errorStrings}
 	}
-	return diagnosticsBundle{zip: buf.Bytes()}
+	return diagnosticsBundle{zip: buf.Bytes(), errorStrings: b.errorStrings}
 }
 
 // insert the bundle in statement diagnostics. Sets bundle.diagID and (in error
@@ -204,6 +216,9 @@ type stmtBundleBuilder struct {
 	placeholders *tree.PlaceholderInfo
 	sv           *settings.Values
 
+	// errorStrings are non-critical errors encountered so far.
+	errorStrings []string
+
 	z memzipper.Zipper
 }
 
@@ -216,18 +231,21 @@ func makeStmtBundleBuilder(
 	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
 	sv *settings.Values,
-) stmtBundleBuilder {
+) (stmtBundleBuilder, error) {
 	b := stmtBundleBuilder{
 		flags: flags, db: db, ie: ie, plan: plan, trace: trace, placeholders: placeholders, sv: sv,
 	}
-	b.buildPrettyStatement(stmtRawSQL)
+	err := b.buildPrettyStatement(stmtRawSQL)
+	if err != nil {
+		return stmtBundleBuilder{}, err
+	}
 	b.z.Init()
-	return b
+	return b, nil
 }
 
 // buildPrettyStatement saves the pretty-printed statement (without any
 // placeholder arguments).
-func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) {
+func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) error {
 	// If we hit an early error, stmt or stmt.AST might not be initialized yet. In
 	// this case use the original raw SQL.
 	if b.plan.stmt == nil || b.plan.stmt.AST == nil {
@@ -245,7 +263,19 @@ func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) {
 		cfg.Align = tree.PrettyNoAlign
 		cfg.JSONFmt = true
 		cfg.ValueRedaction = b.flags.RedactValues
-		b.stmt = cfg.Pretty(b.plan.stmt.AST)
+		var err error
+		b.stmt, err = cfg.Pretty(b.plan.stmt.AST)
+		if errors.Is(err, pretty.ErrPrettyMaxRecursionDepthExceeded) {
+			// Use the raw statement string if pretty-printing fails.
+			b.stmt = stmtRawSQL
+			// If we're collecting a redacted bundle, redact the raw SQL
+			// completely.
+			if b.flags.RedactValues && b.stmt != "" {
+				b.stmt = string(redact.RedactedMarker())
+			}
+		} else if err != nil {
+			return err
+		}
 
 		// If we had ValueRedaction set, Pretty surrounded all constants with
 		// redaction markers. We must call Redact to fully redact them.
@@ -256,6 +286,7 @@ func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) {
 	if b.stmt == "" {
 		b.stmt = "-- no statement"
 	}
+	return nil
 }
 
 // addStatement adds the pretty-printed statement in b.stmt as file
@@ -303,7 +334,7 @@ func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
 
 	b.z.AddFile("opt.txt", formatOptPlan(memo.ExprFmtHideAll))
 	b.z.AddFile("opt-v.txt", formatOptPlan(
-		memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo,
+		memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo|memo.ExprFmtHideFastPathChecks,
 	))
 	b.z.AddFile("opt-vv.txt", formatOptPlan(memo.ExprFmtHideQualifications|memo.ExprFmtHideNotVisibleIndexInfo))
 }
@@ -388,10 +419,46 @@ Jaeger can be started using docker with: docker run -d --name jaeger -p 16686:16
 The UI can then be accessed at http://localhost:16686/search`, b.stmt)
 	jaegerJSON, err := b.trace.ToJaegerJSON(b.stmt, comment, "")
 	if err != nil {
+		b.errorStrings = append(b.errorStrings, fmt.Sprintf("error getting jaeger trace: %v", err))
 		b.z.AddFile("trace-jaeger.txt", err.Error())
 	} else {
 		b.z.AddFile("trace-jaeger.json", jaegerJSON)
 	}
+}
+
+func (b *stmtBundleBuilder) addInFlightTrace(c inFlightTraceCollector) {
+	if b.flags.RedactValues {
+		return
+	}
+	for _, trace := range c.trace {
+		b.z.AddFile(fmt.Sprintf("inflight-trace-n%d.txt", trace.nodeID), trace.trace)
+		b.z.AddFile(fmt.Sprintf("inflight-trace-jaeger-n%d.json", trace.nodeID), trace.jaeger)
+	}
+	if len(c.trace) == 0 && len(c.errors) > 0 {
+		// Include all errors accumulated throughout the in-flight tracing if we
+		// weren't able to get even a single trace.
+		var sb strings.Builder
+		for j, err := range c.errors {
+			if j > 0 {
+				sb.WriteString("\n")
+			}
+			sb.WriteString(err.Error())
+		}
+		b.z.AddFile("inflight-trace-errors.txt", sb.String())
+	}
+	// Include the timeout trace if available.
+	for _, trace := range c.timeoutTrace {
+		b.z.AddFile(fmt.Sprintf("timeout-trace-n%d.txt", trace.nodeID), trace.trace)
+		b.z.AddFile(fmt.Sprintf("timeout-trace-jaeger-n%d.json", trace.nodeID), trace.jaeger)
+	}
+}
+
+// printError writes the given error string into buf (with a newline appended)
+// as well as accumulates the string into b.errorStrings. The method should only
+// be used for non-critical errors.
+func (b *stmtBundleBuilder) printError(errString string, buf *bytes.Buffer) {
+	fmt.Fprintf(buf, errString+"\n")
+	b.errorStrings = append(b.errorStrings, errString)
 }
 
 func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
@@ -399,19 +466,19 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 
 	var buf bytes.Buffer
 	if err := c.PrintVersion(&buf); err != nil {
-		fmt.Fprintf(&buf, "-- error getting version: %v\n", err)
+		b.printError(fmt.Sprintf("-- error getting version: %v", err), &buf)
 	}
 	fmt.Fprintf(&buf, "\n")
 
 	// Show the values of session variables that can impact planning decisions.
 	if err := c.PrintSessionSettings(&buf, b.sv); err != nil {
-		fmt.Fprintf(&buf, "-- error getting session settings: %v\n", err)
+		b.printError(fmt.Sprintf("-- error getting session settings: %v", err), &buf)
 	}
 
 	fmt.Fprintf(&buf, "\n")
 
 	if err := c.PrintClusterSettings(&buf); err != nil {
-		fmt.Fprintf(&buf, "-- error getting cluster settings: %v\n", err)
+		b.printError(fmt.Sprintf("-- error getting cluster settings: %v", err), &buf)
 	}
 
 	b.z.AddFile("env.sql", buf.String())
@@ -424,6 +491,9 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	buf.Reset()
 
+	// TODO(#27611): when we support stats on virtual tables, we'll need to
+	// update this logic to not include virtual tables into schema.sql but still
+	// create stats files for them.
 	var tables, sequences, views []tree.TableName
 	err := b.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
@@ -431,13 +501,28 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 			ctx, b.plan.catalog, func(ds cat.DataSource) (cat.DataSourceName, error) {
 				return b.plan.catalog.fullyQualifiedNameWithTxn(ctx, ds, txn)
 			},
+			false, /* includeVirtualTables */
 		)
 		return err
 	})
 	if err != nil {
-		b.z.AddFile("schema.sql", fmt.Sprintf("-- error getting data source names: %v\n", err))
+		errString := fmt.Sprintf("-- error getting data source names: %v", err)
+		b.errorStrings = append(b.errorStrings, errString)
+		b.z.AddFile("schema.sql", errString+"\n")
 		return
 	}
+
+	dbNames := make(map[string]struct{})
+	schemaNames := make(map[string]struct{})
+	collectDBAndSchemaNames := func(dataSources []tree.TableName) {
+		for _, ds := range dataSources {
+			dbNames[ds.CatalogName.String()] = struct{}{}
+			schemaNames[fmt.Sprintf("%s.%s", ds.CatalogName.String(), ds.SchemaName.String())] = struct{}{}
+		}
+	}
+	collectDBAndSchemaNames(tables)
+	collectDBAndSchemaNames(sequences)
+	collectDBAndSchemaNames(views)
 
 	// Note: we do not shortcut out of this function if there is no table/sequence/view to report:
 	// the bundle analysis tool require schema.sql to always be present, even if it's empty.
@@ -450,37 +535,56 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		first = false
 	}
 	blankLine()
-	if err := c.printCreateAllSchemas(&buf); err != nil {
-		fmt.Fprintf(&buf, "-- error getting all schemas: %v\n", err)
+	c.printCreateAllDatabases(&buf, dbNames)
+	if err := c.printCreateAllSchemas(&buf, schemaNames); err != nil {
+		b.printError(fmt.Sprintf("-- error getting all schemas: %v", err), &buf)
 	}
 	for i := range sequences {
 		blankLine()
 		if err := c.PrintCreateSequence(&buf, &sequences[i]); err != nil {
-			fmt.Fprintf(&buf, "-- error getting schema for sequence %s: %v\n", sequences[i].String(), err)
+			b.printError(fmt.Sprintf("-- error getting schema for sequence %s: %v", sequences[i].FQString(), err), &buf)
 		}
 	}
 	// Get all user-defined types. If redaction is a
 	blankLine()
 	if err := c.PrintCreateEnum(&buf, b.flags.RedactValues); err != nil {
-		fmt.Fprintf(&buf, "-- error getting schema for enums: %v\n", err)
+		b.printError(fmt.Sprintf("-- error getting schema for enums: %v", err), &buf)
 	}
-	if len(mem.Metadata().AllUserDefinedFunctions()) != 0 {
+	if mem.Metadata().HasUserDefinedFunctions() {
 		// Get all relevant user-defined functions.
 		blankLine()
-		if err := c.PrintRelevantCreateUdf(&buf, strings.ToLower(b.stmt), b.flags.RedactValues); err != nil {
-			fmt.Fprintf(&buf, "-- error getting schema for udfs: %v\n", err)
+		err = c.PrintRelevantCreateRoutine(
+			&buf, strings.ToLower(b.stmt), b.flags.RedactValues, &b.errorStrings, false, /* procedure */
+		)
+		if err != nil {
+			b.printError(fmt.Sprintf("-- error getting schema for udfs: %v", err), &buf)
+		}
+	}
+	if call, ok := mem.RootExpr().(*memo.CallExpr); ok {
+		// Currently, a stored procedure can only be called from a CALL statement,
+		// which can only be the root expression.
+		if proc, ok := call.Proc.(*memo.UDFCallExpr); ok {
+			blankLine()
+			err = c.PrintRelevantCreateRoutine(
+				&buf, strings.ToLower(proc.Def.Name), b.flags.RedactValues, &b.errorStrings, true, /* procedure */
+			)
+			if err != nil {
+				b.printError(fmt.Sprintf("-- error getting schema for procedure: %v", err), &buf)
+			}
+		} else {
+			b.printError("-- unexpected input expression for CALL statement", &buf)
 		}
 	}
 	for i := range tables {
 		blankLine()
 		if err := c.PrintCreateTable(&buf, &tables[i], b.flags.RedactValues); err != nil {
-			fmt.Fprintf(&buf, "-- error getting schema for table %s: %v\n", tables[i].String(), err)
+			b.printError(fmt.Sprintf("-- error getting schema for table %s: %v", tables[i].FQString(), err), &buf)
 		}
 	}
 	for i := range views {
 		blankLine()
 		if err := c.PrintCreateView(&buf, &views[i], b.flags.RedactValues); err != nil {
-			fmt.Fprintf(&buf, "-- error getting schema for view %s: %v\n", views[i].String(), err)
+			b.printError(fmt.Sprintf("-- error getting schema for view %s: %v", views[i].FQString(), err), &buf)
 		}
 	}
 	if buf.Len() == 0 {
@@ -491,9 +595,9 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		buf.Reset()
 		hideHistograms := b.flags.RedactValues
 		if err := c.PrintTableStats(&buf, &tables[i], hideHistograms); err != nil {
-			fmt.Fprintf(&buf, "-- error getting statistics for table %s: %v\n", tables[i].String(), err)
+			b.printError(fmt.Sprintf("-- error getting statistics for table %s: %v", tables[i].FQString(), err), &buf)
 		}
-		b.z.AddFile(fmt.Sprintf("stats-%s.sql", tables[i].String()), buf.String())
+		b.z.AddFile(fmt.Sprintf("stats-%s.sql", tables[i].FQString()), buf.String())
 	}
 }
 
@@ -502,13 +606,16 @@ func (b *stmtBundleBuilder) addErrors(queryErr, payloadErr, commErr error) {
 		return
 	}
 
-	if queryErr == nil && payloadErr == nil && commErr == nil {
+	if queryErr == nil && payloadErr == nil && commErr == nil && len(b.errorStrings) == 0 {
 		return
 	}
 	output := fmt.Sprintf(
-		"query error:\n%v\n\npayload error:\n%v\n\ncomm error:\n%v\n",
+		"query error:\n%v\n\npayload error:\n%v\n\ncomm error:\n%v\n\n",
 		queryErr, payloadErr, commErr,
 	)
+	for _, errString := range b.errorStrings {
+		output += errString + "\n"
+	}
 	b.z.AddFile("errors.txt", output)
 }
 
@@ -788,8 +895,12 @@ func (c *stmtEnvCollector) PrintCreateTable(
 		formatOption = " WITH REDACT"
 	}
 	createStatement, err := c.query(
-		fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s%s]", tn.String(), formatOption),
+		fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s%s]", tn.FQString(), formatOption),
 	)
+	// We need to replace schema.table_name in the create statement with the fully
+	// qualified table name.
+	createStatement = strings.Replace(createStatement,
+		fmt.Sprintf("%s.%s", tn.SchemaName, tn.Table()), tn.FQString(), 1)
 	if err != nil {
 		return err
 	}
@@ -799,7 +910,7 @@ func (c *stmtEnvCollector) PrintCreateTable(
 
 func (c *stmtEnvCollector) PrintCreateSequence(w io.Writer, tn *tree.TableName) error {
 	createStatement, err := c.query(fmt.Sprintf(
-		"SELECT create_statement FROM [SHOW CREATE SEQUENCE %s]", tn.String(),
+		"SELECT create_statement FROM [SHOW CREATE SEQUENCE %s]", tn.FQString(),
 	))
 	if err != nil {
 		return err
@@ -824,30 +935,45 @@ func (c *stmtEnvCollector) PrintCreateEnum(w io.Writer, redactValues bool) error
 	return nil
 }
 
-func (c *stmtEnvCollector) PrintRelevantCreateUdf(
-	w io.Writer, stmt string, redactValues bool,
+func (c *stmtEnvCollector) PrintRelevantCreateRoutine(
+	w io.Writer, stmt string, redactValues bool, errorStrings *[]string, procedure bool,
 ) error {
 	// The select function_name returns a DOidWrapper,
 	// we need to cast it to string for queryRows function to process.
-	// TODO: consider getting the udf sql body statements from the memo metadata.
-	functionNameQuery := "SELECT function_name::STRING as function_name_str FROM [SHOW FUNCTIONS]"
-	udfNames, err := c.queryRows(functionNameQuery)
+	// TODO(#104976): consider getting the udf sql body statements from the memo metadata.
+	var routineTypeName, routineNameQuery string
+	if procedure {
+		routineTypeName = "PROCEDURE"
+		routineNameQuery = "SELECT procedure_name::STRING as procedure_name_str FROM [SHOW PROCEDURES]"
+	} else {
+		routineTypeName = "FUNCTION"
+		routineNameQuery = "SELECT function_name::STRING as function_name_str FROM [SHOW FUNCTIONS]"
+	}
+	routineNames, err := c.queryRows(routineNameQuery)
 	if err != nil {
 		return err
 	}
-	for _, name := range udfNames {
+	for _, name := range routineNames {
 		if strings.Contains(stmt, name) {
-			createFunctionQuery := fmt.Sprintf(
-				"SELECT create_statement FROM [ SHOW CREATE FUNCTION \"%s\" ]", name,
+			createRoutineQuery := fmt.Sprintf(
+				"SELECT create_statement FROM [ SHOW CREATE %s \"%s\" ]", routineTypeName, name,
 			)
 			if redactValues {
-				createFunctionQuery = fmt.Sprintf(
-					"SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM [ SHOW CREATE FUNCTION \"%s\" ]", name,
+				createRoutineQuery = fmt.Sprintf(
+					"SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM [ SHOW CREATE %s \"%s\" ]",
+					routineTypeName, name,
 				)
 			}
-			createStatement, err := c.query(createFunctionQuery)
+			createStatement, err := c.query(createRoutineQuery)
 			if err != nil {
-				fmt.Fprintf(w, "-- error getting user defined function %s: %s\n", name, err)
+				var errString string
+				if procedure {
+					errString = fmt.Sprintf("-- error getting stored procedure %s: %s", name, err)
+				} else {
+					errString = fmt.Sprintf("-- error getting user defined function %s: %s", name, err)
+				}
+				fmt.Fprint(w, errString+"\n")
+				*errorStrings = append(*errorStrings, errString)
 				continue
 			}
 			fmt.Fprintf(w, "%s\n", createStatement)
@@ -864,7 +990,7 @@ func (c *stmtEnvCollector) PrintCreateView(
 		formatOption = " WITH REDACT"
 	}
 	createStatement, err := c.query(fmt.Sprintf(
-		"SELECT create_statement FROM [SHOW CREATE VIEW %s%s]", tn.String(), formatOption,
+		"SELECT create_statement FROM [SHOW CREATE VIEW %s%s]", tn.FQString(), formatOption,
 	))
 	if err != nil {
 		return err
@@ -873,18 +999,37 @@ func (c *stmtEnvCollector) PrintCreateView(
 	return nil
 }
 
-func (c *stmtEnvCollector) printCreateAllSchemas(w io.Writer) error {
-	createAllSchemas, err := c.queryRows("SHOW CREATE ALL SCHEMAS;")
-	if err != nil {
-		return err
-	}
-	for _, r := range createAllSchemas {
-		if r == "CREATE SCHEMA "+catconstants.PublicSchemaName+";" {
-			// The public schema is always present, so exclude it to ease the
-			// recreation of the bundle.
+func (c *stmtEnvCollector) printCreateAllDatabases(w io.Writer, dbNames map[string]struct{}) {
+	for db := range dbNames {
+		switch db {
+		case catalogkeys.DefaultDatabaseName, catalogkeys.PgDatabaseName, catconstants.SystemDatabaseName:
+			// The default, postgres, and system databases are always present, so
+			// exclude them to ease the recreation of the bundle.
 			continue
 		}
-		fmt.Fprintf(w, "%s\n", r)
+		fmt.Fprintf(w, "CREATE DATABASE %s;\n", db)
+	}
+}
+
+func (c *stmtEnvCollector) printCreateAllSchemas(
+	w io.Writer, schemaNames map[string]struct{},
+) error {
+	for schema := range schemaNames {
+		_, schemaOnly, found := strings.Cut(schema, ".")
+		if !found {
+			return errors.AssertionFailedf("expected schema name to be qualified with DB name")
+		}
+		switch schemaOnly {
+		case catconstants.PublicSchemaName,
+			catconstants.InformationSchemaName,
+			catconstants.CRDBInternalSchemaName,
+			catconstants.PgCatalogName,
+			catconstants.PgExtensionSchemaName:
+			// The public and virtual schemas are always present, so
+			// exclude them to ease the recreation of the bundle.
+			continue
+		}
+		fmt.Fprintf(w, "CREATE SCHEMA %s;\n", schema)
 	}
 	return nil
 }
@@ -903,18 +1048,13 @@ func (c *stmtEnvCollector) PrintTableStats(
 			 SELECT json_array_elements(statistics)%s AS stat
 			 FROM [SHOW STATISTICS USING JSON FOR TABLE %s]
 		 )`,
-		maybeRemoveHistoBuckets, tn.String(),
+		maybeRemoveHistoBuckets, tn.FQString(),
 	))
 	if err != nil {
 		return err
 	}
 
 	stats = strings.Replace(stats, "'", "''", -1)
-	// Don't display the catalog during the `ALTER TABLE` since the schema file
-	// doesn't specify the catalog for its create table statements.
-	explicitCatalog := tn.ExplicitCatalog
-	tn.ExplicitCatalog = false
-	fmt.Fprintf(w, "ALTER TABLE %s INJECT STATISTICS '%s';\n", tn.String(), stats)
-	tn.ExplicitCatalog = explicitCatalog
+	fmt.Fprintf(w, "ALTER TABLE %s INJECT STATISTICS '%s';\n", tn.FQString(), stats)
 	return nil
 }

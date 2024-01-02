@@ -3,9 +3,10 @@ with t=A
   txn_begin ts=0,1
   put k=k v=v
 ----
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} lock=true stat=PENDING rts=0,1 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} ts=0,1 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} lock=true stat=PENDING rts=0,1 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} ts=0,1 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/0,1 -> /BYTES/v
 
 # Write at newer timestamp.
@@ -17,7 +18,8 @@ with t=A
   txn_step
   put k=k v=v
 ----
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=1 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=0,1 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=1} ts=1.000000000,0 del=false klen=12 vlen=6 ih={{0 /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=0,1 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=1} ts=1.000000000,0 del=false klen=12 vlen=6 ih={{0 /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/1.000000000,0 -> /BYTES/v

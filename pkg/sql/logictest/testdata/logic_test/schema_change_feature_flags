@@ -73,7 +73,7 @@ statement error pq: feature ALTER DATABASE is part of the schema change category
 ALTER DATABASE d RENAME TO r
 
 # Test REPARENT DATABASE
-statement error pq: cannot perform ALTER DATABASE CONVERT TO SCHEMA
+statement error feature ALTER DATABASE is part of the schema change category, which was disabled by the database administrator
 ALTER DATABASE d CONVERT TO SCHEMA WITH PARENT test
 
 # Test ALTER TABLE PARTITION BY.
@@ -117,11 +117,11 @@ statement error pq: feature CONFIGURE ZONE is part of the schema change category
 ALTER TABLE t1 CONFIGURE ZONE USING num_replicas=5
 
 # Test RENAME TABLE.
-statement error pq: feature RENAME TABLE/VIEW/SEQUENCE is part of the schema change category, which was disabled by the database administrator
+statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
 ALTER TABLE t RENAME TO r
 
 # Test ALTER TABLE SET SCHEMA.
-statement error pq: feature ALTER TABLE/VIEW/SEQUENCE SET SCHEMA is part of the schema change category, which was disabled by the database administrator
+statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
 ALTER TABLE t SET SCHEMA s
 
 # Test ALTER TABLE SET LOCALITY REGIONAL BY ROW.
@@ -149,7 +149,7 @@ statement error pq: feature CONFIGURE ZONE is part of the schema change category
 ALTER INDEX t1@i CONFIGURE ZONE DISCARD
 
 # Test RENAME INDEX
-statement error pq: feature RENAME INDEX is part of the schema change category, which was disabled by the database administrator
+statement error pq: feature ALTER INDEX is part of the schema change category, which was disabled by the database administrator
 ALTER INDEX t1@i RENAME TO r
 
 # TODO(angelaw): Test ALTER INDEX SPLIT AT. This does not throw error.
@@ -193,11 +193,11 @@ ALTER TYPE s.typ SET SCHEMA s
 # Test ALTER SEQUENCE.
 
 # Test RENAME SEQUENCE.
-statement error pq: feature RENAME TABLE/VIEW/SEQUENCE is part of the schema change category, which was disabled by the database administrator
+statement error pq: feature ALTER SEQUENCE is part of the schema change category, which was disabled by the database administrator
 ALTER SEQUENCE seq RENAME TO something
 
 # Test ALTER SEQUENCE SET SCHEMA
-statement error pq: feature ALTER TABLE/VIEW/SEQUENCE SET SCHEMA is part of the schema change category, which was disabled by the database administrator
+statement error pq: feature ALTER SEQUENCE is part of the schema change category, which was disabled by the database administrator
 ALTER SEQUENCE seq SET SCHEMA s
 
 statement error pq: feature ALTER SEQUENCE is part of the schema change category, which was disabled by the database administrator
@@ -234,7 +234,7 @@ DROP SEQUENCE seq
 # Test DROP VIEW.
 
 # Test ALTER VIEW SET SCHEMA
-statement error pq: feature ALTER TABLE/VIEW/SEQUENCE SET SCHEMA is part of the schema change category, which was disabled by the database administrator
+statement error pq: feature ALTER VIEW is part of the schema change category, which was disabled by the database administrator
 ALTER VIEW public.bar SET SCHEMA s
 
 statement error pq: feature DROP VIEW is part of the schema change category, which was disabled by the database administrator

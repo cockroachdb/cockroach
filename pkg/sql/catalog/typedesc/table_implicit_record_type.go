@@ -271,9 +271,6 @@ func (v *tableImplicitRecordType) NumReferencingDescriptors() int { return 0 }
 // GetReferencingDescriptorID implements the catalog.TypeDescriptor interface.
 func (v *tableImplicitRecordType) GetReferencingDescriptorID(_ int) descpb.ID { return 0 }
 
-// GetReferencingDescriptorIDs implements the catalog.TypeDescriptor interface.
-func (v *tableImplicitRecordType) GetReferencingDescriptorIDs() []descpb.ID { return nil }
-
 // GetPostDeserializationChanges implements the catalog.Descriptor interface.
 func (v *tableImplicitRecordType) GetPostDeserializationChanges() catalog.PostDeserializationChanges {
 	return catalog.PostDeserializationChanges{}
@@ -282,6 +279,11 @@ func (v *tableImplicitRecordType) GetPostDeserializationChanges() catalog.PostDe
 // HasConcurrentSchemaChanges implements catalog.Descriptor.
 func (v *tableImplicitRecordType) HasConcurrentSchemaChanges() bool {
 	return false
+}
+
+// ConcurrentSchemaChangeJobIDs implements catalog.Descriptor.
+func (v *tableImplicitRecordType) ConcurrentSchemaChangeJobIDs() []catpb.JobID {
+	return nil
 }
 
 // SkipNamespace implements catalog.Descriptor. We never store table implicit
@@ -303,6 +305,12 @@ func (v *tableImplicitRecordType) GetDeclarativeSchemaChangerState() *scpb.Descr
 // GetObjectType implements the Object interface.
 func (v *tableImplicitRecordType) GetObjectType() privilege.ObjectType {
 	v.panicNotSupported("GetObjectType")
+	return ""
+}
+
+// GetObjectTypeString implements the Object interface.
+func (v *tableImplicitRecordType) GetObjectTypeString() string {
+	v.panicNotSupported("GetObjectTypeString")
 	return ""
 }
 

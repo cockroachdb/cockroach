@@ -103,6 +103,8 @@ func TestTypeCheck(t *testing.T) {
 		{`ARRAY[NULL, NULL]:::int[]`, `ARRAY[NULL, NULL]:::INT8[]`},
 		{`ARRAY[]::INT8[]`, `ARRAY[]:::INT8[]`},
 		{`ARRAY[]:::INT8[]`, `ARRAY[]:::INT8[]`},
+		{`ARRAY[1::INT, 1::FLOAT8]`, `ARRAY[1:::INT8::FLOAT8, 1.0:::FLOAT8]:::FLOAT8[]`},
+		{`ARRAY[(1::INT,), (1::FLOAT8,)]`, `ARRAY[(1:::INT8::FLOAT8,), (1.0:::FLOAT8,)]:::RECORD[]`},
 		{`1 = ANY ARRAY[1.5, 2.5, 3.5]`, `1:::DECIMAL = ANY ARRAY[1.5:::DECIMAL, 2.5:::DECIMAL, 3.5:::DECIMAL]:::DECIMAL[]`},
 		{`true = SOME (ARRAY[true, false])`, `true = SOME ARRAY[true, false]:::BOOL[]`},
 		{`1.3 = ALL ARRAY[1, 2, 3]`, `1.3:::DECIMAL = ALL ARRAY[1:::DECIMAL, 2:::DECIMAL, 3:::DECIMAL]:::DECIMAL[]`},
@@ -169,7 +171,10 @@ func TestTypeCheck(t *testing.T) {
 			`CASE WHEN true THEN ('a', 2) ELSE NULL:::RECORD END`,
 			`CASE WHEN true THEN ('a':::STRING, 2:::INT8) ELSE NULL END`,
 		},
-
+		{
+			`CASE WHEN true THEN NULL:::RECORD ELSE ('a', 2) END`,
+			`CASE WHEN true THEN NULL ELSE ('a':::STRING, 2:::INT8) END`,
+		},
 		{`((ROW (1) AS a)).a`, `1:::INT8`},
 		{`((('1', 2) AS a, b)).a`, `'1':::STRING`},
 		{`((('1', 2) AS a, b)).b`, `2:::INT8`},
@@ -471,6 +476,33 @@ func TestTypeCheckCollatedString(t *testing.T) {
 	rightTyp := typed.(*tree.ComparisonExpr).Right.(tree.TypedExpr).ResolvedType()
 	require.Equal(t, rightTyp.Family(), types.CollatedStringFamily)
 	require.Equal(t, rightTyp.Locale(), "en-US-u-ks-level2")
+}
+
+func TestTypeCheckCollatedStringNestedCaseComparison(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext()
+
+	// The collated string constant must be on the LHS for this test, so that
+	// the type-checker chooses the collated string overload first.
+	for _, exprStr := range []string{
+		`CASE WHEN false THEN CASE WHEN (NOT (false)) THEN NULL END ELSE ('' COLLATE "es_ES") END >= ('' COLLATE "es_ES")`,
+		`CASE WHEN false THEN NULL ELSE ('' COLLATE "es_ES") END >= ('' COLLATE "es_ES")`,
+		`CASE WHEN false THEN ('' COLLATE "es_ES") ELSE NULL END >= ('' COLLATE "es_ES")`,
+		`('' COLLATE "es_ES") >= CASE WHEN false THEN CASE WHEN (NOT (false)) THEN NULL END ELSE ('' COLLATE "es_ES") END`} {
+		expr, err := parser.ParseExpr(exprStr)
+		require.NoError(t, err)
+		typed, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
+		require.NoError(t, err)
+
+		for _, ex := range []tree.Expr{typed.(*tree.ComparisonExpr).Left, typed.(*tree.ComparisonExpr).Right} {
+			typ := ex.(tree.TypedExpr).ResolvedType()
+			require.Equal(t, types.CollatedStringFamily, typ.Family())
+			require.Equal(t, "es_ES", typ.Locale())
+		}
+	}
 }
 
 func TestTypeCheckCaseExprWithPlaceholders(t *testing.T) {

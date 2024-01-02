@@ -11,10 +11,13 @@
 package state
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -115,33 +118,108 @@ func (rl *ReplicaLoadCounter) Split() ReplicaLoad {
 	}
 }
 
-// Capacity returns the store capacity for the store with id storeID. It
-// aggregates the load from each replica within the store.
-func Capacity(state State, storeID StoreID) roachpb.StoreCapacity {
-	// TODO(kvoli,lidorcarmel): Store capacity will need to be populated with
-	// the following missing fields: capacity, available, used, l0sublevels,
-	// bytesperreplica, writesperreplica.
-	capacity := roachpb.StoreCapacity{}
+// capacityOverrideSentinel is used to signal that the override value has not
+// been set for a field.
+const capacityOverrideSentinel = -1
 
-	for _, repl := range state.Replicas(storeID) {
-		rangeID := repl.Range()
-		replicaID := repl.ReplicaID()
-		rng, _ := state.Range(rangeID)
-		if rng.Leaseholder() == replicaID {
-			// TODO(kvoli): We currently only consider load on the leaseholder
-			// replica for a range. The other replicas have an estimate that is
-			// calculated within the allocation algorithm. Adapt this to
-			// support follower reads, when added to the workload generator.
-			usage := state.RangeUsageInfo(rng.RangeID(), storeID)
-			capacity.QueriesPerSecond += usage.QueriesPerSecond
-			capacity.WritesPerSecond += usage.WritesPerSecond
-			capacity.LogicalBytes += usage.LogicalBytes
-			capacity.LeaseCount++
-		}
+// CapacityOverride is used to override some field(s) of a store's capacity.
+type CapacityOverride roachpb.StoreCapacity
 
-		capacity.RangeCount++
+// NewCapacityOverride returns a capacity override where no overrides are set.
+func NewCapacityOverride() CapacityOverride {
+	return CapacityOverride{
+		Capacity:         capacityOverrideSentinel,
+		Available:        capacityOverrideSentinel,
+		Used:             capacityOverrideSentinel,
+		LogicalBytes:     capacityOverrideSentinel,
+		RangeCount:       capacityOverrideSentinel,
+		LeaseCount:       capacityOverrideSentinel,
+		QueriesPerSecond: capacityOverrideSentinel,
+		WritesPerSecond:  capacityOverrideSentinel,
+		CPUPerSecond:     capacityOverrideSentinel,
+		L0Sublevels:      capacityOverrideSentinel,
+		IOThreshold: admissionpb.IOThreshold{
+			L0NumSubLevels:           capacityOverrideSentinel,
+			L0NumSubLevelsThreshold:  capacityOverrideSentinel,
+			L0NumFiles:               capacityOverrideSentinel,
+			L0NumFilesThreshold:      capacityOverrideSentinel,
+			L0Size:                   capacityOverrideSentinel,
+			L0MinimumSizePerSubLevel: capacityOverrideSentinel,
+		},
 	}
-	return capacity
+}
+
+func (co CapacityOverride) String() string {
+	return fmt.Sprintf(
+		"capacity=%d, available=%d, used=%d, logical_bytes=%d, range_count=%d, lease_count=%d, "+
+			"queries_per_sec=%.2f, writes_per_sec=%.2f, cpu_per_sec=%.2f, l0_sublevels=%d, io_threhold=%v",
+		co.Capacity,
+		co.Available,
+		co.Used,
+		co.LogicalBytes,
+		co.RangeCount,
+		co.LeaseCount,
+		co.QueriesPerSecond,
+		co.WritesPerSecond,
+		co.CPUPerSecond,
+		co.L0Sublevels,
+		co.IOThreshold,
+	)
+}
+
+func mergeOverride(
+	capacity roachpb.StoreCapacity, override CapacityOverride,
+) roachpb.StoreCapacity {
+	ret := capacity
+	if override.Capacity != capacityOverrideSentinel {
+		ret.Capacity = override.Capacity
+	}
+	if override.Available != capacityOverrideSentinel {
+		ret.Available = override.Available
+	}
+	if override.Used != capacityOverrideSentinel {
+		ret.Used = override.Used
+	}
+	if override.LogicalBytes != capacityOverrideSentinel {
+		ret.LogicalBytes = override.LogicalBytes
+	}
+	if override.RangeCount != capacityOverrideSentinel {
+		ret.RangeCount = override.RangeCount
+	}
+	if override.LeaseCount != capacityOverrideSentinel {
+		ret.LeaseCount = override.LeaseCount
+	}
+	if override.QueriesPerSecond != capacityOverrideSentinel {
+		ret.QueriesPerSecond = override.QueriesPerSecond
+	}
+	if override.WritesPerSecond != capacityOverrideSentinel {
+		ret.WritesPerSecond = override.WritesPerSecond
+	}
+	if override.CPUPerSecond != capacityOverrideSentinel {
+		ret.CPUPerSecond = override.CPUPerSecond
+	}
+	if override.L0Sublevels != capacityOverrideSentinel {
+		ret.L0Sublevels = override.L0Sublevels
+	}
+	if override.IOThreshold.L0NumFiles != capacityOverrideSentinel {
+		ret.IOThreshold.L0NumFiles = override.IOThreshold.L0NumFiles
+	}
+	if override.IOThreshold.L0NumFilesThreshold != capacityOverrideSentinel {
+		ret.IOThreshold.L0NumFilesThreshold = override.IOThreshold.L0NumFilesThreshold
+	}
+	if override.IOThreshold.L0NumSubLevels != capacityOverrideSentinel {
+		ret.IOThreshold.L0NumSubLevels = override.IOThreshold.L0NumSubLevels
+	}
+	if override.IOThreshold.L0NumSubLevelsThreshold != capacityOverrideSentinel {
+		ret.IOThreshold.L0NumSubLevelsThreshold = override.IOThreshold.L0NumSubLevelsThreshold
+	}
+	if override.IOThreshold.L0Size != capacityOverrideSentinel {
+		ret.IOThreshold.L0Size = override.IOThreshold.L0Size
+	}
+	if override.IOThreshold.L0MinimumSizePerSubLevel != capacityOverrideSentinel {
+		ret.IOThreshold.L0MinimumSizePerSubLevel = override.IOThreshold.L0MinimumSizePerSubLevel
+	}
+	return ret
 }
 
 // StoreUsageInfo contains the load on a single store.

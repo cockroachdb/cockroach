@@ -56,7 +56,7 @@ func TestApplyVerifiesVersion(t *testing.T) {
 	}
 
 	t.Run("apply plan version is higher than cluster", func(t *testing.T) {
-		aboveCurrent := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+		aboveCurrent := clusterversion.Latest.Version()
 		aboveCurrent.Major += 1
 		plan := loqrecoverypb.ReplicaUpdatePlan{
 			PlanID:    uuid.MakeV4(),
@@ -67,7 +67,7 @@ func TestApplyVerifiesVersion(t *testing.T) {
 	})
 
 	t.Run("apply plan version lower than current", func(t *testing.T) {
-		belowMin := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+		belowMin := clusterversion.MinSupported.Version()
 		belowMin.Minor -= 1
 		plan := loqrecoverypb.ReplicaUpdatePlan{
 			PlanID:    uuid.MakeV4(),
@@ -92,7 +92,7 @@ func createEngineOrFatal(ctx context.Context, t *testing.T, uuid uuid.UUID, id i
 		StoreID:   roachpb.StoreID(id),
 	}
 	if err = storage.MVCCPutProto(
-		context.Background(), eng, nil, keys.StoreIdentKey(), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &sIdent,
+		context.Background(), eng, keys.StoreIdentKey(), hlc.Timestamp{}, &sIdent, storage.MVCCWriteOptions{},
 	); err != nil {
 		t.Fatalf("failed to populate test store ident: %v", err)
 	}

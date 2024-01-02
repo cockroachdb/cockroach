@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -9,27 +8,29 @@ go_library(
     deps = [
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/gossip",
+        "//pkg/kv/kvserver/asim/history",
         "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/op",
         "//pkg/kv/kvserver/asim/queue",
+        "//pkg/kv/kvserver/asim/scheduled",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/storerebalancer",
         "//pkg/kv/kvserver/asim/workload",
+        "//pkg/util/log",
     ],
 )
 
 go_test(
     name = "asim_test",
     srcs = ["asim_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":asim",
         "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/history",
         "//pkg/kv/kvserver/asim/metrics",
+        "//pkg/kv/kvserver/asim/scheduled",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

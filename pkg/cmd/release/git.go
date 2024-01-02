@@ -13,13 +13,17 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os/exec"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
 )
+
+const remoteOrigin = "origin"
 
 type releaseInfo struct {
 	prevReleaseVersion string
@@ -144,13 +148,39 @@ func findPreviousRelease(releaseSeries string, ignorePrereleases bool) (string, 
 	return versions[len(versions)-1].Original(), nil
 }
 
-// bumpVersion increases the patch release version (the last digit) of a given version
+// bumpVersion increases the patch release version (the last digit) of a given version.
+// For pre-release versions, the pre-release part is bumped.
 func bumpVersion(version string) (string, error) {
+	// special case for versions like v23.2.0-alpha.00000000
+	if strings.HasSuffix(version, "-alpha.00000000") {
+		// reset the version to something we can parse and bump
+		version = strings.TrimSuffix(version, ".00000000") + ".0"
+	}
 	semanticVersion, err := semver.NewVersion(version)
 	if err != nil {
 		return "", fmt.Errorf("cannot parse version: %w", err)
 	}
-	nextVersion := semanticVersion.IncPatch()
+	var nextVersion semver.Version
+	if semanticVersion.Prerelease() == "" {
+		// For regular releases we can use IncPatch without any modification
+		nextVersion = semanticVersion.IncPatch()
+	} else {
+		// For pre-releases (alpha, beta, rc), we need to implement our own bumper. It takes the last digit and increments it.
+		pre := semanticVersion.Prerelease()
+		preType, digit, found := strings.Cut(pre, ".")
+		if !found {
+			return "", fmt.Errorf("parsing prerelease %s", semanticVersion.Original())
+		}
+		preVersion, err := strconv.Atoi(digit)
+		if err != nil {
+			return "", fmt.Errorf("atoi prerelease error %s: %w", semanticVersion.Original(), err)
+		}
+		preVersion++
+		nextVersion, err = semanticVersion.SetPrerelease(fmt.Sprintf("%s.%d", preType, preVersion))
+		if err != nil {
+			return "", fmt.Errorf("bumping prerelease %s: %w", semanticVersion.Original(), err)
+		}
+	}
 	return nextVersion.Original(), nil
 }
 
@@ -192,7 +222,7 @@ func getCommonBaseRef(fromRef, toRef string) (string, error) {
 // findCandidateCommits finds all potential merge commits that can be used for the current release.
 // It includes all merge commits since previous release.
 func findCandidateCommits(prevRelease string, releaseSeries string) ([]string, error) {
-	releaseBranch := fmt.Sprintf("origin/release-%s", releaseSeries)
+	releaseBranch := fmt.Sprintf("%s/release-%s", remoteOrigin, releaseSeries)
 	commonBaseRef, err := getCommonBaseRef(prevRelease, releaseBranch)
 	if err != nil {
 		return []string{}, fmt.Errorf("cannot find common base ref: %w", err)
@@ -220,4 +250,54 @@ func findHealthyBuild(potentialRefs []string) (buildInfo, error) {
 		return meta, nil
 	}
 	return buildInfo{}, fmt.Errorf("no ref found")
+}
+
+// listRemoteBranches retrieves a list of remote branches using a pattern, assuming the remote name is `origin`.
+func listRemoteBranches(pattern string) ([]string, error) {
+	cmd := exec.Command("git", "ls-remote", "--refs", remoteOrigin, "refs/heads/"+pattern)
+	out, err := cmd.Output()
+	if err != nil {
+		return []string{}, fmt.Errorf("git ls-remote: %w", err)
+	}
+	log.Printf("git ls-remote returned: %s", out)
+	var remoteBranches []string
+	// Example output:
+	// $ git ls-remote origin "refs/heads/release-23.1*"
+	// 0175d195d544b77b286d56703aa5c9f74fb74367	refs/heads/release-23.1
+	// eee56b2379446c0a115e6d2cd30735a7efe4fad0	refs/heads/release-23.1.12-rc
+	for _, line := range strings.Split(string(out), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			return []string{}, fmt.Errorf("cannot find branch specification for %s in `%s`", pattern, line)
+		}
+		remoteBranches = append(remoteBranches, strings.TrimPrefix(fields[1], "refs/heads/"))
+	}
+	return remoteBranches, nil
+
+}
+
+// fileExistsInGit checks if a file exists in a local repository, assuming the remote name is `origin`.
+func fileExistsInGit(branch string, f string) (bool, error) {
+	cmd := exec.Command("git", "ls-tree", remoteOrigin+"/"+branch, f)
+	out, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("git ls-tree: %s %s %w, `%s`", branch, f, err, out)
+	}
+	if len(out) == 0 {
+		return false, nil
+	}
+	return true, nil
+}
+
+// fileContent uses `git cat-file -p ref:file` to get to the file contents without `git checkout`.
+func fileContent(ref string, f string) (string, error) {
+	cmd := exec.Command("git", "cat-file", "-p", ref+":"+f)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git cat-file %s:%s: %w, `%s`", ref, f, err, out)
+	}
+	return string(out), nil
 }

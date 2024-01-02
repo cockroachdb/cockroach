@@ -20,6 +20,11 @@ for pkg in ${pkgs}; do
   next
 }
 
+/t.Cleanup\(leaktest.AfterTest\(.+\)\)/ {
+  test = 0
+  next
+}
+
 {
   if (test) {
     printf "%s: %s: missing defer leaktest.AfterTest\n", FILENAME, test

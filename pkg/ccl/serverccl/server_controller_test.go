@@ -16,7 +16,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"net/url"
 	"testing"
 	"time"
 
@@ -25,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -63,19 +62,21 @@ func TestSharedProcessTenantNodeLocalAccess(t *testing.T) {
 		}
 	}()
 
-	tc := serverutils.StartNewTestCluster(t, nodeCount, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled},
+	tc := serverutils.StartCluster(t, nodeCount, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 				ExternalIODir:     dirs[0],
 			},
 			1: {
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 				ExternalIODir:     dirs[1],
 			},
 			2: {
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 				ExternalIODir:     dirs[2],
 			},
 		},
@@ -101,8 +102,7 @@ ALTER TENANT application START SERVICE SHARED`)
 				continue
 			}
 
-			sqlAddr := tc.Server(i).ServingSQLAddr()
-			db, err := serverutils.OpenDBConnE(sqlAddr, "cluster:application", false, tc.Stopper())
+			db, err := tc.Server(i).SystemLayer().SQLConnE(serverutils.DBName("cluster:application"))
 			if err != nil {
 				return err
 			}
@@ -124,32 +124,6 @@ ALTER TENANT application START SERVICE SHARED`)
 	}
 }
 
-func TestSharedProcessServerInheritsTempStorageLimit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	const specialSize = 123123123
-
-	// Start a server with a custom temp storage limit.
-	ctx := context.Background()
-	st := cluster.MakeClusterSettings()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Settings:          st,
-		TempStorageConfig: base.DefaultTestTempStorageConfigWithSize(st, specialSize),
-		DefaultTestTenant: base.TestTenantDisabled,
-	})
-	defer s.Stopper().Stop(ctx)
-
-	// Start a shared process tenant server.
-	ts, _, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
-		TenantName: "hello",
-	})
-	require.NoError(t, err)
-
-	tss := ts.(*server.TestTenant)
-	require.Equal(t, int64(specialSize), tss.SQLCfg.TempStorageConfig.Mon.Limit())
-}
-
 func TestServerControllerHTTP(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -159,7 +133,7 @@ func TestServerControllerHTTP(t *testing.T) {
 	ctx := context.Background()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -167,7 +141,6 @@ func TestServerControllerHTTP(t *testing.T) {
 
 	// Retrieve a privileged HTTP client. NB: this also populates
 	// system.web_sessions.
-	aurl := s.AdminURL()
 	client, err := s.GetAdminHTTPClient()
 	require.NoError(t, err)
 
@@ -184,7 +157,7 @@ func TestServerControllerHTTP(t *testing.T) {
 	t.Logf("waking up a test tenant")
 
 	// Create our own test tenant with a known name.
-	_, _, err = s.(*server.TestServer).StartSharedProcessTenant(ctx,
+	_, _, err = s.TenantController().StartSharedProcessTenant(ctx,
 		base.TestSharedProcessTenantArgs{
 			TenantName: "hello",
 		})
@@ -193,8 +166,7 @@ func TestServerControllerHTTP(t *testing.T) {
 	t.Logf("connecting to the test tenant")
 
 	// Get a SQL connection to the test tenant.
-	sqlAddr := s.ServingSQLAddr()
-	db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
+	db2, err := s.SystemLayer().SQLConnE(serverutils.DBName("cluster:hello/defaultdb"))
 	// Expect no error yet: the connection is opened lazily; an
 	// error here means the parameters were incorrect.
 	require.NoError(t, err)
@@ -252,8 +224,10 @@ VALUES($1, $2, $3, $4, $5, (SELECT user_id FROM system.users WHERE username = $3
 		return &ls, err
 	}
 
+	var aurl *serverutils.TestURL
 	newreq := func() *http.Request {
-		req, err := http.NewRequest("GET", aurl+"/_status/sessions", nil)
+		aurl = s.AdminURL()
+		req, err := http.NewRequest("GET", aurl.WithPath("/_status/sessions").String(), nil)
 		require.NoError(t, err)
 		return req
 	}
@@ -283,15 +257,13 @@ VALUES($1, $2, $3, $4, $5, (SELECT user_id FROM system.users WHERE username = $3
 	t.Logf("retrieving session list from system tenant via cookie")
 
 	c := &http.Cookie{
-		Name:     server.TenantSelectCookieName,
+		Name:     authserver.TenantSelectCookieName,
 		Value:    catconstants.SystemTenantName,
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,
 	}
-	purl, err := url.Parse(aurl)
-	require.NoError(t, err)
-	client.Jar.SetCookies(purl, []*http.Cookie{c})
+	client.Jar.SetCookies(aurl.URL, []*http.Cookie{c})
 
 	req = newreq()
 	body, err = get(req)
@@ -303,7 +275,7 @@ VALUES($1, $2, $3, $4, $5, (SELECT user_id FROM system.users WHERE username = $3
 	t.Logf("retrieving session list from test tenant via cookie")
 
 	c.Value = "hello"
-	client.Jar.SetCookies(purl, []*http.Cookie{c})
+	client.Jar.SetCookies(aurl.URL, []*http.Cookie{c})
 	req = newreq()
 	body, err = get(req)
 	require.NoError(t, err)
@@ -336,10 +308,12 @@ func TestServerControllerDefaultHTTPTenant(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
 	defer s.Stopper().Stop(ctx)
 
-	_, sql, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+	_, sql, err := s.TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
 		TenantName: "hello",
 		TenantID:   roachpb.MustMakeTenantID(10),
 	})
@@ -351,7 +325,7 @@ func TestServerControllerDefaultHTTPTenant(t *testing.T) {
 	client, err := s.GetUnauthenticatedHTTPClient()
 	require.NoError(t, err)
 
-	resp, err := client.Post(s.AdminURL()+"/login",
+	resp, err := client.Post(s.AdminURL().WithPath("/login").String(),
 		"application/json",
 		bytes.NewBuffer([]byte("{\"username\":\"foo\",\"password\":\"cockroach\"})")),
 	)
@@ -360,7 +334,7 @@ func TestServerControllerDefaultHTTPTenant(t *testing.T) {
 
 	tenantCookie := ""
 	for _, c := range resp.Cookies() {
-		if c.Name == server.TenantSelectCookieName {
+		if c.Name == authserver.TenantSelectCookieName {
 			tenantCookie = c.Value
 		}
 	}
@@ -378,21 +352,21 @@ func TestServerControllerBadHTTPCookies(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	client, err := s.GetUnauthenticatedHTTPClient()
 	require.NoError(t, err)
 
 	c := &http.Cookie{
-		Name:     server.TenantSelectCookieName,
+		Name:     authserver.TenantSelectCookieName,
 		Value:    "some-nonexistent-tenant",
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,
 	}
 
-	req, err := http.NewRequest("GET", s.AdminURL()+"/", nil)
+	req, err := http.NewRequest("GET", s.AdminURL().WithPath("/").String(), nil)
 	require.NoError(t, err)
 	req.AddCookie(c)
 	resp, err := client.Do(req)
@@ -400,7 +374,7 @@ func TestServerControllerBadHTTPCookies(t *testing.T) {
 	defer resp.Body.Close()
 	require.Equal(t, 200, resp.StatusCode)
 
-	req, err = http.NewRequest("GET", s.AdminURL()+"/bundle.js", nil)
+	req, err = http.NewRequest("GET", s.AdminURL().WithPath("/bundle.js").String(), nil)
 	require.NoError(t, err)
 	req.AddCookie(c)
 	resp, err = client.Do(req)
@@ -414,15 +388,15 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-
+	skip.UnderDeadlock(t, "slow under deadlock")
 	t.Logf("starting test cluster")
 	numNodes := 3
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		}})
 	defer func() {
 		t.Logf("stopping test cluster")
@@ -437,10 +411,10 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 	// Pick a random node, try to run some SQL inside that tenant.
 	rng, _ := randutil.NewTestRand()
 	serverIdx := int(rng.Int31n(int32(numNodes)))
-	sqlAddr := tc.Server(serverIdx).ServingSQLAddr()
+	sqlAddr := tc.Server(serverIdx).AdvSQLAddr()
 	t.Logf("attempting to use tenant server on node %d (%s)", serverIdx, sqlAddr)
 	testutils.SucceedsSoon(t, func() error {
-		tenantDB, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello", false, tc.Stopper())
+		tenantDB, err := tc.Server(serverIdx).SystemLayer().SQLConnE(serverutils.DBName("cluster:hello"))
 		if err != nil {
 			t.Logf("error connecting to tenant server (will retry): %v", err)
 			return err
@@ -474,11 +448,9 @@ func TestServerStartStop(t *testing.T) {
 	ctx := context.Background()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)
-
-	sqlAddr := s.ServingSQLAddr()
 
 	// Create our own test tenant with a known name.
 	_, err := db.Exec("CREATE TENANT hello")
@@ -490,7 +462,7 @@ func TestServerStartStop(t *testing.T) {
 
 	// Check the liveness.
 	testutils.SucceedsSoon(t, func() error {
-		db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
+		db2, err := s.SystemLayer().SQLConnE(serverutils.DBName("cluster:hello/defaultdb"))
 		// Expect no error yet: the connection is opened lazily; an
 		// error here means the parameters were incorrect.
 		require.NoError(t, err)
@@ -502,7 +474,7 @@ func TestServerStartStop(t *testing.T) {
 
 		// Don't wait for graceful jobs shutdown in this test since
 		// we want to make sure test completes reasonably quickly.
-		_, err = db2.Exec("SET CLUSTER SETTING server.shutdown.jobs_wait='0s'")
+		_, err = db2.Exec("SET CLUSTER SETTING server.shutdown.jobs.timeout='0s'")
 		require.NoError(t, err)
 
 		return nil
@@ -514,7 +486,7 @@ func TestServerStartStop(t *testing.T) {
 
 	// Verify that the service is indeed stopped.
 	testutils.SucceedsSoon(t, func() error {
-		db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
+		db2, err := s.SystemLayer().SQLConnE(serverutils.DBName("cluster:hello/defaultdb"))
 		// Expect no error yet: the connection is opened lazily; an
 		// error here means the parameters were incorrect.
 		require.NoError(t, err)
@@ -563,13 +535,16 @@ func TestServerControllerLoginLogout(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110002),
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	client, err := s.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
 	require.NoError(t, err)
 
-	resp, err := client.Post(s.AdminURL()+"/logout", "", nil)
+	resp, err := client.Post(s.AdminURL().WithPath("/logout").String(), "", nil)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -584,13 +559,16 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	require.ElementsMatch(t, []string{"", ""}, cookieValues)
 
 	// Need a new server because the HTTP Client is memoized.
-	s2, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s2.Stopper().Stop(ctx)
+	srv2 := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110002),
+	})
+	defer srv2.Stopper().Stop(ctx)
+	s2 := srv2.ApplicationLayer()
 
 	clientMT, err := s2.GetAuthenticatedHTTPClient(false, serverutils.MultiTenantSession)
 	require.NoError(t, err)
 
-	respMT, err := clientMT.Get(s.AdminURL() + "/logout")
+	respMT, err := clientMT.Get(s.AdminURL().WithPath("/logout").String())
 	require.NoError(t, err)
 	defer respMT.Body.Close()
 
@@ -605,11 +583,9 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	require.ElementsMatch(t, []string{"", ""}, cookieValues)
 
 	// Now using manual clients to simulate states that might be invalid
-	url, err := url.Parse(s2.AdminURL())
-	require.NoError(t, err)
 	cookieJar, err := cookiejar.New(nil)
 	require.NoError(t, err)
-	cookieJar.SetCookies(url, []*http.Cookie{
+	cookieJar.SetCookies(s2.AdminURL().URL, []*http.Cookie{
 		{
 			Name:  "multitenant-session",
 			Value: "abc-123",
@@ -617,7 +593,7 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	})
 	clientMT.Jar = cookieJar
 
-	respBadCookie, err := clientMT.Get(s.AdminURL() + "/logout")
+	respBadCookie, err := clientMT.Get(s.AdminURL().WithPath("/logout").String())
 	require.NoError(t, err)
 	defer respBadCookie.Body.Close()
 
@@ -639,14 +615,14 @@ func TestServiceShutdownUsesGracefulDrain(t *testing.T) {
 	ctx := context.Background()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)
 
 	drainCh := make(chan struct{})
 
 	// Start a shared process server.
-	_, _, err := s.(*server.TestServer).StartSharedProcessTenant(ctx,
+	_, _, err := s.TenantController().StartSharedProcessTenant(ctx,
 		base.TestSharedProcessTenantArgs{
 			TenantName: "hello",
 			Knobs: base.TestingKnobs{

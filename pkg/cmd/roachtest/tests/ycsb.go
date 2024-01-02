@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"os"
 
@@ -29,6 +30,7 @@ const envYCSBFlags = "ROACHTEST_YCSB_FLAGS"
 func registerYCSB(r registry.Registry) {
 	workloads := []string{"A", "B", "C", "D", "E", "F"}
 	cpusConfigs := []int{8, 32}
+	cpusWithReadCommitted := 32
 	cpusWithGlobalMVCCRangeTombstone := 32
 
 	// concurrencyConfigs contains near-optimal concurrency levels for each
@@ -45,11 +47,11 @@ func registerYCSB(r registry.Registry) {
 	}
 
 	runYCSB := func(
-		ctx context.Context, t test.Test, c cluster.Cluster, wl string, cpus int, rangeTombstone bool,
+		ctx context.Context, t test.Test, c cluster.Cluster, wl string, cpus int, readCommitted, rangeTombstone bool,
 	) {
 		// For now, we only want to run the zfs tests on GCE, since only GCE supports
 		// starting roachprod instances on zfs.
-		if c.Spec().FileSystem == spec.Zfs && c.Spec().Cloud != spec.GCE {
+		if c.Spec().FileSystem == spec.Zfs && c.Cloud() != spec.GCE {
 			t.Skip("YCSB zfs benchmark can only be run on GCE", "")
 		}
 
@@ -65,19 +67,25 @@ func registerYCSB(r registry.Registry) {
 			settings.Env = append(settings.Env, "COCKROACH_GLOBAL_MVCC_RANGE_TOMBSTONE=true")
 		}
 
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, c.Range(1, nodes))
-		err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), 1))
+
+		db := c.Conn(ctx, t.L(), 1)
+		err := enableIsolationLevels(ctx, t, db)
 		require.NoError(t, err)
+		err = WaitFor3XReplication(ctx, t, db)
+		require.NoError(t, err)
+		require.NoError(t, db.Close())
 
 		t.Status("running workload")
 		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			var args string
-			args += fmt.Sprintf(" --select-for-update=%t", t.IsBuildVersion("v19.2.0"))
 			args += " --ramp=" + ifLocal(c, "0s", "2m")
 			args += " --duration=" + ifLocal(c, "10s", "30m")
+			if readCommitted {
+				args += " --isolation-level=read_committed"
+			}
 			if envFlags := os.Getenv(envYCSBFlags); envFlags != "" {
 				args += " " + envFlags
 			}
@@ -107,9 +115,10 @@ func registerYCSB(r registry.Registry) {
 				Benchmark: true,
 				Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runYCSB(ctx, t, c, wl, cpus, false /* rangeTombstone */)
+					runYCSB(ctx, t, c, wl, cpus, false /* readCommitted */, false /* rangeTombstone */)
 				},
-				Tags: registry.Tags(`aws`),
+				CompatibleClouds: registry.AllClouds,
+				Suites:           registry.Suites(registry.Nightly),
 			})
 
 			if wl == "A" {
@@ -119,8 +128,24 @@ func registerYCSB(r registry.Registry) {
 					Benchmark: true,
 					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.SetFileSystem(spec.Zfs)),
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runYCSB(ctx, t, c, wl, cpus, false /* rangeTombstone */)
+						runYCSB(ctx, t, c, wl, cpus, false /* readCommitted */, false /* rangeTombstone */)
 					},
+					CompatibleClouds: registry.AllExceptAWS,
+					Suites:           registry.Suites(registry.Nightly),
+				})
+			}
+
+			if cpus == cpusWithReadCommitted {
+				r.Add(registry.TestSpec{
+					Name:      fmt.Sprintf("%s/isolation-level=read-committed", name),
+					Owner:     registry.OwnerTestEng,
+					Benchmark: true,
+					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus)),
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						runYCSB(ctx, t, c, wl, cpus, true /* readCommitted */, false /* rangeTombstone */)
+					},
+					CompatibleClouds: registry.AllClouds,
+					Suites:           registry.Suites(registry.Nightly),
 				})
 			}
 
@@ -131,11 +156,24 @@ func registerYCSB(r registry.Registry) {
 					Benchmark: true,
 					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus)),
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runYCSB(ctx, t, c, wl, cpus, true /* rangeTombstone */)
+						runYCSB(ctx, t, c, wl, cpus, false /* readCommitted */, true /* rangeTombstone */)
 					},
-					Tags: registry.Tags(`aws`),
+					CompatibleClouds: registry.AllClouds,
+					Suites:           registry.Suites(registry.Nightly),
 				})
 			}
 		}
 	}
+}
+
+func enableIsolationLevels(ctx context.Context, t test.Test, db *gosql.DB) error {
+	for _, cmd := range []string{
+		`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = 'true';`,
+		`SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = 'true';`,
+	} {
+		if _, err := db.ExecContext(ctx, cmd); err != nil {
+			return err
+		}
+	}
+	return nil
 }

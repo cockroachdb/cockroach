@@ -55,6 +55,7 @@ func newDeck(rng *rand.Rand, weights ...int) *deck {
 // probability of i is weights(i)/sum(weights).
 func (d *deck) Int() int {
 	d.mu.Lock()
+	defer d.mu.Unlock()
 	if d.mu.index == len(d.mu.vals) {
 		d.rng.Shuffle(len(d.mu.vals), func(i, j int) {
 			d.mu.vals[i], d.mu.vals[j] = d.mu.vals[j], d.mu.vals[i]
@@ -63,6 +64,5 @@ func (d *deck) Int() int {
 	}
 	result := d.mu.vals[d.mu.index]
 	d.mu.index++
-	d.mu.Unlock()
 	return result
 }

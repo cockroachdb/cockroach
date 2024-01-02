@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -20,6 +19,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/settings/cluster",
@@ -68,7 +68,6 @@ go_test(
     name = "opttester_test",
     size = "small",
     srcs = ["opt_tester_test.go"],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     deps = [
         ":opttester",
@@ -84,5 +83,3 @@ filegroup(
     srcs = glob(["testfixtures/**"]),
     visibility = ["//pkg/sql/opt:__subpackages__"],
 )
-
-get_x_data(name = "get_x_data")

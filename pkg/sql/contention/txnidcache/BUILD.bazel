@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -35,10 +34,10 @@ go_test(
         "txn_id_cache_test.go",
         "writer_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":txnidcache"],
     deps = [
+        "//pkg/base",
         "//pkg/kv",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -48,7 +47,6 @@ go_test(
         "//pkg/sql/appstatspb",
         "//pkg/sql/contentionpb",
         "//pkg/sql/sessiondata",
-        "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
@@ -65,5 +63,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

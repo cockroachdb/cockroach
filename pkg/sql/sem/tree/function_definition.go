@@ -203,6 +203,8 @@ var OidToBuiltinName map[oid.Oid]string
 var OidToQualifiedBuiltinOverload map[oid.Oid]QualifiedOverload
 
 // Format implements the NodeFormatter interface.
+// FunctionDefinitions should always be builtin functions, so we do not need to
+// anonymize them, even if the flag is set.
 func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
 	ctx.WriteString(fd.Name)
 }
@@ -211,6 +213,8 @@ func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
 func (fd *FunctionDefinition) String() string { return AsString(fd) }
 
 // Format implements the NodeFormatter interface.
+// ResolvedFunctionDefinitions should always be builtin functions, so we do not
+// need to anonymize them, even if the flag is set.
 func (fd *ResolvedFunctionDefinition) Format(ctx *FmtCtx) {
 	// This is necessary when deserializing function expressions for SHOW CREATE
 	// statements. When deserializing a function expression with function OID
@@ -252,12 +256,13 @@ func (fd *ResolvedFunctionDefinition) MergeWith(
 // types. The overload from the most significant schema is returned. If
 // paramTypes==nil, an error is returned if the function name is not unique in
 // the most significant schema. If paramTypes is not nil, an error with
-// ErrFunctionUndefined cause is returned if not matched found.
+// ErrRoutineUndefined cause is returned if not matched found. Overloads that
+// don't match the types in routineType are ignored.
 func (fd *ResolvedFunctionDefinition) MatchOverload(
-	paramTypes []*types.T, explicitSchema string, searchPath SearchPath,
+	paramTypes []*types.T, explicitSchema string, searchPath SearchPath, routineType RoutineType,
 ) (QualifiedOverload, error) {
 	matched := func(ol QualifiedOverload, schema string) bool {
-		if ol.IsUDF {
+		if ol.Type == UDFRoutine || ol.Type == ProcedureRoutine {
 			return schema == ol.Schema && (paramTypes == nil || ol.params().MatchIdentical(paramTypes))
 		}
 		return schema == ol.Schema && (paramTypes == nil || ol.params().Match(paramTypes))
@@ -292,13 +297,51 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 		}
 	}
 
-	if len(ret) == 0 {
-		return QualifiedOverload{}, errors.Wrapf(
-			ErrFunctionUndefined, "function %s(%s) does not exist", fd.Name, typeNames(),
-		)
+	if len(ret) == 1 && ret[0].Type&routineType == 0 {
+		if routineType == ProcedureRoutine {
+			return QualifiedOverload{}, pgerror.Newf(
+				pgcode.WrongObjectType, "%s(%s) is not a procedure", fd.Name, typeNames())
+		} else {
+			return QualifiedOverload{}, pgerror.Newf(
+				pgcode.WrongObjectType, "%s(%s) is not a function", fd.Name, typeNames())
+		}
 	}
+
+	// Filter out overloads that don't match the requested type.
+	i := 0
+	for _, o := range ret {
+		if ret[i].Type&routineType != 0 {
+			ret[i] = o
+			i++
+		}
+	}
+	// Clear non-matching overloads.
+	for j := i; j < len(ret); j++ {
+		ret[j] = QualifiedOverload{}
+	}
+	// Truncate the slice.
+	ret = ret[:i]
+
+	if len(ret) == 0 {
+		if routineType == ProcedureRoutine {
+			return QualifiedOverload{}, errors.Mark(
+				pgerror.Newf(pgcode.UndefinedFunction, "procedure %s(%s) does not exist", fd.Name, typeNames()),
+				ErrRoutineUndefined,
+			)
+		} else {
+			return QualifiedOverload{}, errors.Mark(
+				pgerror.Newf(pgcode.UndefinedFunction, "function %s(%s) does not exist", fd.Name, typeNames()),
+				ErrRoutineUndefined,
+			)
+		}
+	}
+
 	if len(ret) > 1 {
-		return QualifiedOverload{}, errors.Errorf("function name %q is not unique", fd.Name)
+		if routineType == ProcedureRoutine {
+			return QualifiedOverload{}, pgerror.Newf(pgcode.AmbiguousFunction, "procedure name %q is not unique", fd.Name)
+		} else {
+			return QualifiedOverload{}, pgerror.Newf(pgcode.AmbiguousFunction, "function name %q is not unique", fd.Name)
+		}
 	}
 	return ret[0], nil
 }
@@ -383,7 +426,7 @@ func QualifyBuiltinFunctionDefinition(
 // GetBuiltinFuncDefinitionOrFail is similar to GetBuiltinFuncDefinition but
 // returns an error if function is not found.
 func GetBuiltinFuncDefinitionOrFail(
-	fName FunctionName, searchPath SearchPath,
+	fName RoutineName, searchPath SearchPath,
 ) (*ResolvedFunctionDefinition, error) {
 	def, err := GetBuiltinFuncDefinition(fName, searchPath)
 	if err != nil {
@@ -391,7 +434,10 @@ func GetBuiltinFuncDefinitionOrFail(
 	}
 	if def == nil {
 		forError := fName // prevent fName from escaping
-		return nil, errors.Wrapf(ErrFunctionUndefined, "unknown function: %s()", ErrString(&forError))
+		return nil, errors.Mark(
+			pgerror.Newf(pgcode.UndefinedFunction, "unknown function: %s()", ErrString(&forError)),
+			ErrRoutineUndefined,
+		)
 	}
 	return def, nil
 }
@@ -400,7 +446,10 @@ func GetBuiltinFuncDefinitionOrFail(
 func GetBuiltinFunctionByOIDOrFail(oid oid.Oid) (*ResolvedFunctionDefinition, error) {
 	ol, ok := OidToQualifiedBuiltinOverload[oid]
 	if !ok {
-		return nil, errors.Wrapf(ErrFunctionUndefined, "function %d not found", oid)
+		return nil, errors.Mark(
+			pgerror.Newf(pgcode.UndefinedFunction, "function %d not found", oid),
+			ErrRoutineUndefined,
+		)
 	}
 	fd := &ResolvedFunctionDefinition{
 		Name:      OidToBuiltinName[oid],
@@ -420,7 +469,7 @@ func GetBuiltinFunctionByOIDOrFail(oid oid.Oid) (*ResolvedFunctionDefinition, er
 // error is still checked and return from the function signature just in case
 // we change the iterating function in the future.
 func GetBuiltinFuncDefinition(
-	fName FunctionName, searchPath SearchPath,
+	fName RoutineName, searchPath SearchPath,
 ) (*ResolvedFunctionDefinition, error) {
 	if fName.ExplicitSchema {
 		return ResolvedBuiltinFuncDefs[fName.Schema()+"."+fName.Object()], nil

@@ -41,19 +41,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPostProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	v := [10]rowenc.EncDatum{}
 	for i := range v {
@@ -225,6 +226,7 @@ func TestPostProcess(t *testing.T) {
 
 func TestAggregatorSpecAggregationEquals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Used for FilterColIdx *uint32.
 	colIdx1 := uint32(0)
@@ -315,6 +317,7 @@ func TestAggregatorSpecAggregationEquals(t *testing.T) {
 
 func TestProcessorBaseContext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Use a custom context to distinguish it from the background one.
 	ctx := context.WithValue(context.Background(), struct{}{}, struct{}{})
@@ -428,6 +431,7 @@ func populateRangeCacheAndDisableBuffering(t *testing.T, db *gosql.DB, tableName
 // interesting to test is the integration between DistSQL and KV.
 func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We're going to test by running a query that selects rows 1..10 with limit
 	// 5. Out of these, rows 1..5 are on node 1, 6..10 on node 2. We're going to
@@ -455,7 +459,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 
 	blockedRead.unblockCond = sync.NewCond(&blockedRead.Mutex)
 
-	tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
+	tc := serverutils.StartCluster(t, 3, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -521,7 +525,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	}
 
 	populateRangeCacheAndDisableBuffering(t, origDB0, "t")
-	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).ServingSQLAddr())
+	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).AdvSQLAddr())
 	defer cleanup()
 
 	atomic.StoreInt64(&trapRead, 1)
@@ -678,7 +682,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, numNodes, testClusterArgs)
+	tc := serverutils.StartCluster(t, numNodes, testClusterArgs)
 	defer tc.Stopper().Stop(ctx)
 
 	// Create a 30-row table, split and scatter evenly across the numNodes nodes.
@@ -699,7 +703,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 	))
 	require.NoError(t, err)
 	populateRangeCacheAndDisableBuffering(t, dbConn, "t")
-	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).ServingSQLAddr())
+	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).AdvSQLAddr())
 	defer cleanup()
 
 	testCases := []struct {
@@ -710,22 +714,20 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		// The default behavior is to enable uncertainty errors for a single random
 		// node.
 		overrideErrorOrigin []int
-		// if non-empty, this test will be skipped.
-		skip string
 	}{
 		{
 			query:           "SELECT * FROM t AS t1 JOIN t AS t2 ON t1.x = t2.x",
-			expectedPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElGFr2zwQx98_n0IcPLQdSm3JadoYCi6tR91lSZcUNihmuLGamDmWJ8mQEvLdh-1AlpDI8dxl73LR_e7-p_9ZC5A_Y7Bh5Pbc2ycUJa8cfRwOPqNn99tj78bro9M7b_Q0-tI7Q6ucD2WCQjcjpAh6GHj9VUDRoI8UOZ-ja6To-dxHX-_doVtW7XmfXHRyFwUTEczs_08AQ8JD1g9mTIL9DAQwUMBggY8hFXzMpOQiP1oUiV44B9vEECVppvK_fQxjLhjYC1CRihnY8BS8xGzIgpAJwwQMIVNBFBfllaO-pz_YG2C45XE2S6SN5hjl8SgN8qhlEBP8JQaeqVWLdeWXNzQN5HSzpkPAX_oYpAomDGyyxH8m1Tq6VLpX6rpOlnARMsHCjUp-Tlal7Jj3PpDTBx4lTBidTWkxe1WnDjm7FtFkWvwCDINM2cgh2KHYsbDT3pp2PYnVYJIdMvu8xVOjuz3yztbtjdbkcL9JXb8NYrYM-p7bWUNt-1-opXvVHmFBL__egtLD753Wvndqtt5xRWpIvTi6VLpX6hH24-o4D9gOEUMmU55IdtD7ZOZjsHDCymuRPBNj9ij4uGhThoOCK76wkElVntIy8JLyKBd4ONxpAnf1MKkhm9aDO03grh6m27D5O2zpZ7a0MDE3aHObbjcxWg9XGK2HK4y-aGK0Hq4wWg9XGN1pYvRlE6v0cIVVerjCqqsmVunhCqv0cIVV3VpW-cv_fgUAAP__x69Mdw==",
+			expectedPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEld9u2jAUh-_3FNaRpraTKbHD30iVqApT6Sh0gLRJFapcYiBqiJltVKqKd58CdC0J8UjWslwgTJwvv2N_5jyD-uWDA71Gq3HRR14wEuhrt3ONbhs_b1rnzTY6rjd7_d73Fka9y_ObxgnaTP2ynqfReQ9pgq46zfZmQFGnjTQ5XaAzpOnpYoB-XDa6jTW81fzWQEd1j40lmzqfjwBDIFzeZlOuwLkFAhgoYLBhgGEmxZArJWR463k1sekuwLEweMFsrsOfBxiGQnJwnkF72ufgQJ_d-7zLmctl3gIMLtfM81d4XdN3swf-BBguhD-fBspBC4zCcW_GwlEuTywYLDGIud684pV8_4QmTE22mTUCg-UAg9JszMEhb3I36-BYS5wtun3w6DQS3U6M_sqdB0K6XHJ3izwIn_zblB31XzI1uRJewGW-tB3V5yN9XCMnZ9IbT1bfAENnrh1UI7hGcc3GtUKk-tfK7EhlpX-obEfstsiJWb4aXYKdUQqRKNWtKGR_P0haP_LEyuXp-9pNsqYv_I_0UcELiekPIHj5IwUvb1VG998XmnpfqJV7V6Vo1ujFg0eP-lRMjH4Anyof6VMlTRfrcjUTgeJ7_R9akTflSFgnd8d8vW5KzOWQ30gxXM1dDzsr0Modlyu9vkvXg2bwcktpydn0TxPen1RKJpXSkarJJEKjKJKiPPoWZacjlZJJ1XSkajKJFKMoGkVZb1G2YaUqUZRtRBFri2UZTShkdYqkIxmcKqcjmZyKmVDM6lQhHcngFImtuRllkip2_EqZpYqpXs5qQuwgm0kGE2Kim0kmE2L7V8lqQuwgm0kmE2JnxowymRA7NNWsJlAr7DgjXzzeeS44YG2u3I6PlwvCB9hYhW2vNxGPK27_aRY2rRHzFcdwzR54nWsup17gKe0NwdFyzpfLT78DAAD__5SzAcM=",
 		},
 		{
 			query:           "SELECT * FROM t AS t1 INNER LOOKUP JOIN t AS t2 ON t1.x = t2.y",
-			expectedPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElHFr2kAUwP_fp3g8GN3GWXMXtRoYWNqMpc0Sp44NSiiZuUlWzWW5C1PE7z6SCNVWr3ED9-fLez_fz3vvboXy1wwtHNmufTWGOPkh4MPQ_wR39reBe-l48ObaGY1Hn923sKl5VxUouByBouB4nj0E1_dvvwzgxne8TYaB74Gi5wt4D4qdLwP4-tEe2lUL17m14ew6DqdZOLdenyHBRETcC-dconWHFAkyJGhiQDDNxIRLKbIitSoLnWiBlkEwTtJcFZ8DghORcbRWqGI142jhOPw-40MeRjxrGkgw4iqMZ-XPq766Tx_4EgleiVk-T6QFCwJFPErDImo0qYHBmqDI1WMLqcIpR4uuSX2NGxEnGwvzucXyPo4WSNAV4iFP4aeIExCJBX267bYkkInfcXTQiP2lUefguTwTau0cFhL0c1V4kj4j_TbpmwflzINyj055IrKIZzzaEQrWe_Q90RBps_ekcH_r1k5rWn9h6LEL06RGo8nq7swLJlsTap1oZ-obXZx-Z1j9wbGjB8eMRs2pvaCxdUbtE02tvlH3_970PXJDLlORSF7rIhvFS8CjKa-eDSnybMIHmZiUbarQL7nyQ8SlqrK0CpykShWC2zDVwkwPMy1s7sD0KWzqtQ1965aWbuvhthbu6OHOv_zpCy3c1XfuauGeHu4dpR2sX_0JAAD__8XU8Oo=",
+			expectedPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV1v2jwUgO_fX2Ed6VW3yZTY4TPSJKqSqWlpwgjTJlWoyojLvIY4sx0VVPHfpwBdIW0iwkWbCyTHh8ePfY5PHkH9icAC3x7Y52PE4zuBvoy8a3Rj_xgOzhwXfeg7_tj_OsDIvzgb2h_RNvTTJk6jMx9pghzXtUdo4HlX34bo0nPc7QxFnos0OV2gz0jT0-UEfb-wR_ZmpYFzZaOTPg9mMphb_58AhliEzA3mTIF1AwQwUMBgwgRDIsWUKSVkNvW4DnTCBVgGBh4nqc5eTzBMhWRgPYLmOmJgwTj4GbERC0Im6wZgCJkOeLTG656-Te7ZEjCciyidx8pCC4yysZ8E2ahWJwZMVhhEqp-XUDqYMbDIjpPTB8tY4cO1LgWPt1bmS6vlLQ8XgGEgxH2aoN-Cx0jEFuqRXdclRlI88LDQkOYMzSMNW4Xn9kKwsXeYgMFLdeaNexT3mrhnFsqaOdlWoeyzYxoLGTLJwj3ByeqV7biiJpJ6Nxf4ukojp9LdUyGHFxypWnB1YtTq9PCaI1XMdjLaeLOaaxxp2H6PmmvvydLDE00rJ5oatYOzTKto7Zxh882y3DzSsPMeWe5UaYMjphIRK3ZQ4zByK9VI1opYOGObvqVEKqdsKMV0HbsZemvQ-kXIlN7Mks3AiZ-mlJYsmP_7zuySSCmJFpPMPImWksw9EtkltfIks3x3RoXtNUpRzWISyZOapaRWMamRJ7WOPah2ntQuJXWKnWie1CkldYtJzType-zuOlm530Xi4ZaHYIGxfWqv_Dw9kP0hmKnszvm_xMMaO14m2Y25CyLFMFwH96zPNJNzHnOl-RQsLVO2Wv33NwAA___OinSA",
 		},
 		{
-			// This test reproduces 51458 and should be enabled once that issue is
-			// fixed.
+			// Reproduction of not propagating errors to all outputs of the
+			// hash router (#51458).
 			query:               "SELECT * FROM t JOIN onerow ON t.x = onerow.x",
-			expectedPlanURL:     "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lPFr2kAUx3_fX3E8GG3H2eSirSNQyGgzms5pp8IGJYyredWwmMvuLswi_u8jiWDjbDSk8yd93n3efb_f590S1O8IbBi5Pfd6TML4SZDPw8FX8uD-uO998vrk9MYbjUffemdkvedDsUGTu4HXJyJGKf6QQZ_o8wW5WtfnC598v3WHbtGx531xyclNyKeSz-33J0AhFgH2-RwV2A_AgIIFFNrgU0ikmKBSQmZLy3yjFyzANimEcZLq7GefwkRIBHsJOtQRgg1j_hjhEHmA0jCBQoCah1HeXjv6Z_ILn4HCtYjSeaxssqAkq0cJz6qWwUzwVxREqtdHbDo_PpMZV7NyT4eBv_IpKM2nCDZb0VekbvqksZABSgxKnfyM3Ldlh99brmZ3IoxRGp2ytAif9KnDzq5kOJ3l34DCINU2cRh1LOq0t6xubLQb2NihsS9aIjG62353Ht0pHc0OHzarO2yDmS3Dest5s-PO--I_zds6PHSrduiW2XrDxGtIbZfbFg-UU3z8K_rFm9BIrvWq3CP8QS6P8CDsUDBElYhY4UH33cw8YDDFIhMlUjnBeykm-TFFOci5_H4FqHSxui68uFjKBB4Od5rA3WqYbcPmS9iqhq1K-GMJNrfhdpPAquE9gVXDewLrNAnsoonnaniP52p4j-fLGrKtenCnCdythru1RuWv3v0NAAD__2MQZAI=",
+			expectedPlanURL:     "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lW9P4koUxt_fTzE5yY16M0inFPA2McEIN-JFcIFkNzHEjPQAjaXDzkwjxvDdN21xpYV2Kf7pC2WY098855knhxdQPz2wYdDqtC6HxPUngvzX792Qu9aP285Fu0uOm-3BcPCtQ8ng6uK2dULWpf_EdZpc99pdInyU4on0ukSfLsn5en26HJHvV61-KwZ32v-3yFHT5VPJ5_bfR0DBFw52-RwV2HfAgIIJFCoworCQYoxKCRluvUSFbWcJtkHB9ReBDr8eURgLiWC_gHa1h2DDkD942EfuoCwbQMFBzV0vwuuGvl884jNQuBReMPeVTZaUhOvBgoerUpkZMFpREIFeH_FGfngmM65mSWaDwWg1oqA0nyLYbEN3uwm2saIZ0t-4gS-kgxKdBHkUvvmnkh39X3E1uxauj7JsJaV6ONHHDXZyLt3pLPoEFHqBtkmD0YZJG5VU629tVVJtWe9oa4fmriiJRbme7n-nFCslpZ6QwvYPBysajjIzSmXzY_PBMtV_QT6qn5aPaqItc_9LMQtfimmUPvRGzEOlV5LHxAOwEf_bbmJj5rxLvpmSX8mU_wWBqn1aoGqZA2eHoj6qhfAV7jVPjNRJJRY2ic4UY9OUCOQYb6UYR7XxsheBovA4qHS8u160_dctpSXy-e-fgf1JVjbJKkaqZ5PO0iSWJhmbJDObxMw0ysxFnSVQRq5RlUMtZ8VIOZZXi5FyLP83TbIOtrySRlUPNWrr8vJJOUbVipFyjGJbOagVaM_cRG0ZlU-yskn1YqR6NolthbN-cBCscFxNPPF07zpgg7F-Sjv-vD4QvsCnKpyZg5l4irjD50U48SbcU0jhhj9iEzXKueu7SrtjsLUMcLX661cAAAD__3vS9aQ=",
 			overrideErrorOrigin: []int{0},
 		},
 	}
@@ -750,25 +752,30 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		}
 		for _, testCase := range testCases {
 			t.Run(testCase.query, func(t *testing.T) {
-				if testCase.skip != "" {
-					skip.IgnoreLint(t, testCase.skip)
-				}
 				func() {
 					_, err := defaultConn.Exec(ctx, fmt.Sprintf("set vectorize=%s", vectorizeOpt))
 					require.NoError(t, err)
-					func() {
-						// Check distsql plan.
+					// We allow for the DistSQL plan to be different for some
+					// time in case the range cache wasn't populated as we
+					// expected (we've seen this under race in #108250).
+					testutils.SucceedsSoon(t, func() error {
 						rows, err := defaultConn.Query(
 							ctx,
-							fmt.Sprintf("SELECT info FROM [EXPLAIN (DISTSQL) %s] WHERE info LIKE 'Diagram:%%'", testCase.query),
+							fmt.Sprintf("SELECT info FROM [EXPLAIN (DISTSQL, SHAPE) %s] WHERE info LIKE 'Diagram:%%'", testCase.query),
 						)
 						require.NoError(t, err)
 						defer rows.Close()
 						rows.Next()
 						var actualPlanURL string
 						require.NoError(t, rows.Scan(&actualPlanURL))
-						require.Equal(t, testCase.expectedPlanURL, actualPlanURL)
-					}()
+						if testCase.expectedPlanURL != actualPlanURL {
+							return errors.Newf(
+								"DistSQL plans didn't match:\nexpected:%s\nactual: %s",
+								testCase.expectedPlanURL, actualPlanURL,
+							)
+						}
+						return nil
+					})
 
 					errorOrigin := []int{allNodeIdxs[rng.Intn(len(allNodeIdxs))]}
 					if testCase.overrideErrorOrigin != nil {
@@ -816,6 +823,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 // instantiation of processors.
 func TestFlowConcurrentTxnUse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Run("TestSingleGoroutine", func(t *testing.T) {
 		flow := &flowinfra.FlowBase{}

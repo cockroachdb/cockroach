@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/tokenbucket"
 )
 
 // We don't want the ability for an admitted a request to be able to run
@@ -108,7 +108,7 @@ type elasticCPUGranter struct {
 		// GrantCoordinator, which is ordered before the one in WorkQueue, since
 		// requester.granted() is called while holding GrantCoordinator.mu.
 		syncutil.Mutex
-		tb               *quotapool.TokenBucket
+		tb               *tokenbucket.TokenBucket
 		tbLastReset      time.Time
 		tbReset          *util.EveryN
 		utilizationLimit float64
@@ -122,8 +122,8 @@ var _ granter = &elasticCPUGranter{}
 func newElasticCPUGranter(
 	ambientCtx log.AmbientContext, st *cluster.Settings, metrics *elasticCPUGranterMetrics,
 ) *elasticCPUGranter {
-	tokenBucket := &quotapool.TokenBucket{}
-	tokenBucket.Init(0, 0, timeutil.DefaultTimeSource{})
+	tokenBucket := &tokenbucket.TokenBucket{}
+	tokenBucket.InitWithNowFn(0, 0, timeutil.Now)
 	return newElasticCPUGranterWithTokenBucket(ambientCtx, st, metrics, tokenBucket)
 }
 
@@ -131,7 +131,7 @@ func newElasticCPUGranterWithTokenBucket(
 	ambientCtx log.AmbientContext,
 	st *cluster.Settings,
 	metrics *elasticCPUGranterMetrics,
-	tokenBucket *quotapool.TokenBucket,
+	tokenBucket *tokenbucket.TokenBucket,
 ) *elasticCPUGranter {
 	e := &elasticCPUGranter{
 		ctx:     ambientCtx.AnnotateCtx(context.Background()),
@@ -156,7 +156,7 @@ func (e *elasticCPUGranter) tryGet(count int64) (granted bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	granted, _ = e.mu.tb.TryToFulfill(quotapool.Tokens(count))
+	granted, _ = e.mu.tb.TryToFulfill(tokenbucket.Tokens(count))
 	return granted
 }
 
@@ -170,7 +170,7 @@ func (e *elasticCPUGranter) returnGrantWithoutGrantingElsewhere(count int64) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	e.mu.tb.Adjust(quotapool.Tokens(count))
+	e.mu.tb.Adjust(tokenbucket.Tokens(count))
 }
 
 // tookWithoutPermission implements granter.
@@ -178,7 +178,7 @@ func (e *elasticCPUGranter) tookWithoutPermission(count int64) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	e.mu.tb.Adjust(quotapool.Tokens(-count))
+	e.mu.tb.Adjust(tokenbucket.Tokens(-count))
 }
 
 // continueGrantChain implements granter.
@@ -212,7 +212,7 @@ func (e *elasticCPUGranter) setUtilizationLimit(utilizationLimit float64) {
 	//
 	rate := utilizationLimit * float64(int64(runtime.GOMAXPROCS(0))*time.Second.Nanoseconds())
 	e.mu.utilizationLimit = utilizationLimit
-	e.mu.tb.UpdateConfig(quotapool.TokensPerSecond(rate), quotapool.Tokens(rate))
+	e.mu.tb.UpdateConfig(tokenbucket.TokensPerSecond(rate), tokenbucket.Tokens(rate))
 	if now := timeutil.Now(); now.Sub(e.mu.tbLastReset) > 15*time.Second { // TODO(irfansharif): make this is a cluster setting?
 		// Periodically reset the token bucket. This is just defense-in-depth
 		// and at worst, over-admits. We've seen production clusters where the
@@ -369,10 +369,10 @@ func makeElasticCPUGranterMetrics() *elasticCPUGranterMetrics {
 		AvailableNanos:         metric.NewGauge(elasticCPUAvailableNanos),
 		NanosExhaustedDuration: metric.NewGauge(elasticCPUNanosExhaustedDuration),
 		OverLimitDuration: metric.NewHistogram(metric.HistogramOptions{
-			Mode:     metric.HistogramModePrometheus,
-			Metadata: elasticCPUOverLimitDurations,
-			Duration: base.DefaultHistogramWindowInterval(),
-			Buckets:  metric.IOLatencyBuckets,
+			Mode:         metric.HistogramModePrometheus,
+			Metadata:     elasticCPUOverLimitDurations,
+			Duration:     base.DefaultHistogramWindowInterval(),
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		Utilization:      metric.NewGaugeFloat64(elasticCPUGranterUtilization),
 		UtilizationLimit: metric.NewGaugeFloat64(elasticCPUGranterUtilizationLimit),

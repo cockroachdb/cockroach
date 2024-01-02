@@ -760,6 +760,9 @@ func (expr *DInterval) Walk(_ Visitor) Expr { return expr }
 func (expr *DBox2D) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
+func (expr *DPGLSN) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr *DGeography) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
@@ -1038,6 +1041,16 @@ func (n *AlterTenantReplication) walkStmt(v Visitor) Statement {
 			ret.Options.Retention = e
 		}
 	}
+	if n.Options.ResumeTimestamp != nil {
+		e, changed := WalkExpr(v, n.Options.ResumeTimestamp)
+		if changed {
+			if ret == n {
+				ret = n.copyNode()
+			}
+			ret.Options.ResumeTimestamp = e
+		}
+	}
+
 	return ret
 }
 
@@ -1101,6 +1114,16 @@ func (n *CreateTenantFromReplication) walkStmt(v Visitor) Statement {
 			ret.Options.Retention = e
 		}
 	}
+	if n.Options.ResumeTimestamp != nil {
+		e, changed := WalkExpr(v, n.Options.ResumeTimestamp)
+		if changed {
+			if ret == n {
+				ret = n.copyNode()
+			}
+			ret.Options.ResumeTimestamp = e
+		}
+	}
+
 	if n.Like.OtherTenant != nil {
 		ts, changed := walkTenantSpec(v, n.TenantSpec)
 		if changed {
@@ -1130,6 +1153,35 @@ func (n *ShowTenant) walkStmt(v Visitor) Statement {
 		}
 		ret.TenantSpec = ts
 	}
+	return ret
+}
+
+// copyNode makes a copy of this Statement without recursing in any child Statements.
+func (n *ShowFingerprints) copyNode() *ShowFingerprints {
+	stmtCopy := *n
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (n *ShowFingerprints) walkStmt(v Visitor) Statement {
+	ret := n
+	ts, changed := walkTenantSpec(v, n.TenantSpec)
+	if changed {
+		if ret == n {
+			ret = n.copyNode()
+		}
+		ret.TenantSpec = ts
+	}
+	if n.Options.StartTimestamp != nil {
+		e, changed := WalkExpr(v, n.Options.StartTimestamp)
+		if changed {
+			if ret == n {
+				ret = n.copyNode()
+			}
+			ret.Options.StartTimestamp = e
+		}
+	}
+
 	return ret
 }
 
@@ -1260,6 +1312,16 @@ func (stmt *Backup) walkStmt(v Visitor) Statement {
 				ret = stmt.copyNode()
 			}
 			ret.Options.IncludeAllSecondaryTenants = include
+		}
+	}
+
+	if stmt.Options.ExecutionLocality != nil {
+		rh, changed := WalkExpr(v, stmt.Options.ExecutionLocality)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Options.ExecutionLocality = rh
 		}
 	}
 
@@ -1538,6 +1600,16 @@ func (stmt *Restore) walkStmt(v Visitor) Statement {
 				ret = stmt.copyNode()
 			}
 			ret.Options.IncludeAllSecondaryTenants = include
+		}
+	}
+
+	if stmt.Options.ExecutionLocality != nil {
+		include, changed := WalkExpr(v, stmt.Options.ExecutionLocality)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Options.ExecutionLocality = include
 		}
 	}
 
@@ -1967,7 +2039,9 @@ var _ walkableStmt = &Restore{}
 var _ walkableStmt = &SelectClause{}
 var _ walkableStmt = &Select{}
 var _ walkableStmt = &SetClusterSetting{}
+var _ walkableStmt = &SetTransaction{}
 var _ walkableStmt = &SetVar{}
+var _ walkableStmt = &ShowFingerprints{}
 var _ walkableStmt = &ShowTenantClusterSetting{}
 var _ walkableStmt = &ShowTenant{}
 var _ walkableStmt = &UnionClause{}

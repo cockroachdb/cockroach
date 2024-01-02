@@ -25,7 +25,7 @@ database_name  schema_name         grantee  privilege_type  is_grantable
 test           information_schema  public   USAGE           false
 
 # Check public schema grants.
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA public
 ----
 database_name  schema_name  grantee  privilege_type  is_grantable
@@ -34,7 +34,7 @@ test           public       public   CREATE          false
 test           public       public   USAGE           false
 test           public       root     ALL             true
 
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA test.*
 ----
 database_name  schema_name  grantee  privilege_type  is_grantable
@@ -53,7 +53,7 @@ let $temp_schema
 SELECT schema_name FROM [show schemas] WHERE schema_name LIKE '%pg_temp%'
 
 # Check pg_temp grants.
-query TT colnames
+query TT colnames,rowsort
 SELECT grantee, privilege_type FROM [SHOW GRANTS ON SCHEMA $temp_schema]
 ----
 grantee  privilege_type
@@ -67,7 +67,7 @@ CREATE SCHEMA s;
 GRANT CREATE ON SCHEMA s TO testuser2
 
 # Check user-defined schema grants.
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA s
 ----
 database_name  schema_name  grantee    privilege_type  is_grantable
@@ -78,7 +78,7 @@ test           s            testuser2  CREATE          false
 
 # Check grant information in backing table. We have to strip off the session
 # identifying information from the end of the pg_temp schema name.
-query TTTTT colnames
+query TTTTT colnames,rowsort
 SELECT
   grantee,
   table_catalog,
@@ -145,7 +145,7 @@ CREATE SCHEMA owner_grant_option
 statement ok
 GRANT USAGE ON SCHEMA owner_grant_option TO owner_grant_option_child
 
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA owner_grant_option
 ----
 database_name  schema_name         grantee                   privilege_type  is_grantable
@@ -164,7 +164,7 @@ CREATE ROLE other_owner
 statement ok
 ALTER SCHEMA owner_grant_option OWNER TO other_owner
 
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA owner_grant_option
 ----
 database_name  schema_name         grantee                   privilege_type  is_grantable
@@ -185,7 +185,7 @@ CREATE ROLE r102962
 statement ok
 GRANT USAGE ON SCHEMA sc102962 TO r102962
 
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA sc102962
 ----
 database_name  schema_name  grantee  privilege_type  is_grantable

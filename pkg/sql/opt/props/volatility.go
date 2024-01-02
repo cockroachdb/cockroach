@@ -117,6 +117,11 @@ func (vs VolatilitySet) IsLeakproof() bool {
 	return vs == 0 || vs == volatilityBit(volatility.Leakproof)
 }
 
+// HasImmutable returns true if the set contains Immutable.
+func (vs VolatilitySet) HasImmutable() bool {
+	return (vs & volatilityBit(volatility.Immutable)) != 0
+}
+
 // HasStable returns true if the set contains Stable.
 func (vs VolatilitySet) HasStable() bool {
 	return (vs & volatilityBit(volatility.Stable)) != 0
@@ -125,6 +130,18 @@ func (vs VolatilitySet) HasStable() bool {
 // HasVolatile returns true if the set contains Volatile.
 func (vs VolatilitySet) HasVolatile() bool {
 	return (vs & volatilityBit(volatility.Volatile)) != 0
+}
+
+// ToVolatility returns the least restrictive volatility value in the set.
+func (vs VolatilitySet) ToVolatility() volatility.V {
+	if vs.HasVolatile() {
+		return volatility.Volatile
+	} else if vs.HasStable() {
+		return volatility.Stable
+	} else if vs.HasImmutable() {
+		return volatility.Immutable
+	}
+	return volatility.Leakproof
 }
 
 func (vs VolatilitySet) String() string {

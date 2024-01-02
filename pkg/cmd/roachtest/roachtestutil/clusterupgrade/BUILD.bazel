@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -7,15 +6,16 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/build",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/test",
         "//pkg/roachpb",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
         "//pkg/util/retry",
         "//pkg/util/version",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -26,88 +26,25 @@ The supported log output formats are documented below.
 
 ## Format `crdb-v1`
 
-This is the legacy file format used from CockroachDB v1.0.
 
-Each log entry is emitted using a common prefix, described below,
-followed by:
+This is a legacy file format used from CockroachDB v1.0.
+
+Each log entry is emitted using a common prefix, described below, followed by:
 
 - The logging context tags enclosed between `[` and `]`, if any. It is possible
   for this to be omitted if there were no context tags.
+- Optionally, a counter column, if the option 'show-counter' is enabled. See below for details.
 - the text of the log entry.
 
-Beware that the text of the log entry can span multiple lines. The following caveats apply:
-
+Beware that the text of the log entry can span multiple lines.
+The following caveats apply:
 
 - The text of the log entry can start with text enclosed between `[` and `]`.
   If there were no logging tags to start with, it is not possible to distinguish between
   logging context tag information and a `[...]` string in the main text of the
-  log entry. This means that this format is ambiguous. For an unambiguous alternative,
-  consider `crdb-v1-count`.
+  log entry. This means that this format is ambiguous.
 
-- The text of the log entry can embed arbitrary application-level strings,
-  including strings that represent log entries. In particular, an accident
-  of implementation can cause the common entry prefix (described below)
-  to also appear on a line of its own, as part of the payload of a previous
-  log entry. There is no automated way to recognize when this occurs.
-  Care must be taken by a human observer to recognize these situations.
-
-- The log entry parser provided by CockroachDB to read log files is faulty
-  and is unable to recognize the aforementioned pitfall; nor can it read
-  entries larger than 64KiB successfully. Generally, use of this internal
-  log entry parser is discouraged for entries written with this format.
-
-See the newer format `crdb-v2` for an alternative
-without these limitations.
-
-### Header lines
-
-At the beginning of each file, a header is printed using a similar format as
-regular log entries. This header reports when the file was created,
-which parameters were used to start the server, the server identifiers
-if known, and other metadata about the running process.
-
-- This header appears to be logged at severity `INFO` (with an `I` prefix
-  at the start of the line) even though it does not really have a severity.
-- The header is printed unconditionally even when a filter is configured to
-  omit entries at the `INFO` level.
-
-### Common log entry prefix
-
-Each line of output starts with the following prefix:
-
-     Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker
-
-| Field           | Description                                                                                                                          |
-|-----------------|--------------------------------------------------------------------------------------------------------------------------------------|
-| L               | A single character, representing the [log level](logging.html#logging-levels-severities) (e.g., `I` for `INFO`). |
-| yy              | The year (zero padded; i.e., 2016 is `16`).                                                                                |
-| mm              | The month (zero padded; i.e., May is `05`).                                                                                |
-| dd              | The day (zero padded).                                                                                                               |
-| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                                      |
-| goid            | The goroutine id (omitted if zero for use by tests).                                                                                 |
-| chan            | The channel number (omitted if zero for backward compatibility).                                                                     |
-| file            | The file name where the entry originated.                                                                                            |
-| line            | The line number where the entry originated.                                                                                          |
-| marker          | Redactability marker ` + redactableIndicator + ` (see below for details).                                                  |
-
-The redactability marker can be empty; in this case, its position in the common prefix is
-a double ASCII space character which can be used to reliably identify this situation.
-
-If the marker ` + redactableIndicator + ` is present, the remainder of the log entry
-contains delimiters (‹...›) around
-fields that are considered sensitive. These markers are automatically recognized
-by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
-
-
-## Format `crdb-v1-count`
-
-This is an alternative, backward-compatible legacy file format used from CockroachDB v2.0.
-
-Each log entry is emitted using a common prefix, described below,
-followed by the text of the log entry.
-
-Beware that the text of the log entry can span multiple lines. The following caveats apply:
-
+  To remove this ambiguity, you can use the option 'show-counter'.
 
 - The text of the log entry can embed arbitrary application-level strings,
   including strings that represent log entries. In particular, an accident
@@ -142,6 +79,9 @@ Each line of output starts with the following prefix:
 
      Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker tags counter
 
+Reminder, the tags may be omitted; and the counter is only printed if the option
+'show-counter' is specified.
+
 | Field           | Description                                                                                                                          |
 |-----------------|--------------------------------------------------------------------------------------------------------------------------------------|
 | L               | A single character, representing the [log level](logging.html#logging-levels-severities) (e.g., `I` for `INFO`). |
@@ -154,8 +94,8 @@ Each line of output starts with the following prefix:
 | file            | The file name where the entry originated.                                                                                            |
 | line            | The line number where the entry originated.                                                                                          |
 | marker          | Redactability marker ` + redactableIndicator + ` (see below for details).                                                  |
-| tags    | The logging tags, enclosed between `[` and `]`. May be absent. |
-| counter | The entry counter. Always present.                                                 |
+| tags            | The logging tags, enclosed between `[` and `]`. May be absent.                                                   |
+| counter         | The entry counter. Only included if 'show-counter' is enabled.                                                                       |
 
 The redactability marker can be empty; in this case, its position in the common prefix is
 a double ASCII space character which can be used to reliably identify this situation.
@@ -166,21 +106,42 @@ fields that are considered sensitive. These markers are automatically recognized
 by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
 
 
+Additional options recognized via `format-options`:
+
+| Option | Description |
+|--------|-------------|
+| `show-counter` | Whether to include the counter column in the line header. Without it, the format may be ambiguous due to the optionality of tags. |
+| `colors` | The color profile to use. Possible values: none, auto, ansi, 256color. Default is auto. |
+| `timezone` | The timezone to use for the timestamp column. The value can be any timezone name recognized by the Go standard library. Default is `UTC` |
+
+
+
+## Format `crdb-v1-count`
+
+This format name is an alias for 'crdb-v1' with
+the following format option defaults:
+
+- `show-counter: true`
+- `colors: none`
+
+
 ## Format `crdb-v1-tty`
 
-Same textual format as `crdb-v1`.
+This format name is an alias for 'crdb-v1' with
+the following format option defaults:
 
-In addition, if the output stream happens to be a VT-compatible terminal,
-and the flag `no-color` was *not* set in the configuration, the entries
-are decorated using ANSI color codes.
+- `show-counter: false`
+- `colors: auto`
+
 
 ## Format `crdb-v1-tty-count`
 
-Same textual format as `crdb-v1-count`.
+This format name is an alias for 'crdb-v1' with
+the following format option defaults:
 
-In addition, if the output stream happens to be a VT-compatible terminal,
-and the flag `no-color` was *not* set in the configuration, the entries
-are decorated using ANSI color codes.
+- `show-counter: true`
+- `colors: auto`
+
 
 ## Format `crdb-v2`
 
@@ -306,13 +267,22 @@ the new format, they are prefixed by the `=` continuation
 indicator.
 
 
+Additional options recognized via `format-options`:
+
+| Option | Description |
+|--------|-------------|
+| `colors` | The color profile to use. Possible values: none, auto, ansi, 256color. Default is auto. |
+| `timezone` | The timezone to use for the timestamp column. The value can be any timezone name recognized by the Go standard library. Default is `UTC` |
+
+
+
 ## Format `crdb-v2-tty`
 
-Same textual format as `crdb-v2`.
+This format name is an alias for 'crdb-v2' with
+the following format option defaults:
 
-In addition, if the output stream happens to be a VT-compatible terminal,
-and the flag `no-color` was *not* set in the configuration, the entries
-are decorated using ANSI color codes.
+- `colors: auto`
+
 
 ## Format `json`
 
@@ -325,40 +295,43 @@ processing over a stream unambiguously.
 
 Each entry contains at least the following fields:
 
-| Field | Description |
-|-------|-------------|
-| `file` | The name of the source file where the event was emitted. |
-| `goroutine` | The identifier of the goroutine where the event was emitted. |
-| `line` | The line number where the event was emitted in the source. |
-| `redactable` | Whether the payload is redactable (see below for details). |
-| `timestamp` | The timestamp at which the event was emitted on the logging channel. |
-| `version` | The binary version with which the event was generated. |
+| Field name if `tag-style: compact` is specified | Field name if `tag-style: verbose` is specified | Description |
+|-------|-------|-------------|
+| `tag` | `tag` | (Only if the option `fluent-tag: true` is given.) A Fluent tag for the event, formed by the process name and the logging channel. |
+| `d` | `datetime` | The pretty-printed date/time of the event timestamp, if enabled via options. |
+| `f` | `file` | The name of the source file where the event was emitted. |
+| `g` | `goroutine` | The identifier of the goroutine where the event was emitted. |
+| `l` | `line` | The line number where the event was emitted in the source. |
+| `r` | `redactable` | Whether the payload is redactable (see below for details). |
+| `t` | `timestamp` | The timestamp at which the event was emitted on the logging channel. |
+| `v` | `version` | The binary version with which the event was generated. |
 
 
 After a couple of *header* entries written at the beginning of each log sink,
 all subsequent log entries also contain the following fields:
 
-| Field               | Description |
-|---------------------|-------------|
-| `channel` | The name of the logging channel where the event was sent. |
-| `severity` | The severity of the event. |
-| `channel_numeric` | The numeric identifier for the logging channel where the event was sent. |
-| `entry_counter` | The entry number on this logging sink, relative to the last process restart. |
-| `severity_numeric` | The numeric value of the severity of the event. |
+| Field name if `tag-style: compact` is specified | Field name if `tag-style: verbose` is specified | Description |
+|-------|-------|-------------|
+| `C` | `channel` | The name of the logging channel where the event was sent. |
+| `sev` | `severity` | The severity of the event. |
+| `c` | `channel_numeric` | The numeric identifier for the logging channel where the event was sent. |
+| `n` | `entry_counter` | The entry number on this logging sink, relative to the last process restart. |
+| `s` | `severity_numeric` | The numeric value of the severity of the event. |
 
 
 Additionally, the following fields are conditionally present:
 
-| Field               | Description |
-|---------------------|-------------|
-| `node_id` | The node ID where the event was generated, once known. Only reported for single-tenant or KV servers. |
-| `cluster_id` | The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers. |
-| `instance_id` | The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `tenant_id` | The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `tags`    | The logging context tags for the entry, if there were context tags. |
-| `message` | For unstructured events, the flat text payload. |
-| `event`   | The logging event, if structured (see below for details). |
-| `stacks`  | Goroutine stacks, for fatal events. |
+| Field name if `tag-style: compact` is specified | Field name if `tag-style: verbose` is specified | Description |
+|-------|-------|-------------|
+| `N` | `node_id` | The node ID where the event was generated, once known. Only reported for single-tenant or KV servers. |
+| `x` | `cluster_id` | The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers. |
+| `q` | `instance_id` | The SQL instance ID where the event was generated, once known. |
+| `T` | `tenant_id` | The SQL tenant ID where the event was generated, once known. |
+| `V` | `tenant_name` | The SQL virtual cluster where the event was generated, once known. |
+| `tags` | `tags` | The logging context tags for the entry, if there were context tags. |
+| `message` | `message` | For unstructured events, the flat text payload. |
+| `event`   | `event`   | The logging event, if structured (see below for details). |
+| `stacks`  | `stacks`  | Goroutine stacks, for fatal events. |
 
 When an entry is structured, the `event` field maps to a dictionary
 whose structure is one of the documented structured events. See the [reference documentation](eventlog.html)
@@ -369,182 +342,41 @@ contain delimiters (‹...›) around
 fields that are considered sensitive. These markers are automatically recognized
 by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
 
+Additional options recognized via `format-options`:
+
+| Option | Description |
+|--------|-------------|
+| `datetime-format` | The format to use for the `datetime` field. The value can be one of `none`, `iso8601`/`rfc3339` (synonyms), or `rfc1123`. Default is `none`. |
+| `datetime-timezone` | The timezone to use for the `datetime` field. The value can be any timezone name recognized by the Go standard library. Default is `UTC` |
+| `tag-style` | The tags to include in the envelope. The value can be `compact` (one letter tags) or `verbose` (long-form tags). Default is `verbose`. |
+| `fluent-tag` | Whether to produce an additional field called `tag` for Fluent compatibility. Default is `false`. |
 
 
 
 ## Format `json-compact`
 
-This format emits log entries as a JSON payload.
+This format name is an alias for 'json' with
+the following format option defaults:
 
-The JSON object is guaranteed to not contain unescaped newlines
-or other special characters, and the entry as a whole is followed
-by a newline character. This makes the format suitable for
-processing over a stream unambiguously.
-
-Each entry contains at least the following fields:
-
-| Field | Description |
-|-------|-------------|
-| `f` | The name of the source file where the event was emitted. |
-| `g` | The identifier of the goroutine where the event was emitted. |
-| `l` | The line number where the event was emitted in the source. |
-| `r` | Whether the payload is redactable (see below for details). |
-| `t` | The timestamp at which the event was emitted on the logging channel. |
-| `v` | The binary version with which the event was generated. |
-
-
-After a couple of *header* entries written at the beginning of each log sink,
-all subsequent log entries also contain the following fields:
-
-| Field               | Description |
-|---------------------|-------------|
-| `C` | The name of the logging channel where the event was sent. |
-| `sev` | The severity of the event. |
-| `c` | The numeric identifier for the logging channel where the event was sent. |
-| `n` | The entry number on this logging sink, relative to the last process restart. |
-| `s` | The numeric value of the severity of the event. |
-
-
-Additionally, the following fields are conditionally present:
-
-| Field               | Description |
-|---------------------|-------------|
-| `N` | The node ID where the event was generated, once known. Only reported for single-tenant or KV servers. |
-| `x` | The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers. |
-| `q` | The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `T` | The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `tags`    | The logging context tags for the entry, if there were context tags. |
-| `message` | For unstructured events, the flat text payload. |
-| `event`   | The logging event, if structured (see below for details). |
-| `stacks`  | Goroutine stacks, for fatal events. |
-
-When an entry is structured, the `event` field maps to a dictionary
-whose structure is one of the documented structured events. See the [reference documentation](eventlog.html)
-for structured events for a list of possible payloads.
-
-When the entry is marked as `redactable`, the `tags`, `message`, and/or `event` payloads
-contain delimiters (‹...›) around
-fields that are considered sensitive. These markers are automatically recognized
-by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
-
-
+- `fluent-tag: false`
+- `tag-style: compact`
 
 
 ## Format `json-fluent`
 
-This format emits log entries as a JSON payload.
+This format name is an alias for 'json' with
+the following format option defaults:
 
-The JSON object is guaranteed to not contain unescaped newlines
-or other special characters, and the entry as a whole is followed
-by a newline character. This makes the format suitable for
-processing over a stream unambiguously.
-
-Each entry contains at least the following fields:
-
-| Field | Description |
-|-------|-------------|
-| `tag` | A Fluent tag for the event, formed by the process name and the logging channel. |
-| `file` | The name of the source file where the event was emitted. |
-| `goroutine` | The identifier of the goroutine where the event was emitted. |
-| `line` | The line number where the event was emitted in the source. |
-| `redactable` | Whether the payload is redactable (see below for details). |
-| `timestamp` | The timestamp at which the event was emitted on the logging channel. |
-| `version` | The binary version with which the event was generated. |
-
-
-After a couple of *header* entries written at the beginning of each log sink,
-all subsequent log entries also contain the following fields:
-
-| Field               | Description |
-|---------------------|-------------|
-| `channel` | The name of the logging channel where the event was sent. |
-| `severity` | The severity of the event. |
-| `channel_numeric` | The numeric identifier for the logging channel where the event was sent. |
-| `entry_counter` | The entry number on this logging sink, relative to the last process restart. |
-| `severity_numeric` | The numeric value of the severity of the event. |
-
-
-Additionally, the following fields are conditionally present:
-
-| Field               | Description |
-|---------------------|-------------|
-| `node_id` | The node ID where the event was generated, once known. Only reported for single-tenant or KV servers. |
-| `cluster_id` | The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers. |
-| `instance_id` | The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `tenant_id` | The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `tags`    | The logging context tags for the entry, if there were context tags. |
-| `message` | For unstructured events, the flat text payload. |
-| `event`   | The logging event, if structured (see below for details). |
-| `stacks`  | Goroutine stacks, for fatal events. |
-
-When an entry is structured, the `event` field maps to a dictionary
-whose structure is one of the documented structured events. See the [reference documentation](eventlog.html)
-for structured events for a list of possible payloads.
-
-When the entry is marked as `redactable`, the `tags`, `message`, and/or `event` payloads
-contain delimiters (‹...›) around
-fields that are considered sensitive. These markers are automatically recognized
-by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
-
-
+- `fluent-tag: true`
+- `tag-style: verbose`
 
 
 ## Format `json-fluent-compact`
 
-This format emits log entries as a JSON payload.
+This format name is an alias for 'json' with
+the following format option defaults:
 
-The JSON object is guaranteed to not contain unescaped newlines
-or other special characters, and the entry as a whole is followed
-by a newline character. This makes the format suitable for
-processing over a stream unambiguously.
-
-Each entry contains at least the following fields:
-
-| Field | Description |
-|-------|-------------|
-| `tag` | A Fluent tag for the event, formed by the process name and the logging channel. |
-| `f` | The name of the source file where the event was emitted. |
-| `g` | The identifier of the goroutine where the event was emitted. |
-| `l` | The line number where the event was emitted in the source. |
-| `r` | Whether the payload is redactable (see below for details). |
-| `t` | The timestamp at which the event was emitted on the logging channel. |
-| `v` | The binary version with which the event was generated. |
-
-
-After a couple of *header* entries written at the beginning of each log sink,
-all subsequent log entries also contain the following fields:
-
-| Field               | Description |
-|---------------------|-------------|
-| `C` | The name of the logging channel where the event was sent. |
-| `sev` | The severity of the event. |
-| `c` | The numeric identifier for the logging channel where the event was sent. |
-| `n` | The entry number on this logging sink, relative to the last process restart. |
-| `s` | The numeric value of the severity of the event. |
-
-
-Additionally, the following fields are conditionally present:
-
-| Field               | Description |
-|---------------------|-------------|
-| `N` | The node ID where the event was generated, once known. Only reported for single-tenant or KV servers. |
-| `x` | The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers. |
-| `q` | The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `T` | The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `tags`    | The logging context tags for the entry, if there were context tags. |
-| `message` | For unstructured events, the flat text payload. |
-| `event`   | The logging event, if structured (see below for details). |
-| `stacks`  | Goroutine stacks, for fatal events. |
-
-When an entry is structured, the `event` field maps to a dictionary
-whose structure is one of the documented structured events. See the [reference documentation](eventlog.html)
-for structured events for a list of possible payloads.
-
-When the entry is marked as `redactable`, the `tags`, `message`, and/or `event` payloads
-contain delimiters (‹...›) around
-fields that are considered sensitive. These markers are automatically recognized
-by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
-
-
+- `fluent-tag: true`
+- `tag-style: compact`
 
 

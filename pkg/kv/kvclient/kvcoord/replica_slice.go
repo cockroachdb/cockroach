@@ -12,20 +12,28 @@ package kvcoord
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
+	"github.com/cockroachdb/errors"
 )
 
 // ReplicaInfo extends the Replica structure with the associated node
 // Locality information.
+// NB: tierMatchLength, latency and healthy are only computed and used within
+// OptimizeReplicaOrder. They measure these properties as the distance from the
+// current node.
+// TODO(baptist): Convert ReplicaInfo and ReplicaSlice package scope.
 type ReplicaInfo struct {
 	roachpb.ReplicaDescriptor
-	Tiers []roachpb.Tier
+	Locality        roachpb.Locality
+	tierMatchLength int
+	latency         time.Duration
+	healthy         bool
 }
 
 // A ReplicaSlice is a slice of ReplicaInfo.
@@ -44,23 +52,19 @@ const (
 	// replicas that are not LEARNERs, VOTER_OUTGOING, or
 	// VOTER_DEMOTING_{LEARNER/NON_VOTER}.
 	AllExtantReplicas
-	// AllReplicas prescribes that the ReplicaSlice should include all replicas.
-	AllReplicas
 )
 
 // NewReplicaSlice creates a ReplicaSlice from the replicas listed in the range
 // descriptor and using gossip to lookup node descriptors. Replicas on nodes
 // that are not gossiped are omitted from the result.
 //
-// Generally, learners are not returned, unless AllReplicas was passed in as a
-// filter, which in that case, everything will be returned. However, if a
-// non-nil leaseholder is passed in, it will be included in the result even if
-// the descriptor has it as a learner (we assert that the leaseholder is part
-// of the descriptor). The idea is that the descriptor might be stale and list
-// the leaseholder as a learner erroneously, and lease info is a strong signal
-// in that direction. Note that the returned ReplicaSlice might still not
-// include the leaseholder if info for the respective node is missing from the
-// NodeDescStore.
+// Generally, learners are not returned. However, if a non-nil leaseholder is
+// passed in, it will be included in the result even if the descriptor has it as
+// a learner (we assert that the leaseholder is part of the descriptor). The
+// idea is that the descriptor might be stale and list the leaseholder as a
+// learner erroneously, and lease info is a strong signal in that direction.
+// Note that the returned ReplicaSlice might still not include the leaseholder
+// if info for the respective node is missing from the NodeDescStore.
 //
 // If there's no info in gossip for any of the nodes in the descriptor, a
 // sendError is returned.
@@ -99,8 +103,6 @@ func NewReplicaSlice(
 		replicas = desc.Replicas().Filter(canReceiveLease).Descriptors()
 	case AllExtantReplicas:
 		replicas = desc.Replicas().VoterAndNonVoterDescriptors()
-	case AllReplicas:
-		replicas = desc.Replicas().Descriptors()
 	default:
 		log.Fatalf(ctx, "unknown ReplicaSliceFilter %v", filter)
 	}
@@ -129,12 +131,12 @@ func NewReplicaSlice(
 		}
 		rs = append(rs, ReplicaInfo{
 			ReplicaDescriptor: r,
-			Tiers:             nd.Locality.Tiers,
+			Locality:          nd.Locality,
 		})
 	}
 	if len(rs) == 0 {
 		return nil, newSendError(
-			fmt.Sprintf("no replica node information available via gossip for r%d", desc.RangeID))
+			errors.Errorf("no replica node information available via gossip for r%d", desc.RangeID))
 	}
 	return rs, nil
 }
@@ -171,23 +173,13 @@ func (rs ReplicaSlice) MoveToFront(i int) {
 	rs[0] = front
 }
 
-// localityMatch returns the number of consecutive locality tiers
-// which match between a and b.
-func localityMatch(a, b []roachpb.Tier) int {
-	if len(a) == 0 {
-		return 0
-	}
-	for i := range a {
-		if i >= len(b) || a[i] != b[i] {
-			return i
-		}
-	}
-	return len(a)
-}
-
 // A LatencyFunc returns the latency from this node to a remote
 // node and a bool indicating whether the latency is valid.
 type LatencyFunc func(roachpb.NodeID) (time.Duration, bool)
+
+// HealthFunc returns true if the node should be considered alive. Unhealthy
+// nodes are sorted behind healthy nodes.
+type HealthFunc func(roachpb.NodeID) bool
 
 // OptimizeReplicaOrder sorts the replicas in the order in which
 // they're to be used for sending RPCs (meaning in the order in which
@@ -205,7 +197,11 @@ type LatencyFunc func(roachpb.NodeID) (time.Duration, bool)
 // leaseholder is known by the caller, the caller will move it to the
 // front if appropriate.
 func (rs ReplicaSlice) OptimizeReplicaOrder(
-	nodeID roachpb.NodeID, latencyFn LatencyFunc, locality roachpb.Locality,
+	st *cluster.Settings,
+	nodeID roachpb.NodeID,
+	healthFn HealthFunc,
+	latencyFn LatencyFunc,
+	locality roachpb.Locality,
 ) {
 	// If we don't know which node we're on or its locality, and we don't have
 	// latency information to other nodes, send the RPCs randomly.
@@ -213,33 +209,60 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 		shuffle.Shuffle(rs)
 		return
 	}
+	followerReadsUnhealthy := FollowerReadsUnhealthy.Get(&st.SV)
+	sortByLocalityFirst := sortByLocalityFirst.Get(&st.SV)
+	// Populate the health, tier match length and locality before the sort loop.
+	for i := range rs {
+		rs[i].tierMatchLength = locality.SharedPrefix(rs[i].Locality)
+
+		// Latency to the local node is always the "best" use the special -1
+		// value to sort before any node other than itself.
+		// NB: -1 => Local node, 0 => unknown, >0 => remote node.
+		if rs[i].NodeID == nodeID {
+			rs[i].latency = -1
+		} else if latencyFn != nil {
+			if l, ok := latencyFn(rs[i].NodeID); ok {
+				rs[i].latency = l
+			}
+		}
+
+		if !followerReadsUnhealthy {
+			rs[i].healthy = healthFn(rs[i].NodeID)
+		}
+	}
 
 	// Sort replicas by latency and then attribute affinity.
 	sort.Slice(rs, func(i, j int) bool {
-		// Replicas on the same node have the same latency.
-		if rs[i].NodeID == rs[j].NodeID {
-			return false // i == j
-		}
-		// Replicas on the local node sort first.
-		if rs[i].NodeID == nodeID {
-			return true // i < j
-		}
-		if rs[j].NodeID == nodeID {
-			return false // j < i
+		// Always sort healthy nodes before unhealthy nodes.
+		if rs[i].healthy != rs[j].healthy {
+			return rs[i].healthy
 		}
 
-		if latencyFn != nil {
-			latencyI, okI := latencyFn(rs[i].NodeID)
-			latencyJ, okJ := latencyFn(rs[j].NodeID)
-			if okI && okJ {
-				return latencyI < latencyJ
+		// If the region is different choose the closer one.
+		// If the setting is true(default) consider locality before latency.
+		if sortByLocalityFirst {
+			// If the region is different choose the closer one.
+			if rs[i].tierMatchLength != rs[j].tierMatchLength {
+				return rs[i].tierMatchLength > rs[j].tierMatchLength
 			}
 		}
-		attrMatchI := localityMatch(locality.Tiers, rs[i].Tiers)
-		attrMatchJ := localityMatch(locality.Tiers, rs[j].Tiers)
-		// Longer locality matches sort first (the assumption is that
-		// they'll have better latencies).
-		return attrMatchI > attrMatchJ
+
+		// Use latency if they are different. The local node has a latency of -1
+		// so will sort before any other node.
+		if rs[i].latency != rs[j].latency {
+			return rs[i].latency < rs[j].latency
+		}
+
+		// If the setting is false, sort locality after latency.
+		if !sortByLocalityFirst {
+			// If the region is different choose the closer one.
+			if rs[i].tierMatchLength != rs[j].tierMatchLength {
+				return rs[i].tierMatchLength > rs[j].tierMatchLength
+			}
+		}
+
+		// If everything else is equal sort by node id.
+		return rs[i].NodeID < rs[j].NodeID
 	})
 }
 
@@ -250,15 +273,4 @@ func (rs ReplicaSlice) Descriptors() []roachpb.ReplicaDescriptor {
 		reps[i] = rs[i].ReplicaDescriptor
 	}
 	return reps
-}
-
-// LocalityValue returns the value of the locality tier associated with the
-// given key.
-func (ri *ReplicaInfo) LocalityValue(key string) string {
-	for _, tier := range ri.Tiers {
-		if tier.Key == key {
-			return tier.Value
-		}
-	}
-	return ""
 }

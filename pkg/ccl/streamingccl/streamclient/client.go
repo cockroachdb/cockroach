@@ -10,6 +10,7 @@ package streamclient
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
@@ -40,19 +41,26 @@ type SubscriptionToken []byte
 // information to start a stream processor.
 type CheckpointToken []byte
 
-// Client provides a way for the stream ingestion job to consume a
-// specified stream.
-//
-// TODO(57427): The stream client does not yet support the concept of
-// generations in a stream.
+// Dialer is a wrapper for different kinds of clients which stream updates from
+// a tenant.
+type Dialer interface {
+	// Dial checks if the source is able to be connected to for queries
+	Dial(ctx context.Context) error
+
+	// Close releases all the resources used by this client.
+	Close(ctx context.Context) error
+}
+
+// Client provides methods to stream updates from an application tenant.
+// The client persists state on the system tenant, allowing a new client
+// to resume from a checkpoint if a connection is lost.
 type Client interface {
+	Dialer
+
 	// Create initializes a stream with the source, potentially reserving any
 	// required resources, such as protected timestamps, and returns an ID which
 	// can be used to interact with this stream in the future.
-	Create(ctx context.Context, tenant roachpb.TenantName) (streampb.ReplicationProducerSpec, error)
-
-	// Dial checks if the source is able to be connected to for queries
-	Dial(ctx context.Context) error
+	Create(ctx context.Context, tenant roachpb.TenantName, req streampb.ReplicationProducerRequest) (streampb.ReplicationProducerSpec, error)
 
 	// Destroy informs the source of the stream that it may terminate production
 	// and release resources such as protected timestamps.
@@ -78,9 +86,6 @@ type Client interface {
 	// TODO(dt): ts -> checkpointToken.
 	Subscribe(ctx context.Context, streamID streampb.StreamID, spec SubscriptionToken,
 		initialScanTime hlc.Timestamp, previousReplicatedTime hlc.Timestamp) (Subscription, error)
-
-	// Close releases all the resources used by this client.
-	Close(ctx context.Context) error
 
 	// Complete completes a replication stream consumption.
 	Complete(ctx context.Context, streamID streampb.StreamID, successfulIngestion bool) error
@@ -142,7 +147,7 @@ type Subscription interface {
 
 // NewStreamClient creates a new stream client based on the stream address.
 func NewStreamClient(
-	ctx context.Context, streamAddress streamingccl.StreamAddress, db isql.DB,
+	ctx context.Context, streamAddress streamingccl.StreamAddress, db isql.DB, opts ...Option,
 ) (Client, error) {
 	var streamClient Client
 	streamURL, err := streamAddress.URL()
@@ -154,7 +159,7 @@ func NewStreamClient(
 	case "postgres", "postgresql":
 		// The canonical PostgreSQL URL scheme is "postgresql", however our
 		// own client commands also accept "postgres".
-		return NewPartitionedStreamClient(ctx, streamURL)
+		return NewPartitionedStreamClient(ctx, streamURL, opts...)
 	case "external":
 		if db == nil {
 			return nil, errors.AssertionFailedf("nil db handle can't be used to dereference external URI")
@@ -163,7 +168,7 @@ func NewStreamClient(
 		if err != nil {
 			return nil, err
 		}
-		return NewStreamClient(ctx, addr, db)
+		return NewStreamClient(ctx, addr, db, opts...)
 	case RandomGenScheme:
 		streamClient, err = newRandomStreamClient(streamURL)
 		if err != nil {
@@ -192,28 +197,76 @@ func lookupExternalConnection(
 }
 
 // GetFirstActiveClient iterates through each provided stream address
-// and returns the first client it's able to successfully Dial.
-func GetFirstActiveClient(ctx context.Context, streamAddresses []string) (Client, error) {
+// and returns the first client it's able to successfully dial.
+func GetFirstActiveClient(
+	ctx context.Context, streamAddresses []string, db isql.DB, opts ...Option,
+) (Client, error) {
+
+	newClient := func(ctx context.Context, address streamingccl.StreamAddress) (Dialer, error) {
+		return NewStreamClient(ctx, address, db, opts...)
+	}
+	dialer, err := getFirstDialer(ctx, streamAddresses, newClient)
+	if err != nil {
+		return nil, err
+	}
+	return dialer.(Client), err
+}
+
+type dialerFactory func(ctx context.Context, address streamingccl.StreamAddress) (Dialer, error)
+
+func getFirstDialer(
+	ctx context.Context, streamAddresses []string, getNewDialer dialerFactory,
+) (Dialer, error) {
 	if len(streamAddresses) == 0 {
-		return nil, errors.Newf("failed to connect, no partition addresses")
+		return nil, errors.Newf("failed to connect, no addresses")
 	}
 	var combinedError error = nil
 	for _, address := range streamAddresses {
 		streamAddress := streamingccl.StreamAddress(address)
-		client, err := NewStreamClient(ctx, streamAddress, nil)
+		clientCandidate, err := getNewDialer(ctx, streamAddress)
 		if err == nil {
-			err = client.Dial(ctx)
+			err = clientCandidate.Dial(ctx)
 			if err == nil {
-				return client, err
+				return clientCandidate, err
 			}
 		}
-
 		// Note the failure and attempt the next address
 		log.Errorf(ctx, "failed to connect to address %s: %s", streamAddress, err.Error())
 		combinedError = errors.CombineErrors(combinedError, err)
 	}
+	return nil, errors.Wrap(combinedError, "failed to connect to any address")
+}
 
-	return nil, errors.Wrap(combinedError, "failed to connect to any partition address")
+type options struct {
+	streamID streampb.StreamID
+}
+
+func (o *options) appName() string {
+	const appNameBase = "repstream"
+	if o.streamID != 0 {
+		return fmt.Sprintf("%s job id=%d", appNameBase, o.streamID)
+	} else {
+		return appNameBase
+	}
+}
+
+// An Option configures some part of a Client.
+type Option func(*options)
+
+// WithStreamID sets the StreamID for the client. This only impacts
+// metadata such as the application_name on the SQL connection.
+func WithStreamID(id streampb.StreamID) Option {
+	return func(o *options) {
+		o.streamID = id
+	}
+}
+
+func processOptions(opts []Option) *options {
+	ret := &options{}
+	for _, o := range opts {
+		o(ret)
+	}
+	return ret
 }
 
 /*

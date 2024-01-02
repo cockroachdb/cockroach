@@ -17,10 +17,11 @@ with t=A
   put  k=k v=v
   get  k=k ts=3
 ----
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=4 Replicated Intent []}
 get: "k" -> /BYTES/v @5.000000000,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=4} ts=5.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=4} ts=5.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/5.000000000,0 -> /BYTES/v
 
 run ok
@@ -29,7 +30,7 @@ with t=A
   txn_restart
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
 
 
 # We're operating at a higher epoch but a lower timestamp.
@@ -40,7 +41,8 @@ with t=A
   put k=k v=v2
   get k=k
 ----
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
 get: "k" -> /BYTES/v2 @5.000000000,0
 >> at end:
-meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/5.000000000,0 -> /BYTES/v2

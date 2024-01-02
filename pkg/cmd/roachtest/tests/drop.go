@@ -35,7 +35,6 @@ func registerDrop(r registry.Registry) {
 	// rows). Next, it issues a `DROP` for the whole database, and sets the GC TTL
 	// to one second.
 	runDrop := func(ctx context.Context, t test.Test, c cluster.Cluster, warehouses, nodes int) {
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Range(1, nodes))
 		settings := install.MakeClusterSettings()
 		settings.Env = append(settings.Env, "COCKROACH_MEMPROF_INTERVAL=15s")
@@ -44,7 +43,11 @@ func registerDrop(r registry.Registry) {
 		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			t.WorkerStatus("importing TPCC fixture")
-			c.Run(ctx, c.Node(1), tpccImportCmd(warehouses))
+			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+			if err != nil {
+				t.Fatal(err)
+			}
+			c.Run(ctx, c.Node(1), tpccImportCmd(warehouses, pgurl))
 
 			// Don't open the DB connection until after the data has been imported.
 			// Otherwise the ALTER TABLE query below might fail to find the
@@ -162,10 +165,12 @@ func registerDrop(r registry.Registry) {
 	numNodes := 9
 
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("drop/tpcc/w=%d,nodes=%d", warehouses, numNodes),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("drop/tpcc/w=%d,nodes=%d", warehouses, numNodes),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// NB: this is likely not going to work out in `-local` mode. Edit the
 			// numbers during iteration.

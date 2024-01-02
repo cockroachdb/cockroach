@@ -30,8 +30,7 @@ func registerJasyncSQL(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -94,7 +93,7 @@ func registerJasyncSQL(r registry.Registry) {
 		_ = c.RunE(
 			ctx,
 			node,
-			`cd /mnt/data1/jasync-sql && PGUSER=root PGHOST=localhost PGPORT=26257 PGDATABASE=defaultdb ./gradlew :postgresql-async:test`,
+			`cd /mnt/data1/jasync-sql && PGUSER=root PGHOST=localhost PGPORT={pgport:1} PGDATABASE=defaultdb ./gradlew :postgresql-async:test`,
 		)
 
 		_ = c.RunE(ctx, node, `mkdir -p ~/logs/report/jasyncsql-results`)
@@ -140,11 +139,12 @@ func registerJasyncSQL(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "jasync",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `orm`),
+		Name:             "jasync",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.ORM),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runJasyncSQL(ctx, t, c)
 		},

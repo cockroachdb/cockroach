@@ -1136,7 +1136,7 @@ ORDER BY
 {}
 {"(1,cat)"}
 
-query T
+query T nosort
 SELECT
   t2.c4
 FROM
@@ -1196,6 +1196,11 @@ CREATE TABLE t78159 (b BOOL)
 statement ok
 INSERT INTO t78159 VALUES (false)
 
+query I
+SELECT (CASE WHEN b THEN NULL ELSE ((ROW(1) AS a)) END).a from t78159
+----
+1
+
 query B
 SELECT (CASE WHEN b THEN ((ROW(1) AS a)) ELSE NULL END).a from t78159
 ----
@@ -1208,14 +1213,12 @@ subtest 78515
 statement ok
 SELECT (CASE WHEN false THEN (ROW(1) AS a) ELSE (ROW(2) AS a) END).a;
 
-# The label of the first tuple is used in the type of the CASE expression. This
-# is similar to Postgres, but not exactly the same - Postgres uses the labels of
-# the last tuple. This difference should be addressed in the future when we try
-# to adhere more closely to Postgres's type conversion behavior (see #75101).
-statement ok
+# The label of the last tuple is used in the type of the CASE expression. This
+# matches Postgres behavior.
+statement error could not identify column \"a\" in tuple{int AS b}
 SELECT (CASE WHEN false THEN (ROW(1) AS a) ELSE (ROW(2) AS b) END).a;
 
-statement error could not identify column \"b\" in tuple{int AS a}
+statement ok
 SELECT (CASE WHEN false THEN (ROW(1) AS a) ELSE (ROW(2) AS b) END).b;
 
 subtest end
@@ -1224,7 +1227,7 @@ subtest end
 # to handle tuples of arrays of tuples in the VALUES clause.
 subtest 79484
 
-query T
+query T nosort
 SELECT * FROM (
   VALUES
     ((ARRAY[15181:::INT8], ARRAY[]:::RECORD[])),
@@ -1248,3 +1251,35 @@ INSERT INTO t94092 VALUES (1);
 
 query error expected tuple \(\) to have a length of 2
 SELECT (c, 1) != (()) FROM t94092;
+
+# Regression test for #106303.
+statement error pgcode 42601 mismatch in tuple definition: 0 expressions, 1 labels
+SELECT (ROW() AS a) IS NOT UNKNOWN
+
+statement error pgcode 42601 mismatch in tuple definition: 0 expressions, 1 labels
+SELECT CASE WHEN False THEN ROW() ELSE (ROW() AS a) END
+
+subtest 109105
+
+statement ok
+CREATE TABLE t109105 (a int);
+
+statement ok
+INSERT INTO t109105 VALUES (1),(2),(3),(4),(5),(6);
+
+# This should CAST the nulls in the rows to the types of the constant values
+# instead of erroring out.
+query T
+SELECT (CASE WHEN a = 1 THEN NULL
+             WHEN a = 2 THEN ROW(NULL, NULL, 1.1e3::FLOAT)
+             WHEN a = 3 THEN ROW(NULL, 1.1::DECIMAL, NULL)
+             WHEN a = 4 THEN ROW(1::INT, null, NULL)
+             WHEN a = 5 THEN NULL
+             ELSE NULL END) FROM t109105 ORDER BY 1;
+----
+NULL
+NULL
+NULL
+(,,1100)
+(,1.1,)
+(1,,)

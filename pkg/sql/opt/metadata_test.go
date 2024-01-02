@@ -108,7 +108,7 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("expected table privilege to be revoked")
 	}
 
-	udfName := tree.MakeQualifiedFunctionName("t", "public", "udf")
+	udfName := tree.MakeQualifiedRoutineName("t", "public", "udf")
 	md.AddUserDefinedFunction(
 		&tree.Overload{Oid: catid.FuncIDToOID(1111)},
 		udfName.ToUnresolvedObjectName(),
@@ -540,4 +540,14 @@ func (ep *fakeGetMultiregionConfigPlanner) GetRangeDescByID(
 	context.Context, roachpb.RangeID,
 ) (rangeDesc roachpb.RangeDescriptor, err error) {
 	return
+}
+
+// Optimizer is part of the cat.Catalog interface.
+func (ep *fakeGetMultiregionConfigPlanner) Optimizer() interface{} {
+	return nil
+}
+
+// AutoCommit is part of the eval.Planner interface.
+func (ep *fakeGetMultiregionConfigPlanner) AutoCommit() bool {
+	return false
 }

@@ -120,10 +120,10 @@ func TestIndexConstraints(t *testing.T) {
 					computedCols = make(map[opt.ColumnID]opt.ScalarExpr)
 					for col, expr := range sv.ComputedCols() {
 						b := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, &f)
-						if err := b.Build(expr); err != nil {
+						computedColExpr, err := b.Build(expr)
+						if err != nil {
 							d.Fatalf(t, "error building computed column expression: %v", err)
 						}
-						computedColExpr := f.Memo().RootExpr().(opt.ScalarExpr)
 						computedCols[col] = computedColExpr
 						var sharedProps props.Shared
 						memo.BuildSharedProps(computedColExpr, &sharedProps, &evalCtx)
@@ -136,6 +136,7 @@ func TestIndexConstraints(t *testing.T) {
 					filters, optionalFilters, indexCols, sv.NotNullCols(), computedCols,
 					colsInComputedColsExpressions,
 					true /* consolidate */, &evalCtx, &f, partition.PrefixSorter{},
+					func() {}, /* checkCancellation */
 				)
 				result := ic.Constraint()
 				var buf bytes.Buffer
@@ -254,6 +255,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 					nil /* computedCols */, opt.ColSet{}, /* colsInComputedColsExpressions */
 					true, /* consolidate */
 					&evalCtx, &f, partition.PrefixSorter{},
+					func() {}, /* checkCancellation */
 				)
 				_ = ic.Constraint()
 				_ = ic.RemainingFilters()
@@ -312,10 +314,10 @@ func buildFilters(
 		return memo.FiltersExpr{}, err
 	}
 	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
-	if err := b.Build(expr); err != nil {
+	root, err := b.Build(expr)
+	if err != nil {
 		return memo.FiltersExpr{}, err
 	}
-	root := f.Memo().RootExpr().(opt.ScalarExpr)
 	if _, ok := root.(*memo.TrueExpr); ok {
 		return memo.TrueFilter, nil
 	}

@@ -17,10 +17,10 @@ BEGIN TRANSACTION -- identifiers removed
 parse
 START TRANSACTION
 ----
-BEGIN TRANSACTION -- normalized!
-BEGIN TRANSACTION -- fully parenthesized
-BEGIN TRANSACTION -- literals removed
-BEGIN TRANSACTION -- identifiers removed
+START TRANSACTION
+START TRANSACTION -- fully parenthesized
+START TRANSACTION -- literals removed
+START TRANSACTION -- identifiers removed
 
 parse
 BEGIN TRANSACTION READ ONLY

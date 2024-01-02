@@ -35,6 +35,7 @@ export type StmtInsightsReq = {
   end?: moment.Moment;
   stmtExecutionID?: string;
   stmtFingerprintId?: string;
+  useObsService?: boolean;
 };
 
 export type StmtInsightsResponseRow = {
@@ -65,6 +66,38 @@ export type StmtInsightsResponseRow = {
   plan_gist: string;
   cpu_sql_nanos: number;
   error_code: string;
+  last_error_redactable: string;
+  status: StatementStatus;
+};
+
+export type StmtInsightsObsServiceResponseRow = {
+  session_id: string;
+  transaction_id: string;
+  transaction_fingerprint_id: string; // hex string
+  implicit_txn: boolean;
+  statement_id: string;
+  statement_fingerprint_id: string; // hex string
+  query: string;
+  start_time: string; // Timestamp
+  end_time: string; // Timestamp
+  full_scan: boolean;
+  user_name: string;
+  app_name: string;
+  database_name: string;
+  rows_read: number;
+  rows_written: number;
+  priority: string;
+  retries: number;
+  exec_node_ids: number[];
+  contention: string; // interval
+  last_retry_reason?: string;
+  causes: string[];
+  problem: string;
+  index_recommendations: string[];
+  plan_gist: string;
+  cpu_sql_nanos: number;
+  error_code: string;
+  last_error_redactable: string;
   status: StatementStatus;
 };
 
@@ -95,43 +128,78 @@ index_recommendations,
 plan_gist,
 cpu_sql_nanos,
 error_code,
+last_error_redactable,
 status
 `;
 
-const stmtInsightsOverviewQuery = (filters?: StmtInsightsReq): string => {
-  if (filters?.stmtExecutionID) {
-    return `
-SELECT ${stmtColumns} FROM crdb_internal.cluster_execution_insights
-WHERE stmt_id = '${filters.stmtExecutionID}'`;
+const stmtColumnsObsService = `
+session_id,
+transaction_id,
+transaction_fingerprint_id,
+implicit_txn,
+statement_id,
+statement_fingerprint_id,
+query,
+start_time,
+end_time,
+full_scan,
+user_name,
+app_name,
+database_name,
+rows_read,
+rows_written,
+user_priority,
+retries,
+execution_node_ids,
+contention_time,
+last_retry_reason,
+causes,
+problem,
+index_recommendations,
+plan_gist,
+cpu_sql_nanos,
+error_code,
+last_error_redactable,
+status
+`;
+
+const stmtInsightsOverviewQuery = (req?: StmtInsightsReq): string => {
+  const columns = req.useObsService ? stmtColumnsObsService : stmtColumns;
+  const table = req.useObsService
+    ? "obsservice.statement_execution_insights"
+    : "crdb_internal.cluster_execution_insights";
+  const stmtIdColumnName = req.useObsService ? "statement_id" : "stmt_id";
+  if (req?.stmtExecutionID) {
+    return `SELECT ${columns} FROM ${table} WHERE ${stmtIdColumnName} = '${req.stmtExecutionID}'`;
   }
 
+  const txnIdColumnName = req.useObsService ? "transaction_id" : "txn_id";
+  const stmtFingerprintIDColumnName = req.useObsService
+    ? "statement_fingerprint_id"
+    : "stmt_fingerprint_id";
   let whereClause = `
   WHERE app_name NOT LIKE '${INTERNAL_APP_NAME_PREFIX}%'
   AND problem != 'None'
-  AND txn_id != '00000000-0000-0000-0000-000000000000'`;
-  if (filters?.start) {
+  AND ${txnIdColumnName} != '00000000-0000-0000-0000-000000000000'`;
+  if (req?.start) {
     whereClause =
-      whereClause + ` AND start_time >= '${filters.start.toISOString()}'`;
+      whereClause + ` AND start_time >= '${req.start.toISOString()}'`;
   }
-  if (filters?.end) {
-    whereClause =
-      whereClause + ` AND end_time <= '${filters.end.toISOString()}'`;
+  if (req?.end) {
+    whereClause = whereClause + ` AND end_time <= '${req.end.toISOString()}'`;
   }
-  if (filters?.stmtFingerprintId) {
+  if (req?.stmtFingerprintId) {
     whereClause =
       whereClause +
-      ` AND encode(stmt_fingerprint_id, 'hex') = '${filters.stmtFingerprintId}'`;
+      ` AND encode(${stmtFingerprintIDColumnName}, 'hex') = '${req.stmtFingerprintId}'`;
   }
 
-  return `
-SELECT ${stmtColumns} FROM
+  return `SELECT ${columns} FROM
    (
-     SELECT DISTINCT ON (stmt_fingerprint_id, problem, causes)
+     SELECT DISTINCT ON (${stmtFingerprintIDColumnName}, problem, causes)
        *
-     FROM
-       crdb_internal.cluster_execution_insights
-         ${whereClause}
-     ORDER BY stmt_fingerprint_id, problem, causes, end_time DESC
+     FROM ${table} ${whereClause}
+     ORDER BY ${stmtFingerprintIDColumnName}, problem, causes, end_time DESC
    )`;
 };
 
@@ -153,9 +221,12 @@ export async function getStmtInsightsApi(
     execute: true,
     max_result_size: LARGE_RESULT_SIZE,
     timeout: LONG_TIMEOUT,
+    use_obs_service: req.useObsService,
   };
 
-  const result = await executeInternalSql<StmtInsightsResponseRow>(request);
+  const result = await executeInternalSql<
+    StmtInsightsResponseRow | StmtInsightsObsServiceResponseRow
+  >(request);
 
   if (sqlResultsAreEmpty(result)) {
     return formatApiResult<StmtInsightEvent[]>(
@@ -164,7 +235,10 @@ export async function getStmtInsightsApi(
       "retrieving insights information",
     );
   }
-  const stmtInsightEvent = formatStmtInsights(result.execution?.txn_results[0]);
+  const stmtInsightEvent = formatStmtInsights(
+    result.execution?.txn_results[0],
+    req.useObsService,
+  );
   await addStmtContentionInfoApi(stmtInsightEvent);
   return formatApiResult<StmtInsightEvent[]>(
     stmtInsightEvent,
@@ -201,48 +275,72 @@ async function addStmtContentionInfoApi(
 }
 
 export function formatStmtInsights(
-  response: SqlTxnResult<StmtInsightsResponseRow>,
+  response: SqlTxnResult<
+    StmtInsightsResponseRow | StmtInsightsObsServiceResponseRow
+  >,
+  useObsService?: boolean,
 ): StmtInsightEvent[] {
   if (!response?.rows?.length) {
     return [];
   }
 
-  return response.rows.map((row: StmtInsightsResponseRow) => {
-    const start = moment.utc(row.start_time);
-    const end = moment.utc(row.end_time);
+  let txnID;
+  let txnFingerprintID;
+  let stmtID;
+  let stmtFingerprintID;
 
-    return {
-      transactionExecutionID: row.txn_id,
-      transactionFingerprintID: FixFingerprintHexValue(row.txn_fingerprint_id),
-      implicitTxn: row.implicit_txn,
-      databaseName: row.database_name,
-      application: row.app_name,
-      username: row.user_name,
-      sessionID: row.session_id,
-      priority: row.priority,
-      retries: row.retries,
-      lastRetryReason: row.last_retry_reason,
-      query: row.query,
-      startTime: start,
-      endTime: end,
-      elapsedTimeMillis: end.diff(start, "milliseconds"),
-      statementExecutionID: row.stmt_id,
-      statementFingerprintID: FixFingerprintHexValue(row.stmt_fingerprint_id),
-      isFullScan: row.full_scan,
-      rowsRead: row.rows_read,
-      rowsWritten: row.rows_written,
-      // This is the total stmt contention.
-      contentionTime: row.contention ? moment.duration(row.contention) : null,
-      indexRecommendations: row.index_recommendations,
-      insights: getInsightsFromProblemsAndCauses(
-        [row.problem],
-        row.causes,
-        InsightExecEnum.STATEMENT,
-      ),
-      planGist: row.plan_gist,
-      cpuSQLNanos: row.cpu_sql_nanos,
-      errorCode: row.error_code,
-      status: row.status,
-    } as StmtInsightEvent;
-  });
+  return response.rows.map(
+    (row: StmtInsightsResponseRow | StmtInsightsObsServiceResponseRow) => {
+      const start = moment.utc(row.start_time);
+      const end = moment.utc(row.end_time);
+      if (useObsService) {
+        const r = row as StmtInsightsObsServiceResponseRow;
+        txnID = r.transaction_id;
+        txnFingerprintID = r.transaction_fingerprint_id;
+        stmtID = r.statement_id;
+        stmtFingerprintID = r.statement_fingerprint_id;
+      } else {
+        const r = row as StmtInsightsResponseRow;
+        txnID = r.txn_id;
+        txnFingerprintID = r.txn_fingerprint_id;
+        stmtID = r.stmt_id;
+        stmtFingerprintID = r.stmt_fingerprint_id;
+      }
+
+      return {
+        transactionExecutionID: txnID,
+        transactionFingerprintID: FixFingerprintHexValue(txnFingerprintID),
+        implicitTxn: row.implicit_txn,
+        databaseName: row.database_name,
+        application: row.app_name,
+        username: row.user_name,
+        sessionID: row.session_id,
+        priority: row.priority,
+        retries: row.retries,
+        lastRetryReason: row.last_retry_reason,
+        query: row.query,
+        startTime: start,
+        endTime: end,
+        elapsedTimeMillis: end.diff(start, "milliseconds"),
+        statementExecutionID: stmtID,
+        statementFingerprintID: FixFingerprintHexValue(stmtFingerprintID),
+        isFullScan: row.full_scan,
+        rowsRead: row.rows_read,
+        rowsWritten: row.rows_written,
+        // This is the total stmt contention.
+        contentionTime: row.contention ? moment.duration(row.contention) : null,
+        indexRecommendations: row.index_recommendations,
+        insights: getInsightsFromProblemsAndCauses(
+          [row.problem],
+          row.causes,
+          InsightExecEnum.STATEMENT,
+        ),
+        planGist: row.plan_gist,
+        cpuSQLNanos: row.cpu_sql_nanos,
+        errorCode: row.error_code,
+        errorMsg: row.last_error_redactable,
+        status: row.status,
+      } as StmtInsightEvent;
+    },
+  );
 }

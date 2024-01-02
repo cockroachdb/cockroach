@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -45,8 +45,7 @@ func TestTraceDumperZipCreation(t *testing.T) {
 		store: dumpstore.NewStore(traceDir, nil, nil),
 	}
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, _, _ := serverutils.StartServer(t, params)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	filename := "foo"

@@ -72,6 +72,11 @@ var (
 	// AbortSpan protects a transaction from re-reading its own intents
 	// after it's been aborted.
 	LocalAbortSpanSuffix = []byte("abc-")
+	// LocalReplicatedSharedLocksTransactionLatchingKeySuffix specifies the key
+	// suffix ("rsl" = replicated shared locks) for all replicated shared lock
+	// attempts, per transaction. The detail about the transaction is the
+	// transaction id.
+	LocalReplicatedSharedLocksTransactionLatchingKeySuffix = roachpb.RKey("rsl-")
 	// localRangeFrozenStatusSuffix is DEPRECATED and remains to prevent reuse.
 	localRangeFrozenStatusSuffix = []byte("fzn-")
 	// LocalRangeGCThresholdSuffix is the suffix for the GC threshold. It keeps
@@ -229,11 +234,7 @@ var (
 	// key (see EngineKey.Version). This permits the storage engine to use
 	// bloom filters when searching for all locks for a lockable key.
 	//
-	// Different lock strengths may use different value types. The exclusive
-	// lock strength uses MVCCMetadata as the value type, since it does
-	// double duty as a reference to a provisional MVCC value.
-	// TODO(sumeer): remember to adjust this comment when adding locks of
-	// other strengths, or range locks.
+	// All lock strengths use MVCCMetadata as the value type.
 	LocalRangeLockTablePrefix = roachpb.Key(makeKey(LocalPrefix, roachpb.RKey("z")))
 	LockTableSingleKeyInfix   = []byte("k")
 	// LockTableSingleKeyStart is the inclusive start key of the key range
@@ -287,12 +288,6 @@ var (
 	// > 1.0 persist the version at which they were bootstrapped.
 	BootstrapVersionKey = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("bootstrap-version")))
 	//
-	// LegacyDescIDGenerator is the legacy global descriptor ID generator sequence
-	// used for table and namespace IDs for the system tenant in clusters <23.1.
-	// Otherwise, a SQL sequence is used for this purpose.
-	//
-	// TODO(postamar): remove along with clusterversion.V23_1DescIDSequenceForSystemTenant
-	LegacyDescIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("desc-idgen")))
 	// NodeIDGenerator is the global node ID generator sequence.
 	NodeIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("node-idgen")))
 	// RangeIDGenerator is the global range ID generator sequence.
@@ -400,6 +395,7 @@ const (
 	SettingsTableID            = 6
 	DescIDSequenceID           = 7
 	TenantsTableID             = 8
+	RegionLivenessTableID      = 9
 
 	// IDs for the important columns and indexes in the zones table live here to
 	// avoid introducing a dependency on sql/sqlbase throughout the codebase.
@@ -506,7 +502,7 @@ var PseudoTableIDs = []uint32{
 	SystemRangesID,
 	TimeseriesRangesID,
 	LivenessRangesID,
-	PublicSchemaID,
+	SystemPublicSchemaID,
 	TenantsRangesID,
 }
 

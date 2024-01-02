@@ -332,10 +332,19 @@ func (m *CreateChangefeed) LoggingChannel() logpb.Channel { return logpb.Channel
 func (m *HotRangesStats) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *MVCCIteratorStats) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *RecoveryEvent) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *SampledExecStats) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *SampledQuery) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *SampledTransaction) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *SchemaDescriptor) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }

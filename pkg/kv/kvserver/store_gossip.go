@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -164,10 +163,6 @@ var errSpanConfigsUnavailable = errors.New("span configs not available")
 // TODO(kvoli): Refactor this function to sit on the store gossip struct,
 // rather than on the store.
 func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
-	if !s.cfg.SpanConfigsDisabled && spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
-		return // nothing to do
-	}
-
 	ctx := s.AnnotateCtx(context.Background())
 	s.computeInitialMetrics.Do(func() {
 		// Metrics depend in part on the system config. Compute them as soon as we
@@ -187,20 +182,6 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 	// be split or merged.
 	now := s.cfg.Clock.NowAsClockTimestamp()
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		key := repl.Desc().StartKey
-		conf, err := sysCfg.GetSpanConfigForKey(ctx, key)
-		if err != nil {
-			if log.V(1) {
-				log.Infof(context.TODO(), "failed to get span config for key %s", key)
-			}
-			conf = s.cfg.DefaultSpanConfig
-		}
-
-		if s.cfg.SpanConfigsDisabled ||
-			!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
-			repl.SetSpanConfig(conf)
-		}
-
 		if shouldQueue {
 			s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)

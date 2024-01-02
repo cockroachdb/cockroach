@@ -13,7 +13,7 @@ import { Location, createLocation, createHashHistory } from "history";
 import _ from "lodash";
 import { Store } from "redux";
 
-import { history } from "src/redux/history";
+import { history } from "./history";
 import { AnalyticsSync, defaultRedactions } from "./analytics";
 import { clusterReducerObj, nodesReducerObj } from "./apiReducers";
 import { AdminUIState, createAdminUIStore } from "./state";

@@ -12,6 +12,7 @@ package sql_test
 
 import (
 	"context"
+	"regexp"
 	"sort"
 	"strconv"
 	"testing"
@@ -35,7 +36,9 @@ func TestDropFunction(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(107322),
+	})
 	defer s.Stopper().Stop(ctx)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -133,10 +136,8 @@ SELECT nextval(105:::REGCLASS);`,
 		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typn)
 		require.NoError(t, err)
 		require.Equal(t, "notmyworkday", typ.GetName())
-		require.Equal(t,
-			[]descpb.ID{109},
-			typ.GetReferencingDescriptorIDs(),
-		)
+		require.Equal(t, 1, typ.NumReferencingDescriptors())
+		require.Equal(t, descpb.ID(109), typ.GetReferencingDescriptorID(0))
 
 		return nil
 	})
@@ -147,7 +148,7 @@ SELECT nextval(105:::REGCLASS);`,
 	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 109)
 		require.Error(t, err)
-		require.Regexp(t, "function undefined", err.Error())
+		require.Regexp(t, regexp.MustCompile(`function \d+ does not exist`), err.Error())
 
 		// Make sure columns and indexes has correct back references.
 		tn := tree.MakeTableNameWithSchema("defaultdb", "public", "t")
@@ -176,7 +177,7 @@ SELECT nextval(105:::REGCLASS);`,
 		typn := tree.MakeQualifiedTypeName("defaultdb", "public", "notmyworkday")
 		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typn)
 		require.NoError(t, err)
-		require.Nil(t, typ.GetReferencingDescriptorIDs())
+		require.Zero(t, typ.NumReferencingDescriptors())
 
 		return nil
 	})
@@ -398,7 +399,7 @@ $$;
 			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.Error(t, err)
-				require.Regexp(t, "function undefined", err.Error())
+				require.Regexp(t, regexp.MustCompile(`function \d+ does not exist`), err.Error())
 				return nil
 			})
 			require.NoError(t, err)
@@ -431,7 +432,7 @@ $$;
 			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.Error(t, err)
-				require.Regexp(t, "function undefined", err.Error())
+				require.Regexp(t, regexp.MustCompile(`function \d+ does not exist`), err.Error())
 				return nil
 			})
 			require.NoError(t, err)

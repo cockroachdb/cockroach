@@ -14,8 +14,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 )
 
 // registry contains all defined settings, their types and default values.
@@ -26,7 +24,23 @@ import (
 //
 // registry should never be mutated after creation (except in tests), as it is
 // read concurrently by different callers.
-var registry = make(map[string]internalSetting)
+var registry = make(map[InternalKey]internalSetting)
+
+// tenantReadOnlyKeys contains the keys of settings that have the
+// class SystemVisible. This is used to initialize defaults in the
+// tenant settings watcher.
+var tenantReadOnlyKeys []InternalKey
+
+// aliasRegistry contains the mapping of names to keys, for names
+// different from the keys.
+var aliasRegistry = make(map[SettingName]aliasEntry)
+
+type aliasEntry struct {
+	// key is the setting this name is referring to.
+	key InternalKey
+	// active indicates whether this name is currently in use.
+	active NameStatus
+}
 
 // slotTable stores the same settings as the registry, but accessible by the
 // slot index.
@@ -35,18 +49,52 @@ var slotTable [MaxSettings]internalSetting
 // TestingSaveRegistry can be used in tests to save/restore the current
 // contents of the registry.
 func TestingSaveRegistry() func() {
-	var origRegistry = make(map[string]internalSetting)
+	var origRegistry = make(map[InternalKey]internalSetting)
 	for k, v := range registry {
 		origRegistry[k] = v
 	}
+	var origAliases = make(map[SettingName]aliasEntry)
+	for k, v := range aliasRegistry {
+		origAliases[k] = v
+	}
+	var origSystemVisibleKeys = make([]InternalKey, len(tenantReadOnlyKeys))
+	copy(origSystemVisibleKeys, tenantReadOnlyKeys)
 	return func() {
 		registry = origRegistry
+		aliasRegistry = origAliases
+		tenantReadOnlyKeys = origSystemVisibleKeys
 	}
+}
+
+// When a setting class changes from ApplicationLevel to System, it should
+// be added to this list so that we can offer graceful degradation to
+// users of previous versions.
+var systemSettingsWithPreviousApplicationClass = map[InternalKey]struct{}{
+	// Changed in v23.2.
+	"cluster.organization":                        {},
+	"enterprise.license":                          {},
+	"kv.bulk_io_write.concurrent_export_requests": {},
+	"kv.closed_timestamp.propagation_slack":       {},
+	"kv.closed_timestamp.side_transport_interval": {},
+	"kv.closed_timestamp.target_duration":         {},
+	"kv.raft.command.max_size":                    {},
+	"kv.rangefeed.enabled":                        {},
+	"server.rangelog.ttl":                         {},
+	"timeseries.storage.enabled":                  {},
+	"timeseries.storage.resolution_10s.ttl":       {},
+	"timeseries.storage.resolution_30m.ttl":       {},
+}
+
+// SettingPreviouslyHadApplicationClass returns true if the setting
+// used to have the ApplicationLevel class.
+func SettingPreviouslyHadApplicationClass(key InternalKey) bool {
+	_, ok := systemSettingsWithPreviousApplicationClass[key]
+	return ok
 }
 
 // When a setting is removed, it should be added to this list so that we cannot
 // accidentally reuse its name, potentially mis-handling older values.
-var retiredSettings = map[string]struct{}{
+var retiredSettings = map[InternalKey]struct{}{
 	// removed as of 2.0.
 	"kv.gc.batch_size":                     {},
 	"kv.transaction.max_intents":           {},
@@ -164,14 +212,32 @@ var retiredSettings = map[string]struct{}{
 	// renamed.
 	"spanconfig.host_coalesce_adjacent.enabled":            {},
 	"sql.defaults.experimental_stream_replication.enabled": {},
-	"sql.log.unstructured_entries.enabled":                 {},
+	"sql.drop_tenant.enabled":                              {},
+
+	// removed as of 23.2.
+	"sql.log.unstructured_entries.enabled":                     {},
+	"sql.auth.createrole_allows_grant_role_membership.enabled": {},
+	"changefeed.replan_flow_frequency":                         {},
+	"changefeed.replan_flow_threshold":                         {},
+	"jobs.trace.force_dump_mode":                               {},
+	"timeseries.storage.30m_resolution_ttl":                    {},
+	"server.cpu_profile.enabled":                               {},
+	"changefeed.lagging_ranges_threshold":                      {},
+	"changefeed.lagging_ranges_polling_rate":                   {},
+	"trace.jaeger.agent":                                       {},
+	"bulkio.restore.use_simple_import_spans":                   {},
+	"bulkio.restore.remove_regions.enabled":                    {},
+
+	// removed as of 24.1
+	"storage.mvcc.range_tombstones.enabled":        {},
+	"changefeed.balance_range_distribution.enable": {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
 // cluster settings. In 22.2 and later, new session settings do not need an
 // associated sql.defaults cluster setting. Instead they can have their default
 // changed with ALTER ROLE ... SET.
-var sqlDefaultSettings = map[string]struct{}{
+var sqlDefaultSettings = map[InternalKey]struct{}{
 	// PLEASE DO NOT ADD NEW SETTINGS TO THIS MAP. THANK YOU.
 	"sql.defaults.cost_scans_with_default_col_size.enabled":                     {},
 	"sql.defaults.datestyle":                                                    {},
@@ -223,51 +289,50 @@ var sqlDefaultSettings = map[string]struct{}{
 	"sql.defaults.zigzag_join.enabled":                                          {},
 }
 
-// register adds a setting to the registry.
-func register(class Class, key, desc string, s internalSetting) {
-	if _, ok := retiredSettings[key]; ok {
-		panic(fmt.Sprintf("cannot reuse previously defined setting name: %s", key))
+// checkNameFound verifies whether the given string is known as key or name.
+func checkNameFound(keyOrName string) {
+	if _, ok := retiredSettings[InternalKey(keyOrName)]; ok {
+		panic(fmt.Sprintf("cannot reuse previously defined setting key: %s", InternalKey(keyOrName)))
 	}
-	if _, ok := registry[key]; ok {
-		panic(fmt.Sprintf("setting already defined: %s", key))
+	if _, ok := registry[InternalKey(keyOrName)]; ok {
+		panic(fmt.Sprintf("setting already defined: %s", keyOrName))
 	}
-	if strings.Contains(key, "sql.defaults") {
-		if _, ok := sqlDefaultSettings[key]; !ok {
+	if a, ok := aliasRegistry[SettingName(keyOrName)]; ok {
+		panic(fmt.Sprintf("setting already defined: %s (with key %s)", keyOrName, a.key))
+	}
+	if strings.Contains(keyOrName, "sql.defaults") {
+		if _, ok := sqlDefaultSettings[InternalKey(keyOrName)]; !ok {
 			panic(fmt.Sprintf(
 				"new sql.defaults cluster settings: %s is not needed now that `ALTER ROLE ... SET` syntax "+
-					"is supported; please remove the new sql.defaults cluster setting", key))
+					"is supported; please remove the new sql.defaults cluster setting", keyOrName))
 		}
 	}
-	if len(desc) == 0 {
-		panic(fmt.Sprintf("setting missing description: %s", key))
-	}
-	if r, _ := utf8.DecodeRuneInString(desc); unicode.IsUpper(r) {
-		panic(fmt.Sprintf(
-			"setting descriptions should start with a lowercase letter: %q, %q", key, desc,
-		))
-	}
-	for _, c := range desc {
-		if c == unicode.ReplacementChar {
-			panic(fmt.Sprintf("setting descriptions must be valid UTF-8: %q, %q", key, desc))
-		}
-		if unicode.IsControl(c) {
-			panic(fmt.Sprintf(
-				"setting descriptions cannot contain control character %q: %q, %q", c, key, desc,
-			))
-		}
-	}
+}
+
+// register adds a setting to the registry.
+func register(class Class, key InternalKey, desc string, s internalSetting) {
+	checkNameFound(string(key))
+
 	slot := slotIdx(len(registry))
 	s.init(class, key, desc, slot)
 	registry[key] = s
 	slotTable[slot] = s
+	if class == SystemVisible {
+		tenantReadOnlyKeys = append(tenantReadOnlyKeys, key)
+	}
+}
+
+func registerAlias(key InternalKey, name SettingName, nameStatus NameStatus) {
+	checkNameFound(string(name))
+	aliasRegistry[name] = aliasEntry{key: key, active: nameStatus}
 }
 
 // NumRegisteredSettings returns the number of registered settings.
 func NumRegisteredSettings() int { return len(registry) }
 
 // Keys returns a sorted string array with all the known keys.
-func Keys(forSystemTenant bool) (res []string) {
-	res = make([]string, 0, len(registry))
+func Keys(forSystemTenant bool) (res []InternalKey) {
+	res = make([]InternalKey, 0, len(registry))
 	for k, v := range registry {
 		if v.isRetired() {
 			continue
@@ -277,15 +342,81 @@ func Keys(forSystemTenant bool) (res []string) {
 		}
 		res = append(res, k)
 	}
-	sort.Strings(res)
+	sort.Slice(res, func(i, j int) bool { return res[i] < res[j] })
 	return res
+}
+
+// SystemVisibleKeys returns a array with all the known keys that
+// have the class SystemVisible. It might not be sorted.
+// The caller must refrain from modifying the return value.
+func SystemVisibleKeys() []InternalKey {
+	return tenantReadOnlyKeys
+}
+
+// ConsoleKeys return an array with all cluster settings keys
+// used by the UI Console.
+// This list should only contain settings that have no sensitive
+// information, because it will be returned on `settings` endpoint for
+// users without VIEWCLUSTERSETTING or MODIFYCLUSTERSETTING permission,
+// but that have VIEWACTIVITY or VIEWACTIVITYREDACTED permissions.
+func ConsoleKeys() (res []InternalKey) {
+	return allConsoleKeys
+}
+
+var allConsoleKeys = []InternalKey{
+	"cross_cluster_replication.enabled",
+	"keyvisualizer.enabled",
+	"keyvisualizer.sample_interval",
+	"sql.index_recommendation.drop_unused_duration",
+	"sql.insights.anomaly_detection.latency_threshold",
+	"sql.insights.export.enabled",
+	"sql.insights.high_retry_count.threshold",
+	"sql.insights.latency_threshold",
+	"sql.stats.automatic_collection.enabled",
+	"timeseries.storage.resolution_10s.ttl",
+	"timeseries.storage.resolution_30m.ttl",
+	"ui.display_timezone",
+	"version",
+}
+
+// NameToKey returns the key associated with a setting name.
+func NameToKey(name SettingName) (key InternalKey, found bool, nameStatus NameStatus) {
+	// First check the alias registry.
+	if alias, ok := aliasRegistry[name]; ok {
+		return alias.key, true, alias.active
+	}
+	// No alias: did they perhaps use the key directly?
+	maybeKey := InternalKey(name)
+	if s, ok := registry[maybeKey]; ok {
+		nameStatus := NameActive
+		if s.Name() != SettingName(maybeKey) {
+			// The user is invited to use the new name instead of the key.
+			nameStatus = NameRetired
+		}
+		return maybeKey, true, nameStatus
+	}
+	return "", false, NameActive
 }
 
 // LookupForLocalAccess returns a NonMaskedSetting by name. Used when a setting
 // is being retrieved for local processing within the cluster and not for
 // reporting; sensitive values are accessible.
-func LookupForLocalAccess(name string, forSystemTenant bool) (NonMaskedSetting, bool) {
-	s, ok := registry[name]
+func LookupForLocalAccess(
+	name SettingName, forSystemTenant bool,
+) (NonMaskedSetting, bool, NameStatus) {
+	key, ok, nameStatus := NameToKey(name)
+	if !ok {
+		return nil, ok, nameStatus
+	}
+	s, ok := LookupForLocalAccessByKey(key, forSystemTenant)
+	return s, ok, nameStatus
+}
+
+// LookupForLocalAccessByKey returns a NonMaskedSetting by key. Used when a
+// setting is being retrieved for local processing within the cluster and not
+// for reporting; sensitive values are accessible.
+func LookupForLocalAccessByKey(key InternalKey, forSystemTenant bool) (NonMaskedSetting, bool) {
+	s, ok := registry[key]
 	if !ok {
 		return nil, false
 	}
@@ -295,13 +426,13 @@ func LookupForLocalAccess(name string, forSystemTenant bool) (NonMaskedSetting, 
 	return s, true
 }
 
-// LookupForReporting returns a Setting by name. Used when a setting is being
+// LookupForReportingByKey returns a Setting by key. Used when a setting is being
 // retrieved for reporting.
 //
 // For settings that are non-reportable, the returned Setting hides the current
 // value (see Setting.String).
-func LookupForReporting(name string, forSystemTenant bool) (Setting, bool) {
-	s, ok := registry[name]
+func LookupForReportingByKey(key InternalKey, forSystemTenant bool) (Setting, bool) {
+	s, ok := registry[key]
 	if !ok {
 		return nil, false
 	}
@@ -317,6 +448,10 @@ func LookupForReporting(name string, forSystemTenant bool) (Setting, bool) {
 // ForSystemTenant can be passed to Lookup for code that runs only on the system
 // tenant.
 const ForSystemTenant = true
+
+// ForVirtualCluster can be passed to Lookup for code that runs on
+// virtual clusters.
+const ForVirtualCluster = false
 
 // ReadableTypes maps our short type identifiers to friendlier names.
 var ReadableTypes = map[string]string{
@@ -337,9 +472,14 @@ var ReadableTypes = map[string]string{
 //     is a string setting with an empty value);
 //   - "<redacted>" if the setting is not reportable;
 //   - "<unknown>" if there is no setting with this name.
-func RedactedValue(name string, values *Values, forSystemTenant bool) string {
-	if setting, ok := LookupForReporting(name, forSystemTenant); ok {
+func RedactedValue(key InternalKey, values *Values, forSystemTenant bool) string {
+	if setting, ok := LookupForReportingByKey(key, forSystemTenant); ok {
 		return setting.String(values)
 	}
 	return "<unknown>"
+}
+
+// TestingListPrevAppSettings is exported for testing only.
+func TestingListPrevAppSettings() map[InternalKey]struct{} {
+	return systemSettingsWithPreviousApplicationClass
 }

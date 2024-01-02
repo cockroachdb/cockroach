@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -92,6 +93,20 @@ type DescriptorBuilder interface {
 	// This is to compensate for the fact that these are not subject to cluster
 	// upgrade migrations
 	RunRestoreChanges(version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) Descriptor) error
+
+	// StripDanglingBackReferences attempts to remove any back-references in the
+	// descriptor which are known to be dangling references. In other words, if
+	// there is a back-reference to a descriptor or a job and we know that the
+	// ID isn't valid, then this method removes this back-reference.
+	//
+	// Back-references are only ever checked when performing schema changes and
+	// usually aren't needed by the query planner so any corruption there can
+	// remain undetected for a long time. This method provides a mechanism for
+	// brute-force repair.
+	StripDanglingBackReferences(
+		descIDMightExist func(id descpb.ID) bool,
+		nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
+	) error
 
 	// SetRawBytesInStorage sets `rawBytesInStorage` field by deep-copying `rawBytes`.
 	SetRawBytesInStorage(rawBytes []byte)
@@ -230,6 +245,10 @@ type Descriptor interface {
 	// HasConcurrentSchemaChanges returns true if it has a schema changer
 	// in progress, either legacy or declarative.
 	HasConcurrentSchemaChanges() bool
+
+	// ConcurrentSchemaChangeJobIDs returns all in-progress schema change
+	// jobs, either legacy or declarative.
+	ConcurrentSchemaChangeJobIDs() []catpb.JobID
 
 	// SkipNamespace is true when a descriptor should not have a namespace record.
 	SkipNamespace() bool
@@ -776,9 +795,6 @@ type TypeDescriptor interface {
 	// GetReferencingDescriptorID returns the ID of the referencing descriptor at
 	// ordinal refOrdinal.
 	GetReferencingDescriptorID(refOrdinal int) descpb.ID
-	// GetReferencingDescriptorIDs returns IDs of descriptors referencing this
-	// type.
-	GetReferencingDescriptorIDs() []descpb.ID
 
 	// AsEnumTypeDescriptor returns this instance cast to EnumTypeDescriptor
 	// if this type is an enum type, nil otherwise.
@@ -958,9 +974,14 @@ type FunctionDescriptor interface {
 	// GetLanguage returns the language of this function.
 	GetLanguage() catpb.Function_Language
 
-	// ToCreateExpr converts a function descriptor back to a CREATE FUNCTION
-	// statement. This is mainly used for formatting, e.g. SHOW CREATE FUNCTION.
-	ToCreateExpr() (*tree.CreateFunction, error)
+	// ToCreateExpr converts a function descriptor back to a CREATE FUNCTION or
+	// CREATE PROCEDURE statement. This is mainly used for formatting, e.g.,
+	// SHOW CREATE FUNCTION and SHOW CREATE PROCEDURE.
+	ToCreateExpr() (*tree.CreateRoutine, error)
+
+	// IsProcedure returns true if the descriptor represents a procedure. It
+	// returns false if the descriptor represents a user-defined function.
+	IsProcedure() bool
 }
 
 // FilterDroppedDescriptor returns an error if the descriptor state is DROP.

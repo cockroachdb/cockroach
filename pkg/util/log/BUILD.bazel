@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
@@ -35,8 +34,10 @@ go_library(
         "log_decoder.go",
         "log_entry.go",
         "log_flush.go",
+        "metric.go",
         "redact.go",
         "registry.go",
+        "report.go",
         "sinks.go",
         "stderr_redirect.go",
         "stderr_redirect_unix.go",
@@ -55,6 +56,7 @@ go_library(
         "//pkg/base/serverident",
         "//pkg/build",
         "//pkg/cli/exit",
+        "//pkg/settings",
         "//pkg/testutils/skip",
         "//pkg/util",
         "//pkg/util/allstacks",
@@ -62,6 +64,7 @@ go_library(
         "//pkg/util/encoding/encodingtype",
         "//pkg/util/envutil",
         "//pkg/util/fileutil",
+        "//pkg/util/httputil",
         "//pkg/util/jsonbytes",
         "//pkg/util/log/channel",
         "//pkg/util/log/logconfig",
@@ -158,7 +161,6 @@ go_test(
         "trace_test.go",
         ":mock_logsink",  # keep
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":log"],
     deps = [
@@ -190,6 +192,7 @@ go_test(
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_x_net//trace",
+        "@org_golang_x_sys//unix",
     ],
 )
 
@@ -227,5 +230,3 @@ gomock(
         "//pkg/gen:__pkg__",
     ],
 )
-
-get_x_data(name = "get_x_data")

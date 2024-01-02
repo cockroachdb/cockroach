@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -195,9 +196,17 @@ func (sc *webhookSinkClient) makePayloadForBytes(body []byte) (SinkPayload, erro
 	return req, nil
 }
 
-// MakeResolvedPayload implements the SinkClient interface
-func (sc *webhookSinkClient) MakeResolvedPayload(body []byte, topic string) (SinkPayload, error) {
-	return sc.makePayloadForBytes(body)
+// FlushResolvedPayload implements the SinkClient interface
+func (sc *webhookSinkClient) FlushResolvedPayload(
+	ctx context.Context, body []byte, _ func(func(topic string) error) error, retryOpts retry.Options,
+) error {
+	pl, err := sc.makePayloadForBytes(body)
+	if err != nil {
+		return err
+	}
+	return retry.WithMaxAttempts(ctx, retryOpts, retryOpts.MaxRetries+1, func() error {
+		return sc.Flush(ctx, pl)
+	})
 }
 
 // Flush implements the SinkClient interface
@@ -229,7 +238,7 @@ func validateWebhookOpts(
 	u sinkURL, encodingOpts changefeedbase.EncodingOptions, opts changefeedbase.WebhookSinkOptions,
 ) error {
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
-		return errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeHTTPS)
+		return errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeWebhookHTTPS)
 	}
 
 	switch encodingOpts.Format {
@@ -265,7 +274,7 @@ type webhookCSVBuffer struct {
 var _ BatchBuffer = (*webhookCSVBuffer)(nil)
 
 // Append implements the BatchBuffer interface
-func (cb *webhookCSVBuffer) Append(key []byte, value []byte) {
+func (cb *webhookCSVBuffer) Append(key []byte, value []byte, _ attributes) {
 	cb.bytes = append(cb.bytes, value...)
 	cb.messageCount += 1
 }
@@ -289,7 +298,7 @@ type webhookJSONBuffer struct {
 var _ BatchBuffer = (*webhookJSONBuffer)(nil)
 
 // Append implements the BatchBuffer interface
-func (jb *webhookJSONBuffer) Append(key []byte, value []byte) {
+func (jb *webhookJSONBuffer) Append(key []byte, value []byte, _ attributes) {
 	jb.messages = append(jb.messages, value)
 	jb.numBytes += len(value)
 }

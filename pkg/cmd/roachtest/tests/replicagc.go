@@ -30,10 +30,12 @@ import (
 func registerReplicaGC(r registry.Registry) {
 	for _, restart := range []bool{true, false} {
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("replicagc-changed-peers/restart=%t", restart),
-			Owner:   registry.OwnerReplication,
-			Cluster: r.MakeClusterSpec(6),
-			Leases:  registry.MetamorphicLeases,
+			Name:             fmt.Sprintf("replicagc-changed-peers/restart=%t", restart),
+			Owner:            registry.OwnerReplication,
+			Cluster:          r.MakeClusterSpec(6),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runReplicaGCChangedPeers(ctx, t, c, restart)
 			},
@@ -63,7 +65,6 @@ func runReplicaGCChangedPeers(
 		t.Fatal("test needs to be run with 6 nodes")
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	settings := install.MakeClusterSettings(install.EnvOption([]string{"COCKROACH_SCAN_MAX_IDLE_TIME=5ms"}))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(1, 3))
 
@@ -271,6 +272,8 @@ func (h *replicagcTestHelper) isolateDeadNodes(ctx context.Context, runNode int)
 			h.t.Fatal(err)
 		}
 	}
+	// Wait to make sure the new constraints are read by all nodes.
+	time.Sleep(time.Minute)
 }
 
 func waitForZeroReplicasOnN3(ctx context.Context, t test.Test, db *gosql.DB) {

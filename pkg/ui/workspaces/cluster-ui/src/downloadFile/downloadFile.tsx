@@ -15,16 +15,13 @@ import React, {
   useImperativeHandle,
 } from "react";
 
-type FileTypes = "text/plain" | "application/json";
-
 export interface DownloadAsFileProps {
   fileName?: string;
-  fileType?: FileTypes;
-  content?: string;
+  content?: Blob;
 }
 
 export interface DownloadFileRef {
-  download: (name: string, type: FileTypes, body: string) => void;
+  download: (name: string, body: Blob) => void;
 }
 
 /*
@@ -58,13 +55,12 @@ export interface DownloadFileRef {
 // tslint:disable-next-line:variable-name
 export const DownloadFile = forwardRef<DownloadFileRef, DownloadAsFileProps>(
   (props, ref) => {
-    const { children, fileName, fileType, content } = props;
+    const { children, fileName, content } = props;
     const anchorRef = useRef<HTMLAnchorElement>();
 
-    const bootstrapFile = (name: string, type: FileTypes, body: string) => {
+    const bootstrapFile = (name: string, body: Blob) => {
       const anchorElement = anchorRef.current;
-      const file = new Blob([body], { type });
-      anchorElement.href = URL.createObjectURL(file);
+      anchorElement.href = URL.createObjectURL(body);
       anchorElement.download = name;
     };
 
@@ -72,12 +68,12 @@ export const DownloadFile = forwardRef<DownloadFileRef, DownloadAsFileProps>(
       if (content === undefined) {
         return;
       }
-      bootstrapFile(fileName, fileType, content);
-    }, [fileName, fileType, content]);
+      bootstrapFile(fileName, content);
+    }, [fileName, content]);
 
     useImperativeHandle(ref, () => ({
-      download: (name: string, type: FileTypes, body: string) => {
-        bootstrapFile(name, type, body);
+      download: (name: string, body: Blob) => {
+        bootstrapFile(name, body);
         anchorRef.current.click();
       },
     }));

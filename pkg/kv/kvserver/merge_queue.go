@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"time"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -120,26 +120,19 @@ func newMergeQueue(store *Store, db *kv.DB) *mergeQueue {
 			acceptsUnsplitRanges: false,
 			successes:            store.metrics.MergeQueueSuccesses,
 			failures:             store.metrics.MergeQueueFailures,
+			storeFailures:        store.metrics.StoreFailures,
 			pending:              store.metrics.MergeQueuePending,
 			processingNanos:      store.metrics.MergeQueueProcessingNanos,
 			purgatory:            store.metrics.MergeQueuePurgatory,
+			disabledConfig:       kvserverbase.MergeQueueEnabled,
 		},
 	)
 	return mq
 }
 
-func (mq *mergeQueue) enabled() bool {
-	st := mq.store.ClusterSettings()
-	return kvserverbase.MergeQueueEnabled.Get(&st.SV)
-}
-
 func (mq *mergeQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
 ) (shouldQueue bool, priority float64) {
-	if !mq.enabled() {
-		return false, 0
-	}
-
 	desc := repl.Desc()
 
 	if desc.EndKey.Equal(roachpb.RKeyMax) {
@@ -164,7 +157,7 @@ func (mq *mergeQueue) shouldQueue(
 		return false, 0
 	}
 
-	sizeRatio := float64(repl.GetMVCCStats().Total()) / float64(repl.GetMinBytes())
+	sizeRatio := float64(repl.GetMVCCStats().Total()) / float64(repl.GetMinBytes(ctx))
 	if math.IsNaN(sizeRatio) || sizeRatio >= 1 {
 		// This range is above the minimum size threshold. It does not need to be
 		// merged.
@@ -243,14 +236,10 @@ func (mq *mergeQueue) requestRangeStats(
 func (mq *mergeQueue) process(
 	ctx context.Context, lhsRepl *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, err error) {
-	if !mq.enabled() {
-		log.VEventf(ctx, 2, "skipping merge: queue has been disabled")
-		return false, nil
-	}
 
 	lhsDesc := lhsRepl.Desc()
 	lhsStats := lhsRepl.GetMVCCStats()
-	minBytes := lhsRepl.GetMinBytes()
+	minBytes := lhsRepl.GetMinBytes(ctx)
 	if lhsStats.Total() >= minBytes {
 		log.VEventf(ctx, 2, "skipping merge: LHS meets minimum size threshold %d with %d bytes",
 			minBytes, lhsStats.Total())
@@ -284,7 +273,7 @@ func (mq *mergeQueue) process(
 	mergedStats.Add(rhsStats)
 
 	lhsLoadSplitSnap := lhsRepl.loadBasedSplitter.Snapshot(ctx, mq.store.Clock().PhysicalTime())
-	var loadMergeReason string
+	var loadMergeReason redact.RedactableString
 	if lhsRepl.SplitByLoadEnabled() {
 		var canMergeLoad bool
 		if canMergeLoad, loadMergeReason = canMergeRangeLoad(
@@ -297,7 +286,7 @@ func (mq *mergeQueue) process(
 	}
 
 	shouldSplit, _ := shouldSplitRange(ctx, mergedDesc, mergedStats,
-		lhsRepl.GetMaxBytes(), lhsRepl.shouldBackpressureWrites(), confReader)
+		lhsRepl.GetMaxBytes(ctx), lhsRepl.shouldBackpressureWrites(), confReader)
 	if shouldSplit {
 		log.VEventf(ctx, 2,
 			"skipping merge to avoid thrashing: merged range %s may split "+
@@ -398,7 +387,7 @@ func (mq *mergeQueue) process(
 	}
 
 	log.VEventf(ctx, 2, "merging to produce range: %s-%s", mergedDesc.StartKey, mergedDesc.EndKey)
-	reason := fmt.Sprintf("lhs+rhs size (%s+%s=%s) below threshold (%s) %s",
+	reason := redact.Sprintf("lhs+rhs size (%s+%s=%s) below threshold (%s) %s",
 		humanizeutil.IBytes(lhsStats.Total()),
 		humanizeutil.IBytes(rhsStats.Total()),
 		humanizeutil.IBytes(mergedStats.Total()),
@@ -459,7 +448,7 @@ func (mq *mergeQueue) updateChan() <-chan time.Time {
 
 func canMergeRangeLoad(
 	ctx context.Context, lhs, rhs split.LoadSplitSnapshot,
-) (can bool, reason string) {
+) (can bool, reason redact.RedactableString) {
 	// When load is a consideration for splits and, by extension, merges, the
 	// mergeQueue is fairly conservative. In an effort to avoid thrashing and to
 	// avoid overreacting to temporary fluctuations in load, the mergeQueue will
@@ -482,7 +471,7 @@ func canMergeRangeLoad(
 	// just after changing the split objective to a different value, where
 	// there is a mismatch.
 	if lhs.SplitObjective != rhs.SplitObjective {
-		return false, fmt.Sprintf("LHS load measurement is a different type (%s) than the RHS (%s)",
+		return false, redact.Sprintf("LHS load measurement is a different type (%s) than the RHS (%s)",
 			lhs.SplitObjective,
 			rhs.SplitObjective,
 		)
@@ -497,7 +486,7 @@ func canMergeRangeLoad(
 	conservativeLoadBasedSplitThreshold := 0.5 * lhs.Threshold
 
 	if merged >= conservativeLoadBasedSplitThreshold {
-		return false, fmt.Sprintf("lhs+rhs %s (%s+%s=%s) above threshold (%s)",
+		return false, redact.Sprintf("lhs+rhs %s (%s+%s=%s) above threshold (%s)",
 			obj,
 			obj.Format(lhs.Max),
 			obj.Format(rhs.Max),
@@ -506,7 +495,7 @@ func canMergeRangeLoad(
 		)
 	}
 
-	return true, fmt.Sprintf("lhs+rhs %s (%s+%s=%s) below threshold (%s)",
+	return true, redact.Sprintf("lhs+rhs %s (%s+%s=%s) below threshold (%s)",
 		obj,
 		obj.Format(lhs.Max),
 		obj.Format(rhs.Max),

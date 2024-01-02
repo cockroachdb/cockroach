@@ -671,7 +671,7 @@ func (c *CustomFuncs) FoldFunction(
 	if c.f.evalCtx != nil && c.f.catalog != nil { // Some tests leave those unset.
 		unresolved := tree.MakeUnresolvedName(private.Name)
 		def, err := c.f.catalog.ResolveFunction(
-			context.Background(), &unresolved,
+			context.Background(), tree.MakeUnresolvedFunctionName(&unresolved),
 			&c.f.evalCtx.SessionData().SearchPath)
 		if err != nil {
 			panic(errors.AssertionFailedf("function %s() not defined", redact.Safe(private.Name)))

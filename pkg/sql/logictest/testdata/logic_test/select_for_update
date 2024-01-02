@@ -131,6 +131,29 @@ query I
 ----
 1
 
+# Unlike Postgres, we do not support multiple locking clauses on parenthesized
+# queries.
+
+statement error pgcode 42601 multiple FOR UPDATE clauses not allowed
+(SELECT 1 FOR UPDATE) FOR UPDATE
+
+statement error pgcode 42601 multiple FOR UPDATE clauses not allowed
+((SELECT 1 FOR UPDATE)) FOR UPDATE
+
+statement error pgcode 42601 multiple FOR UPDATE clauses not allowed
+((SELECT 1) FOR UPDATE) FOR UPDATE
+
+# But we do support locking clauses both inside and outside subqueries.
+
+statement ok
+SELECT (SELECT 1 FOR UPDATE) FOR UPDATE
+
+statement ok
+SELECT * FROM (SELECT 1 FOR UPDATE) AS x FOR UPDATE
+
+statement ok
+SELECT * FROM (SELECT 1 FOR UPDATE) AS x WHERE EXISTS (SELECT 1 FOR UPDATE) FOR UPDATE
+
 # FOR READ ONLY is ignored, like in Postgres.
 query I
 SELECT 1 FOR READ ONLY
@@ -140,17 +163,55 @@ SELECT 1 FOR READ ONLY
 # Various operations are not supported when locking clauses are provided.
 # FeatureNotSupported errors are thrown for each of them.
 
+statement ok
+CREATE TABLE i (i PRIMARY KEY) AS SELECT 1
+
 statement error pgcode 0A000 FOR UPDATE is not allowed with UNION/INTERSECT/EXCEPT
 SELECT 1 UNION SELECT 1 FOR UPDATE
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with UNION/INTERSECT/EXCEPT
 SELECT * FROM (SELECT 1 UNION SELECT 1) a FOR UPDATE
 
+statement error pgcode 0A000 FOR UPDATE is not allowed with UNION/INTERSECT/EXCEPT
+SELECT * FROM (SELECT 1 UNION SELECT 1) a, i FOR UPDATE
+
+query II
+SELECT * FROM (SELECT 1 UNION SELECT 1) a, i FOR UPDATE OF i
+----
+1  1
+
 statement error pgcode 0A000 FOR UPDATE is not allowed with VALUES
 VALUES (1) FOR UPDATE
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with VALUES
+(VALUES (1)) FOR UPDATE
+
+# VALUES within a subquery is allowed, like in Postgres.
+
+query I
+SELECT (VALUES (1)) FOR UPDATE
+----
+1
+
+query I
 SELECT * FROM (VALUES (1)) a FOR UPDATE
+----
+1
+
+query II
+SELECT * FROM (VALUES (1)) a, i FOR UPDATE
+----
+1  1
+
+query II
+SELECT * FROM (VALUES (1)) a, i FOR UPDATE OF a
+----
+1  1
+
+query II
+SELECT * FROM (VALUES (1)) a, i FOR UPDATE OF i
+----
+1  1
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with DISTINCT clause
 SELECT DISTINCT 1 FOR UPDATE
@@ -158,11 +219,33 @@ SELECT DISTINCT 1 FOR UPDATE
 statement error pgcode 0A000 FOR UPDATE is not allowed with DISTINCT clause
 SELECT * FROM (SELECT DISTINCT 1) a FOR UPDATE
 
+statement error pgcode 0A000 FOR UPDATE is not allowed with DISTINCT clause
+SELECT * FROM (SELECT DISTINCT 1) a, i FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with DISTINCT clause
+SELECT * FROM (SELECT DISTINCT 1) a, i FOR UPDATE OF a
+
+query II
+SELECT * FROM (SELECT DISTINCT 1) a, i FOR UPDATE OF i
+----
+1  1
+
 statement error pgcode 0A000 FOR UPDATE is not allowed with GROUP BY clause
 SELECT 1 GROUP BY 1 FOR UPDATE
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with GROUP BY clause
 SELECT * FROM (SELECT 1 GROUP BY 1) a FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with GROUP BY clause
+SELECT * FROM (SELECT 1 GROUP BY 1) a, i FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with GROUP BY clause
+SELECT * FROM (SELECT 1 GROUP BY 1) a, i FOR UPDATE OF a
+
+query II
+SELECT * FROM (SELECT 1 GROUP BY 1) a, i FOR UPDATE OF i
+----
+1  1
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with HAVING clause
 SELECT 1 HAVING TRUE FOR UPDATE
@@ -170,11 +253,33 @@ SELECT 1 HAVING TRUE FOR UPDATE
 statement error pgcode 0A000 FOR UPDATE is not allowed with HAVING clause
 SELECT * FROM (SELECT 1 HAVING TRUE) a FOR UPDATE
 
+statement error pgcode 0A000 FOR UPDATE is not allowed with HAVING clause
+SELECT * FROM (SELECT 1 HAVING TRUE) a, i FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with HAVING clause
+SELECT * FROM (SELECT 1 HAVING TRUE) a, i FOR UPDATE OF a
+
+query II
+SELECT * FROM (SELECT 1 HAVING TRUE) a, i FOR UPDATE OF i
+----
+1  1
+
 statement error pgcode 0A000 FOR UPDATE is not allowed with aggregate functions
 SELECT count(1) FOR UPDATE
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with aggregate functions
 SELECT * FROM (SELECT count(1)) a FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with aggregate functions
+SELECT * FROM (SELECT count(1)) a, i FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with aggregate functions
+SELECT * FROM (SELECT count(1)) a, i FOR UPDATE OF a
+
+query II
+SELECT * FROM (SELECT count(1)) a, i FOR UPDATE OF i
+----
+1  1
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with window functions
 SELECT count(1) OVER () FOR UPDATE
@@ -182,24 +287,53 @@ SELECT count(1) OVER () FOR UPDATE
 statement error pgcode 0A000 FOR UPDATE is not allowed with window functions
 SELECT * FROM (SELECT count(1) OVER ()) a FOR UPDATE
 
+statement error pgcode 0A000 FOR UPDATE is not allowed with window functions
+SELECT * FROM (SELECT count(1) OVER ()) a, i FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with window functions
+SELECT * FROM (SELECT count(1) OVER ()) a, i FOR UPDATE OF a
+
+query II
+SELECT * FROM (SELECT count(1) OVER ()) a, i FOR UPDATE OF i
+----
+1  1
+
 statement error pgcode 0A000 FOR UPDATE is not allowed with set-returning functions in the target list
 SELECT generate_series(1, 2) FOR UPDATE
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with set-returning functions in the target list
 SELECT * FROM (SELECT generate_series(1, 2)) a FOR UPDATE
 
+statement error pgcode 0A000 FOR UPDATE is not allowed with set-returning functions in the target list
+SELECT * FROM (SELECT generate_series(1, 2)) a, i FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with set-returning functions in the target list
+SELECT * FROM (SELECT generate_series(1, 2)) a, i FOR UPDATE OF a
+
+query II nosort
+SELECT * FROM (SELECT generate_series(1, 2)) a, i FOR UPDATE OF i
+----
+1  1
+2  1
+
 # Set-returning functions in the from list are allowed.
-query I
+query I nosort
 SELECT * FROM generate_series(1, 2) FOR UPDATE
 ----
 1
 2
 
-query I
+query I nosort
 SELECT * FROM (SELECT * FROM generate_series(1, 2)) a FOR UPDATE
 ----
 1
 2
+
+query II nosort
+SELECT * FROM (SELECT * FROM generate_series(1, 2)) a, i FOR UPDATE
+----
+1  1
+2  1
 
 # Use of SELECT FOR UPDATE/SHARE requires SELECT and UPDATE privileges.
 
@@ -275,7 +409,7 @@ user root
 statement ok
 BEGIN READ ONLY
 
-statement error cannot execute FOR UPDATE in a read-only transaction
+statement error cannot execute SELECT FOR UPDATE in a read-only transaction
 SELECT * FROM t FOR UPDATE
 
 statement ok
@@ -284,7 +418,7 @@ ROLLBACK
 statement ok
 BEGIN READ ONLY
 
-statement error cannot execute FOR NO KEY UPDATE in a read-only transaction
+statement error cannot execute SELECT FOR NO KEY UPDATE in a read-only transaction
 SELECT * FROM t FOR NO KEY UPDATE
 
 statement ok
@@ -293,7 +427,7 @@ ROLLBACK
 statement ok
 BEGIN READ ONLY
 
-statement error cannot execute FOR SHARE in a read-only transaction
+statement error cannot execute SELECT FOR SHARE in a read-only transaction
 SELECT * FROM t FOR SHARE
 
 statement ok
@@ -302,7 +436,7 @@ ROLLBACK
 statement ok
 BEGIN READ ONLY
 
-statement error cannot execute FOR KEY SHARE in a read-only transaction
+statement error cannot execute SELECT FOR KEY SHARE in a read-only transaction
 SELECT * FROM t FOR KEY SHARE
 
 statement ok
@@ -357,24 +491,33 @@ BEGIN; UPDATE t SET v = 2 WHERE k = 1
 
 user testuser
 
+statement ok
+SET enable_shared_locking_for_serializable = true
+
+skipif config local-mixed-23.1
 query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE FOR SHARE OF t NOWAIT
 
+skipif config local-mixed-23.1
 query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE OF t2 FOR SHARE OF t NOWAIT
 
+skipif config local-mixed-23.1
 query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE NOWAIT FOR SHARE OF t
 
+skipif config local-mixed-23.1
 query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE NOWAIT FOR SHARE OF t2
 
 statement ok
 SET statement_timeout = '10ms'
 
+skipif config local-mixed-23.1
 query error pgcode 57014 query execution canceled due to statement timeout
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE FOR SHARE OF t2 NOWAIT
 
+skipif config local-mixed-23.1
 query error pgcode 57014 query execution canceled due to statement timeout
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE OF t FOR SHARE OF t2 NOWAIT
 
@@ -411,7 +554,7 @@ user testuser
 statement ok
 BEGIN
 
-query II
+query II rowsort
 SELECT * FROM t FOR UPDATE SKIP LOCKED
 ----
 1  1
@@ -421,7 +564,7 @@ SELECT * FROM t FOR UPDATE SKIP LOCKED
 statement ok
 UPDATE t SET v = 4 WHERE k = 3
 
-query II
+query II rowsort
 SELECT * FROM t FOR UPDATE SKIP LOCKED
 ----
 1  1
@@ -431,7 +574,7 @@ SELECT * FROM t FOR UPDATE SKIP LOCKED
 # All columns are available from the secondary index on u, so no index join is
 # needed. The secondary index can produce the row where k=2 since the row is
 # only locked in the primary index.
-query II
+query II rowsort
 SELECT k, u FROM t3 WHERE u = 2 FOR UPDATE SKIP LOCKED
 ----
 2  2
@@ -485,3 +628,51 @@ SELECT * FROM t94290 WHERE b = 2 FOR UPDATE;
 
 statement ok
 RESET statement_timeout;
+
+# Ensure when SKIP LOCKED is used in conjunction with replicated locks we return
+# appropriate errors.
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(a INT PRIMARY KEY);
+INSERT INTO t VALUES(1);
+GRANT ALL ON t TO testuser;
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser;
+
+user testuser
+
+statement ok
+SET enable_durable_locking_for_serializable = true;
+
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t WHERE a = 1 FOR UPDATE;
+----
+1
+
+user root
+
+skipif config local-mixed-23.1
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty  lock_strength  durability  isolation_level  granted  contended
+
+skipif config local-mixed-23.1
+statement error usage of replicated locks in conjunction with skip locked wait policy is currently unsupported
+SELECT * FROM t FOR UPDATE SKIP LOCKED
+
+# Ensure the replicated lock isn't pulled into the in-memory lock table, even
+# after the skip locked statement has run.
+skipif config local-mixed-23.1
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+
+user testuser
+
+statement ok
+COMMIT

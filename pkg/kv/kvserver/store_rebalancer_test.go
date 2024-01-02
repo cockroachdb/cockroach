@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/tracker"
@@ -610,7 +611,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	// order to pass replicaIsBehind checks, fake out the function for getting
 	// raft status with one that always returns all replicas as up to date.
 	sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
-		return TestingRaftStatusFn(r)
+		return TestingRaftStatusFn(r.Desc(), r.StoreID())
 	}
 
 	testCases := []struct {
@@ -907,7 +908,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			// order to pass replicaIsBehind checks, fake out the function for getting
 			// raft status with one that always returns all replicas as up to date.
 			sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
-				return TestingRaftStatusFn(r)
+				return TestingRaftStatusFn(r.Desc(), r.StoreID())
 			}
 			sp.OverrideIsStoreReadyForRoutineReplicaTransferFn = func(_ context.Context, this roachpb.StoreID) bool {
 				for _, deadStore := range deadStores {
@@ -1261,7 +1262,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			// order to pass replicaIsBehind checks, fake out the function for getting
 			// raft status with one that always returns all replicas as up to date.
 			sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
-				return TestingRaftStatusFn(r)
+				return TestingRaftStatusFn(r.Desc(), r.StoreID())
 			}
 			s.cfg.DefaultSpanConfig.NumVoters = int32(len(tc.voters))
 			s.cfg.DefaultSpanConfig.NumReplicas = int32(len(tc.voters) + len(tc.nonVoters))
@@ -1526,7 +1527,7 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 			// order to pass replicaIsBehind checks, fake out the function for getting
 			// raft status with one that always returns all replicas as up to date.
 			sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
-				return TestingRaftStatusFn(r)
+				return TestingRaftStatusFn(r.Desc(), r.StoreID())
 			}
 
 			s.cfg.DefaultSpanConfig.NumReplicas = int32(len(tc.voters))
@@ -1563,21 +1564,19 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	// Set up a fake RaftStatus that indicates s5 is behind (but all other stores
 	// are caught up). We thus shouldn't transfer a lease to s5.
 	behindTestingRaftStatusFn := func(
-		r interface {
-			Desc() *roachpb.RangeDescriptor
-			StoreID() roachpb.StoreID
-		},
+		desc *roachpb.RangeDescriptor,
+		storeID roachpb.StoreID,
 	) *raft.Status {
 		status := &raft.Status{
 			Progress: make(map[uint64]tracker.Progress),
 		}
-		replDesc, ok := r.Desc().GetReplicaDescriptor(r.StoreID())
-		require.True(t, ok, "Could not find replica descriptor for replica on store with id %d", r.StoreID())
+		replDesc, ok := desc.GetReplicaDescriptor(storeID)
+		require.True(t, ok, "Could not find replica descriptor for replica on store with id %d", storeID)
 
 		status.Lead = uint64(replDesc.ReplicaID)
 		status.RaftState = raft.StateLeader
 		status.Commit = 2
-		for _, replica := range r.Desc().InternalReplicas {
+		for _, replica := range desc.InternalReplicas {
 			match := uint64(2)
 			if replica.StoreID == roachpb.StoreID(5) {
 				match = 0
@@ -1618,7 +1617,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 
 		sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr, objectiveProvider)
 		sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
-			return behindTestingRaftStatusFn(r)
+			return behindTestingRaftStatusFn(r.Desc(), r.StoreID())
 		}
 		lbRebalanceDimension := sr.RebalanceObjective().ToDimension()
 
@@ -1818,19 +1817,46 @@ func TestStoreRebalancerIOOverloadCheck(t *testing.T) {
 	}
 }
 
+func TestStoreRebalancerHotRangesLogging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	objectiveProvider := &testRebalanceObjectiveProvider{}
+
+	stopper, g, sp, _, _ := allocatorimpl.CreateTestAllocator(ctx, 10, false /* deterministic */)
+	defer stopper.Stop(ctx)
+
+	localDesc := *noLocalityStores[0]
+	cfg := TestStoreConfig(nil)
+	cfg.Gossip = g
+	cfg.StorePool = sp
+	s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
+	rr := NewReplicaRankings()
+
+	loadRanges(rr, s, []testRange{
+		{voters: []roachpb.StoreID{1, 3, 5}, qps: 100, reqCPU: 100 * float64(time.Millisecond)},
+		{voters: []roachpb.StoreID{2, 4, 6}, qps: 200, reqCPU: 200 * float64(time.Millisecond)},
+		{voters: []roachpb.StoreID{1, 2, 3}, qps: 300, reqCPU: 300 * float64(time.Millisecond)},
+	})
+
+	hottestRanges := rr.TopLoad(objectiveProvider.Objective().ToDimension())
+	require.Equal(t, redact.RedactableString(
+		"\t1: r3:‹/Meta1› replicas=[(n1,s1):1,(n2,s2):2,(n3,s3):3] load=[batches/s=300.0 request_cpu/s=300ms raft_cpu/s=0µs write(keys)/s=0.0 write(bytes)/s=0 B read(keys)/s=0.0 read(bytes)/s=0 B]"+
+			"\n\t2: r2:‹/Meta1› replicas=[(n2,s2):2,(n4,s4):4,(n6,s6):6] load=[batches/s=200.0 request_cpu/s=200ms raft_cpu/s=0µs write(keys)/s=0.0 write(bytes)/s=0 B read(keys)/s=0.0 read(bytes)/s=0 B]"+
+			"\n\t3: r1:‹/Meta1› replicas=[(n1,s1):1,(n3,s3):3,(n5,s5):5] load=[batches/s=100.0 request_cpu/s=100ms raft_cpu/s=0µs write(keys)/s=0.0 write(bytes)/s=0 B read(keys)/s=0.0 read(bytes)/s=0 B]",
+	), formatHotRanges(hottestRanges))
+}
+
 // TestingRaftStatusFn returns a raft status where all replicas are up to date and
 // the replica on the store with ID StoreID is the leader. It may be used for
 // testing.
-func TestingRaftStatusFn(
-	r interface {
-		Desc() *roachpb.RangeDescriptor
-		StoreID() roachpb.StoreID
-	},
-) *raft.Status {
+func TestingRaftStatusFn(desc *roachpb.RangeDescriptor, storeID roachpb.StoreID) *raft.Status {
 	status := &raft.Status{
 		Progress: make(map[uint64]tracker.Progress),
 	}
-	replDesc, ok := r.Desc().GetReplicaDescriptor(r.StoreID())
+	replDesc, ok := desc.GetReplicaDescriptor(storeID)
 	if !ok {
 		return status
 	}
@@ -1838,7 +1864,7 @@ func TestingRaftStatusFn(
 	status.Lead = uint64(replDesc.ReplicaID)
 	status.RaftState = raft.StateLeader
 	status.Commit = 2
-	for _, replica := range r.Desc().InternalReplicas {
+	for _, replica := range desc.InternalReplicas {
 		status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
 			Match: 2,
 			State: tracker.StateReplicate,

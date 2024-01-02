@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,13 +40,13 @@ import (
 //	if err := w.Start(ctx); err != nil { ... }
 //
 //	// Get overrides and keep them up to date.
-//	all, allCh := w.AllTenantOverrides()
-//	tenant, tenantCh := w.TenantOverrides(tenantID)
+//	all, allCh := w.GetAllTenantOverrides()
+//	tenant, tenantCh := w.GetTenantOverrides(ctx,tenantID)
 //	select {
 //	case <-allCh:
-//	  all, allCh = w.AllTenantOverrides()
+//	  all, allCh = w.GetAllTenantOverrides()
 //	case <-tenantCh:
-//	  tenant, tenantCh = w.TenantOverrides(tenantID)
+//	  tenant, tenantCh = w.GetTenantOverrides(ctx,tenantID)
 //	case <-ctx.Done():
 //	  ...
 //	}
@@ -60,6 +61,15 @@ type Watcher struct {
 	// startCh is closed once the rangefeed starts.
 	startCh  chan struct{}
 	startErr error
+
+	// rfc provides access to the underlying rangefeedcache.Watcher for
+	// testing.
+	rfc *rangefeedcache.Watcher
+	mu  struct {
+		syncutil.Mutex
+		// Used by TestingRestart.
+		updateWait chan struct{}
+	}
 }
 
 // New constructs a new Watcher.
@@ -74,6 +84,7 @@ func New(
 		dec:     MakeRowDecoder(),
 	}
 	w.store.Init()
+	w.mu.updateWait = make(chan struct{})
 	return w
 }
 
@@ -84,8 +95,8 @@ func New(
 // canceled or the stopper is stopped prior to the initial data being retrieved.
 func (w *Watcher) Start(ctx context.Context, sysTableResolver catalog.SystemTableIDResolver) error {
 	w.startCh = make(chan struct{})
+	defer close(w.startCh)
 	w.startErr = w.startRangeFeed(ctx, sysTableResolver)
-	close(w.startCh)
 	return w.startErr
 }
 
@@ -141,7 +152,7 @@ func (w *Watcher) startRangeFeed(
 			allOverrides[tenantID] = append(allOverrides[tenantID], setting)
 		} else {
 			// We are processing incremental changes.
-			w.store.SetTenantOverride(tenantID, setting)
+			w.store.setTenantOverride(ctx, tenantID, setting)
 		}
 		return nil
 	}
@@ -151,13 +162,18 @@ func (w *Watcher) startRangeFeed(
 			// The CompleteUpdate indicates that the table scan is complete.
 			// Henceforth, all calls to translateEvent will be incremental changes,
 			// until we hit an error and have to restart the rangefeed.
-			w.store.SetAll(allOverrides)
+			w.store.setAll(ctx, allOverrides)
 			allOverrides = nil
 
 			if !initialScan.done {
 				initialScan.done = true
 				close(initialScan.ch)
 			}
+			// Used by TestingRestart().
+			w.mu.Lock()
+			defer w.mu.Unlock()
+			close(w.mu.updateWait)
+			w.mu.updateWait = make(chan struct{})
 		}
 	}
 
@@ -178,10 +194,12 @@ func (w *Watcher) startRangeFeed(
 		0, /* bufferSize */
 		[]roachpb.Span{tenantSettingsTableSpan},
 		false, /* withPrevValue */
+		true,  /* withRowTSInInitialScan */
 		translateEvent,
 		onUpdate,
 		nil, /* knobs */
 	)
+	w.rfc = c
 
 	// Kick off the rangefeedcache which will retry until the stopper stops.
 	if err := rangefeedcache.Start(ctx, w.stopper, c, onError); err != nil {
@@ -204,12 +222,6 @@ func (w *Watcher) startRangeFeed(
 // WaitForStart waits until the rangefeed is set up. Returns an error if the
 // rangefeed setup failed.
 func (w *Watcher) WaitForStart(ctx context.Context) error {
-	// Fast path check.
-	select {
-	case <-w.startCh:
-		return w.startErr
-	default:
-	}
 	if w.startCh == nil {
 		return errors.AssertionFailedf("Start() was not yet called")
 	}
@@ -221,14 +233,26 @@ func (w *Watcher) WaitForStart(ctx context.Context) error {
 	}
 }
 
+// TestingRestart restarts the rangefeeds and waits for the initial
+// update after the rangefeed update to be processed.
+func (w *Watcher) TestingRestart() {
+	if w.rfc != nil {
+		w.mu.Lock()
+		waitCh := w.mu.updateWait
+		w.mu.Unlock()
+		w.rfc.TestingRestart()
+		<-waitCh
+	}
+}
+
 // GetTenantOverrides returns the current overrides for the given tenant, and a
 // channel that will be closed when the overrides for this tenant change.
 //
 // The caller must not modify the returned overrides slice.
 func (w *Watcher) GetTenantOverrides(
-	tenantID roachpb.TenantID,
+	ctx context.Context, tenantID roachpb.TenantID,
 ) (overrides []kvpb.TenantSetting, changeCh <-chan struct{}) {
-	o := w.store.GetTenantOverrides(tenantID)
+	o := w.store.getTenantOverrides(ctx, tenantID)
 	return o.overrides, o.changeCh
 }
 
@@ -237,9 +261,22 @@ func (w *Watcher) GetTenantOverrides(
 // have an override for the same setting.
 //
 // The caller must not modify the returned overrides slice.
-func (w *Watcher) GetAllTenantOverrides() (
-	overrides []kvpb.TenantSetting,
-	changeCh <-chan struct{},
-) {
-	return w.GetTenantOverrides(allTenantOverridesID)
+func (w *Watcher) GetAllTenantOverrides(
+	ctx context.Context,
+) (overrides []kvpb.TenantSetting, changeCh <-chan struct{}) {
+	return w.GetTenantOverrides(ctx, allTenantOverridesID)
+}
+
+// SetAternateDefault configures a custom default value
+// for a setting when there is no stored value picked up
+// from system.tenant_settings.
+//
+// The second argument must be sorted by setting key already.
+//
+// At the time of this writing, this is used for SystemVisible
+// settings, so that the values from the system tenant's
+// system.settings table are used when there is no override
+// in .tenant_settings.
+func (w *Watcher) SetAlternateDefaults(ctx context.Context, payloads []kvpb.TenantSetting) {
+	w.store.setAlternateDefaults(ctx, payloads)
 }

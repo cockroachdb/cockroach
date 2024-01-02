@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -28,6 +29,8 @@ import (
 // cluster configured to run in column format.
 func runTestCaseMultipleFormats(t *testing.T, testCase func(*testing.T, testModelRunner)) {
 	t.Run("Row Format", func(t *testing.T) {
+		defer log.Scope(t).Close(t)
+
 		tm := newTestModelRunner(t)
 		tm.Start()
 		tm.DB.forceRowFormat = true
@@ -36,6 +39,8 @@ func runTestCaseMultipleFormats(t *testing.T, testCase func(*testing.T, testMode
 	})
 
 	t.Run("Column Format", func(t *testing.T) {
+		defer log.Scope(t).Close(t)
+
 		tm := newTestModelRunner(t)
 		tm.Start()
 		defer tm.Stop()
@@ -359,6 +364,7 @@ func TestInterpolationLimit(t *testing.T) {
 
 func TestQueryWorkerMemoryConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
 		generateData := func(dps int64) []tspb.TimeSeriesDatapoint {
 			result := make([]tspb.TimeSeriesDatapoint, 0, dps)
@@ -553,6 +559,7 @@ func TestQueryBadRequests(t *testing.T) {
 
 func TestQueryNearCurrentTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
 		tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
 			tsd("metric.test", "source1",
@@ -626,6 +633,7 @@ func TestQueryNearCurrentTime(t *testing.T) {
 
 func TestQueryRollup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Rollups are always columnar, no need to run this test using row format.
 	tm := newTestModelRunner(t)

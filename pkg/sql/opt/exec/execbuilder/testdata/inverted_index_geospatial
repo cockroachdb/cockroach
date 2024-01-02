@@ -30,6 +30,9 @@ rows decoded from KV: 6 (48 B, 12 KVs, 6 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • sort
 │ nodes: <hidden>
@@ -45,7 +48,7 @@ regions: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
-    └── • index join
+    └── • index join (streamer)
         │ nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 2
@@ -83,7 +86,7 @@ regions: <hidden>
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVe1u2zYU_b-nuLh_kmAaTEqK53IY4MVVN29LHShBh2IyAka8cwXLpEpSm4Igj7UX2JMNkpIgrhu1XhFg_iH7fhz68B4e8Qbd-xIFnie_JrMLWMOrdHEKKzKXXl6VBL_9lKQJOH9ZaE_WUe7d4cF5On_5fTh-wSffnS3mry8OY8YYi6D7YtHRgRA_JovT5CJ9G7RrbY5gkb5MUjh5C2sMUBtFr-WGHIrfkeMywMqanJwztk3ddA1z1aBgARa6qn2bXgaYG0sobtAXviQUeNFyTEkqsiOGASrysii7ZR-2MG0JXBZaUYMBzkxZb7QTsO6ZYYDnlWwTowxPsqz5Q2VZw1mWNexTD_xmXwzPEKRWEDEw_h1ZhwH-8gZ8sSEB7J-_7-LcaE_aF0bvlKz5y4Gi3ChSAuI-eXXtyYElqQREIZz02VV6NoNclqV7aKxkYe8bJxjg6ZvZDJynCnJTaw-H1PhRof2RANYNtG8gWj_VsJENbGhj7DXIsjS59C0v1nG4kj5_Rw5M7avaC2j7O_73iRiXtwH20Z3CzssVoeC3weefgrn-k6wn9aooPVmyI759FO7rSVNZMBqmXIBrRQfnpfWiEzH69jjLWMiyjLFPPRBIq31hrfY74i_aMUxbvt0GO3l7tfrYeVmW24eAGsrr3bMxJERbc-9L8LSpQBVuDbWTK_psncIndQr30elnU-g7s4YDZu1_XVZruv64Yb_EMeGuY_j4Y44Jdx0TP7tjnk-oaB-hHowUbcvU58WH1wHjjLcv_pCF4_EL9vgzG__AJzHvgwmb8EkcJzE_EI9viGl49KQVwv9ghS8YU7zPmM6N9WRH8faQpvzr_5tLj_fZVUquMtrR1q6eWpndLgMktaL-3namtjmdWZN3f9OHiw7XJRQ531d5H8x1X2oJPgbzQXA4DA4HwdEwOBoEx8PgeBB8_AF4efvVvwEAAP__rlsH3Q==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVuFu4kYQ_t-nGM2fJKqj7NoO5baqREO4lrY5IkBXnWqENvaEWNi7vt11QxTxWH2BPlllO0QBAnf0KvX8Y2FmZz_PzDef1o9oP2YocNT7rdcdwxzeDgdXMCM9dfImI_j9596wB9ZNU-XIWIqdPT4aDfuXP_itN7z9_fWg_258HDLGWAD1DwtOjoT4qTe46o2HH7wKKz-BwfCyN4SLDzBHD5VO6J3MyaL4AzlOPCyMjslabSrXYx3QTxYomIepKkpXuScextoQikd0qcsIBY6rHIckEzJnDD1MyMk0q2GfS-hUCUxTldACPezqrMyVFTBvMkMPR4WsHGcRXkTR4jaJogVnUbRgn1rw9NAzPEKQKoGAgXZ3ZCx6-Ot7cGlOAtjffz3ZsVaOlEu12toy-t5CQrFOKBEQNs6bB0cWDMlEQODDReOdDa-7EMsss8-BhUzNKrCNHl6973bBOiog1qVycEwLd5YqdyKA1Q1tAojmuwJyuYCccm0eQGaZjqWr8mJ1DjfSxXdkQZeuKJ2AKr7Of-UIcbL0sLGeGLZOzggFfzES_UsUbOl9_lT01Z9kHCVv08yRIXPG10djtd9bFAa0gg4XYKshAOukcaImNfjuPIqYz6KIsU8tCKSSQ49Vs7A1DIOqLZ0q37rAmu6Gvca2TmbZ-lDQguJye1b2EVPt2Y8ZOMoLSFI7h9LKGX02b_5O3vwN3vghvP2iU_UkZn-PmJt_02JOD68L-ksU5W8rirdeU5S_rajwP1FUaSkB6wzJnMz_RmSwQaR_CJHPwgvWaWz8YvM6YZzx6uLwmd9qvWEvn27rR94OeWO0WZu3w7AX8iPx8obp-Cc7peP_C-l8QdvCjbYFh7RtpI0jcxauN63Dv_3aVH6-UWV4SJVDsoVWltaq3PUmtvGmU76ceEjJjJoPBatLE9O10XEd25iDGqh2JGRds8sbo69WW43Eni-Xl0h8L5K_G4lvIvl7kYLdSP4mUrAXKdyNFGwihXuRzvf1aeLhbabvp2mCAlcaPX1lWT1YHZAzWw3A6E7f17Djh6Ki71Zmljy8knO6JEcmT1VqXRqjcKak5fKbfwIAAP__hpdg6A==
 
 statement ok
 DROP TABLE geo_table
@@ -119,6 +122,9 @@ rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • sort
 │ nodes: <hidden>
@@ -134,7 +140,7 @@ regions: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
-    └── • index join
+    └── • index join (streamer)
         │ nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 2
@@ -172,7 +178,7 @@ regions: <hidden>
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzcVe9u40QQ_85TjOZLW2GUXdsNuUVIoTkfBOilcqtDJxJVW--Qs-Ls-nbX4KrqY_ECPBlau62aK2eIKBK6fNh4_vzWv53fjPcG3fsKBZ5nP2azC9jAq3xxCmsyl15eVQQ_fZflGTh_WWpP1lHh3eHBeT5_-XU8fsEnX50t5q8vDlPGGEug-2PJ0YEQ32aL0-wifxuFvbZHsMhfZjmcvIUNRqiNotdySw7Fz8hxFWFtTUHOGRtcN13CXLUoWISlrhsf3KsIC2MJxQ360leEAi8Cx5ykIjtiGKEiL8uq2_bhCNNA4LLUilqMcGaqZqudgE3PDCM8r2VwjJZ4sly2v6jlsmVJWNjfLPjFvhi-RJBaQcLA-HdkHUb4wxvw5ZYEsD9-v7MLoz1pXxr9JGTNbw4UFUaREhD3zqtrTw4sSSWAj-Gk967zsxkUsqrcQ2ItS3ufmGKEp29mM3CeaihMoz0cUutHpfZHAlhX0D6BaPOxhK1sYUtbY69BVpUppA-8WMfhSvriHTkwja8bLyDkd_zvHTGubiPsrTuFnZdrQsFvo3_eBXP9K1lP6lVZebJkR3y3Fe7jWVtbMBqmXIALooPz0nrRiZh8ebxcsiAiC1oNLgik1b6woP0T8RehDNPAtztgJ2-vVm87L6tqtwmopaJ52htDQoSYe1-Bp20NqnQbaJxc0zPoFO-j0_em1HfDGg8Ma_90WW_o-q8H9tOdmP9OqGQfoR4GKdmVqfeLD68DxhkPH_6YxePxC_b4Nxt_wycp740Jm_BJmmYpPxCPb4hpfPSso_AvypTuU6ZzYz3ZUbpbpCn__P82pcf7nConVxvtaOdUH9uZ3a4iJLWm_t52prEFnVlTdK_pzUWH6xyKnO-jvDfmug8Fgo_BfBAcD4PjQXAyDE4GwekwOB0EH38AXt1-9mcAAAD__5TuB9k=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVuFu4kYQ_t-nGM2fJKqj7NoO5baqREO4lrY5IkBXnQpCG3tCLOxd3-66IYp4rL5An6xaO0SBHLSoJ7XnHwszO_t5Zr75tH5E-zFHgaPeL73uGBbwdji4gjnpmZM3OcGvP_aGPbBulilHxlLi7PHRaNi__C5sveHtb68H_Xfj45gxxiKof1h0ciTED73BVW88_BB4rOIEBsPL3hAuPsACA1Q6pXeyIIviN-Q4DbA0OiFrtfGuxzqgny5RsAAzVVbOu6cBJtoQikd0mcsJBY59jkOSKZkzhgGm5GSW17DPJXR8ArNMpbTEALs6rwplBSyazDDAUSm942yCF5PJ8jadTJYs8gv7mwVPDz3DJwhSpRAx0O6OjMUAf34PLitIAPvzjyc70cqRcplWr7aMvreQUqJTSgWEjfPmwZEFQzIVwFtw0Xjnw-suJDLP7XNgKTOzDowxwKv33S5YRyUkulIOjmnpzjLlTgSwuqFNANFiV0Ahl1BQoc0DyDzXiXQ-L1bncCNdckcWdOXKygnw8XX-a0eI01WAjfXEsHVyTij4i5HoX6Jgq-CfT0Vf_U7GUfo2yx0ZMmd8czTW-71laUAr6HAB1g8BWCeNEzWp0TfnkwnzpDLP3d4FgVR66DE_C6-GYeDb0vH51gXWdDfsNbZ1Ms83h4KWlFSvZ2UfMX7PfszBUVFCmtkFVFbO6TPwFm7xxg_h7SedqScxh3vE3PyblQt6-LSgv2xFVZZSsM6QLMj8Z0RGW0SGhxD5LLxok8bGL7avE8YZ9xdHyMJW6w17-XRb3_N2zBujzdq8Hce9mB-JlzdMJzz5rNL5F22Lt9oWHdK2kTaOzFm82bQO__r_pvLzrSrjQ6ocki21srRR5a43sa03nfLVNEBK59R8KFhdmYSujU7q2MYc1EC1IyXrml3eGH213mok9ny5vETie5HC3Uh8GyncixTtRgq3kaK9SPFupGgbKd6LdL6vT9MAb3N9P8tSFLjW6OknlvWD_oCcWz8Aozt9X8OOH0pP363MLQV4JRd0SY5MkanMuixB4UxFq9VXfwUAAP__aLZg5A==
 
 # Also works when creating an index.
 statement ok
@@ -192,6 +198,9 @@ rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • sort
 │ nodes: <hidden>
@@ -207,7 +216,7 @@ regions: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
-    └── • index join
+    └── • index join (streamer)
         │ nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 2
@@ -245,4 +254,4 @@ regions: <hidden>
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzcVe9u40QQ_85TjOZLW2GUXdsNuUVIoTkfBOilcqtDJxJVW--Qs-Ls-nbX4KrqY_ECPBlau62aK2eIKBK6fNh4_vzWv53fjPcG3fsKBZ5nP2azC9jAq3xxCmsyl15eVQQ_fZflGTh_WWpP1lHh3eHBeT5_-XU8fsEnX50t5q8vDlPGGEug-2PJ0YEQ32aL0-wifxuFvbZHsMhfZjmcvIUNRqiNotdySw7Fz8hxFWFtTUHOGRtcN13CXLUoWISlrhsf3KsIC2MJxQ360leEAi8Cx5ykIjtiGKEiL8uq2_bhCNNA4LLUilqMcGaqZqudgE3PDCM8r2VwjJZ4sly2v6jlsmVJWNjfLPjFvhi-RJBaQcLA-HdkHUb4wxvw5ZYEsD9-v7MLoz1pXxr9JGTNbw4UFUaREhD3zqtrTw4sSSWAj-Gk967zsxkUsqrcQ2ItS3ufmGKEp29mM3CeaihMoz0cUutHpfZHAlhX0D6BaPOxhK1sYUtbY69BVpUppA-8WMfhSvriHTkwja8bLyDkd_zvHTGubiPsrTuFnZdrQsFvo3_eBXP9K1lP6lVZebJkR3y3Fe7jWVtbMBqmXIALooPz0nrRiZh8ebxcsiAiC1oNLgik1b6woP0T8RehDNPAtztgJ2-vVm87L6tqtwmopaJ52htDQoSYe1-Bp20NqnQbaJxc0zPoFO-j0_em1HfDGg8Ma_90WW_o-q8H9tOdmP9OqGQfoR4GKdmVqfeLD68DxhkPH_6YxePxC_b4Nxt_wycp740Jm_BJmmYpPxCPb4hpfPSso_AvypTuU6ZzYz3ZUbpbpCn__P82pcf7nConVxvtaOdUH9uZ3a4iJLWm_t52prEFnVlTdK_pzUWH6xyKnO-jvDfmug8Fgo_BfBAcD4PjQXAyDE4GwekwOB0EH38AXt1-9mcAAAD__5TuB9k=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVuFu4kYQ_t-nGM2fJKqj7NoO5baqREO4lrY5IkBXnQpCG3tCLOxd3-66IYp4rL5An6xaO0SBHLSoJ7XnHwszO_t5Zr75tH5E-zFHgaPeL73uGBbwdji4gjnpmZM3OcGvP_aGPbBulilHxlLi7PHRaNi__C5sveHtb68H_Xfj45gxxiKof1h0ciTED73BVW88_BB4rOIEBsPL3hAuPsACA1Q6pXeyIIviN-Q4DbA0OiFrtfGuxzqgny5RsAAzVVbOu6cBJtoQikd0mcsJBY59jkOSKZkzhgGm5GSW17DPJXR8ArNMpbTEALs6rwplBSyazDDAUSm942yCF5PJ8jadTJYs8gv7mwVPDz3DJwhSpRAx0O6OjMUAf34PLitIAPvzjyc70cqRcplWr7aMvreQUqJTSgWEjfPmwZEFQzIVwFtw0Xjnw-suJDLP7XNgKTOzDowxwKv33S5YRyUkulIOjmnpzjLlTgSwuqFNANFiV0Ahl1BQoc0DyDzXiXQ-L1bncCNdckcWdOXKygnw8XX-a0eI01WAjfXEsHVyTij4i5HoX6Jgq-CfT0Vf_U7GUfo2yx0ZMmd8czTW-71laUAr6HAB1g8BWCeNEzWp0TfnkwnzpDLP3d4FgVR66DE_C6-GYeDb0vH51gXWdDfsNbZ1Ms83h4KWlFSvZ2UfMX7PfszBUVFCmtkFVFbO6TPwFm7xxg_h7SedqScxh3vE3PyblQt6-LSgv2xFVZZSsM6QLMj8Z0RGW0SGhxD5LLxok8bGL7avE8YZ9xdHyMJW6w17-XRb3_N2zBujzdq8Hce9mB-JlzdMJzz5rNL5F22Lt9oWHdK2kTaOzFm82bQO__r_pvLzrSrjQ6ocki21srRR5a43sa03nfLVNEBK59R8KFhdmYSujU7q2MYc1EC1IyXrml3eGH213mok9ny5vETie5HC3Uh8GyncixTtRgq3kaK9SPFupGgbKd6LdL6vT9MAb3N9P8tSFLjW6OknlvWD_oCcWz8Aozt9X8OOH0pP363MLQV4JRd0SY5MkanMuixB4UxFq9VXfwUAAP__aLZg5A==

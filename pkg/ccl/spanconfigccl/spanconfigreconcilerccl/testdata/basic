@@ -18,6 +18,7 @@ upsert /Table/{5-6}                        database system (host)
 upsert /Table/{6-7}                        database system (host)
 upsert /Table/{7-8}                        database system (host)
 upsert /Table/{8-9}                        database system (host)
+upsert /Table/{9-10}                       database system (host)
 upsert /Table/1{1-2}                       database system (host)
 upsert /Table/1{2-3}                       database system (host)
 upsert /Table/1{3-4}                       database system (host)
@@ -69,6 +70,9 @@ upsert /Table/{59-60}                      database system (host)
 upsert /Table/6{0-1}                       ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 upsert /Table/6{1-2}                       ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 upsert /Table/6{2-3}                       database system (host)
+upsert /Table/6{3-4}                       database system (host)
+upsert /Table/6{4-5}                       database system (host)
+upsert /Table/6{5-6}                       database system (host)
 
 exec-sql
 CREATE DATABASE db;
@@ -105,6 +109,7 @@ upsert /Table/11{2-3}                      num_replicas=7
 state offset=47
 ----
 ...
+/Table/4{6-7}                              database system (host)
 /Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
@@ -120,6 +125,9 @@ state offset=47
 /Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{2-3}                              database system (host)
+/Table/6{3-4}                              database system (host)
+/Table/6{4-5}                              database system (host)
+/Table/6{5-6}                              database system (host)
 /Table/10{6-7}                             num_replicas=7 num_voters=5
 /Table/10{7-8}                             num_replicas=7
 /Table/11{2-3}                             num_replicas=7
@@ -143,6 +151,8 @@ delete /Table/{7-8}
 upsert /Table/{7-8}                        ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 delete /Table/{8-9}
 upsert /Table/{8-9}                        ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+delete /Table/{9-10}
+upsert /Table/{9-10}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 delete /Table/1{1-2}
 upsert /Table/1{1-2}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 delete /Table/1{2-3}
@@ -229,6 +239,12 @@ delete /Table/{59-60}
 upsert /Table/{59-60}                      ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 delete /Table/6{2-3}
 upsert /Table/6{2-3}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+delete /Table/6{3-4}
+upsert /Table/6{3-4}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+delete /Table/6{4-5}
+upsert /Table/6{4-5}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+delete /Table/6{5-6}
+upsert /Table/6{5-6}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 
 state offset=5 limit=42
 ----
@@ -239,6 +255,7 @@ state offset=5 limit=42
 /Table/{6-7}                               ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/{7-8}                               ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/{8-9}                               ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/{9-10}                              ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/1{1-2}                              ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/1{2-3}                              ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/1{3-4}                              ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
@@ -274,5 +291,4 @@ state offset=5 limit=42
 /Table/4{3-4}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/4{4-5}                              ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
-/Table/4{6-7}                              ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 ...

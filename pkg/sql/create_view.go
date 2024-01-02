@@ -30,8 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -44,17 +47,12 @@ import (
 
 // createViewNode represents a CREATE VIEW statement.
 type createViewNode struct {
-	// viewName is the fully qualified name of the new view.
-	viewName *tree.TableName
+	createView *tree.CreateView
 	// viewQuery contains the view definition, with all table names fully
 	// qualified.
-	viewQuery    string
-	ifNotExists  bool
-	replace      bool
-	persistence  tree.Persistence
-	materialized bool
-	dbDesc       catalog.DatabaseDescriptor
-	columns      colinfo.ResultColumns
+	viewQuery string
+	dbDesc    catalog.DatabaseDescriptor
+	columns   colinfo.ResultColumns
 
 	// planDeps tracks which tables and views the view being created
 	// depends on. This is collected during the construction of
@@ -65,9 +63,6 @@ type createViewNode struct {
 	// depends on. This is collected during the construction of
 	// the view query's logical plan.
 	typeDeps typeDependencies
-	// withData indicates if a materialized view should be populated
-	// with data by executing the underlying query.
-	withData bool
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -76,16 +71,17 @@ type createViewNode struct {
 func (n *createViewNode) ReadingOwnWrites() {}
 
 func (n *createViewNode) startExec(params runParams) error {
+	createView := n.createView
 	tableType := tree.GetTableType(
-		false /* isSequence */, true /* isView */, n.materialized,
+		false /* isSequence */, true /* isView */, createView.Materialized,
 	)
-	if n.replace {
+	if createView.Replace {
 		telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter(fmt.Sprintf("or_replace_%s", tableType)))
 	} else {
 		telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter(tableType))
 	}
 
-	viewName := n.viewName.Object()
+	viewName := createView.Name.Object()
 	log.VEventf(params.ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
 
 	// Check that the view does not contain references to other databases.
@@ -120,14 +116,14 @@ func (n *createViewNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			if !n.persistence.IsTemporary() && backRefMutable.Temporary {
+			if !createView.Persistence.IsTemporary() && backRefMutable.Temporary {
 				hasTempBackref = true
 			}
 			backRefMutables[id] = backRefMutable
 		}
 	}
 	if hasTempBackref {
-		n.persistence = tree.PersistenceTemporary
+		createView.Persistence = tree.PersistenceTemporary
 		// This notice is sent from pg, let's imitate.
 		params.p.BufferClientNotice(
 			params.ctx,
@@ -136,16 +132,16 @@ func (n *createViewNode) startExec(params runParams) error {
 	}
 
 	var replacingDesc *tabledesc.Mutable
-	schema, err := getSchemaForCreateTable(params, n.dbDesc, n.persistence, n.viewName,
-		tree.ResolveRequireViewDesc, n.ifNotExists)
+	schema, err := getSchemaForCreateTable(params, n.dbDesc, createView.Persistence, &createView.Name,
+		tree.ResolveRequireViewDesc, createView.IfNotExists)
 	if err != nil && !sqlerrors.IsRelationAlreadyExistsError(err) {
 		return err
 	}
 	if err != nil {
 		switch {
-		case n.ifNotExists:
+		case createView.IfNotExists:
 			return nil
-		case n.replace:
+		case createView.Replace:
 			// If we are replacing an existing view see if what we are
 			// replacing is actually a view.
 			id, err := params.p.Descriptors().LookupObjectID(
@@ -153,7 +149,7 @@ func (n *createViewNode) startExec(params runParams) error {
 				params.p.txn,
 				n.dbDesc.GetID(),
 				schema.GetID(),
-				n.viewName.Table(),
+				createView.Name.Table(),
 			)
 			if err != nil {
 				return err
@@ -174,7 +170,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	}
 
-	if n.persistence.IsTemporary() {
+	if createView.Persistence.IsTemporary() {
 		telemetry.Inc(sqltelemetry.CreateTempViewCounter)
 	}
 
@@ -235,14 +231,14 @@ func (n *createViewNode) startExec(params runParams) error {
 					&params.p.semaCtx,
 					params.p.EvalContext(),
 					params.p.EvalContext().Settings,
-					n.persistence,
+					createView.Persistence,
 					n.dbDesc.IsMultiRegion(),
 					params.p)
 				if err != nil {
 					return err
 				}
 
-				if n.materialized {
+				if createView.Materialized {
 					// If the view is materialized, set up some more state on the view descriptor.
 					// In particular,
 					// * mark the descriptor as a materialized view
@@ -254,7 +250,7 @@ func (n *createViewNode) startExec(params runParams) error {
 					// the table descriptor as requiring a REFRESH VIEW to indicate the view
 					// should only be accessed after a REFRESH VIEW operation has been called
 					// on it.
-					desc.RefreshViewRequired = !n.withData
+					desc.RefreshViewRequired = !createView.WithData
 					desc.State = descpb.DescriptorState_ADD
 					version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
 					if err := desc.AllocateIDs(params.ctx, version); err != nil {
@@ -282,12 +278,10 @@ func (n *createViewNode) startExec(params runParams) error {
 				desc.DependsOnTypes = append(desc.DependsOnTypes, orderedTypeDeps.Ordered()...)
 				newDesc = &desc
 
-				// TODO (lucy): I think this needs a NodeFormatter implementation. For now,
-				// do some basic string formatting (not accurate in the general case).
 				if err = params.p.createDescriptor(
 					params.ctx,
 					newDesc,
-					fmt.Sprintf("CREATE VIEW %q AS %q", n.viewName, n.viewQuery),
+					tree.AsStringWithFQNames(n.createView, params.Ann()),
 				); err != nil {
 					return err
 				}
@@ -317,7 +311,7 @@ func (n *createViewNode) startExec(params runParams) error {
 					params.ctx,
 					backRefMutable,
 					descpb.InvalidMutationID,
-					fmt.Sprintf("updating view reference %q in table %s(%d)", n.viewName,
+					fmt.Sprintf("updating view reference %q in table %s(%d)", &createView.Name,
 						updated.desc.GetName(), updated.desc.GetID(),
 					),
 				); err != nil {
@@ -362,7 +356,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			return params.p.logEvent(params.ctx,
 				newDesc.ID,
 				&eventpb.CreateView{
-					ViewName:  n.viewName.FQString(),
+					ViewName:  createView.Name.FQString(),
 					ViewQuery: n.viewQuery,
 				})
 		}()
@@ -420,7 +414,8 @@ func makeViewTableDesc(
 		desc.ViewQuery = sequenceReplacedQuery
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery, false /* multiStmt */)
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery,
+		false /* multiStmt */, "view queries")
 	if err != nil {
 		return tabledesc.Mutable{}, err
 	}
@@ -433,14 +428,31 @@ func makeViewTableDesc(
 	return desc, nil
 }
 
-// replaceSeqNamesWithIDs prepares to walk the given viewQuery by defining the
-// function used to replace sequence names with IDs, and parsing the
-// viewQuery into a statement.
+// replaceSeqNamesWithIDsLang walks the query in queryStr, replacing any
+// sequence names with their IDs and returning a new query string with the names
+// replaced. It assumes that the query is in the SQL language.
 // TODO (Chengxiong): move this to a better place.
 func replaceSeqNamesWithIDs(
 	ctx context.Context, sc resolver.SchemaResolver, queryStr string, multiStmt bool,
 ) (string, error) {
+	return replaceSeqNamesWithIDsLang(ctx, sc, queryStr, multiStmt, catpb.Function_SQL)
+}
+
+// replaceSeqNamesWithIDsLang walks the query in queryStr, replacing any
+// sequence names with their IDs and returning a new query string with the names
+// replaced. Queries may be in either the SQL or PLpgSQL language, indicated by
+// lang.
+func replaceSeqNamesWithIDsLang(
+	ctx context.Context,
+	sc resolver.SchemaResolver,
+	queryStr string,
+	multiStmt bool,
+	lang catpb.Function_Language,
+) (string, error) {
 	replaceSeqFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if expr == nil {
+			return false, expr, nil
+		}
 		seqIdentifiers, err := seqexpr.GetUsedSequences(expr)
 		if err != nil {
 			return false, expr, err
@@ -460,48 +472,83 @@ func replaceSeqNamesWithIDs(
 		return false, newExpr, nil
 	}
 
-	var stmts tree.Statements
-	if multiStmt {
-		parsedStmtd, err := parser.Parse(queryStr)
-		if err != nil {
-			return "", errors.Wrap(err, "failed to parse query string")
-		}
-		for _, s := range parsedStmtd {
-			stmts = append(stmts, s.AST)
-		}
-	} else {
-		stmt, err := parser.ParseOne(queryStr)
-		if err != nil {
-			return "", errors.Wrap(err, "failed to parse query string")
-		}
-		stmts = tree.Statements{stmt.AST}
-	}
-
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	for i, stmt := range stmts {
-		newStmt, err := tree.SimpleStmtVisit(stmt, replaceSeqFunc)
-		if err != nil {
-			return "", err
-		}
-		if i > 0 {
-			fmtCtx.WriteString("\n")
-		}
-		fmtCtx.FormatNode(newStmt)
+	switch lang {
+	case catpb.Function_SQL:
+		var stmts tree.Statements
 		if multiStmt {
-			fmtCtx.WriteString(";")
+			parsedStmtd, err := parser.Parse(queryStr)
+			if err != nil {
+				return "", errors.Wrap(err, "failed to parse query string")
+			}
+			for _, s := range parsedStmtd {
+				stmts = append(stmts, s.AST)
+			}
+		} else {
+			stmt, err := parser.ParseOne(queryStr)
+			if err != nil {
+				return "", errors.Wrap(err, "failed to parse query string")
+			}
+			stmts = tree.Statements{stmt.AST}
 		}
+
+		for i, stmt := range stmts {
+			newStmt, err := tree.SimpleStmtVisit(stmt, replaceSeqFunc)
+			if err != nil {
+				return "", err
+			}
+			if i > 0 {
+				fmtCtx.WriteString("\n")
+			}
+			fmtCtx.FormatNode(newStmt)
+			if multiStmt {
+				fmtCtx.WriteString(";")
+			}
+		}
+	case catpb.Function_PLPGSQL:
+		var stmts plpgsqltree.Statement
+		plstmt, err := plpgsql.Parse(queryStr)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to parse query string")
+		}
+		stmts = plstmt.AST
+
+		v := utils.SQLStmtVisitor{Fn: replaceSeqFunc}
+		newStmt := plpgsqltree.Walk(&v, stmts)
+		fmtCtx.FormatNode(newStmt)
 	}
 
 	return fmtCtx.String(), nil
 }
 
-// serializeUserDefinedTypes will walk the given view query
-// and serialize any user defined types, so that renaming the type
-// does not corrupt the view.
+// serializeUserDefinedTypes walks the given query and serializes any
+// user defined types as IDs, so that renaming the type does not cause
+// corruption, and returns a new query string containing the replacement IDs.
+// It assumes that the query language is SQL.
 func serializeUserDefinedTypes(
-	ctx context.Context, semaCtx *tree.SemaContext, queries string, multiStmt bool,
+	ctx context.Context, semaCtx *tree.SemaContext, queries string, multiStmt bool, parentType string,
 ) (string, error) {
+	return serializeUserDefinedTypesLang(ctx, semaCtx, queries, multiStmt, parentType, catpb.Function_SQL)
+}
+
+// serializeUserDefinedTypesLang walks the given query and serializes any
+// user defined types as IDs, so that renaming the type does not cause
+// corruption, and returns a new query string containing the replacement IDs.
+// The query may be in either the SQL or PLpgSQL language, indicated by lang.
+func serializeUserDefinedTypesLang(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	queries string,
+	multiStmt bool,
+	parentType string,
+	lang catpb.Function_Language,
+) (string, error) {
+	// replaceFunc is a visitor function that replaces user defined types in SQL
+	// expressions with their IDs.
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if expr == nil {
+			return false, expr, nil
+		}
 		var innerExpr tree.Expr
 		var typRef tree.ResolvableTypeReference
 		switch n := expr.(type) {
@@ -528,6 +575,14 @@ func serializeUserDefinedTypes(
 		if !typ.UserDefined() {
 			return true, expr, nil
 		}
+		{
+			// We cannot type-check subqueries without using optbuilder, so we
+			// currently do not support casting expressions with subqueries to
+			// UDTs.
+			context := "casts to enums within " + parentType
+			defer semaCtx.Properties.Restore(semaCtx.Properties)
+			semaCtx.Properties.Require(context, tree.RejectSubqueries)
+		}
 		texpr, err := innerExpr.TypeCheck(ctx, semaCtx, typ)
 		if err != nil {
 			return false, expr, err
@@ -539,39 +594,83 @@ func serializeUserDefinedTypes(
 		}
 		return false, parsedExpr, nil
 	}
-
-	var stmts tree.Statements
-	if multiStmt {
-		parsedStmts, err := parser.Parse(queries)
+	// replaceTypeFunc is a visitor function that replaces type annotations
+	// containing user defined types with their IDs. This is currently only
+	// necessary for some kinds of PLpgSQL statements.
+	replaceTypeFunc := func(typ tree.ResolvableTypeReference) (newTyp tree.ResolvableTypeReference, err error) {
+		if typ == nil {
+			return typ, nil
+		}
+		// semaCtx may be nil if this is a virtual view being created at
+		// init time.
+		var typeResolver tree.TypeReferenceResolver
+		if semaCtx != nil {
+			typeResolver = semaCtx.TypeResolver
+		}
+		var t *types.T
+		t, err = tree.ResolveType(ctx, typ, typeResolver)
 		if err != nil {
-			return "", errors.Wrap(err, "failed to parse query")
+			return typ, err
 		}
-		stmts = make(tree.Statements, len(parsedStmts))
-		for i, stmt := range parsedStmts {
-			stmts[i] = stmt.AST
+		if !t.UserDefined() {
+			return typ, nil
 		}
-	} else {
-		stmt, err := parser.ParseOne(queries)
-		if err != nil {
-			return "", errors.Wrap(err, "failed to parse query")
-		}
-		stmts = tree.Statements{stmt.AST}
+		return &tree.OIDTypeReference{OID: t.Oid()}, nil
 	}
 
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	for i, stmt := range stmts {
-		newStmt, err := tree.SimpleStmtVisit(stmt, replaceFunc)
-		if err != nil {
-			return "", err
-		}
-		if i > 0 {
-			fmtCtx.WriteString("\n")
-		}
-		fmtCtx.FormatNode(newStmt)
+	switch lang {
+	case catpb.Function_SQL:
+		var stmts tree.Statements
 		if multiStmt {
-			fmtCtx.WriteString(";")
+			parsedStmts, err := parser.Parse(queries)
+			if err != nil {
+				return "", errors.Wrap(err, "failed to parse query")
+			}
+			stmts = make(tree.Statements, len(parsedStmts))
+			for i, stmt := range parsedStmts {
+				stmts[i] = stmt.AST
+			}
+		} else {
+			stmt, err := parser.ParseOne(queries)
+			if err != nil {
+				return "", errors.Wrap(err, "failed to parse query")
+			}
+			stmts = tree.Statements{stmt.AST}
 		}
+
+		for i, stmt := range stmts {
+			newStmt, err := tree.SimpleStmtVisit(stmt, replaceFunc)
+			if err != nil {
+				return "", err
+			}
+			if i > 0 {
+				fmtCtx.WriteString("\n")
+			}
+			fmtCtx.FormatNode(newStmt)
+			if multiStmt {
+				fmtCtx.WriteString(";")
+			}
+		}
+	case catpb.Function_PLPGSQL:
+		var stmts plpgsqltree.Statement
+		plstmt, err := plpgsql.Parse(queries)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to parse query string")
+		}
+		stmts = plstmt.AST
+
+		v := utils.SQLStmtVisitor{Fn: replaceFunc}
+		newStmt := plpgsqltree.Walk(&v, stmts)
+		// Some PLpgSQL statements (i.e., declarations), may contain type
+		// annotations containing the UDT. We need to walk the AST to replace them,
+		// too.
+		v2 := utils.TypeRefVisitor{Fn: replaceTypeFunc}
+		newStmt = plpgsqltree.Walk(&v2, newStmt)
+		fmtCtx.FormatNode(newStmt)
+		fmtCtx.WriteString(";")
 	}
+
 	return fmtCtx.CloseAndGetString(), nil
 }
 
@@ -597,6 +696,13 @@ func (p *planner) replaceViewDesc(
 		}
 		toReplace.ViewQuery = updatedQuery
 	}
+
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, p.SemaCtx(), toReplace.ViewQuery,
+		false /* multiStmt */, "view queries")
+	if err != nil {
+		return nil, err
+	}
+	toReplace.ViewQuery = typeReplacedQuery
 
 	// Check that the new view has at least as many columns as the old view before
 	// adding result columns.
@@ -639,7 +745,7 @@ func (p *planner) replaceViewDesc(
 				ctx,
 				desc,
 				descpb.InvalidMutationID,
-				fmt.Sprintf("removing view reference for %q from %s(%d)", n.viewName,
+				fmt.Sprintf("removing view reference for %q from %s(%d)", &n.createView.Name,
 					desc.Name, desc.ID,
 				),
 			); err != nil {
@@ -675,7 +781,7 @@ func (p *planner) replaceViewDesc(
 	// Since we are replacing an existing view here, we need to write the new
 	// descriptor into place.
 	if err := p.writeSchemaChange(ctx, toReplace, descpb.InvalidMutationID,
-		fmt.Sprintf("CREATE OR REPLACE VIEW %q AS %q", n.viewName, n.viewQuery),
+		fmt.Sprintf("CREATE OR REPLACE VIEW %q AS %q", &n.createView.Name, n.viewQuery),
 	); err != nil {
 		return nil, err
 	}

@@ -20,7 +20,7 @@ new-cluster name=s2 share-io-dir=s1 allow-implicit-access
 
 query-sql
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label LIKE 'row-level-ttl%'
 ----
 0
 
@@ -39,11 +39,11 @@ CREATE TABLE public.t (
 	id INT8 NOT NULL,
 	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
 	CONSTRAINT t_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
 
 query-sql
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label LIKE 'row-level-ttl%'
 ----
 1
 
@@ -53,7 +53,7 @@ DROP DATABASE d
 
 query-sql
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label LIKE 'row-level-ttl%'
 ----
 0
 
@@ -72,11 +72,11 @@ CREATE TABLE public.t (
 	id INT8 NOT NULL,
 	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
 	CONSTRAINT t_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
 
 query-sql
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label LIKE 'row-level-ttl%'
 ----
 1
 
@@ -86,7 +86,7 @@ DROP DATABASE d
 
 query-sql
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label LIKE 'row-level-ttl%'
 ----
 0
 
@@ -109,11 +109,11 @@ CREATE TABLE public.t (
 	id INT8 NOT NULL,
 	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
 	CONSTRAINT t_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
 
 query-sql
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label LIKE 'row-level-ttl%'
 ----
 1
 
@@ -123,6 +123,6 @@ DROP TABLE d.public.t
 
 query-sql
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label LIKE 'row-level-ttl%'
 ----
 0

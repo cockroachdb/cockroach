@@ -17,9 +17,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -51,7 +52,10 @@ func (p *planner) FormatAstAsRedactableString(
 
 // SchemaChange provides the planNode for the new schema changer.
 func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNode, error) {
-	// TODO(ajwerner): Call featureflag.CheckEnabled appropriately.
+	err := checkSchemaChangeEnabled(ctx, p.ExecCfg(), p.stmt.AST.StatementTag())
+	if err != nil {
+		return nil, err
+	}
 	mode := p.extendedEvalCtx.SchemaChangerState.mode
 	// When new schema changer is on we will not support it for explicit
 	// transaction, since we don't know if subsequent statements don't
@@ -78,6 +82,12 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		}
 		return nil, err
 	}
+
+	// If we successfully planned a schema change here, then update telemetry
+	// to indicate that we used the new schema changer.
+	telemetry.Inc(sqltelemetry.DeclarativeSchemaChangerCounter)
+	p.curPlan.instrumentation.schemaChangerMode = schemaChangerModeDeclarative
+
 	return &schemaChangePlanNode{
 		stmt:         stmt,
 		sql:          p.stmt.SQL,
@@ -105,64 +115,6 @@ func (p *planner) newSchemaChangeBuilderDependencies(statements []string) scbuil
 	)
 }
 
-// waitForDescriptorIDGeneratorMigration polls the system.descriptor table (in
-// separate transactions) until the descriptor_id_seq record is present, which
-// indicates that the system tenant's descriptor ID generator has successfully
-// been migrated.
-func (p *planner) waitForDescriptorIDGeneratorMigration(ctx context.Context) error {
-	// Drop all leases and locks due to the current transaction, and, in the
-	// process, abort the transaction.
-	p.Descriptors().ReleaseAll(ctx)
-	if err := p.txn.Rollback(ctx); err != nil {
-		return err
-	}
-
-	// Wait for the system.descriptor_id_gen descriptor to appear.
-	start := timeutil.Now()
-	logEvery := log.Every(30 * time.Second)
-	blocked := true
-	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); blocked && r.Next(); {
-		if knobs := p.ExecCfg().TenantTestingKnobs; knobs != nil {
-			if fn := knobs.BeforeCheckingForDescriptorIDSequence; fn != nil {
-				fn(ctx)
-			}
-		}
-		now := p.ExecCfg().Clock.Now()
-		if logEvery.ShouldLog() {
-			log.Infof(
-				ctx,
-				"waiting for system tenant descriptor ID generator migration, waited %v so far",
-				timeutil.Since(start),
-			)
-		}
-		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
-			ctx context.Context, txn descs.Txn,
-		) error {
-			kvTxn := txn.KV()
-			if err := kvTxn.SetFixedTimestamp(ctx, now); err != nil {
-				return err
-			}
-			k := catalogkeys.MakeDescMetadataKey(p.ExecCfg().Codec, keys.DescIDSequenceID)
-			result, err := txn.KV().Get(ctx, k)
-			if err != nil {
-				return err
-			}
-			if result.Exists() {
-				blocked = false
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
-	log.Infof(
-		ctx,
-		"done waiting for system tenant descriptor ID generator migration after %v",
-		timeutil.Since(start),
-	)
-	return nil
-}
-
 // waitForDescriptorSchemaChanges polls the specified descriptor (in separate
 // transactions) until all its ongoing schema changes have completed.
 // Internally, this call will restart the planner's underlying transaction and
@@ -173,8 +125,8 @@ func (p *planner) waitForDescriptorSchemaChanges(
 	ctx context.Context, descID descpb.ID, scs SchemaChangerState,
 ) error {
 
-	if knobs := p.ExecCfg().DeclarativeSchemaChangerTestingKnobs; knobs != nil &&
-		knobs.BeforeWaitingForConcurrentSchemaChanges != nil {
+	knobs := p.ExecCfg().DeclarativeSchemaChangerTestingKnobs
+	if knobs != nil && knobs.BeforeWaitingForConcurrentSchemaChanges != nil {
 		knobs.BeforeWaitingForConcurrentSchemaChanges(scs.stmts)
 	}
 
@@ -187,16 +139,11 @@ func (p *planner) waitForDescriptorSchemaChanges(
 
 	// Wait for the descriptor to no longer be claimed by a schema change.
 	start := timeutil.Now()
-	logEvery := log.Every(30 * time.Second)
+	logEvery := log.Every(10 * time.Second)
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		now := p.ExecCfg().Clock.Now()
-		if logEvery.ShouldLog() {
-			log.Infof(ctx,
-				"schema change waiting for concurrent schema changes on descriptor %d,"+
-					" waited %v so far", descID, timeutil.Since(start),
-			)
-		}
-		blocked := false
+		var isBlocked bool
+		var blockingJobIDs []catpb.JobID
 		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
 			ctx context.Context, txn descs.Txn,
 		) error {
@@ -207,15 +154,26 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			if err != nil {
 				return err
 			}
-			blocked = desc.HasConcurrentSchemaChanges()
+			isBlocked = desc.HasConcurrentSchemaChanges()
+			blockingJobIDs = desc.ConcurrentSchemaChangeJobIDs()
 			return nil
 		}); err != nil {
 			return err
 		}
-		if !blocked {
+		if !isBlocked {
 			break
 		}
+		if logEvery.ShouldLog() {
+			log.Infof(ctx,
+				"schema change waiting for %v concurrent schema change job(s) %v on descriptor %d,"+
+					" waited %v so far", len(blockingJobIDs), blockingJobIDs, descID, timeutil.Since(start),
+			)
+		}
+		if knobs != nil && knobs.WhileWaitingForConcurrentSchemaChanges != nil {
+			knobs.WhileWaitingForConcurrentSchemaChanges(scs.stmts)
+		}
 	}
+
 	log.Infof(
 		ctx,
 		"done waiting for concurrent schema changes on descriptor %d after %v",

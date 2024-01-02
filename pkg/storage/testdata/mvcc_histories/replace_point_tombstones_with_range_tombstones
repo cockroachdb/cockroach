@@ -45,9 +45,11 @@ del: "i": found key false
 del: "k": found key false
 del: "l": found key false
 del: "n": found key false
+put: lock acquisition = {f id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
 del: "g": found key false
+del: lock acquisition = {g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
 rangekey: {h-o}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "b"/1.000000000,0 -> /BYTES/b1
 data: "c"/1.000000000,0 -> /<empty>
@@ -56,10 +58,10 @@ data: "d"/1.000000000,0 -> /<empty>
 data: "e"/3.000000000,0 -> /<empty>
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
-meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/5.000000000,0 -> /BYTES/f5
 data: "f"/1.000000000,0 -> /<empty>
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/5.000000000,0 -> /<empty>
 data: "g"/1.000000000,0 -> /<empty>
 data: "h"/1.000000000,0 -> /BYTES/h1
@@ -90,10 +92,10 @@ data: "d"/2.000000000,0 -> /BYTES/d2
 data: "d"/1.000000000,0 -> /<empty>
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
-meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/5.000000000,0 -> /BYTES/f5
 data: "f"/1.000000000,0 -> /<empty>
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/5.000000000,0 -> /<empty>
 data: "g"/1.000000000,0 -> /<empty>
 data: "h"/1.000000000,0 -> /BYTES/h1
@@ -102,7 +104,7 @@ data: "k"/5.000000000,0 -> /BYTES/k5
 data: "k"/1.000000000,0 -> /<empty>
 data: "l"/1.000000000,0 -> /BYTES/l1
 data: "m"/5.000000000,0 -> /BYTES/m5
-stats: key_count=10 key_bytes=200 val_count=15 val_bytes=152 range_key_count=7 range_key_bytes=160 range_val_count=14 live_count=5 live_bytes=153 gc_bytes_age=34769 intent_count=2 intent_bytes=31 separated_intent_count=2 intent_age=190
+stats: key_count=10 key_bytes=200 val_count=15 val_bytes=152 range_key_count=7 range_key_bytes=160 range_val_count=14 live_count=5 live_bytes=153 gc_bytes_age=34769 intent_count=2 intent_bytes=31 lock_count=2 lock_age=190
 
 
 # Then, set the dataset up again and replace point keys.
@@ -143,9 +145,11 @@ del: "i": found key false
 del: "k": found key false
 del: "l": found key false
 del: "n": found key false
+put: lock acquisition = {f id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
 del: "g": found key false
+del: lock acquisition = {g id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
 rangekey: {h-o}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "b"/1.000000000,0 -> /BYTES/b1
 data: "c"/1.000000000,0 -> /<empty>
@@ -154,10 +158,10 @@ data: "d"/1.000000000,0 -> /<empty>
 data: "e"/3.000000000,0 -> /<empty>
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
-meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/5.000000000,0 -> /BYTES/f5
 data: "f"/1.000000000,0 -> /<empty>
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/5.000000000,0 -> /<empty>
 data: "g"/1.000000000,0 -> /<empty>
 data: "h"/1.000000000,0 -> /BYTES/h1
@@ -229,10 +233,10 @@ data: "d"/2.000000000,0 -> /BYTES/d2
 data: "d"/1.000000000,0 -> /<empty>
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
-meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/5.000000000,0 -> /BYTES/f5
 data: "f"/1.000000000,0 -> /<empty>
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/5.000000000,0 -> /<empty>
 data: "g"/1.000000000,0 -> /<empty>
 data: "h"/1.000000000,0 -> /BYTES/h1
@@ -241,4 +245,4 @@ data: "k"/5.000000000,0 -> /BYTES/k5
 data: "k"/1.000000000,0 -> /<empty>
 data: "l"/1.000000000,0 -> /BYTES/l1
 data: "m"/5.000000000,0 -> /BYTES/m5
-stats: key_count=10 key_bytes=200 val_count=15 val_bytes=152 range_key_count=7 range_key_bytes=160 range_val_count=14 live_count=5 live_bytes=153 gc_bytes_age=34769 intent_count=2 intent_bytes=31 separated_intent_count=2 intent_age=190
+stats: key_count=10 key_bytes=200 val_count=15 val_bytes=152 range_key_count=7 range_key_bytes=160 range_val_count=14 live_count=5 live_bytes=153 gc_bytes_age=34769 intent_count=2 intent_bytes=31 lock_count=2 lock_age=190

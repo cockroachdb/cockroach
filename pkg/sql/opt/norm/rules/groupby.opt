@@ -58,6 +58,10 @@
 # EliminateJoinUnderGroupByLeft should stay at the top of the file so that it
 # has a chance to fire before rules like EliminateDistinctOn that might prevent
 # matching.
+#
+# Similar to the join-elimination rules that match on Project operators,
+# EliminateJoinUnderGroupByLeft can remap references to the right input of the
+# join to refer to equivalent columns on the left input.
 [EliminateJoinUnderGroupByLeft, Normalize]
 (GroupBy | ScalarGroupBy | DistinctOn
     $input:(InnerJoin | LeftJoin $left:*)
@@ -67,18 +71,24 @@
             $ordering
             $leftCols:(OutputCols $left)
         ) &
-        (ColsAreSubset
-            (UnionCols
+        (CanRemapCols
+            $toRemap:(UnionCols
                 $groupingCols
                 (AggregationOuterCols $aggs)
             )
             $leftCols
+            $fds:(FuncDeps $input)
         ) &
+        (CanUseImprovedJoinElimination $toRemap $leftCols) &
         (CanEliminateJoinUnderGroupByLeft $input $aggs)
 )
 =>
 ((OpName)
-    $left
+    (Project
+        $left
+        (ProjectRemappedCols $toRemap $leftCols $fds)
+        $leftCols
+    )
     $aggs
     (MakeGrouping
         $groupingCols
@@ -97,18 +107,24 @@
             $ordering
             $rightCols:(OutputCols $right)
         ) &
-        (ColsAreSubset
-            (UnionCols
+        (CanRemapCols
+            $toRemap:(UnionCols
                 $groupingCols
                 (AggregationOuterCols $aggs)
             )
             $rightCols
+            $fds:(FuncDeps $input)
         ) &
+        (CanUseImprovedJoinElimination $toRemap $rightCols) &
         (CanEliminateJoinUnderGroupByRight $input $aggs)
 )
 =>
 ((OpName)
-    $right
+    (Project
+        $right
+        (ProjectRemappedCols $toRemap $rightCols $fds)
+        $rightCols
+    )
     $aggs
     (MakeGrouping
         $groupingCols
@@ -130,6 +146,19 @@
     $aggs:*
     $groupingPrivate:* &
         (ColsAreStrictKey (GroupingCols $groupingPrivate) $input)
+)
+=>
+(Project $input [] (GroupingOutputCols $groupingPrivate $aggs))
+
+# EliminateUpsertDistinct is similar to EliminateDistinct, but it only checks if
+# the grouping columns are a lax key because UpsertDistinctOn considers NULL
+# values to be distinct from one another for the purposes of grouping.
+[EliminateUpsertDistinct, Normalize]
+(UpsertDistinctOn | EnsureUpsertDistinctOn
+    $input:*
+    $aggs:*
+    $groupingPrivate:* &
+        (ColsAreLaxKey (GroupingCols $groupingPrivate) $input)
 )
 =>
 (Project $input [] (GroupingOutputCols $groupingPrivate $aggs))

@@ -1,4 +1,3 @@
-# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 # LogicTest: multiregion-15node-5region-3azs
 
 statement ok
@@ -770,7 +769,7 @@ TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
                       voter_constraints = '[+region=us-west-1]',
                       lease_preferences = '[[+region=us-west-1]]'
 
-query ITTT
+query ITTT rowsort
 SELECT id, database_name, super_region_name, regions FROM crdb_internal.super_regions
 ----
 112  db        test           {ap-southeast-2,us-east-1}
@@ -806,7 +805,7 @@ SHOW SUPER REGIONS FROM DATABASE mr1
 ----
 mr1  test  {us-east-1}
 
-query TTT
+query TTT rowsort
 SHOW SUPER REGIONS FROM DATABASE mr2
 ----
 mr2  ca-central-sr  {ca-central-1}

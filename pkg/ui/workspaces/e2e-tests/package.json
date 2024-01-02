@@ -5,8 +5,8 @@
   "license": "BSL",
   "private": true,
   "scripts": {
-    "test": "./build/start-crdb-then.sh yarn cy:run",
-    "test:debug": "./build/start-crdb-then.sh yarn cy:debug",
+    "test": "./build/start-crdb-then.sh pnpm cy:run",
+    "test:debug": "./build/start-crdb-then.sh pnpm cy:debug",
     "cy:run": "cypress run --e2e",
     "cy:debug": "cypress open --e2e --browser=chrome",
     "lint": "eslint './**/*.ts'",
@@ -16,13 +16,15 @@
     "@cockroachlabs/eslint-config": "0.1.11",
     "@testing-library/cypress": "^8.0.2",
     "@types/node": "16",
+    "@typescript-eslint/parser": "2.34.0",
     "cypress": "^10.3.0",
     "eslint": "7.29.0",
-    "eslint-plugin-prettier": "3.4.0",
+    "eslint-config-prettier": "^8.8.0",
+    "eslint-plugin-prettier": "3.4.1",
     "eslint-plugin-react": "7.24.0",
     "eslint-plugin-react-hooks": "4.2.0",
     "prettier": "2.6.2",
-    "typescript": "^4.6.3"
+    "typescript": "5.1.6"
   },
   "dependencies": {
     "@typescript-eslint/eslint-plugin": "4.29.1"

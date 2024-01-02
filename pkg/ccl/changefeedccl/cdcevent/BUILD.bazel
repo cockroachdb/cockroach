@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -18,6 +17,8 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/colinfo",
@@ -32,11 +33,13 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/cache",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
@@ -50,7 +53,6 @@ go_test(
         "projection_test.go",
         "rowfetcher_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":cdcevent"],
     tags = ["ccl_test"],
     deps = [
@@ -58,6 +60,7 @@ go_test(
         "//pkg/ccl/changefeedccl/cdctest",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/jobs/jobspb",
+        "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -84,5 +87,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

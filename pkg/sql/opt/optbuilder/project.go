@@ -220,11 +220,8 @@ func (b *Builder) resolveColRef(e tree.Expr, inScope *scope) tree.TypedExpr {
 		_, srcMeta, _, resolveErr := inScope.FindSourceProvidingColumn(b.ctx, tree.Name(colName))
 		if resolveErr != nil {
 			// It may be a reference to a table, e.g. SELECT tbl FROM tbl.
-			// Attempt to resolve as a TupleStar. We do not attempt to resolve
-			// as a TupleStar if we are inside a view or function definition
-			// because views and functions do not support * expressions.
-			if !b.insideViewDef && !b.insideFuncDef &&
-				sqlerrors.IsUndefinedColumnError(resolveErr) {
+			// Attempt to resolve as a TupleStar.
+			if sqlerrors.IsUndefinedColumnError(resolveErr) {
 				return func() tree.TypedExpr {
 					defer wrapColTupleStarPanic(resolveErr)
 					return inScope.resolveType(columnNameAsTupleStar(colName), types.Any)
@@ -365,13 +362,34 @@ func (b *Builder) finishBuildScalarRef(
 //
 // Note that this is all a cheap no-op if Add is not called.
 type projectionBuilder struct {
-	b        *Builder
-	inScope  *scope
+	b *Builder
+	// inScope is the scope of the expression to build a projection on top of.
+	inScope *scope
+	// resolveScope is the scope used to resolve column references in projection
+	// expressions. If resolveScope is nil, then inScope is used to resolve
+	// column references.
+	resolveScope *scope
+	// outScope is the scope of the resulting projection.
 	outScope *scope
 }
 
 func makeProjectionBuilder(b *Builder, inScope *scope) projectionBuilder {
 	return projectionBuilder{b: b, inScope: inScope}
+}
+
+// HasResolveScope returns true if a scope other than the inScope has been
+// provided.
+func (pb *projectionBuilder) HasResolveScope() bool {
+	return pb.resolveScope != nil
+}
+
+// SetResolveScope replaces inScope for resolving column references in
+// projection expressions.
+func (pb *projectionBuilder) SetResolveScope(resolveScope *scope) {
+	if pb.HasResolveScope() {
+		panic(errors.AssertionFailedf("expected resolveScope to be nil"))
+	}
+	pb.resolveScope = resolveScope
 }
 
 // Add a projection.
@@ -386,9 +404,13 @@ func (pb *projectionBuilder) Add(
 		pb.outScope = pb.inScope.replace()
 		pb.outScope.appendColumnsFromScope(pb.inScope)
 	}
-	typedExpr := pb.inScope.resolveType(expr, desiredType)
+	resolveScope := pb.inScope
+	if pb.HasResolveScope() {
+		resolveScope = pb.resolveScope
+	}
+	typedExpr := resolveScope.resolveType(expr, desiredType)
 	scopeCol := pb.outScope.addColumn(name, typedExpr)
-	scalar := pb.b.buildScalar(typedExpr, pb.inScope, pb.outScope, scopeCol, nil)
+	scalar := pb.b.buildScalar(typedExpr, resolveScope, pb.outScope, scopeCol, nil)
 
 	return scopeCol.id, scalar
 }

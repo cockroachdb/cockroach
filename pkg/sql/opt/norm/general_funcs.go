@@ -281,6 +281,36 @@ func (c *CustomFuncs) RedundantCols(input memo.RelExpr, cols opt.ColSet) opt.Col
 	return cols.Difference(reducedCols)
 }
 
+func (c *CustomFuncs) RemapScanColsInScalarExpr(
+	scalar opt.ScalarExpr, src, dst *memo.ScanPrivate,
+) opt.ScalarExpr {
+	md := c.mem.Metadata()
+	if md.Table(src.Table).ID() != md.Table(dst.Table).ID() {
+		panic(errors.AssertionFailedf("scans must have the same base table"))
+	}
+	if src.Cols.Len() != dst.Cols.Len() {
+		panic(errors.AssertionFailedf("scans must have the same number of columns"))
+	}
+	// Remap each column in src to a column in dst.
+	var colMap opt.ColMap
+	for srcCol, ok := src.Cols.Next(0); ok; srcCol, ok = src.Cols.Next(srcCol + 1) {
+		ord := src.Table.ColumnOrdinal(srcCol)
+		dstCol := dst.Table.ColumnID(ord)
+		colMap.Set(int(srcCol), int(dstCol))
+	}
+	return c.f.RemapCols(scalar, colMap)
+}
+
+// RemapScanColsInFilter returns a new FiltersExpr where columns in src's table
+// are replaced with columns of the same ordinal in dst's table. src and dst
+// must scan the same base table.
+func (c *CustomFuncs) RemapScanColsInFilter(
+	filters memo.FiltersExpr, src, dst *memo.ScanPrivate,
+) memo.FiltersExpr {
+	newFilters := c.RemapScanColsInScalarExpr(&filters, src, dst).(*memo.FiltersExpr)
+	return *newFilters
+}
+
 // DuplicateColumnIDs duplicates a table and set of columns IDs in the metadata.
 // It returns the new table's ID and the new set of columns IDs.
 func (c *CustomFuncs) DuplicateColumnIDs(
@@ -303,6 +333,37 @@ func (c *CustomFuncs) DuplicateColumnIDs(
 // MakeBoolCol creates a new column of type Bool and returns its ID.
 func (c *CustomFuncs) MakeBoolCol() opt.ColumnID {
 	return c.mem.Metadata().AddColumn("", types.Bool)
+}
+
+// CanRemapCols returns true if it's possible to remap every column in the
+// "from" set to a column in the "to" set using the given FDs.
+func (c *CustomFuncs) CanRemapCols(from, to opt.ColSet, fds *props.FuncDepSet) bool {
+	for fromCol, ok := from.Next(0); ok; fromCol, ok = from.Next(fromCol + 1) {
+		if _, ok := c.remapColWithIdenticalType(fromCol, to, fds); !ok {
+			// It is not possible to remap this column to one from the "to" set.
+			return false
+		}
+	}
+	return true
+}
+
+// remapColWithIdenticalType returns a column in the "to" set that is equivalent
+// to "fromCol" and has the identical type. It returns ok=false if no such
+// column exists.
+func (c *CustomFuncs) remapColWithIdenticalType(
+	fromCol opt.ColumnID, to opt.ColSet, fds *props.FuncDepSet,
+) (_ opt.ColumnID, ok bool) {
+	md := c.mem.Metadata()
+	fromColType := md.ColumnMeta(fromCol).Type
+	equivCols := fds.ComputeEquivGroup(fromCol)
+	equivCols.IntersectionWith(to)
+	for equivCol, ok := equivCols.Next(0); ok; equivCol, ok = equivCols.Next(equivCol + 1) {
+		equivColType := md.ColumnMeta(equivCol).Type
+		if fromColType.Identical(equivColType) {
+			return equivCol, true
+		}
+	}
+	return 0, false
 }
 
 // ----------------------------------------------------------------------
@@ -531,6 +592,14 @@ func (c *CustomFuncs) ColsAreStrictKey(cols opt.ColSet, input memo.RelExpr) bool
 	return input.Relational().FuncDeps.ColsAreStrictKey(cols)
 }
 
+// ColsAreLaxKey returns true if the given columns form a lax key for the given
+// input expression. A lax key considers NULL values as distinct from one
+// another, so it is allowed for two rows to have the same set of values if some
+// of the values are NULL.
+func (c *CustomFuncs) ColsAreLaxKey(cols opt.ColSet, input memo.RelExpr) bool {
+	return input.Relational().FuncDeps.ColsAreLaxKey(cols)
+}
+
 // PrimaryKeyCols returns the key columns of the primary key of the table.
 func (c *CustomFuncs) PrimaryKeyCols(table opt.TableID) opt.ColSet {
 	tabMeta := c.mem.Metadata().TableMeta(table)
@@ -565,6 +634,11 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 		memo.BuildSharedProps(e, &p, c.f.evalCtx)
 		return &p
 	}
+}
+
+// FuncDeps retrieves the FuncDepSet for the given expression.
+func (c *CustomFuncs) FuncDeps(expr memo.RelExpr) *props.FuncDepSet {
+	return &expr.Relational().FuncDeps
 }
 
 // ----------------------------------------------------------------------
@@ -948,7 +1022,7 @@ func (c *CustomFuncs) tryFoldComputedCol(
 	}
 
 	computedCol := ComputedCols[computedColID]
-	if memo.CanBeCompositeSensitive(c.f.mem.Metadata(), computedCol) {
+	if memo.CanBeCompositeSensitive(computedCol) {
 		// The computed column expression can return different values for logically
 		// equal outer columns (e.g. d::STRING where d is a DECIMAL).
 		return false

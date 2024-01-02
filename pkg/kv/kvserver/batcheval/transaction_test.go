@@ -63,7 +63,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 	}
 	as := abortspan.New(desc.RangeID)
 
-	txn := roachpb.MakeTransaction("test", txnKey, 0, 0, hlc.Timestamp{WallTime: 1}, 0, 1)
+	txn := roachpb.MakeTransaction("test", txnKey, 0, 0, hlc.Timestamp{WallTime: 1}, 0, 1, 0, false /* omitInRangefeeds */)
 	newTxnAbortSpanEntry := roachpb.AbortSpanEntry{
 		Key:       txn.Key,
 		Timestamp: txn.WriteTimestamp,
@@ -73,7 +73,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 	// Priority don't matter other than that they allow us to detect changes
 	// in the AbortSpanEntry.
 	prevTxn := txn.Clone()
-	prevTxn.WriteTimestamp.Add(-1, 0)
+	prevTxn.WriteTimestamp = prevTxn.WriteTimestamp.Add(-1, 0)
 	prevTxn.Priority--
 	prevTxnAbortSpanEntry := roachpb.AbortSpanEntry{
 		Key:       prevTxn.Key,
@@ -85,7 +85,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 	type evalFn func(storage.ReadWriter, EvalContext, *enginepb.MVCCStats) error
 	addIntent := func(b storage.ReadWriter, _ EvalContext, ms *enginepb.MVCCStats) error {
 		val := roachpb.MakeValueFromString("val")
-		return storage.MVCCPut(ctx, b, ms, intentKey, txn.ReadTimestamp, hlc.ClockTimestamp{}, val, &txn)
+		_, err := storage.MVCCPut(ctx, b, intentKey, txn.ReadTimestamp, val, storage.MVCCWriteOptions{Txn: &txn, Stats: ms})
+		return err
 	}
 	addPrevAbortSpanEntry := func(b storage.ReadWriter, rec EvalContext, ms *enginepb.MVCCStats) error {
 		return UpdateAbortSpan(ctx, rec, b, ms, prevTxn.TxnMeta, true /* poison */)

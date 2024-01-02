@@ -12,9 +12,7 @@ package sql
 
 import (
 	"context"
-	gosql "database/sql"
 	"math"
-	"net/url"
 	"regexp"
 	"strings"
 	"testing"
@@ -73,7 +71,7 @@ func TestAdminAuditLogBasic(t *testing.T) {
 	db.Exec(t, `SELECT 1;`)
 
 	var selectAdminRe = regexp.MustCompile(`"EventType":"admin_query","Statement":"SELECT ‹1›","Tag":"SELECT","User":"root"`)
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 10000, selectAdminRe,
 		log.WithMarkedSensitiveData)
@@ -105,26 +103,16 @@ func TestAdminAuditLogRegularUser(t *testing.T) {
 	db.Exec(t, `SET CLUSTER SETTING sql.log.admin_audit.enabled = true;`)
 
 	db.Exec(t, `CREATE USER testuser`)
-	pgURL, testuserCleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "TestImportPrivileges-testuser",
-		url.User("testuser"),
-	)
 
-	defer testuserCleanupFunc()
-	testuser, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
+	testuser := s.ApplicationLayer().SQLConn(t, serverutils.User("testuser"))
 
-	defer testuser.Close()
-
-	if _, err = testuser.Exec(`SELECT 1`); err != nil {
+	if _, err := testuser.Exec(`SELECT 1`); err != nil {
 		t.Fatal(err)
 	}
 
 	var selectRe = regexp.MustCompile(`SELECT 1`)
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 10000, selectRe,
 		log.WithMarkedSensitiveData)
@@ -180,7 +168,7 @@ COMMIT;
 		},
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -232,18 +220,8 @@ func TestAdminAuditLogMultipleTransactions(t *testing.T) {
 	db.Exec(t, `SET CLUSTER SETTING sql.log.admin_audit.enabled = true;`)
 
 	db.Exec(t, `CREATE USER testuser`)
-	pgURL, testuserCleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "TestImportPrivileges-testuser",
-		url.User("testuser"),
-	)
 
-	defer testuserCleanupFunc()
-	testuser, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer testuser.Close()
+	testuser := s.ApplicationLayer().SQLConn(t, serverutils.User("testuser"))
 
 	db.Exec(t, `GRANT admin TO testuser`)
 
@@ -275,7 +253,7 @@ COMMIT;
 		},
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -319,7 +297,7 @@ COMMIT;
 		t.Fatal(err)
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err = log.FetchEntriesFromFiles(
 		0,

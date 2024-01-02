@@ -228,7 +228,7 @@ func drawDeps(cs scpb.CurrentState, g *scgraph.Graph) (*dot.Graph, error) {
 			ge.Attr("color", "red")
 			ge.Attr("label", e.RuleNames())
 			switch e.Kind() {
-			case scgraph.PreviousStagePrecedence:
+			case scgraph.PreviousStagePrecedence, scgraph.PreviousTransactionPrecedence:
 				ge.Attr("arrowhead", "inv")
 			case scgraph.SameStagePrecedence:
 				ge.Attr("arrowhead", "diamond")

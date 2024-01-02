@@ -6,7 +6,7 @@ new-txn txn=txn1 ts=10,1 epoch=0
 
 # req1 will acquire locks for txn1
 
-new-request r=req1 txn=txn1 ts=10,1 spans=none@a,b+intent@c,f
+new-request r=req1 txn=txn1 ts=10,1 spans=none@a,b+exclusive@c,f
 ----
 
 scan r=req1
@@ -17,27 +17,27 @@ guard-state r=req1
 ----
 new: state=doneWaiting
 
-acquire r=req1 k=c durability=u
+acquire r=req1 k=c durability=u strength=exclusive
 ----
 num=1
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
-acquire r=req1 k=e durability=u
+acquire r=req1 k=e durability=u strength=exclusive
 ----
 num=2
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
 dequeue r=req1
 ----
 num=2
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
 query span=a,d
 ----
@@ -51,32 +51,32 @@ num locks: 1, bytes returned: 41, resume reason: RESUME_UNKNOWN, resume span: <n
 
 # req2 is also for txn1 and will not wait for locks that are held by self.
 
-new-request r=req2 txn=txn1 ts=10,2 spans=intent@b,d+none@d,g
+new-request r=req2 txn=txn1 ts=10,2 spans=exclusive@b,d+none@d,g
 ----
 
 scan r=req2
 ----
 start-waiting: false
 
-acquire r=req2 k=b durability=u
+acquire r=req2 k=b durability=u strength=exclusive
 ----
 num=3
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
 dequeue r=req2
 ----
 num=3
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
 # make sure query limits work
 
@@ -135,16 +135,16 @@ print
 ----
 num=3
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
-   queued writers:
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-   queued writers:
-    active: true req: 4, txn: 00000000-0000-0000-0000-000000000003
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 4, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 4
 
 query span=a,/Max max-bytes=100
@@ -170,3 +170,110 @@ num locks: 1, bytes returned: 91, resume reason: RESUME_UNKNOWN, resume span: <n
   range_id=3 key="e" holder=00000000-0000-0000-0000-000000000001 durability=Unreplicated duration=200ms
    waiters:
     waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Exclusive wait_duration:200ms
+
+clear
+----
+num=0
+
+new-request r=req5 txn=txn3 ts=10,1 spans=shared@a,e
+----
+
+scan r=req5
+----
+start-waiting: false
+
+acquire r=req5 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+acquire r=req5 k=b durability=u strength=shared
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+acquire r=req5 k=c durability=u strength=shared
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+acquire r=req5 k=d durability=u strength=shared
+----
+num=4
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req6 txn=txn2 ts=10,1 spans=shared@b
+----
+
+scan r=req6
+----
+start-waiting: false
+
+acquire r=req6 k=b durability=u strength=shared
+----
+num=4
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "b"
+  holders: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+query span=a,f uncontended max-bytes=50
+----
+num locks: 1, bytes returned: 41, resume reason: RESUME_BYTE_LIMIT, resume span: {b-f}
+ locks:
+  range_id=3 key="a" holder=00000000-0000-0000-0000-000000000003 durability=Unreplicated duration=0s
+
+query span=a,f uncontended max-locks=2 uncontended
+----
+num locks: 1, bytes returned: 41, resume reason: RESUME_KEY_LIMIT, resume span: {b-f}
+ locks:
+  range_id=3 key="a" holder=00000000-0000-0000-0000-000000000003 durability=Unreplicated duration=0s
+
+
+# Bumping max locks up to 3 should return all locks on key b.
+query span=a,f uncontended max-locks=3 uncontended
+----
+num locks: 3, bytes returned: 123, resume reason: RESUME_KEY_LIMIT, resume span: {c-f}
+ locks:
+  range_id=3 key="a" holder=00000000-0000-0000-0000-000000000003 durability=Unreplicated duration=0s
+  range_id=3 key="b" holder=00000000-0000-0000-0000-000000000003 durability=Unreplicated duration=0s
+  range_id=3 key="b" holder=00000000-0000-0000-0000-000000000002 durability=Unreplicated duration=0s
+
+# Starting the scan from b with max-locks set to 1 (less than the number of
+# locks, which is 2) should return all locks even though it goes over the limit.
+query span=b,f uncontended max-locks=1 uncontended
+----
+num locks: 2, bytes returned: 82, resume reason: RESUME_KEY_LIMIT, resume span: {c-f}
+ locks:
+  range_id=3 key="b" holder=00000000-0000-0000-0000-000000000003 durability=Unreplicated duration=0s
+  range_id=3 key="b" holder=00000000-0000-0000-0000-000000000002 durability=Unreplicated duration=0s
+
+# Same idea as above, but this time with byte limit.
+
+query span=b,f uncontended max-bytes=50
+----
+num locks: 2, bytes returned: 82, resume reason: RESUME_BYTE_LIMIT, resume span: {c-f}
+ locks:
+  range_id=3 key="b" holder=00000000-0000-0000-0000-000000000003 durability=Unreplicated duration=0s
+  range_id=3 key="b" holder=00000000-0000-0000-0000-000000000002 durability=Unreplicated duration=0s

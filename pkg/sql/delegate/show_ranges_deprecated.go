@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/deprecatedshowranges"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -57,7 +58,13 @@ func (d *delegator) delegateShowRangesDEPRECATED(n *tree.ShowRanges) (tree.State
 	case tree.ShowRangesDatabase, tree.ShowRangesTable, tree.ShowRangesIndex:
 		// These are supported by this pre-v23.1 implementation.
 	default:
-		return nil, errors.New("the deprecated syntax of SHOW RANGES only supports FROM TABLE, FROM INDEX or FROM DATABASE")
+		err := pgerror.New(pgcode.Syntax,
+			"the deprecated syntax of SHOW RANGES only supports FROM TABLE, FROM INDEX or FROM DATABASE")
+		err = errors.WithDetail(err,
+			"The behavior of SHOW RANGES is currently restricted by configuration to its pre-v23.1 behavior.")
+		err = errors.WithHint(err,
+			"To access the new syntax and semantics, toggle the cluster setting "+deprecatedshowranges.ShowRangesDeprecatedBehaviorSettingName+".")
+		return nil, err
 	}
 
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Ranges)

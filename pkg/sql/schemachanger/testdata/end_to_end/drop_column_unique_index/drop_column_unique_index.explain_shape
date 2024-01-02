@@ -1,0 +1,19 @@
+/* setup */
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+CREATE UNIQUE INDEX vidx ON t.test (v);
+ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4') CHECK (x >= 0);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t.test DROP pi;
+----
+Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index test_pkey- in relation test
+ │    └── into test_pkey+ (k; v, x)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation test
+ │    └── from test@[7] into test_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index test_pkey+ in relation test
+ └── execute 3 system table mutations transactions

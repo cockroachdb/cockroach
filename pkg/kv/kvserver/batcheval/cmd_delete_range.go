@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -21,10 +22,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+)
+
+// enableStickyGCHint controls whether the sticky GCHint is enabled.
+var enableStickyGCHint = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.gc.sticky_hint.enabled",
+	"enable writing sticky GC hints which expedite garbage collection after schema changes"+
+		" (ignored and assumed 'true' in 23.2)",
+	false,
 )
 
 func init() {
@@ -38,12 +49,17 @@ func declareKeysDeleteRange(
 	latchSpans *spanset.SpanSet,
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
-) {
+) error {
 	args := req.(*kvpb.DeleteRangeRequest)
 	if args.Inline {
-		DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+		if err := DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans, maxOffset); err != nil {
+			return err
+		}
 	} else {
-		DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+		err := DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+		if err != nil {
+			return err
+		}
 	}
 
 	// When writing range tombstones, we must look for adjacent range tombstones
@@ -77,6 +93,7 @@ func declareKeysDeleteRange(
 			})
 		}
 	}
+	return nil
 }
 
 const maxDeleteRangeBatchBytes = 32 << 20
@@ -123,22 +140,31 @@ func DeleteRange(
 			if !args.UpdateRangeDeleteGCHint {
 				return nil
 			}
-			// If GCHint was provided, then we need to check if this request meets
-			// range gc criteria of removing all data. This is not an error as range
-			// might have merged since request was sent and we don't want to fail
-			// deletion.
-			if !args.Key.Equal(desc.StartKey.AsRawKey()) || !args.EndKey.Equal(desc.EndKey.AsRawKey()) {
-				return nil
-			}
 			sl := MakeStateLoader(cArgs.EvalCtx)
 			hint, err := sl.LoadGCHint(ctx, readWriter)
 			if err != nil {
 				return err
 			}
-			if !hint.ForwardLatestRangeDeleteTimestamp(h.Timestamp) {
+
+			updated := false
+			// TODO(pavelkalinnikov): deprecate the cluster setting and call
+			// ScheduleGCFor unconditionally when min supported version is 23.2.
+			if cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_2) ||
+				enableStickyGCHint.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
+				// Add the timestamp to GCHint to guarantee that GC eventually clears it.
+				updated = hint.ScheduleGCFor(h.Timestamp)
+			}
+			// If the range tombstone covers the whole Range key span, update the
+			// corresponding timestamp in GCHint to enable ClearRange optimization.
+			if args.Key.Equal(desc.StartKey.AsRawKey()) && args.EndKey.Equal(desc.EndKey.AsRawKey()) {
+				// NB: don't swap the order, we want to call the method unconditionally.
+				updated = hint.ForwardLatestRangeDeleteTimestamp(h.Timestamp) || updated
+			}
+			if !updated {
 				return nil
 			}
-			if updated, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil || !updated {
+
+			if err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil {
 				return err
 			}
 			res.Replicated.State = &kvserverpb.ReplicaState{
@@ -149,7 +175,7 @@ func DeleteRange(
 
 		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
-		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+		maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 
 		// If no predicate parameters are passed, use the fast path. If we're
 		// deleting the entire Raft range, use an even faster path that avoids a
@@ -164,7 +190,7 @@ func DeleteRange(
 			}
 			if err := storage.MVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
 				args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
-				args.IdempotentTombstone, maxIntents, statsCovered); err != nil {
+				args.IdempotentTombstone, maxLockConflicts, statsCovered); err != nil {
 				return result.Result{}, err
 			}
 			var res result.Result
@@ -194,7 +220,7 @@ func DeleteRange(
 		resumeSpan, err := storage.MVCCPredicateDeleteRange(ctx, readWriter, cArgs.Stats,
 			args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
 			args.Predicates, h.MaxSpanRequestKeys, maxDeleteRangeBatchBytes,
-			defaultRangeTombstoneThreshold, maxIntents)
+			defaultRangeTombstoneThreshold, maxLockConflicts)
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -223,13 +249,25 @@ func DeleteRange(
 	if !args.Inline {
 		timestamp = h.Timestamp
 	}
+
+	opts := storage.MVCCWriteOptions{
+		Txn:                            h.Txn,
+		LocalTimestamp:                 cArgs.Now,
+		Stats:                          cArgs.Stats,
+		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
+		OmitInRangefeeds:               cArgs.OmitInRangefeeds,
+		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		Category:                       storage.BatchEvalReadCategory,
+	}
+
 	// NB: Even if args.ReturnKeys is false, we want to know which intents were
 	// written if we're evaluating the DeleteRange for a transaction so that we
 	// can update the Result's AcquiredLocks field.
 	returnKeys := args.ReturnKeys || h.Txn != nil
-	deleted, resumeSpan, num, err := storage.MVCCDeleteRange(
-		ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
-		h.MaxSpanRequestKeys, timestamp, cArgs.Now, h.Txn, returnKeys)
+	deleted, resumeSpan, num, acqs, err := storage.MVCCDeleteRange(
+		ctx, readWriter, args.Key, args.EndKey,
+		h.MaxSpanRequestKeys, timestamp,
+		opts, returnKeys)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -251,5 +289,5 @@ func DeleteRange(
 		}
 	}
 
-	return result.FromAcquiredLocks(h.Txn, deleted...), nil
+	return result.WithAcquiredLocks(acqs...), nil
 }

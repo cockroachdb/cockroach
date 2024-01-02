@@ -1844,21 +1844,20 @@ semi-join-apply
 norm expect=SimplifyLeftJoin
 SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k
 ----
-inner-join (hash)
+project
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:8!null i:9 f:10!null s:11 j:12
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (8)
- ├── fd: (8)-->(9-12), (1)-->(2-5), (1)==(8), (8)==(1)
+ ├── fd: (8)-->(9-12), (1)==(8), (8)==(1), (2)==(9), (9)==(2), (3)==(10), (10)==(3), (4)==(11), (11)==(4), (5)==(12), (12)==(5)
  ├── scan a [as=a2]
  │    ├── columns: a2.k:8!null a2.i:9 a2.f:10!null a2.s:11 a2.j:12
  │    ├── key: (8)
  │    └── fd: (8)-->(9-12)
- ├── scan a
- │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters
-      └── a.k:1 = a2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ └── projections
+      ├── a2.k:8 [as=a.k:1, outer=(8)]
+      ├── a2.i:9 [as=a.i:2, outer=(9)]
+      ├── a2.f:10 [as=a.f:3, outer=(10)]
+      ├── a2.s:11 [as=a.s:4, outer=(11)]
+      └── a2.j:12 [as=a.j:5, outer=(12)]
 
 # Right side has partial rows, so only right-join can be simplified.
 norm expect=SimplifyRightJoin
@@ -1890,22 +1889,20 @@ left-join (hash)
 norm expect=SimplifyLeftJoin
 SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k AND a.k=a2.k AND a2.f=a.f
 ----
-inner-join (hash)
+project
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:8!null i:9 f:10!null s:11 j:12
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (8)
- ├── fd: (8)-->(9-12), (1)-->(2-5), (3)==(10), (10)==(3), (1)==(8), (8)==(1)
+ ├── fd: (8)-->(9-12), (1)==(8), (8)==(1), (2)==(9), (9)==(2), (3)==(10), (10)==(3), (4)==(11), (11)==(4), (5)==(12), (12)==(5)
  ├── scan a [as=a2]
  │    ├── columns: a2.k:8!null a2.i:9 a2.f:10!null a2.s:11 a2.j:12
  │    ├── key: (8)
  │    └── fd: (8)-->(9-12)
- ├── scan a
- │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters
-      ├── a2.f:10 = a.f:3 [outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
-      └── a2.k:8 = a.k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ └── projections
+      ├── a2.k:8 [as=a.k:1, outer=(8)]
+      ├── a2.i:9 [as=a.i:2, outer=(9)]
+      ├── a2.f:10 [as=a.f:3, outer=(10)]
+      ├── a2.s:11 [as=a.s:4, outer=(11)]
+      └── a2.j:12 [as=a.j:5, outer=(12)]
 
 # Input contains Project operator.
 norm expect=SimplifyLeftJoin
@@ -1937,23 +1934,22 @@ SELECT * FROM a FULL JOIN (SELECT * FROM a INNER JOIN a AS a2 ON a.k=a2.k) AS a2
 inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:8!null i:9 f:10!null s:11 j:12 k:15!null i:16 f:17!null s:18 j:19
  ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
- ├── key: (1,15)
- ├── fd: (8)-->(9-12), (15)-->(16-19), (8)==(15), (15)==(8), (1)-->(2-5), (3)==(10), (10)==(3)
- ├── inner-join (hash)
- │    ├── columns: a.k:8!null a.i:9 a.f:10!null a.s:11 a.j:12 a2.k:15!null a2.i:16 a2.f:17!null a2.s:18 a2.j:19
- │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
- │    ├── key: (15)
- │    ├── fd: (8)-->(9-12), (15)-->(16-19), (8)==(15), (15)==(8)
+ ├── key: (1,8)
+ ├── fd: (8)-->(9-12), (8)==(15), (15)==(8), (9)==(16), (16)==(9), (10)==(3,17), (17)==(3,10), (11)==(18), (18)==(11), (12)==(19), (19)==(12), (1)-->(2-5), (3)==(10,17)
+ ├── project
+ │    ├── columns: a2.k:15!null a2.i:16 a2.f:17!null a2.s:18 a2.j:19 a.k:8!null a.i:9 a.f:10!null a.s:11 a.j:12
+ │    ├── key: (8)
+ │    ├── fd: (8)-->(9-12), (8)==(15), (15)==(8), (9)==(16), (16)==(9), (10)==(17), (17)==(10), (11)==(18), (18)==(11), (12)==(19), (19)==(12)
  │    ├── scan a
  │    │    ├── columns: a.k:8!null a.i:9 a.f:10!null a.s:11 a.j:12
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9-12)
- │    ├── scan a [as=a2]
- │    │    ├── columns: a2.k:15!null a2.i:16 a2.f:17!null a2.s:18 a2.j:19
- │    │    ├── key: (15)
- │    │    └── fd: (15)-->(16-19)
- │    └── filters
- │         └── a.k:8 = a2.k:15 [outer=(8,15), constraints=(/8: (/NULL - ]; /15: (/NULL - ]), fd=(8)==(15), (15)==(8)]
+ │    └── projections
+ │         ├── a.k:8 [as=a2.k:15, outer=(8)]
+ │         ├── a.i:9 [as=a2.i:16, outer=(9)]
+ │         ├── a.f:10 [as=a2.f:17, outer=(10)]
+ │         ├── a.s:11 [as=a2.s:18, outer=(11)]
+ │         └── a.j:12 [as=a2.j:19, outer=(12)]
  ├── scan a
  │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
  │    ├── key: (1)
@@ -3147,13 +3143,13 @@ SELECT * FROM xy JOIN uv ON x+y=u AND x=u+v AND x*y+1=u*v+2
 project
  ├── columns: x:1!null y:2 u:5!null v:6
  ├── immutable
- ├── key: (1)
+ ├── key: (5)
  ├── fd: (1)-->(2,5,6), (5)-->(1,2,6)
  └── inner-join (hash)
       ├── columns: x:1!null y:2 u:5!null v:6 column9:9!null column10:10!null column11:11!null column12:12!null
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── immutable
-      ├── key: (1)
+      ├── key: (5)
       ├── fd: (1)-->(2,9,11), (5)-->(6,10,12), (5)==(9), (9)==(5), (1)==(10), (10)==(1), (11)==(12), (12)==(11)
       ├── project
       │    ├── columns: column11:11 column9:9 x:1!null y:2
@@ -3845,41 +3841,39 @@ inner-join (cross)
 norm expect=RemoveJoinNotNullCondition
 SELECT * FROM a LEFT JOIN a AS a2 ON a.k=a2.k AND a.f=a.f AND a2.f=a2.f
 ----
-inner-join (hash)
+project
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:8!null i:9 f:10!null s:11 j:12
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
- ├── key: (8)
- ├── fd: (1)-->(2-5), (8)-->(9-12), (1)==(8), (8)==(1)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (1)==(8), (8)==(1), (2)==(9), (9)==(2), (3)==(10), (10)==(3), (4)==(11), (11)==(4), (5)==(12), (12)==(5)
  ├── scan a
  │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── scan a [as=a2]
- │    ├── columns: a2.k:8!null a2.i:9 a2.f:10!null a2.s:11 a2.j:12
- │    ├── key: (8)
- │    └── fd: (8)-->(9-12)
- └── filters
-      └── a.k:1 = a2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ └── projections
+      ├── a.k:1 [as=a2.k:8, outer=(1)]
+      ├── a.i:2 [as=a2.i:9, outer=(2)]
+      ├── a.f:3 [as=a2.f:10, outer=(3)]
+      ├── a.s:4 [as=a2.s:11, outer=(4)]
+      └── a.j:5 [as=a2.j:12, outer=(5)]
 
 # Full join case.
 norm expect=RemoveJoinNotNullCondition
 SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k AND a.f=a.f AND a2.f=a2.f
 ----
-inner-join (hash)
+project
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:8!null i:9 f:10!null s:11 j:12
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (8)
- ├── fd: (8)-->(9-12), (1)-->(2-5), (1)==(8), (8)==(1)
+ ├── fd: (8)-->(9-12), (1)==(8), (8)==(1), (2)==(9), (9)==(2), (3)==(10), (10)==(3), (4)==(11), (11)==(4), (5)==(12), (12)==(5)
  ├── scan a [as=a2]
  │    ├── columns: a2.k:8!null a2.i:9 a2.f:10!null a2.s:11 a2.j:12
  │    ├── key: (8)
  │    └── fd: (8)-->(9-12)
- ├── scan a
- │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters
-      └── a.k:1 = a2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ └── projections
+      ├── a2.k:8 [as=a.k:1, outer=(8)]
+      ├── a2.i:9 [as=a.i:2, outer=(9)]
+      ├── a2.f:10 [as=a.f:3, outer=(10)]
+      ├── a2.s:11 [as=a.s:4, outer=(11)]
+      └── a2.j:12 [as=a.j:5, outer=(12)]
 
 # No-op case because i is nullable.
 norm expect-not=RemoveJoinNotNullCondition

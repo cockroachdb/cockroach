@@ -1,0 +1,8 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY);
+ALTER TABLE t ADD CHECK (i > 0) NOT VALID;
+----
+
+test
+ALTER TABLE t VALIDATE CONSTRAINT check_i;
+----

@@ -12,6 +12,8 @@
 package sqlerrors
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -160,21 +162,20 @@ func NewUndefinedTypeError(name tree.NodeFormatter) error {
 	return pgerror.Newf(pgcode.UndefinedObject, "type %q does not exist", tree.ErrString(name))
 }
 
-// NewUndefinedFunctionError creates an error that represents a missing user
-// defined function.
-func NewUndefinedFunctionError(fn string) error {
-	return pgerror.Newf(pgcode.UndefinedFunction, "function %q does not exist", fn)
-}
-
 // NewUndefinedRelationError creates an error that represents a missing database table or view.
 func NewUndefinedRelationError(name tree.NodeFormatter) error {
 	return pgerror.Newf(pgcode.UndefinedTable,
 		"relation %q does not exist", tree.ErrString(name))
 }
 
-// NewColumnAlreadyExistsError creates an error for a preexisting column.
-func NewColumnAlreadyExistsError(name, relation string) error {
+// NewColumnAlreadyExistsInRelationError creates an error for a preexisting column in relation.
+func NewColumnAlreadyExistsInRelationError(name, relation string) error {
 	return pgerror.Newf(pgcode.DuplicateColumn, "column %q of relation %q already exists", name, relation)
+}
+
+// NewColumnAlreadyExistsInIndexError creates an error for a  preexisting column in index.
+func NewColumnAlreadyExistsInIndexError(idxName, colName string) error {
+	return pgerror.Newf(pgcode.DuplicateColumn, "index %q already contains column %q", idxName, colName)
 }
 
 // NewDatabaseAlreadyExistsError creates an error for a preexisting database.
@@ -246,6 +247,20 @@ func NewSyntaxErrorf(format string, args ...interface{}) error {
 func NewDependentObjectErrorf(format string, args ...interface{}) error {
 	return pgerror.Newf(pgcode.DependentObjectsStillExist, format, args...)
 }
+
+// NewDependentBlocksOpError creates an error because dependingObjName (of type
+// dependingObjType) has a reference to objName (of objType) when someone attempts
+// to `op` on it.
+// E.g. DROP INDEX "idx" when a VIEW "v" depends on this index and thus will block
+// this drop index.
+func NewDependentBlocksOpError(op, objType, objName, dependentType, dependentName string) error {
+	return errors.WithHintf(
+		NewDependentObjectErrorf("cannot %s %s %q because %s %q depends on it",
+			op, objType, objName, dependentType, dependentName),
+		"consider dropping %q first.", dependentName)
+}
+
+const PrimaryIndexSwapDetail = `CRDB's implementation for "ADD COLUMN", "DROP COLUMN", and "ALTER PRIMARY KEY" will drop the old/current primary index and create a new one.`
 
 // NewColumnReferencedByPrimaryKeyError is returned when attempting to drop a
 // column which is a part of the table's primary key.
@@ -350,6 +365,11 @@ func NewInvalidVolatilityError(err error) error {
 	return pgerror.Wrap(err, pgcode.InvalidFunctionDefinition, "invalid volatility")
 }
 
+func NewCannotModifyVirtualSchemaError(schema string) error {
+	return pgerror.Newf(pgcode.InsufficientPrivilege,
+		"%s is a virtual schema and cannot be modified", tree.ErrNameString(schema))
+}
+
 // QueryTimeoutError is an error representing a query timeout.
 var QueryTimeoutError = pgerror.New(
 	pgcode.QueryCanceled, "query execution canceled due to statement timeout")
@@ -412,3 +432,32 @@ func errHasCode(err error, code ...pgcode.Code) bool {
 	}
 	return false
 }
+
+// IsDistSQLRetryableError returns true if the supplied error, or any of its parent
+// causes is an rpc error.
+// This is an unfortunate implementation that should be looking for a more
+// specific error.
+func IsDistSQLRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// TODO(knz): this is a bad implementation. Make it go away
+	// by avoiding string comparisons.
+
+	errStr := err.Error()
+	// When a crdb node dies, any DistSQL flows with processors scheduled on
+	// it get an error with "rpc error" in the message from the call to
+	// `(*DistSQLPlanner).Run`.
+	return strings.Contains(errStr, `rpc error`)
+}
+
+var (
+	ErrEmptyDatabaseName = pgerror.New(pgcode.Syntax, "empty database name")
+	ErrNoDatabase        = pgerror.New(pgcode.InvalidName, "no database specified")
+	ErrNoSchema          = pgerror.Newf(pgcode.InvalidName, "no schema specified")
+	ErrNoTable           = pgerror.New(pgcode.InvalidName, "no table specified")
+	ErrNoType            = pgerror.New(pgcode.InvalidName, "no type specified")
+	ErrNoFunction        = pgerror.New(pgcode.InvalidName, "no function specified")
+	ErrNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")
+)

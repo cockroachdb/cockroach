@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
@@ -28,7 +27,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const alterTenantCapabilityOp = "ALTER TENANT CAPABILITY"
+const alterTenantCapabilityOp = "ALTER VIRTUAL CLUSTER CAPABILITY"
 
 type alterTenantCapabilityNode struct {
 	n          *tree.AlterTenantCapability
@@ -43,11 +42,8 @@ type alterTenantCapabilityNode struct {
 func (p *planner) AlterTenantCapability(
 	ctx context.Context, n *tree.AlterTenantCapability,
 ) (planNode, error) {
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "grant/revoke capabilities to"); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "grant/revoke capabilities to", p.execCfg.Settings); err != nil {
 		return nil, err
-	}
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities) {
-		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "cannot alter tenant capabilities until version is finalized")
 	}
 
 	tSpec, err := p.planTenantSpec(ctx, n.TenantSpec, alterTenantCapabilityOp)
@@ -146,71 +142,97 @@ func (n *alterTenantCapabilityNode) startExec(params runParams) error {
 	}
 
 	dst := &tenantInfo.Capabilities
-	capabilities := n.n.Capabilities
-	for i, update := range capabilities {
-		typedExpr := n.typedExprs[i]
-		capability, ok := tenantcapabilities.FromName(update.Name)
-		if !ok {
-			// We've already checked this above.
-			return errors.AssertionFailedf("programming error: %q", update.Name)
-		}
 
-		switch c := capability.(type) {
-		case tenantcapabilities.BoolCapability:
-			boolValue, err := paramparse.DatumAsBool(ctx, p.EvalContext(), update.Name, typedExpr)
-			if err != nil {
-				return err
-			}
-			c.Value(dst).Set(boolValue)
-		case tenantcapabilities.SpanConfigBoundsCapability:
-			if n.n.IsRevoke {
-				return pgerror.Newf(pgcode.InvalidParameterValue, "cannot REVOKE CAPABILITY %q", capability)
-			}
-			datum, err := eval.Expr(ctx, p.EvalContext(), typedExpr)
-			if err != nil {
-				return err
-			}
-			var bounds *spanconfigbounds.Bounds
-			// Allow NULL, and use it to clear the SpanConfigBounds.
-			if datum == tree.DNull {
-
-			} else if dBytes, ok := datum.(*tree.DBytes); ok {
-				boundspb := new(tenantcapabilitiespb.SpanConfigBounds)
-				if err := protoutil.Unmarshal([]byte(*dBytes), boundspb); err != nil {
-					return errors.WithDetail(
-						pgerror.Wrapf(
-							err, pgcode.InvalidParameterValue, "invalid %q value",
-							capability,
-						),
-						"cannot decode into cockroach.multitenant.tenantcapabilitiespb.SpanConfigBounds",
-					)
+	if n.n.AllCapabilities {
+		for capID := tenantcapabilities.ID(1); capID <= tenantcapabilities.MaxCapabilityID; capID++ {
+			cap, _ := tenantcapabilities.FromID(capID)
+			switch c := cap.(type) {
+			case tenantcapabilities.BoolCapability:
+				val := true
+				if n.n.IsRevoke {
+					val = false
 				}
-				// Converting the raw proto to spanconfigbounds.Bounds will ensure
-				// constraints are sorted.
-				//
-				// TODO(ajwerner,arul): Validate some properties of the bounds.
-				// We'll also want to make sure that kvserver sanity checks the values
-				// it uses when clamping -- we don't want to clamp the range sizes to be
-				// tiny or GC TTL to be too short because of operator error. Some of
-				// this checking could be pushed into spanconfigbounds.New. We might
-				// also want to check tandem fields to ensure they make sense -- for
-				// example, the range for min/max range sizes should have some overlap.
-				bounds = spanconfigbounds.New(boundspb)
-			} else {
-				return errors.WithDetailf(
-					pgerror.Newf(
-						pgcode.InvalidParameterValue, "parameter %q requires bytes value",
-					),
-					"%s is a %s", datum, datum.ResolvedType(),
+				c.Value(dst).Set(val)
+
+			case tenantcapabilities.SpanConfigBoundsCapability:
+				// "REVOKE" on span config bounds has no meaning currently.
+				if !n.n.IsRevoke {
+					c.Value(dst).Set(nil)
+				}
+
+			default:
+				return errors.AssertionFailedf(
+					"programming error: capability %v type %T not handled: capability ID: %d",
+					cap, cap, cap.ID(),
 				)
 			}
-			c.Value(dst).Set(bounds)
+		}
+	} else {
+		for i, update := range n.n.Capabilities {
+			typedExpr := n.typedExprs[i]
+			capability, ok := tenantcapabilities.FromName(update.Name)
+			if !ok {
+				// We've already checked this above.
+				return errors.AssertionFailedf("programming error: %q", update.Name)
+			}
 
-		default:
-			return errors.AssertionFailedf(
-				"programming error: capability %v type %v not handled: capability ID: %d",
-				capability, capability, capability.ID(),
-			)
+			switch c := capability.(type) {
+			case tenantcapabilities.BoolCapability:
+				boolValue, err := paramparse.DatumAsBool(ctx, p.EvalContext(), update.Name, typedExpr)
+				if err != nil {
+					return err
+				}
+				c.Value(dst).Set(boolValue)
+			case tenantcapabilities.SpanConfigBoundsCapability:
+				if n.n.IsRevoke {
+					return pgerror.Newf(pgcode.InvalidParameterValue, "cannot REVOKE CAPABILITY %q", capability)
+				}
+				datum, err := eval.Expr(ctx, p.EvalContext(), typedExpr)
+				if err != nil {
+					return err
+				}
+				var bounds *spanconfigbounds.Bounds
+				// Allow NULL, and use it to clear the SpanConfigBounds.
+				if datum == tree.DNull {
+
+				} else if dBytes, ok := datum.(*tree.DBytes); ok {
+					boundspb := new(tenantcapabilitiespb.SpanConfigBounds)
+					if err := protoutil.Unmarshal([]byte(*dBytes), boundspb); err != nil {
+						return errors.WithDetail(
+							pgerror.Wrapf(
+								err, pgcode.InvalidParameterValue, "invalid %q value",
+								capability,
+							),
+							"cannot decode into cockroach.multitenant.tenantcapabilitiespb.SpanConfigBounds",
+						)
+					}
+					// Converting the raw proto to spanconfigbounds.Bounds will ensure
+					// constraints are sorted.
+					//
+					// TODO(ajwerner,arul): Validate some properties of the bounds.
+					// We'll also want to make sure that kvserver sanity checks the values
+					// it uses when clamping -- we don't want to clamp the range sizes to be
+					// tiny or GC TTL to be too short because of operator error. Some of
+					// this checking could be pushed into spanconfigbounds.New. We might
+					// also want to check tandem fields to ensure they make sense -- for
+					// example, the range for min/max range sizes should have some overlap.
+					bounds = spanconfigbounds.New(boundspb)
+				} else {
+					return errors.WithDetailf(
+						pgerror.Newf(
+							pgcode.InvalidParameterValue, "parameter %q requires bytes value",
+						),
+						"%s is a %s", datum, datum.ResolvedType(),
+					)
+				}
+				c.Value(dst).Set(bounds)
+
+			default:
+				return errors.AssertionFailedf(
+					"programming error: capability %v type %v not handled: capability ID: %d",
+					capability, capability, capability.ID(),
+				)
+			}
 		}
 	}
 

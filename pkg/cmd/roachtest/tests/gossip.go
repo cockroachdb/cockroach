@@ -39,7 +39,6 @@ import (
 
 func registerGossip(r registry.Registry) {
 	runGossipChaos := func(ctx context.Context, t test.Test, c cluster.Cluster) {
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=*=1")
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
@@ -141,10 +140,12 @@ SELECT node_id
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "gossip/chaos/nodes=9",
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(9),
-		Leases:  registry.MetamorphicLeases,
+		Name:             "gossip/chaos/nodes=9",
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(9),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runGossipChaos(ctx, t, c)
 		},
@@ -276,7 +277,6 @@ func (g *gossipUtil) checkConnectedAndFunctional(
 }
 
 func runGossipPeerings(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	// Repeatedly restart a random node and verify that all of the nodes are
@@ -310,7 +310,6 @@ func runGossipPeerings(ctx context.Context, t test.Test, c cluster.Cluster) {
 }
 
 func runGossipRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	// Repeatedly stop and restart a cluster and verify that we can perform basic
@@ -335,7 +334,6 @@ func runGossipRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 }
 
 func runGossipRestartNodeOne(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	// Reduce the scan max idle time to speed up evacuation of node 1.
 	settings := install.MakeClusterSettings(install.NumRacksOption(c.Spec().NodeCount))
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
@@ -433,8 +431,9 @@ SELECT count(replicas)
 	err := c.RunE(ctx, c.Node(1),
 		` ./cockroach start --insecure --background --store={store-dir} `+
 			`--log-dir={log-dir} --cache=10% --max-sql-memory=10% `+
-			`--listen-addr=:$[{pgport:1}+10000] --http-port=$[{pgport:1}+1] `+
-			`--join={pghost:1}:{pgport:1}`+
+			`--listen-addr=:$[{pgport:1}+1000] --http-port=$[{pgport:1}+1] `+
+			`--join={pghost:1}:{pgport:1} `+
+			`--advertise-addr={pghost:1}:$[{pgport:1}+1000] `+
 			`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`)
 	if err != nil {
 		t.Fatal(err)
@@ -456,7 +455,7 @@ SELECT count(replicas)
 		if i != 1 {
 			return c.Conn(ctx, l, i)
 		}
-		urls, err := c.ExternalPGUrl(ctx, l, c.Node(1), "")
+		urls, err := c.ExternalPGUrl(ctx, l, c.Node(1), "" /* tenant */, 0 /* sqlInstance */)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -472,7 +471,7 @@ SELECT count(replicas)
 		if err != nil {
 			t.Fatal(err)
 		}
-		url.Host = fmt.Sprintf("%s:%d", host, v+10000)
+		url.Host = fmt.Sprintf("%s:%d", host, v+1000)
 		db, err := gosql.Open("postgres", url.String())
 		if err != nil {
 			t.Fatal(err)
@@ -489,8 +488,6 @@ SELECT count(replicas)
 }
 
 func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
-
 	externalIP, err := c.ExternalIP(ctx, t.L(), c.Range(1, c.Spec().NodeCount))
 	if err != nil {
 		t.Fatal(err)

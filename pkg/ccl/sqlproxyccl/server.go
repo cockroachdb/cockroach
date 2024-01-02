@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	proxyproto "github.com/pires/go-proxyproto"
+	"github.com/prometheus/common/expfmt"
 )
 
 var (
@@ -106,11 +107,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleVars(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set(httputil.ContentTypeHeader, httputil.PlaintextContentType)
+	contentType := expfmt.Negotiate(r.Header)
+	w.Header().Set(httputil.ContentTypeHeader, string(contentType))
 	scrape := func(pm *metric.PrometheusExporter) {
 		pm.ScrapeRegistry(s.metricsRegistry, true /* includeChildMetrics*/)
 	}
-	if err := s.prometheusExporter.ScrapeAndPrintAsText(w, scrape); err != nil {
+	if err := s.prometheusExporter.ScrapeAndPrintAsText(w, contentType, scrape); err != nil {
 		log.Errorf(r.Context(), "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -181,7 +183,7 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 
 	srv := http.Server{Handler: s.mux}
 
-	go func() {
+	err := s.Stopper.RunAsyncTask(ctx, "sqlproxy-http-cleanup", func(ctx context.Context) {
 		<-ctx.Done()
 
 		// Wait up to 15 seconds for the HTTP server to shut itself
@@ -196,11 +198,13 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 				// Ignore any errors as this routine will only be called
 				// when the server is shutting down.
 				_ = srv.Shutdown(shutdownCtx)
-
 				return nil
 			},
 		)
-	}()
+	})
+	if err != nil {
+		return err
+	}
 
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err

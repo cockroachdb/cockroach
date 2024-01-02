@@ -102,7 +102,7 @@ func mustGetFlagDuration(cmd *cobra.Command, name string) time.Duration {
 	return val
 }
 
-func (d *dev) getBazelInfo(ctx context.Context, key string) (string, error) {
+func (d *dev) getBazelInfo(ctx context.Context, key string, extraArgs []string) (string, error) {
 	args := []string{"info", key, "--color=no"}
 	out, err := d.exec.CommandContextSilent(ctx, "bazel", args...)
 	if err != nil {
@@ -117,23 +117,17 @@ func (d *dev) getWorkspace(ctx context.Context) (string, error) {
 		return os.Getwd()
 	}
 
-	return d.getBazelInfo(ctx, "workspace")
+	return d.getBazelInfo(ctx, "workspace", []string{})
 }
 
-func (d *dev) getBazelBin(ctx context.Context) (string, error) {
-	return d.getBazelInfo(ctx, "bazel-bin")
+// The second argument should be the relevant "config args", namely Bazel arguments
+// that are --config or --compilation_mode arguments (see getConfigArgs()).
+func (d *dev) getBazelBin(ctx context.Context, configArgs []string) (string, error) {
+	return d.getBazelInfo(ctx, "bazel-bin", configArgs)
 }
 
 func (d *dev) getExecutionRoot(ctx context.Context) (string, error) {
-	return d.getBazelInfo(ctx, "execution_root")
-}
-
-// getDevBin returns the path to the running dev executable.
-func (d *dev) getDevBin() string {
-	if d.knobs.devBinOverride != "" {
-		return d.knobs.devBinOverride
-	}
-	return os.Args[0]
+	return d.getBazelInfo(ctx, "execution_root", []string{})
 }
 
 // getArchivedCdepString returns a non-empty string iff the force_build_cdeps
@@ -224,7 +218,19 @@ func sendBepDataToBeaverHubIfNeeded(bepFilepath string) error {
 	}
 	defer file.Close()
 	httpClient := &http.Client{}
-	req, _ := http.NewRequest("POST", beaverHubServerEndpoint, file)
+
+	// TODO(dt): Ideally this would be <100ms since it is blocking the process
+	// from exiting and returning to the user to the their prompt, and any delay
+	// longer than that is noticeable. However empirical testing suggests we need
+	// ~300ms to upload successfully. Ideally we would move the invocation of this
+	// function to its own subcommand, and then post-build we would just exec that
+	// command forked in a new process, but not wait for it before exiting.
+	const timeout = 400 * time.Millisecond
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, "POST", beaverHubServerEndpoint, file)
 	req.Header.Add("Run-Env", "dev")
 	req.Header.Add("Content-Type", "application/octet-stream")
 	if _, err := httpClient.Do(req); err != nil {
@@ -232,4 +238,38 @@ func sendBepDataToBeaverHubIfNeeded(bepFilepath string) error {
 	}
 	_ = os.Remove(bepFilepath)
 	return nil
+}
+
+func (d *dev) warnAboutChangeInStressBehavior(timeout time.Duration) {
+	if e := d.os.Getenv("DEV_I_UNDERSTAND_ABOUT_STRESS"); e == "" {
+		log.Printf("NOTE: The behavior of `dev test --stress` has changed. The new default behavior is to run the test 1,000 times in parallel (500 for logictests), stopping if any of the tests fail. The number of runs can be tweaked with the `--count` parameter to `dev`.")
+		if timeout > 0 {
+			log.Printf("WARNING: The behavior of --timeout under --stress has changed. --timeout controls the timeout of the test, not the entire `stress` invocation.")
+		}
+		log.Printf("Set DEV_I_UNDERSTAND_ABOUT_STRESS=1 to squelch this message")
+	}
+}
+
+// This function retrieves the merge-base hash between the current branch and master
+func (d *dev) getMergeBaseHash(ctx context.Context) (string, error) {
+	// List files changed against `master`
+	remotes, err := d.exec.CommandContextSilent(ctx, "git", "remote", "-v")
+	if err != nil {
+		return "", err
+	}
+	var upstream string
+	for _, remote := range strings.Split(strings.TrimSpace(string(remotes)), "\n") {
+		if (strings.Contains(remote, "github.com/cockroachdb/cockroach") || strings.Contains(remote, "github.com:cockroachdb/cockroach")) && strings.HasSuffix(remote, "(fetch)") {
+			upstream = strings.Fields(remote)[0]
+			break
+		}
+	}
+	if upstream == "" {
+		return "", fmt.Errorf("could not find git upstream, run `git remote add upstream git@github.com:cockroachdb/cockroach.git`")
+	}
+	baseBytes, err := d.exec.CommandContextSilent(ctx, "git", "merge-base", fmt.Sprintf("%s/master", upstream), "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(baseBytes)), nil
 }

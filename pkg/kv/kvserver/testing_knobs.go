@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -67,6 +68,25 @@ type StoreTestingKnobs struct {
 	// reproposed due to ticks.
 	TestingProposalSubmitFilter func(*ProposalData) (drop bool, err error)
 
+	// TestingAfterRaftLogSync is invoked after completion of a synced write to
+	// Raft log for the given replica, before the corresponding message is sent
+	// back to Raft and these entries can next be applied to the state machine.
+	//
+	// If async log writes are enabled, this callback blocks async log write
+	// responses flow for the entire store, until it returns. This effectively
+	// blocks (most of) the command application flow. Some sync log writes may
+	// fall through because they use a different flow. Note that this callback
+	// does not block the entire raft flow, commands are still being committed.
+	//
+	// If async log writes are disabled, blocks this replica's entire raft
+	// processing while also holding raftMu for the replica. May block raft
+	// processing for other replicas in the same raft scheduler shard, so must be
+	// used with caution.
+	//
+	// TODO(pavelkalinnikov): have a more stable and less nuanced way of blocking
+	// the commands application flow for the entire store.
+	TestingAfterRaftLogSync func(storage.FullReplicaID)
+
 	// TestingApplyCalledTwiceFilter is called before applying the results of a command on
 	// each replica assuming the command was cleared for application (i.e. no
 	// forced error occurred; the supplied AppliedFilterArgs will have a nil
@@ -98,6 +118,13 @@ type StoreTestingKnobs struct {
 	// with a forced error. That is, the "command" will apply as a
 	// no-op write, and the ForcedError field will be set.
 	TestingPostApplyFilter kvserverbase.ReplicaApplyFilter
+
+	// TestingPostApplySideEffectsFilter is called after a command is applied to
+	// state machine, and its side effects are applied to memory. Called on each
+	// replica that applies the command.
+	//
+	// NB: not all fields are passed in to this callback, see the implementation.
+	TestingPostApplySideEffectsFilter kvserverbase.ReplicaApplyFilter
 
 	// TestingResponseErrorEvent is called when an error is returned applying
 	// a command.
@@ -224,6 +251,10 @@ type StoreTestingKnobs struct {
 	// leadership when it diverges from the range's leaseholder. This can
 	// also be set via COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER.
 	DisableLeaderFollowsLeaseholder bool
+	// If set, the above-raft lease transfer safety checks (that verify that
+	// we don't transfer leases to followers that need a snapshot, etc) are
+	// disabled. The proposal-time checks are not affected by this knob.
+	DisableAboveRaftLeaseTransferSafetyChecks bool
 	// DisableRefreshReasonNewLeader disables refreshing pending commands when a new
 	// leader is discovered.
 	DisableRefreshReasonNewLeader bool
@@ -252,10 +283,6 @@ type StoreTestingKnobs struct {
 	DisableProcessRaft func(roachpb.StoreID) bool
 	// DisableLastProcessedCheck disables checking on replica queue last processed times.
 	DisableLastProcessedCheck bool
-	// ReplicateQueueAcceptsUnsplit allows the replication queue to
-	// process ranges that need to be split, for use in tests that use
-	// the replication queue but disable the split queue.
-	ReplicateQueueAcceptsUnsplit bool
 	// SplitQueuePurgatoryChan allows a test to control the channel used to
 	// trigger split queue purgatory processing.
 	SplitQueuePurgatoryChan <-chan time.Time
@@ -266,12 +293,12 @@ type StoreTestingKnobs struct {
 	SystemLogsGCPeriod time.Duration
 	// SystemLogsGCGCDone is used to notify when system logs GC is done.
 	SystemLogsGCGCDone chan<- struct{}
-	// DontPushOnWriteIntentError will propagate a write intent error immediately
-	// instead of utilizing the intent resolver to try to push the corresponding
-	// transaction.
+	// DontPushOnLockConflictError will propagate a lock conflict error
+	// immediately instead of utilizing the intent resolver to try to push the
+	// corresponding transaction.
 	// TODO(nvanbenschoten): can we replace this knob with usage of the Error
 	// WaitPolicy on BatchRequests?
-	DontPushOnWriteIntentError bool
+	DontPushOnLockConflictError bool
 	// DontRetryPushTxnFailures will propagate a push txn failure immediately
 	// instead of utilizing the txn wait queue to wait for the transaction to
 	// finish or be pushed by a higher priority contender.
@@ -286,6 +313,11 @@ type StoreTestingKnobs struct {
 	// EnableUnconditionalRefreshesInRaftReady will always set the refresh reason
 	// in handleRaftReady to refreshReasonNewLeaderOrConfigChange.
 	EnableUnconditionalRefreshesInRaftReady bool
+	// DisableSyncLogWriteToss forces raft log appends to always be asynchronous
+	// when possible, if configured so by the cluster settings. If false, some
+	// asynchronous log writes can be randomly made synchronous in tests. Should
+	// be set to true by tests that require or test asynchronous log writes.
+	DisableSyncLogWriteToss bool
 
 	// SendSnapshot is run after receiving a DelegateRaftSnapshot request but
 	// before any throttling or sending logic.
@@ -293,7 +325,10 @@ type StoreTestingKnobs struct {
 	// ReceiveSnapshot is run after receiving a snapshot header but before
 	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
 	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
-	ReceiveSnapshot func(*kvserverpb.SnapshotRequest_Header) error
+	ReceiveSnapshot func(context.Context, *kvserverpb.SnapshotRequest_Header) error
+	// HandleSnapshotDone is run after the entirety of receiving a snapshot,
+	// regardless of whether it succeeds, gets cancelled, times out, or errors.
+	HandleSnapshotDone func()
 	// ReplicaAddSkipLearnerRollback causes replica addition to skip the learner
 	// rollback that happens when either the initial snapshot or the promotion of
 	// a learner to a voter fails.
@@ -333,7 +368,7 @@ type StoreTestingKnobs struct {
 	BeforeRemovingDemotedLearner func()
 	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
 	// applying a snapshot.
-	BeforeSnapshotSSTIngestion func(IncomingSnapshot, kvserverpb.SnapshotRequest_Type, []string) error
+	BeforeSnapshotSSTIngestion func(IncomingSnapshot, []string) error
 	// OnRelocatedOne intercepts the return values of s.relocateOne after they
 	// have successfully been put into effect.
 	OnRelocatedOne func(_ []kvpb.ReplicationChange, leaseTarget *roachpb.ReplicationTarget)
@@ -423,9 +458,12 @@ type StoreTestingKnobs struct {
 	// BeforeSendSnapshotThrottle intercepts replicas before entering send
 	// snapshot throttling.
 	BeforeSendSnapshotThrottle func()
-	// AfterSendSnapshotThrottle intercepts replicas after receiving a spot in the
-	// send snapshot semaphore.
-	AfterSendSnapshotThrottle func()
+	// AfterSnapshotThrottle intercepts replicas after receiving a spot in the
+	// send/recv snapshot semaphore.
+	AfterSnapshotThrottle func()
+	// BeforeRecvAcceptedSnapshot intercepts replicas before receiving the batches
+	// of a reserved and accepted snapshot.
+	BeforeRecvAcceptedSnapshot func()
 	// SelectDelegateSnapshotSender returns an ordered list of replica which will
 	// be used as delegates for sending a snapshot.
 	SelectDelegateSnapshotSender func(*roachpb.RangeDescriptor) []roachpb.ReplicaDescriptor
@@ -481,6 +519,22 @@ type StoreTestingKnobs struct {
 	// it can be easily extended to validate other properties of baseQueue if
 	// required.
 	BaseQueueInterceptor func(ctx context.Context, bq *baseQueue)
+
+	// BaseQueueDisabledBypassFilter checks whether the replica for the given
+	// rangeID should ignore the queue being disabled, and be processed anyway.
+	BaseQueueDisabledBypassFilter func(rangeID roachpb.RangeID) bool
+
+	// InjectReproposalError injects an error in tryReproposeWithNewLeaseIndex.
+	// If nil is returned, reproposal will be attempted.
+	InjectReproposalError func(p *ProposalData) error
+
+	// LeaseIndexFilter can return nonzero to override the automatically assigned
+	// LeaseAppliedIndex.
+	LeaseIndexFilter func(*ProposalData) kvpb.LeaseAppliedIndex
+
+	// FlowControlTestingKnobs provide fine-grained control over the various
+	// kvflowcontrol components for testing.
+	FlowControlTestingKnobs *kvflowcontrol.TestingKnobs
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

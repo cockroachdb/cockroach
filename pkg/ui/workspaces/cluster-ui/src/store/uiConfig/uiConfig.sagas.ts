@@ -12,8 +12,9 @@ import { all, call, delay, put, takeLatest } from "redux-saga/effects";
 import { actions } from "./uiConfig.reducer";
 import { getUserSQLRoles } from "../../api/userApi";
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
-import { rootActions } from "../reducers";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { getLogger } from "../../util";
+import { rootActions } from "../rootActions";
 
 export function* refreshUserSQLRolesSaga(): any {
   yield put(actions.requestUserSQLRoles());
@@ -26,7 +27,7 @@ export function* requestUserSQLRolesSaga(): any {
     );
     yield put(actions.receivedUserSQLRoles(result.roles));
   } catch (e) {
-    console.warn(e.message);
+    getLogger().warn(e.message, /* additional context */ undefined, e);
   }
 }
 

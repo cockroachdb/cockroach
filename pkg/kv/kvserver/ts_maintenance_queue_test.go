@@ -106,7 +106,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manual,
@@ -119,9 +119,8 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 			},
 		},
 	})
-	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
 	// Generate several splits. The "c"-"zz" range is not going to be considered
@@ -236,8 +235,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(context.Background())
-	tsrv := s.(*server.TestServer)
-	tsdb := tsrv.TsDB()
+	tsdb := s.TsDB().(*ts.DB)
 
 	// Populate time series data into the server. One time series, with one
 	// datapoint at the current time and two datapoints older than the pruning
@@ -245,7 +243,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	// periods; this simplifies verification.
 	seriesName := "test.metric"
 	sourceName := "source1"
-	now := tsrv.Clock().PhysicalNow()
+	now := s.Clock().PhysicalNow()
 	nearPast := now - (tsdb.PruneThreshold(ts.Resolution10s) * 2)
 	farPast := now - (tsdb.PruneThreshold(ts.Resolution10s) * 4)
 	sampleDuration := ts.Resolution10s.SampleDuration()
@@ -339,7 +337,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 
 	// Force pruning.
 	storeID := roachpb.StoreID(1)
-	store, err := tsrv.Stores().GetStore(roachpb.StoreID(1))
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(roachpb.StoreID(1))
 	if err != nil {
 		t.Fatalf("error retrieving store %d: %+v", storeID, err)
 	}

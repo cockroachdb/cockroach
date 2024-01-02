@@ -26,3 +26,5 @@ export * from "./eventsApi";
 export * from "./databaseDetailsApi";
 export * from "./tableDetailsApi";
 export * from "./types";
+export * from "./jobProfilerApi";
+export * from "./txnInsightDetailsApi";

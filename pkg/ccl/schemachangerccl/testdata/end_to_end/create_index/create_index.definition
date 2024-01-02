@@ -1,0 +1,43 @@
+setup
+CREATE TABLE defaultdb.t (id INT PRIMARY KEY, name VARCHAR(256), money INT)
+----
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t VALUES ($stageKey, 'a');
+INSERT INTO t VALUES ($stageKey + 1, 'b');
+INSERT INTO t VALUES ($stageKey + 2, 'c');
+DELETE FROM t WHERE name = 'a' and id = $stageKey;
+INSERT INTO t VALUES ($stageKey, 'a');
+UPDATE t SET name = 'a' WHERE id > 0;
+----
+
+# Each insert will be injected thrice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*) = $successfulStageCount*3 FROM t WHERE name = 'a';
+----
+true
+
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t VALUES ($stageKey, 'a');
+INSERT INTO t VALUES ($stageKey + 1, 'b');
+INSERT INTO t VALUES ($stageKey + 2, 'c');
+DELETE FROM t WHERE name = 'a' and id = $stageKey;
+INSERT INTO t VALUES ($stageKey, 'a');
+UPDATE t SET name = 'a' WHERE id > 0;
+----
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*) = $successfulStageCount*3 FROM t WHERE name = 'a';
+----
+true
+
+test
+CREATE INDEX idx
+  ON defaultdb.t (id, name)
+  STORING (money)
+  PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
+----

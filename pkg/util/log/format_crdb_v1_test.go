@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCrdbV1EncodeDecode(t *testing.T) {
@@ -42,6 +43,17 @@ func TestCrdbV1EncodeDecode(t *testing.T) {
 			}
 
 		case "entries":
+			var loc *time.Location
+			if arg, ok := td.Arg("tz"); ok {
+				var err error
+				var tz string
+				arg.Scan(t, 0, &tz)
+				loc, err = timeutil.LoadLocation(tz)
+				if err != nil {
+					td.Fatalf(t, "invalid tz: %v", err)
+				}
+			}
+
 			var inputEntries []logpb.Entry
 			for _, line := range strings.Split(td.Input, "\n") {
 				entry := templateEntry
@@ -54,7 +66,9 @@ func TestCrdbV1EncodeDecode(t *testing.T) {
 			var buf bytes.Buffer
 			// Encode.
 			for _, entry := range inputEntries {
-				_ = FormatLegacyEntry(entry, &buf)
+				lbuf := formatLogEntryInternalV1(entry, false /* header */, true /* showCounter */, nil /* colorProfile */, loc)
+				buf.Write(lbuf.Bytes())
+				putBuffer(lbuf)
 			}
 			// Decode.
 			entryStr := buf.String()
@@ -182,5 +196,33 @@ func TestCrdbV1EntryDecoderForVeryLargeEntries(t *testing.T) {
 	entries = readAllEntries("file header\n\n\n" + contents)
 	if !reflect.DeepEqual(expected, entries) {
 		t.Fatalf("%s\n", strings.Join(pretty.Diff(expected, entries), "\n"))
+	}
+}
+
+func TestReadTenantDetails(t *testing.T) {
+	tc := []struct {
+		in               string
+		expRemainderTags string
+		expTenantID      string
+		expTenantName    string
+	}{
+		{"", "", serverident.SystemTenantID, ""},
+		{"T123", "", "123", ""},
+		{"T123,Vabc", "", "123", "abc"},
+		{"unknown", "unknown", serverident.SystemTenantID, ""},
+		{"T123,unknown", "unknown", "123", ""},
+		{"T123,Vabc,unknown", "unknown", "123", "abc"},
+		{"unknown,T123", "unknown,T123", serverident.SystemTenantID, ""},
+		{"Vabc,unknown", "Vabc,unknown", serverident.SystemTenantID, ""},
+		{"T123,unknown,Vabc", "unknown,Vabc", "123", ""},
+	}
+
+	for _, test := range tc {
+		t.Run(test.in, func(t *testing.T) {
+			tid, tname, remainderTags := maybeReadTenantDetails([]byte(test.in))
+			assert.Equal(t, tid, test.expTenantID)
+			assert.Equal(t, tname, test.expTenantName)
+			assert.Equal(t, string(remainderTags), test.expRemainderTags)
+		})
 	}
 }

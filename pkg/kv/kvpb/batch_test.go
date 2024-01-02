@@ -236,9 +236,9 @@ func TestLockSpanIterate(t *testing.T) {
 		{&ReverseScanRequest{}, &ReverseScanResponse{}, sp("e", "g"), sp("f", "g")},
 		{&PutRequest{}, &PutResponse{}, sp("h", ""), sp("", "")},
 		{&DeleteRangeRequest{}, &DeleteRangeResponse{}, sp("i", "k"), sp("j", "k")},
-		{&GetRequest{KeyLocking: lock.Exclusive}, &GetResponse{}, sp("l", ""), sp("", "")},
-		{&ScanRequest{KeyLocking: lock.Exclusive}, &ScanResponse{}, sp("m", "o"), sp("n", "o")},
-		{&ReverseScanRequest{KeyLocking: lock.Exclusive}, &ReverseScanResponse{}, sp("p", "r"), sp("q", "r")},
+		{&GetRequest{KeyLockingStrength: lock.Exclusive}, &GetResponse{}, sp("l", ""), sp("", "")},
+		{&ScanRequest{KeyLockingStrength: lock.Exclusive}, &ScanResponse{}, sp("m", "o"), sp("n", "o")},
+		{&ReverseScanRequest{KeyLockingStrength: lock.Exclusive}, &ReverseScanResponse{}, sp("p", "r"), sp("q", "r")},
 	}
 
 	// NB: can't import testutils for RunTrueAndFalse.
@@ -277,7 +277,7 @@ func TestLockSpanIterate(t *testing.T) {
 			// The intent writes are replicated locking request.
 			require.Equal(t, toExpSpans(testReqs[3], testReqs[4]), spans[lock.Replicated])
 
-			// The scans with KeyLocking are unreplicated locking requests.
+			// The scans with KeyLockingStrength are unreplicated locking requests.
 			require.Equal(t, toExpSpans(testReqs[5], testReqs[6], testReqs[7]), spans[lock.Unreplicated])
 		})
 	}
@@ -344,9 +344,9 @@ func TestRefreshSpanIterate(t *testing.T) {
 
 func TestRefreshSpanIterateSkipLocked(t *testing.T) {
 	ba := BatchRequest{}
-	ba.Add(NewGet(roachpb.Key("a"), false))
-	ba.Add(NewScan(roachpb.Key("b"), roachpb.Key("d"), false))
-	ba.Add(NewReverseScan(roachpb.Key("e"), roachpb.Key("g"), false))
+	ba.Add(NewGet(roachpb.Key("a")))
+	ba.Add(NewScan(roachpb.Key("b"), roachpb.Key("d")))
+	ba.Add(NewReverseScan(roachpb.Key("e"), roachpb.Key("g")))
 	br := ba.CreateReply()
 
 	// Without a SkipLocked wait policy.
@@ -389,7 +389,7 @@ func TestBatchResponseCombine(t *testing.T) {
 	{
 		txn := roachpb.MakeTransaction(
 			"test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
-			hlc.Timestamp{WallTime: 123}, 0 /* baseKey */, 99, /* coordinatorNodeID */
+			hlc.Timestamp{WallTime: 123}, 0 /* baseKey */, 99 /* coordinatorNodeID */, 0, false, /* omitInRangefeeds */
 		)
 		brTxn := &BatchResponse{
 			BatchResponse_Header: BatchResponse_Header{

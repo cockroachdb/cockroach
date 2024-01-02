@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -43,7 +45,7 @@ import (
 )
 
 var queryCacheEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.query_cache.enabled", "enable the query cache", true,
 )
 
@@ -53,11 +55,16 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 //   - Types
 //   - AnonymizedStr
 //   - Memo (for reuse during exec, if appropriate).
-func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) {
+func (p *planner) prepareUsingOptimizer(
+	ctx context.Context, origin PreparedStatementOrigin,
+) (planFlags, error) {
 	stmt := &p.stmt
 
 	opc := &p.optPlanningCtx
 	opc.reset(ctx)
+	if origin == PreparedStatementOriginSessionMigration {
+		opc.flags.Set(planFlagSessionMigration)
+	}
 
 	switch t := stmt.AST.(type) {
 	case *tree.AlterIndex, *tree.AlterIndexVisible, *tree.AlterTable, *tree.AlterSequence,
@@ -356,6 +363,7 @@ func (opc *optPlanningCtx) reset(ctx context.Context) {
 	// support it for all statements in principle, but it would increase the
 	// surface of potential issues (conditions we need to detect to invalidate a
 	// cached memo).
+	// TODO(mgartner): Enable memo caching for CALL statements.
 	switch p.stmt.AST.(type) {
 	case *tree.ParenSelect, *tree.Select, *tree.SelectClause, *tree.UnionClause, *tree.ValuesClause,
 		*tree.Insert, *tree.Update, *tree.Delete, *tree.CannedOptPlan:
@@ -428,6 +436,9 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 	f := opc.optimizer.Factory()
 	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, opc.p.stmt.AST)
 	bld.KeepPlaceholders = true
+	if opc.flags.IsSet(planFlagSessionMigration) {
+		bld.SkipAOST = true
+	}
 	if err := bld.Build(); err != nil {
 		return nil, err
 	}
@@ -577,8 +588,13 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 
 	// For index recommendations, after building we must interrupt the flow to
 	// find potential index candidates in the memo.
-	_, isExplain := opc.p.stmt.AST.(*tree.Explain)
-	if isExplain && p.SessionData().IndexRecommendationsEnabled {
+	explainModeShowsRec := func(m tree.ExplainMode) bool {
+		// Only the PLAN (the default), DISTSQL, and GIST explain modes show
+		// index recommendations.
+		return m == tree.ExplainPlan || m == tree.ExplainDistSQL || m == tree.ExplainGist
+	}
+	e, isExplain := opc.p.stmt.AST.(*tree.Explain)
+	if isExplain && explainModeShowsRec(e.Mode) && p.SessionData().IndexRecommendationsEnabled {
 		indexRecs, err := opc.makeQueryIndexRecommendation(ctx)
 		if err != nil {
 			return nil, err
@@ -683,6 +699,15 @@ func (opc *optPlanningCtx) runExecBuilder(
 	planTop.flags = opc.flags
 	if bld.IsDDL {
 		planTop.flags.Set(planFlagIsDDL)
+
+		// The declarative schema changer mode would have already been set here,
+		// since all declarative schema changes are built opaquely. However, some
+		// DDLs (e.g. CREATE TABLE) are built non-opaquely, so we need to set the
+		// mode here if it wasn't already set.
+		if planTop.instrumentation.schemaChangerMode == schemaChangerModeNone {
+			telemetry.Inc(sqltelemetry.LegacySchemaChangerCounter)
+			planTop.instrumentation.schemaChangerMode = schemaChangerModeLegacy
+		}
 	}
 	if bld.ContainsFullTableScan {
 		planTop.flags.Set(planFlagContainsFullTableScan)
@@ -702,10 +727,11 @@ func (opc *optPlanningCtx) runExecBuilder(
 	if bld.ContainsNonDefaultKeyLocking {
 		planTop.flags.Set(planFlagContainsNonDefaultLocking)
 	}
-	if planTop.instrumentation.ShouldSaveMemo() {
-		planTop.mem = mem
-		planTop.catalog = opc.catalog
+	if bld.CheckContainsNonDefaultKeyLocking {
+		planTop.flags.Set(planFlagCheckContainsNonDefaultLocking)
 	}
+	planTop.mem = mem
+	planTop.catalog = opc.catalog
 	return nil
 }
 
@@ -801,4 +827,9 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	)
 
 	return indexRecs, nil
+}
+
+// Optimizer returns the Optimizer associated with this planning context.
+func (opc *optPlanningCtx) Optimizer() interface{} {
+	return &opc.optimizer
 }

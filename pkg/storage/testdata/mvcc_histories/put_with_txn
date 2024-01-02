@@ -7,12 +7,13 @@ with t=A k=k
   get  ts=1
 ----
 >> put v=v t=A k=k
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+49 live_count=+1 live_bytes=+63 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=+100
+put: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+49 live_count=+1 live_bytes=+63 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+100
 get: "k" -> /BYTES/v @0,1
 get: "k" -> /BYTES/v @0,1
 get: "k" -> /BYTES/v @0,1
 >> at end:
-txn: "A" meta={id=00000000 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} lock=true stat=PENDING rts=0,1 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} ts=0,1 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+txn: "A" meta={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} lock=true stat=PENDING rts=0,1 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} ts=0,1 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/0,1 -> /BYTES/v
-stats: key_count=1 key_bytes=14 val_count=1 val_bytes=49 live_count=1 live_bytes=63 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=100
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=49 live_count=1 live_bytes=63 intent_count=1 intent_bytes=18 lock_count=1 lock_age=100

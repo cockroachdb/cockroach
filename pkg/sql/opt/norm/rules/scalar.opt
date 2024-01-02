@@ -299,6 +299,14 @@ $input
 =>
 (Exists $input $subqueryPrivate)
 
+# EliminateConstValuesSubquery replaces a subquery with a constant value if the
+# subquery's input is a single-row, single-column Values expression with a
+# constant value.
+[EliminateConstValueSubquery, Normalize]
+(Subquery (Values [ (Tuple [ $value:(Const) ]) ]))
+=>
+$value
+
 # SimplifyCaseWhenConstValue removes branches known to not match. Any
 # branch known to match is used as the ELSE and further WHEN conditions
 # are skipped. If all WHEN conditions have been removed, the ELSE

@@ -1,12 +1,17 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "sctest",
     srcs = [
+        "backup.go",
+        "comparator.go",
         "cumulative.go",
         "decomp.go",
         "end_to_end.go",
+        "framework.go",
+        "test_server_factory.go",
+        ":gen-stageExecType-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest",
     visibility = ["//visibility:public"],
@@ -17,11 +22,13 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvpb",
         "//pkg/security/username",
         "//pkg/server",
+        "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/seqexpr",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/parser",
         "//pkg/sql/parser/statements",
         "//pkg/sql/pgwire/pgcode",
@@ -30,6 +37,7 @@ go_library(
         "//pkg/sql/schemachanger/scdecomp",
         "//pkg/sql/schemachanger/scdeps/sctestdeps",
         "//pkg/sql/schemachanger/scdeps/sctestutils",
+        "//pkg/sql/schemachanger/scerrors",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
@@ -37,6 +45,7 @@ go_library(
         "//pkg/sql/schemachanger/scplan/scviz",
         "//pkg/sql/schemachanger/screl",
         "//pkg/sql/schemachanger/scrun",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
@@ -46,15 +55,18 @@ go_library(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/util/log",
-        "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_go_cmp//cmp",
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//require",
-        "@org_golang_x_sync//errgroup",
     ],
 )
 
-get_x_data(name = "get_x_data")
+stringer(
+    name = "gen-stageExecType-stringer",
+    src = "framework.go",
+    typ = "stageExecType",
+)

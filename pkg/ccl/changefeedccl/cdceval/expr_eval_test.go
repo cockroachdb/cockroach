@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -43,8 +44,15 @@ func TestEvaluator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	for _, l := range []serverutils.ApplicationLayerInterface{s, srv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
@@ -633,8 +641,9 @@ func TestUnsupportedCDCFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -737,7 +746,7 @@ func randEncDatumPrimaryFamily(
 
 // readSortedRangeFeedValues reads n values, and sorts them based on key order.
 func readSortedRangeFeedValues(
-	t *testing.T, n int, row func(t *testing.T) *kvpb.RangeFeedValue,
+	t *testing.T, n int, row func(t testing.TB) *kvpb.RangeFeedValue,
 ) (res []kvpb.RangeFeedValue) {
 	t.Helper()
 	for i := 0; i < n; i++ {

@@ -97,6 +97,10 @@ const (
 	SpanStatsBuckets                       SystemTableName = "span_stats_buckets"
 	SpanStatsSamples                       SystemTableName = "span_stats_samples"
 	SpanStatsTenantBoundaries              SystemTableName = "span_stats_tenant_boundaries"
+	RegionalLiveness                       SystemTableName = "region_liveness"
+	MVCCStatistics                         SystemTableName = "mvcc_statistics"
+	StmtExecInsightsTableName              SystemTableName = "statement_execution_insights"
+	TxnExecInsightsTableName               SystemTableName = "transaction_execution_insights"
 )
 
 // Oid for virtual database and table.
@@ -105,6 +109,7 @@ const (
 	CrdbInternalBackwardDependenciesTableID
 	CrdbInternalBuildInfoTableID
 	CrdbInternalBuiltinFunctionsTableID
+	CrdbInternalBuiltinFunctionCommentsTableID
 	CrdbInternalCatalogCommentsTableID
 	CrdbInternalCatalogDescriptorTableID
 	CrdbInternalCatalogNamespaceTableID
@@ -125,6 +130,7 @@ const (
 	CrdbInternalClusterStmtStatsTableID
 	CrdbInternalClusterTxnStatsTableID
 	CrdbInternalCreateFunctionStmtsTableID
+	CrdbInternalCreateProcedureStmtsTableID
 	CrdbInternalCreateSchemaStmtsTableID
 	CrdbInternalCreateStmtsTableID
 	CrdbInternalCreateTypeStmtsTableID
@@ -191,6 +197,14 @@ const (
 	CrdbInternalSuperRegions
 	CrdbInternalDroppedRelationsViewID
 	CrdbInternalShowTenantCapabilitiesCacheTableID
+	CrdbInternalInheritedRoleMembersTableID
+	CrdbInternalKVSystemPrivilegesViewID
+	CrdbInternalKVFlowControllerID
+	CrdbInternalKVFlowHandlesID
+	CrdbInternalKVFlowTokenDeductions
+	CrdbInternalRepairableCatalogCorruptionsViewID
+	CrdbInternalKVProtectedTS
+	CrdbInternalKVSessionBasedLeases
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

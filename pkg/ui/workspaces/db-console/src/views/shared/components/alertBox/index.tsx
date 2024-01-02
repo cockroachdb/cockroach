@@ -47,15 +47,19 @@ export class AlertBox extends React.Component<AlertBoxProps, {}> {
       </div>
     );
 
-    if (this.props.link) {
-      content = (
-        <a className="alert-box__link" href={this.props.link}>
+    const learnMore = this.props.link && (
+      <a className="" href={this.props.link}>
+        Learn More.
+      </a>
+    );
+    content = (
+      <>
+        <div className="alert-box__content">
           {content}
-        </a>
-      );
-    }
-
-    content = <div className="alert-box__content">{content}</div>;
+          {learnMore}
+        </div>
+      </>
+    );
 
     return (
       <div

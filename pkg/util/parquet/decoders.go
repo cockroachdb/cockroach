@@ -16,6 +16,7 @@ import (
 	"github.com/apache/arrow/go/v11/parquet"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -53,6 +54,18 @@ type stringDecoder struct{}
 
 func (stringDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
 	return tree.NewDString(string(v)), nil
+}
+
+type pglsnDecoder struct{}
+
+func (pglsnDecoder) decode(v int64) (tree.Datum, error) {
+	return tree.NewDPGLSN(lsn.LSN(v)), nil
+}
+
+type refcursorDecoder struct{}
+
+func (refcursorDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	return tree.NewDRefCursor(string(v)), nil
 }
 
 type int64Decoder struct{}
@@ -279,6 +292,10 @@ func decoderFromFamilyAndType(typOid oid.Oid, family types.Family) (decoder, err
 		return dateDecoder{}, nil
 	case types.Box2DFamily:
 		return box2DDecoder{}, nil
+	case types.PGLSNFamily:
+		return pglsnDecoder{}, nil
+	case types.RefCursorFamily:
+		return refcursorDecoder{}, nil
 	case types.GeographyFamily:
 		return geographyDecoder{}, nil
 	case types.GeometryFamily:
@@ -313,6 +330,8 @@ func init() {
 	var _, _ = stringDecoder{}.decode(parquet.ByteArray{})
 	var _, _ = int32Decoder{}.decode(0)
 	var _, _ = int64Decoder{}.decode(0)
+	var _, _ = pglsnDecoder{}.decode(0)
+	var _, _ = refcursorDecoder{}.decode(parquet.ByteArray{})
 	var _, _ = decimalDecoder{}.decode(parquet.ByteArray{})
 	var _, _ = timestampDecoder{}.decode(parquet.ByteArray{})
 	var _, _ = timestampTZDecoder{}.decode(parquet.ByteArray{})

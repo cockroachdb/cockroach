@@ -303,7 +303,7 @@ func (m *metaTestRunner) generateAndRun(n int) {
 	for i := range m.ops {
 		opRun := &m.ops[i]
 		output := opRun.op.run(m.ctx)
-		m.printOp(opRun.name, opRun.args, output)
+		m.printOp(i, opRun.name, opRun.args, output)
 	}
 }
 
@@ -407,7 +407,7 @@ func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
 	for i := range m.ops {
 		op := &m.ops[i]
 		actualOutput := op.op.run(m.ctx)
-		m.printOp(op.name, op.args, actualOutput)
+		actualOutput = m.printOp(i, op.name, op.args, actualOutput)
 		if strings.Compare(strings.TrimSpace(op.expectedOutput), strings.TrimSpace(actualOutput)) != 0 {
 			// Error messages can sometimes mismatch. If both outputs contain "error",
 			// consider this a pass.
@@ -482,7 +482,9 @@ func (m *metaTestRunner) resolveAndAddOp(op *opGenerator, fixedArgs ...string) {
 }
 
 // Print passed-in operation, arguments and output string to output file.
-func (m *metaTestRunner) printOp(opName string, argStrings []string, output string) {
+func (m *metaTestRunner) printOp(
+	index int, opName string, argStrings []string, output string,
+) string {
 	fmt.Fprintf(m.w, "%s(", opName)
 	for i, arg := range argStrings {
 		if i > 0 {
@@ -490,7 +492,9 @@ func (m *metaTestRunner) printOp(opName string, argStrings []string, output stri
 		}
 		fmt.Fprintf(m.w, "%s", arg)
 	}
+	output = fmt.Sprintf("%s // #%d", output, index)
 	fmt.Fprintf(m.w, ") -> %s\n", output)
+	return output
 }
 
 // printComment prints a comment line into the output file. Supports single-line

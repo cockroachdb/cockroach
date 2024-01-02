@@ -38,6 +38,12 @@ func (b Builder) Gauge(metadata metric.Metadata) *AggGauge {
 	return NewGauge(metadata, b.labels...)
 }
 
+// FunctionalGauge constructs a new AggGauge with the Builder's labels who's
+// value is determined when asked for.
+func (b Builder) FunctionalGauge(metadata metric.Metadata, f func(cvs []int64) int64) *AggGauge {
+	return NewFunctionalGauge(metadata, f, b.labels...)
+}
+
 // GaugeFloat64 constructs a new AggGaugeFloat64 with the Builder's labels.
 func (b Builder) GaugeFloat64(metadata metric.Metadata) *AggGaugeFloat64 {
 	return NewGaugeFloat64(metadata, b.labels...)
@@ -90,6 +96,16 @@ func (cs *childSet) Each(
 		}
 		pm.Label = childLabels
 		f(pm)
+		return true
+	})
+}
+
+// apply applies the given applyFn to every item in the childSet
+func (cs *childSet) apply(applyFn func(item btree.Item)) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	cs.mu.tree.Ascend(func(item btree.Item) bool {
+		applyFn(item)
 		return true
 	})
 }

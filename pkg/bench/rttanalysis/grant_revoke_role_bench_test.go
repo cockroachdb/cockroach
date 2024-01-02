@@ -33,6 +33,75 @@ CREATE ROLE c;`,
 	})
 }
 
+func BenchmarkShowGrants(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("ShowGrants", []RoundTripBenchTestCase{
+		{
+			Name: "grant 2 roles",
+			Setup: `
+CREATE DATABASE db;
+CREATE ROLE a;
+CREATE ROLE b;
+CREATE ROLE c;
+GRANT a TO b;
+GRANT b TO c;
+GRANT ALL ON DATABASE db TO c;
+GRANT DROP ON DATABASE db TO b;
+GRANT CONNECT ON DATABASE db TO a;
+`,
+			Stmt: "SHOW GRANTS ON DATABASE db FOR c",
+			Reset: `
+DROP DATABASE db;
+DROP ROLE a,b,c;
+`,
+		},
+		{
+			Name: "grant 3 roles",
+			Setup: `
+CREATE DATABASE db;
+CREATE ROLE a;
+CREATE ROLE b;
+CREATE ROLE c;
+CREATE ROLE d;
+GRANT a TO b;
+GRANT b TO c;
+GRANT c TO d;
+GRANT ALL ON DATABASE db TO c;
+GRANT DROP ON DATABASE db TO b;
+GRANT CONNECT ON DATABASE db TO a;
+`,
+			Stmt: "SHOW GRANTS ON DATABASE db FOR d",
+			Reset: `
+DROP DATABASE db;
+DROP ROLE a,b,c,d;
+`,
+		},
+		{
+			Name: "grant 4 roles",
+			Setup: `
+CREATE DATABASE db;
+CREATE ROLE a;
+CREATE ROLE b;
+CREATE ROLE c;
+CREATE ROLE d;
+CREATE ROLE e;
+GRANT a TO b;
+GRANT b TO c;
+GRANT c TO d;
+GRANT d TO e;
+GRANT ALL ON DATABASE db TO c;
+GRANT DROP ON DATABASE db TO b;
+GRANT CONNECT ON DATABASE db TO a;
+`,
+			Stmt: "SHOW GRANTS ON DATABASE db FOR d",
+			Reset: `
+DROP DATABASE db;
+DROP ROLE a,b,c,d,e;
+`,
+		},
+	})
+}
+
 func BenchmarkRevokeRole(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("RevokeRole", []RoundTripBenchTestCase{

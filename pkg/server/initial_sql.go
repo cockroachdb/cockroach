@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -28,11 +29,15 @@ import (
 // and `cockroach demo` with 2 nodes or fewer.
 // If adminUser is non-empty, an admin user with that name is
 // created upon initialization. Its password is then also returned.
-func (s *Server) RunInitialSQL(
+func (s *topLevelServer) RunInitialSQL(
 	ctx context.Context, startSingleNode bool, adminUser, adminPassword string,
 ) error {
 	if s.cfg.ObsServiceAddr == base.ObsServiceEmbedFlagValue {
-		if err := s.startEmbeddedObsService(ctx); err != nil {
+		var knobs *obs.EventExporterTestingKnobs
+		if s.cfg.TestingKnobs.EventExporter != nil {
+			knobs = s.cfg.TestingKnobs.EventExporter.(*obs.EventExporterTestingKnobs)
+		}
+		if err := s.startEmbeddedObsService(ctx, knobs); err != nil {
 			return err
 		}
 	}
@@ -70,7 +75,9 @@ func (s *SQLServerWrapper) RunInitialSQL(context.Context, bool, string, string) 
 }
 
 // createAdminUser creates an admin user with the given name.
-func (s *Server) createAdminUser(ctx context.Context, adminUser, adminPassword string) error {
+func (s *topLevelServer) createAdminUser(
+	ctx context.Context, adminUser, adminPassword string,
+) error {
 	ie := s.sqlServer.internalExecutor
 	_, err := ie.Exec(
 		ctx, "admin-user", nil,
@@ -92,7 +99,7 @@ func (s *Server) createAdminUser(ctx context.Context, adminUser, adminPassword s
 //
 // The change is effected using the internal SQL interface of the
 // given server object.
-func (s *Server) disableReplication(ctx context.Context) (retErr error) {
+func (s *topLevelServer) disableReplication(ctx context.Context) (retErr error) {
 	ie := s.sqlServer.internalExecutor
 
 	it, err := ie.QueryIterator(ctx, "get-zones", nil,

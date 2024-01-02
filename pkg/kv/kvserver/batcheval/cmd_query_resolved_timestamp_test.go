@@ -44,16 +44,21 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 		return hlc.Timestamp{WallTime: ts}
 	}
 	writeValue := func(k string, ts int64) {
-		_, err := storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), makeTS(ts), hlc.ClockTimestamp{}, nil)
+		_, _, err := storage.MVCCDelete(ctx, db, roachpb.Key(k), makeTS(ts), storage.MVCCWriteOptions{})
 		require.NoError(t, err)
 	}
 	writeIntent := func(k string, ts int64) {
-		txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, 0, makeTS(ts), 0, 1)
-		_, err := storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), makeTS(ts), hlc.ClockTimestamp{}, &txn)
+		txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, 0, makeTS(ts), 0, 1, 0, false /* omitInRangefeeds */)
+		_, _, err := storage.MVCCDelete(ctx, db, roachpb.Key(k), makeTS(ts), storage.MVCCWriteOptions{Txn: &txn})
 		require.NoError(t, err)
 	}
 	writeInline := func(k string) {
-		_, err := storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
+		_, _, err := storage.MVCCDelete(ctx, db, roachpb.Key(k), hlc.Timestamp{}, storage.MVCCWriteOptions{})
+		require.NoError(t, err)
+	}
+	writeLock := func(k string, str lock.Strength) {
+		txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, 0, makeTS(1), 0, 1, 0, false /* omitInRangefeeds */)
+		err := storage.MVCCAcquireLock(ctx, db, &txn, str, roachpb.Key(k), nil, 0)
 		require.NoError(t, err)
 	}
 
@@ -62,12 +67,15 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 	//  a: intent @ 5
 	//  a: value  @ 3
 	//  b: inline value
+	//  c: shared lock #1
+	//  c: shared lock #2
 	//  c: value  @ 6
 	//  c: value  @ 4
 	//  c: value  @ 1
 	//  d: intent @ 2
 	//  e: intent @ 7
 	//  f: inline value
+	//  g: exclusive lock
 	//
 	// NB: must write each key in increasing timestamp order.
 	writeValue("a", 3)
@@ -75,9 +83,12 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 	writeInline("b")
 	writeValue("c", 1)
 	writeValue("c", 4)
+	writeLock("c", lock.Shared)
+	writeLock("c", lock.Shared)
 	writeIntent("d", 2)
 	writeIntent("e", 7)
 	writeInline("f")
+	writeLock("g", lock.Exclusive)
 
 	for _, cfg := range []struct {
 		name                         string
@@ -181,8 +192,8 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			}
 
 			st := cluster.MakeTestingClusterSettings()
-			gc.MaxIntentsPerCleanupBatch.Override(ctx, &st.SV, cfg.maxEncounteredIntents)
-			gc.MaxIntentKeyBytesPerCleanupBatch.Override(ctx, &st.SV, cfg.maxEncounteredIntentKeyBytes)
+			gc.MaxLocksPerCleanupBatch.Override(ctx, &st.SV, cfg.maxEncounteredIntents)
+			gc.MaxLockKeyBytesPerCleanupBatch.Override(ctx, &st.SV, cfg.maxEncounteredIntentKeyBytes)
 			QueryResolvedTimestampIntentCleanupAge.Override(ctx, &st.SV, cfg.intentCleanupAge)
 
 			clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 10)))
@@ -228,8 +239,8 @@ func TestQueryResolvedTimestampErrors(t *testing.T) {
 
 	lockTableKey := storage.LockTableKey{
 		Key:      roachpb.Key("a"),
-		Strength: lock.Exclusive,
-		TxnUUID:  txnUUID.GetBytes(),
+		Strength: lock.Intent,
+		TxnUUID:  txnUUID,
 	}
 	engineKey, buf := lockTableKey.ToEngineKey(nil)
 

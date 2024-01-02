@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"path"
 	"testing"
 
@@ -20,9 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,6 +33,7 @@ import (
 // yet public.
 func TestRenameColumnDuringConcurrentMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// The structure of the test is to intentionally block a complex
 	// column addition schema change at various events and then issue
@@ -61,37 +64,36 @@ func TestRenameColumnDuringConcurrentMutation(t *testing.T) {
 		<-ev.unblock
 	}
 	ctx := context.Background()
-	var tc *testcluster.TestCluster
-	tc = testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-					RunBeforePublishWriteAndDelete: func() {
-						maybeBlockOnEvent(publishWriteOnly)
-					},
-					RunBeforeBackfill: func() error {
-						maybeBlockOnEvent(backfill)
+	var s serverutils.TestServerInterface
+	var db *gosql.DB
+	s, db, _ = serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				RunBeforePublishWriteAndDelete: func() {
+					maybeBlockOnEvent(publishWriteOnly)
+				},
+				RunBeforeBackfill: func() error {
+					maybeBlockOnEvent(backfill)
+					return nil
+				},
+				RunBeforeResume: func(jobID jobspb.JobID) error {
+					// Load the job to figure out if it's the rename or the
+					// backfill.
+					scJob, err := s.ApplicationLayer().JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
+					if err != nil {
+						return err
+					}
+					pl := scJob.Payload()
+					if pl.GetSchemaChange().TableMutationID == descpb.InvalidMutationID {
 						return nil
-					},
-					RunBeforeResume: func(jobID jobspb.JobID) error {
-						// Load the job to figure out if it's the rename or the
-						// backfill.
-						scJob, err := tc.Server(0).JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
-						if err != nil {
-							return err
-						}
-						pl := scJob.Payload()
-						if pl.GetSchemaChange().TableMutationID == descpb.InvalidMutationID {
-							return nil
-						}
-						maybeBlockOnEvent(resume)
-						return nil
-					},
+					}
+					maybeBlockOnEvent(resume)
+					return nil
 				},
 			},
 		},
 	})
-	defer tc.Stopper().Stop(ctx)
+	defer s.Stopper().Stop(ctx)
 	for _, testCase := range []struct {
 		name   string
 		evType eventType
@@ -103,14 +105,14 @@ func TestRenameColumnDuringConcurrentMutation(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			eventToBlockOn = testCase.evType
 			dbName := path.Base(t.Name())
-			tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+			tdb := sqlutils.MakeSQLRunner(db)
 			tdb.Exec(t, "SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';")
 			tdb.Exec(t, "SET use_declarative_schema_changer = 'off';")
 			tdb.Exec(t, "CREATE DATABASE "+dbName)
 			tdb.Exec(t, "CREATE TABLE "+dbName+".foo (i INT PRIMARY KEY)")
 			scDone := make(chan error)
 			go func() {
-				_, err := tc.ServerConn(0).Exec(
+				_, err := db.Exec(
 					"ALTER TABLE " + dbName + ".foo ADD COLUMN j INT NOT NULL DEFAULT 7 CHECK (j > 0) REFERENCES " + dbName + ".foo(i)")
 				scDone <- err
 			}()

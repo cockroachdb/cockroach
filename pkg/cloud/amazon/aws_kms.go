@@ -22,7 +22,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -60,7 +59,7 @@ type kmsURIParams struct {
 }
 
 var reuseKMSSession = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.aws.reuse_kms_session.enabled",
 	"persist the last opened AWS KMS session and reuse it when opening a new session with the same arguments",
 	util.ConstantWithMetamorphicTestBool("aws-reuse-kms", true),
@@ -192,14 +191,10 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 
 	sess, err := session.NewSessionWithOptions(opts)
 	if err != nil {
-		return nil, errors.Wrap(err, "new aws session")
+		return nil, cloud.KMSInaccessible(errors.Wrap(err, "new aws session"))
 	}
 
 	if kmsURIParams.roleProvider != (roleProvider{}) {
-		if !env.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2SupportAssumeRoleAuth) {
-			return nil, errors.New("cannot authenticate to KMS via assume role until cluster has fully upgraded to 22.2")
-		}
-
 		// If there are delegate roles in the assume-role chain, we create a session
 		// for each role in order for it to fetch the credentials from the next role
 		// in the chain.
@@ -209,7 +204,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 
 			sess, err = session.NewSessionWithOptions(opts)
 			if err != nil {
-				return nil, errors.Wrap(err, "session with intermediate credentials")
+				return nil, cloud.KMSInaccessible(errors.Wrap(err, "session with intermediate credentials"))
 			}
 		}
 
@@ -217,7 +212,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 		opts.Config.Credentials = creds
 		sess, err = session.NewSessionWithOptions(opts)
 		if err != nil {
-			return nil, errors.Wrap(err, "session with assume role credentials")
+			return nil, cloud.KMSInaccessible(errors.Wrap(err, "session with assume role credentials"))
 		}
 	}
 
@@ -252,8 +247,8 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 }
 
 // MasterKeyID implements the KMS interface.
-func (k *awsKMS) MasterKeyID() (string, error) {
-	return k.customerMasterKeyID, nil
+func (k *awsKMS) MasterKeyID() string {
+	return k.customerMasterKeyID
 }
 
 // Encrypt implements the KMS interface.
@@ -265,7 +260,7 @@ func (k *awsKMS) Encrypt(ctx context.Context, data []byte) ([]byte, error) {
 
 	encryptOutput, err := k.kms.Encrypt(encryptInput)
 	if err != nil {
-		return nil, err
+		return nil, cloud.KMSInaccessible(err)
 	}
 
 	return encryptOutput.CiphertextBlob, nil
@@ -280,7 +275,7 @@ func (k *awsKMS) Decrypt(ctx context.Context, data []byte) ([]byte, error) {
 
 	decryptOutput, err := k.kms.Decrypt(decryptInput)
 	if err != nil {
-		return nil, err
+		return nil, cloud.KMSInaccessible(err)
 	}
 
 	return decryptOutput.Plaintext, nil

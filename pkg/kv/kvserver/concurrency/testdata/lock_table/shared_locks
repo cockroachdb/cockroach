@@ -1,0 +1,1697 @@
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10 epoch=0 seq=0
+----
+
+new-txn txn=txn2 ts=10 epoch=0 seq=0
+----
+
+new-txn txn=txn3 ts=10 epoch=0 seq=0
+----
+
+new-txn txn=txn4 ts=10 epoch=0 seq=0
+----
+
+new-txn txn=txn5 ts=10 epoch=0 seq=0
+----
+
+new-request r=req1 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req1
+----
+start-waiting: false
+
+acquire r=req1 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+# ------------------------------------------------------------------------------
+# Ensure conflict resolution semantics for shared locks are sane -- that is,
+# if a shared lock is held on a key, {shared, none} locking requests are allowed
+# to proceed; {intent, exclusive} locking requests are not.
+# ------------------------------------------------------------------------------
+
+new-request r=req2 txn=txn2 ts=10 spans=none@a
+----
+
+scan r=req2
+----
+start-waiting: false
+
+new-request r=req3 txn=txn2 ts=10 spans=shared@a
+----
+
+# req3 should not actively wait, as it's locking strength is shared, but it
+# should be able to acquire a joint claim.
+scan r=req3
+----
+start-waiting: false
+
+# Another shared locking request should be able to acquire a joint claim as
+# well.
+new-request r=req4 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req4
+----
+start-waiting: false
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: false req: 3, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 4, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+
+acquire r=req3 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+# Re-acquisition of the shared lock by req4 should work as well, as req4 is part
+# of the same transaction (txn 2) as req3; req3 just acquired a shared lock.
+acquire r=req4 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+
+new-request r=req5 txn=txn4 ts=10 spans=exclusive@a
+----
+
+scan r=req5
+----
+start-waiting: true
+
+new-request r=req6 txn=txn4 ts=10 spans=intent@a
+----
+
+scan r=req6
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 5
+
+# ------------------------------------------------------------------------------
+# Ensure requests with locking strength shared actively wait if there are active
+# waiters with conflicting lock strengths (even though the lock itself is
+# compatible with the shared lock request).
+# ------------------------------------------------------------------------------
+
+new-request r=req7 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req7
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000004
+    active: true req: 7, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 5
+
+# However, if the shared lock is held by the transaction itself, it doesn't need
+# to actively wait.
+
+new-request r=req8 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req8
+----
+start-waiting: false
+
+print
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000004
+    active: true req: 7, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 5
+
+# ------------------------------------------------------------------------------
+# Ensure a key is locked with SHARED locking strength until the all
+# transactions that hold SHARED LOCKs have released it.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+# Acquire SHARED locks using 3 transactions.
+new-request r=req9 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req9
+----
+start-waiting: false
+
+acquire r=req9 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req10 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req10
+----
+start-waiting: false
+
+acquire r=req10 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+acquire r=req10 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req11 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req11
+----
+start-waiting: false
+
+acquire r=req11 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req12 txn=txn4 ts=10 spans=exclusive@a
+----
+
+scan r=req12
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 12, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 12
+
+# Start releasing the shared locks, one by one.
+
+release txn=txn1 span=a
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 12, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 12
+
+release txn=txn2 span=a
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 12, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 12
+
+# Now that all shared locks have been released, the exclusive locking request is
+# free to proceed.
+release txn=txn3 span=a
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 12, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+
+
+# ------------------------------------------------------------------------------
+# Basic test for joint claims -- ensure all shared lock requests waiting on an
+# exclusive lock to be released are able to acquire a joint claim when the
+# exclusive lock is released.
+# ------------------------------------------------------------------------------
+
+acquire r=req12 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+
+new-request r=req13 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req13
+----
+start-waiting: true
+
+new-request r=req14 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req14
+----
+start-waiting: true
+
+new-request r=req15 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req15
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 13, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 14, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 15, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 13
+
+release txn=txn4 span=a
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 13, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 14, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 15, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+
+# ------------------------------------------------------------------------------
+# Ensure only the head of the queue that is compatible with each other is able
+# to acquire a joint claim when an exclusive lock is released. Setup:
+# lock holder: X, wait queue: (S, S, X, S).
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req16 txn=txn5 ts=10 spans=exclusive@a
+----
+
+scan r=req16
+----
+start-waiting: false
+
+acquire r=req16 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req17 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req17
+----
+start-waiting: true
+
+new-request r=req18 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req18
+----
+start-waiting: true
+
+new-request r=req19 txn=txn3 ts=10 spans=exclusive@a
+----
+
+scan r=req19
+----
+start-waiting: true
+
+new-request r=req20 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req20
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 17, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 18, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 19, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 20, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 17
+
+# Setup complete. Release the exclusive lock and ensure only req17 and req18
+# establish a joint claim. In particular, req20 should be sitting tight.
+release txn=txn5 span=a
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 17, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 18, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 19, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 20, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 19
+
+# Ensure nothing changes with req20 once req18 acquires the lock. This is
+# because they belong to different transactions (txn1 and txn2, respectively).
+acquire r=req18 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: false req: 17, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 19, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 20, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 19
+
+# However, once req17 acquires the shared lock, req20 should be allowed to
+# proceed -- this is because they both belong to the same transaction (txn1).
+acquire r=req17 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 19, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 19
+
+# req20 should be able to come back around and acquire a shared lock for itself.
+# This doesn't change anything though, as the lock was already held by txn1.
+acquire r=req20 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 19, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 19
+
+
+# ------------------------------------------------------------------------------
+# Similar to the test above, but this time with a non-transactional writer
+# instead of the exclusive lock. To make things a bit more interesting, we also
+# add a few non-transactional writers at the head of the queue.
+# lock holder: X, wait queue: (NTW, NTW, NTW, S, S, NTW, S).
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req21 txn=txn5 ts=10 spans=exclusive@a
+----
+
+scan r=req21
+----
+start-waiting: false
+
+acquire r=req21 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req22 txn=none ts=10 spans=intent@a
+----
+
+scan r=req22
+----
+start-waiting: true
+
+new-request r=req23 txn=none ts=10 spans=intent@a
+----
+
+scan r=req23
+----
+start-waiting: true
+
+new-request r=req24 txn=none ts=10 spans=intent@a
+----
+
+scan r=req24
+----
+start-waiting: true
+
+new-request r=req25 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req25
+----
+start-waiting: true
+
+new-request r=req26 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req26
+----
+start-waiting: true
+
+new-request r=req27 txn=none ts=10 spans=intent@a
+----
+
+scan r=req27
+----
+start-waiting: true
+
+new-request r=req28 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req28
+----
+start-waiting: true
+
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 22, strength: Intent, txn: none
+    active: true req: 23, strength: Intent, txn: none
+    active: true req: 24, strength: Intent, txn: none
+    active: true req: 25, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 26, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 27, strength: Intent, txn: none
+    active: true req: 28, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 22
+
+# We're done setting up. Let's release the lock.
+
+release txn=txn5 span=a
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 25, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 26, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 27, strength: Intent, txn: none
+    active: true req: 28, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 27
+
+# ------------------------------------------------------------------------------
+# Ensure a shared lock request doesn't need to wait if its transaction already
+# holds the lock with strength exclusive. To make things interesting, we make
+# the lock's wait queue non-empty.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req29 txn=txn5 ts=10 spans=exclusive@a
+----
+
+scan r=req29
+----
+start-waiting: false
+
+acquire r=req29 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req30 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req30
+----
+start-waiting: true
+
+new-request r=req31 txn=txn2 ts=10 spans=exclusive@a
+----
+
+scan r=req31
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 30, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 31, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 30
+
+# Shared lock request from txn5 (which already holds the lock on key "a")
+new-request r=req32 txn=txn5 ts=10 spans=shared@a
+----
+
+scan r=req32
+----
+start-waiting: false
+
+acquire r=req32 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0), (str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 30, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 31, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 30
+
+# ------------------------------------------------------------------------------
+# Add a test where one of the waiters to be released is already an inactive
+# waiter. We should no-op at that waiter and continue on with our scan, stopping
+# when an incompatibility is found (or the queue is exhausted). We test the
+# queue is exhausted case.
+# ------------------------------------------------------------------------------
+
+dequeue r=req31
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0), (str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 30, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 30
+
+release txn=txn5 span=a
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 30, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+
+new-request r=req33 txn=txn5 ts=10 spans=exclusive@a
+----
+
+scan r=req33
+----
+start-waiting: true
+
+# Req3 was supposed to wait, but we'll acquire the lock here to get where our
+# test setup wants to get.
+acquire r=req33 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 30, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+
+new-request r=req34 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req34
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 30, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 34, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 34
+
+release txn=txn5 span=a
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 30, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 34, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+
+# ------------------------------------------------------------------------------
+# Test that if shared locks are waiting behind an exclusive lock in the wait
+# queue, and the lock is released, only the exclusive lock request is allowed to
+# proceed. Setup:
+# lock holder: X, wait queue: (X, S, S)
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req35 txn=txn5 ts=10 spans=exclusive@a
+----
+
+scan r=req35
+----
+start-waiting: false
+
+acquire r=req35 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req36 txn=txn1 ts=10 spans=exclusive@a
+----
+
+scan r=req36
+----
+start-waiting: true
+
+new-request r=req37 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req37
+----
+start-waiting: true
+
+new-request r=req38 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req38
+----
+start-waiting: true
+
+new-request r=req39 txn=txn4 ts=10 spans=exclusive@a
+----
+
+scan r=req39
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 36, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 37, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 38, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 39, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 36
+
+# Release the lock. Only req36 should be allowed to proceed.
+release txn=txn5 span=a
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 36, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 37, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 38, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 39, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 37
+
+# ------------------------------------------------------------------------------
+# Ensure that if a exclusive locking request (req36) exits the lock table
+# without acquiring the lock, compatible requests in the wait queue (req37 and
+# req38) are nudged to establish a claim and proceed. Note that only the
+# requests that are compatible should be able to establish a claim -- this
+# excludes req39.
+# ------------------------------------------------------------------------------
+dequeue r=req36
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 37, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 38, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 39, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 39
+
+# ------------------------------------------------------------------------------
+# Same set up as above, but this time, have the exclusive locking request
+# acquire the lock (instead of exiting the lock table without acquiring it).
+# The shared lock requests waiting behind it should continue to sit tight.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req40 txn=txn5 ts=10 spans=exclusive@a
+----
+
+scan r=req40
+----
+start-waiting: false
+
+acquire r=req40 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req41 txn=txn1 ts=10 spans=exclusive@a
+----
+
+scan r=req41
+----
+start-waiting: true
+
+new-request r=req42 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req42
+----
+start-waiting: true
+
+new-request r=req43 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req43
+----
+start-waiting: true
+
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 41, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 42, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 43, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 41
+
+# Release the lock. Only req41 should be allowed to proceed.
+release txn=txn5 span=a
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 41, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 42, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 43, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 42
+
+# This time, we'll actually let the exclusive locking request (req41) acquire
+# the lock. Nothing should change with req42 and req43 -- they should sit tight.
+acquire r=req41 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 42, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 43, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 42
+
+# ------------------------------------------------------------------------------
+# A few more tests of requests exiting the lock table without acquiring locks.
+# Setup:
+# lock holder: _, wait queue(S, S, X)
+# If one of the shared locking requests exits the wait queue without acquiring
+# the lock, the exclusive locking request should continue to sit tight.
+# ------------------------------------------------------------------------------
+
+new-request r=req44 txn=txn4 ts=10 spans=exclusive@a
+----
+
+scan r=req44
+----
+start-waiting: true
+
+release txn=txn1 span=a
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 42, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 43, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 44, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 44
+
+# Have req42 exit the lock table without acquiring its shared lock. Nothing
+# should change with req44.
+dequeue r=req42
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 43, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 44, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 44
+
+# However, once req43 exits without acquiring its shared lock, req44 should be
+# allowed to proceed.
+dequeue r=req43
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 44, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+
+# ------------------------------------------------------------------------------
+# Ensure a shared locking request can discover a replicated lock and queue
+# behind it. Subsequent locking requests should then queue up behind the
+# discovered lock.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+# We scan "a" using multiple lock strengths; lock discovery should pick the
+# highest (shared) as the strength with which to wait in the lock wait queue.
+new-request r=req45 txn=txn1 ts=10 spans=none@a+shared@a
+----
+
+scan r=req45
+----
+start-waiting: false
+
+add-discovered r=req45 k=a txn=txn2
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 45, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+
+# To make things slightly interesting, let another shared-locking request come
+# through before req45 re-scans. The new request should be the distinguished
+# waiter, because req45 was waiting inactively after it discovered the lock.
+new-request r=req46 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req46
+----
+start-waiting: true
+
+scan r=req45
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: true req: 45, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 46, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 46
+
+# ------------------------------------------------------------------------------
+# Test for lock promotion. When a lock is held with strength Shared, we do not
+# allow the holder to promote it to Exclusive or write to the key. The same
+# applies if the lock isn't held, but there's a request from our transaction
+# trying to acquire a Shared lock (that's waiting in front of us).
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req47 txn=txn1 ts=10 spans=shared@b
+----
+
+scan r=req47
+----
+start-waiting: false
+
+acquire k=b r=req47 strength=shared durability=u
+----
+num=1
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req48 txn=txn1 ts=10 spans=exclusive@b
+----
+
+scan r=req48
+----
+lock promotion from Shared to Exclusive is not allowed
+
+new-request r=req49 txn=txn1 ts=10 spans=intent@b
+----
+
+scan r=req49
+----
+lock promotion from Shared to Intent is not allowed
+
+new-request r=req50 txn=txn2 ts=10 spans=exclusive@b
+----
+
+scan r=req50
+----
+start-waiting: true
+
+new-request r=req51 txn=txn1 ts=10 spans=exclusive@a
+----
+
+scan r=req51
+----
+start-waiting: false
+
+acquire r=req51 k=a durability=u strength=exclusive
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 50, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 50
+
+new-request r=req52 txn=txn3 ts=10 spans=exclusive@a+exclusive@b
+----
+
+scan r=req52
+----
+start-waiting: true
+
+new-request r=req53 txn=txn3 ts=10 spans=shared@b
+----
+
+scan r=req53
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 52, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 52
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 50, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 53, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 50
+
+new-request r=req54 txn=txn3 ts=10 spans=exclusive@b
+----
+
+scan r=req54
+----
+lock promotion from Shared to Exclusive is not allowed
+
+new-request r=req55 txn=txn3 ts=10 spans=intent@b
+----
+
+scan r=req55
+----
+lock promotion from Shared to Intent is not allowed
+
+release txn=txn1 span=a
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 52, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 50, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 53, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 50
+
+scan r=req52
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 52, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 50, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 52, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 53, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 50
+
+# ------------------------------------------------------------------------------
+# Sub-test for lock promotion. When an initial call to ScanAndEnqueue returns an
+# error, the request is dequeued from any other wait-queues that it may have
+# entered.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req56 txn=txn1 ts=10 spans=exclusive@a
+----
+
+scan r=req56
+----
+start-waiting: false
+
+acquire r=req56 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req56
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req57 txn=txn2 ts=10 spans=shared@b
+----
+
+scan r=req57
+----
+start-waiting: false
+
+acquire r=req57 k=b durability=u strength=shared
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+dequeue r=req57
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+# Mark txn1 as aborted so that the next two requests immediately acquire claims
+# on key "a" when scanning.
+pushed-txn-updated txn=txn1 status=aborted
+----
+
+new-request r=req58 txn=txn2 ts=10 spans=exclusive@a,c
+----
+
+scan r=req58
+----
+lock promotion from Shared to Exclusive is not allowed
+
+print
+----
+num=1
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+# ------------------------------------------------------------------------------
+# Tests where both a shared lock and (replicated) intent exist on a key, and the
+# intent is forgotten because of a lock update. In such cases, compatible
+# waiting requests should be allowed to proceed. They might re-discover the
+# intent, but that's okay -- we don't want requests waiting in the lock table if
+# the lock that was blocking them isn't being tracked.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req59 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req59
+----
+start-waiting: false
+
+acquire r=req59 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req60 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req60
+----
+start-waiting: false
+
+add-discovered k=a durability=r strength=intent txn=txn1 r=req60
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent], unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: false req: 60, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+
+scan r=req60
+----
+start-waiting: true
+
+new-request r=req61 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req61
+----
+start-waiting: true
+
+new-request r=req62 txn=none ts=10 spans=shared@a
+----
+
+scan r=req62
+----
+start-waiting: true
+
+new-request r=req63 txn=txn4 ts=10 spans=exclusive@a
+----
+
+scan r=req63
+----
+start-waiting: true
+
+new-request r=req64 txn=txn5 ts=10 spans=none@a
+----
+
+scan r=req64
+----
+start-waiting: true
+
+new-request r=req65 txn=txn5 ts=10 spans=none@a
+----
+
+scan r=req65
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent], unrepl [(str: Shared seq: 0)]
+   waiting readers:
+    req: 65, txn: 00000000-0000-0000-0000-000000000005
+    req: 64, txn: 00000000-0000-0000-0000-000000000005
+   queued locking requests:
+    active: true req: 60, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 61, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 62, strength: Shared, txn: none
+    active: true req: 63, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 60
+
+update txn=txn1 ts=11,0 epoch=0 span=a
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: false req: 60, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 61, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 63, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 63
+
+# ------------------------------------------------------------------------------
+# Test when a locking request drops out of a wait queue and makes other actively
+# waiting requests compatible as a result. They should be able to proceed.
+# Serves as a regression test for
+# https://github.com/cockroachdb/cockroach/issues/111144.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req66 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req66
+----
+start-waiting: false
+
+acquire r=req66 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req67 txn=txn2 ts=10 spans=exclusive@a
+----
+
+scan r=req67
+----
+start-waiting: true
+
+new-request r=req68 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req68
+----
+start-waiting: true
+
+new-request r=req69 txn=txn4 ts=10 spans=shared@a
+----
+
+scan r=req69
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 67, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 68, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 69, strength: Shared, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 67
+
+dequeue r=req67
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: false req: 68, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 69, strength: Shared, txn: 00000000-0000-0000-0000-000000000004
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: false req: 68, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 69, strength: Shared, txn: 00000000-0000-0000-0000-000000000004
+
+# ------------------------------------------------------------------------------
+# Regression test for
+# https://github.com/cockroachdb/cockroach/issues/113924#issuecomment-1799057694.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req70 txn=txn1 ts=10 spans=intent@a
+----
+
+scan r=req70
+----
+start-waiting: false
+
+new-request r=req71 txn=none ts=10 spans=intent@a
+----
+
+scan r=req71
+----
+start-waiting: false
+
+add-discovered r=req71 txn=txn2 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: repl [Shared]
+   queued locking requests:
+    active: false req: 71, strength: Intent, txn: none
+
+scan r=req70
+----
+start-waiting: true
+
+new-request r=req72 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req72
+----
+start-waiting: true
+
+new-request r=req73 txn=none ts=10 spans=shared@a
+----
+
+scan r=req73
+----
+start-waiting: true
+
+new-request r=req74 txn=none ts=10 spans=intent@a
+----
+
+scan r=req74
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: repl [Shared]
+   queued locking requests:
+    active: true req: 70, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 71, strength: Intent, txn: none
+    active: true req: 72, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 73, strength: Shared, txn: none
+    active: true req: 74, strength: Intent, txn: none
+   distinguished req: 70
+
+release txn=txn2 span=a
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 70, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 71, strength: Intent, txn: none
+    active: true req: 72, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 73, strength: Shared, txn: none
+    active: true req: 74, strength: Intent, txn: none
+   distinguished req: 72
+
+dequeue r=req70
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 72, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 74, strength: Intent, txn: none
+   distinguished req: 74
+
+# ------------------------------------------------------------------------------
+# Ensure when a lock is acquired, and we release other locking requests from the
+# transaction that acquired the lock, wait queues are copacetic.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req75 txn=txn3 ts=10 spans=exclusive@a
+----
+
+scan r=req75
+----
+start-waiting: false
+
+acquire r=req75 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req76 txn=txn1 ts=10 spans=shared@b
+----
+
+scan r=req76
+----
+start-waiting: false
+
+acquire r=req76 k=b durability=u strength=shared
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req77 txn=txn2 ts=10 spans=shared@a+shared@b
+----
+
+scan r=req77
+----
+start-waiting: true
+
+new-request r=req78 txn=txn2 ts=10 spans=exclusive@b
+----
+
+scan r=req78
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 77, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 77
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 78, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 78
+
+release txn=txn3 span=a
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 77, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 78, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 78
+
+scan r=req77
+----
+start-waiting: false
+
+print
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 77, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: false req: 77, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 78, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 78
+
+new-request r=req79 txn=txn4 ts=10 spans=shared@b
+----
+
+scan r=req79
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 77, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: false req: 77, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 78, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 79, strength: Shared, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 78
+
+# The shared lock acquisition by request 77 should remove request 78 from the
+# wait queue as they both belong to txn 2. Request 78 will detect it's trying to
+# promote its lock and get an error (shown after). However, once request 78 is
+# removed, there's no reason for request 79 to actively wait at this key. It
+# should acquire a claim by marking itself as inactive.
+acquire r=req77 k=b durability=u strength=shared
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 77, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: false req: 79, strength: Shared, txn: 00000000-0000-0000-0000-000000000004
+
+scan r=req78
+----
+lock promotion from Shared to Exclusive is not allowed
+
+# -----------------------------------------------------------------------------
+# Test when a non-transactional request finds a lock held by a finalized
+# transaction during its scan of the lock table, and thus removes itself from
+# the lock's wait queue, it also recomputes the wait queue. This recomputation
+# should nudge any other actively waiting non-transactional requests at the head
+# of the wait queue to proceed. Additionally, if present, transactional
+# request(s) should be able to acquire a (possibly joint) claim.
+# -----------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req80 txn=txn3 ts=10 spans=shared@b
+----
+
+scan r=req80
+----
+start-waiting: false
+
+acquire r=req80 k=b durability=u strength=shared
+----
+num=1
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req81 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req81
+----
+start-waiting: false
+
+acquire r=req81 k=a durability=r strength=shared
+----
+num=1
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req82 txn=none ts=10 spans=exclusive@a+exclusive@b
+----
+
+scan r=req82
+----
+start-waiting: true
+
+add-discovered r=req82 k=a txn=txn1 strength=shared
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
+   queued locking requests:
+    active: false req: 82, strength: Exclusive, txn: none
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 82, strength: Exclusive, txn: none
+   distinguished req: 82
+
+guard-state r=req82
+----
+new: state=waitForDistinguished txn=txn3 key="b" held=true guard-strength=Exclusive
+
+new-request r=req83 txn=none ts=10 spans=shared@a
+----
+
+scan r=req83
+----
+start-waiting: true
+
+new-request r=req84 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req84
+----
+start-waiting: true
+
+new-request r=req85 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req85
+----
+start-waiting: true
+
+new-request r=req86 txn=txn4 ts=10 spans=exclusive@a
+----
+
+scan r=req86
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
+   queued locking requests:
+    active: false req: 82, strength: Exclusive, txn: none
+    active: true req: 83, strength: Shared, txn: none
+    active: true req: 84, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 85, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 86, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 83
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 82, strength: Exclusive, txn: none
+   distinguished req: 82
+
+pushed-txn-updated txn=txn1 status=aborted
+----
+
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared] [holder finalized: aborted]
+   queued locking requests:
+    active: false req: 82, strength: Exclusive, txn: none
+    active: true req: 83, strength: Shared, txn: none
+    active: true req: 84, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 85, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 86, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 83
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 82, strength: Exclusive, txn: none
+   distinguished req: 82
+
+scan r=req82
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared] [holder finalized: aborted]
+   queued locking requests:
+    active: false req: 84, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 85, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 86, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 86
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 82, strength: Exclusive, txn: none
+   distinguished req: 82

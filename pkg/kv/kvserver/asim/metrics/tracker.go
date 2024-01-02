@@ -41,6 +41,7 @@ type StoreMetrics struct {
 	RebalanceSentBytes int64
 	RebalanceRcvdBytes int64
 	RangeSplits        int64
+	DiskFractionUsed   float64
 }
 
 // the MetricsTracker to report new store metrics for a tick.
@@ -118,6 +119,7 @@ func (mt *Tracker) Tick(ctx context.Context, tick time.Time, s state.State) {
 			RebalanceSentBytes: u.RebalanceSentBytes,
 			RebalanceRcvdBytes: u.RebalanceRcvdBytes,
 			RangeSplits:        u.RangeSplits,
+			DiskFractionUsed:   desc.Capacity.FractionUsed(),
 		}
 		sms = append(sms, sm)
 	}

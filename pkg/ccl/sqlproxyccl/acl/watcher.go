@@ -214,10 +214,13 @@ func NewWatcher(ctx context.Context, opts ...Option) (*Watcher, error) {
 func (w *Watcher) addAccessController(
 	ctx context.Context, controller AccessController, next chan AccessController,
 ) {
-	w.mu.Lock()
-	index := len(w.controllers)
-	w.controllers = append(w.controllers, controller)
-	w.mu.Unlock()
+	var index int
+	func() {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		index = len(w.controllers)
+		w.controllers = append(w.controllers, controller)
+	}()
 
 	if next != nil {
 		go func() {
@@ -235,51 +238,60 @@ func (w *Watcher) addAccessController(
 func (w *Watcher) updateAccessController(
 	ctx context.Context, index int, controller AccessController,
 ) {
-	w.mu.Lock()
-	copy := w.listeners.Clone()
-	w.controllers[index] = controller
-	controllers := append([]AccessController(nil), w.controllers...)
-	w.mu.Unlock()
+	var copy *btree.BTree
+	var controllers []AccessController
+	func() {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		copy = w.listeners.Clone()
+		w.controllers[index] = controller
+		controllers = append([]AccessController(nil), w.controllers...)
+	}()
 
 	checkListeners(ctx, copy, controllers)
 }
 
-// ListenForDenied Adds a listener to the watcher for the given connection. If the
-// connection is already blocked a nil remove function is returned and an error
-// is returned immediately.
+// ListenForDenied Adds a listener to the watcher for the given connection. If
+// the connection is already blocked a nil remove function is returned and an
+// error is returned immediately.
 //
 // Example Usage:
 //
-//	remove, err := w.ListenForDenied(ctx, connection, func(err error) {
+//	removeFn, err := w.ListenForDenied(ctx, connection, func(err error) {
 //	  /* connection was blocked by change */
 //	})
 //
-// if err != nil { /*connection already blocked*/ }
-// defer remove()
+//	if err != nil { /*connection already blocked*/ }
+//	defer removeFn()
 //
-// Warning:
-// Do not call remove() within the error callback. It would deadlock.
+// WARNING: Do not call removeFn() within the error callback. It would deadlock.
 func (w *Watcher) ListenForDenied(
 	ctx context.Context, connection ConnectionTags, callback func(error),
 ) (func(), error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	lst, controllers := func() (*listener, []AccessController) {
+		w.mu.Lock()
+		defer w.mu.Unlock()
 
-	if err := checkConnection(ctx, connection, w.controllers); err != nil {
+		id := w.nextID
+		w.nextID++
+
+		l := &listener{
+			id:         id,
+			connection: connection,
+		}
+		l.mu.denied = callback
+
+		w.listeners.ReplaceOrInsert(l)
+
+		// We need a new copy of w.controllers so that it doesn't race with the
+		// add and update operations.
+		return l, append([]AccessController(nil), w.controllers...)
+	}()
+	if err := checkConnection(ctx, connection, controllers); err != nil {
+		w.removeListener(lst)
 		return nil, err
 	}
-
-	id := w.nextID
-	w.nextID++
-
-	l := &listener{
-		id:         id,
-		connection: connection,
-	}
-	l.mu.denied = callback
-
-	w.listeners.ReplaceOrInsert(l)
-	return func() { w.removeListener(l) }, nil
+	return func() { w.removeListener(lst) }, nil
 }
 
 func (w *Watcher) removeListener(l *listener) {
@@ -315,6 +327,8 @@ func checkListeners(ctx context.Context, listeners *btree.BTree, controllers []A
 	})
 }
 
+// NOTE: checkConnection may grab a lock, and could be blocked waiting for it,
+// so callers should not hold a global lock while calling this.
 func checkConnection(
 	ctx context.Context, connection ConnectionTags, controllers []AccessController,
 ) error {

@@ -37,7 +37,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -53,13 +56,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -122,13 +129,6 @@ This metric is thus not an indicator of KV health.`,
 		Unit:        metric.Unit_COUNT,
 	}
 
-	metaDiskStalls = metric.Metadata{
-		Name:        "engine.stalls",
-		Help:        "Number of disk stalls detected on this node",
-		Measurement: "Disk stalls detected",
-		Unit:        metric.Unit_COUNT,
-	}
-
 	metaInternalBatchRPCMethodCount = metric.Metadata{
 		Name:        "rpc.method.%s.recv",
 		Help:        "Number of %s requests processed",
@@ -142,31 +142,106 @@ This metric is thus not an indicator of KV health.`,
 		Measurement: "Batches",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	metaBatchRequestsBytes = metric.Metadata{
+		Name:        "batch_requests.bytes",
+		Help:        `Total byte count of batch requests processed`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaBatchResponsesBytes = metric.Metadata{
+		Name:        "batch_responses.bytes",
+		Help:        `Total byte count of batch responses received`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaCrossRegionBatchRequest = metric.Metadata{
+		Name: "batch_requests.cross_region.bytes",
+		Help: `Total byte count of batch requests processed cross region when region
+		tiers are configured`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaCrossRegionBatchResponse = metric.Metadata{
+		Name: "batch_responses.cross_region.bytes",
+		Help: `Total byte count of batch responses received cross region when region
+		tiers are configured`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaCrossZoneBatchRequest = metric.Metadata{
+		Name: "batch_requests.cross_zone.bytes",
+		Help: `Total byte count of batch requests processed cross zone within
+		the same region when region and zone tiers are configured. However, if the
+		region tiers are not configured, this count may also include batch data sent
+		between different regions. Ensuring consistent configuration of region and
+		zone tiers across nodes helps to accurately monitor the data transmitted.`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaCrossZoneBatchResponse = metric.Metadata{
+		Name: "batch_responses.cross_zone.bytes",
+		Help: `Total byte count of batch responses received cross zone within the
+		same region when region and zone tiers are configured. However, if the
+		region tiers are not configured, this count may also include batch data
+		received between different regions. Ensuring consistent configuration of
+		region and zone tiers across nodes helps to accurately monitor the data
+		transmitted.`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaActiveRangeFeed = metric.Metadata{
+		Name:        "rpc.streams.rangefeed.active",
+		Help:        `Number of currently running RangeFeed streams`,
+		Measurement: "Streams",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTotalRangeFeed = metric.Metadata{
+		Name:        "rpc.streams.rangefeed.recv",
+		Help:        `Total number of RangeFeed streams`,
+		Measurement: "Streams",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaActiveMuxRangeFeed = metric.Metadata{
+		Name:        "rpc.streams.mux_rangefeed.active",
+		Help:        `Number of currently running MuxRangeFeed streams`,
+		Measurement: "Streams",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTotalMuxRangeFeed = metric.Metadata{
+		Name:        "rpc.streams.mux_rangefeed.recv",
+		Help:        `Total number of MuxRangeFeed streams`,
+		Measurement: "Streams",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Cluster settings.
 var (
 	// graphiteEndpoint is host:port, if any, of Graphite metrics server.
 	graphiteEndpoint = settings.RegisterStringSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"external.graphite.endpoint",
 		"if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port",
 		"",
-	).WithPublic()
+		settings.WithPublic)
+
 	// graphiteInterval is how often metrics are pushed to Graphite, if enabled.
 	graphiteInterval = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		graphiteIntervalKey,
 		"the interval at which metrics are pushed to Graphite (if enabled)",
 		10*time.Second,
 		settings.NonNegativeDurationWithMaximum(maxGraphiteInterval),
-	).WithPublic()
+		settings.WithPublic)
+
 	RedactServerTracesForSecondaryTenants = settings.RegisterBoolSetting(
 		settings.SystemOnly,
 		"server.secondary_tenants.redact_trace.enabled",
-		"controls if server side traces are redacted for tenant operations",
+		"if enabled, storage/KV trace results are redacted when returned to a virtual cluster",
 		true,
-	).WithPublic()
+		settings.WithName("trace.redact_at_virtual_cluster_boundary.enabled"),
+	)
 
 	slowRequestHistoricalStackThreshold = settings.RegisterDurationSetting(
 		settings.SystemOnly,
@@ -176,28 +251,51 @@ var (
 	)
 )
 
-type nodeMetrics struct {
-	Latency    metric.IHistogram
-	Success    *metric.Counter
-	Err        *metric.Counter
-	DiskStalls *metric.Counter
+// By default, stores will be started concurrently.
+// To start stores sequentially set the environment variable
+// COCKROACH_CONCURRENT_STORE_START=false
+var startStoresAsync = envutil.EnvOrDefaultBool("COCKROACH_CONCURRENT_STORE_START", true)
 
-	BatchCount   *metric.Counter
-	MethodCounts [kvpb.NumMethods]*metric.Counter
+type nodeMetrics struct {
+	Latency metric.IHistogram
+	Success *metric.Counter
+	Err     *metric.Counter
+
+	BatchCount                    *metric.Counter
+	MethodCounts                  [kvpb.NumMethods]*metric.Counter
+	BatchRequestsBytes            *metric.Counter
+	BatchResponsesBytes           *metric.Counter
+	CrossRegionBatchRequestBytes  *metric.Counter
+	CrossRegionBatchResponseBytes *metric.Counter
+	CrossZoneBatchRequestBytes    *metric.Counter
+	CrossZoneBatchResponseBytes   *metric.Counter
+	NumRangeFeed                  *metric.Counter
+	ActiveRangeFeed               *metric.Gauge
+	NumMuxRangeFeed               *metric.Counter
+	ActiveMuxRangeFeed            *metric.Gauge
 }
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
 	nm := nodeMetrics{
 		Latency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:     metric.HistogramModePreferHdrLatency,
-			Metadata: metaExecLatency,
-			Duration: histogramWindow,
-			Buckets:  metric.IOLatencyBuckets,
+			Mode:         metric.HistogramModePreferHdrLatency,
+			Metadata:     metaExecLatency,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
-		Success:    metric.NewCounter(metaExecSuccess),
-		Err:        metric.NewCounter(metaExecError),
-		DiskStalls: metric.NewCounter(metaDiskStalls),
-		BatchCount: metric.NewCounter(metaInternalBatchRPCCount),
+		Success:                       metric.NewCounter(metaExecSuccess),
+		Err:                           metric.NewCounter(metaExecError),
+		BatchCount:                    metric.NewCounter(metaInternalBatchRPCCount),
+		BatchRequestsBytes:            metric.NewCounter(metaBatchRequestsBytes),
+		BatchResponsesBytes:           metric.NewCounter(metaBatchResponsesBytes),
+		CrossRegionBatchRequestBytes:  metric.NewCounter(metaCrossRegionBatchRequest),
+		CrossRegionBatchResponseBytes: metric.NewCounter(metaCrossRegionBatchResponse),
+		CrossZoneBatchRequestBytes:    metric.NewCounter(metaCrossZoneBatchRequest),
+		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
+		ActiveRangeFeed:               metric.NewGauge(metaActiveRangeFeed),
+		NumRangeFeed:                  metric.NewCounter(metaTotalRangeFeed),
+		ActiveMuxRangeFeed:            metric.NewGauge(metaActiveMuxRangeFeed),
+		NumMuxRangeFeed:               metric.NewCounter(metaTotalMuxRangeFeed),
 	}
 
 	for i := range nm.MethodCounts {
@@ -222,6 +320,42 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *kvpb.Error) {
 		nm.Success.Inc(1)
 	}
 	nm.Latency.RecordValue(d.Nanoseconds())
+}
+
+// updateCrossLocalityMetricsOnBatchRequest updates nodeMetrics for batch
+// requests processed on the node. The metrics being updated include 1. total
+// byte count of batch requests processed 2. cross-region metrics, which monitor
+// activities across different regions, and 3. cross-zone metrics, which monitor
+// activities across different zones within the same region or in cases where
+// region tiers are not configured. These metrics may include batches that were
+// not successfully sent but were terminated at an early stage.
+func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchRequest(
+	comparisonResult roachpb.LocalityComparisonType, inc int64,
+) {
+	nm.BatchRequestsBytes.Inc(inc)
+	switch comparisonResult {
+	case roachpb.LocalityComparisonType_CROSS_REGION:
+		nm.CrossRegionBatchRequestBytes.Inc(inc)
+	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+		nm.CrossZoneBatchRequestBytes.Inc(inc)
+	}
+}
+
+// updateCrossLocalityMetricsOnBatchResponse updates nodeMetrics for batch
+// responses that are received back. It updates based on the comparisonResult
+// parameter determined during the initial batch requests check. The underlying
+// assumption is that the response should match the cross-region or cross-zone
+// nature of the requests.
+func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
+	comparisonResult roachpb.LocalityComparisonType, inc int64,
+) {
+	nm.BatchResponsesBytes.Inc(inc)
+	switch comparisonResult {
+	case roachpb.LocalityComparisonType_CROSS_REGION:
+		nm.CrossRegionBatchResponseBytes.Inc(inc)
+	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+		nm.CrossZoneBatchResponseBytes.Inc(inc)
+	}
 }
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -255,6 +389,7 @@ type Node struct {
 	tenantUsage multitenant.TenantUsageServer
 
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher
+	tenantInfoWatcher     *tenantcapabilitieswatcher.Watcher
 
 	spanConfigAccessor spanconfig.KVAccessor // powers the span configuration RPCs
 
@@ -270,6 +405,14 @@ type Node struct {
 
 	// Used to collect samples for the key visualizer.
 	spanStatsCollector *spanstatscollector.SpanStatsCollector
+
+	// versionUpdateMu is used by the TenantSettings endpoint
+	// to inform tenant servers of storage version changes.
+	versionUpdateMu struct {
+		syncutil.Mutex
+		encodedVersion string
+		updateCh       chan struct{}
+	}
 }
 
 var _ kvpb.InternalServer = &Node{}
@@ -316,23 +459,25 @@ func GetBootstrapSchema(
 func bootstrapCluster(
 	ctx context.Context, engines []storage.Engine, initCfg initServerCfg,
 ) (*initState, error) {
+	// We expect all the stores to be empty at this point, except for
+	// the store cluster version key. Assert so.
+	//
+	// TODO(jackson): Eventually we should be able to avoid opening the
+	// engines altogether until here.
+	if err := assertEnginesEmpty(engines); err != nil {
+		return nil, err
+	}
+
+	// We use our binary version to bootstrap the cluster.
+	bootstrapVersion := clusterversion.ClusterVersion{Version: initCfg.latestVersion}
+	if err := kvstorage.WriteClusterVersionToEngines(ctx, engines, bootstrapVersion); err != nil {
+		return nil, err
+	}
+
 	clusterID := uuid.MakeV4()
 	// TODO(andrei): It'd be cool if this method wouldn't do anything to engines
 	// other than the first one, and let regular node startup code deal with them.
-	var bootstrapVersion clusterversion.ClusterVersion
 	for i, eng := range engines {
-		cv := eng.MinVersion()
-		if cv.Major == 0 {
-			return nil, errors.Errorf("missing bootstrap version")
-		}
-
-		// bootstrapCluster requires matching cluster versions on all engines.
-		if i == 0 {
-			bootstrapVersion.Version = cv
-		} else if bootstrapVersion.Version != cv {
-			return nil, errors.Errorf("found cluster versions %s and %s", bootstrapVersion, cv)
-		}
-
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
 			NodeID:    kvstorage.FirstNodeID,
@@ -354,23 +499,24 @@ func bootstrapCluster(
 				DefaultSystemZoneConfig: &initCfg.defaultSystemZoneConfig,
 				Codec:                   keys.SystemSQLCodec,
 			}
-			if initCfg.testingKnobs.Server != nil {
-				knobs := initCfg.testingKnobs.Server.(*TestingKnobs)
-				// If BinaryVersionOverride is set, and our `binaryMinSupportedVersion`
-				// is at its default value, we must populate the cluster with initial
-				// data from the `binaryMinSupportedVersion`. This cluster will then run
-				// the necessary upgrades until `BinaryVersionOverride` before being
-				// ready to use in the test.
-				if knobs.BinaryVersionOverride != (roachpb.Version{}) {
-					if initCfg.binaryMinSupportedVersion.Equal(
-						clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)) {
-						initialValuesOpts.OverrideKey = clusterversion.BinaryMinSupportedVersionKey
-					}
-				}
-				if knobs.BootstrapVersionKeyOverride != 0 {
-					initialValuesOpts.OverrideKey = initCfg.testingKnobs.Server.(*TestingKnobs).BootstrapVersionKeyOverride
+			for _, v := range bootstrap.VersionsWithInitialValues() {
+				if initCfg.latestVersion == v.Version() {
+					initialValuesOpts.OverrideKey = v
+					break
 				}
 			}
+			if initialValuesOpts.OverrideKey == 0 {
+				if initCfg.latestVersion.Less(clusterversion.MinSupported.Version()) {
+					// As an exception, we tolerate tests creating older versions; we just
+					// use the minimum supported version.
+					// TODO(radu): should we make sure there are no upgrades for versions
+					// earlier than this still registered?
+					initialValuesOpts.OverrideKey = clusterversion.MinSupported
+				} else {
+					return nil, errors.AssertionFailedf("cannot bootstrap at version %s", initCfg.latestVersion)
+				}
+			}
+
 			initialValues, tableSplits, err := initialValuesOpts.GenerateInitialValues()
 			if err != nil {
 				return nil, err
@@ -395,7 +541,9 @@ func bootstrapCluster(
 		}
 	}
 
-	return inspectEngines(ctx, engines, initCfg.binaryVersion, initCfg.binaryMinSupportedVersion)
+	// Note that we wrote initcfg.binaryVersion, that will always be the version
+	// that inspectEngines determines.
+	return inspectEngines(ctx, engines, initCfg.latestVersion, initCfg.minSupportedVersion)
 }
 
 // NewNode returns a new instance of Node.
@@ -414,6 +562,7 @@ func NewNode(
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	tenantUsage multitenant.TenantUsageServer,
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher,
+	tenantInfoWatcher *tenantcapabilitieswatcher.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
 	spanConfigReporter spanconfig.Reporter,
 ) *Node {
@@ -428,15 +577,13 @@ func NewNode(
 		clusterID:             clusterID,
 		tenantUsage:           tenantUsage,
 		tenantSettingsWatcher: tenantSettingsWatcher,
+		tenantInfoWatcher:     tenantInfoWatcher,
 		spanConfigAccessor:    spanConfigAccessor,
 		spanConfigReporter:    spanConfigReporter,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 		spanStatsCollector:    spanstatscollector.New(cfg.Settings),
 	}
-	n.storeCfg.KVAdmissionController = kvadmission.MakeController(
-		kvAdmissionQ, elasticCPUGrantCoord, storeGrantCoords, cfg.Settings,
-	)
-	n.storeCfg.SchedulerLatencyListener = elasticCPUGrantCoord.SchedulerLatencyListener
+	n.versionUpdateMu.updateCh = make(chan struct{})
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
@@ -494,11 +641,16 @@ func (n *Node) start(
 		Locality:        locality,
 		LocalityAddress: localityAddress,
 		ClusterName:     clusterName,
-		ServerVersion:   n.storeCfg.Settings.Version.BinaryVersion(),
+		ServerVersion:   n.storeCfg.Settings.Version.LatestVersion(),
 		BuildTag:        build.GetInfo().Tag,
 		StartedAt:       n.startedAt,
 		HTTPAddress:     util.MakeUnresolvedAddr(httpAddr.Network(), httpAddr.String()),
 	}
+
+	// Track changes to the version setting to inform the tenant connector.
+	n.storeCfg.Settings.Version.SetOnChange(n.notifyClusterVersionChange)
+	// Also update the encoded copy immediately.
+	n.notifyClusterVersionChange(ctx, n.storeCfg.Settings.Version.ActiveVersion(ctx))
 
 	// Gossip the node descriptor to make this node addressable by node ID.
 	n.storeCfg.Gossip.NodeID.Set(ctx, n.Descriptor.NodeID)
@@ -506,15 +658,49 @@ func (n *Node) start(
 		return errors.Wrapf(err, "couldn't gossip descriptor for node %d", n.Descriptor.NodeID)
 	}
 
-	// Create stores from the engines that were already initialized.
-	for _, e := range state.initializedEngines {
-		s := kvserver.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
-		if err := s.Start(workersCtx, n.stopper); err != nil {
-			return errors.Wrap(err, "failed to start store")
+	// Create stores from engines that are already initialized. This uses a
+	// channel to collect errors when starting stores in separate goroutines.
+	// The channel is a buffered channel with the same size as the number of
+	// stores so worker go routines will never wait on the channel.
+	var sem *quotapool.IntPool
+	if !startStoresAsync {
+		sem = quotapool.NewIntPool("store start concurrency", 1)
+	}
+	engineErrC := make(chan error, len(state.initializedEngines))
+	for i := range state.initializedEngines {
+		engine := state.initializedEngines[i]
+		err := n.stopper.RunAsyncTaskEx(ctx,
+			stop.TaskOpts{TaskName: "initialize-stores", SpanOpt: stop.FollowsFromSpan, Sem: sem, WaitForSem: true},
+			func(ctx context.Context) {
+				start := timeutil.Now()
+				s := kvserver.NewStore(ctx, n.storeCfg, engine, &n.Descriptor)
+				if err := s.Start(workersCtx, n.stopper); err != nil {
+					engineErrC <- errors.Wrap(err, "failed to start store")
+					return
+				}
+				n.addStore(ctx, s)
+				log.Infof(ctx, "initialized store s%s in %s (%d replicas)",
+					s.StoreID(), timeutil.Since(start).Truncate(time.Millisecond), s.ReplicaCount())
+				engineErrC <- nil
+			})
+		if err != nil {
+			return err
 		}
+	}
 
-		n.addStore(ctx, s)
-		log.Infof(ctx, "initialized store s%s", s.StoreID())
+	// Collect errors from the go routines and return the first error received.
+	// This also waits for all stores to finish starting.
+	for range state.initializedEngines {
+		select {
+		case <-n.stopper.ShouldQuiesce():
+			return errors.New("shutting down")
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-engineErrC:
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	// Verify all initialized stores agree on cluster and node IDs.
@@ -608,7 +794,7 @@ func (n *Node) start(
 	allEngines = append(allEngines, state.uninitializedEngines...)
 	for _, e := range allEngines {
 		t := e.Type()
-		log.Infof(ctx, "started with engine type %v", t)
+		log.Infof(ctx, "started with engine type %v", &t)
 	}
 	log.Infof(ctx, "started with attributes %v", attrs.Attrs)
 	return nil
@@ -724,7 +910,7 @@ func (n *Node) initializeAdditionalStores(
 			}
 
 			n.addStore(ctx, s)
-			log.Infof(ctx, "initialized store s%s", s.StoreID())
+			log.Infof(ctx, "initialized new store s%s", s.StoreID())
 
 			// Done regularly in Node.startGossiping, but this cuts down the time
 			// until this store is used for range allocations.
@@ -1169,6 +1355,7 @@ func (n *Node) batchInternal(
 	}()
 	if log.HasSpanOrEvent(ctx) {
 		log.Eventf(ctx, "node received request: %s", args.Summary())
+		defer log.Event(ctx, "node sending response")
 	}
 
 	tStart := timeutil.Now()
@@ -1176,9 +1363,7 @@ func (n *Node) batchInternal(
 	if err != nil {
 		return nil, err
 	}
-	if handle.ElasticCPUWorkHandle != nil {
-		ctx = admission.ContextWithElasticCPUWorkHandle(ctx, handle.ElasticCPUWorkHandle)
-	}
+	ctx = handle.AnnotateCtx(ctx)
 
 	var writeBytes *kvadmission.StoreWriteBytes
 	defer func() {
@@ -1222,10 +1407,16 @@ func (n *Node) batchInternal(
 	// replica to notice the cancellation and return a response. For this reason,
 	// we log the server-side trace of the cancelled request to help debug what
 	// the request was doing at the time it noticed the cancellation.
-	if pErr != nil && errors.IsAny(pErr.GoError(), context.Canceled, context.DeadlineExceeded) {
+	//
+	// To avoid log spam for now we only log the trace if the request was an
+	// ExportRequest.
+	if pErr != nil && ctx.Err() != nil && args.IsSingleExportRequest() {
 		if sp := tracing.SpanFromContext(ctx); sp != nil && !sp.IsNoop() {
-			log.Infof(ctx, "batch request %s failed with error: %s\ntrace:\n%s", args.String(),
-				pErr.GoError().Error(), sp.GetConfiguredRecording().String())
+			recording := sp.GetConfiguredRecording()
+			if recording.Len() != 0 {
+				log.Infof(ctx, "batch request %s failed with error: %v\ntrace:\n%s", args.String(),
+					pErr.GoError(), recording)
+			}
 		}
 	}
 
@@ -1233,6 +1424,36 @@ func (n *Node) batchInternal(
 	br.Error = pErr
 
 	return br, nil
+}
+
+// getLocalityComparison takes gatewayNodeID as input and returns the locality
+// comparison result between the gateway node and the current node. This result
+// indicates whether the two nodes are located in different regions or zones.
+func (n *Node) getLocalityComparison(
+	ctx context.Context, gatewayNodeID roachpb.NodeID,
+) roachpb.LocalityComparisonType {
+	gossip := n.storeCfg.Gossip
+	if gossip == nil {
+		log.VInfof(ctx, 2, "gossip is not configured")
+		return roachpb.LocalityComparisonType_UNDEFINED
+	}
+
+	gatewayNodeDesc, err := gossip.GetNodeDescriptor(gatewayNodeID)
+	if err != nil {
+		log.VInfof(ctx, 2,
+			"failed to perform look up for node descriptor %v", err)
+		return roachpb.LocalityComparisonType_UNDEFINED
+	}
+
+	comparisonResult, regionValid, zoneValid := n.Descriptor.Locality.CompareWithLocality(gatewayNodeDesc.Locality)
+	if !regionValid {
+		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross region")
+	}
+	if !zoneValid {
+		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross zone")
+	}
+
+	return comparisonResult
 }
 
 // incrementBatchCounters increments counters to track the batch and composite
@@ -1253,6 +1474,9 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 	// carry the associated log tags forward as doing so makes adding additional
 	// log tags more expensive and makes local calls differ from remote calls.
 	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(ctx)
+
+	comparisonResult := n.getLocalityComparison(ctx, args.GatewayNodeID)
+	n.metrics.updateCrossLocalityMetricsOnBatchRequest(comparisonResult, int64(args.Size()))
 
 	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
 	if !ok {
@@ -1297,6 +1521,8 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 		}
 		br.Error = kvpb.NewError(err)
 	}
+
+	n.metrics.updateCrossLocalityMetricsOnBatchResponse(comparisonResult, int64(br.Size()))
 	if buildutil.CrdbTestBuild && br.Error != nil && n.testingErrorEvent != nil {
 		n.testingErrorEvent(ctx, args, errors.DecodeError(ctx, br.Error.EncodedError))
 	}
@@ -1474,11 +1700,19 @@ func (n *Node) RangeLookup(
 
 // RangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_RangeFeedServer) error {
+	if args.StreamID > 0 || args.CloseStream {
+		return errors.AssertionFailedf("unexpected mux rangefeed arguments set when calling RangeFeed")
+	}
+
 	ctx := n.AnnotateCtx(stream.Context())
 	ctx = logtags.AddTag(ctx, "r", args.RangeID)
 	ctx = logtags.AddTag(ctx, "s", args.Replica.StoreID)
 	_, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 	defer restore()
+
+	n.metrics.NumRangeFeed.Inc(1)
+	n.metrics.ActiveRangeFeed.Inc(1)
+	defer n.metrics.ActiveRangeFeed.Inc(-1)
 
 	if err := errors.CombineErrors(future.Wait(ctx, n.stores.RangeFeed(args, stream))); err != nil {
 		// Got stream context error, probably won't be able to propagate it to the stream,
@@ -1499,6 +1733,7 @@ func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_Range
 // the old style RangeFeed deprecated.
 type setRangeIDEventSink struct {
 	ctx      context.Context
+	cancel   context.CancelFunc
 	rangeID  roachpb.RangeID
 	streamID int64
 	wrapped  *lockedMuxStream
@@ -1526,10 +1761,6 @@ type lockedMuxStream struct {
 	sendMu  syncutil.Mutex
 }
 
-func (s *lockedMuxStream) Context() context.Context {
-	return s.wrapped.Context()
-}
-
 func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
@@ -1542,7 +1773,7 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 // to avoid blocking on IO (sender.Send) during potentially critical areas.
 // Thus, the forwarding should happen on a dedicated goroutine.
 func newMuxRangeFeedCompletionWatcher(
-	ctx context.Context, stopper *stop.Stopper, sender *lockedMuxStream,
+	ctx context.Context, stopper *stop.Stopper, send func(e *kvpb.MuxRangeFeedEvent) error,
 ) (doneFn func(event *kvpb.MuxRangeFeedEvent), cleanup func(), _ error) {
 	// structure to help coordination of event forwarding and shutdown.
 	var fin = struct {
@@ -1565,14 +1796,12 @@ func newMuxRangeFeedCompletionWatcher(
 				toSend, fin.completed = fin.completed, nil
 				fin.Unlock()
 				for _, e := range toSend {
-					if err := sender.Send(e); err != nil {
+					if err := send(e); err != nil {
 						// If we failed to send, there is nothing else we can do.
 						// The stream is broken anyway.
 						return
 					}
 				}
-			case <-sender.wrapped.Context().Done():
-				return
 			case <-ctx.Done():
 				return
 			case <-stopper.ShouldQuiesce():
@@ -1609,11 +1838,22 @@ func newMuxRangeFeedCompletionWatcher(
 func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	muxStream := &lockedMuxStream{wrapped: stream}
 
-	rangefeedCompleted, cleanup, err := newMuxRangeFeedCompletionWatcher(stream.Context(), n.stopper, muxStream)
+	// All context created below should derive from this context, which is
+	// cancelled once MuxRangeFeed exits.
+	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
+	defer cancel()
+
+	rangefeedCompleted, cleanup, err := newMuxRangeFeedCompletionWatcher(ctx, n.stopper, muxStream.Send)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
+
+	n.metrics.NumMuxRangeFeed.Inc(1)
+	n.metrics.ActiveMuxRangeFeed.Inc(1)
+	defer n.metrics.ActiveMuxRangeFeed.Inc(-1)
+
+	var activeStreams sync.Map
 
 	for {
 		req, err := stream.Recv()
@@ -1621,23 +1861,55 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			return err
 		}
 
-		streamCtx := n.AnnotateCtx(stream.Context())
+		if req.CloseStream {
+			// Client issued a request to close previously established stream.
+			if v, loaded := activeStreams.LoadAndDelete(req.StreamID); loaded {
+				s := v.(*setRangeIDEventSink)
+				s.cancel()
+			} else {
+				// This is a bit strange, but it could happen if this stream completes
+				// just before we receive close request. So, just print out a warning.
+				if log.V(1) {
+					log.Infof(ctx, "closing unknown rangefeed stream ID %d", req.StreamID)
+				}
+			}
+			continue
+		}
+
+		streamCtx, cancel := context.WithCancel(ctx)
 		streamCtx = logtags.AddTag(streamCtx, "r", req.RangeID)
 		streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
+		streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
 
-		sink := setRangeIDEventSink{
+		streamSink := &setRangeIDEventSink{
 			ctx:      streamCtx,
+			cancel:   cancel,
 			rangeID:  req.RangeID,
 			streamID: req.StreamID,
 			wrapped:  muxStream,
 		}
+		activeStreams.Store(req.StreamID, streamSink)
 
-		// TODO(yevgeniy): Add observability into actively running rangefeeds.
-		f := n.stores.RangeFeed(req, &sink)
+		n.metrics.NumMuxRangeFeed.Inc(1)
+		n.metrics.ActiveMuxRangeFeed.Inc(1)
+		f := n.stores.RangeFeed(req, streamSink)
 		f.WhenReady(func(err error) {
+			n.metrics.ActiveMuxRangeFeed.Inc(-1)
+
+			_, loaded := activeStreams.LoadAndDelete(req.StreamID)
+			streamClosedByClient := !loaded
+			streamSink.cancel()
+
+			if streamClosedByClient && streamSink.ctx.Err() != nil {
+				// If the stream was explicitly closed by the client, we expect to see
+				// context.Canceled error.  In this case, return
+				// kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED to the client.
+				err = kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)
+			}
+
 			if err == nil {
 				cause := kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED
-				if !n.storeCfg.Settings.Version.IsActive(stream.Context(), clusterversion.V23_2) {
+				if !n.storeCfg.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
 					cause = kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED
 				}
 				err = kvpb.NewRangeFeedRetryError(cause)
@@ -1703,9 +1975,8 @@ func (n *Node) ResetQuorum(
 	log.Infof(ctx, "retrieved original range descriptor %s", desc)
 
 	// Check that we've actually lost quorum.
-	livenessMap := n.storeCfg.NodeLiveness.GetIsLiveMap()
 	available := desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
-		return livenessMap[rDesc.NodeID].IsLive
+		return n.storeCfg.NodeLiveness.GetNodeVitalityFromCache(rDesc.NodeID).IsLive(livenesspb.ReplicaProgress)
 	})
 	if available {
 		return nil, errors.Errorf("targeted range to recover has not lost quorum.")
@@ -1760,6 +2031,7 @@ func (n *Node) ResetQuorum(
 	// replicas from this fresh snapshot.
 	if err := kvserver.SendEmptySnapshot(
 		ctx,
+		n.clusterID.Get(),
 		n.storeCfg.Settings,
 		n.storeCfg.Tracer(),
 		conn,
@@ -1884,6 +2156,22 @@ func (n *Node) GossipSubscription(
 	}
 }
 
+func (n *Node) waitForTenantWatcherReadiness(
+	ctx context.Context,
+) (*tenantsettingswatcher.Watcher, *tenantcapabilitieswatcher.Watcher, error) {
+	settingsWatcher := n.tenantSettingsWatcher
+	if err := settingsWatcher.WaitForStart(ctx); err != nil {
+		return nil, nil, err
+	}
+
+	infoWatcher := n.tenantInfoWatcher
+	if err := infoWatcher.WaitForStart(ctx); err != nil {
+		return nil, nil, err
+	}
+
+	return settingsWatcher, infoWatcher, nil
+}
+
 // TenantSettings implements the kvpb.InternalServer interface.
 func (n *Node) TenantSettings(
 	args *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer,
@@ -1891,45 +2179,162 @@ func (n *Node) TenantSettings(
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
 
-	w := n.tenantSettingsWatcher
-	if err := w.WaitForStart(ctx); err != nil {
+	settingsWatcher, infoWatcher, err := n.waitForTenantWatcherReadiness(ctx)
+	if err != nil {
 		return stream.Send(&kvpb.TenantSettingsEvent{
 			Error: errors.EncodeError(ctx, err),
 		})
 	}
 
-	send := func(precedence kvpb.TenantSettingsPrecedence, overrides []kvpb.TenantSetting) error {
-		log.VInfof(ctx, 1, "sending precedence %d: %v", precedence, overrides)
+	// Do we even have a record for this tenant?
+	tInfo, infoCh, found := infoWatcher.GetInfo(args.TenantID)
+	if !found {
 		return stream.Send(&kvpb.TenantSettingsEvent{
+			Error: errors.EncodeError(ctx, &kvpb.MissingRecordError{}),
+		})
+	}
+
+	sendSettings := func(precedence kvpb.TenantSettingsEvent_Precedence, overrides []kvpb.TenantSetting, incremental bool) error {
+		log.VInfof(ctx, 1, "sending precedence %d (incremental=%v): %v", precedence, overrides, incremental)
+		return stream.Send(&kvpb.TenantSettingsEvent{
+			EventType:   kvpb.TenantSettingsEvent_SETTING_EVENT,
 			Precedence:  precedence,
-			Incremental: false,
+			Incremental: incremental,
 			Overrides:   overrides,
 		})
 	}
 
-	allOverrides, allCh := w.GetAllTenantOverrides()
-	if err := send(kvpb.AllTenantsOverrides, allOverrides); err != nil {
+	sendTenantInfo := func(
+		fakePrecedence kvpb.TenantSettingsEvent_Precedence,
+		tInfo tenantcapabilities.Entry,
+	) error {
+		log.VInfof(ctx, 1, "sending tenant info: %+v", tInfo)
+		// Note: we are piggy-backing on the TenantSetting streaming RPC
+		// to send non-setting data. This must be careful to work on
+		// SQL servers running previous versions of the CockroachDB code.
+		// To that end, we make the TenantSettingEvent "look like"
+		// a no-op setting change.
+		return stream.Send(&kvpb.TenantSettingsEvent{
+			EventType: kvpb.TenantSettingsEvent_METADATA_EVENT,
+			// IMPORTANT: setting Incremental to true ensures existing
+			// settings are preserved client-side in previous-version
+			// clients that do not know about the EventType field.
+			Incremental: true,
+			// An empty Overrides slice results in no-op client-side.
+			Overrides:  nil,
+			Precedence: fakePrecedence,
+
+			// These are the actual fields for our update.
+			Name:         tInfo.Name,
+			Capabilities: tInfo.TenantCapabilities,
+			// TODO(knz): remove the cast after we fix the dependency cycle
+			// between the protobufs.
+			ServiceMode: uint32(tInfo.ServiceMode),
+			DataState:   uint32(tInfo.DataState),
+		})
+	}
+
+	// Sanity check: this ensures that someone notices if the proto
+	// definition changes but the code below is not adapted.
+	if numPrecedences := len(kvpb.TenantSettingsEvent_Precedence_value); numPrecedences != 3 {
+		err := errors.AssertionFailedf("programming error: expected 3 precedence values, got %d", numPrecedences)
+		logcrash.ReportOrPanic(ctx, &n.execCfg.Settings.SV, "%w", err)
 		return err
 	}
 
-	tenantOverrides, tenantCh := w.GetTenantOverrides(args.TenantID)
-	if err := send(kvpb.SpecificTenantOverrides, tenantOverrides); err != nil {
+	// Send the initial state.
+
+	// Note: for compatibility with pre-23.1 tenant clients, it is
+	// important that all event types that convey data about the
+	// initial state of a tenant service be sent after the first
+	// SETTING_EVENT message that communicates overrides (for one of
+	// the two precedence levels), and before the second one (for the
+	// other precedence level).
+	//
+	// This is necessary because of a combination of factors:
+	//
+	// - For compatibility with older version tenant clients,
+	//   all non-setting event types must fake being a no-op
+	//   setting event (see the docstring on the EventType field).
+	//   A no-op fake setting event must have `Incremental` set to
+	//   `true`.
+	// - Meanwhile, older version tenant clients also assert that the
+	//   very first message sent by the server must have `Incremental`
+	//   set to `false`.
+	//
+	//   This means we can only send events of other types after the
+	//   first setting overrides event.
+	//
+	// - Then, separately, newer version tenant clients also
+	//   synchronize their startup on the reception of a tenant
+	//   setting event for each precedence level. This is because
+	//   these tenant clients must, in turn, remain compatible with
+	//   older version *KV servers* that do not send other event types
+	//   and send just 2 setting overrides events initially.
+	//
+	//   This means we cannot send other event types after the second
+	//   setting overrides event.
+
+	// Send the setting overrides for one precedence level.
+	const firstPrecedenceLevel = kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES
+	allOverrides, allCh := settingsWatcher.GetAllTenantOverrides(ctx)
+
+	// Inject the current storage logical version as an override; as the
+	// tenant server needs this to start up.
+	verSetting, versionUpdateCh := n.getVersionSettingWithUpdateCh(ctx)
+	allOverrides = append(allOverrides, verSetting)
+	if err := sendSettings(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides, false /* incremental */); err != nil {
+		return err
+	}
+
+	// Send the initial tenant metadata. See the explanatory comment
+	// above for details.
+	if err := sendTenantInfo(firstPrecedenceLevel, tInfo); err != nil {
+		return err
+	}
+
+	// Then send the initial setting overrides for the other precedence
+	// level. This is the payload that will let the tenant client
+	// connector signal readiness.
+	tenantOverrides, tenantCh := settingsWatcher.GetTenantOverrides(ctx, args.TenantID)
+	if err := sendSettings(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides, false /* incremental */); err != nil {
 		return err
 	}
 
 	for {
 		select {
+		case <-versionUpdateCh:
+			// The storage version has changed, send it again.
+			verSetting, versionUpdateCh = n.getVersionSettingWithUpdateCh(ctx)
+			if err := sendSettings(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES,
+				[]kvpb.TenantSetting{verSetting},
+				true /* incremental */); err != nil {
+				return err
+			}
+
+		case <-infoCh:
+			// Tenant metadata has changed, send it again.
+			tInfo, infoCh, _ = infoWatcher.GetInfo(args.TenantID)
+			const anyPrecedenceLevel = kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES
+			if err := sendTenantInfo(anyPrecedenceLevel, tInfo); err != nil {
+				return err
+			}
+
 		case <-allCh:
 			// All-tenant overrides have changed, send them again.
-			allOverrides, allCh = w.GetAllTenantOverrides()
-			if err := send(kvpb.AllTenantsOverrides, allOverrides); err != nil {
+			// TODO(multitenant): We can optimize this by only sending the delta since the last
+			// update, with Incremental set to true.
+			allOverrides, allCh = settingsWatcher.GetAllTenantOverrides(ctx)
+			if err := sendSettings(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides, false /* incremental */); err != nil {
 				return err
 			}
 
 		case <-tenantCh:
 			// Tenant-specific overrides have changed, send them again.
-			tenantOverrides, tenantCh = w.GetTenantOverrides(args.TenantID)
-			if err := send(kvpb.SpecificTenantOverrides, tenantOverrides); err != nil {
+			// TODO(multitenant): We can optimize this by only sending the delta since the last
+			// update, with Incremental set to true.
+			tenantOverrides, tenantCh = settingsWatcher.GetTenantOverrides(ctx, args.TenantID)
+			if err := sendSettings(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides, false /* incremental */); err != nil {
 				return err
 			}
 
@@ -1940,6 +2345,43 @@ func (n *Node) TenantSettings(
 			return stop.ErrUnavailable
 		}
 	}
+}
+
+// getVersionSettingWithUpdateCh returns the current encoded cluster
+// version as a TenantSetting, and a channel that is closed whenever
+// the version changes.
+func (n *Node) getVersionSettingWithUpdateCh(
+	ctx context.Context,
+) (kvpb.TenantSetting, <-chan struct{}) {
+	n.versionUpdateMu.Lock()
+	defer n.versionUpdateMu.Unlock()
+
+	setting := kvpb.TenantSetting{
+		InternalKey: clusterversion.KeyVersionSetting,
+		Value: settings.EncodedValue{
+			Type:  settings.VersionSettingValueType,
+			Value: n.versionUpdateMu.encodedVersion,
+		},
+	}
+
+	return setting, n.versionUpdateMu.updateCh
+}
+
+func (n *Node) notifyClusterVersionChange(
+	ctx context.Context, activeVersion clusterversion.ClusterVersion,
+) {
+	n.versionUpdateMu.Lock()
+	defer n.versionUpdateMu.Unlock()
+
+	encodedVersion, err := protoutil.Marshal(&activeVersion)
+	if err != nil {
+		logcrash.ReportOrPanic(ctx, &n.execCfg.Settings.SV, "%w", err)
+		return
+	}
+	n.versionUpdateMu.encodedVersion = string(encodedVersion)
+	// Notify listeners.
+	close(n.versionUpdateMu.updateCh)
+	n.versionUpdateMu.updateCh = make(chan struct{})
 }
 
 // Join implements the kvpb.InternalServer service. This is the

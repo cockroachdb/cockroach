@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -45,8 +46,8 @@ import (
 // the input slice, or has been shallow-copied appropriately to avoid
 // mutating the original requests).
 func optimizePuts(
-	reader storage.Reader, origReqs []kvpb.RequestUnion, distinctSpans bool,
-) []kvpb.RequestUnion {
+	ctx context.Context, reader storage.Reader, origReqs []kvpb.RequestUnion, distinctSpans bool,
+) ([]kvpb.RequestUnion, error) {
 	var minKey, maxKey roachpb.Key
 	var unique map[string]struct{}
 	if !distinctSpans {
@@ -54,12 +55,15 @@ func optimizePuts(
 	}
 	// Returns false on occurrence of a duplicate key.
 	maybeAddPut := func(key roachpb.Key) bool {
-		// Note that casting the byte slice key to a string does not allocate.
+		// The lookup will not copy key but the map insertion will, but since the
+		// map doesn't escape and we don't mutate the keys its safe to
+		// not allocate for both.
+		mapKey := encoding.UnsafeConvertBytesToString(key)
 		if unique != nil {
-			if _, ok := unique[string(key)]; ok {
+			if _, ok := unique[mapKey]; ok {
 				return false
 			}
-			unique[string(key)] = struct{}{}
+			unique[mapKey] = struct{}{}
 		}
 		if minKey == nil || bytes.Compare(key, minKey) < 0 {
 			minKey = key
@@ -91,17 +95,21 @@ func optimizePuts(
 	}
 
 	if firstUnoptimizedIndex < optimizePutThreshold { // don't bother if below this threshold
-		return origReqs
+		return origReqs, nil
 	}
 	// iter is being used to find the parts of the key range that is empty. We
 	// don't need to see intents for this purpose since intents also have
 	// provisional values that we will see.
-	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	iter, err := reader.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 		KeyTypes: storage.IterKeyTypePointsAndRanges,
 		// We want to include maxKey in our scan. Since UpperBound is exclusive, we
 		// need to set it to the key after maxKey.
-		UpperBound: maxKey.Next(),
+		UpperBound:   maxKey.Next(),
+		ReadCategory: storage.BatchEvalReadCategory,
 	})
+	if err != nil {
+		return nil, err
+	}
 	defer iter.Close()
 
 	// If there are enough puts in the run to justify calling seek,
@@ -114,7 +122,7 @@ func optimizePuts(
 		// TODO(bdarnell): return an error here instead of silently
 		// running without the optimization?
 		log.Errorf(context.TODO(), "Seek returned error; disabling blind-put optimization: %+v", err)
-		return origReqs
+		return origReqs, nil
 	} else if ok && bytes.Compare(iter.UnsafeKey().Key, maxKey) <= 0 {
 		iterKey = iter.UnsafeKey().Key.Clone()
 	}
@@ -142,7 +150,7 @@ func optimizePuts(
 			}
 		}
 	}
-	return reqs
+	return reqs, nil
 }
 
 // evaluateBatch evaluates a batch request by splitting it up into its
@@ -159,6 +167,7 @@ func evaluateBatch(
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	evalPath batchEvalPath,
+	omitInRangefeeds bool, // only relevant for transactional writes
 ) (_ *kvpb.BatchResponse, _ result.Result, retErr *kvpb.Error) {
 	defer func() {
 		// Ensure that errors don't carry the WriteTooOld flag set. The client
@@ -179,10 +188,15 @@ func evaluateBatch(
 	baHeader := ba.Header
 
 	br := ba.CreateReply()
+	var err error
 
 	// Optimize any contiguous sequences of put and conditional put ops.
 	if len(baReqs) >= optimizePutThreshold && evalPath == readWrite {
-		baReqs = optimizePuts(readWriter, baReqs, baHeader.DistinctSpans)
+		baReqs, err = optimizePuts(ctx, readWriter, baReqs, baHeader.DistinctSpans)
+	}
+	if err != nil {
+		pErr := kvpb.NewErrorWithTxn(err, baHeader.Txn)
+		return nil, result.Result{}, pErr
 	}
 
 	// Create a clone of the transaction to store the new txn state produced on
@@ -289,7 +303,7 @@ func evaluateBatch(
 		// may carry a response transaction and in the case of WriteTooOldError
 		// (which is sometimes deferred) it is fully populated.
 		curResult, err := evaluateCommand(
-			ctx, readWriter, rec, ms, ss, baHeader, args, reply, g, st, ui, evalPath,
+			ctx, readWriter, rec, ms, ss, baHeader, args, reply, g, st, ui, evalPath, omitInRangefeeds,
 		)
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
@@ -447,6 +461,7 @@ func evaluateCommand(
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	evalPath batchEvalPath,
+	omitInRangefeeds bool,
 ) (result.Result, error) {
 	var err error
 	var pd result.Result
@@ -466,6 +481,7 @@ func evaluateCommand(
 			Concurrency:           g,
 			Uncertainty:           ui,
 			DontInterleaveIntents: evalPath == readOnlyWithoutInterleavedIntents,
+			OmitInRangefeeds:      omitInRangefeeds,
 		}
 
 		if cmd.EvalRW != nil {

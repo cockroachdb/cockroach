@@ -40,13 +40,14 @@ const (
 
 // BackupOptions describes options for the BACKUP execution.
 type BackupOptions struct {
-	CaptureRevisionHistory     Expr
-	IncludeAllSecondaryTenants Expr
-	EncryptionPassphrase       Expr
-	Detached                   *DBool
-	EncryptionKMSURI           StringOrPlaceholderOptList
-	IncrementalStorage         StringOrPlaceholderOptList
-	ExecutionLocality          Expr
+	CaptureRevisionHistory          Expr
+	IncludeAllSecondaryTenants      Expr
+	EncryptionPassphrase            Expr
+	Detached                        *DBool
+	EncryptionKMSURI                StringOrPlaceholderOptList
+	IncrementalStorage              StringOrPlaceholderOptList
+	ExecutionLocality               Expr
+	UpdatesClusterMonitoringMetrics Expr
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -111,8 +112,9 @@ func (node *Backup) Format(ctx *FmtCtx) {
 	}
 
 	if !node.Options.IsDefault() {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }
 
@@ -145,6 +147,9 @@ type RestoreOptions struct {
 	SchemaOnly                       bool
 	VerifyData                       bool
 	UnsafeRestoreIncompatibleVersion bool
+	ExecutionLocality                Expr
+	ExperimentalOnline               bool
+	RemoveRegions                    bool
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -196,8 +201,9 @@ func (node *Restore) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.AsOf)
 	}
 	if !node.Options.IsDefault() {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }
 
@@ -306,8 +312,14 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 
 	if o.IncludeAllSecondaryTenants != nil {
 		maybeAddSep()
-		ctx.WriteString("include_all_secondary_tenants = ")
+		ctx.WriteString("include_all_virtual_clusters = ")
 		ctx.FormatNode(o.IncludeAllSecondaryTenants)
+	}
+
+	if o.UpdatesClusterMonitoringMetrics != nil {
+		maybeAddSep()
+		ctx.WriteString("updates_cluster_monitoring_metrics = ")
+		ctx.FormatNode(o.UpdatesClusterMonitoringMetrics)
 	}
 }
 
@@ -356,12 +368,19 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 
 	if o.IncludeAllSecondaryTenants != nil {
 		if other.IncludeAllSecondaryTenants != nil {
-			return errors.New("include_all_secondary_tenants specified multiple times")
+			return errors.New("include_all_virtual_clusters specified multiple times")
 		}
 	} else {
 		o.IncludeAllSecondaryTenants = other.IncludeAllSecondaryTenants
 	}
 
+	if o.UpdatesClusterMonitoringMetrics != nil {
+		if other.UpdatesClusterMonitoringMetrics != nil {
+			return errors.New("updates_cluster_monitoring_metrics option specified multiple times")
+		}
+	} else {
+		o.UpdatesClusterMonitoringMetrics = other.UpdatesClusterMonitoringMetrics
+	}
 	return nil
 }
 
@@ -369,12 +388,13 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 func (o BackupOptions) IsDefault() bool {
 	options := BackupOptions{}
 	return o.CaptureRevisionHistory == options.CaptureRevisionHistory &&
-		o.Detached == options.Detached &&
+		(o.Detached == nil || o.Detached == DBoolFalse) &&
 		cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
 		o.ExecutionLocality == options.ExecutionLocality &&
-		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants
+		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
+		o.UpdatesClusterMonitoringMetrics == options.UpdatesClusterMonitoringMetrics
 }
 
 // Format implements the NodeFormatter interface.
@@ -457,7 +477,7 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 
 	if o.IncludeAllSecondaryTenants != nil {
 		maybeAddSep()
-		ctx.WriteString("include_all_secondary_tenants = ")
+		ctx.WriteString("include_all_virtual_clusters = ")
 		ctx.FormatNode(o.IncludeAllSecondaryTenants)
 	}
 
@@ -469,13 +489,13 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 
 	if o.AsTenant != nil {
 		maybeAddSep()
-		ctx.WriteString("tenant_name = ")
+		ctx.WriteString("virtual_cluster_name = ")
 		ctx.FormatNode(o.AsTenant)
 	}
 
 	if o.ForceTenantID != nil {
 		maybeAddSep()
-		ctx.WriteString("tenant = ")
+		ctx.WriteString("virtual_cluster = ")
 		ctx.FormatNode(o.ForceTenantID)
 	}
 
@@ -491,6 +511,22 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 	if o.UnsafeRestoreIncompatibleVersion {
 		maybeAddSep()
 		ctx.WriteString("unsafe_restore_incompatible_version")
+	}
+
+	if o.ExecutionLocality != nil {
+		maybeAddSep()
+		ctx.WriteString("execution locality = ")
+		ctx.FormatNode(o.ExecutionLocality)
+	}
+
+	if o.ExperimentalOnline {
+		maybeAddSep()
+		ctx.WriteString("experimental deferred copy")
+	}
+
+	if o.RemoveRegions {
+		maybeAddSep()
+		ctx.WriteString("remove_regions")
 	}
 }
 
@@ -564,7 +600,8 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 	}
 
 	if o.SkipLocalitiesCheck {
-		if other.SkipLocalitiesCheck {
+		// If RemoveRegions is true, SkipLocalitiesCheck should also be true
+		if other.SkipLocalitiesCheck && !other.RemoveRegions {
 			return errors.New("skip_localities_check specified multiple times")
 		}
 	} else {
@@ -598,7 +635,7 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 	if o.ForceTenantID == nil {
 		o.ForceTenantID = other.ForceTenantID
 	} else if other.ForceTenantID != nil {
-		return errors.New("tenant option specified multiple times")
+		return errors.New("virtual_cluster option specified multiple times")
 	}
 
 	if o.SchemaOnly {
@@ -618,7 +655,7 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 
 	if o.IncludeAllSecondaryTenants != nil {
 		if other.IncludeAllSecondaryTenants != nil {
-			return errors.New("include_all_secondary_tenants specified multiple times")
+			return errors.New("include_all_virtual_clusters specified multiple times")
 		}
 	} else {
 		o.IncludeAllSecondaryTenants = other.IncludeAllSecondaryTenants
@@ -630,6 +667,28 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		}
 	} else {
 		o.UnsafeRestoreIncompatibleVersion = other.UnsafeRestoreIncompatibleVersion
+	}
+
+	if o.ExecutionLocality == nil {
+		o.ExecutionLocality = other.ExecutionLocality
+	} else if other.ExecutionLocality != nil {
+		return errors.New("execution locality option specified multiple times")
+	}
+
+	if o.ExperimentalOnline {
+		if other.ExperimentalOnline {
+			return errors.New("experimental deferred copy specified multiple times")
+		}
+	} else {
+		o.ExperimentalOnline = other.ExperimentalOnline
+	}
+
+	if o.RemoveRegions {
+		if other.RemoveRegions {
+			return errors.New("remove_regions specified multiple times")
+		}
+	} else {
+		o.RemoveRegions = other.RemoveRegions
 	}
 
 	return nil
@@ -656,7 +715,10 @@ func (o RestoreOptions) IsDefault() bool {
 		o.SchemaOnly == options.SchemaOnly &&
 		o.VerifyData == options.VerifyData &&
 		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
-		o.UnsafeRestoreIncompatibleVersion == options.UnsafeRestoreIncompatibleVersion
+		o.UnsafeRestoreIncompatibleVersion == options.UnsafeRestoreIncompatibleVersion &&
+		o.ExecutionLocality == options.ExecutionLocality &&
+		o.ExperimentalOnline == options.ExperimentalOnline &&
+		o.RemoveRegions == options.RemoveRegions
 }
 
 // BackupTargetList represents a list of targets.
@@ -677,7 +739,7 @@ func (tl *BackupTargetList) Format(ctx *FmtCtx) {
 		ctx.WriteString("SCHEMA ")
 		ctx.FormatNode(&tl.Schemas)
 	} else if tl.TenantID.Specified {
-		ctx.WriteString("TENANT ")
+		ctx.WriteString("VIRTUAL CLUSTER ")
 		ctx.FormatNode(&tl.TenantID)
 	} else {
 		if tl.Tables.SequenceOnly {

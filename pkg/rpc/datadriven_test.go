@@ -148,7 +148,6 @@ func setupEnv(t *testing.T) *ddEnv {
 	maxOffset := time.Duration(250)
 
 	clientCtx := newTestContext(clusterID, clock, maxOffset, stopper)
-	clientCtx.heartbeatInterval = 10 * time.Millisecond
 
 	env := &ddEnv{
 		clusterID: clusterID,

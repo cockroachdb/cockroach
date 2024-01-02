@@ -1248,6 +1248,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 			rebalanceConstraintsChecker,
 			replicas,
 			nil,
+			VoterTarget,
 			existingStoreLocalities,
 			func(context.Context, roachpb.StoreID) bool { return true },
 			options,
@@ -1661,4 +1662,37 @@ func TestMaxCapacity(t *testing.T) {
 			t.Errorf("store %d expected max capacity check: %t, actual %t", s.StoreID, e, a)
 		}
 	}
+}
+
+func TestCandidateListString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numCandidates = 3
+
+	cl := candidateList{}
+	for i := 1; i <= numCandidates; i++ {
+		cl = append(cl, candidate{
+			store:           roachpb.StoreDescriptor{StoreID: roachpb.StoreID(i)},
+			valid:           i%2 == 0,
+			fullDisk:        i%2 == 0,
+			necessary:       i%2 == 0,
+			voterNecessary:  i%2 == 0,
+			diversityScore:  float64(i / numCandidates),
+			ioOverloaded:    i%2 == 0,
+			ioOverloadScore: float64(i / numCandidates),
+			convergesScore:  i%3 - 1,
+			balanceScore:    balanceStatus(i%3 - 1),
+			hasNonVoter:     i%2 == 0,
+			rangeCount:      i,
+			details:         fmt.Sprintf("mock detail %d", i),
+		})
+	}
+
+	require.Equal(t, "[]", candidateList{}.String())
+	require.Equal(t, "[\n"+
+		"s1, valid:false, fulldisk:false, necessary:false, voterNecessary:false, diversity:0.00, ioOverloaded: false, ioOverload: 0.00, converges:0, balance:0, hasNonVoter:false, rangeCount:1, queriesPerSecond:0.00, details:(mock detail 1)\n"+
+		"s2, valid:true, fulldisk:true, necessary:true, voterNecessary:true, diversity:0.00, ioOverloaded: true, ioOverload: 0.00, converges:1, balance:1, hasNonVoter:true, rangeCount:2, queriesPerSecond:0.00, details:(mock detail 2)\n"+
+		"s3, valid:false, fulldisk:false, necessary:false, voterNecessary:false, diversity:1.00, ioOverloaded: false, ioOverload: 1.00, converges:-1, balance:-1, hasNonVoter:false, rangeCount:3, queriesPerSecond:0.00, details:(mock detail 3)]",
+		cl.String())
 }

@@ -15,11 +15,11 @@ package kvfeed
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -31,33 +31,45 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-// Config configures a kvfeed.
-type Config struct {
-	Settings                *cluster.Settings
-	DB                      *kv.DB
-	Codec                   keys.SQLCodec
-	Clock                   *hlc.Clock
-	Gossip                  gossip.OptionalGossip
-	Spans                   []roachpb.Span
-	CheckpointSpans         []roachpb.Span
-	CheckpointTimestamp     hlc.Timestamp
-	Targets                 changefeedbase.Targets
-	Writer                  kvevent.Writer
-	Metrics                 *kvevent.Metrics
+// MonitoringConfig is a set of callbacks which the kvfeed calls to provide
+// the caller with information about the state of the kvfeed.
+type MonitoringConfig struct {
+	// LaggingRangesCallback is called periodically with the number of lagging ranges
+	// in the kvfeed.
+	LaggingRangesCallback func(int64)
+	// LaggingRangesPollingInterval is how often the kv feed will poll for
+	// lagging ranges.
+	LaggingRangesPollingInterval time.Duration
+	// LaggingRangesThreshold is how far behind a range must be to be considered
+	// lagging.
+	LaggingRangesThreshold time.Duration
+
 	OnBackfillCallback      func() func()
 	OnBackfillRangeCallback func(int64) (func(), func())
-	MM                      *mon.BytesMonitor
-	WithDiff                bool
-	SchemaChangeEvents      changefeedbase.SchemaChangeEventClass
-	SchemaChangePolicy      changefeedbase.SchemaChangePolicy
-	SchemaFeed              schemafeed.SchemaFeed
+}
 
-	// FeedWatcher function is invoked along with the kv/schema feed.
-	// It may return an error which will cause kv feed to exit.
-	FeedWatcher func(ctx context.Context) error
+// Config configures a kvfeed.
+type Config struct {
+	Settings            *cluster.Settings
+	DB                  *kv.DB
+	Codec               keys.SQLCodec
+	Clock               *hlc.Clock
+	Spans               []roachpb.Span
+	CheckpointSpans     []roachpb.Span
+	CheckpointTimestamp hlc.Timestamp
+	Targets             changefeedbase.Targets
+	Writer              kvevent.Writer
+	Metrics             *kvevent.Metrics
+	MonitoringCfg       MonitoringConfig
+	MM                  *mon.BytesMonitor
+	WithDiff            bool
+	SchemaChangeEvents  changefeedbase.SchemaChangeEventClass
+	SchemaChangePolicy  changefeedbase.SchemaChangePolicy
+	SchemaFeed          schemafeed.SchemaFeed
 
 	// If true, the feed will begin with a dump of data at exactly the
 	// InitialHighWater. This is a peculiar behavior. In general the
@@ -89,9 +101,8 @@ func Run(ctx context.Context, cfg Config) error {
 	{
 		sc = &scanRequestScanner{
 			settings:                cfg.Settings,
-			gossip:                  cfg.Gossip,
 			db:                      cfg.DB,
-			onBackfillRangeCallback: cfg.OnBackfillRangeCallback,
+			onBackfillRangeCallback: cfg.MonitoringCfg.OnBackfillRangeCallback,
 		}
 	}
 	var pff physicalFeedFactory
@@ -105,22 +116,28 @@ func Run(ctx context.Context, cfg Config) error {
 		return kvevent.NewMemBuffer(cfg.MM.MakeBoundAccount(), &cfg.Settings.SV, cfg.Metrics)
 	}
 
+	// withFiltering is propagated via the RangefeedRequest to the rangefeed
+	// server, where if true, the server respects the OmitInRangefeeds flag and
+	// enables filtering out any transactional writes with that flag set to true.
+	// OmitInRangefeeds is set to true for all transactional writes when the
+	// disable_changefeed_replication session variable is on.
+	const withFiltering = true
+
+	g := ctxgroup.WithContext(ctx)
 	f := newKVFeed(
 		cfg.Writer, cfg.Spans, cfg.CheckpointSpans, cfg.CheckpointTimestamp,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
-		cfg.NeedsInitialScan, cfg.WithDiff,
+		cfg.NeedsInitialScan, cfg.WithDiff, withFiltering,
 		cfg.InitialHighWater, cfg.EndTime,
 		cfg.Codec,
 		cfg.SchemaFeed,
 		sc, pff, bf, cfg.UseMux, cfg.Targets, cfg.Knobs)
-	f.onBackfillCallback = cfg.OnBackfillCallback
+	f.onBackfillCallback = cfg.MonitoringCfg.OnBackfillCallback
+	f.rangeObserver = startLaggingRangesObserver(g, cfg.MonitoringCfg.LaggingRangesCallback,
+		cfg.MonitoringCfg.LaggingRangesPollingInterval, cfg.MonitoringCfg.LaggingRangesThreshold)
 
-	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(cfg.SchemaFeed.Run)
 	g.GoCtx(f.run)
-	if cfg.FeedWatcher != nil {
-		g.GoCtx(cfg.FeedWatcher)
-	}
 	err := g.Wait()
 
 	// NB: The higher layers of the changefeed should detect the boundary and the
@@ -162,6 +179,59 @@ func Run(ctx context.Context, cfg Config) error {
 	return err
 }
 
+func startLaggingRangesObserver(
+	g ctxgroup.Group,
+	updateLaggingRanges func(int64),
+	pollingInterval time.Duration,
+	threshold time.Duration,
+) func(fn kvcoord.ForEachRangeFn) {
+	return func(fn kvcoord.ForEachRangeFn) {
+		g.GoCtx(func(ctx context.Context) error {
+			// Reset metrics on shutdown.
+			defer func() {
+				updateLaggingRanges(0)
+			}()
+
+			var timer timeutil.Timer
+			defer timer.Stop()
+			timer.Reset(pollingInterval)
+
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-timer.C:
+					timer.Read = true
+
+					count := int64(0)
+					thresholdTS := timeutil.Now().Add(-1 * threshold)
+					err := fn(func(rfCtx kvcoord.RangeFeedContext, feed kvcoord.PartialRangeFeed) error {
+						// The resolved timestamp of a range determines the timestamp which is caught up to.
+						// However, during catchup scans, this is not set. For catchup scans, we consider the
+						// time the partial rangefeed was created to be its resolved ts. Note that a range can
+						// restart due to a range split, transient error etc. In these cases you also expect
+						// to see a `CreatedTime` but no resolved timestamp.
+						ts := feed.Resolved
+						if ts.IsEmpty() {
+							ts = hlc.Timestamp{WallTime: feed.CreatedTime.UnixNano()}
+						}
+
+						if ts.Less(hlc.Timestamp{WallTime: thresholdTS.UnixNano()}) {
+							count += 1
+						}
+						return nil
+					})
+					if err != nil {
+						return err
+					}
+					updateLaggingRanges(count)
+					timer.Reset(pollingInterval)
+				}
+			}
+		})
+	}
+}
+
 // schemaChangeDetectedError is a sentinel error to indicate to Run() that the
 // schema change is stopping due to a schema change. This is handy to trigger
 // the context group to stop; the error is handled entirely in this package.
@@ -178,6 +248,7 @@ type kvFeed struct {
 	checkpoint          []roachpb.Span
 	checkpointTimestamp hlc.Timestamp
 	withDiff            bool
+	withFiltering       bool
 	withInitialBackfill bool
 	initialHighWater    hlc.Timestamp
 	endTime             hlc.Timestamp
@@ -185,6 +256,7 @@ type kvFeed struct {
 	codec               keys.SQLCodec
 
 	onBackfillCallback func() func()
+	rangeObserver      func(fn kvcoord.ForEachRangeFn)
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass
 	schemaChangePolicy changefeedbase.SchemaChangePolicy
 
@@ -208,7 +280,7 @@ func newKVFeed(
 	checkpointTimestamp hlc.Timestamp,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
-	withInitialBackfill, withDiff bool,
+	withInitialBackfill, withDiff, withFiltering bool,
 	initialHighWater hlc.Timestamp,
 	endTime hlc.Timestamp,
 	codec keys.SQLCodec,
@@ -227,6 +299,7 @@ func newKVFeed(
 		checkpointTimestamp: checkpointTimestamp,
 		withInitialBackfill: withInitialBackfill,
 		withDiff:            withDiff,
+		withFiltering:       withFiltering,
 		initialHighWater:    initialHighWater,
 		endTime:             endTime,
 		schemaChangeEvents:  schemaChangeEvents,
@@ -261,6 +334,8 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+	rangeFeedResumeFrontier = span.MakeConcurrentFrontier(rangeFeedResumeFrontier)
+	defer rangeFeedResumeFrontier.Release()
 
 	for i := 0; ; i++ {
 		initialScan := i == 0
@@ -416,8 +491,8 @@ func (f *kvFeed) scanIfShould(
 				}
 			}
 			if !scanTime.Equal(ev.After.GetModificationTime()) {
-				return nil, hlc.Timestamp{}, errors.AssertionFailedf(
-					"found event in shouldScan which did not occur at the scan time %v: %v",
+				return nil, hlc.Timestamp{}, errors.Newf(
+					"found event in scanIfShould which did not occur at the scan time %v: %v",
 					scanTime, ev)
 			}
 		}
@@ -462,9 +537,7 @@ func (f *kvFeed) scanIfShould(
 	return spansToScan, scanTime, nil
 }
 
-func (f *kvFeed) runUntilTableEvent(
-	ctx context.Context, resumeFrontier *span.Frontier,
-) (err error) {
+func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Frontier) (err error) {
 	startFrom := resumeFrontier.Frontier()
 
 	// Determine whether to request the previous value of each update from
@@ -495,11 +568,13 @@ func (f *kvFeed) runUntilTableEvent(
 
 	g := ctxgroup.WithContext(ctx)
 	physicalCfg := rangeFeedConfig{
-		Spans:    stps,
-		Frontier: resumeFrontier.Frontier(),
-		WithDiff: f.withDiff,
-		Knobs:    f.knobs,
-		UseMux:   f.useMux,
+		Spans:         stps,
+		Frontier:      resumeFrontier.Frontier(),
+		WithDiff:      f.withDiff,
+		WithFiltering: f.withFiltering,
+		Knobs:         f.knobs,
+		UseMux:        f.useMux,
+		RangeObserver: f.rangeObserver,
 	}
 
 	// The following two synchronous calls works as follows:
@@ -580,13 +655,14 @@ func copyFromSourceToDestUntilTableEvent(
 	ctx context.Context,
 	dest kvevent.Writer,
 	source kvevent.Reader,
-	frontier *span.Frontier,
+	frontier span.Frontier,
 	tables schemafeed.SchemaFeed,
 	endTime hlc.Timestamp,
 	knobs TestingKnobs,
 ) error {
 	var (
 		scanBoundary errBoundaryReached
+		endTimeIsSet = !endTime.IsEmpty()
 
 		// checkForScanBoundary takes in a new event's timestamp (event generated
 		// from rangefeed), and asks "Is some type of 'boundary' reached
@@ -598,7 +674,11 @@ func copyFromSourceToDestUntilTableEvent(
 			// If the scanBoundary is not nil, it either means that there is a table
 			// event boundary set or a boundary for the end time. If the boundary is
 			// for the end time, we should keep looking for table events.
-			_, isEndTimeBoundary := scanBoundary.(*errEndTimeReached)
+			isEndTimeBoundary := false
+			if endTimeIsSet {
+				_, isEndTimeBoundary = scanBoundary.(*errEndTimeReached)
+			}
+
 			if scanBoundary != nil && !isEndTimeBoundary {
 				return nil
 			}
@@ -613,12 +693,23 @@ func copyFromSourceToDestUntilTableEvent(
 			// precedence to table events.
 			if len(nextEvents) > 0 {
 				scanBoundary = &errTableEventReached{nextEvents[0]}
-			} else if !endTime.IsEmpty() && scanBoundary == nil {
+			} else if endTimeIsSet && scanBoundary == nil {
 				scanBoundary = &errEndTimeReached{
 					endTime: endTime,
 				}
 			}
 			return nil
+		}
+
+		// spanFrontier returns frontier timestamp for the specified span.
+		spanFrontier = func(sp roachpb.Span) (sf hlc.Timestamp) {
+			frontier.SpanEntries(sp, func(_ roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+				if sf.IsEmpty() || ts.Less(sf) {
+					sf = ts
+				}
+				return span.ContinueMatch
+			})
+			return sf
 		}
 
 		// applyScanBoundary apply the boundary that we set above.
@@ -647,10 +738,29 @@ func copyFromSourceToDestUntilTableEvent(
 				if resolved.Timestamp.LessEq(boundaryResolvedTimestamp) {
 					return false, false, nil
 				}
-				if _, err := frontier.Forward(resolved.Span, boundaryResolvedTimestamp); err != nil {
-					return false, false, err
+
+				// At this point, we know event is after boundaryResolvedTimestamp.
+				skipEvent = true
+
+				if _, ok := scanBoundary.(*errEndTimeReached); ok {
+					// We know we have end time boundary. In this case, we do not want to
+					// skip this event because we want to make sure we emit checkpoint at
+					// exactly boundaryResolvedTimestamp. This checkpoint can be used to
+					// produce span based changefeed checkpoints if needed.
+					// We only want to emit this checkpoint once, and then we can skip
+					// subsequent checkpoints for this span until entire frontier reaches
+					// boundary timestamp.
+					if boundaryResolvedTimestamp.Compare(spanFrontier(resolved.Span)) > 0 {
+						e.Raw().Checkpoint.ResolvedTS = boundaryResolvedTimestamp
+						skipEvent = false
+					}
 				}
-				return true, frontier.Frontier().EqOrdering(boundaryResolvedTimestamp), nil
+
+				if _, err := frontier.Forward(resolved.Span, boundaryResolvedTimestamp); err != nil {
+					return true, false, err
+				}
+
+				return skipEvent, frontier.Frontier().EqOrdering(boundaryResolvedTimestamp), nil
 			case kvevent.TypeFlush:
 				// TypeFlush events have a timestamp of zero and should have already
 				// been processed by the timestamp check above. We include this here
@@ -694,18 +804,33 @@ func copyFromSourceToDestUntilTableEvent(
 			if err != nil {
 				return err
 			}
+
+			if skipEntry || scanBoundaryReached {
+				// We will skip this entry or outright terminate kvfeed (if boundary reached).
+				// Regardless of the reason, we must release this event memory allocation
+				// since other ranges might not have reached scan boundary yet.
+				// Failure to release this event allocation may prevent other events from being
+				// enqueued in the blocking buffer due to memory limit.
+				a := e.DetachAlloc()
+				a.Release(ctx)
+			}
+
 			if scanBoundaryReached {
 				// All component rangefeeds are now at the boundary.
 				// Break out of the ctxgroup by returning the sentinel error.
+				// (We don't care if skipEntry is false -- scan boundary can only be
+				// returned for resolved event, and we don't care if we emit this event
+				// since exiting with scan boundary error will cause appropriate
+				// boundary type (EXIT) to be emitted for the entire frontier)
 				return scanBoundary
 			}
+
 			if skipEntry {
 				return nil
 			}
 			return addEntry(e)
 		}
 	)
-
 	for {
 		e, err := source.Get(ctx)
 		if err != nil {

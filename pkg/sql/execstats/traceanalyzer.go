@@ -11,11 +11,13 @@
 package execstats
 
 import (
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -124,7 +126,7 @@ type NodeLevelStats struct {
 	MvccRangeKeySkippedPointsGroupedByNode          map[base.SQLInstanceID]int64
 	NetworkMessagesGroupedByNode                    map[base.SQLInstanceID]int64
 	ContentionTimeGroupedByNode                     map[base.SQLInstanceID]time.Duration
-	RUEstimateGroupedByNode                         map[base.SQLInstanceID]int64
+	RUEstimateGroupedByNode                         map[base.SQLInstanceID]float64
 	CPUTimeGroupedByNode                            map[base.SQLInstanceID]time.Duration
 }
 
@@ -156,8 +158,10 @@ type QueryLevelStats struct {
 	NetworkMessages                    int64
 	ContentionTime                     time.Duration
 	ContentionEvents                   []kvpb.ContentionEvent
-	RUEstimate                         int64
+	RUEstimate                         float64
 	CPUTime                            time.Duration
+	SqlInstanceIds                     map[base.SQLInstanceID]struct{}
+	Regions                            []string
 }
 
 // QueryLevelStatsWithErr is the same as QueryLevelStats, but also tracks
@@ -208,6 +212,15 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.ContentionEvents = append(s.ContentionEvents, other.ContentionEvents...)
 	s.RUEstimate += other.RUEstimate
 	s.CPUTime += other.CPUTime
+	if len(s.SqlInstanceIds) == 0 && len(other.SqlInstanceIds) > 0 {
+		s.SqlInstanceIds = other.SqlInstanceIds
+	} else if len(other.SqlInstanceIds) > 0 && len(s.SqlInstanceIds) > 0 {
+		for id := range other.SqlInstanceIds {
+			s.SqlInstanceIds[id] = struct{}{}
+		}
+	}
+
+	s.Regions = util.CombineUnique(s.Regions, other.Regions)
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a
@@ -297,7 +310,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		MvccRangeKeySkippedPointsGroupedByNode:          make(map[base.SQLInstanceID]int64),
 		NetworkMessagesGroupedByNode:                    make(map[base.SQLInstanceID]int64),
 		ContentionTimeGroupedByNode:                     make(map[base.SQLInstanceID]time.Duration),
-		RUEstimateGroupedByNode:                         make(map[base.SQLInstanceID]int64),
+		RUEstimateGroupedByNode:                         make(map[base.SQLInstanceID]float64),
 		CPUTimeGroupedByNode:                            make(map[base.SQLInstanceID]time.Duration),
 	}
 	var errs error
@@ -327,7 +340,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		a.nodeLevelStats.MvccRangeKeyContainedPointsGroupedByNode[instanceID] += int64(stats.KV.RangeKeyContainedPoints.Value())
 		a.nodeLevelStats.MvccRangeKeySkippedPointsGroupedByNode[instanceID] += int64(stats.KV.RangeKeySkippedPoints.Value())
 		a.nodeLevelStats.ContentionTimeGroupedByNode[instanceID] += stats.KV.ContentionTime.Value()
-		a.nodeLevelStats.RUEstimateGroupedByNode[instanceID] += int64(stats.Exec.ConsumedRU.Value())
+		a.nodeLevelStats.RUEstimateGroupedByNode[instanceID] += float64(stats.Exec.ConsumedRU.Value())
 		a.nodeLevelStats.CPUTimeGroupedByNode[instanceID] += stats.Exec.CPUTime.Value()
 	}
 
@@ -346,30 +359,6 @@ func (a *TraceAnalyzer) ProcessStats() error {
 			a.nodeLevelStats.NetworkBytesSentGroupedByNode[originInstanceID] += bytes
 		}
 
-		// The row execution flow attaches flow stats to a stream stat with the
-		// last outbox, so we need to check stream stats for max memory and disk
-		// usage.
-		// TODO(cathymw): maxMemUsage shouldn't be attached to span stats that
-		// are associated with streams, since it's a flow level stat. However,
-		// due to the row exec engine infrastructure, it is too complicated to
-		// attach this to a flow level span. If the row exec engine gets
-		// removed, getting maxMemUsage from streamStats should be removed as
-		// well.
-		if stats.stats.FlowStats.MaxMemUsage.HasValue() {
-			memUsage := int64(stats.stats.FlowStats.MaxMemUsage.Value())
-			if memUsage > a.nodeLevelStats.MaxMemoryUsageGroupedByNode[originInstanceID] {
-				a.nodeLevelStats.MaxMemoryUsageGroupedByNode[originInstanceID] = memUsage
-			}
-		}
-		if stats.stats.FlowStats.MaxDiskUsage.HasValue() {
-			if diskUsage := int64(stats.stats.FlowStats.MaxDiskUsage.Value()); diskUsage > a.nodeLevelStats.MaxDiskUsageGroupedByNode[originInstanceID] {
-				a.nodeLevelStats.MaxDiskUsageGroupedByNode[originInstanceID] = diskUsage
-			}
-		}
-		if stats.stats.FlowStats.ConsumedRU.HasValue() {
-			a.nodeLevelStats.RUEstimateGroupedByNode[originInstanceID] += int64(stats.stats.FlowStats.ConsumedRU.Value())
-		}
-
 		numMessages, err := getNumNetworkMessagesFromComponentsStats(stats.stats)
 		if err != nil {
 			errs = errors.CombineErrors(errs, errors.Wrap(err, "error calculating number of network messages"))
@@ -378,13 +367,23 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		}
 	}
 
+	instanceIds := make(map[base.SQLInstanceID]struct{}, len(a.flowStats))
+	// Default to 1 since most queries only use a single region.
+	regions := make([]string, 0, 1)
+
 	// Process flowStats.
 	for instanceID, stats := range a.flowStats {
 		if stats.stats == nil {
 			continue
 		}
 
+		instanceIds[instanceID] = struct{}{}
 		for _, v := range stats.stats {
+			// Avoid duplicates and empty string.
+			if v.Component.Region != "" {
+				regions = util.CombineUnique(regions, []string{v.Component.Region})
+			}
+
 			if v.FlowStats.MaxMemUsage.HasValue() {
 				if memUsage := int64(v.FlowStats.MaxMemUsage.Value()); memUsage > a.nodeLevelStats.MaxMemoryUsageGroupedByNode[instanceID] {
 					a.nodeLevelStats.MaxMemoryUsageGroupedByNode[instanceID] = memUsage
@@ -396,14 +395,17 @@ func (a *TraceAnalyzer) ProcessStats() error {
 				}
 			}
 			if v.FlowStats.ConsumedRU.HasValue() {
-				a.nodeLevelStats.RUEstimateGroupedByNode[instanceID] += int64(v.FlowStats.ConsumedRU.Value())
+				a.nodeLevelStats.RUEstimateGroupedByNode[instanceID] += float64(v.FlowStats.ConsumedRU.Value())
 			}
 		}
 	}
 
 	// Process query level stats.
 	a.queryLevelStats = QueryLevelStats{}
+	a.queryLevelStats.SqlInstanceIds = instanceIds
+	sort.Strings(regions)
 
+	a.queryLevelStats.Regions = regions
 	for _, bytesSentByNode := range a.nodeLevelStats.NetworkBytesSentGroupedByNode {
 		a.queryLevelStats.NetworkBytesSent += bytesSentByNode
 	}

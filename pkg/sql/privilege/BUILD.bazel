@@ -1,13 +1,12 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "privilege",
     srcs = [
+        "kind.go",
         "privilege.go",
         "target_object_type.go",
-        ":gen-kind-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/privilege",
     visibility = ["//visibility:public"],
@@ -27,19 +26,11 @@ go_test(
         "main_test.go",
         "privilege_test.go",
     ],
-    args = ["-test.timeout=55s"],
     deps = [
         ":privilege",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
     ],
 )
-
-stringer(
-    name = "gen-kind-stringer",
-    src = "privilege.go",
-    additional_args = ["-linecomment"],
-    typ = "Kind",
-)
-
-get_x_data(name = "get_x_data")

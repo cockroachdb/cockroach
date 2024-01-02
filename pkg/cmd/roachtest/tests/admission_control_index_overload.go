@@ -36,17 +36,17 @@ import (
 // stabilizes.
 func registerIndexOverload(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:      "admission-control/index-overload",
-		Owner:     registry.OwnerAdmissionControl,
-		Benchmark: true,
-		Tags:      registry.Tags("weekly"),
-		Cluster:   r.MakeClusterSpec(4, spec.CPU(8)),
-		Leases:    registry.MetamorphicLeases,
+		Name:             "admission-control/index-overload",
+		Owner:            registry.OwnerAdmissionControl,
+		Benchmark:        true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Weekly),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(8)),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			crdbNodes := c.Spec().NodeCount - 1
 			workloadNode := c.Spec().NodeCount
 
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, crdbNodes))
 
 			{

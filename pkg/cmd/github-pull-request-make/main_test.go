@@ -20,21 +20,36 @@ import (
 
 func TestPkgsFromDiff(t *testing.T) {
 	for filename, expPkgs := range map[string]map[string]pkg{
-		datapathutils.TestDataPath(t, "10305.diff"): {
-			"pkg/roachpb": {tests: []string{"TestLeaseEquivalence"}},
-			"pkg/storage": {tests: []string{"TestStoreRangeLease", "TestStoreRangeLeaseSwitcheroo"}},
-		},
 		datapathutils.TestDataPath(t, "skip.diff"): {
-			"pkg/ccl/storageccl": {tests: []string{"TestPutS3"}},
+			"pkg/ccl/storageccl": makePkg([]string{"TestPutS3"}),
 		},
-		// This PR had some churn and renamed packages. This was formerly problematic
-		// because nonexistent packages would be emitted.
-		datapathutils.TestDataPath(t, "27595.diff"): {
-			"pkg/storage/closedts/transport": {tests: []string{"TestTransportConnectOnRequest", "TestTransportClientReceivesEntries"}},
-			"pkg/storage/closedts/container": {tests: []string{"TestTwoNodes"}},
-			"pkg/storage/closedts/storage":   {tests: []string{"TestConcurrent"}},
+		datapathutils.TestDataPath(t, "modified.diff"): {
+			"pkg/ccl/streamingccl/streamingest": makePkg([]string{"TestStreamingAutoReplan"}),
 		},
 		datapathutils.TestDataPath(t, "removed.diff"): {},
+		datapathutils.TestDataPath(t, "not_go.diff"):  {},
+		datapathutils.TestDataPath(t, "new_test.diff"): {
+			"pkg/ccl/streamingccl/streamclient": makePkg([]string{
+				"TestExternalConnectionClient",
+				"TestGetFirstActiveClientEmpty",
+			}),
+		},
+		datapathutils.TestDataPath(t, "dont_stress.diff"): {},
+		datapathutils.TestDataPath(t, "27595.diff"): {
+			"pkg/storage/closedts/container": makePkg([]string{
+				"TestTwoNodes",
+			}),
+			"pkg/storage/closedts/minprop": makePkg([]string{
+				"TestTrackerConcurrentUse",
+			}),
+			"pkg/storage/closedts/storage": makePkg([]string{
+				"TestConcurrent",
+			}),
+			"pkg/storage/closedts/transport": makePkg([]string{
+				"TestTransportConnectOnRequest",
+				"TestTransportClientReceivesEntries",
+			}),
+		},
 	} {
 		t.Run(filename, func(t *testing.T) {
 			f, err := os.Open(filename)
@@ -50,5 +65,23 @@ func TestPkgsFromDiff(t *testing.T) {
 				t.Errorf("expected %s, got %s", expPkgs, pkgs)
 			}
 		})
+	}
+}
+
+func TestUpTo5TestsPerPackage(t *testing.T) {
+	fileName := datapathutils.TestDataPath(t, "five_tests.diff")
+	f, err := os.Open(fileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	pkgs, err := pkgsFromDiff(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, pkg := range pkgs {
+		if len(pkg.tests) > 5 {
+			t.Fatal("more than 5 tests in package")
+		}
 	}
 }

@@ -19,8 +19,12 @@ import { StatementDiagnosticsReport } from "../api";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { DEFAULT_STATS_REQ_OPTIONS } from "src/api/statementsApi";
 import { mockStmtStats } from "src/api/testUtils";
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
 
 const history = createMemoryHistory({ initialEntries: ["/statements"] });
+const timestamp = new protos.google.protobuf.Timestamp({
+  seconds: new Long(Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3),
+});
 
 const diagnosticsReports: StatementDiagnosticsReport[] = [
   {
@@ -355,6 +359,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     ascending: false,
     columnTitle: "executionCount",
   },
+  requestTime: moment.utc("2021.12.12"),
   search: "",
   filters: {
     app: "",
@@ -380,6 +385,8 @@ const statementsPagePropsFixture: StatementsPageProps = {
   isTenant: false,
   hasViewActivityRedactedRole: false,
   hasAdminRole: true,
+  statementDiagnostics: [],
+  oldestDataAvailable: timestamp,
   dismissAlertMessage: noop,
   refreshDatabases: noop,
   refreshStatementDiagnosticsRequests: noop,
@@ -398,6 +405,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   onChangeLimit: noop,
   onChangeReqSort: noop,
   onApplySearchCriteria: noop,
+  onRequestTimeChange: noop,
 };
 
 export const statementsPagePropsWithRequestError: StatementsPageProps = {

@@ -47,12 +47,12 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 
 	testCases := []struct {
 		desc          string
-		setup         func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, s serverutils.TestServerInterface, tableDesc *tabledesc.Mutable, scheduleID int64)
-		expectedErrRe func(tableID descpb.ID, scheduleID int64) string
+		setup         func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, s serverutils.TestServerInterface, tableDesc *tabledesc.Mutable, scheduleID jobspb.ScheduleID)
+		expectedErrRe func(tableID descpb.ID, scheduleID jobspb.ScheduleID) string
 	}{
 		{
 			desc: "not pointing at a valid scheduled job",
-			setup: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, s serverutils.TestServerInterface, tableDesc *tabledesc.Mutable, scheduleID int64) {
+			setup: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, s serverutils.TestServerInterface, tableDesc *tabledesc.Mutable, scheduleID jobspb.ScheduleID) {
 				require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 					// We need the collection to read the descriptor from storage for
 					// the subsequent write to succeed.
@@ -65,13 +65,13 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 					return col.WriteDesc(ctx, false /* kvBatch */, tableDesc, txn.KV())
 				}))
 			},
-			expectedErrRe: func(tableID descpb.ID, scheduleID int64) string {
+			expectedErrRe: func(tableID descpb.ID, scheduleID jobspb.ScheduleID) string {
 				return fmt.Sprintf(`table id %d maps to a non-existent schedule id 0`, tableID)
 			},
 		},
 		{
 			desc: "scheduled job points at an different table",
-			setup: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, s serverutils.TestServerInterface, tableDesc *tabledesc.Mutable, scheduleID int64) {
+			setup: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, s serverutils.TestServerInterface, tableDesc *tabledesc.Mutable, scheduleID jobspb.ScheduleID) {
 				db := s.InternalDB().(isql.DB)
 				require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 					schedules := jobs.ScheduledJobTxn(txn)
@@ -100,7 +100,7 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 					return schedules.Update(ctx, sj)
 				}))
 			},
-			expectedErrRe: func(tableID descpb.ID, scheduleID int64) string {
+			expectedErrRe: func(tableID descpb.ID, scheduleID jobspb.ScheduleID) string {
 				return fmt.Sprintf(`schedule id %d points to table id 0 instead of table id %d`, scheduleID, tableID)
 			},
 		},

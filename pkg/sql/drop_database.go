@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -53,7 +53,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	if n.Name == "" {
-		return nil, errEmptyDatabaseName
+		return nil, sqlerrors.ErrEmptyDatabaseName
 	}
 
 	if string(n.Name) == p.SessionData().Database && p.SessionData().SafeUpdates {
@@ -141,7 +141,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		schemaToDelete := schemaWithDbDesc.schema
 		switch schemaToDelete.SchemaKind() {
 		case catalog.SchemaPublic:
-			b := &kv.Batch{}
+			b := p.Txn().NewBatch()
 			if err := p.Descriptors().DeleteDescriptorlessPublicSchemaToBatch(
 				ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), n.dbDesc, b,
 			); err != nil {
@@ -151,7 +151,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 				return err
 			}
 		case catalog.SchemaTemporary:
-			b := &kv.Batch{}
+			b := p.Txn().NewBatch()
 			if err := p.Descriptors().DeleteTempSchemaToBatch(
 				ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), n.dbDesc, schemaToDelete.GetName(), b,
 			); err != nil {
@@ -173,7 +173,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		}
 	}
 
-	p.createDropDatabaseJob(
+	if err := p.createDropDatabaseJob(
 		ctx,
 		n.dbDesc.GetID(),
 		schemasIDsToDelete,
@@ -181,7 +181,9 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		n.d.typesToDelete,
 		n.d.functionsToDelete,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
-	)
+	); err != nil {
+		return err
+	}
 
 	n.dbDesc.SetDropped()
 	b := p.txn.NewBatch()
@@ -213,6 +215,11 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	if err := p.deleteComment(
 		ctx, n.dbDesc.GetID(), 0 /* subID */, catalogkeys.DatabaseCommentType,
 	); err != nil {
+		return err
+	}
+
+	// TODO(jeffswenson): delete once region_livess is implemented (#107966)
+	if err := p.maybeUpdateSystemDBSurvivalGoal(ctx); err != nil {
 		return err
 	}
 

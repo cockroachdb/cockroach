@@ -1,0 +1,355 @@
+/* setup */
+CREATE TABLE t1(i INT PRIMARY KEY, j INT);
+CREATE MATERIALIZED VIEW v2 AS SELECT i, j FROM t1;
+CREATE INDEX idx ON v2(j);
+CREATE MATERIALIZED VIEW v3 AS SELECT j FROM v2@idx;
+----
+...
++object {100 101 t1} -> 104
++object {100 101 v2} -> 105
++object {100 101 v3} -> 106
+
+/* test */
+DROP INDEX idx CASCADE;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: DROP INDEX
+getting all objects in schema: 101
+increment telemetry for sql.schema.drop_index
+write *eventpb.DropIndex to event log:
+  cascadeDroppedViews:
+  - defaultdb.public.v3
+  indexName: idx
+  mutationId: 1
+  sql:
+    descriptorId: 105
+    statement: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
+    tag: DROP INDEX
+    user: root
+  tableName: defaultdb.public.v2
+## StatementPhase stage 1 of 1 with 34 MutationType ops
+delete object namespace entry {100 101 v3} -> 106
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 2
+  -    id: 106
+  -    indexId: 2
+     dependsOn:
+     - 104
+  ...
+     formatVersion: 3
+     id: 105
+  -  indexes:
+  -  - createdAtNanos: "1640995200000000000"
+  -    createdExplicitly: true
+  -    foreignKey: {}
+  -    geoConfig: {}
+  -    id: 2
+  -    interleave: {}
+  -    keyColumnDirections:
+  -    - ASC
+  -    keyColumnIds:
+  -    - 2
+  -    keyColumnNames:
+  -    - j
+  -    keySuffixColumnIds:
+  -    - 3
+  -    name: idx
+  -    partitioning: {}
+  -    sharded: {}
+  -    version: 4
+  +  indexes: []
+     isMaterializedView: true
+     modificationTime: {}
+  +  mutations:
+  +  - direction: DROP
+  +    index:
+  +      createdAtNanos: "1640995200000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 2
+  +      keyColumnNames:
+  +      - j
+  +      keySuffixColumnIds:
+  +      - 3
+  +      name: idx
+  +      partitioning: {}
+  +      sharded: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: v2
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "9"
+  +  version: "10"
+     viewQuery: SELECT i, j FROM defaultdb.public.t1
+upsert descriptor #106
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+     viewQuery: SELECT j FROM defaultdb.public.v2@idx
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 37 MutationType ops
+delete object namespace entry {100 101 v3} -> 106
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 2
+  -    id: 106
+  -    indexId: 2
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": j
+  +        "3": rowid
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 105
+  +      indexes:
+  +        "1": v2_pkey
+  +      name: v2
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
+  +        statement: DROP INDEX idx CASCADE
+  +        statementTag: DROP INDEX
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     dependsOn:
+     - 104
+  ...
+     formatVersion: 3
+     id: 105
+  -  indexes:
+  -  - createdAtNanos: "1640995200000000000"
+  -    createdExplicitly: true
+  -    foreignKey: {}
+  -    geoConfig: {}
+  -    id: 2
+  -    interleave: {}
+  -    keyColumnDirections:
+  -    - ASC
+  -    keyColumnIds:
+  -    - 2
+  -    keyColumnNames:
+  -    - j
+  -    keySuffixColumnIds:
+  -    - 3
+  -    name: idx
+  -    partitioning: {}
+  -    sharded: {}
+  -    version: 4
+  +  indexes: []
+     isMaterializedView: true
+     modificationTime: {}
+  +  mutations:
+  +  - direction: DROP
+  +    index:
+  +      createdAtNanos: "1640995200000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 2
+  +      keyColumnNames:
+  +      - j
+  +      keySuffixColumnIds:
+  +      - 3
+  +      name: idx
+  +      partitioning: {}
+  +      sharded: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: v2
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "9"
+  +  version: "10"
+     viewQuery: SELECT i, j FROM defaultdb.public.t1
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 106
+  +      name: v3
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
+  +        statement: DROP INDEX idx CASCADE
+  +        statementTag: DROP INDEX
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     dependsOn:
+     - 105
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+     viewQuery: SELECT j FROM defaultdb.public.v2@idx
+persist all catalog changes to storage
+create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.v2@idx CASCADE"
+  descriptor IDs: [105 106]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
+upsert descriptor #105
+  ...
+         keySuffixColumnIds:
+         - 3
+  -      name: idx
+  +      name: crdb_internal_index_2_name_placeholder
+         partitioning: {}
+         sharded: {}
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: v2
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "10"
+  +  version: "11"
+     viewQuery: SELECT i, j FROM defaultdb.public.t1
+persist all catalog changes to storage
+create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
+  descriptor IDs: [106]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to [105]
+commit transaction #3
+notified job registry to adopt jobs: [2]
+begin transaction #4
+## PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": j
+  -        "3": rowid
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 105
+  -      indexes:
+  -        "1": v2_pkey
+  -      name: v2
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
+  -        statement: DROP INDEX idx CASCADE
+  -        statementTag: DROP INDEX
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     dependsOn:
+     - 104
+  ...
+     isMaterializedView: true
+     modificationTime: {}
+  -  mutations:
+  -  - direction: DROP
+  -    index:
+  -      createdAtNanos: "1640995200000000000"
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 2
+  -      keyColumnNames:
+  -      - j
+  -      keySuffixColumnIds:
+  -      - 3
+  -      name: crdb_internal_index_2_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  +  mutations: []
+     name: v2
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "11"
+  +  version: "12"
+     viewQuery: SELECT i, j FROM defaultdb.public.t1
+persist all catalog changes to storage
+create job #3 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
+  descriptor IDs: [105]
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to [106]
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 105
+commit transaction #4
+notified job registry to adopt jobs: [3]
+# end PostCommitPhase

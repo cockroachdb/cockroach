@@ -1,0 +1,20 @@
+/* setup */
+CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL);
+
+/* test */
+CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+EXPLAIN (DDL, SHAPE) CREATE UNIQUE INDEX idx ON t(b);
+----
+Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹b›); following CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
+	RETURNS INT8
+	LANGUAGE SQL
+	AS $$SELECT ‹1›;$$;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey in relation t
+ │    └── into idx+ (b: a)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[3] into idx+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index idx+ in relation t
+ └── execute 1 system table mutations transaction

@@ -1,0 +1,1025 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
+----
+...
++object {100 101 t} -> 104
+
+/* test */
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count=3);
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.alter_primary_key
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 104
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›) USING HASH WITH (‹bucket_count› = ‹3›)
+    tag: ALTER TABLE
+    user: root
+  tableName: defaultdb.public.t
+## StatementPhase stage 1 of 1 with 13 MutationType ops
+upsert descriptor #104
+   table:
+  +  checks:
+  +  - constraintId: 2
+  +    expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
+  +    fromHashShardedColumn: true
+  +    name: check_crdb_internal_j_shard_3
+  +    validity: Validating
+     columns:
+     - id: 1
+  ...
+     id: 104
+     modificationTime: {}
+  +  mutations:
+  +  - column:
+  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 3:::INT8)
+  +      hidden: true
+  +      id: 3
+  +      name: crdb_internal_j_shard_3
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +      virtual: true
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+  +  - constraint:
+  +      check:
+  +        constraintId: 2
+  +        expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
+  +        fromHashShardedColumn: true
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        validity: Validating
+  +      foreignKey: {}
+  +      name: crdb_internal_constraint_2_name_placeholder
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 5
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 4
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      - 2
+  +      keyColumnNames:
+  +      - crdb_internal_j_shard_3
+  +      - j
+  +      name: crdb_internal_index_4_name_placeholder
+  +      partitioning: {}
+  +      sharded:
+  +        columnNames:
+  +        - j
+  +        isSharded: true
+  +        name: crdb_internal_j_shard_3
+  +        shardBuckets: 3
+  +      storeColumnIds:
+  +      - 1
+  +      storeColumnNames:
+  +      - i
+  +      unique: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 6
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 5
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      - 2
+  +      keyColumnNames:
+  +      - crdb_internal_j_shard_3
+  +      - j
+  +      name: crdb_internal_index_5_name_placeholder
+  +      partitioning: {}
+  +      sharded:
+  +        columnNames:
+  +        - j
+  +        isSharded: true
+  +        name: crdb_internal_j_shard_3
+  +        shardBuckets: 3
+  +      storeColumnIds:
+  +      - 1
+  +      storeColumnNames:
+  +      - i
+  +      unique: true
+  +      useDeletePreservingEncoding: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: t
+  -  nextColumnId: 3
+  -  nextConstraintId: 2
+  +  nextColumnId: 4
+  +  nextConstraintId: 7
+     nextFamilyId: 1
+  -  nextIndexId: 2
+  +  nextIndexId: 6
+     nextMutationId: 1
+     parentId: 100
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 17 MutationType ops
+upsert descriptor #104
+   table:
+  +  checks:
+  +  - constraintId: 2
+  +    expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
+  +    fromHashShardedColumn: true
+  +    name: check_crdb_internal_j_shard_3
+  +    validity: Validating
+     columns:
+     - id: 1
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": j
+  +        "3": crdb_internal_j_shard_3
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      constraints:
+  +        "2": check_crdb_internal_j_shard_3
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "2": t_i_key
+  +        "4": t_pkey
+  +      name: t
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›) USING HASH WITH (‹bucket_count› = ‹3›)
+  +        statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)
+  +        statementTag: ALTER TABLE
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     id: 104
+     modificationTime: {}
+  +  mutations:
+  +  - column:
+  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 3:::INT8)
+  +      hidden: true
+  +      id: 3
+  +      name: crdb_internal_j_shard_3
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +      virtual: true
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+  +  - constraint:
+  +      check:
+  +        constraintId: 2
+  +        expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
+  +        fromHashShardedColumn: true
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        validity: Validating
+  +      foreignKey: {}
+  +      name: crdb_internal_constraint_2_name_placeholder
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 5
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 4
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      - 2
+  +      keyColumnNames:
+  +      - crdb_internal_j_shard_3
+  +      - j
+  +      name: crdb_internal_index_4_name_placeholder
+  +      partitioning: {}
+  +      sharded:
+  +        columnNames:
+  +        - j
+  +        isSharded: true
+  +        name: crdb_internal_j_shard_3
+  +        shardBuckets: 3
+  +      storeColumnIds:
+  +      - 1
+  +      storeColumnNames:
+  +      - i
+  +      unique: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 6
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 5
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      - 2
+  +      keyColumnNames:
+  +      - crdb_internal_j_shard_3
+  +      - j
+  +      name: crdb_internal_index_5_name_placeholder
+  +      partitioning: {}
+  +      sharded:
+  +        columnNames:
+  +        - j
+  +        isSharded: true
+  +        name: crdb_internal_j_shard_3
+  +        shardBuckets: 3
+  +      storeColumnIds:
+  +      - 1
+  +      storeColumnNames:
+  +      - i
+  +      unique: true
+  +      useDeletePreservingEncoding: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: t
+  -  nextColumnId: 3
+  -  nextConstraintId: 2
+  +  nextColumnId: 4
+  +  nextConstraintId: 7
+     nextFamilyId: 1
+  -  nextIndexId: 2
+  +  nextIndexId: 6
+     nextMutationId: 1
+     parentId: 100
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)"
+  descriptor IDs: [104]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 15 with 5 MutationType ops
+upsert descriptor #104
+  ...
+       name: check_crdb_internal_j_shard_3
+       validity: Validating
+  +  - columnIds:
+  +    - 3
+  +    expr: crdb_internal_j_shard_3 IS NOT NULL
+  +    isNonNullConstraint: true
+  +    name: crdb_internal_j_shard_3_auto_not_null
+  +    validity: Validating
+     columns:
+     - id: 1
+  ...
+       direction: ADD
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     - constraint:
+         check:
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 3
+  +        expr: crdb_internal_j_shard_3 IS NOT NULL
+  +        isNonNullConstraint: true
+  +        name: crdb_internal_j_shard_3_auto_not_null
+  +        validity: Validating
+  +      constraintType: NOT_NULL
+  +      foreignKey: {}
+  +      name: crdb_internal_j_shard_3_auto_not_null
+  +      notNullColumn: 3
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 2 of 15 with 1 BackfillType op pending"
+commit transaction #3
+begin transaction #4
+## PostCommitPhase stage 2 of 15 with 1 BackfillType op
+backfill indexes [4] from index #1 in table #104
+commit transaction #4
+begin transaction #5
+## PostCommitPhase stage 3 of 15 with 3 MutationType ops
+upsert descriptor #104
+  ...
+         version: 4
+       mutationId: 1
+  -    state: BACKFILLING
+  +    state: DELETE_ONLY
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 4 of 15 with 1 MutationType op pending"
+commit transaction #5
+begin transaction #6
+## PostCommitPhase stage 4 of 15 with 3 MutationType ops
+upsert descriptor #104
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: MERGING
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "4"
+  +  version: "5"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 5 of 15 with 1 BackfillType op pending"
+commit transaction #6
+begin transaction #7
+## PostCommitPhase stage 5 of 15 with 1 BackfillType op
+merge temporary indexes [5] into backfilled indexes [4] in table #104
+commit transaction #7
+begin transaction #8
+## PostCommitPhase stage 6 of 15 with 4 MutationType ops
+upsert descriptor #104
+  ...
+         version: 4
+       mutationId: 1
+  -    state: MERGING
+  -  - direction: ADD
+  +    state: WRITE_ONLY
+  +  - direction: DROP
+       index:
+         constraintId: 6
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - constraint:
+         check:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "5"
+  +  version: "6"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 7 of 15 with 3 ValidationType ops pending"
+commit transaction #8
+begin transaction #9
+## PostCommitPhase stage 7 of 15 with 3 ValidationType ops
+validate forward indexes [4] in table #104
+validate CHECK constraint crdb_internal_j_shard_3_auto_not_null in table #104
+validate CHECK constraint check_crdb_internal_j_shard_3 in table #104
+commit transaction #9
+begin transaction #10
+## PostCommitPhase stage 8 of 15 with 19 MutationType ops
+upsert descriptor #104
+  ...
+       fromHashShardedColumn: true
+       name: check_crdb_internal_j_shard_3
+  -    validity: Validating
+  -  - columnIds:
+  -    - 3
+  -    expr: crdb_internal_j_shard_3 IS NOT NULL
+  -    isNonNullConstraint: true
+  -    name: crdb_internal_j_shard_3_auto_not_null
+  -    validity: Validating
+     columns:
+     - id: 1
+  ...
+         id: 3
+         name: crdb_internal_j_shard_3
+  -      nullable: true
+         type:
+           family: IntFamily
+  ...
+       mutationId: 1
+       state: WRITE_ONLY
+  -  - constraint:
+  -      check:
+  -        constraintId: 2
+  -        expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
+  -        fromHashShardedColumn: true
+  -        name: crdb_internal_constraint_2_name_placeholder
+  -        validity: Validating
+  -      foreignKey: {}
+  -      name: crdb_internal_constraint_2_name_placeholder
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  -  - direction: ADD
+  +  - direction: DROP
+       index:
+  -      constraintId: 5
+  +      constraintId: 6
+         createdExplicitly: true
+         encodingType: 1
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 4
+  +      id: 5
+         interleave: {}
+         keyColumnDirections:
+  ...
+         - crdb_internal_j_shard_3
+         - j
+  -      name: crdb_internal_index_4_name_placeholder
+  +      name: crdb_internal_index_5_name_placeholder
+         partitioning: {}
+         sharded:
+  ...
+         - i
+         unique: true
+  +      useDeletePreservingEncoding: true
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - direction: DROP
+       index:
+  -      constraintId: 6
+  -      createdExplicitly: true
+  +      constraintId: 1
+  +      createdAtNanos: "1640995200000000000"
+         encodingType: 1
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 5
+  +      id: 1
+         interleave: {}
+         keyColumnDirections:
+         - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - i
+  +      name: crdb_internal_index_1_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 2
+  +      storeColumnNames:
+  +      - j
+  +      unique: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 3
+  +      createdAtNanos: "1640998800000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+         - ASC
+         keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - i
+  +      keySuffixColumnIds:
+         - 3
+         - 2
+  -      keyColumnNames:
+  -      - crdb_internal_j_shard_3
+  -      - j
+  -      name: crdb_internal_index_5_name_placeholder
+  +      name: t_i_key
+         partitioning: {}
+  -      sharded:
+  -        columnNames:
+  -        - j
+  -        isSharded: true
+  -        name: crdb_internal_j_shard_3
+  -        shardBuckets: 3
+  -      storeColumnIds:
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      unique: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 4
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+         - 1
+  -      storeColumnNames:
+  +      keyColumnNames:
+         - i
+  +      keySuffixColumnIds:
+  +      - 3
+  +      - 2
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnNames: []
+         unique: true
+         useDeletePreservingEncoding: true
+  ...
+       mutationId: 1
+       state: DELETE_ONLY
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 3
+  -        expr: crdb_internal_j_shard_3 IS NOT NULL
+  -        isNonNullConstraint: true
+  -        name: crdb_internal_j_shard_3_auto_not_null
+  -        validity: Validating
+  -      constraintType: NOT_NULL
+  -      foreignKey: {}
+  -      name: crdb_internal_j_shard_3_auto_not_null
+  -      notNullColumn: 3
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     name: t
+     nextColumnId: 4
+  ...
+     parentId: 100
+     primaryIndex:
+  -    constraintId: 1
+  -    createdAtNanos: "1640995200000000000"
+  +    constraintId: 5
+  +    createdExplicitly: true
+       encodingType: 1
+       foreignKey: {}
+       geoConfig: {}
+  -    id: 1
+  +    id: 4
+       interleave: {}
+       keyColumnDirections:
+       - ASC
+  +    - ASC
+       keyColumnIds:
+  -    - 1
+  +    - 3
+  +    - 2
+       keyColumnNames:
+  -    - i
+  +    - crdb_internal_j_shard_3
+  +    - j
+       name: t_pkey
+       partitioning: {}
+  -    sharded: {}
+  +    sharded:
+  +      columnNames:
+  +      - j
+  +      isSharded: true
+  +      name: crdb_internal_j_shard_3
+  +      shardBuckets: 3
+       storeColumnIds:
+  -    - 2
+  +    - 1
+       storeColumnNames:
+  -    - j
+  +    - i
+       unique: true
+       version: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "6"
+  +  version: "7"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 9 of 15 with 1 MutationType op pending"
+commit transaction #10
+begin transaction #11
+## PostCommitPhase stage 9 of 15 with 3 MutationType ops
+upsert descriptor #104
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "7"
+  +  version: "8"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 10 of 15 with 1 BackfillType op pending"
+commit transaction #11
+begin transaction #12
+## PostCommitPhase stage 10 of 15 with 1 BackfillType op
+backfill indexes [2] from index #4 in table #104
+commit transaction #12
+begin transaction #13
+## PostCommitPhase stage 11 of 15 with 3 MutationType ops
+upsert descriptor #104
+  ...
+         version: 4
+       mutationId: 1
+  -    state: BACKFILLING
+  +    state: DELETE_ONLY
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "8"
+  +  version: "9"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 12 of 15 with 1 MutationType op pending"
+commit transaction #13
+begin transaction #14
+## PostCommitPhase stage 12 of 15 with 3 MutationType ops
+upsert descriptor #104
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: MERGING
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "9"
+  +  version: "10"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 13 of 15 with 1 BackfillType op pending"
+commit transaction #14
+begin transaction #15
+## PostCommitPhase stage 13 of 15 with 1 BackfillType op
+merge temporary indexes [3] into backfilled indexes [2] in table #104
+commit transaction #15
+begin transaction #16
+## PostCommitPhase stage 14 of 15 with 4 MutationType ops
+upsert descriptor #104
+  ...
+         version: 4
+       mutationId: 1
+  -    state: MERGING
+  -  - direction: ADD
+  +    state: WRITE_ONLY
+  +  - direction: DROP
+       index:
+         constraintId: 4
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "10"
+  +  version: "11"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 15 of 15 with 1 ValidationType op pending"
+commit transaction #16
+begin transaction #17
+## PostCommitPhase stage 15 of 15 with 1 ValidationType op
+validate forward indexes [2] in table #104
+commit transaction #17
+begin transaction #18
+## PostCommitNonRevertiblePhase stage 1 of 2 with 16 MutationType ops
+upsert descriptor #104
+  ...
+         oid: 20
+         width: 64
+  +  - computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 3:::INT8)
+  +    hidden: true
+  +    id: 3
+  +    name: crdb_internal_j_shard_3
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +    virtual: true
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  ...
+           statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)
+           statementTag: ALTER TABLE
+  -    revertible: true
+       targetRanks: <redacted>
+       targets: <redacted>
+  ...
+     formatVersion: 3
+     id: 104
+  +  indexes:
+  +  - constraintId: 3
+  +    createdAtNanos: "1640998800000000000"
+  +    createdExplicitly: true
+  +    foreignKey: {}
+  +    geoConfig: {}
+  +    id: 2
+  +    interleave: {}
+  +    keyColumnDirections:
+  +    - ASC
+  +    keyColumnIds:
+  +    - 1
+  +    keyColumnNames:
+  +    - i
+  +    keySuffixColumnIds:
+  +    - 3
+  +    - 2
+  +    name: t_i_key
+  +    partitioning: {}
+  +    sharded: {}
+  +    storeColumnNames: []
+  +    unique: true
+  +    version: 4
+     modificationTime: {}
+     mutations:
+  -  - column:
+  -      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 3:::INT8)
+  -      hidden: true
+  -      id: 3
+  -      name: crdb_internal_j_shard_3
+  -      type:
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
+  -      virtual: true
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     - direction: DROP
+       index:
+  -      constraintId: 6
+  -      createdExplicitly: true
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 5
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      - ASC
+  -      keyColumnIds:
+  -      - 3
+  -      - 2
+  -      keyColumnNames:
+  -      - crdb_internal_j_shard_3
+  -      - j
+  -      name: crdb_internal_index_5_name_placeholder
+  -      partitioning: {}
+  -      sharded:
+  -        columnNames:
+  -        - j
+  -        isSharded: true
+  -        name: crdb_internal_j_shard_3
+  -        shardBuckets: 3
+  -      storeColumnIds:
+  -      - 1
+  -      storeColumnNames:
+  -      - i
+  -      unique: true
+  -      useDeletePreservingEncoding: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - direction: DROP
+  -    index:
+         constraintId: 1
+         createdAtNanos: "1640995200000000000"
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  -  - direction: ADD
+  -    index:
+  -      constraintId: 3
+  -      createdAtNanos: "1640998800000000000"
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      keySuffixColumnIds:
+  -      - 3
+  -      - 2
+  -      name: t_i_key
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnNames: []
+  -      unique: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 4
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 3
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      keySuffixColumnIds:
+  -      - 3
+  -      - 2
+  -      name: crdb_internal_index_3_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnNames: []
+  -      unique: true
+  -      useDeletePreservingEncoding: true
+  -      version: 4
+  -    mutationId: 1
+       state: DELETE_ONLY
+     name: t
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "11"
+  +  version: "12"
+persist all catalog changes to storage
+adding table for stats refresh: 104
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending"
+set schema change job #1 to non-cancellable
+commit transaction #18
+begin transaction #19
+## PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": j
+  -        "3": crdb_internal_j_shard_3
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      constraints:
+  -        "2": check_crdb_internal_j_shard_3
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "2": t_i_key
+  -        "4": t_pkey
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›) USING HASH WITH (‹bucket_count› = ‹3›)
+  -        statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+       version: 4
+     modificationTime: {}
+  -  mutations:
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 1
+  -      createdAtNanos: "1640995200000000000"
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 1
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      name: crdb_internal_index_1_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 2
+  -      storeColumnNames:
+  -      - j
+  -      unique: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  +  mutations: []
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "12"
+  +  version: "13"
+persist all catalog changes to storage
+create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)"
+  descriptor IDs: [104]
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+commit transaction #19
+notified job registry to adopt jobs: [2]
+# end PostCommitPhase

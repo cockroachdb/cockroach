@@ -524,7 +524,6 @@ explain(shape):
               table: abc@abc_b_idx
               spans: FULL SCAN
               locking strength: for update
-              locking durability: guaranteed
 explain(gist):
 • root
 │
@@ -1123,3 +1122,77 @@ explain(shape):
   syntax: "select 123"
 explain(gist):
 • show completions
+
+exec-ddl
+CREATE TABLE ts (a int, b STRING)
+----
+
+gist-explain-roundtrip
+SELECT max(a), b FROM ts WHERE a = 1 AND b LIKE '$ internal%' GROUP BY b
+----
+hash: 6959966538333657501
+plan-gist: AgF0AgADAAAAAwsCBgQ=
+explain(shape):
+• group (hash)
+│ group by: b
+│
+└── • filter
+    │ filter: (a = _) AND (b LIKE _)
+    │
+    └── • scan
+          table: ts@ts_pkey
+          spans: FULL SCAN
+explain(gist):
+• group (hash)
+│ group by: a
+│
+└── • filter
+    │
+    └── • scan
+          table: ts@ts_pkey
+          spans: FULL SCAN
+
+# The above query produces this gist when run via EXPLAIN (GIST) in a real DB and when
+# run in a DB w/o that table panics, this tests that the panic is fixed.  Essentially we're
+# exercising the "unknown" table code.
+explain-plan-gist
+AgHQAQIAAwAAAAMLAgYE
+----
+• group (hash)
+│ group by: unknownCol-0
+│
+└── • filter
+    │
+    └── • scan
+          table: ?@?
+          spans: FULL SCAN
+
+# Regression for #111346
+explain-plan-gist
+AgFWBgCPAQIAABNWCgsGBwwHHA0UAXoCBgEFUCJ6AQ==
+----
+• upsert
+│ into: ?()
+│ auto commit
+│
+└── • lookup join (left outer)
+    │ table: ?@?
+    │ equality: (_, _, _) = (?, ?, ?)
+    │ equality cols are key
+    │
+    └── • distinct
+        │ distinct on
+        │
+        └── • render
+            │
+            └── • render
+                │
+                └── • group (hash)
+                    │ group by: _, _, _
+                    │
+                    └── • index join
+                        │ table: ?@?
+                        │
+                        └── • scan
+                              table: ?@?
+                              spans: 1 span

@@ -33,8 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -84,7 +84,7 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 	}
 
 	// To alter the owner, the user also has to have CREATEDB privilege.
-	if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEDB); err != nil {
+	if err := params.p.CheckGlobalPrivilegeOrRoleOption(params.ctx, privilege.CREATEDB); err != nil {
 		return err
 	}
 
@@ -290,11 +290,11 @@ type alterDatabaseDropRegionNode struct {
 }
 
 var allowDropFinalRegion = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.multiregion.drop_primary_region.enabled",
 	"allows dropping the PRIMARY REGION of a database if it is the last region",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // AlterDatabaseDropRegion transforms a tree.AlterDatabaseDropRegion into a plan node.
 func (p *planner) AlterDatabaseDropRegion(
@@ -420,7 +420,7 @@ func (p *planner) AlterDatabaseDropRegion(
 				pgcode.InvalidDatabaseDefinition,
 				"databases in this cluster must have at least 1 region",
 				n.Region,
-				DefaultPrimaryRegionClusterSettingName,
+				sqlclustersettings.DefaultPrimaryRegionClusterSettingName,
 			)
 		}
 
@@ -561,7 +561,6 @@ func (p *planner) checkCanDropSystemDatabaseRegion(ctx context.Context, region t
 // - either be part of an admin role.
 // - or be an owner of the table.
 // - or have the CREATE privilege on the table.
-// privilege on the table descriptor.
 //
 // For the system database, the conditions are more stringent. The user must
 // be the node user, and this must be a secondary tenant.
@@ -1337,6 +1336,9 @@ func (p *planner) maybeUpdateSystemDBSurvivalGoal(ctx context.Context) error {
 		if !db.IsMultiRegion() {
 			return
 		}
+		if db.Dropped() {
+			return
+		}
 		curGoal := db.GetRegionConfig().SurvivalGoal
 		if curGoal > maxSurvivalGoal {
 			maxSurvivalGoal = curGoal
@@ -1546,6 +1548,16 @@ func (p *planner) AlterDatabaseAddSuperRegion(
 		"ALTER DATABASE",
 	); err != nil {
 		return nil, err
+	}
+
+	// Validate no duplicate regions exist.
+	existingRegionNames := make(map[tree.Name]struct{})
+	for _, region := range n.Regions {
+		if _, found := existingRegionNames[region]; found {
+			return nil, pgerror.Newf(pgcode.DuplicateObject,
+				"duplicate region %s found in super region %s", region, n.SuperRegionName)
+		}
+		existingRegionNames[region] = struct{}{}
 	}
 
 	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.DatabaseName))
@@ -2314,6 +2326,15 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 		}
 	}
 
+	currentZone := zonepb.NewZoneConfig()
+	if currentZoneConfigWithRaw, err := params.p.Descriptors().GetZoneConfig(
+		params.ctx, params.p.Txn(), n.desc.ID,
+	); err != nil {
+		return err
+	} else if currentZoneConfigWithRaw != nil {
+		currentZone = currentZoneConfigWithRaw.ZoneConfigProto()
+	}
+
 	if deleteZone {
 		switch n.n.LocalityLevel {
 		case tree.LocalityLevelGlobal:
@@ -2376,7 +2397,7 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 		}
 
 		if err := validateZoneAttrsAndLocalities(
-			params.ctx, params.p.InternalSQLTxn().Regions(), params.p.ExecCfg(), newZone,
+			params.ctx, params.p.InternalSQLTxn().Regions(), params.p.ExecCfg(), currentZone, newZone,
 		); err != nil {
 			return err
 		}
@@ -2421,7 +2442,7 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 
 	// Validate if the zone config extension is compatible with the database.
 	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(
-		params.ctx, params.p.InternalSQLTxn().Regions(), params.ExecCfg(), updatedRegionConfig, true, /* validateLocalities */
+		params.ctx, params.p.InternalSQLTxn().Regions(), params.ExecCfg(), updatedRegionConfig, currentZone, true, /* validateLocalities */
 	)
 	if err != nil {
 		return err

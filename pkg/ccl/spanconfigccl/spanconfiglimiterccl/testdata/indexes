@@ -1,56 +1,56 @@
 # Ensure that system.span_count is maintained appropriately when creating and
 # dropping secondary indexes, and then dropping the table entirely.
 
-initialize tenant=10
+initialize tenant=11
 ----
 
-query-sql tenant=10
+query-sql tenant=11
 SELECT count(*) FROM system.span_count;
 ----
 0
 
-exec-sql tenant=10
+exec-sql tenant=11
 CREATE DATABASE db;
 CREATE TABLE db.t(i INT PRIMARY KEY, j INT);
 ----
 
-query-sql tenant=10
+query-sql tenant=11
 SELECT span_count FROM system.span_count;
 ----
 3
 
-exec-sql tenant=10
+exec-sql tenant=11
 CREATE INDEX idx2 ON db.t (j);
 ----
 
-query-sql tenant=10
+query-sql tenant=11
 SELECT span_count FROM system.span_count;
 ----
 5
 
-exec-sql tenant=10
+exec-sql tenant=11
 DROP INDEX db.t@idx2;
 ----
 
-query-sql tenant=10
+query-sql tenant=11
 SELECT span_count FROM system.span_count;
 ----
 3
 
-exec-sql tenant=10
+exec-sql tenant=11
 CREATE INDEX idx4 ON db.t (j);
 ----
 
-query-sql tenant=10
+query-sql tenant=11
 SELECT span_count FROM system.span_count;
 ----
 5
 
-exec-sql tenant=10
+exec-sql tenant=11
 DROP TABLE db.t;
 ----
 
-query-sql tenant=10
+query-sql tenant=11
 SELECT span_count FROM system.span_count;
 ----
 0

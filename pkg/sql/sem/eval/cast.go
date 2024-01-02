@@ -69,6 +69,15 @@ func PerformCast(
 	return performCast(ctx, evalCtx, d, t, true /* truncateWidth */)
 }
 
+// PerformCastNoTruncate performs an explicit cast, but returns an error if the
+// value doesn't fit in the required type. It is used for coercing types in a
+// PLpgSQL INTO clause.
+func PerformCastNoTruncate(
+	ctx context.Context, evalCtx *Context, d tree.Datum, t *types.T,
+) (tree.Datum, error) {
+	return performCast(ctx, evalCtx, d, t, false /* truncateWidth */)
+}
+
 // PerformAssignmentCast performs an assignment cast from the provided Datum to
 // the specified type. The original datum is returned if its type is identical
 // to the specified type.
@@ -432,7 +441,7 @@ func performCastWithoutPrecisionTruncation(
 			}
 		case *tree.DBool, *tree.DDecimal:
 			s = d.String()
-		case *tree.DTimestamp, *tree.DDate, *tree.DTime, *tree.DTimeTZ, *tree.DGeography, *tree.DGeometry, *tree.DBox2D:
+		case *tree.DTimestamp, *tree.DDate, *tree.DTime, *tree.DTimeTZ, *tree.DGeography, *tree.DGeometry, *tree.DBox2D, *tree.DPGLSN:
 			s = tree.AsStringWithFlags(d, tree.FmtBareStrings)
 		case *tree.DTimestampTZ:
 			// Convert to context timezone for correct display.
@@ -582,6 +591,34 @@ func performCastWithoutPrecisionTruncation(
 			return tree.NewDBox2D(*bbox), nil
 		}
 
+	case types.PGLSNFamily:
+		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
+			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+				"version %v must be finalized to use pg_lsn",
+				clusterversion.V23_2.Version())
+		}
+		switch d := d.(type) {
+		case *tree.DString:
+			return tree.ParseDPGLSN(string(*d))
+		case *tree.DCollatedString:
+			return tree.ParseDPGLSN(d.Contents)
+		case *tree.DPGLSN:
+			return d, nil
+		}
+
+	case types.RefCursorFamily:
+		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
+			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+				"version %v must be finalized to use refcursor",
+				clusterversion.V23_2.Version())
+		}
+		switch d := d.(type) {
+		case *tree.DString:
+			return tree.NewDRefCursor(string(*d)), nil
+		case *tree.DCollatedString:
+			return tree.NewDRefCursor(d.Contents), nil
+		}
+
 	case types.GeographyFamily:
 		switch d := d.(type) {
 		case *tree.DString:
@@ -722,7 +759,7 @@ func performCastWithoutPrecisionTruncation(
 			return tree.MakeDTime(timeofday.FromTime(d.Time).Round(roundTo)), nil
 		case *tree.DTimestampTZ:
 			// Strip time zone. Times don't carry their location.
-			stripped, err := d.EvalAtTimeZone(evalCtx.GetLocation())
+			stripped, err := d.EvalAtAndRemoveTimeZone(evalCtx.GetLocation(), time.Microsecond)
 			if err != nil {
 				return nil, err
 			}
@@ -770,11 +807,7 @@ func performCastWithoutPrecisionTruncation(
 			return d.Round(roundTo)
 		case *tree.DTimestampTZ:
 			// Strip time zone. Timestamps don't carry their location.
-			stripped, err := d.EvalAtTimeZone(evalCtx.GetLocation())
-			if err != nil {
-				return nil, err
-			}
-			return stripped.Round(roundTo)
+			return d.EvalAtAndRemoveTimeZone(evalCtx.GetLocation(), roundTo)
 		}
 
 	case types.TimestampTZFamily:
@@ -796,9 +829,7 @@ func performCastWithoutPrecisionTruncation(
 			_, after := t.In(evalCtx.GetLocation()).Zone()
 			return tree.MakeDTimestampTZ(t.Add(time.Duration(before-after)*time.Second), roundTo)
 		case *tree.DTimestamp:
-			_, before := d.Time.Zone()
-			_, after := d.Time.In(evalCtx.GetLocation()).Zone()
-			return tree.MakeDTimestampTZ(d.Time.Add(time.Duration(before-after)*time.Second), roundTo)
+			return d.AddTimeZone(evalCtx.GetLocation(), roundTo)
 		case *tree.DInt:
 			return tree.MakeDTimestampTZ(timeutil.Unix(int64(*d), 0), roundTo)
 		case *tree.DTimestampTZ:
@@ -865,7 +896,7 @@ func performCastWithoutPrecisionTruncation(
 		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_1) {
 			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 				"version %v must be finalized to use TSVector",
-				clusterversion.ByKey(clusterversion.V23_1))
+				clusterversion.V23_1.Version())
 		}
 		switch v := d.(type) {
 		case *tree.DString:
@@ -879,7 +910,7 @@ func performCastWithoutPrecisionTruncation(
 		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_1) {
 			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 				"version %v must be finalized to use TSVector",
-				clusterversion.ByKey(clusterversion.V23_1))
+				clusterversion.V23_1.Version())
 		}
 		switch v := d.(type) {
 		case *tree.DString:
@@ -1003,7 +1034,7 @@ func performIntToOidCast(
 		}
 		name, _, err := res.ResolveFunctionByOID(ctx, oid.Oid(v))
 		if err != nil {
-			if errors.Is(err, tree.ErrFunctionUndefined) {
+			if errors.Is(err, tree.ErrRoutineUndefined) {
 				return tree.NewDOidWithType(o, t), nil //nolint:returnerrcheck
 			}
 			return nil, err

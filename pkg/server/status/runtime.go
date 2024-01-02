@@ -13,12 +13,14 @@ package status
 import (
 	"context"
 	"os"
+	"regexp"
 	"runtime"
 	"runtime/debug"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -175,81 +177,112 @@ var (
 		Name:        "sys.host.disk.read.count",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
-		Help:        "Disk read operations across all disks since this process started",
+		Help:        "Disk read operations across all disks since this process started (as reported by the OS)",
 	}
 	metaHostDiskReadBytes = metric.Metadata{
 		Name:        "sys.host.disk.read.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
-		Help:        "Bytes read from all disks since this process started",
+		Help:        "Bytes read from all disks since this process started (as reported by the OS)",
 	}
 	metaHostDiskReadTime = metric.Metadata{
 		Name:        "sys.host.disk.read.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
-		Help:        "Time spent reading from all disks since this process started",
+		Help:        "Time spent reading from all disks since this process started (as reported by the OS)",
 	}
 	metaHostDiskWriteCount = metric.Metadata{
 		Name:        "sys.host.disk.write.count",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
-		Help:        "Disk write operations across all disks since this process started",
+		Help:        "Disk write operations across all disks since this process started (as reported by the OS)",
 	}
 	metaHostDiskWriteBytes = metric.Metadata{
 		Name:        "sys.host.disk.write.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
-		Help:        "Bytes written to all disks since this process started",
+		Help:        "Bytes written to all disks since this process started (as reported by the OS)",
 	}
 	metaHostDiskWriteTime = metric.Metadata{
 		Name:        "sys.host.disk.write.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
-		Help:        "Time spent writing to all disks since this process started",
+		Help:        "Time spent writing to all disks since this process started (as reported by the OS)",
 	}
 	metaHostDiskIOTime = metric.Metadata{
 		Name:        "sys.host.disk.io.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
-		Help:        "Time spent reading from or writing to all disks since this process started",
+		Help:        "Time spent reading from or writing to all disks since this process started (as reported by the OS)",
 	}
 	metaHostDiskWeightedIOTime = metric.Metadata{
 		Name:        "sys.host.disk.weightedio.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
-		Help:        "Weighted time spent reading from or writing to to all disks since this process started",
+		Help:        "Weighted time spent reading from or writing to to all disks since this process started (as reported by the OS)",
 	}
 	metaHostIopsInProgress = metric.Metadata{
 		Name:        "sys.host.disk.iopsinprogress",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
-		Help:        "IO operations currently in progress on this host",
+		Help:        "IO operations currently in progress on this host (as reported by the OS)",
 	}
 	metaHostNetRecvBytes = metric.Metadata{
 		Name:        "sys.host.net.recv.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
-		Help:        "Bytes received on all network interfaces since this process started",
+		Help:        "Bytes received on all network interfaces since this process started (as reported by the OS)",
 	}
 	metaHostNetRecvPackets = metric.Metadata{
 		Name:        "sys.host.net.recv.packets",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Packets",
-		Help:        "Packets received on all network interfaces since this process started",
+		Help:        "Packets received on all network interfaces since this process started (as reported by the OS)",
+	}
+	metaHostNetRecvErr = metric.Metadata{
+		Name:        "sys.host.net.recv.err",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Packets",
+		Help:        "Error receiving packets on all network interfaces since this process started (as reported by the OS)",
+	}
+	metaHostNetRecvDrop = metric.Metadata{
+		Name:        "sys.host.net.recv.drop",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Packets",
+		Help:        "Receiving packets that got dropped on all network interfaces since this process started (as reported by the OS)",
 	}
 	metaHostNetSendBytes = metric.Metadata{
 		Name:        "sys.host.net.send.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
-		Help:        "Bytes sent on all network interfaces since this process started",
+		Help:        "Bytes sent on all network interfaces since this process started (as reported by the OS)",
 	}
 	metaHostNetSendPackets = metric.Metadata{
 		Name:        "sys.host.net.send.packets",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Packets",
-		Help:        "Packets sent on all network interfaces since this process started",
+		Help:        "Packets sent on all network interfaces since this process started (as reported by the OS)",
+	}
+	metaHostNetSendErr = metric.Metadata{
+		Name:        "sys.host.net.send.err",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Packets",
+		Help:        "Error on sending packets on all network interfaces since this process started (as reported by the OS)",
+	}
+	metaHostNetSendDrop = metric.Metadata{
+		Name:        "sys.host.net.send.drop",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Packets",
+		Help:        "Sending packets that got dropped on all network interfaces since this process started (as reported by the OS)",
 	}
 )
+
+// diskMetricsIgnoredDevices is a regex that matches any block devices that must be
+// ignored for disk metrics (eg. sys.host.disk.write.bytes), as those devices
+// have likely been counted elsewhere. This prevents us from double-counting,
+// for instance, RAID volumes under both the logical volume and under the
+// physical volume(s).
+var diskMetricsIgnoredDevices = envutil.EnvOrDefaultString("COCKROACH_DISK_METRICS_IGNORED_DEVICES", getDefaultIgnoredDevices())
 
 // getCgoMemStats is a function that fetches stats for the C++ portion of the code.
 // We will not necessarily have implementations for all builds, so check for nil first.
@@ -332,8 +365,12 @@ type RuntimeStatSampler struct {
 	IopsInProgress         *metric.Gauge
 	HostNetRecvBytes       *metric.Gauge
 	HostNetRecvPackets     *metric.Gauge
+	HostNetRecvErr         *metric.Gauge
+	HostNetRecvDrop        *metric.Gauge
 	HostNetSendBytes       *metric.Gauge
 	HostNetSendPackets     *metric.Gauge
+	HostNetSendErr         *metric.Gauge
+	HostNetSendDrop        *metric.Gauge
 	// Uptime and build.
 	Uptime         *metric.Gauge // We use a gauge to be able to call Update.
 	BuildTimestamp *metric.Gauge
@@ -369,7 +406,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 	}
 	netCounters, err := getSummedNetStats(ctx)
 	if err != nil {
-		log.Ops.Errorf(ctx, "could not get initial disk IO counters: %v", err)
+		log.Ops.Errorf(ctx, "could not get initial network stat counters: %v", err)
 	}
 
 	rsr := &RuntimeStatSampler{
@@ -410,8 +447,12 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		IopsInProgress:         metric.NewGauge(metaHostIopsInProgress),
 		HostNetRecvBytes:       metric.NewGauge(metaHostNetRecvBytes),
 		HostNetRecvPackets:     metric.NewGauge(metaHostNetRecvPackets),
+		HostNetRecvErr:         metric.NewGauge(metaHostNetRecvErr),
+		HostNetRecvDrop:        metric.NewGauge(metaHostNetRecvDrop),
 		HostNetSendBytes:       metric.NewGauge(metaHostNetSendBytes),
 		HostNetSendPackets:     metric.NewGauge(metaHostNetSendPackets),
+		HostNetSendErr:         metric.NewGauge(metaHostNetSendErr),
+		HostNetSendDrop:        metric.NewGauge(metaHostNetSendDrop),
 		FDOpen:                 metric.NewGauge(metaFDOpen),
 		FDSoftLimit:            metric.NewGauge(metaFDSoftLimit),
 		Uptime:                 metric.NewGauge(metaUptime),
@@ -543,11 +584,14 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 		subtractNetworkCounters(&deltaNet, rsr.last.net)
 		rsr.last.net = netCounters
 		subtractNetworkCounters(&netCounters, rsr.initialNetCounters)
-
-		rsr.HostNetSendBytes.Update(int64(netCounters.BytesSent))
-		rsr.HostNetSendPackets.Update(int64(netCounters.PacketsSent))
 		rsr.HostNetRecvBytes.Update(int64(netCounters.BytesRecv))
 		rsr.HostNetRecvPackets.Update(int64(netCounters.PacketsRecv))
+		rsr.HostNetRecvErr.Update(int64(netCounters.Errin))
+		rsr.HostNetRecvDrop.Update(int64(netCounters.Dropin))
+		rsr.HostNetSendBytes.Update(int64(netCounters.BytesSent))
+		rsr.HostNetSendPackets.Update(int64(netCounters.PacketsSent))
+		rsr.HostNetSendErr.Update(int64(netCounters.Errout))
+		rsr.HostNetSendDrop.Update(int64(netCounters.Dropout))
 	}
 
 	// Time statistics can be compared to the total elapsed time to create a
@@ -692,7 +736,7 @@ func getSummedDiskCounters(ctx context.Context) (DiskStats, error) {
 		return DiskStats{}, err
 	}
 
-	return sumDiskCounters(diskCounters), nil
+	return sumAndFilterDiskCounters(diskCounters)
 }
 
 func getSummedNetStats(ctx context.Context) (net.IOCountersStat, error) {
@@ -704,11 +748,26 @@ func getSummedNetStats(ctx context.Context) (net.IOCountersStat, error) {
 	return sumNetworkCounters(netCounters), nil
 }
 
-// sumDiskCounters returns a new disk.IOCountersStat whose values are the sum of the
-// values in the slice of disk.IOCountersStats passed in.
-func sumDiskCounters(disksStats []DiskStats) DiskStats {
+// sumAndFilterDiskCounters returns a new disk.IOCountersStat whose values are
+// the sum of the values in the slice of disk.IOCountersStats passed in. It
+// filters out any disk counters that are likely reflecting values already
+// counted elsewhere, eg. md* logical volumes that are created out of RAIDing
+// underlying drives. The filtering regex defaults to a platform-dependent one.
+func sumAndFilterDiskCounters(disksStats []DiskStats) (DiskStats, error) {
 	output := DiskStats{}
+	var ignored *regexp.Regexp
+	if diskMetricsIgnoredDevices != "" {
+		var err error
+		ignored, err = regexp.Compile(diskMetricsIgnoredDevices)
+		if err != nil {
+			return output, err
+		}
+	}
+
 	for _, stats := range disksStats {
+		if ignored != nil && ignored.MatchString(stats.Name) {
+			continue
+		}
 		output.ReadBytes += stats.ReadBytes
 		output.readCount += stats.readCount
 		output.readTime += stats.readTime
@@ -722,7 +781,7 @@ func sumDiskCounters(disksStats []DiskStats) DiskStats {
 
 		output.iopsInProgress += stats.iopsInProgress
 	}
-	return output
+	return output, nil
 }
 
 // subtractDiskCounters subtracts the counters in `sub` from the counters in `from`,
@@ -746,9 +805,13 @@ func sumNetworkCounters(netCounters []net.IOCountersStat) net.IOCountersStat {
 	output := net.IOCountersStat{}
 	for _, counter := range netCounters {
 		output.BytesRecv += counter.BytesRecv
-		output.BytesSent += counter.BytesSent
 		output.PacketsRecv += counter.PacketsRecv
+		output.Errin += counter.Errin
+		output.Dropin += counter.Dropin
+		output.BytesSent += counter.BytesSent
 		output.PacketsSent += counter.PacketsSent
+		output.Errout += counter.Errout
+		output.Dropout += counter.Dropout
 	}
 	return output
 }
@@ -757,9 +820,13 @@ func sumNetworkCounters(netCounters []net.IOCountersStat) net.IOCountersStat {
 // saving the results in `from`.
 func subtractNetworkCounters(from *net.IOCountersStat, sub net.IOCountersStat) {
 	from.BytesRecv -= sub.BytesRecv
-	from.BytesSent -= sub.BytesSent
 	from.PacketsRecv -= sub.PacketsRecv
+	from.Errin -= sub.Errin
+	from.Dropin -= sub.Dropin
+	from.BytesSent -= sub.BytesSent
 	from.PacketsSent -= sub.PacketsSent
+	from.Errout -= sub.Errout
+	from.Dropout -= sub.Dropout
 }
 
 // GetProcCPUTime returns the cumulative user/system time (in ms) since the process start.

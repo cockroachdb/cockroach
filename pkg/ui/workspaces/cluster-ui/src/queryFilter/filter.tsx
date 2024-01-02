@@ -751,7 +751,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
                       <Select
                         options={timeUnit}
                         value={timeUnit.filter(
-                          unit => unit.label == filters.timeUnit,
+                          unit => unit.label === filters.timeUnit,
                         )}
                         onChange={e => this.handleSelectChange(e, "timeUnit")}
                         className={timePair.timeUnit}

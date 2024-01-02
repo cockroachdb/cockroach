@@ -56,26 +56,27 @@ with t=A
   txn_remove
 ----
 >> del_range k=b end=c returnKeys t=A
+del_range: lock acquisitions = [{b id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0 Replicated Intent []} {b/123 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0 Replicated Intent []}]
 del_range: "b"-"c" -> deleted 2 key(s)
 del_range: returned "b"
 del_range: returned "b/123"
-stats: key_bytes=+24 val_count=+2 val_bytes=+100 live_count=-2 live_bytes=-48 gc_bytes_age=+9288 intent_count=+2 intent_bytes=+24 separated_intent_count=+2 intent_age=+108
+stats: key_bytes=+24 val_count=+2 val_bytes=+100 live_count=-2 live_bytes=-48 gc_bytes_age=+9288 intent_count=+2 intent_bytes=+24 lock_count=+2 lock_age=+108
 >> at end:
 data: "a"/45.000000000,0 -> /<empty>
 data: "a"/44.000000000,0 -> /BYTES/abc
 data: "a/123"/45.000000000,0 -> /<empty>
 data: "a/123"/44.000000000,0 -> /BYTES/abc
-meta: "b"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/46.000000000,0 -> /<empty>
 data: "b"/44.000000000,0 -> /BYTES/abc
-meta: "b/123"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b/123"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b/123"/46.000000000,0 -> /<empty>
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
 data: "c/123"/44.000000000,0 -> /BYTES/abc
 data: "d"/44.000000000,0 -> /BYTES/abc
 data: "d/123"/44.000000000,0 -> /BYTES/abc
-stats: key_count=8 key_bytes=176 val_count=12 val_bytes=164 live_count=4 live_bytes=96 gc_bytes_age=13248 intent_count=2 intent_bytes=24 separated_intent_count=2 intent_age=108
+stats: key_count=8 key_bytes=176 val_count=12 val_bytes=164 live_count=4 live_bytes=96 gc_bytes_age=13248 intent_count=2 intent_bytes=24 lock_count=2 lock_age=108
 
 
 # A limited non-txn that deletes a range of keys.
@@ -96,10 +97,10 @@ data: "a"/45.000000000,0 -> /<empty>
 data: "a"/44.000000000,0 -> /BYTES/abc
 data: "a/123"/45.000000000,0 -> /<empty>
 data: "a/123"/44.000000000,0 -> /BYTES/abc
-meta: "b"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/46.000000000,0 -> /<empty>
 data: "b"/44.000000000,0 -> /BYTES/abc
-meta: "b/123"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b/123"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b/123"/46.000000000,0 -> /<empty>
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/47.000000000,0 -> /<empty>
@@ -108,7 +109,7 @@ data: "c/123"/47.000000000,0 -> /<empty>
 data: "c/123"/44.000000000,0 -> /BYTES/abc
 data: "d"/44.000000000,0 -> /BYTES/abc
 data: "d/123"/44.000000000,0 -> /BYTES/abc
-stats: key_count=8 key_bytes=200 val_count=14 val_bytes=164 live_count=2 live_bytes=48 gc_bytes_age=17064 intent_count=2 intent_bytes=24 separated_intent_count=2 intent_age=108
+stats: key_count=8 key_bytes=200 val_count=14 val_bytes=164 live_count=2 live_bytes=48 gc_bytes_age=17064 intent_count=2 intent_bytes=24 lock_count=2 lock_age=108
 
 
 # A txn that performs a delete range at a lower timestamp returns a WriteTooOld error.
@@ -120,15 +121,15 @@ with t=A
   txn_remove
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=46.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=46.000000000,0 wto=false gul=0,0
 data: "a"/45.000000000,0 -> /<empty>
 data: "a"/44.000000000,0 -> /BYTES/abc
 data: "a/123"/45.000000000,0 -> /<empty>
 data: "a/123"/44.000000000,0 -> /BYTES/abc
-meta: "b"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/46.000000000,0 -> /<empty>
 data: "b"/44.000000000,0 -> /BYTES/abc
-meta: "b/123"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b/123"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b/123"/46.000000000,0 -> /<empty>
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/47.000000000,0 -> /<empty>
@@ -154,29 +155,30 @@ with t=A
   txn_remove
 ----
 >> del_range k=c end=z returnKeys t=A
+del_range: lock acquisitions = [{d id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0 Replicated Intent []} {d/123 id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0 Replicated Intent []}]
 del_range: "c"-"z" -> deleted 2 key(s)
 del_range: returned "d"
 del_range: returned "d/123"
-stats: key_bytes=+24 val_count=+2 val_bytes=+100 live_count=-2 live_bytes=-48 gc_bytes_age=+8944 intent_count=+2 intent_bytes=+24 separated_intent_count=+2 intent_age=+104
+stats: key_bytes=+24 val_count=+2 val_bytes=+100 live_count=-2 live_bytes=-48 gc_bytes_age=+8944 intent_count=+2 intent_bytes=+24 lock_count=+2 lock_age=+104
 >> at end:
 data: "a"/45.000000000,0 -> /<empty>
 data: "a"/44.000000000,0 -> /BYTES/abc
 data: "a/123"/45.000000000,0 -> /<empty>
 data: "a/123"/44.000000000,0 -> /BYTES/abc
-meta: "b"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/46.000000000,0 -> /<empty>
 data: "b"/44.000000000,0 -> /BYTES/abc
-meta: "b/123"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b/123"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b/123"/46.000000000,0 -> /<empty>
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/47.000000000,0 -> /<empty>
 data: "c"/44.000000000,0 -> /BYTES/abc
 data: "c/123"/47.000000000,0 -> /<empty>
 data: "c/123"/44.000000000,0 -> /BYTES/abc
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0} ts=48.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0} ts=48.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/48.000000000,0 -> /<empty>
 data: "d"/44.000000000,0 -> /BYTES/abc
-meta: "d/123"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0} ts=48.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d/123"/0,0 -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0} ts=48.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d/123"/48.000000000,0 -> /<empty>
 data: "d/123"/44.000000000,0 -> /BYTES/abc
-stats: key_count=8 key_bytes=224 val_count=16 val_bytes=264 gc_bytes_age=26008 intent_count=4 intent_bytes=48 separated_intent_count=4 intent_age=212
+stats: key_count=8 key_bytes=224 val_count=16 val_bytes=264 gc_bytes_age=26008 intent_count=4 intent_bytes=48 lock_count=4 lock_age=212

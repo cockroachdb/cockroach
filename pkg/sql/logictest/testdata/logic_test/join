@@ -1069,7 +1069,7 @@ FROM
 NULL  NULL
 
 # Regression test for #28817. Do not allow special functions in ON clause.
-query error generator functions are not allowed in ON
+query error pq: generate_series\(\): set-returning functions are not allowed in ON
 SELECT * FROM foo JOIN bar ON generate_series(0, 1) < 2
 
 query error aggregate functions are not allowed in JOIN conditions
@@ -1152,3 +1152,89 @@ SELECT abcd.*, dxby.* FROM abcd INNER JOIN dxby USING (d, b)
 ----
 a  b  c  d  d  x  b  y
 2  2  2  2  2  2  2  2
+
+# Regression test for #105608 - don't filter out NULL values from the
+# task-patient LEFT join.
+statement ok
+CREATE TABLE patient (id INT8 NOT NULL, site_id INT8, PRIMARY KEY (id));
+
+statement ok
+CREATE TABLE site (id INT8 NOT NULL, PRIMARY KEY (id));
+
+statement ok
+CREATE TABLE task (id INT8 NOT NULL, description VARCHAR(255), patient_id INT8, PRIMARY KEY (id));
+
+statement ok
+ALTER TABLE IF EXISTS patient ADD CONSTRAINT fkhty4ykfvf29xscswwd63mgdoc FOREIGN KEY (site_id) REFERENCES site;
+
+statement ok
+ALTER TABLE IF EXISTS task ADD CONSTRAINT fkkk2ow88d08vqxqyvvvmys1j2m FOREIGN KEY (patient_id) REFERENCES patient;
+
+statement ok
+INSERT INTO site(id) VALUES (1);
+INSERT INTO site(id) VALUES (2);
+INSERT INTO site(id) VALUES (3);
+
+statement ok
+INSERT INTO patient(site_id, id) VALUES (NULL, 4);
+INSERT INTO patient(site_id, id) VALUES (1, 5);
+INSERT INTO patient(site_id, id) VALUES (1, 6);
+INSERT INTO patient(site_id, id) VALUES (2, 7);
+INSERT INTO patient(site_id, id) VALUES (3, 8);
+
+statement ok
+INSERT INTO task(description, patient_id, id) VALUES ('taskWithoutPatient', NULL, 9);
+INSERT INTO task(description, patient_id, id) VALUES ('taskWithPatientWithoutSite', 4, 10);
+INSERT INTO task(description, patient_id, id) VALUES ('taskWithPatient1WithValidSite1', 5, 11);
+INSERT INTO task(description, patient_id, id) VALUES ('taskWithPatient2WithValidSite1', 6, 12);
+INSERT INTO task(description, patient_id, id) VALUES ('taskWithPatient3WithValidSite2', 7, 13);
+INSERT INTO task(description, patient_id, id) VALUES ('taskWithPatientWithInvalidSite', 8, 14);
+
+query ITI rowsort
+SELECT task0_.id AS id1_2_, task0_.description AS descript2_2_, task0_.patient_id AS patient_3_2_
+FROM task AS task0_ WHERE EXISTS (
+	SELECT task1_.id FROM task AS task1_
+	LEFT JOIN patient AS patient2_
+	ON task1_.patient_id = patient2_.id
+	LEFT JOIN site AS site3_
+	ON patient2_.site_id = site3_.id
+	WHERE (task1_.id = task0_.id) AND ((patient2_.id IS NULL) OR (site3_.id IN (2, 1)))
+);
+----
+9   taskWithoutPatient              NULL
+11  taskWithPatient1WithValidSite1  5
+12  taskWithPatient2WithValidSite1  6
+13  taskWithPatient3WithValidSite2  7
+
+# Regression test for #106371 - only infer self-join equalities if the original
+# equality columns form a key over the *base* table, not just the join inputs.
+statement ok
+CREATE TABLE t106371 (x INT NOT NULL, y INT NOT NULL);
+INSERT INTO t106371 VALUES (1, 1), (1, 2);
+
+query IIII
+SELECT * FROM (SELECT * FROM t106371 ORDER BY y LIMIT 1) a
+JOIN (SELECT DISTINCT ON (x) * FROM (SELECT * FROM t106371 WHERE y = 2)) b ON a.x = b.x;
+----
+1  1  1  2
+
+# Regression test for #107850. Do not eliminate joins and remap columns that are
+# equivalent but have non-identical types.
+subtest regression_107850
+
+statement ok
+CREATE TABLE t107850a (
+  d2 DECIMAL(10, 2) NOT NULL UNIQUE
+);
+CREATE TABLE t107850b (
+  d0 DECIMAL(10, 0) NOT NULL REFERENCES t107850a (d2)
+);
+INSERT INTO t107850a VALUES (1.00);
+INSERT INTO t107850b VALUES (1);
+
+query R
+SELECT d2 FROM t107850a JOIN t107850b ON d2 = d0
+----
+1.00
+
+subtest end

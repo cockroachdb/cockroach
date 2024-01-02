@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -100,6 +102,7 @@ func newFileUploadMachine(
 
 	// We need a planner to do the initial planning, even if a planner
 	// is not required after that.
+	c.txnOpt.initPlanner(ctx, c.p)
 	cleanup := c.p.preparePlannerForCopy(ctx, &c.txnOpt, false /* finalBatch */, c.implicitTxn)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
@@ -107,8 +110,11 @@ func newFileUploadMachine(
 	c.parsingEvalCtx = c.p.EvalContext()
 
 	if n.Table.Table() == NodelocalFileUploadTable {
-		if err := c.p.RequireAdminRole(ctx, "upload to nodelocal"); err != nil {
+		if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
 			return nil, err
+		} else if !hasAdmin {
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to upload to nodelocal")
 		}
 	}
 

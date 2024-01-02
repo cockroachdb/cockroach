@@ -12,6 +12,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -58,7 +60,7 @@ func TestFileRegistryRelativePaths(t *testing.T) {
 	for _, tc := range testCases {
 		require.NoError(t, mem.MkdirAll(tc.dbDir, 0755))
 		registry := &PebbleFileRegistry{FS: mem, DBDir: tc.dbDir}
-		require.NoError(t, registry.Load())
+		require.NoError(t, registry.Load(context.Background()))
 		require.NoError(t, registry.SetFileEntry(tc.filename, fileEntry))
 		entry := registry.GetFileEntry(tc.expectedFilename)
 		if diff := pretty.Diff(entry, fileEntry); diff != nil {
@@ -99,7 +101,7 @@ func TestFileRegistryOps(t *testing.T) {
 		}
 
 		registry := &PebbleFileRegistry{FS: mem, DBDir: "/mydb"}
-		require.NoError(t, registry.Load())
+		require.NoError(t, registry.Load(context.Background()))
 		registry.mu.Lock()
 		defer registry.mu.Unlock()
 		if diff := pretty.Diff(registry.mu.entries, expected); diff != nil {
@@ -110,7 +112,7 @@ func TestFileRegistryOps(t *testing.T) {
 
 	require.NoError(t, mem.MkdirAll("/mydb", 0755))
 	registry := &PebbleFileRegistry{FS: mem, DBDir: "/mydb"}
-	require.NoError(t, registry.Load())
+	require.NoError(t, registry.Load(context.Background()))
 	require.Nil(t, registry.GetFileEntry("file1"))
 
 	// {file1 => foo}
@@ -176,7 +178,7 @@ func TestFileRegistryOps(t *testing.T) {
 
 	// Open a read-only registry. All updates should fail.
 	roRegistry := &PebbleFileRegistry{FS: mem, DBDir: "/mydb", ReadOnly: true}
-	require.NoError(t, roRegistry.Load())
+	require.NoError(t, roRegistry.Load(context.Background()))
 	require.Error(t, roRegistry.SetFileEntry("file3", bazFileEntry))
 	require.Error(t, roRegistry.MaybeDeleteEntry("file3"))
 	require.Error(t, roRegistry.MaybeCopyEntry("file3", "file4"))
@@ -192,7 +194,7 @@ func TestFileRegistryCheckNoFile(t *testing.T) {
 		&enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("foo")}
 	require.NoError(t, CheckNoRegistryFile(mem, "" /* dbDir */))
 	registry := &PebbleFileRegistry{FS: mem}
-	require.NoError(t, registry.Load())
+	require.NoError(t, registry.Load(context.Background()))
 	require.NoError(t, registry.SetFileEntry("/foo", fileEntry))
 	require.Error(t, CheckNoRegistryFile(mem, "" /* dbDir */))
 }
@@ -220,7 +222,7 @@ func TestFileRegistryElideUnencrypted(t *testing.T) {
 	}
 
 	registry := &PebbleFileRegistry{FS: mem}
-	require.NoError(t, registry.Load())
+	require.NoError(t, registry.Load(context.Background()))
 	require.NoError(t, registry.writeToRegistryFile(&enginepb.RegistryUpdateBatch{
 		Updates: []*enginepb.RegistryUpdate{
 			{Filename: "test1", Entry: &enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte(nil)}},
@@ -231,7 +233,7 @@ func TestFileRegistryElideUnencrypted(t *testing.T) {
 
 	// Create another pebble file registry to verify that the unencrypted file is elided on startup.
 	registry2 := &PebbleFileRegistry{FS: mem}
-	require.NoError(t, registry2.Load())
+	require.NoError(t, registry2.Load(context.Background()))
 	require.NotContains(t, registry2.mu.entries, "test1")
 	entry := registry2.mu.entries["test2"]
 	require.NotNil(t, entry)
@@ -249,7 +251,7 @@ func TestFileRegistryElideNonexistent(t *testing.T) {
 	require.NoError(t, f.Close())
 	{
 		registry := &PebbleFileRegistry{FS: mem}
-		require.NoError(t, registry.Load())
+		require.NoError(t, registry.Load(context.Background()))
 		require.NoError(t, registry.writeToRegistryFile(&enginepb.RegistryUpdateBatch{
 			Updates: []*enginepb.RegistryUpdate{
 				{Filename: "foo", Entry: &enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("foo")}},
@@ -263,7 +265,7 @@ func TestFileRegistryElideNonexistent(t *testing.T) {
 	// entry is elided on startup.
 	{
 		registry := &PebbleFileRegistry{FS: mem}
-		require.NoError(t, registry.Load())
+		require.NoError(t, registry.Load(context.Background()))
 		require.NotContains(t, registry.mu.entries, "foo")
 		require.Contains(t, registry.mu.entries, "bar")
 		require.NotNil(t, registry.mu.entries["bar"])
@@ -294,7 +296,7 @@ func TestFileRegistryRecordsReadAndWrite(t *testing.T) {
 	// Create a file registry and add entries for a few files.
 	require.NoError(t, CheckNoRegistryFile(mem, "" /* dbDir */))
 	registry1 := &PebbleFileRegistry{FS: mem}
-	require.NoError(t, registry1.Load())
+	require.NoError(t, registry1.Load(context.Background()))
 	for filename, entry := range files {
 		require.NoError(t, registry1.SetFileEntry(filename, entry))
 	}
@@ -303,14 +305,14 @@ func TestFileRegistryRecordsReadAndWrite(t *testing.T) {
 	// Create another file registry and load in the registry file.
 	// It should use the monolithic one.
 	registry2 := &PebbleFileRegistry{FS: mem}
-	require.NoError(t, registry2.Load())
+	require.NoError(t, registry2.Load(context.Background()))
 	for filename, entry := range files {
 		require.Equal(t, entry, registry2.GetFileEntry(filename))
 	}
 	require.NoError(t, registry2.Close())
 
 	registry3 := &PebbleFileRegistry{FS: mem}
-	require.NoError(t, registry3.Load())
+	require.NoError(t, registry3.Load(context.Background()))
 	for filename, entry := range files {
 		require.Equal(t, entry, registry3.GetFileEntry(filename))
 	}
@@ -351,9 +353,11 @@ func TestFileRegistry(t *testing.T) {
 			}
 			return string(entry.EncryptionSettings)
 		case "load":
+			var softMaxSize int64
+			d.MaybeScanArgs(t, "soft-max-size", &softMaxSize)
 			require.Nil(t, registry)
-			registry = &PebbleFileRegistry{FS: fs}
-			require.NoError(t, registry.Load())
+			registry = &PebbleFileRegistry{FS: fs, SoftMaxSize: softMaxSize}
+			require.NoError(t, registry.Load(context.Background()))
 			return buf.String()
 		case "reset":
 			require.Nil(t, registry)
@@ -499,4 +503,229 @@ func (f loggingFile) Close() error {
 func (f loggingFile) Sync() error {
 	fmt.Fprintf(f.w, "sync(%q)\n", f.name)
 	return f.File.Sync()
+}
+
+// fileRegistryEntryChecked creates new files and corresponding entries in the
+// file registry and checks that the expected entries are in the registry.
+type fileRegistryEntryChecker struct {
+	t   *testing.T
+	dir string
+	fs  vfs.FS
+
+	dbDir              vfs.File
+	encryptionSettings []byte
+	numAddedEntries    int
+}
+
+func makeFileRegistryEntryChecker(t *testing.T, fs vfs.FS, dir string) *fileRegistryEntryChecker {
+	dbDir, err := fs.OpenDir(dir)
+	require.NoError(t, err)
+	return &fileRegistryEntryChecker{
+		t:     t,
+		dir:   dir,
+		fs:    fs,
+		dbDir: dbDir,
+		// Large settings slice, so that the test rolls over registry files quickly.
+		encryptionSettings: make([]byte, 1<<20),
+	}
+}
+
+func (c *fileRegistryEntryChecker) addEntry(r *PebbleFileRegistry) {
+	filename := fmt.Sprintf("%04d", c.numAddedEntries)
+	// Create a file for this added entry so that it doesn't get cleaned up
+	// when we reopen the file registry.
+	f, err := c.fs.Create(c.fs.PathJoin(c.dir, filename))
+	require.NoError(c.t, err)
+	require.NoError(c.t, f.Sync())
+	require.NoError(c.t, f.Close())
+	require.NoError(c.t, c.dbDir.Sync())
+	fileEntry := &enginepb.FileEntry{EnvType: enginepb.EnvType_Data}
+	fileEntry.EncryptionSettings = append(c.encryptionSettings, []byte(filename)...)
+	require.NoError(c.t, r.SetFileEntry(filename, fileEntry))
+	c.numAddedEntries++
+}
+
+// checkEntries checks that the entries we have added are in the file registry
+// and there isn't an additional entry.
+func (c *fileRegistryEntryChecker) checkEntries(r *PebbleFileRegistry) {
+	for i := 0; i < c.numAddedEntries; i++ {
+		filename := fmt.Sprintf("%04d", i)
+		entry := r.GetFileEntry(filename)
+		require.NotNil(c.t, entry)
+		require.Equal(c.t, filename, string(entry.EncryptionSettings[len(entry.EncryptionSettings)-4:]))
+	}
+	// Does not have an additional entry.
+	filename := fmt.Sprintf("%04d", c.numAddedEntries)
+	entry := r.GetFileEntry(filename)
+	require.Nil(c.t, entry)
+}
+
+func TestFileRegistryRollover(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const dir = "/mydb"
+	mem := vfs.NewMem()
+	require.NoError(t, mem.MkdirAll(dir, 0755))
+	registry := &PebbleFileRegistry{
+		FS:    mem,
+		DBDir: dir,
+		// SoftMaxSize configures the registry size at which the registry will
+		// first roll over to a new registry size. Setting a lower size reduces
+		// the memory footprint and runtime of this function.
+		SoftMaxSize: 32 << 10, /* 32 KiB */
+	}
+	require.NoError(t, registry.Load(context.Background()))
+
+	// All the registry files created so far. Some may have been subsequently
+	// deleted.
+	var registryFiles []string
+	accumRegistryFiles := func() {
+		registry.mu.Lock()
+		defer registry.mu.Unlock()
+		n := len(registryFiles)
+		if registry.mu.registryFilename != "" &&
+			(n == 0 || registry.mu.registryFilename != registryFiles[n-1]) {
+			registryFiles = append(registryFiles, registry.mu.registryFilename)
+			n++
+		}
+	}
+	registryChecker := makeFileRegistryEntryChecker(t, mem, dir)
+	for {
+		created := len(registryFiles)
+		accumRegistryFiles()
+		if created != len(registryFiles) {
+			// Rolled over.
+			registryChecker.checkEntries(registry)
+		}
+		// Rollover a few times.
+		if len(registryFiles) == 4 {
+			break
+		}
+		registryChecker.addEntry(registry)
+	}
+	require.NoError(t, registry.Close())
+	registry = &PebbleFileRegistry{FS: mem, DBDir: dir}
+	require.NoError(t, registry.Load(context.Background()))
+	// Check added entries again.
+	registryChecker.checkEntries(registry)
+	require.NoError(t, registry.Close())
+}
+
+// TestFileRegistryKeepOldFilesAndSync tests that the file registry keeps
+// older registry files as configured, and correctly syncs writes to disk.
+func TestFileRegistryKeepOldFilesAndSync(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t) // Slow under race.
+
+	const dir = "/mydb"
+	mem := vfs.NewStrictMem()
+	{
+		require.NoError(t, mem.MkdirAll(dir, 0755))
+		// Sync the root dir so that /mydb does not vanish later.
+		dir, err := mem.OpenDir("/")
+		require.NoError(t, err)
+		require.NoError(t, dir.Sync())
+		dir.Close()
+	}
+
+	// Keep 2 old file registries.
+	var numOldRegistryFiles = 3
+	registry := &PebbleFileRegistry{
+		FS:                  mem,
+		DBDir:               dir,
+		NumOldRegistryFiles: numOldRegistryFiles,
+		SoftMaxSize:         1024,
+	}
+	require.NoError(t, registry.Load(context.Background()))
+
+	// All the registry files created so far. Some may have been subsequently
+	// deleted.
+	var registryFiles []string
+	accumRegistryFiles := func(forceCheck bool) (totalCreated int) {
+		registry.mu.Lock()
+		defer registry.mu.Unlock()
+		n := len(registryFiles)
+		doCheck := forceCheck
+		if registry.mu.registryFilename != "" &&
+			(n == 0 || registry.mu.registryFilename != registryFiles[n-1]) {
+			registryFiles = append(registryFiles, registry.mu.registryFilename)
+			n++
+			doCheck = true
+		}
+		if doCheck {
+			numObsolete := len(registryFiles) - 1
+			if numObsolete > numOldRegistryFiles {
+				numObsolete = numOldRegistryFiles
+			}
+			// The obsolete files are what we expect them to be.
+			require.Equal(t, numObsolete, len(registry.mu.obsoleteRegistryFiles))
+			var expectedFiles []string
+			for i := 0; i < numObsolete; i++ {
+				require.Equal(t, registryFiles[n-2-i], registry.mu.obsoleteRegistryFiles[numObsolete-1-i])
+				expectedFiles = append(expectedFiles, registryFiles[n-2-i])
+			}
+			expectedFiles = append(expectedFiles, registryFiles[n-1])
+			// Also check that it matches what is in the filesystem.
+			lsFiles, err := mem.List(dir)
+			require.NoError(t, err)
+			var foundFiles []string
+			for _, f := range lsFiles {
+				f = mem.PathBase(f)
+				if strings.HasPrefix(f, registryFilenameBase) {
+					foundFiles = append(foundFiles, f)
+				}
+			}
+			require.ElementsMatch(t, expectedFiles, foundFiles)
+		}
+		return len(registryFiles)
+	}
+	registryChecker := makeFileRegistryEntryChecker(t, mem, dir)
+	totalCreated := 0
+	for {
+		created := accumRegistryFiles(false)
+		if created != totalCreated {
+			registryChecker.checkEntries(registry)
+		}
+		totalCreated = created
+		// Go over the threshold of old registry files to keep, so we exercise
+		// cleanup logic a few times.
+		if totalCreated > numOldRegistryFiles+3 {
+			break
+		}
+		registryChecker.addEntry(registry)
+	}
+	// Start ignoring syncs.
+	mem.SetIgnoreSyncs(true)
+	// Add another entry, that will be deliberately lost.
+	registryChecker.addEntry(registry)
+	registryChecker.checkEntries(registry)
+	require.NoError(t, registry.Close())
+	mem.ResetToSyncedState()
+	// Remove the lost entry from what we check.
+	registryChecker.numAddedEntries--
+
+	mem.SetIgnoreSyncs(false)
+	// Keep no old registry files.
+	numOldRegistryFiles = 0
+	registry = &PebbleFileRegistry{
+		FS:                  mem,
+		DBDir:               dir,
+		NumOldRegistryFiles: numOldRegistryFiles,
+		SoftMaxSize:         1024,
+	}
+	require.NoError(t, registry.Load(context.Background()))
+	// Force check that the old registry files are gone.
+	accumRegistryFiles(true)
+	// Check added entries again.
+	registryChecker.checkEntries(registry)
+	require.NoError(t, registry.Close())
+
+	// Another load, with a different NumOldRegistryFiles, just for fun.
+	numOldRegistryFiles = 1
+	registry = &PebbleFileRegistry{FS: mem, DBDir: dir, NumOldRegistryFiles: numOldRegistryFiles}
+	require.NoError(t, registry.Load(context.Background()))
+	registryChecker.checkEntries(registry)
 }

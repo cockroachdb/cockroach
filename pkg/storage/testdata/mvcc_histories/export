@@ -43,8 +43,13 @@ with t=A
 del: "a": found key true
 del: "b": found key false
 del: "h": found key true
+put: lock acquisition = {a id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {d id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {j id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {o id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {c-d}/[5.000000000,0={localTs=4.000000000,0}/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -53,12 +58,12 @@ rangekey: {f-g}/[5.000000000,0={localTs=4.000000000,0}/<empty> 3.000000000,0=/<e
 rangekey: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {h-k}/[1.000000000,0=/<empty>]
 rangekey: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-meta: "a"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "a"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/7.000000000,0 -> /BYTES/a7
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "e"/3.000000000,0 -> {localTs=2.000000000,0}/BYTES/e3
@@ -69,35 +74,35 @@ data: "g"/4.000000000,0 -> /BYTES/g4
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "h"/4.000000000,0 -> /<empty>
 data: "h"/3.000000000,0 -> /BYTES/h3
-meta: "j"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "j"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "j"/7.000000000,0 -> /BYTES/j7
 data: "k"/5.000000000,0 -> {localTs=4.000000000,0}/BYTES/k5
-meta: "l"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "l"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "l"/7.000000000,0 -> /BYTES/l7
-meta: "o"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "o"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "o"/7.000000000,0 -> /BYTES/n7
 
 # Exporting across intents will error.
 run error
 export k=a end=z
 ----
-error: (*kvpb.WriteIntentError:) conflicting intents on "a"
+error: (*kvpb.LockConflictError:) conflicting locks on "a"
 
 run error
-export k=a end=z maxIntents=100
+export k=a end=z maxLockConflicts=100
 ----
-error: (*kvpb.WriteIntentError:) conflicting intents on "a", "d", "j", "l", "o"
+error: (*kvpb.LockConflictError:) conflicting locks on "a", "d", "j", "l", "o"
 
 run error
-export k=a end=z maxIntents=3
+export k=a end=z maxLockConflicts=3
 ----
-error: (*kvpb.WriteIntentError:) conflicting intents on "a", "d", "j"
+error: (*kvpb.LockConflictError:) conflicting locks on "a", "d", "j"
 
 # Export the entire dataset below the intents, with full revision history.
 run ok
 export k=a end=z ts=6 allRevisions
 ----
-export: data_size:165
+export: data_size:165 
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
@@ -125,13 +130,13 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z ts=1 allRevisions
 ----
-export: data_size:14
+export: data_size:14 
 export: {a-k}/[1.000000000,0=/<empty>]
 
 run ok
 export k=a end=z ts=2 allRevisions
 ----
-export: data_size:38
+export: data_size:38 
 export: {a-k}/[1.000000000,0=/<empty>]
 export: "a"/2.000000000,0 -> /BYTES/a2
 export: "f"/2.000000000,0 -> /BYTES/f2
@@ -140,7 +145,7 @@ export: "g"/2.000000000,0 -> /BYTES/g2
 run ok
 export k=a end=z ts=3 allRevisions
 ----
-export: data_size:77
+export: data_size:77 
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/2.000000000,0 -> /BYTES/a2
 export: {b-d}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -156,7 +161,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z ts=4 allRevisions
 ----
-export: data_size:104
+export: data_size:104 
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
@@ -178,7 +183,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z ts=5 allRevisions
 ----
-export: data_size:157
+export: data_size:157 
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
@@ -203,7 +208,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z ts=6 allRevisions
 ----
-export: data_size:165
+export: data_size:165 
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
@@ -229,7 +234,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z startTs=1 ts=6 allRevisions
 ----
-export: data_size:151
+export: data_size:151 
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
 export: {b-c}/[3.000000000,0=/<empty>]
@@ -253,7 +258,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z startTs=2 ts=6 allRevisions
 ----
-export: data_size:127
+export: data_size:127 
 export: "a"/4.000000000,0 -> /<empty>
 export: {b-c}/[3.000000000,0=/<empty>]
 export: "b"/4.000000000,0 -> /<empty>
@@ -274,7 +279,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z startTs=3 ts=6 allRevisions
 ----
-export: data_size:88
+export: data_size:88 
 export: "a"/4.000000000,0 -> /<empty>
 export: "b"/4.000000000,0 -> /<empty>
 export: {c-g}/[5.000000000,0=/<empty>]
@@ -288,7 +293,7 @@ export: "k"/5.000000000,0 -> /BYTES/k5
 run ok
 export k=a end=z startTs=4 ts=6 allRevisions
 ----
-export: data_size:61
+export: data_size:61 
 export: {c-g}/[5.000000000,0=/<empty>]
 export: "f"/6.000000000,0 -> /BYTES/f6
 export: "k"/5.000000000,0 -> /BYTES/k5
@@ -296,7 +301,7 @@ export: "k"/5.000000000,0 -> /BYTES/k5
 run ok
 export k=a end=z startTs=5 ts=6 allRevisions
 ----
-export: data_size:8
+export: data_size:8 
 export: "f"/6.000000000,0 -> /BYTES/f6
 
 run ok
@@ -314,7 +319,7 @@ export:
 run ok
 export k=a end=z ts=2
 ----
-export: data_size:24
+export: data_size:24 
 export: "a"/2.000000000,0 -> /BYTES/a2
 export: "f"/2.000000000,0 -> /BYTES/f2
 export: "g"/2.000000000,0 -> /BYTES/g2
@@ -322,7 +327,7 @@ export: "g"/2.000000000,0 -> /BYTES/g2
 run ok
 export k=a end=z ts=3
 ----
-export: data_size:24
+export: data_size:24 
 export: "a"/2.000000000,0 -> /BYTES/a2
 export: "e"/3.000000000,0 -> /BYTES/e3
 export: "h"/3.000000000,0 -> /BYTES/h3
@@ -330,7 +335,7 @@ export: "h"/3.000000000,0 -> /BYTES/h3
 run ok
 export k=a end=z ts=4
 ----
-export: data_size:32
+export: data_size:32 
 export: "d"/4.000000000,0 -> /BYTES/d4
 export: "e"/3.000000000,0 -> /BYTES/e3
 export: "f"/4.000000000,0 -> /BYTES/f4
@@ -339,14 +344,14 @@ export: "g"/4.000000000,0 -> /BYTES/g4
 run ok
 export k=a end=z ts=5
 ----
-export: data_size:16
+export: data_size:16 
 export: "g"/4.000000000,0 -> /BYTES/g4
 export: "k"/5.000000000,0 -> /BYTES/k5
 
 run ok
 export k=a end=z ts=6
 ----
-export: data_size:24
+export: data_size:24 
 export: "f"/6.000000000,0 -> /BYTES/f6
 export: "g"/4.000000000,0 -> /BYTES/g4
 export: "k"/5.000000000,0 -> /BYTES/k5
@@ -354,7 +359,7 @@ export: "k"/5.000000000,0 -> /BYTES/k5
 run ok
 export k=a end=z startTs=1 ts=6
 ----
-export: data_size:91
+export: data_size:91 
 export: "a"/4.000000000,0 -> /<empty>
 export: {b-c}/[3.000000000,0=/<empty>]
 export: "b"/4.000000000,0 -> /<empty>
@@ -369,7 +374,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z startTs=2 ts=6
 ----
-export: data_size:91
+export: data_size:91 
 export: "a"/4.000000000,0 -> /<empty>
 export: {b-c}/[3.000000000,0=/<empty>]
 export: "b"/4.000000000,0 -> /<empty>
@@ -384,7 +389,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z startTs=3 ts=6
 ----
-export: data_size:72
+export: data_size:72 
 export: "a"/4.000000000,0 -> /<empty>
 export: "b"/4.000000000,0 -> /<empty>
 export: {c-g}/[5.000000000,0=/<empty>]
@@ -396,7 +401,7 @@ export: "k"/5.000000000,0 -> /BYTES/k5
 run ok
 export k=a end=z startTs=4 ts=6
 ----
-export: data_size:61
+export: data_size:61 
 export: {c-g}/[5.000000000,0=/<empty>]
 export: "f"/6.000000000,0 -> /BYTES/f6
 export: "k"/5.000000000,0 -> /BYTES/k5
@@ -404,7 +409,7 @@ export: "k"/5.000000000,0 -> /BYTES/k5
 run ok
 export k=a end=z startTs=5 ts=6
 ----
-export: data_size:8
+export: data_size:8 
 export: "f"/6.000000000,0 -> /BYTES/f6
 
 run ok
@@ -417,13 +422,13 @@ export:
 run ok
 export k=a end=z startTs=0 ts=1 allRevisions
 ----
-export: data_size:14
+export: data_size:14 
 export: {a-k}/[1.000000000,0=/<empty>]
 
 run ok
 export k=a end=z startTs=1 ts=2 allRevisions
 ----
-export: data_size:24
+export: data_size:24 
 export: "a"/2.000000000,0 -> /BYTES/a2
 export: "f"/2.000000000,0 -> /BYTES/f2
 export: "g"/2.000000000,0 -> /BYTES/g2
@@ -431,7 +436,7 @@ export: "g"/2.000000000,0 -> /BYTES/g2
 run ok
 export k=a end=z startTs=2 ts=3 allRevisions
 ----
-export: data_size:39
+export: data_size:39 
 export: {b-d}/[3.000000000,0=/<empty>]
 export: "e"/3.000000000,0 -> /BYTES/e3
 export: {f-h}/[3.000000000,0=/<empty>]
@@ -441,7 +446,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z startTs=3 ts=4 allRevisions
 ----
-export: data_size:27
+export: data_size:27 
 export: "a"/4.000000000,0 -> /<empty>
 export: "b"/4.000000000,0 -> /<empty>
 export: "d"/4.000000000,0 -> /BYTES/d4
@@ -452,14 +457,14 @@ export: "h"/4.000000000,0 -> /<empty>
 run ok
 export k=a end=z startTs=4 ts=5 allRevisions
 ----
-export: data_size:53
+export: data_size:53 
 export: {c-g}/[5.000000000,0=/<empty>]
 export: "k"/5.000000000,0 -> /BYTES/k5
 
 run ok
 export k=a end=z startTs=5 ts=6 allRevisions
 ----
-export: data_size:8
+export: data_size:8 
 export: "f"/6.000000000,0 -> /BYTES/f6
 
 run ok
@@ -470,7 +475,7 @@ export:
 run ok
 export k=a end=z startTs=1 ts=2
 ----
-export: data_size:24
+export: data_size:24 
 export: "a"/2.000000000,0 -> /BYTES/a2
 export: "f"/2.000000000,0 -> /BYTES/f2
 export: "g"/2.000000000,0 -> /BYTES/g2
@@ -478,7 +483,7 @@ export: "g"/2.000000000,0 -> /BYTES/g2
 run ok
 export k=a end=z startTs=2 ts=3
 ----
-export: data_size:39
+export: data_size:39 
 export: {b-d}/[3.000000000,0=/<empty>]
 export: "e"/3.000000000,0 -> /BYTES/e3
 export: {f-h}/[3.000000000,0=/<empty>]
@@ -488,7 +493,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z startTs=3 ts=4
 ----
-export: data_size:27
+export: data_size:27 
 export: "a"/4.000000000,0 -> /<empty>
 export: "b"/4.000000000,0 -> /<empty>
 export: "d"/4.000000000,0 -> /BYTES/d4
@@ -499,14 +504,14 @@ export: "h"/4.000000000,0 -> /<empty>
 run ok
 export k=a end=z startTs=4 ts=5
 ----
-export: data_size:53
+export: data_size:53 
 export: {c-g}/[5.000000000,0=/<empty>]
 export: "k"/5.000000000,0 -> /BYTES/k5
 
 run ok
 export k=a end=z startTs=5 ts=6
 ----
-export: data_size:8
+export: data_size:8 
 export: "f"/6.000000000,0 -> /BYTES/f6
 
 # TargetSize returns a resume span, and allows overflow, both when exporting the
@@ -515,7 +520,7 @@ export: "f"/6.000000000,0 -> /BYTES/f6
 run ok
 export k=a end=z ts=6 allRevisions targetSize=1
 ----
-export: data_size:11 resume="b"/0,0
+export: data_size:11  resume="b"/0,0
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
@@ -523,7 +528,7 @@ export: "a"/2.000000000,0 -> /BYTES/a2
 run ok
 export k=a end=z ts=6 allRevisions targetSize=1 stopMidKey
 ----
-export: data_size:11 resume="b"/0,0
+export: data_size:11  resume="b"/0,0
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
@@ -531,13 +536,13 @@ export: "a"/2.000000000,0 -> /BYTES/a2
 run ok
 export k=a end=z ts=6 targetSize=1
 ----
-export: data_size:8 resume="g"/0,0
+export: data_size:8  resume="g"/0,0
 export: "f"/6.000000000,0 -> /BYTES/f6
 
 run ok
 export k=a end=z startTs=1 ts=6 targetSize=1
 ----
-export: data_size:1 resume="b"/0,0
+export: data_size:1  resume="b"/0,0
 export: "a"/4.000000000,0 -> /<empty>
 
 # MaxSize returns an error if exceeded without TargetSize.
@@ -570,14 +575,14 @@ error: (*storage.ExceedMaxSizeError:) export size (12 bytes) exceeds max size (1
 run ok
 export k=a end=z ts=6 allRevisions targetSize=10 maxSize=10 stopMidKey
 ----
-export: data_size:4 resume="a"/2.000000000,0
+export: data_size:4  resume="a"/2.000000000,0
 export: a{-\x00}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 
 run ok
 export k=a end=z ts=6 allRevisions targetSize=12 maxSize=12
 ----
-export: data_size:11 resume="b"/0,0
+export: data_size:11  resume="b"/0,0
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
@@ -592,7 +597,7 @@ error: (*storage.ExceedMaxSizeError:) export size (18 bytes) exceeds max size (1
 run ok
 export k=a end=z ts=6 allRevisions targetSize=4 maxSize=12
 ----
-export: data_size:11 resume="b"/0,0
+export: data_size:11  resume="b"/0,0
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
@@ -604,20 +609,20 @@ export: "a"/2.000000000,0 -> /BYTES/a2
 run ok
 export k=a end=z ts=6 allRevisions targetSize=3 maxSize=3 stopMidKey
 ----
-export: data_size:3 resume="a"/4.000000000,0
+export: data_size:3  resume="a"/4.000000000,0
 export: a{-\x00}/[1.000000000,0=/<empty>]
 
 run ok
 export k=a end=z ts=6 allRevisions targetSize=4 maxSize=4 stopMidKey
 ----
-export: data_size:4 resume="a"/2.000000000,0
+export: data_size:4  resume="a"/2.000000000,0
 export: a{-\x00}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 
 run ok
 export k=a end=z ts=6 allRevisions targetSize=17 maxSize=17 stopMidKey
 ----
-export: data_size:17 resume="b"/4.000000000,0
+export: data_size:17  resume="b"/4.000000000,0
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
@@ -632,7 +637,7 @@ error: (*storage.ExceedMaxSizeError:) export size (18 bytes) exceeds max size (1
 run ok
 export k=b end=k ts=6 allRevisions
 ----
-export: data_size:131
+export: data_size:131 
 export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 export: "b"/4.000000000,0 -> /<empty>
 export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -653,7 +658,7 @@ export: "h"/3.000000000,0 -> /BYTES/h3
 run ok
 export k=bbb end=ggg startTs=2 ts=5 allRevisions
 ----
-export: data_size:89
+export: data_size:89 
 export: {bbb-c}/[3.000000000,0=/<empty>]
 export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 export: {d-f}/[5.000000000,0=/<empty>]
@@ -667,7 +672,7 @@ export: "g"/4.000000000,0 -> /BYTES/g4
 run ok
 export k=bbb end=ggg startTs=2 ts=5
 ----
-export: data_size:61
+export: data_size:61 
 export: {bbb-c}/[3.000000000,0=/<empty>]
 export: {c-g}/[5.000000000,0=/<empty>]
 export: g{-gg}/[3.000000000,0=/<empty>]
@@ -677,7 +682,7 @@ export: "g"/4.000000000,0 -> /BYTES/g4
 run ok
 export k=a kTs=4 end=c ts=6 allRevisions
 ----
-export: data_size:16
+export: data_size:16 
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
@@ -687,7 +692,7 @@ export: "b"/4.000000000,0 -> /<empty>
 run ok
 export k=a kTs=3 end=c ts=6 allRevisions
 ----
-export: data_size:15
+export: data_size:15 
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/2.000000000,0 -> /BYTES/a2
 export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -696,7 +701,7 @@ export: "b"/4.000000000,0 -> /<empty>
 run ok
 export k=a kTs=2 end=c ts=6 allRevisions
 ----
-export: data_size:15
+export: data_size:15 
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/2.000000000,0 -> /BYTES/a2
 export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -705,7 +710,7 @@ export: "b"/4.000000000,0 -> /<empty>
 run ok
 export k=a kTs=1 end=c ts=6 allRevisions
 ----
-export: data_size:7
+export: data_size:7 
 export: {a-b}/[1.000000000,0=/<empty>]
 export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 export: "b"/4.000000000,0 -> /<empty>
@@ -713,7 +718,7 @@ export: "b"/4.000000000,0 -> /<empty>
 run ok
 export k=f kTs=4 end=g ts=6 allRevisions
 ----
-export: data_size:35
+export: data_size:35 
 export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 export: "f"/4.000000000,0 -> /BYTES/f4
 export: "f"/2.000000000,0 -> /BYTES/f2
@@ -721,20 +726,20 @@ export: "f"/2.000000000,0 -> /BYTES/f2
 run ok
 export k=f kTs=4 end=g startTs=2 ts=4 allRevisions
 ----
-export: data_size:10
+export: data_size:10 
 export: {f-g}/[3.000000000,0=/<empty>]
 export: "f"/4.000000000,0 -> /BYTES/f4
 
 run ok
 export k=f kTs=3 end=g startTs=2 ts=4 allRevisions
 ----
-export: data_size:2
+export: data_size:2 
 export: {f-g}/[3.000000000,0=/<empty>]
 
 # Resuming from a specific key version at or below startTS.
 run ok
 export k=a kTs=2 end=c startTs=2 ts=6
 ----
-export: data_size:3
+export: data_size:3 
 export: {b-c}/[3.000000000,0=/<empty>]
 export: "b"/4.000000000,0 -> /<empty>

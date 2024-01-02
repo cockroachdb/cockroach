@@ -40,7 +40,7 @@ ReadyForQuery
 
 # This is crdb_only because Postgres does not support AS OF SYSTEM TIME.
 send crdb_only
-Query {"String": "BEGIN AS OF SYSTEM TIME '1s'"}
+Query {"String": "BEGIN AS OF SYSTEM TIME '0s'"}
 Sync
 ----
 

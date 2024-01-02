@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -14,6 +13,8 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/abortspan",
+        "//pkg/kv/kvserver/benignerror",
+        "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/rditer",
         "//pkg/roachpb",
         "//pkg/settings",
@@ -24,10 +25,10 @@ go_library(
         "//pkg/util/bufalloc",
         "//pkg/util/hlc",
         "//pkg/util/log",
-        "//pkg/util/protoutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//:pebble",
     ],
 )
 
@@ -43,7 +44,6 @@ go_test(
         "gc_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=895s"],
     embed = [":gc"],
     deps = [
         "//pkg/base",
@@ -52,12 +52,15 @@ go_test(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/concurrency/isolation",
+        "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/rditer",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/serverpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sqlliveness/slinstance",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
@@ -76,5 +79,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

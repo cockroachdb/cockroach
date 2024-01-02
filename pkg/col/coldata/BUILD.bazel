@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
@@ -41,9 +40,7 @@ go_test(
         "nulls_test.go",
         "vec_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":coldata"],
-    tags = ["no-remote-exec"],  # keep
     deps = [
         "//pkg/col/coldatatestutils",
         "//pkg/sql/colconv",
@@ -91,5 +88,3 @@ disallowed_imports_test(
         "//pkg/sql/sem/tree",
     ],
 )
-
-get_x_data(name = "get_x_data")

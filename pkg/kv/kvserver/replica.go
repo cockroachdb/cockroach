@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"sort"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -88,7 +89,7 @@ const (
 // threshold and the current GC TTL (true) or just based on the GC threshold
 // (false).
 var StrictGCEnforcement = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.gc_ttl.strict_enforcement.enabled",
 	"if true, fail to serve requests at timestamps below the TTL even if the data still exists",
 	true,
@@ -179,6 +180,46 @@ func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
 type raftSparseStatus struct {
 	raft.BasicStatus
 	Progress map[uint64]tracker.Progress
+}
+
+// ReplicaMutex is an RWMutex. It has its own type to make it easier to look for
+// usages specific to the replica mutex.
+type ReplicaMutex syncutil.RWMutex
+
+func (mu *ReplicaMutex) Lock() {
+	(*syncutil.RWMutex)(mu).Lock()
+}
+
+func (mu *ReplicaMutex) TracedLock(ctx context.Context) {
+	(*syncutil.RWMutex)(mu).TracedLock(ctx)
+}
+
+func (mu *ReplicaMutex) Unlock() {
+	(*syncutil.RWMutex)(mu).Unlock()
+}
+
+func (mu *ReplicaMutex) RLock() {
+	(*syncutil.RWMutex)(mu).RLock()
+}
+
+func (mu *ReplicaMutex) TracedRLock(ctx context.Context) {
+	(*syncutil.RWMutex)(mu).TracedRLock(ctx)
+}
+
+func (mu *ReplicaMutex) AssertHeld() {
+	(*syncutil.RWMutex)(mu).AssertHeld()
+}
+
+func (mu *ReplicaMutex) AssertRHeld() {
+	(*syncutil.RWMutex)(mu).AssertRHeld()
+}
+
+func (mu *ReplicaMutex) RUnlock() {
+	(*syncutil.RWMutex)(mu).RUnlock()
+}
+
+func (mu *ReplicaMutex) RLocker() sync.Locker {
+	return (*syncutil.RWMutex)(mu).RLocker()
 }
 
 // A Replica is a contiguous keyspace with writes managed via an
@@ -386,7 +427,7 @@ type Replica struct {
 
 	mu struct {
 		// Protects all fields in the mu struct.
-		syncutil.RWMutex
+		ReplicaMutex
 		// The destroyed status of a replica indicating if it's alive, corrupt,
 		// scheduled for destruction or has been GCed.
 		// destroyStatus should only be set while also holding the raftMu and
@@ -686,7 +727,10 @@ type Replica struct {
 		// raftMu and the entire handleRaftReady loop. Not needed if raftMu is
 		// already held.
 		applyingEntries bool
-		// The replica's Raft group "node".
+		// The replica's Raft group "node". Can be nil for destroyed replicas
+		// (destroyReasonRemoved) and in some tests, otherwise is never nil.
+		//
+		// TODO(erikgrinaker): make this never be nil.
 		internalRaftGroup *raft.RawNode
 
 		// The ID of the leader replica within the Raft group. NB: this is updated
@@ -801,6 +845,16 @@ type Replica struct {
 		pausedFollowers map[roachpb.ReplicaID]struct{}
 
 		slowProposalCount int64 // updated in refreshProposalsLocked
+
+		// replicaFlowControlIntegration is used to interface with replication flow
+		// control. It's backed by the node-level kvflowcontrol.Controller that
+		// manages flow tokens for on a per <tenant,work class> basis, which it
+		// interfaces through a replica-level kvflowcontrol.Handle. It's
+		// actively used on replicas initiating replication traffic, i.e. are
+		// both the leaseholder and raft leader.
+		//
+		// Accessing it requires Replica.mu to be held, exclusively.
+		replicaFlowControlIntegration replicaFlowControlIntegration
 	}
 
 	// The raft log truncations that are pending. Access is protected by its own
@@ -819,7 +873,7 @@ type Replica struct {
 		// Requires Replica.raftMu be held when providing logical ops and
 		//  informing the processor of closed timestamp updates. This properly
 		//  synchronizes updates that are linearized and driven by the Raft log.
-		proc *rangefeed.Processor
+		proc rangefeed.Processor
 		// opFilter is a best-effort filter that informs the raft processing
 		// goroutine of which logical operations the rangefeed processor is
 		// interested in based on the processor's current registrations.
@@ -881,7 +935,7 @@ func (r *Replica) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (r *Replica) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("[n%d,s%d,r%s]",
-		r.store.Ident.NodeID, r.store.Ident.StoreID, r.rangeStr.get())
+		r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
 }
 
 // ReplicaID returns the ID for the Replica. This value is fixed for the
@@ -905,23 +959,27 @@ func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
 }
 
 // GetMinBytes gets the replica's minimum byte threshold.
-func (r *Replica) GetMinBytes() int64 {
+func (r *Replica) GetMinBytes(_ context.Context) int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.conf.RangeMinBytes
 }
 
 // GetMaxBytes gets the replica's maximum byte threshold.
-func (r *Replica) GetMaxBytes() int64 {
+func (r *Replica) GetMaxBytes(_ context.Context) int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.conf.RangeMaxBytes
 }
 
-// SetSpanConfig sets the replica's span config.
-func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) {
+// SetSpanConfig sets the replica's span config. It returns whether the change
+// to the span config was "significant". For significant changes, the caller
+// should queue up the span to all the relevant queues since they may not decide
+// to process this replica.
+func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	oldConf := r.mu.conf
 
 	if r.IsInitialized() && !r.mu.conf.IsEmpty() && !conf.IsEmpty() {
 		total := r.mu.state.Stats.Total()
@@ -943,11 +1001,51 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) {
 			r.mu.largestPreviousMaxRangeSizeBytes = 0
 		}
 	}
-
 	if knobs := r.store.TestingKnobs(); knobs != nil && knobs.SetSpanConfigInterceptor != nil {
 		conf = knobs.SetSpanConfigInterceptor(r.descRLocked(), conf)
 	}
 	r.mu.conf, r.mu.spanConfigExplicitlySet = conf, true
+	return oldConf.HasConfigurationChange(conf)
+}
+
+// MaybeQueue attempts to check and queue against the subset of that are
+// impacted by changes to the SpanConfig. This should be called after any
+// changes to the span configs.
+func (r *Replica) MaybeQueue(ctx context.Context, now hlc.ClockTimestamp) {
+	r.store.splitQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		h.MaybeAdd(ctx, r, now)
+	})
+	r.store.mergeQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		h.MaybeAdd(ctx, r, now)
+	})
+	if EnqueueInMvccGCQueueOnSpanConfigUpdateEnabled.Get(&r.store.GetStoreConfig().Settings.SV) {
+		r.store.mvccGCQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			h.MaybeAdd(ctx, r, now)
+		})
+	}
+	// The replicate queue has a relatively more expensive queue check
+	// (shouldQueue), because it scales with the number of stores, and
+	// performs more checks.
+	if EnqueueInReplicateQueueOnSpanConfigUpdateEnabled.Get(&r.store.GetStoreConfig().Settings.SV) {
+		r.store.replicateQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			h.MaybeAdd(ctx, r, now)
+		})
+	}
+}
+
+// IsScratchRange returns true if this is range is a scratch range (i.e.
+// overlaps with the scratch span and has a start key <= keys.ScratchRangeMin).
+func (r *Replica) IsScratchRange() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.isScratchRangeRLocked()
+}
+
+func (r *Replica) isScratchRangeRLocked() bool {
+	rangeKeySpan := r.descRLocked().KeySpan()
+	rangeStartKey := rangeKeySpan.Key
+	return rangeKeySpan.AsRawSpanWithNoLocals().Overlaps(keys.ScratchSpan) &&
+		roachpb.RKey(keys.ScratchRangeMin).Compare(rangeStartKey) <= 0
 }
 
 // IsFirstRange returns true if this is the first range.
@@ -976,17 +1074,23 @@ func (r *Replica) IsQuiescent() bool {
 
 // DescAndSpanConfig returns the authoritative range descriptor as well
 // as the span config for the replica.
-func (r *Replica) DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig) {
+func (r *Replica) DescAndSpanConfig() (*roachpb.RangeDescriptor, *roachpb.SpanConfig) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.state.Desc, r.mu.conf
+	// This method is being removed shortly. We can't pass out a pointer to the
+	// underlying replica's SpanConfig.
+	conf := r.mu.conf
+	return r.mu.state.Desc, &conf
 }
 
-// SpanConfig returns the authoritative span config for the replica.
-func (r *Replica) SpanConfig() roachpb.SpanConfig {
+// LoadSpanConfig loads the authoritative span config for the replica.
+func (r *Replica) LoadSpanConfig(_ context.Context) (*roachpb.SpanConfig, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.conf
+	// This method is being removed shortly. We can't pass out a pointer to the
+	// underlying replica's SpanConfig.
+	conf := r.mu.conf
+	return &conf, nil
 }
 
 // Desc returns the authoritative range descriptor, acquiring a replica lock in
@@ -1086,7 +1190,7 @@ func (r *Replica) GetGCHint() roachpb.GCHint {
 
 // ExcludeDataFromBackup returns whether the replica is to be excluded from a
 // backup.
-func (r *Replica) ExcludeDataFromBackup() bool {
+func (r *Replica) ExcludeDataFromBackup(_ context.Context) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.conf.ExcludeDataFromBackup
@@ -1380,7 +1484,7 @@ func (r *Replica) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp,
 func (r *Replica) setLastReplicaGCTimestamp(ctx context.Context, timestamp hlc.Timestamp) error {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	return storage.MVCCPutProto(
-		ctx, r.store.TODOEngine(), nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &timestamp)
+		ctx, r.store.TODOEngine(), key, hlc.Timestamp{}, &timestamp, storage.MVCCWriteOptions{})
 }
 
 // getQueueLastProcessed returns the last processed timestamp for the
@@ -1788,8 +1892,8 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
 		return err
 	} else if !r.isRangefeedEnabledRLocked() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
-		return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
-			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
+		return errors.Errorf("[r%d] rangefeeds require the kv.rangefeed.enabled setting. See %s",
+			r.RangeID, docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 	} else if err := r.checkTSAboveGCThresholdRLocked(ts, status, false /* isAdmin */); err != nil {
 		return err
 	}
@@ -2040,7 +2144,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 	// orphaned followers would fail to queue themselves for GC.) Unquiesce the
 	// range in case it managed to quiesce between when the Subsume request
 	// arrived and now, which is rare but entirely legal.
-	r.maybeUnquiesceLocked()
+	r.maybeUnquiesceLocked(false /* wakeLeader */, true /* mayCampaign */)
 
 	taskCtx := r.AnnotateCtx(context.Background())
 	err = r.store.stopper.RunAsyncTask(taskCtx, "wait-for-merge", func(ctx context.Context) {
@@ -2226,7 +2330,7 @@ func checkIfTxnAborted(
 	var entry roachpb.AbortSpanEntry
 	aborted, err := rec.AbortSpan().Get(ctx, reader, txn.ID, &entry)
 	if err != nil {
-		return kvpb.NewError(kvpb.NewReplicaCorruptionError(
+		return kvpb.NewError(kvpb.MaybeWrapReplicaCorruptionError(ctx,
 			errors.Wrap(err, "could not read from AbortSpan")))
 	}
 	if aborted {
@@ -2280,7 +2384,8 @@ func (r *Replica) GetEngineCapacity() (roachpb.StoreCapacity, error) {
 // GetApproximateDiskBytes returns an approximate measure of bytes in the store
 // in the specified key range.
 func (r *Replica) GetApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
-	return r.store.TODOEngine().ApproximateDiskBytes(from, to)
+	bytes, _, _, err := r.store.TODOEngine().ApproximateDiskBytes(from, to)
+	return bytes, err
 }
 
 func init() {

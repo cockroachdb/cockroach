@@ -1,7 +1,6 @@
-# tenant-cluster-setting-override-opt: sql.zone_configs.allow_for_secondary_tenant.enabled=true sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
 
-query TTTTT
+query TTTTT rowsort
 SHOW REGIONS
 ----
 ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}  {}  {}
@@ -371,7 +370,7 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
                             constraints = '[]',
                             lease_preferences = '[]'
 
-query TTTTTT colnames
+query TTTTTT colnames,rowsort
 SHOW DATABASES
 ----
 database_name         owner  primary_region  secondary_region  regions  survival_goal
@@ -392,7 +391,7 @@ ALTER DATABASE "mr-zone-configs" ADD REGION "ca-central-1"
 statement ok
 ALTER DATABASE "mr-zone-configs" ADD REGION "ap-southeast-2"
 
-query TTTTTT colnames
+query TTTTTT colnames,rowsort
 SHOW DATABASES
 ----
 database_name         owner  primary_region  secondary_region  regions                                  survival_goal
@@ -847,7 +846,7 @@ statement ok
 ALTER DATABASE initial_multiregion_db DROP REGION "us-east-1";
 ALTER INDEX tbl@a_idx CONFIGURE ZONE USING num_replicas = 10
 
-statement error zone configuration for index tbl@a_idx has field "num_replicas" set which will be overwritten when setting the initial PRIMARY REGION\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
+statement error zone configuration for index tbl@a_idx has field "num_replicas" set which will be overwritten when setting the initial PRIMARY REGION \(expected=nil actual=10\)\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
 ALTER DATABASE initial_multiregion_db SET PRIMARY REGION "us-east-1"
 
 # Variations of tests where a zone config is present while we try to transition
@@ -856,14 +855,14 @@ statement ok
 ALTER INDEX tbl@a_idx CONFIGURE ZONE DISCARD;
 ALTER TABLE tbl CONFIGURE ZONE USING num_replicas = 10
 
-statement error zone configuration for table tbl has field "num_replicas" set which will be overwritten when setting the the initial PRIMARY REGION\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
+statement error zone configuration for table tbl has field "num_replicas" set which will be overwritten when setting the the initial PRIMARY REGION \(expected=nil actual=10\)\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
 ALTER DATABASE initial_multiregion_db SET PRIMARY REGION "us-east-1"
 
 statement ok
 ALTER TABLE tbl CONFIGURE ZONE DISCARD;
 ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING num_replicas = 10
 
-statement error zone configuration for database initial_multiregion_db has field "num_replicas" set which will be overwritten when setting the the initial PRIMARY REGION\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
+statement error zone configuration for database initial_multiregion_db has field "num_replicas" set which will be overwritten when setting the the initial PRIMARY REGION \(expected=nil actual=10\)\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
 ALTER DATABASE initial_multiregion_db SET PRIMARY REGION "us-east-1"
 
 # Validate that if we DISCARD the zone configuration, we can successfully turn

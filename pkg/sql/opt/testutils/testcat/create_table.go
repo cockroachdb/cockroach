@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -70,11 +70,11 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// Update the table name to include catalog and schema if not provided.
 	tc.qualifyTableName(&stmt.Table)
 
-	// Assume that every table in the "system", "information_schema" or
-	// "pg_catalog" catalog is a virtual table. This is a simplified assumption
-	// for testing purposes.
+	// Assume that every table in the "system", "information_schema",
+	// "crdb_internal", or "pg_catalog" catalog is a virtual table. This is a
+	// simplified assumption for testing purposes.
 	if stmt.Table.CatalogName == "system" || stmt.Table.SchemaName == "information_schema" ||
-		stmt.Table.SchemaName == "pg_catalog" {
+		stmt.Table.SchemaName == "crdb_internal" || stmt.Table.SchemaName == "pg_catalog" {
 		return tc.createVirtualTable(stmt)
 	}
 
@@ -83,7 +83,6 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	if stmt.Locality != nil {
 		isRbr = stmt.Locality.LocalityLevel == tree.LocalityLevelRow
 		isRbt = stmt.Locality.LocalityLevel == tree.LocalityLevelTable
-		fmt.Println(isRbt)
 	}
 	tab := &Table{TabID: tc.nextStableID(), TabName: stmt.Table, Catalog: tc}
 
@@ -350,10 +349,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.CheckConstraintTableDef:
-			tab.Checks = append(tab.Checks, cat.CheckConstraint{
-				Constraint: serializeTableDefExpr(def.Expr),
-				Validated:  validatedCheckConstraint(def),
-			})
+			tab.addCheckConstraint(def)
 		}
 	}
 
@@ -687,6 +683,35 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	targetTable.inboundFKs = append(targetTable.inboundFKs, fk)
 }
 
+func (tt *Table) addCheckConstraint(check *tree.CheckConstraintTableDef) {
+	var columnOrdinals []int
+	visitFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if vBase, ok := expr.(tree.VarName); ok {
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return false, nil, err
+			}
+			if c, ok := v.(*tree.ColumnItem); ok {
+				colID := tt.FindOrdinal(string(c.ColumnName))
+				columnOrdinals = append(columnOrdinals, colID)
+			}
+			return false, v, nil
+		}
+		return true, expr, nil
+	}
+
+	// Collect the columns referenced by the check expr.
+	if _, err := tree.SimpleVisit(check.Expr, visitFn); err != nil {
+		panic(fmt.Sprintf("failed to find columns in check expr %s", check.Expr.String()))
+	}
+
+	tt.Checks = append(tt.Checks, &CheckConstraint{
+		constraint:     serializeTableDefExpr(check.Expr),
+		validated:      validatedCheckConstraint(check),
+		columnOrdinals: columnOrdinals,
+	})
+}
+
 func (tt *Table) addUniqueConstraint(
 	name tree.Name, columns tree.IndexElemList, predicate tree.Expr, withoutIndex bool,
 ) {
@@ -864,7 +889,7 @@ func (tt *Table) addIndexWithVersion(
 		IdxZone:      cat.EmptyZone(),
 		table:        tt,
 		version:      version,
-		Invisibility: def.Invisibility,
+		Invisibility: def.Invisibility.Value,
 	}
 
 	// Look for name suffixes indicating this is a mutation index.
@@ -900,13 +925,13 @@ func (tt *Table) addIndexWithVersion(
 			switch tt.Columns[col.InvertedSourceColumnOrdinal()].DatumType().Family() {
 			case types.GeometryFamily:
 				// Don't use the default config because it creates a huge number of spans.
-				idx.geoConfig = geoindex.Config{
-					S2Geometry: &geoindex.S2GeometryConfig{
+				idx.geoConfig = geopb.Config{
+					S2Geometry: &geopb.S2GeometryConfig{
 						MinX: -5,
 						MaxX: 5,
 						MinY: -5,
 						MaxY: 5,
-						S2Config: &geoindex.S2Config{
+						S2Config: &geopb.S2Config{
 							MinLevel: 0,
 							MaxLevel: 2,
 							LevelMod: 1,
@@ -917,8 +942,8 @@ func (tt *Table) addIndexWithVersion(
 
 			case types.GeographyFamily:
 				// Don't use the default config because it creates a huge number of spans.
-				idx.geoConfig = geoindex.Config{
-					S2Geography: &geoindex.S2GeographyConfig{S2Config: &geoindex.S2Config{
+				idx.geoConfig = geopb.Config{
+					S2Geography: &geopb.S2GeographyConfig{S2Config: &geopb.S2Config{
 						MinLevel: 0,
 						MaxLevel: 2,
 						LevelMod: 1,

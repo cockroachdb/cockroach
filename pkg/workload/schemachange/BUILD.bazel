@@ -1,5 +1,4 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
 go_library(
@@ -8,8 +7,12 @@ go_library(
         "deck.go",
         "error_code_set.go",
         "error_screening.go",
+        "generate.go",
         "operation_generator.go",
+        "optype.go",
+        "query_util.go",
         "schemachange.go",
+        "tracing.go",
         "type_resolver.go",
         "watch_dog.go",
         ":gen-optype-stringer",  # keep
@@ -19,7 +22,6 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/roachpb",
-        "//pkg/security/username",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/parser",
@@ -27,9 +29,12 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/randgen",
         "//pkg/sql/schemachange",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/encoding",
+        "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/workload",
@@ -40,13 +45,33 @@ go_library(
         "@com_github_jackc_pgx_v5//pgxpool",
         "@com_github_lib_pq//oid",
         "@com_github_spf13_pflag//:pflag",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_exporters_otlp_otlptrace//:otlptrace",
+        "@io_opentelemetry_go_otel_sdk//trace",
+        "@io_opentelemetry_go_otel_trace//:trace",
+        "@io_opentelemetry_go_proto_otlp//collector/trace/v1:trace",
+        "@io_opentelemetry_go_proto_otlp//trace/v1:trace",
+        "@org_golang_x_exp//slices",
     ],
 )
 
 stringer(
     name = "gen-optype-stringer",
-    src = "operation_generator.go",
+    src = "optype.go",
     typ = "opType",
 )
 
-get_x_data(name = "get_x_data")
+go_test(
+    name = "schemachange_test",
+    srcs = ["generate_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":schemachange"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//slices",
+    ],
+)

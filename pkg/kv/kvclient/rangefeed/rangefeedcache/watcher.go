@@ -57,18 +57,20 @@ import (
 // The expectation is that the caller will use a mutex to update an underlying
 // data structure.
 //
-// NOTE (for emphasis): Update events after the initial scan published at a
-// delay corresponding to kv.closed_timestamp.target_duration (default 3s).
+// NOTE (for emphasis): Update events after the initial scan are published at a
+// delay corresponding to kv.closed_timestamp.target_duration (default 3s) with
+// an interval of kv.rangefeed.closed_timestamp_refresh_interval (default 3s).
 // Users seeking to leverage the Updates which arrive with that delay but also
 // react to the row-level events as they arrive can hijack the translateEvent
 // function to trigger some non-blocking action.
 type Watcher struct {
-	name             redact.SafeString
-	clock            *hlc.Clock
-	rangefeedFactory *rangefeed.Factory
-	spans            []roachpb.Span
-	bufferSize       int
-	withPrevValue    bool
+	name                   redact.SafeString
+	clock                  *hlc.Clock
+	rangefeedFactory       *rangefeed.Factory
+	spans                  []roachpb.Span
+	bufferSize             int
+	withPrevValue          bool
+	withRowTSInInitialScan bool
 
 	started int32 // accessed atomically
 
@@ -76,6 +78,9 @@ type Watcher struct {
 	onUpdate       OnUpdateFunc
 
 	lastFrontierTS hlc.Timestamp // used to assert monotonicity across rangefeed attempts
+
+	// Used to force a restart during testing.
+	restartErrCh chan error
 
 	knobs TestingKnobs
 }
@@ -164,19 +169,22 @@ func NewWatcher(
 	bufferSize int,
 	spans []roachpb.Span,
 	withPrevValue bool,
+	withRowTSInInitialScan bool,
 	translateEvent TranslateEventFunc,
 	onUpdate OnUpdateFunc,
 	knobs *TestingKnobs,
 ) *Watcher {
 	w := &Watcher{
-		name:             name,
-		clock:            clock,
-		rangefeedFactory: rangeFeedFactory,
-		spans:            spans,
-		bufferSize:       bufferSize,
-		withPrevValue:    withPrevValue,
-		translateEvent:   translateEvent,
-		onUpdate:         onUpdate,
+		name:                   name,
+		clock:                  clock,
+		rangefeedFactory:       rangeFeedFactory,
+		spans:                  spans,
+		bufferSize:             bufferSize,
+		withPrevValue:          withPrevValue,
+		withRowTSInInitialScan: withRowTSInInitialScan,
+		translateEvent:         translateEvent,
+		onUpdate:               onUpdate,
+		restartErrCh:           make(chan error),
 	}
 	if knobs != nil {
 		w.knobs = *knobs
@@ -305,7 +313,7 @@ func (s *Watcher) Run(ctx context.Context) error {
 		// where a higher admission-pri makes sense.
 		rangefeed.WithSystemTablePriority(),
 		rangefeed.WithDiff(s.withPrevValue),
-		rangefeed.WithRowTimestampInInitialScan(true),
+		rangefeed.WithRowTimestampInInitialScan(s.withRowTSInInitialScan),
 		rangefeed.WithOnInitialScanError(func(ctx context.Context, err error) (shouldFail bool) {
 			// TODO(irfansharif): Consider if there are other errors which we
 			// want to treat as permanent. This was cargo culted from the
@@ -353,10 +361,22 @@ func (s *Watcher) Run(ctx context.Context) error {
 
 		case err := <-errCh:
 			return err
+		case err := <-s.restartErrCh:
+			return err
 		case err := <-s.knobs.ErrorInjectionCh:
 			return err
 		}
 	}
+}
+
+var restartErr = errors.New("testing restart requested")
+
+// TestingRestart injects an error into the rangefeed cache, forcing
+// it to restart. This is separate from the testing knob so that we
+// can force a restart from test infrastructure without overriding the
+// user-provided testing knobs.
+func (s *Watcher) TestingRestart() {
+	s.restartErrCh <- restartErr
 }
 
 func (s *Watcher) handleUpdate(

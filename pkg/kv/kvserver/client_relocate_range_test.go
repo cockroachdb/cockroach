@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -166,7 +165,6 @@ func usesAtomicReplicationChange(ops []kvpb.ReplicationChange) bool {
 
 func TestAdminRelocateRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 84242, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -464,7 +462,7 @@ func TestReplicaRemovalDuringGet(t *testing.T) {
 
 	// Perform write.
 	pArgs := putArgs(key, []byte("foo"))
-	_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), pArgs)
+	_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSenderI().(kv.Sender), pArgs)
 	require.Nil(t, pErr)
 
 	// Perform delayed read during replica removal.
@@ -490,7 +488,7 @@ func TestReplicaRemovalDuringCPut(t *testing.T) {
 
 	// Perform write.
 	pArgs := putArgs(key, []byte("foo"))
-	_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), pArgs)
+	_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSenderI().(kv.Sender), pArgs)
 	require.Nil(t, pErr)
 
 	// Perform delayed conditional put during replica removal. This will cause
@@ -566,7 +564,7 @@ func setupReplicaRemovalTest(
 		srv := tc.Servers[0]
 		err := srv.Stopper().RunAsyncTask(ctx, "request", func(ctx context.Context) {
 			reqCtx := context.WithValue(ctx, magicKey{}, struct{}{})
-			resp, pErr := kv.SendWrapped(reqCtx, srv.DistSender(), req)
+			resp, pErr := kv.SendWrapped(reqCtx, srv.DistSenderI().(kv.Sender), req)
 			resultC <- result{resp, pErr}
 		})
 		require.NoError(t, err)

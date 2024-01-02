@@ -1,26 +1,30 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "integration_test",
     srcs = ["insights_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         "//pkg/base",
+        "//pkg/kv/kvpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/contention",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats/insights",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

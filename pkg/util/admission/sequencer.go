@@ -10,6 +10,8 @@
 
 package admission
 
+import "sync/atomic"
+
 // sequencer issues monotonic sequencing timestamps derived from observed
 // CreateTimes. This is a purpose-built data structure for replication admission
 // control where we want to assign each AC-queued work below-raft a "sequence
@@ -58,6 +60,8 @@ func (s *sequencer) sequence(createTime int64) int64 {
 	if createTime <= s.maxCreateTime {
 		createTime = s.maxCreateTime + 1
 	}
-	s.maxCreateTime = createTime
+	// This counter is read concurrently in gcSequencers. We use an atomic store
+	// here and an atomic load there, to avoid tripping up the race detector.
+	atomic.StoreInt64(&s.maxCreateTime, createTime)
 	return createTime
 }

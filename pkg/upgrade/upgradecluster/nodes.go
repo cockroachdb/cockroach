@@ -12,7 +12,9 @@ package upgradecluster
 
 import (
 	"context"
+	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -39,25 +41,26 @@ type Nodes []Node
 // concurrently with the retrieval of the current set of nodes. Appropriate
 // usage of this entails wrapping it under a stabilizing loop, like we do in
 // EveryNode.
-func NodesFromNodeLiveness(ctx context.Context, nl NodeLiveness) (Nodes, error) {
+func NodesFromNodeLiveness(
+	ctx context.Context, nl livenesspb.NodeVitalityInterface,
+) (Nodes, error) {
 	var ns []Node
-	ls, err := nl.GetLivenessesFromKV(ctx)
+	ls, err := nl.ScanNodeVitalityFromKV(ctx)
 	if err != nil {
 		return nil, err
 	}
-	for _, l := range ls {
-		if l.Membership.Decommissioned() {
+	for id, n := range ls {
+		if n.IsDecommissioned() {
 			continue
 		}
-		live, err := nl.IsLive(l.NodeID)
-		if err != nil {
-			return nil, err
+		if !n.IsLive(livenesspb.Upgrade) {
+			return nil, errors.Newf("n%d required, but unavailable", id)
 		}
-		if !live {
-			return nil, errors.Newf("n%d required, but unavailable", l.NodeID)
-		}
-		ns = append(ns, Node{ID: l.NodeID, Epoch: l.Epoch})
+		// TODO(baptist): Stop using Epoch, need to determine an alternative.
+		ns = append(ns, Node{ID: id, Epoch: n.GenLiveness().Epoch})
 	}
+	// Tests assume the nodes are sorted, so sort by node id first.
+	sort.Slice(ns, func(i, j int) bool { return ns[i].ID < ns[j].ID })
 	return ns, nil
 }
 

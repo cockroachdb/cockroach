@@ -96,7 +96,6 @@ var rubyPGBlocklist = blocklist{
 	`PG::Connection not read past the end of a large object`:                                                                                                                                                                    "unknown",
 	`PG::Connection returns notifications which are already in the queue before wait_for_notify is called without waiting for the socket to become readable`:                                                                    "unknown",
 	`PG::Connection sends nil as the payload if the notification wasn't given one`:                                                                                                                                              "unknown",
-	`PG::Connection set_single_row_mode should receive rows before entire query fails`:                                                                                                                                          "unknown",
 	`PG::Connection set_single_row_mode should receive rows before entire query is finished`:                                                                                                                                    "unknown",
 	`PG::Connection trace and untrace client-server communication`:                                                                                                                                                              "unknown",
 	`PG::Connection type casting can type cast parameters to put_copy_data with explicit encoder`:                                                                                                                               "unknown",
@@ -174,7 +173,6 @@ var rubyPGBlocklist = blocklist{
 	`running with sync_* methods PG::Connection not read past the end of a large object`:                                                                                                                                        "unknown",
 	`running with sync_* methods PG::Connection returns notifications which are already in the queue before wait_for_notify is called without waiting for the socket to become readable`:                                        "unknown",
 	`running with sync_* methods PG::Connection sends nil as the payload if the notification wasn't given one`:                                                                                                                  "unknown",
-	`running with sync_* methods PG::Connection set_single_row_mode should receive rows before entire query fails`:                                                                                                              "unknown",
 	`running with sync_* methods PG::Connection set_single_row_mode should receive rows before entire query is finished`:                                                                                                        "unknown",
 	`running with sync_* methods PG::Connection trace and untrace client-server communication`:                                                                                                                                  "unknown",
 	`running with sync_* methods PG::Connection type casting can type cast parameters to put_copy_data with explicit encoder`:                                                                                                   "unknown",
@@ -199,4 +197,11 @@ var rubyPGBlocklist = blocklist{
 	`with a Fiber scheduler connects to a server with setting default encoding`:                                                                                                                                                 "unknown",
 	`with a Fiber scheduler should convert strings and parameters to #prepare and #exec_prepared`:                                                                                                                               "unknown",
 	`with a Fiber scheduler waits when sending query data`:                                                                                                                                                                      "unknown",
+}
+
+var rubyPGIgnorelist = blocklist{
+	`PG::Connection OS thread support Connection.new shouldn't block a second thread`:                             "flaky",
+	`running with sync_* methods PG::Connection consume_input should raise ConnectionBad for a closed connection`: "flaky",
+	`running with sync_* methods PG::Connection OS thread support Connection.new shouldn't block a second thread`: "flaky",
+	`running with sync_* methods PG::Connection handles server close while asynchronous connect`:                  "flaky",
 }

@@ -36,7 +36,8 @@ import { createSelector, ParametricSelector } from "reselect";
 import { AdminUIState } from "./state";
 import { RouteComponentProps } from "react-router";
 
-const { generateStmtDetailsToID, HexStringToInt64String } = util;
+const { generateStmtDetailsToID, HexStringToInt64String, generateTableID } =
+  util;
 
 const SessionsRequest = protos.cockroach.server.serverpb.ListSessionsRequest;
 
@@ -108,7 +109,9 @@ const databasesReducerObj = new CachedDataReducer(
 );
 export const refreshDatabases = databasesReducerObj.refresh;
 
-export const databaseRequestPayloadToID = (dbName: string): string => dbName;
+export const databaseRequestPayloadToID = (
+  params: clusterUiApi.DatabaseDetailsReqParams,
+): string => params.database;
 
 const databaseDetailsReducerObj = new KeyedCachedDataReducer(
   clusterUiApi.getDatabaseDetails,
@@ -118,6 +121,17 @@ const databaseDetailsReducerObj = new KeyedCachedDataReducer(
   moment.duration(10, "m"),
 );
 
+const databaseDetailsSpanStatsReducerObj = new KeyedCachedDataReducer(
+  clusterUiApi.getDatabaseDetailsSpanStats,
+  "databaseDetailsSpanStats",
+  databaseRequestPayloadToID,
+  null,
+  moment.duration(10, "m"),
+);
+
+export const refreshDatabaseDetailsSpanStats =
+  databaseDetailsSpanStatsReducerObj.refresh;
+
 const hotRangesRequestToID = (req: api.HotRangesRequestMessage) =>
   req.page_token;
 
@@ -125,17 +139,14 @@ export const hotRangesReducerObj = new PaginatedCachedDataReducer(
   api.getHotRanges,
   "hotRanges",
   hotRangesRequestToID,
+  1000 /* page limit */,
+  null /* invalidation period */,
+  moment.duration(30, "minutes"),
 );
 
 export const refreshDatabaseDetails = databaseDetailsReducerObj.refresh;
 
 export const refreshHotRanges = hotRangesReducerObj.refresh;
-
-// NOTE: We encode the db and table name so we can combine them as a string.
-// TODO(maxlang): there's probably a nicer way to do this
-export function generateTableID(db: string, table: string) {
-  return `${encodeURIComponent(db)}/${encodeURIComponent(table)}`;
-}
 
 export const tableRequestToID = (
   req:
@@ -216,6 +227,19 @@ const jobReducerObj = new KeyedCachedDataReducer(
   moment.duration(10, "m"),
 );
 export const refreshJob = jobReducerObj.refresh;
+
+export const jobProfilerRequestKey = (
+  req: api.ListJobProfilerExecutionDetailsRequestMessage,
+): string => `${req.job_id}`;
+
+const jobProfilerReducerObj = new KeyedCachedDataReducer(
+  api.listExecutionDetailFiles,
+  "jobProfiler",
+  jobProfilerRequestKey,
+  null,
+  moment.duration(10, "m"),
+);
+export const refreshListExecutionDetailFiles = jobProfilerReducerObj.refresh;
 
 export const queryToID = (req: api.QueryPlanRequestMessage): string =>
   req.query;
@@ -372,16 +396,19 @@ const userSQLRolesReducerObj = new CachedDataReducer(
 export const invalidateUserSQLRoles = userSQLRolesReducerObj.invalidateData;
 export const refreshUserSQLRoles = userSQLRolesReducerObj.refresh;
 
+export const statementDiagnosticInvalidationPeriod = moment.duration(5, "m");
 const statementDiagnosticsReportsReducerObj = new CachedDataReducer(
   clusterUiApi.getStatementDiagnosticsReports,
   "statementDiagnosticsReports",
-  moment.duration(5, "m"),
+  statementDiagnosticInvalidationPeriod,
   moment.duration(1, "m"),
 );
 export const refreshStatementDiagnosticsRequests =
   statementDiagnosticsReportsReducerObj.refresh;
 export const invalidateStatementDiagnosticsRequests =
   statementDiagnosticsReportsReducerObj.invalidateData;
+export const RECEIVE_STATEMENT_DIAGNOSTICS_REPORT =
+  statementDiagnosticsReportsReducerObj.RECEIVE;
 
 const dataDistributionReducerObj = new CachedDataReducer(
   api.getDataDistribution,
@@ -533,6 +560,15 @@ const tenantsListObj = new CachedDataReducer(
 
 export const refreshTenantsList = tenantsListObj.refresh;
 
+const connectivityObj = new CachedDataReducer(
+  api.getNetworkConnectivity,
+  "connectivity",
+  moment.duration(30, "s"),
+  moment.duration(1, "minute"),
+);
+
+export const refreshConnectivity = connectivityObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<
@@ -547,6 +583,9 @@ export interface APIReducersState {
   databaseDetails: KeyedCachedDataReducerState<
     clusterUiApi.SqlApiResponse<clusterUiApi.DatabaseDetailsResponse>
   >;
+  databaseDetailsSpanStats: KeyedCachedDataReducerState<
+    clusterUiApi.SqlApiResponse<clusterUiApi.DatabaseDetailsSpanStatsResponse>
+  >;
   tableDetails: KeyedCachedDataReducerState<
     clusterUiApi.SqlApiResponse<clusterUiApi.TableDetailsResponse>
   >;
@@ -554,6 +593,7 @@ export interface APIReducersState {
   nonTableStats: CachedDataReducerState<api.NonTableStatsResponseMessage>;
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
+  jobProfiler: KeyedCachedDataReducerState<api.ListJobProfilerExecutionDetailsResponseMessage>;
   jobs: KeyedCachedDataReducerState<api.JobsResponseMessage>;
   job: KeyedCachedDataReducerState<api.JobResponseMessage>;
   queryPlan: CachedDataReducerState<api.QueryPlanResponseMessage>;
@@ -597,6 +637,7 @@ export interface APIReducersState {
   snapshot: KeyedCachedDataReducerState<clusterUiApi.GetTracingSnapshotResponse>;
   rawTrace: KeyedCachedDataReducerState<clusterUiApi.GetTraceResponse>;
   tenants: CachedDataReducerState<api.ListTenantsResponseMessage>;
+  connectivity: CachedDataReducerState<api.NetworkConnectivityResponse>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -610,11 +651,14 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [databasesReducerObj.actionNamespace]: databasesReducerObj.reducer,
   [databaseDetailsReducerObj.actionNamespace]:
     databaseDetailsReducerObj.reducer,
+  [databaseDetailsSpanStatsReducerObj.actionNamespace]:
+    databaseDetailsSpanStatsReducerObj.reducer,
   [tableDetailsReducerObj.actionNamespace]: tableDetailsReducerObj.reducer,
   [indexStatsReducerObj.actionNamespace]: indexStatsReducerObj.reducer,
   [nonTableStatsReducerObj.actionNamespace]: nonTableStatsReducerObj.reducer,
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
+  [jobProfilerReducerObj.actionNamespace]: jobProfilerReducerObj.reducer,
   [jobsReducerObj.actionNamespace]: jobsReducerObj.reducer,
   [jobReducerObj.actionNamespace]: jobReducerObj.reducer,
   [queryPlanReducerObj.actionNamespace]: queryPlanReducerObj.reducer,
@@ -652,6 +696,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [statementFingerprintInsightsReducerObj.actionNamespace]:
     statementFingerprintInsightsReducerObj.reducer,
   [tenantsListObj.actionNamespace]: tenantsListObj.reducer,
+  [connectivityObj.actionNamespace]: connectivityObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };

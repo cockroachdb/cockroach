@@ -5,7 +5,7 @@ print
 ----
 regular workqueue: closed epoch: 0 tenantHeap len: 0
 elastic workqueue: closed epoch: 0 tenantHeap len: 0
-stats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+stats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:1}
 
 set-try-get-return-value v=true
@@ -25,7 +25,7 @@ set-store-request-estimates write-tokens=100
 regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 1, w: 1, fifo: -128
 elastic workqueue: closed epoch: 0 tenantHeap len: 0
-stats:{workCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+stats:{workCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
 admit id=2 tenant=55 priority=0 create-time-millis=1 bypass=false
@@ -44,7 +44,7 @@ regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 101, w: 1, fifo: -128
  tenant-id: 55 used: 100, w: 1, fifo: -128
 elastic workqueue: closed epoch: 0 tenantHeap len: 0
-stats:{workCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+stats:{workCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
 set-try-get-return-value v=false
@@ -65,7 +65,7 @@ regular workqueue: closed epoch: 0 tenantHeap len: 1 top tenant: 57
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 0]
 elastic workqueue: closed epoch: 0 tenantHeap len: 0
-stats:{workCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+stats:{workCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
 granted
@@ -81,7 +81,7 @@ regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 100, w: 1, fifo: -128
 elastic workqueue: closed epoch: 0 tenantHeap len: 0
-stats:{workCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+stats:{workCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
 work-done id=3 ingested-bytes=1000000 additional-tokens=50000
@@ -95,7 +95,7 @@ regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 100, w: 1, fifo: -128
 elastic workqueue: closed epoch: 0 tenantHeap len: 0
-stats:{workCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+stats:{workCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
 set-store-request-estimates write-tokens=10000
@@ -105,7 +105,7 @@ regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 100, w: 1, fifo: -128
 elastic workqueue: closed epoch: 0 tenantHeap len: 0
-stats:{workCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+stats:{workCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:10000}
 
 work-done id=4 write-bytes=2000 ingested-bytes=1000 additional-tokens=2000
@@ -119,7 +119,7 @@ regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 2100, w: 1, fifo: -128
 elastic workqueue: closed epoch: 0 tenantHeap len: 0
-stats:{workCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+stats:{workCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:10000}
 
 bypassed-work-done work-count=10 write-bytes=1000 ingested-bytes=1000000
@@ -133,17 +133,17 @@ regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 2100, w: 1, fifo: -128
 elastic workqueue: closed epoch: 0 tenantHeap len: 0
-stats:{workCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0}} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
+stats:{workCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
 estimates:{writeTokens:10000}
 
-stats-to-ignore ingested-bytes=12000 ingested-into-L0-bytes=9000
+stats-to-ignore ingested-bytes=12000 ingested-into-L0-bytes=9000 write-bytes=1500
 ----
 regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 2100, w: 1, fifo: -128
 elastic workqueue: closed epoch: 0 tenantHeap len: 0
-stats:{workCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{IngestOperationStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000 MemtableOverlappingFiles:0}} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
+stats:{workCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{ingestStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000 MemtableOverlappingFiles:0} writeBytes:1500} aboveRaftStats:{workCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
 estimates:{writeTokens:10000}
 
 # Elastic work.
@@ -171,7 +171,7 @@ regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 57 used: 2100, w: 1, fifo: -128
 elastic workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 10000, w: 1, fifo: -128
-stats:{workCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{IngestOperationStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000 MemtableOverlappingFiles:0}} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
+stats:{workCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{ingestStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000 MemtableOverlappingFiles:0} writeBytes:1500} aboveRaftStats:{workCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
 estimates:{writeTokens:10000}
 
 set-try-get-return-value v=true elastic=true
@@ -191,7 +191,7 @@ regular workqueue: closed epoch: 0 tenantHeap len: 0
 elastic workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 10000, w: 1, fifo: -128
  tenant-id: 54 used: 10000, w: 1, fifo: -128
-stats:{workCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{IngestOperationStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000 MemtableOverlappingFiles:0}} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
+stats:{workCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{ingestStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000 MemtableOverlappingFiles:0} writeBytes:1500} aboveRaftStats:{workCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
 estimates:{writeTokens:10000}
 
 work-done id=5 write-bytes=1000 additional-tokens=200
@@ -207,7 +207,7 @@ regular workqueue: closed epoch: 0 tenantHeap len: 0
 elastic workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 10200, w: 1, fifo: -128
  tenant-id: 54 used: 10000, w: 1, fifo: -128
-stats:{workCount:15 writeAccountedBytes:4000 ingestedAccountedBytes:2001000 statsToIgnore:{IngestOperationStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000 MemtableOverlappingFiles:0}} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
+stats:{workCount:15 writeAccountedBytes:4000 ingestedAccountedBytes:2001000 statsToIgnore:{ingestStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000 MemtableOverlappingFiles:0} writeBytes:1500} aboveRaftStats:{workCount:5 writeAccountedBytes:3000 ingestedAccountedBytes:1001000} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
 estimates:{writeTokens:10000}
 
 work-done id=6 ingested-bytes=500 additional-tokens=500
@@ -223,5 +223,5 @@ regular workqueue: closed epoch: 0 tenantHeap len: 0
 elastic workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 10200, w: 1, fifo: -128
  tenant-id: 54 used: 10500, w: 1, fifo: -128
-stats:{workCount:16 writeAccountedBytes:4000 ingestedAccountedBytes:2001500 statsToIgnore:{IngestOperationStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000 MemtableOverlappingFiles:0}} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
+stats:{workCount:16 writeAccountedBytes:4000 ingestedAccountedBytes:2001500 statsToIgnore:{ingestStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000 MemtableOverlappingFiles:0} writeBytes:1500} aboveRaftStats:{workCount:6 writeAccountedBytes:3000 ingestedAccountedBytes:1001500} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
 estimates:{writeTokens:10000}

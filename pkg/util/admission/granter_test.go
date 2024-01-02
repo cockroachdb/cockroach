@@ -98,7 +98,7 @@ func TestGranterBasic(t *testing.T) {
 				return req
 			}
 			delayForGrantChainTermination = 0
-			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &NoopOnLogEntryAdmitted{})
+			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
 			defer coords.Close()
 			coord = coords.Regular
 			return flushAndReset()
@@ -112,7 +112,7 @@ func TestGranterBasic(t *testing.T) {
 				makeStoreRequesterFunc: func(
 					ambientCtx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
 					settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, knobs *TestingKnobs,
-					_ OnLogEntryAdmitted, _ *syncutil.Mutex,
+					_ OnLogEntryAdmitted, _ *metric.Counter, _ *syncutil.Mutex,
 				) storeRequester {
 					makeTestRequester := func(wc admissionpb.WorkClass) *testRequester {
 						req := &testRequester{
@@ -138,8 +138,16 @@ func TestGranterBasic(t *testing.T) {
 					return req
 				},
 				kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
+				kvIOTokensAvailable:         metrics.KVIOTokensAvailable,
+				kvElasticIOTokensAvailable:  metrics.KVElasticIOTokensAvailable,
+				kvIOTokensTaken:             metrics.KVIOTokensTaken,
+				kvIOTokensReturned:          metrics.KVIOTokensReturned,
+				kvIOTokensBypassed:          metrics.KVIOTokensBypassed,
+				l0CompactedBytes:            metrics.L0CompactedBytes,
+				l0TokensProduced:            metrics.L0TokensProduced,
 				workQueueMetrics:            workQueueMetrics,
 				disableTickerForTesting:     true,
+				knobs:                       &TestingKnobs{},
 			}
 			var metricsProvider testMetricsProvider
 			metricsProvider.setMetricsForStores([]int32{1}, pebble.Metrics{})
@@ -232,8 +240,8 @@ func TestGranterBasic(t *testing.T) {
 				// We are not using a real ioLoadListener, and simply setting the
 				// tokens (the ioLoadListener has its own test).
 				coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
-					int64(ioTokens), int64(elasticTokens),
-					int64(ioTokens*250), int64(elasticTokens*250),
+					int64(ioTokens), int64(ioTokens), int64(elasticTokens),
+					int64(ioTokens*250), int64(ioTokens*250), int64(elasticTokens*250), false,
 				)
 			}
 			coord.testingTryGrant()
@@ -245,6 +253,10 @@ func TestGranterBasic(t *testing.T) {
 			var tickInterval int
 			d.ScanArgs(t, "io-tokens", &ioTokens)
 			d.ScanArgs(t, "elastic-disk-bw-tokens", &elasticTokens)
+			elasticIOTokens := ioTokens
+			if d.HasArg("elastic-io-tokens") {
+				d.ScanArgs(t, "elastic-io-tokens", &elasticIOTokens)
+			}
 			if d.HasArg("tick-interval") {
 				d.ScanArgs(t, "tick-interval", &tickInterval)
 			}
@@ -259,8 +271,9 @@ func TestGranterBasic(t *testing.T) {
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
 			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
-				int64(ioTokens), int64(elasticTokens),
-				int64(ioTokens*burstMultiplier), int64(elasticTokens*burstMultiplier),
+				int64(ioTokens), int64(elasticIOTokens), int64(elasticTokens),
+				int64(ioTokens*burstMultiplier), int64(elasticIOTokens*burstMultiplier),
+				int64(elasticTokens*burstMultiplier), false,
 			)
 			coord.testingTryGrant()
 			return flushAndReset()
@@ -312,7 +325,8 @@ func TestStoreCoordinators(t *testing.T) {
 		makeRequesterFunc: makeRequesterFunc,
 		makeStoreRequesterFunc: func(
 			ctx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
-			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, _ *TestingKnobs, _ OnLogEntryAdmitted, _ *syncutil.Mutex) storeRequester {
+			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, _ *TestingKnobs, _ OnLogEntryAdmitted,
+			_ *metric.Counter, _ *syncutil.Mutex) storeRequester {
 			reqReg := makeRequesterFunc(ctx, KVWork, granters[admissionpb.RegularWorkClass], settings, metrics, opts)
 			reqElastic := makeRequesterFunc(ctx, KVWork, granters[admissionpb.ElasticWorkClass], settings, metrics, opts)
 			str := &storeTestRequester{}
@@ -323,7 +337,7 @@ func TestStoreCoordinators(t *testing.T) {
 			return str
 		},
 	}
-	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &NoopOnLogEntryAdmitted{})
+	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
 	// There is only 1 KVWork requester at this point in initialization, for the
 	// Regular GrantCoordinator.
 	require.Equal(t, 1, len(requesters))
@@ -384,7 +398,7 @@ func (tr *testRequester) hasWaitingRequests() bool {
 
 func (tr *testRequester) granted(grantChainID grantChainID) int64 {
 	fmt.Fprintf(tr.buf, "%s%s: granted in chain %d, and returning %d\n",
-		workKindString(tr.workKind), tr.additionalID,
+		tr.workKind, tr.additionalID,
 		grantChainID, tr.returnValueFromGranted)
 	tr.grantChainID = grantChainID
 	return tr.returnValueFromGranted
@@ -394,24 +408,24 @@ func (tr *testRequester) close() {}
 
 func (tr *testRequester) tryGet(count int64) {
 	rv := tr.granter.tryGet(count)
-	fmt.Fprintf(tr.buf, "%s%s: tryGet(%d) returned %t\n", workKindString(tr.workKind),
+	fmt.Fprintf(tr.buf, "%s%s: tryGet(%d) returned %t\n", tr.workKind,
 		tr.additionalID, count, rv)
 }
 
 func (tr *testRequester) returnGrant(count int64) {
-	fmt.Fprintf(tr.buf, "%s%s: returnGrant(%d)\n", workKindString(tr.workKind), tr.additionalID,
+	fmt.Fprintf(tr.buf, "%s%s: returnGrant(%d)\n", tr.workKind, tr.additionalID,
 		count)
 	tr.granter.returnGrant(count)
 }
 
 func (tr *testRequester) tookWithoutPermission(count int64) {
-	fmt.Fprintf(tr.buf, "%s%s: tookWithoutPermission(%d)\n", workKindString(tr.workKind),
+	fmt.Fprintf(tr.buf, "%s%s: tookWithoutPermission(%d)\n", tr.workKind,
 		tr.additionalID, count)
 	tr.granter.tookWithoutPermission(count)
 }
 
 func (tr *testRequester) continueGrantChain() {
-	fmt.Fprintf(tr.buf, "%s%s: continueGrantChain\n", workKindString(tr.workKind),
+	fmt.Fprintf(tr.buf, "%s%s: continueGrantChain\n", tr.workKind,
 		tr.additionalID)
 	tr.granter.continueGrantChain(tr.grantChainID)
 }
@@ -487,3 +501,17 @@ func (m *testMetricsProvider) setMetricsForStores(stores []int32, metrics pebble
 		})
 	}
 }
+
+type noopOnLogEntryAdmitted struct{}
+
+func (n *noopOnLogEntryAdmitted) AdmittedLogEntry(
+	context.Context,
+	roachpb.NodeID,
+	admissionpb.WorkPriority,
+	roachpb.StoreID,
+	roachpb.RangeID,
+	LogPosition,
+) {
+}
+
+var _ OnLogEntryAdmitted = &noopOnLogEntryAdmitted{}

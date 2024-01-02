@@ -14,11 +14,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -29,9 +32,14 @@ import (
 )
 
 // perfArtifactsDir is the directory on cluster nodes in which perf artifacts
-// reside. Upon success this directory is copied into test artifactsDir from
+// reside. Upon success this directory is copied into the test's ArtifactsDir() from
 // each node in the cluster.
 const perfArtifactsDir = "perf"
+
+// goCoverArtifactsDir the directory on cluster nodes in which go coverage
+// profiles are dumped. At the end of a test this directory is copied into the
+// test's ArtifactsDir() from each node in the cluster.
+const goCoverArtifactsDir = "gocover"
 
 type testStatus struct {
 	msg      string
@@ -54,8 +62,12 @@ type failure struct {
 type testImpl struct {
 	spec *registry.TestSpec
 
-	cockroach          string // path to main cockroach binary
-	cockroachShort     string // path to cockroach-short binary compiled with --crdb_test build tag
+	cockroach   string // path to main cockroach binary
+	cockroachEA string // path to cockroach-short binary compiled with --crdb_test build tag
+
+	randomCockroachOnce sync.Once
+	randomizedCockroach string // either `cockroach` or `cockroach-short`, picked randomly
+
 	deprecatedWorkload string // path to workload binary
 	debug              bool   // whether the test is in debug mode.
 	// buildVersion is the version of the Cockroach binary that the test will run
@@ -94,6 +106,13 @@ type testImpl struct {
 		// referencing 0+ errors. failure captures all the errors
 		failures []failure
 
+		// failuresSuppressed indicates if further failures should be added to mu.failures.
+		failuresSuppressed bool
+
+		// numFailures is the number of failures that have been added via addFailures.
+		// This can deviate from len(failures) if failures have been suppressed.
+		numFailures int
+
 		// status is a map from goroutine id to status set by that goroutine. A
 		// special goroutine is indicated by runnerID; that one provides the test's
 		// "main status".
@@ -111,6 +130,9 @@ type testImpl struct {
 	// Version strings look like "20.1.4".
 	versionsBinaryOverride map[string]string
 	skipInit               bool
+	// If true, go coverage is enabled and the BAZEL_COVER_DIR env var will be set
+	// when starting nodes.
+	goCoverEnabled bool
 }
 
 func newFailure(squashedErr error, errs []error) failure {
@@ -123,13 +145,53 @@ func (t *testImpl) BuildVersion() *version.Version {
 	return t.buildVersion
 }
 
-// Cockroach returns the path to the cockroach binary.
+// Cockroach will return either `RuntimeAssertionsCockroach()` or
+// `StandardCockroach()`, picked randomly. Once a random choice has
+// been made, the same binary will be returned on every call to
+// `Cockroach`, to avoid errors that may arise from binaries having a
+// different value for metamorphic constants.
 func (t *testImpl) Cockroach() string {
-	return t.cockroach
+	// If the test is a benchmark test, we don't want to enable assertions
+	// as it will slow down performance.
+	if t.spec.Benchmark {
+		t.l.Printf("Benchmark test, running with standard cockroach")
+		return t.StandardCockroach()
+	}
+	t.randomCockroachOnce.Do(func() {
+		//TODO(SR): assertions are temporarily disabled for _all_ tests except those using t.RuntimeAssertionsCockroach()
+		// directly, until after the stability period for 23.2. See https://github.com/cockroachdb/cockroach/issues/114615
+		assertionsEnabledProbability := 0.0
+		// If the user specified a custom seed to be used with runtime
+		// assertions, assume they want to run the test with assertions
+		// enabled, making it easier to reproduce issues.
+		if os.Getenv(test.EnvAssertionsEnabledSeed) != "" {
+			assertionsEnabledProbability = 1
+		}
+
+		if rand.Float64() < assertionsEnabledProbability {
+			// The build with runtime assertions should exist in every nightly
+			// CI build, but we can't assume it exists in every roachtest call.
+			if path := t.RuntimeAssertionsCockroach(); path != "" {
+				t.l.Printf("Runtime assertions enabled")
+				t.randomizedCockroach = path
+				return
+			} else {
+				t.l.Printf("WARNING: running without runtime assertions since the corresponding binary was not specified")
+			}
+		}
+		t.l.Printf("Runtime assertions disabled")
+		t.randomizedCockroach = t.StandardCockroach()
+	})
+
+	return t.randomizedCockroach
 }
 
-func (t *testImpl) CockroachShort() string {
-	return t.cockroachShort
+func (t *testImpl) RuntimeAssertionsCockroach() string {
+	return t.cockroachEA
+}
+
+func (t *testImpl) StandardCockroach() string {
+	return t.cockroach
 }
 
 func (t *testImpl) DeprecatedWorkload() string {
@@ -338,13 +400,16 @@ func (t *testImpl) addFailure(depth int, format string, args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.mu.failures = append(t.mu.failures, reportFailure)
+	if !t.mu.failuresSuppressed {
+		t.mu.failures = append(t.mu.failures, reportFailure)
+	}
 
 	var b strings.Builder
 	formatFailure(&b, reportFailure)
 	msg := b.String()
 
-	failureNum := len(t.mu.failures)
+	t.mu.numFailures++
+	failureNum := t.mu.numFailures
 	failureLog := fmt.Sprintf("failure_%d", failureNum)
 	t.L().Printf("test failure #%d: full stack retained in %s.log: %s", failureNum, failureLog, msg)
 	// Also dump the verbose error (incl. all stack traces) to a log file, in case
@@ -370,8 +435,17 @@ func (t *testImpl) addFailure(depth int, format string, args ...interface{}) {
 	t.mu.output = append(t.mu.output, '\n')
 }
 
-// We take the first error from each failure which is the
-// "squashed" error that contains all information of a failure
+// suppressFailures will stop future failures from being surfaced to github posting
+// or the test logger. It will not stop those failures from being logged in their
+// own failure.log files. Used if we are confident on the root cause of a failure and
+// want to reduce noise of other failures, i.e. timeouts.
+func (t *testImpl) suppressFailures() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.failuresSuppressed = true
+}
+
+// We take the "squashed" error that contains information of all the errors for each failure.
 func formatFailure(b *strings.Builder, reportFailures ...failure) {
 	for i, failure := range reportFailures {
 		if i > 0 {
@@ -396,13 +470,13 @@ func (t *testImpl) Failed() bool {
 }
 
 func (t *testImpl) failedRLocked() bool {
-	return len(t.mu.failures) > 0
+	return t.mu.numFailures > 0
 }
 
 func (t *testImpl) firstFailure() failure {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	if len(t.mu.failures) <= 0 {
+	if len(t.mu.failures) == 0 {
 		return failure{}
 	}
 	return t.mu.failures[0]
@@ -435,6 +509,13 @@ func (t *testImpl) PerfArtifactsDir() string {
 	return perfArtifactsDir
 }
 
+func (t *testImpl) GoCoverArtifactsDir() string {
+	if t.goCoverEnabled {
+		return goCoverArtifactsDir
+	}
+	return ""
+}
+
 // IsBuildVersion returns true if the build version is greater than or equal to
 // minVersion. This allows a test to optionally perform additional checks
 // depending on the cockroach version it is running against. Note that the
@@ -455,18 +536,36 @@ func (t *testImpl) IsBuildVersion(minVersion string) bool {
 	return t.BuildVersion().AtLeast(vers)
 }
 
-// teamCityEscape escapes a string for use as <value> in a key='<value>' attribute
+// TeamCityEscape escapes a string for use as <value> in a key='<value>' attribute
 // in TeamCity build output marker.
-// Documentation here: https://confluence.jetbrains.com/display/TCD10/Build+Script+Interaction+with+TeamCity#BuildScriptInteractionwithTeamCity-Escapedvalues
-func teamCityEscape(s string) string {
-	r := strings.NewReplacer(
-		"\n", "|n",
-		"'", "|'",
-		"|", "||",
-		"[", "|[",
-		"]", "|]",
-	)
-	return r.Replace(s)
+// See https://www.jetbrains.com/help/teamcity/2023.05/service-messages.html#Escaped+Values
+func TeamCityEscape(s string) string {
+	var sb strings.Builder
+
+	for _, runeValue := range s {
+		switch runeValue {
+		case '\n':
+			sb.WriteString("|n")
+		case '\r':
+			sb.WriteString("|r")
+		case '|':
+			sb.WriteString("||")
+		case '[':
+			sb.WriteString("|[")
+		case ']':
+			sb.WriteString("|]")
+		case '\'':
+			sb.WriteString("|'")
+		default:
+			if runeValue > 127 {
+				// escape unicode
+				sb.WriteString(fmt.Sprintf("|0x%04x", runeValue))
+			} else {
+				sb.WriteRune(runeValue)
+			}
+		}
+	}
+	return sb.String()
 }
 
 func teamCityNameEscape(name string) string {

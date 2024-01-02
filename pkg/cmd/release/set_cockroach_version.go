@@ -33,7 +33,7 @@ var setCockroachVersionCmd = &cobra.Command{
 
 func init() {
 	setCockroachVersionCmd.Flags().StringVar(&setCockroachVersionFlags.versionStr, versionFlag, "", "cockroachdb version")
-	_ = roachtestPredecessorsCmd.MarkFlagRequired(versionFlag)
+	_ = setCockroachVersionCmd.MarkFlagRequired(versionFlag)
 }
 
 func setCockroachVersion(_ *cobra.Command, _ []string) error {
@@ -42,9 +42,12 @@ func setCockroachVersion(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("cannot parse version %s: %w", setCockroachVersionFlags.versionStr, err)
 	}
-	version := []byte(setCockroachVersionFlags.versionStr + "\n")
-	err = os.WriteFile(versionFile, version, 0644)
-	if err != nil {
+	return updateVersionFile(versionFile, setCockroachVersionFlags.versionStr)
+}
+
+func updateVersionFile(dest string, version string) error {
+	contents := []byte(version + "\n")
+	if err := os.WriteFile(dest, contents, 0644); err != nil {
 		return fmt.Errorf("cannot write version.txt: %w", err)
 	}
 	return nil

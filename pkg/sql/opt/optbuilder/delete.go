@@ -38,8 +38,36 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 			"DELETE statement requires LIMIT when ORDER BY is used"))
 	}
 
+	batch := del.Batch
+	if batch != nil {
+		var hasSize bool
+		for i, param := range batch.Params {
+			switch param.(type) {
+			case *tree.SizeBatchParam:
+				if hasSize {
+					panic(pgerror.Newf(pgcode.Syntax, "invalid parameter at index %d, SIZE already specified", i))
+				}
+				hasSize = true
+			}
+		}
+		if hasSize {
+			// TODO(ecwall): remove when DELETE BATCH is supported
+			panic(pgerror.Newf(pgcode.Syntax,
+				"DELETE BATCH (SIZE <size>) not implemented"))
+		}
+		// TODO(ecwall): remove when DELETE BATCH is supported
+		panic(pgerror.Newf(pgcode.Syntax,
+			"DELETE BATCH not implemented"))
+	}
+
 	// Find which table we're working on, check the permissions.
 	tab, depName, alias, refColumns := b.resolveTableForMutation(del.Table, privilege.DELETE)
+
+	if tab.IsVirtualTable() {
+		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot delete from view \"%s\"", tab.Name(),
+		))
+	}
 
 	if refColumns != nil {
 		panic(pgerror.Newf(pgcode.Syntax,
@@ -50,7 +78,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	b.checkPrivilege(depName, tab, privilege.SELECT)
 
 	// Check if this table has already been mutated in another subquery.
-	b.checkMultipleMutations(tab, false /* simpleInsert */)
+	b.checkMultipleMutations(tab, generalMutation)
 
 	var mb mutationBuilder
 	mb.init(b, "delete", tab, alias)

@@ -24,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -45,14 +47,14 @@ func loadSchedules(
 ) (scheduleDetails, error) {
 	scheduleID := spec.scheduleID
 	s := scheduleDetails{}
-	if scheduleID == 0 {
+	if scheduleID == jobspb.InvalidScheduleID {
 		return s, errors.Newf("Schedule ID expected, none found")
 	}
 
 	execCfg := p.ExecCfg()
 	env := sql.JobSchedulerEnv(execCfg.JobsKnobs())
 	schedules := jobs.ScheduledJobTxn(p.InternalSQLTxn())
-	schedule, err := schedules.Load(ctx, env, int64(scheduleID))
+	schedule, err := schedules.Load(ctx, env, scheduleID)
 	if err != nil {
 		return s, err
 	}
@@ -127,16 +129,16 @@ func doAlterBackupSchedules(
 			s.incJob.ScheduleID())
 	}
 
-	// Check that the user is admin or the owner of the schedules being altered.
-	isAdmin, err := p.UserHasAdminRole(ctx, p.User())
+	// Check that the user has privileges or is the owner of the schedules being altered.
+	hasPriv, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA, p.User())
 	if err != nil {
 		return err
 	}
 	isOwnerOfFullJob := s.fullJob == nil || s.fullJob.Owner() == p.User()
 	isOwnerOfIncJob := s.incJob == nil || s.incJob.Owner() == p.User()
-	if !isAdmin && !(isOwnerOfFullJob && isOwnerOfIncJob) {
-		return pgerror.New(pgcode.InsufficientPrivilege, "must be admin or owner of the "+
-			"schedules being altered.")
+	if !hasPriv && !(isOwnerOfFullJob && isOwnerOfIncJob) {
+		return pgerror.Newf(pgcode.InsufficientPrivilege, "must be admin or the owner of the "+
+			"schedules being altered, or have %s privilege", privilege.REPAIRCLUSTERMETADATA)
 	}
 
 	if s, err = processFullBackupRecurrence(
@@ -175,6 +177,10 @@ func doAlterBackupSchedules(
 	}
 
 	if err := processScheduleOptions(ctx, p, spec, s); err != nil {
+		return err
+	}
+
+	if err := processNextRunNow(p, spec, s); err != nil {
 		return err
 	}
 
@@ -299,13 +305,22 @@ func processScheduleOptions(
 			// NB: as of 20.2, schedule creation requires admin so this is duplicative
 			// but in the future we might relax so you can schedule anything that you
 			// can backup, but then this cluster-wide metric should be admin-only.
-			if err := p.RequireAdminRole(ctx, optUpdatesLastBackupMetric); err != nil {
-				return pgerror.Wrap(err, pgcode.InsufficientPrivilege, "")
+			if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
+				return err
+			} else if !hasAdmin {
+				return pgerror.Newf(pgcode.InsufficientPrivilege,
+					"only users with the admin role are allowed to change %s", optUpdatesLastBackupMetric)
 			}
 
-			updatesLastBackupMetric, err := strconv.ParseBool(v)
-			if err != nil {
-				return errors.Wrapf(err, "unexpected value for %s: %s", k, v)
+			// If the option is specified it generally means to set it, unless it has
+			// a value and that value parses as false.
+			updatesLastBackupMetric := true
+			if v != "" {
+				var err error
+				updatesLastBackupMetric, err = strconv.ParseBool(v)
+				if err != nil {
+					return errors.Wrapf(err, "unexpected value for %s: %s", k, v)
+				}
 			}
 			s.fullArgs.UpdatesLastBackupMetric = updatesLastBackupMetric
 			if s.incArgs == nil {
@@ -376,6 +391,9 @@ func processOptionsForArgs(inOpts tree.BackupOptions, outOpts *tree.BackupOption
 		} else {
 			outOpts.IncrementalStorage = inOpts.IncrementalStorage
 		}
+	}
+	if inOpts.UpdatesClusterMonitoringMetrics != nil {
+		outOpts.UpdatesClusterMonitoringMetrics = inOpts.UpdatesClusterMonitoringMetrics
 	}
 	return nil
 }
@@ -459,7 +477,7 @@ func processFullBackupRecurrence(
 			s.fullJob.ScheduleLabel(),
 			incRecurrence,
 			*s.fullJob.ScheduleDetails(),
-			jobs.InvalidScheduleID,
+			jobspb.InvalidScheduleID,
 			s.fullArgs.UpdatesLastBackupMetric,
 			s.incStmt,
 			s.fullArgs.ChainProtectedTimestampRecords,
@@ -572,9 +590,37 @@ func processInto(p sql.PlanHookState, spec *alterBackupScheduleSpec, s scheduleD
 	return nil
 }
 
+func processNextRunNow(
+	p sql.PlanHookState, spec *alterBackupScheduleSpec, s scheduleDetails,
+) error {
+	if !spec.nextRunNow {
+		return nil
+	}
+
+	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+
+	// Trigger the full schedule, unless there is an inc schedule and the user did
+	// not explicitly specify the full.
+	schedule := s.fullJob
+	if s.incJob != nil && !spec.fullNextRunNow {
+		schedule = s.incJob
+	}
+
+	// A paused schedule is indicated by having no next_run time. If we triggered
+	// a run of a schedule which was previously paused by setting next_run to now,
+	// we would be resuming it. This could be surprising, so instead just tell the
+	// user to use RESUME explicitly, so they're clear that they need to pause it
+	// again later if they don't want it to keep running.
+	if schedule.IsPaused() {
+		return errors.Newf("cannot execute a paused schedule; use RESUME SCHEDULE instead")
+	}
+	schedule.SetNextRun(env.Now())
+	return nil
+}
+
 type alterBackupScheduleSpec struct {
 	// Schedule specific properties that get evaluated.
-	scheduleID           uint64
+	scheduleID           jobspb.ScheduleID
 	recurrence           string
 	fullBackupRecurrence string
 	fullBackupAlways     bool
@@ -583,6 +629,8 @@ type alterBackupScheduleSpec struct {
 	into                 []string
 	backupOptions        tree.BackupOptions
 	scheduleOptions      map[string]string
+	nextRunNow           bool
+	fullNextRunNow       bool
 }
 
 // makeAlterBackupScheduleSpec construct alterBackupScheduleSpec struct to assist
@@ -593,7 +641,7 @@ func makeAlterBackupScheduleSpec(
 ) (*alterBackupScheduleSpec, error) {
 	exprEval := p.ExprEvaluator(alterBackupScheduleOp)
 	spec := &alterBackupScheduleSpec{
-		scheduleID: alterStmt.ScheduleID,
+		scheduleID: jobspb.ScheduleID(alterStmt.ScheduleID),
 	}
 	var err error
 	observed := make(map[string]interface{})
@@ -642,6 +690,9 @@ func makeAlterBackupScheduleSpec(
 			}
 		case *tree.AlterBackupScheduleSetScheduleOption:
 			scheduleOptions = append(scheduleOptions, typedCmd.Option)
+		case *tree.AlterBackupScheduleNextRun:
+			spec.nextRunNow = true
+			spec.fullNextRunNow = typedCmd.Full
 		default:
 			return nil, errors.Newf("not yet implemented: %v", tree.AsString(typedCmd))
 		}
@@ -658,7 +709,7 @@ func makeAlterBackupScheduleSpec(
 	}
 
 	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(),
+		p.ExecCfg().Settings,
 		"BACKUP INTO LATEST")
 	spec.isEnterpriseUser = enterpriseCheckErr == nil
 
@@ -697,6 +748,9 @@ func alterBackupScheduleTypeCheck(
 
 		case *tree.AlterBackupScheduleSetScheduleOption:
 			opts = append(opts, typedCmd.Option)
+		case *tree.AlterBackupScheduleNextRun:
+			// no parameters to this cmd so nothing to do here.
+
 		}
 	}
 	if err := exprutil.TypeCheck(

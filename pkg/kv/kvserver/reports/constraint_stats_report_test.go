@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
@@ -729,7 +728,10 @@ func TestConstraintReport(t *testing.T) {
 	// the cluster. We disable the cluster's own production of reports so that it
 	// doesn't interfere with the test.
 	ReporterInterval.Override(ctx, &st.SV, 0)
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Settings:          st,
+	})
 	con := s.InternalExecutor().(isql.Executor)
 	defer s.Stopper().Stop(ctx)
 
@@ -985,7 +987,7 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 		allStores = append(allStores, sds...)
 	}
 
-	keyScanner := keysutils.MakePrettyScannerForNamedTables(tableToID, idxToID)
+	keyScanner := keysutils.MakePrettyScannerForNamedTables(roachpb.SystemTenantID, tableToID, idxToID)
 	ranges, err := processSplits(keyScanner, tc.splits, allStores)
 	if err != nil {
 		return compiledTestCase{}, err
@@ -1052,7 +1054,7 @@ func generateTableZone(t table, tableDesc descpb.TableDescriptor) (*zonepb.ZoneC
 	if tableZone != nil {
 		var err error
 		tableZone.SubzoneSpans, err = sql.GenerateSubzoneSpans(
-			nil, uuid.UUID{} /* clusterID */, keys.SystemSQLCodec,
+			nil, keys.SystemSQLCodec,
 			tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), tableZone.Subzones, false /* hasNewSubzones */)
 		if err != nil {
 			return nil, errors.Wrap(err, "error generating subzone spans")

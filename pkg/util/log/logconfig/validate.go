@@ -42,6 +42,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	defaultBufferedStaleness := 5 * time.Second
 	defaultFlushTriggerSize := ByteSize(1024 * 1024)   // 1mib
 	defaultMaxBufferSize := ByteSize(50 * 1024 * 1024) // 50mib
+	bufferFmt := BufferFmtNewline
 
 	baseCommonSinkConfig := CommonSinkConfig{
 		Filter:      logpb.Severity_INFO,
@@ -56,6 +57,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 				MaxStaleness:     &zeroDuration,
 				FlushTriggerSize: &zeroByteSize,
 				MaxBufferSize:    &zeroByteSize,
+				Format:           &bufferFmt,
 			},
 		},
 	}
@@ -76,6 +78,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 					MaxStaleness:     &zeroDuration,
 					FlushTriggerSize: &zeroByteSize,
 					MaxBufferSize:    &zeroByteSize,
+					Format:           &bufferFmt,
 				},
 			},
 		},
@@ -88,6 +91,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 					MaxStaleness:     &defaultBufferedStaleness,
 					FlushTriggerSize: &defaultFlushTriggerSize,
 					MaxBufferSize:    &defaultMaxBufferSize,
+					Format:           &bufferFmt,
 				},
 			},
 		},
@@ -100,13 +104,18 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 					MaxStaleness:     &defaultBufferedStaleness,
 					FlushTriggerSize: &defaultFlushTriggerSize,
 					MaxBufferSize:    &defaultMaxBufferSize,
+					Format:           &bufferFmt,
 				},
 			},
 		},
 		UnsafeTLS:         &bf,
 		DisableKeepAlives: &bf,
 		Method:            func() *HTTPSinkMethod { m := HTTPSinkMethod(http.MethodPost); return &m }(),
-		Timeout:           &zeroDuration,
+		Timeout: func() *time.Duration {
+			twoS := 2 * time.Second
+			return &twoS
+		}(),
+		Compression: &GzipCompression,
 	}
 
 	propagateCommonDefaults(&baseFileDefaults.CommonSinkConfig, baseCommonSinkConfig)
@@ -161,15 +170,28 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	if c.Sinks.Stderr.Filter == logpb.Severity_UNKNOWN {
 		c.Sinks.Stderr.Filter = logpb.Severity_NONE
 	}
+	// We need to know if format-options were specifically defined on the stderr sink later on,
+	// since this information is lost once propagateCommonDefaults is called.
+	stdErrFormatOptionsOriginallySet := len(c.Sinks.Stderr.FormatOptions) > 0
 	propagateCommonDefaults(&c.Sinks.Stderr.CommonSinkConfig, c.FileDefaults.CommonSinkConfig)
 	if c.Sinks.Stderr.Auditable != nil && *c.Sinks.Stderr.Auditable {
-		if *c.Sinks.Stderr.Format == "crdb-v1-tty" {
-			f := "crdb-v1-tty-count"
-			c.Sinks.Stderr.Format = &f
-		}
 		c.Sinks.Stderr.Criticality = &bt
 	}
 	c.Sinks.Stderr.Auditable = nil
+	// The format parameter for stderr is set to `crdb-v2-tty` and cannot be changed.
+	// See docs: https://www.cockroachlabs.com/docs/stable/configure-logs#output-to-stderr
+	if *c.Sinks.Stderr.Format != DefaultStderrFormat {
+		f := DefaultStderrFormat
+		c.Sinks.Stderr.Format = &f
+	}
+	// FormatOptions are format-specific. We should only copy them over to StdErr from
+	// FileDefaults if FileDefaults is also making use of a crdb-v2 format. Otherwise,
+	// we are likely to error when trying to apply an unsupported format option.
+	if c.FileDefaults.CommonSinkConfig.Format != nil &&
+		!strings.Contains(*c.FileDefaults.CommonSinkConfig.Format, "v2") &&
+		!stdErrFormatOptionsOriginallySet {
+		c.Sinks.Stderr.CommonSinkConfig.FormatOptions = map[string]string{}
+	}
 	if err := c.ValidateCommonSinkConfig(c.Sinks.Stderr.CommonSinkConfig); err != nil {
 		fmt.Fprintf(&errBuf, "stderr sink: %v\n", err)
 	}
@@ -448,6 +470,17 @@ func (c *Config) validateHTTPSinkConfig(hsc *HTTPSinkConfig) error {
 	propagateHTTPDefaults(&hsc.HTTPDefaults, c.HTTPDefaults)
 	if hsc.Address == nil || len(*hsc.Address) == 0 {
 		return errors.New("address cannot be empty")
+	}
+	if *hsc.Compression != GzipCompression && *hsc.Compression != NoneCompression {
+		return errors.New("compression must be 'gzip' or 'none'")
+	}
+	// If both header types are populated, make sure theres no duplicate keys
+	if hsc.Headers != nil && hsc.FileBasedHeaders != nil {
+		for key := range hsc.Headers {
+			if _, exists := hsc.FileBasedHeaders[key]; exists {
+				return errors.Newf("headers and file-based-headers have the same key %s", key)
+			}
+		}
 	}
 	return c.ValidateCommonSinkConfig(hsc.CommonSinkConfig)
 }

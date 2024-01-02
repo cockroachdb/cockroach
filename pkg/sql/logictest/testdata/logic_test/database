@@ -10,7 +10,7 @@ CREATE DATABASE IF NOT EXISTS a
 statement error pgcode 42601 empty database name
 CREATE DATABASE ""
 
-query TTTTTT colnames
+query TTTTTT colnames,rowsort
 SHOW DATABASES
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal
@@ -31,7 +31,7 @@ true
 statement ok
 COMMENT ON DATABASE a IS 'A'
 
-query TTTTTTT colnames
+query TTTTTTT colnames,rowsort
 SHOW DATABASES WITH COMMENT
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
@@ -44,7 +44,7 @@ test           root   NULL            NULL              {}       NULL           
 statement ok
 COMMENT ON DATABASE a IS 'AAA'
 
-query TTTTTTT colnames
+query TTTTTTT colnames,rowsort
 SHOW DATABASES WITH COMMENT
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
@@ -62,10 +62,10 @@ query TT colnames,rowsort
 SHOW SCHEMAS FROM a
 ----
 schema_name         owner
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
 public              admin
 s                   root
 
@@ -120,7 +120,7 @@ CREATE DATABASE b8 WITH CONNECTION LIMIT = 1
 statement ok
 CREATE DATABASE c
 
-query TTTTTT
+query TTTTTT rowsort
 SHOW DATABASES
 ----
 a          root  NULL  NULL  {}  NULL
@@ -186,7 +186,7 @@ DROP DATABASE b7 CASCADE
 statement error pgcode 42601 empty database name
 DROP DATABASE ""
 
-query TTTTTT colnames
+query TTTTTT colnames,rowsort
 SHOW DATABASES
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal
@@ -309,6 +309,11 @@ CREATE TABLE db69713.s.pg_constraintdef_test (
 statement ok
 DROP DATABASE db69713;
 
+statement ok
+RESET DATABASE;
+
+subtest end
+
 # Ensure user must exist to create with owner.
 statement error role/user "fake_user" does not exist
 CREATE DATABASE aa with owner fake_user
@@ -316,7 +321,7 @@ CREATE DATABASE aa with owner fake_user
 statement ok
 CREATE DATABASE a with owner testuser
 
-query TTTTTT colnames
+query TTTTTT colnames,rowsort
 SHOW DATABASES
 ----
 database_name  owner     primary_region  secondary_region  regions  survival_goal
@@ -359,5 +364,75 @@ SELECT * FROM [SHOW DATABASES] WHERE database_name = 'ifnotexistsownerdb'
 ----
 database_name       owner     primary_region  secondary_region  regions  survival_goal
 ifnotexistsownerdb  testuser  NULL            NULL              {}       NULL
+
+subtest end
+
+subtest regression_105906
+
+statement ok
+CREATE SCHEMA regression_105906
+
+statement ok
+CREATE DATABASE regression_105906
+
+query TT colnames,rowsort
+SHOW SCHEMAS
+----
+schema_name         owner
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
+public              admin
+regression_105906   root
+
+# Note: regression_105906 should not appear in the list of schemas below
+query TT colnames,rowsort
+SHOW SCHEMAS FROM regression_105906
+----
+schema_name         owner
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
+public              admin
+
+statement ok
+DROP DATABASE regression_105906
+
+statement ok
+DROP SCHEMA regression_105906
+
+statement ok
+CREATE SCHEMA "rEgReSsIoN 105906"
+
+statement ok
+CREATE DATABASE "rEgReSsIoN 105906"
+
+query T rowsort
+SELECT schema_name FROM [SHOW SCHEMAS]
+----
+public
+rEgReSsIoN 105906
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+
+# Note: "rEgReSsIoN 105906" should not appear in the list of schemas below
+query T rowsort
+SELECT schema_name FROM [SHOW SCHEMAS FROM "rEgReSsIoN 105906"]
+----
+public
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+
+statement ok
+DROP SCHEMA "rEgReSsIoN 105906"
+
+statement ok
+DROP DATABASE "rEgReSsIoN 105906"
 
 subtest end

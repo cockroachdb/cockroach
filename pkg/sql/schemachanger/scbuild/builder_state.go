@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -51,7 +52,11 @@ func (b *builderState) QueryByID(id catid.DescID) scbuildstmt.ElementResultSet {
 		return nil
 	}
 	b.ensureDescriptor(id)
-	return b.descCache[id].ers
+	c := b.descCache[id]
+	if c.cachedCollection == nil {
+		c.cachedCollection = b.newCollection(id)
+	}
+	return c.cachedCollection
 }
 
 // Ensure implements the scbuildstmt.BuilderState interface.
@@ -63,12 +68,15 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 	default:
 		panic(errors.AssertionFailedf("unsupported target %s", target.Status()))
 	}
+
 	if dst == nil {
 		// We're adding both a new element and a target for it.
 		if target == scpb.ToAbsent {
 			// Ignore targets to remove something that doesn't exist yet.
 			return
 		}
+		// Set a target for the element but check for concurrent schema changes.
+		_ = b.checkForConcurrentSchemaChanges(e)
 		b.addNewElementState(elementState{
 			element:  e,
 			initial:  scpb.Status_ABSENT,
@@ -83,17 +91,40 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 		// Ignore no-op changes.
 		return
 	}
+
+	// Check that there are no concurrent schema changes on the descriptors
+	// referenced by this element. Re-assign dst because of potential
+	// re-allocations.
+	dst = b.checkForConcurrentSchemaChanges(e)
+
+	// We were about to overwrite an element's target and metadata. Assert one
+	// disallowed case: reviving a "ghost" element, that is, add an element that
+	// was previously added and then dropped. This assertion is artificial per se
+	// and should not be taken as holy and unbreakable. It is just that we don't
+	// think why someone would need to do this for now, so we simply put a gate
+	// here as a sanity check. If we do find a case where we need to revive a
+	// ghost element in the future, feel free to remove this check.
+	// We fall back to legacy schema changer if it happens since users do not need
+	// to see this but still it will make to the logs so developers can be aware
+	// of it and investigate it further if needed.
+	if dst.current == scpb.Status_ABSENT &&
+		dst.target == scpb.ToAbsent &&
+		(target == scpb.ToPublic || target == scpb.Transient) &&
+		dst.metadata.IsLinkedToSchemaChange() {
+		panic(scerrors.NotImplementedErrorf(nil, "attempt to revive a ghost element:"+
+			" [elem=%v],[current=ABSENT],[target=ToAbsent],[newTarget=%v]", dst.element.String(), target.Status()))
+	}
+
 	// Henceforth all possibilities lead to the target and metadata being
 	// overwritten. See below for explanations as to why this is legal.
-	oldTarget := dst.target
-	dst.target = target
-	dst.metadata = meta
+	oldTarget, oldStatementID := dst.target, dst.metadata.StatementID
+	dst.target, dst.metadata = target, meta
 	if dst.metadata.Size() == 0 {
 		// The element has never had a target set before.
 		// We can freely overwrite it.
 		return
 	}
-	if dst.metadata.StatementID == meta.StatementID {
+	if oldStatementID == meta.StatementID {
 		// The element has had a target set before, but it was in the same build.
 		// We can freely overwrite it or unset it.
 		if target.Status() == dst.initial {
@@ -146,6 +177,32 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 	panic(errors.AssertionFailedf("unsupported incumbent target %s", oldTarget.Status()))
 }
 
+func (b *builderState) checkForConcurrentSchemaChanges(e scpb.Element) *elementState {
+	b.ensureDescriptors(e)
+	// Check that there are no descriptors which are undergoing a concurrent
+	// schema change which might interfere with this one.
+	screl.AllTargetDescIDs(e).ForEach(func(id descpb.ID) {
+		if c := b.descCache[id]; c != nil && c.desc != nil && c.desc.HasConcurrentSchemaChanges() {
+			panic(scerrors.ConcurrentSchemaChangeError(c.desc))
+		}
+	})
+	// We may have mutated the builder state for this element.
+	// Specifically, the output slice might have grown and have been realloc'ed.
+	return b.getExistingElementState(e)
+}
+
+// ensureDescriptors ensures the presence of all elements for all
+// descriptors referenced inside the element.
+//
+// This provides us with all of the ID -> name mappings required to
+// comprehensively decorate any EXPLAIN (DDL) output.
+func (b *builderState) ensureDescriptors(e scpb.Element) {
+	_ = screl.WalkDescIDs(e, func(id *catid.DescID) error {
+		b.ensureDescriptor(*id)
+		return nil
+	})
+}
+
 func (b *builderState) upsertElementState(es elementState) {
 	if existing := b.getExistingElementState(es.element); existing != nil {
 		if err := b.localMemAcc.Grow(b.ctx, es.byteSize()-existing.byteSize()); err != nil {
@@ -185,9 +242,10 @@ func (b *builderState) addNewElementState(es elementState) {
 	id := screl.GetDescID(es.element)
 	key := screl.ElementString(es.element)
 	c := b.descCache[id]
-	c.ers.indexes = append(c.ers.indexes, len(b.output))
+	c.outputIndexes = append(c.outputIndexes, len(b.output))
 	c.elementIndexMap[key] = len(b.output)
 	b.output = append(b.output, es)
+	c.cachedCollection = nil
 }
 
 // LogEventForExistingTarget implements the scbuildstmt.BuilderState interface.
@@ -209,15 +267,6 @@ func (b *builderState) LogEventForExistingTarget(e scpb.Element) {
 		panic(errors.AssertionFailedf("no target set for element %s in builder state", key))
 	}
 	es.withLogEvent = true
-}
-
-// ForEachElementStatus implements the scpb.ElementStatusIterator interface.
-func (b *builderState) ForEachElementStatus(
-	fn func(current scpb.Status, target scpb.TargetStatus, e scpb.Element),
-) {
-	for _, es := range b.output {
-		fn(es.current, es.target, es.element)
-	}
 }
 
 var _ scbuildstmt.PrivilegeChecker = (*builderState)(nil)
@@ -259,11 +308,14 @@ func (b *builderState) checkPrivilege(id catid.DescID, priv privilege.Kind) {
 		// Validate if this descriptor can be resolved under the current schema.
 		if c.desc.DescriptorType() != catalog.Schema &&
 			c.desc.DescriptorType() != catalog.Database {
-			scpb.ForEachSchemaParent(c.ers, func(current scpb.Status, target scpb.TargetStatus, e *scpb.SchemaParent) {
-				if current == scpb.Status_PUBLIC {
-					b.checkPrivilege(e.SchemaID, privilege.USAGE)
-				}
-			})
+			scpb.ForEachSchemaParent(
+				b.QueryByID(id),
+				func(current scpb.Status, _ scpb.TargetStatus, e *scpb.SchemaParent) {
+					if current == scpb.Status_PUBLIC {
+						b.checkPrivilege(e.SchemaID, privilege.USAGE)
+					}
+				},
+			)
 		}
 		err = b.auth.CheckPrivilege(b.ctx, c.desc, priv)
 		c.privileges[priv] = err
@@ -276,6 +328,9 @@ func (b *builderState) checkPrivilege(id catid.DescID, priv privilege.Kind) {
 // CurrentUserHasAdminOrIsMemberOf implements the scbuildstmt.PrivilegeChecker interface.
 func (b *builderState) CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername) bool {
 	if b.hasAdmin {
+		return true
+	}
+	if b.evalCtx.SessionData().User() == role {
 		return true
 	}
 	memberships, err := b.auth.MemberOfWithAdminOption(b.ctx, role)
@@ -304,14 +359,17 @@ func (b *builderState) NextTableColumnID(table *scpb.Table) (ret catid.ColumnID)
 		}
 		ret = tbl.GetNextColumnID()
 	}
-	scpb.ForEachColumn(b, func(_ scpb.Status, _ scpb.TargetStatus, column *scpb.Column) {
-		if column.IsSystemColumn {
-			return
-		}
-		if column.TableID == table.TableID && column.ColumnID >= ret {
-			ret = column.ColumnID + 1
-		}
-	})
+	scpb.ForEachColumn(
+		b.QueryByID(table.TableID),
+		func(_ scpb.Status, _ scpb.TargetStatus, column *scpb.Column) {
+			if column.IsSystemColumn {
+				return
+			}
+			if column.ColumnID >= ret {
+				ret = column.ColumnID + 1
+			}
+		},
+	)
 	return ret
 }
 
@@ -327,17 +385,20 @@ func (b *builderState) NextColumnFamilyID(table *scpb.Table) (ret catid.FamilyID
 		}
 		ret = tbl.GetNextFamilyID()
 	}
-	scpb.ForEachColumnFamily(b, func(_ scpb.Status, _ scpb.TargetStatus, cf *scpb.ColumnFamily) {
-		if cf.TableID == table.TableID && cf.FamilyID >= ret {
-			ret = cf.FamilyID + 1
-		}
-	})
+	scpb.ForEachColumnFamily(
+		b.QueryByID(table.TableID),
+		func(_ scpb.Status, _ scpb.TargetStatus, cf *scpb.ColumnFamily) {
+			if cf.FamilyID >= ret {
+				ret = cf.FamilyID + 1
+			}
+		},
+	)
 	return ret
 }
 
 // NextTableIndexID implements the scbuildstmt.TableHelpers interface.
-func (b *builderState) NextTableIndexID(table *scpb.Table) (ret catid.IndexID) {
-	return b.nextIndexID(table.TableID)
+func (b *builderState) NextTableIndexID(tableID catid.DescID) (ret catid.IndexID) {
+	return b.nextIndexID(tableID)
 }
 
 // NextViewIndexID implements the scbuildstmt.TableHelpers interface.
@@ -349,10 +410,10 @@ func (b *builderState) NextViewIndexID(view *scpb.View) (ret catid.IndexID) {
 }
 
 // NextTableConstraintID implements the scbuildstmt.TableHelpers interface.
-func (b *builderState) NextTableConstraintID(id catid.DescID) (ret catid.ConstraintID) {
+func (b *builderState) NextTableConstraintID(tableID catid.DescID) (ret catid.ConstraintID) {
 	{
-		b.ensureDescriptor(id)
-		desc := b.descCache[id].desc
+		b.ensureDescriptor(tableID)
+		desc := b.descCache[tableID].desc
 		tbl, ok := desc.(catalog.TableDescriptor)
 		if !ok {
 			panic(errors.AssertionFailedf("Expected table descriptor for ID %d, instead got %s",
@@ -363,14 +424,55 @@ func (b *builderState) NextTableConstraintID(id catid.DescID) (ret catid.Constra
 			ret = 1
 		}
 	}
-
-	b.QueryByID(id).ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+	// Consult all present element in case they have a ConstraintID field and it's larger.
+	b.QueryByID(tableID).ForEach(func(
+		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
+	) {
 		v, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
-		if id, ok := v.(catid.ConstraintID); ok && id >= ret {
-			ret = id + 1
+		if id, ok := v.(catid.ConstraintID); ok {
+			if id < catid.ConstraintID(scbuildstmt.TableTentativeIdsStart) && id >= ret {
+				ret = id + 1
+			}
 		}
 	})
+	return ret
+}
 
+// NextTableTentativeIndexID implements the scbuildstmt.TableHelpers interface.
+func (b *builderState) NextTableTentativeIndexID(tableID catid.DescID) (ret catid.IndexID) {
+	ret = catid.IndexID(scbuildstmt.TableTentativeIdsStart)
+
+	// Consult all present index-related element in case their ID is larger.
+	b.QueryByID(tableID).ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		switch e.(type) {
+		case *scpb.PrimaryIndex, *scpb.TemporaryIndex, *scpb.SecondaryIndex:
+			val, _ := screl.Schema.GetAttribute(screl.IndexID, e)
+			indexID := val.(catid.IndexID)
+			if indexID >= catid.IndexID(scbuildstmt.TableTentativeIdsStart) && indexID >= ret {
+				ret = indexID + 1
+			}
+		}
+	})
+	return ret
+}
+
+// NextTableTentativeConstraintID implements the scbuildstmt.TableHelpers interface.
+func (b *builderState) NextTableTentativeConstraintID(
+	tableID catid.DescID,
+) (ret catid.ConstraintID) {
+	ret = catid.ConstraintID(scbuildstmt.TableTentativeIdsStart)
+
+	// Consult all present element in case they have a ConstraintID field and it's larger.
+	b.QueryByID(tableID).ForEach(func(
+		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
+	) {
+		v, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+		if id, ok := v.(catid.ConstraintID); ok {
+			if id >= catid.ConstraintID(scbuildstmt.TableTentativeIdsStart) && id >= ret {
+				ret = id + 1
+			}
+		}
+	})
 	return ret
 }
 
@@ -393,19 +495,15 @@ func (b *builderState) nextIndexID(id catid.DescID) (ret catid.IndexID) {
 		}
 		ret = tbl.GetNextIndexID()
 	}
-	scpb.ForEachPrimaryIndex(b, func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.PrimaryIndex) {
-		if index.TableID == id && index.IndexID >= ret {
-			ret = index.IndexID + 1
-		}
-	})
-	scpb.ForEachTemporaryIndex(b, func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.TemporaryIndex) {
-		if index.TableID == id && index.IndexID >= ret {
-			ret = index.IndexID + 1
-		}
-	})
-	scpb.ForEachSecondaryIndex(b, func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.SecondaryIndex) {
-		if index.TableID == id && index.IndexID >= ret {
-			ret = index.IndexID + 1
+	// Consult all present index-related element in case their ID is larger.
+	b.QueryByID(id).ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		switch e.(type) {
+		case *scpb.PrimaryIndex, *scpb.TemporaryIndex, *scpb.SecondaryIndex:
+			val, _ := screl.Schema.GetAttribute(screl.IndexID, e)
+			indexID := val.(catid.IndexID)
+			if indexID < catid.IndexID(scbuildstmt.TableTentativeIdsStart) && indexID >= ret {
+				ret = indexID + 1
+			}
 		}
 	})
 	return ret
@@ -426,12 +524,14 @@ func (b *builderState) IndexPartitioningDescriptor(
 	}
 	var oldNumImplicitColumns int
 
-	scpb.ForEachIndexPartitioning(bd.ers, func(_ scpb.Status, _ scpb.TargetStatus, p *scpb.IndexPartitioning) {
-		if p.TableID != index.TableID || p.IndexID != index.IndexID {
-			return
-		}
-		oldNumImplicitColumns = int(p.PartitioningDescriptor.NumImplicitColumns)
-	})
+	scpb.ForEachIndexPartitioning(
+		b.QueryByID(index.TableID),
+		func(_ scpb.Status, _ scpb.TargetStatus, p *scpb.IndexPartitioning) {
+			if p.IndexID == index.IndexID {
+				oldNumImplicitColumns = int(p.PartitioningDescriptor.NumImplicitColumns)
+			}
+		},
+	)
 
 	keyColumns := make([]*scpb.IndexColumn, 0, len(columns))
 	for _, column := range columns {
@@ -445,19 +545,25 @@ func (b *builderState) IndexPartitioningDescriptor(
 	})
 	oldKeyColumnNames := make([]string, len(keyColumns))
 	for i, ic := range keyColumns {
-		scpb.ForEachColumnName(b, func(_ scpb.Status, _ scpb.TargetStatus, cn *scpb.ColumnName) {
-			if cn.TableID != index.TableID || cn.ColumnID != ic.ColumnID {
-				return
-			}
-			oldKeyColumnNames[i] = cn.Name
-		})
+		scpb.ForEachColumnName(
+			b.QueryByID(index.TableID),
+			func(_ scpb.Status, _ scpb.TargetStatus, cn *scpb.ColumnName) {
+				if cn.ColumnID != ic.ColumnID {
+					return
+				}
+				oldKeyColumnNames[i] = cn.Name
+			},
+		)
 	}
 	var allowedNewColumnNames []tree.Name
-	scpb.ForEachColumnName(b, func(current scpb.Status, target scpb.TargetStatus, cn *scpb.ColumnName) {
-		if cn.TableID != index.TableID && current != scpb.Status_PUBLIC && target == scpb.ToPublic {
-			allowedNewColumnNames = append(allowedNewColumnNames, tree.Name(cn.Name))
-		}
-	})
+	scpb.ForEachColumnName(
+		b.QueryByID(index.TableID),
+		func(current scpb.Status, target scpb.TargetStatus, cn *scpb.ColumnName) {
+			if current != scpb.Status_PUBLIC && target == scpb.ToPublic {
+				allowedNewColumnNames = append(allowedNewColumnNames, tree.Name(cn.Name))
+			}
+		},
+	)
 	allowImplicitPartitioning := b.evalCtx.SessionData().ImplicitColumnPartitioningEnabled ||
 		tbl.IsLocalityRegionalByRow()
 	_, ret, err := b.createPartCCL(
@@ -676,16 +782,7 @@ var _ scbuildstmt.ElementReferences = (*builderState)(nil)
 // ForwardReferences implements the scbuildstmt.ElementReferences interface.
 func (b *builderState) ForwardReferences(e scpb.Element) scbuildstmt.ElementResultSet {
 	ids := screl.AllDescIDs(e)
-	var c int
-	ids.ForEach(func(id descpb.ID) {
-		b.ensureDescriptor(id)
-		c = c + len(b.descCache[id].ers.indexes)
-	})
-	ret := &elementResultSet{b: b, indexes: make([]int, 0, c)}
-	ids.ForEach(func(id descpb.ID) {
-		ret.indexes = append(ret.indexes, b.descCache[id].ers.indexes...)
-	})
-	return ret
+	return b.newCollection(ids.Ordered()...)
 }
 
 // BackReferences implements the scbuildstmt.ElementReferences interface.
@@ -716,11 +813,20 @@ func (b *builderState) BackReferences(id catid.DescID) scbuildstmt.ElementResult
 		}
 		ids.ForEach(b.ensureDescriptor)
 	}
-	ret := &elementResultSet{b: b}
-	ids.ForEach(func(id descpb.ID) {
-		ret.indexes = append(ret.indexes, b.descCache[id].ers.indexes...)
-	})
-	return ret
+	return b.newCollection(ids.Ordered()...)
+}
+
+func (b *builderState) newCollection(ids ...descpb.ID) *scpb.ElementCollection[scpb.Element] {
+	var n int
+	for _, id := range ids {
+		b.ensureDescriptor(id)
+		n = n + len(b.descCache[id].outputIndexes)
+	}
+	indexes := make([]int, 0, n)
+	for _, id := range ids {
+		indexes = append(indexes, b.descCache[id].outputIndexes...)
+	}
+	return scpb.NewElementCollection(b, indexes)
 }
 
 var _ scbuildstmt.NameResolver = (*builderState)(nil)
@@ -748,7 +854,7 @@ func (b *builderState) ResolveDatabase(
 	}
 	b.ensureDescriptor(db.GetID())
 	b.checkPrivilege(db.GetID(), p.RequiredPrivilege)
-	return b.descCache[db.GetID()].ers
+	return b.QueryByID(db.GetID())
 }
 
 // ResolveSchema implements the scbuildstmt.NameResolver interface.
@@ -763,18 +869,38 @@ func (b *builderState) ResolveSchema(
 		panic(sqlerrors.NewUndefinedSchemaError(name.Schema()))
 	}
 	b.checkOwnershipOrPrivilegesOnSchemaDesc(name, sc, p)
-	return b.descCache[sc.GetID()].ers
+	return b.QueryByID(sc.GetID())
 }
 
-// ResolvePrefix implements the scbuildstmt.NameResolver interface.
-func (b *builderState) ResolvePrefix(
-	prefix tree.ObjectNamePrefix, requiredSchemaPriv privilege.Kind,
+// ResolveTargetObject implements the scbuildstmt.NameResolver interface.
+func (b *builderState) ResolveTargetObject(
+	name *tree.UnresolvedObjectName, requiredSchemaPriv privilege.Kind,
 ) (dbElts scbuildstmt.ElementResultSet, scElts scbuildstmt.ElementResultSet) {
-	db, sc := b.cr.MustResolvePrefix(b.ctx, prefix)
+	objName := name.ToTableName()
+	db, sc := b.cr.MayResolvePrefix(b.ctx, objName.ObjectNamePrefix)
+	// If the database or schema are not found during resolution,
+	// then generate an appropriate error.
+	if db == nil || sc == nil {
+		if !objName.ExplicitSchema && !objName.ExplicitCatalog {
+			panic(
+				pgerror.New(pgcode.InvalidName, "no database specified"),
+			)
+		}
+		panic(errors.WithHint(pgerror.Newf(pgcode.InvalidSchemaName,
+			"cannot create %q because the target database or schema does not exist",
+			tree.ErrString(&objName)),
+			"verify that the current database and search_path are valid and/or the target database exists"))
+	}
 	b.ensureDescriptor(db.GetID())
+	if sc.SchemaKind() == catalog.SchemaVirtual {
+		panic(sqlerrors.NewCannotModifyVirtualSchemaError(sc.GetName()))
+	}
+	if sc.SchemaKind() == catalog.SchemaTemporary {
+		panic(unimplemented.NewWithIssue(104687, "cannot create UDFs under a temporary schema"))
+	}
 	b.ensureDescriptor(sc.GetID())
-	b.checkOwnershipOrPrivilegesOnSchemaDesc(prefix, sc, scbuildstmt.ResolveParams{RequiredPrivilege: requiredSchemaPriv})
-	return b.descCache[db.GetID()].ers, b.descCache[sc.GetID()].ers
+	b.checkOwnershipOrPrivilegesOnSchemaDesc(objName.ObjectNamePrefix, sc, scbuildstmt.ResolveParams{RequiredPrivilege: requiredSchemaPriv})
+	return b.QueryByID(db.GetID()), b.QueryByID(sc.GetID())
 }
 
 // checkOwnershipOrPrivilegesOnSchemaDesc checks ownership or privileges
@@ -788,7 +914,7 @@ func (b *builderState) checkOwnershipOrPrivilegesOnSchemaDesc(
 	switch sc.SchemaKind() {
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
-			"%s permission denied for schema %q", p.RequiredPrivilege.String(), name))
+			"%s permission denied for schema %q", p.RequiredPrivilege.DisplayName(), name))
 	case catalog.SchemaUserDefined:
 		b.ensureDescriptor(sc.GetID())
 		if p.RequireOwnership {
@@ -836,7 +962,7 @@ func (b *builderState) ResolveUserDefinedTypeType(
 	default:
 		panic(errors.AssertionFailedf("unknown type kind %s", typ.GetKind()))
 	}
-	return b.descCache[typ.GetID()].ers
+	return b.QueryByID(typ.GetID())
 }
 
 // ResolveRelation implements the scbuildstmt.NameResolver interface.
@@ -847,7 +973,7 @@ func (b *builderState) ResolveRelation(
 	if c == nil {
 		return nil
 	}
-	return c.ers
+	return b.QueryByID(c.desc.GetID())
 }
 
 func (b *builderState) resolveRelation(
@@ -918,7 +1044,7 @@ func (b *builderState) ResolveTable(
 	if rel := c.desc.(catalog.TableDescriptor); !rel.IsTable() {
 		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a table", rel.GetName()))
 	}
-	return c.ers
+	return b.QueryByID(c.desc.GetID())
 }
 
 // ResolveSequence implements the scbuildstmt.NameResolver interface.
@@ -932,7 +1058,7 @@ func (b *builderState) ResolveSequence(
 	if rel := c.desc.(catalog.TableDescriptor); !rel.IsSequence() {
 		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a sequence", rel.GetName()))
 	}
-	return c.ers
+	return b.QueryByID(c.desc.GetID())
 }
 
 // ResolveView implements the scbuildstmt.NameResolver interface.
@@ -946,7 +1072,7 @@ func (b *builderState) ResolveView(
 	if rel := c.desc.(catalog.TableDescriptor); !rel.IsView() {
 		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a view", rel.GetName()))
 	}
-	return c.ers
+	return b.QueryByID(c.desc.GetID())
 }
 
 // ResolveIndex implements the scbuildstmt.NameResolver interface.
@@ -954,16 +1080,16 @@ func (b *builderState) ResolveIndex(
 	relationID catid.DescID, indexName tree.Name, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
 	b.ensureDescriptor(relationID)
-	c := b.descCache[relationID]
-	rel := c.desc.(catalog.TableDescriptor)
+	rel := b.descCache[relationID].desc.(catalog.TableDescriptor)
 	if !rel.IsPhysicalTable() || rel.IsSequence() {
 		panic(pgerror.Newf(pgcode.WrongObjectType,
 			"%q is not an indexable table or a materialized view", rel.GetName()))
 	}
 	b.checkPrivilege(rel.GetID(), p.RequiredPrivilege)
+	elts := b.QueryByID(rel.GetID())
 	var indexID catid.IndexID
-	scpb.ForEachIndexName(c.ers, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
-		if e.TableID == relationID && tree.Name(e.Name) == indexName {
+	scpb.ForEachIndexName(elts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
+		if tree.Name(e.Name) == indexName {
 			indexID = e.IndexID
 		}
 	})
@@ -977,7 +1103,7 @@ func (b *builderState) ResolveIndex(
 		panic(pgerror.Newf(pgcode.UndefinedObject,
 			"index %q not found in relation %q", indexName, rel.GetName()))
 	}
-	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, element scpb.Element) bool {
+	return elts.Filter(func(_ scpb.Status, _ scpb.TargetStatus, element scpb.Element) bool {
 		idI, _ := screl.Schema.GetAttribute(screl.IndexID, element)
 		return idI != nil && idI.(catid.IndexID) == indexID
 	})
@@ -987,7 +1113,7 @@ func (b *builderState) ResolveIndex(
 func (b *builderState) ResolveIndexByName(
 	tableIndexName *tree.TableIndexName, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
-	// If a table name is specified, confirm its not a systme table first.
+	// If a table name is specified, confirm it is not a system table first.
 	if tableIndexName.Table.ObjectName != "" {
 		desc := b.resolveRelation(tableIndexName.Table.ToUnresolvedObjectName(), p)
 		if desc == nil {
@@ -997,7 +1123,7 @@ func (b *builderState) ResolveIndexByName(
 		b.ensureDescriptor(tableDesc.GetParentSchemaID())
 		if catalog.IsSystemDescriptor(tableDesc) {
 			schemaDesc := b.descCache[tableDesc.GetParentSchemaID()].desc
-			panic(catalog.NewMutableAccessToVirtualSchemaError(schemaDesc.(catalog.SchemaDescriptor)))
+			panic(catalog.NewMutableAccessToDescriptorlessSchemaError(schemaDesc.(catalog.SchemaDescriptor)))
 		}
 	}
 
@@ -1019,12 +1145,12 @@ func (b *builderState) ResolveColumn(
 	relationID catid.DescID, columnName tree.Name, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
 	b.ensureDescriptor(relationID)
-	c := b.descCache[relationID]
-	rel := c.desc.(catalog.TableDescriptor)
+	rel := b.descCache[relationID].desc.(catalog.TableDescriptor)
+	elts := b.QueryByID(rel.GetID())
 	b.checkPrivilege(rel.GetID(), p.RequiredPrivilege)
 	var columnID catid.ColumnID
-	scpb.ForEachColumnName(c.ers, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnName) {
-		if e.TableID == relationID && tree.Name(e.Name) == columnName {
+	scpb.ForEachColumnName(elts, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnName) {
+		if tree.Name(e.Name) == columnName {
 			columnID = e.ColumnID
 		}
 	})
@@ -1034,7 +1160,7 @@ func (b *builderState) ResolveColumn(
 		}
 		panic(colinfo.NewUndefinedColumnError(string(columnName)))
 	}
-	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+	return elts.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
 		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)
 		return idI != nil && idI.(catid.ColumnID) == columnID
 	})
@@ -1045,33 +1171,39 @@ func (b *builderState) ResolveConstraint(
 	relationID catid.DescID, constraintName tree.Name, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
 	b.ensureDescriptor(relationID)
-	c := b.descCache[relationID]
-	rel := c.desc.(catalog.TableDescriptor)
+	rel := b.descCache[relationID].desc.(catalog.TableDescriptor)
+	elts := b.QueryByID(rel.GetID())
 	var constraintID catid.ConstraintID
-	scpb.ForEachConstraintWithoutIndexName(c.ers, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName) {
-		if e.TableID == relationID && tree.Name(e.Name) == constraintName {
-			constraintID = e.ConstraintID
-		}
-	})
+	scpb.ForEachConstraintWithoutIndexName(elts,
+		func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName) {
+			if tree.Name(e.Name) == constraintName {
+				constraintID = e.ConstraintID
+			}
+		},
+	)
 
 	if constraintID == 0 {
 		var indexID catid.IndexID
-		scpb.ForEachIndexName(c.ers, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
-			if e.TableID == relationID && tree.Name(e.Name) == constraintName {
+		scpb.ForEachIndexName(elts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
+			if tree.Name(e.Name) == constraintName {
 				indexID = e.IndexID
 			}
 		})
 		if indexID != 0 {
-			scpb.ForEachPrimaryIndex(c.ers, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.PrimaryIndex) {
-				if e.TableID == relationID && e.IndexID == indexID {
-					constraintID = e.ConstraintID
-				}
-			})
-			scpb.ForEachSecondaryIndex(c.ers, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.SecondaryIndex) {
-				if e.TableID == relationID && e.IndexID == indexID && e.IsUnique {
-					constraintID = e.ConstraintID
-				}
-			})
+			scpb.ForEachPrimaryIndex(elts,
+				func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.PrimaryIndex) {
+					if e.IndexID == indexID {
+						constraintID = e.ConstraintID
+					}
+				},
+			)
+			scpb.ForEachSecondaryIndex(elts,
+				func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.SecondaryIndex) {
+					if e.IndexID == indexID && e.IsUnique {
+						constraintID = e.ConstraintID
+					}
+				},
+			)
 		}
 	}
 
@@ -1082,42 +1214,54 @@ func (b *builderState) ResolveConstraint(
 		panic(sqlerrors.NewUndefinedConstraintError(string(constraintName), rel.GetName()))
 	}
 
-	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+	return elts.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
 		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
 		return idI != nil && idI.(catid.ConstraintID) == constraintID
 	})
 }
 
-func (b *builderState) ResolveUDF(
-	fnObj *tree.FuncObj, p scbuildstmt.ResolveParams,
+func (b *builderState) ResolveRoutine(
+	routineObj *tree.RoutineObj, p scbuildstmt.ResolveParams, routineType tree.RoutineType,
 ) scbuildstmt.ElementResultSet {
-	fd, err := b.cr.ResolveFunction(b.ctx, fnObj.FuncName.ToUnresolvedObjectName().ToUnresolvedName(), b.semaCtx.SearchPath)
+	name := routineObj.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
+	// TODO(mgartner): We can probably make the distinction between the two
+	// types of unresolved routine names at parsing-time (or shortly after),
+	// rather than here. Ideally, the UnresolvedRoutineName interface can be
+	// incorporated with ResolvableFunctionReference.
+	var routineName tree.UnresolvedRoutineName
+	if routineType == tree.ProcedureRoutine {
+		routineName = tree.MakeUnresolvedProcedureName(name)
+	} else {
+		routineName = tree.MakeUnresolvedFunctionName(name)
+	}
+	fd, err := b.cr.ResolveFunction(b.ctx, routineName, b.semaCtx.SearchPath)
 	if err != nil {
-		if p.IsExistenceOptional && errors.Is(err, tree.ErrFunctionUndefined) {
+		if p.IsExistenceOptional && errors.Is(err, tree.ErrRoutineUndefined) {
 			return nil
 		}
 		panic(err)
 	}
 
-	paramTypes, err := fnObj.ParamTypes(b.ctx, b.cr)
+	paramTypes, err := routineObj.ParamTypes(b.ctx, b.cr)
 	if err != nil {
 		return nil
 	}
-	ol, err := fd.MatchOverload(paramTypes, fnObj.FuncName.Schema(), b.semaCtx.SearchPath)
+	ol, err := fd.MatchOverload(paramTypes, routineObj.FuncName.Schema(),
+		b.semaCtx.SearchPath, routineType)
 	if err != nil {
-		if p.IsExistenceOptional && errors.Is(err, tree.ErrFunctionUndefined) {
+		if p.IsExistenceOptional && errors.Is(err, tree.ErrRoutineUndefined) {
 			return nil
 		}
 		panic(err)
 	}
 
-	// ResolveUDF is not concerned with builtin functions that are defined using
+	// ResolveRoutine is not concerned with builtin functions that are defined using
 	// a SQL string, so we don't check ol.HasSQLBody() here.
-	if !ol.IsUDF {
+	if ol.Type == tree.BuiltinRoutine {
 		panic(
 			errors.Errorf(
 				"cannot perform schema change on function %s%s because it is required by the database system",
-				fnObj.FuncName.Object(), ol.Signature(true),
+				routineObj.FuncName.Object(), ol.Signature(true),
 			),
 		)
 	}
@@ -1125,7 +1269,7 @@ func (b *builderState) ResolveUDF(
 	fnID := funcdesc.UserDefinedFunctionOIDToID(ol.Oid)
 	b.mustOwn(fnID)
 	b.ensureDescriptor(fnID)
-	return b.descCache[fnID].ers
+	return b.QueryByID(fnID)
 }
 
 func (b *builderState) newCachedDesc(id descpb.ID) *cachedDesc {
@@ -1133,7 +1277,6 @@ func (b *builderState) newCachedDesc(id descpb.ID) *cachedDesc {
 		desc:            b.readDescriptor(id),
 		privileges:      make(map[privilege.Kind]error),
 		hasOwnership:    b.hasAdmin,
-		ers:             &elementResultSet{b: b},
 		elementIndexMap: map[string]int{},
 	}
 }
@@ -1142,7 +1285,6 @@ func (b *builderState) newCachedDescForNewDesc() *cachedDesc {
 	return &cachedDesc{
 		privileges:      make(map[privilege.Kind]error),
 		hasOwnership:    true,
-		ers:             &elementResultSet{b: b},
 		elementIndexMap: map[string]int{},
 	}
 }
@@ -1350,8 +1492,11 @@ func (b *builderState) WrapFunctionBody(
 	lang catpb.Function_Language,
 	refProvider scbuildstmt.ReferenceProvider,
 ) *scpb.FunctionBody {
-	bodyStr = b.replaceSeqNamesWithIDs(bodyStr)
-	bodyStr = b.serializeUserDefinedTypes(bodyStr)
+	if lang != catpb.Function_PLPGSQL {
+		// TODO(#115627): fix this to work with PL/pgSQL.
+		bodyStr = b.replaceSeqNamesWithIDs(bodyStr)
+		bodyStr = b.serializeUserDefinedTypes(bodyStr)
+	}
 	fnBody := &scpb.FunctionBody{
 		FunctionID: fnID,
 		Body:       bodyStr,
@@ -1461,8 +1606,6 @@ func (b *builderState) serializeUserDefinedTypes(queryStr string) string {
 		default:
 			return true, expr, nil
 		}
-		// semaCtx may be nil if this is a virtual view being created at
-		// init time.
 		var typ *types.T
 		typ, err = tree.ResolveType(b.ctx, typRef, b.semaCtx.TypeResolver)
 		if err != nil {
@@ -1470,6 +1613,13 @@ func (b *builderState) serializeUserDefinedTypes(queryStr string) string {
 		}
 		if !typ.UserDefined() {
 			return true, expr, nil
+		}
+		{
+			// We cannot type-check subqueries without using optbuilder, so we
+			// currently do not support casting expressions with subqueries to
+			// UDTs.
+			defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+			b.semaCtx.Properties.Require("casts to enums within UDFs", tree.RejectSubqueries)
 		}
 		texpr, err := innerExpr.TypeCheck(b.ctx, b.semaCtx, typ)
 		if err != nil {
@@ -1520,53 +1670,13 @@ func (b *builderState) ResolveDatabasePrefix(schemaPrefix *tree.ObjectNamePrefix
 	}
 }
 
-type elementResultSet struct {
-	b       *builderState
-	indexes []int
+var _ scpb.ElementCollectionGetter = &builderState{}
+
+func (b *builderState) Get(ordinal int) (_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) {
+	es := &b.output[ordinal]
+	return es.current, es.target, es.element
 }
 
-var _ scbuildstmt.ElementResultSet = &elementResultSet{}
-
-// ForEachElementStatus implements the scpb.ElementStatusIterator interface.
-func (ers *elementResultSet) ForEachElementStatus(
-	fn func(current scpb.Status, target scpb.TargetStatus, element scpb.Element),
-) {
-	if ers.IsEmpty() {
-		return
-	}
-	for _, i := range ers.indexes {
-		es := &ers.b.output[i]
-		fn(es.current, es.target, es.element)
-	}
-}
-
-// IsEmpty implements the scbuildstmt.ElementResultSet interface.
-func (ers *elementResultSet) IsEmpty() bool {
-	return ers == nil || len(ers.indexes) == 0
-}
-
-// Filter implements the scbuildstmt.ElementResultSet interface.
-func (ers *elementResultSet) Filter(
-	predicate func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) bool,
-) scbuildstmt.ElementResultSet {
-	return ers.filter(predicate)
-}
-
-func (ers *elementResultSet) filter(
-	predicate func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) bool,
-) *elementResultSet {
-	if ers.IsEmpty() {
-		return nil
-	}
-	ret := elementResultSet{b: ers.b}
-	for _, i := range ers.indexes {
-		es := &ers.b.output[i]
-		if predicate(es.current, es.target, es.element) {
-			ret.indexes = append(ret.indexes, i)
-		}
-	}
-	if len(ret.indexes) == 0 {
-		return nil
-	}
-	return &ret
+func (b *builderState) Size() int {
+	return len(b.output)
 }

@@ -183,11 +183,15 @@ func (s *TCPServer) ServeWith(
 		}
 		tempDelay = 0
 		err := s.stopper.RunAsyncTask(ctx, "tcp-serve", func(ctx context.Context) {
+			defer func() {
+				_ = rw.Close()
+			}()
 			s.addConn(rw)
 			defer s.rmConn(rw)
 			serveConn(ctx, rw)
 		})
 		if err != nil {
+			err = errors.CombineErrors(err, rw.Close())
 			return err
 		}
 	}

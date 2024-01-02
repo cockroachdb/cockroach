@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -32,7 +33,7 @@ func TestAllElementsHaveDescID(t *testing.T) {
 func TestAllElementsHaveMinVersion(t *testing.T) {
 	forEachNewElementType(t, func(elem scpb.Element) {
 		// If `elem` does not have a min version, the following function call will panic.
-		MinElementVersion(elem)
+		VersionSupportsElementUse(elem, clusterversion.ClusterVersion{})
 	})
 }
 

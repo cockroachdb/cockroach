@@ -71,7 +71,6 @@ var rustPostgresBlocklist = blocklist{
 	"types.test_hstore_params":              "unsupported datatype - https://github.com/cockroachdb/cockroach/issues/41284",
 	"types.test_i16_params":                 "default int size (int4 vs int8) mismatch",
 	"types.test_i32_params":                 "default int size (int4 vs int8) mismatch",
-	"types.test_lsn_params":                 "unsupported datatype - https://github.com/cockroachdb/cockroach/issues/54516",
 	"types.test_pg_database_datname":        "default database name mismatch",
 	"types.test_slice":                      "default int size (int4 vs int8) mismatch",
 	"types.test_slice_range":                "unsupported feature - https://github.com/cockroachdb/cockroach/issues/27791",

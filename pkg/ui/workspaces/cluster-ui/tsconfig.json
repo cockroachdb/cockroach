@@ -15,10 +15,14 @@
     "skipLibCheck": true,
     "sourceMap": false,
     "baseUrl": ".",
+    "preserveSymlinks": true,
     "paths": {
       "@cockroachlabs/crdb-protobuf-client": [
         "../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js",
         "./node_modules/@cockroachlabs/crdb-protobuf-client"
+      ],
+      "immer": [
+        "./node_modules/immer"
       ]
     }
   },

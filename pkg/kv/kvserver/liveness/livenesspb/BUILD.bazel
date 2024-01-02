@@ -1,18 +1,22 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "livenesspb",
-    srcs = ["liveness.go"],
+    srcs = [
+        "liveness.go",
+        "liveness_test_helper.go",
+    ],
     embed = [":livenesspb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
         "//pkg/util/hlc",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//status",
     ],
@@ -41,5 +45,3 @@ go_proto_library(
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
-
-get_x_data(name = "get_x_data")

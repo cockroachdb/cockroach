@@ -26,17 +26,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -51,7 +55,7 @@ func TestRoundtripJob(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	registry := s.JobRegistry().(*jobs.Registry)
 	defer s.Stopper().Stop(ctx)
 
@@ -109,12 +113,17 @@ RETURNING id;
 	terminalStatuses := []jobs.Status{jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed}
 	terminalIDs := make([]jobspb.JobID, len(terminalStatuses))
 	terminalClaims := make([][]byte, len(terminalStatuses))
+	mkSessionID := func() []byte {
+		sessionID, err := slstorage.MakeSessionID([]byte("us"), uuid.MakeV4())
+		require.NoError(t, err)
+		return []byte(sessionID)
+	}
 	for i, s := range terminalStatuses {
-		terminalClaims[i] = uuid.MakeV4().GetBytes() // bogus claim
+		terminalClaims[i] = mkSessionID() // bogus claim
 		tdb.QueryRow(t, insertQuery, s, terminalClaims[i], 42).Scan(&terminalIDs[i])
 	}
 	var nonTerminalID jobspb.JobID
-	tdb.QueryRow(t, insertQuery, jobs.StatusRunning, uuid.MakeV4().GetBytes(), 42).Scan(&nonTerminalID)
+	tdb.QueryRow(t, insertQuery, jobs.StatusRunning, mkSessionID(), 42).Scan(&nonTerminalID)
 
 	checkClaimEqual := func(id jobspb.JobID, exp []byte) error {
 		const getClaimQuery = `SELECT claim_session_id FROM system.jobs WHERE id = $1`
@@ -198,12 +207,13 @@ func TestRegistrySettingUpdate(t *testing.T) {
 	}
 
 	for _, test := range [...]struct {
-		name       string      // Test case ID.
-		setting    string      // Cluster setting key.
-		value      interface{} // Duration when expecting a large number of job runs.
-		matchStmt  string      // SQL statement to match to identify the target job.
-		initCount  int         // Initial number of jobs to ignore at the beginning of the test.
-		toOverride *settings.DurationSetting
+		name         string      // Test case ID.
+		setting      string      // Cluster setting key.
+		value        interface{} // Duration when expecting a large number of job runs.
+		matchStmt    string      // SQL statement to match to identify the target job.
+		matchAppName string
+		initCount    int // Initial number of jobs to ignore at the beginning of the test.
+		toOverride   *settings.DurationSetting
 	}{
 		{
 			name:       "adopt setting",
@@ -238,33 +248,44 @@ func TestRegistrySettingUpdate(t *testing.T) {
 			toOverride: jobs.CancelIntervalSetting,
 		},
 		{
-			name:       "gc setting",
-			setting:    jobs.GcIntervalSettingKey,
-			value:      shortDuration,
-			matchStmt:  jobs.GcQuery,
-			initCount:  0,
-			toOverride: jobs.GcIntervalSetting,
+			name:         "gc setting",
+			setting:      jobs.GcIntervalSettingKey,
+			value:        shortDuration,
+			matchAppName: "$ internal-gc-jobs",
+			initCount:    0,
+			toOverride:   jobs.GcIntervalSetting,
 		},
 		{
-			name:       "gc setting with base",
-			setting:    jobs.IntervalBaseSettingKey,
-			value:      shortDurationBase,
-			matchStmt:  jobs.GcQuery,
-			initCount:  0,
-			toOverride: jobs.GcIntervalSetting,
+			name:         "gc setting with base",
+			setting:      jobs.IntervalBaseSettingKey,
+			value:        shortDurationBase,
+			matchAppName: "$ internal-gc-jobs",
+			initCount:    0,
+			toOverride:   jobs.GcIntervalSetting,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			// Replace multiple white spaces with a single space, remove the last ';', and
-			// trim leading and trailing spaces.
-			matchStmt := strings.TrimSpace(regexp.MustCompile(`(\s+|;+)`).ReplaceAllString(test.matchStmt, " "))
+			var stmtMatcher func(*sessiondata.SessionData, string) bool
+			if test.matchAppName != "" {
+				stmtMatcher = func(sd *sessiondata.SessionData, _ string) bool {
+					return sd.ApplicationName == test.matchAppName
+				}
+			} else {
+				// Replace multiple white spaces with a single space, remove the last ';', and
+				// trim leading and trailing spaces.
+				matchStmt := strings.TrimSpace(regexp.MustCompile(`(\s+|;+)`).ReplaceAllString(test.matchStmt, " "))
+				stmtMatcher = func(_ *sessiondata.SessionData, stmt string) bool {
+					return stmt == matchStmt
+				}
+			}
+
 			var seen = int32(0)
-			stmtFilter := func(ctxt context.Context, _ *sessiondata.SessionData, stmt string, err error) {
+			stmtFilter := func(_ context.Context, sd *sessiondata.SessionData, stmt string, err error) {
 				if err != nil {
 					return
 				}
-				if stmt == matchStmt {
+				if stmtMatcher(sd, stmt) {
 					atomic.AddInt32(&seen, 1)
 				}
 			}
@@ -327,13 +348,12 @@ func TestGCDurationControl(t *testing.T) {
 	//
 	// Replace multiple white spaces with a single space, remove the last ';', and
 	// trim leading and trailing spaces.
-	gcStmt := strings.TrimSpace(regexp.MustCompile(`(\s+|;+)`).ReplaceAllString(jobs.GcQuery, " "))
 	var seen = int32(0)
-	stmtFilter := func(ctxt context.Context, _ *sessiondata.SessionData, stmt string, err error) {
+	stmtFilter := func(_ context.Context, sd *sessiondata.SessionData, _ string, err error) {
 		if err != nil {
 			return
 		}
-		if stmt == gcStmt {
+		if sd.ApplicationName == "$ internal-gc-jobs" {
 			atomic.AddInt32(&seen, 1)
 		}
 	}
@@ -353,7 +373,7 @@ func TestGCDurationControl(t *testing.T) {
 	}
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, cs *cluster.Settings) jobs.Resumer {
-		return jobs.FakeResumer{}
+		return jobstest.FakeResumer{}
 	}, jobs.UsesTenantCostControl)
 	s, sqlDB, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
@@ -432,7 +452,7 @@ func TestErrorsPopulatedOnRetry(t *testing.T) {
 				return ctx.Err()
 			}
 		}
-		return jobs.FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume:     execFn,
 			FailOrCancel: execFn,
 		}
@@ -543,7 +563,7 @@ SELECT unnest(execution_errors)
 		t *testing.T, id jobspb.JobID, status jobs.Status,
 		from, to time.Time, cause string,
 	) {
-		log.Flush()
+		log.FlushFiles()
 		entries, err := log.FetchEntriesFromFiles(
 			from.UnixNano(), to.UnixNano(), 2,
 			regexp.MustCompile(fmt.Sprintf(
@@ -705,4 +725,84 @@ SELECT unnest(execution_errors)
 		close(seventhRun.resume)
 		require.Regexp(t, err3, registry.WaitForJobs(ctx, []jobspb.JobID{id}))
 	})
+}
+
+// TestWaitWithRetryableError tests retryable errors when querying
+// for jobs.
+func TestWaitWithRetryableError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
+	ctx := context.Background()
+
+	cs := cluster.MakeTestingClusterSettings()
+	// Set the lease duration to zero for instanty expiry.
+	lease.LeaseDuration.Override(ctx, &cs.SV, 0)
+	// Renewal timeout to 0 saying that the lease will get renewed only
+	// after the lease expires when a request requests the descriptor.
+	lease.LeaseRenewalDuration.Override(ctx, &cs.SV, 0)
+
+	var targetJobID atomic.Int64
+	var numberOfTimesDetected atomic.Int64
+	const targetNumberOfRetries = 5
+	args := base.TestServerArgs{
+		Settings: cs,
+		// Leasing settings used above conflict with some updates
+		// when starting the server, so skip those.
+		PartOfCluster: true,
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				DisableAutoCommitDuringExec: true,
+				AfterExecute: func(ctx context.Context, stmt string, err error) {
+					if targetJobID.Load() > 0 &&
+						strings.Contains(stmt, "SELECT count(*) FROM system.jobs") &&
+						strings.Contains(stmt, fmt.Sprintf("%d", targetJobID.Load())) {
+						// Leases expire almost instantly, without a renewal we will need
+						// a retry.
+						time.Sleep(time.Second)
+						// Detect this multiple times to ensure retries, once observed
+						// enough times disable the after execution.
+						if numberOfTimesDetected.Add(1) > targetNumberOfRetries-1 {
+							targetJobID.Store(0)
+						}
+					}
+				},
+			},
+		},
+	}
+
+	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, cs *cluster.Settings) jobs.Resumer {
+		return jobstest.FakeResumer{}
+	}, jobs.UsesTenantCostControl)
+	s := serverutils.StartServerOnly(t, args)
+	defer s.Stopper().Stop(ctx)
+	ts := s.ApplicationLayer()
+	registry := ts.JobRegistry().(*jobs.Registry)
+
+	// Create and run a dummy job.
+	idb := ts.InternalDB().(isql.DB)
+	id := registry.MakeJobID()
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err := registry.CreateJobWithTxn(ctx, jobs.Record{
+			// Job does not accept an empty Details field, so arbitrarily provide
+			// ImportDetails.
+			Details:  jobspb.ImportDetails{},
+			Progress: jobspb.ImportProgress{},
+			Username: username.TestUserName(),
+		}, id, txn)
+		return err
+	}))
+	targetJobID.Store(int64(id))
+	require.NoError(t,
+		registry.WaitForJobs(
+			ctx, []jobspb.JobID{id},
+		))
+	if !skip.Stress() {
+		require.Equalf(t, int64(targetNumberOfRetries), numberOfTimesDetected.Load(), "jobs query did not retry")
+	} else {
+		// For stress be lenient since we are relying on timing for leasing
+		// expiration, which can be imprecise. So, lets aim for at least one
+		// retry.
+		require.GreaterOrEqualf(t, numberOfTimesDetected.Load(), int64(2), "jobs query did not retry")
+	}
 }

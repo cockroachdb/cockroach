@@ -1,0 +1,53 @@
+# As a part of these tests we will have cascaded drops
+# which will clean up secondary indexes, computed columns
+# since j and k are being dropped. We will concurrently
+# throw DML while we are mutating and dropping dependencies
+# at stage of the schema change plan.
+
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT DEFAULT 32 ON UPDATE 42, INDEX((j+1), k));
+----
+
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t (i, j, k) VALUES($stageKey, $stageKey, $stageKey);
+----
+pq: column "j" does not exist
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t (i) VALUES($stageKey);
+----
+
+stage-exec phase=PostCommitPhase stage=:
+SELECT j+1, k FROM t
+----
+pq: column "j" does not exist
+
+stage-exec phase=PostCommitPhase stage=:
+SELECT count(i) FROM t
+----
+$successfulStageCount
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t (i, j, k) VALUES($stageKey, $stageKey, $stageKey);
+----
+pq: column "j" does not exist
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t (i) VALUES($stageKey);
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+SELECT j+1, k FROM t
+----
+pq: column "j" does not exist
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(i) FROM t
+----
+$successfulStageCount
+
+test
+ALTER TABLE t DROP COLUMN j CASCADE;
+ALTER TABLE t DROP COLUMN k CASCADE;
+----

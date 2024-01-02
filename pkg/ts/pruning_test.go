@@ -11,6 +11,7 @@
 package ts
 
 import (
+	"context"
 	"reflect"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestContainsTimeSeries(t *testing.T) {
@@ -70,6 +72,8 @@ func TestContainsTimeSeries(t *testing.T) {
 
 func TestFindTimeSeries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
@@ -273,7 +277,8 @@ func TestFindTimeSeries(t *testing.T) {
 		},
 	} {
 		snap := e.NewSnapshot()
-		actual, err := tm.DB.findTimeSeries(snap, tcase.start, tcase.end, tcase.timestamp)
+		actual, err := tm.DB.findTimeSeries(
+			context.Background(), snap, tcase.start, tcase.end, tcase.timestamp)
 		snap.Close()
 		if err != nil {
 			t.Fatalf("case %d: unexpected error %q", i, err)
@@ -289,6 +294,7 @@ func TestFindTimeSeries(t *testing.T) {
 // to columnar format, and thus does not yet support rollups.
 func TestPruneTimeSeries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
 		// Arbitrary timestamp
 		var now int64 = 1475700000 * 1e9
@@ -387,6 +393,8 @@ func TestPruneTimeSeries(t *testing.T) {
 
 func TestMaintainTimeSeriesWithRollups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
@@ -443,6 +451,8 @@ func TestMaintainTimeSeriesWithRollups(t *testing.T) {
 
 func TestMaintainTimeSeriesNoRollups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()

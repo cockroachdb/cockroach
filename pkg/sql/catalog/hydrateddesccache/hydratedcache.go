@@ -161,7 +161,7 @@ var (
 
 // CacheSize controls the size of the LRU cache.
 var CacheSize = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.catalog.hydrated_tables.cache_size",
 	"number of table descriptor versions retained in the hydratedtables LRU cache",
 	128,

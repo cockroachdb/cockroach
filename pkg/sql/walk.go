@@ -370,6 +370,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterRoleSetNode{}):                        "alter role set var",
 	reflect.TypeOf(&applyJoinNode{}):                           "apply join",
 	reflect.TypeOf(&bufferNode{}):                              "buffer",
+	reflect.TypeOf(&callNode{}):                                "call",
 	reflect.TypeOf(&cancelQueriesNode{}):                       "cancel queries",
 	reflect.TypeOf(&cancelSessionsNode{}):                      "cancel sessions",
 	reflect.TypeOf(&cdcValuesNode{}):                           "wrapped streaming node",
@@ -386,7 +387,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&controlSchedulesNode{}):                    "control schedules",
 	reflect.TypeOf(&createDatabaseNode{}):                      "create database",
 	reflect.TypeOf(&createExtensionNode{}):                     "create extension",
-	reflect.TypeOf(&createExternalConectionNode{}):             "create external connection",
+	reflect.TypeOf(&createExternalConnectionNode{}):            "create external connection",
 	reflect.TypeOf(&createFunctionNode{}):                      "create function",
 	reflect.TypeOf(&createIndexNode{}):                         "create index",
 	reflect.TypeOf(&createSequenceNode{}):                      "create sequence",
@@ -484,4 +485,5 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&zeroNode{}):                                "norows",
 	reflect.TypeOf(&zigzagJoinNode{}):                          "zigzag join",
 	reflect.TypeOf(&schemaChangePlanNode{}):                    "schema change",
+	reflect.TypeOf(&identifySystemNode{}):                      "identify system",
 }

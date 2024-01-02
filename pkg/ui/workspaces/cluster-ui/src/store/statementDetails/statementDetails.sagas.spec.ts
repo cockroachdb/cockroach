@@ -53,6 +53,8 @@ describe("SQLDetailsStats sagas", () => {
     }),
     type: "request",
   };
+  // /start and /end aren't included in the above payload, but the default value
+  // when missing (0 for both) appears anyway.
   const key =
     "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0";
   const SQLDetailsStatsResponse =

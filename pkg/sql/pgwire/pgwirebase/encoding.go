@@ -15,7 +15,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"math"
 	"strconv"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -58,16 +58,11 @@ const readBufferMaxMessageSizeClusterSettingName = "sql.conn.max_read_buffer_mes
 // ReadBufferMaxMessageSizeClusterSetting is the cluster setting for configuring
 // ReadBuffer default message sizes.
 var ReadBufferMaxMessageSizeClusterSetting = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	readBufferMaxMessageSizeClusterSettingName,
 	"maximum buffer size to allow for ingesting sql statements. Connections must be restarted for this to take effect.",
 	defaultMaxReadBufferMessageSize,
-	func(val int64) error {
-		if val < minReadBufferMessageSize {
-			return errors.Newf("buffer message size must be at least %s", humanize.Bytes(minReadBufferMessageSize))
-		}
-		return nil
-	},
+	settings.ByteSizeWithMinimum(minReadBufferMessageSize),
 )
 
 // FormatCode represents a pgwire data format.
@@ -318,9 +313,7 @@ func validateArrayDimensions(nDimensions int, nElements int) error {
 	return nil
 }
 
-// DecodeDatum decodes bytes with specified type and format code into
-// a datum. If res is nil, then user defined types are not attempted
-// to be resolved.
+// DecodeDatum decodes bytes with specified type and format code into a datum.
 func DecodeDatum(
 	ctx context.Context, evalCtx *eval.Context, typ *types.T, code FormatCode, b []byte,
 ) (tree.Datum, error) {
@@ -354,6 +347,8 @@ func DecodeDatum(
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return tree.NewDInt(tree.DInt(i)), nil
+		case oid.T_pg_lsn:
+			return tree.ParseDPGLSN(bs)
 		case oid.T_oid,
 			oid.T_regoper,
 			oid.T_regproc,
@@ -472,9 +467,10 @@ func DecodeDatum(
 			}
 			return &tree.DTSVector{TSVector: ret}, nil
 		}
-		if typ.Family() == types.ArrayFamily {
-			// Arrays come in in their string form, so we parse them as such and later
-			// convert them to their actual datum form.
+		switch typ.Family() {
+		case types.ArrayFamily, types.TupleFamily:
+			// Arrays and tuples come in in their string form, so we parse them
+			// as such and later convert them to their actual datum form.
 			if err := validateStringBytes(b); err != nil {
 				return nil, err
 			}
@@ -512,6 +508,12 @@ func DecodeDatum(
 			}
 			i := int64(binary.BigEndian.Uint64(b))
 			return tree.NewDInt(tree.DInt(i)), nil
+		case oid.T_pg_lsn:
+			if len(b) < 8 {
+				return nil, pgerror.Newf(pgcode.Syntax, "lsn requires 8 bytes for binary format")
+			}
+			i := int64(binary.BigEndian.Uint64(b))
+			return tree.NewDPGLSN(lsn.LSN(i)), nil
 		case oid.T_float4:
 			if len(b) < 4 {
 				return nil, pgerror.Newf(pgcode.Syntax, "float4 requires 4 bytes for binary format")
@@ -812,6 +814,13 @@ func DecodeDatum(
 			return nil, err
 		}
 		return tree.NewDEnum(e), nil
+	case types.RefCursorFamily:
+		if err := validateStringBytes(b); err != nil {
+			return nil, err
+		}
+		// Note: we could use bs here if we were guaranteed all callers never
+		// mutated b.
+		return tree.NewDRefCursor(string(b)), nil
 	}
 	switch id {
 	case oid.T_text, oid.T_varchar, oid.T_unknown:
@@ -1016,20 +1025,17 @@ func decodeBinaryTuple(ctx context.Context, evalCtx *eval.Context, b []byte) (tr
 
 	bufferLength := len(b)
 	if bufferLength < tupleHeaderSize {
-		return nil, pgerror.Newf(
-			pgcode.Syntax,
-			"tuple requires a %d byte header for binary format. bufferLength=%d",
-			tupleHeaderSize, bufferLength)
+		return nil, errors.WithDetailf(
+			pgerror.Newf(pgcode.Syntax, "tuple requires a %d byte header for binary format", tupleHeaderSize),
+			"bufferLength=%d", bufferLength)
 	}
 
 	bufferStartIdx := 0
 	bufferEndIdx := bufferStartIdx + tupleHeaderSize
 	numberOfElements := int32(binary.BigEndian.Uint32(b[bufferStartIdx:bufferEndIdx]))
 	if numberOfElements < 0 {
-		return nil, pgerror.Newf(
-			pgcode.Syntax,
-			"tuple must have non-negative number of elements. numberOfElements=%d",
-			numberOfElements)
+		return nil, errors.WithDetailf(pgerror.New(pgcode.Syntax, "tuple must have non-negative number of elements"),
+			"numberOfElements=%d", numberOfElements)
 	}
 	bufferStartIdx = bufferEndIdx
 
@@ -1038,39 +1044,38 @@ func decodeBinaryTuple(ctx context.Context, evalCtx *eval.Context, b []byte) (tr
 
 	elementIdx := int32(0)
 
-	// getStateString is used to output current state in error messages
-	getSyntaxError := func(message string, args ...interface{}) error {
-		formattedMessage := fmt.Sprintf(message, args...)
-		return pgerror.Newf(
-			pgcode.Syntax,
-			"%s elementIdx=%d bufferLength=%d bufferStartIdx=%d bufferEndIdx=%d",
-			formattedMessage, elementIdx, bufferLength, bufferStartIdx, bufferEndIdx)
+	// decorateSyntaxError is used to output the current state in error messages.
+	decorateSyntaxError := func(err error) error {
+		return errors.WithDetailf(
+			err,
+			"elementIdx=%d bufferLength=%d bufferStartIdx=%d bufferEndIdx=%d",
+			elementIdx, bufferLength, bufferStartIdx, bufferEndIdx)
 	}
 
 	for elementIdx < numberOfElements {
 
 		bufferEndIdx = bufferStartIdx + oidSize
 		if bufferEndIdx < bufferStartIdx {
-			return nil, getSyntaxError("integer overflow reading element OID for binary format. ")
+			return nil, decorateSyntaxError(pgerror.New(pgcode.Syntax, "integer overflow reading element OID for binary format"))
 		}
 		if bufferLength < bufferEndIdx {
-			return nil, getSyntaxError("insufficient bytes reading element OID for binary format. ")
+			return nil, decorateSyntaxError(pgerror.New(pgcode.Syntax, "insufficient bytes reading element OID for binary format"))
 		}
 
 		elementOID := int32(binary.BigEndian.Uint32(b[bufferStartIdx:bufferEndIdx]))
 		elementType, ok := types.OidToType[oid.Oid(elementOID)]
 		if !ok {
-			return nil, getSyntaxError("element type not found for OID %d. ", elementOID)
+			return nil, decorateSyntaxError(pgerror.Newf(pgcode.Syntax, "element type not found for OID %d", elementOID))
 		}
 		typs[elementIdx] = elementType
 		bufferStartIdx = bufferEndIdx
 
 		bufferEndIdx = bufferStartIdx + elementSize
 		if bufferEndIdx < bufferStartIdx {
-			return nil, getSyntaxError("integer overflow reading element size for binary format. ")
+			return nil, decorateSyntaxError(pgerror.New(pgcode.Syntax, "integer overflow reading element size for binary format"))
 		}
 		if bufferLength < bufferEndIdx {
-			return nil, getSyntaxError("insufficient bytes reading element size for binary format. ")
+			return nil, decorateSyntaxError(pgerror.New(pgcode.Syntax, "insufficient bytes reading element size for binary format"))
 		}
 
 		bytesToRead := binary.BigEndian.Uint32(b[bufferStartIdx:bufferEndIdx])
@@ -1080,10 +1085,10 @@ func decodeBinaryTuple(ctx context.Context, evalCtx *eval.Context, b []byte) (tr
 		} else {
 			bufferEndIdx = bufferStartIdx + int(bytesToRead)
 			if bufferEndIdx < bufferStartIdx {
-				return nil, getSyntaxError("integer overflow reading element for binary format. ")
+				return nil, decorateSyntaxError(pgerror.New(pgcode.Syntax, "integer overflow reading element for binary format"))
 			}
 			if bufferLength < bufferEndIdx {
-				return nil, getSyntaxError("insufficient bytes reading element for binary format. ")
+				return nil, decorateSyntaxError(pgerror.New(pgcode.Syntax, "insufficient bytes reading element for binary format"))
 			}
 
 			colDatum, err := DecodeDatum(ctx, evalCtx, elementType, FormatBinary, b[bufferStartIdx:bufferEndIdx])

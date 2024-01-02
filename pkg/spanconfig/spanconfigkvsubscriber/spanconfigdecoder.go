@@ -29,18 +29,18 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// spanConfigDecoder decodes rows from system.span_configurations. It's not
+// SpanConfigDecoder decodes rows from system.span_configurations. It's not
 // safe for concurrent use.
-type spanConfigDecoder struct {
+type SpanConfigDecoder struct {
 	alloc   tree.DatumAlloc
 	columns []catalog.Column
 	decoder valueside.Decoder
 }
 
-// newSpanConfigDecoder instantiates a spanConfigDecoder.
-func newSpanConfigDecoder() *spanConfigDecoder {
+// NewSpanConfigDecoder instantiates a SpanConfigDecoder.
+func NewSpanConfigDecoder() *SpanConfigDecoder {
 	columns := systemschema.SpanConfigurationsTable.PublicColumns()
-	return &spanConfigDecoder{
+	return &SpanConfigDecoder{
 		columns: columns,
 		decoder: valueside.MakeDecoder(columns),
 	}
@@ -48,7 +48,7 @@ func newSpanConfigDecoder() *spanConfigDecoder {
 
 // decode a span config entry given a KV from the
 // system.span_configurations table.
-func (sd *spanConfigDecoder) decode(kv roachpb.KeyValue) (spanconfig.Record, error) {
+func (sd *SpanConfigDecoder) decode(kv roachpb.KeyValue) (spanconfig.Record, error) {
 	// First we need to decode the start_key field from the index key.
 	var rawSp roachpb.Span
 	var conf roachpb.SpanConfig
@@ -90,7 +90,7 @@ func (sd *spanConfigDecoder) decode(kv roachpb.KeyValue) (spanconfig.Record, err
 	return spanconfig.MakeRecord(spanconfig.DecodeTarget(rawSp), conf)
 }
 
-func (sd *spanConfigDecoder) translateEvent(
+func (sd *SpanConfigDecoder) TranslateEvent(
 	ctx context.Context, ev *kvpb.RangeFeedValue,
 ) rangefeedbuffer.Event {
 	deleted := !ev.Value.IsPresent()
@@ -132,10 +132,10 @@ func (sd *spanConfigDecoder) translateEvent(
 		update = spanconfig.Update(record)
 	}
 
-	return &bufferEvent{update, ev.Value.Timestamp}
+	return &BufferEvent{update, ev.Value.Timestamp}
 }
 
 // TestingDecoderFn exports the decoding routine for testing purposes.
 func TestingDecoderFn() func(roachpb.KeyValue) (spanconfig.Record, error) {
-	return newSpanConfigDecoder().decode
+	return NewSpanConfigDecoder().decode
 }

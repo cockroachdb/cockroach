@@ -188,6 +188,7 @@ func (s *MockWebhookSink) publish(hw http.ResponseWriter, hr *http.Request) erro
 		return err
 	}
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.mu.numCalls++
 	if s.mu.statusCodes[s.mu.statusCodesIndex] >= http.StatusOK && s.mu.statusCodes[s.mu.statusCodesIndex] < http.StatusMultipleChoices {
 		s.mu.rows = append(s.mu.rows, string(row))
@@ -199,6 +200,5 @@ func (s *MockWebhookSink) publish(hw http.ResponseWriter, hr *http.Request) erro
 
 	hw.WriteHeader(s.mu.statusCodes[s.mu.statusCodesIndex])
 	s.mu.statusCodesIndex = (s.mu.statusCodesIndex + 1) % len(s.mu.statusCodes)
-	s.mu.Unlock()
 	return nil
 }

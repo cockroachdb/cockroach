@@ -40,7 +40,7 @@ CREATE SEQUENCE seq
 statement ok
 CREATE TYPE enum AS ENUM('a', 'b')
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES FROM public
 ----
 public  seq  sequence  testuser   0  NULL
@@ -109,7 +109,7 @@ DROP OWNED BY testuser
 statement error pq: cannot drop desired object\(s\) because other objects depend on them
 DROP OWNED BY testuser RESTRICT
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES FROM public
 ----
 public  t  table  testuser   0  NULL
@@ -244,7 +244,7 @@ user root
 # database privileges via DROP OWNED BY.
 subtest revoke-privileges-db
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE test
 ----
 test  admin     ALL      true
@@ -257,7 +257,7 @@ user root
 statement ok
 DROP OWNED BY testuser
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE test
 ----
 test  admin   ALL      true
@@ -288,7 +288,7 @@ CREATE TABLE s.t()
 statement ok
 DROP OWNED BY testuser
 
-query TTTTB
+query TTTTB rowsort
 SHOW GRANTS ON SCHEMA s
 ----
 test  s  admin  ALL  true
@@ -317,7 +317,7 @@ GRANT ALL ON t TO testuser WITH GRANT OPTION
 
 user testuser
 
-query TTTTTB
+query TTTTTB rowsort
 SHOW GRANTS ON t
 ----
 test  public  t  admin    ALL  true
@@ -327,7 +327,7 @@ test  public  t  testuser ALL  true
 statement ok
 DROP OWNED BY testuser
 
-query TTTTTB
+query TTTTTB rowsort
 SHOW GRANTS ON t
 ----
 test  public  t  admin    ALL  true
@@ -362,7 +362,7 @@ CREATE TABLE t2()
 statement ok
 SET ROLE root
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES FROM public
 ----
 public  t1  table  r1   0  NULL
@@ -466,7 +466,7 @@ CREATE TABLE d2.t1()
 
 user root
 
-query TTTTTT
+query TTTTTT rowsort
 SHOW DATABASES
 ----
 d1         root  NULL  NULL  {}  NULL
@@ -481,20 +481,20 @@ test       root  NULL  NULL  {}  NULL
 statement ok
 SET DATABASE = d1
 
-query TT
+query TT rowsort
 SHOW SCHEMAS FROM d1
 ----
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
 public              admin
 s1                  root
 s2                  root
 s3                  testuser
 s4                  testuser
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES FROM d1
 ----
 public  t1  table  root      0  NULL
@@ -504,7 +504,7 @@ public  v2  view   testuser  0  NULL
 s1      t1  table  root      0  NULL
 s1      t2  table  testuser  0  NULL
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE d1
 ----
 d1  admin     ALL      true
@@ -513,7 +513,7 @@ d1  root      ALL      true
 d1  testuser  CREATE   true
 d1  testuser  DROP     true
 
-query TTTTB
+query TTTTB rowsort
 SHOW GRANTS ON SCHEMA d1.s1
 ----
 d1  s1  admin     ALL     true
@@ -523,31 +523,31 @@ d1  s1  testuser  CREATE  true
 statement ok
 DROP OWNED BY testuser
 
-query TT
+query TT rowsort
 SHOW SCHEMAS FROM d1
 ----
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
 public              admin
 s1                  root
 s2                  root
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES FROM d1
 ----
 public  t1  table  root      0  NULL
 public  v1  view   root      0  NULL
 s1      t1  table  root      0  NULL
 
-query TTTTB
+query TTTTB rowsort
 SHOW GRANTS ON SCHEMA d1.s1
 ----
 d1  s1  admin     ALL     true
 d1  s1  root      ALL     true
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE d1
 ----
 d1  admin     ALL      true
@@ -557,13 +557,13 @@ d1  root      ALL      true
 statement ok
 SET DATABASE = d2
 
-query TT
+query TT rowsort
 SHOW SCHEMAS FROM d2
 ----
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
 public              admin
 s1                  root
 s2                  testuser
@@ -573,7 +573,7 @@ SHOW TABLES FROM d2
 ----
 public  t1  table  testuser  0  NULL
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE d2
 ----
 d2  admin     ALL      true
@@ -584,13 +584,13 @@ d2  testuser  ALL      true
 statement ok
 DROP OWNED BY testuser
 
-query TT
+query TT rowsort
 SHOW SCHEMAS FROM d2
 ----
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
 public              admin
 s1                  root
 
@@ -598,7 +598,7 @@ query TTTTIT
 SHOW TABLES FROM d2
 ----
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE d2
 ----
 d2  admin     ALL      true
@@ -608,7 +608,7 @@ d2  root      ALL      true
 statement ok
 SET DATABASE = d3
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE d3
 ----
 d3  admin     ALL      true
@@ -619,7 +619,7 @@ d3  testuser  CREATE   true
 statement ok
 DROP OWNED BY testuser
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE d3
 ----
 d3  admin   ALL      true
@@ -645,14 +645,8 @@ CREATE FUNCTION f_drop_udf() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 statement ok
 ALTER FUNCTION f_drop_udf OWNER TO u_drop_udf;
 
-# TODO(chengxiong): DROP function was only enabled in 23.1. This skip can be
-# removed in 23.2.
-skipif config local-mixed-22.2-23.1
 statement ok
 DROP OWNED BY u_drop_udf;
 
-# TODO(chengxiong): DROP function was only enabled in 23.1. This skip can be
-# removed in 23.2.
-skipif config local-mixed-22.2-23.1
-statement error pq: unknown function: f_drop_udf\(\): function undefined
+statement error pq: unknown function: f_drop_udf\(\)
 SHOW CREATE FUNCTION f_drop_udf;

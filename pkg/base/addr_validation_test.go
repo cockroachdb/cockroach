@@ -64,12 +64,17 @@ func TestValidateAddrs(t *testing.T) {
 		t.Fatal("expected port resolution failure, got no error")
 	}
 	portExpectedErr := err.Error()
-	// For the host name resolution error we can reliably expect "no such host"
-	// below, but before we test anything we need to ensure we indeed have
-	// a reliably non-resolvable host name.
-	_, err = net.DefaultResolver.LookupIPAddr(context.Background(), "nonexistent.example.com")
-	if err == nil {
-		t.Fatal("expected host resolution failure, got no error")
+	// ValidateAddrs uses a net.DefaultResolver for host name resolution.
+	// Normally, when given a non-existent host name, we expect it to return a
+	// "no such host" error. However, it may return a different error if there is
+	// no network access. See
+	// https://github.com/cockroachdb/cockroach/issues/109052.
+	noSuchHostErr := func(host string) string {
+		_, err := net.DefaultResolver.LookupIPAddr(context.Background(), host)
+		if err == nil { // the supplied host is expected to be reliably non-resolvable
+			t.Fatal("expected host resolution failure, got no error")
+		}
+		return err.Error()
 	}
 
 	// The test cases.
@@ -149,19 +154,19 @@ func TestValidateAddrs(t *testing.T) {
 		{addrs{"localhost:-1231", "", "", "", "", ""}, "invalid port", addrs{}},
 		{addrs{"localhost:nonexistent", "", "", "", "", ""}, portExpectedErr, addrs{}},
 		// Invalid address.
-		{addrs{"nonexistent.example.com:26257", "", "", "", "", ""}, "no such host", addrs{}},
-		{addrs{"333.333.333.333:26257", "", "", "", "", ""}, "no such host", addrs{}},
+		{addrs{"nonexistent.example.com:26257", "", "", "", "", ""}, noSuchHostErr("nonexistent.example.com"), addrs{}},
+		{addrs{"333.333.333.333:26257", "", "", "", "", ""}, noSuchHostErr("333.333.333.333"), addrs{}},
 	}
 
 	for i, test := range testData {
 		t.Run(fmt.Sprintf("%d/%s", i, test.in), func(t *testing.T) {
 			cfg := base.Config{
-				Addr:              test.in.listen,
-				AdvertiseAddr:     test.in.adv,
-				HTTPAddr:          test.in.http,
-				HTTPAdvertiseAddr: test.in.advhttp,
-				SQLAddr:           test.in.sql,
-				SQLAdvertiseAddr:  test.in.advsql,
+				Addr:               test.in.listen,
+				HTTPAddr:           test.in.http,
+				SQLAddr:            test.in.sql,
+				AdvertiseAddrH:     base.AdvertiseAddrH{AdvertiseAddr: test.in.adv},
+				HTTPAdvertiseAddrH: base.HTTPAdvertiseAddrH{HTTPAdvertiseAddr: test.in.advhttp},
+				SQLAdvertiseAddrH:  base.SQLAdvertiseAddrH{SQLAdvertiseAddr: test.in.advsql},
 			}
 
 			if err := cfg.ValidateAddrs(context.Background()); err != nil {

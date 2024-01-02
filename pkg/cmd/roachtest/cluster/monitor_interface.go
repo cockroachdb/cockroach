@@ -24,7 +24,13 @@ type Monitor interface {
 	ExpectDeath()
 	ExpectDeaths(count int32)
 	ResetDeaths()
+
+	// Go spawns a goroutine whose fatal errors will be handled gracefully leading to a
+	// clean roachtest shutdown. To prevent leaky goroutines, the caller must call
+	// Wait() or WaitE() before returning.
 	Go(fn func(context.Context) error)
+	GoWithCancel(fn func(context.Context) error) func()
+	WaitForNodeDeath() error
 	WaitE() error
 	Wait()
 }

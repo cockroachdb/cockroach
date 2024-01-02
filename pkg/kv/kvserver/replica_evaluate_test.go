@@ -37,7 +37,7 @@ func TestEvaluateBatch(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ts := hlc.Timestamp{WallTime: 1}
-	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, 0, ts, 0, 0)
+	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, 0, ts, 0, 0, 0, false /* omitInRangefeeds */)
 
 	tcs := []testCase{
 		//
@@ -52,6 +52,7 @@ func TestEvaluateBatch(t *testing.T) {
 				require.Nil(t, r.pErr)
 				require.NotNil(t, r.br)
 				require.Empty(t, r.br.Responses)
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		}, {
 			// Scanning without limit should return everything.
@@ -62,8 +63,9 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.Add(req)
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a", "b", "c", "d", "e", "f"})
+				verifyReadResult(t, r, []string{"a", "b", "c", "d", "e", "f"})
 				verifyResumeSpans(t, r, "")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		}, {
 			// Ditto in reverse.
@@ -74,8 +76,9 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.Add(req)
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"f", "e", "d", "c", "b", "a"})
+				verifyReadResult(t, r, []string{"f", "e", "d", "c", "b", "a"})
 				verifyResumeSpans(t, r, "")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		}, {
 			// Scanning with "giant" limit should return everything.
@@ -87,8 +90,9 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 100000
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a", "b", "c", "d", "e", "f"})
+				verifyReadResult(t, r, []string{"a", "b", "c", "d", "e", "f"})
 				verifyResumeSpans(t, r, "")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		}, {
 			// Ditto in reverse.
@@ -100,8 +104,9 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 100000
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"f", "e", "d", "c", "b", "a"})
+				verifyReadResult(t, r, []string{"f", "e", "d", "c", "b", "a"})
 				verifyResumeSpans(t, r, "")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		}, {
 			// Similar to above, just two scans.
@@ -113,8 +118,9 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 100000
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a", "b"}, []string{"d", "e", "f"})
+				verifyReadResult(t, r, []string{"a", "b"}, []string{"d", "e", "f"})
 				verifyResumeSpans(t, r, "", "")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		}, {
 			// Ditto in reverse.
@@ -126,8 +132,9 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 100000
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"f", "e", "d"}, []string{"b", "a"})
+				verifyReadResult(t, r, []string{"f", "e", "d"}, []string{"b", "a"})
 				verifyResumeSpans(t, r, "", "")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		}, {
 			// A batch limited to return only one key. Throw in a Get which will come
@@ -142,8 +149,9 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 1
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a"}, nil, nil)
+				verifyReadResult(t, r, []string{"a"}, nil, nil)
 				verifyResumeSpans(t, r, "b-c", "f-", "d-f")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		}, {
 			// Ditto in reverse.
@@ -156,8 +164,9 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 1
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"e"}, nil, nil)
+				verifyReadResult(t, r, []string{"e"}, nil, nil)
 				verifyResumeSpans(t, r, "d-d\x00", "f-", "a-c")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		}, {
 			// Similar, but this time the request allows the second scan to
@@ -172,8 +181,9 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 4
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a", "b"}, []string{"e"}, []string{"c"})
+				verifyReadResult(t, r, []string{"a", "b"}, []string{"e"}, []string{"c"})
 				verifyResumeSpans(t, r, "", "", "d-e")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 				b, err := r.br.Responses[1].GetGet().Value.GetBytes()
 				require.NoError(t, err)
 				require.Equal(t, "value-e", string(b))
@@ -189,8 +199,9 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 4
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"d", "c"}, []string{"e"}, []string{"b"})
+				verifyReadResult(t, r, []string{"d", "c"}, []string{"e"}, []string{"b"})
 				verifyResumeSpans(t, r, "", "", "a-a\x00")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 				b, err := r.br.Responses[1].GetGet().Value.GetBytes()
 				require.NoError(t, err)
 				require.Equal(t, "value-e", string(b))
@@ -207,8 +218,9 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 2
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a"}, []string{"b"}, nil, nil)
+				verifyReadResult(t, r, []string{"a"}, []string{"b"}, nil, nil)
 				verifyResumeSpans(t, r, "", "", "c-", "d-e")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		}, {
 			// GetRequests that come before revscans.
@@ -222,8 +234,9 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 2
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a"}, []string{"b"}, nil, nil)
+				verifyReadResult(t, r, []string{"a"}, []string{"b"}, nil, nil)
 				verifyResumeSpans(t, r, "", "", "c-", "d-e")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		},
 		//
@@ -245,8 +258,9 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 3
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a"}, nil, nil)
+				verifyReadResult(t, r, []string{"a"}, nil, nil)
 				verifyResumeSpans(t, r, "b-c", "e-", "c-e")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		}, {
 			// Ditto in reverse.
@@ -260,8 +274,9 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 3
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"d"}, nil, nil)
+				verifyReadResult(t, r, []string{"d"}, nil, nil)
 				verifyResumeSpans(t, r, "c-c\x00", "e-", "a-c")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		}, {
 			// GetRequests that come before scans.
@@ -274,8 +289,9 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.TargetBytes = 1
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a"}, nil, nil)
+				verifyReadResult(t, r, []string{"a"}, nil, nil)
 				verifyResumeSpans(t, r, "", "b-", "c-e")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		}, {
 			// GetRequests that come before revscans.
@@ -288,31 +304,101 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.TargetBytes = 1
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a"}, nil, nil)
+				verifyReadResult(t, r, []string{"a"}, nil, nil)
 				verifyResumeSpans(t, r, "", "b-", "c-e")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		},
 		//
-		// Test suite for KeyLocking.
+		// Test suite for KeyLockingStrength.
 		//
 		{
 			// Two gets, one of which finds a key, one of which does not. An
 			// unreplicated lock should be acquired on the key that existed.
-			name: "gets with key locking",
+			name: "gets with key locking (exclusive, unreplicated)",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
-				scanA := getArgsString("a")
-				scanA.KeyLocking = lock.Exclusive
-				d.ba.Add(scanA)
-				scanG := getArgsString("g")
-				scanG.KeyLocking = lock.Exclusive
-				d.ba.Add(scanG)
+				getA := getArgsString("a")
+				getA.KeyLockingStrength = lock.Exclusive
+				getA.KeyLockingDurability = lock.Unreplicated
+				d.ba.Add(getA)
+				getG := getArgsString("g")
+				getG.KeyLockingStrength = lock.Exclusive
+				getG.KeyLockingDurability = lock.Unreplicated
+				d.ba.Add(getG)
 				d.ba.Txn = &txn
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a"}, nil)
-				verifyAcquiredLocks(t, r, lock.Unreplicated, "a")
-				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+				verifyReadResult(t, r, []string{"a"}, nil)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Exclusive: {lock.Unreplicated: []string{"a"}},
+				})
+			},
+		},
+		{
+			// Same as above, but with shared locks.
+			name: "gets with key locking (shared, unreplicated)",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEFAt(t, d, ts.Prev())
+				getA := getArgsString("a")
+				getA.KeyLockingStrength = lock.Shared
+				getA.KeyLockingDurability = lock.Unreplicated
+				d.ba.Add(getA)
+				getG := getArgsString("g")
+				getG.KeyLockingStrength = lock.Shared
+				getG.KeyLockingDurability = lock.Unreplicated
+				d.ba.Add(getG)
+				d.ba.Txn = &txn
+			},
+			check: func(t *testing.T, r resp) {
+				verifyReadResult(t, r, []string{"a"}, nil)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Shared: {lock.Unreplicated: []string{"a"}},
+				})
+			},
+		},
+		{
+			// Same as above, but with replicated exclusive locks.
+			name: "gets with key locking (exclusive, replicated)",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEFAt(t, d, ts.Prev())
+				getA := getArgsString("a")
+				getA.KeyLockingStrength = lock.Exclusive
+				getA.KeyLockingDurability = lock.Replicated
+				d.ba.Add(getA)
+				getG := getArgsString("g")
+				getG.KeyLockingStrength = lock.Exclusive
+				getG.KeyLockingDurability = lock.Replicated
+				d.ba.Add(getG)
+				d.ba.Txn = &txn
+			},
+			check: func(t *testing.T, r resp) {
+				verifyReadResult(t, r, []string{"a"}, nil)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Exclusive: {lock.Replicated: []string{"a"}},
+				})
+			},
+		},
+		{
+			// Same as above, but with replicated shared locks.
+			name: "gets with key locking (shared, replicated)",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEFAt(t, d, ts.Prev())
+				getA := getArgsString("a")
+				getA.KeyLockingStrength = lock.Shared
+				getA.KeyLockingDurability = lock.Replicated
+				d.ba.Add(getA)
+				getG := getArgsString("g")
+				getG.KeyLockingStrength = lock.Shared
+				getG.KeyLockingDurability = lock.Replicated
+				d.ba.Add(getG)
+				d.ba.Txn = &txn
+			},
+			check: func(t *testing.T, r resp) {
+				verifyReadResult(t, r, []string{"a"}, nil)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Shared: {lock.Replicated: []string{"a"}},
+				})
 			},
 		},
 		{
@@ -321,62 +407,225 @@ func TestEvaluateBatch(t *testing.T) {
 			name: "gets with key locking without txn",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
-				scanA := getArgsString("a")
-				scanA.KeyLocking = lock.Exclusive
-				d.ba.Add(scanA)
-				scanG := getArgsString("g")
-				scanG.KeyLocking = lock.Exclusive
-				d.ba.Add(scanG)
+				getA := getArgsString("a")
+				getA.KeyLockingStrength = lock.Exclusive
+				d.ba.Add(getA)
+				getG := getArgsString("g")
+				getG.KeyLockingStrength = lock.Exclusive
+				d.ba.Add(getG)
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a"}, nil)
-				verifyAcquiredLocks(t, r, lock.Unreplicated, []string(nil)...)
-				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+				verifyReadResult(t, r, []string{"a"}, nil)
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		},
 		{
 			// Three scans that observe 3, 1, and 0 keys, respectively. An
 			// unreplicated lock should be acquired on each key that is scanned.
-			name: "scans with key locking",
+			name: "scans with key locking (exclusive, unreplicated)",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAD := scanArgsString("a", "d")
-				scanAD.KeyLocking = lock.Exclusive
+				scanAD.KeyLockingStrength = lock.Exclusive
+				scanAD.KeyLockingDurability = lock.Unreplicated
 				d.ba.Add(scanAD)
 				scanEF := scanArgsString("e", "f")
-				scanEF.KeyLocking = lock.Exclusive
+				scanEF.KeyLockingStrength = lock.Exclusive
+				scanEF.KeyLockingDurability = lock.Unreplicated
 				d.ba.Add(scanEF)
 				scanHJ := scanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ.KeyLockingStrength = lock.Exclusive
+				scanHJ.KeyLockingDurability = lock.Unreplicated
 				d.ba.Add(scanHJ)
 				d.ba.Txn = &txn
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a", "b", "c"}, []string{"e"}, nil)
-				verifyAcquiredLocks(t, r, lock.Unreplicated, "a", "b", "c", "e")
-				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+				verifyReadResult(t, r, []string{"a", "b", "c"}, []string{"e"}, nil)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Exclusive: {lock.Unreplicated: []string{"a", "b", "c", "e"}},
+				})
 			},
 		},
 		{
-			// Ditto in reverse.
-			name: "reverse scans with key locking",
+			// Same as above, but with shared locks.
+			name: "scans with key locking (shared, unreplicated)",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
-				scanAD := revScanArgsString("a", "d")
-				scanAD.KeyLocking = lock.Exclusive
+				scanAD := scanArgsString("a", "d")
+				scanAD.KeyLockingStrength = lock.Shared
+				scanAD.KeyLockingDurability = lock.Unreplicated
 				d.ba.Add(scanAD)
-				scanEF := revScanArgsString("e", "f")
-				scanEF.KeyLocking = lock.Exclusive
+				scanEF := scanArgsString("e", "f")
+				scanEF.KeyLockingStrength = lock.Shared
+				scanEF.KeyLockingDurability = lock.Unreplicated
 				d.ba.Add(scanEF)
-				scanHJ := revScanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ := scanArgsString("h", "j")
+				scanHJ.KeyLockingStrength = lock.Shared
+				scanHJ.KeyLockingDurability = lock.Unreplicated
 				d.ba.Add(scanHJ)
 				d.ba.Txn = &txn
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"c", "b", "a"}, []string{"e"}, nil)
-				verifyAcquiredLocks(t, r, lock.Unreplicated, "c", "b", "a", "e")
-				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+				verifyReadResult(t, r, []string{"a", "b", "c"}, []string{"e"}, nil)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Shared: {lock.Unreplicated: []string{"a", "b", "c", "e"}},
+				})
+			},
+		},
+		{
+			// Same as above, but with replicated exclusive locks.
+			name: "scans with key locking (exclusive, replicated)",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEFAt(t, d, ts.Prev())
+				scanAD := scanArgsString("a", "d")
+				scanAD.KeyLockingStrength = lock.Exclusive
+				scanAD.KeyLockingDurability = lock.Replicated
+				d.ba.Add(scanAD)
+				scanEF := scanArgsString("e", "f")
+				scanEF.KeyLockingStrength = lock.Exclusive
+				scanEF.KeyLockingDurability = lock.Replicated
+				d.ba.Add(scanEF)
+				scanHJ := scanArgsString("h", "j")
+				scanHJ.KeyLockingStrength = lock.Exclusive
+				scanHJ.KeyLockingDurability = lock.Replicated
+				d.ba.Add(scanHJ)
+				d.ba.Txn = &txn
+			},
+			check: func(t *testing.T, r resp) {
+				verifyReadResult(t, r, []string{"a", "b", "c"}, []string{"e"}, nil)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Exclusive: {lock.Replicated: []string{"a", "b", "c", "e"}},
+				})
+			},
+		},
+		{
+			// Same as above, but with replicated shared locks.
+			name: "scans with key locking (shared, replicated)",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEFAt(t, d, ts.Prev())
+				scanAD := scanArgsString("a", "d")
+				scanAD.KeyLockingStrength = lock.Shared
+				scanAD.KeyLockingDurability = lock.Replicated
+				d.ba.Add(scanAD)
+				scanEF := scanArgsString("e", "f")
+				scanEF.KeyLockingStrength = lock.Shared
+				scanEF.KeyLockingDurability = lock.Replicated
+				d.ba.Add(scanEF)
+				scanHJ := scanArgsString("h", "j")
+				scanHJ.KeyLockingStrength = lock.Shared
+				scanHJ.KeyLockingDurability = lock.Replicated
+				d.ba.Add(scanHJ)
+				d.ba.Txn = &txn
+			},
+			check: func(t *testing.T, r resp) {
+				verifyReadResult(t, r, []string{"a", "b", "c"}, []string{"e"}, nil)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Shared: {lock.Replicated: []string{"a", "b", "c", "e"}},
+				})
+			},
+		},
+		{
+			// Ditto in reverse with exclusive locks.
+			name: "reverse scans with key locking (exclusive, unreplicated)",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEFAt(t, d, ts.Prev())
+				scanAD := revScanArgsString("a", "d")
+				scanAD.KeyLockingStrength = lock.Exclusive
+				scanAD.KeyLockingDurability = lock.Unreplicated
+				d.ba.Add(scanAD)
+				scanEF := revScanArgsString("e", "f")
+				scanEF.KeyLockingStrength = lock.Exclusive
+				scanEF.KeyLockingDurability = lock.Unreplicated
+				d.ba.Add(scanEF)
+				scanHJ := revScanArgsString("h", "j")
+				scanHJ.KeyLockingStrength = lock.Exclusive
+				scanHJ.KeyLockingDurability = lock.Unreplicated
+				d.ba.Add(scanHJ)
+				d.ba.Txn = &txn
+			},
+			check: func(t *testing.T, r resp) {
+				verifyReadResult(t, r, []string{"c", "b", "a"}, []string{"e"}, nil)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Exclusive: {lock.Unreplicated: []string{"c", "b", "a", "e"}},
+				})
+			},
+		},
+		{
+			// Same as above, but with shared locks.
+			name: "reverse scans with key locking (shared, unreplicated)",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEFAt(t, d, ts.Prev())
+				scanAD := revScanArgsString("a", "d")
+				scanAD.KeyLockingStrength = lock.Shared
+				scanAD.KeyLockingDurability = lock.Unreplicated
+				d.ba.Add(scanAD)
+				scanEF := revScanArgsString("e", "f")
+				scanEF.KeyLockingStrength = lock.Shared
+				scanEF.KeyLockingDurability = lock.Unreplicated
+				d.ba.Add(scanEF)
+				scanHJ := revScanArgsString("h", "j")
+				scanHJ.KeyLockingStrength = lock.Shared
+				scanHJ.KeyLockingDurability = lock.Unreplicated
+				d.ba.Add(scanHJ)
+				d.ba.Txn = &txn
+			},
+			check: func(t *testing.T, r resp) {
+				verifyReadResult(t, r, []string{"c", "b", "a"}, []string{"e"}, nil)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Shared: {lock.Unreplicated: []string{"c", "b", "a", "e"}},
+				})
+			},
+		},
+		{
+			// Same as above, but with replicated exclusive locks.
+			name: "reverse scans with key locking (exclusive, replicated)",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEFAt(t, d, ts.Prev())
+				scanAD := revScanArgsString("a", "d")
+				scanAD.KeyLockingStrength = lock.Exclusive
+				scanAD.KeyLockingDurability = lock.Replicated
+				d.ba.Add(scanAD)
+				scanEF := revScanArgsString("e", "f")
+				scanEF.KeyLockingStrength = lock.Exclusive
+				scanEF.KeyLockingDurability = lock.Replicated
+				d.ba.Add(scanEF)
+				scanHJ := revScanArgsString("h", "j")
+				scanHJ.KeyLockingStrength = lock.Exclusive
+				scanHJ.KeyLockingDurability = lock.Replicated
+				d.ba.Add(scanHJ)
+				d.ba.Txn = &txn
+			},
+			check: func(t *testing.T, r resp) {
+				verifyReadResult(t, r, []string{"c", "b", "a"}, []string{"e"}, nil)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Exclusive: {lock.Replicated: []string{"c", "b", "a", "e"}},
+				})
+			},
+		},
+		{
+			// Same as above, but with replicated shared locks.
+			name: "reverse scans with key locking (shared, replicated)",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEFAt(t, d, ts.Prev())
+				scanAD := revScanArgsString("a", "d")
+				scanAD.KeyLockingStrength = lock.Shared
+				scanAD.KeyLockingDurability = lock.Replicated
+				d.ba.Add(scanAD)
+				scanEF := revScanArgsString("e", "f")
+				scanEF.KeyLockingStrength = lock.Shared
+				scanEF.KeyLockingDurability = lock.Replicated
+				d.ba.Add(scanEF)
+				scanHJ := revScanArgsString("h", "j")
+				scanHJ.KeyLockingStrength = lock.Shared
+				scanHJ.KeyLockingDurability = lock.Replicated
+				d.ba.Add(scanHJ)
+				d.ba.Txn = &txn
+			},
+			check: func(t *testing.T, r resp) {
+				verifyReadResult(t, r, []string{"c", "b", "a"}, []string{"e"}, nil)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Shared: {lock.Replicated: []string{"c", "b", "a", "e"}},
+				})
 			},
 		},
 		{
@@ -386,19 +635,18 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAD := scanArgsString("a", "d")
-				scanAD.KeyLocking = lock.Exclusive
+				scanAD.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAD)
 				scanEF := scanArgsString("e", "f")
-				scanEF.KeyLocking = lock.Exclusive
+				scanEF.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanEF)
 				scanHJ := scanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanHJ)
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a", "b", "c"}, []string{"e"}, nil)
-				verifyAcquiredLocks(t, r, lock.Unreplicated, []string(nil)...)
-				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+				verifyReadResult(t, r, []string{"a", "b", "c"}, []string{"e"}, nil)
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		},
 		{
@@ -407,19 +655,18 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAD := revScanArgsString("a", "d")
-				scanAD.KeyLocking = lock.Exclusive
+				scanAD.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAD)
 				scanEF := revScanArgsString("e", "f")
-				scanEF.KeyLocking = lock.Exclusive
+				scanEF.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanEF)
 				scanHJ := revScanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanHJ)
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"c", "b", "a"}, []string{"e"}, nil)
-				verifyAcquiredLocks(t, r, lock.Unreplicated, []string(nil)...)
-				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+				verifyReadResult(t, r, []string{"c", "b", "a"}, []string{"e"}, nil)
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		},
 		{
@@ -431,16 +678,17 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := scanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				d.ba.Txn = &txn
 				d.ba.MaxSpanRequestKeys = 3
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a", "b", "c"})
+				verifyReadResult(t, r, []string{"a", "b", "c"})
 				verifyResumeSpans(t, r, "d-e")
-				verifyAcquiredLocks(t, r, lock.Unreplicated, "a", "b", "c")
-				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Exclusive: {lock.Unreplicated: []string{"a", "b", "c"}},
+				})
 			},
 		},
 		{
@@ -449,16 +697,17 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := revScanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				d.ba.Txn = &txn
 				d.ba.MaxSpanRequestKeys = 3
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"d", "c", "b"})
+				verifyReadResult(t, r, []string{"d", "c", "b"})
 				verifyResumeSpans(t, r, "a-a\x00")
-				verifyAcquiredLocks(t, r, lock.Unreplicated, "d", "c", "b")
-				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Exclusive: {lock.Unreplicated: []string{"d", "c", "b"}},
+				})
 			},
 		},
 		{
@@ -471,19 +720,20 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := scanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				scanHJ := scanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanHJ)
 				d.ba.Txn = &txn
 				d.ba.MaxSpanRequestKeys = 3
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a", "b", "c"}, nil)
+				verifyReadResult(t, r, []string{"a", "b", "c"}, nil)
 				verifyResumeSpans(t, r, "d-e", "h-j")
-				verifyAcquiredLocks(t, r, lock.Unreplicated, "a", "b", "c")
-				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Exclusive: {lock.Unreplicated: []string{"a", "b", "c"}},
+				})
 			},
 		},
 		{
@@ -492,19 +742,20 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := revScanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				scanHJ := scanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanHJ)
 				d.ba.Txn = &txn
 				d.ba.MaxSpanRequestKeys = 3
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"d", "c", "b"}, nil)
+				verifyReadResult(t, r, []string{"d", "c", "b"}, nil)
 				verifyResumeSpans(t, r, "a-a\x00", "h-j")
-				verifyAcquiredLocks(t, r, lock.Unreplicated, "d", "c", "b")
-				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Exclusive: {lock.Unreplicated: []string{"d", "c", "b"}},
+				})
 			},
 		},
 		{
@@ -515,16 +766,17 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := scanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				d.ba.Txn = &txn
 				d.ba.TargetBytes = 1
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a"})
+				verifyReadResult(t, r, []string{"a"})
 				verifyResumeSpans(t, r, "b-e")
-				verifyAcquiredLocks(t, r, lock.Unreplicated, "a")
-				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Exclusive: {lock.Unreplicated: []string{"a"}},
+				})
 			},
 		},
 		{
@@ -533,16 +785,17 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := revScanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				d.ba.Txn = &txn
 				d.ba.TargetBytes = 1
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"d"})
+				verifyReadResult(t, r, []string{"d"})
 				verifyResumeSpans(t, r, "a-c\x00")
-				verifyAcquiredLocks(t, r, lock.Unreplicated, "d")
-				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Exclusive: {lock.Unreplicated: []string{"d"}},
+				})
 			},
 		},
 		{
@@ -554,19 +807,20 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := scanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				scanHJ := scanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanHJ)
 				d.ba.Txn = &txn
 				d.ba.TargetBytes = 1
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a"}, nil)
+				verifyReadResult(t, r, []string{"a"}, nil)
 				verifyResumeSpans(t, r, "b-e", "h-j")
-				verifyAcquiredLocks(t, r, lock.Unreplicated, "a")
-				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Exclusive: {lock.Unreplicated: []string{"a"}},
+				})
 			},
 		},
 		{
@@ -575,19 +829,20 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := revScanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				scanHJ := scanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanHJ)
 				d.ba.Txn = &txn
 				d.ba.TargetBytes = 1
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"d"}, nil)
+				verifyReadResult(t, r, []string{"d"}, nil)
 				verifyResumeSpans(t, r, "a-c\x00", "h-j")
-				verifyAcquiredLocks(t, r, lock.Unreplicated, "d")
-				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+				verifyAcquiredLocks(t, r, acquiredLocks{
+					lock.Exclusive: {lock.Unreplicated: []string{"d"}},
+				})
 			},
 		},
 		//
@@ -606,6 +861,7 @@ func TestEvaluateBatch(t *testing.T) {
 			check: func(t *testing.T, r resp) {
 				verifyNumKeys(t, r, 3, 1, 0)
 				verifyResumeSpans(t, r, "", "", "")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		},
 		{
@@ -621,6 +877,7 @@ func TestEvaluateBatch(t *testing.T) {
 			check: func(t *testing.T, r resp) {
 				verifyNumKeys(t, r, 3, 1, 0)
 				verifyResumeSpans(t, r, "", "", "")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		},
 		{
@@ -637,6 +894,7 @@ func TestEvaluateBatch(t *testing.T) {
 			check: func(t *testing.T, r resp) {
 				verifyNumKeys(t, r, 2, 0, 0)
 				verifyResumeSpans(t, r, "b\x00-d", "e-f", "h-j")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		},
 		{
@@ -653,6 +911,7 @@ func TestEvaluateBatch(t *testing.T) {
 			check: func(t *testing.T, r resp) {
 				verifyNumKeys(t, r, 3, 0, 0)
 				verifyResumeSpans(t, r, "", "e-f", "h-j")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		},
 	}
@@ -690,6 +949,7 @@ func TestEvaluateBatch(t *testing.T) {
 				nil,
 				uncertainty.Interval{},
 				evalPath,
+				false, /* omitInRangefeeds */
 			)
 
 			tc.check(t, r)
@@ -733,13 +993,14 @@ func writeABCDEFIntents(t *testing.T, d *data, txn *roachpb.Transaction) {
 
 func writeABCDEFWith(t *testing.T, eng storage.Engine, ts hlc.Timestamp, txn *roachpb.Transaction) {
 	for _, k := range []string{"a", "b", "c", "d", "e", "f"} {
-		require.NoError(t, storage.MVCCPut(
-			context.Background(), eng, nil /* ms */, roachpb.Key(k), ts, hlc.ClockTimestamp{},
-			roachpb.MakeValueFromString("value-"+k), txn))
+		_, err := storage.MVCCPut(
+			context.Background(), eng, roachpb.Key(k), ts,
+			roachpb.MakeValueFromString("value-"+k), storage.MVCCWriteOptions{Txn: txn})
+		require.NoError(t, err)
 	}
 }
 
-func verifyScanResult(t *testing.T, r resp, keysPerResp ...[]string) {
+func verifyReadResult(t *testing.T, r resp, keysPerResp ...[]string) {
 	t.Helper()
 	require.Nil(t, r.pErr)
 	require.NotNil(t, r.br)
@@ -796,13 +1057,17 @@ func verifyResumeSpans(t *testing.T, r resp, resumeSpans ...string) {
 	}
 }
 
-func verifyAcquiredLocks(t *testing.T, r resp, dur lock.Durability, lockedKeys ...string) {
+type acquiredLocks map[lock.Strength]map[lock.Durability][]string
+
+func verifyAcquiredLocks(t *testing.T, r resp, expLocked acquiredLocks) {
 	t.Helper()
-	var foundLocked []string
+	foundLocked := make(acquiredLocks)
 	for _, l := range r.res.Local.AcquiredLocks {
-		if l.Durability == dur {
-			foundLocked = append(foundLocked, string(l.Key))
+		if foundLocked[l.Strength] == nil {
+			foundLocked[l.Strength] = make(map[lock.Durability][]string)
 		}
+		cur := foundLocked[l.Strength][l.Durability]
+		foundLocked[l.Strength][l.Durability] = append(cur, string(l.Key))
 	}
-	require.Equal(t, lockedKeys, foundLocked)
+	require.Equal(t, expLocked, foundLocked)
 }

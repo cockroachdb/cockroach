@@ -63,20 +63,27 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 		// only occurs when the Any is nested, in a projection, etc.
 		return !t.Input.Relational().OuterCols.Empty()
 
-	case *memo.UDFExpr:
+	case *memo.UDFCallExpr:
 		// Do not attempt to hoist UDFs.
 		return false
 
 	case *memo.EqExpr:
-		// Hoist subqueries in expressions like (Eq (Variable) (Subquery)) if
-		// the corresponding session setting is enabled.
+		// Hoist subqueries in expressions like (Eq (Variable) (Subquery)) if:
+		//
+		//   1. The corresponding session setting is enabled.
+		//   2. And, the subquery has not already been hoisted elsewhere in the
+		//      expression tree. Hoisting the same subquery twice could result
+		//      in query plans where two children of an expression have
+		//      intersecting columns (see #114703).
+		//
 		// TODO(mgartner): We could hoist if we have an IS NOT DISTINCT FROM
 		// expression. But it won't currently lead to a lookup join due to
 		// #100855 and the plan could be worse, so we avoid it for now.
 		if c.f.evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries {
 			_, isLeftVar := scalar.Child(0).(*memo.VariableExpr)
-			_, isRightSubquery := scalar.Child(1).(*memo.SubqueryExpr)
-			if isLeftVar && isRightSubquery {
+			subquery, isRightSubquery := scalar.Child(1).(*memo.SubqueryExpr)
+			if isLeftVar && isRightSubquery &&
+				!c.f.Metadata().IsHoistedUncorrelatedSubquery(subquery) {
 				return true
 			}
 		}
@@ -394,7 +401,7 @@ func (c *CustomFuncs) EnsureKey(in memo.RelExpr) memo.RelExpr {
 
 	// Otherwise, wrap the input in an Ordinality operator.
 	colID := c.f.Metadata().AddColumn("rownum", types.Int)
-	private := memo.OrdinalityPrivate{ColID: colID}
+	private := memo.OrdinalityPrivate{ColID: colID, ForDuplicateRemoval: true}
 	return c.f.ConstructOrdinality(in, &private)
 }
 
@@ -735,10 +742,7 @@ func (c *CustomFuncs) ConstructBinary(op opt.Operator, left, right opt.ScalarExp
 // ConstructNoColsRow returns a Values operator having a single row with zero
 // columns.
 func (c *CustomFuncs) ConstructNoColsRow() memo.RelExpr {
-	return c.f.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
-		Cols: opt.ColList{},
-		ID:   c.f.Metadata().NextUniqueID(),
-	})
+	return c.f.ConstructNoColsRow()
 }
 
 // referenceSingleColumn returns a Variable operator that refers to the one and
@@ -824,12 +828,18 @@ func (r *subqueryHoister) hoistAll(scalar opt.ScalarExpr) opt.ScalarExpr {
 		// According to the implementation of deriveHasHoistableSubquery,
 		// Exists, Any, and ArrayFlatten expressions are only hoistable if they
 		// are correlated. Uncorrelated subquery expressions are hoistable if
-		// the corresponding session setting is enabled and they are part of an
-		// equality expression with a variable.
-		uncorrelatedHoistAllowed := scalar.Op() == opt.SubqueryOp &&
-			r.f.evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries
-		if subquery.Relational().OuterCols.Empty() && !uncorrelatedHoistAllowed {
-			break
+		// the corresponding session setting is enabled, they are part of an
+		// equality expression with a variable, and they have not already been
+		// hoisted elsewhere in the expression tree.
+		if subquery.Relational().OuterCols.Empty() {
+			uncorrelatedHoistAllowed := scalar.Op() == opt.SubqueryOp &&
+				r.f.evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries &&
+				!r.f.Metadata().IsHoistedUncorrelatedSubquery(scalar)
+			if !uncorrelatedHoistAllowed {
+				break
+			}
+			// Mark the subquery as being hoisted.
+			r.f.Metadata().AddHoistedUncorrelatedSubquery(scalar)
 		}
 
 		switch t := scalar.(type) {
@@ -1147,8 +1157,8 @@ func (c *CustomFuncs) TryRemapOuterCols(
 }
 
 // tryRemapOuterCols handles the traversal and outer-column replacement for
-// TryRemapOuterCols. It returns the replacement expression and whether an
-// outer-column reference was successfully remapped.
+// TryRemapOuterCols. It returns the replacement expression, which may be
+// unchanged if remapping was not possible.
 func (c *CustomFuncs) tryRemapOuterCols(
 	expr opt.Expr, outerCol opt.ColumnID, substituteCols opt.ColSet,
 ) opt.Expr {
@@ -1160,9 +1170,15 @@ func (c *CustomFuncs) tryRemapOuterCols(
 	switch t := expr.(type) {
 	case *memo.VariableExpr:
 		if t.Col == outerCol {
-			if replaceCol, ok := substituteCols.Next(0); ok {
-				// This outer-column reference can be remapped.
-				return c.f.ConstructVariable(replaceCol)
+			md := c.mem.Metadata()
+			outerColTyp := md.ColumnMeta(outerCol).Type
+			replaceCol, ok := substituteCols.Next(0)
+			for ; ok; replaceCol, ok = substituteCols.Next(replaceCol + 1) {
+				if outerColTyp.Identical(md.ColumnMeta(replaceCol).Type) {
+					// Only perform the replacement if the types are identical.
+					// This outer-column reference can be remapped.
+					return c.f.ConstructVariable(replaceCol)
+				}
 			}
 		}
 	case memo.RelExpr:

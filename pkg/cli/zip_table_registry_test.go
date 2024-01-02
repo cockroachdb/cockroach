@@ -11,11 +11,18 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestQueryForTable(t *testing.T) {
@@ -133,4 +140,75 @@ you must redact them at the SQL level.`
 			t.Fatalf(errFmtString, table)
 		}
 	}
+}
+
+func executeAllCustomQuerys(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, tableRegistry DebugZipTableRegistry,
+) {
+	for table, regConfig := range tableRegistry {
+		if regConfig.customQueryRedacted != "" {
+			rows := sqlDB.Query(t, regConfig.customQueryRedacted)
+			require.NoError(t, rows.Err(), "failed to select for table %s redacted", table)
+		}
+
+		if regConfig.customQueryUnredacted != "" {
+			rows := sqlDB.Query(t, regConfig.customQueryUnredacted)
+			require.NoError(t, rows.Err(), "failed to select for table %s unredacted", table)
+		}
+	}
+}
+
+func TestCustomQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cluster := serverutils.StartCluster(t, 1 /* numNodes */, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// The zip queries include queries that are only meant to work
+			// in a system tenant. These would fail if pointed to a
+			// secondary tenant.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+	})
+	defer cluster.Stopper().Stop(context.Background())
+	testConn := cluster.ServerConn(0 /* idx */)
+	sqlDB := sqlutils.MakeSQLRunner(testConn)
+
+	executeAllCustomQuerys(t, sqlDB, zipInternalTablesPerCluster)
+	executeAllCustomQuerys(t, sqlDB, zipInternalTablesPerNode)
+	executeAllCustomQuerys(t, sqlDB, zipSystemTables)
+}
+
+func executeSelectOnNonSensitiveColumns(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, tableRegistry DebugZipTableRegistry,
+) {
+
+	for table, regConfig := range tableRegistry {
+		if len(regConfig.nonSensitiveCols) != 0 {
+			columns := strings.Join(regConfig.nonSensitiveCols[:], ",")
+			rows := sqlDB.Query(t, fmt.Sprintf("SELECT %s FROM %s", columns, table))
+			require.NoError(t, rows.Err(), "failed to select non sensitive columns on table %s", table)
+		}
+	}
+}
+
+func TestNonSensitiveColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cluster := serverutils.StartCluster(t, 1 /* numNodes */, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// The zip queries include queries that are only meant to work
+			// in a system tenant. These would fail if pointed to a
+			// secondary tenant.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+	})
+	defer cluster.Stopper().Stop(context.Background())
+	testConn := cluster.ServerConn(0 /* idx */)
+	sqlDB := sqlutils.MakeSQLRunner(testConn)
+
+	executeSelectOnNonSensitiveColumns(t, sqlDB, zipInternalTablesPerCluster)
+	executeSelectOnNonSensitiveColumns(t, sqlDB, zipInternalTablesPerNode)
+	executeSelectOnNonSensitiveColumns(t, sqlDB, zipSystemTables)
 }

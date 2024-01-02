@@ -1,0 +1,709 @@
+# LogicTest: !local-mixed-23.1
+
+statement ok
+CREATE TABLE xy (x INT, y INT);
+
+subtest cast
+
+# Cast to REFCURSOR.
+query T
+SELECT 'foo'::REFCURSOR;
+----
+foo
+
+# Cast to REFCURSOR using the vectorized engine.
+query T
+SELECT 'foo'::REFCURSOR FROM generate_series(1, 100) LIMIT 1;
+----
+foo
+
+subtest table
+
+# Table that references REFCURSOR.
+statement ok
+CREATE TABLE t (x REFCURSOR, y REFCURSOR[]);
+INSERT INTO t VALUES ('foo', '{bar}'), ('baz', '{}');
+
+# Add a REFCURSOR column.
+statement ok
+ALTER TABLE xy ADD COLUMN curs REFCURSOR;
+
+statement ok
+INSERT INTO xy VALUES (1, 2, 'foo');
+
+query IIT
+SELECT * FROM xy;
+----
+1  2  foo
+
+# Alter a column type to REFCURSOR.
+statement ok
+DROP TABLE IF EXISTS xy;
+CREATE TABLE xy (x INT, y TEXT);
+SET enable_experimental_alter_column_type_general=true;
+
+statement ok
+ALTER TABLE xy ALTER COLUMN y TYPE REFCURSOR;
+
+statement ok
+INSERT INTO xy VALUES (1, 'bar');
+
+query IT
+SELECT * FROM xy;
+----
+1  bar
+
+# Create a partial index that uses the REFCURSOR type.
+statement ok
+CREATE INDEX part ON xy (x) WHERE y::REFCURSOR::TEXT <= 'bar';
+
+query IT
+SELECT * FROM xy@part WHERE y::REFCURSOR::TEXT <= 'bar';
+----
+1  bar
+
+# Add a check constraint that uses the REFCURSOR type.
+statement ok
+ALTER TABLE xy ADD CONSTRAINT bar CHECK (y::REFCURSOR::TEXT <= 'bar');
+
+query IT
+SELECT * FROM xy;
+----
+1  bar
+
+subtest type
+
+# UDT that references REFCURSOR.
+statement ok
+CREATE TYPE typ AS (x INT, y REFCURSOR);
+
+query T
+SELECT (100, 'bar')::typ;
+----
+(100,bar)
+
+subtest function
+
+# Function that returns REFCURSOR.
+statement ok
+CREATE FUNCTION f() RETURNS REFCURSOR AS $$
+  SELECT 'foo'::REFCURSOR;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f();
+----
+foo
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS REFCURSOR AS $$
+  BEGIN
+    RETURN 'foo'::REFCURSOR;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+foo
+
+statement ok
+DROP FUNCTION f;
+
+# Function that takes REFCURSOR argument.
+statement ok
+CREATE FUNCTION f(curs REFCURSOR) RETURNS INT AS $$
+  SELECT 0;
+$$ LANGUAGE SQL;
+
+query I
+SELECT f('foo');
+----
+0
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f(curs REFCURSOR) RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f('foo');
+----
+0
+
+statement ok
+DROP FUNCTION f;
+
+# Function that references REFCURSOR internally.
+statement ok
+CREATE FUNCTION f() RETURNS INT AS $$
+  SELECT 'foo'::REFCURSOR;
+  SELECT 0;
+$$ LANGUAGE SQL;
+
+query I
+SELECT f();
+----
+0
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    SELECT 'foo'::REFCURSOR;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+0
+
+statement ok
+DROP FUNCTION f;
+
+# Function that returns a composite type with REFCURSOR component.
+statement ok
+CREATE FUNCTION f() RETURNS typ AS $$
+  SELECT (1, 'foo'::REFCURSOR);
+$$ LANGUAGE SQL;
+
+query T
+SELECT f();
+----
+(1,foo)
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS typ AS $$
+  BEGIN
+    RETURN (1, 'foo'::REFCURSOR);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+(1,foo)
+
+subtest error
+
+statement error pgcode 42804 pq: incompatible type for COLLATE: refcursor
+SELECT 'foo'::REFCURSOR COLLATE en;
+
+# REFCURSOR does not have a width.
+statement error pgcode 42601 syntax error
+SELECT 'foo'::REFCURSOR(2);
+
+# Testing casts.
+statement ok
+CREATE TABLE implicit_types (
+  a TEXT, b CHAR, c VARCHAR, d NAME, e INT, f FLOAT, g DECIMAL, h BOOL,
+  i INTERVAL, j DATE, k TIMESTAMP, l REFCURSOR
+);
+
+# Only the string types can be explicitly cast to REFCURSOR.
+subtest explicit_cast_to
+
+query T
+SELECT NULL::REFCURSOR;
+----
+NULL
+
+query T
+SELECT 'foo'::TEXT::REFCURSOR;
+----
+foo
+
+query T
+SELECT 'a'::CHAR::REFCURSOR;
+----
+a
+
+query T
+SELECT 'foo'::VARCHAR::REFCURSOR;
+----
+foo
+
+query T
+SELECT 'foo'::NAME::REFCURSOR;
+----
+foo
+
+statement error pgcode 42846 pq: invalid cast: int -> refcursor
+SELECT 1::INT::REFCURSOR;
+
+statement error pgcode 42846 pq: invalid cast: float -> refcursor
+SELECT 1.0::FLOAT::REFCURSOR;
+
+statement error pgcode 42846 pq: invalid cast: decimal -> refcursor
+SELECT 1.0::DECIMAL::REFCURSOR;
+
+statement error pgcode 42846 pq: invalid cast: bool -> refcursor
+SELECT False::REFCURSOR;
+
+statement error pgcode 42846 pq: invalid cast: interval -> refcursor
+SELECT '34h2s'::INTERVAL::REFCURSOR;
+
+statement error pgcode 42846 pq: invalid cast: date -> refcursor
+SELECT '2015-08-30'::DATE::REFCURSOR;
+
+statement error pgcode 42846 pq: invalid cast: timestamp -> refcursor
+SELECT '2015-08-30 03:34:45.34567'::TIMESTAMP::REFCURSOR;
+
+# Only the string types can be explicitly cast from REFCURSOR.
+subtest explicit_cast_from
+
+query T
+SELECT 'foo'::REFCURSOR::TEXT;
+----
+foo
+
+query T
+SELECT 'a'::REFCURSOR::CHAR;
+----
+a
+
+query T
+SELECT 'foo'::REFCURSOR::VARCHAR;
+----
+foo
+
+query T
+SELECT 'foo'::REFCURSOR::NAME;
+----
+foo
+
+statement error pgcode 42846 pq: invalid cast: refcursor -> int
+SELECT '1'::REFCURSOR::INT;
+
+statement error pgcode 42846 pq: invalid cast: refcursor -> float
+SELECT '1.0'::REFCURSOR::FLOAT;
+
+statement error pgcode 42846 pq: invalid cast: refcursor -> decimal
+SELECT '1.0'::REFCURSOR::DECIMAL;
+
+statement error pgcode 42846 pq: invalid cast: refcursor -> bool
+SELECT 'False'::REFCURSOR::BOOL;
+
+statement error pgcode 42846 pq: invalid cast: refcursor -> interval
+SELECT '34h2s'::REFCURSOR::INTERVAL;
+
+statement error pgcode 42846 pq: invalid cast: refcursor -> date
+SELECT '2015-08-30'::REFCURSOR::DATE;
+
+statement error pgcode 42846 pq: invalid cast: refcursor -> timestamp
+SELECT '2015-08-30 03:34:45.34567'::REFCURSOR::TIMESTAMP;
+
+# There are no implicit casts to REFCURSOR.
+subtest implicit_cast_to
+
+statement ok
+INSERT INTO implicit_types(l) VALUES (NULL);
+
+statement error pgcode 42804 pq: value type string doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES ('foo'::TEXT);
+
+statement error pgcode 42804 pq: value type char doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES ('a'::CHAR);
+
+statement error pgcode 42804 pq: value type varchar doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES ('foo'::VARCHAR);
+
+statement error pgcode 42804 pq: value type name doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES ('foo'::NAME);
+
+statement error pgcode 42804 pq: value type int doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES (1::INT);
+
+statement error pgcode 42804 pq: value type float doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES (1.0::FLOAT);
+
+statement error pgcode 42804 pq: value type decimal doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES (1.0::DECIMAL);
+
+statement error pgcode 42804 pq: value type bool doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES (False::BOOL);
+
+statement error pgcode 42804 pq: value type interval doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES ('34h2s'::INTERVAL);
+
+statement error pgcode 42804 pq: value type date doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES ('2015-08-30'::DATE);
+
+statement error pgcode 42804 pq: value type timestamp doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES ('2015-08-30 03:34:45.34567'::TIMESTAMP);
+
+# Only the strings types can be implicitly casted from refcursor.
+subtest implicit_cast_from
+
+statement ok
+INSERT INTO implicit_types(a) VALUES ('foo'::REFCURSOR);
+
+statement ok
+INSERT INTO implicit_types(b) VALUES ('a'::REFCURSOR);
+
+statement ok
+INSERT INTO implicit_types(c) VALUES ('foo'::REFCURSOR);
+
+statement ok
+INSERT INTO implicit_types(d) VALUES ('foo'::REFCURSOR);
+
+statement error pgcode 42804 pq: value type refcursor doesn't match type int of column \"e\"
+INSERT INTO implicit_types(e) VALUES ('1'::REFCURSOR);
+
+statement error pgcode 42804 pq: value type refcursor doesn't match type float of column \"f\"
+INSERT INTO implicit_types(f) VALUES ('1.0'::REFCURSOR);
+
+statement error pgcode 42804 pq: value type refcursor doesn't match type decimal of column \"g\"
+INSERT INTO implicit_types(g) VALUES ('1.0'::REFCURSOR);
+
+statement error pgcode 42804 pq: value type refcursor doesn't match type bool of column \"h\"
+INSERT INTO implicit_types(h) VALUES ('False'::REFCURSOR);
+
+statement error pgcode 42804 pq: value type refcursor doesn't match type interval of column \"i\"
+INSERT INTO implicit_types(i) VALUES ('34h2s'::REFCURSOR);
+
+statement error pgcode 42804 pq: value type refcursor doesn't match type date of column \"j\"
+INSERT INTO implicit_types(j) VALUES ('2015-08-30'::REFCURSOR);
+
+statement error pgcode 42804 pq: value type refcursor doesn't match type timestamp of column \"k\"
+INSERT INTO implicit_types(k) VALUES ('2015-08-30 03:34:45.34567'::REFCURSOR);
+
+query TTTTIRRBTTTT rowsort
+SELECT * FROM implicit_types;
+----
+NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL
+foo   NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL
+NULL  a     NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL
+NULL  NULL  foo   NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL
+NULL  NULL  NULL  foo   NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL
+
+# REFCURSOR doesn't support any comparisons (with an exception mentioned below).
+subtest comparisons
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR = 'foo'::REFCURSOR;
+
+# TODO(drewk): The error code should be 42883.
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR = 'foo'::TEXT;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR = NULL;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR < 'foo'::REFCURSOR;
+
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR < 'foo'::TEXT;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR < NULL;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR > 'foo'::REFCURSOR;
+
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR > 'foo'::TEXT;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR > NULL;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR <= 'foo'::REFCURSOR;
+
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR <= 'foo'::TEXT;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR <= NULL;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR >= 'foo'::REFCURSOR;
+
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR >= 'foo'::TEXT;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR >= NULL;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS DISTINCT FROM 'foo'::REFCURSOR;
+
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS DISTINCT FROM 'foo'::TEXT;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM 'foo'::REFCURSOR;
+
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM 'foo'::TEXT;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR BETWEEN 'foo'::REFCURSOR AND 'bar'::REFCURSOR;
+
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR BETWEEN 'foo'::TEXT AND 'bar'::TEXT;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR BETWEEN NULL AND NULL;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT NULLIF('foo'::REFCURSOR, 'bar'::REFCURSOR);
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT NULLIF('foo'::REFCURSOR, NULL);
+
+# Regression test for #112010 - REFCURSOR should allow IS NULL and
+# IS NOT NULL comparisons.
+subtest is_null
+
+query B
+SELECT 'foo'::REFCURSOR IS NULL;
+----
+false
+
+query B
+SELECT 'foo'::REFCURSOR IS NOT NULL;
+----
+true
+
+query B
+SELECT 'foo'::REFCURSOR IS DISTINCT FROM NULL;
+----
+true
+
+query B
+SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM NULL;
+----
+false
+
+# REFCURSOR columns are allowed.
+query B rowsort
+SELECT l IS NULL FROM implicit_types;
+----
+true
+true
+true
+true
+true
+
+query B rowsort
+SELECT l IS NOT NULL FROM implicit_types;
+----
+false
+false
+false
+false
+false
+
+query B rowsort
+SELECT l IS DISTINCT FROM NULL FROM implicit_types;
+----
+false
+false
+false
+false
+false
+
+query B rowsort
+SELECT l IS NOT DISTINCT FROM NULL FROM implicit_types;
+----
+true
+true
+true
+true
+true
+
+# Comparison with column is not allowed.
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS DISTINCT FROM l FROM implicit_types;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM l FROM implicit_types;
+
+# Comparison with typed NULL is not allowed.
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS DISTINCT FROM (NULL::REFCURSOR);
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM (NULL::REFCURSOR);
+
+# Comparison with CASE expression is not allowed.
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS DISTINCT FROM (CASE WHEN true THEN NULL ELSE 1 END);
+
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM (CASE WHEN true THEN NULL ELSE 1 END);
+
+# The CASE operator is folded into an untyped NULL.
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS DISTINCT FROM (CASE WHEN true THEN NULL ELSE NULL END);
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM (CASE WHEN true THEN NULL ELSE NULL END);
+
+# The CASE operator is folded into a typed NULL.
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS DISTINCT FROM (CASE WHEN true THEN NULL ELSE NULL::REFCURSOR END);
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM (CASE WHEN true THEN NULL ELSE NULL::REFCURSOR END);
+
+# Regression test for #112099 - REFCURSOR is not valid as an index column.
+subtest refcursor_index
+
+statement ok
+CREATE TABLE t112099_no_index (x INT NOT NULL, y TEXT NOT NULL, r REFCURSOR NOT NULL);
+
+# REFCURSOR is not allowed in a primary key.
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+CREATE TABLE t112099 (r REFCURSOR PRIMARY KEY);
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+CREATE TABLE t112099 (x INT, y TEXT, r REFCURSOR, PRIMARY KEY (x, r, y));
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+ALTER TABLE t112099_no_index ADD PRIMARY KEY (r);
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+ALTER TABLE t112099_no_index ADD PRIMARY KEY (x, r, y);
+
+# REFCURSOR is not allowed in a secondary index.
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+CREATE TABLE t112099 (r REFCURSOR, INDEX (r));
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+CREATE TABLE t112099 (x INT, y TEXT, r REFCURSOR, INDEX (x, r, y));
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+CREATE INDEX ON t112099_no_index (r);
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+CREATE INDEX ON t112099_no_index (x, r, y);
+
+# Regression test for #115701 - REFCURSOR[] is not a valid index column.
+subtest refcursor[]_array_index
+
+statement ok
+CREATE TABLE t115701_no_index (x INT NOT NULL, y TEXT NOT NULL, r REFCURSOR[] NOT NULL);
+
+# REFCURSOR[] is not allowed in a primary key.
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+CREATE TABLE t115701 (r REFCURSOR[] PRIMARY KEY);
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+CREATE TABLE t115701 (x INT, y TEXT, r REFCURSOR[], PRIMARY KEY (x, r, y));
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+ALTER TABLE t115701_no_index ADD PRIMARY KEY (r);
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+ALTER TABLE t115701_no_index ADD PRIMARY KEY (x, r, y);
+
+# REFCURSOR[] is not allowed in a secondary index.
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+CREATE TABLE t115701 (r REFCURSOR[], INDEX (r));
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+CREATE TABLE t115701 (x INT, y TEXT, r REFCURSOR[], INDEX (x, r, y));
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+CREATE INDEX ON t115701_no_index (r);
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+CREATE INDEX ON t115701_no_index (x, r, y);
+
+statement error pgcode 0A000 pq: column r of type refcursor\[\] is not allowed as the last column in an inverted index
+CREATE INDEX ON t115701_no_index USING GIN (r)
+
+skipif config local-legacy-schema-changer
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+CREATE INDEX ON t115701_no_index USING GIN (x, r, y gin_trgm_ops)
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 0A000  pq: column r of type refcursor\[\] is only allowed as the last column in an inverted index
+CREATE INDEX ON t115701_no_index USING GIN (x, r, y gin_trgm_ops)
+
+# REFCURSOR is allowed as a STORING column.
+statement ok
+CREATE TABLE t112099 (x INT, r REFCURSOR, INDEX (x) STORING (r));
+DROP TABLE t112099;
+
+statement ok
+CREATE TABLE t112099 (x INT, y TEXT, r REFCURSOR, INDEX (x) STORING (y, r));
+DROP TABLE t112099;
+
+statement ok
+CREATE INDEX ON t112099_no_index (x) STORING (r);
+
+statement ok
+CREATE INDEX ON t112099_no_index (x) STORING (y, r);
+
+statement ok
+DROP TABLE t112099_no_index;
+
+subtest functions
+
+# String functions are not allowed.
+statement error pgcode 22023 pq: unsupported binary operator
+SELECT x || x FROM t;
+
+# Min/max are not allowed for REFCURSOR.
+statement error pgcode 42883 pq: unknown signature: min\(refcursor\)
+SELECT min(x) FROM t;
+
+statement error pgcode 42883 pq: unknown signature: max\(refcursor\)
+SELECT max(x) FROM t;
+
+# TODO(#113651): Min/max should work with REFCURSOR[].
+statement error pgcode 42883 pq: unknown signature
+SELECT min(y) FROM t;
+
+statement error pgcode 42883 pq: unknown signature
+SELECT max(y) FROM t;
+
+# Any-type-matching window functions are allowed.
+query TTTT rowsort
+SELECT lag(x) OVER w, lead(x) OVER w, first_value(x) OVER w, last_value(x) OVER w FROM t WINDOW w AS (ORDER BY x);
+----
+NULL  foo   baz  baz
+baz   NULL  baz  foo
+
+# TODO(#113651): Window functions should work with REFCURSOR[].
+statement error pgcode 42883 pq: unknown signature
+SELECT lag(y) OVER w, lead(y) OVER w, first_value(y) OVER w, last_value(y) OVER w FROM t WINDOW w AS ();
+
+# Array functions are allowed.
+query TT
+SELECT array_agg(x ORDER BY x, y), array_cat_agg(y ORDER BY x, y) FROM t;
+----
+{baz,foo}  {bar}
+
+query TT
+SELECT array_append(y, x), array_prepend(x, y) FROM t ORDER BY x, y;
+----
+{baz}      {baz}
+{bar,foo}  {foo,bar}
+
+query TT
+SELECT array_remove(y, 'baz'), array_replace(y, 'baz', 'foo') FROM t ORDER BY x, y;
+----
+{}     {}
+{bar}  {bar}
+
+subtest end

@@ -66,6 +66,19 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	}
 	rng, _ := randutil.NewTestRand()
 
+	// Ensure that coldata-batch-size is in [MinBatchSize, 1024] range. If the
+	// batch size becomes too large, then the test will use multiple GBs of RAM
+	// which might lead to OOMs in some environments.
+	const maxBatchSize = 1024
+	if oldBatchSize := coldata.BatchSize(); oldBatchSize > maxBatchSize {
+		defer func() {
+			require.NoError(t, coldata.SetBatchSizeForTests(oldBatchSize))
+		}()
+		newBatchSize := colexectestutils.MinBatchSize + rng.Intn(maxBatchSize-colexectestutils.MinBatchSize+1)
+		require.NoError(t, coldata.SetBatchSizeForTests(newBatchSize))
+		t.Logf("coldata-batch-size overridden to %d", newBatchSize)
+	}
+
 	// Use the Bytes type because we can control the size of values with it
 	// easily.
 	typs := []*types.T{types.Bytes}

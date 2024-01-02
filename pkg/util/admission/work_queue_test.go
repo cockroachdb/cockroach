@@ -208,6 +208,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				timeSource = timeutil.NewManualTime(initialTime)
 				opts.timeSource = timeSource
 				opts.disableEpochClosingGoroutine = true
+				opts.disableGCTenantsAndResetUsed = true
 				st = cluster.MakeTestingClusterSettings()
 				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 					KVWork, tg, st, metrics, opts).(*WorkQueue)
@@ -289,7 +290,11 @@ func TestWorkQueueBasic(t *testing.T) {
 				if !work.admitted {
 					return fmt.Sprintf("id not admitted: %d\n", id)
 				}
-				q.AdmittedWorkDone(work.tenantID)
+				cpuTime := int64(1)
+				if d.HasArg("cpu-time") {
+					d.ScanArgs(t, "cpu-time", &cpuTime)
+				}
+				q.AdmittedWorkDone(work.tenantID, time.Duration(cpuTime))
 				wrkMap.delete(id)
 				return buf.stringAndReset()
 
@@ -322,6 +327,10 @@ func TestWorkQueueBasic(t *testing.T) {
 				timeSource.Advance(time.Duration(millis) * time.Millisecond)
 				EpochLIFOEnabled.Override(context.Background(), &st.SV, true)
 				q.tryCloseEpoch(timeSource.Now())
+				return q.String()
+
+			case "gc-tenants-and-reset-used":
+				q.gcTenantsAndResetUsed()
 				return q.String()
 
 			default:
@@ -406,7 +415,7 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 				// This hot loop with GC calls is able to trigger the previously buggy
 				// code by squeezing in multiple times between the token grant and
 				// cancellation.
-				q.gcTenantsAndResetTokens()
+				q.gcTenantsAndResetUsed()
 			}
 		}
 	}()
@@ -536,7 +545,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 						tg[admissionpb.RegularWorkClass],
 						tg[admissionpb.ElasticWorkClass],
 					},
-					st, metrics, opts, nil /* testing knobs */, &NoopOnLogEntryAdmitted{}, &mockCoordMu).(*StoreWorkQueue)
+					st, metrics, opts, nil /* testing knobs */, &noopOnLogEntryAdmitted{}, metric.NewCounter(metric.Metadata{}), &mockCoordMu).(*StoreWorkQueue)
 				tg[admissionpb.RegularWorkClass].r = q.getRequesters()[admissionpb.RegularWorkClass]
 				tg[admissionpb.ElasticWorkClass].r = q.getRequesters()[admissionpb.ElasticWorkClass]
 				wrkMap.resetMap()
@@ -657,13 +666,14 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				return buf.stringAndReset()
 
 			case "stats-to-ignore":
-				var ingestedBytes, ingestedIntoL0Bytes int
+				var ingestedBytes, ingestedIntoL0Bytes, writeBytes int
 				d.ScanArgs(t, "ingested-bytes", &ingestedBytes)
 				d.ScanArgs(t, "ingested-into-L0-bytes", &ingestedIntoL0Bytes)
+				d.ScanArgs(t, "write-bytes", &writeBytes)
 				q.StatsToIgnore(pebble.IngestOperationStats{
 					Bytes:                     uint64(ingestedBytes),
 					ApproxIngestedIntoL0Bytes: uint64(ingestedIntoL0Bytes),
-				})
+				}, uint64(writeBytes))
 				return printQueue()
 
 			case "print":

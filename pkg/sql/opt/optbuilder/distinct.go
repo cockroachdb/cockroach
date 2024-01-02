@@ -89,6 +89,7 @@ func (b *Builder) buildDistinctOn(
 	var seen opt.ColSet
 	for _, col := range inScope.ordering {
 		if !distinctOnCols.Contains(col.ID()) {
+			colIsValid := false
 			scopeCol := inScope.getColumn(col.ID())
 			if scopeCol != nil {
 				if isExpr, ok := scopeCol.scalar.(*memo.IsExpr); ok {
@@ -96,16 +97,21 @@ func (b *Builder) buildDistinctOn(
 						if v, ok := isExpr.Left.(*memo.VariableExpr); ok {
 							if distinctOnCols.Contains(v.Col) {
 								// We have a col IS NULL expression (case 3 above).
-								continue
+								// Add the new column to distinctOnCols, since it doesn't change
+								// the semantics of the DISTINCT ON.
+								distinctOnCols.Add(col.ID())
+								colIsValid = true
 							}
 						}
 					}
 				}
 			}
-			panic(pgerror.Newf(
-				pgcode.InvalidColumnReference,
-				"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
-			))
+			if !colIsValid {
+				panic(pgerror.Newf(
+					pgcode.InvalidColumnReference,
+					"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
+				))
+			}
 		}
 		seen.Add(col.ID())
 		if seen.Equals(distinctOnCols) {
@@ -138,9 +144,7 @@ func (b *Builder) buildDistinctOn(
 	outScope = inScope.replace()
 	outScope.cols = make([]scopeColumn, 0, len(inScope.cols))
 	// Add the output columns.
-	for i := range inScope.cols {
-		outScope.cols = append(outScope.cols, inScope.cols[i])
-	}
+	outScope.cols = append(outScope.cols, inScope.cols...)
 
 	// Add any extra ON columns.
 	outScope.extraCols = make([]scopeColumn, 0, len(inScope.extraCols))

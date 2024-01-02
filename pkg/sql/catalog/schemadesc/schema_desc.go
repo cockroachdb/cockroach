@@ -336,6 +336,15 @@ func (desc *immutable) HasConcurrentSchemaChanges() bool {
 		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID
 }
 
+// ConcurrentSchemaChangeJobIDs implements catalog.Descriptor.
+func (desc *immutable) ConcurrentSchemaChangeJobIDs() (ret []catpb.JobID) {
+	if desc.DeclarativeSchemaChangerState != nil &&
+		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID {
+		ret = append(ret, desc.DeclarativeSchemaChangerState.JobID)
+	}
+	return ret
+}
+
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *Mutable) MaybeIncrementVersion() {
 	// Already incremented, no-op.
@@ -480,6 +489,11 @@ func (desc *immutable) GetObjectType() privilege.ObjectType {
 	return privilege.Schema
 }
 
+// GetObjectTypeString implements the Object interface.
+func (desc *immutable) GetObjectTypeString() string {
+	return string(privilege.Schema)
+}
+
 // GetResolvedFuncDefinition implements the SchemaDescriptor interface.
 // TODO(mgartner): This should not create tree.Overloads because it cannot fully
 // populated them.
@@ -497,12 +511,16 @@ func (desc *immutable) GetResolvedFuncDefinition(
 	for i := range funcDescPb.Signatures {
 		sig := &funcDescPb.Signatures[i]
 		retType := sig.ReturnType
+		routineType := tree.UDFRoutine
+		if sig.IsProcedure {
+			routineType = tree.ProcedureRoutine
+		}
 		overload := &tree.Overload{
 			Oid: catid.FuncIDToOID(sig.ID),
 			ReturnType: func(args []tree.TypedExpr) *types.T {
 				return retType
 			},
-			IsUDF:                    true,
+			Type:                     routineType,
 			UDFContainsOnlySignature: true,
 		}
 		if funcDescPb.Signatures[i].ReturnSet {

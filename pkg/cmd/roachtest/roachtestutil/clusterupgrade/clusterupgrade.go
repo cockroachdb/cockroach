@@ -15,26 +15,86 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 )
 
-const (
-	// MainVersion is the sentinel used to represent that the binary
-	// passed to roachtest should be uploaded when `version` is left
-	// unspecified.
-	MainVersion = ""
+var (
+	TestBuildVersion *version.Version
+
+	currentBranch = os.Getenv("TC_BUILD_BRANCH")
 )
+
+// Version is a thin wrapper around the `version.Version` struct that
+// provides convenient utility function to pretty print versions and
+// check whether this is the current version being tested.
+type Version struct {
+	version.Version
+}
+
+// String returns the string representation of this version. For
+// convenience, if this version represents the current version being
+// tested, we print the branch name being tested if the test is
+// running on TeamCity, to make it clearer (instead of "<current>").
+func (v *Version) String() string {
+	if v.IsCurrent() {
+		if currentBranch != "" {
+			return currentBranch
+		}
+
+		return "<current>"
+	}
+
+	return v.Version.String()
+}
+
+// IsCurrent returns whether this version corresponds to the current
+// version being tested.
+func (v *Version) IsCurrent() bool {
+	return v.Version.Compare(&CurrentVersion().Version) == 0
+}
+
+// AtLeast is a thin wrapper around `(*version.Version).AtLeast`,
+// allowing two `Version` objects to be compared directly.
+func (v *Version) AtLeast(other *Version) bool {
+	return v.Version.AtLeast(&other.Version)
+}
+
+// CurrentVersion returns the version associated with the current
+// build.
+func CurrentVersion() *Version {
+	if TestBuildVersion != nil {
+		return &Version{*TestBuildVersion} // test-only
+	}
+
+	return &Version{*version.MustParse(build.BinaryVersion())}
+}
+
+// MustParseVersion parses the version string given (with or without
+// leading 'v') and returns the corresponding `Version` object.
+func MustParseVersion(v string) *Version {
+	versionStr := v
+	if !strings.HasPrefix(v, "v") {
+		versionStr = "v" + v
+	}
+
+	return &Version{*version.MustParse(versionStr)}
+}
 
 // BinaryVersion returns the binary version running on the node
 // associated with the given database connection.
@@ -70,44 +130,120 @@ func ClusterVersion(ctx context.Context, db *gosql.DB) (roachpb.Version, error) 
 	return roachpb.ParseVersion(sv)
 }
 
-// UploadVersion uploads the specified crdb version to the given
-// nodes. It returns the path of the uploaded binaries on the nodes,
-// suitable to be used with `roachdprod start --binary=<path>`.
-func UploadVersion(
+// UploadCockroach stages the cockroach binary in the nodes.
+// Convenience function, see `uploadBinaryVersion` for more details.
+func UploadCockroach(
 	ctx context.Context,
 	t test.Test,
 	l *logger.Logger,
 	c cluster.Cluster,
 	nodes option.NodeListOption,
-	newVersion string,
+	v *Version,
 ) (string, error) {
-	binaryName := "./cockroach"
-	if newVersion == MainVersion {
-		if err := c.PutE(ctx, l, t.Cockroach(), binaryName, nodes); err != nil {
-			return "", err
+	return uploadBinaryVersion(ctx, t, l, "cockroach", c, nodes, v)
+}
+
+// UploadWorkload stages the workload binary in the nodes.
+// Convenience function, see `uploadBinaryVersion` for more details.
+// The boolean return value indicates whether a workload binary was
+// uploaded to the nodes; a `false` value indicates that the version
+// passed is too old and no binary is available.
+func UploadWorkload(
+	ctx context.Context,
+	t test.Test,
+	l *logger.Logger,
+	c cluster.Cluster,
+	nodes option.NodeListOption,
+	v *Version,
+) (string, bool, error) {
+	// minWorkloadBinaryVersion is the minimum version for which we have
+	// `workload` binaries available.
+	var minWorkloadBinaryVersion *Version
+	switch c.Architecture() {
+	case vm.ArchARM64:
+		minWorkloadBinaryVersion = MustParseVersion("v23.2.0")
+	default:
+		minWorkloadBinaryVersion = MustParseVersion("v22.2.0")
+	}
+
+	// If we are uploading the `current` version, skip version checking,
+	// as the binary used is the one passed via command line flags.
+	if !v.IsCurrent() && !v.AtLeast(minWorkloadBinaryVersion) {
+		return "", false, nil
+	}
+
+	path, err := uploadBinaryVersion(ctx, t, l, "workload", c, nodes, v)
+	return path, err == nil, err
+}
+
+// uploadBinaryVersion uploads the specified binary associated with
+// the given version to the given nodes. It returns the path of the
+// uploaded binaries on the nodes.
+func uploadBinaryVersion(
+	ctx context.Context,
+	t test.Test,
+	l *logger.Logger,
+	binary string,
+	c cluster.Cluster,
+	nodes option.NodeListOption,
+	v *Version,
+) (string, error) {
+	dstBinary := BinaryPathForVersion(t, v, binary)
+	var defaultBinary string
+	var isOverridden bool
+	switch binary {
+	case "cockroach":
+		defaultBinary, isOverridden = t.VersionsBinaryOverride()[v.String()]
+		if isOverridden {
+			l.Printf("using cockroach binary override for version %s: %s", v, defaultBinary)
+		} else {
+			// Run with standard binary as older versions retrieved through roachprod stage
+			// are not currently available with crdb_test enabled.
+			// TODO(DarrylWong): Compile older versions with crdb_test flag.
+			defaultBinary = t.StandardCockroach()
 		}
-	} else if binary, ok := t.VersionsBinaryOverride()[newVersion]; ok {
-		// If an override has been specified for newVersion, use that binary.
-		l.Printf("using binary override for version %s: %s", newVersion, binary)
-		binaryName = "./cockroach-" + newVersion
-		if err := c.PutE(ctx, l, binary, binaryName, nodes); err != nil {
+	case "workload":
+		defaultBinary = t.DeprecatedWorkload()
+	default:
+		return "", fmt.Errorf("unknown binary name: %s", binary)
+	}
+
+	if v.IsCurrent() || isOverridden {
+		if err := c.PutE(ctx, l, defaultBinary, dstBinary, nodes); err != nil {
 			return "", err
 		}
 	} else {
-		v := "v" + newVersion
-		dir := v
-		binaryName = filepath.Join(dir, "cockroach")
-		// Check if the cockroach binary already exists.
-		if err := c.RunE(ctx, nodes, "test", "-e", binaryName); err != nil {
-			if err := c.RunE(ctx, nodes, "mkdir", "-p", dir); err != nil {
-				return "", err
-			}
-			if err := c.Stage(ctx, l, "release", v, dir, nodes); err != nil {
-				return "", err
-			}
+		dir := filepath.Dir(dstBinary)
+		// Avoid staging the binary if it already exists.
+		if err := c.RunE(ctx, nodes, "test -e", dstBinary); err == nil {
+			return dstBinary, nil
+		}
+
+		// Ensure binary directory exists.
+		if err := c.RunE(ctx, nodes, "mkdir -p", dir); err != nil {
+			return "", err
+		}
+
+		var application, stageVersion string
+		switch binary {
+		case "cockroach":
+			application = "release"
+			stageVersion = v.String()
+		case "workload":
+			application = "workload"
+			// For workload binaries, we do not have a convenient way to get
+			// a build for a specific release. Instead, we stage the binary
+			// for the corresponding release branch, which is good enough in
+			// most cases.
+			stageVersion = fmt.Sprintf("release-%d.%d", v.Major(), v.Minor())
+		}
+
+		if err := c.Stage(ctx, l, application, stageVersion, dir, nodes); err != nil {
+			return "", err
 		}
 	}
-	return BinaryPathFromVersion(newVersion), nil
+
+	return dstBinary, nil
 }
 
 // InstallFixtures copies the previously created fixtures (in
@@ -115,14 +251,16 @@ func UploadVersion(
 // passed. After this step, the corresponding binary can be started on
 // the cluster and it will use that store directory.
 func InstallFixtures(
-	ctx context.Context, l *logger.Logger, c cluster.Cluster, nodes option.NodeListOption, v string,
+	ctx context.Context, l *logger.Logger, c cluster.Cluster, nodes option.NodeListOption, v *Version,
 ) error {
-	c.Run(ctx, nodes, "mkdir -p {store-dir}")
-	vv := version.MustParse("v" + v)
+	if err := c.RunE(ctx, nodes, "mkdir -p {store-dir}"); err != nil {
+		return fmt.Errorf("creating store-dir: %w", err)
+	}
+
 	// The fixtures use cluster version (major.minor) but the input might be
 	// a patch release.
 	name := CheckpointName(
-		roachpb.Version{Major: int32(vv.Major()), Minor: int32(vv.Minor())}.String(),
+		roachpb.Version{Major: int32(v.Major()), Minor: int32(v.Minor())}.String(),
 	)
 	for _, n := range nodes {
 		if err := c.PutE(ctx, l,
@@ -133,32 +271,52 @@ func InstallFixtures(
 		}
 	}
 	// Extract fixture. Fail if there's already an LSM in the store dir.
-	c.Run(ctx, nodes, "ls {store-dir}/marker.* 1> /dev/null 2>&1 && exit 1 || (cd {store-dir} && tar -xf fixture.tgz)")
+	if err := c.RunE(ctx, nodes, "ls {store-dir}/marker.* 1> /dev/null 2>&1 && exit 1 || (cd {store-dir} && tar -xf fixture.tgz)"); err != nil {
+		return fmt.Errorf("extracting fixtures: %w", err)
+	}
+
 	return nil
 }
 
-// StartWithBinary starts a cockroach binary, assumed to already be
-// present in the nodes in the path given.
-func StartWithBinary(
+// StartWithSettings starts cockroach and constructs settings according
+// to the setting options passed.
+func StartWithSettings(
 	ctx context.Context,
 	l *logger.Logger,
 	c cluster.Cluster,
 	nodes option.NodeListOption,
-	binaryPath string,
 	startOpts option.StartOpts,
+	opts ...install.ClusterSettingOption,
 ) error {
-	settings := install.MakeClusterSettings(install.BinaryOption(binaryPath))
+	settings := install.MakeClusterSettings(opts...)
 	return c.StartE(ctx, l, startOpts, settings, nodes)
 }
 
-// BinaryPathFromVersion shows where the binary for the given version
-// can be found on roachprod nodes. It's either `./cockroach` or the
-// path to which a released binary is staged.
-func BinaryPathFromVersion(v string) string {
-	if v == "" {
-		return "./cockroach"
+func CockroachPathForVersion(t test.Test, v *Version) string {
+	return BinaryPathForVersion(t, v, "cockroach")
+}
+
+func WorkloadPathForVersion(t test.Test, v *Version) string {
+	return BinaryPathForVersion(t, v, "workload")
+}
+
+// BinaryPathForVersion shows where a certain binary (typically
+// `cockroach`, `workload`) for the given version is expected to be
+// found on roachprod nodes. The file will only actually exist if
+// there was a previous call to `Upload*` with the same version
+// parameter.
+func BinaryPathForVersion(t test.Test, v *Version, binary string) string {
+	if v.IsCurrent() {
+		if binary == "cockroach" {
+			return test.DefaultCockroachPath
+		}
+		return "./" + binary
+	} else if _, ok := t.VersionsBinaryOverride()[v.String()]; ok && binary == "cockroach" {
+		// If a cockroach override has been specified for `v`, use that binary.
+		return "./cockroach-" + v.String()
+	} else {
+		return filepath.Join(v.String(), binary)
 	}
-	return filepath.Join("v"+v, "cockroach")
 }
 
 // RestartNodesWithNewBinary uploads a given cockroach version to the
@@ -170,7 +328,8 @@ func RestartNodesWithNewBinary(
 	c cluster.Cluster,
 	nodes option.NodeListOption,
 	startOpts option.StartOpts,
-	newVersion string,
+	newVersion *Version,
+	settings ...install.ClusterSettingOption,
 ) error {
 	// NB: We could technically stage the binary on all nodes before
 	// restarting each one, but on Unix it's invalid to write to an
@@ -183,7 +342,7 @@ func RestartNodesWithNewBinary(
 		nodes[i], nodes[j] = nodes[j], nodes[i]
 	})
 	for _, node := range nodes {
-		l.Printf("restarting node %d into version %s", node, VersionMsg(newVersion))
+		l.Printf("restarting node %d into version %s", node, newVersion.String())
 		// Stop the cockroach process gracefully in order to drain it properly.
 		// This makes the upgrade closer to how users do it in production, but
 		// it's also needed to eliminate flakiness. In particular, this will
@@ -196,11 +355,17 @@ func RestartNodesWithNewBinary(
 			return err
 		}
 
-		binary, err := UploadVersion(ctx, t, l, c, c.Node(node), newVersion)
+		binary, err := UploadCockroach(ctx, t, l, c, c.Node(node), newVersion)
 		if err != nil {
 			return err
 		}
-		if err := StartWithBinary(ctx, l, c, c.Node(node), binary, startOpts); err != nil {
+		// Never run init steps when restarting -- these should already
+		// have happened by the time the cluster was first bootstrapped
+		// and trying to run them again just adds noise to the logs.
+		startOpts.RoachprodOpts.SkipInit = true
+		if err := StartWithSettings(
+			ctx, l, c, c.Node(node), startOpts, append(settings, install.BinaryOption(binary))...,
+		); err != nil {
 			return err
 		}
 
@@ -217,34 +382,74 @@ func RestartNodesWithNewBinary(
 	return nil
 }
 
+// DefaultUpgradeTimeout is the default timeout used when waiting for
+// an upgrade to finish (i.e., for all migrations to run and for the
+// cluster version to propagate). This timeout should be sufficient
+// for simple tests where there isn't a lot of data; in other
+// situations, a custom timeout can be passed to
+// `WaitForClusterUpgrade`.
+var DefaultUpgradeTimeout = 10 * time.Minute
+
 // WaitForClusterUpgrade waits for the cluster version to reach the
 // first node's binary version. This function should only be called if
 // every node in the cluster has been restarted to run the same binary
 // version. We rely on the cluster's internal self-upgrading
 // mechanism to update the underlying cluster version.
 func WaitForClusterUpgrade(
-	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, dbFunc func(int) *gosql.DB,
+	ctx context.Context,
+	l *logger.Logger,
+	nodes option.NodeListOption,
+	dbFunc func(int) *gosql.DB,
+	timeout time.Duration,
 ) error {
-	newVersion, err := BinaryVersion(dbFunc(nodes[0]))
+	firstNode := nodes[0]
+	newVersion, err := BinaryVersion(dbFunc(firstNode))
 	if err != nil {
 		return err
 	}
 
-	l.Printf("waiting for cluster to auto-upgrade to %s", newVersion)
-	for _, node := range nodes {
-		err := retry.ForDuration(10*time.Minute, func() error {
+	// waitForUpgrade will wait for the given `node` to have the
+	// expected cluster version within the given timeout.
+	waitForUpgrade := func(node int, timeout time.Duration) error {
+		var latestVersion roachpb.Version
+		var opts retry.Options
+		retryCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		err := opts.Do(retryCtx, func(ctx context.Context) error {
 			currentVersion, err := ClusterVersion(ctx, dbFunc(node))
 			if err != nil {
 				return err
 			}
+
+			latestVersion = currentVersion
 			if currentVersion != newVersion {
-				return fmt.Errorf("%d: expected cluster version %s, got %s", node, newVersion, currentVersion)
+				return fmt.Errorf("not upgraded yet")
 			}
-			l.Printf("%s: acked by n%d", currentVersion, node)
 			return nil
 		})
 		if err != nil {
-			return err
+			return errors.Wrapf(err,
+				"timed out after %s: expected n%d to be at cluster version %s, but is still at %s",
+				timeout, node, newVersion, latestVersion,
+			)
+		}
+		l.Printf("%s: acked by n%d", newVersion, node)
+		return nil
+	}
+
+	l.Printf("waiting for cluster to auto-upgrade to %s for %s", newVersion, timeout)
+	if err := waitForUpgrade(firstNode, timeout); err != nil {
+		return err
+	}
+
+	// Wait for `propagationTimeout` for all other nodes to also
+	// acknowledge the same cluster version as the first node. This
+	// should happen much faster, as migrations should already have
+	// finished at this point.
+	propagationTimeout := 3 * time.Minute
+	for _, node := range nodes[1:] {
+		if err := waitForUpgrade(node, propagationTimeout); err != nil {
+			return fmt.Errorf("n%d is already at %s: %w", firstNode, newVersion, err)
 		}
 	}
 
@@ -257,16 +462,4 @@ func WaitForClusterUpgrade(
 // version.
 func CheckpointName(binaryVersion string) string {
 	return "checkpoint-v" + binaryVersion
-}
-
-// VersionMsg returns a version string to be displayed in logs. It's
-// either the version given, or the "<current>" string to represent
-// the latest cockroach version, typically built off the branch being
-// tested.
-func VersionMsg(v string) string {
-	if v == MainVersion {
-		return "<current>"
-	}
-
-	return v
 }

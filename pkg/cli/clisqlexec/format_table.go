@@ -267,6 +267,9 @@ func (sqlExecCtx *Context) makeReporter(w io.Writer) (rowReporter, func(), error
 	case TableDisplayRawHTML:
 		return &htmlReporter{escape: false, rowStats: false}, nil, nil
 
+	case TableDisplayUnnumberedHTML:
+		return &htmlReporter{escape: true, rowStats: false}, nil, nil
+
 	case TableDisplayRecords:
 		return &recordReporter{}, nil, nil
 

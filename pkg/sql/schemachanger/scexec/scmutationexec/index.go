@@ -411,6 +411,10 @@ func (i *immediateVisitor) AddColumnToIndex(ctx context.Context, op scop.AddColu
 			return colOrdMap.GetDefault(cids[i]) < colOrdMap.GetDefault(cids[j])
 		})
 	}
+	// If this is an inverted column, note that.
+	if indexDesc.Type == descpb.IndexDescriptor_INVERTED && op.ColumnID == indexDesc.InvertedColumnID() {
+		indexDesc.InvertedColumnKinds = append(indexDesc.InvertedColumnKinds, op.InvertedKind)
+	}
 	return nil
 }
 

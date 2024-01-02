@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
@@ -107,7 +106,7 @@ func TestAddSSTQPSStat(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 	})
 
@@ -188,7 +187,7 @@ func TestAddSSTQPSStat(t *testing.T) {
 		// If queries are correctly recorded, we should see increase in query
 		// count by the expected QPS. However, it is possible to to get a
 		// slightly higher number due to interleaving requests. To avoid a
-		// flakey test, we assert that QPS is at least as high as expected,
+		// flaky test, we assert that QPS is at least as high as expected,
 		// then no greater than 4 requests of expected QPS. If this test is
 		// flaky, increase the delta to account for background activity
 		// interleaving with measurements.
@@ -199,7 +198,7 @@ func TestAddSSTQPSStat(t *testing.T) {
 
 // genVariableRead returns a batch request containing, start-end sequential key reads.
 func genVariableRead(ctx context.Context, start, end roachpb.Key) *kvpb.BatchRequest {
-	scan := kvpb.NewScan(start, end, false)
+	scan := kvpb.NewScan(start, end)
 	readBa := &kvpb.BatchRequest{}
 	readBa.Add(scan)
 	return readBa
@@ -219,9 +218,9 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	}
 	args.ServerArgs.Knobs.Store = &StoreTestingKnobs{DisableCanAckBeforeApplication: true}
-	tc := serverutils.StartNewTestCluster(t, 1, args)
+	tc := serverutils.StartCluster(t, 1, args)
 
-	const epsilonAllowed = 4
+	const epsilonAllowed = 5
 
 	defer tc.Stopper().Stop(ctx)
 	ts := tc.Server(0)
@@ -256,51 +255,43 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 	// Disable the consistency checker, to avoid interleaving requests
 	// artificially inflating measurement due to consistency checking.
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.consistency_check.interval = '0'`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.range_split.by_load_enabled = false`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.range_split.by_load.enabled = false`)
 
 	for _, testCase := range testCases {
-		// This test can flake, where an errant request - not sent here
-		// (commonly intent resolution) will artifically inflate the collected
-		// metrics. This results in unexpected read/write statistics and a
-		// flakey test every few hundred runs. Here we assert that the run
-		// should succeed soon, if it fails on the first.
-		testutils.SucceedsSoon(t, func() error {
-			// Reset the request counts to 0 before sending to clear previous requests.
-			repl.loadStats.Reset()
+		// Reset the request counts to 0 before sending to clear previous requests.
+		repl.loadStats.Reset()
 
-			requestsBefore := repl.loadStats.TestingGetSum(load.Requests)
-			writesBefore := repl.loadStats.TestingGetSum(load.WriteKeys)
-			readsBefore := repl.loadStats.TestingGetSum(load.ReadKeys)
-			readBytesBefore := repl.loadStats.TestingGetSum(load.ReadBytes)
-			writeBytesBefore := repl.loadStats.TestingGetSum(load.WriteBytes)
+		requestsBefore := repl.loadStats.TestingGetSum(load.Requests)
+		writesBefore := repl.loadStats.TestingGetSum(load.WriteKeys)
+		readsBefore := repl.loadStats.TestingGetSum(load.ReadKeys)
+		readBytesBefore := repl.loadStats.TestingGetSum(load.ReadBytes)
+		writeBytesBefore := repl.loadStats.TestingGetSum(load.WriteBytes)
 
-			for i := 0; i < testCase.writes; i++ {
-				_, pErr := db.Inc(ctx, scratchKey, 1)
-				require.Nil(t, pErr)
-			}
-			require.Equal(t, 0.0, requestsBefore)
-			require.Equal(t, 0.0, writesBefore)
-			require.Equal(t, 0.0, readsBefore)
-			require.Equal(t, 0.0, writeBytesBefore)
-			require.Equal(t, 0.0, readBytesBefore)
+		for i := 0; i < testCase.writes; i++ {
+			_, pErr := db.Inc(ctx, scratchKey, 1)
+			require.Nil(t, pErr)
+		}
+		require.Equal(t, 0.0, requestsBefore)
+		require.Equal(t, 0.0, writesBefore)
+		require.Equal(t, 0.0, readsBefore)
+		require.Equal(t, 0.0, writeBytesBefore)
+		require.Equal(t, 0.0, readBytesBefore)
 
-			requestsAfter := repl.loadStats.TestingGetSum(load.Requests)
-			writesAfter := repl.loadStats.TestingGetSum(load.WriteKeys)
-			readsAfter := repl.loadStats.TestingGetSum(load.ReadKeys)
-			readBytesAfter := repl.loadStats.TestingGetSum(load.ReadBytes)
-			writeBytesAfter := repl.loadStats.TestingGetSum(load.WriteBytes)
+		requestsAfter := repl.loadStats.TestingGetSum(load.Requests)
+		writesAfter := repl.loadStats.TestingGetSum(load.WriteKeys)
+		readsAfter := repl.loadStats.TestingGetSum(load.ReadKeys)
+		readBytesAfter := repl.loadStats.TestingGetSum(load.ReadBytes)
+		writeBytesAfter := repl.loadStats.TestingGetSum(load.WriteBytes)
 
-			assertGreaterThanInDelta(t, testCase.expectedRQPS, requestsAfter, epsilonAllowed)
-			assertGreaterThanInDelta(t, testCase.expectedWPS, writesAfter, epsilonAllowed)
-			assertGreaterThanInDelta(t, testCase.expectedRPS, readsAfter, epsilonAllowed)
-			assertGreaterThanInDelta(t, testCase.expectedRBPS, readBytesAfter, epsilonAllowed)
-			// NB: We assert that the written bytes is greater than the write
-			// batch request size. However the size multiplication factor,
-			// varies between 3 and 5 so we instead assert that it is greater
-			// than the logical bytes.
-			require.GreaterOrEqual(t, writeBytesAfter, testCase.expectedWBPS)
-			return nil
-		})
+		assertGreaterThanInDelta(t, testCase.expectedRQPS, requestsAfter, epsilonAllowed)
+		assertGreaterThanInDelta(t, testCase.expectedWPS, writesAfter, epsilonAllowed)
+		assertGreaterThanInDelta(t, testCase.expectedRPS, readsAfter, epsilonAllowed)
+		assertGreaterThanInDelta(t, testCase.expectedRBPS, readBytesAfter, epsilonAllowed)
+		// NB: We assert that the written bytes is greater than the write
+		// batch request size. However the size multiplication factor,
+		// varies between 3 and 5 so we instead assert that it is greater
+		// than the logical bytes.
+		require.GreaterOrEqual(t, writeBytesAfter, testCase.expectedWBPS)
 	}
 }
 
@@ -309,7 +300,7 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 	})
 
@@ -322,14 +313,11 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 	const epsilonAllowed = 4
 
 	scratchKey := tc.ScratchRange(t)
-	nextKey := scratchKey.Next()
-
-	scratchKeys := make([]roachpb.Key, 300)
 	sstKeys := make(storageutils.KVs, 300)
 	for i := range sstKeys {
-		scratchKeys[i] = nextKey
-		sstKeys[i] = storageutils.PointKV(nextKey.String(), 1, "value")
-		nextKey = nextKey.Next()
+		// Format each key as /Table/Max/000000001, /Table/Max/000000002, etc.
+		sstKeys[i] = storageutils.PointKV(
+			string(scratchKey)+fmt.Sprintf("%09d", i), 1, "value")
 	}
 	sst, start, end := storageutils.MakeSST(t, ts.ClusterSettings(), sstKeys)
 	sstReq := &kvpb.AddSSTableRequest{
@@ -359,6 +347,10 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 	scanReadBA := &kvpb.BatchRequest{}
 	scanReadBA.Add(scan)
 
+	// NB: Each KV pair is an identical size, 38 bytes. Expect that as the
+	// number of keys being read increases, the read bytes scales by keys * 38.
+	const entrySize = 38
+
 	testCases := []struct {
 		ba           *kvpb.BatchRequest
 		expectedRQPS float64
@@ -368,73 +360,57 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 		expectedRBPS float64
 	}{
 		{getReadBA, 1, 0, 1, 0, 10},
-		{genVariableRead(ctx, start, sstKeys[1].(storage.MVCCKeyValue).Key.Key), 1, 0, 1, 0, 38},
-		{genVariableRead(ctx, start, sstKeys[4].(storage.MVCCKeyValue).Key.Key), 1, 0, 4, 0, 176},
-		{genVariableRead(ctx, start, sstKeys[64].(storage.MVCCKeyValue).Key.Key), 1, 0, 64, 0, 10496},
+		{genVariableRead(ctx, start, sstKeys[1].(storage.MVCCKeyValue).Key.Key), 1, 0, 1, 0, entrySize},
+		{genVariableRead(ctx, start, sstKeys[4].(storage.MVCCKeyValue).Key.Key), 1, 0, 4, 0, 4 * entrySize},
+		{genVariableRead(ctx, start, sstKeys[64].(storage.MVCCKeyValue).Key.Key), 1, 0, 64, 0, 64 * entrySize},
 	}
 
 	store, err := ts.GetStores().(*Stores).GetStore(ts.GetFirstStoreID())
 	require.NoError(t, err)
 
+	// Ensure that the all the keys in the AddSST sent were for the same range.
 	repl := store.LookupReplica(roachpb.RKey(start))
 	require.NotNil(t, repl)
 
 	replEnd := store.LookupReplica(roachpb.RKey(end))
 	require.NotNil(t, repl)
 
-	require.EqualValues(t, repl, replEnd)
+	require.EqualValues(t, repl.Desc().RangeID, replEnd.Desc().RangeID)
 
 	// Disable the consistency checker, to avoid interleaving requests
 	// artificially inflating measurement due to consistency checking.
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.consistency_check.interval = '0'`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.range_split.by_load_enabled = false`)
 
 	for _, testCase := range testCases {
-		// This test can flake, where an errant request - not sent here
-		// (commonly intent resolution) will artifically inflate the collected
-		// metrics. This results in unexpected read/write statistics and a
-		// flakey test every few hundred runs. Here we assert that the run
-		// should succeed soon, if it fails on the first.
-		testutils.SucceedsSoon(t, func() error {
-			// Reset the request counts to 0 before sending to clear previous requests.
-			// Reset the request counts to 0 before sending to clear previous requests.
-			repl.loadStats.Reset()
+		// Reset the request counts to 0 before sending to clear previous requests.
+		repl.loadStats.Reset()
 
-			requestsBefore := repl.loadStats.TestingGetSum(load.Requests)
-			writesBefore := repl.loadStats.TestingGetSum(load.WriteKeys)
-			readsBefore := repl.loadStats.TestingGetSum(load.ReadKeys)
-			readBytesBefore := repl.loadStats.TestingGetSum(load.ReadBytes)
-			writeBytesBefore := repl.loadStats.TestingGetSum(load.WriteBytes)
+		requestsBefore := repl.loadStats.TestingGetSum(load.Requests)
+		writesBefore := repl.loadStats.TestingGetSum(load.WriteKeys)
+		readsBefore := repl.loadStats.TestingGetSum(load.ReadKeys)
+		readBytesBefore := repl.loadStats.TestingGetSum(load.ReadBytes)
+		writeBytesBefore := repl.loadStats.TestingGetSum(load.WriteBytes)
 
-			_, pErr = db.NonTransactionalSender().Send(ctx, testCase.ba)
-			require.Nil(t, pErr)
+		_, pErr = db.NonTransactionalSender().Send(ctx, testCase.ba)
+		require.Nil(t, pErr)
 
-			require.Equal(t, 0.0, requestsBefore)
-			require.Equal(t, 0.0, writesBefore)
-			require.Equal(t, 0.0, readsBefore)
-			require.Equal(t, 0.0, writeBytesBefore)
-			require.Equal(t, 0.0, readBytesBefore)
+		require.Equal(t, 0.0, requestsBefore)
+		require.Equal(t, 0.0, writesBefore)
+		require.Equal(t, 0.0, readsBefore)
+		require.Equal(t, 0.0, writeBytesBefore)
+		require.Equal(t, 0.0, readBytesBefore)
 
-			requestsAfter := repl.loadStats.TestingGetSum(load.Requests)
-			writesAfter := repl.loadStats.TestingGetSum(load.WriteKeys)
-			readsAfter := repl.loadStats.TestingGetSum(load.ReadKeys)
-			readBytesAfter := repl.loadStats.TestingGetSum(load.ReadBytes)
-			writeBytesAfter := repl.loadStats.TestingGetSum(load.WriteBytes)
+		requestsAfter := repl.loadStats.TestingGetSum(load.Requests)
+		writesAfter := repl.loadStats.TestingGetSum(load.WriteKeys)
+		readsAfter := repl.loadStats.TestingGetSum(load.ReadKeys)
+		readBytesAfter := repl.loadStats.TestingGetSum(load.ReadBytes)
+		writeBytesAfter := repl.loadStats.TestingGetSum(load.WriteBytes)
 
-			assertGreaterThanInDelta(t, testCase.expectedRQPS, requestsAfter, epsilonAllowed)
-			assertGreaterThanInDelta(t, testCase.expectedWPS, writesAfter, epsilonAllowed)
-			assertGreaterThanInDelta(t, testCase.expectedRPS, readsAfter, epsilonAllowed)
-			// Increase the allowance for write bytes, as although this should
-			// be zero - there exists some cases where a write will interleave
-			// with our testing. This causes the test to flake if it occurs repeatedly.
-			// TODO(kvoli): This can be determinsitic, with an general
-			// interface that records the type of request or otherwise filters
-			// out unwanted types.
-			assertGreaterThanInDelta(t, testCase.expectedWBPS, writeBytesAfter, epsilonAllowed*15)
-			assertGreaterThanInDelta(t, testCase.expectedRBPS, readBytesAfter, epsilonAllowed)
-
-			return nil
-		})
+		assertGreaterThanInDelta(t, testCase.expectedRQPS, requestsAfter, epsilonAllowed)
+		assertGreaterThanInDelta(t, testCase.expectedWPS, writesAfter, epsilonAllowed)
+		assertGreaterThanInDelta(t, testCase.expectedRPS, readsAfter, epsilonAllowed)
+		assertGreaterThanInDelta(t, testCase.expectedWBPS, writeBytesAfter, epsilonAllowed)
+		assertGreaterThanInDelta(t, testCase.expectedRBPS, readBytesAfter, epsilonAllowed)
 	}
 }
 

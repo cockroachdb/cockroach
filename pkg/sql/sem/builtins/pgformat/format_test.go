@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -31,18 +30,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
 
 // Tests for the format() SQL function.
 func TestFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "mitigating the tendency to time out at the sql package level under race")
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
 	typesToTest := make([]*types.T, 0, 256)
 	// Types we don't support that are present in types.OidToType
 	var skipType func(typ *types.T) bool
@@ -57,6 +59,10 @@ func TestFormat(t *testing.T) {
 			if skipType(typ.ArrayContents()) {
 				return true
 			}
+		}
+		if typ.Oid() == oid.T_refcursor {
+			// REFCURSOR doesn't support comparison operators.
+			return true
 		}
 		return !randgen.IsLegalColumnType(typ)
 	}
@@ -83,7 +89,7 @@ func TestFormat(t *testing.T) {
 		if util.RaceEnabled {
 			numRows = 2
 		}
-		tab := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", r(`tablename`))
+		tab := desctestutils.TestingGetPublicTableDescriptor(kvDB, srv.ApplicationLayer().Codec(), "defaultdb", r(`tablename`))
 		for i := 0; i < numRows; i++ {
 			var row []string
 			for _, col := range tab.WritableColumns() {

@@ -20,6 +20,7 @@ export interface DataFromServer {
   OIDCAutoLogin: boolean;
   OIDCLoginEnabled: boolean;
   OIDCButtonText: string;
+  OIDCGenerateJWTAuthTokenEnabled: boolean;
   FeatureFlags: FeatureFlags;
 }
 // Tell TypeScript about `window.dataFromServer`, which is set in a script
@@ -32,7 +33,7 @@ declare global {
 }
 
 export function fetchDataFromServer(): Promise<DataFromServer> {
-  return fetch("/uiconfig", {
+  return fetch("uiconfig", {
     method: "GET",
     headers: {
       Accept: "application/json",

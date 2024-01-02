@@ -82,7 +82,7 @@ func init() {
 		opt.SubqueryOp: (*Builder).buildSubquery,
 
 		// User-defined functions.
-		opt.UDFOp: (*Builder).buildUDF,
+		opt.UDFCallOp: (*Builder).buildUDF,
 	}
 
 	for _, op := range opt.BoolOperators {
@@ -665,12 +665,8 @@ func (b *Builder) buildExistsSubquery(
 			Alias: b.mem.Metadata().ColumnMeta(existsCol).Alias,
 			ID:    existsCol,
 		}
-		stmts := memo.RelListExpr{memo.RelRequiredPropsExpr{
-			RelExpr: input,
-			PhysProps: &physical.Required{
-				Presentation: physical.Presentation{aliasedCol},
-			},
-		}}
+		stmts := []memo.RelExpr{input}
+		stmtProps := []*physical.Required{{Presentation: physical.Presentation{aliasedCol}}}
 
 		// Create an wrapRootExprFn that wraps input in a Limit and a Project.
 		wrapRootExpr := func(f *norm.Factory, e memo.RelExpr) opt.Expr {
@@ -690,6 +686,7 @@ func (b *Builder) buildExistsSubquery(
 		planGen := b.buildRoutinePlanGenerator(
 			params,
 			stmts,
+			stmtProps,
 			true, /* allowOuterWithRefs */
 			wrapRootExpr,
 		)
@@ -703,6 +700,10 @@ func (b *Builder) buildExistsSubquery(
 				true,  /* calledOnNullInput */
 				false, /* multiColOutput */
 				false, /* generator */
+				false, /* tailCall */
+				false, /* procedure */
+				nil,   /* blockState */
+				nil,   /* cursorDeclaration */
 			),
 			tree.DBoolFalse,
 		}, types.Bool), nil
@@ -797,18 +798,15 @@ func (b *Builder) buildSubquery(
 			Alias: b.mem.Metadata().ColumnMeta(outputCol).Alias,
 			ID:    outputCol,
 		}
-		stmts := memo.RelListExpr{memo.RelRequiredPropsExpr{
-			RelExpr: input,
-			PhysProps: &physical.Required{
-				Presentation: physical.Presentation{aliasedCol},
-			},
-		}}
+		stmts := []memo.RelExpr{input}
+		stmtProps := []*physical.Required{{Presentation: physical.Presentation{aliasedCol}}}
 
 		// Create a tree.RoutinePlanFn that can plan the single statement
 		// representing the subquery.
 		planGen := b.buildRoutinePlanGenerator(
 			params,
 			stmts,
+			stmtProps,
 			true, /* allowOuterWithRefs */
 			nil,  /* wrapRootExpr */
 		)
@@ -821,6 +819,10 @@ func (b *Builder) buildSubquery(
 			true,  /* calledOnNullInput */
 			false, /* multiColOutput */
 			false, /* generator */
+			false, /* tailCall */
+			false, /* procedure */
+			nil,   /* blockState */
+			nil,   /* cursorDeclaration */
 		), nil
 	}
 
@@ -875,6 +877,10 @@ func (b *Builder) buildSubquery(
 			true,  /* calledOnNullInput */
 			false, /* multiColOutput */
 			false, /* generator */
+			false, /* tailCall */
+			false, /* procedure */
+			nil,   /* blockState */
+			nil,   /* cursorDeclaration */
 		), nil
 	}
 
@@ -918,10 +924,13 @@ func (b *Builder) addSubquery(
 	return exprNode
 }
 
-// buildUDF builds a UDF expression into a typed expression that can be
+// buildUDF builds a UDFCall expression into a typed expression that can be
 // evaluated.
 func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
-	udf := scalar.(*memo.UDFExpr)
+	udf := scalar.(*memo.UDFCallExpr)
+	if udf.Def == nil {
+		return nil, errors.AssertionFailedf("expected non-nil UDF definition")
+	}
 
 	// Build the argument expressions.
 	var err error
@@ -936,37 +945,123 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		}
 	}
 
-	for _, s := range udf.Body {
+	for _, s := range udf.Def.Body {
 		if s.Relational().CanMutate {
 			b.ContainsMutation = true
 			break
 		}
 	}
 
+	if udf.Def.BlockState != nil {
+		b.initRoutineExceptionHandler(udf.Def.BlockState, udf.Def.ExceptionBlock)
+	}
+
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
 	// TODO(mgartner): Add support for WITH expressions inside UDF bodies.
 	planGen := b.buildRoutinePlanGenerator(
-		udf.Params,
-		udf.Body,
+		udf.Def.Params,
+		udf.Def.Body,
+		udf.Def.BodyProps,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 	)
 
 	// Enable stepping for volatile functions so that statements within the UDF
-	// see mutations made by the invoking statement and by previous executed
+	// see mutations made by the invoking statement and by previously executed
 	// statements.
-	enableStepping := udf.Volatility == volatility.Volatile
+	enableStepping := udf.Def.Volatility == volatility.Volatile
+
+	// Build each routine for the exception handler, if one exists.
+	var exceptionHandler *tree.RoutineExceptionHandler
+	if udf.Def.ExceptionBlock != nil {
+		block := udf.Def.ExceptionBlock
+		exceptionHandler = &tree.RoutineExceptionHandler{
+			Codes:   block.Codes,
+			Actions: make([]*tree.RoutineExpr, len(block.Actions)),
+		}
+		for i, action := range block.Actions {
+			actionPlanGen := b.buildRoutinePlanGenerator(
+				action.Params,
+				action.Body,
+				action.BodyProps,
+				false, /* allowOuterWithRefs */
+				nil,   /* wrapRootExpr */
+			)
+			// Build a routine with no arguments for the exception handler. The actual
+			// arguments will be supplied when (if) the handler is invoked.
+			exceptionHandler.Actions[i] = tree.NewTypedRoutineExpr(
+				action.Name,
+				nil, /* args */
+				actionPlanGen,
+				action.Typ,
+				true, /* enableStepping */
+				action.CalledOnNullInput,
+				action.MultiColDataSource,
+				action.SetReturning,
+				false, /* tailCall */
+				false, /* procedure */
+				nil,   /* blockState */
+				nil,   /* cursorDeclaration */
+			)
+		}
+	}
 
 	return tree.NewTypedRoutineExpr(
-		udf.Name,
+		udf.Def.Name,
 		args,
 		planGen,
 		udf.Typ,
 		enableStepping,
-		udf.CalledOnNullInput,
-		udf.MultiColDataSource,
-		udf.SetReturning,
+		udf.Def.CalledOnNullInput,
+		udf.Def.MultiColDataSource,
+		udf.Def.SetReturning,
+		udf.TailCall,
+		false, /* procedure */
+		udf.Def.BlockState,
+		udf.Def.CursorDeclaration,
 	), nil
+}
+
+// initRoutineExceptionHandler initializes the exception handler (if any) for
+// the shared BlockState of a group of sub-routines within a PLpgSQL block.
+func (b *Builder) initRoutineExceptionHandler(
+	blockState *tree.BlockState, exceptionBlock *memo.ExceptionBlock,
+) {
+	if exceptionBlock == nil {
+		// Building the exception block is currently the only necessary
+		// initialization.
+		return
+	}
+	exceptionHandler := &tree.RoutineExceptionHandler{
+		Codes:   exceptionBlock.Codes,
+		Actions: make([]*tree.RoutineExpr, len(exceptionBlock.Actions)),
+	}
+	for i, action := range exceptionBlock.Actions {
+		actionPlanGen := b.buildRoutinePlanGenerator(
+			action.Params,
+			action.Body,
+			action.BodyProps,
+			false, /* allowOuterWithRefs */
+			nil,   /* wrapRootExpr */
+		)
+		// Build a routine with no arguments for the exception handler. The actual
+		// arguments will be supplied when (if) the handler is invoked.
+		exceptionHandler.Actions[i] = tree.NewTypedRoutineExpr(
+			action.Name,
+			nil, /* args */
+			actionPlanGen,
+			action.Typ,
+			true, /* enableStepping */
+			action.CalledOnNullInput,
+			action.MultiColDataSource,
+			action.SetReturning,
+			false, /* tailCall */
+			false, /* procedure */
+			nil,   /* blockState */
+			nil,   /* cursorDeclaration */
+		)
+	}
+	blockState.ExceptionHandler = exceptionHandler
 }
 
 type wrapRootExprFn func(f *norm.Factory, e memo.RelExpr) opt.Expr
@@ -982,7 +1077,11 @@ type wrapRootExprFn func(f *norm.Factory, e memo.RelExpr) opt.Expr
 // wrapRootExpr allows the root expression of all statements to be replaced with
 // an arbitrary expression.
 func (b *Builder) buildRoutinePlanGenerator(
-	params opt.ColList, stmts memo.RelListExpr, allowOuterWithRefs bool, wrapRootExpr wrapRootExprFn,
+	params opt.ColList,
+	stmts []memo.RelExpr,
+	stmtProps []*physical.Required,
+	allowOuterWithRefs bool,
+	wrapRootExpr wrapRootExprFn,
 ) tree.RoutinePlanGenerator {
 	// argOrd returns the ordinal of the argument within the arguments list that
 	// can be substituted for each reference to the given function parameter
@@ -1040,6 +1139,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 
 		for i := range stmts {
 			stmt := stmts[i]
+			props := stmtProps[i]
 			o.Init(ctx, b.evalCtx, b.catalog)
 			f := o.Factory()
 
@@ -1081,11 +1181,11 @@ func (b *Builder) buildRoutinePlanGenerator(
 
 				return f.CopyAndReplaceDefault(e, replaceFn)
 			}
-			f.CopyAndReplace(stmt.RelExpr, stmt.PhysProps, replaceFn)
+			f.CopyAndReplace(stmt, props, replaceFn)
 
 			if wrapRootExpr != nil {
 				wrapped := wrapRootExpr(f, f.Memo().RootExpr().(memo.RelExpr)).(memo.RelExpr)
-				f.Memo().SetRoot(wrapped, stmt.PhysProps)
+				f.Memo().SetRoot(wrapped, props)
 			}
 
 			// Optimize the memo.
@@ -1106,7 +1206,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 					// Enhance the error with the EXPLAIN (OPT, VERBOSE) of the
 					// inner expression.
 					fmtFlags := memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars |
-						memo.ExprFmtHideTypes
+						memo.ExprFmtHideTypes | memo.ExprFmtHideFastPathChecks
 					explainOpt := o.FormatExpr(optimizedExpr, fmtFlags, false /* redactableValues */)
 					err = errors.WithDetailf(err, "routineExpr:\n%s", explainOpt)
 				}
@@ -1114,12 +1214,6 @@ func (b *Builder) buildRoutinePlanGenerator(
 			}
 			if len(eb.subqueries) > 0 {
 				return expectedLazyRoutineError("subquery")
-			}
-			if len(eb.cascades) > 0 {
-				return expectedLazyRoutineError("cascade")
-			}
-			if len(eb.checks) > 0 {
-				return expectedLazyRoutineError("check")
 			}
 			isFinalPlan := i == len(stmts)-1
 			err = fn(plan, isFinalPlan)

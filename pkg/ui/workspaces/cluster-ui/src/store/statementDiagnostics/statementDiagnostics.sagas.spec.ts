@@ -33,6 +33,7 @@ import moment from "moment-timezone";
 describe("statementsDiagnostics sagas", () => {
   describe("createDiagnosticsReportSaga", () => {
     const statementFingerprint = "SELECT * FROM table";
+    const planGist = "gist";
     const minExecLatency = 100; // num seconds
     const expiresAfter = 0; // num seconds, setting expiresAfter to 0 means the request won't expire.
 
@@ -40,6 +41,7 @@ describe("statementsDiagnostics sagas", () => {
       stmtFingerprint: statementFingerprint,
       minExecutionLatencySeconds: minExecLatency,
       expiresAfterSeconds: expiresAfter,
+      planGist: planGist,
     };
 
     const insertResponse: InsertStmtDiagnosticResponse = {

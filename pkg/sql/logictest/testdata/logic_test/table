@@ -63,7 +63,7 @@ CREATE TABLE c (
 statement ok
 COMMENT ON INDEX c_foo_idx IS 'index_comment'
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM c
 ----
 table_name  index_name     non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -80,7 +80,7 @@ c           c_pkey         false       1             id           id          AS
 c           c_pkey         false       2             foo          foo         N/A        true     false     true     1
 c           c_pkey         false       3             bar          bar         N/A        true     false     true     1
 
-query TTBITTTBBBFT colnames
+query TTBITTTBBBFT colnames,rowsort
 SHOW INDEXES FROM c WITH COMMENT
 ----
 table_name  index_name     non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility  comment
@@ -100,7 +100,7 @@ c           c_pkey         false       3             bar          bar         N/
 # primary keys can never be null
 
 query TTTTBT colnames
-SHOW CONSTRAINTS FROM c WITH COMMENT
+SELECT * FROM [SHOW CONSTRAINTS FROM c WITH COMMENT] ORDER BY constraint_name
 ----
 table_name  constraint_name  constraint_type  details               validated  comment
 c           c_bar_key        UNIQUE           UNIQUE (bar ASC)      true       NULL
@@ -137,7 +137,7 @@ CREATE TABLE f (
   PRIMARY KEY (a, b, c)
 )
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM f
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
@@ -145,7 +145,7 @@ a            INT8       false        NULL            ·                      {f_
 b            INT8       false        NULL            ·                      {f_pkey}  false
 c            INT8       false        NULL            ·                      {f_pkey}  false
 
-query TTTTITT colnames
+query TTTTITT colnames,rowsort
 SHOW TABLES FROM test WITH COMMENT
 ----
 schema_name  table_name  type   owner  estimated_row_count  locality  comment
@@ -188,7 +188,7 @@ CREATE TABLE test.users (
   FAMILY fam_3_username_email (username, email)
 )
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM test.users
 ----
 column_name  data_type     is_nullable  column_default  generation_expression  indices               is_hidden
@@ -199,7 +199,7 @@ nickname     STRING        true         NULL            ·                      
 username     STRING(10)    true         NULL            ·                      {users_pkey}          false
 email        VARCHAR(100)  true         NULL            ·                      {users_pkey}          false
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM test.users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -253,7 +253,7 @@ CREATE TABLE test.dupe_generated (
 )
 
 query TTTTB colnames
-SHOW CONSTRAINTS FROM test.dupe_generated
+SELECT * FROM [SHOW CONSTRAINTS FROM test.dupe_generated] ORDER BY constraint_name
 ----
 table_name      constraint_name      constraint_type  details                  validated
 dupe_generated  check_bar            CHECK            CHECK ((bar > 2))        true
@@ -304,7 +304,7 @@ test.public.named_constraints  CREATE TABLE public.named_constraints (
                                )
 
 query TTTTB colnames
-SHOW CONSTRAINTS FROM test.named_constraints
+SELECT * FROM [SHOW CONSTRAINTS FROM test.named_constraints] ORDER BY constraint_name
 ----
 table_name         constraint_name  constraint_type  details                                    validated
 named_constraints  bar              UNIQUE           UNIQUE (id ASC, name ASC)                  true
@@ -395,7 +395,7 @@ CREATE TABLE alltypes (
   cvarchar12 VARCHAR(12)
   )
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM alltypes
 ----
 column_name       data_type     is_nullable  column_default  generation_expression  indices          is_hidden
@@ -572,6 +572,7 @@ cluster_transaction_statistics          NULL
 cluster_transactions                    NULL
 cluster_txn_execution_insights          NULL
 create_function_statements              NULL
+create_procedure_statements             NULL
 create_schema_statements                NULL
 create_statements                       NULL
 create_type_statements                  NULL
@@ -589,14 +590,23 @@ index_spans                             NULL
 index_usage_statistics                  NULL
 invalid_objects                         NULL
 jobs                                    NULL
+kv_builtin_function_comments            NULL
 kv_catalog_comments                     NULL
 kv_catalog_descriptor                   NULL
 kv_catalog_namespace                    NULL
 kv_catalog_zones                        NULL
 kv_dropped_relations                    NULL
+kv_flow_control_handles                 NULL
+kv_flow_controller                      NULL
+kv_flow_token_deductions                NULL
+kv_inherited_role_members               NULL
 kv_node_liveness                        NULL
 kv_node_status                          NULL
+kv_protected_ts_records                 NULL
+kv_repairable_catalog_corruptions       NULL
+kv_session_based_leases                 NULL
 kv_store_status                         NULL
+kv_system_privileges                    NULL
 leases                                  NULL
 lost_descriptors_with_data              NULL
 node_build_info                         NULL

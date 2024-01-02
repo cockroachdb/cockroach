@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 )
 
 // This file contains the two major components to name resolution:
@@ -109,21 +108,13 @@ func classifyColumnItem(n *UnresolvedName) (VarName, error) {
 
 // Resolution algorithms follow.
 
-const (
-	// PublicSchema is the name of the physical schema in every
-	// database/catalog.
-	PublicSchema string = catconstants.PublicSchemaName
-	// PublicSchemaName is the same, typed as Name.
-	PublicSchemaName Name = Name(PublicSchema)
-)
-
 // QualifiedNameResolver is the helper interface to resolve qualified
 // table names given an ID and the required table kind, as well as the
 // current database to determine whether or not to include the
 // database in the qualification.
 type QualifiedNameResolver interface {
 	GetQualifiedTableNameByID(ctx context.Context, id int64, requiredType RequiredTableKind) (*TableName, error)
-	GetQualifiedFunctionNameByID(ctx context.Context, id int64) (*FunctionName, error)
+	GetQualifiedFunctionNameByID(ctx context.Context, id int64) (*RoutineName, error)
 	CurrentDatabase() string
 }
 
@@ -199,9 +190,9 @@ type ObjectLookupFlags struct {
 	Required bool
 	// RequireMutable specifies whether to return a mutable descriptor.
 	RequireMutable bool
-	// AvoidLeased, if set, avoid the leased (possibly stale) version of the
+	// AssertNotLeased, if set, avoid the leased (possibly stale) version of the
 	// descriptor. It must be set when callers want consistent reads.
-	AvoidLeased bool
+	AssertNotLeased bool
 	// IncludeOffline specifies if offline descriptors should be visible.
 	IncludeOffline bool
 	// AllowWithoutPrimaryKey specifies if tables without PKs can be resolved.

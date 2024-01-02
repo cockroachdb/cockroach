@@ -70,11 +70,29 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 					admissionStats.aux.writeBypassedAccountedBytes += uint64(bypassedWrite)
 					admissionStats.aux.ingestedBypassedAccountedBytes += uint64(bypassedIngested)
 				}
+				if d.HasArg("above-raft-count") {
+					var count, write, ingested uint64
+					d.ScanArgs(t, "above-raft-count", &count)
+					d.ScanArgs(t, "above-raft-write", &write)
+					if d.HasArg("above-raft-ingested") {
+						d.ScanArgs(t, "above-raft-ingested", &ingested)
+					}
+					admissionStats.aboveRaftStats.workCount += count
+					admissionStats.aboveRaftStats.writeAccountedBytes += write
+					admissionStats.aboveRaftStats.ingestedAccountedBytes += ingested
+				}
 				if d.HasArg("ignore-ingested-into-L0") {
 					var ignoreIngestedIntoL0 int
 					d.ScanArgs(t, "ignore-ingested-into-L0", &ignoreIngestedIntoL0)
-					admissionStats.statsToIgnore.ApproxIngestedIntoL0Bytes += uint64(ignoreIngestedIntoL0)
-					admissionStats.statsToIgnore.Bytes += uint64(ignoreIngestedIntoL0)
+					admissionStats.statsToIgnore.ingestStats.ApproxIngestedIntoL0Bytes +=
+						uint64(ignoreIngestedIntoL0)
+					admissionStats.statsToIgnore.ingestStats.Bytes +=
+						uint64(ignoreIngestedIntoL0)
+				}
+				if d.HasArg("ignored-written") {
+					var ignoredWritten int
+					d.ScanArgs(t, "ignored-written", &ignoredWritten)
+					admissionStats.statsToIgnore.writeBytes += uint64(ignoredWritten)
 				}
 				estimator.updateEstimates(l0Metrics, cumLSMIngestedBytes, admissionStats)
 				wL0lm, iL0lm, ilm := estimator.getModelsAtDone()

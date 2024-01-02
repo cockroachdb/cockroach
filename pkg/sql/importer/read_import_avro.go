@@ -73,7 +73,12 @@ func nativeTimeToDatum(t time.Time, targetT *types.T) (tree.Datum, error) {
 // the key is a primitive or logical Avro type name ("string",
 // "long.time-millis", etc).
 func nativeToDatum(
-	ctx context.Context, x interface{}, targetT *types.T, avroT []string, evalCtx *eval.Context,
+	ctx context.Context,
+	x interface{},
+	targetT *types.T,
+	avroT []string,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
 ) (tree.Datum, error) {
 	var d tree.Datum
 
@@ -111,19 +116,19 @@ func nativeToDatum(
 			// []byte arrays are hard.  Sometimes we want []bytes, sometimes
 			// we want StringFamily.  So, instead of creating DBytes datum,
 			// parse this data to "cast" it to our expected type.
-			return rowenc.ParseDatumStringAs(ctx, targetT, string(v), evalCtx)
+			return rowenc.ParseDatumStringAs(ctx, targetT, string(v), evalCtx, semaCtx)
 		}
 	case string:
 		// We allow strings to be specified for any column, as
 		// long as we can convert the string value to the target type.
-		return rowenc.ParseDatumStringAs(ctx, targetT, v, evalCtx)
+		return rowenc.ParseDatumStringAs(ctx, targetT, v, evalCtx, semaCtx)
 	case map[string]interface{}:
 		for _, aT := range avroT {
 			// The value passed in is an avro schema.  Extract
 			// possible primitive types from the dictionary and
 			// attempt to convert those values to our target type.
 			if val, ok := v[aT]; ok {
-				return nativeToDatum(ctx, val, targetT, avroT, evalCtx)
+				return nativeToDatum(ctx, val, targetT, avroT, evalCtx, semaCtx)
 			}
 		}
 	case []interface{}:
@@ -139,7 +144,7 @@ func nativeToDatum(
 		// Convert each element.
 		arr := tree.NewDArray(targetT.ArrayContents())
 		for _, elt := range v {
-			eltDatum, err := nativeToDatum(ctx, elt, targetT.ArrayContents(), eltAvroT, evalCtx)
+			eltDatum, err := nativeToDatum(ctx, elt, targetT.ArrayContents(), eltAvroT, evalCtx, semaCtx)
 			if err == nil {
 				err = arr.Append(eltDatum)
 			}
@@ -230,7 +235,7 @@ func (a *avroConsumer) convertNative(
 		if !ok {
 			return fmt.Errorf("cannot convert avro value %v to col %s", v, conv.VisibleCols[idx].GetType().Name())
 		}
-		datum, err := nativeToDatum(ctx, v, typ, avroT, conv.EvalCtx)
+		datum, err := nativeToDatum(ctx, v, typ, avroT, conv.EvalCtx, conv.SemaCtx)
 		if err != nil {
 			return err
 		}

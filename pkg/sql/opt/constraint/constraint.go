@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const CancelCheckInterval = 16
+
 // Constraint specifies the possible set of values that one or more columns
 // will have in the result set. If this is a single column constraint, then
 // that column's value will always be part of one of the spans in this
@@ -238,11 +240,19 @@ func (c Constraint) String() string {
 }
 
 // Contains returns true if the constraint contains every span in the given
-// constraint. The columns of the constraint must be a prefix of the columns of
-// other.
+// constraint.
 func (c *Constraint) Contains(evalCtx *eval.Context, other *Constraint) bool {
-	if !c.Columns.IsPrefixOf(&other.Columns) {
-		panic(errors.AssertionFailedf("columns must be a prefix of other columns"))
+	// The columns of the constraint must have a common prefix with the columns
+	// from other constraint.
+	prefixLength := c.Columns.PrefixLength(&other.Columns)
+	if prefixLength == 0 {
+		return false
+	}
+
+	// Only one of the constraints can have spans longer than the common prefix
+	// length.
+	if c.maxSpanKeyLength() > prefixLength && other.maxSpanKeyLength() > prefixLength {
+		return false
 	}
 
 	// An unconstrained constraint contains all constraints.
@@ -301,6 +311,20 @@ func (c *Constraint) Contains(evalCtx *eval.Context, other *Constraint) bool {
 	return rightIndex == right.Count()
 }
 
+func (c *Constraint) maxSpanKeyLength() int {
+	var maxLength int
+	for i := 0; i < c.Spans.Count(); i++ {
+		startLength, endLength := c.Spans.Get(i).StartKey().Length(), c.Spans.Get(i).EndKey().Length()
+		if startLength > maxLength {
+			maxLength = startLength
+		}
+		if endLength > maxLength {
+			maxLength = endLength
+		}
+	}
+	return maxLength
+}
+
 // ContainsSpan returns true if the constraint contains the given span (or a
 // span that contains it).
 func (c *Constraint) ContainsSpan(evalCtx *eval.Context, sp *Span) bool {
@@ -344,7 +368,7 @@ func (c *Constraint) findIntersectingSpan(keyCtx *KeyContext, sp *Span) (_ *Span
 //	c:      /a/b: [/1 - /2] [/4 - /4]
 //	other:  /b: [/5 - /5]
 //	result: /a/b: [/1/5 - /2/5] [/4/5 - /4/5]
-func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint) {
+func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint, checkCancellation func()) {
 	if !other.Columns.IsStrictSuffixOf(&c.Columns) {
 		// Note: we don't want to let the c and other pointers escape by passing
 		// them directly to Sprintf.
@@ -366,7 +390,15 @@ func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint) {
 	var resultInitialized bool
 	keyCtx := KeyContext{Columns: c.Columns, EvalCtx: evalCtx}
 
+	numIterations := 0
+	cancelCheck := func() {
+		numIterations++
+		if checkCancellation != nil && (numIterations%CancelCheckInterval) == 0 {
+			checkCancellation()
+		}
+	}
 	for i := 0; i < c.Spans.Count(); i++ {
+		cancelCheck()
 		sp := *c.Spans.Get(i)
 
 		startLen, endLen := sp.start.Length(), sp.end.Length()
@@ -402,6 +434,7 @@ func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint) {
 				}
 			}
 			for j := 0; j < other.Spans.Count(); j++ {
+				cancelCheck()
 				extSp := other.Spans.Get(j)
 				var newSp Span
 				newSp.Init(
@@ -450,6 +483,7 @@ func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint) {
 				resultInitialized = true
 				result.Alloc(c.Spans.Count())
 				for j := 0; j < i; j++ {
+					cancelCheck()
 					result.Append(c.Spans.Get(j))
 				}
 			}

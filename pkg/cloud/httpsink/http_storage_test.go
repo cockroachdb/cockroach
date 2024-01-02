@@ -224,33 +224,7 @@ func TestHttpGet(t *testing.T) {
 	for _, tc := range []int{1, 2, 5, 16, 32, len(data) - 1, len(data)} {
 		t.Run(fmt.Sprintf("read-%d", tc), func(t *testing.T) {
 			limit := tc
-			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				start, err := rangeStart(r.Header.Get("Range"))
-				if start < 0 || start >= len(data) {
-					t.Errorf("invalid start offset %d in range header %s",
-						start, r.Header.Get("Range"))
-				}
-				end := start + limit
-				if end > len(data) {
-					end = len(data)
-				}
-
-				w.Header().Add("Accept-Ranges", "bytes")
-				w.Header().Add("Content-Length", strconv.Itoa(len(data)-start))
-
-				if start > 0 {
-					w.Header().Add(
-						"Content-Range",
-						fmt.Sprintf("bytes %d-%d/%d", start, end, len(data)))
-				}
-
-				if err == nil {
-					_, err = w.Write(data[start:end])
-				}
-				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-				}
-			}))
+			s := httptest.NewServer(http.HandlerFunc(newTestingRangeHandler(t, data, limit)))
 
 			// Start antagonist function that aggressively closes client connections.
 			ctx, cancelAntagonist := context.WithCancel(context.Background())
@@ -267,7 +241,7 @@ func TestHttpGet(t *testing.T) {
 			})
 
 			conf := cloudpb.ExternalStorage{HttpPath: cloudpb.ExternalStorage_Http{BaseUri: s.URL}}
-			store, err := MakeHTTPStorage(ctx, cloud.ExternalStorageContext{Settings: testSettings}, conf)
+			store, err := MakeHTTPStorage(ctx, cloud.EarlyBootExternalStorageContext{Settings: testSettings}, conf)
 			require.NoError(t, err)
 
 			var file ioctx.ReadCloserCtx
@@ -305,7 +279,7 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 
 	conf := cloudpb.ExternalStorage{HttpPath: cloudpb.ExternalStorage_Http{BaseUri: s.URL}}
 	store, err := MakeHTTPStorage(context.Background(),
-		cloud.ExternalStorageContext{Settings: testSettings}, conf)
+		cloud.EarlyBootExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())
@@ -434,8 +408,7 @@ func TestExhaustRetries(t *testing.T) {
 	cloud.HTTPRetryOptions.MaxRetries = 10
 
 	conf := cloudpb.ExternalStorage{HttpPath: cloudpb.ExternalStorage_Http{BaseUri: "http://does.not.matter"}}
-	store, err := MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings,
-		MetricsRecorder: cloud.NilMetrics}, conf)
+	store, err := MakeHTTPStorage(context.Background(), cloud.EarlyBootExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())
@@ -443,4 +416,77 @@ func TestExhaustRetries(t *testing.T) {
 
 	_, _, err = store.ReadFile(context.Background(), "/something", cloud.ReadOptions{NoFileSize: true})
 	require.Error(t, err)
+}
+
+func newTestingRangeHandler(
+	t *testing.T, data []byte, maxReadLen int,
+) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start, err := rangeStart(r.Header.Get("Range"))
+		if start < 0 || start >= len(data) {
+			t.Errorf("invalid start offset %d in range header %s",
+				start, r.Header.Get("Range"))
+		}
+		end := start + maxReadLen
+		if end > len(data) {
+			end = len(data)
+		}
+
+		w.Header().Add("Accept-Ranges", "bytes")
+		w.Header().Add("Content-Length", strconv.Itoa(len(data)-start))
+
+		if start > 0 {
+			w.Header().Add(
+				"Content-Range",
+				fmt.Sprintf("bytes %d-%d/%d", start, end, len(data)))
+		}
+
+		if err == nil {
+			_, err = w.Write(data[start:end])
+		}
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}
+
+}
+
+// TestReadFileAtReturnsSize tests that ReadFileAt returns
+// a cloud.ResumingReader that contains the size of the file.
+func TestReadFileAtReturnsSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	testSettings := cluster.MakeTestingClusterSettings()
+	file := "testfile"
+	data := []byte("hello world")
+
+	server := httptest.NewServer(http.HandlerFunc(newTestingRangeHandler(t, data, 2)))
+	defer server.Close()
+
+	conf := cloudpb.ExternalStorage{HttpPath: cloudpb.ExternalStorage_Http{BaseUri: server.URL}}
+	args := cloud.EarlyBootExternalStorageContext{
+		IOConf:   base.ExternalIODirConfig{},
+		Settings: testSettings,
+		Options:  nil,
+		Limiters: nil,
+	}
+	s, err := MakeHTTPStorage(ctx, args, conf)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, s.Close())
+	}()
+
+	w, err := s.Writer(ctx, file)
+	require.NoError(t, err)
+
+	_, err = w.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	reader, _, err := s.ReadFile(ctx, file, cloud.ReadOptions{})
+	require.NoError(t, err)
+
+	rr, ok := reader.(*cloud.ResumingReader)
+	require.True(t, ok)
+	require.Equal(t, int64(len(data)), rr.Size)
 }

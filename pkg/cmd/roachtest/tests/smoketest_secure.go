@@ -27,13 +27,13 @@ import (
 func registerSecure(r registry.Registry) {
 	for _, numNodes := range []int{1, 3} {
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("smoketest/secure/nodes=%d", numNodes),
-			Tags:    registry.Tags("smoketest", "weekly"),
-			Owner:   registry.OwnerTestEng,
-			Cluster: r.MakeClusterSpec(numNodes),
-			Leases:  registry.MetamorphicLeases,
+			Name:             fmt.Sprintf("smoketest/secure/nodes=%d", numNodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Smoketest, registry.Weekly),
+			Owner:            registry.OwnerTestEng,
+			Cluster:          r.MakeClusterSpec(numNodes),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				c.Put(ctx, t.Cockroach(), "./cockroach")
 				settings := install.MakeClusterSettings(install.SecureOption(true))
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
 				db := c.Conn(ctx, t.L(), 1)
@@ -44,18 +44,19 @@ func registerSecure(r registry.Registry) {
 		})
 	}
 	r.Add(registry.TestSpec{
-		Name:    "smoketest/secure/multitenant",
-		Owner:   registry.OwnerMultiTenant,
-		Cluster: r.MakeClusterSpec(2),
-		Leases:  registry.MetamorphicLeases,
-		Run:     multitenantSmokeTest,
+		Name:             "smoketest/secure/multitenant",
+		Owner:            registry.OwnerMultiTenant,
+		Cluster:          r.MakeClusterSpec(2),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Run:              multitenantSmokeTest,
 	})
 }
 
 // multitenantSmokeTest verifies that a secure sql pod can connect to kv server
 // and that tenant is is properly transmitted via cert.
 func multitenantSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	settings := install.MakeClusterSettings(install.SecureOption(true))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(1))
 

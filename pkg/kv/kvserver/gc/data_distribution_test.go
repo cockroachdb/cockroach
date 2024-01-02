@@ -79,8 +79,8 @@ func (ds dataDistribution) setupTest(
 			if txn.WriteTimestamp.IsEmpty() {
 				txn.WriteTimestamp = ts
 			}
-			err := storage.MVCCPut(ctx, eng, &ms, kv.Key.Key, ts,
-				hlc.ClockTimestamp{}, roachpb.Value{RawBytes: kv.Value}, txn)
+			_, err := storage.MVCCPut(ctx, eng, kv.Key.Key, ts,
+				roachpb.Value{RawBytes: kv.Value}, storage.MVCCWriteOptions{Txn: txn, Stats: &ms})
 			require.NoError(t, err, "failed to insert value for key %s, value length=%d",
 				kv.Key.String(), len(kv.Value))
 		}
@@ -94,7 +94,7 @@ func (ds dataDistribution) setupTest(
 	require.NoError(t, eng.Flush())
 	snap := eng.NewSnapshot()
 	defer snap.Close()
-	ms, err := rditer.ComputeStatsForRange(&desc, snap, maxTs.WallTime)
+	ms, err := rditer.ComputeStatsForRange(ctx, &desc, snap, maxTs.WallTime)
 	require.NoError(t, err)
 	return ms
 }

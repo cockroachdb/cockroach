@@ -15,18 +15,18 @@ import (
 	"io"
 	"net"
 	"sync/atomic"
-	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -45,9 +45,10 @@ type rangefeedMuxer struct {
 	g ctxgroup.Group
 
 	ds         *DistSender
+	metrics    *DistSenderRangeFeedMetrics
 	cfg        rangeFeedConfig
 	registry   *rangeFeedRegistry
-	catchupSem *limit.ConcurrentRequestLimiter
+	catchupSem *catchupScanRateLimiter
 	eventCh    chan<- RangeFeedMessage
 
 	// Each call to start new range feed gets a unique ID which is echoed back
@@ -69,7 +70,7 @@ func muxRangeFeed(
 	spans []SpanTimePair,
 	ds *DistSender,
 	rr *rangeFeedRegistry,
-	catchupSem *limit.ConcurrentRequestLimiter,
+	catchupRateLimiter *catchupScanRateLimiter,
 	eventCh chan<- RangeFeedMessage,
 ) (retErr error) {
 	if log.V(1) {
@@ -85,10 +86,18 @@ func muxRangeFeed(
 		registry:   rr,
 		ds:         ds,
 		cfg:        cfg,
-		catchupSem: catchupSem,
+		metrics:    &ds.metrics.DistSenderRangeFeedMetrics,
+		catchupSem: catchupRateLimiter,
 		eventCh:    eventCh,
 	}
-	divideAllSpansOnRangeBoundaries(spans, m.startSingleRangeFeed, ds, &m.g)
+	if cfg.knobs.metrics != nil {
+		m.metrics = cfg.knobs.metrics
+	}
+
+	m.g.GoCtx(func(ctx context.Context) error {
+		return divideAllSpansOnRangeBoundaries(ctx, spans, m.startSingleRangeFeed, ds, &m.g)
+	})
+
 	return errors.CombineErrors(m.g.Wait(), ctx.Err())
 }
 
@@ -108,12 +117,13 @@ func muxRangeFeed(
 type muxStream struct {
 	nodeID roachpb.NodeID
 
+	streams syncutil.IntMap // streamID -> *activeMuxRangeFeed
+
 	// mu must be held when starting rangefeed.
 	mu struct {
 		syncutil.Mutex
-		sender  rangeFeedRequestSender
-		streams map[int64]*activeMuxRangeFeed
-		closed  bool
+		sender rangeFeedRequestSender
+		closed bool
 	}
 }
 
@@ -157,12 +167,6 @@ type activeMuxRangeFeed struct {
 	rSpan roachpb.RSpan
 	roachpb.ReplicaDescriptor
 	startAfter hlc.Timestamp
-
-	// cathchupRes is the catchup scan quota acquired upon the
-	// start of rangefeed.
-	// It is released when this stream receives first non-empty checkpoint
-	// (meaning: catchup scan completes).
-	catchupRes catchupAlloc
 
 	// State pertaining to execution of rangefeed call.
 	token     rangecache.EvictionToken
@@ -209,18 +213,11 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 	// Bound the partial rangefeed to the partial span.
 	span := rs.AsRawSpanWithNoLocals()
 
-	// Before starting single rangefeed, acquire catchup scan quota.
-	catchupRes, err := acquireCatchupScanQuota(ctx, m.ds, m.catchupSem)
-	if err != nil {
-		return err
-	}
-
 	// Register active mux range feed.
 	stream := &activeMuxRangeFeed{
-		activeRangeFeed: newActiveRangeFeed(span, startAfter, m.registry, m.ds.metrics.RangefeedRanges),
+		activeRangeFeed: newActiveRangeFeed(span, startAfter, m.registry, m.metrics),
 		rSpan:           rs,
 		startAfter:      startAfter,
-		catchupRes:      catchupRes,
 		token:           token,
 	}
 
@@ -245,6 +242,11 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 // gets transferred to the node event loop goroutine (receiveEventsFromNode).
 func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error {
 	streamID := atomic.AddInt64(&m.seqID, 1)
+
+	// Before starting single rangefeed, acquire catchup scan quota.
+	if err := s.acquireCatchupScanQuota(ctx, m.catchupSem, m.metrics); err != nil {
+		return err
+	}
 
 	// Start a retry loop for sending the batch to the range.
 	for r := retry.StartWithCtx(ctx, m.ds.rpcRetryOptions); r.Next(); {
@@ -273,7 +275,7 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 
 		for !s.transport.IsExhausted() {
 			args := makeRangeFeedRequest(
-				s.Span, s.token.Desc().RangeID, m.cfg.overSystemTable, s.startAfter, m.cfg.withDiff)
+				s.Span, s.token.Desc().RangeID, m.cfg.overSystemTable, s.startAfter, m.cfg.withDiff, m.cfg.withFiltering)
 			args.Replica = s.transport.NextReplica()
 			args.StreamID = streamID
 			s.ReplicaDescriptor = args.Replica
@@ -288,8 +290,10 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 				s.Span, s.startAfter, s.token.Desc().RangeID, args.Replica, r.CurrentAttempt())
 
 			conn, err := m.establishMuxConnection(ctx, rpcClient, args.Replica.NodeID)
+			s.onConnect(rpcClient, m.metrics)
+
 			if err == nil {
-				err = conn.startRangeFeed(streamID, s, &args)
+				err = conn.startRangeFeed(streamID, s, &args, m.cfg.knobs.beforeSendRequest)
 			}
 
 			if err != nil {
@@ -301,6 +305,17 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 				}
 				continue
 			}
+
+			if m.cfg.knobs.captureMuxRangeFeedRequestSender != nil {
+				m.cfg.knobs.captureMuxRangeFeedRequestSender(
+					args.Replica.NodeID,
+					func(req *kvpb.RangeFeedRequest) error {
+						conn.mu.Lock()
+						defer conn.mu.Unlock()
+						return conn.mu.sender.Send(req)
+					})
+			}
+
 			return nil
 		}
 
@@ -368,15 +383,11 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 
 	ms := muxStream{nodeID: nodeID}
 	ms.mu.sender = mux
-	ms.mu.streams = make(map[int64]*activeMuxRangeFeed)
 	if err := future.MustSet(stream, muxStreamOrError{stream: &ms}); err != nil {
 		return err
 	}
 
-	stuckWatcher := newStuckRangeFeedCanceler(cancel, defaultStuckRangeThreshold(m.ds.st))
-	defer stuckWatcher.stop()
-
-	if recvErr := m.receiveEventsFromNode(ctx, mux, stuckWatcher, &ms); recvErr != nil {
+	if recvErr := m.receiveEventsFromNode(ctx, mux, &ms); recvErr != nil {
 		// Clear out this client, and restart all streams on this node.
 		// Note: there is a race here where we may delete this muxClient, while
 		// another goroutine loaded it.  That's fine, since we would not
@@ -388,13 +399,19 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 			recvErr = nil
 		}
 
+		toRestart := ms.close()
+
 		// make sure that the underlying error is not fatal. If it is, there is no
 		// reason to restart each rangefeed, so just bail out.
-		if _, err := handleRangefeedError(ctx, recvErr); err != nil {
+		if _, err := handleRangefeedError(ctx, m.metrics, recvErr); err != nil {
+			// Regardless of an error, release any resources (i.e. metrics) still
+			// being held by active stream.
+			for _, s := range toRestart {
+				s.release()
+			}
 			return err
 		}
 
-		toRestart := ms.close()
 		if log.V(1) {
 			log.Infof(ctx, "mux to node %d restarted %d streams", ms.nodeID, len(toRestart))
 		}
@@ -406,26 +423,11 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 
 // receiveEventsFromNode receives mux rangefeed events from a node.
 func (m *rangefeedMuxer) receiveEventsFromNode(
-	ctx context.Context,
-	receiver muxRangeFeedEventReceiver,
-	stuckWatcher *stuckRangeFeedCanceler,
-	ms *muxStream,
+	ctx context.Context, receiver muxRangeFeedEventReceiver, ms *muxStream,
 ) error {
-	stuckThreshold := defaultStuckRangeThreshold(m.ds.st)
-	stuckCheckFreq := func() time.Duration {
-		if threshold := stuckThreshold(); threshold > 0 {
-			return threshold
-		}
-		return time.Minute
-	}
-	nextStuckCheck := timeutil.Now().Add(stuckCheckFreq())
-
-	var event *kvpb.MuxRangeFeedEvent
 	for {
-		if err := stuckWatcher.do(func() (err error) {
-			event, err = receiver.Recv()
-			return err
-		}); err != nil {
+		event, err := receiver.Recv()
+		if err != nil {
 			return err
 		}
 
@@ -445,13 +447,22 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 			continue
 		}
 
+		if m.cfg.knobs.onRangefeedEvent != nil {
+			skip, err := m.cfg.knobs.onRangefeedEvent(ctx, active.Span, event.StreamID, &event.RangeFeedEvent)
+			if err != nil {
+				return err
+			}
+			if skip {
+				continue
+			}
+		}
+
 		switch t := event.GetValue().(type) {
 		case *kvpb.RangeFeedCheckpoint:
 			if t.Span.Contains(active.Span) {
 				// If we see the first non-empty checkpoint, we know we're done with the catchup scan.
-				if !t.ResolvedTS.IsEmpty() && active.catchupRes != nil {
-					active.catchupRes.Release()
-					active.catchupRes = nil
+				if active.catchupRes != nil {
+					active.releaseCatchupScan()
 				}
 				// Note that this timestamp means that all rows in the span with
 				// writes at or before the timestamp have now been seen. The
@@ -463,9 +474,9 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 		case *kvpb.RangeFeedError:
 			log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
 			if active.catchupRes != nil {
-				m.ds.metrics.RangefeedErrorCatchup.Inc(1)
+				m.metrics.Errors.RangefeedErrorCatchup.Inc(1)
 			}
-			ms.deleteStream(event.StreamID)
+			ms.streams.Delete(event.StreamID)
 			// Restart rangefeed on another goroutine. Restart might be a bit
 			// expensive, particularly if we have to resolve span.  We do not want
 			// to block receiveEventsFromNode for too long.
@@ -482,30 +493,10 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 			return ctx.Err()
 		case m.eventCh <- msg:
 		}
-
-		// Piggyback on this loop to check if any of the active ranges
-		// on this node appear to be stuck.
-		// NB: this does not notify the server in any way.  We may have to add
-		// a more complex protocol -- or better yet, figure out why ranges
-		// get stuck in the first place.
-		if timeutil.Now().After(nextStuckCheck) {
-			if threshold := stuckThreshold(); threshold > 0 {
-				// Restart rangefeed on another goroutine. Restart might be a bit
-				// expensive, particularly if we have to resolve span.  We do not want
-				// to block receiveEventsFromNode for too long.
-				toRestart := ms.purgeStuckStreams(threshold)
-				if len(toRestart) > 0 {
-					m.g.GoCtx(func(ctx context.Context) error {
-						return m.restartActiveRangeFeeds(ctx, errRestartStuckRange, toRestart)
-					})
-				}
-			}
-			nextStuckCheck = timeutil.Now().Add(stuckCheckFreq())
-		}
 	}
 }
 
-// restarActiveRangeFeeds restarts one or more rangefeeds.
+// restartActiveRangeFeeds restarts one or more rangefeeds.
 func (m *rangefeedMuxer) restartActiveRangeFeeds(
 	ctx context.Context, reason error, toRestart []*activeMuxRangeFeed,
 ) error {
@@ -521,14 +512,12 @@ func (m *rangefeedMuxer) restartActiveRangeFeeds(
 func (m *rangefeedMuxer) restartActiveRangeFeed(
 	ctx context.Context, active *activeMuxRangeFeed, reason error,
 ) error {
-	m.ds.metrics.RangefeedRestartRanges.Inc(1)
-
-	if log.V(1) {
-		log.Infof(ctx, "RangeFeed %s@%s (r%d, replica %s) disconnected with last checkpoint %s ago: %v",
-			active.Span, active.StartAfter, active.RangeID, active.ReplicaDescriptor,
-			timeutil.Since(active.Resolved.GoTime()), reason)
-	}
+	m.metrics.Errors.RangefeedRestartRanges.Inc(1)
 	active.setLastError(reason)
+
+	// Release catchup scan reservation if any -- we will acquire another
+	// one when we restart.
+	active.releaseCatchupScan()
 
 	doRelease := true
 	defer func() {
@@ -537,10 +526,16 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 		}
 	}()
 
-	errInfo, err := handleRangefeedError(ctx, reason)
+	errInfo, err := handleRangefeedError(ctx, m.metrics, reason)
 	if err != nil {
 		// If this is an error we cannot recover from, terminate the rangefeed.
 		return err
+	}
+
+	if log.V(1) {
+		log.Infof(ctx, "RangeFeed %s@%s (r%d, replica %s) disconnected with last checkpoint %s ago: %v (errInfo %v)",
+			active.Span, active.StartAfter, active.RangeID, active.ReplicaDescriptor,
+			timeutil.Since(active.Resolved.GoTime()), reason, errInfo)
 	}
 
 	if errInfo.evict {
@@ -562,65 +557,79 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 // on this node connection.  If no error returned, registers stream
 // with this connection.  Otherwise, stream is not registered.
 func (c *muxStream) startRangeFeed(
-	streamID int64, stream *activeMuxRangeFeed, req *kvpb.RangeFeedRequest,
-) error {
+	streamID int64, stream *activeMuxRangeFeed, req *kvpb.RangeFeedRequest, beforeSend func(),
+) (retErr error) {
 	// NB: lock must be held for the duration of this method.
+	// The reasons for this are twofold:
+	//  1. Send calls must be protected against concurrent calls.
+	//  2. The muxStream may be in the process of restart -- that is receiveEventsFromNode just
+	//     returned an error.  When that happens, muxStream is closed, and all rangefeeds
+	//     belonging to this muxStream are restarted.  The lock here synchronizes with the close()
+	//     call so that we either observe the fact that muxStream is closed when this method runs,
+	//     or that the close waits until this call completes.
+	//     Note also, the Send method may block.  That's alright.  If the call is blocked because
+	//     the server side just returned an error, then, the send call should abort and cause an
+	//     error to be returned, releasing the lock, and letting close proceed.
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// As soon as we issue Send below, the stream may return an event or an error that
+	// may be seen by the event consumer (receiveEventsFromNode).
+	// Therefore, we update streams map immediately, but undo this insert in case of an error,
+	// which is returned to the caller for retry.
+	c.streams.Store(streamID, unsafe.Pointer(stream))
+
+	defer func() {
+		if retErr != nil {
+			// undo stream registration.
+			c.streams.Delete(streamID)
+		}
+	}()
 
 	if c.mu.closed {
 		return net.ErrClosed
 	}
 
-	// Concurrent Send calls are not thread safe; thus Send calls must be
-	// synchronized.
-	if err := c.mu.sender.Send(req); err != nil {
-		return err
+	if beforeSend != nil {
+		beforeSend()
 	}
 
-	// As soon as we issue Send above, the stream may return an error that
-	// may be seen by the event consumer (receiveEventsFromNode).
-	// Therefore, we update streams map under the lock to ensure that the
-	// receiver will be able to observe this stream.
-	c.mu.streams[streamID] = stream
+	return c.mu.sender.Send(req)
+}
+
+func (c *muxStream) lookupStream(streamID int64) *activeMuxRangeFeed {
+	v, ok := c.streams.Load(streamID)
+	if ok {
+		return (*activeMuxRangeFeed)(v)
+	}
 	return nil
 }
 
-func (c *muxStream) lookupStream(streamID int64) (a *activeMuxRangeFeed) {
-	c.mu.Lock()
-	a = c.mu.streams[streamID]
-	c.mu.Unlock()
-	return a
-}
-
-func (c *muxStream) purgeStuckStreams(threshold time.Duration) (stuck []*activeMuxRangeFeed) {
-	c.mu.Lock()
-	for streamID, a := range c.mu.streams {
-		if !a.startAfter.IsEmpty() && timeutil.Since(a.startAfter.GoTime()) > threshold {
-			stuck = append(stuck, a)
-			delete(c.mu.streams, streamID)
-		}
-	}
-	c.mu.Unlock()
-	return stuck
-}
-
-func (c *muxStream) deleteStream(streamID int64) {
-	c.mu.Lock()
-	delete(c.mu.streams, streamID)
-	c.mu.Unlock()
-}
-
 // close closes mux stream returning the list of active range feeds.
-func (c *muxStream) close() []*activeMuxRangeFeed {
+func (c *muxStream) close() (toRestart []*activeMuxRangeFeed) {
+	// NB: lock must be held for the duration of this method to synchronize with startRangeFeed.
 	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.mu.closed = true
-	toRestart := make([]*activeMuxRangeFeed, 0, len(c.mu.streams))
-	for _, a := range c.mu.streams {
-		toRestart = append(toRestart, a)
-	}
-	c.mu.streams = nil
-	c.mu.Unlock()
+
+	c.streams.Range(func(_ int64, v unsafe.Pointer) bool {
+		toRestart = append(toRestart, (*activeMuxRangeFeed)(v))
+		return true
+	})
 
 	return toRestart
+}
+
+// NewCloseStreamRequest returns a mux rangefeed request to close specified stream.
+func NewCloseStreamRequest(
+	ctx context.Context, st *cluster.Settings, streamID int64,
+) (*kvpb.RangeFeedRequest, error) {
+	if !st.Version.IsActive(ctx, clusterversion.V23_2) {
+		return nil, errors.Newf("CloseStream request requires cluster version 23.2 or above, found %s", st.Version)
+	}
+	return &kvpb.RangeFeedRequest{
+		StreamID:    streamID,
+		CloseStream: true,
+	}, nil
 }

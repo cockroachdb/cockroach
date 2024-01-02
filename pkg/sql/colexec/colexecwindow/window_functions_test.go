@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/marusama/semaphore"
 	"github.com/stretchr/testify/require"
@@ -47,6 +48,9 @@ func (tc *windowFnTestCase) init() {
 }
 
 func TestWindowFunctions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
@@ -90,7 +94,7 @@ func TestWindowFunctions(t *testing.T) {
 	avgFn := execinfrapb.AggregatorSpec_AVG
 	maxFn := execinfrapb.AggregatorSpec_MAX
 
-	for _, spillForced := range []bool{true} {
+	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		for _, tc := range []windowFnTestCase{
 			// With PARTITION BY, no ORDER BY.

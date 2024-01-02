@@ -4,7 +4,7 @@
 # rows eagerly in the presence of limit hints.
 
 statement ok
-CREATE TABLE a (x INT PRIMARY KEY, y INT, z INT, INDEX (y));
+CREATE TABLE a (x INT PRIMARY KEY, y INT, z INT, INDEX (y), FAMILY (x, y, z));
 CREATE TABLE b (x INT PRIMARY KEY);
 INSERT INTO a VALUES (1, 1, 1), (2, 1, 1), (3, 2, 2), (4, 2, 2);
 INSERT INTO b VALUES (1), (2), (3), (4);
@@ -84,6 +84,9 @@ rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • limit
 │ count: 1
@@ -93,7 +96,7 @@ regions: <hidden>
     │ regions: <hidden>
     │ actual row count: 1
     │
-    ├── • index join
+    ├── • index join (streamer)
     │   │ nodes: <hidden>
     │   │ regions: <hidden>
     │   │ actual row count: 1
@@ -122,7 +125,7 @@ regions: <hidden>
     │         table: a@a_y_idx
     │         spans: [/1 - /1]
     │
-    └── • index join
+    └── • index join (streamer)
         │ nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
@@ -165,6 +168,9 @@ rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • limit
 │ count: 1
@@ -174,7 +180,7 @@ regions: <hidden>
     │ regions: <hidden>
     │ actual row count: 1
     │
-    ├── • index join
+    ├── • index join (streamer)
     │   │ nodes: <hidden>
     │   │ regions: <hidden>
     │   │ actual row count: 1
@@ -201,7 +207,7 @@ regions: <hidden>
     │         table: a@a_y_idx
     │         spans: [/1 - /1]
     │
-    └── • index join
+    └── • index join (streamer)
         │ nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
@@ -319,11 +325,14 @@ rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • limit
 │ count: 1
 │
-└── • lookup join
+└── • lookup join (streamer)
     │ nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 1
@@ -411,11 +420,14 @@ rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • limit
 │ count: 2
 │
-└── • lookup join
+└── • lookup join (streamer)
     │ nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 2

@@ -1,4 +1,4 @@
-parse
+error
 DECLARE
 BEGIN
 IF x THEN
@@ -6,9 +6,28 @@ IF x THEN
 END IF;
 END
 ----
-expected parse error: at or near ";": syntax error: unimplemented: this syntax
+----
+at or near ";": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+BEGIN
+IF x THEN
+  COMMIT;
+        ^
+HINT: You have attempted to use a feature that is not yet implemented.
 
-parse
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
+
+error
 DECLARE
 BEGIN
 IF x THEN
@@ -16,9 +35,28 @@ IF x THEN
 END IF;
 END
 ----
-expected parse error: at or near ";": syntax error: unimplemented: this syntax
+----
+at or near ";": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+BEGIN
+IF x THEN
+  ROLLBACK;
+          ^
+HINT: You have attempted to use a feature that is not yet implemented.
 
-parse
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
+
+error
 DECLARE
 BEGIN
 IF x THEN
@@ -28,14 +66,52 @@ ELSIF y THEN
 END IF;
 END
 ----
-expected parse error: at or near ";": syntax error: unimplemented: this syntax
+----
+at or near ";": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+BEGIN
+IF x THEN
+  COMMIT;
+        ^
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
 
 
-parse
+error
 DECLARE
 BEGIN
   INSERT INTO t1 VALUES (1,2) RETURNING x INTO y;
   COMMIT;
 END
 ----
-expected parse error: at or near ";": syntax error: unimplemented: this syntax
+----
+at or near ";": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  INSERT INTO t1 VALUES (1,2) RETURNING x INTO y;
+  COMMIT;
+        ^
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----

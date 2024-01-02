@@ -31,19 +31,21 @@ func BuildQuery(
 ) {
 	stmt, err := parser.ParseOne(sql)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("%+v", err)
 	}
 
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
+	semaCtx.FunctionResolver = catalog
+	semaCtx.SearchPath = &evalCtx.SessionData().SearchPath
 	if err := semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
-		t.Fatal(err)
+		t.Fatalf("%+v", err)
 	}
 	semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 	o.Init(ctx, evalCtx, catalog)
 	err = optbuilder.New(ctx, &semaCtx, evalCtx, catalog, o.Factory(), stmt.AST).Build()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("%+v", err)
 	}
 }
 
@@ -53,15 +55,16 @@ func BuildScalar(
 ) opt.ScalarExpr {
 	expr, err := parser.ParseExpr(input)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("%+v", err)
 	}
 
 	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
-	if err := b.Build(expr); err != nil {
+	root, err := b.Build(expr)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	return f.Memo().RootExpr().(opt.ScalarExpr)
+	return root
 }
 
 // BuildFilters builds the given input string as a FiltersExpr and returns it.

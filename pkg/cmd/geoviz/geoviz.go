@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/golang/geo/s2"
 )
 
@@ -206,8 +207,8 @@ func ImageFromReader(r io.Reader) (*Image, error) {
 			if err != nil {
 				return nil, fmt.Errorf("error parsing: %s", data)
 			}
-			index := geoindex.NewS2GeographyIndex(geoindex.S2GeographyConfig{
-				S2Config: &geoindex.S2Config{
+			index := geoindex.NewS2GeographyIndex(geopb.S2GeographyConfig{
+				S2Config: &geopb.S2Config{
 					MinLevel: 4,
 					MaxLevel: 30,
 					MaxCells: 20,

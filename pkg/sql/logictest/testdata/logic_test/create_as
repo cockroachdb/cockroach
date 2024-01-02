@@ -105,7 +105,7 @@ CREATE TABLE foo2 (x) AS (VALUES(ROW()))
 statement error pq: nested array unsupported as column type: int\[\]\[\]
 CREATE TABLE foo2 (x) AS (VALUES(ARRAY[ARRAY[1]]))
 
-statement error generator functions are not allowed in VALUES
+statement error pq: generate_series\(\): set-returning functions are not allowed in VALUES
 CREATE TABLE foo2 (x) AS (VALUES(generate_series(1,3)))
 
 statement error pq: value type unknown cannot be used for table columns
@@ -382,3 +382,72 @@ query I
 SELECT * FROM tab_from_seq
 ----
 2
+
+# Regression test for #105393
+subtest regression_105393
+
+statement ok
+CREATE DATABASE db105393_1;
+CREATE DATABASE db105393_2;
+USE db105393_1;
+CREATE TYPE e105393 AS ENUM ('a');
+CREATE TABLE t105393 (a INT PRIMARY KEY, b e105393);
+USE db105393_2;
+
+statement error pq: cross database type references are not supported: db105393_1.public.e105393
+CREATE TABLE e105393 AS TABLE db105393_1.public.t105393;
+
+statement error pq: cross database type references are not supported: db105393_1.public.e105393
+CREATE TABLE e105393 AS SELECT * FROM db105393_1.public.t105393;
+
+statement error pq: cross database type references are not supported: db105393_1.public.e105393
+CREATE TABLE e105393 AS SELECT b FROM db105393_1.public.t105393;
+
+statement error pq: cross database type references are not supported: db105393_1.public.e105393
+CREATE TABLE e105393 (a PRIMARY KEY, b) AS TABLE db105393_1.public.t105393;
+
+statement error pq: cross database type references are not supported: db105393_1.public.e105393
+CREATE TABLE e105393 (b) AS SELECT b FROM db105393_1.public.t105393;
+
+# Regression test for #105887
+subtest regression_105887
+
+statement ok
+CREATE TABLE t_105887_job (a INT);
+INSERT INTO t_105887_job values (1);
+
+statement ok
+ALTER TABLE t_105887_job ADD COLUMN b INT NOT NULL DEFAULT 2;
+
+query B
+SELECT count(*) > 0 FROM crdb_internal.jobs WHERE job_type like '%SCHEMA CHANGE%';
+----
+true
+
+statement ok
+CREATE MATERIALIZED VIEW v_105887_1 AS SELECT * FROM [SHOW JOBS];
+CREATE MATERIALIZED VIEW v_105887_2 AS SELECT * FROM crdb_internal.jobs;
+
+query B
+SELECT count(*) > 0 FROM v_105887_1
+----
+true
+
+query B
+SELECT count(*) > 0 FROM v_105887_2
+----
+true
+
+statement ok
+CREATE TABLE t_105887_1 AS SELECT * FROM [SHOW JOBS];
+CREATE TABLE t_105887_2 AS SELECT * FROM crdb_internal.jobs;
+
+query B
+SELECT count(*) > 0 FROM t_105887_1
+----
+true
+
+query B
+SELECT count(*) > 0 FROM t_105887_2
+----
+true

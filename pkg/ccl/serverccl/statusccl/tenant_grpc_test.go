@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,11 +34,14 @@ func TestTenantGRPCServices(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "probable OOM")
+
 	ctx := context.Background()
 
-	serverParams, _ := tests.CreateTestServerParams()
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: serverParams,
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
 	})
 	defer testCluster.Stopper().Stop(ctx)
 
@@ -46,9 +49,7 @@ func TestTenantGRPCServices(t *testing.T) {
 
 	tenantID := serverutils.TestTenantID()
 	testingKnobs := base.TestingKnobs{
-		SQLStatsKnobs: &sqlstats.TestingKnobs{
-			AOSTClause: "AS OF SYSTEM TIME '-1us'",
-		},
+		SQLStatsKnobs: sqlstats.CreateTestingKnobs(),
 	}
 	tenant, connTenant := serverutils.StartTenant(t, server, base.TestTenantArgs{
 		TenantID:     tenantID,
@@ -59,15 +60,7 @@ func TestTenantGRPCServices(t *testing.T) {
 	t.Logf("subtests starting")
 
 	t.Run("gRPC is running", func(t *testing.T) {
-		grpcAddr := tenant.RPCAddr()
-		rpcCtx := tenant.RPCContext()
-
-		nodeID := roachpb.NodeID(tenant.SQLInstanceID())
-		conn, err := rpcCtx.GRPCDialNode(grpcAddr, nodeID, rpc.DefaultClass).Connect(ctx)
-		require.NoError(t, err)
-
-		client := serverpb.NewStatusClient(conn)
-
+		client := tenant.GetStatusClient(t)
 		resp, err := client.Statements(ctx, &serverpb.StatementsRequest{NodeID: "local"})
 		require.NoError(t, err)
 		require.NotEmpty(t, resp.Statements)
@@ -78,7 +71,7 @@ func TestTenantGRPCServices(t *testing.T) {
 	defer httpClient.CloseIdleConnections()
 
 	t.Run("gRPC Gateway is running", func(t *testing.T) {
-		resp, err := httpClient.Get(tenant.AdminURL() + "/_status/statements")
+		resp, err := httpClient.Get(tenant.AdminURL().WithPath("/_status/statements").String())
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
@@ -97,7 +90,7 @@ func TestTenantGRPCServices(t *testing.T) {
 	defer connTenant2.Close()
 
 	t.Run("statements endpoint fans out request to multiple pods", func(t *testing.T) {
-		resp, err := httpClient.Get(tenant2.AdminURL() + "/_status/statements")
+		resp, err := httpClient.Get(tenant2.AdminURL().WithPath("/_status/statements").String())
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
@@ -117,7 +110,7 @@ func TestTenantGRPCServices(t *testing.T) {
 		require.NoError(t, err)
 		defer httpClient3.CloseIdleConnections()
 
-		resp, err := httpClient3.Get(tenant3.AdminURL() + "/_status/statements")
+		resp, err := httpClient3.Get(tenant3.AdminURL().WithPath("/_status/statements").String())
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
@@ -155,7 +148,7 @@ func TestTenantGRPCServices(t *testing.T) {
 	})
 
 	t.Run("sessions endpoint is available", func(t *testing.T) {
-		resp, err := httpClient.Get(tenant.AdminURL() + "/_status/sessions")
+		resp, err := httpClient.Get(tenant.AdminURL().WithPath("/_status/sessions").String())
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, 200, resp.StatusCode)

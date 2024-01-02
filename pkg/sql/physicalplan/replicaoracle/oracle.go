@@ -35,7 +35,8 @@ type Policy byte
 var (
 	// RandomChoice chooses lease replicas randomly.
 	RandomChoice = RegisterPolicy(newRandomOracle)
-	// BinPackingChoice bin-packs the choices.
+	// BinPackingChoice gives preference to leaseholders if possible, otherwise
+	// bin-packs the choices
 	BinPackingChoice = RegisterPolicy(newBinPackingOracle)
 	// ClosestChoice chooses the node closest to the current node.
 	ClosestChoice = RegisterPolicy(newClosestOracle)
@@ -52,6 +53,7 @@ type Config struct {
 	Clock       *hlc.Clock
 	RPCContext  *rpc.Context
 	LatencyFunc kvcoord.LatencyFunc
+	HealthFunc  kvcoord.HealthFunc
 }
 
 // Oracle is used to choose the lease holder for ranges. This
@@ -163,6 +165,7 @@ func (o *randomOracle) ChoosePreferredReplica(
 }
 
 type closestOracle struct {
+	st        *cluster.Settings
 	nodeDescs kvcoord.NodeDescStore
 	// nodeID and locality of the current node. Used to give preference to the
 	// current node and others "close" to it.
@@ -172,6 +175,7 @@ type closestOracle struct {
 	// inside the same process.
 	nodeID      roachpb.NodeID
 	locality    roachpb.Locality
+	healthFunc  kvcoord.HealthFunc
 	latencyFunc kvcoord.LatencyFunc
 }
 
@@ -181,10 +185,12 @@ func newClosestOracle(cfg Config) Oracle {
 		latencyFn = latencyFunc(cfg.RPCContext)
 	}
 	return &closestOracle{
+		st:          cfg.Settings,
 		nodeDescs:   cfg.NodeDescs,
 		nodeID:      cfg.NodeID,
 		locality:    cfg.Locality,
 		latencyFunc: latencyFn,
+		healthFunc:  cfg.HealthFunc,
 	}
 }
 
@@ -202,7 +208,7 @@ func (o *closestOracle) ChoosePreferredReplica(
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, false, err
 	}
-	replicas.OptimizeReplicaOrder(o.nodeID, o.latencyFunc, o.locality)
+	replicas.OptimizeReplicaOrder(o.st, o.nodeID, o.healthFunc, o.latencyFunc, o.locality)
 	repl := replicas[0].ReplicaDescriptor
 	// There are no "misplanned" ranges if we know the leaseholder, and we're
 	// deliberately choosing non-leaseholder.
@@ -226,6 +232,7 @@ const maxPreferredRangesPerLeaseHolder = 10
 // node.
 // Finally, it tries not to overload any node.
 type binPackingOracle struct {
+	st                               *cluster.Settings
 	maxPreferredRangesPerLeaseHolder int
 	nodeDescs                        kvcoord.NodeDescStore
 	// nodeID and locality of the current node. Used to give preference to the
@@ -237,15 +244,18 @@ type binPackingOracle struct {
 	nodeID      roachpb.NodeID
 	locality    roachpb.Locality
 	latencyFunc kvcoord.LatencyFunc
+	healthFunc  kvcoord.HealthFunc
 }
 
 func newBinPackingOracle(cfg Config) Oracle {
 	return &binPackingOracle{
+		st:                               cfg.Settings,
 		maxPreferredRangesPerLeaseHolder: maxPreferredRangesPerLeaseHolder,
 		nodeDescs:                        cfg.NodeDescs,
 		nodeID:                           cfg.NodeID,
 		locality:                         cfg.Locality,
 		latencyFunc:                      latencyFunc(cfg.RPCContext),
+		healthFunc:                       cfg.HealthFunc,
 	}
 }
 
@@ -266,7 +276,7 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, false, err
 	}
-	replicas.OptimizeReplicaOrder(o.nodeID, o.latencyFunc, o.locality)
+	replicas.OptimizeReplicaOrder(o.st, o.nodeID, o.healthFunc, o.latencyFunc, o.locality)
 
 	// Look for a replica that has been assigned some ranges, but it's not yet full.
 	minLoad := int(math.MaxInt32)

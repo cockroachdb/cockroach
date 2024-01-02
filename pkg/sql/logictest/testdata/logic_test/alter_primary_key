@@ -243,7 +243,7 @@ CREATE TABLE t (
   v JSONB,
   INDEX i1 (w), -- will get rewritten.
   INDEX i2 (y), -- will get rewritten.
-  UNIQUE INDEX i3 (z) STORING (y), -- will not be rewritten.
+  UNIQUE INDEX i3 (z) STORING (y), -- will be rewritten.
   UNIQUE INDEX i4 (z), -- will be rewritten.
   UNIQUE INDEX i5 (w) STORING (y), -- will be rewritten.
   INVERTED INDEX i6 (v), -- will be rewritten.
@@ -266,38 +266,38 @@ t  CREATE TABLE public.t (
      z INT8 NOT NULL,
      w INT8 NULL,
      v JSONB NULL,
-     crdb_internal_z_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 4:::INT8)) VIRTUAL,
+     crdb_internal_z_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(z))), 4:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (y ASC),
-     UNIQUE INDEX i3 (z ASC) STORING (y),
-     UNIQUE INDEX t_x_key (x ASC),
      INDEX i1 (w ASC),
      INDEX i2 (y ASC),
+     UNIQUE INDEX i3 (z ASC),
      UNIQUE INDEX i4 (z ASC),
-     UNIQUE INDEX i5 (w ASC) STORING (y),
+     UNIQUE INDEX i5 (w ASC),
      INVERTED INDEX i6 (v),
      INDEX i7 (z ASC) USING HASH WITH (bucket_count=4),
+     UNIQUE INDEX t_x_key (x ASC),
      FAMILY fam_0_x_y_z_w_v (x, y, z, w, v)
    )
 
-# Test that the indexes we expect got rewritten. All but i3 should have been rewritten,
-# so all but i3's indexID should be larger than 7.
+# Test that the indexes we expect got rewritten. All should have been rewritten,
+# so all indexID should be larger than 7.
 
 query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
-4   i3
 9   t_pkey
-11  t_x_key
-13  i1
-15  i2
+11  i1
+13  i2
+15  i3
 17  i4
 19  i5
 21  i6
 23  i7
+25  t_x_key
 
 # Make sure that each index can index join against the new primary key;
 
-query T
+query T nosort
 SELECT * FROM [EXPLAIN SELECT * FROM t@i1] OFFSET 2
 ----
 ·
@@ -314,7 +314,7 @@ SELECT * FROM t@i1
 ----
 1 2 3 4 {}
 
-query T
+query T nosort
 SELECT * FROM [EXPLAIN SELECT * FROM t@i2] OFFSET 2
 ----
 ·
@@ -331,7 +331,7 @@ SELECT * FROM t@i2
 ----
 1 2 3 4 {}
 
-query T
+query T nosort
 SELECT * FROM [EXPLAIN SELECT * FROM t@i3] OFFSET 2
 ----
 ·
@@ -348,7 +348,7 @@ SELECT * FROM t@i3
 ----
 1 2 3 4 {}
 
-query T
+query T nosort
 SELECT * FROM [EXPLAIN SELECT * FROM t@i4] OFFSET 2
 ----
 ·
@@ -365,7 +365,7 @@ SELECT * FROM t@i4
 ----
 1 2 3 4 {}
 
-query T
+query T nosort
 SELECT * FROM [EXPLAIN SELECT * FROM t@i5] OFFSET 2
 ----
 ·
@@ -382,7 +382,7 @@ SELECT * FROM t@i5
 ----
 1 2 3 4 {}
 
-query T
+query T nosort
 SELECT * FROM [EXPLAIN SELECT * FROM t@i7] OFFSET 2
 ----
 ·
@@ -398,6 +398,20 @@ query IIIIT
 SELECT * FROM t@i5
 ----
 1 2 3 4 {}
+
+# Make sure the create_statement from `SHOW CREATE` can indeed recreate the
+# table without error.
+
+let $index_rewrites_t_create_statement
+SELECT create_statement FROM [SHOW CREATE t];
+
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+$index_rewrites_t_create_statement
+
+subtest end
 
 subtest hash_sharded
 
@@ -426,15 +440,15 @@ t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      y INT8 NOT NULL,
      z INT8 NULL,
-     crdb_internal_z_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 5:::INT8)) VIRTUAL,
-     crdb_internal_y_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 10:::INT8)) VIRTUAL,
+     crdb_internal_z_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(z))), 5:::INT8)) VIRTUAL,
+     crdb_internal_y_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(y))), 10:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=10),
-     UNIQUE INDEX t_x_key (x ASC),
      INDEX i1 (z ASC) USING HASH WITH (bucket_count=5),
+     UNIQUE INDEX t_x_key (x ASC),
      FAMILY fam_0_x_y_z (x, y, z)
    )
 
-query T
+query T nosort
 SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] OFFSET 2
 ----
 ·
@@ -448,8 +462,8 @@ query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
 3  t_pkey
-5  t_x_key
-7  i1
+5  i1
+7  t_x_key
 
 query III
 SELECT * FROM t@t_pkey
@@ -489,13 +503,13 @@ query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
-     crdb_internal_x_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 5:::INT8)) VIRTUAL,
+     crdb_internal_x_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 5:::INT8)) VIRTUAL,
      x INT8 NOT NULL,
      y INT8 NOT NULL,
      z INT8 NULL,
      CONSTRAINT t_pkey PRIMARY KEY (y ASC),
-     UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=5),
      INDEX i (z ASC),
+     UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=5),
      FAMILY fam_0_x_y_z (x, y, z)
    )
 
@@ -635,13 +649,13 @@ CREATE TABLE t (x INT NOT NULL);
 statement ok
 ALTER TABLE t ADD PRIMARY KEY (x) USING HASH WITH (bucket_count=4)
 
+skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
      x INT8 NOT NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     crdb_internal_x_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 4:::INT8)) VIRTUAL,
+     crdb_internal_x_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 4:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4)
    )
 
@@ -1059,13 +1073,14 @@ CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH (bucket_count=2));
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x) USING HASH WITH (bucket_count=3)
 
+# old shard column isn't removed by legacy schema changer.
+skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
-     crdb_internal_x_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) VIRTUAL,
      x INT8 NOT NULL,
-     crdb_internal_x_shard_3 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 3:::INT8)) VIRTUAL,
+     crdb_internal_x_shard_3 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 3:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3)
    )
 
@@ -1084,10 +1099,10 @@ query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
-     crdb_internal_x_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) VIRTUAL,
+     crdb_internal_x_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 2:::INT8)) VIRTUAL,
      x INT8 NOT NULL,
      y INT8 NOT NULL,
-     crdb_internal_y_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 2:::INT8)) VIRTUAL,
+     crdb_internal_y_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(y))), 2:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=2),
      UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=2),
      FAMILY fam_0_x_y (x, y)
@@ -1310,7 +1325,7 @@ t_pkey  i  ASC
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i) USING HASH WITH (bucket_count=2)
 
-query TTT
+query TTT rowsort
 SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
 ----
 t_pkey  crdb_internal_i_shard_2  ASC
@@ -1403,8 +1418,8 @@ CREATE TABLE public.t (
   b INT8 NOT NULL,
   k INT8 NOT NULL AS (a + b) VIRTUAL,
   CONSTRAINT t_pkey PRIMARY KEY (k ASC),
-  UNIQUE INDEX t_a_key (a ASC),
-  INDEX t_idx_b_k (b ASC, k ASC)
+  INDEX t_idx_b_k (b ASC, k ASC),
+  UNIQUE INDEX t_a_key (a ASC)
 )
 
 query III colnames,rowsort
@@ -1439,9 +1454,9 @@ CREATE TABLE public.t (
   b INT8 NOT NULL,
   k INT8 NOT NULL AS (a + b) VIRTUAL,
   CONSTRAINT t_pkey PRIMARY KEY (b ASC, k ASC),
-  UNIQUE INDEX t_k_key (k ASC),
+  INDEX t_idx_b_k (b ASC, k ASC),
   UNIQUE INDEX t_a_key (a ASC),
-  INDEX t_idx_b_k (b ASC, k ASC)
+  UNIQUE INDEX t_k_key (k ASC)
 )
 
 query III colnames,rowsort
@@ -1483,10 +1498,10 @@ CREATE TABLE public.t (
   b INT8 NOT NULL,
   k INT8 NOT NULL AS (a + b) VIRTUAL,
   CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-  UNIQUE INDEX t_b_k_key (b ASC, k ASC),
-  UNIQUE INDEX t_k_key (k ASC),
+  INDEX t_idx_b_k (b ASC, k ASC),
   UNIQUE INDEX t_a_key (a ASC),
-  INDEX t_idx_b_k (b ASC, k ASC)
+  UNIQUE INDEX t_k_key (k ASC),
+  UNIQUE INDEX t_b_k_key (b ASC, k ASC)
 )
 
 query III colnames,rowsort
@@ -1555,7 +1570,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t_test_param]
 CREATE TABLE public.t_test_param (
   a INT8 NOT NULL,
   b INT8 NOT NULL,
-  crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 5:::INT8)) VIRTUAL,
+  crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 5:::INT8)) VIRTUAL,
   CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH (bucket_count=5),
   UNIQUE INDEX t_test_param_a_key (a ASC),
   FAMILY fam_0_a_b (a, b)
@@ -1571,6 +1586,7 @@ statement ok
 COMMENT ON INDEX pkey IS 'idx';
 COMMENT ON CONSTRAINT pkey ON pkey_comment IS 'const';
 
+# Create a unique secondary index and add a comment on it.
 statement ok
 CREATE UNIQUE INDEX i2 ON pkey_comment(c);
 
@@ -1591,15 +1607,21 @@ COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
 statement ok
 ALTER TABLE pkey_comment ALTER PRIMARY KEY USING COLUMNS (b);
 
-# No comment exists inside the CREATE statement
-skipif config local-legacy-schema-changer
+# Verify that all comments are appropriately carried over. The order of comments
+# from `SHOW CREATE` between LSC and DSC are slightly different so we used
+# slightly complicated query to extract all comments from `SHOW CREATE` and
+# order them by comments for a unified output.
 query T
-SELECT substring(create_statement, strpos(create_statement, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
+SELECT trim(trailing ';' from unnest(regexp_split_to_array(substring(create_statement, strpos(create_statement, 'COMMENT')), '\n', 'g'))) AS comment
+FROM [SHOW CREATE pkey_comment]
+ORDER BY comment;
 ----
-COMMENT ON INDEX public.pkey_comment@pkey IS 'idx';
-COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
-COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const';
 COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
+COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const'
+COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2'
+COMMENT ON INDEX public.pkey_comment@pkey IS 'idx'
+
+subtest end
 
 subtest test-index-deduplication
 
@@ -1877,7 +1899,7 @@ t_96730  CREATE TABLE public.t_96730 (
            i INT8 NOT NULL,
            j INT8 NOT NULL,
            k STRING NOT NULL,
-           crdb_internal_j_k_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(j, k)), 16:::INT8)) VIRTUAL,
+           crdb_internal_j_k_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(j, k))), 16:::INT8)) VIRTUAL,
            CONSTRAINT t_96730_pkey PRIMARY KEY (j ASC, k ASC) USING HASH WITH (bucket_count=16),
            UNIQUE INDEX t_96730_i_key (i ASC)
          )
@@ -1901,6 +1923,52 @@ t_99303  CREATE TABLE public.t_99303 (
            i INT8 NOT NULL,
            j INT8 NOT NULL,
            CONSTRAINT t_99303_pkey PRIMARY KEY (j ASC),
-           UNIQUE INDEX t_99303_i_key1 (i ASC),
-           UNIQUE INDEX t_99303_i_key (i ASC) WHERE i > 0:::INT8
+           UNIQUE INDEX t_99303_i_key (i ASC) WHERE i > 0:::INT8,
+           UNIQUE INDEX t_99303_i_key1 (i ASC)
          )
+
+subtest end
+
+# This subtest ensures that if we ALTER PK on a table with unique secondary
+# indexes on the new-pk-cols, then ALTER PK rewrites those unique secondary
+# indexes so that they have no reference to old-pk-cols anymore (previously,
+# before the ALTER PK, old-pk-cols are in their keySuffixColumn). This ensures
+# subsequent dropping of old-pk-cols will not impact any of these unique
+# secondary indexes.
+subtest 114436
+
+statement ok
+CREATE TABLE t_114436 (j INT NOT NULL, UNIQUE INDEX idx (j));
+
+statement ok
+ALTER TABLE t_114436 ALTER PRIMARY KEY USING COLUMNS (j);
+
+statement ok
+ALTER TABLE t_114436 DROP COLUMN IF EXISTS rowid;
+
+query TTT
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t_114436] ORDER BY 1,2,3
+----
+idx j ASC
+t_114436_pkey j ASC
+
+# Repeat the same thing but on a non-rowid column this time.
+statement ok
+DROP TABLE t_114436;
+
+statement ok
+CREATE TABLE t_114436 (i INT PRIMARY KEY, j INT NOT NULL, UNIQUE INDEX idx (j));
+
+statement ok
+ALTER TABLE t_114436 ALTER PRIMARY KEY USING COLUMNS (j);
+
+statement ok
+ALTER TABLE t_114436 DROP COLUMN i;
+
+query TTT
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t_114436] ORDER BY 1,2,3
+----
+idx j ASC
+t_114436_pkey j ASC
+
+subtest end

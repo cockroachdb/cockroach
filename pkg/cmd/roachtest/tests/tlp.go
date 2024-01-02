@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -29,22 +28,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
-	"github.com/google/go-cmp/cmp"
 )
 
 const statementTimeout = time.Minute
 
 func registerTLP(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:            "tlp",
-		Owner:           registry.OwnerSQLQueries,
-		Timeout:         time.Hour * 1,
-		RequiresLicense: true,
-		Tags:            nil,
-		Cluster:         r.MakeClusterSpec(1),
-		Leases:          registry.MetamorphicLeases,
-		NativeLibs:      registry.LibGEOS,
-		Run:             runTLP,
+		Name:             "tlp",
+		Owner:            registry.OwnerSQLQueries,
+		Timeout:          time.Hour * 1,
+		RequiresLicense:  true,
+		Cluster:          r.MakeClusterSpec(1),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		NativeLibs:       registry.LibGEOS,
+		Run:              runTLP,
+		ExtraLabels:      []string{"O-rsg"},
 	})
 }
 
@@ -65,8 +65,6 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
-
 	for i := 0; ; i++ {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 		if shouldExit() {
@@ -82,7 +80,7 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 			return
 		}
 		c.Stop(ctx, t.L(), option.DefaultStopOpts())
-		c.Wipe(ctx)
+		c.Wipe(ctx, false /* preserveCerts */)
 	}
 }
 
@@ -269,20 +267,6 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 			"expected unpartitioned and partitioned results to be equal\n%s\nsql: %s\n%s\nwith args: %s",
 			diff, unpartitioned, partitioned, args)
 	})
-}
-
-func unsortedMatricesDiff(rowMatrix1, rowMatrix2 [][]string) string {
-	var rows1 []string
-	for _, row := range rowMatrix1 {
-		rows1 = append(rows1, strings.Join(row[:], ","))
-	}
-	var rows2 []string
-	for _, row := range rowMatrix2 {
-		rows2 = append(rows2, strings.Join(row[:], ","))
-	}
-	sort.Strings(rows1)
-	sort.Strings(rows2)
-	return cmp.Diff(rows1, rows2)
 }
 
 func runWithTimeout(f func() error) error {

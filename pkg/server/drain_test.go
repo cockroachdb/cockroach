@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -31,7 +32,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 // TestDrain tests the Drain RPC.
@@ -157,12 +157,22 @@ INSERT INTO t.test VALUES (3);
 	// Open a new SQL connection.
 	sqlDB = sqlutils.MakeSQLRunner(drainCtx.tc.ServerConn(1))
 
-	// Check that the stats were flushed into the statement stats system table.
-	// Verify that the number of statistics for node 1 are non-zero.
-	sqlDB.CheckQueryResults(t,
-		`SELECT count(*) > 0 FROM system.statement_statistics WHERE node_id = 1`,
-		[][]string{{"true"}},
-	)
+	if sqlstats.GatewayNodeEnabled.Get(&drainCtx.tc.Servers[0].ClusterSettings().SV) {
+		// Check that the stats were flushed into the statement stats system table.
+		// Verify that the number of statistics for node 1 are non-zero.
+		sqlDB.CheckQueryResults(t,
+			`SELECT count(*) > 0 FROM system.statement_statistics WHERE node_id = 1`,
+			[][]string{{"true"}},
+		)
+	} else {
+		// Check that the stats were flushed into the statement stats system table.
+		// Verify that the number of statistics for node 1 are non-zero.
+		sqlDB.CheckQueryResults(t,
+			`SELECT count(*) > 0 FROM system.statement_statistics WHERE node_id = 0 AND statistics -> 'statistics' ->> 'nodes' = '[1]'`,
+			[][]string{{"true"}},
+		)
+	}
+
 }
 
 type testDrainContext struct {
@@ -192,12 +202,8 @@ func newTestDrainContext(t *testing.T, drainSleepCallCount *int) *testDrainConte
 	}
 
 	// We'll have the RPC talk to the first node.
-	var err error
-	tc.c, tc.connCloser, err = getAdminClientForServer(tc.tc.Server(0))
-	if err != nil {
-		tc.Close()
-		t.Fatal(err)
-	}
+	tc.c = tc.tc.Server(0).GetAdminClient(t)
+	tc.connCloser = func() {}
 
 	return tc
 }
@@ -294,28 +300,14 @@ func (t *testDrainContext) getDrainResponse(
 	return resp, nil
 }
 
-func getAdminClientForServer(
-	s serverutils.TestServerInterface,
-) (c serverpb.AdminClient, closer func(), err error) {
-	//lint:ignore SA1019 grpc.WithInsecure is deprecated
-	conn, err := grpc.Dial(s.ServingRPCAddr(), grpc.WithInsecure())
-	if err != nil {
-		return nil, nil, err
-	}
-	client := serverpb.NewAdminClient(conn)
-	return client, func() {
-		_ = conn.Close() // nolint:grpcconnclose
-	}, nil
-}
-
 func TestServerShutdownReleasesSession(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -324,7 +316,7 @@ func TestServerShutdownReleasesSession(t *testing.T) {
 	}
 
 	tenant, tenantSQLRaw := serverutils.StartTenant(t, s, tenantArgs)
-	defer tenant.Stopper().Stop(ctx)
+	defer tenant.AppStopper().Stop(ctx)
 	tenantSQL := sqlutils.MakeSQLRunner(tenantSQLRaw)
 
 	queryOwner := func(id base.SQLInstanceID) (owner *string) {
@@ -337,7 +329,7 @@ func TestServerShutdownReleasesSession(t *testing.T) {
 		return 0 < len(rows)
 	}
 
-	tmpTenant, err := s.StartTenant(ctx, tenantArgs)
+	tmpTenant, err := s.TenantController().StartTenant(ctx, tenantArgs)
 	require.NoError(t, err)
 
 	tmpSQLInstance := tmpTenant.SQLInstanceID()
@@ -346,7 +338,32 @@ func TestServerShutdownReleasesSession(t *testing.T) {
 	require.True(t, sessionExists(*session))
 
 	require.NoError(t, tmpTenant.DrainClients(context.Background()))
+	tmpTenant.AppStopper().Stop(ctx)
 
 	require.False(t, sessionExists(*session), "expected session %s to be deleted from the sqlliveness table, but it still exists", *session)
 	require.Nil(t, queryOwner(tmpSQLInstance), "expected sql_instance %d to have no owning session_id", tmpSQLInstance)
+}
+
+// Verify that drain works correctly even if we don't start the sql instance.
+func TestNoSQLServer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 2,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+				DisableSQLServer:  true,
+			},
+		})
+
+	defer tc.Stopper().Stop(ctx)
+	req := serverpb.DrainRequest{Shutdown: false, DoDrain: true, NodeId: "2"}
+	drainStream, err := tc.Server(0).ApplicationLayer().GetAdminClient(t).Drain(ctx, &req)
+	require.NoError(t, err)
+	// When we get this next response the drain has started - check the error.
+	drainResp, err := drainStream.Recv()
+	require.NoError(t, err)
+	require.True(t, drainResp.IsDraining)
 }

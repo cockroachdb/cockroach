@@ -1,8 +1,7 @@
 # LogicTest: 5node
 
-# TODO(rytaft): When zigzag joins are supported with multicolumn inverted
-# indexes, change this test to use a multicolumn inverted index and split
-# the index.
+statement ok
+SET enable_zigzag_join = true
 
 subtest json
 
@@ -66,7 +65,7 @@ SELECT start_key, end_key, replicas, lease_holder
 FROM [SHOW RANGES FROM INDEX json_tab@primary WITH DETAILS] ORDER BY lease_holder, start_key
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  …/10          {1}       1
+<before:/Table/65>  …/10          {1}       1
 …/10                …/20          {2}       2
 …/20                …/<IndexMax>  {3}       3
 
@@ -75,7 +74,7 @@ SELECT start_key, end_key, replicas, lease_holder
 FROM [SHOW RANGES FROM TABLE json_tab WITH DETAILS] ORDER BY lease_holder, start_key
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  …/1/10        {1}       1
+<before:/Table/65>  …/1/10        {1}       1
 …/2                 <after:/Max>  {1}       1
 …/1/10              …/1/20        {2}       2
 …/1/20              …/2           {3}       3
@@ -98,7 +97,7 @@ vectorized: true
       table: json_tab@json_tab_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8k9Fv0zAQxt_5K073MhCuEjtbkfwUtmWiqDQjqQRoRJPbnKZCFgfbkUBV_3eURNsIrFlQBW-5O3_-frrP2aL9VqDE6OPl_PVsAc_PZ-kyfT9_AWk0j86WoOAiid_BF6vLa6dW8OFNlESwgvBz7fsBwdEVZyCyI4iT8yiB00-gkGGpc1qoW7Ior5AjQ4EMA8wYVkavyVptmtG2PTjLv6P0GW7KqnZNO2O41oZQbtFtXEEocalWBSWkcjKejwxzcmpTtNffoYV3H9fVV_qBDM90Ud-WVoJisEKGaaWaauJxH7MdQ127B0Pr1A2h5Ds2HupiUzgyZLygT9T1JYTijzVJKd-m8eJ0L4DYC_Dgq01OhvK-achfYrZ7hHKhJ7rypv3Tce0khHwvRtDD4OPD4YeF43F_4omx-TzBdZ_P8b_KR4xfjDhwMcKfjNzKE1D3Wzn5H6_2EYCEbKVLSz37fTf7zZOm_Ia6X8Dq2qzp0uh1a9OVcatrGzlZ1015V8zKbtQA_irmg2LRE_PfxWJQ_GrYORgUHw-Ljw_BPhkUT4edp3_lnO2e_QwAAP__EgULFQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lN9u2jAUh-_3FNa56aY5SuwAk3zFWlKNqYUuQdqmDlWGnHZZQ5zZjrqq4t2nhEFJ1iBoVV8g_Cefv_yOnQcwv1MQEHy7OPs4HJG3g2E0ib6cvSNRcBacTIgkp-H4nPwyKruycka-fgrCgMxI_0fheT6So0tGCZ8ekXE4CEJy_J1IoJCpGEdygQbEJTCgwIGCD1MKuVZzNEbpcuqhWjiM_4DwKCRZXthyeEphrjSCeACb2BRBwETOUgxRxqhdDyjEaGWSVvi1Wn_95yq_xXugcKLSYpEZQSQlM6AQ5bLsOS7zYLqkoAr7uKGx8gZBsC3D4QCEt6T7S54mqUWN2vXrhqtxQfr8v9iEEJ-j8ei4VYg3hPxWoUcPpWPUGNcl-uw9TJdPWI-Uo3K3V189Lqwgfdaq5Te0ejUttn8x2cuK6TLPcfn-9WSHeG7q2Xm9enZqQnz_4PgLg-Oes3dq_BDJTWrd10ute8i1DNHkKjNY02nbyWvs5LDyzmB8g6s7ZlSh53ih1bxau-qOK1A1EKOxq1m26gyz9ZSxGuVi81XZJrGdJF4jsW2S3yTxnaQPBzj5O0mddhJrkjrPfbtOk9TdSeq1O_Emqfdcp255Hq5TdXeVxCDA-9ecJ37WDcoH5I0pD2X0U91V2Ml9Xh6pa5kapHAub3GAFvUiyRJjkzkIqwtcLt_8DQAA__91J3EE
 
 # Combine predicates with AND. Should have the same output as b @> '[1, 2]'.
 # This should not use a zigzag join due to distribution costs.
@@ -118,7 +117,7 @@ vectorized: true
       table: json_tab@json_tab_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk19vmzAUxd_3Kaz70lRzBDZpJvmJtqFapgw6iLRNHaqccFVlo5jZRtoU5btPwPqHqaFMechb7r0-vr-cg7dgfuYgIPhyvTifh2Q0myfL5NPilCTBIrhcEkmu4ugj-W5UcWvlinx-H8QBGa2I_61yXQ_JyQ1LT07JeTjrdnndjeJZEJOLr0QChUJlGMp7NCBugAEFDhQ8SCmUWq3RGKXr0bY5OM9-gXApbIqysnU7pbBWGkFswW5sjiBgKVc5xigz1I4LFDK0cpM31z_w-g8_bssf-BsoXKq8ui-MIJKSFVBISllXY4e5kO4oqMo-LTRW3iEItqPDoa42uUWN2vG6RG1fkJHPu94JIT4kUXjx18POmD8b78Xje_GeqJTOUGPWRfLZW0h3L_yHUI1V6Uy7p6PKCuKzvRheB4MNj44dFp3D3LHDh6b3CtdjepPjpMeH28YPtI2744GevQL16NnZ8b_4F_BiNKUqDHbg9t3s1s8Bsztsn49RlV7jtVbrZk1bRo2uaWRobDtlbTEv2lEN-FzMesW8I2b_inmv-F3_Zq9XPOkXTw7BPusVT_s3T_9rc7p78ycAAP__7U0mKw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElFFP2z4QwN__n8K6F0B_R4mdtpP8VKBB6wQtSyptE6uQ2xwsI40z2xFDqN99SkqhiUjVwgN-qOo79-ef7-w-gvmTgoDg--X58XBEDgfDaBJ9PT8iUXAenE6IJGfh-IL8Niq7tnJGvn0OwoAczkj_Z-F5PpKDKzY9OCLHo0E9ysvoOBwEITn5QSRQyFSMI7lAA-IKGFDgQMGHKYVcqzkao3SZeqwWDuO_IDwKSZYXtgxPKcyVRhCPYBObIgiYyFmKIcoYtesBhRitTNIKv_btr79c53f4ABROVVosMiOIpGQGFKJcljPHZR5MlxRUYV82NFbeIgi2YTgcgPCWdHfJsyS1qFG7ft1wFRfksM_rtRRCfInGo5OnmtbSfCPdqssbun6r7oul0jFqjOuKffY_TJevnGmkHJW7vfrqcWEF6bNWLb-h1atpsd1bzd7Xapd5jst37zbbx_O5252P6nanpst3Lyt_Z1m55-xcU76P5HNNux9V0-4-Dz5Ek6vMYE22bSevsZPDyveG8S2u3qdRhZ7jpVbzau1qOq5AVSBGY1dZtpoMs3XKWI1y8fx_tUliW0m8RmKbJL9J4ltJn_Zw8reSOu0k1iR13nq6TpPU3UrqtTvxJqn3VqdueR9uUnV_ncQgwHsazisf6wHlD-StKS9l9EvdV9jJQ15eqRuZGqRwIe9wgBb1IskSY5M5CKsLXC7_-xcAAP__soaMGg==
 
 # Filter with a nested array. This index expression is not tight.
 # This should not use a zigzag join due to distribution costs.
@@ -138,7 +137,7 @@ vectorized: true
       table: json_tab@json_tab_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8k9Fv0zAQxt_5K6x7GQhXiZ2uSH4K2zJRVJqRVAJUosmtT1Mhi4PtSKCq_ztKom0EtWlQxd5yd_78_XSfswX7IwcB0eeb2dvpnLy8mqaL9OPsFUmjWXS5IJJcJ_EH8s3q4tbJFfn0LkoisiLh18r3AyRnyyWjhGfZGYmTqyghF1-IBAqFVjiX92hBLIEBBQ4UAsgolEav0Vpt6tG2OThVP0H4FDZFWbm6nVFYa4MgtuA2LkcQsJCrHBOUCo3nAwWFTm7y5voHuPDh47b8jr-AwqXOq_vCCiIpWQGFtJR1NfKYD9mOgq7ck6F18g5BsB0dDnW9yR0aNF7QJWr7goR8z6KEEO_TeH5xEIEfRHhy1kahQdW1DdlryHZ7OOd6pEtv0j0dV06QkB3ECDoYbHg87LR4POaPPD40oSNcjwmN_19CfPhq-Imr4f5o4F6OQD3u5fx5Xu4ehARtqQuLHYBDN_v1s0Z1h-1vYHVl1nhj9Lqxacu40TUNhda1U9YW06Id1YB_ilmvmHfE7G8x7xW_6XcOesXjfvH4FOzzXvGk33nyT87Z7sXvAAAA__-LJA31
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lF9vmzwUh-_fT2Gdm77TjMAmySRfZW2olqlNOoi0TR2qnHDasRLMbKOuqvLdJ8jSFhSipFV9EcV_ePzwOzYPYH5nICD4dnH2cTwh_4_G0Sz6cvaORMFZcDIjkpyG03Pyy6j8yso5-fopCAMyJ8Mfpef5SI4uLxklPI6PyDQcBSE5_k4kUMhVghO5RAPiEhhQ4EDBh5hCodUCjVG6mnqoF46TPyA8CmlelLYajikslEYQD2BTmyEImMl5hiHKBLXrAYUErUyzGr-RG27-XBW3eA8UTlRWLnMjiKRkDhSiQlY9x2UexCsKqrRPGxorbxAEe2Y4HoHwVnR_ydM0s6hRu37TcD0uyJBvCU4I8TmaTo47lXhLye9UejJROkGNSVNjyN5DvNriPVGOKtxBc_W0tIIMWaeW39IaNLTY_uVkryunyzzH5ftXlB3i-VjR3ltWtNdQ4vtHx18ZHfecvXPjh0g-5tZ_y9z6h1zOEE2hcoMNoa6dvNZODqvuDSY3uL5nRpV6gRdaLeq16-60BtUDCRq7nmXrzjjfTBmrUS4fvy3PSWwniTdI7DnJb5P4TtKHA5z8naReN4m1Sb2Xvl2vTervJA26nXibNHipU786D9eZurtKExDg_WvOlp9Ng-oBeWOqQxn9VHc1dnZfVEfqWmYGKZzLWxyhRb1M89TYdAHC6hJXq__-BgAA__-QcHPk
 
 subtest array
 
@@ -213,4 +212,4 @@ vectorized: true
           right columns: (a, b_inverted_key)
           right fixed values: 1 column
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl1v0zAUhu_5FUfnZiAsNU7vfBXYgigq60gm8RlVbnKIzDKfYDuIEeW_oyQSXZlabXc-H8_rx5J79D8bVJh-ulq_Wl3C84tVfp1_WL-APF2n59eg4U22eQ_aOX23DXqXfGfeGvsLPr5NsxR2kHzromhJcNZLAfFwBpvsIs3g9WfQKNByRZf6ljyqryixENg6Lsl7dmOrnxZW1W9UkUBj2y6M7UJgyY5Q9RhMaAgVfjH1H12_Y2PJLSIUWFHQpplyc1MRROqhJAo856a7tV6BFrBDMe_Kx-1uuqAgWWIxCOQu7OV80DWhkoN4_ANG9Yx0RW4hD_X3Kv9O2_aG7lDgmvmma-EHGwtsFSTyvubeUR51jJ_imLML5BbxoV8iXx6NXz4lPiPfsvV0EH8sORoKgVTVNP8Tz50r6cpxOV0zl5uJmxoV-TBP5Vys7DwaBe_D8iQcn4bjk_DyP7gYnv0NAAD___D1GIU=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl9v0zAUxd_5FFf3ZSA8NU7f_FRYgyjq1pFU4m9VucltME3tYDuMUuW7oyRs_QOtNj9E8fXNOb9z4y26HwUKjD7ejl-NbuD5cJRMk_fjF5BE4-hqChLexJNrkNbKzdzLxWBpzFzpn_DhbRRHsIDB1yoI-gQXW84grC9gEg-jGF5_AokMtcnoRq7JofiCHGcMS2tScs7YprRtG0bZLxQBQ6XLyjflGcPUWEKxRa98QSjws8p_y_ydUZpsL0CGGXmpilY3URlBIP6FRIZXpqjW2gmQDBbIul7-uN5J5QUM-jirGZrK7-Cclzmh4HtpRkMUQc0eH6iJEpPMyPb4YZwd2sPbvFzRBhmOjVlVJXw3SoPRAgZ8H3vHzE8yh0fM_CnMibGebC885B3wlyft-kd24VPsYnKl0Y4O7E45BUdOl7yeMaQsp-6iOVPZlG6tSdvebjtphdpCRs53p7zbjPT9kfOW5PrhD-8r8bNK4WklfqwUnlXqn2OaMVwW5m6uMhQY_F2X_3ncL2w-kLlrhp18M3et7HRTNqNaysIRw2u5oiF5smullfMqReFtRXX97E8AAAD__yUEWWw=

@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant-default-configs !local-mixed-22.2-23.1
+# LogicTest: !3node-tenant-default-configs !local-mixed-23.1
 
 # Test formatting of keys in output of SPLIT AT
 
@@ -10,9 +10,9 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  <after:/Max>  {1}       1
+<before:/Table/65>  <after:/Max>  {1}       1
 
-query TTT colnames
+query TTT colnames,nosort
 ALTER TABLE t SPLIT AT VALUES (1), (10)
 ----
 key            pretty  split_enforced_until
@@ -24,7 +24,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  …/1/1         {1}       1
+<before:/Table/65>  …/1/1         {1}       1
 …/1/1               …/1/10        {1}       1
 …/1/10              <after:/Max>  {1}       1
 

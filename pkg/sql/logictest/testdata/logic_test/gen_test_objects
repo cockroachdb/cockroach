@@ -169,20 +169,28 @@ SELECT crdb_internal.generate_test_objects('{"seed":1234,"counts":[10],"table_te
 ----
 {"databases": 0, "schemas": 0, "tables": 10}
 
+# Regression test for not ignoring virtual columns.
+query T
+SELECT crdb_internal.generate_test_objects('{"seed":1234,"counts":[1],"table_templates":["system.statement_statistics"]}'::JSONB)->'generated_counts'
+----
+{"databases": 0, "schemas": 0, "tables": 1}
+
 query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
-comments
-database_role_sett               ings
-eventlog
-jo\\x86bs
-join_tokens
-priVileges
+mig%prations
+privileges
+replication_constraint_stats
 replication_critical_localities
-role_id_seq
-statement_bundle_chunks
-ten  ant_set                     tings
+s
+t̾atement_diagnostics
+schedulEd_jobs
+statement_execution_insights
+sta͌temenṭ_bundlẻ_chunks
+sta😣tement_statistics
+table_statistics
+tenant_id_seq
 
 # Again, the column names are randomized.
 query TTT
@@ -191,26 +199,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-comments             comment             text
-comments             obj😹ect_id          bigint
-comments             rowid               bigint
-comments             "sub'_id"           bigint
-comments             type                bigint
-"database_role_sett  ings"               databasḙ_id                  oid
-"database_role_sett  ings"               "ro*le_id"                   oid
-"database_role_sett  ings"               role_name                    text
-"database_role_sett  ings"               rowid                        bigint
-"database_role_sett  ings"               "se t"" tings"""             ARRAY
-eventlog             "eventType"         text
-eventlog             info                text
-eventlog             "reportingID"       bigint
-eventlog             rowid               bigint
-eventlog             "targetID"          bigint
-eventlog             "tỉ  mestamp"       timestamp without time zone
-eventlog             "uniq""ueID"        bytea
-"jo\\x86bs"          "Claim_session_id"  bytea
-"jo\\x86bs"          claim_instance_id   bigint
-"jo\\x86bs"          "crea ted_by_id"    bigint
+"mig%prations"                "%qm,inor"          bigint
+"mig%prations"                completed_at        timestamp with time zone
+"mig%prations"                internal            bigint
+"mig%prations"                "major'"            bigint
+"mig%prations"                patch               bigint
+"mig%prations"                rowid               bigint
+privileges                    "gran t_options"    ARRAY
+privileges                    path😀               text
+privileges                    privileges          ARRAY
+privileges                    rowid               bigint
+privileges                    "user%q_%qid"       oid
+privileges                    username            text
+replication_constraint_stats  "  ty*pe"           text
+replication_constraint_stats  config              text
+replication_constraint_stats  report_id           bigint
+replication_constraint_stats  rowid               bigint
+replication_constraint_stats  subzone_id          bigint
+replication_constraint_stats  "viola!tion_start"  timestamp with time zone
+replication_constraint_stats  violating_ranges    bigint
+replication_constraint_stats  zon😂e_id            bigint
 
 subtest templates/different_templates_in_each_db
 
@@ -228,15 +236,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt1"  public  external_connections
-"d%qbt1"  public  "le)as e"
-"d%qbt1"  public  statement_activity
-"d%qbt2"  public  tena😿nt_id_seq
-"d%qbt2"  public  ui
-"d%qbt2"  public  w😤eb_sessions
-dbt3      public  "descrip tor_id_seq"
-dbt3      public  "span                   _stats_tenant_boundaries"
-dbt3      public  "sta""tement_activity"
+"d%qbt1"  public  span_stats_samples
+"d%qbt1"  public  "t abLe_statistics"
+"d%qbt1"  public  "transaction_execut%ion_insights"
+"d%qbt2"  public  "r\\x0fegion_liveness"
+"d%qbt2"  public  span_stats_buckets
+"d%qbt2"  public  "transaction_statisTics"
+dbt3      public  "extern'al_connections"
+dbt3      public  "te\\x64nant_i""d_se q"
+dbt3      public  "tenant_setting%vs"
 
 
 statement ok
@@ -475,13 +483,13 @@ subtest inv_privs
 query error does not have CREATE privilege on database system
 SELECT crdb_internal.generate_test_objects('system.public.foo', 10)
 
-query error cannot CREATE on schema pg_catalog
+query error pg_catalog is a virtual schema and cannot be modified
 SELECT crdb_internal.generate_test_objects('pg_catalog.foo', 10)
 
 statement ok
 SET search_path=pg_catalog,public
 
-query error cannot CREATE on schema pg_catalog
+query error pg_catalog is a virtual schema and cannot be modified
 SELECT crdb_internal.generate_test_objects('foo', 10)
 
 statement ok

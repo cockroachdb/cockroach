@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -37,8 +38,6 @@ const allocatorStableSeconds = 120
 
 func registerAllocator(r registry.Registry) {
 	runAllocator := func(ctx context.Context, t test.Test, c cluster.Cluster, start int, maxStdDev float64) {
-		c.Put(ctx, t.Cockroach(), "./cockroach")
-
 		// Put away one node to be the stats collector.
 		nodes := c.Spec().NodeCount - 1
 
@@ -49,11 +48,17 @@ func registerAllocator(r registry.Registry) {
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		m := c.NewMonitor(ctx, c.Range(1, start))
 		m.Go(func(ctx context.Context) error {
 			t.Status("loading fixture")
 			if err := c.RunE(
-				ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "tpch", "--scale-factor", "10",
+				ctx, c.Node(1),
+				"./cockroach", "workload", "fixtures", "import", "tpch", "--scale-factor", "10", pgurl,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -68,7 +73,7 @@ func registerAllocator(r registry.Registry) {
 			WithCluster(clusNodes.InstallNodes()).
 			WithPrometheusNode(promNode.InstallNodes()[0])
 
-		err := c.StartGrafana(ctx, t.L(), cfg)
+		err = c.StartGrafana(ctx, t.L(), cfg)
 		require.NoError(t, err)
 
 		cleanupFunc := func() {
@@ -86,14 +91,13 @@ func registerAllocator(r registry.Registry) {
 
 		// Start the remaining nodes to kick off upreplication/rebalancing.
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(start+1, nodes))
-
-		c.Run(ctx, c.Node(1), `./cockroach workload init kv --drop`)
+		c.Run(ctx, c.Node(1), fmt.Sprintf("./cockroach workload init kv --drop '%s'", pgurl))
 		for node := 1; node <= nodes; node++ {
 			node := node
 			// TODO(dan): Ideally, the test would fail if this queryload failed,
 			// but we can't put it in monitor as-is because the test deadlocks.
 			go func() {
-				const cmd = `./cockroach workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=127`
+				cmd := fmt.Sprintf("./cockroach workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=127 {pgurl%s}", c.Node(node))
 				l, err := t.L().ChildLogger(fmt.Sprintf(`kv-%d`, node))
 				if err != nil {
 					t.Fatal(err)
@@ -148,21 +152,25 @@ func registerAllocator(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:      `replicate/up/1to3`,
-		Owner:     registry.OwnerKV,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(4),
-		Leases:    registry.MetamorphicLeases,
+		Name:             `replicate/up/1to3`,
+		Owner:            registry.OwnerKV,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      `replicate/rebalance/3to5`,
-		Owner:     registry.OwnerKV,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(6),
-		Leases:    registry.MetamorphicLeases,
+		Name:             `replicate/rebalance/3to5`,
+		Owner:            registry.OwnerKV,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(6),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 3, 42.0)
 		},
@@ -171,10 +179,14 @@ func registerAllocator(r registry.Registry) {
 		Name:      `replicate/wide`,
 		Owner:     registry.OwnerKV,
 		Benchmark: true,
-		Timeout:   10 * time.Minute,
-		Cluster:   r.MakeClusterSpec(9, spec.CPU(1)),
-		Leases:    registry.MetamorphicLeases,
-		Run:       runWideReplication,
+		// Allow a longer running time to account for runs that use a
+		// cockroach build with runtime assertions enabled.
+		Timeout:          30 * time.Minute,
+		Cluster:          r.MakeClusterSpec(9, spec.CPU(1)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Run:              runWideReplication,
 	})
 }
 
@@ -338,7 +350,6 @@ func runWideReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatalf("9-node cluster required")
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=replicate_queue=6"}
 	settings := install.MakeClusterSettings()
@@ -446,9 +457,13 @@ FROM crdb_internal.kv_store_status
 		t.Fatalf("expected 0 mis-replicated ranges, but found %d", n)
 	}
 
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+	if err != nil {
+		t.Fatal(err)
+	}
 	decom := func(id int) {
 		c.Run(ctx, c.Node(1),
-			fmt.Sprintf("./cockroach node decommission --insecure --wait=none %d", id))
+			fmt.Sprintf("./cockroach node decommission --insecure --url=%s --wait=none %d", pgurl, id))
 	}
 
 	// Decommission a node. The ranges should down-replicate to 7 replicas.

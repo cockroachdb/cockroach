@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -32,9 +31,10 @@ func TestSampledStatsCollection(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
+	tt := s.ApplicationLayer()
+	sv, sqlStats := &tt.ClusterSettings().SV, tt.SQLServer().(*Server).sqlStats
 
 	sqlutils.CreateTable(
 		t, db, "test", "x INT", 10, sqlutils.ToRowFn(sqlutils.RowIdxFn),
@@ -43,7 +43,6 @@ func TestSampledStatsCollection(t *testing.T) {
 	getStmtStats :=
 		func(
 			t *testing.T,
-			server serverutils.TestServerInterface,
 			stmt string,
 			implicitTxn bool,
 			database string,
@@ -56,11 +55,11 @@ func TestSampledStatsCollection(t *testing.T) {
 				Failed:      false,
 			}
 			var stats *appstatspb.CollectedStatementStatistics
-			require.NoError(t, server.SQLServer().(*Server).sqlStats.
+			require.NoError(t, sqlStats.
 				GetLocalMemProvider().
 				IterateStatementStats(
 					ctx,
-					&sqlstats.IteratorOptions{},
+					sqlstats.IteratorOptions{},
 					func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 						if statistics.Key.Query == key.Query &&
 							statistics.Key.ImplicitTxn == key.ImplicitTxn &&
@@ -79,17 +78,16 @@ func TestSampledStatsCollection(t *testing.T) {
 
 	getTxnStats := func(
 		t *testing.T,
-		server serverutils.TestServerInterface,
 		key appstatspb.TransactionFingerprintID,
 	) *appstatspb.CollectedTransactionStatistics {
 		t.Helper()
 		var stats *appstatspb.CollectedTransactionStatistics
 
-		require.NoError(t, server.SQLServer().(*Server).sqlStats.
+		require.NoError(t, sqlStats.
 			GetLocalMemProvider().
 			IterateTransactionStats(
 				ctx,
-				&sqlstats.IteratorOptions{},
+				sqlstats.IteratorOptions{},
 				func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
 					if statistics.TransactionFingerprintID == key {
 						stats = statistics
@@ -108,7 +106,7 @@ func TestSampledStatsCollection(t *testing.T) {
 		if enable {
 			v = 1
 		}
-		collectTxnStatsSampleRate.Override(ctx, &st.SV, v)
+		collectTxnStatsSampleRate.Override(ctx, sv, v)
 	}
 
 	type queryer interface {
@@ -128,7 +126,7 @@ func TestSampledStatsCollection(t *testing.T) {
 		toggleSampling(true)
 		queryDB(t, db, selectOrderBy)
 
-		stats := getStmtStats(t, s, selectOrderBy, true /* implicitTxn */, "defaultdb")
+		stats := getStmtStats(t, selectOrderBy, true /* implicitTxn */, "defaultdb")
 
 		require.Equal(t, int64(2), stats.Stats.Count, "expected to have collected two sets of general stats")
 		require.Equal(t, int64(1), stats.Stats.ExecStats.Count, "expected to have collected exactly one set of execution stats")
@@ -153,8 +151,8 @@ func TestSampledStatsCollection(t *testing.T) {
 		toggleSampling(true)
 		doTxn(t)
 
-		aggStats := getStmtStats(t, s, aggregation, false /* implicitTxn */, "defaultdb")
-		selectStats := getStmtStats(t, s, selectOrderBy, false /* implicitTxn */, "defaultdb")
+		aggStats := getStmtStats(t, aggregation, false /* implicitTxn */, "defaultdb")
+		selectStats := getStmtStats(t, selectOrderBy, false /* implicitTxn */, "defaultdb")
 
 		require.Equal(t, int64(2), aggStats.Stats.Count, "expected to have collected two sets of general stats")
 		require.Equal(t, int64(1), aggStats.Stats.ExecStats.Count, "expected to have collected exactly one set of execution stats")
@@ -169,7 +167,7 @@ func TestSampledStatsCollection(t *testing.T) {
 		key := util.MakeFNV64()
 		key.Add(uint64(aggStats.ID))
 		key.Add(uint64(selectStats.ID))
-		txStats := getTxnStats(t, s, appstatspb.TransactionFingerprintID(key.Sum()))
+		txStats := getTxnStats(t, appstatspb.TransactionFingerprintID(key.Sum()))
 
 		require.Equal(t, int64(2), txStats.Stats.Count, "expected to have collected two sets of general stats")
 		require.Equal(t, int64(1), txStats.Stats.ExecStats.Count, "expected to have collected exactly one set of execution stats")
@@ -191,7 +189,7 @@ func TestSampledStatsCollection(t *testing.T) {
 
 		// Make sure DEALLOCATE statements are grouped together rather than having
 		// one key per prepared statement name.
-		stats := getStmtStats(t, s, "DEALLOCATE _", true /* implicitTxn */, "defaultdb")
+		stats := getStmtStats(t, "DEALLOCATE _", true /* implicitTxn */, "defaultdb")
 
 		require.Equal(t, int64(2), stats.Stats.Count, "expected to have collected two sets of general stats")
 		require.Equal(t, int64(0), stats.Stats.ExecStats.Count, "expected to have collected zero execution stats")

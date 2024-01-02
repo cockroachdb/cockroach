@@ -23,8 +23,9 @@ import "sql/catalog/catpb/privilege.proto";
 import "sql/catalog/catpb/function.proto";
 import "sql/schemachanger/scpb/scpb.proto";
 import "sql/types/types.proto";
-import "geo/geoindex/config.proto";
+import "geo/geopb/config.proto";
 import "gogoproto/gogo.proto";
+import "roachpb/metadata.proto";
 
 enum ConstraintValidity {
   // The constraint is valid for all rows.
@@ -1289,7 +1290,13 @@ message DatabaseDescriptor {
   // descriptor being changed as part of a declarative schema change.
   optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 12;
 
-  // Next field is 13.
+  // SystemDatabaseSchemaVersion denotes the version of the system
+  // database's schema.
+  //
+  // Note: It should only be set for the system database.
+  optional roachpb.Version system_database_schema_version = 13;
+
+  // Next field is 14.
 }
 
 // SuperRegion stores a super region configuration.
@@ -1550,6 +1557,8 @@ message SchemaDescriptor {
     optional sql.sem.types.T return_type = 3;
 
     optional bool return_set = 4 [(gogoproto.nullable) = false];
+
+    optional bool is_procedure = 5 [(gogoproto.nullable) = false];
   }
 
   // Function contains a group of UDFs with the same name.
@@ -1655,7 +1664,10 @@ message FunctionDescriptor {
   // descriptor being changed as part of a declarative schema change.
   optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 20;
 
-  // Next field id is 21
+  // IsProcedure is true if the descriptor represents a procedure.
+  optional bool is_procedure = 21 [(gogoproto.nullable) = false];
+
+  // Next field id is 22
 }
 
 // Descriptor is a union type for descriptors for tables, schemas, databases,

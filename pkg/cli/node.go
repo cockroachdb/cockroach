@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -33,10 +34,6 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-)
-
-const (
-	localTimeFormat = "2006-01-02 15:04:05.999999-07:00"
 )
 
 var lsNodesColumnHeaders = []string{
@@ -55,13 +52,14 @@ To retrieve the IDs for inactive members, see 'node status --decommission'.
 }
 
 func runLsNodes(cmd *cobra.Command, args []string) (resErr error) {
-	conn, err := makeSQLClient("cockroach node ls", useSystemDb)
+	ctx := context.Background()
+	// TODO(ssd): We can potentially make this work against
+	// secondary tenants using sql_instances.
+	conn, err := makeTenantSQLClient(ctx, "cockroach node ls", useSystemDb, catconstants.SystemTenantName)
 	if err != nil {
 		return err
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
-
-	ctx := context.Background()
 
 	// TODO(knz): This can use a context deadline instead, now that
 	// query cancellation is supported.
@@ -214,7 +212,8 @@ SELECT node_id AS id,
        draining AS is_draining
 FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (node_id)`
 
-	conn, err := makeSQLClient("cockroach node status", useSystemDb)
+	ctx := context.Background()
+	conn, err := makeTenantSQLClient(ctx, "cockroach node status", useSystemDb, catconstants.SystemTenantName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -232,7 +231,6 @@ FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (n
 		queriesToJoin = append(queriesToJoin, decommissionQuery)
 	}
 
-	ctx := context.Background()
 	if err = conn.EnsureConn(ctx); err != nil {
 		return nil, nil, err
 	}
@@ -353,7 +351,7 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+	conn, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
 		return errors.Wrap(err, "failed to connect to the node")
 	}
@@ -818,7 +816,7 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+	conn, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
 		return errors.Wrap(err, "failed to connect to the node")
 	}

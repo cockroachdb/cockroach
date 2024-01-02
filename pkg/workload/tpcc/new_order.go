@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
@@ -131,7 +130,7 @@ func createNewOrder(
 }
 
 func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
-	atomic.AddUint64(&n.config.auditor.newOrderTransactions, 1)
+	n.config.auditor.newOrderTransactions.Add(1)
 
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
@@ -146,7 +145,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 	n.config.auditor.Lock()
 	n.config.auditor.orderLinesFreq[d.oOlCnt]++
 	n.config.auditor.Unlock()
-	atomic.AddUint64(&n.config.auditor.totalOrderLines, uint64(d.oOlCnt))
+	n.config.auditor.totalOrderLines.Add(uint64(d.oOlCnt))
 
 	// itemIDs tracks the item ids in the order so that we can prevent adding
 	// multiple items with the same ID. This would not make sense because each
@@ -213,7 +212,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 	d.oEntryD = timeutil.Now()
 
 	err := crdbpgx.ExecuteTx(
-		ctx, n.mcp.Get(), n.config.txOpts,
+		ctx, n.mcp.Get(), pgx.TxOptions{},
 		func(tx pgx.Tx) error {
 			// Select the district tax rate and next available order number, bumping it.
 			var dNextOID int
@@ -273,7 +272,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 						// can't find the item. The spec requires us to actually go
 						// to the database for this, even though we know earlier
 						// that the item has an invalid number.
-						atomic.AddUint64(&n.config.auditor.newOrderRollbacks, 1)
+						n.config.auditor.newOrderRollbacks.Add(1)
 						return errSimulated
 					}
 					return errors.New("missing item row")
@@ -303,7 +302,8 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 					SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_%02[1]d
 					FROM stock
 					WHERE (s_i_id, s_w_id) IN (%[2]s)
-					ORDER BY s_i_id`,
+					ORDER BY s_i_id
+					FOR UPDATE`,
 					d.dID, strings.Join(stockIDs, ", "),
 				),
 			)

@@ -54,10 +54,15 @@ type TestSpec struct {
 	// N.B. performance tests may have different requirements than correctness tests, e.g., machine type/architecture.
 	// Thus, they must be opted into explicitly via this field.
 	Benchmark bool
-	// Tags is a set of tags associated with the test that allow grouping
-	// tests. If no tags are specified, the set ["default"] is automatically
-	// given.
-	Tags map[string]struct{}
+
+	// CompatibleClouds is the set of clouds this test can run on (e.g. AllClouds,
+	// OnlyGCE, etc). Must be set.
+	CompatibleClouds CloudSet
+
+	// Suites is the set of suites this test is part of (e.g. Nightly, Weekly,
+	// etc). Must be set, even if empty (see ManualOnly).
+	Suites SuiteSet
+
 	// Cluster provides the specification for the cluster to use for the test.
 	Cluster spec.ClusterSpec
 	// NativeLibs specifies the native libraries required to be present on
@@ -119,6 +124,17 @@ type TestSpec struct {
 	// fingerprint, i.e. the node count, the version, etc. that appear in the
 	// infix. This will get rid of this awkward prefix naming restriction.
 	SnapshotPrefix string
+
+	// ExtraLabels are test-specific labels that will be added to the Github
+	// issue created when a failure occurs, in addition to default labels.
+	ExtraLabels []string
+
+	// CockroachBinary is the cockroach binary that will be uploaded
+	// to every node in the cluster at the start of the test. We upload to
+	// every node so that we can fetch logs in the case of a failure.
+	// If one is not specified, the default behavior is to upload
+	// a binary with the crdb_test flag randomly enabled or disabled.
+	CockroachBinary ClusterCockroachBinary
 }
 
 // PostValidation is a type of post-validation that runs after a test completes.
@@ -136,72 +152,12 @@ const (
 	PostValidationNoDeadNodes
 )
 
-// MatchType is the type of match a file has to a TestFilter.
-type MatchType int
-
-const (
-	// Matched means that the file passes the filter and the tags.
-	Matched MatchType = iota
-	// FailedFilter means that the file fails the filter.
-	FailedFilter
-	// FailedTags means that the file passed the filter but failed the tags
-	// match.
-	FailedTags
-)
-
-// Match returns Matched if the filter matches the test. If the filter does
-// not match the test because the tag filter does not match, the test is
-// marked as FailedTags.
-func (t *TestSpec) Match(filter *TestFilter) MatchType {
-	if !filter.Name.MatchString(t.Name) {
-		return FailedFilter
-	}
-
-	if len(filter.Tags) == 0 {
-		return Matched
-	}
-
-	for tag := range filter.Tags {
-		// If the tag is a single CSV e.g. "foo,bar,baz", we match all the tags
-		if matchesAll(t.Tags, strings.Split(tag, ",")) {
-			return Matched
-		}
-	}
-
-	return FailedTags
-}
-
 // PromSub replaces all non prometheus friendly chars with "_". Note,
 // before creating a metric, read up on prom metric naming conventions:
 // https://prometheus.io/docs/practices/naming/
 func PromSub(raw string) string {
 	invalidPromRE := regexp.MustCompile("[^a-zA-Z0-9_]")
 	return invalidPromRE.ReplaceAllLiteralString(raw, "_")
-}
-
-func matchesAll(testTags map[string]struct{}, filterTags []string) bool {
-	for _, tag := range filterTags {
-		negate := false
-		if tag[0] == '!' {
-			negate = true
-			tag = tag[1:]
-		}
-		_, tagExists := testTags[tag]
-
-		if negate == tagExists {
-			return false
-		}
-	}
-	return true
-}
-
-// Tags returns a set of strings.
-func Tags(values ...string) map[string]struct{} {
-	set := make(map[string]struct{})
-	for _, s := range values {
-		set[s] = struct{}{}
-	}
-	return set
 }
 
 // LeaseType specifies the type of leases to use for the cluster.
@@ -232,4 +188,203 @@ const (
 	// MetamorphicLeases randomly chooses epoch or expiration
 	// leases (across the entire cluster)
 	MetamorphicLeases
+)
+
+var allClouds = []string{spec.Local, spec.GCE, spec.AWS, spec.Azure}
+
+// CloudSet represents a set of clouds.
+//
+// Instances of CloudSet are immutable. The uninitialized (zero) value is not
+// valid.
+type CloudSet struct {
+	// m contains only values from allClouds.
+	m map[string]struct{}
+}
+
+// AllClouds contains all clouds.
+var AllClouds = Clouds(allClouds...)
+
+// AllExceptLocal contains all clouds except Local.
+var AllExceptLocal = AllClouds.NoLocal()
+
+// AllExceptAWS contains all clouds except AWS.
+var AllExceptAWS = AllClouds.NoAWS()
+
+// OnlyAWS contains only the AWS cloud.
+var OnlyAWS = Clouds(spec.AWS)
+
+// OnlyGCE contains only the GCE cloud.
+var OnlyGCE = Clouds(spec.GCE)
+
+// OnlyLocal contains only the GCE cloud.
+var OnlyLocal = Clouds(spec.Local)
+
+// Clouds creates a CloudSet for the given clouds. Cloud names must be one of:
+// spec.Local, spec.GCE, spec.AWS, spec.Azure.
+func Clouds(clouds ...string) CloudSet {
+	assertValidValues(allClouds, clouds...)
+	return CloudSet{m: addToSet(nil, clouds...)}
+}
+
+// NoLocal removes the Local cloud and returns the new set.
+func (cs CloudSet) NoLocal() CloudSet {
+	return CloudSet{m: removeFromSet(cs.m, spec.Local)}
+}
+
+// NoAWS removes the AWS cloud and returns the new set.
+func (cs CloudSet) NoAWS() CloudSet {
+	return CloudSet{m: removeFromSet(cs.m, spec.AWS)}
+}
+
+// NoAzure removes the Azure cloud and returns the new set.
+func (cs CloudSet) NoAzure() CloudSet {
+	return CloudSet{m: removeFromSet(cs.m, spec.Azure)}
+}
+
+// Contains returns true if the set contains the given cloud.
+func (cs CloudSet) Contains(cloud string) bool {
+	cs.AssertInitialized()
+	_, ok := cs.m[cloud]
+	return ok
+}
+
+func (cs CloudSet) String() string {
+	cs.AssertInitialized()
+	return setToString(allClouds, cs.m)
+}
+
+// AssertInitialized panics if the CloudSet is the zero value.
+func (cs CloudSet) AssertInitialized() {
+	if cs.m == nil {
+		panic("CloudSet not initialized")
+	}
+}
+
+// Suite names.
+const (
+	Nightly               = "nightly"
+	Weekly                = "weekly"
+	ReleaseQualification  = "release_qualification"
+	ORM                   = "orm"
+	Driver                = "driver"
+	Tool                  = "tool"
+	Smoketest             = "smoketest"
+	Quick                 = "quick"
+	Fixtures              = "fixtures"
+	Pebble                = "pebble"
+	PebbleNightlyWrite    = "pebble_nightly_write"
+	PebbleNightlyYCSB     = "pebble_nightly_ycsb"
+	PebbleNightlyYCSBRace = "pebble_nightly_ycsb_race"
+	Roachtest             = "roachtest"
+)
+
+var allSuites = []string{
+	Nightly, Weekly, ReleaseQualification, ORM, Driver, Tool, Smoketest, Quick, Fixtures,
+	Pebble, PebbleNightlyWrite, PebbleNightlyYCSB, PebbleNightlyYCSBRace, Roachtest,
+}
+
+// SuiteSet represents a set of suites.
+//
+// Instances of SuiteSet are immutable. The uninitialized (zero) value is not
+// valid.
+type SuiteSet struct {
+	// m contains only values from allSuites.
+	m map[string]struct{}
+}
+
+// ManualOnly is used for tests that are not part of any suite; these tests are
+// only run manually.
+var ManualOnly = Suites()
+
+// Suites creates a SuiteSet with the given suites. Only the constants above are
+// valid values.
+func Suites(suites ...string) SuiteSet {
+	assertValidValues(allSuites, suites...)
+	return SuiteSet{m: addToSet(nil, suites...)}
+}
+
+// AllSuites contains all suites.
+var AllSuites = Suites(allSuites...)
+
+// Contains returns true if the set contains the given suite.
+func (ss SuiteSet) Contains(suite string) bool {
+	ss.AssertInitialized()
+	_, ok := ss.m[suite]
+	return ok
+}
+
+func (ss SuiteSet) String() string {
+	return setToString(allSuites, ss.m)
+}
+
+// AssertInitialized panics if the SuiteSet is the zero value.
+func (ss SuiteSet) AssertInitialized() {
+	if ss.m == nil {
+		panic("SuiteSet not initialized")
+	}
+}
+
+// assertValidValues asserts that the given values exist in the validValues slice.
+func assertValidValues(validValues []string, values ...string) {
+	for _, v := range values {
+		found := false
+		for _, valid := range validValues {
+			if valid == v {
+				found = true
+				break
+			}
+		}
+		if !found {
+			panic(fmt.Sprintf("invalid value %q (valid values: %v)", v, validValues))
+		}
+	}
+}
+
+// addToSet returns a new set that is the initial set with the given values added.
+func addToSet(initial map[string]struct{}, values ...string) map[string]struct{} {
+	m := make(map[string]struct{})
+	for k := range initial {
+		m[k] = struct{}{}
+	}
+	for _, v := range values {
+		m[v] = struct{}{}
+	}
+	return m
+}
+
+// removeFromSet returns a new set that is the initial set with the given values removed.
+func removeFromSet(initial map[string]struct{}, values ...string) map[string]struct{} {
+	m := make(map[string]struct{})
+	for k := range initial {
+		m[k] = struct{}{}
+	}
+	for _, v := range values {
+		delete(m, v)
+	}
+	return m
+}
+
+// setToString returns the elements of a set, in the relative order in which they appear
+// in validValues. Returns "<none>" if the set is empty.
+func setToString(validValues []string, m map[string]struct{}) string {
+	var elems []string
+	for _, v := range validValues {
+		if _, ok := m[v]; ok {
+			elems = append(elems, v)
+		}
+	}
+	if len(elems) == 0 {
+		return "<none>"
+	}
+	return strings.Join(elems, ",")
+}
+
+// ClusterCockroachBinary specifies the type of cockroach binaries that
+// can be uploaded to the cluster.
+type ClusterCockroachBinary int
+
+const (
+	RandomizedCockroach ClusterCockroachBinary = iota
+	StandardCockroach
+	RuntimeAssertionsCockroach
 )

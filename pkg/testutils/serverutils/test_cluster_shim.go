@@ -20,7 +20,6 @@ package serverutils
 import (
 	"context"
 	gosql "database/sql"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
@@ -34,7 +33,7 @@ import (
 type TestClusterInterface interface {
 	// Start is used to start up the servers that were instantiated when
 	// creating this cluster.
-	Start(t testing.TB)
+	Start(t TestFataler)
 
 	// NumServers returns the number of servers this test cluster is configured
 	// with.
@@ -51,6 +50,9 @@ type TestClusterInterface interface {
 
 	// StopServer stops a single server.
 	StopServer(idx int)
+
+	// RestartServer restarts a single server.
+	RestartServer(idx int) error
 
 	// Stopper retrieves the stopper for this test cluster. Tests should call or
 	// defer the Stop() method on this stopper after starting a test cluster.
@@ -73,7 +75,7 @@ type TestClusterInterface interface {
 	// AddVotersOrFatal is the same as AddVoters but will Fatal the test on
 	// error.
 	AddVotersOrFatal(
-		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+		t TestFataler, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) roachpb.RangeDescriptor
 
 	// RemoveVoters removes one or more voter replicas from a range.
@@ -84,7 +86,7 @@ type TestClusterInterface interface {
 	// RemoveVotersOrFatal is the same as RemoveVoters but will Fatal the test on
 	// error.
 	RemoveVotersOrFatal(
-		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+		t TestFataler, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) roachpb.RangeDescriptor
 
 	// AddNonVoters adds non-voting replicas for a range on a set of stores.
@@ -97,7 +99,7 @@ type TestClusterInterface interface {
 
 	// AddNonVotersOrFatal is the same as AddNonVoters but will fatal if it fails.
 	AddNonVotersOrFatal(
-		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+		t TestFataler, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) roachpb.RangeDescriptor
 
 	// RemoveNonVoters removes one or more non-voters from a range.
@@ -108,7 +110,7 @@ type TestClusterInterface interface {
 	// RemoveNonVotersOrFatal is the same as RemoveNonVoters but will fatal if it
 	// fails.
 	RemoveNonVotersOrFatal(
-		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+		t TestFataler, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) roachpb.RangeDescriptor
 
 	// RebalanceVoter rebalances a voting replica from src to dest.
@@ -119,7 +121,7 @@ type TestClusterInterface interface {
 	// RebalanceVoterOrFatal rebalances a voting replica from src to dest but wil
 	// fatal if it fails.
 	RebalanceVoterOrFatal(
-		ctx context.Context, t testing.TB, startKey roachpb.Key, src, dest roachpb.ReplicationTarget,
+		ctx context.Context, t TestFataler, startKey roachpb.Key, src, dest roachpb.ReplicationTarget,
 	) *roachpb.RangeDescriptor
 
 	// SwapVoterWithNonVoter atomically "swaps" the voting replica located on
@@ -134,7 +136,7 @@ type TestClusterInterface interface {
 	// SwapVoterWithNonVoterOrFatal is the same as SwapVoterWithNonVoter but will
 	// fatal if it fails.
 	SwapVoterWithNonVoterOrFatal(
-		t testing.TB, startKey roachpb.Key, voterTarget, nonVoterTarget roachpb.ReplicationTarget,
+		t TestFataler, startKey roachpb.Key, voterTarget, nonVoterTarget roachpb.ReplicationTarget,
 	) *roachpb.RangeDescriptor
 
 	// FindRangeLeaseHolder returns the current lease holder for the given range.
@@ -166,7 +168,7 @@ type TestClusterInterface interface {
 	// TransferRangeLeaseOrFatal is the same as TransferRangeLease but will fatal
 	// if it fails.
 	TransferRangeLeaseOrFatal(
-		t testing.TB, rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
+		t TestFataler, rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
 	)
 
 	// MoveRangeLeaseNonCooperatively performs a non-cooperative transfer of the
@@ -195,7 +197,7 @@ type TestClusterInterface interface {
 
 	// LookupRangeOrFatal is the same as LookupRange but will Fatal the test on
 	// error.
-	LookupRangeOrFatal(t testing.TB, key roachpb.Key) roachpb.RangeDescriptor
+	LookupRangeOrFatal(t TestFataler, key roachpb.Key) roachpb.RangeDescriptor
 
 	// Target returns a roachpb.ReplicationTarget for the specified server.
 	Target(serverIdx int) roachpb.ReplicationTarget
@@ -207,11 +209,11 @@ type TestClusterInterface interface {
 	// ScratchRange returns the start key of a span of keyspace suitable for use
 	// as kv scratch space (it doesn't overlap system spans or SQL tables). The
 	// range is lazily split off on the first call to ScratchRange.
-	ScratchRange(t testing.TB) roachpb.Key
+	ScratchRange(t TestFataler) roachpb.Key
 
 	// ScratchRangeWithExpirationLease is like ScratchRange, but returns a system
 	// range with an expiration lease.
-	ScratchRangeWithExpirationLease(t testing.TB) roachpb.Key
+	ScratchRangeWithExpirationLease(t TestFataler) roachpb.Key
 
 	// WaitForFullReplication waits until all stores in the cluster
 	// have no ranges with replication pending.
@@ -221,11 +223,17 @@ type TestClusterInterface interface {
 	// default tenant for testing.
 	StartedDefaultTestTenant() bool
 
-	// StorageClusterConn returns a gosql.DB connection to the first server in a
-	// storage cluster. This is useful in environments where it's not clear
-	// whether ServerConn is returning a connection to the storage cluster or a
-	// secondary tenant.
-	StorageClusterConn() *gosql.DB
+	// ApplicationLayer calls .ApplicationLayer() on the ith server in
+	// the cluster.
+	ApplicationLayer(idx int) ApplicationLayerInterface
+
+	// SystemLayer calls .SystemLayer() on the ith server in the
+	// cluster.
+	SystemLayer(idx int) ApplicationLayerInterface
+
+	// StorageLayer calls .StorageLayer() on the ith server in the
+	// cluster.
+	StorageLayer(idx int) StorageLayerInterface
 
 	// SplitTable splits a range in the table, creates a replica for the right
 	// side of the split on TargetNodeIdx, and moves the lease for the right
@@ -234,13 +242,13 @@ type TestClusterInterface interface {
 	//
 	// TODO(radu): we should verify that the queries in tests using SplitTable
 	// are indeed distributed as intended.
-	SplitTable(t *testing.T, desc catalog.TableDescriptor, sps []SplitPoint)
+	SplitTable(t TestFataler, desc catalog.TableDescriptor, sps []SplitPoint)
 
 	// WaitForTenantCapabilities waits until all servers have the specified
 	// tenant capabilities for the specified tenant ID.
 	// Only boolean capabilities are currently supported as we wait for the
 	// specified capabilities to have a "true" value.
-	WaitForTenantCapabilities(*testing.T, roachpb.TenantID, map[tenantcapabilities.ID]string)
+	WaitForTenantCapabilities(TestFataler, roachpb.TenantID, map[tenantcapabilities.ID]string)
 
 	// ToggleReplicateQueues activates or deactivates the replication queues on all
 	// the stores on all the nodes.
@@ -259,7 +267,7 @@ type SplitPoint struct {
 // service.
 type TestClusterFactory interface {
 	// NewTestCluster creates a test cluster without starting it.
-	NewTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) TestClusterInterface
+	NewTestCluster(t TestFataler, numNodes int, args base.TestClusterArgs) TestClusterInterface
 }
 
 var clusterFactoryImpl TestClusterFactory
@@ -271,27 +279,23 @@ func InitTestClusterFactory(impl TestClusterFactory) {
 	clusterFactoryImpl = impl
 }
 
-// StartNewTestCluster creates and starts up a TestCluster made up of numNodes
-// in-memory testing servers. The cluster should be stopped using
+// StartCluster is a convenience function that calls
+// NewCluster() followed by Start() on the resulting cluster
+// instance. The caller remains responsible for calling
 // Stopper().Stop().
-func StartNewTestCluster(
-	t testing.TB, numNodes int, args base.TestClusterArgs,
-) TestClusterInterface {
-	cluster := NewTestCluster(t, numNodes, args)
+func StartCluster(t TestFataler, numNodes int, args base.TestClusterArgs) TestClusterInterface {
+	cluster := NewCluster(t, numNodes, args)
 	cluster.Start(t)
-	for i := 0; i < cluster.NumServers(); i++ {
-		sysconfigProvider := cluster.Server(i).SystemConfigProvider()
-		sysconfig := sysconfigProvider.GetSystemConfig()
-		if sysconfig != nil {
-			sysconfig.PurgeZoneConfigCache()
-		}
-	}
+	// Note: do not add logic here. To customize cluster configuration,
+	// add testing knobs and check them in testcluster.NewTestCluster() or
+	// the (*TestCluster).Start() method.
+	// Not all tests use StartTestCluster().
 	return cluster
 }
 
-// NewTestCluster creates TestCluster made up of numNodes in-memory testing
+// NewCluster creates TestCluster made up of numNodes in-memory testing
 // servers. It can be started using the return type.
-func NewTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) TestClusterInterface {
+func NewCluster(t TestFataler, numNodes int, args base.TestClusterArgs) TestClusterInterface {
 	if clusterFactoryImpl == nil {
 		panic("TestClusterFactory not initialized. One needs to be injected " +
 			"from the package's TestMain()")

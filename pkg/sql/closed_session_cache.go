@@ -30,20 +30,20 @@ type timeSource func() time.Time
 // ClosedSessionCacheCapacity is the cluster setting that controls the maximum number
 // of sessions in the cache.
 var ClosedSessionCacheCapacity = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.closed_session_cache.capacity",
 	"the maximum number of sessions in the cache",
 	1000, // TODO(gtr): Totally arbitrary for now, adjust later.
-).WithPublic()
+	settings.WithPublic)
 
 // ClosedSessionCacheTimeToLive is the cluster setting that controls the maximum time
 // to live for a session's information in the cache, in seconds.
 var ClosedSessionCacheTimeToLive = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.closed_session_cache.time_to_live",
 	"the maximum time to live, in seconds",
 	3600, // One hour
-).WithPublic()
+	settings.WithPublic)
 
 // ClosedSessionCache is an in-memory FIFO cache for closed sessions.
 type ClosedSessionCache struct {

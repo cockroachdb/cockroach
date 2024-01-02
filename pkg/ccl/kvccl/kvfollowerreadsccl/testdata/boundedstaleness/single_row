@@ -244,7 +244,7 @@ ALTER TABLE t2 ADD COLUMN new_col INT
 query idx=2
 SELECT * FROM t2 AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 2
 ----
-pq: referenced descriptor ID 105: descriptor not found
+pq: referenced descriptor ID 105: looking up ID 105: descriptor not found
 events (7 found):
  * event 1: colbatchscan trace on node_idx 2: local read
  * event 2: transaction retry on node_idx: 2
@@ -257,7 +257,7 @@ events (7 found):
 query idx=2
 SELECT * FROM t2 AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 2
 ----
-pq: referenced descriptor ID 105: descriptor not found
+pq: referenced descriptor ID 105: looking up ID 105: descriptor not found
 events (7 found):
  * event 1: colbatchscan trace on node_idx 2: local read
  * event 2: transaction retry on node_idx: 2

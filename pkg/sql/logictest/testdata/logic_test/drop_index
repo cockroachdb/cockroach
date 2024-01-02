@@ -52,7 +52,7 @@ DROP INDEX baw
 statement ok
 INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -70,7 +70,7 @@ DROP INDEX users@zap
 statement ok
 DROP INDEX IF EXISTS users@zap
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -87,7 +87,7 @@ users       users_pkey  false       3             title        title       N/A  
 statement ok
 DROP INDEX IF EXISTS users@foo, users@zap
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -100,7 +100,6 @@ users       users_pkey  false       3             title        title       N/A  
 user testuser
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 statement error must be owner of table users or have CREATE privilege on table users
 DROP INDEX users@bar
 
@@ -124,7 +123,7 @@ DROP INDEX users@bar RESTRICT
 statement ok
 DROP INDEX users@bar CASCADE
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -152,7 +151,7 @@ CREATE INDEX baz ON users (name, title)
 statement ok
 DROP INDEX IF EXISTS users@invalid, users@baz
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -173,7 +172,7 @@ DROP INDEX users@foo
 statement ok
 DROP INDEX users@bar
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -186,7 +185,7 @@ users       users_pkey  false       3             title        title       N/A  
 statement ok
 CREATE VIEW v2 AS SELECT name FROM v
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES
 ----
 public  users  table  root  0  NULL
@@ -209,7 +208,7 @@ user root
 statement ok
 DROP INDEX users@foo CASCADE
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -249,7 +248,7 @@ CREATE INDEX baz ON users (name)
 statement ok
 DROP INDEX IF EXISTS baz, zap
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -402,7 +401,7 @@ statement ok
 DROP INDEX t2_96731_idx CASCADE;
 
 query TTTTB colnames
-SHOW CONSTRAINTS FROM t1_96731;
+SELECT * FROM [SHOW CONSTRAINTS FROM t1_96731] ORDER BY constraint_name
 ----
 table_name  constraint_name  constraint_type  details                                 validated
 t1_96731    t1_96731_j_fkey  FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true
@@ -435,7 +434,7 @@ statement ok
 DROP INDEX t2_96731_idx CASCADE;
 
 query TTTTB colnames
-SHOW CONSTRAINTS FROM t1_96731;
+SELECT * FROM [SHOW CONSTRAINTS FROM t1_96731] ORDER BY constraint_name
 ----
 table_name  constraint_name  constraint_type  details                                 validated
 t1_96731    t1_96731_j_fkey  FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true
@@ -464,3 +463,40 @@ t1_96731    t1_96731_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)  true
 
 statement ok
 DROP TABLE t1_96731, t2_96731;
+
+
+# In #107576 we had a bug where we were not correctly resolving foreign key
+# references by filtering down to the target table for DROP INDEX. As a side effect
+# we could end up cleaning foreign key references in other unrelated tables. In
+# the example below fk_drop_other has foreign key back references which are not
+# relevant.
+subtest drop_index_fk_check
+
+statement ok
+CREATE TABLE fk_drop_target
+ ( k int primary key,
+   j int);
+CREATE TABLE fk_drop_ref_src(
+  k int,
+  j int primary key);
+CREATE UNIQUE INDEX target_j
+     ON fk_drop_target(j);
+ CREATE TABLE fk_ref_dst(
+  k int primary key,
+  j int,
+  m int,
+   CONSTRAINT "j_fk" FOREIGN KEY (j) REFERENCES
+       fk_drop_target(k),
+   CONSTRAINT m_fk   FOREIGN KEY (m) REFERENCES
+        fk_drop_ref_src(j)
+ );
+
+statement ok
+DROP INDEX fk_drop_target@target_j CASCADE;
+
+query T rowsort
+SELECT constraint_name from [SHOW CONSTRAINTS FROM fk_ref_dst];
+----
+fk_ref_dst_pkey
+j_fk
+m_fk

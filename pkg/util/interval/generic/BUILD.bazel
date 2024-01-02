@@ -1,6 +1,5 @@
 # gazelle:exclude internal/**
 
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load(":gen.bzl", "gen_interval_btree")
 
@@ -21,7 +20,6 @@ go_test(
     name = "generic_test",
     size = "large",
     srcs = [":example_interval_btree_test.go"],
-    args = ["-test.timeout=895s"],
     embed = [":generic"],
     shard_count = 16,
     deps = [
@@ -43,5 +41,3 @@ gen_interval_btree(
     package = "generic",
     type = "*example",
 )
-
-get_x_data(name = "get_x_data")

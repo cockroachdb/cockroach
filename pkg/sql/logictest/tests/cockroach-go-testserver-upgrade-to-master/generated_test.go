@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -29,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 18
+const configIdx = 19
 
 var logicTestDir string
 
@@ -50,6 +51,11 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
+
+	defer serverutils.TestingSetDefaultTenantSelectionOverride(
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+	)()
+
 	os.Exit(m.Run())
 }
 
@@ -72,25 +78,18 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
+func TestLogic_mixed_version_bootstrap_tenant(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_bootstrap_tenant")
+}
+
 func TestLogic_mixed_version_can_login(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "mixed_version_can_login")
-}
-
-func TestLogic_mixed_version_database_role_settings_role_id(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "mixed_version_database_role_settings_role_id")
-}
-
-func TestLogic_mixed_version_external_connections_owner_id(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "mixed_version_external_connections_owner_id")
 }
 
 func TestLogic_mixed_version_insights_queries(
@@ -100,13 +99,6 @@ func TestLogic_mixed_version_insights_queries(
 	runLogicTest(t, "mixed_version_insights_queries")
 }
 
-func TestLogic_mixed_version_new_system_privileges(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "mixed_version_new_system_privileges")
-}
-
 func TestLogic_mixed_version_partially_visible_index(
 	t *testing.T,
 ) {
@@ -114,18 +106,25 @@ func TestLogic_mixed_version_partially_visible_index(
 	runLogicTest(t, "mixed_version_partially_visible_index")
 }
 
-func TestLogic_mixed_version_range_tombstones(
+func TestLogic_mixed_version_procedure(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "mixed_version_range_tombstones")
+	runLogicTest(t, "mixed_version_procedure")
 }
 
-func TestLogic_mixed_version_role_members_user_ids(
+func TestLogic_mixed_version_refcursor(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "mixed_version_role_members_user_ids")
+	runLogicTest(t, "mixed_version_refcursor")
+}
+
+func TestLogic_mixed_version_schedule_details(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_schedule_details")
 }
 
 func TestLogic_mixed_version_system_privileges_user_id(
@@ -133,4 +132,32 @@ func TestLogic_mixed_version_system_privileges_user_id(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "mixed_version_system_privileges_user_id")
+}
+
+func TestLogic_mixed_version_udf_execute_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_udf_execute_privileges")
+}
+
+func TestLogic_mixed_version_udf_mutations(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_udf_mutations")
+}
+
+func TestLogic_mixed_version_upgrade_preserve_ttl(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_upgrade_preserve_ttl")
+}
+
+func TestLogic_pg_lsn_mixed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "pg_lsn_mixed")
 }

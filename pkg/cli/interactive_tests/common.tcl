@@ -17,7 +17,7 @@ system "rm -f $histfile"
 
 # Everything in this test should be fast. Don't be tolerant for long
 # waits.
-set timeout 30
+set timeout 45
 
 # When run via Docker the enclosing terminal has 0 columns and 0 rows,
 # and this confuses readline. Ensure sane defaults here.
@@ -63,6 +63,7 @@ proc handle_timeout {text} {
     exit 1
 }
 proc eexpect {text} {
+    system "echo; echo \$(date '+.%y%m%d %H:%M:%S.%N') START EXPECT TEST | tee -a logs/expect-cmd.log"
     expect {
 	$text {}
 	timeout { handle_timeout $text }
@@ -136,6 +137,20 @@ proc flush_server_logs {} {
     # Wait for flush to occur.
     system "for i in `seq 1 3`; do
               grep 'hangup received, flushing logs' logs/db/logs/cockroach.log && exit 0;
+              echo still waiting
+              sleep 1
+            done
+            echo 'server failed to flush logs?'
+            exit 1"
+    report "END FLUSH LOGS"
+}
+
+proc flush_and_sync_logs {filename grep_text} {
+    report "BEGIN FLUSH LOGS $filename"
+    system "kill -HUP `cat server_pid` 2>/dev/null"
+    # Wait for flush to occur.
+    system "for i in `seq 1 5`; do
+              grep '$grep_text' $filename && exit 0;
               echo still waiting
               sleep 1
             done

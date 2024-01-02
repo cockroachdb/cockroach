@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -187,7 +189,7 @@ type kvFanoutClient struct {
 func (k kvFanoutClient) nodesList(ctx context.Context) (*serverpb.NodesListResponse, error) {
 	statuses, _, err := getNodeStatuses(ctx, k.db, 0 /* limit */, 0 /* offset */)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, srverrors.ServerError(ctx, err)
 	}
 	resp := &serverpb.NodesListResponse{
 		Nodes: make([]serverpb.NodeDetails, len(statuses)),
@@ -228,7 +230,7 @@ func (k kvFanoutClient) dialNode(ctx context.Context, serverID serverID) (*grpc.
 }
 
 func (k kvFanoutClient) listNodes(ctx context.Context) (*serverpb.NodesResponse, error) {
-	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = k.ambientCtx.AnnotateCtx(ctx)
 
 	statuses, _, err := getNodeStatuses(ctx, k.db, 0, 0)
@@ -239,10 +241,15 @@ func (k kvFanoutClient) listNodes(ctx context.Context) (*serverpb.NodesResponse,
 		Nodes: statuses,
 	}
 
-	clock := k.clock
-	resp.LivenessByNodeID, err = getLivenessStatusMap(ctx, k.nodeLiveness, clock.Now(), k.st)
+	nodeStatusMap, err := k.nodeLiveness.ScanNodeVitalityFromKV(ctx)
 	if err != nil {
 		return nil, err
+	}
+	// TODO(baptist): Consider returning something better than LivenessStatus. It
+	// is an unfortunate mix of values.
+	resp.LivenessByNodeID = make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(nodeStatusMap))
+	for nodeID, status := range nodeStatusMap {
+		resp.LivenessByNodeID[nodeID] = status.LivenessStatus()
 	}
 	return &resp, nil
 }

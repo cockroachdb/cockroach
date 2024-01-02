@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -52,7 +53,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 
 	// Sanity check to prevent misuse of API.
 	if active, firstUse := log.IsActive(); active {
-		panic(errors.Newf("logging already active; first used at:\n%s", firstUse))
+		logcrash.ReportOrPanic(ctx, nil /* sv */, "logging already active; first used at:\n%s", firstUse)
 	}
 
 	// Try to derive a default directory from the first store,
@@ -89,8 +90,9 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	// flag) is passed without argument, see below.
 	commandSpecificDefaultLegacyStderrOverride := severity.INFO
 
-	if isDemoCmd(cmd) {
-		// `cockroach demo` is special: it starts a server, but without
+	if isDemoCmd(cmd) || cmd == genMetricListCmd {
+		// `cockroach demo` and `cockroach gen metric-list` are special:
+		// they start a server, but without
 		// disk and interactively. We don't want to litter the console
 		// with warning or error messages unless overridden; however,
 		// should the command encounter a log.Fatal event, we want

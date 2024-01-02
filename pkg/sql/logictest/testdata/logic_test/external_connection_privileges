@@ -81,7 +81,7 @@ CREATE ROLE testuser2
 statement ok
 GRANT DROP, USAGE ON EXTERNAL CONNECTION foo TO testuser2 WITH GRANT OPTION
 
-query TTTB colnames
+query TTTB colnames,rowsort
 SHOW GRANTS ON EXTERNAL CONNECTION foo
 ----
 connection_name  grantee    privilege_type  is_grantable
@@ -93,7 +93,7 @@ foo              testuser   USAGE           true
 foo              testuser2  DROP            true
 foo              testuser2  USAGE           true
 
-query TTTB colnames
+query TTTB colnames,rowsort
 SHOW GRANTS ON EXTERNAL CONNECTION foo FOR testuser, testuser2
 ----
 connection_name  grantee    privilege_type  is_grantable

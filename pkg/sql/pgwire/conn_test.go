@@ -28,8 +28,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -39,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -78,7 +79,7 @@ func TestConn(t *testing.T) {
 	// server that the client will connect to; we just use it on the side to
 	// execute some metadata queries that pgx sends whenever it opens a
 	// connection.
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true, UseDatabase: "system"})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{Insecure: true, UseDatabase: "system"})
 	defer s.Stopper().Stop(context.Background())
 
 	// Start a pgwire "server".
@@ -91,7 +92,8 @@ func TestConn(t *testing.T) {
 	log.Infof(context.Background(), "started listener on %s", serverAddr)
 
 	var g errgroup.Group
-	ctx := context.Background()
+	ctx, cancelConn := context.WithCancel(context.Background())
+	defer cancelConn()
 
 	var clientWG sync.WaitGroup
 	clientWG.Add(1)
@@ -100,23 +102,30 @@ func TestConn(t *testing.T) {
 		return client(ctx, serverAddr, &clientWG)
 	})
 
+	server := newTestServer()
 	// Wait for the client to connect and perform the handshake.
-	conn, err := waitForClientConn(ln)
+	netConn, err := waitForClientConn(ln)
 	if err != nil {
 		t.Fatal(err)
 	}
+	conn := server.newConn(
+		ctx,
+		cancelConn,
+		netConn,
+		sql.SessionArgs{ConnResultsBufferSize: 16 << 10},
+		timeutil.Now(),
+	)
 
 	// Run the conn's loop in the background - it will push commands to the
 	// buffer.
 	serveCtx, stopServe := context.WithCancel(ctx)
 	g.Go(func() error {
-		conn.serveImpl(
+		server.serveImpl(
 			serveCtx,
-			func() bool { return false }, /* draining */
-			// sqlServer - nil means don't create a command processor and a write side of the conn
-			nil,
+			conn,
 			&mon.BoundAccount{}, /* reserved */
 			authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
+			clusterunique.ID{},
 		)
 		return nil
 	})
@@ -183,10 +192,9 @@ func TestConnMessageTooBig(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, mainDB, _ := serverutils.StartServer(t, params)
-	defer mainDB.Close()
-	defer s.Stopper().Stop(context.Background())
+	srv, mainDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Form a 1MB string.
 	longStr := "a"
@@ -314,11 +322,9 @@ func TestConnMessageTooBig(t *testing.T) {
 		},
 	}
 
-	pgURL, cleanup := sqlutils.PGUrl(
+	pgURL, cleanup := s.PGUrl(
 		t,
-		s.ServingSQLAddr(),
-		"TestBigClientMessage",
-		url.User(username.RootUser),
+		serverutils.CertsDirPrefix("TestBigClientMessage"),
 	)
 	defer cleanup()
 
@@ -533,17 +539,22 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 	return conn.Close(ctx)
 }
 
+func newTestServer() *Server {
+	sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
+	metrics := newTenantSpecificMetrics(sqlMetrics /* sqlMemMetrics */, metric.TestSampleInterval)
+	return &Server{
+		tenantMetrics: metrics,
+		execCfg: &sql.ExecutorConfig{
+			Settings: cluster.MakeTestingClusterSettings(),
+		},
+	}
+}
+
 // waitForClientConn blocks until a client connects and performs the pgwire
 // handshake. This emulates what pgwire.Server does.
-func waitForClientConn(ln net.Listener) (*conn, error) {
+func waitForClientConn(ln net.Listener) (net.Conn, error) {
 	conn, _, err := getSessionArgs(ln, false)
-	if err != nil {
-		return nil, err
-	}
-
-	metrics := makeTenantSpecificMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
-	pgwireConn := newConn(conn, sql.SessionArgs{ConnResultsBufferSize: 16 << 10}, &metrics, timeutil.Now(), nil)
-	return pgwireConn, nil
+	return conn, err
 }
 
 // getSessionArgs blocks until a client connects and returns the connection
@@ -902,12 +913,13 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 	// We're going to test closing the connection in both the Open and Aborted
 	// state.
 	testutils.RunTrueAndFalse(t, "open state", func(t *testing.T, open bool) {
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		ctx := context.Background()
-		defer s.Stopper().Stop(ctx)
+		srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
+		s := srv.ApplicationLayer()
 
-		pgURL, cleanupFunc := sqlutils.PGUrl(
-			t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+		pgURL, cleanupFunc := s.PGUrl(
+			t, serverutils.CertsDirPrefix("testConnClose"), serverutils.User(username.RootUser),
 		)
 		defer cleanupFunc()
 		db, err := gosql.Open("postgres", pgURL.String())
@@ -971,9 +983,11 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 func TestConnCloseWhileProducingRows(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
 
 	// Disable results buffering.
 	if _, err := db.Exec(
@@ -981,8 +995,8 @@ func TestConnCloseWhileProducingRows(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+	pgURL, cleanupFunc := s.PGUrl(
+		t, serverutils.CertsDirPrefix("testConnClose"), serverutils.User(username.RootUser),
 	)
 	defer cleanupFunc()
 	noBufferDB, err := gosql.Open("postgres", pgURL.String())
@@ -1082,26 +1096,26 @@ func TestMaliciousInputs(t *testing.T) {
 				close(errChan)
 			}(tc)
 
-			sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
-			metrics := makeTenantSpecificMetrics(sqlMetrics, time.Second /* histogramWindow */)
-
-			conn := newConn(
+			ctx, cancelConn := context.WithCancel(ctx)
+			defer cancelConn()
+			s := newTestServer()
+			conn := s.newConn(
+				ctx,
+				cancelConn,
 				r,
 				// ConnResultsBufferSize - really small so that it overflows
 				// when we produce a few results.
 				sql.SessionArgs{ConnResultsBufferSize: 10},
-				&metrics,
 				timeutil.Now(),
-				nil,
 			)
 			// Ignore the error from serveImpl. There might be one when the client
 			// sends malformed input.
-			conn.serveImpl(
+			s.serveImpl(
 				ctx,
-				func() bool { return false }, /* draining */
-				nil,                          /* sqlServer */
-				&mon.BoundAccount{},          /* reserved */
+				conn,
+				&mon.BoundAccount{}, /* reserved */
 				authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
+				clusterunique.ID{},
 			)
 			if err := <-errChan; err != nil {
 				t.Fatal(err)
@@ -1141,7 +1155,12 @@ func TestReadTimeoutConnExits(t *testing.T) {
 			}
 			defer c.Close()
 
-			readTimeoutConn := NewReadTimeoutConn(c, func() error { return ctx.Err() })
+			readTimeoutConn := &readTimeoutConn{
+				Conn: c,
+				checkExitConds: func() error {
+					return ctx.Err()
+				},
+			}
 			// Assert that reads are performed normally.
 			readBytes := make([]byte, len(expectedRead))
 			if _, err := readTimeoutConn.Read(readBytes); err != nil {
@@ -1182,8 +1201,9 @@ func TestReadTimeoutConnExits(t *testing.T) {
 func TestConnResultsBufferSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Check that SHOW results_buffer_size correctly exposes the value when it
 	// inherits the default.
@@ -1193,7 +1213,7 @@ func TestConnResultsBufferSize(t *testing.T) {
 		require.Equal(t, `16384`, size)
 	}
 
-	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanup := s.PGUrl(t, serverutils.CertsDirPrefix(t.Name()), serverutils.User(username.RootUser))
 	defer cleanup()
 	q := pgURL.Query()
 
@@ -1255,7 +1275,7 @@ func TestConnCloseCancelsAuth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	authBlocked := make(chan struct{})
-	s, _, _ := serverutils.StartServer(t,
+	srv := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
 			Insecure: true,
 			Knobs: base.TestingKnobs{
@@ -1273,11 +1293,12 @@ func TestConnCloseCancelsAuth(t *testing.T) {
 			},
 		})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// We're going to open a client connection and do the minimum so that the
 	// server gets to the authentication phase, where it will block.
-	conn, err := net.Dial("tcp", s.ServingSQLAddr())
+	conn, err := net.Dial("tcp", s.AdvSQLAddr())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1305,7 +1326,7 @@ func TestConnServerAbortsOnRepeatedErrors(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	var shouldError uint32 = 0
 	testingKnobError := fmt.Errorf("a random error")
-	s, db, _ := serverutils.StartServer(t,
+	srv, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Insecure: true,
 			Knobs: base.TestingKnobs{
@@ -1320,8 +1341,7 @@ func TestConnServerAbortsOnRepeatedErrors(t *testing.T) {
 			},
 		})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	defer db.Close()
+	defer srv.Stopper().Stop(ctx)
 
 	conn, err := db.Conn(ctx)
 	require.NoError(t, err)
@@ -1697,19 +1717,33 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 		},
 	}
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	defer db.Close()
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			pgURL, cleanupFunc := sqlutils.PGUrl(
-				t, s.ServingSQLAddr(), "TestParseSearchPathInConnectionString" /* prefix */, url.User(username.RootUser),
+			pgURL, cleanupFunc := s.PGUrl(
+				t, serverutils.CertsDirPrefix("TestParseSearchPathInConnectionString"),
+				serverutils.User(username.RootUser),
 			)
 			defer cleanupFunc()
 
-			pgURL.RawQuery += "&" + tc.query
+			tcValues, err := url.ParseQuery(tc.query)
+			require.NoError(t, err)
+
+			// Combine existing query params with the test case query params.
+			values := pgURL.Query()
+			for k := range tcValues {
+				if values.Has(k) {
+					values.Set(k, values.Get(k)+" "+tcValues.Get(k))
+				} else {
+					values.Set(k, tcValues.Get(k))
+				}
+			}
+			pgURL.RawQuery = values.Encode()
+
 			c, connErr := pgx.Connect(ctx, pgURL.String())
 			if tc.expectedErr != "" {
 				require.ErrorContains(t, connErr, tc.expectedErr)
@@ -1718,7 +1752,7 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 			require.NoError(t, connErr)
 
 			var sp string
-			err := c.QueryRow(ctx, `SHOW search_path`).Scan(&sp)
+			err = c.QueryRow(ctx, `SHOW search_path`).Scan(&sp)
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedSearchPath, sp)
 		})
@@ -1728,22 +1762,31 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 func TestSetSessionArguments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	defer db.Close()
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+	_, err := s.SQLConn(t, serverutils.DBName("defaultdb")).Exec(`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true`)
+	require.NoError(t, err)
+
+	pgURL, cleanupFunc := s.PGUrl(
+		t, serverutils.CertsDirPrefix("testConnClose"), serverutils.User(username.RootUser),
 	)
 	defer cleanupFunc()
 
-	pgURL.RawQuery += `&options=` + `  --user=test -c    search_path=public,testsp,"Abc",Def %20 ` +
+	testOptionValues, err := url.ParseQuery(`options=` + `  --user=test -c    search_path=public,testsp,"Abc",Def %20 ` +
 		"--default-transaction-isolation=read\\ uncommitted   " +
 		"-capplication_name=test  " +
 		"--DateStyle=ymd\\ ,\\ iso\\  " +
 		"-c intervalstyle%3DISO_8601 " +
-		"-ccustom_option.custom_option=test2"
+		"-ccustom_option.custom_option=test2")
+	require.NoError(t, err)
+
+	query := pgURL.Query()
+	query.Set("options", query.Get("options")+" "+testOptionValues.Get("options"))
+	pgURL.RawQuery = query.Encode()
+
 	noBufferDB, err := gosql.Open("postgres", pgURL.String())
 
 	if err != nil {
@@ -1808,15 +1851,16 @@ func TestRoleDefaultSettings(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	defer db.Close()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
 
 	_, err := db.ExecContext(ctx, "CREATE ROLE testuser WITH LOGIN")
 	require.NoError(t, err)
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "TestRoleDefaultSettings" /* prefix */, url.User("testuser"),
+	pgURL, cleanupFunc := s.PGUrl(
+		t, serverutils.CertsDirPrefix("TestRoleDefaultSettings"), serverutils.User("testuser"),
 	)
 	defer cleanupFunc()
 
@@ -1934,8 +1978,8 @@ func TestRoleDefaultSettings(t *testing.T) {
 
 			pgURLCopy := pgURL
 			if tc.userOverride != "" {
-				newPGURL, cleanupFunc := sqlutils.PGUrl(
-					t, s.ServingSQLAddr(), "TestRoleDefaultSettings" /* prefix */, url.User(tc.userOverride),
+				newPGURL, cleanupFunc := s.PGUrl(
+					t, serverutils.CertsDirPrefix("TestRoleDefaultSettings"), serverutils.User(tc.userOverride),
 				)
 				defer cleanupFunc()
 				pgURLCopy = newPGURL
@@ -1969,8 +2013,10 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	testServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer testServer.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	testServer := srv.ApplicationLayer()
 
 	// Users.
 	rootUser := username.RootUser
@@ -1981,12 +2027,10 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 	// and always returns an associated cleanup function, even in case of error,
 	// which should be called. The returned cleanup function is idempotent.
 	openConnWithUser := func(user string) (*pgx.Conn, func(), error) {
-		pgURL, cleanup := sqlutils.PGUrlWithOptionalClientCerts(
+		pgURL, cleanup := testServer.PGUrl(
 			t,
-			testServer.ServingSQLAddr(),
-			t.Name(),
-			url.UserPassword(user, user),
-			user == rootUser,
+			serverutils.UserPassword(user, user),
+			serverutils.ClientCerts(user == rootUser),
 		)
 		defer cleanup()
 		conn, err := pgx.Connect(ctx, pgURL.String())
@@ -2184,17 +2228,19 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 func TestConnCloseReleasesReservedMem(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
 
 	before := s.PGServer().(*Server).tenantSpecificConnMonitor.AllocBytes()
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+	pgURL, cleanupFunc := s.PGUrl(
+		t, serverutils.CertsDirPrefix("testConnClose"), serverutils.User(username.RootUser),
 	)
 	values := pgURL.Query()
-	values.Add("options", "c sadsad=") // invalid client-provided session param
+	values.Set("options", "c sadsad=") // invalid client-provided session param
 	pgURL.RawQuery = values.Encode()
 
 	defer cleanupFunc()

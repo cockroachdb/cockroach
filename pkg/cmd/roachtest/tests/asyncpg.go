@@ -20,16 +20,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
 const asyncpgRunTestCmd = `
 source venv/bin/activate && 
 cd /mnt/data1/asyncpg && 
-PGPORT=26257 PGHOST=localhost PGUSER=root PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
+PGPORT={pgport:1} PGHOST=localhost PGUSER=root PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
 `
 
 var asyncpgReleaseTagRegex = regexp.MustCompile(`^(?P<major>v\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 
+// WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
+// This is used by docs automation to produce a list of supported versions for ORM's.
 var asyncpgSupportedTag = "v0.24.0"
 
 func registerAsyncpg(r registry.Registry) {
@@ -43,8 +46,16 @@ func registerAsyncpg(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+
+		// This test assumes that multiple_active_portals_enabled is false, but through
+		// metamorphic constants, it is possible for them to be enabled. We disable
+		// metamorphic testing to avoid this. Note the asyncpg test suite drops the
+		// database so we can't set the session variable like we do in pgjdbc.
+		// TODO(DarrylWong): Use a metamorphic constants exclusion list instead.
+		// See: https://github.com/cockroachdb/cockroach/issues/113164
+		settings := install.MakeClusterSettings()
+		settings.Env = append(settings.Env, "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true")
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), settings, c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -75,6 +86,12 @@ func registerAsyncpg(r registry.Registry) {
 			"/mnt/data1/asyncpg",
 			asyncpgSupportedTag,
 			node,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx, t, c, node, "update apt-get", `sudo apt-get update`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -138,11 +155,15 @@ func registerAsyncpg(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "asyncpg",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1, spec.CPU(16)),
-		Tags:    registry.Tags(`default`, `orm`),
-		Leases:  registry.MetamorphicLeases,
+		Name:  "asyncpg",
+		Owner: registry.OwnerSQLFoundations,
+		// TODO(DarrylWong): This test currently fails on Ubuntu 22.04 so we run it on 20.04.
+		// See https://github.com/cockroachdb/cockroach/issues/112108.
+		// Once this issue is fixed we should remove this Ubuntu Version override.
+		Cluster:          r.MakeClusterSpec(1, spec.CPU(16), spec.UbuntuVersion(vm.FocalFossa)),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.ORM),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAsyncpg(ctx, t, c)
 		},

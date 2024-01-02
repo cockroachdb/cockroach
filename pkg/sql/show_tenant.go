@@ -60,11 +60,11 @@ func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode,
 		return nil, err
 	}
 
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "show"); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "show", p.execCfg.Settings); err != nil {
 		return nil, err
 	}
 
-	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "SHOW TENANT")
+	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "SHOW VIRTUAL CLUSTER")
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func CanManageTenant(ctx context.Context, p AuthorizationAccessor) error {
 		return nil
 	}
 
-	return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MANAGETENANT)
+	return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MANAGEVIRTUALCLUSTER)
 }
 
 func (n *showTenantNode) startExec(params runParams) error {
@@ -137,7 +137,7 @@ func (n *showTenantNode) getTenantValues(
 	}
 
 	// Tenant status + replication status fields.
-	jobId := tenantInfo.TenantReplicationJobID
+	jobId := tenantInfo.PhysicalReplicationConsumerJobID
 	if jobId == 0 {
 		values.dataState = values.tenantInfo.DataState.String()
 	} else {
@@ -223,7 +223,7 @@ func (n *showTenantNode) Values() tree.Datums {
 	}
 
 	if n.withReplication {
-		// This is a 'SHOW TENANT name WITH REPLICATION STATUS' command.
+		// This is a 'SHOW VIRTUAL CLUSTER name WITH REPLICATION STATUS' command.
 		sourceTenantName := tree.DNull
 		sourceClusterUri := tree.DNull
 		replicationJobId := tree.DNull
@@ -233,7 +233,7 @@ func (n *showTenantNode) Values() tree.Datums {
 
 		replicationInfo := v.replicationInfo
 		if replicationInfo != nil {
-			replicationJobId = tree.NewDInt(tree.DInt(tenantInfo.TenantReplicationJobID))
+			replicationJobId = tree.NewDInt(tree.DInt(tenantInfo.PhysicalReplicationConsumerJobID))
 			sourceTenantName = tree.NewDString(string(replicationInfo.IngestionDetails.SourceTenantName))
 			sourceClusterUri = tree.NewDString(replicationInfo.IngestionDetails.StreamAddress)
 			if replicationInfo.ReplicationLagInfo != nil {

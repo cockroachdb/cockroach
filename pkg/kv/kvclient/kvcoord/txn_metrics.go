@@ -22,6 +22,7 @@ type TxnMetrics struct {
 	Aborts                    *metric.Counter
 	Commits                   *metric.Counter
 	Commits1PC                *metric.Counter // Commits which finished in a single phase
+	CommitsReadOnly           *metric.Counter // Commits which finished without acquiring locks
 	ParallelCommits           *metric.Counter // Commits which entered the STAGING state
 	ParallelCommitAutoRetries *metric.Counter // Commits which were retried after entering the STAGING state
 	CommitWaits               *metric.Counter // Commits that waited for linearizability
@@ -73,13 +74,19 @@ var (
 	}
 	metaCommits1PCRates = metric.Metadata{
 		Name:        "txn.commits1PC",
-		Help:        "Number of KV transaction one-phase commit attempts",
+		Help:        "Number of KV transaction one-phase commits",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaCommitsReadOnly = metric.Metadata{
+		Name:        "txn.commits_read_only",
+		Help:        "Number of read only KV transaction commits",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaParallelCommitsRates = metric.Metadata{
 		Name:        "txn.parallelcommits",
-		Help:        "Number of KV transaction parallel commit attempts",
+		Help:        "Number of KV transaction parallel commits",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -212,12 +219,6 @@ var (
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaRestartsPossibleReplay = metric.Metadata{
-		Name:        "txn.restarts.possiblereplay",
-		Help:        "Number of restarts due to possible replays of command batches at the storage layer",
-		Measurement: "Restarted Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaRestartsAsyncWriteFailure = metric.Metadata{
 		Name:        "txn.restarts.asyncwritefailure",
 		Help:        "Number of restarts due to async consensus writes that failed to leave intents",
@@ -281,6 +282,7 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		Aborts:                              metric.NewCounter(metaAbortsRates),
 		Commits:                             metric.NewCounter(metaCommitsRates),
 		Commits1PC:                          metric.NewCounter(metaCommits1PCRates),
+		CommitsReadOnly:                     metric.NewCounter(metaCommitsReadOnly),
 		ParallelCommits:                     metric.NewCounter(metaParallelCommitsRates),
 		ParallelCommitAutoRetries:           metric.NewCounter(metaParallelCommitAutoRetries),
 		CommitWaits:                         metric.NewCounter(metaCommitWaitCount),
@@ -291,20 +293,20 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		ClientRefreshAutoRetries:            metric.NewCounter(metaClientRefreshAutoRetries),
 		ServerRefreshSuccess:                metric.NewCounter(metaServerRefreshSuccess),
 		Durations: metric.NewHistogram(metric.HistogramOptions{
-			Mode:     metric.HistogramModePreferHdrLatency,
-			Metadata: metaDurationsHistograms,
-			Duration: histogramWindow,
-			Buckets:  metric.IOLatencyBuckets,
+			Mode:         metric.HistogramModePreferHdrLatency,
+			Metadata:     metaDurationsHistograms,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		TxnsWithCondensedIntents:      metric.NewCounter(metaTxnsWithCondensedIntentSpans),
 		TxnsWithCondensedIntentsGauge: metric.NewGauge(metaTxnsWithCondensedIntentSpansGauge),
 		TxnsRejectedByLockSpanBudget:  metric.NewCounter(metaTxnsRejectedByLockSpanBudget),
 		Restarts: metric.NewHistogram(metric.HistogramOptions{
-			Metadata: metaRestartsHistogram,
-			Duration: histogramWindow,
-			MaxVal:   100,
-			SigFigs:  3,
-			Buckets:  metric.Count1KBuckets,
+			Metadata:     metaRestartsHistogram,
+			Duration:     histogramWindow,
+			MaxVal:       100,
+			SigFigs:      3,
+			BucketConfig: metric.Count1KBuckets,
 		}),
 		RestartsWriteTooOld:            telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),
 		RestartsWriteTooOldMulti:       telemetry.NewCounterWithMetric(metaRestartsWriteTooOldMulti),

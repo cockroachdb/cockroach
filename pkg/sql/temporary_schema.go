@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -48,20 +47,20 @@ import (
 // TempObjectCleanupInterval is a ClusterSetting controlling how often
 // temporary objects get cleaned up.
 var TempObjectCleanupInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.temp_object_cleaner.cleanup_interval",
 	"how often to clean up orphaned temporary objects",
 	30*time.Minute,
-).WithPublic()
+	settings.WithPublic)
 
 // TempObjectWaitInterval is a ClusterSetting controlling how long
 // after a creation a temporary object will be cleaned up.
 var TempObjectWaitInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.temp_object_cleaner.wait_interval",
 	"how long after creation a temporary object will be cleaned up",
 	30*time.Minute,
-).WithPublic()
+	settings.WithPublic)
 
 var (
 	temporaryObjectCleanerActiveCleanersMetric = metric.Metadata{
@@ -108,7 +107,7 @@ func (p *planner) getOrCreateTemporarySchema(
 	if err != nil {
 		return nil, err
 	}
-	b := &kv.Batch{}
+	b := p.Txn().NewBatch()
 	if err := p.Descriptors().InsertTempSchemaToBatch(
 		ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), db, tempSchemaName, id, b,
 	); err != nil {

@@ -52,6 +52,9 @@ type replicatedCmd struct {
 	// finishTracingSpan. This span "follows from" the proposer's span (even
 	// when the proposer is remote; we marshall tracing info through the
 	// proposal).
+	//
+	// For local commands, we also have a `ProposalData` which may have a span
+	// as well, and if it does, this span will follow from it.
 	sp *tracing.Span
 
 	// splitMergeUnlock is acquired for splits and merges when they are staged
@@ -69,6 +72,12 @@ type replicatedCmd struct {
 // IsLocal implements apply.Command.
 func (c *replicatedCmd) IsLocal() bool {
 	return c.proposal != nil
+}
+
+// ApplyAdmissionControl indicates whether the command should be
+// subject to replication admission control.
+func (c *replicatedCmd) ApplyAdmissionControl() bool {
+	return c.Entry.ApplyAdmissionControl
 }
 
 // Ctx implements apply.Command.

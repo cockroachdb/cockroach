@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -310,7 +311,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 								// HACK ALERT: to do without a TxnCoordSender, we jump through
 								// hoops to get the retryable error expected by db.Txn().
 								return nil, kvpb.NewError(kvpb.NewTransactionRetryWithProtoRefreshError(
-									"foo", ba.Txn.ID, *ba.Txn))
+									"foo", ba.Txn.ID, ba.Txn.Epoch, *ba.Txn))
 							}
 							return nil, pErr
 						}
@@ -464,7 +465,7 @@ func TestWrongTxnRetry(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Simulate an inner txn by generating an error with a bogus txn id.
-		return kvpb.NewTransactionRetryWithProtoRefreshError("test error", uuid.MakeV4(), roachpb.Transaction{})
+		return kvpb.NewTransactionRetryWithProtoRefreshError("test error", uuid.MakeV4(), 0, roachpb.Transaction{})
 	}
 
 	if err := db.Txn(context.Background(), txnClosure); !testutils.IsError(err, "test error") {
@@ -573,20 +574,20 @@ func TestTxnNegotiateAndSend(t *testing.T) {
 			MinTimestampBound: ts10,
 		}
 		ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
-		ba.Add(kvpb.NewGet(roachpb.Key("a"), false))
+		ba.Add(kvpb.NewGet(roachpb.Key("a")))
 		br, pErr := txn.NegotiateAndSend(ctx, ba)
 
 		if fastPath {
 			require.Nil(t, pErr)
 			require.NotNil(t, br)
 			require.Equal(t, ts20, br.Timestamp)
-			require.True(t, txn.CommitTimestampFixed())
-			require.Equal(t, ts20, txn.CommitTimestamp())
+			require.True(t, txn.ReadTimestampFixed())
+			require.Equal(t, ts20, txn.ReadTimestamp())
 		} else {
 			require.Nil(t, br)
 			require.NotNil(t, pErr)
 			require.Regexp(t, "unimplemented: cross-range bounded staleness reads not yet implemented", pErr)
-			require.False(t, txn.CommitTimestampFixed())
+			require.False(t, txn.ReadTimestampFixed())
 		}
 	})
 }
@@ -684,20 +685,20 @@ func TestTxnNegotiateAndSendWithDeadline(t *testing.T) {
 				MaxTimestampBound: test.maxTSBound,
 			}
 			ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
-			ba.Add(kvpb.NewGet(roachpb.Key("a"), false))
+			ba.Add(kvpb.NewGet(roachpb.Key("a")))
 			br, pErr := txn.NegotiateAndSend(ctx, ba)
 
 			if test.expErr == "" {
 				require.Nil(t, pErr)
 				require.NotNil(t, br)
 				require.Equal(t, minTSBound, br.Timestamp)
-				require.True(t, txn.CommitTimestampFixed())
-				require.Equal(t, minTSBound, txn.CommitTimestamp())
+				require.True(t, txn.ReadTimestampFixed())
+				require.Equal(t, minTSBound, txn.ReadTimestamp())
 			} else {
 				require.Nil(t, br)
 				require.NotNil(t, pErr)
 				require.Regexp(t, test.expErr, pErr)
-				require.False(t, txn.CommitTimestampFixed())
+				require.False(t, txn.ReadTimestampFixed())
 			}
 		})
 	}
@@ -754,7 +755,7 @@ func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
 		}
 		ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
 		ba.MaxSpanRequestKeys = 2
-		ba.Add(kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false /* forUpdate */))
+		ba.Add(kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d")))
 		br, pErr := txn.NegotiateAndSend(ctx, ba)
 
 		if fastPath {
@@ -762,8 +763,8 @@ func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
 			require.NotNil(t, br)
 			// The negotiated timestamp should be returned and fixed.
 			require.Equal(t, ts20, br.Timestamp)
-			require.True(t, txn.CommitTimestampFixed())
-			require.Equal(t, ts20, txn.CommitTimestamp())
+			require.True(t, txn.ReadTimestampFixed())
+			require.Equal(t, ts20, txn.ReadTimestamp())
 			// Even though the response is paginated and carries a resume span.
 			require.Len(t, br.Responses, 1)
 			scanResp := br.Responses[0].GetScan()
@@ -776,7 +777,7 @@ func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
 			require.Nil(t, br)
 			require.NotNil(t, pErr)
 			require.Regexp(t, "unimplemented: cross-range bounded staleness reads not yet implemented", pErr)
-			require.False(t, txn.CommitTimestampFixed())
+			require.False(t, txn.ReadTimestampFixed())
 		}
 	})
 }
@@ -834,4 +835,43 @@ func TestTxnCommitTriggers(t *testing.T) {
 			require.Equal(t, test.expTrigger, triggerVal)
 		})
 	}
+}
+
+type txnSenderLockingOverrideWrapper struct {
+	TxnSender
+}
+
+func (t txnSenderLockingOverrideWrapper) IsLocking() bool {
+	return true
+}
+
+func TestTransactionAdmissionHeader(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClockForTesting(nil)
+	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(),
+		newTestTxnFactory(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			br := ba.CreateReply()
+			return br, nil
+		}), clock, stopper)
+
+	txn := NewTxnWithAdmissionControl(
+		ctx, db, 0 /* gatewayNodeID */, kvpb.AdmissionHeader_FROM_SQL, admissionpb.NormalPri)
+	header := txn.AdmissionHeader()
+	expectedHeader := kvpb.AdmissionHeader{
+		Priority:   int32(admissionpb.NormalPri),
+		CreateTime: header.CreateTime,
+		Source:     kvpb.AdmissionHeader_FROM_SQL,
+	}
+	require.Equal(t, expectedHeader, header)
+	// MockTransactionalSender always return false from IsLocking, so wrap it to
+	// return true.
+	txn.mu.sender = txnSenderLockingOverrideWrapper{txn.mu.sender}
+	header = txn.AdmissionHeader()
+	expectedHeader.Priority = int32(admissionpb.LockingNormalPri)
+	require.Equal(t, expectedHeader, header)
 }

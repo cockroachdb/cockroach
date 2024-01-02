@@ -27,19 +27,10 @@ func (i *immediateVisitor) CreateSchemaDescriptor(
 		ParentID:   catid.InvalidDescID, // Set by `SchemaParent` element
 		Name:       "",                  // Set by `Namespace` element
 		ID:         op.SchemaID,
-		Privileges: &catpb.PrivilegeDescriptor{Version: catpb.Version21_2}, // Populated by `UserPrivileges` elements and `Owner` element
+		Privileges: &catpb.PrivilegeDescriptor{Version: catpb.Version23_2}, // Populated by `UserPrivileges` elements and `Owner` element
 		Version:    1,
 	}).BuildCreatedMutableSchema()
 	mut.State = descpb.DescriptorState_ADD
 	i.CreateDescriptor(mut)
-	return nil
-}
-
-func (i *immediateVisitor) SetSchemaName(ctx context.Context, op scop.SetSchemaName) error {
-	sc, err := i.checkOutSchema(ctx, op.SchemaID)
-	if err != nil {
-		return err
-	}
-	sc.SetName(op.Name)
 	return nil
 }

@@ -1,6 +1,4 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load("@io_bazel_rules_go//extras:bindata.bzl", "bindata")
 
 go_library(
     name = "aws",
@@ -9,12 +7,14 @@ go_library(
         "config.go",
         "keys.go",
         "support.go",
-        ":embedded",  # keep
+    ],
+    embedsrcs = [
+        "config.json",
+        "old.json",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/flagstub",
@@ -41,22 +41,3 @@ genrule(
         "//pkg/gen:__pkg__",
     ],
 )
-
-bindata(
-    name = "embedded",
-    srcs = [
-        "config.json",
-        "old.json",
-    ],
-    extra_args = [
-        "-mode",
-        "0600",
-        "-modtime",
-        "1400000000",
-    ],
-    metadata = True,
-    package = "aws",
-    visibility = ["//pkg/gen:__pkg__"],
-)
-
-get_x_data(name = "get_x_data")

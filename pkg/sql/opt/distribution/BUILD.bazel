@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -20,7 +19,6 @@ go_library(
 go_test(
     name = "distribution_test",
     srcs = ["distribution_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":distribution"],
     deps = [
         "//pkg/settings/cluster",
@@ -33,5 +31,3 @@ go_test(
         "//pkg/sql/sem/eval",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -157,8 +157,6 @@ func (f *Factory) New(
 		initialTimestamp: initialTimestamp,
 		name:             name,
 		onValue:          onValue,
-
-		stopped: make(chan struct{}),
 	}
 	initConfig(&r.config, options)
 	return &r
@@ -181,10 +179,8 @@ type RangeFeed struct {
 
 	onValue OnValue
 
-	closeOnce sync.Once
-	cancel    context.CancelFunc
-	stopped   chan struct{}
-
+	cancel  context.CancelFunc
+	running sync.WaitGroup
 	started int32 // accessed atomically
 }
 
@@ -210,6 +206,7 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 
 	for _, sp := range spans {
 		if _, err := frontier.Forward(sp, f.initialTimestamp); err != nil {
+			frontier.Release() // release whatever was allocated.
 			return err
 		}
 	}
@@ -222,6 +219,8 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 	})
 
 	runWithFrontier := func(ctx context.Context) {
+		defer frontier.Release()
+
 		// pprof.Do function does exactly what we do here, but it also results in
 		// pprof.Do function showing up in the stack traces -- so, just set and reset
 		// labels manually.
@@ -242,8 +241,10 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 
 	ctx = logtags.AddTag(ctx, "rangefeed", f.name)
 	ctx, f.cancel = f.stopper.WithCancelOnQuiesce(ctx)
+	f.running.Add(1)
 	if err := f.stopper.RunAsyncTask(ctx, "rangefeed", runWithFrontier); err != nil {
 		f.cancel()
+		f.running.Done()
 		return err
 	}
 	return nil
@@ -253,10 +254,8 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 // idempotently. It waits for the currently running handler, if any, to complete
 // and guarantees that no future handlers will be invoked after this point.
 func (f *RangeFeed) Close() {
-	f.closeOnce.Do(func() {
-		f.cancel()
-		<-f.stopped
-	})
+	f.cancel()
+	f.running.Wait()
 }
 
 // Run the rangefeed in a loop in the case of failure, likely due to node
@@ -271,8 +270,8 @@ var useMuxRangeFeed = util.ConstantWithMetamorphicTestBool("use-mux-rangefeed", 
 
 // run will run the RangeFeed until the context is canceled or if the client
 // indicates that an initial scan error is non-recoverable.
-func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
-	defer close(f.stopped)
+func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier) {
+	defer f.running.Done()
 	r := retry.StartWithCtx(ctx, f.retryOptions)
 	restartLogEvery := log.Every(10 * time.Second)
 
@@ -295,7 +294,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 	if f.scanConfig.overSystemTable {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithSystemTablePriority())
 	}
-	if useMuxRangeFeed {
+	if f.useMuxRangefeed {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithMuxRangeFeed())
 	}
 	if f.withDiff {
@@ -354,7 +353,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 
 // processEvents processes events sent by the rangefeed on the eventCh.
 func (f *RangeFeed) processEvents(
-	ctx context.Context, frontier *span.Frontier, eventCh <-chan kvcoord.RangeFeedMessage,
+	ctx context.Context, frontier span.Frontier, eventCh <-chan kvcoord.RangeFeedMessage,
 ) error {
 	for {
 		select {

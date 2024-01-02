@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -36,18 +35,16 @@ import (
 )
 
 func TestHotRangesStats(t *testing.T) {
-	ctx := context.Background()
 	defer leaktest.AfterTest(t)()
-	ccl.TestingEnableEnterprise()
-	defer ccl.TestingDisableEnterprise()
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
+	ctx := context.Background()
 	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
 	defer cleanup()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		StoreSpecs: []base.StoreSpec{
 			base.DefaultTestStoreSpec,
 			base.DefaultTestStoreSpec,
@@ -63,17 +60,16 @@ func TestHotRangesStats(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	logcrash.DiagnosticsReportingEnabled.Override(ctx, &s.ClusterSettings().SV, true)
-	structlogging.TelemetryHotRangesStatsEnabled.Override(ctx, &s.ClusterSettings().SV, true)
-	structlogging.TelemetryHotRangesStatsInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Millisecond)
-	structlogging.TelemetryHotRangesStatsLoggingDelay.Override(ctx, &s.ClusterSettings().SV, 10*time.Millisecond)
-
 	tenantID := roachpb.MustMakeTenantID(2)
-	tt, err := s.StartTenant(ctx, base.TestTenantArgs{
+	tt, err := s.TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: tenantID,
-		Settings: s.ClusterSettings(),
 	})
 	require.NoError(t, err)
+
+	logcrash.DiagnosticsReportingEnabled.Override(ctx, &tt.ClusterSettings().SV, true)
+	structlogging.TelemetryHotRangesStatsEnabled.Override(ctx, &tt.ClusterSettings().SV, true)
+	structlogging.TelemetryHotRangesStatsInterval.Override(ctx, &tt.ClusterSettings().SV, 500*time.Millisecond)
+	structlogging.TelemetryHotRangesStatsLoggingDelay.Override(ctx, &tt.ClusterSettings().SV, 10*time.Millisecond)
 
 	testutils.SucceedsSoon(t, func() error {
 		ss := tt.TenantStatusServer().(serverpb.TenantStatusServer)
@@ -87,8 +83,8 @@ func TestHotRangesStats(t *testing.T) {
 		return nil
 	})
 
-	testutils.SucceedsWithin(t, func() error {
-		log.Flush()
+	testutils.SucceedsSoon(t, func() error {
+		log.FlushFiles()
 		entries, err := log.FetchEntriesFromFiles(
 			0,
 			math.MaxInt64,
@@ -103,5 +99,5 @@ func TestHotRangesStats(t *testing.T) {
 			return errors.New("waiting for logs")
 		}
 		return nil
-	}, 5*time.Second)
+	})
 }

@@ -1,23 +1,13 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "pgcrypto",
-    srcs = ["padding.go"],
+    srcs = ["pgcrypto.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/pgcrypto",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
-)
-
-go_test(
-    name = "pgcrypto_test",
-    srcs = ["padding_test.go"],
-    args = ["-test.timeout=295s"],
-    embed = [":pgcrypto"],
     deps = [
-        "//pkg/util/leaktest",
-        "@com_github_stretchr_testify//require",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/eval",
     ],
 )
-
-get_x_data(name = "get_x_data")

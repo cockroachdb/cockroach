@@ -1,10 +1,10 @@
-# LogicTest: !3node-tenant-default-configs !local-mixed-22.2-23.1
+# LogicTest: !3node-tenant-default-configs !local-mixed-23.1
 
 query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----
 id  active  length  name
-1   true    10      system
+1   true    12      system
 
 # Create a few tenants.
 
@@ -74,7 +74,7 @@ SHOW TENANT three
 id  name   data_state  service_mode
 4   three  ready       none
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SHOW TENANTS
 ----
 id  name        data_state  service_mode
@@ -134,7 +134,7 @@ CREATE TENANT IF NOT EXISTS three
 statement ok
 set default_transaction_read_only = on;
 
-statement error cannot execute CREATE TENANT in a read-only transaction
+statement error cannot execute CREATE VIRTUAL CLUSTER in a read-only transaction
 CREATE TENANT four;
 
 statement ok
@@ -142,7 +142,7 @@ set default_transaction_read_only = off;
 
 user testuser
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 CREATE TENANT four
 
 subtest drop_tenant
@@ -187,7 +187,7 @@ DROP TENANT "five-requiring-quotes"
 statement ok
 set default_transaction_read_only = on;
 
-statement error cannot execute DROP TENANT in a read-only transaction
+statement error cannot execute DROP VIRTUAL CLUSTER in a read-only transaction
 DROP TENANT three
 
 statement ok
@@ -195,23 +195,23 @@ set default_transaction_read_only = off;
 
 user testuser
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 DROP TENANT three
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 SHOW TENANTS
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 SHOW TENANT 'two'
 
 user root
 
 statement ok
-GRANT SYSTEM MANAGETENANT TO testuser
+GRANT SYSTEM MANAGEVIRTUALCLUSTER TO testuser
 
 user testuser
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SHOW TENANTS
 ----
 id  name        data_state  service_mode
@@ -225,6 +225,21 @@ SHOW TENANT two
 ----
 id  name        data_state  service_mode
 3   two         ready       none
+
+user root
+
+statement ok
+REVOKE SYSTEM MANAGEVIRTUALCLUSTER FROM testuser
+
+# Sanity check that using the original "internal key" privilege name is
+# respected.
+statement ok
+GRANT SYSTEM MANAGETENANT TO testuser
+
+user testuser
+
+statement ok
+SHOW TENANTS
 
 user root
 
@@ -285,7 +300,7 @@ CREATE TENANT "1";
 CREATE TENANT "a-b";
 CREATE TENANT "hello-100"
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SHOW TENANTS
 ----
 id  name             data_state  service_mode
@@ -325,7 +340,7 @@ DROP TENANT two
 statement error cannot drop tenant.*in service mode external
 DROP TENANT 'tenant-one'
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SHOW TENANTS
 ----
 id  name             data_state  service_mode
@@ -344,7 +359,7 @@ ALTER TENANT two STOP SERVICE
 statement ok
 ALTER TENANT 'tenant-one' STOP SERVICE
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SHOW TENANTS
 ----
 id  name             data_state  service_mode
@@ -366,7 +381,7 @@ DROP TENANT 'tenant-one'
 subtest tenant_templates
 
 query T
-SHOW CLUSTER SETTING sql.create_tenant.default_template
+SHOW CLUSTER SETTING sql.create_virtual_cluster.default_template
 ----
 ·
 
@@ -383,7 +398,7 @@ SELECT id FROM system.tenants WHERE name = 'tmpl'
 
 statement ok
 ALTER TENANT tmpl GRANT CAPABILITY can_view_node_info; -- will be copied
-ALTER TENANT tmpl SET CLUSTER SETTING trace.debug.enable = true; -- will be copied
+ALTER TENANT tmpl SET CLUSTER SETTING trace.debug_http_endpoint.enabled = true; -- will be copied
 -- Simulate resource limits. Will be copied.
 -- Note: we cannot use the update_tenant_resource_limits() builtin
 -- directly here because it can only be used from a CCL binary.
@@ -415,11 +430,11 @@ EXCEPT SELECT capability_name, capability_value FROM [SHOW TENANT othertenant WI
 ----
 
 # Check that the setting overrides were copied.
-query TTTT
+query TTTT rowsort
 SELECT variable, value, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT othertenant]
 WHERE origin != 'no-override'
 ----
-trace.debug.enable  true  b  per-tenant-override
+trace.debug_http_endpoint.enabled  true  b  per-tenant-override
 
 # Check that the resource usage parameters were copied.
 query IIRRRRI
@@ -436,13 +451,13 @@ DROP TENANT othertenant
 
 # Now set the default template and try again.
 statement ok
-SET CLUSTER SETTING sql.create_tenant.default_template = 'nonexistent';
+SET CLUSTER SETTING sql.create_virtual_cluster.default_template = 'nonexistent';
 
 statement error retrieving default tenant configuration template.*tenant "nonexistent" does not exist
 CREATE TENANT othertenant
 
 statement ok
-SET CLUSTER SETTING sql.create_tenant.default_template = 'tmpl';
+SET CLUSTER SETTING sql.create_virtual_cluster.default_template = 'tmpl';
 
 # Create a new tenant - this should use the template implicitly now.
 statement ok
@@ -463,11 +478,11 @@ EXCEPT SELECT capability_name, capability_value FROM [SHOW TENANT othertenant WI
 ----
 
 # Check the setting overrides were taken over.
-query TTTT
+query TTTT rowsort
 SELECT variable, value, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT othertenant]
 WHERE origin != 'no-override'
 ----
-trace.debug.enable  true  b  per-tenant-override
+trace.debug_http_endpoint.enabled  true  b  per-tenant-override
 
 # Check that the resource usage parameters were copied.
 query IIRRRRI
@@ -485,12 +500,12 @@ ALTER TENANT tmpl STOP SERVICE;
 DROP TENANT tmpl
 
 statement ok
-RESET CLUSTER SETTING sql.create_tenant.default_template
+RESET CLUSTER SETTING sql.create_virtual_cluster.default_template
 
-subtest block_drop_tenant
+subtest block_drop_virtual_cluster
 
 statement ok
-SET disable_drop_tenant = 'true'
+SET disable_drop_virtual_cluster = 'true'
 
 statement ok
 CREATE TENANT nodelete
@@ -499,7 +514,77 @@ statement error rejected.*irreversible data loss
 DROP TENANT nodelete
 
 statement ok
-RESET disable_drop_tenant
+RESET disable_drop_virtual_cluster
 
 statement ok
 DROP TENANT nodelete
+
+subtest regression_105115
+
+statement ok
+CREATE TENANT noservice
+
+statement error shared service not enabled for tenant "noservice"
+SET CLUSTER SETTING server.controller.default_target_cluster = noservice
+
+statement ok
+SET CLUSTER SETTING server.controller.default_target_cluster.check_service.enabled = false
+
+statement ok
+SET CLUSTER SETTING server.controller.default_target_cluster = noservice
+
+statement ok
+RESET CLUSTER SETTING server.controller.default_target_cluster.check_service.enabled
+
+statement ok
+RESET CLUSTER SETTING server.controller.default_target_cluster
+
+statement ok
+DROP TENANT noservice;
+CREATE TENANT withservice;
+ALTER TENANT withservice START SERVICE SHARED
+
+statement ok
+SET CLUSTER SETTING server.controller.default_target_cluster = withservice
+
+statement error cannot stop service while tenant is selected as default
+ALTER TENANT withservice STOP SERVICE
+
+statement ok
+SET CLUSTER SETTING server.controller.default_target_cluster.check_service.enabled = false
+
+statement ok
+ALTER TENANT withservice STOP SERVICE
+
+# clean up
+statement ok
+RESET CLUSTER SETTING server.controller.default_target_cluster.check_service.enabled
+
+statement ok
+RESET CLUSTER SETTING server.controller.default_target_cluster
+
+statement ok
+DROP TENANT withservice
+
+subtest restrict_system_access
+
+statement ok
+SET CLUSTER SETTING sql.restrict_system_interface.enabled = true
+
+statement error blocked update to application-level cluster setting.*\nHINT:.*\nTry changing the setting from a virtual cluster
+SET CLUSTER SETTING ui.display_timezone = 'America/New_York'
+
+statement error blocked DDL execution from the system interface.*\nHINT:.*\nTry running the DDL from a virtual cluster
+CREATE TABLE foo(x INT)
+
+statement error blocked DDL execution from the system interface.*\nHINT:.*\nTry running the DDL from a virtual cluster
+CREATE DATABASE foo
+
+statement error blocked DDL execution from the system interface.*\nHINT:.*\nTry running the DDL from a virtual cluster
+CREATE SCHEMA foo
+
+statement error blocked DDL execution from the system interface.*\nHINT:.*\nTry running the DDL from a virtual cluster
+CREATE VIEW foo AS SELECT latitude,longitude FROM system.locations
+
+statement ok
+RESET CLUSTER SETTING sql.restrict_system_interface.enabled

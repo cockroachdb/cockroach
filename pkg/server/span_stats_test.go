@@ -8,42 +8,81 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package server
+package server_test
 
 import (
 	"bytes"
 	"context"
 	"fmt"
-	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-func TestLocalSpanStats(t *testing.T) {
+func TestSpanStatsMetaScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{DisableCanAckBeforeApplication: true},
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+	s := testCluster.Server(0)
+
+	testSpans := []roachpb.Span{
+		{
+			Key:    keys.Meta1Prefix,
+			EndKey: keys.Meta1KeyMax,
 		},
-	})
-	s := serv.(*TestServer)
-	defer s.Stopper().Stop(ctx)
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+		{
+			Key:    keys.LocalMax,
+			EndKey: keys.Meta2KeyMax,
+		},
+		{
+			Key:    keys.Meta2Prefix,
+			EndKey: keys.Meta2KeyMax,
+		},
+	}
+
+	// SpanStats should have no problem finding descriptors for
+	// spans up to and including Meta2KeyMax.
+	for _, span := range testSpans {
+		res, err := s.StatusServer().(serverpb.StatusServer).SpanStats(ctx,
+			&roachpb.SpanStatsRequest{
+				NodeID: "0",
+				Spans: []roachpb.Span{
+					span,
+				},
+			},
+		)
+		require.NoError(t, err)
+		require.Equal(t, int32(1), res.SpanToStats[span.String()].RangeCount)
+	}
+}
+
+func TestSpanStatsFanOut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	const numNodes = 3
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	s := tc.Server(0)
+
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	// Create a number of ranges using splits.
 	splitKeys := []string{"a", "c", "e", "g", "i"}
@@ -104,33 +143,182 @@ func TestLocalSpanStats(t *testing.T) {
 	}
 
 	testCases := []testCase{
-		{spans[0], 4, 6},
-		{spans[1], 1, 3},
-		{spans[2], 2, 5},
-		{spans[3], 2, 1},
-		{spans[4], 2, 3},
-		{spans[5], 1, 2},
+		{spans[0], 4, int64(6)},
+		{spans[1], 1, int64(3)},
+		{spans[2], 2, int64(5)},
+		{spans[3], 2, int64(1)},
+		{spans[4], 2, int64(3)},
+		{spans[5], 1, int64(2)},
 	}
-	// Multi-span request
-	multiResult, err := s.status.getLocalStats(ctx,
-		&roachpb.SpanStatsRequest{
-			NodeID: "0",
-			Spans:  spans,
-		},
-	)
-	require.NoError(t, err)
 
-	// Verify stats across different spans.
-	for _, tcase := range testCases {
-		rSpan, err := keys.SpanAddr(tcase.span)
+	testutils.SucceedsSoon(t, func() error {
+
+		// Multi-span request
+		multiResult, err := s.StatusServer().(serverpb.StatusServer).SpanStats(ctx,
+			&roachpb.SpanStatsRequest{
+				NodeID: "0",
+				Spans:  spans,
+			},
+		)
 		require.NoError(t, err)
 
-		// Assert expected values from multi-span request
-		spanStats := multiResult.SpanToStats[tcase.span.String()]
-		require.Equal(t, spanStats.RangeCount, tcase.expectedRanges, fmt.Sprintf(
-			"Multi-span: expected %d ranges in span [%s - %s], found %d", tcase.expectedRanges, rSpan.Key.String(), rSpan.EndKey.String(), spanStats.RangeCount))
-		require.Equal(t, spanStats.TotalStats.LiveCount, tcase.expectedKeys, fmt.Sprintf(
-			"Multi-span: expected %d keys in span [%s - %s], found %d", tcase.expectedKeys, rSpan.Key.String(), rSpan.EndKey.String(), spanStats.TotalStats.LiveCount))
+		// Verify stats across different spans.
+		for _, tcase := range testCases {
+			rSpan, err := keys.SpanAddr(tcase.span)
+			require.NoError(t, err)
+
+			// Assert expected values from multi-span request
+			spanStats := multiResult.SpanToStats[tcase.span.String()]
+			if tcase.expectedRanges != spanStats.RangeCount {
+				return errors.Newf("Multi-span: expected %d ranges in span [%s - %s], found %d",
+					tcase.expectedRanges,
+					rSpan.Key.String(),
+					rSpan.EndKey.String(),
+					spanStats.RangeCount,
+				)
+			}
+			if tcase.expectedKeys != spanStats.TotalStats.LiveCount {
+				return errors.Newf(
+					"Multi-span: expected %d keys in span [%s - %s], found %d",
+					tcase.expectedKeys,
+					rSpan.Key.String(),
+					rSpan.EndKey.String(),
+					spanStats.TotalStats.LiveCount,
+				)
+			}
+		}
+
+		return nil
+	})
+
+}
+
+func TestSpanStatsFanOutFaultTolerance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStressWithIssue(t, 108534)
+	ctx := context.Background()
+	const numNodes = 5
+
+	type testCase struct {
+		name         string
+		dialCallback func(nodeID roachpb.NodeID) error
+		nodeCallback func(ctx context.Context, nodeID roachpb.NodeID) error
+		assertions   func(res *roachpb.SpanStatsResponse)
+	}
+
+	containsError := func(errors []string, testString string) bool {
+		for _, e := range errors {
+			if strings.Contains(e, testString) {
+				return true
+			}
+		}
+		return false
+	}
+
+	testCases := []testCase{
+		{
+			// In a complete failure, no node is able to service requests successfully.
+			name: "complete-fanout-failure",
+			dialCallback: func(nodeID roachpb.NodeID) error {
+				// On the 1st and 2nd node, simulate a connection error.
+				if nodeID == 1 || nodeID == 2 {
+					return errors.Newf("error dialing node %d", nodeID)
+				}
+				return nil
+			},
+			nodeCallback: func(ctx context.Context, nodeID roachpb.NodeID) error {
+				// On the 3rd node, simulate some sort of KV error.
+				if nodeID == 3 {
+					return errors.Newf("kv error on node %d", nodeID)
+				}
+
+				// On the 4th and 5th node, simulate a request that takes a very long time.
+				// In this case, nodeFn will block until the context is cancelled
+				// i.e. if iterateNodes respects the timeout cluster setting.
+				if nodeID == 4 || nodeID == 5 {
+					<-ctx.Done()
+					// Return an error that mimics the error returned
+					// when a rpc's context is cancelled:
+					return errors.Newf("node %d timed out", nodeID)
+				}
+				return nil
+			},
+			assertions: func(res *roachpb.SpanStatsResponse) {
+				// Expect to still be able to access SpanToStats for keys.EverythingSpan
+				// without panicking, even though there was a failure on every node.
+				require.Equal(t, int64(0), res.SpanToStats[keys.EverythingSpan.String()].TotalStats.LiveCount)
+				require.Equal(t, 5, len(res.Errors))
+
+				require.Equal(t, true, containsError(res.Errors, "error dialing node 1"))
+				require.Equal(t, true, containsError(res.Errors, "error dialing node 2"))
+				require.Equal(t, true, containsError(res.Errors, "kv error on node 3"))
+				require.Equal(t, true, containsError(res.Errors, "node 4 timed out"))
+				require.Equal(t, true, containsError(res.Errors, "node 5 timed out"))
+			},
+		},
+		{
+			// In a partial failure, nodes 1, 3, and 4 fail, and nodes 2 and 5 succeed.
+			name: "partial-fanout-failure",
+			dialCallback: func(nodeID roachpb.NodeID) error {
+				if nodeID == 1 {
+					return errors.Newf("error dialing node %d", nodeID)
+				}
+				return nil
+			},
+			nodeCallback: func(ctx context.Context, nodeID roachpb.NodeID) error {
+				if nodeID == 3 {
+					return errors.Newf("kv error on node %d", nodeID)
+				}
+
+				if nodeID == 4 {
+					<-ctx.Done()
+					// Return an error that mimics the error returned
+					// when a rpc's context is cancelled:
+					return errors.Newf("node %d timed out", nodeID)
+				}
+				return nil
+			},
+			assertions: func(res *roachpb.SpanStatsResponse) {
+				require.Greater(t, res.SpanToStats[keys.EverythingSpan.String()].TotalStats.LiveCount, int64(0))
+				// 3 nodes could not service their requests.
+				require.Equal(t, 3, len(res.Errors))
+
+				require.Equal(t, true, containsError(res.Errors, "error dialing node 1"))
+				require.Equal(t, true, containsError(res.Errors, "kv error on node 3"))
+				require.Equal(t, true, containsError(res.Errors, "node 4 timed out"))
+
+				// There should not be any errors for node 2 or node 5.
+				require.Equal(t, false, containsError(res.Errors, "error dialing node 2"))
+				require.Equal(t, false, containsError(res.Errors, "node 5 timed out"))
+			},
+		},
+	}
+
+	for _, tCase := range testCases {
+		tCase := tCase
+		t.Run(tCase.name, func(t *testing.T) {
+			serverArgs := base.TestServerArgs{}
+			serverArgs.Knobs.Server = &server.TestingKnobs{
+				IterateNodesDialCallback: tCase.dialCallback,
+				IterateNodesNodeCallback: tCase.nodeCallback,
+			}
+
+			tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{ServerArgs: serverArgs})
+			defer tc.Stopper().Stop(ctx)
+
+			sqlDB := tc.Server(0).SQLConn(t, serverutils.DBName("defaultdb"))
+			_, err := sqlDB.Exec("SET CLUSTER SETTING server.span_stats.node.timeout = '3s'")
+			require.NoError(t, err)
+
+			res, err := tc.GetStatusClient(t, 0).SpanStats(ctx, &roachpb.SpanStatsRequest{
+				NodeID: "0", // Indicates we want a fan-out.
+				Spans:  []roachpb.Span{keys.EverythingSpan},
+			})
+
+			require.NoError(t, err)
+			tCase.assertions(res)
+		})
 	}
 }
 
@@ -140,7 +328,7 @@ func BenchmarkSpanStats(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	createCluster := func(numNodes int) serverutils.TestClusterInterface {
-		return serverutils.StartNewTestCluster(b, numNodes,
+		return serverutils.StartCluster(b, numNodes,
 			base.TestClusterArgs{
 				ReplicationMode: base.ReplicationAuto,
 			})
@@ -182,7 +370,7 @@ func BenchmarkSpanStats(b *testing.B) {
 					ts.numRanges,
 				), func(b *testing.B) {
 
-					tenant := tc.Server(0).TenantOrServer()
+					tenant := tc.Server(0).ApplicationLayer()
 					tenantCodec := keys.MakeSQLCodec(serverutils.TestTenantID())
 					tenantPrefix := tenantCodec.TenantPrefix()
 
@@ -193,22 +381,24 @@ func BenchmarkSpanStats(b *testing.B) {
 					var spans []roachpb.Span
 
 					// Create a table spans
-					var spanStartKey roachpb.Key
 					for i := 0; i < ts.numSpans; i++ {
-						spanStartKey = nil
+						spanStartKey := makeKey(
+							tenantPrefix,
+							[]byte{byte(i)},
+						)
+						spanEndKey := makeKey(
+							tenantPrefix,
+							[]byte{byte(i + 1)},
+						)
 						// Create ranges.
-						var key roachpb.Key
 						for j := 0; j < ts.numRanges; j++ {
-							key = makeKey(tenantPrefix, []byte(strconv.Itoa(i*j)))
-							if spanStartKey == nil {
-								spanStartKey = key
-							}
-							_, _, err := tc.Server(0).SplitRange(key)
+							splitKey := makeKey(spanStartKey, []byte{byte(j)})
+							_, _, err := tc.Server(0).SplitRange(splitKey)
 							require.NoError(b, err)
 						}
 						spans = append(spans, roachpb.Span{
 							Key:    spanStartKey,
-							EndKey: key,
+							EndKey: spanEndKey,
 						})
 					}
 

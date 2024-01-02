@@ -47,6 +47,10 @@ func (s *Smither) pickAnyType(typ *types.T) *types.T {
 		if s.disableDecimals {
 			typ = s.randType()
 		}
+	case types.OidFamily:
+		if s.disableOIDs {
+			typ = s.randType()
+		}
 	}
 	return typ
 }
@@ -58,11 +62,14 @@ func (s *Smither) randScalarType() *types.T {
 	if s.types != nil {
 		scalarTypes = s.types.scalarTypes
 	}
-	typ := randgen.RandTypeFromSlice(s.rnd, scalarTypes)
-	if s.disableDecimals {
-		for typ.Family() == types.DecimalFamily {
-			typ = randgen.RandTypeFromSlice(s.rnd, scalarTypes)
+	var typ *types.T
+	for {
+		typ = randgen.RandTypeFromSlice(s.rnd, scalarTypes)
+		if (s.disableDecimals && typ.Family() == types.DecimalFamily) ||
+			(s.disableOIDs && typ.Family() == types.OidFamily) {
+			continue
 		}
+		break
 	}
 	return typ
 }
@@ -91,11 +98,19 @@ func (s *Smither) randType() *types.T {
 	if s.types != nil {
 		seedTypes = s.types.seedTypes
 	}
-	typ := randgen.RandTypeFromSlice(s.rnd, seedTypes)
-	if s.disableDecimals {
-		for typ.Family() == types.DecimalFamily {
-			typ = randgen.RandTypeFromSlice(s.rnd, seedTypes)
+	var typ *types.T
+	for {
+		typ = randgen.RandTypeFromSlice(s.rnd, seedTypes)
+		if s.disableDecimals && typ.Family() == types.DecimalFamily ||
+			(s.disableOIDs && typ.Family() == types.OidFamily) {
+			continue
 		}
+		if s.postgres && typ == types.Name {
+			// Name type in CRDB doesn't match Postgres behavior. Exclude for tests
+			// which compare CRDB behavior to Postgres.
+			continue
+		}
+		break
 	}
 	return typ
 }

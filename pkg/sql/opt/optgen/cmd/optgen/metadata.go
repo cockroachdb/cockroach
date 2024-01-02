@@ -195,6 +195,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"SequenceID":           {fullName: "opt.SequenceID", passByVal: true},
 		"UniqueID":             {fullName: "opt.UniqueID", passByVal: true},
 		"WithID":               {fullName: "opt.WithID", passByVal: true},
+		"UDFDefinition":        {fullName: "memo.UDFDefinition", isPointer: true},
 		"Ordering":             {fullName: "opt.Ordering", passByVal: true},
 		"OrderingChoice":       {fullName: "props.OrderingChoice", passByVal: true},
 		"GroupingOrder":        {fullName: "memo.GroupingOrder", passByVal: true},
@@ -219,7 +220,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"Statement":            {fullName: "tree.Statement", isInterface: true},
 		"Subquery":             {fullName: "tree.Subquery", isPointer: true, usePointerIntern: true},
 		"CreateTable":          {fullName: "tree.CreateTable", isPointer: true, usePointerIntern: true},
-		"CreateFunction":       {fullName: "tree.CreateFunction", isPointer: true, usePointerIntern: true},
+		"CreateRoutine":        {fullName: "tree.CreateRoutine", isPointer: true, usePointerIntern: true},
 		"CreateStats":          {fullName: "tree.CreateStats", isPointer: true, usePointerIntern: true},
 		"TableName":            {fullName: "tree.TableName", isPointer: true, usePointerIntern: true},
 		"Constraint":           {fullName: "constraint.Constraint", isPointer: true, usePointerIntern: true},
@@ -250,6 +251,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"Volatility":           {fullName: "volatility.V", passByVal: true},
 		"LiteralRows":          {fullName: "opt.LiteralRows", isExpr: true, isPointer: true},
 		"Distribution":         {fullName: "physical.Distribution", passByVal: true},
+		"TreeCreateView":       {fullName: "tree.CreateView", isPointer: true, usePointerIntern: true},
 	}
 
 	// Add types of generated op and private structs.

@@ -52,6 +52,7 @@ var SQLPasses = []reduce.Pass{
 	removeIndexCols,
 	removeIndexPredicate,
 	removeIndexStoringCols,
+	removeIndexInvisibility,
 	removeIndexPartitionBy,
 	removeIndexPartitions,
 	removeIndexPartitionListValues,
@@ -198,9 +199,9 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 				if node.AsSource != nil {
 					walk(node.AsSource)
 				}
-			case *tree.CreateFunction:
+			case *tree.CreateRoutine:
 				for i := range node.Options {
-					if body, ok := node.Options[i].(tree.FunctionBodyStr); ok {
+					if body, ok := node.Options[i].(tree.RoutineBodyStr); ok {
 						stmts, err := parser.Parse(string(body))
 						if err != nil {
 							// Ignore parsing errors.
@@ -210,7 +211,7 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 						for _, ast := range funcAsts {
 							walk(ast)
 						}
-						node.Options[i] = tree.FunctionBodyStr(joinASTs(asts))
+						node.Options[i] = tree.RoutineBodyStr(joinASTs(asts))
 					}
 				}
 			case *tree.CTE:
@@ -427,6 +428,7 @@ func collectASTs(stmts statements.Statements) []tree.NodeFormatter {
 
 func joinASTs(stmts []tree.NodeFormatter) string {
 	var sb strings.Builder
+	var fmtCtx *tree.FmtCtx
 	for i, stmt := range stmts {
 		if i > 0 {
 			sb.WriteString("\n\n")
@@ -438,7 +440,16 @@ func joinASTs(stmts []tree.NodeFormatter) string {
 			UseTabs:   false,
 			Simplify:  true,
 		}
-		sb.WriteString(cfg.Pretty(stmt))
+		p, err := cfg.Pretty(stmt)
+		if err != nil {
+			// Use simple printing if pretty-printing fails.
+			if fmtCtx == nil {
+				fmtCtx = tree.NewFmtCtx(tree.FmtParsable)
+			}
+			stmt.Format(fmtCtx)
+			p = fmtCtx.CloseAndGetString()
+		}
+		sb.WriteString(p)
 		sb.WriteString(";")
 	}
 	return sb.String()
@@ -810,7 +821,7 @@ var (
 	})
 	removeCreateFuncParams = walkSQL("remove CREATE FUNCTION parameters", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
-		case *tree.CreateFunction:
+		case *tree.CreateRoutine:
 			n := len(node.Params)
 			if xfi < n {
 				node.Params = append(node.Params[:xfi], node.Params[xfi+1:]...)
@@ -889,6 +900,19 @@ var (
 			return removeStoringCol(node)
 		case *tree.UniqueConstraintTableDef:
 			return removeStoringCol(&node.IndexTableDef)
+		}
+		return 0
+	})
+	removeIndexInvisibility = walkSQL("remove index Invisibility", func(xfi int, node interface{}) int {
+		xf := xfi == 0
+		switch node := node.(type) {
+		case *tree.IndexTableDef:
+			if node.Invisibility.Value != 0 {
+				if xf {
+					node.Invisibility = tree.IndexInvisibility{Value: 0.0}
+				}
+				return 1
+			}
 		}
 		return 0
 	})

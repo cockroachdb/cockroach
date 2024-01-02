@@ -1,0 +1,31 @@
+# LogicTest: local-mixed-23.1
+
+statement ok
+SET use_declarative_schema_changer = 'off'
+
+statement error pgcode 42P16 not indexable in a non-inverted index
+CREATE TABLE t (x JSONB PRIMARY KEY)
+
+statement error pgcode 42P16 not indexable in a non-inverted index
+CREATE TABLE t (x INT PRIMARY KEY, y JSON, INDEX (y ASC))
+
+statement error pgcode 42P16 not indexable in a non-inverted index
+CREATE TABLE t (x INT PRIMARY KEY, y JSON, UNIQUE (x ASC, y ASC))
+
+statement ok
+CREATE TABLE t (x JSONB)
+
+statement error pgcode 42P16 not indexable in a non-inverted index
+CREATE INDEX t_idx ON t(x)
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always'
+
+statement error pgcode 42P16 not indexable in a non-inverted index
+CREATE TABLE t2 (x JSONB PRIMARY KEY)
+
+statement error pgcode 42P16 not indexable in a non-inverted index
+CREATE TABLE t2 (x INT PRIMARY KEY, y JSON, INDEX (y ASC))
+
+statement error pgcode 42P16 not indexable in a non-inverted index
+CREATE TABLE t2 (x INT PRIMARY KEY, y JSON, UNIQUE (x ASC, y ASC))

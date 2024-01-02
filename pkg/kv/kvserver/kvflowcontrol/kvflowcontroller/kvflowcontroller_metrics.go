@@ -11,12 +11,18 @@
 package kvflowcontroller
 
 import (
+	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
 )
 
 var (
@@ -126,17 +132,20 @@ func annotateMetricTemplateWithWorkClass(
 }
 
 type metrics struct {
-	FlowTokensAvailable   [admissionpb.NumWorkClasses]*metric.Gauge
-	FlowTokensDeducted    [admissionpb.NumWorkClasses]*metric.Counter
-	FlowTokensReturned    [admissionpb.NumWorkClasses]*metric.Counter
-	FlowTokensUnaccounted [admissionpb.NumWorkClasses]*metric.Counter
-	RequestsWaiting       [admissionpb.NumWorkClasses]*metric.Gauge
-	RequestsAdmitted      [admissionpb.NumWorkClasses]*metric.Counter
-	RequestsErrored       [admissionpb.NumWorkClasses]*metric.Counter
-	RequestsBypassed      [admissionpb.NumWorkClasses]*metric.Counter
-	WaitDuration          [admissionpb.NumWorkClasses]metric.IHistogram
-	TotalStreamCount      [admissionpb.NumWorkClasses]*metric.Gauge
-	BlockedStreamCount    [admissionpb.NumWorkClasses]*metric.Gauge
+	ElasticFlowTokensDeducted    *metric.Counter
+	ElasticFlowTokensReturned    *metric.Counter
+	ElasticFlowTokensUnaccounted *metric.Counter
+	RegularFlowTokensDeducted    *metric.Counter
+	RegularFlowTokensReturned    *metric.Counter
+	RegularFlowTokensUnaccounted *metric.Counter
+	FlowTokensAvailable          [admissionpb.NumWorkClasses]*metric.Gauge
+	RequestsWaiting              [admissionpb.NumWorkClasses]*metric.Gauge
+	RequestsAdmitted             [admissionpb.NumWorkClasses]*metric.Counter
+	RequestsErrored              [admissionpb.NumWorkClasses]*metric.Counter
+	RequestsBypassed             [admissionpb.NumWorkClasses]*metric.Counter
+	WaitDuration                 [admissionpb.NumWorkClasses]metric.IHistogram
+	TotalStreamCount             [admissionpb.NumWorkClasses]*metric.Gauge
+	BlockedStreamCount           [admissionpb.NumWorkClasses]*metric.Gauge
 }
 
 var _ metric.Struct = &metrics{}
@@ -152,23 +161,35 @@ func newMetrics(c *Controller) *metrics {
 			annotateMetricTemplateWithWorkClass(wc, flowTokensAvailable),
 			func() int64 {
 				sum := int64(0)
-				c.mu.Lock()
-				defer c.mu.Unlock()
-				for _, wbc := range c.mu.buckets {
-					sum += int64(wbc.tokens[wc])
-				}
+				c.mu.buckets.Range(func(key, value any) bool {
+					b := value.(*bucket)
+					sum += int64(b.tokens(wc))
+					return true
+				})
 				return sum
 			},
 		)
-		m.FlowTokensDeducted[wc] = metric.NewCounter(
-			annotateMetricTemplateWithWorkClass(wc, flowTokensDeducted),
-		)
-		m.FlowTokensReturned[wc] = metric.NewCounter(
-			annotateMetricTemplateWithWorkClass(wc, flowTokensReturned),
-		)
-		m.FlowTokensUnaccounted[wc] = metric.NewCounter(
-			annotateMetricTemplateWithWorkClass(wc, flowTokensUnaccounted),
-		)
+		if wc == regular {
+			m.RegularFlowTokensDeducted = metric.NewCounter(
+				annotateMetricTemplateWithWorkClass(wc, flowTokensDeducted),
+			)
+			m.RegularFlowTokensReturned = metric.NewCounter(
+				annotateMetricTemplateWithWorkClass(wc, flowTokensReturned),
+			)
+			m.RegularFlowTokensUnaccounted = metric.NewCounter(
+				annotateMetricTemplateWithWorkClass(wc, flowTokensUnaccounted),
+			)
+		} else {
+			m.ElasticFlowTokensDeducted = metric.NewCounter(
+				annotateMetricTemplateWithWorkClass(wc, flowTokensDeducted),
+			)
+			m.ElasticFlowTokensReturned = metric.NewCounter(
+				annotateMetricTemplateWithWorkClass(wc, flowTokensReturned),
+			)
+			m.ElasticFlowTokensUnaccounted = metric.NewCounter(
+				annotateMetricTemplateWithWorkClass(wc, flowTokensUnaccounted),
+			)
+		}
 		m.RequestsWaiting[wc] = metric.NewGauge(
 			annotateMetricTemplateWithWorkClass(wc, requestsWaiting),
 		)
@@ -183,10 +204,10 @@ func newMetrics(c *Controller) *metrics {
 		)
 		m.WaitDuration[wc] = metric.NewHistogram(
 			metric.HistogramOptions{
-				Metadata: annotateMetricTemplateWithWorkClass(wc, waitDuration),
-				Duration: base.DefaultHistogramWindowInterval(),
-				Buckets:  metric.IOLatencyBuckets,
-				Mode:     metric.HistogramModePrometheus,
+				Metadata:     annotateMetricTemplateWithWorkClass(wc, waitDuration),
+				Duration:     base.DefaultHistogramWindowInterval(),
+				BucketConfig: metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePrometheus,
 			},
 		)
 		m.TotalStreamCount[wc] = metric.NewFunctionalGauge(
@@ -194,19 +215,88 @@ func newMetrics(c *Controller) *metrics {
 			func() int64 {
 				c.mu.Lock()
 				defer c.mu.Unlock()
-				return int64(len(c.mu.buckets))
+				return int64(c.mu.bucketCount)
 			},
 		)
+
+		// blockedStreamLogger controls periodic logging of blocked streams in
+		// WorkClass wc.
+		var blockedStreamLogger = log.Every(30 * time.Second)
+		var buf strings.Builder
 		m.BlockedStreamCount[wc] = metric.NewFunctionalGauge(
 			annotateMetricTemplateWithWorkClass(wc, blockedStreamCount),
 			func() int64 {
+				shouldLogBlocked := blockedStreamLogger.ShouldLog()
+				// count is the metric value.
 				count := int64(0)
-				c.mu.Lock()
-				defer c.mu.Unlock()
-				for _, wbc := range c.mu.buckets {
-					if wbc.tokens[wc] <= 0 {
-						count += 1
+
+				streamStatsCount := 0
+				// TODO(sumeer): this cap is not ideal. Consider dynamically reducing
+				// the logging frequency to maintain a mean of 400 log entries/10min.
+				const streamStatsCountCap = 20
+				c.mu.buckets.Range(func(key, value any) bool {
+					stream := key.(kvflowcontrol.Stream)
+					b := value.(*bucket)
+
+					if b.tokens(wc) <= 0 {
+						count++
+
+						if shouldLogBlocked {
+							// TODO(sumeer): this cap is not ideal.
+							const blockedStreamCountCap = 100
+							if count == 1 {
+								buf.Reset()
+								buf.WriteString(stream.String())
+							} else if count <= blockedStreamCountCap {
+								buf.WriteString(", ")
+								buf.WriteString(stream.String())
+							} else if count == blockedStreamCountCap+1 {
+								buf.WriteString(" omitted some due to overflow")
+							}
+						}
 					}
+					// Log stats, which reflect both elastic and regular, when handling
+					// the elastic metric. The choice of wc == elastic is arbitrary.
+					// Every 30s this predicate will evaluate to true, and we will log
+					// all the streams (elastic and regular) that experienced some
+					// blocking since the last time such logging was done. If a
+					// high-enough log verbosity is specified, shouldLogBacked will
+					// always be true, but since this method executes at the frequency
+					// of scraping the metric, we will still log at a reasonable rate.
+					if shouldLogBlocked && wc == elastic {
+						// Get and reset stats regardless of whether we will log this
+						// stream or not. We want stats to reflect only the last metric
+						// interval.
+						regularStats, elasticStats := b.getAndResetStats(c.clock.PhysicalTime())
+						logStream := false
+						if regularStats.noTokenDuration > 0 || elasticStats.noTokenDuration > 0 {
+							logStream = true
+							streamStatsCount++
+						}
+						if logStream {
+							if streamStatsCount <= streamStatsCountCap {
+								var b strings.Builder
+								fmt.Fprintf(&b, "stream %s was blocked: durations:", stream.String())
+								if regularStats.noTokenDuration > 0 {
+									fmt.Fprintf(&b, " regular %s", regularStats.noTokenDuration.String())
+								}
+								if elasticStats.noTokenDuration > 0 {
+									fmt.Fprintf(&b, " elastic %s", elasticStats.noTokenDuration.String())
+								}
+								fmt.Fprintf(&b, " tokens deducted: regular %s elastic %s",
+									humanize.IBytes(uint64(regularStats.tokensDeducted)),
+									humanize.IBytes(uint64(elasticStats.tokensDeducted)))
+								log.Infof(context.Background(), "%s", redact.SafeString(b.String()))
+							} else if streamStatsCount == streamStatsCountCap+1 {
+								log.Infof(context.Background(), "skipped logging some streams that were blocked")
+							}
+						}
+					}
+					return true
+				})
+				if shouldLogBlocked && count > 0 {
+					log.Warningf(context.Background(), "%d blocked %s replication stream(s): %s",
+						count, wc, redact.SafeString(buf.String()))
 				}
 				return count
 			},
@@ -238,19 +328,21 @@ func (m *metrics) onErrored(class admissionpb.WorkClass, dur time.Duration) {
 }
 
 func (m *metrics) onTokenAdjustment(adjustment tokensPerWorkClass) {
-	for class, delta := range adjustment {
-		if delta < 0 {
-			m.FlowTokensDeducted[class].Inc(-int64(delta))
-		} else if delta > 0 {
-			m.FlowTokensReturned[class].Inc(int64(delta))
-		}
+	if adjustment.regular < 0 {
+		m.RegularFlowTokensDeducted.Inc(-int64(adjustment.regular))
+	} else {
+		m.RegularFlowTokensReturned.Inc(int64(adjustment.regular))
+	}
+	if adjustment.elastic < 0 {
+		m.ElasticFlowTokensDeducted.Inc(-int64(adjustment.elastic))
+	} else {
+		m.ElasticFlowTokensReturned.Inc(int64(adjustment.elastic))
 	}
 }
 
 func (m *metrics) onUnaccounted(unaccounted tokensPerWorkClass) {
-	for class, delta := range unaccounted {
-		m.FlowTokensUnaccounted[class].Inc(int64(delta))
-	}
+	m.RegularFlowTokensUnaccounted.Inc(int64(unaccounted.regular))
+	m.ElasticFlowTokensUnaccounted.Inc(int64(unaccounted.elastic))
 }
 
 // MetricStruct implements the metric.Struct interface.

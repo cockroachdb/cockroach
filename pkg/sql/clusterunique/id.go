@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ID represents an identifier that is guaranteed to be unique across
@@ -26,6 +27,11 @@ import (
 type ID struct {
 	uint128.Uint128
 }
+
+var _ redact.SafeValue = ID{}
+
+// SafeValue implements the redact.SafeValue interface.
+func (ID) SafeValue() {}
 
 // GenerateID takes a timestamp and SQLInstanceID, and generates a
 // ID.

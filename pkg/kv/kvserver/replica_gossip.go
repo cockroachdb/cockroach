@@ -92,6 +92,7 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(
 		ctx, r, todoSpanSet, false, /* requiresClosedTSOlderThanStorageSnap */
+		kvpb.AdmissionHeader{},
 	)
 	defer rec.Release()
 	rw := r.store.TODOEngine().NewReadOnly(storage.StandardDurability)
@@ -100,7 +101,7 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 	br, result, pErr :=
 		evaluateBatch(
 			ctx, kvserverbase.CmdIDKey(""), rw, rec, nil /* ms */, &ba,
-			nil /* g */, nil /* st */, uncertainty.Interval{}, readOnlyDefault,
+			nil /* g */, nil /* st */, uncertainty.Interval{}, readOnlyDefault, false, /* omitInRangefeeds */
 		)
 	if pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "couldn't scan node liveness records in span %s", span)

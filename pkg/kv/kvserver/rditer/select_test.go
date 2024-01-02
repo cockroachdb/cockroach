@@ -29,8 +29,9 @@ func TestSelect(t *testing.T) {
 
 	w := echotest.NewWalker(t, datapathutils.TestDataPath(t, t.Name()))
 	for _, tc := range []struct {
-		name string
-		sp   roachpb.RSpan
+		name   string
+		sp     roachpb.RSpan
+		filter ReplicatedSpansFilter
 	}{
 		{
 			name: "no_span",
@@ -49,6 +50,39 @@ func TestSelect(t *testing.T) {
 				Key:    roachpb.RKey("a"),
 				EndKey: roachpb.RKey("c"),
 			},
+			filter: ReplicatedSpansAll,
+		},
+		{
+			name: "r2_excludeuser",
+			sp: roachpb.RSpan{
+				Key:    roachpb.RKey("a"),
+				EndKey: roachpb.RKey("c"),
+			},
+			filter: ReplicatedSpansExcludeUser,
+		},
+		{
+			name: "r2_useronly",
+			sp: roachpb.RSpan{
+				Key:    roachpb.RKey("a"),
+				EndKey: roachpb.RKey("c"),
+			},
+			filter: ReplicatedSpansUserOnly,
+		},
+		{
+			name: "r2_excludelocks",
+			sp: roachpb.RSpan{
+				Key:    roachpb.RKey("a"),
+				EndKey: roachpb.RKey("c"),
+			},
+			filter: ReplicatedSpansExcludeLocks,
+		},
+		{
+			name: "r2_locksonly",
+			sp: roachpb.RSpan{
+				Key:    roachpb.RKey("a"),
+				EndKey: roachpb.RKey("c"),
+			},
+			filter: ReplicatedSpansLocksOnly,
 		},
 		{
 			name: "r3",
@@ -64,6 +98,7 @@ func TestSelect(t *testing.T) {
 				for _, unreplicatedByRangeID := range []bool{false, true} {
 					opts := SelectOpts{
 						ReplicatedBySpan:      tc.sp,
+						ReplicatedSpansFilter: tc.filter,
 						ReplicatedByRangeID:   replicatedByRangeID,
 						UnreplicatedByRangeID: unreplicatedByRangeID,
 					}

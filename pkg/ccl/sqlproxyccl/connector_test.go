@@ -381,10 +381,10 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		c := &connector{
 			TenantID: roachpb.MustMakeTenantID(42),
 			DialTenantLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:     metric.HistogramModePrometheus,
-				Metadata: metaDialTenantLatency,
-				Duration: time.Millisecond,
-				Buckets:  metric.NetworkLatencyBuckets,
+				Mode:         metric.HistogramModePrometheus,
+				Metadata:     metaDialTenantLatency,
+				Duration:     time.Millisecond,
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
 		}
@@ -432,7 +432,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		// Assert existing calls.
 		require.Equal(t, 1, dialSQLServerCount)
 		require.Equal(t, 1, reportFailureFnCount)
-		count, _ := c.DialTenantLatency.Total()
+		count, _ := c.DialTenantLatency.CumulativeSnapshot().Total()
 		require.Equal(t, count, int64(1))
 		require.Equal(t, c.DialTenantRetries.Count(), int64(0))
 
@@ -454,7 +454,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		// Assert existing calls.
 		require.Equal(t, 2, dialSQLServerCount)
 		require.Equal(t, 2, reportFailureFnCount)
-		count, _ = c.DialTenantLatency.Total()
+		count, _ = c.DialTenantLatency.CumulativeSnapshot().Total()
 		require.Equal(t, count, int64(2))
 		require.Equal(t, c.DialTenantRetries.Count(), int64(0))
 	})
@@ -466,10 +466,10 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 
 		c := &connector{
 			DialTenantLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:     metric.HistogramModePreferHdrLatency,
-				Metadata: metaDialTenantLatency,
-				Duration: time.Millisecond,
-				Buckets:  metric.NetworkLatencyBuckets,
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     metaDialTenantLatency,
+				Duration:     time.Millisecond,
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
 		}
@@ -480,7 +480,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		conn, err := c.dialTenantCluster(ctx, nil /* requester */)
 		require.EqualError(t, err, "baz")
 		require.Nil(t, conn)
-		count, _ := c.DialTenantLatency.Total()
+		count, _ := c.DialTenantLatency.CumulativeSnapshot().Total()
 		require.Equal(t, count, int64(1))
 		require.Equal(t, c.DialTenantRetries.Count(), int64(0))
 	})
@@ -500,10 +500,10 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		c := &connector{
 			TenantID: roachpb.MustMakeTenantID(42),
 			DialTenantLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:     metric.HistogramModePreferHdrLatency,
-				Metadata: metaDialTenantLatency,
-				Duration: time.Millisecond,
-				Buckets:  metric.NetworkLatencyBuckets,
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     metaDialTenantLatency,
+				Duration:     time.Millisecond,
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
 		}
@@ -553,7 +553,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		require.Equal(t, 3, addrLookupFnCount)
 		require.Equal(t, 2, dialSQLServerCount)
 		require.Equal(t, 1, reportFailureFnCount)
-		count, _ := c.DialTenantLatency.Total()
+		count, _ := c.DialTenantLatency.CumulativeSnapshot().Total()
 		require.Equal(t, count, int64(1))
 		require.Equal(t, c.DialTenantRetries.Count(), int64(2))
 	})
@@ -790,7 +790,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 		defer crdbConn.Close()
 
 		defer testutils.TestingHook(&BackendDial,
-			func(msg *pgproto3.StartupMessage, serverAddress string,
+			func(ctx context.Context, msg *pgproto3.StartupMessage, serverAddress string,
 				tlsConfig *tls.Config) (net.Conn, error) {
 				require.Equal(t, c.StartupMsg, msg)
 				require.Equal(t, "10.11.12.13:80", serverAddress)
@@ -800,7 +800,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 		)()
 
 		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "10.11.12.13:80")
-		conn, err := c.dialSQLServer(sa)
+		conn, err := c.dialSQLServer(ctx, sa)
 		require.NoError(t, err)
 		defer conn.Close()
 
@@ -823,7 +823,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "!@#$::")
 		defer sa.Close()
 
-		conn, err := c.dialSQLServer(sa)
+		conn, err := c.dialSQLServer(ctx, sa)
 		require.Error(t, err)
 		require.Regexp(t, "invalid address format", err)
 		require.False(t, isRetriableConnectorError(err))
@@ -836,7 +836,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 		defer crdbConn.Close()
 
 		defer testutils.TestingHook(&BackendDial,
-			func(msg *pgproto3.StartupMessage, serverAddress string,
+			func(ctx context.Context, msg *pgproto3.StartupMessage, serverAddress string,
 				tlsConfig *tls.Config) (net.Conn, error) {
 				require.Equal(t, c.StartupMsg, msg)
 				require.Equal(t, "10.11.12.13:1234", serverAddress)
@@ -845,7 +845,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 			},
 		)()
 		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "10.11.12.13:1234")
-		conn, err := c.dialSQLServer(sa)
+		conn, err := c.dialSQLServer(ctx, sa)
 		require.NoError(t, err)
 		defer conn.Close()
 
@@ -863,7 +863,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 	t.Run("failed to dial with non-transient error", func(t *testing.T) {
 		c := &connector{StartupMsg: &pgproto3.StartupMessage{}}
 		defer testutils.TestingHook(&BackendDial,
-			func(msg *pgproto3.StartupMessage, serverAddress string,
+			func(ctx context.Context, msg *pgproto3.StartupMessage, serverAddress string,
 				tlsConfig *tls.Config) (net.Conn, error) {
 				require.Equal(t, c.StartupMsg, msg)
 				require.Equal(t, "127.0.0.1:1234", serverAddress)
@@ -874,7 +874,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "127.0.0.1:1234")
 		defer sa.Close()
 
-		conn, err := c.dialSQLServer(sa)
+		conn, err := c.dialSQLServer(ctx, sa)
 		require.EqualError(t, err, "foo")
 		require.False(t, isRetriableConnectorError(err))
 		require.Nil(t, conn)
@@ -883,19 +883,19 @@ func TestConnector_dialSQLServer(t *testing.T) {
 	t.Run("failed to dial with transient error", func(t *testing.T) {
 		c := &connector{StartupMsg: &pgproto3.StartupMessage{}}
 		defer testutils.TestingHook(&BackendDial,
-			func(msg *pgproto3.StartupMessage, serverAddress string,
+			func(ctx context.Context, msg *pgproto3.StartupMessage, serverAddress string,
 				tlsConfig *tls.Config) (net.Conn, error) {
 				require.Equal(t, c.StartupMsg, msg)
 				require.Equal(t, "127.0.0.2:4567", serverAddress)
 				require.Nil(t, tlsConfig)
-				return nil, withCode(errors.New("bar"), codeBackendDown)
+				return nil, withCode(errors.New("bar"), codeBackendDialFailed)
 			},
 		)()
 		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "127.0.0.2:4567")
 		defer sa.Close()
 
-		conn, err := c.dialSQLServer(sa)
-		require.EqualError(t, err, "codeBackendDown: bar")
+		conn, err := c.dialSQLServer(ctx, sa)
+		require.EqualError(t, err, "codeBackendDialFailed: bar")
 		require.True(t, isRetriableConnectorError(err))
 		require.Nil(t, conn)
 	})

@@ -12,6 +12,7 @@ package cli
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"io"
 	"net"
@@ -23,14 +24,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/profiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	tracezipper "github.com/cockroachdb/cockroach/pkg/util/tracing/zipper"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
 	"github.com/marusama/semaphore"
@@ -159,15 +165,15 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 
 	var tenants []*serverpb.Tenant
 	if err := func() error {
-		s := zr.start("discovering tenants on cluster")
-		conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+		s := zr.start("discovering virtual clusters")
+		conn, finish, err := getClientGRPCConn(ctx, serverCfg)
 		if err != nil {
 			return s.fail(err)
 		}
 		defer finish()
 
 		var resp *serverpb.ListTenantsResponse
-		if err := timeutil.RunWithTimeout(context.Background(), "list tenants", timeout, func(ctx context.Context) error {
+		if err := timeutil.RunWithTimeout(context.Background(), "list virtual clusters", timeout, func(ctx context.Context) error {
 			resp, err = serverpb.NewAdminClient(conn).ListTenants(ctx, &serverpb.ListTenantsRequest{})
 			return err
 		}); err != nil {
@@ -214,7 +220,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			sqlAddr := tenant.SqlAddr
 
 			s := zr.start("establishing RPC connection to %s", cfg.AdvertiseAddr)
-			conn, _, finish, err := getClientGRPCConn(ctx, cfg)
+			conn, finish, err := getClientGRPCConn(ctx, cfg)
 			if err != nil {
 				return s.fail(err)
 			}
@@ -244,15 +250,15 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 
 			if !cmd.Flags().Changed(cliflags.TableDisplayFormat.Name) {
 				// Use a streaming format to avoid accumulating all rows in RAM.
-				sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayJSON
+				sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
 			}
 
 			zr.sqlOutputFilenameExtension = computeSQLOutputFilenameExtension(sqlExecCtx.TableDisplayFormat)
 
-			sqlConn, err := makeTenantSQLClient("cockroach zip", useSystemDb, tenant.TenantName)
+			sqlConn, err := makeTenantSQLClient(ctx, "cockroach zip", useSystemDb, tenant.TenantName)
 			// The zip output is sent directly into a text file, so the results should
 			// be scanned into strings.
-			sqlConn.SetAlwaysInferResultTypes(false)
+			_ = sqlConn.SetAlwaysInferResultTypes(false)
 			if err != nil {
 				_ = s.fail(errors.Wrap(err, "unable to open a SQL session. Debug information will be incomplete"))
 			} else {
@@ -266,7 +272,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			// Only add tenant prefix for non system tenants.
 			var prefix string
 			if tenant.TenantId.ToUint64() != roachpb.SystemTenantID.ToUint64() {
-				prefix = fmt.Sprintf("/tenants/%s", tenant.TenantName)
+				prefix = fmt.Sprintf("/cluster/%s", tenant.TenantName)
 			}
 
 			zc := debugZipContext{
@@ -343,6 +349,18 @@ done
 		}
 	}
 
+	if !zipCtx.includeRunningJobTraces {
+		zr.info("NOTE: Omitted traces of running jobs from this debug zip bundle." +
+			" Use the --" + cliflags.ZipIncludeRunningJobTraces.Name + " flag to enable the fetching of this" +
+			" data.")
+	}
+
+	if !zipCtx.includeStacks {
+		zr.info("NOTE: Omitted node-level goroutine stack dumps from this debug zip bundle." +
+			" Use the --" + cliflags.ZipIncludeGoroutineStacks.Name + " flag to enable the fetching of this" +
+			" data.")
+	}
+
 	// TODO(obs-infra): remove deprecation warning once process completed in v23.2.
 	if zipCtx.redactLogs {
 		zr.info("WARNING: The --" + cliflags.ZipRedactLogs.Name +
@@ -353,21 +371,93 @@ done
 	return nil
 }
 
-// maybeAddProfileSuffix adds a file extension if this was not done
-// already on the server. This is necessary as pre-20.2 servers did
-// not use any extension for memory profiles.
-//
-// TODO(knz): Remove this in v21.1.
-func maybeAddProfileSuffix(name string) string {
-	switch {
-	case strings.HasPrefix(name, profiler.HeapFileNamePrefix+".") && !strings.HasSuffix(name, profiler.HeapFileNameSuffix):
-		name += profiler.HeapFileNameSuffix
-	case strings.HasPrefix(name, profiler.StatsFileNamePrefix+".") && !strings.HasSuffix(name, profiler.StatsFileNameSuffix):
-		name += profiler.StatsFileNameSuffix
-	case strings.HasPrefix(name, profiler.JemallocFileNamePrefix+".") && !strings.HasSuffix(name, profiler.JemallocFileNameSuffix):
-		name += profiler.JemallocFileNameSuffix
+type jobTrace struct {
+	jobID   jobspb.JobID
+	traceID tracingpb.TraceID
+}
+
+// dumpTraceableJobTraces collects the traces for some "traceable" jobs that are
+// in a running state. The job types in this list are the ones that have
+// explicitly implemented the TraceableJob interface.
+func (zc *debugZipContext) dumpTraceableJobTraces(ctx context.Context) error {
+	rows, err := zc.firstNodeSQLConn.Query(ctx,
+		`WITH
+latestprogress AS (
+  SELECT job_id, value
+  FROM system.job_info AS progress
+  WHERE info_key = 'legacy_progress'
+  ORDER BY written desc
+),
+jobpage AS (
+  SELECT id
+  FROM system.jobs@jobs_status_created_idx
+  WHERE (job_type IN ($1, $2, $3, $4)) AND (status IN ($5, $6))
+  ORDER BY id
+)
+SELECT distinct (id), latestprogress.value AS progress
+FROM jobpage AS j
+INNER JOIN latestprogress ON j.id = latestprogress.job_id;`,
+		jobspb.TypeBackup.String(),
+		jobspb.TypeRestore.String(),
+		jobspb.TypeImport.String(),
+		jobspb.TypeReplicationStreamIngestion.String(),
+		"running",
+		"reverting",
+	)
+	if err != nil {
+		return err
 	}
-	return name
+	vals := make([]driver.Value, 2)
+	jobTraces := make([]jobTrace, 0)
+	for err = rows.Next(vals); err == nil; err = rows.Next(vals) {
+		jobID, ok := vals[0].(int64)
+		if !ok {
+			return errors.New("failed to parse jobID")
+		}
+		progressBytes, ok := vals[1].([]byte)
+		if !ok {
+			return errors.New("failed to parse progress bytes")
+		}
+		progress := &jobspb.Progress{}
+		if err := protoutil.Unmarshal(progressBytes, progress); err != nil {
+			return err
+		}
+		jobTraces = append(jobTraces, jobTrace{jobID: jobspb.JobID(jobID), traceID: progress.TraceID})
+	}
+	if err != io.EOF {
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	func() {
+		// Debug zip collection sets this to false since results from the query are
+		// all dumped into txt files. In our case we parse the results of the query
+		// with their respective types and pre-process the information before
+		// dumping into a zip file.
+		reset := zc.firstNodeSQLConn.SetAlwaysInferResultTypes(true)
+		defer reset()
+		for _, jobTrace := range jobTraces {
+			inflightTraceZipper := tracezipper.MakeSQLConnInflightTraceZipper(zc.firstNodeSQLConn.GetDriverConn())
+			jobZip, err := inflightTraceZipper.Zip(ctx, int64(jobTrace.traceID))
+			if err != nil {
+				log.Warningf(ctx, "failed to collect inflight trace zip for job %d: %v", jobTrace.jobID, err)
+				continue
+			}
+
+			ts := timeutil.Now().Format(`20060102150405`)
+			name := fmt.Sprintf("%s/jobs/%d/%s/trace.zip", zc.prefix, jobTrace.jobID, ts)
+			s := zc.clusterPrinter.start("requesting traces for job %d", jobTrace.jobID)
+			if err := zc.z.createRaw(s, name, jobZip); err != nil {
+				log.Warningf(ctx, "failed to write inflight trace zip for job %d to file %s: %v",
+					jobTrace.jobID, name, err)
+				continue
+			}
+		}
+	}()
+
+	return nil
 }
 
 // dumpTableDataForZip runs the specified SQL query and stores the
@@ -389,15 +479,28 @@ func (zc *debugZipContext) dumpTableDataForZip(
 	for numRetries := 1; numRetries <= maxRetries; numRetries++ {
 		name := baseName + suffix + "." + zc.clusterPrinter.sqlOutputFilenameExtension
 		s.progress("writing output: %s", name)
-		sqlErr := func() error {
+		sqlErr := func() (err error) {
 			zc.z.Lock()
 			defer zc.z.Unlock()
+
+			// Use a time travel query intentionally to avoid contention.
+			if !buildutil.CrdbTestBuild {
+				if err := conn.Exec(ctx, "BEGIN AS OF SYSTEM TIME '-0.1s';"); err != nil {
+					return err
+				}
+				defer func() {
+					rollbackErr := conn.Exec(ctx, "ROLLBACK;")
+					if rollbackErr != nil {
+						err = errors.WithSecondaryError(err, errors.Wrapf(rollbackErr, "failed rolling back"))
+					}
+				}()
+			}
 
 			// TODO(knz): This can use context cancellation now that query
 			// cancellation is supported in v22.1 and later.
 			// SET must be run separately from the query so that the command tag output
 			// doesn't get added to the debug file.
-			err := conn.Exec(ctx, fmt.Sprintf(`SET statement_timeout = '%s'`, zc.timeout))
+			err = conn.Exec(ctx, fmt.Sprintf(`SET statement_timeout = '%s'`, zc.timeout))
 			if err != nil {
 				return err
 			}

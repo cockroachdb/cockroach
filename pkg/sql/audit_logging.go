@@ -13,10 +13,12 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging/auditevents"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -39,20 +41,35 @@ func (p *planner) maybeAuditSensitiveTableAccessEvent(
 	)
 }
 
-func (p *planner) maybeAuditRoleBasedAuditEvent(ctx context.Context) {
+func (p *planner) maybeAuditRoleBasedAuditEvent(ctx context.Context, execType executorType) {
 	// Avoid doing audit work if not necessary.
-	if p.shouldNotRoleBasedAudit() {
+	if p.shouldNotRoleBasedAudit(execType) {
 		return
 	}
 
 	// Use reduced audit config is enabled.
-	if auditlogging.UserAuditEnableReducedConfig.Get(&p.execCfg.Settings.SV) {
+	if auditlogging.UserAuditReducedConfigEnabled(&p.execCfg.Settings.SV) {
 		p.logReducedAuditConfig(ctx)
 		return
 	}
 
 	user := p.User()
-	userRoles, err := p.MemberOfWithAdminOption(ctx, user)
+	userRoles, err := func() (map[username.SQLUsername]bool, error) {
+		if p.Txn() != nil {
+			return p.MemberOfWithAdminOption(ctx, user)
+		} else {
+			// If there is no open transaction, then we need to create an internal
+			// one. This is the case for logging BEGIN statements, since the
+			// transaction is not opened until after BEGIN is logged.
+			var userRoles map[username.SQLUsername]bool
+			innerErr := p.ExecCfg().InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+				var err error
+				userRoles, err = MemberOfWithAdminOption(ctx, p.ExecCfg(), txn, user)
+				return err
+			})
+			return userRoles, innerErr
+		}
+	}()
 	if err != nil {
 		log.Errorf(ctx, "RoleBasedAuditEvent: error getting user role memberships: %v", err)
 		return
@@ -114,10 +131,14 @@ func (p *planner) initializeReducedAuditConfig(ctx context.Context) {
 	p.reducedAuditConfig.AuditSetting = p.AuditConfig().GetMatchingAuditSetting(userRoles, user)
 }
 
-// shouldNotRoleBasedAudit checks if we should do any auditing work for RoleBasedAuditEvents.
-func (p *planner) shouldNotRoleBasedAudit() bool {
-	// Do not do audit work if the cluster setting is empty.
-	// Do not emit audit events for reserved users/roles. This does not omit the root user.
-	// Do not emit audit events for internal planners.
-	return auditlogging.UserAuditLogConfig.Get(&p.execCfg.Settings.SV) == "" || p.User().IsReserved() || p.isInternalPlanner
+// shouldNotRoleBasedAudit checks if we should do any auditing work for
+// RoleBasedAuditEvents.
+func (p *planner) shouldNotRoleBasedAudit(execType executorType) bool {
+	// Do not do audit work if role-based auditing is not enabled.
+	// Do not emit audit events for reserved users/roles. This does not omit the
+	// root user.
+	// Do not emit audit events for internal executors.
+	return !auditlogging.UserAuditEnabled(p.execCfg.Settings) ||
+		p.User().IsReserved() ||
+		execType == executorTypeInternal
 }

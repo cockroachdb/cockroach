@@ -39,6 +39,14 @@ type InstanceInfo struct {
 	BinaryVersion   roachpb.Version
 }
 
+func (ii InstanceInfo) GetInstanceID() base.SQLInstanceID {
+	return ii.InstanceID
+}
+
+func (ii InstanceInfo) GetLocality() roachpb.Locality {
+	return ii.Locality
+}
+
 // SafeFormat implements redact.SafeFormatter.
 func (ii InstanceInfo) SafeFormat(s interfaces.SafePrinter, verb rune) {
 	s.Printf(
@@ -72,7 +80,3 @@ type AddressResolver interface {
 
 // NonExistentInstanceError can be returned if a SQL instance does not exist.
 var NonExistentInstanceError = errors.Errorf("non existent SQL instance")
-
-// NotASQLInstanceError can be returned if a function is is not supported for
-// non-SQL instances.
-var NotASQLInstanceError = errors.Errorf("not supported for non-SQL instance")

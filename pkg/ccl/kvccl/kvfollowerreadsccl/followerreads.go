@@ -15,7 +15,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -28,15 +27,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 // ClosedTimestampPropagationSlack is used by follower_read_timestamp() as a
 // measure of how long closed timestamp updates are supposed to take from the
 // leaseholder to the followers.
 var ClosedTimestampPropagationSlack = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.SystemVisible,
 	"kv.closed_timestamp.propagation_slack",
 	"a conservative estimate of the amount of time expect for closed timestamps to "+
 		"propagate from a leaseholder to followers. This is taken into account by "+
@@ -74,27 +74,25 @@ func getGlobalReadsLead(clock *hlc.Clock) time.Duration {
 // checkEnterpriseEnabled checks whether the enterprise feature for follower
 // reads is enabled, returning a detailed error if not. It is not suitable for
 // use in hot paths since a new error may be instantiated on each call.
-func checkEnterpriseEnabled(logicalClusterID uuid.UUID, st *cluster.Settings) error {
-	return utilccl.CheckEnterpriseEnabled(st, logicalClusterID, "follower reads")
+func checkEnterpriseEnabled(st *cluster.Settings) error {
+	return utilccl.CheckEnterpriseEnabled(st, "follower reads")
 }
 
 // isEnterpriseEnabled is faster than checkEnterpriseEnabled, and suitable
 // for hot paths.
-func isEnterpriseEnabled(logicalClusterID uuid.UUID, st *cluster.Settings) bool {
-	return utilccl.IsEnterpriseEnabled(st, logicalClusterID, "follower reads")
+func isEnterpriseEnabled(st *cluster.Settings) bool {
+	return utilccl.IsEnterpriseEnabled(st, "follower reads")
 }
 
-func checkFollowerReadsEnabled(logicalClusterID uuid.UUID, st *cluster.Settings) bool {
+func checkFollowerReadsEnabled(st *cluster.Settings) bool {
 	if !kvserver.FollowerReadsEnabled.Get(&st.SV) {
 		return false
 	}
-	return isEnterpriseEnabled(logicalClusterID, st)
+	return isEnterpriseEnabled(st)
 }
 
-func evalFollowerReadOffset(
-	logicalClusterID uuid.UUID, st *cluster.Settings,
-) (time.Duration, error) {
-	if err := checkEnterpriseEnabled(logicalClusterID, st); err != nil {
+func evalFollowerReadOffset(st *cluster.Settings) (time.Duration, error) {
+	if err := checkEnterpriseEnabled(st); err != nil {
 		return 0, err
 	}
 	// NOTE: we assume that at least some of the ranges being queried use a
@@ -129,7 +127,6 @@ func closedTimestampLikelySufficient(
 // canSendToFollower implements the logic for checking whether a batch request
 // may be sent to a follower.
 func canSendToFollower(
-	logicalClusterID uuid.UUID,
 	st *cluster.Settings,
 	clock *hlc.Clock,
 	ctPolicy roachpb.RangeClosedTimestampPolicy,
@@ -138,13 +135,12 @@ func canSendToFollower(
 	return kvserver.BatchCanBeEvaluatedOnFollower(ba) &&
 		closedTimestampLikelySufficient(st, clock, ctPolicy, ba.RequiredFrontier()) &&
 		// NOTE: this call can be expensive, so perform it last. See #62447.
-		checkFollowerReadsEnabled(logicalClusterID, st)
+		checkFollowerReadsEnabled(st)
 }
 
 type followerReadOracle struct {
-	logicalClusterID *base.ClusterIDContainer
-	st               *cluster.Settings
-	clock            *hlc.Clock
+	st    *cluster.Settings
+	clock *hlc.Clock
 
 	closest    replicaoracle.Oracle
 	binPacking replicaoracle.Oracle
@@ -152,11 +148,10 @@ type followerReadOracle struct {
 
 func newFollowerReadOracle(cfg replicaoracle.Config) replicaoracle.Oracle {
 	return &followerReadOracle{
-		logicalClusterID: cfg.RPCContext.LogicalClusterID,
-		st:               cfg.Settings,
-		clock:            cfg.Clock,
-		closest:          replicaoracle.NewOracle(replicaoracle.ClosestChoice, cfg),
-		binPacking:       replicaoracle.NewOracle(replicaoracle.BinPackingChoice, cfg),
+		st:         cfg.Settings,
+		clock:      cfg.Clock,
+		closest:    replicaoracle.NewOracle(replicaoracle.ClosestChoice, cfg),
+		binPacking: replicaoracle.NewOracle(replicaoracle.BinPackingChoice, cfg),
 	}
 }
 
@@ -196,12 +191,56 @@ func (o *followerReadOracle) useClosestOracle(
 	return txn != nil &&
 		closedTimestampLikelySufficient(o.st, o.clock, ctPolicy, txn.RequiredFrontier()) &&
 		// NOTE: this call can be expensive, so perform it last. See #62447.
-		checkFollowerReadsEnabled(o.logicalClusterID.Get(), o.st)
+		checkFollowerReadsEnabled(o.st)
 }
 
 // followerReadOraclePolicy is a leaseholder choosing policy that detects
 // whether a query can be used with a follower read.
 var followerReadOraclePolicy = replicaoracle.RegisterPolicy(newFollowerReadOracle)
+
+type bulkOracle struct {
+	cfg       replicaoracle.Config
+	locFilter roachpb.Locality
+}
+
+var _ replicaoracle.Oracle = bulkOracle{}
+
+// NewBulkOracle returns an oracle for planning bulk operations, which will plan
+// balancing randomly across all replicas (if follower reads are enabled).
+func NewBulkOracle(cfg replicaoracle.Config, locFilter roachpb.Locality) replicaoracle.Oracle {
+	return bulkOracle{cfg: cfg, locFilter: locFilter}
+}
+
+// ChoosePreferredReplica implements the replicaoracle.Oracle interface.
+func (r bulkOracle) ChoosePreferredReplica(
+	ctx context.Context,
+	_ *kv.Txn,
+	desc *roachpb.RangeDescriptor,
+	leaseholder *roachpb.ReplicaDescriptor,
+	_ roachpb.RangeClosedTimestampPolicy,
+	_ replicaoracle.QueryState,
+) (_ roachpb.ReplicaDescriptor, ignoreMisplannedRanges bool, _ error) {
+	if leaseholder != nil && !checkFollowerReadsEnabled(r.cfg.Settings) {
+		return *leaseholder, false, nil
+	}
+
+	replicas, err := kvcoord.NewReplicaSlice(ctx, r.cfg.NodeDescs, desc, nil, kvcoord.AllExtantReplicas)
+	if err != nil {
+		return roachpb.ReplicaDescriptor{}, false, sqlerrors.NewRangeUnavailableError(desc.RangeID, err)
+	}
+	if r.locFilter.NonEmpty() {
+		var matches []int
+		for i := range replicas {
+			if ok, _ := replicas[i].Locality.Matches(r.locFilter); ok {
+				matches = append(matches, i)
+			}
+		}
+		if len(matches) > 0 {
+			return replicas[matches[randutil.FastUint32()%uint32(len(matches))]].ReplicaDescriptor, true, nil
+		}
+	}
+	return replicas[randutil.FastUint32()%uint32(len(replicas))].ReplicaDescriptor, true, nil
+}
 
 func init() {
 	sql.ReplicaOraclePolicy = followerReadOraclePolicy

@@ -44,7 +44,7 @@ func TestRangeStatsInit(t *testing.T) {
 		KeyCount:        6,
 		ValCount:        7,
 		IntentCount:     8,
-		IntentAge:       9,
+		LockAge:         9,
 		GCBytesAge:      10,
 		LastUpdateNanos: 11,
 	}

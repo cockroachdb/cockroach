@@ -28,11 +28,11 @@ func (p *planner) DropTenant(ctx context.Context, n *tree.DropTenant) (planNode,
 	// Even though the call to DropTenantByID in startExec also
 	// performs this check, we need to do this early because otherwise
 	// the lookup of the ID from the name will fail.
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "drop"); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "drop", p.execCfg.Settings); err != nil {
 		return nil, err
 	}
 
-	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "DROP TENANT")
+	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "DROP VIRTUAL CLUSTER")
 	if err != nil {
 		return nil, err
 	}

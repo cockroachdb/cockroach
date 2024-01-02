@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -23,6 +22,7 @@ go_library(
         "linear_reference.go",
         "linestring.go",
         "make_geometry.go",
+        "mvtgeom.go",
         "node.go",
         "orientation.go",
         "point_polygon_optimization.go",
@@ -35,6 +35,7 @@ go_library(
         "snap_to_grid.go",
         "subdivide.go",
         "swap_ordinates.go",
+        "tile_envelope.go",
         "topology_operations.go",
         "unary_operators.go",
         "unary_predicates.go",
@@ -84,6 +85,7 @@ go_test(
         "linear_reference_test.go",
         "linestring_test.go",
         "make_geometry_test.go",
+        "mvtgeom_test.go",
         "node_test.go",
         "orientation_test.go",
         "remove_repeated_points_test.go",
@@ -95,13 +97,13 @@ go_test(
         "snap_to_grid_test.go",
         "subdivide_test.go",
         "swap_ordinates_test.go",
+        "tile_envelope_test.go",
         "topology_operations_test.go",
         "unary_operators_test.go",
         "unary_predicates_test.go",
         "validity_check_test.go",
         "voronoi_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = ["//c-deps:libgeos"],
     embed = [":geomfn"],
     deps = [
@@ -116,5 +118,3 @@ go_test(
         "@com_github_twpayne_go_geom//encoding/wkt",
     ],
 )
-
-get_x_data(name = "get_x_data")

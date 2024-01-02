@@ -1,3 +1,3 @@
 echo
 ----
-db1.AdminSplit(ctx, tk(2), hlc.MaxTimestamp) // <nil>
+db0.AdminSplit(ctx, tk(2), hlc.MaxTimestamp) // <nil>

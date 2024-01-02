@@ -13,14 +13,18 @@ package settings
 import (
 	"context"
 	"fmt"
+
+	"github.com/cockroachdb/errors"
 )
 
 // common implements basic functionality used by all setting types.
 type common struct {
 	class         Class
-	key           string
+	key           InternalKey
+	name          SettingName
 	description   string
 	visibility    Visibility
+	unsafe        bool
 	slot          slotIdx
 	nonReportable bool
 	retired       bool
@@ -33,9 +37,10 @@ type common struct {
 type slotIdx int32
 
 // init must be called to initialize the fields that don't have defaults.
-func (c *common) init(class Class, key string, description string, slot slotIdx) {
+func (c *common) init(class Class, key InternalKey, description string, slot slotIdx) {
 	c.class = class
 	c.key = key
+	c.name = SettingName(key) // until overridden
 	c.description = description
 	if slot < 0 {
 		panic(fmt.Sprintf("Invalid slot index %d", slot))
@@ -50,8 +55,12 @@ func (c common) Class() Class {
 	return c.class
 }
 
-func (c common) Key() string {
+func (c common) InternalKey() InternalKey {
 	return c.key
+}
+
+func (c common) Name() SettingName {
+	return c.name
 }
 
 func (c common) Description() string {
@@ -74,30 +83,52 @@ func (c *common) ErrorHint() (bool, string) {
 	return false, ""
 }
 
-// SetReportable indicates whether a setting's value can show up in SHOW ALL
-// CLUSTER SETTINGS and telemetry reports.
-//
-// The setting can still be used with SET and SHOW if the exact
-// setting name is known. Use SetReportable(false) for data that must
-// be hidden from standard setting report, telemetry and
-// troubleshooting screenshots, such as license data or keys.
-//
-// All string settings are also non-reportable by default and must be
-// opted in to reports manually with SetReportable(true).
-func (c *common) SetReportable(reportable bool) {
+func (c *common) getSlot() slotIdx {
+	return c.slot
+}
+
+// ValueOrigin returns the origin of the current value of the setting.
+func (c *common) ValueOrigin(ctx context.Context, sv *Values) ValueOrigin {
+	return sv.getValueOrigin(ctx, c.slot)
+}
+
+// setReportable configures the reportability.
+// Refer to the WithReportable option for details.
+func (c *common) setReportable(reportable bool) {
 	c.nonReportable = !reportable
 }
 
-// SetVisibility customizes the visibility of a setting.
-func (c *common) SetVisibility(v Visibility) {
+// setVisibility customizes the visibility of a setting.
+// Refer to the WithVisibility option for details.
+func (c *common) setVisibility(v Visibility) {
 	c.visibility = v
 }
 
-// SetRetired marks the setting as obsolete. It also hides
+// setRetired marks the setting as obsolete. It also hides
 // it from the output of SHOW CLUSTER SETTINGS.
-func (c *common) SetRetired() {
+func (c *common) setRetired() {
 	c.description = "do not use - " + c.description
 	c.retired = true
+}
+
+// setName is used to override the name of the setting.
+// Refer to the WithName option for details.
+func (c *common) setName(name SettingName) {
+	if c.name != SettingName(c.key) {
+		panic(errors.AssertionFailedf("duplicate use of WithName"))
+	}
+	c.name = name
+}
+
+// setUnsafe is used to override the unsafe status of the setting.
+// Refer to the WithUnsafe option for details.
+func (c *common) setUnsafe() {
+	c.unsafe = true
+}
+
+// IsUnsafe indicates whether the setting is unsafe.
+func (c *common) IsUnsafe() bool {
+	return c.unsafe
 }
 
 // SetOnChange installs a callback to be called when a setting's value changes.
@@ -110,9 +141,11 @@ func (c *common) SetOnChange(sv *Values, fn func(ctx context.Context)) {
 type internalSetting interface {
 	NonMaskedSetting
 
-	init(class Class, key, description string, slot slotIdx)
+	init(class Class, key InternalKey, description string, slot slotIdx)
 	isRetired() bool
 	setToDefault(ctx context.Context, sv *Values)
+
+	getSlot() slotIdx
 
 	// isReportable indicates whether the value of the setting can be
 	// included in user-facing reports such as that produced by SHOW ALL

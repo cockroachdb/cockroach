@@ -20,3 +20,7 @@ import (
 func Count(val uint64) redact.SafeString {
 	return redact.SafeString(humanize.Comma(int64(val)))
 }
+
+func Countf(val float64) redact.SafeString {
+	return redact.SafeString(humanize.Commaf(val))
+}

@@ -12,12 +12,12 @@ package rangefeed
 
 import (
 	"bytes"
-	"container/heap"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -351,14 +351,12 @@ func (h unresolvedTxnHeap) Swap(i, j int) {
 	h[i].index, h[j].index = i, j
 }
 
-func (h *unresolvedTxnHeap) Push(x interface{}) {
-	n := len(*h)
-	txn := x.(*unresolvedTxn)
-	txn.index = n
+func (h *unresolvedTxnHeap) Push(txn *unresolvedTxn) {
+	txn.index = len(*h)
 	*h = append(*h, txn)
 }
 
-func (h *unresolvedTxnHeap) Pop() interface{} {
+func (h *unresolvedTxnHeap) Pop() *unresolvedTxn {
 	old := *h
 	n := len(old)
 	txn := old[n-1]
@@ -474,7 +472,7 @@ func (uiq *unresolvedIntentQueue) updateTxn(
 			refCount:        delta,
 		}
 		uiq.txns[txn.txnID] = txn
-		heap.Push(&uiq.minHeap, txn)
+		heap.Push[*unresolvedTxn](&uiq.minHeap, txn)
 
 		// Adding a new txn can't advance the queue's earliest timestamp.
 		return false
@@ -495,13 +493,13 @@ func (uiq *unresolvedIntentQueue) updateTxn(
 	if txn.refCount == 0 {
 		// Remove txn from the queue.
 		delete(uiq.txns, txn.txnID)
-		heap.Remove(&uiq.minHeap, txn.index)
+		heap.Remove[*unresolvedTxn](&uiq.minHeap, txn.index)
 		return wasMin
 	}
 
 	// Forward the txn's timestamp. Need to fix heap if timestamp changes.
 	if txn.timestamp.Forward(ts) {
-		heap.Fix(&uiq.minHeap, txn.index)
+		heap.Fix[*unresolvedTxn](&uiq.minHeap, txn.index)
 		return wasMin
 	}
 	return false
@@ -525,7 +523,7 @@ func (uiq *unresolvedIntentQueue) Del(txnID uuid.UUID) bool {
 
 	// Remove txn from the queue.
 	delete(uiq.txns, txn.txnID)
-	heap.Remove(&uiq.minHeap, txn.index)
+	heap.Remove[*unresolvedTxn](&uiq.minHeap, txn.index)
 	return wasMin
 }
 

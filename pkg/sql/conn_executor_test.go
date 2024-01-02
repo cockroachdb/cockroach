@@ -43,10 +43,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -123,13 +123,13 @@ func TestSessionFinishRollsBackTxn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	{
 		pgURL, cleanup := sqlutils.PGUrl(
-			t, s.ServingSQLAddr(), "TestSessionFinishRollsBackTxn", url.User(username.RootUser))
+			t, s.AdvSQLAddr(), "TestSessionFinishRollsBackTxn", url.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -154,7 +154,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		t.Run(state, func(t *testing.T) {
 			// Create a low-level lib/pq connection so we can close it at will.
 			pgURL, cleanupDB := sqlutils.PGUrl(
-				t, s.ServingSQLAddr(), state, url.User(username.RootUser))
+				t, s.AdvSQLAddr(), state, url.User(username.RootUser))
 			defer cleanupDB()
 			c, err := pq.Open(pgURL.String())
 			if err != nil {
@@ -315,12 +315,12 @@ func TestErrorOnRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// We can't get the tableID programmatically here.
-	// The table id can be retrieved by doing.
-	// CREATE DATABASE test;
-	// CREATE TABLE test.t();
-	// SELECT id FROM system.namespace WHERE name = 't' AND "parentID" != 1
-	const targetKeyStringFmt string = "/Table/%d/1/1/0"
+	getTargetKey := func(s serverutils.TestServerInterface, tableID uint32) string {
+		if s.TenantController().StartedDefaultTestTenant() {
+			return fmt.Sprintf("/Tenant/%d/Table/%d/1/1/0", serverutils.TestTenantID().ToUint64(), tableID)
+		}
+		return fmt.Sprintf("/Table/%d/1/1/0", tableID)
+	}
 	var targetKeyString atomic.Value
 	targetKeyString.Store("")
 	var injectedErr int64
@@ -363,7 +363,7 @@ CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 `)
 	tableID := sqlutils.QueryTableID(t, sqlDB, "t", "public", "test")
-	targetKeyString.Store(fmt.Sprintf(targetKeyStringFmt, tableID))
+	targetKeyString.Store(getTargetKey(s, tableID))
 
 	tx, err := sqlDB.Begin()
 	if err != nil {
@@ -417,7 +417,7 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	defer mutations.ResetMaxBatchSizeForTests()
 	numRows := smallerKvBatchSize + smallerInsertBatchSize + 10
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Insecure = true
 	params.Knobs.DistSQL = &execinfra.TestingKnobs{
 		TableReaderBatchBytesLimit: 10,
@@ -426,23 +426,36 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
-	if _, err := db.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (x FLOAT);
-`); err != nil {
-		t.Fatal(err)
+	for _, s := range []string{
+		`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true;`,
+		`SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true;`,
+		`CREATE DATABASE t;`,
+		`CREATE TABLE t.test (x FLOAT);`,
+	} {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	if _, err := db.Exec(
-		`INSERT INTO t.test(x) SELECT generate_series(1, $1)::FLOAT`,
-		numRows); err != nil {
-		t.Fatal(err)
-	}
-
-	// Now slightly modify the values in duplicate rows.
-	// We choose a float +0.1 to ensure that none of the derived
-	// values become duplicate of already-present values.
-	if _, err := db.Exec(`
+	for _, isoLevel := range []tree.IsolationLevel{
+		tree.ReadCommittedIsolation,
+		tree.SnapshotIsolation,
+		tree.SerializableIsolation,
+	} {
+		t.Run(isoLevel.String(), func(t *testing.T) {
+			if _, err := db.Exec("DELETE FROM t.test"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(
+				`INSERT INTO t.test(x) SELECT generate_series(1, $1)::FLOAT`,
+				numRows); err != nil {
+				t.Fatal(err)
+			}
+			// Now slightly modify the values in duplicate rows.
+			// We choose a float +0.1 to ensure that none of the derived
+			// values become duplicate of already-present values.
+			q := fmt.Sprintf(`
+BEGIN TRANSACTION ISOLATION LEVEL %s;
 INSERT INTO t.test(x)
     -- the if ensures that no row is processed two times.
 SELECT IF(x::INT::FLOAT = x,
@@ -451,19 +464,24 @@ SELECT IF(x::INT::FLOAT = x,
              'NOOPE', 'insert saw its own writes: ' || x::STRING || ' (it is halloween today)')::FLOAT)
        + 0.1
   FROM t.test
-`); err != nil {
-		t.Fatal(err)
-	}
+  -- the function used here is implemented by using the internal executor.
+  WHERE has_table_privilege('root', ((x+.1)/(x+1) + 1)::int::oid, 'INSERT') IS NULL;
+COMMIT;`, isoLevel.String())
+			if _, err := db.Exec(q); err != nil {
+				t.Fatal(err)
+			}
 
-	// Finally verify that no rows has been operated on more than once.
-	row := db.QueryRow(`SELECT count(DISTINCT x) FROM t.test`)
-	var cnt int
-	if err := row.Scan(&cnt); err != nil {
-		t.Fatal(err)
-	}
+			// Finally verify that no rows has been operated on more than once.
+			row := db.QueryRow(`SELECT count(DISTINCT x) FROM t.test`)
+			var cnt int
+			if err := row.Scan(&cnt); err != nil {
+				t.Fatal(err)
+			}
 
-	if cnt != 2*numRows {
-		t.Fatalf("expected %d rows in final table, got %d", 2*numRows, cnt)
+			if cnt != 2*numRows {
+				t.Fatalf("expected %d rows in final table, got %d", 2*numRows, cnt)
+			}
+		})
 	}
 }
 
@@ -471,17 +489,17 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Insecure = true
 
-	s, _, _ := serverutils.StartServer(t, params)
+	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(context.Background())
 
 	// Prepare a session with a custom application name.
 	pgURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(username.RootUser),
-		Host:     s.ServingSQLAddr(),
+		Host:     s.AdvSQLAddr(),
 		RawQuery: "sslmode=disable&application_name=mytest",
 	}
 	rawSQL, err := gosql.Open("postgres", pgURL.String())
@@ -750,7 +768,7 @@ func TestRetriableErrorDuringPrepare(t *testing.T) {
 				BeforePrepare: func(ctx context.Context, stmt string, txn *kv.Txn) error {
 					if strings.Contains(stmt, uniqueString) && atomic.AddInt64(&failed, 1) <= numToFail {
 						return kvpb.NewTransactionRetryWithProtoRefreshError("boom",
-							txn.ID(), *txn.TestingCloneTxn())
+							txn.ID(), txn.Epoch(), *txn.TestingCloneTxn())
 					}
 					return nil
 				},
@@ -774,6 +792,7 @@ func TestRetriableErrorDuringPrepare(t *testing.T) {
 func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	var retryCount int64
 	const numToRetry = 2 // only fail on the first two attempts
 	filter := newDynamicRequestFilter()
@@ -785,6 +804,7 @@ func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(context.Background())
+	codec := s.ApplicationLayer().Codec()
 
 	conn, err := sqlDB.Conn(context.Background())
 	require.NoError(t, err)
@@ -803,7 +823,7 @@ func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 		}
 		if req, ok := ba.GetArg(kvpb.ConditionalPut); ok {
 			put := req.(*kvpb.ConditionalPutRequest)
-			_, tableID, err := keys.SystemSQLCodec.DecodeTablePrefix(put.Key)
+			_, tableID, err := codec.DecodeTablePrefix(put.Key)
 			if err != nil || tableID != fooTableId {
 				return nil
 			}
@@ -843,6 +863,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(ctx)
+	codec := s.ApplicationLayer().Codec()
 
 	testDB := sqlutils.MakeSQLRunner(sqlDB)
 	testDB.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
@@ -855,7 +876,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	// transaction state evolves appropriately.
 
 	// Use pgx so that we can introspect error codes returned from cockroach.
-	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "", url.User("root"))
+	pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "", url.User("root"))
 	defer cleanup()
 	conf, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
@@ -880,7 +901,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 		}
 		if req, ok := ba.GetArg(kvpb.Get); ok {
 			get := req.(*kvpb.GetRequest)
-			_, tableID, err := keys.SystemSQLCodec.DecodeTablePrefix(get.Key)
+			_, tableID, err := codec.DecodeTablePrefix(get.Key)
 			if err != nil || tableID != keys.NamespaceTableID {
 				err = nil
 				return nil
@@ -970,7 +991,7 @@ func TestUnqualifiedIntSizeRace(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Insecure: true,
 	})
 	defer s.Stopper().Stop(ctx)
@@ -1010,7 +1031,7 @@ func TestTrimSuspendedPortals(t *testing.T) {
 	ctx := context.Background()
 
 	var stmtBuff *sql.StmtBuf
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				// get a handle to the statement buffer during the Bind phase
@@ -1189,15 +1210,11 @@ func TestTransactionDeadline(t *testing.T) {
 			SessionOverride: sessionOverrideKnob,
 		},
 	}
-	testClusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestTenantDisabled,
-			Knobs:             knobs,
-		},
-	}
-	tc := serverutils.StartNewTestCluster(t, 1, testClusterArgs)
-	defer tc.Stopper().Stop(ctx)
-	s := tc.Server(0)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs:             knobs,
+	})
+	defer s.Stopper().Stop(ctx)
 
 	// Setup a dynamic session override which will be used in subsequent tests to ensure the transaction
 	// deadline is set accurately. Use clusterSQLLiveness for bootstrapping the tenant.
@@ -1274,7 +1291,7 @@ CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 		// the session expiry should be ignored.
 		// Open a DB connection on the server and not the tenant to test that the session
 		// expiry is ignored outside of the multi-tenant environment.
-		dbConn := serverutils.OpenDBConn(t, s.ServingSQLAddr(), "" /* useDatabase */, false /* insecure */, s.Stopper())
+		dbConn := s.SystemLayer().SQLConn(t)
 		defer dbConn.Close()
 		// Set up a dummy database and table to write into for the test.
 		if _, err := dbConn.Exec(`CREATE DATABASE t1;
@@ -1309,6 +1326,8 @@ CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 func TestShowLastQueryStatistics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "measure planning latency which is slower than usual under race")
 
 	ctx := context.Background()
 	params := base.TestServerArgs{}
@@ -1438,11 +1457,22 @@ func TestInjectRetryErrors(t *testing.T) {
 
 	ctx := context.Background()
 	params := base.TestServerArgs{}
+
+	var readCommittedStmtRetries atomic.Int64
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		OnReadCommittedStmtRetry: func(retryReason error) {
+			if strings.Contains(retryReason.Error(), "inject_retry_errors_enabled") {
+				readCommittedStmtRetries.Add(1)
+			}
+		},
+	}
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	defer db.Close()
 
-	_, err := db.Exec("SET inject_retry_errors_enabled = 'true'")
+	_, err := db.Exec(`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true`)
+	require.NoError(t, err)
+	_, err = db.Exec("SET inject_retry_errors_enabled = 'true'")
 	require.NoError(t, err)
 
 	t.Run("with_savepoints", func(t *testing.T) {
@@ -1508,6 +1538,75 @@ func TestInjectRetryErrors(t *testing.T) {
 		_, err = db.ExecContext(ctx, "DROP TABLE t")
 		require.NoError(t, err)
 	})
+
+	t.Run("read_committed_txn", func(t *testing.T) {
+		readCommittedStmtRetries.Store(0)
+
+		tx, err := db.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
+		require.NoError(t, err)
+
+		var txRes int
+		err = tx.QueryRow("SELECT $1::int8", 3).Scan(&txRes)
+		require.NoError(t, err)
+		require.NoError(t, tx.Commit())
+		require.Equal(t, 3, txRes)
+		require.Equal(t, int64(3), readCommittedStmtRetries.Load())
+	})
+
+	t.Run("read_committed_txn_retries_exceeded", func(t *testing.T) {
+		readCommittedStmtRetries.Store(0)
+
+		// inject_retry_errors_enabled is hardcoded to always inject an error
+		// 3 times, so if we lower max_retries_for_read_committed,
+		// the error should bubble up to the client.
+		_, err := db.Exec("SET max_retries_for_read_committed = 2")
+		require.NoError(t, err)
+		tx, err := db.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
+		require.NoError(t, err)
+
+		var txRes int
+		err = tx.QueryRow("SELECT $1::int8", 3).Scan(&txRes)
+
+		require.Error(t, err)
+		pqErr := (*pq.Error)(nil)
+		require.ErrorAs(t, err, &pqErr)
+		require.Equal(t, "40001", string(pqErr.Code), "expected a transaction retry error code. got %v", pqErr)
+		require.ErrorContains(t, pqErr, "read committed retry limit exceeded")
+		require.NoError(t, tx.Rollback())
+		require.Equal(t, int64(2), readCommittedStmtRetries.Load())
+	})
+
+	t.Run("read_committed_txn_already_sent_results", func(t *testing.T) {
+		readCommittedStmtRetries.Store(0)
+
+		// Choose a small results_buffer_size and make sure the statement retry
+		// does not occur.
+		pgURL, cleanupFn := sqlutils.PGUrl(
+			t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+		defer cleanupFn()
+		q := pgURL.Query()
+		q.Add("results_buffer_size", "4")
+		pgURL.RawQuery = q.Encode()
+		smallBufferDB, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		defer smallBufferDB.Close()
+
+		_, err = smallBufferDB.Exec("SET inject_retry_errors_enabled = 'true'")
+		require.NoError(t, err)
+
+		tx, err := smallBufferDB.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
+		require.NoError(t, err)
+
+		var txRes int
+		err = tx.QueryRow("SELECT $1::int8", 3).Scan(&txRes)
+		require.Error(t, err)
+		pqErr := (*pq.Error)(nil)
+		require.ErrorAs(t, err, &pqErr)
+		require.Equal(t, "40001", string(pqErr.Code), "expected a transaction retry error code. got %v", pqErr)
+		require.ErrorContains(t, pqErr, "cannot automatically retry since some results were already sent to the client")
+		require.NoError(t, tx.Rollback())
+		require.Equal(t, int64(0), readCommittedStmtRetries.Load())
+	})
 }
 
 func TestInjectRetryOnCommitErrors(t *testing.T) {
@@ -1564,7 +1663,7 @@ func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 	params := base.TestServerArgs{}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
-	dbConn := serverutils.OpenDBConn(t, s.ServingSQLAddr(), "", false /* insecure */, s.Stopper())
+	dbConn := s.ApplicationLayer().SQLConn(t)
 	defer dbConn.Close()
 
 	waitChannel := make(chan struct{})
@@ -1738,28 +1837,16 @@ func TestSessionTotalActiveTime(t *testing.T) {
 
 	ctx := context.Background()
 	params := base.TestServerArgs{}
-	s, mainDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, mainDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	_, err := mainDB.Exec(fmt.Sprintf("CREATE USER %s", username.TestUser))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	pgURL, cleanupDB := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "TestSessionTotalActiveTime", url.User(username.TestUser))
-	defer cleanupDB()
-	rawSQL, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer func() {
-		err := rawSQL.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
-	}()
+	rawSQL := s.SQLConn(t, serverutils.User(username.TestUser))
 
 	getSessionWithTestUser := func() *serverpb.Session {
 		sessions := s.SQLServer().(*sql.Server).GetExecutorConfig().SessionRegistry.SerializeAll()

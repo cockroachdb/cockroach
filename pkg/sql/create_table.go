@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -46,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -57,10 +59,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/lib/pq/oid"
@@ -114,7 +118,7 @@ func getSchemaForCreateTable(
 	// Check we are not creating a table which conflicts with an alias available
 	// as a built-in type in CockroachDB but an extension type on the public
 	// schema for PostgreSQL.
-	if tableName.Schema() == tree.PublicSchema {
+	if tableName.Schema() == catconstants.PublicSchemaName {
 		if _, ok := types.PublicSchemaAliases[tableName.Object()]; ok {
 			return nil, sqlerrors.NewTypeAlreadyExistsError(tableName.String())
 		}
@@ -705,7 +709,7 @@ func addUniqueWithoutIndexTableDef(
 			"partitioned unique constraints without an index are not supported",
 		)
 	}
-	if d.Invisibility != 0.0 {
+	if d.Invisibility.Value != 0.0 {
 		// Theoretically, this should never happen because this is not supported by
 		// the parser. This is just a safe check.
 		return pgerror.Newf(pgcode.FeatureNotSupported,
@@ -1190,19 +1194,6 @@ func newTableDescIfAs(
 		return nil, err
 	}
 
-	colResIndex := 0
-	// TableDefs for a CREATE TABLE ... AS AST node comprise of a ColumnTableDef
-	// for each column, and a ConstraintTableDef for any constraints on those
-	// columns.
-	for _, defs := range p.Defs {
-		var d *tree.ColumnTableDef
-		var ok bool
-		if d, ok = defs.(*tree.ColumnTableDef); ok {
-			d.Type = resultColumns[colResIndex].Typ
-			colResIndex++
-		}
-	}
-
 	// If there are no TableDefs defined by the parser, then we construct a
 	// ColumnTableDef for each column using resultColumns.
 	if len(p.Defs) == 0 {
@@ -1210,15 +1201,51 @@ func newTableDescIfAs(
 			var d *tree.ColumnTableDef
 			var ok bool
 			var tableDef tree.TableDef = &tree.ColumnTableDef{
-				Name:   tree.Name(colRes.Name),
-				Type:   colRes.Typ,
-				Hidden: colRes.Hidden,
+				Name:       tree.Name(colRes.Name),
+				Type:       colRes.Typ,
+				IsCreateAs: true,
+				Hidden:     colRes.Hidden,
 			}
 			if d, ok = tableDef.(*tree.ColumnTableDef); !ok {
 				return nil, errors.Errorf("failed to cast type to ColumnTableDef\n")
 			}
 			d.Nullable.Nullability = tree.SilentNull
 			p.Defs = append(p.Defs, tableDef)
+		}
+	} else {
+		colResIndex := 0
+		// TableDefs for a CREATE TABLE ... AS AST node comprise of a ColumnTableDef
+		// for each column, and a ConstraintTableDef for any constraints on those
+		// columns.
+		for _, defs := range p.Defs {
+			var d *tree.ColumnTableDef
+			var ok bool
+			if d, ok = defs.(*tree.ColumnTableDef); ok {
+				d.Type = resultColumns[colResIndex].Typ
+				d.IsCreateAs = true
+				colResIndex++
+			}
+		}
+	}
+
+	// Check if there is any reference to a user defined type that belongs to
+	// another database which is not allowed.
+	for _, def := range p.Defs {
+		if d, ok := def.(*tree.ColumnTableDef); ok {
+			// In CTAS, ColumnTableDef are generated from resultColumns which are
+			// resolved already. So we may cast it to *types.T directly without
+			// resolving it again.
+			typ := d.Type.(*types.T)
+			if typ.UserDefined() {
+				tn, typDesc, err := params.p.GetTypeDescriptor(params.ctx, typedesc.UserDefinedTypeOIDToID(typ.Oid()))
+				if err != nil {
+					return nil, err
+				}
+				if typDesc.GetParentID() != db.GetID() {
+					return nil, pgerror.Newf(
+						pgcode.FeatureNotSupported, "cross database type references are not supported: %s", tn.String())
+				}
+			}
 		}
 	}
 
@@ -1802,16 +1829,16 @@ func NewTableDesc(
 			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
 				return nil, err
 			}
-			if !version.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
-				d.Invisibility > 0.0 && d.Invisibility < 1.0 {
+			if !version.IsActive(clusterversion.V23_2) &&
+				d.Invisibility.Value > 0.0 && d.Invisibility.Value < 1.0 {
 				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
-				NotVisible:       d.Invisibility != 0.0,
-				Invisibility:     d.Invisibility,
+				NotVisible:       d.Invisibility.Value != 0.0,
+				Invisibility:     d.Invisibility.Value,
 			}
 			if d.Inverted {
 				idx.Type = descpb.IndexDescriptor_INVERTED
@@ -1918,8 +1945,11 @@ func NewTableDesc(
 			); err != nil {
 				return nil, err
 			}
-			if !version.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
-				d.Invisibility > 0.0 && d.Invisibility < 1.0 {
+			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
+				return nil, err
+			}
+			if !version.IsActive(clusterversion.V23_2) &&
+				d.Invisibility.Value > 0.0 && d.Invisibility.Value < 1.0 {
 				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 			}
 			idx := descpb.IndexDescriptor{
@@ -1927,8 +1957,8 @@ func NewTableDesc(
 				Unique:           true,
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
-				NotVisible:       d.Invisibility != 0.0,
-				Invisibility:     d.Invisibility,
+				NotVisible:       d.Invisibility.Value != 0.0,
+				Invisibility:     d.Invisibility.Value,
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
@@ -2391,8 +2421,9 @@ func newTableDesc(
 			params.ExecCfg().JobsKnobs(),
 			jobs.ScheduledJobTxn(params.p.InternalSQLTxn()),
 			params.p.User(),
-			ret.GetID(),
-			ttl,
+			ret,
+			params.p.extendedEvalCtx.ClusterID,
+			params.p.execCfg.Settings.Version.ActiveVersion(params.ctx),
 		)
 		if err != nil {
 			return nil, err
@@ -2403,27 +2434,31 @@ func newTableDesc(
 }
 
 // newRowLevelTTLScheduledJob returns a *jobs.ScheduledJob for row level TTL
-// for a given table.
+// for a given table. newRowLevelTTLScheduledJob assumes that
+// tblDesc.RowLevelTTL is not nil.
 func newRowLevelTTLScheduledJob(
 	env scheduledjobs.JobSchedulerEnv,
 	owner username.SQLUsername,
-	tblID descpb.ID,
-	ttl *catpb.RowLevelTTL,
+	tblDesc *tabledesc.Mutable,
+	clusterID uuid.UUID,
+	clusterVersion clusterversion.ClusterVersion,
 ) (*jobs.ScheduledJob, error) {
 	sj := jobs.NewScheduledJob(env)
-	sj.SetScheduleLabel(fmt.Sprintf("row-level-ttl-%d", tblID))
+	sj.SetScheduleLabel(ttlbase.BuildScheduleLabel(tblDesc))
 	sj.SetOwner(owner)
 	sj.SetScheduleDetails(jobspb.ScheduleDetails{
 		Wait: jobspb.ScheduleDetails_WAIT,
 		// If a job fails, try again at the allocated cron time.
-		OnError: jobspb.ScheduleDetails_RETRY_SCHED,
+		OnError:                jobspb.ScheduleDetails_RETRY_SCHED,
+		ClusterID:              clusterID,
+		CreationClusterVersion: clusterVersion,
 	})
 
-	if err := sj.SetSchedule(ttl.DeletionCronOrDefault()); err != nil {
+	if err := sj.SetSchedule(tblDesc.RowLevelTTL.DeletionCronOrDefault()); err != nil {
 		return nil, err
 	}
 	args := &catpb.ScheduledRowLevelTTLArgs{
-		TableID: tblID,
+		TableID: tblDesc.GetID(),
 	}
 	any, err := pbtypes.MarshalAny(args)
 	if err != nil {
@@ -2442,12 +2477,17 @@ func CreateRowLevelTTLScheduledJob(
 	knobs *jobs.TestingKnobs,
 	s jobs.ScheduledJobStorage,
 	owner username.SQLUsername,
-	tblID descpb.ID,
-	ttl *catpb.RowLevelTTL,
+	tblDesc *tabledesc.Mutable,
+	clusterID uuid.UUID,
+	version clusterversion.ClusterVersion,
 ) (*jobs.ScheduledJob, error) {
+	if !tblDesc.HasRowLevelTTL() {
+		return nil, errors.AssertionFailedf("CreateRowLevelTTLScheduledJob called with no .RowLevelTTL: %#v", tblDesc)
+	}
+
 	telemetry.Inc(sqltelemetry.RowLevelTTLCreated)
 	env := JobSchedulerEnv(knobs)
-	j, err := newRowLevelTTLScheduledJob(env, owner, tblID, ttl)
+	j, err := newRowLevelTTLScheduledJob(env, owner, tblDesc, clusterID, version)
 	if err != nil {
 		return nil, err
 	}
@@ -2631,7 +2671,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					Inverted:     idx.GetType() == descpb.IndexDescriptor_INVERTED,
 					Storing:      make(tree.NameList, 0, idx.NumSecondaryStoredColumns()),
 					Columns:      make(tree.IndexElemList, 0, idx.NumKeyColumns()),
-					Invisibility: idx.GetInvisibility(),
+					Invisibility: tree.IndexInvisibility{Value: idx.GetInvisibility()},
 				}
 				numColumns := idx.NumKeyColumns()
 				if idx.IsSharded() {

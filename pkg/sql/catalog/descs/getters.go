@@ -142,13 +142,19 @@ func (g ByIDGetter) Function(
 	desc, err := g.Desc(ctx, id)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d does not exist", id)
+			return nil, errors.Mark(
+				pgerror.Newf(pgcode.UndefinedFunction, "function %d does not exist", id),
+				tree.ErrRoutineUndefined,
+			)
 		}
 		return nil, err
 	}
 	fn, ok := desc.(catalog.FunctionDescriptor)
 	if !ok {
-		return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d does not exist", id)
+		return nil, errors.Mark(
+			pgerror.Newf(pgcode.UndefinedFunction, "function %d does not exist", id),
+			tree.ErrRoutineUndefined,
+		)
 	}
 	return fn, nil
 }
@@ -396,34 +402,26 @@ func (g MutableByNameGetter) Type(
 
 func makeGetterBase(txn *kv.Txn, col *Collection, flags getterFlags) getterBase {
 	return getterBase{
-		txn:   &txnWrapper{Txn: txn, Collection: col},
-		flags: flags,
+		txnWrapper: txnWrapper{Txn: txn, Collection: col},
+		flags:      flags,
 	}
 }
 
 type getterBase struct {
-	txn
+	txnWrapper
 	flags getterFlags
 }
 
-type (
-	txn interface {
-		KV() *kv.Txn
-		Descriptors() *Collection
-	}
-	txnWrapper struct {
-		*kv.Txn
-		*Collection
-	}
-)
+type txnWrapper struct {
+	*kv.Txn
+	*Collection
+}
 
-var _ txn = &txnWrapper{}
-
-func (w *txnWrapper) KV() *kv.Txn {
+func (w txnWrapper) KV() *kv.Txn {
 	return w.Txn
 }
 
-func (w *txnWrapper) Descriptors() *Collection {
+func (w txnWrapper) Descriptors() *Collection {
 	return w.Collection
 }
 

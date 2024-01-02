@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -58,7 +59,6 @@ func registerTPCDSVec(r registry.Registry) {
 	}
 
 	runTPCDSVec := func(ctx context.Context, t test.Test, c cluster.Cluster) {
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 		clusterConn := c.Conn(ctx, t.L(), 1)
@@ -71,7 +71,7 @@ func registerTPCDSVec(r registry.Registry) {
 		t.Status("restoring TPCDS dataset for Scale Factor 1")
 		if _, err := clusterConn.Exec(
 			`
-RESTORE DATABASE tpcds FROM 'gs://cockroach-fixtures/workload/tpcds/scalefactor=1/backup?AUTH=implicit'
+RESTORE DATABASE tpcds FROM 'gs://cockroach-fixtures-us-east1/workload/tpcds/scalefactor=1/backup?AUTH=implicit'
 WITH unsafe_restore_incompatible_version;
 `,
 		); err != nil {
@@ -94,7 +94,7 @@ WITH unsafe_restore_incompatible_version;
 		// We additionally open fresh connections for each query.
 		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout)
 		firstNode := c.Node(1)
-		urls, err := c.ExternalPGUrl(ctx, t.L(), firstNode, "")
+		urls, err := c.ExternalPGUrl(ctx, t.L(), firstNode, "" /* tenant */, 0 /* sqlInstance */)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -185,11 +185,16 @@ WITH unsafe_restore_incompatible_version;
 	}
 
 	r.Add(registry.TestSpec{
-		Name:      "tpcdsvec",
-		Owner:     registry.OwnerSQLQueries,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(3),
+		Name:             "tpcdsvec",
+		Owner:            registry.OwnerSQLQueries,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(3),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			if c.Cloud() != spec.GCE && !c.IsLocal() {
+				t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
+			}
 			runTPCDSVec(ctx, t, c)
 		},
 	})

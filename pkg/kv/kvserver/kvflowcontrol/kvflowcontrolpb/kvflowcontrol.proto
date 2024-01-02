@@ -82,6 +82,8 @@ message RaftAdmissionMeta {
 // this particular "replication stream" (i.e. flowing to a particular store,
 // remote or otherwise).
 message AdmittedRaftLogEntries {
+  option (gogoproto.goproto_stringer) = false;
+
   // RangeID of the raft group these entries belong to. This is the range on
   // whose behalf work was admitted.
   int64 range_id = 1 [(gogoproto.customname) = "RangeID",

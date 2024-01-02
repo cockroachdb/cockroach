@@ -1,12 +1,12 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 go_library(
     name = "scpb",
     srcs = [
         "constants.go",
+        "element_collection.go",
         "migration.go",
         "name_mappings.go",
         "state.go",
@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/privilege",  # keep
         "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/sem/tree",  # keep
+        "//pkg/util/debugutil",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -35,7 +36,7 @@ go_proto_library(
     proto = ":scpb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/geo/geoindex",
+        "//pkg/geo/geopb",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/sem/catid",  # keep
@@ -54,7 +55,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/geo/geoindex:geoindex_proto",
+        "//pkg/geo/geopb:geopb_proto",
         "//pkg/sql/catalog/catenumpb:catenumpb_proto",
         "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/sem/semenumpb:semenumpb_proto",
@@ -113,4 +114,9 @@ genrule(
     ],
 )
 
-get_x_data(name = "get_x_data")
+go_test(
+    name = "scpb_test",
+    srcs = ["element_collection_test.go"],
+    embed = [":scpb"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

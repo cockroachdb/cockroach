@@ -30,7 +30,7 @@ type deferredState struct {
 	databaseRoleSettingsToDelete []databaseRoleSettingToDelete
 	schemaChangerJob             *jobs.Record
 	schemaChangerJobUpdates      map[jobspb.JobID]schemaChangerJobUpdate
-	scheduleIDsToDelete          []int64
+	scheduleIDsToDelete          []jobspb.ScheduleID
 	statsToRefresh               catalog.DescriptorIDSet
 	indexesToSplitAndScatter     []indexesToSplitAndScatter
 	gcJobs
@@ -71,7 +71,7 @@ func (s *deferredState) AddIndexForMaybeSplitAndScatter(
 		})
 }
 
-func (s *deferredState) DeleteSchedule(scheduleID int64) {
+func (s *deferredState) DeleteSchedule(scheduleID jobspb.ScheduleID) {
 	s.scheduleIDsToDelete = append(s.scheduleIDsToDelete, scheduleID)
 }
 
@@ -171,7 +171,7 @@ func (s *deferredState) exec(
 	q StatsRefreshQueue,
 	iss IndexSpanSplitter,
 ) error {
-	dbZoneConfigsToDelete, gcJobRecords := s.gcJobs.makeRecords(tjr.MakeJobID, !tjr.UseLegacyGCJob(ctx))
+	dbZoneConfigsToDelete, gcJobRecords := s.gcJobs.makeRecords(tjr.MakeJobID)
 	// Any databases being GCed should have an entry even if none of its tables
 	// are being dropped. This entry will be used to generate the GC jobs below.
 	for _, id := range dbZoneConfigsToDelete.Ordered() {

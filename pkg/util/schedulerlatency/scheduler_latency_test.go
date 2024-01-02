@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,20 +64,10 @@ func TestSchedulerLatencySampler(t *testing.T) {
 		}(i)
 	}
 
-	mu := struct {
-		syncutil.Mutex
-		p99 time.Duration
-	}{}
-	slcbID := RegisterCallback(func(p99 time.Duration, period time.Duration) {
-		require.Equal(t, samplePeriod.Default(), period)
-		mu.Lock()
-		defer mu.Unlock()
-		mu.p99 = p99
-	})
-	defer UnregisterCallback(slcbID)
+	mu := testListener{}
 
 	reg := metric.NewRegistry()
-	require.NoError(t, StartSampler(ctx, st, stopper, reg, 10*time.Second))
+	require.NoError(t, StartSampler(ctx, st, stopper, reg, 10*time.Second, &mu))
 	testutils.SucceedsSoon(t, func() error {
 		mu.Lock()
 		defer mu.Unlock()
@@ -87,17 +78,37 @@ func TestSchedulerLatencySampler(t *testing.T) {
 		var err error
 		reg.Each(func(name string, mtr interface{}) {
 			wh := mtr.(metric.WindowedHistogram)
-			avg := wh.MeanWindowed()
+			windowSnapshot := wh.WindowedSnapshot()
+			avg := windowSnapshot.Mean()
 			if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 				avg = 0
 			}
 
-			if wh.ValueAtQuantileWindowed(99) == 0 || avg == 0 {
+			if windowSnapshot.ValueAtQuantile(99) == 0 || avg == 0 {
 				err = fmt.Errorf("expected non-zero p99 scheduling latency metrics")
 			}
 		})
 		return err
 	})
+
+	if mu.err != nil {
+		t.Fatal(mu.err)
+	}
+}
+
+type testListener struct {
+	syncutil.Mutex
+	err error
+	p99 time.Duration
+}
+
+func (l *testListener) SchedulerLatency(p99 time.Duration, period time.Duration) {
+	l.Lock()
+	defer l.Unlock()
+	if samplePeriod.Default() != period {
+		l.err = errors.CombineErrors(l.err, errors.Newf("mismatch: expected %v, got %v", samplePeriod.Default(), period))
+	}
+	l.p99 = p99
 }
 
 func TestComputeSchedulerPercentile(t *testing.T) {
@@ -184,12 +195,13 @@ func TestComputeSchedulerPercentileAgainstPrometheus(t *testing.T) {
 			}
 		}
 
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(100), percentile(&hist, 1.00), 1) // pmax
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(0), percentile(&hist, 0.00), 1)   // pmin
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(50), percentile(&hist, 0.50), 1)  // p50
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(75), percentile(&hist, 0.75), 1)  // p75
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(90), percentile(&hist, 0.90), 1)  // p90
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(99), percentile(&hist, 0.99), 1)  // p99
+		histWindow := promhist.WindowedSnapshot()
+		require.InDelta(t, histWindow.ValueAtQuantile(100), percentile(&hist, 1.00), 1) // pmax
+		require.InDelta(t, histWindow.ValueAtQuantile(0), percentile(&hist, 0.00), 1)   // pmin
+		require.InDelta(t, histWindow.ValueAtQuantile(50), percentile(&hist, 0.50), 1)  // p50
+		require.InDelta(t, histWindow.ValueAtQuantile(75), percentile(&hist, 0.75), 1)  // p75
+		require.InDelta(t, histWindow.ValueAtQuantile(90), percentile(&hist, 0.90), 1)  // p90
+		require.InDelta(t, histWindow.ValueAtQuantile(99), percentile(&hist, 0.99), 1)  // p99
 	}
 }
 

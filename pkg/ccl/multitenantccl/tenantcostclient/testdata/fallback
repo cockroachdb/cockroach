@@ -1,11 +1,6 @@
 # Tests in this file verify the enacting of the fallback rate when token bucket
 # requests are erroring out.
 
-# Wait for initial 10K RUs to be granted.
-wait-for-event
-token-bucket-response
-----
-
 configure
 fallback_rate: 1000
 ----
@@ -49,7 +44,7 @@ advance wait=true
 
 token-bucket
 ----
-3000.00 RU filling @ 1000.00 RU/s
+3000.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU)
 
 # Issue another 5K write which must wait until the fallback rate adds 2K to the
 # bucket in order to complete.
@@ -71,7 +66,7 @@ not-completed label=w1
 
 token-bucket
 ----
-4000.00 RU filling @ 1000.00 RU/s (5000.00 waiting RU)
+4000.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU) (5000.00 waiting RU)
 
 # Advance another second and ensure that the write request was completed.
 advance wait=true
@@ -84,7 +79,7 @@ await label=w1
 
 token-bucket
 ----
-0.00 RU filling @ 1000.00 RU/s
+0.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU)
 
 wait-for-event
 token-bucket-response-error

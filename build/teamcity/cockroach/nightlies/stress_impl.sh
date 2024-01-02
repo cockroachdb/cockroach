@@ -15,11 +15,6 @@ bazel build //pkg/cmd/bazci --config=ci
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 ARTIFACTS_DIR=/artifacts
 
-if [[ ! -z $(bazel query "attr(tags, \"broken_in_bazel\", $TARGET)") ]]
-then
-    echo "Skipping test $TARGET as it is broken in bazel"
-    exit 0
-fi
 if [[ ! -z $(bazel query "attr(tags, \"integration\", $TARGET)") ]]
 then
     echo "Skipping test $TARGET as it is an integration test"
@@ -31,7 +26,6 @@ COCKROACH_NIGHTLY_STRESS=true $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --co
                                         --test_env=COCKROACH_NIGHTLY_STRESS=true \
                                         --test_env=GOTRACEBACK=all \
                                         --test_timeout="$TESTTIMEOUTSECS" \
-                                        --test_arg=-test.timeout="${GOTESTTIMEOUTSECS}s" \
                                         --run_under "@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts 'XML_OUTPUT_FILE=$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci merge-test-xmls' $STRESSFLAGS" \
                                         --define "gotags=$TAGS" \
                                         --nocache_test_results \

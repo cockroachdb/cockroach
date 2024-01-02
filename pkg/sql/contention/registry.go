@@ -259,30 +259,35 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) {
 
 // AddContentionEvent adds a new ContentionEvent to the Registry.
 func (r *Registry) AddContentionEvent(event contentionpb.ExtendedContentionEvent) {
-	c := event.BlockingEvent
 	r.globalLock.Lock()
 	defer r.globalLock.Unlock()
-	// Remove the tenant ID prefix if there is any.
-	c.Key, _, _ = keys.DecodeTenantPrefix(c.Key)
-	_, rawTableID, rawIndexID, err := keys.DecodeTableIDIndexID(c.Key)
-	if err != nil {
-		// The key is not a valid SQL key, so we store it in a separate cache.
-		if v, ok := r.nonSQLKeysMap.Get(comparableKey(c.Key)); !ok {
-			// This is the first contention event seen for this key.
-			r.nonSQLKeysMap.Add(comparableKey(c.Key), newNonSQLKeyMapValue(c))
-		} else {
-			v.(*nonSQLKeyMapValue).addContentionEvent(c)
+	if event.ContentionType == contentionpb.ContentionType_LOCK_WAIT {
+		// (xinhaoz) We will need to change the indexMap structs if we want to surface
+		// non lock wait related contention to index contention surfaces.
+		c := event.BlockingEvent
+		// Remove the tenant ID prefix if there is any.
+		c.Key, _, _ = keys.DecodeTenantPrefix(c.Key)
+		_, rawTableID, rawIndexID, err := keys.DecodeTableIDIndexID(c.Key)
+		if err != nil {
+			// The key is not a valid SQL key, so we store it in a separate cache.
+			if v, ok := r.nonSQLKeysMap.Get(comparableKey(c.Key)); !ok {
+				// This is the first contention event seen for this key.
+				r.nonSQLKeysMap.Add(comparableKey(c.Key), newNonSQLKeyMapValue(c))
+			} else {
+				v.(*nonSQLKeyMapValue).addContentionEvent(c)
+			}
+			return
 		}
-		return
-	}
-	tableID := descpb.ID(rawTableID)
-	indexID := descpb.IndexID(rawIndexID)
-	if v, ok := r.indexMap.get(tableID, indexID); !ok {
-		// This is the first contention event seen for the given tableID/indexID
-		// pair.
-		r.indexMap.add(tableID, indexID, newIndexMapValue(c))
-	} else {
-		v.addContentionEvent(c)
+		tableID := descpb.ID(rawTableID)
+		indexID := descpb.IndexID(rawIndexID)
+		if v, ok := r.indexMap.get(tableID, indexID); !ok {
+			// This is the first contention event seen for the given tableID/indexID
+			// pair.
+			r.indexMap.add(tableID, indexID, newIndexMapValue(c))
+		} else {
+			v.addContentionEvent(c)
+		}
+
 	}
 
 	r.eventStore.addEvent(event)

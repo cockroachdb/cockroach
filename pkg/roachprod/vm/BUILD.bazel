@@ -1,9 +1,11 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "vm",
-    srcs = ["vm.go"],
+    srcs = [
+        "dns.go",
+        "vm.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm",
     visibility = ["//visibility:public"],
     deps = [
@@ -19,9 +21,6 @@ go_test(
     name = "vm_test",
     size = "small",
     srcs = ["vm_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":vm"],
     deps = ["@com_github_stretchr_testify//assert"],
 )
-
-get_x_data(name = "get_x_data")

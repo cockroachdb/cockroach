@@ -14,20 +14,38 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
 type showFingerprintsNode struct {
-	optColumnsSlot
+	columns colinfo.ResultColumns
 
 	tableDesc catalog.TableDescriptor
 	indexes   []catalog.Index
+
+	tenantSpec tenantSpec
+	options    *resolvedShowTenantFingerprintOptions
 
 	run showFingerprintsRun
 }
@@ -52,6 +70,10 @@ type showFingerprintsNode struct {
 func (p *planner) ShowFingerprints(
 	ctx context.Context, n *tree.ShowFingerprints,
 ) (planNode, error) {
+	if n.TenantSpec != nil {
+		return p.planShowTenantFingerprint(ctx, n.TenantSpec, n.Options)
+	}
+
 	// We avoid the cache so that we can observe the fingerprints without
 	// taking a lease, like other SHOW commands.
 	tableDesc, err := p.ResolveUncachedTableDescriptorEx(
@@ -65,8 +87,61 @@ func (p *planner) ShowFingerprints(
 	}
 
 	return &showFingerprintsNode{
+		columns:   colinfo.ShowFingerprintsColumns,
 		tableDesc: tableDesc,
-		indexes:   tableDesc.NonDropIndexes(),
+		indexes:   tableDesc.ActiveIndexes(),
+	}, nil
+}
+
+type resolvedShowTenantFingerprintOptions struct {
+	startTimestamp hlc.Timestamp
+}
+
+func evalShowTenantFingerprintOptions(
+	ctx context.Context,
+	options tree.ShowFingerprintOptions,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	op string,
+) (*resolvedShowTenantFingerprintOptions, error) {
+	r := &resolvedShowTenantFingerprintOptions{}
+	if options.StartTimestamp != nil {
+		ts, err := asof.EvalSystemTimeExpr(ctx, evalCtx, semaCtx, options.StartTimestamp, op, asof.ShowTenantFingerprint)
+		if err != nil {
+			return nil, err
+		}
+		r.startTimestamp = ts
+	}
+
+	return r, nil
+}
+
+func (p *planner) planShowTenantFingerprint(
+	ctx context.Context, ts *tree.TenantSpec, options tree.ShowFingerprintOptions,
+) (planNode, error) {
+	if err := CanManageTenant(ctx, p); err != nil {
+		return nil, err
+	}
+
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "fingerprint", p.execCfg.Settings); err != nil {
+		return nil, err
+	}
+
+	tspec, err := p.planTenantSpec(ctx, ts, "SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER")
+	if err != nil {
+		return nil, err
+	}
+
+	evalOptions, err := evalShowTenantFingerprintOptions(ctx, options, p.EvalContext(), p.SemaCtx(),
+		"SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER")
+	if err != nil {
+		return nil, err
+	}
+
+	return &showFingerprintsNode{
+		columns:    colinfo.ShowTenantFingerprintsColumns,
+		tenantSpec: tspec,
+		options:    evalOptions,
 	}, nil
 }
 
@@ -78,18 +153,139 @@ type showFingerprintsRun struct {
 	values []tree.Datum
 }
 
-func (n *showFingerprintsNode) startExec(params runParams) error {
+func (n *showFingerprintsNode) startExec(_ runParams) error {
+	if n.tenantSpec != nil {
+		n.run.values = []tree.Datum{tree.DNull, tree.DNull, tree.DNull, tree.DNull}
+		return nil
+	}
+
 	n.run.values = []tree.Datum{tree.DNull, tree.DNull}
 	return nil
 }
 
+// protectTenantSpanWithSession creates a protected timestamp record
+// for the given tenant ID at the read timestamp of the current
+// transaction. The PTS record will be tied to the given sessionID.
+//
+// The caller should call the returned cleanup function to release the
+// PTS record.
+func protectTenantSpanWithSession(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	tenantID roachpb.TenantID,
+	sessionID clusterunique.ID,
+	tsToProtect hlc.Timestamp,
+) (func(), error) {
+	ptsRecordID := uuid.MakeV4()
+	ptsRecord := sessionprotectedts.MakeRecord(
+		ptsRecordID,
+		// TODO(ssd): The type here seems weird. I think this
+		// is correct in that we use this to compare against
+		// the session_id table which returns the stringified
+		// session ID. But, maybe we can make this clearer.
+		[]byte(sessionID.String()),
+		tsToProtect,
+		ptpb.MakeTenantsTarget([]roachpb.TenantID{tenantID}),
+	)
+	log.Infof(ctx, "protecting timestamp: %#+v", ptsRecord)
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
+		return pts.Protect(ctx, ptsRecord)
+	}); err != nil {
+		return nil, err
+	}
+
+	releasePTS := func() {
+		if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
+			return pts.Release(ctx, ptsRecordID)
+		}); err != nil {
+			log.Warningf(ctx, "failed to release protected timestamp %s: %v", ptsRecordID, err)
+		}
+	}
+	return releasePTS, nil
+}
+
+func (n *showFingerprintsNode) nextTenant(params runParams) (bool, error) {
+	if n.run.rowIdx > 0 {
+		return false, nil
+	}
+
+	tinfo, err := n.tenantSpec.getTenantInfo(params.ctx, params.p)
+	if err != nil {
+		return false, err
+	}
+
+	tid, err := roachpb.MakeTenantID(tinfo.ID)
+	if err != nil {
+		return false, err
+	}
+
+	// We want to write a protected timestamp record at the earliest timestamp
+	// that the fingerprint query is going to read from. When fingerprinting
+	// revisions, this will be the specified start time.
+	tsToProtect := params.p.EvalContext().Txn.ReadTimestamp()
+	if n.options != nil && !n.options.startTimestamp.IsEmpty() {
+		if !n.options.startTimestamp.LessEq(tsToProtect) {
+			return false, pgerror.Newf(pgcode.InvalidParameterValue, `start timestamp %s is greater than the end timestamp %s`,
+				n.options.startTimestamp.String(), tsToProtect.String())
+		}
+		tsToProtect = n.options.startTimestamp
+	}
+	cleanup, err := protectTenantSpanWithSession(
+		params.ctx,
+		params.p.ExecCfg(),
+		tid,
+		params.p.ExtendedEvalContext().SessionID,
+		tsToProtect,
+	)
+	if err != nil {
+		return false, err
+	}
+	defer cleanup()
+
+	var startTime hlc.Timestamp
+	var allRevisions bool
+	if n.options != nil && !n.options.startTimestamp.IsEmpty() {
+		startTime = n.options.startTimestamp
+		allRevisions = true
+	}
+
+	fingerprint, err := params.p.FingerprintSpan(params.ctx,
+		keys.MakeTenantSpan(tid),
+		startTime,
+		allRevisions,
+		false /* stripped */)
+	if err != nil {
+		return false, err
+	}
+
+	endTime := hlc.Timestamp{
+		WallTime: params.p.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
+	}
+	n.run.values[0] = tree.NewDString(string(tinfo.Name))
+	if !startTime.IsEmpty() {
+		n.run.values[1] = eval.TimestampToDecimalDatum(startTime)
+	}
+	n.run.values[2] = eval.TimestampToDecimalDatum(endTime)
+	n.run.values[3] = tree.NewDInt(tree.DInt(fingerprint))
+	n.run.rowIdx++
+
+	return true, nil
+}
+
 func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
+	if n.tenantSpec != nil {
+		return n.nextTenant(params)
+	}
+
 	if n.run.rowIdx >= len(n.indexes) {
 		return false, nil
 	}
 	index := n.indexes[n.run.rowIdx]
 
 	cols := make([]string, 0, len(n.tableDesc.PublicColumns()))
+	var numBytesCols int
 	addColumn := func(col catalog.Column) {
 		var colNameOrExpr string
 		if col.IsExpressionIndexColumn() {
@@ -104,8 +300,11 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		switch col.GetType().Family() {
 		case types.BytesFamily:
 			cols = append(cols, fmt.Sprintf("%s:::bytes", colNameOrExpr))
+			numBytesCols++
+		case types.StringFamily:
+			cols = append(cols, fmt.Sprintf("%s:::string", colNameOrExpr))
 		default:
-			cols = append(cols, fmt.Sprintf("%s::string::bytes", colNameOrExpr))
+			cols = append(cols, fmt.Sprintf("%s::string", colNameOrExpr))
 		}
 	}
 
@@ -134,6 +333,22 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 				return false, err
 			}
 			addColumn(col)
+		}
+	}
+
+	if len(cols) != numBytesCols && numBytesCols != 0 {
+		// Currently, cols has a mix of BYTES and STRING types, but fnv64
+		// requires all arguments to be of the same type. We'll cast less
+		// frequent type to the other.
+		from, to := "::bytes", "::string"
+		if numBytesCols > len(cols)/2 {
+			// BYTES is more frequent.
+			from, to = "::string", "::bytes"
+		}
+		for i := range cols {
+			if strings.HasSuffix(cols[i], from) {
+				cols[i] = cols[i] + to
+			}
 		}
 	}
 

@@ -14,6 +14,7 @@ import { call } from "redux-saga-test-plan/matchers";
 import {
   cancelDiagnosticsReportSaga,
   createDiagnosticsReportSaga,
+  receivedStatementDiagnosticsSaga,
 } from "./statementsSagas";
 import {
   createStatementDiagnosticsReportCompleteAction,
@@ -25,17 +26,25 @@ import {
 } from "./statementsActions";
 import { throwError } from "redux-saga-test-plan/providers";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import { PayloadAction, WithRequest } from "src/interfaces/action";
+import {
+  invalidateStatementDiagnosticsRequests,
+  RECEIVE_STATEMENT_DIAGNOSTICS_REPORT,
+  refreshStatementDiagnosticsRequests,
+} from "src/redux/apiReducers";
 
 describe("statementsSagas", () => {
   describe("requestDiagnostics generator", () => {
     it("calls api#createStatementDiagnosticsReport with statement fingerprint, min exec latency, and expires after fields as payload", () => {
       const statementFingerprint = "some-id";
+      const planGist = "gist";
       const minExecLatency = 10; // num seconds
       const expiresAfter = 15 * 60; // num seconds (num mins * num seconds per min)
       const insertStmtDiagnosticsRequest = {
         stmtFingerprint: statementFingerprint,
         minExecutionLatencySeconds: minExecLatency,
         expiresAfterSeconds: expiresAfter,
+        planGist: planGist,
       };
       const action = createStatementDiagnosticsReportAction(
         insertStmtDiagnosticsRequest,
@@ -59,12 +68,14 @@ describe("statementsSagas", () => {
 
   it("calls dispatched failed action if api#createStatementDiagnosticsReport request failed ", () => {
     const statementFingerprint = "some-id";
+    const planGist = "gist";
     const minExecLatency = 10; // num seconds
     const expiresAfter = 15 * 60; // num seconds (num mins * num seconds per min)
     const insertStmtDiagnosticsRequest = {
       stmtFingerprint: statementFingerprint,
       minExecutionLatencySeconds: minExecLatency,
       expiresAfterSeconds: expiresAfter,
+      planGist: planGist,
     };
     const action = createStatementDiagnosticsReportAction(
       insertStmtDiagnosticsRequest,
@@ -132,5 +143,58 @@ describe("statementsSagas", () => {
       .put(cancelStatementDiagnosticsReportFailedAction())
       .dispatch(action)
       .run();
+  });
+
+  it("frequently refreshes diagnostics if there is not completed requests", () => {
+    const action: PayloadAction<
+      WithRequest<clusterUiApi.StatementDiagnosticsResponse, unknown>
+    > = {
+      type: RECEIVE_STATEMENT_DIAGNOSTICS_REPORT,
+      payload: {
+        data: [
+          {
+            id: "1",
+            completed: false, // received diagnostic is not completed.
+            expires_at: undefined,
+            min_execution_latency: undefined,
+            requested_at: undefined,
+            statement_diagnostics_id: "s-1",
+            statement_fingerprint: "fingerprint-1",
+          },
+        ],
+        request: null,
+      },
+    };
+
+    return expectSaga(receivedStatementDiagnosticsSaga(100), action)
+      .delay(100)
+      .put(invalidateStatementDiagnosticsRequests())
+      .call(refreshStatementDiagnosticsRequests)
+      .run();
+  });
+
+  it("does not refresh diagnostics if all requests completed", () => {
+    const action: PayloadAction<
+      WithRequest<clusterUiApi.StatementDiagnosticsResponse, unknown>
+    > = {
+      type: RECEIVE_STATEMENT_DIAGNOSTICS_REPORT,
+      payload: {
+        data: [
+          {
+            id: "1",
+            completed: true, // request is completed
+            expires_at: undefined,
+            min_execution_latency: undefined,
+            requested_at: undefined,
+            statement_diagnostics_id: "s-1",
+            statement_fingerprint: "fingerprint-1",
+          },
+        ],
+        request: null,
+      },
+    };
+
+    // it should exit without any actions.
+    return expectSaga(receivedStatementDiagnosticsSaga(100), action).run();
   });
 });

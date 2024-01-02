@@ -14,7 +14,6 @@ package spanconfigreporter
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -33,12 +32,7 @@ var rangeDescPageSize = settings.RegisterIntSetting(
 	"spanconfig.reporter.range_desc_page_size",
 	"pa",
 	100,
-	func(i int64) error {
-		if i < 5 || i > 25000 {
-			return fmt.Errorf("expected range_desc_page_size to be in range [5, 25000], got %d", i)
-		}
-		return nil
-	},
+	settings.IntInRange(5, 25000),
 )
 
 var conformanceReportRateLimit = settings.RegisterFloatSetting(
@@ -46,19 +40,8 @@ var conformanceReportRateLimit = settings.RegisterFloatSetting(
 	"spanconfig.reporter.report_rate_limit",
 	"the number of calls per second allowed to SpanConfigConformance",
 	1.0,
-	func(f float64) error {
-		if f < 0 || f > 1e9 {
-			return fmt.Errorf("expected report_rate_limit to be in range [0, 1e9], got %f", f)
-		}
-		return nil
-	},
+	settings.FloatInRange(0, 1e9),
 )
-
-// Liveness is the subset of the interface satisfied by CRDB's node liveness
-// component that the reporter relies on.
-type Liveness interface {
-	GetIsLiveMap() livenesspb.IsLiveMap
-}
 
 // Reporter is used to figure out whether ranges backing specific spans conform
 // to the span configs that apply over them. It's a concrete implementation of
@@ -86,7 +69,7 @@ type Reporter struct {
 		//   configs from different points in time. If this too becomes a
 		//   problem, we can explicitly generate a snapshot like we do for
 		//   liveness.
-		Liveness
+		livenesspb.NodeVitalityInterface
 		rangedesc.Scanner
 		constraint.StoreResolver
 		spanconfig.StoreReader
@@ -101,7 +84,7 @@ var _ spanconfig.Reporter = &Reporter{}
 
 // New constructs and returns a Reporter.
 func New(
-	liveness Liveness,
+	liveness livenesspb.NodeVitalityInterface,
 	resolver constraint.StoreResolver,
 	reader spanconfig.StoreReader,
 	scanner rangedesc.Scanner,
@@ -125,7 +108,7 @@ func New(
 		r.rateLimiter.UpdateLimit(newLimit, int64(newLimit))
 	})
 
-	r.dep.Liveness = liveness
+	r.dep.NodeVitalityInterface = liveness
 	r.dep.StoreResolver = resolver
 	r.dep.Scanner = scanner
 	r.dep.StoreReader = reader
@@ -153,7 +136,7 @@ func (r *Reporter) SpanConfigConformance(
 	report := roachpb.SpanConfigConformanceReport{}
 	unavailableNodes := make(map[roachpb.NodeID]struct{})
 
-	isLiveMap := r.dep.Liveness.GetIsLiveMap()
+	isLiveMap := r.dep.NodeVitalityInterface.ScanNodeVitalityFromCache()
 	for _, span := range spans {
 		if err := r.dep.Scan(ctx, int(rangeDescPageSize.Get(&r.settings.SV)),
 			func() { report = roachpb.SpanConfigConformanceReport{} /* init */ },
@@ -167,7 +150,7 @@ func (r *Reporter) SpanConfigConformance(
 
 					status := desc.Replicas().ReplicationStatus(
 						func(rDesc roachpb.ReplicaDescriptor) bool {
-							isLive := isLiveMap[rDesc.NodeID].IsLive
+							isLive := isLiveMap[rDesc.NodeID].IsLive(livenesspb.SpanConfigConformance)
 							if !isLive {
 								unavailableNodes[rDesc.NodeID] = struct{}{}
 							}

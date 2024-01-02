@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -35,21 +36,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx/v4"
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -66,7 +64,7 @@ func TestStmtStatsBulkIngestWithRandomMetadata(t *testing.T) {
 
 	for i := 0; i < 50; i++ {
 		var stats serverpb.StatementsResponse_CollectedStatementStatistics
-		randomData := sqlstatsutil.GetRandomizedCollectedStatementStatisticsForTest(t)
+		randomData := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
 		stats.Key.KeyData = randomData.Key
 		testData = append(testData, stats)
 	}
@@ -77,7 +75,7 @@ func TestStmtStatsBulkIngestWithRandomMetadata(t *testing.T) {
 	require.NoError(t,
 		sqlStats.IterateStatementStats(
 			context.Background(),
-			&sqlstats.IteratorOptions{},
+			sqlstats.IteratorOptions{},
 			func(
 				ctx context.Context,
 				statistics *appstatspb.CollectedStatementStatistics,
@@ -196,7 +194,7 @@ func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
 	require.NoError(t,
 		sqlStats.IterateStatementStats(
 			context.Background(),
-			&sqlstats.IteratorOptions{},
+			sqlstats.IteratorOptions{},
 			func(
 				ctx context.Context,
 				statistics *appstatspb.CollectedStatementStatistics,
@@ -294,7 +292,7 @@ func TestSQLStatsTxnStatsBulkIngest(t *testing.T) {
 	require.NoError(t,
 		sqlStats.IterateTransactionStats(
 			context.Background(),
-			&sqlstats.IteratorOptions{},
+			sqlstats.IteratorOptions{},
 			func(
 				ctx context.Context,
 				statistics *appstatspb.CollectedTransactionStatistics,
@@ -313,21 +311,18 @@ func TestNodeLocalInMemoryViewDoesNotReturnPersistedStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "possible OOM")
+
 	ctx := context.Background()
 
-	params, _ := tests.CreateTestServerParams()
-	cluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: params,
-	})
-
-	server := cluster.Server(0 /* idx */)
+	cluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{})
+	defer cluster.Stopper().Stop(ctx)
+	server := cluster.Server(0 /* idx */).ApplicationLayer()
 
 	// Open two connections so that we can run statements without messing up
 	// the SQL stats.
-	testConn := cluster.ServerConn(0 /* idx */)
+	testConn := server.SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(testConn)
-	defer cluster.Stopper().Stop(ctx)
-
 	sqlDB.Exec(t, "SET application_name = 'app1'")
 	sqlDB.Exec(t, "SELECT 1 WHERE true")
 
@@ -448,7 +443,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		nil /* curCount */, nil /* maxHist */, math.MaxInt64, st,
 	)
 
-	insightsProvider := insights.New(st, insights.NewMetrics())
+	insightsProvider := insights.New(st, insights.NewMetrics(), obs.NoopEventsExporter{})
 	sqlStats := sslocal.New(
 		st,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
@@ -508,6 +503,17 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		require.Equal(t, tc.curFingerprintCount, sqlStats.GetTotalFingerprintCount(),
 			"testCase: %+v", tc)
 	}
+
+	// Verify reset works correctly.
+	require.NoError(t, sqlStats.Reset(ctx))
+	require.Zero(t, sqlStats.GetTotalFingerprintCount())
+
+	// Verify the count again after the reset.
+	for _, tc := range testCases {
+		recordStats(&tc)
+		require.Equal(t, tc.curFingerprintCount, sqlStats.GetTotalFingerprintCount(),
+			"testCase: %+v", tc)
+	}
 }
 
 func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
@@ -561,14 +567,14 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "enabled", func(t *testing.T, enabled bool) {
 		// Establish the cluster setting.
 		setting := sslocal.AssociateStmtWithTxnFingerprint
-		err := updater.Set(ctx, setting.Key(), settings.EncodedValue{
+		err := updater.Set(ctx, setting.InternalKey(), settings.EncodedValue{
 			Value: settings.EncodeBool(enabled),
 			Type:  setting.Typ(),
 		})
 		require.NoError(t, err)
 
 		// Construct the SQL Stats machinery.
-		insightsProvider := insights.New(st, insights.NewMetrics())
+		insightsProvider := insights.New(st, insights.NewMetrics(), obs.NoopEventsExporter{})
 		sqlStats := sslocal.New(
 			st,
 			sqlstats.MaxMemSQLStatsStmtFingerprints,
@@ -621,7 +627,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			var stats []*appstatspb.CollectedStatementStatistics
 			err = statsCollector.IterateStatementStats(
 				ctx,
-				&sqlstats.IteratorOptions{},
+				sqlstats.IteratorOptions{},
 				func(_ context.Context, s *appstatspb.CollectedStatementStatistics) error {
 					stats = append(stats, s)
 					return nil
@@ -636,6 +642,9 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			}
 			require.Equal(t, expectedCount, len(stats), "testCase: %+v, stats: %+v", txn, stats)
 		}
+
+		require.NoError(t, sqlStats.Reset(ctx))
+		require.Zero(t, sqlStats.GetTotalFingerprintCount())
 	})
 }
 
@@ -644,9 +653,7 @@ func TestTxnStatsDiscardedAfterPrematureStatementExecutionAbortion(t *testing.T)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	server, sqlConn, _ := serverutils.StartServer(t, params)
-
+	server, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer server.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlConn)
 
@@ -685,7 +692,7 @@ func TestUnprivilegedUserReset(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
-	sqlConn.Exec(t, "CREATE USER nonAdminUser")
+	sqlConn.Exec(t, "CREATE USER non_admin_user")
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 
@@ -694,7 +701,7 @@ func TestUnprivilegedUserReset(t *testing.T) {
 		"test-reset-sql-stats-as-non-admin-user",
 		nil, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: username.MakeSQLUsernameFromPreNormalizedString("nonAdminUser"),
+			User: username.MakeSQLUsernameFromPreNormalizedString("non_admin_user"),
 		},
 		"SELECT crdb_internal.reset_sql_stats()",
 	)
@@ -723,7 +730,7 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 	currentTestCaseIdx := 0
 	const latencyThreshold = time.Second * 5
 
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string) {
 			if !isInternal && testData[currentTestCaseIdx].query == stmt {
@@ -734,11 +741,11 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 			}
 		},
 	}
-	s, _, _ := serverutils.StartServer(t, params)
+	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(ctx)
 
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "StartServer", url.User(username.RootUser))
+		t, s.AdvSQLAddr(), "StartServer", url.User(username.RootUser))
 	defer cleanupGoDB()
 	c, err := pgx.Connect(ctx, pgURL.String())
 	require.NoError(t, err, "error connecting with pg url")
@@ -765,12 +772,8 @@ func TestFingerprintCreation(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	testServer, sqlConn, _ := serverutils.StartServer(t, params)
-	defer func() {
-		require.NoError(t, sqlConn.Close())
-		testServer.Stopper().Stop(ctx)
-	}()
+	testServer, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer testServer.Stopper().Stop(ctx)
 
 	testConn := sqlutils.MakeSQLRunner(sqlConn)
 	testConn.Exec(t, "CREATE TABLE t (v INT)")
@@ -1119,12 +1122,14 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStress(t, "These tests make timing assertions, which may fail under stress.")
-
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	// Max limit safety check on the expected idle latency in seconds. Mostly a
+	// paranoia check.
+	const idleLatCap float64 = 30
 
 	testCases := []struct {
 		name     string
@@ -1150,7 +1155,8 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			stmtLats: map[string]float64{"SELECT _": 0},
 			txnLat:   0,
 			ops: func(t *testing.T, db *gosql.DB) {
-				// These 100ms don't count because we're not in an explicit transaction.
+				// These 100ms don't count because we're not in an explicit
+				// transaction.
 				time.Sleep(100 * time.Millisecond)
 				_, err := db.Exec("SELECT 1")
 				require.NoError(t, err)
@@ -1273,32 +1279,16 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			// Note that we're not using pgx here because it *always* prepares
 			// statements, and we want to test our client latency measurements
 			// both with and without prepared statements.
-			dbUrl, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
-			defer cleanup()
-			connector, err := pq.NewConnector(dbUrl.String())
-			require.NoError(t, err)
-			opsDB := gosql.OpenDB(connector)
-			defer func() {
-				_ = opsDB.Close()
-			}()
+			opsDB := s.SQLConn(t)
 
-			// Set a unique application name for our session, so we can find our stats easily.
+			// Set a unique application name for our session, so we can find our
+			// stats easily.
 			appName := t.Name()
-			_, err = opsDB.Exec("SET application_name = $1", appName)
+			_, err := opsDB.Exec("SET application_name = $1", appName)
 			require.NoError(t, err)
 
 			// Run the test operations.
 			tc.ops(t, opsDB)
-
-			// Make looser timing assertions in CI, since we've seen
-			// more variability there.
-			// - Bazel test runs also use this looser delta.
-			// - Goland and `go test` use the tighter delta unless
-			//   the crdb_test build tag has been set.
-			delta := 0.003
-			if buildutil.CrdbTestBuild {
-				delta = 0.05
-			}
 
 			// Look for the latencies we expect.
 			t.Run("stmt", func(t *testing.T) {
@@ -1316,8 +1306,13 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 					actual[query] = latency
 				}
 				require.NoError(t, rows.Err())
-				require.InDeltaMapValues(t, tc.stmtLats, actual, delta,
-					"expected: %v\nactual: %v", tc.stmtLats, actual)
+				// Ensure that all test case statements have at least the
+				// minimum expected idle latency and do not exceed the safety
+				// check cap.
+				for tc_stmt, tc_latency := range tc.stmtLats {
+					require.GreaterOrEqual(t, actual[tc_stmt], tc_latency)
+					require.Less(t, actual[tc_stmt], idleLatCap)
+				}
 			})
 
 			t.Run("txn", func(t *testing.T) {
@@ -1328,8 +1323,10 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 					 WHERE app_name = $1`, appName)
 				err := row.Scan(&actual)
 				require.NoError(t, err)
-				require.GreaterOrEqual(t, actual, float64(0))
-				require.InDelta(t, tc.txnLat, actual, delta)
+				// Ensure the test case transaction has at least the minimum
+				// expected idle latency and do not exceed the safety check cap.
+				require.GreaterOrEqual(t, actual, tc.txnLat)
+				require.Less(t, actual, idleLatCap)
 			})
 		})
 	}
@@ -1345,12 +1342,8 @@ func TestSQLStatsIndexesUsed(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	testServer, sqlConn, _ := serverutils.StartServer(t, params)
-	defer func() {
-		require.NoError(t, sqlConn.Close())
-		testServer.Stopper().Stop(ctx)
-	}()
+	testServer, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer testServer.Stopper().Stop(ctx)
 	testConn := sqlutils.MakeSQLRunner(sqlConn)
 	appName := "indexes-usage"
 	testConn.Exec(t, "SET application_name = $1", appName)
@@ -1391,7 +1384,7 @@ func TestSQLStatsIndexesUsed(t *testing.T) {
 		{
 			name:          "buildZigZag",
 			tableCreation: "CREATE TABLE t5 (a INT, b INT, INDEX a_idx(a), INDEX b_idx(b))",
-			statement:     "SELECT * FROM t5@{FORCE_ZIGZAG} WHERE a = 1 AND b = 1",
+			statement:     "SET enable_zigzag_join = true; SELECT * FROM t5@{FORCE_ZIGZAG} WHERE a = 1 AND b = 1; RESET enable_zigzag_join",
 			fingerprint:   "SELECT * FROM t5@{FORCE_ZIGZAG} WHERE (a = _) AND (b = _)",
 			indexes: []indexInfo{
 				{name: "a_idx", table: "t5"},
@@ -1453,12 +1446,8 @@ func TestSQLStatsLatencyInfo(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	testServer, sqlConn, _ := serverutils.StartServer(t, params)
-	defer func() {
-		require.NoError(t, sqlConn.Close())
-		testServer.Stopper().Stop(ctx)
-	}()
+	testServer, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer testServer.Stopper().Stop(ctx)
 	testConn := sqlutils.MakeSQLRunner(sqlConn)
 	appName := "latency-info"
 	testConn.Exec(t, "SET application_name = $1", appName)
@@ -1546,9 +1535,7 @@ func TestSQLStatsRegions(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			params, _ := tests.CreateTestServerParams()
-			params.Locality = tc.locality
-			s, conn, _ := serverutils.StartServer(t, params)
+			s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{Locality: tc.locality})
 			defer s.Stopper().Stop(ctx)
 
 			db := sqlutils.MakeSQLRunner(conn)

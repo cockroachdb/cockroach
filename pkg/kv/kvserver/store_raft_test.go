@@ -13,15 +13,25 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/raft/v3/raftpb"
 )
@@ -122,5 +132,97 @@ func TestRaftReceiveQueue(t *testing.T) {
 		require.False(t, shouldQ)
 		require.Zero(t, q1.acc.Used())
 		require.Equal(t, n5, q5.acc.Used()) // we didn't touch q5
+	}
+}
+
+// TestRaftCrossLocalityMetrics verifies that
+// updateCrossLocalityMetricsOn{Incoming|Outgoing}RaftMsg correctly updates
+// cross-region, cross-zone byte count metrics for incoming and outgoing raft
+// msg.
+func TestRaftCrossLocalityMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
+	cfg := TestStoreConfig(clock)
+	var stopper *stop.Stopper
+	stopper, _, _, cfg.StorePool, _ = storepool.CreateTestStorePool(ctx, cfg.Settings,
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
+		func() int { return 0 }, /* nodeCount */
+		livenesspb.NodeLivenessStatus_DEAD)
+	defer stopper.Stop(ctx)
+
+	// Create a noop store.
+	node := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(1)}
+	eng := storage.NewDefaultInMemForTesting()
+	stopper.AddCloser(eng)
+	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
+	store := NewStore(ctx, cfg, eng, &node)
+	store.Ident = &roachpb.StoreIdent{
+		ClusterID: uuid.Nil,
+		StoreID:   1,
+		NodeID:    1,
+	}
+
+	const expectedInc = 10
+	metricsNames := []string{
+		"raft.rcvd.bytes",
+		"raft.rcvd.cross_region.bytes",
+		"raft.rcvd.cross_zone.bytes",
+		"raft.sent.bytes",
+		"raft.sent.cross_region.bytes",
+		"raft.sent.cross_zone.bytes"}
+	for _, tc := range []struct {
+		crossLocalityType    roachpb.LocalityComparisonType
+		expectedMetricChange [6]int64
+		forRequest           bool
+	}{
+		{crossLocalityType: roachpb.LocalityComparisonType_CROSS_REGION,
+			expectedMetricChange: [6]int64{expectedInc, expectedInc, 0, 0, 0, 0},
+			forRequest:           true,
+		},
+		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE,
+			expectedMetricChange: [6]int64{expectedInc, 0, expectedInc, 0, 0, 0},
+			forRequest:           true,
+		},
+		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE,
+			expectedMetricChange: [6]int64{expectedInc, 0, 0, 0, 0, 0},
+			forRequest:           true,
+		},
+		{crossLocalityType: roachpb.LocalityComparisonType_CROSS_REGION,
+			expectedMetricChange: [6]int64{0, 0, 0, expectedInc, expectedInc, 0},
+			forRequest:           false,
+		},
+		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE,
+			expectedMetricChange: [6]int64{0, 0, 0, expectedInc, 0, expectedInc},
+			forRequest:           false,
+		},
+		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE,
+			expectedMetricChange: [6]int64{0, 0, 0, expectedInc, 0, 0},
+			forRequest:           false,
+		},
+	} {
+		t.Run(fmt.Sprintf("%-v", tc.crossLocalityType), func(t *testing.T) {
+			beforeMetrics, metricsErr := store.metrics.GetStoreMetrics(metricsNames)
+			if metricsErr != nil {
+				t.Error(metricsErr)
+			}
+			if tc.forRequest {
+				store.Metrics().updateCrossLocalityMetricsOnIncomingRaftMsg(tc.crossLocalityType, expectedInc)
+			} else {
+				store.Metrics().updateCrossLocalityMetricsOnOutgoingRaftMsg(tc.crossLocalityType, expectedInc)
+			}
+
+			afterMetrics, metricsErr := store.metrics.GetStoreMetrics(metricsNames)
+			if metricsErr != nil {
+				t.Error(metricsErr)
+			}
+			metricsDiff := getMapsDiff(beforeMetrics, afterMetrics)
+			expectedDiff := make(map[string]int64, 6)
+			for i, inc := range tc.expectedMetricChange {
+				expectedDiff[metricsNames[i]] = inc
+			}
+			require.Equal(t, metricsDiff, expectedDiff)
+		})
 	}
 }

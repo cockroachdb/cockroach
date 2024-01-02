@@ -30,6 +30,7 @@ export default function (props: GraphDashboardProps) {
       title="Queue Processing Failures"
       sources={storeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="failures">
         <Metric
@@ -84,6 +85,7 @@ export default function (props: GraphDashboardProps) {
       title="Queue Processing Times"
       sources={storeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="processing time">
         <Metric
@@ -141,6 +143,7 @@ export default function (props: GraphDashboardProps) {
       title="Replica GC Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -165,6 +168,7 @@ export default function (props: GraphDashboardProps) {
       title="Replication Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -218,6 +222,7 @@ export default function (props: GraphDashboardProps) {
       title="Split Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -237,6 +242,7 @@ export default function (props: GraphDashboardProps) {
       title="Merge Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -256,6 +262,7 @@ export default function (props: GraphDashboardProps) {
       title="Raft Log Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -275,6 +282,7 @@ export default function (props: GraphDashboardProps) {
       title="Raft Snapshot Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -294,6 +302,7 @@ export default function (props: GraphDashboardProps) {
       title="Consistency Checker Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -313,6 +322,7 @@ export default function (props: GraphDashboardProps) {
       title="Time Series Maintenance Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -332,6 +342,7 @@ export default function (props: GraphDashboardProps) {
       title="MVCC GC Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -351,7 +362,9 @@ export default function (props: GraphDashboardProps) {
       title="Protected Timestamp Records"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`Number of protected timestamp records (used by backups, changefeeds, etc. to prevent MVCC GC)`}
+      tooltip={`Number of protected timestamp records (used by backups, changefeeds,
+          etc. to prevent MVCC GC)`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="Records">
         {nodeIDs.map(nid => (

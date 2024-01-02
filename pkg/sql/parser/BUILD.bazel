@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
@@ -56,7 +55,6 @@ go_test(
         "scanner_test.go",
         ":gen-helpmap-test",  # keep
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":parser"],
     deps = [
@@ -100,12 +98,10 @@ export HOME=$(GENDIR)
 export GOPATH=/nonexist-gopath
 export GOROOT=
 $(location :sql-gen) $(location sql.y) sql $(location replace_help_rules.awk) \
-    $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc) \
-    $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) \
+    $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc)
 """,
     exec_tools = [
         ":sql-gen",
-        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
         "@go_sdk//:bin/go",
         "@org_golang_x_tools//cmd/goyacc",
     ],
@@ -179,5 +175,3 @@ disallowed_imports_test(
         "pkg/sql/catalog",
     ],
 )
-
-get_x_data(name = "get_x_data")

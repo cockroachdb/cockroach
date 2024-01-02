@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -66,7 +65,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 	skip.UnderStressRace(t, "TODO(ssd) test times outs under race")
 	skip.UnderRace(t, "TODO(ssd) test times outs under race")
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	writesPopulated := false
 	var writesFn func() error
@@ -139,6 +138,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
+	codec := s.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
 SET use_declarative_schema_changer='off';
@@ -170,7 +170,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
-	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2, func() {
+	addIndexSchemaChange(t, sqlDB, kvDB, codec, maxValue, 2, func() {
 		if _, err := sqlDB.Exec("SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS])"); err != nil {
 			t.Fatal(err)
 		}
@@ -182,7 +182,7 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	const (
 		rowCount  = 2000
@@ -249,7 +249,7 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 
-	tc = serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+	tc = serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs:      params,
 	})
@@ -273,7 +273,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "TODO(ssd) test times outs under race")
+	skip.UnderDuress(t, "TODO(ssd) test times outs under race")
 
 	// protects mergeNotification, writesPopulated
 	var mu syncutil.Mutex
@@ -290,7 +290,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 		maxValue = 200
 	}
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	initMergeNotification := func() chan struct{} {
 		mu.Lock()
 		defer mu.Unlock()
@@ -346,7 +346,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
@@ -354,13 +354,14 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
+	codec := tc.Server(0).ApplicationLayer().Codec()
 	_, err := sqlDB.Exec("SET use_declarative_schema_changer='off'")
 	require.NoError(t, err)
 	_, err = sqlDB.Exec("SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'")
 	require.NoError(t, err)
 
 	splitTemporaryIndex = func() error {
-		tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "public", "test")
+		tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "t", "public", "test")
 		tempIdx, err := findCorrespondingTemporaryIndex(tableDesc, idxName)
 		if err != nil {
 			return err
@@ -408,7 +409,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, x DECIMAL DEFAULT (DECIMAL '1.4')
 
 	// number of keys == 2 * number of rows; 1 column family and 1 index entry
 	// for each row.
-	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
 	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
@@ -421,6 +422,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, x DECIMAL DEFAULT (DECIMAL '1.4')
 		t,
 		sqlDB,
 		kvDB,
+		codec,
 		"CREATE UNIQUE INDEX foo ON t.test (v)",
 		maxValue,
 		2,
@@ -435,6 +437,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, x DECIMAL DEFAULT (DECIMAL '1.4')
 		t,
 		sqlDB,
 		kvDB,
+		codec,
 		"CREATE INDEX bar ON t.test(k) STORING (v)",
 		maxValue,
 		3,
@@ -454,14 +457,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, x DECIMAL DEFAULT (DECIMAL '1.4')
 		var val int
 		var x float64
 		if err := rows.Scan(&val, &x); err != nil {
-			t.Errorf("row %d scan failed: %s", count, err)
-			continue
+			t.Fatalf("row %d scan failed: %s", count, err)
 		}
 		if count != val {
-			t.Errorf("e = %d, v = %d", count, val)
+			t.Fatalf("wrong index contents: expected %d, found %d", count, val)
 		}
 		if x != 1.4 {
-			t.Errorf("e = %f, v = %f", 1.4, x)
+			t.Fatalf("wrong index contents: expected %f, found %f", 1.4, x)
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -483,7 +485,7 @@ func TestInvertedIndexMergeEveryStateWrite(t *testing.T) {
 	var initialRows = 10000
 	rowIdx := 0
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	var writeMore func() error
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -552,7 +554,7 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 		additionalRowsForMerge = 10
 	)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			// Ensure that the temp index has work to do.
@@ -590,6 +592,7 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 
 	s, sqlDB, kvDB = serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
+	codec := s.ApplicationLayer().Codec()
 	var err error
 	scratch, err = s.ScratchRange()
 	require.NoError(t, err)
@@ -609,7 +612,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
 	}
-	addIndexSchemaChange(t, sqlDB, kvDB, maxValue+additionalRowsForMerge, 2, func() {
+	addIndexSchemaChange(t, sqlDB, kvDB, codec, maxValue+additionalRowsForMerge, 2, func() {
 		if _, err := sqlDB.Exec("SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS])"); err != nil {
 			t.Fatal(err)
 		}
@@ -738,7 +741,7 @@ func TestIndexMergeEveryChunkWrite(t *testing.T) {
 	rowIdx := 0
 	mergeSerializeCh := make(chan struct{}, 1)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	var writeMore func() error
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
@@ -844,7 +847,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v int);`
 	// Wait for the beginning of the Merge step of the schema change.
 	// Write data to the temp index and split it at the hazardous
 	// points.
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {

@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -71,11 +70,11 @@ const (
 )
 
 var changeOwnPasswordEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.auth.change_own_password.enabled",
 	"controls whether a user is allowed to change their own password, even if they have no other privileges",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 // AlterRole represents a `ALTER ROLE ... [WITH] OPTION` statement.
 // Privileges: CREATEROLE privilege.
@@ -136,7 +135,7 @@ func (p *planner) checkPasswordOptionConstraints(
 		// NOCREATELOGIN to another role, or set up a password for
 		// authentication, or set up password validity, or enable/disable
 		// LOGIN privilege; even if they have CREATEROLE privilege.
-		if err := p.CheckRoleOption(ctx, roleoption.CREATELOGIN); err != nil {
+		if err := p.CheckGlobalPrivilegeOrRoleOption(ctx, privilege.CREATELOGIN); err != nil {
 			return err
 		}
 	}
@@ -182,7 +181,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		// CockroachDB does not support the superuser role option right now, but we
 		// make it so any member of the ADMIN role can only be edited by another ADMIN
 		// (done after checking for existence of the role).
-		if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEROLE); err != nil {
+		if err := params.p.CheckGlobalPrivilegeOrRoleOption(params.ctx, privilege.CREATEROLE); err != nil {
 			return err
 		}
 		// Check that the requested combination of password options is
@@ -216,8 +215,11 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		return err
 	}
 	if isAdmin {
-		if err := params.p.RequireAdminRole(params.ctx, "ALTER ROLE admin"); err != nil {
+		if hasAdmin, err := params.p.HasAdminRole(params.ctx); err != nil {
 			return err
+		} else if !hasAdmin {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to alter another admin")
 		}
 	}
 
@@ -278,7 +280,7 @@ func (*alterRoleNode) Values() tree.Datums          { return tree.Datums{} }
 func (*alterRoleNode) Close(context.Context)        {}
 
 // AlterRoleSet represents a `ALTER ROLE ... SET` statement.
-// Privileges: CREATEROLE privilege; or admin-only if `ALTER ROLE ALL`.
+// Privileges: CREATEROLE, MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING privilege; or admin-only if `ALTER ROLE ALL`.
 func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planNode, error) {
 	// Note that for Postgres, only superuser can ALTER another superuser.
 	// CockroachDB does not support the superuser role option right now.
@@ -288,44 +290,30 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 	// modifying their own defaults unless they have CREATEROLE. This is analogous
 	// to our restriction that prevents a user from modifying their own password.
 	if n.AllRoles {
-		if err := p.RequireAdminRole(ctx, "ALTER ROLE ALL"); err != nil {
+		if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
 			return nil, err
+		} else if !hasAdmin {
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to ALTER ROLE ALL ... SET")
 		}
 	} else {
-		hasModify := false
-		hasSqlModify := false
-		hasCreateRole := false
-		// Check system privileges.
-		if ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING, p.User()); err != nil {
+		canAlterRoleSet, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE)
+		if err != nil {
 			return nil, err
-		} else if ok {
-			hasModify = true
-			hasSqlModify = true
 		}
-		if !hasModify {
-			if ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING, p.User()); err != nil {
+		if !canAlterRoleSet {
+			canAlterRoleSet, err = p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
+			if err != nil {
 				return nil, err
-			} else if ok {
-				hasSqlModify = true
 			}
 		}
-		// Check role options.
-		if !hasSqlModify {
-			if ok, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING); err != nil {
+		if !canAlterRoleSet {
+			canAlterRoleSet, err = p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYSQLCLUSTERSETTING)
+			if err != nil {
 				return nil, err
-			} else if ok {
-				hasModify = true
-				hasSqlModify = true
 			}
 		}
-		if !hasModify && !hasSqlModify {
-			if ok, err := p.HasRoleOption(ctx, roleoption.CREATEROLE); err != nil {
-				return nil, err
-			} else if ok {
-				hasCreateRole = true
-			}
-		}
-		if !hasModify && !hasSqlModify && !hasCreateRole {
+		if !canAlterRoleSet {
 			return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "ALTER ROLE ... SET requires %s, %s or %s", privilege.MODIFYCLUSTERSETTING, privilege.MODIFYSQLCLUSTERSETTING, roleoption.CREATEROLE)
 		}
 	}
@@ -439,9 +427,6 @@ func (p *planner) processSetOrResetClause(
 }
 
 func (n *alterRoleSetNode) startExec(params runParams) error {
-	databaseRoleSettingsHasRoleIDCol := params.p.ExecCfg().Settings.Version.IsActive(params.ctx,
-		clusterversion.V23_1DatabaseRoleSettingsHasRoleIDColumn)
-
 	var opName string
 	if n.isRole {
 		sqltelemetry.IncIAMAlterCounter(sqltelemetry.Role)
@@ -465,12 +450,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 		sessioninit.DatabaseRoleSettingsTableName,
 	)
 
-	var upsertQuery = fmt.Sprintf(
-		`UPSERT INTO %s (database_id, role_name, settings) VALUES ($1, $2, $3)`,
-		sessioninit.DatabaseRoleSettingsTableName,
-	)
-	if databaseRoleSettingsHasRoleIDCol {
-		upsertQuery = fmt.Sprintf(`
+	var upsertQuery = fmt.Sprintf(`
 UPSERT INTO %s (database_id, role_name, settings, role_id)
 VALUES ($1, $2, $3, (
 	SELECT CASE $2
@@ -478,9 +458,8 @@ VALUES ($1, $2, $3, (
 		ELSE (SELECT user_id FROM system.users WHERE username = $2)
 	END
 ))`,
-			sessioninit.DatabaseRoleSettingsTableName, username.EmptyRole, username.EmptyRoleID,
-		)
-	}
+		sessioninit.DatabaseRoleSettingsTableName, username.EmptyRole, username.EmptyRoleID,
+	)
 
 	// Instead of inserting an empty settings array, this function will make
 	// sure the row is deleted instead.
@@ -625,7 +604,17 @@ func (n *alterRoleSetNode) getRoleName(
 		return false, username.SQLUsername{}, err
 	}
 	if isAdmin {
-		if err := params.p.RequireAdminRole(params.ctx, "ALTER ROLE admin"); err != nil {
+		if hasAdmin, err := params.p.HasAdminRole(params.ctx); err != nil {
+			return false, username.SQLUsername{}, err
+		} else if !hasAdmin {
+			return false, username.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to alter another admin")
+		}
+
+		// Note that admins implicitly have the REPAIRCLUSTERMETADATA privilege.
+		if err := params.p.CheckPrivilege(
+			params.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+		); err != nil {
 			return false, username.SQLUsername{}, err
 		}
 	}

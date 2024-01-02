@@ -1,0 +1,28 @@
+/* setup */
+CREATE TABLE t (a INT NOT NULL, b INT NOT NULL);
+CREATE INDEX idx_b ON t(b);
+
+/* test */
+EXPLAIN (DDL, SHAPE) alter table t add primary key (a);
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIMARY KEY (‹a›);
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey- in relation t
+ │    └── into t_pkey~ (a; rowid-, b)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[7] into t_pkey~
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_pkey~ in relation t
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey~ in relation t
+ │    ├── into idx_b+ (b: a)
+ │    └── into t_pkey+ (a; b)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    ├── from t@[5] into idx_b+
+ │    └── from t@[9] into t_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
+ ├── validate UNIQUE constraint backed by index idx_b+ in relation t
+ └── execute 4 system table mutations transactions

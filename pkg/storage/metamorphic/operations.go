@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -207,7 +208,7 @@ func (m mvccPutOp) run(ctx context.Context) string {
 	txn.Sequence++
 	writer := m.m.getReadWriter(m.writer)
 
-	err := storage.MVCCPut(ctx, writer, nil, m.key, txn.ReadTimestamp, hlc.ClockTimestamp{}, m.value, txn)
+	_, err := storage.MVCCPut(ctx, writer, m.key, txn.ReadTimestamp, m.value, storage.MVCCWriteOptions{Txn: txn})
 	if err != nil {
 		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
 			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
@@ -236,8 +237,8 @@ func (m mvccCPutOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	err := storage.MVCCConditionalPut(ctx, writer, nil, m.key,
-		txn.ReadTimestamp, hlc.ClockTimestamp{}, m.value, m.expVal, true, txn)
+	_, err := storage.MVCCConditionalPut(ctx, writer, m.key,
+		txn.ReadTimestamp, m.value, m.expVal, true, storage.MVCCWriteOptions{Txn: txn})
 	if err != nil {
 		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
 			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
@@ -265,7 +266,7 @@ func (m mvccInitPutOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	err := storage.MVCCInitPut(ctx, writer, nil, m.key, txn.ReadTimestamp, hlc.ClockTimestamp{}, m.value, false, txn)
+	_, err := storage.MVCCInitPut(ctx, writer, m.key, txn.ReadTimestamp, m.value, false, storage.MVCCWriteOptions{Txn: txn})
 	if err != nil {
 		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
 			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
@@ -276,6 +277,50 @@ func (m mvccInitPutOp) run(ctx context.Context) string {
 	}
 
 	// Update the txn's lock spans to account for this intent being written.
+	addKeyToLockSpans(txn, m.key)
+	return "ok"
+}
+
+type mvccCheckForAcquireLockOp struct {
+	m                *metaTestRunner
+	writer           readWriterID
+	key              roachpb.Key
+	txn              txnID
+	strength         lock.Strength
+	maxLockConflicts int
+}
+
+func (m mvccCheckForAcquireLockOp) run(ctx context.Context) string {
+	txn := m.m.getTxn(m.txn)
+	writer := m.m.getReadWriter(m.writer)
+
+	err := storage.MVCCCheckForAcquireLock(ctx, writer, txn, m.strength, m.key, int64(m.maxLockConflicts))
+	if err != nil {
+		return fmt.Sprintf("error: %s", err)
+	}
+
+	return "ok"
+}
+
+type mvccAcquireLockOp struct {
+	m                *metaTestRunner
+	writer           readWriterID
+	key              roachpb.Key
+	txn              txnID
+	strength         lock.Strength
+	maxLockConflicts int
+}
+
+func (m mvccAcquireLockOp) run(ctx context.Context) string {
+	txn := m.m.getTxn(m.txn)
+	writer := m.m.getReadWriter(m.writer)
+
+	err := storage.MVCCAcquireLock(ctx, writer, txn, m.strength, m.key, nil, int64(m.maxLockConflicts))
+	if err != nil {
+		return fmt.Sprintf("error: %s", err)
+	}
+
+	// Update the txn's lock spans to account for this lock being acquired.
 	addKeyToLockSpans(txn, m.key)
 	return "ok"
 }
@@ -298,8 +343,8 @@ func (m mvccDeleteRangeOp) run(ctx context.Context) string {
 
 	txn.Sequence++
 
-	keys, _, _, err := storage.MVCCDeleteRange(ctx, writer, nil, m.key, m.endKey,
-		0, txn.WriteTimestamp, hlc.ClockTimestamp{}, txn, true)
+	keys, _, _, _, err := storage.MVCCDeleteRange(ctx, writer, m.key, m.endKey,
+		0, txn.WriteTimestamp, storage.MVCCWriteOptions{Txn: txn}, true)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -335,7 +380,7 @@ func (m mvccDeleteRangeUsingRangeTombstoneOp) run(ctx context.Context) string {
 	}
 
 	err := storage.MVCCDeleteRangeUsingTombstone(ctx, writer, nil, m.key, m.endKey, m.ts,
-		hlc.ClockTimestamp{}, m.key, m.endKey, false /* idempotent */, math.MaxInt64, /* maxIntents */
+		hlc.ClockTimestamp{}, m.key, m.endKey, false /* idempotent */, math.MaxInt64, /* maxLockConflicts */
 		nil /* msCovered */)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
@@ -377,7 +422,7 @@ func (m mvccDeleteOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	_, err := storage.MVCCDelete(ctx, writer, nil, m.key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn)
+	_, _, err := storage.MVCCDelete(ctx, writer, m.key, txn.ReadTimestamp, storage.MVCCWriteOptions{Txn: txn})
 	if err != nil {
 		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
 			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
@@ -487,7 +532,7 @@ func (t txnCommitOp) run(ctx context.Context) string {
 	for _, span := range txn.LockSpans {
 		intent := roachpb.MakeLockUpdate(txn, span)
 		intent.Status = roachpb.COMMITTED
-		_, _, _, err := storage.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent, storage.MVCCResolveWriteIntentOptions{})
+		_, _, _, _, err := storage.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent, storage.MVCCResolveWriteIntentOptions{})
 		if err != nil {
 			panic(err)
 		}
@@ -510,7 +555,7 @@ func (t txnAbortOp) run(ctx context.Context) string {
 	for _, span := range txn.LockSpans {
 		intent := roachpb.MakeLockUpdate(txn, span)
 		intent.Status = roachpb.ABORTED
-		_, _, _, err := storage.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent, storage.MVCCResolveWriteIntentOptions{})
+		_, _, _, _, err := storage.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent, storage.MVCCResolveWriteIntentOptions{})
 		if err != nil {
 			panic(err)
 		}
@@ -608,11 +653,14 @@ type iterOpenOp struct {
 
 func (i iterOpenOp) run(ctx context.Context) string {
 	rw := i.m.getReadWriter(i.rw)
-	iter := rw.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	iter, err := rw.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 		Prefix:     false,
 		LowerBound: i.key,
 		UpperBound: i.endKey.Next(),
 	})
+	if err != nil {
+		return err.Error()
+	}
 
 	i.m.setIterInfo(i.id, iteratorInfo{
 		id:          i.id,
@@ -779,7 +827,7 @@ func (i ingestOp) run(ctx context.Context) string {
 	}
 	sstWriter.Close()
 
-	if err := i.m.engine.IngestExternalFiles(ctx, []string{sstPath}); err != nil {
+	if err := i.m.engine.IngestLocalFiles(ctx, []string{sstPath}); err != nil {
 		return fmt.Sprintf("error = %s", err.Error())
 	}
 
@@ -932,6 +980,69 @@ var opGenerators = []opGenerator{
 			operandTransaction,
 			operandUnusedMVCCKey,
 			operandValue,
+		},
+		weight: 50,
+	},
+	{
+		name: "mvcc_check_for_acquire_lock",
+		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
+			writer := readWriterID(args[0])
+			txn := txnID(args[1])
+			key := m.txnKeyGenerator.parse(args[2])
+			strength := lock.Shared
+			if m.floatGenerator.parse(args[3]) < 0.5 {
+				strength = lock.Exclusive
+			}
+			maxLockConflicts := int(m.floatGenerator.parse(args[4]) * 1000)
+
+			return &mvccCheckForAcquireLockOp{
+				m:                m,
+				writer:           writer,
+				key:              key.Key,
+				txn:              txn,
+				strength:         strength,
+				maxLockConflicts: maxLockConflicts,
+			}
+		},
+		operands: []operandType{
+			operandReadWriter,
+			operandTransaction,
+			operandMVCCKey,
+			operandFloat,
+			operandFloat,
+		},
+		weight: 50,
+	},
+	{
+		name: "mvcc_acquire_lock",
+		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
+			writer := readWriterID(args[0])
+			txn := txnID(args[1])
+			key := m.txnKeyGenerator.parse(args[2])
+			strength := lock.Shared
+			if m.floatGenerator.parse(args[3]) < 0.5 {
+				strength = lock.Exclusive
+			}
+			maxLockConflicts := int(m.floatGenerator.parse(args[4]) * 1000)
+
+			// Track this write in the txn generator. This ensures the batch will be
+			// committed before the transaction is committed.
+			m.txnGenerator.trackTransactionalWrite(writer, txn, key.Key, nil)
+			return &mvccAcquireLockOp{
+				m:                m,
+				writer:           writer,
+				key:              key.Key,
+				txn:              txn,
+				strength:         strength,
+				maxLockConflicts: maxLockConflicts,
+			}
+		},
+		operands: []operandType{
+			operandReadWriter,
+			operandTransaction,
+			operandUnusedMVCCKey,
+			operandFloat,
+			operandFloat,
 		},
 		weight: 50,
 	},

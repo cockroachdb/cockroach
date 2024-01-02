@@ -208,6 +208,18 @@ func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {
 	if op.ForUpdate {
 		methodName = `GetForUpdate`
 	}
+	if op.ForShare {
+		methodName = `GetForShare`
+	}
+	if op.SkipLocked {
+		// NB: SkipLocked is a property of a batch, not an individual operation. We
+		// don't have a way to represent this here, so we pretend it's part of the
+		// method name for debugging purposes.
+		methodName += "SkipLocked"
+	}
+	if op.GuaranteedDurability {
+		methodName += "GuaranteedDurability"
+	}
 	fmt.Fprintf(w, `%s.%s(%s%s)`, fctx.receiver, methodName, fctx.maybeCtx(), fmtKey(op.Key))
 	op.Result.format(w)
 }
@@ -232,6 +244,18 @@ func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
 	methodName := `Scan`
 	if op.ForUpdate {
 		methodName = `ScanForUpdate`
+	}
+	if op.ForShare {
+		methodName = `ScanForShare`
+	}
+	if op.SkipLocked {
+		// NB: SkipLocked is a property of a batch, not an individual operation. We
+		// don't have a way to represent this here, so we pretend it's part of the
+		// method name for debugging purposes.
+		methodName += "SkipLocked"
+	}
+	if op.GuaranteedDurability {
+		methodName += "GuaranteedDurability"
 	}
 	if op.Reverse {
 		methodName = `Reverse` + methodName

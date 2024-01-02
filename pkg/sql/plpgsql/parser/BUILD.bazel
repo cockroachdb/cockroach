@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 sh_binary(
@@ -16,13 +15,11 @@ genrule(
     cmd = """
     export GOPATH=/nonexist-gopath
       $(location :plpgsql-gen) $(location plpgsql.y) plpgsql ""\
-          $(location plpgsql.go) $(location @org_golang_x_tools//cmd/goyacc) \
-          $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) \
+          $(location plpgsql.go) $(location @org_golang_x_tools//cmd/goyacc)
 
     """,
     exec_tools = [
         ":plpgsql-gen",
-        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
         "@org_golang_x_tools//cmd/goyacc",
     ],
     visibility = ["//visibility:public"],
@@ -63,14 +60,12 @@ exports_files(
 go_test(
     name = "parser_test",
     srcs = ["parser_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     deps = [
         ":plpgparser",
         "//pkg/sql/sem/plpgsqltree/utils",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/sqlutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )
-
-get_x_data(name = "get_x_data")

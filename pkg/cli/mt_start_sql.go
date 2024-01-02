@@ -14,9 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
 )
@@ -59,26 +60,21 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	const serverType redact.SafeString = "SQL server"
 
 	initConfig := func(ctx context.Context) error {
-		if err := serverCfg.InitSQLServer(ctx); err != nil {
-			return err
-		}
-
-		// We need a value in the version setting prior to the update
-		// coming from the system.settings table. This value must be valid
-		// and compatible with the state of the tenant's keyspace.
-		//
-		// Since we don't know at which binary version the tenant
-		// keyspace was initialized, we must be conservative and
-		// assume it was created a long time ago; and that we may
-		// have to run all known migrations since then. So initialize
-		// the version setting to the minimum supported version.
-		st := serverCfg.BaseConfig.Settings
-		return clusterversion.Initialize(
-			ctx, st.Version.BinaryMinSupportedVersion(), &st.SV,
-		)
+		return serverCfg.InitSQLServer(ctx)
 	}
 
-	newServerFn := func(ctx context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverStartupInterface, error) {
+	newServerFn := func(ctx context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverctl.ServerStartupInterface, error) {
+		// The context passed into NewSeparateProcessTenantServer will be
+		// captured in makeTenantSQLServerArgs by a few users that will hold on
+		// to it. Those users can log something into the current tracing span
+		// (created in runStartInternal) after the span has been Finish()'ed
+		// which is disallowed. To go around this issue, in this code path we
+		// create a new tracing span that is never finished since those users
+		// stay alive until the tenant server is up.
+		// TODO(yuzefovich): consider changing NewSeparateProcessTenantServer to
+		// not take in a context and - akin to NewServer - to construct its own
+		// from context.Background.
+		ctx, _ = tracing.ChildSpan(ctx, "mt-start-sql" /* opName */)
 		// Beware of not writing simply 'return server.NewServer()'. This is
 		// because it would cause the serverStartupInterface reference to
 		// always be non-nil, even if NewServer returns a nil pointer (and

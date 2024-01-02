@@ -13,6 +13,7 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -83,11 +85,20 @@ func alterChangefeedPlanHook(
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
-		typedExpr, err := alterChangefeedStmt.Jobs.TypeCheck(ctx, p.SemaCtx(), types.Int)
+		jobID, err := func() (jobspb.JobID, error) {
+			origProps := p.SemaCtx().Properties
+			p.SemaCtx().Properties.Require("cdc", tree.RejectSubqueries)
+			defer p.SemaCtx().Properties.Restore(origProps)
+
+			id, err := p.ExprEvaluator("ALTER CHANGEFEED").Int(ctx, alterChangefeedStmt.Jobs)
+			if err != nil {
+				return jobspb.JobID(0), err
+			}
+			return jobspb.JobID(id), nil
+		}()
 		if err != nil {
-			return err
+			return pgerror.Wrap(err, pgcode.DatatypeMismatch, "changefeed ID must be an INT value")
 		}
-		jobID := jobspb.JobID(tree.MustBeDInt(typedExpr))
 
 		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())
 		if err != nil {
@@ -143,6 +154,14 @@ func alterChangefeedPlanHook(
 			return err
 		}
 		newChangefeedStmt.Targets = newTargets
+
+		if prevDetails.Select != "" {
+			query, err := cdceval.ParseChangefeedExpression(prevDetails.Select)
+			if err != nil {
+				return err
+			}
+			newChangefeedStmt.Select = query
+		}
 
 		for key, value := range newOptions.AsMap() {
 			opt := tree.KVOption{Key: tree.Name(key)}
@@ -455,9 +474,26 @@ func generateAndValidateNewTargets(
 		return nil, nil, hlc.Timestamp{}, nil, err
 	}
 
+	checkIfCommandAllowed := func() error {
+		if prevDetails.Select == "" {
+			return nil
+		}
+		return errors.WithIssueLink(
+			errors.New("cannot modify targets when using CDC query changefeed; consider recreating changefeed"),
+			errors.IssueLink{
+				IssueURL: "https://github.com/cockroachdb/cockroach/issues/83033",
+				Detail: "you have encountered a known bug in CockroachDB, please consider " +
+					"reporting on the Github issue or reach out via Support.",
+			})
+	}
+
 	for _, cmd := range alterCmds {
 		switch v := cmd.(type) {
 		case *tree.AlterChangefeedAddTarget:
+			if err := checkIfCommandAllowed(); err != nil {
+				return nil, nil, hlc.Timestamp{}, nil, err
+			}
+
 			targetOpts, err := exprEval.KVOptions(
 				ctx, v.Options, changefeedvalidators.AlterTargetOptionValidations,
 			)
@@ -553,6 +589,10 @@ func generateAndValidateNewTargets(
 			}
 			telemetry.CountBucketed(telemetryPath+`.added_targets`, int64(len(v.Targets)))
 		case *tree.AlterChangefeedDropTarget:
+			if err := checkIfCommandAllowed(); err != nil {
+				return nil, nil, hlc.Timestamp{}, nil, err
+			}
+
 			for _, target := range v.Targets {
 				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)
 				if err != nil {
@@ -705,6 +745,10 @@ func generateNewProgress(
 ) (jobspb.Progress, hlc.Timestamp, error) {
 	prevHighWater := prevProgress.GetHighWater()
 	changefeedProgress := prevProgress.GetChangefeed()
+	ptsRecord := uuid.UUID{}
+	if changefeedProgress != nil {
+		ptsRecord = changefeedProgress.ProtectedTimestampRecord
+	}
 
 	haveHighwater := !(prevHighWater == nil || prevHighWater.IsEmpty())
 	haveCheckpoint := changefeedProgress != nil && changefeedProgress.Checkpoint != nil &&
@@ -747,6 +791,7 @@ func generateNewProgress(
 					Checkpoint: &jobspb.ChangefeedProgress_Checkpoint{
 						Spans: existingTargetSpans,
 					},
+					ProtectedTimestampRecord: ptsRecord,
 				},
 			},
 		}
@@ -776,6 +821,7 @@ func generateNewProgress(
 				Checkpoint: &jobspb.ChangefeedProgress_Checkpoint{
 					Spans: mergedSpanGroup.Slice(),
 				},
+				ProtectedTimestampRecord: ptsRecord,
 			},
 		},
 	}

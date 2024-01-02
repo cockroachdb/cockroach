@@ -22,6 +22,7 @@ import "util/hlc/timestamp.proto";
 import "util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
+import "roachpb/span_config.proto";
 
 // ReplicationProducerSpec is the specification returned by the replication
 // producer job when it is created.
@@ -34,6 +35,46 @@ message ReplicationProducerSpec {
   // through the lifetime of a replication stream. This will be the timestamp as
   // of which each partition will perform its initial rangefeed scan.
   util.hlc.Timestamp replication_start_time = 2 [(gogoproto.nullable) = false];
+
+  bytes source_cluster_id = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SourceClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  roachpb.TenantID source_tenant_id = 4 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SourceTenantID"
+  ];
+}
+
+// ReplicationProducerRequest is sent by the consuming cluster when
+// starting a replication stream on an existing tenant.
+message ReplicationProducerRequest {
+  // ReplicationStartTime is the initial timestamp from which the replication
+  // producer job will begin streaming MVCC revisions. This timestamp is picked
+  // once when the replication producer job is created, and is never updated
+  // through the lifetime of a replication stream. This will be the timestamp as
+  // of which each partition will perform its initial rangefeed scan.
+  util.hlc.Timestamp replication_start_time = 1 [(gogoproto.nullable) = false];
+
+
+  // ClusterID identifies the requesting cluster. If set, this is
+  // compared to the ClusterID in the tenant record's
+  // PreviousSourceTenant.
+  bytes cluster_id = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "ClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  // TenantID identifies the requesting cluster's destination
+  // tenant. If set, this is compared to the TenantID in the tenant
+  // record's PreviousSourceTenant.
+  roachpb.TenantID tenant_id = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TenantID"
+  ];
 }
 
 // StreamPartitionSpec is the stream partition specification.
@@ -65,11 +106,23 @@ message StreamPartitionSpec {
     google.protobuf.Duration min_checkpoint_frequency = 2
        [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
 
-    // Controls batch size in bytes.
+    // Controls the batch size, in bytes, sent over pgwire to the consumer.
     int64 batch_byte_size = 3;
   }
 
   ExecutionConfig config = 3 [(gogoproto.nullable) = false];
+}
+
+// SpanConfigEventStreamSpec is the span config event stream specification.
+message SpanConfigEventStreamSpec {
+  roachpb.Span span = 1 [(gogoproto.nullable) = false];
+
+  roachpb.TenantID tenant_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
+
+  // Controls how often checkpoint records are published.
+  google.protobuf.Duration min_checkpoint_frequency = 3
+  [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+
 }
 
 message ReplicationStreamSpec {
@@ -92,14 +145,27 @@ message ReplicationStreamSpec {
   repeated Partition partitions = 1 [(gogoproto.nullable) = false];
 
   roachpb.TenantID source_tenant_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "SourceTenantID"];
+
+  int64 span_config_stream_id = 3 [(gogoproto.customname) = "SpanConfigStreamID", (gogoproto
+    .casttype) = "StreamID"];
+
+}
+
+// StreamedSpanConfigEntry holds a span config update and its source side commit timestamp
+message StreamedSpanConfigEntry {
+  roachpb.SpanConfigEntry span_config = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  bool from_full_scan = 3;
 }
 
 // StreamEvent describes a replication stream event
 message StreamEvent {
+
   message Batch {
     repeated roachpb.KeyValue key_values = 1 [(gogoproto.nullable) = false];
     repeated roachpb.RangeFeedSSTable ssts = 2 [(gogoproto.nullable) = false];
     repeated roachpb.RangeFeedDeleteRange del_ranges = 3 [(gogoproto.nullable) = false];
+    repeated StreamedSpanConfigEntry span_configs = 4 [(gogoproto.nullable) = false];
   }
 
   // Checkpoint represents stream checkpoint.
@@ -134,11 +200,8 @@ message StreamReplicationStatus {
 }
 
 message StreamIngestionStats {
-  // The status of current stream producer job.
-  StreamReplicationStatus producer_status = 1;
-
-  // The error when trying to reach the current stream producer job.
-  string producer_error = 2;
+  reserved 1;
+  reserved 2;
 
   // Stream ingestion details.
   cockroach.sql.jobs.jobspb.StreamIngestionDetails ingestion_details = 3;

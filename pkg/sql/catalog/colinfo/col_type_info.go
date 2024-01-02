@@ -124,6 +124,22 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 				"TSVector/TSQuery not supported until version 23.1")
 		}
 
+	case types.PGLSNFamily:
+		if !version.IsActive(ctx, clusterversion.V23_2) {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"pg_lsn not supported until version 23.2",
+			)
+		}
+
+	case types.RefCursorFamily:
+		if !version.IsActive(ctx, clusterversion.V23_2) {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"refcursor not supported until version 23.2",
+			)
+		}
+
 	default:
 		return pgerror.Newf(pgcode.InvalidTableDefinition,
 			"value type %s cannot be used for table columns", t.String())
@@ -134,9 +150,18 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 
 // ColumnTypeIsIndexable returns whether the type t is valid as an indexed column.
 func ColumnTypeIsIndexable(t *types.T) bool {
-	if t.IsAmbiguous() || t.Family() == types.TupleFamily {
+	// NB: .IsAmbiguous checks the content type of array types.
+	if t.IsAmbiguous() || t.Family() == types.TupleFamily || t.Family() == types.RefCursorFamily {
 		return false
 	}
+
+	// If the type is an array, check its content type as well.
+	if unwrapped := t.ArrayContents(); unwrapped != nil {
+		if unwrapped.Family() == types.TupleFamily || unwrapped.Family() == types.RefCursorFamily {
+			return false
+		}
+	}
+
 	// Some inverted index types also have a key encoding, but we don't
 	// want to support those yet. See #50659.
 	return !MustBeValueEncoded(t) && !ColumnTypeIsOnlyInvertedIndexable(t)
@@ -146,7 +171,9 @@ func ColumnTypeIsIndexable(t *types.T) bool {
 // using an inverted index.
 func ColumnTypeIsInvertedIndexable(t *types.T) bool {
 	switch t.Family() {
-	case types.JsonFamily, types.ArrayFamily, types.StringFamily:
+	case types.ArrayFamily:
+		return t.ArrayContents().Family() != types.RefCursorFamily
+	case types.JsonFamily, types.StringFamily:
 		return true
 	}
 	return ColumnTypeIsOnlyInvertedIndexable(t)

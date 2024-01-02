@@ -85,7 +85,7 @@ statement error pq: object type PointZ does not match column dimensionality Geom
 INSERT INTO geom_4d VALUES ('pointz(1 2 3)')
 
 # Builtins for creating Points
-query T
+query T nosort
 SELECT st_astext(point) FROM
 ( VALUES
   (st_point(1, 2)),
@@ -108,7 +108,7 @@ SELECT ST_AsEWKT(ST_Affine(the_geom, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, pi()/2, pi()
 LINESTRING Z (24 33.571 53.142, 42 78.571 125.142, 60 123.571 197.142)
 
 # Point specific operations
-query RRRRI
+query RRRRI nosort
 SELECT
   st_x(a.geom),
   st_y(a.geom),
@@ -144,7 +144,7 @@ statement error argument to st_m\(\) must have shape POINT
 SELECT st_m('LINESTRING M (0 0 0, 1 1 1)')
 
 # ST_Zmflag tests
-query I
+query I nosort
 SELECT
   ST_Zmflag(a.geom)
 FROM (VALUES
@@ -165,7 +165,7 @@ query TT
 SELECT
   ST_AsText(geom) d,
   ST_AsText(ST_Translate(geom, 1, 1, 1))
-FROM 
+FROM
 ( VALUES
   ('POINT(1.0 1.0 1.0)'::geometry),
   ('MULTIPOINT (1 1 1, 2 2 2)'::geometry),
@@ -182,7 +182,7 @@ POINT Z (1 1 1)                                     POINT Z (2 2 2)
 POLYGON Z ((0 0 0, 1 0 0, 1 1 0, 0 0 0))            POLYGON Z ((1 1 1, 2 1 1, 2 2 1, 1 1 1))
 
 # Builtins for forcing geometries into other dimensions
-query T
+query T nosort
 SELECT st_astext(st_force2d(geom)) FROM
 ( VALUES
   ('POINT(1 2)'::geometry),
@@ -200,7 +200,7 @@ POINT (1 2)
 POINT EMPTY
 GEOMETRYCOLLECTION EMPTY
 
-query T
+query T nosort
 SELECT st_astext(st_force3d(geom)) FROM
 ( VALUES
   ('POINT(1 2)'::geometry),
@@ -216,7 +216,7 @@ POINT Z (1 2 3)
 POINT Z (1 2 3)
 GEOMETRYCOLLECTION Z (POINT Z (1 2 0))
 
-query T
+query T nosort
 SELECT st_astext(st_force3dz(geom, 7)) FROM
 ( VALUES
   ('POINT(1 2)'::geometry),
@@ -232,7 +232,7 @@ POINT Z (1 2 3)
 POINT Z (1 2 3)
 GEOMETRYCOLLECTION Z (LINESTRING Z (1 2 7, 3 4 7))
 
-query T
+query T nosort
 SELECT st_astext(st_force3dm(geom)) FROM
 ( VALUES
   ('POINT(1 2)'::geometry),
@@ -248,7 +248,7 @@ POINT M (1 2 0)
 POINT M (1 2 4)
 GEOMETRYCOLLECTION M (MULTIPOINT M (1 2 0, 4 5 0))
 
-query T
+query T nosort
 SELECT st_astext(st_force3dm(geom, 7)) FROM
 ( VALUES
   ('POINT(1 2)'::geometry),
@@ -262,7 +262,7 @@ POINT M (1 2 3)
 POINT M (1 2 7)
 POINT M (1 2 4)
 
-query T
+query T nosort
 SELECT st_astext(st_force4d(geom)) FROM
 ( VALUES
   ('POINT(1 2)'::geometry),
@@ -278,7 +278,7 @@ POINT ZM (1 2 3 0)
 POINT ZM (1 2 3 4)
 POLYGON ZM ((1 2 0 0, 5 5 0 0, 0 8 0 0, 1 2 0 0))
 
-query T
+query T nosort
 SELECT st_astext(st_force4d(geom, 7)) FROM
 ( VALUES
   ('POINT(1 2)'::geometry),
@@ -292,7 +292,7 @@ POINT ZM (1 2 7 3)
 POINT ZM (1 2 3 0)
 POINT ZM (1 2 3 4)
 
-query T
+query T nosort
 SELECT st_astext(st_force4d(geom, 7, 17)) FROM
 ( VALUES
   ('POINT(1 2)'::geometry),
@@ -308,7 +308,7 @@ POINT ZM (1 2 3 17)
 POINT ZM (1 2 3 4)
 GEOMETRYCOLLECTION ZM (POINT ZM EMPTY, LINESTRING ZM (1 2 7 17, 3 4 7 17))
 
-query T
+query T nosort
 SELECT st_astext(st_addmeasure(geom, 0, 10)) FROM
 ( VALUES
   ('LINESTRING(0 0, 1 1, 2 2)'::geometry),
@@ -348,7 +348,7 @@ SELECT distinct(st_astext(geom)) FROM
 ----
 MULTIPOINT Z (0 0 0, 8 4 5, 6 6 7)
 
-query T
+query T nosort
 SELECT st_astext(st_snaptogrid(geom, 'POINT(2 2)'::geometry, 2, 3, 5, 4)) FROM
 ( VALUES
   ('POINT(2 1)'::geometry),
@@ -383,7 +383,7 @@ SELECT st_length('LINESTRING M(0 0 -25, 1 1 -50, 2 2 0)')
 ----
 2.8284271247461903
 
-query TTT
+query TTT nosort
 SELECT
   encode(ST_AsTWKB(t, 5), 'hex'),
   encode(ST_AsTWKB(t, 5, 3), 'hex'),
@@ -397,3 +397,14 @@ FROM ( VALUES
 a10080b518c09a0c                                                a10080b518c09a0c                                                      a10080b518c09a0c
 a208030280b518c09a0c0e04c0cf24c0843d070a                        a2080f0280b518c09a0cb06d04c0cf24c0843dbf3e0a                          a2088f0280b518c09a0cb06dc0b802c0cf24c0843dbf3ea08d06
 a30801010480b518c0cf2402c09a0cc09a0c00ffb418bf9a0c0ac09a0c0009  a3080d010480b518c0cf24d00fc09a0cc09a0c00ffb418bf9a0c904ec09a0c008f4e  a3080d010480b518c0cf24d00fc09a0cc09a0c00ffb418bf9a0c904ec09a0c008f4e
+
+# Regression test for incorrectly not using DNull represenation for empty
+# geometry which then led to an internal error on the remote node (#106884).
+statement ok
+CREATE TABLE t106884 AS SELECT 1;
+SELECT st_asmvtgeom(
+          '01060000C000000000'::GEOMETRY,
+          'BOX(-2.4310452547766257 -0.7340617188515679,1.4606149586106913 1.509111744681483)'::BOX2D,
+          1::INT4
+        )::GEOMETRY
+        FROM t106884;

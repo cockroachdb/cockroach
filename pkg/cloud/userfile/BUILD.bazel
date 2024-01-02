@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -32,9 +31,8 @@ go_test(
         "file_table_storage_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
-    embed = [":userfile"],
     deps = [
+        ":userfile",
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/cloud",
@@ -46,7 +44,6 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/util/leaktest",
@@ -55,5 +52,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

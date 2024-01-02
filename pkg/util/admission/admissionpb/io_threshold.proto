@@ -23,4 +23,6 @@ message IOThreshold {
   int64 l0_num_sub_levels_threshold = 2;
   int64 l0_num_files = 3;
   int64 l0_num_files_threshold = 4;
+  int64 l0_size = 5;
+  int64 l0_minimum_size_per_sub_level = 6;
 }

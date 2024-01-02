@@ -39,18 +39,18 @@ import (
 // make it shorter.
 func registerSnapshotOverload(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:      "admission-control/snapshot-overload",
-		Owner:     registry.OwnerAdmissionControl,
-		Benchmark: true,
-		Tags:      registry.Tags(`weekly`),
-		Cluster:   r.MakeClusterSpec(4, spec.CPU(8)),
-		Leases:    registry.MetamorphicLeases,
+		Name:             "admission-control/snapshot-overload",
+		Owner:            registry.OwnerAdmissionControl,
+		Benchmark:        true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Weekly),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(8)),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount < 4 {
 				t.Fatalf("expected at least 4 nodes, found %d", c.Spec().NodeCount)
 			}
 
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 			crdbNodes := c.Spec().NodeCount - 1
 			workloadNode := crdbNodes + 1
 			for i := 1; i <= crdbNodes; i++ {

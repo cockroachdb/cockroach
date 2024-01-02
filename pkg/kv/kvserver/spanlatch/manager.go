@@ -436,7 +436,16 @@ func (m *Manager) insertLocked(lg *Guard) {
 }
 
 func (m *Manager) nextIDLocked() uint64 {
-	m.idAlloc++
+	// We allocate IDs from the top of the uint64 space and in reverse order.
+	// This is done to order latches in the tree on a same key in reverse order
+	// of acquisition. Doing so ensures that when we iterate over the tree and
+	// see a key with many conflicting latches, we visit the latches on that key
+	// in the reverse order that they will be released. In doing so, we minimize
+	// the number of open channels that we wait on (calls to waitForSignal) and
+	// minimize the number of goroutine scheduling points. This is important to
+	// avoid spikes in runnable goroutine after each request completes, which
+	// can negatively affect node health.
+	m.idAlloc--
 	return m.idAlloc
 }
 

@@ -38,7 +38,7 @@ s                {rowid}       1          1               0           true
 let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t] WHERE statistics_name = 's' AND column_names = '{j}'
 
-query TIRI colnames
+query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_1
 ----
 upper_bound                             range_rows  distinct_range_rows  equal_rows

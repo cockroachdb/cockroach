@@ -238,8 +238,8 @@ func writeToRangeLogTable(
 		// Stop writing when the server shuts down.
 		asyncCtx, stopCancel := stopper.WithCancelOnQuiesce(asyncCtx)
 
-		const perAttemptTimeout = 5 * time.Second
-		const maxAttempts = 5
+		const perAttemptTimeout = 20 * time.Second
+		const maxAttempts = 3
 		retryOpts := base.DefaultRetryOptions()
 		retryOpts.Closer = asyncCtx.Done()
 		retryOpts.MaxRetries = maxAttempts

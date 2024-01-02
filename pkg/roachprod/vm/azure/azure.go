@@ -27,7 +27,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/profiles/latest/resources/mgmt/subscriptions"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/to"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
@@ -54,14 +53,19 @@ var providerInstance = &Provider{}
 func Init() error {
 	const cliErr = "please install the Azure CLI utilities " +
 		"(https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)"
-	const authErr = "please use `az login` to login to Azure"
+	const authErr = "unable to authenticate; please use `az login` or double check environment variables"
 
 	providerInstance = New()
 	providerInstance.OperationTimeout = 10 * time.Minute
 	providerInstance.SyncDelete = false
-	if _, err := exec.LookPath("az"); err != nil {
-		vm.Providers[ProviderName] = flagstub.New(&Provider{}, cliErr)
-		return err
+
+	// If the appropriate environment variables are not set for api access,
+	// then the authenticated CLI must be installed.
+	if !hasEnvAuth {
+		if _, err := exec.LookPath("az"); err != nil {
+			vm.Providers[ProviderName] = flagstub.New(&Provider{}, cliErr)
+			return err
+		}
 	}
 	if _, err := providerInstance.getAuthToken(); err != nil {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, authErr)
@@ -83,11 +87,21 @@ type Provider struct {
 		syncutil.Mutex
 
 		authorizer     autorest.Authorizer
-		subscription   subscriptions.Subscription
+		subscriptionId string
 		resourceGroups map[string]resources.Group
 		subnets        map[string]network.Subnet
 		securityGroups map[string]network.SecurityGroup
 	}
+}
+
+func (p *Provider) SupportsSpotVMs() bool {
+	return false
+}
+
+func (p *Provider) GetPreemptedSpotVMs(
+	l *logger.Logger, vms vm.List, since time.Time,
+) ([]vm.PreemptedVM, error) {
+	return nil, nil
 }
 
 func (p *Provider) CreateVolumeSnapshot(
@@ -157,6 +171,16 @@ func getAzureDefaultLabelMap(opts vm.CreateOpts) map[string]string {
 	m := vm.GetDefaultLabelMap(opts)
 	m[vm.TagCreated] = timeutil.Now().Format(time.RFC3339)
 	return m
+}
+
+func (p *Provider) AddLabels(l *logger.Logger, vms vm.List, labels map[string]string) error {
+	l.Printf("adding labels to Azure VMs not yet supported")
+	return nil
+}
+
+func (p *Provider) RemoveLabels(l *logger.Logger, vms vm.List, labels []string) error {
+	l.Printf("removing labels from Azure VMs not yet supported")
+	return nil
 }
 
 // Create implements vm.Provider.
@@ -231,15 +255,17 @@ func (p *Provider) Create(
 			location := providerOpts.Locations[locIdx]
 
 			// Create a resource group within the location.
-			group, err := p.getOrCreateResourceGroup(
-				ctx, getClusterResourceGroupName(location), location, clusterTags)
+			group, err := p.getOrCreateResourceGroup(ctx, getClusterResourceGroupName(location), location, clusterTags)
 			if err != nil {
 				return err
 			}
 
-			p.mu.Lock()
-			subnet, ok := p.mu.subnets[location]
-			p.mu.Unlock()
+			subnet, ok := func() (network.Subnet, bool) {
+				p.mu.Lock()
+				defer p.mu.Unlock()
+				s, ok := p.mu.subnets[location]
+				return s, ok
+			}()
 			if !ok {
 				return errors.Errorf("missing subnet for location %q", location)
 			}
@@ -270,7 +296,7 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	if err != nil {
 		return err
 	}
-	client := compute.NewVirtualMachinesClient(*sub.ID)
+	client := compute.NewVirtualMachinesClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return err
 	}
@@ -318,7 +344,7 @@ func (p *Provider) DeleteCluster(l *logger.Logger, name string) error {
 	if err != nil {
 		return err
 	}
-	client := resources.NewGroupsClient(*sub.SubscriptionID)
+	client := resources.NewGroupsClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return err
 	}
@@ -369,7 +395,7 @@ func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration)
 	if err != nil {
 		return err
 	}
-	client := compute.NewVirtualMachinesClient(*sub.SubscriptionID)
+	client := compute.NewVirtualMachinesClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return err
 	}
@@ -432,8 +458,9 @@ func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 		return "", errors.Wrapf(err, "could not decode JWT claims segment")
 	}
 
-	// This is in an email address format, we just want the username.
-	return data.Username[:strings.Index(data.Username, "@")], nil
+	// If this is in an email address format, we just want the username.
+	username, _, _ := strings.Cut(data.Username, "@")
+	return username, nil
 }
 
 // List implements the vm.Provider interface. This will query all
@@ -448,7 +475,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 	}
 
 	// We're just going to list all VMs and filter.
-	client := compute.NewVirtualMachinesClient(*sub.SubscriptionID)
+	client := compute.NewVirtualMachinesClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return nil, err
 	}
@@ -457,6 +484,11 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 	if err != nil {
 		return nil, err
 	}
+
+	// Keep track of which clusters we find through listing VMs.
+	// If later we need to list resource groups to find empty clusters,
+	// we want to make sure we don't add anything twice.
+	foundClusters := make(map[string]bool)
 
 	var ret vm.List
 	for it.NotDone() {
@@ -483,9 +515,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 			MachineType: string(found.HardwareProfile.VMSize),
 			// We add a fake availability-zone suffix since other roachprod
 			// code assumes particular formats. For example, "eastus2z".
-			Zone:        *found.Location + "z",
-			SQLPort:     config.DefaultSQLPort,
-			AdminUIPort: config.DefaultAdminUIPort,
+			Zone: *found.Location + "z",
 		}
 
 		if createdPtr := found.Tags[vm.TagCreated]; createdPtr == nil {
@@ -515,12 +545,87 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 			return nil, err
 		}
 
+		clusterName, _ := m.ClusterName()
+		foundClusters[clusterName] = true
 		ret = append(ret, m)
 
 		if err := it.NextWithContext(ctx); err != nil {
 			return nil, err
 		}
+	}
 
+	// Azure allows for clusters to exist even if the attached VM no longer exists.
+	// Such a cluster won't be found by listing all azure VMs like above.
+	// Normally we don't want to access these clusters except for deleting them.
+	if opts.IncludeEmptyClusters {
+		groupsClient := resources.NewGroupsClient(sub)
+		if groupsClient.Authorizer, err = p.getAuthorizer(); err != nil {
+			return nil, err
+		}
+
+		// List all resource groups for clusters under the subscription.
+		filter := fmt.Sprintf("tagName eq '%s'", vm.TagCluster)
+		it, err := groupsClient.ListComplete(ctx, filter, nil /* limit */)
+		if err != nil {
+			return nil, err
+		}
+
+		for it.NotDone() {
+			resourceGroup := it.Value()
+			if _, ok := resourceGroup.Tags[vm.TagRoachprod]; !ok {
+				if err := it.NextWithContext(ctx); err != nil {
+					return nil, err
+				}
+				continue
+			}
+
+			// Resource Groups have the name format "user-<clusterid>-<region>",
+			// while clusters have the name format "user-<clusterid>".
+			parts := strings.Split(*resourceGroup.Name, "-")
+			clusterName := strings.Join(parts[:len(parts)-1], "-")
+			if foundClusters[clusterName] {
+				if err := it.NextWithContext(ctx); err != nil {
+					return nil, err
+				}
+				continue
+			}
+
+			// The cluster does not have a VM, but roachprod assumes that this is not
+			// possible and implements providers on the VM level. A VM-less cluster will
+			// not have access to provider info or methods. To still allow this cluster to
+			// be deleted, we must create a fake VM, indicated by EmptyCluster.
+			m := vm.VM{
+				Name:       *resourceGroup.Name,
+				Provider:   ProviderName,
+				RemoteUser: remoteUser,
+				VPC:        "global",
+				// We add a fake availability-zone suffix since other roachprod
+				// code assumes particular formats. For example, "eastus2z".
+				Zone:         *resourceGroup.Location + "z",
+				EmptyCluster: true,
+			}
+
+			// We ignore any parsing errors here as roachprod tries to destroy "bad VMs".
+			// We don't want that since this is a fake VM, we need to destroy the resource
+			// group instead. This will be done by GC when it sees that no m.CreatedAt exists.
+			createdPtr := resourceGroup.Tags[vm.TagCreated]
+			if createdPtr != nil {
+				parsed, _ := time.Parse(time.RFC3339, *createdPtr)
+				m.CreatedAt = parsed
+			}
+
+			lifetimePtr := resourceGroup.Tags[vm.TagLifetime]
+			if lifetimePtr != nil {
+				parsed, _ := time.ParseDuration(*lifetimePtr)
+				m.Lifetime = parsed
+			}
+
+			ret = append(ret, m)
+
+			if err := it.NextWithContext(ctx); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return ret, nil
@@ -546,16 +651,21 @@ func (p *Provider) createVM(
 		lun := 42
 		startupArgs.AttachedDiskLun = &lun
 	}
+
+	// In the future, when all tests are run on Ubuntu 22.04, we can remove this
+	// check and always enable RSA SHA1 and create a tcpdump symlink.
+	startupArgs.IsUbuntu22 = !opts.UbuntuVersion.IsOverridden()
+
 	startupScript, err := evalStartupTemplate(startupArgs)
 	if err != nil {
 		return vm, err
 	}
 	sub, err := p.getSubscription(ctx)
 	if err != nil {
-		return
+		return compute.VirtualMachine{}, err
 	}
 
-	client := compute.NewVirtualMachinesClient(*sub.SubscriptionID)
+	client := compute.NewVirtualMachinesClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return
 	}
@@ -563,11 +673,11 @@ func (p *Provider) createVM(
 	// We first need to allocate a NIC to give the VM network access
 	ip, err := p.createIP(l, ctx, group, name, providerOpts)
 	if err != nil {
-		return
+		return compute.VirtualMachine{}, err
 	}
 	nic, err := p.createNIC(l, ctx, group, ip, subnet)
 	if err != nil {
-		return
+		return compute.VirtualMachine{}, err
 	}
 
 	tags := make(map[string]*string)
@@ -598,14 +708,14 @@ func (p *Provider) createVM(
 				// From https://discourse.ubuntu.com/t/find-ubuntu-images-on-microsoft-azure/18918
 				// You can find available versions by running the following command:
 				// az vm image list --all --publisher Canonical
-				// To get the latest 20.04 version:
+				// To get the latest 22.04 version:
 				// az vm image list --all --publisher Canonical | \
-				// jq '[.[] | select(.sku=="20_04-lts")] | max_by(.version)'
+				// jq '[.[] | select(.sku=="22_04-lts")] | max_by(.version)'
 				ImageReference: &compute.ImageReference{
 					Publisher: to.StringPtr("Canonical"),
-					Offer:     to.StringPtr("0001-com-ubuntu-server-focal"),
-					Sku:       to.StringPtr("20_04-lts"),
-					Version:   to.StringPtr("20.04.202109080"),
+					Offer:     to.StringPtr("0001-com-ubuntu-server-jammy"),
+					Sku:       to.StringPtr("22_04-lts"),
+					Version:   to.StringPtr("22.04.202309190"),
 				},
 				OsDisk: &compute.OSDisk{
 					CreateOption: compute.DiskCreateOptionTypesFromImage,
@@ -644,6 +754,20 @@ func (p *Provider) createVM(
 			},
 		},
 	}
+	if opts.UbuntuVersion.IsOverridden() {
+		var image []string
+		image, err = getUbuntuImage(opts.UbuntuVersion)
+		if err != nil {
+			return compute.VirtualMachine{}, err
+		}
+		vm.VirtualMachineProperties.StorageProfile.ImageReference = &compute.ImageReference{
+			Publisher: to.StringPtr("Canonical"),
+			Offer:     to.StringPtr(image[0]),
+			Sku:       to.StringPtr(image[1]),
+			Version:   to.StringPtr(image[2]),
+		}
+		l.Printf("Overriding default Ubuntu image with %s", image)
+	}
 	if !opts.SSDOpts.UseLocalSSD {
 		caching := compute.CachingTypesNone
 
@@ -656,7 +780,7 @@ func (p *Provider) createVM(
 			caching = compute.CachingTypesNone
 		default:
 			err = errors.Newf("unsupported caching behavior: %s", providerOpts.DiskCaching)
-			return
+			return compute.VirtualMachine{}, err
 		}
 		dataDisks := []compute.DataDisk{
 			{
@@ -671,7 +795,7 @@ func (p *Provider) createVM(
 			var ultraDisk compute.Disk
 			ultraDisk, err = p.createUltraDisk(l, ctx, group, name+"-ultra-disk", providerOpts)
 			if err != nil {
-				return
+				return compute.VirtualMachine{}, err
 			}
 			// UltraSSD specific disk configurations.
 			dataDisks[0].CreateOption = compute.DiskCreateOptionTypesAttach
@@ -693,7 +817,7 @@ func (p *Provider) createVM(
 			}
 		default:
 			err = errors.Newf("unsupported network disk type: %s", providerOpts.NetworkDiskType)
-			return
+			return compute.VirtualMachine{}, err
 		}
 
 		vm.StorageProfile.DataDisks = &dataDisks
@@ -720,14 +844,12 @@ func (p *Provider) createNIC(
 	if err != nil {
 		return
 	}
-	client := network.NewInterfacesClient(*sub.SubscriptionID)
+	client := network.NewInterfacesClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return
 	}
 
-	p.mu.Lock()
-	sg := p.mu.securityGroups[p.getVnetNetworkSecurityGroupName(*group.Location)]
-	p.mu.Unlock()
+	_, sg := p.getResourcesAndSecurityGroupByName("", p.getVnetNetworkSecurityGroupName(*group.Location))
 
 	future, err := client.CreateOrUpdate(ctx, *group.Name, *ip.Name, network.Interface{
 		Name:     ip.Name,
@@ -761,12 +883,88 @@ func (p *Provider) createNIC(
 	return
 }
 
+// securityRules returns an array of TCP security rules and contains
+// a list of well-known, and roachtest specific ports.
+func securityRules() *[]network.SecurityRule {
+	allowTCP := func(name string, priority int32, direction network.SecurityRuleDirection, destPortRange string) network.SecurityRule {
+		suffix := ""
+		switch direction {
+		case network.SecurityRuleDirectionInbound:
+			suffix = "_Inbound"
+		case network.SecurityRuleDirectionOutbound:
+			suffix = "_Outbound"
+		default:
+		}
+		res := network.SecurityRule{
+			Name: to.StringPtr(name + suffix),
+			SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+				Priority:                 to.Int32Ptr(priority),
+				Protocol:                 network.SecurityRuleProtocolTCP,
+				Access:                   network.SecurityRuleAccessAllow,
+				Direction:                direction,
+				SourceAddressPrefix:      to.StringPtr("*"),
+				SourcePortRange:          to.StringPtr("*"),
+				DestinationAddressPrefix: to.StringPtr("*"),
+				DestinationPortRange:     to.StringPtr(destPortRange),
+			},
+		}
+		return res
+	}
+
+	namedInbound := map[string]string{
+		"SSH":                "22",
+		"HTTP":               "80",
+		"HTTPS":              "43",
+		"CockroachPG":        "26257",
+		"CockroachAdmin":     "26258",
+		"Grafana":            "3000",
+		"Prometheus":         "9090",
+		"Kafka":              "9092",
+		"WorkloadPPROF":      "33333",
+		"WorkloadPrometheus": "2112-2120",
+	}
+
+	// The names for these are generated in the form Roachtest_<index>_Inbound.
+	// The mapped roachtests are not exhaustive, and at some point will be
+	// cumbersome to keep adding exceptions for.
+	// TODO: (miral) Consider removing all rules if this keeps tripping roachtests.
+	genericInbound := []string{
+		"8011",        // multitenant
+		"8081",        // backup/*
+		"9011",        // smoketest/secure/multitenan
+		"9081-9102",   // smoketest/secure/multitenant
+		"20011-20016", //multitenant/upgrade
+		"27257",       //acceptance/gossip/restart-node-one
+		"27259-27280", // various multitenant tenant SQL ports
+		"30258",       //acceptance/multitenant
+	}
+
+	// The extra 1 is for the single allow all TCP outbound allowTCP.
+	firewallRules := make([]network.SecurityRule, 1+len(namedInbound)+len(genericInbound))
+	firewallRules[0] = allowTCP("TCP_All", 300, network.SecurityRuleDirectionOutbound, "*")
+	r := 1
+	priority := 300
+	for ruleName, port := range namedInbound {
+		firewallRules[r] = allowTCP(ruleName, int32(priority+r), network.SecurityRuleDirectionInbound, port)
+		r++
+	}
+
+	for i, port := range genericInbound {
+		firewallRules[r] = allowTCP(fmt.Sprintf("Roachtest_%d", i), int32(priority+r), network.SecurityRuleDirectionInbound, port)
+		r++
+	}
+	return &firewallRules
+}
+
 func (p *Provider) getOrCreateNetworkSecurityGroup(
 	ctx context.Context, name string, resourceGroup resources.Group,
 ) (network.SecurityGroup, error) {
-	p.mu.Lock()
-	group, ok := p.mu.securityGroups[name]
-	p.mu.Unlock()
+	group, ok := func() (network.SecurityGroup, bool) {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		g, ok := p.mu.securityGroups[name]
+		return g, ok
+	}()
 	if ok {
 		return group, nil
 	}
@@ -775,7 +973,7 @@ func (p *Provider) getOrCreateNetworkSecurityGroup(
 	if err != nil {
 		return network.SecurityGroup{}, err
 	}
-	client := network.NewSecurityGroupsClient(*sub.SubscriptionID)
+	client := network.NewSecurityGroupsClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return network.SecurityGroup{}, err
 	}
@@ -785,145 +983,14 @@ func (p *Provider) getOrCreateNetworkSecurityGroup(
 
 	cacheAndReturn := func(group network.SecurityGroup) (network.SecurityGroup, error) {
 		p.mu.Lock()
+		defer p.mu.Unlock()
 		p.mu.securityGroups[name] = group
-		p.mu.Unlock()
 		return group, nil
 	}
 
 	future, err := client.CreateOrUpdate(ctx, *resourceGroup.Name, name, network.SecurityGroup{
 		SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
-			SecurityRules: &[]network.SecurityRule{
-				{
-					Name: to.StringPtr("SSH_Inbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(300),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("22"),
-					},
-				},
-				{
-					Name: to.StringPtr("SSH_Outbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(301),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionOutbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("*"),
-					},
-				},
-				{
-					Name: to.StringPtr("HTTP_Inbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(320),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("80"),
-					},
-				},
-				{
-					Name: to.StringPtr("HTTP_Outbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(321),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionOutbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("*"),
-					},
-				},
-				{
-					Name: to.StringPtr("HTTPS_Inbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(340),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("443"),
-					},
-				},
-				{
-					Name: to.StringPtr("HTTPS_Outbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(341),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionOutbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("*"),
-					},
-				},
-				{
-					Name: to.StringPtr("CockroachPG_Inbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(342),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("26257"),
-					},
-				},
-				{
-					Name: to.StringPtr("CockroachAdmin_Inbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(343),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("26258"),
-					},
-				},
-				{
-					Name: to.StringPtr("Grafana_Inbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(344),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("3000"),
-					},
-				},
-				{
-					Name: to.StringPtr("Prometheus_Inbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(345),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("9090"),
-					},
-				},
-			},
+			SecurityRules: securityRules(),
 		},
 		Location: resourceGroup.Location,
 	})
@@ -957,7 +1024,10 @@ func (p *Provider) createVNets(
 		return nil, err
 	}
 
-	groupsClient := resources.NewGroupsClient(*sub.SubscriptionID)
+	groupsClient := resources.NewGroupsClient(sub)
+	if groupsClient.Authorizer, err = p.getAuthorizer(); err != nil {
+		return nil, err
+	}
 
 	vnetResourceGroupTags := make(map[string]*string)
 	vnetResourceGroupTags[tagComment] = to.StringPtr("DO NOT DELETE: Used by all roachprod clusters")
@@ -1008,9 +1078,7 @@ func (p *Provider) createVNets(
 	newSubnetsCreated := false
 
 	for _, location := range providerOpts.Locations {
-		p.mu.Lock()
-		group := p.mu.resourceGroups[vnetResourceGroupName(location)]
-		p.mu.Unlock()
+		group, _ := p.getResourcesAndSecurityGroupByName(vnetResourceGroupName(location), "")
 		// Prefix already exists for the resource group.
 		if prefixString := group.Tags[tagSubnet]; prefixString != nil {
 			prefix, err := strconv.Atoi(*prefixString)
@@ -1025,18 +1093,18 @@ func (p *Provider) createVNets(
 			newSubnetsCreated = true
 			prefix := nextAvailablePrefix()
 			prefixesByLocation[location] = prefix
-			p.mu.Lock()
-			group := p.mu.resourceGroups[vnetResourceGroupName(location)]
-			p.mu.Unlock()
+			group, _ := p.getResourcesAndSecurityGroupByName(vnetResourceGroupName(location), "")
 			group, err = setVNetSubnetPrefix(group, prefix)
 			if err != nil {
 				return nil, errors.Wrapf(err, "for location %q", location)
 			}
 			// We just updated the VNet Subnet prefix on the resource group -- update
 			// the cached entry to reflect that.
-			p.mu.Lock()
-			p.mu.resourceGroups[vnetResourceGroupName(location)] = group
-			p.mu.Unlock()
+			func() {
+				p.mu.Lock()
+				defer p.mu.Unlock()
+				p.mu.resourceGroups[vnetResourceGroupName(location)] = group
+			}()
 		}
 	}
 
@@ -1047,10 +1115,7 @@ func (p *Provider) createVNets(
 	ret := make(map[string]network.VirtualNetwork)
 	vnets := make([]network.VirtualNetwork, len(ret))
 	for location, prefix := range prefixesByLocation {
-		p.mu.Lock()
-		resourceGroup := p.mu.resourceGroups[vnetResourceGroupName(location)]
-		networkSecurityGroup := p.mu.securityGroups[p.getVnetNetworkSecurityGroupName(location)]
-		p.mu.Unlock()
+		resourceGroup, networkSecurityGroup := p.getResourcesAndSecurityGroupByName(vnetResourceGroupName(location), p.getVnetNetworkSecurityGroupName(location))
 		if vnet, _, err := p.createVNet(l, ctx, resourceGroup, networkSecurityGroup, prefix, providerOpts); err == nil {
 			ret[location] = vnet
 			vnets = append(vnets, vnet)
@@ -1083,7 +1148,7 @@ func (p *Provider) createVNet(
 	if err != nil {
 		return
 	}
-	client := network.NewVirtualNetworksClient(*sub.SubscriptionID)
+	client := network.NewVirtualNetworksClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return
 	}
@@ -1121,8 +1186,8 @@ func (p *Provider) createVNet(
 	}
 	subnet = (*vnet.Subnets)[0]
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.mu.subnets[*resourceGroup.Location] = subnet
-	p.mu.Unlock()
 	l.Printf("created Azure VNet %q in %q with prefix %d", vnetName, *resourceGroup.Name, prefix)
 	return
 }
@@ -1136,7 +1201,7 @@ func (p *Provider) createVNetPeerings(
 	if err != nil {
 		return err
 	}
-	client := network.NewVirtualNetworkPeeringsClient(*sub.SubscriptionID)
+	client := network.NewVirtualNetworkPeeringsClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return err
 	}
@@ -1201,7 +1266,7 @@ func (p *Provider) createIP(
 	if err != nil {
 		return
 	}
-	ipc := network.NewPublicIPAddressesClient(*sub.SubscriptionID)
+	ipc := network.NewPublicIPAddressesClient(sub)
 	if ipc.Authorizer, err = p.getAuthorizer(); err != nil {
 		return
 	}
@@ -1245,12 +1310,12 @@ func (p *Provider) fillNetworkDetails(ctx context.Context, m *vm.VM, nicID azure
 		return err
 	}
 
-	nicClient := network.NewInterfacesClient(*sub.SubscriptionID)
+	nicClient := network.NewInterfacesClient(sub)
 	if nicClient.Authorizer, err = p.getAuthorizer(); err != nil {
 		return err
 	}
 
-	ipClient := network.NewPublicIPAddressesClient(*sub.SubscriptionID)
+	ipClient := network.NewPublicIPAddressesClient(sub)
 	ipClient.Authorizer = nicClient.Authorizer
 
 	iface, err := nicClient.Get(ctx, nicID.resourceGroup, nicID.resourceName, "" /*expand*/)
@@ -1294,17 +1359,20 @@ func (p *Provider) getOrCreateResourceGroup(
 ) (resources.Group, error) {
 
 	// First, check the local provider cache.
-	p.mu.Lock()
-	group, ok := p.mu.resourceGroups[name]
-	p.mu.Unlock()
+	group, ok := func() (resources.Group, bool) {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		g, ok := p.mu.resourceGroups[name]
+		return g, ok
+	}()
 	if ok {
 		return group, nil
 	}
 
 	cacheAndReturn := func(group resources.Group) (resources.Group, error) {
 		p.mu.Lock()
+		defer p.mu.Unlock()
 		p.mu.resourceGroups[name] = group
-		p.mu.Unlock()
 		return group, nil
 	}
 
@@ -1313,7 +1381,7 @@ func (p *Provider) getOrCreateResourceGroup(
 		return resources.Group{}, err
 	}
 
-	client := resources.NewGroupsClient(*sub.SubscriptionID)
+	client := resources.NewGroupsClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return resources.Group{}, err
 	}
@@ -1354,7 +1422,7 @@ func (p *Provider) createUltraDisk(
 		return compute.Disk{}, err
 	}
 
-	client := compute.NewDisksClient(*sub.SubscriptionID)
+	client := compute.NewDisksClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return compute.Disk{}, err
 	}
@@ -1388,35 +1456,85 @@ func (p *Provider) createUltraDisk(
 	return disk, err
 }
 
-// getSubscription chooses the first available subscription. The value
-// is memoized in the Provider instance.
-func (p *Provider) getSubscription(
-	ctx context.Context,
-) (sub subscriptions.Subscription, err error) {
-	p.mu.Lock()
-	sub = p.mu.subscription
-	p.mu.Unlock()
-
-	if sub.SubscriptionID != nil {
-		return
-	}
-
-	sc := subscriptions.NewClient()
-	if sc.Authorizer, err = p.getAuthorizer(); err != nil {
-		return
-	}
-
-	page, err := sc.List(ctx)
-	if err == nil {
-		if len(page.Values()) == 0 {
-			err = errors.New("did not find Azure subscription")
-			return sub, err
-		}
-		sub = page.Values()[0]
-
+// getSubscription returns env.AZURE_SUBSCRIPTION_ID if it exists
+// or the first subscription when listing all available via an API call.
+// The value is memoized in the Provider instance.
+func (p *Provider) getSubscription(ctx context.Context) (string, error) {
+	subscriptionId := func() string {
 		p.mu.Lock()
-		p.mu.subscription = page.Values()[0]
-		p.mu.Unlock()
+		defer p.mu.Unlock()
+		return p.mu.subscriptionId
+	}()
+
+	if subscriptionId != "" {
+		return subscriptionId, nil
 	}
-	return
+
+	subscriptionId = os.Getenv("AZURE_SUBSCRIPTION_ID")
+
+	// Fallback to retrieving the first subscription
+	if subscriptionId == "" {
+		authorizer, err := p.getAuthorizer()
+		if err != nil {
+			return "", err
+		}
+		sc := subscriptions.NewClient()
+		sc.Authorizer = authorizer
+
+		page, err := sc.List(ctx)
+		if err == nil {
+			if len(page.Values()) == 0 {
+				err = errors.New("did not find Azure subscription")
+				return "", err
+			}
+			s := page.Values()[0].SubscriptionID
+			if s != nil {
+				subscriptionId = *s
+			}
+		}
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.subscriptionId = subscriptionId
+	return subscriptionId, nil
+}
+
+// getResourceGroupByName receives a string name and returns
+// the resources.Group associated with it.
+func (p *Provider) getResourcesAndSecurityGroupByName(
+	rName string, sName string,
+) (resources.Group, network.SecurityGroup) {
+	var rGroup resources.Group
+	var sGroup network.SecurityGroup
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if rName != "" {
+		rGroup = p.mu.resourceGroups[rName]
+	}
+	if sName != "" {
+		sGroup = p.mu.securityGroups[sName]
+	}
+	return rGroup, sGroup
+}
+
+var (
+	// We define the actual image here because it's different for every provider.
+	focalFossa = vm.UbuntuImages{
+		DefaultImage: "0001-com-ubuntu-server-focal;20_04-lts;20.04.202109080",
+	}
+
+	azUbuntuImages = map[vm.UbuntuVersion]vm.UbuntuImages{
+		vm.FocalFossa: focalFossa,
+	}
+)
+
+// getUbuntuImage returns the correct Ubuntu image for the specified Ubuntu version.
+func getUbuntuImage(version vm.UbuntuVersion) ([]string, error) {
+	image, ok := azUbuntuImages[version]
+	if ok {
+		return strings.Split(image.DefaultImage, ";"), nil
+	}
+
+	return nil, errors.Errorf("Unknown Ubuntu version specified.")
 }

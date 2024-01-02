@@ -1,0 +1,33 @@
+# LogicTest: cockroach-go-testserver-upgrade-to-master
+
+# This test verifies that when a cluster is upgraded, it preserves the TTL
+# job configuration on a table.
+
+query T
+SELECT version FROM [SHOW CLUSTER SETTING version]
+----
+23.1
+
+statement ok
+CREATE TABLE tbl (
+  id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes')
+
+upgrade all
+
+# Verify that the cluster version upgrades have begun by asserting we're no
+# longer on the previous version. Note that the first cluster upgrade is the
+# one that repairs all descriptors.
+query B retry
+SELECT version != '23.1' FROM [SHOW CLUSTER SETTING version]
+----
+true
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+----
+CREATE TABLE public.tbl (
+  id INT8 NOT NULL,
+  crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+  CONSTRAINT tbl_pkey PRIMARY KEY (id ASC)
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL)

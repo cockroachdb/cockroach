@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
@@ -22,6 +21,8 @@ go_library(
         "analyze.go",
         "annotation.go",
         "backup.go",
+        "batch.go",
+        "call.go",
         "changefeed.go",
         "col_name.go",
         "comment_on_column.go",
@@ -37,6 +38,7 @@ go_library(
         "constraint.go",
         "copy.go",
         "create.go",
+        "create_routine.go",
         "cursor.go",
         "data_placement.go",
         "datum.go",
@@ -102,7 +104,6 @@ go_library(
         "type_check.go",
         "type_name.go",
         "typing.go",
-        "udf.go",
         "union.go",
         "unlisten.go",
         "unsupported_error.go",
@@ -125,8 +126,10 @@ go_library(
         "//pkg/col/typeconv",  # keep
         "//pkg/geo",
         "//pkg/geo/geopb",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
+        "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
@@ -179,6 +182,7 @@ go_test(
         "collatedstring_test.go",
         "compare_test.go",
         "constant_test.go",
+        "create_routine_test.go",
         "datum_integration_test.go",
         "datum_invariants_test.go",
         "datum_prev_next_test.go",
@@ -202,14 +206,13 @@ go_test(
         "pretty_test.go",
         "table_name_test.go",
         "time_test.go",
+        "txn_test.go",
         "type_check_internal_test.go",
         "type_check_test.go",
         "type_name_test.go",
         "typing_test.go",
-        "udf_test.go",
         "var_expr_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]) + ["//pkg/sql/parser:sql.y"],
     embed = [":tree"],
     deps = [
@@ -217,6 +220,7 @@ go_test(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/internal/rsg",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/settings/cluster",
@@ -307,5 +311,3 @@ disallowed_imports_test(
         "pkg/sql/catalog",
     ],
 )
-
-get_x_data(name = "get_x_data")

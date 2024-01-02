@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -84,13 +84,14 @@ func TestNumRangesInSpanContainedBy(t *testing.T) {
 		},
 	}
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107376),
 	})
 	ctx := context.Background()
-	defer tc.Stopper().Stop(ctx)
+	defer s.Stopper().Stop(ctx)
 
-	scratchKey := tc.ScratchRange(t)
+	scratchKey, err := s.ScratchRange()
+	require.NoError(t, err)
 	mkKey := func(prefix roachpb.Key, k string) roachpb.Key {
 		return append(prefix[:len(prefix):len(prefix)], k...)
 	}
@@ -106,8 +107,7 @@ func TestNumRangesInSpanContainedBy(t *testing.T) {
 			EndKey: mkEndKey(prefix, sp[1]),
 		}
 	}
-	db := tc.Server(0).DB()
-	dsp := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLPlanner
+	dsp := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).DistSQLPlanner
 	spanString := func(sp span) string {
 		return sp[0] + "-" + sp[1]
 	}
@@ -121,7 +121,8 @@ func TestNumRangesInSpanContainedBy(t *testing.T) {
 	run := func(t *testing.T, c testCase) {
 		prefix := encoding.EncodeStringAscending(scratchKey, t.Name())
 		for _, split := range c.splits {
-			tc.SplitRangeOrFatal(t, mkKey(prefix, split))
+			_, _, err = s.SplitRange(mkKey(prefix, split))
+			require.NoError(t, err)
 		}
 		outerSpan := mkSpan(prefix, c.outer)
 		for _, sc := range c.subtests {
@@ -130,7 +131,7 @@ func TestNumRangesInSpanContainedBy(t *testing.T) {
 				for _, sp := range sc.subSpans {
 					spans = append(spans, mkSpan(prefix, sp))
 				}
-				total, contained, err := sql.NumRangesInSpanContainedBy(ctx, db, dsp, outerSpan, spans)
+				total, contained, err := sql.NumRangesInSpanContainedBy(ctx, kvDB, dsp, outerSpan, spans)
 				require.NoError(t, err)
 				require.Equal(t, c.total, total)
 				require.Equal(t, sc.contained, contained)

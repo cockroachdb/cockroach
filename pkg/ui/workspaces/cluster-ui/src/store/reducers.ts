@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createAction, createReducer } from "@reduxjs/toolkit";
+import { createReducer } from "@reduxjs/toolkit";
 import { combineReducers, createStore } from "redux";
 import {
   ClusterLocksReqState,
@@ -27,12 +27,12 @@ import {
   TxnInsightDetailsCachedState,
 } from "./insightDetails/transactionInsightDetails";
 import {
-  StmtInsightsState,
   reducer as stmtInsights,
+  StmtInsightsState,
 } from "./insights/statementInsights";
 import {
-  TxnInsightsState,
   reducer as txnInsights,
+  TxnInsightsState,
 } from "./insights/transactionInsights";
 import { JobDetailsReducerState, reducer as job } from "./jobDetails";
 import { JobsState, reducer as jobs } from "./jobs";
@@ -58,7 +58,6 @@ import {
   TerminateQueryState,
 } from "./terminateQuery";
 import { reducer as uiConfig, UIConfigState } from "./uiConfig";
-import { DOMAIN_NAME } from "./utils";
 import {
   reducer as statementFingerprintInsights,
   StatementFingerprintInsightsCachedState,
@@ -70,8 +69,19 @@ import {
 } from "./clusterSettings/clusterSettings.reducer";
 import {
   KeyedDatabaseDetailsState,
-  reducer as databaseDetails,
+  KeyedDatabaseDetailsSpanStatsState,
+  databaseDetailsReducer,
+  databaseDetailsSpanStatsReducer,
 } from "./databaseDetails";
+import {
+  KeyedTableDetailsState,
+  reducer as tableDetails,
+} from "./databaseTableDetails/tableDetails.reducer";
+import {
+  JobProfilerExecutionDetailFilesState,
+  reducer as executionDetailFiles,
+} from "./jobs/jobProfiler.reducer";
+import { rootActions } from "./rootActions";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -87,9 +97,12 @@ export type AdminUiState = {
   indexStats: IndexStatsReducerState;
   jobs: JobsState;
   job: JobDetailsReducerState;
+  executionDetailFiles: JobProfilerExecutionDetailFilesState;
   clusterLocks: ClusterLocksReqState;
   databasesList: DatabasesListState;
   databaseDetails: KeyedDatabaseDetailsState;
+  databaseDetailsSpanStats: KeyedDatabaseDetailsSpanStatsState;
+  tableDetails: KeyedTableDetailsState;
   stmtInsights: StmtInsightsState;
   txnInsightDetails: TxnInsightDetailsCachedState;
   txnInsights: TxnInsightsState;
@@ -119,17 +132,16 @@ export const reducers = combineReducers<AdminUiState>({
   indexStats,
   jobs,
   job,
+  executionDetailFiles,
   clusterLocks,
   databasesList,
-  databaseDetails,
+  databaseDetails: databaseDetailsReducer.reducer,
+  databaseDetailsSpanStats: databaseDetailsSpanStatsReducer.reducer,
+  tableDetails,
   schemaInsights,
   statementFingerprintInsights,
   clusterSettings,
 });
-
-export const rootActions = {
-  resetState: createAction(`${DOMAIN_NAME}/RESET_STATE`),
-};
 
 /**
  * rootReducer consolidates reducers slices and cases for handling global actions related to entire state.

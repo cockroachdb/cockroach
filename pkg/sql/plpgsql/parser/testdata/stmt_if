@@ -14,16 +14,51 @@ END
 DECLARE
 BEGIN
 IF johnnygyro THEN
-	NULL
+	NULL;
 	diego := 1 + 2;
 ELSIF hihotpants THEN
 	diego := 7 + 7;
 ELSE
 	diego := 0;
-END IF
-<NOT DONE YET>
+END IF;
 END
-<NOT DONE YET>
+ -- normalized!
+DECLARE
+BEGIN
+IF (johnnygyro) THEN
+	NULL;
+	diego := ((1) + (2));
+ELSIF (hihotpants) THEN
+	diego := ((7) + (7));
+ELSE
+	diego := (0);
+END IF;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+IF johnnygyro THEN
+	NULL;
+	diego := _ + _;
+ELSIF hihotpants THEN
+	diego := _ + _;
+ELSE
+	diego := _;
+END IF;
+END
+ -- literals removed
+DECLARE
+BEGIN
+IF _ THEN
+	NULL;
+	_ := 1 + 2;
+ELSIF _ THEN
+	_ := 7 + 7;
+ELSE
+	_ := 0;
+END IF;
+END
+ -- identifiers removed
 
 
 parse
@@ -36,10 +71,27 @@ END
 DECLARE
 BEGIN
 IF johnnygyro THEN
-END IF
-<NOT DONE YET>
+END IF;
 END
-<NOT DONE YET>
+ -- normalized!
+DECLARE
+BEGIN
+IF (johnnygyro) THEN
+END IF;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+IF johnnygyro THEN
+END IF;
+END
+ -- literals removed
+DECLARE
+BEGIN
+IF _ THEN
+END IF;
+END
+ -- identifiers removed
 
 feature-count
 DECLARE

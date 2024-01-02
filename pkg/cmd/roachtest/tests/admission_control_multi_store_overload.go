@@ -26,7 +26,6 @@ import (
 func registerMultiStoreOverload(r registry.Registry) {
 	runKV := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		nodes := c.Spec().NodeCount - 1
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 		startOpts := option.DefaultStartOptsNoBackups()
 		startOpts.RoachprodOpts.StoreCount = 2
@@ -92,12 +91,13 @@ func registerMultiStoreOverload(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:      "admission-control/multi-store-with-overload",
-		Owner:     registry.OwnerAdmissionControl,
-		Benchmark: true,
-		Tags:      registry.Tags(`weekly`),
-		Cluster:   r.MakeClusterSpec(2, spec.CPU(8), spec.SSD(2)),
-		Leases:    registry.MetamorphicLeases,
+		Name:             "admission-control/multi-store-with-overload",
+		Owner:            registry.OwnerAdmissionControl,
+		Benchmark:        true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Weekly),
+		Cluster:          r.MakeClusterSpec(2, spec.CPU(8), spec.SSD(2)),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKV(ctx, t, c)
 		},

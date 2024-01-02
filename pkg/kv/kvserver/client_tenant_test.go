@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -90,12 +91,12 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 		var aggregateStats enginepb.MVCCStats
 		var seen int
 		store.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
-			ri := replica.State(ctx)
-			if ri.TenantID != tenantID.ToUint64() {
+			id, _ := replica.TenantID() // now initialized
+			if id != tenantID {
 				return true
 			}
 			seen++
-			aggregateStats.Add(*ri.Stats)
+			aggregateStats.Add(replica.GetMVCCStats())
 			return true
 		})
 		ex := metric.MakePrometheusExporter()
@@ -103,7 +104,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 			ex.ScrapeRegistry(store.Registry(), true /* includeChildMetrics */)
 		}
 		var in bytes.Buffer
-		if err := ex.ScrapeAndPrintAsText(&in, scrape); err != nil {
+		if err := ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape); err != nil {
 			t.Fatalf("failed to print prometheus data: %v", err)
 		}
 		if seen != 2 {
@@ -113,7 +114,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 		re := regexp.MustCompile(`^(\w+)\{.*,tenant_id="` + tenantID.String() + `"\} (\d+)`)
 		metricsToVal := map[string]int64{
 			"gcbytesage":    aggregateStats.GCBytesAge,
-			"intentage":     aggregateStats.IntentAge,
+			"intentage":     aggregateStats.LockAge,
 			"livebytes":     aggregateStats.LiveBytes,
 			"livecount":     aggregateStats.LiveCount,
 			"keybytes":      aggregateStats.KeyBytes,
@@ -126,6 +127,8 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 			"rangevalcount": aggregateStats.RangeValCount,
 			"intentbytes":   aggregateStats.IntentBytes,
 			"intentcount":   aggregateStats.IntentCount,
+			"lockbytes":     aggregateStats.LockBytes,
+			"lockcount":     aggregateStats.LockCount,
 			"sysbytes":      aggregateStats.SysBytes,
 			"syscount":      aggregateStats.SysCount,
 		}
@@ -166,8 +169,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	timeSource := timeutil.NewManualTime(t0)
 
 	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default test tenant so that we can start our own.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TenantRateKnobs: tenantrate.TestingKnobs{
@@ -187,7 +189,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	})
 	ctx := context.Background()
 	tenantID := serverutils.TestTenantID()
-	ts, err := s.StartTenant(ctx, base.TestTenantArgs{
+	ts, err := s.TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: tenantID,
 		TestingKnobs: base.TestingKnobs{
 			JobsTestingKnobs: &jobs.TestingKnobs{
@@ -283,7 +285,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	httpClient, err := s.GetUnauthenticatedHTTPClient()
 	require.NoError(t, err)
 	getMetrics := func() string {
-		resp, err := httpClient.Get(s.AdminURL() + "/_status/vars")
+		resp, err := httpClient.Get(s.AdminURL().WithPath("/_status/vars").String())
 		require.NoError(t, err)
 		read, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
@@ -327,9 +329,9 @@ func TestTenantCtx(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "shared-process tenant", func(t *testing.T, sharedProcess bool) {
 		getErr := make(chan error)
 		pushErr := make(chan error)
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{
 			// Disable the default test tenant since we're going to create our own.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
@@ -383,7 +385,7 @@ func TestTenantCtx(t *testing.T) {
 		var tsql *gosql.DB
 		if sharedProcess {
 			var err error
-			_, tsql, err = s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+			_, tsql, err = s.TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
 				TenantName: "test",
 				TenantID:   tenantID,
 			})

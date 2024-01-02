@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
@@ -33,7 +32,6 @@ go_test(
         "dep_edge_tree_test.go",
         "graph_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":scgraph"],
     deps = [
         "//pkg/sql/catalog/descpb",
@@ -52,5 +50,3 @@ stringer(
     src = "edge.go",
     typ = "DepEdgeKind",
 )
-
-get_x_data(name = "get_x_data")

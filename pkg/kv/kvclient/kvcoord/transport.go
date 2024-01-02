@@ -49,9 +49,7 @@ type SendOptions struct {
 //
 // The caller is responsible for ordering the replicas in the slice according to
 // the order in which the should be tried.
-type TransportFactory func(
-	SendOptions, *nodedialer.Dialer, ReplicaSlice,
-) (Transport, error)
+type TransportFactory func(SendOptions, ReplicaSlice) (Transport, error)
 
 // Transport objects can send RPCs to one or more replicas of a range.
 // All calls to Transport methods are made from a single thread, so
@@ -207,7 +205,9 @@ func (gt *grpcTransport) sendBatch(
 	if rpc.IsLocal(iface) {
 		gt.opts.metrics.LocalSentCount.Inc(1)
 	}
+	log.VEvent(ctx, 2, "sending batch request")
 	reply, err := iface.Batch(ctx, ba)
+	log.VEvent(ctx, 2, "received batch response")
 	// If we queried a remote node, perform extra validation.
 	if reply != nil && !rpc.IsLocal(iface) {
 		if err == nil {
@@ -317,9 +317,7 @@ func (h *byHealth) Less(i, j int) bool {
 // Transport. This is useful for tests that want to use DistSender
 // without a full RPC stack.
 func SenderTransportFactory(tracer *tracing.Tracer, sender kv.Sender) TransportFactory {
-	return func(
-		_ SendOptions, _ *nodedialer.Dialer, replicas ReplicaSlice,
-	) (Transport, error) {
+	return func(_ SendOptions, replicas ReplicaSlice) (Transport, error) {
 		// Always send to the first replica.
 		replica := replicas[0].ReplicaDescriptor
 		return &senderTransport{tracer, sender, replica, false}, nil

@@ -11,10 +11,8 @@ package statusccl
 import (
 	"bytes"
 	"context"
-	gosql "database/sql"
 	"encoding/hex"
 	"fmt"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,8 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -36,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -60,7 +56,8 @@ func TestTenantStatusAPI(t *testing.T) {
 
 	ctx := context.Background()
 
-	knobs := tests.CreateTestingKnobs()
+	var knobs base.TestingKnobs
+	knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
 	knobs.SpanConfig = &spanconfig.TestingKnobs{
 		// Some of these subtests expect multiple (uncoalesced) tenant ranges.
 		StoreDisableCoalesceAdjacent: true,
@@ -74,8 +71,10 @@ func TestTenantStatusAPI(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
 
 	t.Run("reset_sql_stats", func(t *testing.T) {
+		skip.UnderDeadlockWithIssue(t, 99559)
 		testResetSQLStatsRPCForTenant(ctx, t, testHelper)
 	})
 
@@ -112,6 +111,7 @@ func TestTenantStatusAPI(t *testing.T) {
 	})
 
 	t.Run("txn_id_resolution", func(t *testing.T) {
+		skip.UnderDeadlockWithIssue(t, 99770)
 		testTxnIDResolutionRPC(ctx, t, testHelper)
 	})
 
@@ -132,7 +132,6 @@ func TestTenantStatusAPI(t *testing.T) {
 	})
 
 	t.Run("tenant_span_stats", func(t *testing.T) {
-		skip.UnderDeadlockWithIssue(t, 99770)
 		testTenantSpanStats(ctx, t, testHelper)
 	})
 
@@ -159,6 +158,17 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 		err := client.PostJSONChecked("/_status/span", &req, &resp)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "Forbidden")
+
+		// VIEWCLUSTERMETADATA should allow the user to see the span stats.
+		grantStmt := `GRANT SYSTEM VIEWCLUSTERMETADATA TO authentic_user_noadmin;`
+		helper.TestCluster().TenantConn(0).Exec(t, grantStmt)
+
+		err = client.PostJSONChecked("/_status/span", &req, &resp)
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.SpanToStats)
+
+		revokeStmt := `REVOKE SYSTEM VIEWCLUSTERMETADATA FROM authentic_user_noadmin;`
+		helper.TestCluster().TenantConn(0).Exec(t, revokeStmt)
 
 		adminClient := helper.TestCluster().TenantHTTPClient(t, 1, true)
 		adminClient.PostJSON("/_status/span", &req, &resp)
@@ -188,15 +198,16 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 		// Set the span batch limit to 1.
 		_, err := helper.HostCluster().ServerConn(0).Exec(`SET CLUSTER SETTING server.span_stats.span_batch_limit = 1`)
 		require.NoError(t, err)
-		_, err = tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
-			&roachpb.SpanStatsRequest{
-				NodeID: "0", // 0 indicates we want stats from all nodes.
-				Spans:  []roachpb.Span{aSpan, aSpan},
-			})
-		require.ErrorContains(t, err, `error getting span statistics - number of spans in request payload (2) exceeds`+
-			` 'server.span_stats.span_batch_limit' cluster setting limit (1)`)
+		res, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).
+			SpanStats(ctx,
+				&roachpb.SpanStatsRequest{
+					NodeID: "0", // 0 indicates we want stats from all nodes.
+					Spans:  []roachpb.Span{aSpan, aSpan},
+				})
+		require.NoError(t, err)
+		require.Contains(t, res.SpanToStats, aSpan.String())
 		// Reset the span batch limit to default.
-		_, err = helper.HostCluster().ServerConn(0).Exec(`SET CLUSTER SETTING server.span_stats.span_batch_limit = $1`, roachpb.DefaultSpanStatsSpanLimit)
+		_, err = helper.HostCluster().ServerConn(0).Exec(`RESET CLUSTER SETTING server.span_stats.span_batch_limit`)
 		require.NoError(t, err)
 	})
 
@@ -209,18 +220,22 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 			return bytes.Join(keys, nil)
 		}
 
-		controlStats, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
-			&roachpb.SpanStatsRequest{
-				NodeID: "0", // 0 indicates we want stats from all nodes.
-				Spans:  []roachpb.Span{aSpan},
-			})
-		require.NoError(t, err)
-
 		// Create a new range in this tenant.
-		_, _, err = helper.HostCluster().Server(0).SplitRange(makeKey(tPrefix, roachpb.Key("c")))
+		newRangeKey := makeKey(tPrefix, roachpb.Key("c"))
+		_, newDesc, err := helper.HostCluster().Server(0).SplitRange(newRangeKey)
 		require.NoError(t, err)
 
-		// Wait for the split to finish and propagate.
+		// Wait until the range split occurs.
+		testutils.SucceedsSoon(t, func() error {
+			desc, err := helper.HostCluster().LookupRange(newRangeKey)
+			require.NoError(t, err)
+			if !desc.StartKey.Equal(newDesc.StartKey) {
+				return errors.New("range has not split")
+			}
+			return nil
+		})
+
+		// Wait for the new range to replicate.
 		err = helper.HostCluster().WaitForFullReplication()
 		require.NoError(t, err)
 
@@ -233,19 +248,6 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 				t.Fatal(err)
 			}
 		}
-
-		stats, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
-			&roachpb.SpanStatsRequest{
-				NodeID: "0", // 0 indicates we want stats from all nodes.
-				Spans:  []roachpb.Span{aSpan},
-			})
-
-		require.NoError(t, err)
-
-		controlSpanStats := controlStats.SpanToStats[aSpan.String()]
-		testSpanStats := stats.SpanToStats[aSpan.String()]
-		require.Equal(t, controlSpanStats.RangeCount+1, testSpanStats.RangeCount)
-		require.Equal(t, controlSpanStats.TotalStats.LiveCount+int64(len(incKeys)), testSpanStats.TotalStats.LiveCount)
 
 		// Make a multi-span call
 		type spanCase struct {
@@ -298,19 +300,29 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 			spans = append(spans, sc.span)
 		}
 
-		stats, err = tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
-			&roachpb.SpanStatsRequest{
-				NodeID: "0", // 0 indicates we want stats from all nodes.
-				Spans:  spans,
-			})
+		testutils.SucceedsSoon(t, func() error {
+			stats, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
+				&roachpb.SpanStatsRequest{
+					NodeID: "0", // 0 indicates we want stats from all nodes.
+					Spans:  spans,
+				})
 
-		require.NoError(t, err)
-		// Check each span has their expected values.
-		for _, sc := range spanCases {
-			spanStats := stats.SpanToStats[sc.span.String()]
-			require.Equal(t, spanStats.RangeCount, sc.expectedRangeCount, fmt.Sprintf("mismatch on expected range count for span case with span %v", sc.span.String()))
-			require.Equal(t, spanStats.TotalStats.LiveCount, sc.expectedLiveCount, fmt.Sprintf("mismatch on expected live count for span case with span %v", sc.span.String()))
-		}
+			require.NoError(t, err)
+
+			for _, sc := range spanCases {
+				spanStats := stats.SpanToStats[sc.span.String()]
+				if sc.expectedRangeCount != spanStats.RangeCount {
+					return errors.Newf("mismatch on expected range count for span case with span %v", sc.span.String())
+				}
+
+				if sc.expectedLiveCount != spanStats.TotalStats.LiveCount {
+					return errors.Newf("mismatch on expected live count for span case with span %v", sc.span.String())
+				}
+			}
+
+			return nil
+		})
+
 	})
 
 }
@@ -374,17 +386,18 @@ func testTenantLogs(ctx context.Context, t *testing.T, helper serverccl.TenantTe
 func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderStressWithIssue(t, 113984)
+	skip.UnderRace(t, "may OOM")
 
 	ctx := context.Background()
-	serverParams, _ := tests.CreateTestServerParams()
-	serverParams.Knobs.SpanConfig = &spanconfig.TestingKnobs{
-		ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
-	}
-	// Need to disable the test tenant here as the non-tenant case below
-	// assumes that it's operating within the system tenant.
-	serverParams.DefaultTestTenant = base.TestTenantDisabled
-	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: serverParams,
+	testCluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
+				}},
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
 	})
 	defer testCluster.Stopper().Stop(ctx)
 
@@ -393,13 +406,11 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	tenant, sqlDB := serverutils.StartTenant(t, server, base.TestTenantArgs{
 		TenantID: roachpb.MustMakeTenantID(10 /* id */),
 		TestingKnobs: base.TestingKnobs{
-			SQLStatsKnobs: &sqlstats.TestingKnobs{
-				AOSTClause: "AS OF SYSTEM TIME '-1us'",
-			},
+			SQLStatsKnobs: sqlstats.CreateTestingKnobs(),
 		},
 	})
 
-	nonTenant := testCluster.Server(1 /* idx */)
+	systemLayer := testCluster.Server(1 /* idx */).SystemLayer()
 
 	tenantStatusServer := tenant.StatusServer().(serverpb.SQLStatusServer)
 
@@ -438,11 +449,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 		{stmt: `SELECT * FROM posts_nt`},
 	}
 
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, nonTenant.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
-	defer cleanupGoDB()
-	sqlDB, err = gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
+	sqlDB = systemLayer.SQLConn(t)
 
 	for _, stmt := range testCaseNonTenant {
 		_, err = sqlDB.Exec(stmt.stmt)
@@ -473,8 +480,8 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	})
 
 	path := "/_status/statements"
-	var nonTenantStats serverpb.StatementsResponse
-	err = serverutils.GetJSONProto(nonTenant, path, &nonTenantStats)
+	var systemLayerStats serverpb.StatementsResponse
+	err = serverutils.GetJSONProto(systemLayer, path, &systemLayerStats)
 	require.NoError(t, err)
 
 	checkStatements := func(t *testing.T, tc []testCase, actual *serverpb.StatementsResponse) {
@@ -516,20 +523,20 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 
 	// Now we verify the non tenant stats are what we expected.
 	t.Run("non-tenant-stats", func(t *testing.T) {
-		checkStatements(t, testCaseNonTenant, &nonTenantStats)
+		checkStatements(t, testCaseNonTenant, &systemLayerStats)
 	})
 
 	// Now we verify that tenant and non-tenant have no visibility into each other's stats.
 	t.Run("overlap", func(t *testing.T) {
 		for _, tenantStmt := range tenantStats.Statements {
-			for _, nonTenantStmt := range nonTenantStats.Statements {
-				require.NotEqual(t, tenantStmt, nonTenantStmt, "expected tenant to have no visibility to non-tenant's statement stats, but found:", nonTenantStmt)
+			for _, systemLayerStmt := range systemLayerStats.Statements {
+				require.NotEqual(t, tenantStmt, systemLayerStmt, "expected tenant to have no visibility to system layer's statement stats, but found:", systemLayerStmt)
 			}
 		}
 
 		for _, tenantTxn := range tenantStats.Transactions {
-			for _, nonTenantTxn := range nonTenantStats.Transactions {
-				require.NotEqual(t, tenantTxn, nonTenantTxn, "expected tenant to have no visibility to non-tenant's transaction stats, but found:", nonTenantTxn)
+			for _, systemLayerTxn := range systemLayerStats.Transactions {
+				require.NotEqual(t, tenantTxn, systemLayerTxn, "expected tenant to have no visibility to system layer's transaction stats, but found:", systemLayerTxn)
 			}
 		}
 
@@ -1358,10 +1365,10 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 	})
 
 	t.Run("test tenant ranges respects tenant isolation", func(t *testing.T) {
-		keyPrefixForA := keys.MakeTenantPrefix(helper.TestCluster().Tenant(0).GetRPCContext().TenantID)
-		keyPrefixEndForA := keyPrefixForA.PrefixEnd()
-		keyPrefixForB := keys.MakeTenantPrefix(helper.ControlCluster().Tenant(0).GetRPCContext().TenantID)
-		keyPrefixEndForB := keyPrefixForB.PrefixEnd()
+		tenIDA := helper.TestCluster().Tenant(0).GetRPCContext().TenantID
+		tenIDB := helper.ControlCluster().Tenant(0).GetRPCContext().TenantID
+		keySpanForA := keys.MakeTenantSpan(tenIDA)
+		keySpanForB := keys.MakeTenantSpan(tenIDB)
 
 		resp, err := tenantA.TenantRanges(context.Background(), &serverpb.TenantRangesRequest{})
 		require.NoError(t, err)
@@ -1369,8 +1376,8 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 		for localityKey, rangeList := range resp.RangesByLocality {
 			require.NotEmpty(t, localityKey)
 			for _, r := range rangeList.Ranges {
-				assertStartKeyInRange(t, r.Span.StartKey, keyPrefixForA)
-				assertEndKeyInRange(t, r.Span.EndKey, keyPrefixForA, keyPrefixEndForA)
+				assertStartKeyInRange(t, r.Span.StartKey, keySpanForA.Key)
+				assertEndKeyInRange(t, r.Span.EndKey, keySpanForA.Key, keySpanForA.EndKey)
 			}
 		}
 
@@ -1380,8 +1387,8 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 		for localityKey, rangeList := range resp.RangesByLocality {
 			require.NotEmpty(t, localityKey)
 			for _, r := range rangeList.Ranges {
-				assertStartKeyInRange(t, r.Span.StartKey, keyPrefixForB)
-				assertEndKeyInRange(t, r.Span.EndKey, keyPrefixForB, keyPrefixEndForB)
+				assertStartKeyInRange(t, r.Span.StartKey, keySpanForB.Key)
+				assertEndKeyInRange(t, r.Span.EndKey, keySpanForB.Key, keySpanForB.EndKey)
 			}
 		}
 	})
@@ -1454,28 +1461,28 @@ func assertStartKeyInRange(t *testing.T, startKey string, tenantPrefix roachpb.K
 }
 
 // assertEndKeyInRange compares the pretty printed endKey with the provided
-// tenantPrefix and tenantPrefixEnd keys. Ensures that the key starts with
-// either the tenantPrefix, or the tenantPrefixEnd (valid as end keys are
+// tenantPrefix and tenantEnd keys. Ensures that the key starts with
+// either the tenantPrefix, or the tenantEnd (valid as end keys are
 // exclusive).
 func assertEndKeyInRange(
-	t *testing.T, endKey string, tenantPrefix roachpb.Key, tenantPrefixEnd roachpb.Key,
+	t *testing.T, endKey string, tenantPrefix roachpb.Key, tenantEnd roachpb.Key,
 ) {
 	require.Truef(t,
 		strings.Index(endKey, tenantPrefix.String()) == 0 ||
-			strings.Index(endKey, tenantPrefixEnd.String()) == 0 ||
+			strings.Index(endKey, tenantEnd.String()) == 0 ||
 			// Possible if the tenant's ranges fall at the end of the entire keyspace
 			// range within the cluster.
 			endKey == "/Max",
-		fmt.Sprintf("end key %s is outside of the tenant's keyspace (prefix: %v, prefixEnd: %v)",
-			endKey, tenantPrefix.String(), tenantPrefixEnd.String()))
+		fmt.Sprintf("end key %s is outside of the tenant's keyspace (start: %v, end: %v)",
+			endKey, tenantPrefix.String(), tenantEnd.String()))
 }
 
 func testTenantHotRanges(_ context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
 	tenantA := helper.TestCluster().TenantStatusSrv(0).(serverpb.TenantStatusServer)
 	tenantB := helper.ControlCluster().TenantStatusSrv(0).(serverpb.TenantStatusServer)
 
-	tIDa := security.EmbeddedTenantIDs()[0]
-	tIDb := security.EmbeddedTenantIDs()[1]
+	tIDa := securitytest.EmbeddedTenantIDs()[0]
+	tIDb := securitytest.EmbeddedTenantIDs()[1]
 
 	testutils.SucceedsSoon(t, func() error {
 		resp, err := tenantA.HotRangesV2(context.Background(), &serverpb.HotRangesRequest{})
@@ -1514,6 +1521,9 @@ func testTenantHotRanges(_ context.Context, t *testing.T, helper serverccl.Tenan
 
 		client.PostJSON("/_status/v2/hotranges", &req, &resp)
 		require.NotEmpty(t, resp.Ranges)
+
+		revokeStmt := `REVOKE SYSTEM VIEWCLUSTERMETADATA FROM authentic_user_noadmin;`
+		helper.TestCluster().TenantConn(0).Exec(t, revokeStmt)
 	})
 
 	t.Run("test tenant hot ranges respects tenant isolation", func(t *testing.T) {

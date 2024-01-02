@@ -814,7 +814,7 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 		var provided physical.Provided
 		// BuildProvided relies on ProvidedPhysical() being set in the children, so
 		// it must run after the recursive calls on the children.
-		provided.Ordering = ordering.BuildProvided(relParent, &parentProps.Ordering)
+		provided.Ordering = ordering.BuildProvided(o.evalCtx, relParent, &parentProps.Ordering)
 		provided.Distribution = distribution.BuildProvided(o.ctx, o.evalCtx, relParent, &parentProps.Distribution)
 		o.mem.SetBestProps(relParent, parentProps, &provided, relCost)
 	}

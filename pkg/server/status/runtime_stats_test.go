@@ -35,7 +35,7 @@ func TestStructuredEventLogging(t *testing.T) {
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	testStartTs := timeutil.Now()
@@ -44,7 +44,7 @@ func TestStructuredEventLogging(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	// Ensure that the entry hits the OS so it can be read back below.
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
 		math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)

@@ -67,9 +67,16 @@ var _ = numRunnableGoroutines
 const samplePeriodShort = time.Millisecond
 const samplePeriodLong = 250 * time.Millisecond
 
-// The system is underloaded if the number of runnable goroutines per proc
-// is below this threshold.
-const underloadedRunnablePerProcThreshold = 1 * toFixedPoint
+// The system is underloaded if the number of runnable goroutines per proc is
+// below this threshold. We have observed that steady workloads (like kv0),
+// can have 50% cpu utilization and < 0.2 runnable goroutines per proc. We
+// want to err on the side of a lower threshold since the samplePeriodShort
+// regime allows admission control to react faster to fluctuations in runnable
+// goroutines -- real world workloads sometimes have very spiky CPU
+// utilization (see the graphs in
+// https://github.com/cockroachdb/cockroach/issues/111125). So we set this to
+// 0.1 runnable goroutine per proc.
+const underloadedRunnablePerProcThreshold = 1 * toFixedPoint / 10
 
 // We "report" the average value every reportingPeriod.
 // Note: if this is changed from 1s, CumulativeNormalizedRunnableGoroutines()

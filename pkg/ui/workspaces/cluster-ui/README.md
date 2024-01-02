@@ -113,42 +113,11 @@ but the goal is to provide guidance about compatibility.
 The build processes for Cluster UI have been integrated into the `make` commands
 for `/pkg/ui`. The intention is that the development workflow between DB Console
 and Cluster UI components be seamless. If you would like to build cluster-ui
-independently, you can run the following commands,
+independently, you can run the following command:
 
 ```shell
-  > make pkg/ui/yarn.protobuf.installed -B; # to build protobufs cluster-ui depends on
-  > make pkg/ui/yarn.cluster-ui.installed -B; # to build cluster-ui
+bazel build //pkg/ui/workspaces/cluster-ui
 ```
-
-## Development Workflow with CockroachCloud
-
-In CockroachCloud Console, we install multiple *aliased* versions of cluster-ui.
-This, in addition to certain peer dependencies, prevent us from using a traditional
-`yarn link` for local development of cluster-ui. Instead, you must *pack* the dependency
-and install it from a local tarball. To view a local change to cluster-ui in CockroachCloud,
-
-```shell
-# after making your code change,
-# in the root of cockroachdb/cockroach
-$ make pkg/ui/yarn.protobuf.installed -B
-$ make pkg/ui/yarn.cluster-ui.installed -B
-# in pkg/ui/workspaces/cluster-ui
-$ yarn run build
-$ yarn pack --prod
-```
-
-And then install the package in `managed-service` repo:
-
-```shell
-$ cd /console
-$ yarn cache clean
-# yarn add --force [cluster-ui package alias]@[full path to tarball],
-# here's an example
-$ yarn add --force @cockroachlabs/cluster-ui-21-1@/path/to/cockroachlabs-cluster-ui.tgz
-```
-
-Test your changes by running CockroachCloud locally, but please be careful to not
-commit the changes to `package.json` or to `yarn.lock`
 
 ## Storybook
 
@@ -157,7 +126,7 @@ Learn more about Storybook here: https://storybook.js.org/
 You can run storybook for this project using:
 
 ```shell
-$ yarn run storybook
+$ pnpm run storybook
 ```
 
 And opening http://localhost:6006/ in your browser.
@@ -185,18 +154,32 @@ here: https://storybook.js.org/docs/react/api/csf in order to
 facilitate writing unit tests with the storybook components.
 
 ## Publishing Cluster UI package to npm
-Publishing Cluster UI pre-release versions from the master branch to npm is done
-by a Github Action workflow called "Publish Cluster UI Pre-release". This workflow
-will publish to npm anytime a version of Cluster UI is merged to master that is
-unpublished (by comparing the version in the `package.json` to versions of
-`@cockroachlabs/cluster-ui` on npm). To change the version of Cluster UI, you can
-run the command `yarn bump` from `pkg/ui/workspaces/cluster-ui`.
+### Automatic Publishing with Github Actions
+Publishing Cluster UI versions to npm is done by Github Action workflows that run
+on master and release branches. "Publish Cluster UI Pre-release" runs on master,
+and "Publish Cluster UI Release" for commits merged to release branches. These
+workflows will publish to npm anytime a version of Cluster UI is merged to the branch
+that is unpublished (by comparing the version in the `package.json` to versions of
+`@cockroachlabs/cluster-ui` on npm).
 
-To publish a version from a release branch, a manual publish is still required.
-The steps below can be followed to manually publish to npm. Github Workflows are
-being worked on for release branches, and this README will be updated when they
-are available.
+Follow the steps below on your feature branch:
 
+### 1. Bump Cluster UI Version
+Run `pnpm bump` from `pkg/ui/workspaces/cluster-ui`, or change the version manually
+in `package.json`.
+
+### 2. Run `pnpm build` without errors 
+Ensure the pkg can be built without errors by running `pnpm build` in the `cluster-ui`
+directory.
+
+### 3. Merge PR and verify publish action was successful
+Once your PR is merged to the desired branch, check that the workflow ran
+successfully. Go to the 'Actions' tab in the cockroachdb repo and select the
+action corresponding to either master (Publish Cluster UI Pre-release) or a
+release branch (Publish Cluster UI Release). If there were any errors, address
+in a new PR and merge (no need to bump the version as the publish was unsuccessful).
+
+### Manual Publishing
 ### 1. Change the version in package.json
 CockroachDB uses a form of [calver](https://calver.org/) versioning where the major part
 is a *Short Year* and the minor part is an iterative number.The micro part (in
@@ -245,28 +228,12 @@ Before publishing, ensure that you have authenticated with the npm registry by
 running the following command,
 
 ```shell
-$ yarn login
+$ pnpm login
 ```
 
-To log in, you will be prompted for your credentials.
-```shell
-$ yarn login
-yarn login v1.22.10
-question npm username: *********
-question npm email: **************@*****.***
-✨  Done in 11.56s.
-```
-
-If you were logged in already, you will see the current authenticated user
-```shell
-$ yarn login
-yarn login v1.XX.XX
-info npm username: xxxxxxxxxxx
-info npm email: xxxxxxxx@xxxxx.zzz
-✨  Done in 0.05s.
-```
-
-Once you have authenticated, you are ready to publish to npm.
+To log in, you will be prompted for your credentials. If you were logged in
+already, you will see the current authenticated user. Once you have
+authenticated, you are ready to publish to npm.
 
 #### Publish package to npm
 
@@ -281,7 +248,7 @@ automatically reverted back to the newer version.
 To publish the package, run the publish command,
 
 ```shell
-$ yarn publish --access public
+$ pnpm publish --access public
 ```
 
 During a publish you can expect to see some prepublish steps before the package

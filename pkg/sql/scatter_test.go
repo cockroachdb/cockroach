@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -39,7 +38,7 @@ func TestScatterRandomizeLeases(t *testing.T) {
 
 	const numHosts = 3
 
-	tc := serverutils.StartNewTestCluster(t, numHosts, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, numHosts, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
 	sqlutils.CreateTable(
@@ -53,7 +52,7 @@ func TestScatterRandomizeLeases(t *testing.T) {
 
 	// Even though we disabled merges via the store testing knob, we must also
 	// disable the setting in order for manual splits to be allowed.
-	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue.enabled = false")
 
 	// Introduce 99 splits to get 100 ranges.
 	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
@@ -115,8 +114,10 @@ func TestScatterResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	ts, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(context.Background())
+
+	s := ts.ApplicationLayer()
 
 	sqlutils.CreateTable(
 		t, sqlDB, "t",
@@ -124,7 +125,7 @@ func TestScatterResponse(t *testing.T) {
 		1000,
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(10)),
 	)
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 
 	r := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -153,10 +154,10 @@ func TestScatterResponse(t *testing.T) {
 		}
 		var expectedKey roachpb.Key
 		if i == 0 {
-			expectedKey = keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.GetID()))
+			expectedKey = s.Codec().TablePrefix(uint32(tableDesc.GetID()))
 		} else {
 			var err error
-			expectedKey, err = randgen.TestingMakePrimaryIndexKey(tableDesc, i*10)
+			expectedKey, err = randgen.TestingMakePrimaryIndexKeyForTenant(tableDesc, s.Codec(), i*10)
 			if err != nil {
 				t.Fatal(err)
 			}

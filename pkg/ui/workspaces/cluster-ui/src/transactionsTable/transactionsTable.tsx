@@ -82,9 +82,12 @@ interface TransactionLinkTargetProps {
 export const TransactionLinkTarget = (
   props: TransactionLinkTargetProps,
 ): string => {
-  const searchParams = propsToQueryString({
-    [appNamesAttr]: [props.application],
-  });
+  let searchParams = "";
+  if (props.application != null) {
+    searchParams = propsToQueryString({
+      [appNamesAttr]: [props.application],
+    });
+  }
 
   return `/transaction/${props.transactionFingerprintId}?${searchParams}`;
 };
@@ -104,7 +107,7 @@ export function makeTransactionsColumns(
   const sampledExecStatsBarChartOptions: BarChartOptions<TransactionInfo> = {
     classes: defaultBarChartOptions.classes,
     displayNoSamples: (d: TransactionInfo) => {
-      return longToInt(d.stats_data.stats.exec_stats?.count) == 0;
+      return longToInt(d.stats_data.stats.exec_stats?.count) === 0;
     },
   };
 
@@ -152,7 +155,7 @@ export function makeTransactionsColumns(
               item.stats_data.statement_fingerprint_ids,
               statements,
             ) || "Transaction query unavailable.",
-          appName: item.stats_data.app,
+          appName: item.stats_data.app ? item.stats_data.app : unset,
           transactionFingerprintId:
             item.stats_data.transaction_fingerprint_id.toString(),
           search,

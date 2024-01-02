@@ -13,10 +13,12 @@ package persistedsqlstats
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -66,13 +68,24 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 		return
 	}
 
-	s.lastFlushStarted = now
 	log.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
 		s.SQLStats.GetTotalFingerprintCount(), s.SQLStats.GetTotalFingerprintBytes(), timeutil.Since(s.lastFlushStarted))
+	s.lastFlushStarted = now
 
 	aggregatedTs := s.ComputeAggregatedTs()
 
-	if s.stmtsLimitSizeReached(ctx) || s.txnsLimitSizeReached(ctx) {
+	// We only check the statement count as there should always be at least as many statements as transactions.
+	limitReached := false
+
+	var err error
+	if sqlStatsLimitTableSizeEnabled.Get(&s.SQLStats.GetClusterSettings().SV) {
+		limitReached, err = s.StmtsLimitSizeReached(ctx)
+	}
+
+	if err != nil {
+		log.Errorf(ctx, "encountered an error at flush, checking for statement statistics size limit: %v", err)
+	}
+	if limitReached {
 		log.Infof(ctx, "unable to flush fingerprints because table limit was reached.")
 	} else {
 		var wg sync.WaitGroup
@@ -92,15 +105,28 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 	}
 }
 
-func (s *PersistedSQLStats) stmtsLimitSizeReached(ctx context.Context) bool {
-	maxPersistedRows := float64(SQLStatsMaxPersistedRows.Get(&s.SQLStats.GetClusterSettings().SV))
+func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, error) {
+	// Doing a count check on every flush for every node adds a lot of overhead.
+	// To reduce the overhead only do the check once an hour by default.
+	intervalToCheck := sqlStatsLimitTableCheckInterval.Get(&s.cfg.Settings.SV)
+	if !s.lastSizeCheck.IsZero() && s.lastSizeCheck.Add(intervalToCheck).After(timeutil.Now()) {
+		log.Infof(ctx, "PersistedSQLStats.StmtsLimitSizeReached skipped with last check at: %s and check interval: %s", s.lastSizeCheck, intervalToCheck)
+		return false, nil
+	}
 
-	readStmt := `
-SELECT
-    count(*)
-FROM
-    system.statement_statistics
-`
+	maxPersistedRows := float64(SQLStatsMaxPersistedRows.Get(&s.cfg.Settings.SV))
+
+	// The statistics table is split into 8 shards. Instead of counting all the
+	// rows across all the shards the count can be limited to a single shard.
+	// Then check the size off that one shard. This reduces the risk of causing
+	// contention or serialization issues. The cleanup is done by the shard, so
+	// it should prevent the data from being skewed to a single shard.
+	randomShard := rand.Intn(systemschema.SQLStatsHashShardBucketCount)
+	readStmt := fmt.Sprintf(`SELECT count(*)
+      FROM system.statement_statistics
+      %s
+      WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = $1
+`, s.cfg.Knobs.GetAOSTClause())
 
 	row, err := s.cfg.DB.Executor().QueryRowEx(
 		ctx,
@@ -108,44 +134,29 @@ FROM
 		nil,
 		sessiondata.NodeUserSessionDataOverride,
 		readStmt,
+		randomShard,
 	)
 
 	if err != nil {
-		return false
+		return false, err
 	}
 	actualSize := float64(tree.MustBeDInt(row[0]))
-	return actualSize > (maxPersistedRows * 1.5)
-}
-
-func (s *PersistedSQLStats) txnsLimitSizeReached(ctx context.Context) bool {
-	maxPersistedRows := float64(SQLStatsMaxPersistedRows.Get(&s.SQLStats.GetClusterSettings().SV))
-
-	readStmt := `
-SELECT
-    count(*)
-FROM
-    system.transaction_statistics
-`
-
-	row, err := s.cfg.DB.Executor().QueryRowEx(
-		ctx,
-		"fetch-txn-count",
-		nil,
-		sessiondata.NodeUserSessionDataOverride,
-		readStmt,
-	)
-
-	if err != nil {
-		return false
+	maxPersistedRowsByShard := maxPersistedRows / systemschema.SQLStatsHashShardBucketCount
+	isSizeLimitReached := actualSize > (maxPersistedRowsByShard * 1.5)
+	// If the table is over the limit do the check for every flush. This allows
+	// the flush to start again as soon as the data is within limits instead of
+	// needing to wait an hour.
+	if !isSizeLimitReached {
+		s.lastSizeCheck = timeutil.Now()
 	}
-	actualSize := float64(tree.MustBeDInt(row[0]))
-	return actualSize > (maxPersistedRows * 1.5)
+
+	return isSizeLimitReached, nil
 }
 
 func (s *PersistedSQLStats) flushStmtStats(ctx context.Context, aggregatedTs time.Time) {
 	// s.doFlush directly logs errors if they are encountered. Therefore,
 	// no error is returned here.
-	_ = s.SQLStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{},
+	_ = s.SQLStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{},
 		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 			s.doFlush(ctx, func() error {
 				return s.doFlushSingleStmtStats(ctx, statistics, aggregatedTs)
@@ -160,7 +171,7 @@ func (s *PersistedSQLStats) flushStmtStats(ctx context.Context, aggregatedTs tim
 }
 
 func (s *PersistedSQLStats) flushTxnStats(ctx context.Context, aggregatedTs time.Time) {
-	_ = s.SQLStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{},
+	_ = s.SQLStats.IterateTransactionStats(ctx, sqlstats.IteratorOptions{},
 		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
 			s.doFlush(ctx, func() error {
 				return s.doFlushSingleTxnStats(ctx, statistics, aggregatedTs)

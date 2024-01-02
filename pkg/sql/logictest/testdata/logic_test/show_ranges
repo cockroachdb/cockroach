@@ -52,10 +52,10 @@ start_key                end_key                  range_id
 /Table/6                 /Table/7                 10
 
 # Ditto, verbose form.
-query TTIFITTTTTTTI colnames
+query TTIFITTTTTTTIT colnames
 SELECT * FROM [SHOW CLUSTER RANGES WITH DETAILS] LIMIT 0
 ----
-start_key                end_key                  range_id  range_size_mb               lease_holder  lease_holder_locality  replicas  replica_localities      voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key                end_key                  range_id  range_size_mb               lease_holder  lease_holder_locality  replicas  replica_localities      voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
 # Ditto, with keys.
 query TTTTITTTTTT colnames
@@ -64,10 +64,10 @@ SELECT * FROM [SHOW CLUSTER RANGES WITH KEYS] LIMIT 0
 start_key  end_key  raw_start_key  raw_end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
 
 # Ditto, verbose + keys.
-query TTTTIFITTTTTTTI colnames
+query TTTTIFITTTTTTTIT colnames
 SELECT * FROM [SHOW CLUSTER RANGES WITH DETAILS, KEYS] LIMIT 0
 ----
-start_key  end_key  raw_start_key  raw_end_key  range_id  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key  end_key  raw_start_key  raw_end_key  range_id  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
 query TTTTII colnames
 SELECT start_key, to_hex(raw_start_key), end_key, to_hex(raw_end_key), range_id, lease_holder FROM [SHOW CLUSTER RANGES WITH DETAILS, KEYS]
@@ -94,10 +94,10 @@ SELECT * FROM [SHOW CLUSTER RANGES WITH TABLES] LIMIT 0
 ----
 start_key  end_key  range_id  database_name  schema_name  table_name  table_id  table_start_key  table_end_key  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
 
-query TTITTTITTFITTTTTTTI colnames
+query TTITTTITTFITTTTTTTIT colnames
 SELECT * FROM [SHOW CLUSTER RANGES WITH DETAILS, TABLES] LIMIT 0
 ----
-start_key  end_key  range_id  database_name  schema_name  table_name  table_id  table_start_key  table_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key  end_key  range_id  database_name  schema_name  table_name  table_id  table_start_key  table_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
 query TTTTITTTITTTTTTTTTT colnames
 SELECT * FROM [SHOW CLUSTER RANGES WITH KEYS, TABLES] LIMIT 0
@@ -118,9 +118,9 @@ start_key                end_key                  range_id  database_name  schem
 /System/NodeLivenessMax  /System/tsd              3         NULL           NULL         NULL                             NULL      NULL             NULL    /System/tsd              04747364
 /System/tsd              /System/"tse"            4         NULL           NULL         NULL                             NULL      NULL             NULL    /System/"tse"            04747365
 /System/"tse"            /Table/0                 5         NULL           NULL         NULL                             NULL      NULL             NULL    /Table/0                 88
-/Table/25                /Table/26                27        system         public       replication_constraint_stats     25        /Table/25        a1      /Table/26                a2
-/Table/26                /Table/27                28        system         public       replication_critical_localities  26        /Table/26        a2      /Table/27                a3
-/Table/27                /Table/28                29        system         public       replication_stats                27        /Table/27        a3      /Table/28                a4
+/Table/25                /Table/26                28        system         public       replication_constraint_stats     25        /Table/25        a1      /Table/26                a2
+/Table/26                /Table/27                29        system         public       replication_critical_localities  26        /Table/26        a2      /Table/27                a3
+/Table/27                /Table/28                30        system         public       replication_stats                27        /Table/27        a3      /Table/28                a4
 
 subtest show_cluster_ranges/with_indexes
 
@@ -130,20 +130,20 @@ SELECT * FROM [SHOW CLUSTER RANGES WITH INDEXES] LIMIT 0
 ----
 start_key  end_key  range_id  database_name  schema_name  table_name  table_id  index_name  index_id  index_start_key  index_end_key  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
 
-query TTITTTITITTFITTTTTTTI colnames
+query TTITTTITITTFITTTTTTTIT colnames
 SELECT * FROM [SHOW CLUSTER RANGES WITH DETAILS, INDEXES] LIMIT 0
 ----
-start_key  end_key  range_id  database_name  schema_name  table_name  table_id  index_name  index_id  index_start_key  index_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key  end_key  range_id  database_name  schema_name  table_name  table_id  index_name  index_id  index_start_key  index_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
 query TTTTITTTITITTTTTTTTTT colnames
 SELECT * FROM [SHOW CLUSTER RANGES WITH KEYS, INDEXES] LIMIT 0
 ----
 start_key  end_key  raw_start_key  raw_end_key  range_id  database_name  schema_name  table_name  table_id  index_name  index_id  index_start_key  index_end_key  raw_index_start_key  raw_index_end_key  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
 
-query TTTTITTTITITTTTFITTTTTTTI colnames
+query TTTTITTTITITTTTFITTTTTTTIT colnames
 SELECT * FROM [SHOW CLUSTER RANGES WITH DETAILS, KEYS, INDEXES] LIMIT 0
 ----
-start_key  end_key  raw_start_key  raw_end_key  range_id  database_name  schema_name  table_name  table_id  index_name  index_id  index_start_key  index_end_key  raw_index_start_key  raw_index_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key  end_key  raw_start_key  raw_end_key  range_id  database_name  schema_name  table_name  table_id  index_name  index_id  index_start_key  index_end_key  raw_index_start_key  raw_index_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
 # Show some rows.
 # This also demonstrates how the index information remains NULL if there's no index contained.
@@ -159,9 +159,9 @@ start_key                end_key                  range_id  database_name  schem
 /System/NodeLivenessMax  /System/tsd              3         NULL           NULL         NULL                             NULL      NULL        NULL      NULL             NULL    /System/tsd              04747364
 /System/tsd              /System/"tse"            4         NULL           NULL         NULL                             NULL      NULL        NULL      NULL             NULL    /System/"tse"            04747365
 /System/"tse"            /Table/0                 5         NULL           NULL         NULL                             NULL      NULL        NULL      NULL             NULL    /Table/0                 88
-/Table/25                /Table/26                27        system         public       replication_constraint_stats     25        primary     1         /Table/25/1      a189    /Table/25/2              a18a
-/Table/26                /Table/27                28        system         public       replication_critical_localities  26        primary     1         /Table/26/1      a289    /Table/26/2              a28a
-/Table/27                /Table/28                29        system         public       replication_stats                27        primary     1         /Table/27/1      a389    /Table/27/2              a38a
+/Table/25                /Table/26                28        system         public       replication_constraint_stats     25        primary     1         /Table/25/1      a189    /Table/25/2              a18a
+/Table/26                /Table/27                29        system         public       replication_critical_localities  26        primary     1         /Table/26/1      a289    /Table/26/2              a28a
+/Table/27                /Table/28                30        system         public       replication_stats                27        primary     1         /Table/27/1      a389    /Table/27/2              a38a
 
 
 subtest show_ranges_from_database
@@ -179,10 +179,10 @@ SHOW RANGES WITH KEYS
 ----
 start_key  end_key  raw_start_key  raw_end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
 
-query TTIFITTTTTTTI colnames
+query TTIFITTTTTTTIT colnames
 SHOW RANGES WITH DETAILS
 ----
-start_key  end_key  range_id  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key  end_key  range_id  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
 # Add some tables. This will force at least one range to pop up.
 # also split them to make the test more interesting.
@@ -197,11 +197,11 @@ SELECT start_key, end_key, range_id, split_enforced_until FROM [SHOW RANGES]
 ORDER BY range_id
 ----
 start_key        end_key          range_id  split_enforced_until
-/Table/62        /Table/106/1/10  63        NULL
-/Table/106/1/10  /Table/106/2/20  64        2262-04-11 23:47:16.854776 +0000 +0000
-/Table/106/2/20  /Table/106/2/30  65        2262-04-11 23:47:16.854776 +0000 +0000
-/Table/106/2/30  /Table/107/1/42  66        2262-04-11 23:47:16.854776 +0000 +0000
-/Table/107/1/42  /Max             67        2262-04-11 23:47:16.854776 +0000 +0000
+/Table/65        /Table/106/1/10  67        NULL
+/Table/106/1/10  /Table/106/2/20  68        2262-04-11 23:47:16.854776 +0000 +0000
+/Table/106/2/20  /Table/106/2/30  69        2262-04-11 23:47:16.854776 +0000 +0000
+/Table/106/2/30  /Table/107/1/42  70        2262-04-11 23:47:16.854776 +0000 +0000
+/Table/107/1/42  /Max             71        2262-04-11 23:47:16.854776 +0000 +0000
 
 # Ditto, verbose form.
 query TTIIT colnames
@@ -209,11 +209,11 @@ SELECT start_key, end_key, range_id, lease_holder, split_enforced_until FROM [SH
 ORDER BY range_id
 ----
 start_key        end_key          range_id  lease_holder  split_enforced_until
-/Table/62        /Table/106/1/10  63        1             NULL
-/Table/106/1/10  /Table/106/2/20  64        1             2262-04-11 23:47:16.854776 +0000 +0000
-/Table/106/2/20  /Table/106/2/30  65        1             2262-04-11 23:47:16.854776 +0000 +0000
-/Table/106/2/30  /Table/107/1/42  66        1             2262-04-11 23:47:16.854776 +0000 +0000
-/Table/107/1/42  /Max             67        1             2262-04-11 23:47:16.854776 +0000 +0000
+/Table/65        /Table/106/1/10  67        1             NULL
+/Table/106/1/10  /Table/106/2/20  68        1             2262-04-11 23:47:16.854776 +0000 +0000
+/Table/106/2/20  /Table/106/2/30  69        1             2262-04-11 23:47:16.854776 +0000 +0000
+/Table/106/2/30  /Table/107/1/42  70        1             2262-04-11 23:47:16.854776 +0000 +0000
+/Table/107/1/42  /Max             71        1             2262-04-11 23:47:16.854776 +0000 +0000
 
 # Show that the new tables shows up in the full range list.
 query TTITTTITITT colnames
@@ -224,16 +224,16 @@ WHERE (database_name = 'system' AND table_name LIKE 'repl%')
 ORDER BY range_id, table_id, index_id
 ----
 start_key        end_key          range_id  database_name  schema_name  table_name                       table_id  index_name  index_id  index_start_key  index_end_key
-/Table/25        /Table/26        27        system         public       replication_constraint_stats     25        primary     1         /Table/25/1      /Table/25/2
-/Table/26        /Table/27        28        system         public       replication_critical_localities  26        primary     1         /Table/26/1      /Table/26/2
-/Table/27        /Table/28        29        system         public       replication_stats                27        primary     1         /Table/27/1      /Table/27/2
-/Table/62        /Table/106/1/10  63        test           public       t                                106       t_pkey      1         /Table/106/1     /Table/106/1/10
-/Table/106/1/10  /Table/106/2/20  64        test           public       t                                106       t_pkey      1         /Table/106/1/10  /Table/106/2
-/Table/106/1/10  /Table/106/2/20  64        test           public       t                                106       idx         2         /Table/106/2     /Table/106/2/20
-/Table/106/2/20  /Table/106/2/30  65        test           public       t                                106       idx         2         /Table/106/2/20  /Table/106/2/30
-/Table/106/2/30  /Table/107/1/42  66        test           public       t                                106       idx         2         /Table/106/2/30  /Table/106/3
-/Table/106/2/30  /Table/107/1/42  66        test           public       u                                107       u_pkey      1         /Table/107/1     /Table/107/1/42
-/Table/107/1/42  /Max             67        test           public       u                                107       u_pkey      1         /Table/107/1/42  /Table/107/2
+/Table/25        /Table/26        28        system         public       replication_constraint_stats     25        primary     1         /Table/25/1      /Table/25/2
+/Table/26        /Table/27        29        system         public       replication_critical_localities  26        primary     1         /Table/26/1      /Table/26/2
+/Table/27        /Table/28        30        system         public       replication_stats                27        primary     1         /Table/27/1      /Table/27/2
+/Table/65        /Table/106/1/10  67        test           public       t                                106       t_pkey      1         /Table/106/1     /Table/106/1/10
+/Table/106/1/10  /Table/106/2/20  68        test           public       t                                106       t_pkey      1         /Table/106/1/10  /Table/106/2
+/Table/106/1/10  /Table/106/2/20  68        test           public       t                                106       idx         2         /Table/106/2     /Table/106/2/20
+/Table/106/2/20  /Table/106/2/30  69        test           public       t                                106       idx         2         /Table/106/2/20  /Table/106/2/30
+/Table/106/2/30  /Table/107/1/42  70        test           public       t                                106       idx         2         /Table/106/2/30  /Table/106/3
+/Table/106/2/30  /Table/107/1/42  70        test           public       u                                107       u_pkey      1         /Table/107/1     /Table/107/1/42
+/Table/107/1/42  /Max             71        test           public       u                                107       u_pkey      1         /Table/107/1/42  /Table/107/2
 
 subtest show_ranges_from_database/with_tables
 
@@ -248,15 +248,15 @@ SELECT * FROM [SHOW RANGES WITH TABLES, KEYS] LIMIT 0
 ----
 start_key  end_key  raw_start_key  raw_end_key  range_id  schema_name  table_name  table_id  table_start_key  table_end_key  raw_table_start_key  raw_table_end_key  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
 
-query TTITTITTFITTTTTTTI colnames
+query TTITTITTFITTTTTTTIT colnames
 SELECT * FROM [SHOW RANGES WITH DETAILS, TABLES] LIMIT 0
 ----
-start_key  end_key  range_id  schema_name  table_name  table_id  table_start_key  table_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key  end_key  range_id  schema_name  table_name  table_id  table_start_key  table_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
-query TTTTITTITTTTFITTTTTTTI colnames
+query TTTTITTITTTTFITTTTTTTIT colnames
 SELECT * FROM [SHOW RANGES WITH DETAILS, KEYS, TABLES] LIMIT 0
 ----
-start_key  end_key  raw_start_key  raw_end_key  range_id  schema_name  table_name  table_id  table_start_key  table_end_key  raw_table_start_key  raw_table_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key  end_key  raw_start_key  raw_end_key  range_id  schema_name  table_name  table_id  table_start_key  table_end_key  raw_table_start_key  raw_table_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
 # Show the data.
 query TTITTITT colnames
@@ -265,12 +265,12 @@ FROM [SHOW RANGES WITH TABLES]
 ORDER BY range_id
 ----
 start_key        end_key          range_id  schema_name  table_name  table_id  table_start_key  table_end_key
-/Table/62        /Table/106/1/10  63        public       t           106       /Table/106       /Table/106/1/10
-/Table/106/1/10  /Table/106/2/20  64        public       t           106       /Table/106/1/10  /Table/106/2/20
-/Table/106/2/20  /Table/106/2/30  65        public       t           106       /Table/106/2/20  /Table/106/2/30
-/Table/106/2/30  /Table/107/1/42  66        public       t           106       /Table/106/2/30  /Table/107
-/Table/106/2/30  /Table/107/1/42  66        public       u           107       /Table/107       /Table/107/1/42
-/Table/107/1/42  /Max             67        public       u           107       /Table/107/1/42  /Table/108
+/Table/65        /Table/106/1/10  67        public       t           106       /Table/106       /Table/106/1/10
+/Table/106/1/10  /Table/106/2/20  68        public       t           106       /Table/106/1/10  /Table/106/2/20
+/Table/106/2/20  /Table/106/2/30  69        public       t           106       /Table/106/2/20  /Table/106/2/30
+/Table/106/2/30  /Table/107/1/42  70        public       t           106       /Table/106/2/30  /Table/107
+/Table/106/2/30  /Table/107/1/42  70        public       u           107       /Table/107       /Table/107/1/42
+/Table/107/1/42  /Max             71        public       u           107       /Table/107/1/42  /Table/108
 
 subtest show_ranges_from_database/with_indexes
 
@@ -285,15 +285,15 @@ SELECT * FROM [SHOW RANGES WITH INDEXES, KEYS] LIMIT 0
 ----
 start_key  end_key  raw_start_key  raw_end_key  range_id  schema_name  table_name  table_id  index_name  index_id  index_start_key  index_end_key  raw_index_start_key  raw_index_end_key  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
 
-query TTITTITITTFITTTTTTTI colnames
+query TTITTITITTFITTTTTTTIT colnames
 SELECT * FROM [SHOW RANGES WITH DETAILS, INDEXES] LIMIT 0
 ----
-start_key  end_key  range_id  schema_name  table_name  table_id  index_name  index_id  index_start_key  index_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key  end_key  range_id  schema_name  table_name  table_id  index_name  index_id  index_start_key  index_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
-query TTTTITTITITTTTFITTTTTTTI colnames
+query TTTTITTITITTTTFITTTTTTTIT colnames
 SELECT * FROM [SHOW RANGES WITH DETAILS, KEYS, INDEXES] LIMIT 0
 ----
-start_key  end_key  raw_start_key  raw_end_key  range_id  schema_name  table_name  table_id  index_name  index_id  index_start_key  index_end_key  raw_index_start_key  raw_index_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key  end_key  raw_start_key  raw_end_key  range_id  schema_name  table_name  table_id  index_name  index_id  index_start_key  index_end_key  raw_index_start_key  raw_index_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
 # Show some rows.
 # This also demonstrates how the index information remains NULL if there's no index contained.
@@ -303,13 +303,13 @@ FROM [SHOW RANGES WITH INDEXES]
 ORDER BY range_id, table_id, index_id
 ----
 start_key        end_key          range_id  schema_name  table_name  table_id  index_name  index_id  index_start_key  index_end_key
-/Table/62        /Table/106/1/10  63        public       t           106       t_pkey      1         /Table/106/1     /Table/106/1/10
-/Table/106/1/10  /Table/106/2/20  64        public       t           106       t_pkey      1         /Table/106/1/10  /Table/106/2
-/Table/106/1/10  /Table/106/2/20  64        public       t           106       idx         2         /Table/106/2     /Table/106/2/20
-/Table/106/2/20  /Table/106/2/30  65        public       t           106       idx         2         /Table/106/2/20  /Table/106/2/30
-/Table/106/2/30  /Table/107/1/42  66        public       t           106       idx         2         /Table/106/2/30  /Table/106/3
-/Table/106/2/30  /Table/107/1/42  66        public       u           107       u_pkey      1         /Table/107/1     /Table/107/1/42
-/Table/107/1/42  /Max             67        public       u           107       u_pkey      1         /Table/107/1/42  /Table/107/2
+/Table/65        /Table/106/1/10  67        public       t           106       t_pkey      1         /Table/106/1     /Table/106/1/10
+/Table/106/1/10  /Table/106/2/20  68        public       t           106       t_pkey      1         /Table/106/1/10  /Table/106/2
+/Table/106/1/10  /Table/106/2/20  68        public       t           106       idx         2         /Table/106/2     /Table/106/2/20
+/Table/106/2/20  /Table/106/2/30  69        public       t           106       idx         2         /Table/106/2/20  /Table/106/2/30
+/Table/106/2/30  /Table/107/1/42  70        public       t           106       idx         2         /Table/106/2/30  /Table/106/3
+/Table/106/2/30  /Table/107/1/42  70        public       u           107       u_pkey      1         /Table/107/1     /Table/107/1/42
+/Table/107/1/42  /Max             71        public       u           107       u_pkey      1         /Table/107/1/42  /Table/107/2
 
 
 subtest show_ranges_from_table
@@ -325,15 +325,15 @@ SELECT * FROM [SHOW RANGES FROM TABLE t WITH KEYS] LIMIT 0
 ----
 start_key  end_key  raw_start_key  raw_end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
 
-query TTIFITTTTTTTI colnames
+query TTIFITTTTTTTIT colnames
 SELECT * FROM [SHOW RANGES FROM TABLE t WITH DETAILS] LIMIT 0
 ----
-start_key  end_key  range_id  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key  end_key  range_id  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
-query TTTTIFITTTTTTTI colnames
+query TTTTIFITTTTTTTIT colnames
 SELECT * FROM [SHOW RANGES FROM TABLE t WITH DETAILS,KEYS] LIMIT 0
 ----
-start_key  end_key  raw_start_key  raw_end_key  range_id  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key  end_key  raw_start_key  raw_end_key  range_id  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
 # Now also look at the output.
 query TTIT colnames
@@ -341,10 +341,10 @@ SELECT start_key, end_key, range_id, split_enforced_until FROM [SHOW RANGES FROM
 ORDER BY range_id
 ----
 start_key           end_key                  range_id  split_enforced_until
-<before:/Table/62>  …/1/10                   63        NULL
-…/1/10              …/2/20                   64        2262-04-11 23:47:16.854776 +0000 +0000
-…/2/20              …/2/30                   65        2262-04-11 23:47:16.854776 +0000 +0000
-…/2/30              <after:/Table/107/1/42>  66        2262-04-11 23:47:16.854776 +0000 +0000
+<before:/Table/65>  …/1/10                   67        NULL
+…/1/10              …/2/20                   68        2262-04-11 23:47:16.854776 +0000 +0000
+…/2/20              …/2/30                   69        2262-04-11 23:47:16.854776 +0000 +0000
+…/2/30              <after:/Table/107/1/42>  70        2262-04-11 23:47:16.854776 +0000 +0000
 
 # Ditto, verbose form.
 query TTIIT colnames
@@ -352,10 +352,10 @@ SELECT start_key, end_key, range_id, lease_holder, split_enforced_until FROM [SH
 ORDER BY range_id
 ----
 start_key           end_key                  range_id  lease_holder  split_enforced_until
-<before:/Table/62>  …/1/10                   63        1             NULL
-…/1/10              …/2/20                   64        1             2262-04-11 23:47:16.854776 +0000 +0000
-…/2/20              …/2/30                   65        1             2262-04-11 23:47:16.854776 +0000 +0000
-…/2/30              <after:/Table/107/1/42>  66        1             2262-04-11 23:47:16.854776 +0000 +0000
+<before:/Table/65>  …/1/10                   67        1             NULL
+…/1/10              …/2/20                   68        1             2262-04-11 23:47:16.854776 +0000 +0000
+…/2/20              …/2/30                   69        1             2262-04-11 23:47:16.854776 +0000 +0000
+…/2/30              <after:/Table/107/1/42>  70        1             2262-04-11 23:47:16.854776 +0000 +0000
 
 # Let's inspect the other table for comparison.
 query TTIT colnames
@@ -363,8 +363,8 @@ SELECT start_key, end_key, range_id, split_enforced_until FROM [SHOW RANGES FROM
 ORDER BY range_id
 ----
 start_key                 end_key       range_id  split_enforced_until
-<before:/Table/106/2/30>  …/1/42        66        2262-04-11 23:47:16.854776 +0000 +0000
-…/1/42                    <after:/Max>  67        2262-04-11 23:47:16.854776 +0000 +0000
+<before:/Table/106/2/30>  …/1/42        70        2262-04-11 23:47:16.854776 +0000 +0000
+…/1/42                    <after:/Max>  71        2262-04-11 23:47:16.854776 +0000 +0000
 
 
 
@@ -381,15 +381,15 @@ SELECT * FROM [SHOW RANGES FROM TABLE t WITH INDEXES,KEYS] LIMIT 0
 ----
 start_key  end_key  raw_start_key  raw_end_key  range_id  index_name  index_id  index_start_key  index_end_key  raw_index_start_key  raw_index_end_key  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
 
-query TTITITTFITTTTTTTI colnames
+query TTITITTFITTTTTTTIT colnames
 SELECT * FROM [SHOW RANGES FROM TABLE t WITH INDEXES, DETAILS] LIMIT 0
 ----
-start_key  end_key  range_id  index_name  index_id  index_start_key  index_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key  end_key  range_id  index_name  index_id  index_start_key  index_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
-query TTTTITITTTTFITTTTTTTI colnames
+query TTTTITITTTTFITTTTTTTIT colnames
 SELECT * FROM [SHOW RANGES FROM TABLE t WITH INDEXES, KEYS, DETAILS] LIMIT 0
 ----
-start_key  end_key  raw_start_key  raw_end_key  range_id  index_name  index_id  index_start_key  index_end_key  raw_index_start_key  raw_index_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key  end_key  raw_start_key  raw_end_key  range_id  index_name  index_id  index_start_key  index_end_key  raw_index_start_key  raw_index_end_key  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
 # Now also look at the output.
 query TTITITT colnames
@@ -397,11 +397,11 @@ SELECT start_key, end_key, range_id, index_name, index_id, index_start_key, inde
 ORDER BY range_id, index_id
 ----
 start_key           end_key                  range_id  index_name  index_id  index_start_key  index_end_key
-<before:/Table/62>  …/1/10                   63        t_pkey      1         …/1              …/1/10
-…/1/10              …/2/20                   64        t_pkey      1         …/1/10           …/2
-…/1/10              …/2/20                   64        idx         2         …/2              …/2/20
-…/2/20              …/2/30                   65        idx         2         …/2/20           …/2/30
-…/2/30              <after:/Table/107/1/42>  66        idx         2         …/2/30           …/3
+<before:/Table/65>  …/1/10                   67        t_pkey      1         …/1              …/1/10
+…/1/10              …/2/20                   68        t_pkey      1         …/1/10           …/2
+…/1/10              …/2/20                   68        idx         2         …/2              …/2/20
+…/2/20              …/2/30                   69        idx         2         …/2/20           …/2/30
+…/2/30              <after:/Table/107/1/42>  70        idx         2         …/2/30           …/3
 
 
 
@@ -418,33 +418,33 @@ SELECT * FROM [SHOW RANGES FROM INDEX t@idx WITH KEYS] LIMIT 0
 ----
 start_key  end_key  raw_start_key  raw_end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
 
-query TTIFITTTTTTTI colnames
+query TTIFITTTTTTTIT colnames
 SELECT * FROM [SHOW RANGES FROM INDEX t@idx WITH DETAILS] LIMIT 0
 ----
-start_key  end_key  range_id  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key  end_key  range_id  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
-query TTTTIFITTTTTTTI colnames
+query TTTTIFITTTTTTTIT colnames
 SELECT * FROM [SHOW RANGES FROM INDEX t@idx WITH DETAILS, KEYS] LIMIT 0
 ----
-start_key  end_key  raw_start_key  raw_end_key  range_id  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size
+start_key  end_key  raw_start_key  raw_end_key  range_id  range_size_mb  lease_holder  lease_holder_locality  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  range_size  span_stats
 
 # Now also look at the output.
 query TTIT colnames
-SELECT start_key, end_key, range_id, split_enforced_until FROM [SHOW RANGES FROM INDEX t@idx]
+SELECT start_key, end_key, range_id, split_enforced_until FROM [SHOW RANGES FROM INDEX t@idx] ORDER BY start_key
 ----
 start_key                 end_key                  range_id  split_enforced_until
-<before:/Table/106/1/10>  …/20                     64        2262-04-11 23:47:16.854776 +0000 +0000
-…/20                      …/30                     65        2262-04-11 23:47:16.854776 +0000 +0000
-…/30                      <after:/Table/107/1/42>  66        2262-04-11 23:47:16.854776 +0000 +0000
+<before:/Table/106/1/10>  …/20                     68        2262-04-11 23:47:16.854776 +0000 +0000
+…/20                      …/30                     69        2262-04-11 23:47:16.854776 +0000 +0000
+…/30                      <after:/Table/107/1/42>  70        2262-04-11 23:47:16.854776 +0000 +0000
 
 # Ditto, verbose form.
 query TTIIT colnames
-SELECT start_key, end_key, range_id, lease_holder, split_enforced_until FROM [SHOW RANGES FROM INDEX t@idx WITH DETAILS]
+SELECT start_key, end_key, range_id, lease_holder, split_enforced_until FROM [SHOW RANGES FROM INDEX t@idx WITH DETAILS] ORDER BY start_key
 ----
 start_key                 end_key                  range_id  lease_holder  split_enforced_until
-<before:/Table/106/1/10>  …/20                     64        1             2262-04-11 23:47:16.854776 +0000 +0000
-…/20                      …/30                     65        1             2262-04-11 23:47:16.854776 +0000 +0000
-…/30                      <after:/Table/107/1/42>  66        1             2262-04-11 23:47:16.854776 +0000 +0000
+<before:/Table/106/1/10>  …/20                     68        1             2262-04-11 23:47:16.854776 +0000 +0000
+…/20                      …/30                     69        1             2262-04-11 23:47:16.854776 +0000 +0000
+…/30                      <after:/Table/107/1/42>  70        1             2262-04-11 23:47:16.854776 +0000 +0000
 
 subtest cast_error
 

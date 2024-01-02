@@ -1,5 +1,4 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("//build:STRINGER.bzl", "stringer")
 
 go_library(
@@ -18,9 +17,11 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/kv/kvpb",
+        "//pkg/multitenant/mtinfopb",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/spanconfig/spanconfigbounds",
+        "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_redact//interfaces",
@@ -41,12 +42,10 @@ stringer(
 go_test(
     name = "tenantcapabilities_test",
     srcs = ["values_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":tenantcapabilities"],
     deps = [
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

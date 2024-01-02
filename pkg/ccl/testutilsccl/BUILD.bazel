@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -11,14 +10,12 @@ go_library(
         "//pkg/base",
         "//pkg/jobs",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/execinfra",
         "//pkg/sql/sqltestutils",
-        "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
         "//pkg/util",
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

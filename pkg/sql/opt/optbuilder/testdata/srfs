@@ -66,7 +66,7 @@ ordinality
 build
 SELECT * FROM (VALUES (1)) LIMIT generate_series(1, 3)
 ----
-error (0A000): generate_series(): generator functions are not allowed in LIMIT
+error (0A000): generate_series(): set-returning functions are not allowed in LIMIT
 
 # multiple_SRFs
 
@@ -709,7 +709,7 @@ error (0A000): generate_series(): generate_series(): set-returning functions mus
 build
 SELECT max(a) FROM t HAVING max(a::int) > generate_series(0, a::int)
 ----
-error (0A000): generate_series(): generator functions are not allowed in HAVING
+error (0A000): generate_series(): set-returning functions are not allowed in HAVING
 
 build
 SELECT max(a) FROM t HAVING max(a::int) > (SELECT generate_series(0, b::int) FROM u limit 1)
@@ -861,7 +861,7 @@ error (42803): column "unnest" must appear in the GROUP BY clause or be used in 
 build
 SELECT 0, unnest(ARRAY[0]) GROUP BY 1, 2
 ----
-error (0A000): unnest(): generator functions are not allowed in GROUP BY
+error (0A000): unnest(): set-returning functions are not allowed in GROUP BY
 
 build
 SELECT 0, information_schema._pg_expandarray(ARRAY[0]) GROUP BY 1
@@ -1137,3 +1137,34 @@ project
       │         └── zip
       │              └── f95615()
       └── filters (true)
+
+# Regression test for issue #95315.
+exec-ddl
+CREATE TABLE t95315 (c1 INT, c2 FLOAT)
+----
+
+# Regression test for issue #95315.
+# A query which uses a project set involving simple column expressions does
+# not error out.
+build
+SELECT 1,c1,c2 FROM t95315 JOIN
+       ROWS FROM (CAST(c1 AS INT), CAST(c2 AS INT)) USING (c1, c2)
+----
+project
+ ├── columns: "?column?":8!null c1:1 c2:2
+ ├── inner-join-apply
+ │    ├── columns: t95315.c1:1 t95315.c2:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5 c1:6 c2:7
+ │    ├── scan t95315
+ │    │    └── columns: t95315.c1:1 t95315.c2:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    ├── project-set
+ │    │    ├── columns: c1:6 c2:7
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         ├── t95315.c1:1
+ │    │         └── t95315.c2:2::INT8
+ │    └── filters
+ │         ├── t95315.c1:1 = c1:6
+ │         └── t95315.c2:2 = c2:7
+ └── projections
+      └── 1 [as="?column?":8]

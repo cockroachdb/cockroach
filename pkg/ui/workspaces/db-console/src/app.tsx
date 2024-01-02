@@ -84,6 +84,7 @@ import "styl/app.styl";
 import InsightsOverviewPage from "./views/insights/insightsOverview";
 import TransactionInsightDetailsPage from "./views/insights/transactionInsightDetailsPage";
 import StatementInsightDetailsPage from "./views/insights/statementInsightDetailsPage";
+import { JwtAuthTokenPage } from "./views/jwt/jwtAuthToken";
 import { CockroachCloudContext } from "@cockroachlabs/cluster-ui";
 import { SnapshotRouter } from "src/views/tracez_v2/snapshotRoutes";
 import KeyVisualizerPage from "src/views/keyVisualizer";
@@ -116,6 +117,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
               {/* login */}
               {createLoginRoute()}
               {createLogoutRoute(store)}
+              <Route path="/jwt/:oidc" component={JwtAuthTokenPage} />
               <Route path="/">
                 <Layout>
                   <Switch>
@@ -406,7 +408,10 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                       path={`/reports/network/:${nodeIDAttr}`}
                       component={Network}
                     />
-                    <Route exact path="/reports/network" component={Network} />
+                    <Redirect
+                      from={`/reports/network`}
+                      to={`/reports/network/region`}
+                    />
                     <Route exact path="/reports/nodes" component={Nodes} />
                     <Route
                       exact

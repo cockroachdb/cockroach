@@ -18,103 +18,282 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestBackup_ccl_create_index(t *testing.T) {
+func TestBackupRollbacks_ccl_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index", newCluster)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
 }
+
+func TestBackupRollbacks_ccl_drop_database_multiregion_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_database_multiregion_primary_region"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacks_ccl_drop_table_multiregion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacks_ccl_drop_table_multiregion_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion_primary_region"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacksMixedVersion_ccl_create_index(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacksMixedVersion_ccl_drop_database_multiregion_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_database_multiregion_primary_region"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacksMixedVersion_ccl_drop_table_multiregion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacksMixedVersion_ccl_drop_table_multiregion_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion_primary_region"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccess_ccl_create_index(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccess_ccl_drop_database_multiregion_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_database_multiregion_primary_region"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccess_ccl_drop_table_multiregion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccess_ccl_drop_table_multiregion_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion_primary_region"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccessMixedVersion_ccl_create_index(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccessMixedVersion_ccl_drop_database_multiregion_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_database_multiregion_primary_region"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccessMixedVersion_ccl_drop_table_multiregion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccessMixedVersion_ccl_drop_table_multiregion_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion_primary_region"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestEndToEndSideEffects_ccl_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.EndToEndSideEffects(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index", newCluster)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index"
+	sctest.EndToEndSideEffects(t, path, MultiRegionTestClusterFactory{})
 }
-func TestGenerateSchemaChangeCorpus_ccl_create_index(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.GenerateSchemaChangeCorpus(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index", newCluster)
-}
-func TestPause_ccl_create_index(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.Pause(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index", newCluster)
-}
-func TestRollback_ccl_create_index(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.Rollback(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index", newCluster)
-}
-func TestBackup_ccl_drop_database_multiregion_primary_region(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_database_multiregion_primary_region", newCluster)
-}
+
 func TestEndToEndSideEffects_ccl_drop_database_multiregion_primary_region(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.EndToEndSideEffects(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_database_multiregion_primary_region", newCluster)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_database_multiregion_primary_region"
+	sctest.EndToEndSideEffects(t, path, MultiRegionTestClusterFactory{})
 }
-func TestGenerateSchemaChangeCorpus_ccl_drop_database_multiregion_primary_region(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.GenerateSchemaChangeCorpus(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_database_multiregion_primary_region", newCluster)
-}
-func TestPause_ccl_drop_database_multiregion_primary_region(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.Pause(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_database_multiregion_primary_region", newCluster)
-}
-func TestRollback_ccl_drop_database_multiregion_primary_region(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.Rollback(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_database_multiregion_primary_region", newCluster)
-}
-func TestBackup_ccl_drop_table_multiregion(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion", newCluster)
-}
+
 func TestEndToEndSideEffects_ccl_drop_table_multiregion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.EndToEndSideEffects(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion", newCluster)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion"
+	sctest.EndToEndSideEffects(t, path, MultiRegionTestClusterFactory{})
 }
-func TestGenerateSchemaChangeCorpus_ccl_drop_table_multiregion(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.GenerateSchemaChangeCorpus(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion", newCluster)
-}
-func TestPause_ccl_drop_table_multiregion(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.Pause(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion", newCluster)
-}
-func TestRollback_ccl_drop_table_multiregion(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.Rollback(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion", newCluster)
-}
-func TestBackup_ccl_drop_table_multiregion_primary_region(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion_primary_region", newCluster)
-}
+
 func TestEndToEndSideEffects_ccl_drop_table_multiregion_primary_region(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.EndToEndSideEffects(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion_primary_region", newCluster)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion_primary_region"
+	sctest.EndToEndSideEffects(t, path, MultiRegionTestClusterFactory{})
 }
+
+func TestExecuteWithDMLInjection_ccl_create_index(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index"
+	sctest.ExecuteWithDMLInjection(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestExecuteWithDMLInjection_ccl_drop_database_multiregion_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_database_multiregion_primary_region"
+	sctest.ExecuteWithDMLInjection(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestExecuteWithDMLInjection_ccl_drop_table_multiregion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion"
+	sctest.ExecuteWithDMLInjection(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestExecuteWithDMLInjection_ccl_drop_table_multiregion_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion_primary_region"
+	sctest.ExecuteWithDMLInjection(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestGenerateSchemaChangeCorpus_ccl_create_index(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index"
+	sctest.GenerateSchemaChangeCorpus(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestGenerateSchemaChangeCorpus_ccl_drop_database_multiregion_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_database_multiregion_primary_region"
+	sctest.GenerateSchemaChangeCorpus(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestGenerateSchemaChangeCorpus_ccl_drop_table_multiregion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion"
+	sctest.GenerateSchemaChangeCorpus(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestGenerateSchemaChangeCorpus_ccl_drop_table_multiregion_primary_region(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.GenerateSchemaChangeCorpus(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion_primary_region", newCluster)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion_primary_region"
+	sctest.GenerateSchemaChangeCorpus(t, path, MultiRegionTestClusterFactory{})
 }
+
+func TestPause_ccl_create_index(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index"
+	sctest.Pause(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestPause_ccl_drop_database_multiregion_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_database_multiregion_primary_region"
+	sctest.Pause(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestPause_ccl_drop_table_multiregion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion"
+	sctest.Pause(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestPause_ccl_drop_table_multiregion_primary_region(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Pause(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion_primary_region", newCluster)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion_primary_region"
+	sctest.Pause(t, path, MultiRegionTestClusterFactory{})
 }
+
+func TestPauseMixedVersion_ccl_create_index(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index"
+	sctest.PauseMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestPauseMixedVersion_ccl_drop_database_multiregion_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_database_multiregion_primary_region"
+	sctest.PauseMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestPauseMixedVersion_ccl_drop_table_multiregion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion"
+	sctest.PauseMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestPauseMixedVersion_ccl_drop_table_multiregion_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion_primary_region"
+	sctest.PauseMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestRollback_ccl_create_index(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index"
+	sctest.Rollback(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestRollback_ccl_drop_database_multiregion_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_database_multiregion_primary_region"
+	sctest.Rollback(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestRollback_ccl_drop_table_multiregion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion"
+	sctest.Rollback(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestRollback_ccl_drop_table_multiregion_primary_region(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Rollback(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion_primary_region", newCluster)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/drop_table_multiregion_primary_region"
+	sctest.Rollback(t, path, MultiRegionTestClusterFactory{})
 }

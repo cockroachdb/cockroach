@@ -1,7 +1,14 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
-load("@build_bazel_rules_nodejs//:index.bzl", "nodejs_binary")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+
+npm_link_all_packages(name = "node_modules")
+
+exports_files([
+    ".npmrc.bazel",
+    "package.json",
+    "pnpm-lock.yaml",
+])
 
 go_library(
     name = "ui",
@@ -18,49 +25,25 @@ go_library(
     ],
 )
 
-bool_flag(
-    name = "with_ui_flag",
-    build_setting_default = False,
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "with_ui",
-    flag_values = {
-        ":with_ui_flag": "true",
-    },
-    visibility = ["//visibility:public"],
-)
-
-genrule(
-    name = "gen-empty-index.html",
-    outs = ["index.html"],
-    cmd = """
-    cat >$@ <<EOF
-<!DOCTYPE html>
-<title>CockroachDB</title>
-Binary built without web UI.
-<hr>
-<em>%s</em>
-EOF
-""",
-    visibility = ["//pkg/ui:__subpackages__"],
+test_suite(
+    name = "test",
+    tests = [
+        "//pkg/ui/workspaces/cluster-ui:jest",
+        "//pkg/ui/workspaces/db-console:jest",
+    ],
 )
 
 test_suite(
     name = "lint",
     tests = [
-        "//pkg/cmd/mirror/npm:are_lockfiles_updated",
         "//pkg/ui/workspaces/cluster-ui:lint",
         "//pkg/ui/workspaces/db-console:lint",
-        "//pkg/ui/workspaces/e2e-tests:lint",
     ],
 )
 
 go_test(
     name = "ui_test",
     srcs = ["ui_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":ui"],
     deps = [
         "//pkg/base",
@@ -69,5 +52,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

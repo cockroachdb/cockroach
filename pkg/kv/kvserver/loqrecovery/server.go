@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -468,10 +469,7 @@ func (s Server) NodeStatus(
 }
 
 func (s Server) Verify(
-	ctx context.Context,
-	req *serverpb.RecoveryVerifyRequest,
-	liveNodes livenesspb.IsLiveMap,
-	db *kv.DB,
+	ctx context.Context, req *serverpb.RecoveryVerifyRequest, nl *liveness.NodeLiveness, db *kv.DB,
 ) (*serverpb.RecoveryVerifyResponse, error) {
 	// Block requests that require fan-out to other nodes until upgrade is finalized.
 	if !s.settings.Version.IsActive(ctx, clusterversion.V23_1) {
@@ -497,24 +495,20 @@ func (s Server) Verify(
 	if err != nil {
 		return nil, err
 	}
-
-	decomStatus := make(map[roachpb.NodeID]livenesspb.MembershipStatus)
-	decomNodes := make(map[roachpb.NodeID]interface{})
+	decomNodes := make(map[roachpb.NodeID]bool)
+	decomStatus := make(map[roachpb.NodeID]livenesspb.MembershipStatus, len(req.DecommissionedNodeIDs))
 	for _, plannedID := range req.DecommissionedNodeIDs {
-		decomNodes[plannedID] = struct{}{}
-		if ns, ok := liveNodes[plannedID]; ok {
-			decomStatus[plannedID] = ns.Membership
-		}
+		decomNodes[plannedID] = true
+		decomStatus[plannedID] = nl.GetNodeVitalityFromCache(plannedID).MembershipStatus()
 	}
 
 	isNodeLive := func(rd roachpb.ReplicaDescriptor) bool {
 		// Preemptively remove dead nodes as they would return Forbidden error if
 		// liveness is not stale enough.
-		if _, removed := decomNodes[rd.NodeID]; removed {
+		if decomNodes[rd.NodeID] {
 			return false
 		}
-		l, ok := liveNodes[rd.NodeID]
-		return ok && l.IsLive
+		return nl.GetNodeVitalityFromCache(rd.NodeID).IsLive(livenesspb.LossOfQuorum)
 	}
 
 	getRangeInfo := func(
@@ -643,6 +637,19 @@ func checkRangeHealth(
 	return loqrecoverypb.RangeHealth_LOSS_OF_QUORUM
 }
 
+// makeVisitAvailableNodes creates a function to visit available remote nodes.
+//
+// Returned function would dial all cluster nodes from gossip and executes
+// visitor function with admin client after connection is established. Function
+// will perform retries on dial operation as well on visitor execution.
+//
+// For former, grpcutil.IsConnectionUnavailable check on returned error will
+// abort retry loop because that indicates that node is not available. The
+// expectation here is that we don't know if nodes in gossip are available or
+// not and we don't want to block on dead nodes indefinitely.
+//
+// For latter, errors marked with errMarkRetry marker are retried. It is up
+// to the visitor to mark appropriate errors are retryable.
 func makeVisitAvailableNodes(
 	g *gossip.Gossip, loc roachpb.Locality, rpcCtx *rpc.Context,
 ) visitNodeAdminFn {
@@ -656,11 +663,16 @@ func makeVisitAvailableNodes(
 				log.Infof(ctx, "visiting node n%d, attempt %d", node.NodeID, r.CurrentAttempt())
 				addr := node.AddressForLocality(loc)
 				var conn *grpc.ClientConn
-				conn, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, rpc.DefaultClass).Connect(ctx)
+				// Note that we use ConnectNoBreaker here to avoid any race with probe
+				// running on current node and target node restarting. Errors from circuit
+				// breaker probes could confuse us and present node as unavailable.
+				conn, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, rpc.DefaultClass).ConnectNoBreaker(ctx)
 				// Nodes would contain dead nodes that we don't need to visit. We can skip
 				// them and let caller handle incomplete info.
 				if err != nil {
 					if grpcutil.IsConnectionUnavailable(err) {
+						log.Infof(ctx, "rejecting node n%d because of suspected un-retryable error: %s",
+							node.NodeID, err)
 						return nil
 					}
 					// This was an initial heartbeat type error, we must retry as node seems
@@ -712,6 +724,18 @@ func makeVisitAvailableNodes(
 	}
 }
 
+// makeVisitNode creates a function to visit a remote node.
+//
+// Returned function would dial a node and executes visitor function with
+// status client after connection is established. Function will perform
+// retries on dial operation as well on visitor execution.
+//
+// For former, closed connection errors will abort retry loop because that
+// indicates that node is not available. The expectation here is that we are
+// trying to talk to available nodes and all other errors are transient.
+//
+// For latter, errors marked with errMarkRetry marker are retried. It is up
+// to the visitor to mark appropriate errors are retryable.
 func makeVisitNode(g *gossip.Gossip, loc roachpb.Locality, rpcCtx *rpc.Context) visitNodeStatusFn {
 	return func(ctx context.Context, nodeID roachpb.NodeID, retryOpts retry.Options,
 		visitor func(client serverpb.StatusClient) error,
@@ -724,9 +748,14 @@ func makeVisitNode(g *gossip.Gossip, loc roachpb.Locality, rpcCtx *rpc.Context) 
 			log.Infof(ctx, "visiting node n%d, attempt %d", node.NodeID, r.CurrentAttempt())
 			addr := node.AddressForLocality(loc)
 			var conn *grpc.ClientConn
-			conn, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, rpc.DefaultClass).Connect(ctx)
+			// Note that we use ConnectNoBreaker here to avoid any race with probe
+			// running on current node and target node restarting. Errors from circuit
+			// breaker probes could confuse us and present node as unavailable.
+			conn, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, rpc.DefaultClass).ConnectNoBreaker(ctx)
 			if err != nil {
 				if grpcutil.IsClosedConnection(err) {
+					log.Infof(ctx, "can't dial node n%d because connection is permanently closed: %s",
+						node.NodeID, err)
 					return err
 				}
 				// Retry any other transient connection flakes.

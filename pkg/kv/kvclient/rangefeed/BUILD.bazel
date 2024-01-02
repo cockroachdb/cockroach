@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
@@ -62,7 +61,6 @@ go_test(
         "rangefeed_mock_test.go",
         ":mock_rangefeed",  # keep
     ],
-    args = ["-test.timeout=295s"],
     embed = [":rangefeed"],
     deps = [
         "//pkg/base",
@@ -71,6 +69,7 @@ go_test(
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/closedts",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -90,6 +89,7 @@ go_test(
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/retry",
         "//pkg/util/stop",
@@ -101,5 +101,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -21,7 +21,7 @@ import (
 
 // initializeQueryCounter returns a queryCounter that accounts for system
 // upgrades that may have run DDL statements.
-func initializeQueryCounter(s serverutils.TestServerInterface) queryCounter {
+func initializeQueryCounter(s serverutils.ApplicationLayerInterface) queryCounter {
 	return queryCounter{
 		txnBeginCount:                   s.MustGetSQLCounter(sql.MetaTxnBeginStarted.Name),
 		selectCount:                     s.MustGetSQLCounter(sql.MetaSelectStarted.Name),
@@ -44,7 +44,7 @@ func initializeQueryCounter(s serverutils.TestServerInterface) queryCounter {
 }
 
 func checkCounterDelta(
-	s serverutils.TestServerInterface, meta metric.Metadata, init, delta int64,
+	s serverutils.ApplicationLayerInterface, meta metric.Metadata, init, delta int64,
 ) (int64, error) {
 	actual := s.MustGetSQLCounter(meta.Name)
 	if actual != (init + delta) {
@@ -54,7 +54,7 @@ func checkCounterDelta(
 	return actual, nil
 }
 
-func checkCounterGE(s serverutils.TestServerInterface, meta metric.Metadata, e int64) error {
+func checkCounterGE(s serverutils.ApplicationLayerInterface, meta metric.Metadata, e int64) error {
 	if a := s.MustGetSQLCounter(meta.Name); a < e {
 		return errors.Errorf("stat %s: expected: actual %d >= %d",
 			meta.Name, a, e)

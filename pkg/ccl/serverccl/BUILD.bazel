@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -13,13 +12,11 @@ go_library(
         "//pkg/base",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/security",
+        "//pkg/security/securitytest",
         "//pkg/server/serverpb",
         "//pkg/sql",
         "//pkg/sql/contention",
-        "//pkg/sql/pgwire",
         "//pkg/sql/sqlstats/persistedsqlstats",
-        "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/httputil",
@@ -39,17 +36,15 @@ go_test(
         "server_controller_test.go",
         "server_sql_test.go",
         "server_startup_guardrails_test.go",
+        "settings_test.go",
         "shared_process_tenant_test.go",
         "tenant_decommissioned_host_test.go",
         "tenant_migration_test.go",
         "tenant_vars_test.go",
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
     data = glob(["testdata/**"]),
     embed = [":serverccl"],
+    exec_properties = {"Pool": "large"},
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",
@@ -58,6 +53,7 @@ go_test(
         "//pkg/ccl/utilccl/licenseccl",
         "//pkg/clusterversion",
         "//pkg/jobs",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/multitenant/tenantcapabilities",
@@ -68,15 +64,16 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
+        "//pkg/server/authserver",
         "//pkg/server/serverpb",
-        "//pkg/server/systemconfigwatcher/systemconfigwatchertest",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/isql",
         "//pkg/sql/lexbase",
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sqlinstance/instancestorage",
-        "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
@@ -89,6 +86,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "//pkg/util/stop",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
@@ -100,5 +98,3 @@ go_test(
         "@org_golang_x_crypto//bcrypt",
     ],
 )
-
-get_x_data(name = "get_x_data")

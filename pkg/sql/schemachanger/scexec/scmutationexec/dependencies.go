@@ -79,6 +79,9 @@ type ImmediateMutationStateUpdater interface {
 	// AddComment adds comments for a descriptor.
 	AddComment(id descpb.ID, subID int, commentType catalogkeys.CommentType, comment string)
 
+	// InitSequence initializes a sequence.
+	InitSequence(id descpb.ID, startVal int64)
+
 	// Reset schedules a reset of the in-txn catalog state
 	// to undo the modifications from earlier stages.
 	Reset()
@@ -118,7 +121,7 @@ type DeferredMutationStateUpdater interface {
 	) error
 
 	// DeleteSchedule deletes a scheduled job.
-	DeleteSchedule(scheduleID int64)
+	DeleteSchedule(scheduleID jobspb.ScheduleID)
 
 	// RefreshStats refresh stats for a given descriptor.
 	RefreshStats(id descpb.ID)

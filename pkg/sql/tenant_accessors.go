@@ -13,9 +13,9 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfo"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -23,23 +23,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
 
 // rejectIfCantCoordinateMultiTenancy returns an error if the current tenant is
 // disallowed from coordinating tenant management operations on behalf of a
 // multi-tenant cluster. Only the system tenant has permissions to do so.
-func rejectIfCantCoordinateMultiTenancy(codec keys.SQLCodec, op string) error {
+func rejectIfCantCoordinateMultiTenancy(
+	codec keys.SQLCodec, op string, st *cluster.Settings,
+) error {
+	var err error
 	// NOTE: even if we got this wrong, the rest of the function would fail for
 	// a non-system tenant because they would be missing a system.tenants table.
 	if !codec.ForSystemTenant() {
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
+		err = pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only the system tenant can %s other tenants", op)
 	}
-	return nil
+	err = maybeAddSystemInterfaceHint(err, "manage tenants", codec, st)
+	return err
 }
 
 // rejectIfSystemTenant returns an error if the provided tenant ID is the system
@@ -59,11 +64,6 @@ func GetAllNonDropTenantIDs(
 ) ([]roachpb.TenantID, error) {
 	q := `SELECT id FROM system.tenants WHERE data_state != $1 ORDER BY id`
 	var arg interface{} = mtinfopb.DataStateDrop
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
-		q = `SELECT id FROM system.tenants
-WHERE crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)->>'deprecatedDataState' != $1 ORDER BY id`
-		arg = "DROP"
-	}
 	rows, err := txn.QueryBufferedEx(ctx, "get-tenant-ids", txn.KV(), sessiondata.NodeUserSessionDataOverride, q, arg)
 	if err != nil {
 		return nil, err
@@ -88,10 +88,6 @@ WHERE crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)->>
 func GetTenantRecordByName(
 	ctx context.Context, settings *cluster.Settings, txn isql.Txn, tenantName roachpb.TenantName,
 ) (*mtinfopb.TenantInfo, error) {
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
-		return nil, errors.Newf("tenant names not supported until upgrade to %s or higher is completed",
-			clusterversion.V23_1TenantNamesStateAndServiceMode.String())
-	}
 	row, err := txn.QueryRowEx(
 		ctx, "get-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		`SELECT id, info, name, data_state, service_mode FROM system.tenants WHERE name = $1`, tenantName,
@@ -101,52 +97,8 @@ func GetTenantRecordByName(
 	} else if row == nil {
 		return nil, pgerror.Newf(pgcode.UndefinedObject, "tenant %q does not exist", tenantName)
 	}
-	return getTenantInfoFromRow(row)
-}
-
-func getTenantInfoFromRow(row tree.Datums) (*mtinfopb.TenantInfo, error) {
-	info := &mtinfopb.TenantInfo{}
-	info.ID = uint64(tree.MustBeDInt(row[0]))
-
-	// For the benefit of pre-23.1 BACKUP/RESTORE.
-	info.DeprecatedID = info.ID
-
-	infoBytes := []byte(tree.MustBeDBytes(row[1]))
-	if err := protoutil.Unmarshal(infoBytes, &info.ProtoInfo); err != nil {
-		return nil, err
-	}
-
-	// Load the name if defined.
-	if row[2] != tree.DNull {
-		info.Name = roachpb.TenantName(tree.MustBeDString(row[2]))
-	}
-
-	// Load the data state column if defined.
-	if row[3] != tree.DNull {
-		info.DataState = mtinfopb.TenantDataState(tree.MustBeDInt(row[3]))
-	} else {
-		// Pre-v23.1 info struct.
-		switch info.ProtoInfo.DeprecatedDataState {
-		case mtinfopb.ProtoInfo_READY:
-			info.DataState = mtinfopb.DataStateReady
-		case mtinfopb.ProtoInfo_ADD:
-			info.DataState = mtinfopb.DataStateAdd
-		case mtinfopb.ProtoInfo_DROP:
-			info.DataState = mtinfopb.DataStateDrop
-		default:
-			return nil, errors.AssertionFailedf("unhandled: %d", info.ProtoInfo.DeprecatedDataState)
-		}
-	}
-
-	// Load the service mode if defined.
-	info.ServiceMode = mtinfopb.ServiceModeNone
-	if row[4] != tree.DNull {
-		info.ServiceMode = mtinfopb.TenantServiceMode(tree.MustBeDInt(row[4]))
-	} else if info.DataState == mtinfopb.DataStateReady {
-		// Records created for CC Serverless pre-v23.1.
-		info.ServiceMode = mtinfopb.ServiceModeExternal
-	}
-	return info, nil
+	_, info, err := mtinfo.GetTenantInfoFromSQLRow(row)
+	return info, err
 }
 
 // GetTenantRecordByID retrieves a tenant in system.tenants.
@@ -154,9 +106,6 @@ func GetTenantRecordByID(
 	ctx context.Context, txn isql.Txn, tenID roachpb.TenantID, settings *cluster.Settings,
 ) (*mtinfopb.TenantInfo, error) {
 	q := `SELECT id, info, name, data_state, service_mode FROM system.tenants WHERE id = $1`
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
-		q = `SELECT id, info, NULL, NULL, NULL FROM system.tenants WHERE id = $1`
-	}
 	row, err := txn.QueryRowEx(
 		ctx, "get-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		q, tenID.ToUint64(),
@@ -167,7 +116,8 @@ func GetTenantRecordByID(
 		return nil, pgerror.Newf(pgcode.UndefinedObject, "tenant \"%d\" does not exist", tenID.ToUint64())
 	}
 
-	return getTenantInfoFromRow(row)
+	_, info, err := mtinfo.GetTenantInfoFromSQLRow(row)
+	return info, err
 }
 
 // LookupTenantID implements the tree.TenantOperator interface.
@@ -175,11 +125,11 @@ func (p *planner) LookupTenantID(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (tid roachpb.TenantID, err error) {
 	const op = "get-tenant-info"
-	if err := p.RequireAdminRole(ctx, op); err != nil {
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 		return tid, err
 	}
 
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op, p.execCfg.Settings); err != nil {
 		return tid, err
 	}
 
@@ -239,18 +189,16 @@ func GetExtendedTenantInfo(
 	return res, nil
 }
 
-var defaultTenantConfigTemplate = func() *settings.StringSetting {
-	s := settings.RegisterStringSetting(
-		settings.SystemOnly,
-		"sql.create_tenant.default_template",
-		"tenant to use as configuration template when LIKE is not specified in CREATE TENANT",
-		// We use the empty string so that no template is used by default
-		// (i.e. empty proto, no setting overrides).
-		"",
-	)
-	s.SetReportable(true)
-	return s
-}()
+var defaultTenantConfigTemplate = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"sql.create_tenant.default_template",
+	"tenant to use as configuration template when LIKE is not specified in CREATE VIRTUAL CLUSTER",
+	// We use the empty string so that no template is used by default
+	// (i.e. empty proto, no setting overrides).
+	"",
+	settings.WithName("sql.create_virtual_cluster.default_template"),
+	settings.WithReportable(true),
+)
 
 // GetTenantTemplate loads the tenant template corresponding to the
 // provided origin tenant. If info is nil, likeTenantID is zero and
@@ -329,7 +277,7 @@ func GetTenantTemplate(
 	tmplInfo.DroppedName = ""
 	tmplInfo.DeprecatedID = 0
 	tmplInfo.DeprecatedDataState = 0
-	tmplInfo.TenantReplicationJobID = 0
+	tmplInfo.PhysicalReplicationConsumerJobID = 0
 	if tmplInfo.Usage != nil {
 		tmplInfo.Usage.Consumption = kvpb.TenantConsumption{}
 	}

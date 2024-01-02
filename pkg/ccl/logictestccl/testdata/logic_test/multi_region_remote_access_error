@@ -1,4 +1,3 @@
-# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off !metamorphic-batch-sizes
 # Currently this test and other multiregion tests may flake often when run
 # under the multiregion-9node-3region-3azs-vec-off config, and less often
@@ -16,6 +15,9 @@ SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
 
 statement ok
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
+
+statement ok
+SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms';
 
 # Start with SURVIVE ZONE FAILURE for positive tests.
 # SURVIVE REGION FAILURE cases will always error out.
@@ -190,6 +192,24 @@ CREATE TABLE messages_global (
 ) LOCALITY GLOBAL
 
 statement ok
+CREATE TABLE messages_global_2 (
+    account_id INT NOT NULL,
+    message_id   UUID DEFAULT gen_random_uuid(),
+    message    STRING NOT NULL,
+    PRIMARY KEY (account_id),
+    INDEX msg_idx(message)
+) LOCALITY GLOBAL
+
+statement ok
+CREATE TABLE messages_global_3 (
+    account_id INT NOT NULL,
+    message_id   UUID DEFAULT gen_random_uuid(),
+    message    STRING NOT NULL,
+    PRIMARY KEY (account_id),
+    INDEX msg_idx(message)
+) LOCALITY GLOBAL
+
+statement ok
 CREATE TABLE messages_rbt (
     account_id INT NOT NULL,
     message_id   UUID DEFAULT gen_random_uuid(),
@@ -229,6 +249,9 @@ CREATE TABLE customers (
 ) LOCALITY REGIONAL BY ROW;
 
 statement ok
+INSERT INTO customers VALUES ('69a1c2c2-5b18-459e-94d2-079dc53a4dd0', 'ACME Sprockets')
+
+statement ok
 ALTER TABLE customers INJECT STATISTICS '[
   {
     "columns": ["id"],
@@ -258,6 +281,9 @@ CREATE TABLE orders (
     INDEX (cust_id),
     FOREIGN KEY (cust_id, crdb_region) REFERENCES customers (id, crdb_region) ON UPDATE CASCADE
 ) LOCALITY REGIONAL BY ROW;
+
+statement ok
+INSERT INTO orders VALUES ('69a1c2c2-5b18-459e-94d2-079dc53a4dd0', '69a1c2c2-5b18-459e-94d2-079dc53a4dd0', 'Super Deluxe Sprocket')
 
 statement ok
 ALTER TABLE orders INJECT STATISTICS '[
@@ -437,7 +463,7 @@ skipif config multiregion-9node-3region-3azs-vec-off
 query I retry
 SELECT DISTINCT range_id FROM [SHOW RANGES FROM TABLE messages_rbr]
 ----
-66
+70
 
 # Update does not fail when accessing all rows in messages_rbr because lookup
 # join does not error out the lookup table in phase 1.
@@ -608,7 +634,7 @@ SELECT * FROM parent LIMIT 1
 1
 
 query T retry
-EXPLAIN(OPT) SELECT * FROM parent LIMIT 1
+EXPLAIN (OPT) SELECT * FROM parent LIMIT 1
 ----
 locality-optimized-search
  ├── scan parent
@@ -618,11 +644,33 @@ locality-optimized-search
       ├── constraint: /11/10: [/'ca-central-1' - /'us-east-1']
       └── limit: 1
 
-# Locality optimized search with lookup join will be supported in phase 2 or 3
-# when we can dynamically determine if the lookup will access a remote region.
-retry
-statement error pq: Query has no home region\. Try adding a filter on o\.crdb_region and/or on key column \(o\.id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-SELECT * FROM customers c JOIN orders o ON c.id = o.cust_id AND
+# Static checking should not error this query out, because we now generate a
+# plan with a home region for it.
+query T retry
+EXPLAIN (OPT) SELECT * FROM customers c JOIN orders o ON c.id = o.cust_id AND
+  (c.crdb_region = o.crdb_region) WHERE c.id = '69a1c2c2-5b18-459e-94d2-079dc53a4dd0'
+----
+project
+ └── inner-join (lookup orders [as=o])
+      ├── lookup columns are key
+      ├── inner-join (lookup orders@orders_cust_id_idx [as=o])
+      │    ├── locality-optimized-search
+      │    │    ├── scan customers [as=c]
+      │    │    │    └── constraint: /15/13: [/'ap-southeast-2'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0' - /'ap-southeast-2'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0']
+      │    │    └── scan customers [as=c]
+      │    │         └── constraint: /20/18
+      │    │              ├── [/'ca-central-1'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0' - /'ca-central-1'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0']
+      │    │              └── [/'us-east-1'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0' - /'us-east-1'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0']
+      │    └── filters
+      │         └── cust_id = '69a1c2c2-5b18-459e-94d2-079dc53a4dd0'
+      └── filters (true)
+
+# This query should error out dynamically during execution, but
+# `GetLookupJoinLookupTableDistribution` doesn't currently work in
+# the execbuilder phase because `Optimizer.stateMap` is empty.
+# TODO(msirek): Fix this test case to not error out statically.
+statement error pq: Query has no home region\. Try adding a filter on o\.crdb_region and/or on key column \(o\.cust_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+SELECT 'a' FROM customers c JOIN orders o ON c.id = o.cust_id AND
   (c.crdb_region = o.crdb_region) WHERE c.id = '69a1c2c2-5b18-459e-94d2-079dc53a4dd0'
 
 # Locality optimized lookup join is allowed.
@@ -689,7 +737,7 @@ AND rbr.crdb_region = 'ap-southeast-2'
 ----
 
 query T retry
-EXPLAIN(OPT) SELECT * FROM  messages_rbt rbt INNER LOOKUP JOIN messages_rbr rbr ON rbr.account_id = rbt.account_id
+EXPLAIN (OPT) SELECT * FROM  messages_rbt rbt INNER LOOKUP JOIN messages_rbr rbr ON rbr.account_id = rbt.account_id
 AND rbr.crdb_region = 'ap-southeast-2'
 ----
 project
@@ -709,7 +757,7 @@ AND rbr.crdb_region = 'ap-southeast-2'
 ----
 
 query T retry
-EXPLAIN(OPT) SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_rbt rbt ON rbr.account_id = rbt.account_id
+EXPLAIN (OPT) SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_rbt rbt ON rbr.account_id = rbt.account_id
 AND rbr.crdb_region = 'ap-southeast-2'
 ----
 project
@@ -722,13 +770,13 @@ project
 
 # A lookup join with a global table as either input should be allowed.
 query TTTTTT retry
-SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
+SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global_2 g2 ON g1.account_id = g2.account_id
 ----
 
 query T retry
-EXPLAIN(OPT) SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
+EXPLAIN (OPT) SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global_2 g2 ON g1.account_id = g2.account_id
 ----
-inner-join (lookup messages_global [as=g2])
+inner-join (lookup messages_global_2 [as=g2])
  ├── flags: force lookup join (into right side)
  ├── lookup columns are key
  ├── scan messages_global [as=g1]
@@ -736,18 +784,18 @@ inner-join (lookup messages_global [as=g2])
 
 # A join relation with local home region as the left input of lookup join should be allowed.
 query TTTTTTTTT retry
-SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
-  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
+SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global_2 g2 ON g1.account_id = g2.account_id
+  INNER LOOKUP JOIN messages_global_3 g3 ON g2.account_id = g3.account_id
 ----
 
 query T retry
-EXPLAIN(OPT) SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
-  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
+EXPLAIN (OPT) SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global_2 g2 ON g1.account_id = g2.account_id
+  INNER LOOKUP JOIN messages_global_3 g3 ON g2.account_id = g3.account_id
 ----
-inner-join (lookup messages_global [as=g3])
+inner-join (lookup messages_global_3 [as=g3])
  ├── flags: force lookup join (into right side)
  ├── lookup columns are key
- ├── inner-join (lookup messages_global [as=g2])
+ ├── inner-join (lookup messages_global_2 [as=g2])
  │    ├── flags: force lookup join (into right side)
  │    ├── lookup columns are key
  │    ├── scan messages_global [as=g1]
@@ -759,29 +807,29 @@ inner-join (lookup messages_global [as=g3])
 retry
 statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region and/or on key column \(rbr\.account_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_global g2 ON rbr.account_id = g2.account_id
-  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
+  INNER LOOKUP JOIN messages_global_2 g3 ON g2.account_id = g3.account_id
 
 # The explicit REGIONAL BY ROW AS column name should be used in the error
 # message if it differs from the default crdb_region.
 retry
 statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region_alt and/or on key column \(rbr\.account_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SELECT * FROM messages_rbr_alt rbr INNER LOOKUP JOIN messages_global g2 ON rbr.account_id = g2.account_id
-  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
+  INNER LOOKUP JOIN messages_global_2 g3 ON g2.account_id = g3.account_id
 
 # A lookup join relation with a left input join relation which uses locality
 # optimized scan in one of the tables of the lookup join should be allowed.
 query TTTTTTTTT retry
 SELECT * FROM (SELECT * FROM messages_rbr LIMIT 1) rbr INNER LOOKUP JOIN
   messages_global g2 ON rbr.account_id = g2.account_id
-  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
+  INNER LOOKUP JOIN messages_global_2 g3 ON g2.account_id = g3.account_id
 ----
 
 query T retry
-EXPLAIN(OPT) SELECT * FROM (SELECT * FROM messages_rbr LIMIT 1) rbr INNER LOOKUP JOIN
+EXPLAIN (OPT) SELECT * FROM (SELECT * FROM messages_rbr LIMIT 1) rbr INNER LOOKUP JOIN
   messages_global g2 ON rbr.account_id = g2.account_id
-  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
+  INNER LOOKUP JOIN messages_global_2 g3 ON g2.account_id = g3.account_id
 ----
-inner-join (lookup messages_global [as=g3])
+inner-join (lookup messages_global_2 [as=g3])
  ├── flags: force lookup join (into right side)
  ├── lookup columns are key
  ├── inner-join (lookup messages_global [as=g2])
@@ -823,7 +871,7 @@ SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ca-central-1'
 query T nodeidx=4
 SET enforce_home_region = true;
 USE multi_region_test_db;
-EXPLAIN(OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ca-central-1'
+EXPLAIN (OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ca-central-1'
 ----
 project
  └── scan messages_rbr@msg_idx
@@ -849,7 +897,7 @@ SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ap-southeast-2'
 Hello, Region!
 
 query T retry
-EXPLAIN(OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ap-southeast-2'
+EXPLAIN (OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ap-southeast-2'
 ----
 project
  └── scan messages_rbr@msg_idx
@@ -974,7 +1022,7 @@ SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbt AS t1 ON 
 ----
 
 query T retry
-EXPLAIN(OPT) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbt AS t1 ON t1.j @> t2.j
+EXPLAIN (OPT) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbt AS t1 ON t1.j @> t2.j
 ----
 project
  └── inner-join (lookup json_arr1_rbt [as=t1])
@@ -1002,7 +1050,7 @@ AND t1.crdb_region = 'ap-southeast-2'
 # A local inverted join should not have high cost estimates (due to
 # `largeDistributeCost`).
 query T retry
-EXPLAIN(OPT,VERBOSE) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbr AS t1 ON t1.j @> t2.j
+EXPLAIN (OPT,VERBOSE) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbr AS t1 ON t1.j @> t2.j
 AND t1.crdb_region = 'ap-southeast-2' LIMIT 1
 ----
 project
@@ -1034,6 +1082,7 @@ project
       │    ├── fd: ()-->(11), (7)-->(9)
       │    ├── limit hint: 1.00
       │    ├── distribution: ap-southeast-2
+      │    ├── lookup table distribution: ap-southeast-2
       │    ├── prune: (7)
       │    ├── inner-join (inverted json_arr1_rbr@j_idx [as=t1])
       │    │    ├── columns: t2.j:3 t1.k:18 crdb_region:22

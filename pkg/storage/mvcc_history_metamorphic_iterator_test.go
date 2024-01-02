@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
@@ -146,11 +145,6 @@ func (m *metamorphicIterator) moveAround() {
 		actions = append(actions, action{
 			"SeekLT(cur)",
 			func() { mvccIt.SeekLT(cur) },
-		}, action{
-			"SeekIntentGE(cur, 00000)",
-			func() {
-				mvccIt.SeekIntentGE(cur.Key, uuid.Nil)
-			},
 		}, action{
 			"SeekLT(Max)",
 			func() { mvccIt.SeekLT(storage.MVCCKeyMax) },
@@ -367,11 +361,6 @@ func (m *metamorphicMVCCIterator) Prev() {
 
 func (m *metamorphicMVCCIterator) UnsafeLazyValue() pebble.LazyValue {
 	return m.it.(storage.MVCCIterator).UnsafeLazyValue()
-}
-
-func (m *metamorphicMVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
-	m.it.(storage.MVCCIterator).SeekIntentGE(key, txnUUID)
-	m.moveAround()
 }
 
 func (m *metamorphicMVCCIterator) UnsafeRawKey() []byte {

@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -25,7 +24,6 @@ go_test(
     name = "querycache_test",
     size = "small",
     srcs = ["query_cache_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":querycache"],
     deps = [
         "//pkg/sql/opt/memo",
@@ -33,5 +31,3 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
-
-get_x_data(name = "get_x_data")

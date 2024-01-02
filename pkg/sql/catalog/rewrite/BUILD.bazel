@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -20,9 +19,12 @@ go_library(
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/plpgsql/parser:plpgparser",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/screl",
         "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/plpgsqltree",
+        "//pkg/sql/sem/plpgsqltree/utils",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/hlc",
@@ -30,5 +32,3 @@ go_library(
         "@com_github_lib_pq//oid",
     ],
 )
-
-get_x_data(name = "get_x_data")

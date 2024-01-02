@@ -1,0 +1,184 @@
+subtest usage
+
+statement error pgcode 0A000 unimplemented: C is not yet supported
+CREATE FUNCTION populate() RETURNS integer AS 'dir/funcs', 'populate' LANGUAGE C
+
+statement error pgcode 42704 language \"made_up_language\" does not exist
+CREATE FUNCTION populate() RETURNS integer AS $$
+DECLARE
+    -- declarations
+BEGIN
+    PERFORM my_function();
+END;
+$$ LANGUAGE made_up_language
+
+statement error pgcode 42P13 leak proof function must be immutable, but got volatility: STABLE
+CREATE FUNCTION f(a int) RETURNS INT LEAKPROOF STABLE LANGUAGE SQL AS 'SELECT 1'
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is string
+CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 'hello' $$
+
+statement error pgcode 42601 pq: STABLE: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT IMMUTABLE STABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 42601 pq: STRICT: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT CALLED ON NULL INPUT STABLE STRICT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 42601 pq: RETURNS NULL ON NULL INPUT: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT CALLED ON NULL INPUT STABLE RETURNS NULL ON NULL INPUT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 42601 pq: NOT LEAKPROOF: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT LEAKPROOF NOT LEAKPROOF LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 42601 pq: AS \$\$ SELECT 2 \$\$: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$ AS $$ SELECT 2 $$;
+
+statement error pgcode 42601 pq: LANGUAGE SQL: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL LANGUAGE SQL AS $$ SELECT 1 $$;
+
+
+subtest volatility
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+INSERT INTO kv VALUES (1, 1), (2, 2), (3, 3);
+CREATE FUNCTION get_l(i INT) RETURNS INT STABLE LANGUAGE SQL AS $$
+SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION get_i(i INT) RETURNS INT STABLE LANGUAGE SQL AS $$
+SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION get_s(i INT) RETURNS INT STABLE LANGUAGE SQL AS $$
+SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION get_v(i INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION int_identity_v(i INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+SELECT i;
+$$;
+
+query T
+SELECT pg_get_functiondef('get_l'::regproc::oid)
+----
+CREATE FUNCTION public.get_l(IN i INT8)
+    RETURNS INT8
+    STABLE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT v FROM test.public.kv WHERE k = i;
+$$
+
+query T
+SELECT pg_get_functiondef(NULL)
+----
+NULL
+
+query T
+SELECT pg_get_functiondef(123456)
+----
+NULL
+
+# Postgres behaves differently for builtin functions, but we don't yet support
+# the syntax for defining non-SQL functions.
+query T
+SELECT pg_get_functiondef('soundex'::regproc::oid)
+----
+soundex
+
+# Only the volatile functions should see the changes made by the UPDATE in the
+# CTE.
+query IIIIIIII colnames,rowsort
+WITH u AS (
+  UPDATE kv SET v = v + 10 RETURNING k
+)
+SELECT
+get_l(k) l1, get_l(int_identity_v(k)) l2,
+get_i(k) i1, get_i(int_identity_v(k)) i2,
+get_s(k) s1, get_s(int_identity_v(k)) s2,
+get_v(k) v1, get_v(int_identity_v(k)) v2
+FROM u;
+----
+l1  l2  i1  i2  s1  s2  v1  v2
+1   1   1   1   1   1   11  11
+2   2   2   2   2   2   12  12
+3   3   3   3   3   3   13  13
+
+statement ok
+CREATE SEQUENCE sq2;
+
+# Note: postgres allows non-volatile functions to call other volatile functions.
+statement error pgcode 22023 volatile statement not allowed in immutable function: SELECT nextval\('sq2'\)
+CREATE FUNCTION rand_i() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
+
+# Note: postgres allows non-volatile functions to call other volatile functions.
+statement error pgcode 22023 volatile statement not allowed in stable function: SELECT nextval\('sq2'\)
+CREATE FUNCTION rand_s() RETURNS INT STABLE LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
+
+statement ok
+CREATE FUNCTION rand_v() RETURNS INT VOLATILE  LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
+
+query II rowsort
+SELECT rand_v(), rand_v() FROM generate_series(1, 3)
+----
+1  2
+3  4
+5  6
+
+
+subtest strict
+
+statement ok
+CREATE FUNCTION strict_fn(i INT, t TEXT, b BOOL) RETURNS INT STRICT LANGUAGE SQL AS $$
+  SELECT 1
+$$
+
+query I
+SELECT strict_fn(1, 'foo', true)
+----
+1
+
+# Same as above, but with non-constant arguments.
+query I
+WITH tmp(a, b, c) AS MATERIALIZED (VALUES (1, 'foo', true))
+SELECT strict_fn(a, b, c) FROM tmp
+----
+1
+
+query III
+SELECT strict_fn(NULL, 'foo', true), strict_fn(1, NULL, true), strict_fn(1, 'foo', NULL)
+----
+NULL  NULL  NULL
+
+query III
+SELECT strict_fn(NULL, NULL, true), strict_fn(1, NULL, NULL), strict_fn(NULL, 'foo', NULL)
+----
+NULL  NULL  NULL
+
+query I
+SELECT strict_fn(NULL, NULL, NULL)
+----
+NULL
+
+statement ok
+CREATE TABLE imp(k INT PRIMARY KEY, a INT, b TEXT);
+INSERT INTO imp VALUES (1, 2, 'a');
+
+statement ok
+CREATE FUNCTION strict_fn_imp(t TEXT, i imp) RETURNS INT RETURNS NULL ON NULL INPUT LANGUAGE SQL AS $$
+  SELECT 1
+$$
+
+# A tuple with all NULL elements is not considered "NULL INPUT" for a UDF, even
+# though IS NULL returns true for it.
+query IB
+SELECT strict_fn_imp('foo', (NULL,NULL,NULL)), (NULL,NULL,NULL)::imp IS NULL
+----
+1  true
+
+query I
+SELECT strict_fn_imp('foo', NULL)
+----
+NULL

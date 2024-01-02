@@ -261,9 +261,11 @@ func (c *call) result(ctx context.Context, leader bool) Result {
 					// so far. This is racy with the leader finishing and resetting
 					// c.mu.sp, in which case we'll get nothing; we ignore that
 					// possibiltity as unlikely, making this best-effort.
-					c.mu.Lock()
-					rec := c.mu.sp.GetTraceRecording(sp.RecordingType())
-					c.mu.Unlock()
+					rec := func() tracing.Trace {
+						c.mu.Lock()
+						defer c.mu.Unlock()
+						return c.mu.sp.GetTraceRecording(sp.RecordingType())
+					}()
 					sp.ImportTrace(rec)
 				}
 			}
@@ -393,6 +395,7 @@ func (g *Group) doCall(
 	}
 
 	g.mu.Lock()
+	defer g.mu.Unlock()
 	delete(g.m, key)
 	{
 		c.mu.Lock()
@@ -404,7 +407,6 @@ func (g *Group) doCall(
 	}
 	// Publish the results to all waiters.
 	close(c.c)
-	g.mu.Unlock()
 }
 
 var _ = (*Group).Forget
@@ -414,8 +416,8 @@ var _ = (*Group).Forget
 // an earlier call to complete.
 func (g *Group) Forget(key string) {
 	g.mu.Lock()
+	defer g.mu.Unlock()
 	delete(g.m, key)
-	g.mu.Unlock()
 }
 
 // NumCalls returns the number of in-flight calls for a given key.

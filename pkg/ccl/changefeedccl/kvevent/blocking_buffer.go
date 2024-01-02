@@ -105,6 +105,7 @@ func newMemBuffer(
 
 	b.qp = allocPool{
 		AbstractPool: quotapool.New("changefeed", quota, opts...),
+		sv:           sv,
 		metrics:      metrics,
 	}
 
@@ -164,8 +165,8 @@ func (b *blockingBuffer) notifyOutOfQuota(canFlush bool) {
 // that producer is blocked.
 func (b *blockingBuffer) producerBlocked() {
 	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.mu.numBlocked++
-	b.mu.Unlock()
 }
 
 // quotaAcquiredAfterWait is invoked by quota pool to notify blocking buffer
@@ -173,6 +174,7 @@ func (b *blockingBuffer) producerBlocked() {
 // NB: always called after producerBlocked
 func (b *blockingBuffer) quotaAcquiredAfterWait() {
 	b.mu.Lock()
+	defer b.mu.Unlock()
 	if b.mu.numBlocked > 0 {
 		b.mu.numBlocked--
 	} else {
@@ -183,7 +185,6 @@ func (b *blockingBuffer) quotaAcquiredAfterWait() {
 		// Clear out canFlush since we know that producers no longer blocked.
 		b.mu.canFlush = false
 	}
-	b.mu.Unlock()
 }
 
 // Get implements kvevent.Reader interface.
@@ -214,10 +215,11 @@ func (b *blockingBuffer) enqueue(ctx context.Context, e Event) (err error) {
 
 	if b.mu.closed {
 		logcrash.ReportOrPanic(ctx, b.sv, "buffer unexpectedly closed")
-		return errors.AssertionFailedf("buffer unexpectedly closed")
+		return errors.New("buffer unexpectedly closed")
 	}
 
 	b.metrics.BufferEntriesIn.Inc(1)
+	b.metrics.BufferEntriesByType[e.et.Index()].Inc(1)
 	b.mu.queue.enqueue(e)
 
 	select {
@@ -246,11 +248,16 @@ func (b *blockingBuffer) AcquireMemory(ctx context.Context, n int64) (alloc Allo
 		return alloc, err
 	}
 	b.metrics.BufferEntriesMemAcquired.Inc(n)
+	b.metrics.AllocatedMem.Inc(n)
 	return alloc, nil
 }
 
 // Add implements Writer interface.
 func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
+	if log.V(2) {
+		log.Infof(ctx, "Add event: %s", e.String())
+	}
+
 	// Immediately enqueue event if it already has allocation,
 	// or if it's a Flush request -- which has no allocations.
 	// Such events happen when we switch from backfill to rangefeed mode.
@@ -320,6 +327,7 @@ func (b *blockingBuffer) CloseWithReason(ctx context.Context, reason error) erro
 		quota := r.(*memQuota)
 		quota.closed = true
 		quota.acc.Close(ctx)
+		b.metrics.AllocatedMem.Dec(quota.allocated)
 		return false
 	})
 
@@ -438,9 +446,14 @@ func (r *memRequest) ShouldWait() bool {
 type allocPool struct {
 	*quotapool.AbstractPool
 	metrics *Metrics
+	sv      *settings.Values
 }
 
 func (ap allocPool) Release(ctx context.Context, bytes, entries int64) {
+	if bytes < 0 {
+		logcrash.ReportOrPanic(ctx, ap.sv, "attempt to release negative bytes (%d) into pool", bytes)
+	}
+
 	ap.AbstractPool.Update(func(r quotapool.Resource) (shouldNotify bool) {
 		quota := r.(*memQuota)
 		if quota.closed {
@@ -448,6 +461,7 @@ func (ap allocPool) Release(ctx context.Context, bytes, entries int64) {
 		}
 		quota.acc.Shrink(ctx, bytes)
 		quota.allocated -= bytes
+		ap.metrics.AllocatedMem.Dec(bytes)
 		ap.metrics.BufferEntriesMemReleased.Inc(bytes)
 		ap.metrics.BufferEntriesReleased.Inc(entries)
 		return true

@@ -11,17 +11,19 @@
 package mixedversion
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
-	"strconv"
+	"runtime/debug"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -32,23 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 type (
-	// Helper is the struct passed to user-functions providing helper
-	// functions that mixed-version tests can use.
-	Helper struct {
-		ctx         context.Context
-		testContext *Context
-		// bgCount keeps track of the number of background tasks started
-		// with `helper.Background()`. The counter is used to generate
-		// unique log file names.
-		bgCount    int64
-		runner     *testRunner
-		stepLogger *logger.Logger
-	}
-
 	// backgroundEvent is the struct sent by background steps when they
 	// finish (successfully or not).
 	backgroundEvent struct {
@@ -61,6 +49,7 @@ type (
 		group     ctxgroup.Group
 		ctx       context.Context
 		events    chan backgroundEvent
+		logger    *logger.Logger
 		stopFuncs []StopFunc
 	}
 
@@ -68,6 +57,7 @@ type (
 		summarized     bool
 		description    string
 		seed           int64
+		testContext    *Context
 		binaryVersions []roachpb.Version
 		// Cluster versions before and after the failure occurred. Before
 		// each step is executed, the test runner will cache each node's
@@ -79,6 +69,19 @@ type (
 		// happen while the upgrade is finalizing.
 		clusterVersionsBefore []roachpb.Version
 		clusterVersionsAfter  []roachpb.Version
+	}
+
+	// crdbMonitor is a thin wrapper around the roachtest monitor API
+	// (cluster.NewMonitor) that produces error events through a channel
+	// whenever an unexpected node death happens. It also allows us to
+	// provide an API for test authors to inform the framework that a
+	// node death is expected if the test performs its own restarts or
+	// chaos events.
+	crdbMonitor struct {
+		once      sync.Once
+		crdbNodes option.NodeListOption
+		monitor   cluster.Monitor
+		errCh     chan error
 	}
 
 	testRunner struct {
@@ -94,6 +97,7 @@ type (
 		clusterVersions atomic.Value
 
 		background *backgroundRunner
+		monitor    *crdbMonitor
 
 		connCache struct {
 			mu    syncutil.Mutex
@@ -123,27 +127,21 @@ func newTestRunner(
 		logger:     l,
 		cluster:    c,
 		crdbNodes:  crdbNodes,
-		background: newBackgroundRunner(ctx),
+		background: newBackgroundRunner(ctx, l),
+		monitor:    newCRDBMonitor(ctx, c, crdbNodes),
 		seed:       randomSeed,
 	}
 }
 
 // run implements the test running logic, which boils down to running
 // each step in sequence.
-func (tr *testRunner) run() error {
-	defer tr.closeConnections()
-	defer func() {
-		// Stop background functions explicitly so that the corresponding
-		// termination is marked `TriggeredByTest` (not necessary for
-		// correctness, just for clarity).
-		tr.logger.Printf("stopping background functions")
-		tr.background.Terminate()
-	}()
-
+func (tr *testRunner) run() (retErr error) {
 	stepsErr := make(chan error)
+	defer func() { tr.teardown(stepsErr, retErr != nil) }()
+
 	go func() {
 		defer close(stepsErr)
-		for _, step := range tr.plan.steps {
+		for _, step := range tr.plan.Steps() {
 			if err := tr.runStep(tr.ctx, step); err != nil {
 				stepsErr <- err
 				return
@@ -165,6 +163,9 @@ func (tr *testRunner) run() error {
 			}
 
 			return fmt.Errorf("background step `%s` returned error: %w", event.Name, event.Err)
+
+		case err := <-tr.monitor.Err():
+			return tr.testFailure(err.Error(), tr.logger, nil)
 		}
 	}
 }
@@ -173,15 +174,7 @@ func (tr *testRunner) run() error {
 // recursively in the case of sequentialRunStep and concurrentRunStep.
 func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 	if ss, ok := step.(singleStep); ok {
-		if ss.ID() == 1 {
-			// if this is the first singleStep of the plan, ensure it is an
-			// "initialization step" (i.e., cockroach nodes are ready after
-			// it executes). This is an assumption of the test runner and
-			// makes for clear error messages if that assumption is broken.
-			if err := tr.ensureInitializationStep(ss); err != nil {
-				return err
-			}
-		} else {
+		if ss.impl.ID() > tr.plan.startClusterID {
 			// update the runner's view of the cluster's binary and cluster
 			// versions before every non-initialization `singleStep` is
 			// executed
@@ -194,6 +187,7 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 			if err := tr.refreshClusterVersions(); err != nil {
 				return err
 			}
+			tr.monitor.Init()
 		}
 	}
 
@@ -227,7 +221,7 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 			return err
 		}
 
-		if stopChan := ss.Background(); stopChan != nil {
+		if stopChan := ss.impl.Background(); stopChan != nil {
 			tr.startBackgroundStep(ss, stepLogger, stopChan)
 			return nil
 		}
@@ -243,14 +237,17 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 // background or not.
 func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logger.Logger) error {
 	tr.logStep("STARTING", ss, l)
-	tr.logVersions(l)
+	tr.logVersions(l, ss.context)
 	start := timeutil.Now()
 	defer func() {
 		prefix := fmt.Sprintf("FINISHED [%s]", timeutil.Since(start))
 		tr.logStep(prefix, ss, l)
 	}()
-	if err := ss.Run(ctx, l, tr.cluster, tr.newHelper(ctx, l)); err != nil {
-		if isContextCanceled(err) {
+
+	if err := panicAsError(l, func() error {
+		return ss.impl.Run(ctx, l, tr.cluster, tr.newHelper(ctx, l, ss.context))
+	}); err != nil {
+		if isContextCanceled(ctx) {
 			l.Printf("step terminated (context canceled)")
 			// Avoid creating a `stepError` (which involves querying binary
 			// and cluster versions) when the context was canceled as the
@@ -268,7 +265,7 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logge
 }
 
 func (tr *testRunner) startBackgroundStep(ss singleStep, l *logger.Logger, stopChan shouldStop) {
-	stop := tr.background.Start(ss.Description(), func(ctx context.Context) error {
+	stop := tr.background.Start(ss.impl.Description(), func(ctx context.Context) error {
 		return tr.runSingleStep(ctx, ss, l)
 	})
 
@@ -294,17 +291,17 @@ func (tr *testRunner) startBackgroundStep(ss singleStep, l *logger.Logger, stopC
 // happened *while* the cluster version was updating).
 func (tr *testRunner) stepError(err error, step singleStep, l *logger.Logger) error {
 	desc := fmt.Sprintf("mixed-version test failure while running step %d (%s): %s",
-		step.ID(), step.Description(), err,
+		step.impl.ID(), step.impl.Description(), err,
 	)
 
-	return tr.testFailure(desc, l)
+	return tr.testFailure(desc, l, &step.context)
 }
 
 // testFailure generates a `testFailure` with the given
 // description. It logs the error to the logger passed, and renames
 // the underlying file to include the "FAILED" prefix to help in
 // debugging.
-func (tr *testRunner) testFailure(desc string, l *logger.Logger) error {
+func (tr *testRunner) testFailure(desc string, l *logger.Logger, testContext *Context) error {
 	clusterVersionsBefore := tr.clusterVersions
 	var clusterVersionsAfter atomic.Value
 	if tr.connCacheInitialized() {
@@ -318,6 +315,7 @@ func (tr *testRunner) testFailure(desc string, l *logger.Logger) error {
 	tf := &testFailure{
 		description:           desc,
 		seed:                  tr.seed,
+		testContext:           testContext,
 		binaryVersions:        loadAtomicVersions(tr.binaryVersions),
 		clusterVersionsBefore: loadAtomicVersions(clusterVersionsBefore),
 		clusterVersionsAfter:  loadAtomicVersions(clusterVersionsAfter),
@@ -331,27 +329,70 @@ func (tr *testRunner) testFailure(desc string, l *logger.Logger) error {
 		tr.logger.Printf("could not rename failed step logger: %v", err)
 	}
 
-	return errors.WithStack(tf)
+	return tf
+}
+
+// teardown groups together all tasks that happen once a test finishes.
+func (tr *testRunner) teardown(stepsChan chan error, testFailed bool) {
+	if testFailed {
+		tr.logger.Printf("mixed-version test FAILED")
+	} else {
+		tr.logger.Printf("mixed-version test PASSED")
+	}
+
+	tr.cancel()
+
+	// Stop background functions explicitly so that the corresponding
+	// termination is marked `TriggeredByTest` (not necessary for
+	// correctness, just for clarity).
+	tr.logger.Printf("stopping background functions")
+	tr.background.Terminate()
+
+	tr.logger.Printf("stopping node monitor")
+	if err := tr.monitor.Stop(); err != nil {
+		tr.logger.Printf("monitor returned error: %v", err)
+	}
+
+	// If the test failed, we wait for any currently running steps to
+	// return before passing control back to the roachtest
+	// framework. This achieves a test.log that does not contain any
+	// test step output once roachtest started to collect failure
+	// artifacts, which would be confusing.
+	if testFailed {
+		tr.logger.Printf("waiting for all steps to finish after context cancelation")
+		waitForChannel(stepsChan, "test steps", tr.logger)
+	}
+
+	tr.logger.Printf("closing database connections")
+	tr.closeConnections()
 }
 
 func (tr *testRunner) logStep(prefix string, step singleStep, l *logger.Logger) {
 	dashes := strings.Repeat("-", 10)
-	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.ID(), step.Description())
+	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.impl.ID(), step.impl.Description())
 }
 
 // logVersions writes the current cached versions of the binary and
 // cluster versions on each node. The cached versions should exist for
 // all steps but the first one (when we start the cluster itself).
-func (tr *testRunner) logVersions(l *logger.Logger) {
+func (tr *testRunner) logVersions(l *logger.Logger, testContext Context) {
 	binaryVersions := loadAtomicVersions(tr.binaryVersions)
 	clusterVersions := loadAtomicVersions(tr.clusterVersions)
+	releasedVersions := make([]*clusterupgrade.Version, 0, len(testContext.CockroachNodes))
+	for _, node := range testContext.CockroachNodes {
+		releasedVersions = append(releasedVersions, testContext.NodeVersion(node))
+	}
 
 	if binaryVersions == nil || clusterVersions == nil {
 		return
 	}
 
-	l.Printf("binary versions: %s", formatVersions(binaryVersions))
-	l.Printf("cluster versions: %s", formatVersions(clusterVersions))
+	tw := newTableWriter(len(releasedVersions))
+	tw.AddRow("released versions", toString(releasedVersions)...)
+	tw.AddRow("logical binary versions", toString(binaryVersions)...)
+	tw.AddRow("cluster versions", toString(clusterVersions)...)
+
+	l.Printf("current cluster configuration:\n%s", tw.String())
 }
 
 // loggerFor creates a logger instance to be used by a test step. Logs
@@ -359,8 +400,8 @@ func (tr *testRunner) logVersions(l *logger.Logger) {
 // easy to go from the IDs displayed in the test plan to the
 // corresponding output of that step.
 func (tr *testRunner) loggerFor(step singleStep) (*logger.Logger, error) {
-	name := invalidChars.ReplaceAllString(strings.ToLower(step.Description()), "")
-	name = fmt.Sprintf("%d_%s", step.ID(), name)
+	name := invalidChars.ReplaceAllString(strings.ToLower(step.impl.Description()), "")
+	name = fmt.Sprintf("%d_%s", step.impl.ID(), name)
 
 	prefix := path.Join(logPrefix, name)
 	return prefixedLogger(tr.logger, prefix)
@@ -401,15 +442,6 @@ func (tr *testRunner) refreshClusterVersions() error {
 	return nil
 }
 
-func (tr *testRunner) ensureInitializationStep(ss singleStep) error {
-	_, isInit := ss.(startFromCheckpointStep)
-	if !isInit {
-		return fmt.Errorf("unexpected initialization type in mixed-version test: %T", ss)
-	}
-
-	return nil
-}
-
 // maybeInitConnections initialize connections if the connection cache
 // is empty. When the function returns, either the `connCache` field
 // is populated with a connection for every crdb node, or the field is
@@ -443,8 +475,11 @@ func (tr *testRunner) connCacheInitialized() bool {
 	return tr.connCache.cache != nil
 }
 
-func (tr *testRunner) newHelper(ctx context.Context, l *logger.Logger) *Helper {
+func (tr *testRunner) newHelper(
+	ctx context.Context, l *logger.Logger, testContext Context,
+) *Helper {
 	return &Helper{
+		Context:    &testContext,
 		ctx:        ctx,
 		runner:     tr,
 		stepLogger: l,
@@ -470,11 +505,48 @@ func (tr *testRunner) closeConnections() {
 	}
 }
 
-func newBackgroundRunner(ctx context.Context) *backgroundRunner {
+func newCRDBMonitor(
+	ctx context.Context, c cluster.Cluster, crdbNodes option.NodeListOption,
+) *crdbMonitor {
+	return &crdbMonitor{
+		crdbNodes: crdbNodes,
+		monitor:   c.NewMonitor(ctx, crdbNodes),
+		errCh:     make(chan error),
+	}
+}
+
+// Init must be called once the cluster is initialized and the
+// cockroach process is running on the nodes. Init is idempotent.
+func (cm *crdbMonitor) Init() {
+	cm.once.Do(func() {
+		go func() {
+			if err := cm.monitor.WaitForNodeDeath(); err != nil {
+				cm.errCh <- err
+			}
+		}()
+	})
+}
+
+// Err returns a channel that will receive errors whenever an
+// unexpected node death is observed.
+func (cm *crdbMonitor) Err() chan error {
+	return cm.errCh
+}
+
+func (cm *crdbMonitor) ExpectDeaths(n int) {
+	cm.monitor.ExpectDeaths(int32(n))
+}
+
+func (cm *crdbMonitor) Stop() error {
+	return cm.monitor.WaitE()
+}
+
+func newBackgroundRunner(ctx context.Context, l *logger.Logger) *backgroundRunner {
 	g := ctxgroup.WithContext(ctx)
 	return &backgroundRunner{
 		group:  g,
 		ctx:    ctx,
+		logger: l,
 		events: make(chan backgroundEvent),
 	}
 }
@@ -489,11 +561,20 @@ func (br *backgroundRunner) Start(name string, fn func(context.Context) error) c
 	var expectedContextCancelation bool
 	br.group.Go(func() error {
 		err := fn(bgCtx)
-		br.events <- backgroundEvent{
+		event := backgroundEvent{
 			Name:            name,
 			Err:             err,
-			TriggeredByTest: err != nil && isContextCanceled(err) && expectedContextCancelation,
+			TriggeredByTest: err != nil && isContextCanceled(bgCtx) && expectedContextCancelation,
 		}
+
+		select {
+		case br.events <- event:
+			// exit goroutine
+		case <-br.ctx.Done():
+			// Test already finished, exit goroutine.
+			return nil
+		}
+
 		return err
 	})
 
@@ -511,138 +592,99 @@ func (br *backgroundRunner) Start(name string, fn func(context.Context) error) c
 // started during the test. This includes background functions created
 // during test runtime (using `helper.Background()`), as well as
 // background steps declared in the test setup (using
-// `BackgroundFunc`, `Workload`, et al).
+// `BackgroundFunc`, `Workload`, et al). Returns when all background
+// functions have returned.
 func (br *backgroundRunner) Terminate() {
 	for _, stop := range br.stopFuncs {
 		stop()
 	}
+
+	doneCh := make(chan error)
+	go func() {
+		defer close(doneCh)
+		_ = br.group.Wait()
+	}()
+
+	waitForChannel(doneCh, "background functions", br.logger)
 }
 
 func (br *backgroundRunner) CompletedEvents() <-chan backgroundEvent {
 	return br.events
 }
 
-func (h *Helper) RandomNode(prng *rand.Rand, nodes option.NodeListOption) int {
-	return nodes[prng.Intn(len(nodes))]
-}
-
-// RandomDB returns a (nodeID, connection) tuple for a randomly picked
-// cockroach node according to the parameters passed.
-func (h *Helper) RandomDB(prng *rand.Rand, nodes option.NodeListOption) (int, *gosql.DB) {
-	node := h.RandomNode(prng, nodes)
-	return node, h.Connect(node)
-}
-
-// QueryRow performs `db.QueryRowContext` on a randomly picked
-// database node. The query and the node picked are logged in the logs
-// of the step that calls this function.
-func (h *Helper) QueryRow(rng *rand.Rand, query string, args ...interface{}) *gosql.Row {
-	node, db := h.RandomDB(rng, h.runner.crdbNodes)
-	h.stepLogger.Printf("running SQL statement:\n%s\nArgs: %v\nNode: %d", query, args, node)
-	return db.QueryRowContext(h.ctx, query, args...)
-}
-
-// Exec performs `db.ExecContext` on a randomly picked database node.
-// The query and the node picked are logged in the logs of the step
-// that calls this function.
-func (h *Helper) Exec(rng *rand.Rand, query string, args ...interface{}) error {
-	node, db := h.RandomDB(rng, h.runner.crdbNodes)
-	h.stepLogger.Printf("running SQL statement:\n%s\nArgs: %v\nNode: %d", query, args, node)
-	_, err := db.ExecContext(h.ctx, query, args...)
-	return err
-}
-
-func (h *Helper) Connect(node int) *gosql.DB {
-	return h.runner.conn(node)
-}
-
-// SetContext should be called by steps that need access to the test
-// context, as that is only visible to them.
-func (h *Helper) SetContext(c *Context) {
-	h.testContext = c
-}
-
-// Context returns the test context associated with a certain step. It
-// is made available for user-functions (see runHookStep).
-func (h *Helper) Context() *Context {
-	return h.testContext
-}
-
-// Background allows test authors to create functions that run in the
-// background in mixed-version hooks.
-func (h *Helper) Background(
-	name string, fn func(context.Context, *logger.Logger) error,
-) context.CancelFunc {
-	return h.runner.background.Start(name, func(ctx context.Context) error {
-		bgLogger, err := h.loggerFor(name)
-		if err != nil {
-			return fmt.Errorf("failed to create logger for background function %q: %w", name, err)
-		}
-
-		err = fn(ctx, bgLogger)
-		if err != nil {
-			if isContextCanceled(err) {
-				return err
-			}
-
-			desc := fmt.Sprintf("error in background function %s: %s", name, err)
-			return h.runner.testFailure(desc, bgLogger)
-		}
-
-		return nil
-	})
-}
-
-// BackgroundCommand has the same semantics of `Background()`; the
-// command passed will run and the test will fail if the command is
-// not successful.
-func (h *Helper) BackgroundCommand(cmd string, nodes option.NodeListOption) context.CancelFunc {
-	desc := fmt.Sprintf("run command: %q", cmd)
-	return h.Background(desc, func(ctx context.Context, l *logger.Logger) error {
-		l.Printf("running command `%s` on nodes %v in the background", cmd, nodes)
-		return h.runner.cluster.RunE(ctx, nodes, cmd)
-	})
-}
-
-// loggerFor creates a logger instance to be used by background
-// functions (created by calling `Background` on the helper
-// instance). It is similar to the logger instances created for
-// mixed-version steps, but with the `background_` prefix.
-func (h *Helper) loggerFor(name string) (*logger.Logger, error) {
-	atomic.AddInt64(&h.bgCount, 1)
-
-	fileName := invalidChars.ReplaceAllString(strings.ToLower(name), "")
-	fileName = fmt.Sprintf("background_%s_%d", fileName, h.bgCount)
-	fileName = path.Join(logPrefix, fileName)
-
-	return prefixedLogger(h.runner.logger, fileName)
-}
-
 func (tf *testFailure) Error() string {
 	if tf.summarized {
 		return tf.description
 	}
-
 	tf.summarized = true
-	debugInfo := func(label, value string) string {
-		return fmt.Sprintf("%-40s%s", label+":", value)
-	}
-	seedInfo := debugInfo("test random seed", strconv.FormatInt(tf.seed, 10))
-	binaryVersions := debugInfo("binary versions", formatVersions(tf.binaryVersions))
-	clusterVersionsBefore := debugInfo(
-		"cluster versions before failure",
-		formatVersions(tf.clusterVersionsBefore),
-	)
-	var clusterVersionsAfter string
-	if cv := tf.clusterVersionsAfter; cv != nil {
-		clusterVersionsBefore += "\n"
-		clusterVersionsAfter = debugInfo("cluster versions after failure", formatVersions(cv))
+
+	lines := []string{
+		tf.description,
+		fmt.Sprintf("test random seed: %d\n", tf.seed),
 	}
 
-	return fmt.Sprintf(
-		"%s\n%s\n%s\n%s%s",
-		tf.description, seedInfo, binaryVersions, clusterVersionsBefore, clusterVersionsAfter,
+	tw := newTableWriter(len(tf.binaryVersions))
+	if tf.testContext != nil {
+		releasedVersions := make([]*clusterupgrade.Version, 0, len(tf.testContext.CockroachNodes))
+		for _, node := range tf.testContext.CockroachNodes {
+			releasedVersions = append(releasedVersions, tf.testContext.NodeVersion(node))
+		}
+		tw.AddRow("released versions", toString(releasedVersions)...)
+	}
+
+	tw.AddRow("logical binary versions", toString(tf.binaryVersions)...)
+	tw.AddRow("cluster versions before failure", toString(tf.clusterVersionsBefore)...)
+
+	if cv := tf.clusterVersionsAfter; cv != nil {
+		tw.AddRow("cluster versions after failure", toString(cv)...)
+	}
+
+	lines = append(lines, tw.String())
+	return strings.Join(lines, "\n")
+}
+
+// tableWriter is a thin wrapper around the `tabwriter` package used
+// by the test runner to display logical and released binary versions
+// in a tabular format.
+type tableWriter struct {
+	buffer *bytes.Buffer
+	w      *tabwriter.Writer
+}
+
+// newTableWriter creates a tableWriter to display tabular data for
+// the given number of nodes.
+func newTableWriter(numNodes int) *tableWriter {
+	var buffer bytes.Buffer
+	const (
+		minWidth = 3
+		tabWidth = 4
+		padding  = 5
+		padchar  = ' '
+		flags    = 0
 	)
+
+	tw := tabwriter.NewWriter(&buffer, minWidth, tabWidth, padding, padchar, flags)
+	writer := &tableWriter{buffer: &buffer, w: tw}
+
+	var nodeValues []string
+	for j := 1; j <= numNodes; j++ {
+		nodeValues = append(nodeValues, fmt.Sprintf("n%d", j))
+	}
+
+	writer.AddRow("", nodeValues...)
+	return writer
+}
+
+// AddRow adds a row to the table with the given title and values.
+func (tw *tableWriter) AddRow(title string, values ...string) {
+	cells := append([]string{title}, values...)
+	fmt.Fprintf(tw.w, "%s", strings.Join(cells, "\t"))
+	fmt.Fprintf(tw.w, "\n")
+}
+
+func (tw *tableWriter) String() string {
+	_ = tw.w.Flush()
+	return tw.buffer.String()
 }
 
 func renameFailedLogger(l *logger.Logger) error {
@@ -662,24 +704,55 @@ func loadAtomicVersions(v atomic.Value) []roachpb.Version {
 	return v.Load().([]roachpb.Version)
 }
 
-func formatVersions(versions []roachpb.Version) string {
-	var pairs []string
-	for idx, version := range versions {
-		pairs = append(pairs, fmt.Sprintf("%d: %s", idx+1, version))
-	}
-
-	return fmt.Sprintf("[%s]", strings.Join(pairs, ", "))
+// panicAsError ensures that the any panics that might happen while
+// the function passed runs are captured and returned as regular
+// errors. A stack trace is included in the logs when that happens to
+// facilitate debugging.
+func panicAsError(l *logger.Logger, f func() error) (retErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			l.Printf("panic stack trace:\n%s", string(debug.Stack()))
+			retErr = fmt.Errorf("panic (stack trace above): %v", r)
+		}
+	}()
+	return f()
 }
 
-// isContextCanceled returns a boolean indicating whether the error
-// given happened because some context was canceled.
-func isContextCanceled(err error) bool {
-	// TODO(renato): unfortunately, we have to resort to string
-	// comparison here. The most common use case for this function is
-	// detecting cluster commands that fail when the test context is
-	// canceled (after test success or failure), and roachtest does not
-	// return an error that wraps the context cancelation (in other
-	// words, `errors.Is` doesn't work). Once we fix this behavior, we
-	// should use structured errors here.
-	return strings.Contains(err.Error(), context.Canceled.Error())
+// waitForChannel waits for the given channel `ch` to close; returns
+// when that happens. If the channel does not close within 5 minutes,
+// the function logs a message and returns.
+//
+// The main use-case for this function is waiting for user-provided
+// hooks to return after the context passed to them is canceled. We
+// want to allow some time for them to finish, but we also don't want
+// to block indefinitely if a function inadvertently ignores context
+// cancelation.
+func waitForChannel(ch chan error, desc string, l *logger.Logger) {
+	maxWait := 5 * time.Minute
+	select {
+	case <-ch:
+		// return
+	case <-time.After(maxWait):
+		l.Printf("waited for %s for %s to finish, giving up", maxWait, desc)
+	}
+}
+
+func toString[T fmt.Stringer](xs []T) []string {
+	var result []string
+	for _, x := range xs {
+		result = append(result, x.String())
+	}
+
+	return result
+}
+
+// isContextCanceled returns a boolean indicating whether the context
+// passed is canceled.
+func isContextCanceled(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
 }

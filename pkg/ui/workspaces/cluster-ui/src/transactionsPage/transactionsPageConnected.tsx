@@ -25,6 +25,7 @@ import {
   selectSortSetting,
   selectFilters,
   selectSearch,
+  selectRequestTime,
 } from "./transactionsPage.selectors";
 import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
@@ -86,6 +87,9 @@ export const TransactionsPageConnected = withRouter(
         hasAdminRole: selectHasAdminRole(state),
         limit: selectTxnsPageLimit(state),
         reqSortSetting: selectTxnsPageReqSort(state),
+        requestTime: selectRequestTime(state),
+        oldestDataAvailable:
+          state.adminUI?.transactions?.data?.oldest_aggregated_ts_returned,
       },
       activePageProps: mapStateToActiveTransactionsPageProps(state),
     }),
@@ -172,6 +176,14 @@ export const TransactionsPageConnected = withRouter(
               sortValue: sort,
             }),
           ),
+        onRequestTimeChange: (t: moment.Moment) => {
+          dispatch(
+            localStorageActions.update({
+              key: "requestTime/StatementsPage",
+              value: t,
+            }),
+          );
+        },
       },
       activePageProps: mapDispatchToActiveTransactionsPageProps(dispatch),
     }),

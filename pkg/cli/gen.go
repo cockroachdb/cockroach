@@ -17,16 +17,25 @@ import (
 	"html"
 	"io"
 	"os"
+	"sort"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	slugify "github.com/mozillazg/go-slugify"
 	"github.com/spf13/cobra"
@@ -215,11 +224,11 @@ Output the list of cluster settings known to this binary.
 			return s
 		}
 
-		wrapDivSlug := func(s string) string {
+		wrapDivSlug := func(key settings.InternalKey, name settings.SettingName) string {
 			if sqlExecCtx.TableDisplayFormat == clisqlexec.TableDisplayRawHTML {
-				return fmt.Sprintf(`<div id="setting-%s" class="anchored">%s</div>`, slugify.Slugify(s), wrapCode(s))
+				return fmt.Sprintf(`<div id="setting-%s" class="anchored">%s</div>`, slugify.Slugify(string(key)), wrapCode(string(name)))
 			}
-			return s
+			return string(name)
 		}
 
 		// Fill a Values struct with the defaults.
@@ -227,11 +236,12 @@ Output the list of cluster settings known to this binary.
 		settings.NewUpdater(&s.SV).ResetRemaining(context.Background())
 
 		var rows [][]string
-		for _, name := range settings.Keys(settings.ForSystemTenant) {
-			setting, ok := settings.LookupForLocalAccess(name, settings.ForSystemTenant)
+		for _, key := range settings.Keys(settings.ForSystemTenant) {
+			setting, ok := settings.LookupForLocalAccessByKey(key, settings.ForSystemTenant)
 			if !ok {
-				panic(fmt.Sprintf("could not find setting %q", name))
+				panic(fmt.Sprintf("could not find setting %q", key))
 			}
+			name := setting.Name()
 
 			if excludeSystemSettings && setting.Class() == settings.SystemOnly {
 				continue
@@ -250,7 +260,7 @@ Output the list of cluster settings known to this binary.
 				defaultVal = sm.SettingsListDefault()
 			} else {
 				defaultVal = setting.String(&s.SV)
-				if override, ok := upgrades.SettingsDefaultOverrides[name]; ok {
+				if override, ok := upgrades.SettingsDefaultOverrides[key]; ok {
 					defaultVal = override
 				}
 			}
@@ -261,7 +271,7 @@ Output the list of cluster settings known to this binary.
 				settingDesc = html.EscapeString(settingDesc)
 				alterRoleLink = `<a href="alter-role.html"><code>ALTER ROLE... SET</code></a>`
 			}
-			if strings.Contains(name, "sql.defaults") {
+			if strings.Contains(string(name), "sql.defaults") || strings.Contains(string(key), "sql.defaults") {
 				settingDesc = fmt.Sprintf(`%s
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using %s`,
@@ -270,15 +280,15 @@ This session variable default should now be configured using %s`,
 				)
 			}
 
-			row := []string{wrapDivSlug(name), typ, wrapCode(defaultVal), settingDesc}
+			row := []string{wrapDivSlug(key, name), typ, wrapCode(defaultVal), settingDesc}
 			if showSettingClass {
 				class := "unknown"
 				switch setting.Class() {
 				case settings.SystemOnly:
 					class = classLabels[0]
-				case settings.TenantReadOnly:
+				case settings.SystemVisible:
 					class = classLabels[1]
-				case settings.TenantWritable:
+				case settings.ApplicationLevel:
 					class = classLabels[2]
 				}
 				row = append(row, class)
@@ -308,6 +318,109 @@ This session variable default should now be configured using %s`,
 	},
 }
 
+var genMetricListCmd = &cobra.Command{
+	Use:   "metric-list",
+	Short: "output a list of available metrics",
+	Long: `
+Output the list of metrics typical for a node.
+`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
+
+		// Use a testserver. We presume that all relevant metrics exist in
+		// test servers too.
+		sArgs := base.TestServerArgs{
+			Insecure:          true,
+			DefaultTestTenant: base.ExternalTestTenantAlwaysEnabled,
+		}
+		s, err := server.TestServerFactory.New(sArgs)
+		if err != nil {
+			return err
+		}
+		srv := s.(serverutils.TestServerInterfaceRaw)
+		defer srv.Stopper().Stop(ctx)
+
+		// We want to only return after the server is ready.
+		readyCh := make(chan struct{})
+		srv.SetReadyFn(func(bool) {
+			close(readyCh)
+		})
+
+		// Start the server.
+		if err := srv.Start(ctx); err != nil {
+			return err
+		}
+
+		// Wait until the server is ready to action.
+		select {
+		case <-readyCh:
+		case <-time.After(5 * time.Second):
+			return errors.AssertionFailedf("could not initialize server in time")
+		}
+
+		var sections []catalog.ChartSection
+
+		// Retrieve the chart catalog (metric list) for the system tenant over RPC.
+		retrieve := func(layer serverutils.ApplicationLayerInterface, predicate func(catalog.MetricLayer) bool) error {
+			conn, err := layer.RPCClientConnE(username.RootUserName())
+			if err != nil {
+				return err
+			}
+			client := serverpb.NewAdminClient(conn)
+
+			resp, err := client.ChartCatalog(ctx, &serverpb.ChartCatalogRequest{})
+			if err != nil {
+				return err
+			}
+			for _, section := range resp.Catalog {
+				if !predicate(section.MetricLayer) {
+					continue
+				}
+				sections = append(sections, section)
+			}
+			return nil
+		}
+
+		if err := retrieve(srv, func(layer catalog.MetricLayer) bool {
+			return layer != catalog.MetricLayer_APPLICATION
+		}); err != nil {
+			return err
+		}
+		if err := retrieve(srv.TestTenant(), func(layer catalog.MetricLayer) bool {
+			return layer == catalog.MetricLayer_APPLICATION
+		}); err != nil {
+			return err
+		}
+
+		// Sort by layer then metric name.
+		sort.Slice(sections, func(i, j int) bool {
+			return sections[i].MetricLayer < sections[j].MetricLayer ||
+				(sections[i].MetricLayer == sections[j].MetricLayer &&
+					sections[i].Title < sections[j].Title)
+		})
+
+		// Populate the resulting table.
+		cols := []string{"Layer", "Metric", "Description", "Y-Axis Label", "Type", "Unit", "Aggregation", "Derivative"}
+		var rows [][]string
+		for _, section := range sections {
+			rows = append(rows,
+				[]string{
+					section.MetricLayer.String(),
+					section.Title,
+					section.Charts[0].Metrics[0].Help,
+					section.Charts[0].AxisLabel,
+					section.Charts[0].Metrics[0].MetricType.String(),
+					section.Charts[0].Units.String(),
+					section.Charts[0].Aggregator.String(),
+					section.Charts[0].Derivative.String(),
+				})
+		}
+		align := "dddddddd"
+		sliceIter := clisqlexec.NewRowSliceIter(rows, align)
+		return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, cols, sliceIter)
+	},
+}
+
 var genCmd = &cobra.Command{
 	Use:   "gen [command]",
 	Short: "generate auxiliary files",
@@ -321,6 +434,7 @@ var genCmds = []*cobra.Command{
 	genExamplesCmd,
 	genHAProxyCmd,
 	genSettingsListCmd,
+	genMetricListCmd,
 	GenEncryptionKeyCmd,
 }
 
@@ -347,7 +461,7 @@ func init() {
 	f.StringVar(&classHeaderLabel, "class-header-label", "Class",
 		"label to use in the output for the class column")
 	f.StringSliceVar(&classLabels, "class-labels",
-		[]string{"system-only", "tenant-ro", "tenant-rw"},
+		[]string{"system-only", "system-visible", "application"},
 		"label to use in the output for the various setting classes")
 
 	genCmd.AddCommand(genCmds...)

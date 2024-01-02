@@ -46,7 +46,7 @@ var AddSSTableRequestSizeFactor = settings.RegisterIntSetting(
 	// increase accounted QPS by 1. Typically AddSSTableRequests are ~1mb in size, accounted as 20
 	// QPS.
 	50000,
-).WithPublic()
+	settings.WithPublic)
 
 // LocalityOracle provides a mapping between a node ID and it's corresponding
 // locality.

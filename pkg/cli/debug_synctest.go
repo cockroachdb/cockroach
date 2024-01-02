@@ -30,6 +30,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// TODO(sumeer): consider deleting this command, now that it is no longer
+// exercised by the synctest roachtest (which has been deleted). We will need
+// to confirm that users of CockroachDB are not running it as part of their
+// testing.
+
 var debugSyncTestCmd = &cobra.Command{
 	Use:   "synctest <empty-dir> <nemesis-script>",
 	Short: "Run a log-like workload that can help expose filesystem anomalies",
@@ -144,8 +149,8 @@ func runSyncer(
 	}
 
 	fmt.Fprintf(stderr, "verifying existing sequence numbers...")
-	err = db.MVCCIterate(roachpb.KeyMin, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind,
-		storage.IterKeyTypePointsOnly, check)
+	err = db.MVCCIterate(ctx, roachpb.KeyMin, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind,
+		storage.IterKeyTypePointsOnly, storage.UnknownReadCategory, check)
 	if err != nil {
 		return 0, err
 	}

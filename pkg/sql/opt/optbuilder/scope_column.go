@@ -135,6 +135,15 @@ func (c *scopeColumn) setParamOrd(ord int) {
 	c.paramOrd = funcParamOrd(ord + 1)
 }
 
+// getParamOrd retrieves the 0-based ordinal from the column's 1-based function
+// parameter ordinal. Panics if the function ordinal is unset.
+func (c *scopeColumn) getParamOrd() int {
+	if c.paramOrd < 1 {
+		panic(errors.AssertionFailedf("expected non-negative argument ordinal"))
+	}
+	return int(c.paramOrd) - 1
+}
+
 // funcParamReferencedBy returns true if the scopeColumn is a function parameter
 // column that can be referenced by the given placeholder.
 func (c *scopeColumn) funcParamReferencedBy(idx tree.PlaceholderIdx) bool {

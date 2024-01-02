@@ -23,11 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // RowChannelBufSize is the default buffer size of a RowChannel.
@@ -42,11 +40,15 @@ type ConsumerStatus uint32
 const (
 	// NeedMoreRows indicates that the consumer is still expecting more rows.
 	NeedMoreRows ConsumerStatus = iota
-	// SwitchToAnotherPortal indicates that the we received exec command for
-	// a different portal, and may come back to continue executing the current
+	// SwitchToAnotherPortal indicates that we received exec command for a
+	// different portal, and may come back to continue executing the current
 	// portal later. If the cluster setting session variable
-	// multiple_active_portals_enabled is set to be true, we do nothing and return
-	// the control to the connExecutor.
+	// multiple_active_portals_enabled is set to be true, we do nothing and
+	// return the control to the connExecutor.
+	//
+	// Note that currently multiple active portals don't support the distributed
+	// execution, so this status can only be reached during the local execution.
+	// This is tracked by #100822.
 	SwitchToAnotherPortal
 	// DrainRequested indicates that the consumer will not process any more data
 	// rows, but will accept trailing metadata from the producer.
@@ -92,6 +94,9 @@ type RowReceiver interface {
 	// and they might not all be aware of the last status returned).
 	//
 	// Implementations of Push() must be thread-safe.
+	// TODO(yuzefovich): some implementations (DistSQLReceiver and
+	// copyingRowReceiver) are not actually thread-safe. Figure out whether we
+	// want to fix them or to update the contract.
 	Push(row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata) ConsumerStatus
 }
 
@@ -164,7 +169,7 @@ type RowSource interface {
 	ConsumerDone()
 
 	// ConsumerClosed informs the source that the consumer is done and will not
-	// make any more calls to Next(). Must only be called once on a given
+	// make any more calls to Next(). Must be called at least once on a given
 	// RowSource.
 	//
 	// Like ConsumerDone(), if the consumer of the source stops consuming rows
@@ -420,16 +425,6 @@ func (rb *rowSourceBase) consumerDone() {
 		uint32(NeedMoreRows), uint32(DrainRequested))
 }
 
-// consumerClosed helps processors implement RowSource.ConsumerClosed. The name
-// is only used for debug messages.
-func (rb *rowSourceBase) consumerClosed(name string) {
-	status := ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.ConsumerStatus)))
-	if status == ConsumerClosed {
-		logcrash.ReportOrPanic(context.Background(), nil, "%s already closed", redact.Safe(name))
-	}
-	atomic.StoreUint32((*uint32)(&rb.ConsumerStatus), uint32(ConsumerClosed))
-}
-
 // RowChannel is a thin layer over a RowChannelMsg channel, which can be used to
 // transfer rows between goroutines.
 type RowChannel struct {
@@ -530,7 +525,7 @@ func (rc *RowChannel) ConsumerDone() {
 
 // ConsumerClosed is part of the RowSource interface.
 func (rc *RowChannel) ConsumerClosed() {
-	rc.consumerClosed("RowChannel")
+	atomic.StoreUint32((*uint32)(&rc.ConsumerStatus), uint32(ConsumerClosed))
 	numSenders := atomic.LoadInt32(&rc.numSenders)
 	// Drain (at most) numSenders messages in case senders are blocked trying to
 	// emit a row.

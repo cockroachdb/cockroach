@@ -11,10 +11,13 @@
 package log
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 )
 
 var (
@@ -52,6 +56,7 @@ func testBase(
 	fn func(header http.Header, body string) error,
 	hangServer bool,
 	deadline time.Duration,
+	recall time.Duration,
 ) {
 	sc := ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
@@ -163,6 +168,13 @@ func testBase(
 		return
 	}
 
+	// Issue a second log event if recall is specified so that the test can be
+	// run again.
+	if recall > 0 {
+		time.Sleep(recall)
+		Ops.Infof(context.Background(), "hello world")
+	}
+
 	// If the test was not requiring a timeout, it was requiring some
 	// logging message to match the predicate. If we don't see the
 	// predicate match, it is a test failure.
@@ -179,8 +191,9 @@ func TestMessageReceived(t *testing.T) {
 	timeout := 5 * time.Second
 	tb := true
 	defaults := logconfig.HTTPDefaults{
-		Address: &address,
-		Timeout: &timeout,
+		Address:     &address,
+		Timeout:     &timeout,
+		Compression: &logconfig.NoneCompression,
 
 		// We need to disable keepalives otherwise the HTTP server in the
 		// test will let an async goroutine run waiting for more requests.
@@ -198,7 +211,7 @@ func TestMessageReceived(t *testing.T) {
 		return nil
 	}
 
-	testBase(t, defaults, testFn, false /* hangServer */, time.Duration(0))
+	testBase(t, defaults, testFn, false /* hangServer */, time.Duration(0), time.Duration(0))
 }
 
 // TestHTTPSinkTimeout verifies that a log call to a hanging server doesn't last
@@ -221,7 +234,7 @@ func TestHTTPSinkTimeout(t *testing.T) {
 		},
 	}
 
-	testBase(t, defaults, nil /* testFn */, true /* hangServer */, 500*time.Millisecond)
+	testBase(t, defaults, nil /* testFn */, true /* hangServer */, 500*time.Millisecond, time.Duration(0))
 }
 
 // TestHTTPSinkContentTypeJSON verifies that the HTTP sink content type
@@ -256,7 +269,7 @@ func TestHTTPSinkContentTypeJSON(t *testing.T) {
 		return nil
 	}
 
-	testBase(t, defaults, testFn, false /* hangServer */, time.Duration(0))
+	testBase(t, defaults, testFn, false /* hangServer */, time.Duration(0), time.Duration(0))
 }
 
 // TestHTTPSinkContentTypePlainText verifies that the HTTP sink content type
@@ -291,5 +304,93 @@ func TestHTTPSinkContentTypePlainText(t *testing.T) {
 		return nil
 	}
 
-	testBase(t, defaults, testFn, false /* hangServer */, time.Duration(0))
+	testBase(t, defaults, testFn, false /* hangServer */, time.Duration(0), time.Duration(0))
+}
+
+func TestHTTPSinkHeadersAndCompression(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	address := "http://localhost" // testBase appends the port
+	timeout := 5 * time.Second
+	tb := true
+	format := "json"
+	expectedContentType := "application/json"
+	expectedContentEncoding := logconfig.GzipCompression
+	val := "secret-value"
+	filepathVal := "another-secret-value"
+	filepathReplaceVal := "third-secret-value"
+	// Test filepath method of providing header values.
+	tempDir := t.TempDir()
+	filename := filepath.Join(tempDir, "filepath_test.txt")
+	require.NoError(t, os.WriteFile(filename, []byte(filepathVal), 0777))
+	defaults := logconfig.HTTPDefaults{
+		Address: &address,
+		Timeout: &timeout,
+
+		// We need to disable keepalives otherwise the HTTP server in the
+		// test will let an async goroutine run waiting for more requests.
+		DisableKeepAlives: &tb,
+		CommonSinkConfig: logconfig.CommonSinkConfig{
+			Format:    &format,
+			Buffering: disabledBufferingCfg,
+		},
+
+		Compression: &logconfig.GzipCompression,
+		// Provide both the old format and new format in order to test backwards compatability.
+		Headers:          map[string]string{"X-CRDB-TEST": val},
+		FileBasedHeaders: map[string]string{"X-CRDB-TEST-2": filename},
+	}
+
+	var callCt int
+	testFn := func(header http.Header, body string) error {
+		t.Log(body)
+		contentType := header.Get("Content-Type")
+		if contentType != expectedContentType {
+			return errors.Newf("mismatched content type: expected %s, got %s", expectedContentType, contentType)
+		}
+		contentEncoding := header.Get("Content-Encoding")
+		if contentEncoding != expectedContentEncoding {
+			return errors.Newf("mismatched content encoding: expected %s, got %s", expectedContentEncoding, contentEncoding)
+		}
+
+		var isGzipped = func(dat []byte) bool {
+			gzipPrefix := []byte("\x1F\x8B\x08")
+			return bytes.HasPrefix(dat, gzipPrefix)
+		}
+
+		if !isGzipped([]byte(body)) {
+			return errors.New("expected gzipped body")
+		}
+		var matchCount int
+		filepathExpectedVal := filepathVal
+		if callCt > 0 {
+			filepathExpectedVal = filepathReplaceVal
+		}
+		for k, v := range header {
+			if k == "X-Crdb-Test" || k == "X-Crdb-Test-2" {
+				for _, vv := range v {
+					if vv == "secret-value" || vv == filepathExpectedVal {
+						matchCount++
+					}
+				}
+			}
+		}
+		if matchCount != 2 {
+			return errors.New("expected to find special header in request")
+		}
+		// If this is the first time the testFn has been called, update file contents and send SIGHUP.
+		if callCt == 0 {
+			callCt++
+			if err := os.WriteFile(filename, []byte(filepathReplaceVal), 0777); err != nil {
+				return err
+			}
+			t.Log("issuing SIGHUP")
+			if err := unix.Kill(unix.Getpid(), unix.SIGHUP); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return nil
+	}
+
+	testBase(t, defaults, testFn, false /* hangServer */, time.Duration(0), 1*time.Second)
 }

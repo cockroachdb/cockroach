@@ -1,0 +1,11 @@
+parse
+DROP_REPLICATION_SLOT "A2s_x"
+----
+DROP_REPLICATION_SLOT "A2s_x"
+DROP_REPLICATION_SLOT "A2s_x" -- literals removed
+
+parse
+DROP_REPLICATION_SLOT "A2s_x" WAIT
+----
+DROP_REPLICATION_SLOT "A2s_x" WAIT
+DROP_REPLICATION_SLOT "A2s_x" WAIT -- literals removed

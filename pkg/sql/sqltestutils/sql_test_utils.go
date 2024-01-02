@@ -70,6 +70,7 @@ func SetShortRangeFeedIntervals(t *testing.T, db sqlutils.DBHandle) {
 	}
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = `+short)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = `+short)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = `+short)
 }
 
 // AddDefaultZoneConfig adds an entry for the given id into system.zones.
@@ -94,9 +95,9 @@ func BulkInsertIntoTable(sqlDB *gosql.DB, maxValue int) error {
 }
 
 // GetTableKeyCount returns the number of keys in t.test.
-func GetTableKeyCount(ctx context.Context, kvDB *kv.DB) (int, error) {
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	tablePrefix := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.GetID()))
+func GetTableKeyCount(ctx context.Context, kvDB *kv.DB, codec keys.SQLCodec) (int, error) {
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "test")
+	tablePrefix := codec.TablePrefix(uint32(tableDesc.GetID()))
 	tableEnd := tablePrefix.PrefixEnd()
 	kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0)
 	return len(kvs), err
@@ -104,8 +105,8 @@ func GetTableKeyCount(ctx context.Context, kvDB *kv.DB) (int, error) {
 
 // CheckTableKeyCountExact returns whether the number of keys in t.test
 // equals exactly e.
-func CheckTableKeyCountExact(ctx context.Context, kvDB *kv.DB, e int) error {
-	if count, err := GetTableKeyCount(ctx, kvDB); err != nil {
+func CheckTableKeyCountExact(ctx context.Context, kvDB *kv.DB, codec keys.SQLCodec, e int) error {
+	if count, err := GetTableKeyCount(ctx, kvDB, codec); err != nil {
 		return err
 	} else if count != e {
 		return errors.Newf("expected %d key value pairs, but got %d", e, count)
@@ -115,8 +116,10 @@ func CheckTableKeyCountExact(ctx context.Context, kvDB *kv.DB, e int) error {
 
 // CheckTableKeyCount returns the number of KVs in the DB, the multiple
 // should be the number of columns.
-func CheckTableKeyCount(ctx context.Context, kvDB *kv.DB, multiple int, maxValue int) error {
-	return CheckTableKeyCountExact(ctx, kvDB, multiple*(maxValue+1))
+func CheckTableKeyCount(
+	ctx context.Context, kvDB *kv.DB, codec keys.SQLCodec, multiple int, maxValue int,
+) error {
+	return CheckTableKeyCountExact(ctx, kvDB, codec, multiple*(maxValue+1))
 }
 
 // IsClientSideQueryCanceledErr returns whether err is a client-side

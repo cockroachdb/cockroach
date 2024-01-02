@@ -1,10 +1,8 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "kvflowsimulator_test",
     srcs = ["simulation_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol",
@@ -29,5 +27,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

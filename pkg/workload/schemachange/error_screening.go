@@ -79,36 +79,13 @@ func (og *operationGenerator) tableHasRows(
 func (og *operationGenerator) scanInt(
 	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
 ) (i int, err error) {
-	err = tx.QueryRow(ctx, query, args...).Scan(&i)
-	if err == nil {
-		og.LogQueryResults(
-			query,
-			i,
-			args...,
-		)
-	}
-	return i, errors.Wrapf(err, "scanBool: %q %q", query, args)
+	return Scan[int](ctx, og, tx, query, args...)
 }
 
 func (og *operationGenerator) scanBool(
 	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
 ) (b bool, err error) {
-	err = tx.QueryRow(ctx, query, args...).Scan(&b)
-	if err == nil {
-		og.LogQueryResults(
-			query,
-			b,
-			args...,
-		)
-	}
-	return b, errors.Wrapf(err, "scanBool: %q %q", query, args)
-}
-
-func scanString(
-	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
-) (s string, err error) {
-	err = tx.QueryRow(ctx, query, args...).Scan(&s)
-	return s, errors.Wrapf(err, "scanString: %q %q", query, args)
+	return Scan[bool](ctx, og, tx, query, args...)
 }
 
 func (og *operationGenerator) schemaExists(
@@ -1070,13 +1047,9 @@ SELECT COALESCE(
 func (og *operationGenerator) constraintExists(
 	ctx context.Context, tx pgx.Tx, constraintName string,
 ) (bool, error) {
-	return og.scanBool(ctx, tx, fmt.Sprintf(`
-	SELECT EXISTS(
-	        SELECT *
-	          FROM pg_catalog.pg_constraint
-	           WHERE conname = '%s'
-	       );
-	`, constraintName))
+	return og.scanBool(ctx, tx, `SELECT EXISTS(
+		SELECT * FROM pg_catalog.pg_constraint WHERE conname = $1
+	 )`, constraintName)
 }
 
 func (og *operationGenerator) rowsSatisfyFkConstraint(
@@ -1374,66 +1347,29 @@ SELECT EXISTS(
 func (og *operationGenerator) schemaContainsTypesWithCrossSchemaReferences(
 	ctx context.Context, tx pgx.Tx, schemaName string,
 ) (bool, error) {
-	return og.scanBool(ctx, tx, `
-  WITH database_id AS (
-                    SELECT id
-                      FROM system.namespace
-                     WHERE "parentID" = 0
-                       AND "parentSchemaID" = 0
-                       AND name = current_database()
-                   ),
-       schema_id AS (
-                    SELECT nsp.id
-                      FROM system.namespace AS nsp
-                      JOIN database_id ON "parentID" = database_id.id
-                                      AND "parentSchemaID" = 0
-                                      AND name = $1
-                 ),
-       descriptor_ids AS (
-                        SELECT nsp.id
-                          FROM system.namespace AS nsp,
-                               schema_id,
-                               database_id
-                         WHERE nsp."parentID" = database_id.id
-                           AND nsp."parentSchemaID" = schema_id.id
-                      ),
-       descriptors AS (
-                    SELECT crdb_internal.pb_to_json(
-                            'cockroach.sql.sqlbase.Descriptor',
-                            descriptor
-                           ) AS descriptor
-                      FROM system.descriptor AS descriptors
-                      JOIN descriptor_ids ON descriptors.id
-                                             = descriptor_ids.id
-                   ),
-       types AS (
-                SELECT descriptor
-                  FROM descriptors
-                 WHERE (descriptor->'type') IS NOT NULL
-             ),
-       table_references AS (
-                            SELECT json_array_elements(
-                                    descriptor->'table'->'dependedOnBy'
-                                   ) AS ref
-                              FROM descriptors
-                             WHERE (descriptor->'table') IS NOT NULL
-                        ),
-       dependent AS (
-                    SELECT (ref->>'id')::INT8 AS id FROM table_references
-                 ),
-       referenced_descriptors AS (
-                                SELECT json_array_elements_text(
-                                        descriptor->'type'->'referencingDescriptorIds'
-                                       )::INT8 AS id
-                                  FROM types
-                              )
-SELECT EXISTS(
-        SELECT *
-          FROM system.namespace
-         WHERE id IN (SELECT id FROM referenced_descriptors)
-           AND "parentSchemaID" NOT IN (SELECT id FROM schema_id)
-           AND id NOT IN (SELECT id FROM dependent)
-       );`, schemaName)
+	ctes := []CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+		{"types", enumDescsQuery},
+		{"referenced_descriptor_ids", `
+				SELECT json_array_elements(descriptor->'referencingDescriptorIds')::INT8 AS id FROM types WHERE schema_id = $1::REGNAMESPACE::INT8
+			UNION ALL
+				SELECT (ref->'id')::INT8 AS id FROM (SELECT json_array_elements(descriptor->'dependedOnBy') AS ref from functions WHERE schema_id = $1::REGNAMESPACE::INT8)
+		`},
+	}
+
+	_, err := Collect(ctx, og, tx, pgx.RowToMap, With(ctes, `SELECT * FROM types WHERE schema_id = $1::REGNAMESPACE::INT8`), schemaName)
+	if err != nil {
+		return false, err
+	}
+
+	result, err := Collect(ctx, og, tx, pgx.RowToMap, With(ctes, `
+		SELECT $1::REGNAMESPACE::INT8 AS this_schema_id, * FROM descriptors d
+		WHERE schema_id != $1::REGNAMESPACE::INT8
+		AND EXISTS(SELECT * FROM referenced_descriptor_ids WHERE id = d.id)
+		AND (NOT descriptor ? 'table')
+	`), schemaName)
+	return len(result) > 0, err
 }
 
 // enumMemberPresent determines whether val is a member of the enum.
@@ -1556,10 +1492,7 @@ func (og *operationGenerator) getRegionColumn(
 			tableName.String())
 	}
 
-	regionCol, err := scanString(
-		ctx,
-		tx,
-		`
+	regionCol, err := Scan[string](ctx, og, tx, `
 WITH
 	descriptors
 		AS (

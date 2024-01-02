@@ -30,7 +30,7 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE l WITH DETAILS] ORDER BY lease_holder
 ----
 start_key           end_key                 replicas  lease_holder
-<before:/Table/62>  …/1/2                   {1}       1
+<before:/Table/65>  …/1/2                   {1}       1
 …/1/2               …/1/3                   {2}       2
 …/1/3               <after:/Table/107/1/2>  {3}       3
 
@@ -63,7 +63,7 @@ vectorized: true
       table: r@r_pkey
       spans: [/2 - /2]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk1GPk0AQx9_9FJN5anVNWYovJJdgTk659OAELpoYYrZlbIkci7tLYtP0uxvApIK92ovRe2N29_ef-c8MO9TfSnTR_3i7eB2EMHkTJGnyfjGFxF_4lyk8h6s4uoESFv5VCtdREIKCuyQI38JETOHDOz_2QcAF2MiwkjmF4p40up-QI0MbM4a1kivSWqr2eNc9CvLv6FoMi6puTHucMVxJReju0BSmJHQxFcuSYhI5qVmrlZMRRdlJK099rr_SFhleyrK5r7QLgsESGSa1aKOZPbMw2zOUjfmZ4qC83MJG6M1Q0-OY7TOG2og1oWvv2QOlHnSaSqqcFOUDpawl__TkiN8bUmu6lkVFajYf1pZua3L7CUR3qR93c0CGJX0xE4-_mF6oYr3pP5Fh1BgXPM48m3nOqAsHh_O_cHik_FC-lPXMGbfiaGpnkJqfvwfWsC-lV_7rPeAPlvo_9sB-0j04UlxMupaVprPGbLX2KF9T3y4tG7WiWyVXXZo-jDqu62xO2vS3Th8EVXfV_Yrnw_w0zMew9StsD2A-hu2T8KsBbI3h-SM8_5b5NMxPw86jPGf7Zz8CAAD__xdu9rU=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk19v0zAUxd_5FNZ9WsFV4zR7sTQpaM0gU_-MJhNIKJrc5raNlsbBdjSqqt8dJRm0iVooTIAfovjfz-ceH29Bf0mBg_fpbvjWH5OLgR-EwYdhhwTe0LsOyWtyM52MSEqG3k1Ibif-mChyH_jjd-RCdMjH997UI4JcERsoZDLGsVijBv4ZGFCwIaKQKzlHraUqh7fVIj_-CtyikGR5YcrhiMJcKgS-BZOYFIFDKGYpTlHEqHolK0YjkrRCK1c95I-4AQrXMi3WmeZEUDIDCkEuyl7P7lkQ7SjIwjwfsSfPNmQl9KrJdBlEu4iCNmKJwO0D3f4AONvRE9L33CKTKkaFcYMclTt_teRI_SNUS7yVSYaq129qDTc58vpGJvehN63uBSikuDAXLnvTuVLJclX_AoVJYThxGXVt6jotV_YV91sV919Q8ZFyxrIr857TtuaoFKclxWlIYefnxmr6lrrp384Na0m3Tkr_F7mx_0Nu7JO5OSJ2ijqXmcazYmG1Tuqysn6Ml1j7qWWh5nin5LxaW3cnFaiyPkZt6lmn7vhZNWWXJygU6x8P_XwSO03qt0msTbIOSXaDxA5Jl22S_VPSZYNkHZKsNqn_Gz6xF5DYaZLdJjl_6pNT5mGRyqeHJAYO1nPrHvl8b1BuEEtdhjJYyacKW74TDXwhUo0URuIRB2hQrZMs0SaZAzeqwN3u1bcAAAD__wr9Uho=
 
 # Test that we can handle merge joins with equality columns of integers with
 # different widths.

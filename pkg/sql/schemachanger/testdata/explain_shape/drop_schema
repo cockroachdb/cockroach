@@ -1,9 +1,0 @@
-/* setup */
-CREATE DATABASE db;
-CREATE SCHEMA db.sc;
-
-/* test */
-EXPLAIN (ddl, shape) DROP SCHEMA db.sc;
-----
-Schema change plan for DROP SCHEMA ‹db›.‹sc›;
- └── execute 2 system table mutations transactions

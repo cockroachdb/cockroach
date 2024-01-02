@@ -1,35 +1,56 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tests",
+    srcs = [
+        "default_settings.go",
+        "output.go",
+        "rand_framework.go",
+        "rand_gen.go",
+        "rand_util.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/tests",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/kv/kvserver/asim/assertion",
+        "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/event",
+        "//pkg/kv/kvserver/asim/gen",
+        "//pkg/kv/kvserver/asim/history",
+        "//pkg/kv/kvserver/asim/scheduled",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/roachpb",
+        "//pkg/sql",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/multiregion",
+    ],
+)
 
 go_test(
     name = "tests_test",
-    srcs = ["datadriven_simulation_test.go"],
-    args = ["-test.timeout=295s"],
+    srcs = [
+        "datadriven_simulation_test.go",
+        "helpers_test.go",
+        "rand_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":tests"],
     deps = [
-        "//pkg/kv/kvserver/asim",
+        "//pkg/kv/kvserver/allocator/allocatorimpl",
+        "//pkg/kv/kvserver/asim/assertion",
         "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/event",
         "//pkg/kv/kvserver/asim/gen",
+        "//pkg/kv/kvserver/asim/history",
         "//pkg/kv/kvserver/asim/metrics",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_guptarohit_asciigraph//:asciigraph",
         "@com_github_stretchr_testify//require",
     ],
 )
-
-go_library(
-    name = "tests",
-    srcs = ["assert.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/tests",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/kv/kvserver/asim",
-        "//pkg/kv/kvserver/asim/metrics",
-        "//pkg/util/log",
-        "@com_github_montanaflynn_stats//:stats",
-    ],
-)
-
-get_x_data(name = "get_x_data")

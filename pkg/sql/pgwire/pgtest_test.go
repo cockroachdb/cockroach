@@ -38,12 +38,15 @@ func TestPGTest(t *testing.T) {
 		newServer := func() (addr, user string, cleanup func()) {
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+					base.TestTenantProbabilistic, 112960,
+				),
 				Insecure: true,
 			})
 			cleanup = func() {
 				s.Stopper().Stop(ctx)
 			}
-			addr = s.ServingSQLAddr()
+			addr = s.ApplicationLayer().AdvSQLAddr()
 			user = username.RootUser
 			// None of the tests read that much data, so we hardcode the max message
 			// size to something small. This lets us test the handling of large

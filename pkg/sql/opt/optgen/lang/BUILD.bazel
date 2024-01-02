@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
@@ -34,7 +33,6 @@ go_test(
         "parser_test.go",
         "scanner_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":lang"],
     deps = [
@@ -84,5 +82,3 @@ stringer(
     src = "operator.og.go",
     typ = "Operator",
 )
-
-get_x_data(name = "get_x_data")

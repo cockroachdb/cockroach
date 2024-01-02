@@ -1,10 +1,9 @@
 ops
 CREATE SCHEMA sc;
 ----
-StatementPhase stage 1 of 1 with 7 MutationType ops
+StatementPhase stage 1 of 1 with 8 MutationType ops
   transitions:
-    [[Schema:{DescID: 104}, PUBLIC], ABSENT] -> DESCRIPTOR_ADDED
-    [[SchemaName:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[Schema:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 104, Name: sc, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
     [[Owner:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
@@ -13,9 +12,9 @@ StatementPhase stage 1 of 1 with 7 MutationType ops
   ops:
     *scop.CreateSchemaDescriptor
       SchemaID: 104
-    *scop.SetSchemaName
+    *scop.SetNameInDescriptor
+      DescriptorID: 104
       Name: sc
-      SchemaID: 104
     *scop.AddDescriptorName
       Namespace:
         DatabaseID: 100
@@ -41,10 +40,11 @@ StatementPhase stage 1 of 1 with 7 MutationType ops
         Privileges: 2
         UserName: root
         WithGrantOption: 2
+    *scop.MarkDescriptorAsPublic
+      DescriptorID: 104
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Schema:{DescID: 104}, PUBLIC], DESCRIPTOR_ADDED] -> ABSENT
-    [[SchemaName:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
+    [[Schema:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 104, Name: sc, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
     [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
@@ -56,7 +56,6 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
 PreCommitPhase stage 2 of 2 with 8 MutationType ops
   transitions:
     [[Schema:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
-    [[SchemaName:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 104, Name: sc, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
     [[Owner:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
@@ -65,9 +64,9 @@ PreCommitPhase stage 2 of 2 with 8 MutationType ops
   ops:
     *scop.CreateSchemaDescriptor
       SchemaID: 104
-    *scop.SetSchemaName
+    *scop.SetNameInDescriptor
+      DescriptorID: 104
       Name: sc
-      SchemaID: 104
     *scop.AddDescriptorName
       Namespace:
         DatabaseID: 100
@@ -116,10 +115,6 @@ CREATE SCHEMA sc;
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Schema:{DescID: 105}, DESCRIPTOR_ADDED]
-  to:   [SchemaName:{DescID: 105}, PUBLIC]
-  kind: Precedence
-  rule: descriptor existence precedes dependents
-- from: [Schema:{DescID: 105}, DESCRIPTOR_ADDED]
   to:   [SchemaParent:{DescID: 105, ReferencedDescID: 100}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
@@ -131,10 +126,6 @@ CREATE SCHEMA sc;
   to:   [UserPrivileges:{DescID: 105, Name: root}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
-- from: [SchemaName:{DescID: 105}, PUBLIC]
-  to:   [Schema:{DescID: 105}, PUBLIC]
-  kind: Precedence
-  rule: dependents exist before descriptor becomes public
 - from: [SchemaParent:{DescID: 105, ReferencedDescID: 100}, PUBLIC]
   to:   [Schema:{DescID: 105}, PUBLIC]
   kind: Precedence

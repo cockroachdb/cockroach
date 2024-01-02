@@ -134,15 +134,20 @@ type joinReader struct {
 		unlimitedMemMonitor *mon.BytesMonitor
 		budgetAcc           mon.BoundAccount
 		// maintainOrdering indicates whether the ordering of the input stream
-		// needs to be maintained AND that we rely on the streamer for that.
-		// We currently only rely on the streamer in two cases:
-		//   1. We are performing an index join and joinReader.maintainOrdering is
+		// needs to be maintained AND that we rely on the streamer for that. We
+		// currently rely on the streamer in the following cases:
+		//   1. When spec.SplitFamilyIDs has more than one family, for both
+		//      index and lookup joins (this is needed to ensure that all KVs
+		//      for a single row are returned contiguously).
+		//   2. We are performing an index join and spec.MaintainOrdering is
 		//      true.
-		//   2. We are performing a lookup join and maintainLookupOrdering is true.
-		// Except for case (2), we don't rely on the streamer for maintaining
-		// the ordering for lookup joins due to implementation details (since we
-		// still buffer all looked up rows and restore the ordering explicitly via
-		// the joinReaderOrderingStrategy).
+		//   3. We are performing a lookup join and spec.MaintainLookupOrdering
+		//      is true.
+		// Note that in case (3), we don't rely on the streamer for maintaining
+		// the ordering for lookup joins when spec.MaintainOrdering is true due
+		// to implementation details (since we still buffer all looked up rows
+		// and restore the ordering explicitly via the
+		// joinReaderOrderingStrategy).
 		maintainOrdering    bool
 		diskMonitor         *mon.BytesMonitor
 		txnKVStreamerMemAcc mon.BoundAccount
@@ -266,7 +271,7 @@ const joinReaderProcName = "join reader"
 // ParallelizeMultiKeyLookupJoinsEnabled determines whether the joinReader
 // parallelizes KV batches in all cases.
 var ParallelizeMultiKeyLookupJoinsEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.parallelize_multi_key_lookup_joins.enabled",
 	"determines whether KV batches are executed in parallel for lookup joins in all cases. "+
 		"Enabling this will increase the speed of lookup joins when each input row might get "+
@@ -511,13 +516,30 @@ func newJoinReader(
 		jr.streamerInfo.unlimitedMemMonitor.StartNoReserved(ctx, flowCtx.Mon)
 		jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 		jr.streamerInfo.txnKVStreamerMemAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
-		// The index joiner can rely on the streamer to maintain the input ordering,
-		// but the lookup joiner currently handles this logic itself, so the
-		// streamer can operate in OutOfOrder mode. The exception is when the
-		// results of each lookup need to be returned in index order - in this case,
-		// InOrder mode must be used for the streamer.
-		jr.streamerInfo.maintainOrdering = (jr.maintainOrdering && readerType == indexJoinReaderType) ||
-			spec.MaintainLookupOrdering
+		// When we have SplitFamilyIDs with more than one family ID, then it's
+		// possible for a single lookup span to be split into multiple "family"
+		// spans, and in order to preserve the invariant that all KVs for a
+		// single SQL row are contiguous we must ask the streamer to preserve
+		// the ordering. See #113013 for an example.
+		jr.streamerInfo.maintainOrdering = len(spec.SplitFamilyIDs) > 1
+		if readerType == indexJoinReaderType {
+			if spec.MaintainOrdering {
+				// The index join can rely on the streamer to maintain the input
+				// ordering.
+				jr.streamerInfo.maintainOrdering = true
+			}
+		} else {
+			// Due to implementation details (the join reader strategy restores
+			// the desired order when spec.MaintainOrdering is set) we only need
+			// to ask the streamer to maintain ordering if the results of each
+			// lookup need to be returned in index order.
+			if spec.MaintainLookupOrdering {
+				jr.streamerInfo.maintainOrdering = true
+			}
+		}
+		if jr.FlowCtx.EvalCtx.SessionData().StreamerAlwaysMaintainOrdering {
+			jr.streamerInfo.maintainOrdering = true
+		}
 
 		var diskBuffer kvstreamer.ResultDiskBuffer
 		if jr.streamerInfo.maintainOrdering {
@@ -534,8 +556,10 @@ func newJoinReader(
 			flowCtx.Stopper(),
 			jr.txn,
 			flowCtx.EvalCtx.Settings,
+			flowCtx.EvalCtx.SessionData(),
 			spec.LockingWaitPolicy,
 			spec.LockingStrength,
+			spec.LockingDurability,
 			streamerBudgetLimit,
 			&jr.streamerInfo.budgetAcc,
 			jr.streamerInfo.maintainOrdering,
@@ -562,6 +586,7 @@ func newJoinReader(
 			Txn:                        jr.txn,
 			LockStrength:               spec.LockingStrength,
 			LockWaitPolicy:             spec.LockingWaitPolicy,
+			LockDurability:             spec.LockingDurability,
 			LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
 			Alloc:                      &jr.alloc,
 			MemMonitor:                 flowCtx.Mon,
@@ -819,6 +844,24 @@ func sortSpans(spans roachpb.Spans, spanIDs []int) {
 	}
 }
 
+func (jr *joinReader) getBatchBytesLimit() rowinfra.BytesLimit {
+	if jr.usesStreamer {
+		// The streamer itself sets the correct TargetBytes parameter on the
+		// BatchRequests.
+		return rowinfra.NoBytesLimit
+	}
+	if !jr.shouldLimitBatches {
+		// We deem it safe to not limit the batches in order to get the
+		// DistSender-level parallelism.
+		return rowinfra.NoBytesLimit
+	}
+	bytesLimit := jr.lookupBatchBytesLimit
+	if bytesLimit == 0 {
+		bytesLimit = rowinfra.GetDefaultBatchBytesLimit(jr.EvalCtx.TestingKnobs.ForceProductionValues)
+	}
+	return bytesLimit
+}
+
 // readInput reads the next batch of input rows and starts an index scan, which
 // for lookup join is the lookup of matching KVs for a batch of input rows.
 // It can sometimes emit a single row on behalf of the previous batch.
@@ -1016,19 +1059,8 @@ func (jr *joinReader) readInput() (
 	// modification here, but we want to be conscious about the memory
 	// accounting - we don't double count for any memory of spans because the
 	// joinReaderStrategy doesn't account for any memory used by the spans.
-	var bytesLimit rowinfra.BytesLimit
-	if !jr.usesStreamer {
-		if !jr.shouldLimitBatches {
-			bytesLimit = rowinfra.NoBytesLimit
-		} else {
-			bytesLimit = jr.lookupBatchBytesLimit
-			if jr.lookupBatchBytesLimit == 0 {
-				bytesLimit = rowinfra.GetDefaultBatchBytesLimit(jr.EvalCtx.TestingKnobs.ForceProductionValues)
-			}
-		}
-	}
 	if err = jr.fetcher.StartScan(
-		jr.Ctx(), spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
+		jr.Ctx(), spans, spanIDs, jr.getBatchBytesLimit(), rowinfra.NoRowLimit,
 	); err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
@@ -1094,12 +1126,8 @@ func (jr *joinReader) fetchLookupRow() (joinReaderState, *execinfrapb.ProducerMe
 			}
 
 			log.VEventf(jr.Ctx(), 1, "scanning %d remote spans", len(spans))
-			bytesLimit := rowinfra.GetDefaultBatchBytesLimit(jr.EvalCtx.TestingKnobs.ForceProductionValues)
-			if !jr.shouldLimitBatches {
-				bytesLimit = rowinfra.NoBytesLimit
-			}
 			if err := jr.fetcher.StartScan(
-				jr.Ctx(), spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
+				jr.Ctx(), spans, spanIDs, jr.getBatchBytesLimit(), rowinfra.NoRowLimit,
 			); err != nil {
 				jr.MoveToDraining(err)
 				return jrStateUnknown, jr.DrainHelper()
@@ -1220,6 +1248,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			ContentionTime:      optional.MakeTimeValue(jr.contentionEventsListener.CumulativeContentionTime),
 			BatchRequestsIssued: optional.MakeUint(uint64(jr.fetcher.GetBatchRequestsIssued())),
 			KVCPUTime:           optional.MakeTimeValue(fis.kvCPUTime),
+			UsedStreamer:        jr.usesStreamer,
 		},
 		Output: jr.OutputHelper.Stats(),
 	}

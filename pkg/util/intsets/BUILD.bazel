@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -25,9 +24,6 @@ go_test(
         "fast_test.go",
         "sparse_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":intsets"],
     deps = ["//pkg/util/randutil"],
 )
-
-get_x_data(name = "get_x_data")

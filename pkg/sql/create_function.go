@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -28,13 +29,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
 )
 
 type createFunctionNode struct {
-	cf *tree.CreateFunction
+	cf *tree.CreateRoutine
 
 	dbDesc   catalog.DatabaseDescriptor
 	scDesc   catalog.SchemaDescriptor
@@ -61,6 +64,16 @@ func (n *createFunctionNode) startExec(params runParams) error {
 		}
 	}
 
+	scDesc, err := params.p.descCollection.ByName(params.p.Txn()).Get().Schema(params.ctx, n.dbDesc, n.scDesc.GetName())
+	if err != nil {
+		return err
+	}
+	if scDesc.SchemaKind() == catalog.SchemaTemporary {
+		return unimplemented.NewWithIssue(104687, "cannot create UDFs under a temporary schema")
+	}
+
+	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("function"))
+
 	mutScDesc, err := params.p.descCollection.MutableByName(params.p.Txn()).Schema(params.ctx, n.dbDesc, n.scDesc.GetName())
 	if err != nil {
 		return err
@@ -74,7 +87,7 @@ func (n *createFunctionNode) startExec(params runParams) error {
 				return err
 			}
 
-			fnName := tree.MakeQualifiedFunctionName(n.dbDesc.GetName(), n.scDesc.GetName(), n.cf.FuncName.String())
+			fnName := tree.MakeQualifiedRoutineName(n.dbDesc.GetName(), n.scDesc.GetName(), n.cf.Name.String())
 			event := eventpb.CreateFunction{
 				FunctionName: fnName.FQString(),
 				IsReplace:    !isNew,
@@ -105,11 +118,8 @@ func (n *createFunctionNode) createNewFunction(
 		return err
 	}
 
-	for _, option := range n.cf.Options {
-		err := setFuncOption(params, udfDesc, option)
-		if err != nil {
-			return err
-		}
+	if err := setFuncOptions(params, udfDesc, n.cf.Options); err != nil {
+		return err
 	}
 
 	if err := n.addUDFReferences(udfDesc, params); err != nil {
@@ -119,7 +129,7 @@ func (n *createFunctionNode) createNewFunction(
 	err := params.p.createDescriptor(
 		params.ctx,
 		udfDesc,
-		tree.AsStringWithFQNames(&n.cf.FuncName, params.Ann()),
+		tree.AsStringWithFQNames(&n.cf.Name, params.Ann()),
 	)
 	if err != nil {
 		return err
@@ -136,10 +146,11 @@ func (n *createFunctionNode) createNewFunction(
 	scDesc.AddFunction(
 		udfDesc.GetName(),
 		descpb.SchemaDescriptor_FunctionSignature{
-			ID:         udfDesc.GetID(),
-			ArgTypes:   paramTypes,
-			ReturnType: returnType,
-			ReturnSet:  udfDesc.ReturnType.ReturnSet,
+			ID:          udfDesc.GetID(),
+			ArgTypes:    paramTypes,
+			ReturnType:  returnType,
+			ReturnSet:   udfDesc.ReturnType.ReturnSet,
+			IsProcedure: udfDesc.IsProcedure(),
 		},
 	)
 	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "Create Function"); err != nil {
@@ -152,6 +163,22 @@ func (n *createFunctionNode) createNewFunction(
 func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params runParams) error {
 	// TODO(chengxiong): add validation that the function is not referenced. This
 	// is needed when we start allowing function references from other objects.
+
+	if n.cf.IsProcedure && !udfDesc.IsProcedure() {
+		return errors.WithDetailf(
+			pgerror.Newf(pgcode.WrongObjectType, "cannot change routine kind"),
+			"%q is a function",
+			udfDesc.Name,
+		)
+	}
+
+	if !n.cf.IsProcedure && udfDesc.IsProcedure() {
+		return errors.WithDetailf(
+			pgerror.Newf(pgcode.WrongObjectType, "cannot change routine kind"),
+			"%q is a procedure",
+			udfDesc.Name,
+		)
+	}
 
 	// Make sure parameter names are not changed.
 	for i := range n.cf.Params {
@@ -171,7 +198,7 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 	}
 	isSameUDT := types.IsOIDUserDefinedType(retType.Oid()) && retType.Oid() ==
 		udfDesc.ReturnType.Type.Oid()
-	if n.cf.ReturnType.IsSet != udfDesc.ReturnType.ReturnSet || (!retType.Equal(udfDesc.ReturnType.Type) && !isSameUDT) {
+	if n.cf.ReturnType.SetOf != udfDesc.ReturnType.ReturnSet || (!retType.Equal(udfDesc.ReturnType.Type) && !isSameUDT) {
 		return pgerror.Newf(pgcode.InvalidFunctionDefinition, "cannot change return type of existing function")
 	}
 	if isSameUDT {
@@ -182,11 +209,8 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 	if err := validateVolatilityInOptions(n.cf.Options, udfDesc); err != nil {
 		return err
 	}
-	for _, option := range n.cf.Options {
-		err := setFuncOption(params, udfDesc, option)
-		if err != nil {
-			return err
-		}
+	if err := setFuncOptions(params, udfDesc, n.cf.Options); err != nil {
+		return err
 	}
 
 	// Removing all existing references before adding new references.
@@ -242,11 +266,12 @@ func (n *createFunctionNode) getMutableFuncDesc(
 	}
 
 	// Try to look up an existing function.
-	fuObj := tree.FuncObj{
-		FuncName: n.cf.FuncName,
+	routineObj := tree.RoutineObj{
+		FuncName: n.cf.Name,
 		Params:   n.cf.Params,
 	}
-	existing, err := params.p.matchUDF(params.ctx, &fuObj, false /* required */)
+	existing, err := params.p.matchRoutine(params.ctx, &routineObj,
+		false /* required */, tree.UDFRoutine|tree.ProcedureRoutine)
 	if err != nil {
 		return nil, false, err
 	}
@@ -257,7 +282,7 @@ func (n *createFunctionNode) getMutableFuncDesc(
 			return nil, false, pgerror.Newf(
 				pgcode.DuplicateFunction,
 				"function %q already exists with same argument types",
-				n.cf.FuncName.Object(),
+				n.cf.Name.Object(),
 			)
 		}
 		fnID := funcdesc.UserDefinedFunctionOIDToID(existing.Oid)
@@ -283,7 +308,7 @@ func (n *createFunctionNode) getMutableFuncDesc(
 		scDesc.GetDefaultPrivilegeDescriptor(),
 		n.dbDesc.GetID(),
 		params.SessionData().User(),
-		privilege.Functions,
+		privilege.Routines,
 	)
 	if err != nil {
 		return nil, false, err
@@ -293,10 +318,11 @@ func (n *createFunctionNode) getMutableFuncDesc(
 		funcDescID,
 		n.dbDesc.GetID(),
 		scDesc.GetID(),
-		string(n.cf.FuncName.ObjectName),
+		string(n.cf.Name.ObjectName),
 		pbParams,
 		returnType,
-		n.cf.ReturnType.IsSet,
+		n.cf.ReturnType.SetOf,
+		n.cf.IsProcedure,
 		privileges,
 	)
 
@@ -348,7 +374,7 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 			backRefMutable,
 			descpb.InvalidMutationID,
 			fmt.Sprintf("updating udf reference %q in table %s(%d)",
-				n.cf.FuncName.String(), updated.desc.GetName(), updated.desc.GetID(),
+				n.cf.Name.String(), updated.desc.GetName(), updated.desc.GetID(),
 			),
 		); err != nil {
 			return err
@@ -362,7 +388,7 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 			backRefMutable,
 			descpb.InvalidMutationID,
 			fmt.Sprintf("updating udf reference %q in table %s(%d)",
-				n.cf.FuncName.String(), backRefMutable.GetName(), backRefMutable.GetID(),
+				n.cf.Name.String(), backRefMutable.GetName(), backRefMutable.GetID(),
 			),
 		); err != nil {
 			return err
@@ -392,43 +418,56 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 	return nil
 }
 
-func setFuncOption(params runParams, udfDesc *funcdesc.Mutable, option tree.FunctionOption) error {
-	switch t := option.(type) {
-	case tree.FunctionVolatility:
-		v, err := funcinfo.VolatilityToProto(t)
-		if err != nil {
-			return err
+func setFuncOptions(
+	params runParams, udfDesc *funcdesc.Mutable, options tree.RoutineOptions,
+) error {
+	var err error
+	var body string
+	var lang catpb.Function_Language
+	for _, option := range options {
+		switch t := option.(type) {
+		case tree.RoutineVolatility:
+			vol, err := funcinfo.VolatilityToProto(t)
+			if err != nil {
+				return err
+			}
+			udfDesc.SetVolatility(vol)
+		case tree.RoutineLeakproof:
+			udfDesc.SetLeakProof(bool(t))
+		case tree.RoutineNullInputBehavior:
+			v, err := funcinfo.NullInputBehaviorToProto(t)
+			if err != nil {
+				return err
+			}
+			udfDesc.SetNullInputBehavior(v)
+		case tree.RoutineLanguage:
+			lang, err = funcinfo.FunctionLangToProto(t)
+			if err != nil {
+				return err
+			}
+			udfDesc.SetLang(lang)
+		case tree.RoutineBodyStr:
+			// Handle the body after the loop, since we don't yet know what language
+			// it is.
+			body = string(t)
+		default:
+			return pgerror.Newf(pgcode.InvalidParameterValue, "Unknown function option %q", t)
 		}
-		udfDesc.SetVolatility(v)
-	case tree.FunctionLeakproof:
-		udfDesc.SetLeakProof(bool(t))
-	case tree.FunctionNullInputBehavior:
-		v, err := funcinfo.NullInputBehaviorToProto(t)
-		if err != nil {
-			return err
-		}
-		udfDesc.SetNullInputBehavior(v)
-	case tree.FunctionLanguage:
-		v, err := funcinfo.FunctionLangToProto(t)
-		if err != nil {
-			return err
-		}
-		udfDesc.SetLang(v)
-	case tree.FunctionBodyStr:
+	}
+
+	if lang != catpb.Function_UNKNOWN_LANGUAGE && body != "" {
 		// Replace any sequence names in the function body with IDs.
-		seqReplacedFuncBody, err := replaceSeqNamesWithIDs(params.ctx, params.p, string(t), true)
+		seqReplacedFuncBody, err := replaceSeqNamesWithIDsLang(params.ctx, params.p, body, true, lang)
 		if err != nil {
 			return err
 		}
-		typeReplacedFuncBody, err := serializeUserDefinedTypes(params.ctx, params.p.SemaCtx(), seqReplacedFuncBody, true /* multiStmt */)
+		typeReplacedFuncBody, err := serializeUserDefinedTypesLang(
+			params.ctx, params.p.SemaCtx(), seqReplacedFuncBody, true /* multiStmt */, "UDFs", lang)
 		if err != nil {
 			return err
 		}
 		udfDesc.SetFuncBody(typeReplacedFuncBody)
-	default:
-		return pgerror.Newf(pgcode.InvalidParameterValue, "Unknown function option %q", t)
 	}
-
 	return nil
 }
 
@@ -440,7 +479,7 @@ func resetFuncOption(udfDesc *funcdesc.Mutable) {
 }
 
 func makeFunctionParam(
-	ctx context.Context, param tree.FuncParam, typeResolver tree.TypeReferenceResolver,
+	ctx context.Context, param tree.RoutineParam, typeResolver tree.TypeReferenceResolver,
 ) (descpb.FunctionDescriptor_Parameter, error) {
 	pbParam := descpb.FunctionDescriptor_Parameter{
 		Name: string(param.Name),
@@ -474,7 +513,7 @@ func (p *planner) descIsTable(ctx context.Context, id descpb.ID) (bool, error) {
 // validateVolatilityInOptions checks if the volatility values in the given list
 // of function options, if any, can be applied to the function descriptor.
 func validateVolatilityInOptions(
-	options tree.FunctionOptions, fnDesc catalog.FunctionDescriptor,
+	options tree.RoutineOptions, fnDesc catalog.FunctionDescriptor,
 ) error {
 	vp := funcinfo.MakeVolatilityProperties(fnDesc.GetVolatility(), fnDesc.GetLeakProof())
 	if err := vp.Apply(options); err != nil {

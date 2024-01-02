@@ -1,3 +1,7 @@
+# LogicTest: !metamorphic-batch-sizes local local-legacy-schema-changer local-mixed-23.1 local-vec-off
+# We disable metamorphic batch sizes and only use local configs so that we read
+# a predictable number of rows in each limited scan.
+
 statement ok
 CREATE TABLE guardrails (i INT PRIMARY KEY);
 INSERT INTO guardrails SELECT generate_series(1, 100)

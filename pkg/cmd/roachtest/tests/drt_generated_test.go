@@ -38,9 +38,13 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // Query mocks base method.
-func (m *MockClient) Query(arg0 context.Context, arg1 string, arg2 time.Time) (model.Value, v1.Warnings, error) {
+func (m *MockClient) Query(arg0 context.Context, arg1 string, arg2 time.Time, arg3 ...v1.Option) (model.Value, v1.Warnings, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Query", arg0, arg1, arg2)
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Query", varargs...)
 	ret0, _ := ret[0].(model.Value)
 	ret1, _ := ret[1].(v1.Warnings)
 	ret2, _ := ret[2].(error)
@@ -48,15 +52,20 @@ func (m *MockClient) Query(arg0 context.Context, arg1 string, arg2 time.Time) (m
 }
 
 // Query indicates an expected call of Query.
-func (mr *MockClientMockRecorder) Query(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) Query(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockClient)(nil).Query), arg0, arg1, arg2)
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockClient)(nil).Query), varargs...)
 }
 
 // QueryRange mocks base method.
-func (m *MockClient) QueryRange(arg0 context.Context, arg1 string, arg2 v1.Range) (model.Value, v1.Warnings, error) {
+func (m *MockClient) QueryRange(arg0 context.Context, arg1 string, arg2 v1.Range, arg3 ...v1.Option) (model.Value, v1.Warnings, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QueryRange", arg0, arg1, arg2)
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "QueryRange", varargs...)
 	ret0, _ := ret[0].(model.Value)
 	ret1, _ := ret[1].(v1.Warnings)
 	ret2, _ := ret[2].(error)
@@ -64,7 +73,8 @@ func (m *MockClient) QueryRange(arg0 context.Context, arg1 string, arg2 v1.Range
 }
 
 // QueryRange indicates an expected call of QueryRange.
-func (mr *MockClientMockRecorder) QueryRange(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) QueryRange(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryRange", reflect.TypeOf((*MockClient)(nil).QueryRange), arg0, arg1, arg2)
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryRange", reflect.TypeOf((*MockClient)(nil).QueryRange), varargs...)
 }

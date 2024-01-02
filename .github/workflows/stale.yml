@@ -12,7 +12,7 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-    - uses: actions/stale@v3
+    - uses: actions/stale@v8
       with:
         operations-per-run: 1000
         repo-token: ${{ secrets.GITHUB_TOKEN }}
@@ -31,4 +31,4 @@ jobs:
         days-before-pr-stale: 99999
         days-before-issue-stale: 540
         days-before-close: 10
-        exempt-issue-labels: 'X-anchored-telemetry,X-nostale'
+        exempt-issue-labels: 'release-blocker,X-anchored-telemetry,X-nostale'

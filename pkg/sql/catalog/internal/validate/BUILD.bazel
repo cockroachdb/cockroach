@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -29,7 +28,6 @@ go_test(
         "helpers_test.go",
         "schema_changer_state_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":validate"],
     deps = [
         "//pkg/clusterversion",
@@ -43,5 +41,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -28,6 +27,7 @@ go_library(
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/builtins/builtinconstants",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/sqltelemetry",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -45,11 +45,13 @@ go_test(
         "main_test.go",
         "schema_telemetry_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
+        ":schematelemetry",
         "//pkg/base",
         "//pkg/jobs",
+        "//pkg/jobs/jobspb",
         "//pkg/jobs/jobstest",
+        "//pkg/scheduledjobs",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -66,5 +68,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

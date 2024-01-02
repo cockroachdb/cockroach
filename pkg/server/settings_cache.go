@@ -99,10 +99,23 @@ var _ settingswatcher.Storage = (*settingsCacheWriter)(nil)
 func storeCachedSettingsKVs(ctx context.Context, eng storage.Engine, kvs []roachpb.KeyValue) error {
 	batch := eng.NewBatch()
 	defer batch.Close()
+
+	// Remove previous entries -- they are now stale.
+	if _, _, _, _, err := storage.MVCCDeleteRange(ctx, batch,
+		keys.LocalStoreCachedSettingsKeyMin,
+		keys.LocalStoreCachedSettingsKeyMax,
+		0 /* no limit */, hlc.Timestamp{}, storage.MVCCWriteOptions{}, false /* returnKeys */); err != nil {
+		return err
+	}
+
+	// Now we can populate the cache with new entries.
 	for _, kv := range kvs {
 		kv.Value.Timestamp = hlc.Timestamp{} // nb: Timestamp is not part of checksum
-		if err := storage.MVCCPut(
-			ctx, batch, nil, keys.StoreCachedSettingsKey(kv.Key), hlc.Timestamp{}, hlc.ClockTimestamp{}, kv.Value, nil,
+		cachedSettingsKey := keys.StoreCachedSettingsKey(kv.Key)
+		// A new value is added, or an existing value is updated.
+		log.VEventf(ctx, 1, "storing cached setting: %s -> %+v", cachedSettingsKey, kv.Value)
+		if _, err := storage.MVCCPut(
+			ctx, batch, cachedSettingsKey, hlc.Timestamp{}, kv.Value, storage.MVCCWriteOptions{},
 		); err != nil {
 			return err
 		}
@@ -111,13 +124,11 @@ func storeCachedSettingsKVs(ctx context.Context, eng storage.Engine, kvs []roach
 }
 
 // loadCachedSettingsKVs loads locally stored cached settings.
-func loadCachedSettingsKVs(_ context.Context, eng storage.Engine) ([]roachpb.KeyValue, error) {
+func loadCachedSettingsKVs(ctx context.Context, eng storage.Engine) ([]roachpb.KeyValue, error) {
 	var settingsKVs []roachpb.KeyValue
-	if err := eng.MVCCIterate(
-		keys.LocalStoreCachedSettingsKeyMin,
-		keys.LocalStoreCachedSettingsKeyMax,
-		storage.MVCCKeyAndIntentsIterKind,
-		storage.IterKeyTypePointsOnly,
+	if err := eng.MVCCIterate(ctx, keys.LocalStoreCachedSettingsKeyMin,
+		keys.LocalStoreCachedSettingsKeyMax, storage.MVCCKeyAndIntentsIterKind,
+		storage.IterKeyTypePointsOnly, storage.UnknownReadCategory,
 		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 			settingKey, err := keys.DecodeStoreCachedSettingsKey(kv.Key.Key)
 			if err != nil {
@@ -132,8 +143,7 @@ func loadCachedSettingsKVs(_ context.Context, eng storage.Engine) ([]roachpb.Key
 				Value: roachpb.Value{RawBytes: meta.RawBytes},
 			})
 			return nil
-		},
-	); err != nil {
+		}); err != nil {
 		return nil, err
 	}
 	return settingsKVs, nil
@@ -144,14 +154,16 @@ func initializeCachedSettings(
 ) error {
 	dec := settingswatcher.MakeRowDecoder(codec)
 	for _, kv := range kvs {
-		settings, val, _, err := dec.DecodeRow(kv, nil /* alloc */)
+		settingKeyS, val, _, err := dec.DecodeRow(kv, nil /* alloc */)
 		if err != nil {
-			return errors.Wrap(err, `while decoding settings data
--this likely indicates the settings table structure or encoding has been altered;
--skipping settings updates`)
+			return errors.WithHint(errors.Wrap(err, "while decoding settings data"),
+				"This likely indicates the settings table structure or encoding has been altered;"+
+					" skipping settings updates.")
 		}
-		if err := updater.Set(ctx, settings, val); err != nil {
-			log.Warningf(ctx, "setting %q to %v failed: %+v", settings, val, err)
+		settingKey := settings.InternalKey(settingKeyS)
+		log.VEventf(ctx, 1, "loaded cached setting: %s -> %+v", settingKey, val)
+		if err := updater.Set(ctx, settingKey, val); err != nil {
+			log.Warningf(ctx, "setting %q to %v failed: %+v", settingKey, val, err)
 		}
 	}
 	updater.ResetRemaining(ctx)

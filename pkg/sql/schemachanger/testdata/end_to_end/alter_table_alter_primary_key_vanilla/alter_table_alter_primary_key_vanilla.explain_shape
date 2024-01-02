@@ -1,0 +1,25 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
+INSERT INTO t(i, j) VALUES (-4, -4), (-2, -2), (-3, -3);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›);
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey- in relation t
+ │    └── into t_pkey+ (j; i)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[5] into t_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey+ in relation t
+ │    └── into t_i_key+ (i: j)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[3] into t_i_key+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_i_key+ in relation t
+ └── execute 2 system table mutations transactions

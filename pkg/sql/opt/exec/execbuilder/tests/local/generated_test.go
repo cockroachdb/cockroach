@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -51,6 +52,11 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
+
+	defer serverutils.TestingSetDefaultTenantSelectionOverride(
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+	)()
+
 	os.Exit(m.Run())
 }
 
@@ -103,6 +109,13 @@ func TestExecBuild_autocommit(
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "autocommit")
+}
+
+func TestExecBuild_call(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "call")
 }
 
 func TestExecBuild_cascade(
@@ -215,6 +228,13 @@ func TestExecBuild_fk(
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "fk")
+}
+
+func TestExecBuild_fk_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "fk_read_committed")
 }
 
 func TestExecBuild_forecast(
@@ -490,6 +510,13 @@ func TestExecBuild_select_for_update(
 	runExecBuildLogicTest(t, "select_for_update")
 }
 
+func TestExecBuild_select_for_update_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "select_for_update_read_committed")
+}
+
 func TestExecBuild_select_index(
 	t *testing.T,
 ) {
@@ -623,6 +650,13 @@ func TestExecBuild_unique(
 	runExecBuildLogicTest(t, "unique")
 }
 
+func TestExecBuild_unique_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "unique_read_committed")
+}
+
 func TestExecBuild_update(
 	t *testing.T,
 ) {
@@ -637,11 +671,25 @@ func TestExecBuild_update_from(
 	runExecBuildLogicTest(t, "update_from")
 }
 
+func TestExecBuild_update_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "update_read_committed")
+}
+
 func TestExecBuild_upsert(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "upsert")
+}
+
+func TestExecBuild_upsert_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "upsert_read_committed")
 }
 
 func TestExecBuild_values(

@@ -1,40 +1,66 @@
-init
+reconfigure
+limit: 1000000000
 rate: 1000
 ----
+Burst Limit: 1000000000
+Refill Rate: 1000
 Current RUs: 0
+Average RUs: 0
 
 update
 1s
 ----
+Burst Limit: 1000000000
+Refill Rate: 1000
 Current RUs: 1000
+Average RUs: 0
 
 update
 0s
 ----
+Burst Limit: 1000000000
+Refill Rate: 1000
 Current RUs: 1000
+Average RUs: 0
 
 update
 -5s
 ----
+Burst Limit: 1000000000
+Refill Rate: 1000
 Current RUs: 1000
+Average RUs: 0
 
 update
 10s
 ----
+Burst Limit: 1000000000
+Refill Rate: 1000
 Current RUs: 11000
+Average RUs: 0
 
 update
 72h
 ----
+Burst Limit: 1000000000
+Refill Rate: 1000
 Current RUs: 259211000
+Average RUs: 0
 
-init
-initial: 1234
+reconfigure
+limit: 10000
 rate: 10
+current: 1234
 ----
+Burst Limit: 10000
+Refill Rate: 10
 Current RUs: 1234
+Average RUs: 0
 
 update
 10s
 ----
+Burst Limit: 10000
+Refill Rate: 10
 Current RUs: 1334
+Average RUs: 0

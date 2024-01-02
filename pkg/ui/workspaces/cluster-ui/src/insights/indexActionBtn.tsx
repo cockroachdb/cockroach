@@ -53,7 +53,7 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
         setApplying(false);
         let foundError = false;
         for (let i = 0; i < r.length; i++) {
-          if (r[i].status == "FAILED") {
+          if (r[i].status === "FAILED") {
             foundError = true;
             setError(r[i].error);
             break;
@@ -202,7 +202,7 @@ function addIdxName(statement: string): string {
   for (let i = 0; i < statements.length; i++) {
     if (statements[i].trim().toUpperCase().startsWith("CREATE INDEX ON ")) {
       result = `${result}${createIdxName(statements[i])}; `;
-    } else if (statements[i].length != 0) {
+    } else if (statements[i].length !== 0) {
       result = `${result}${statements[i]};`;
     }
   }
@@ -231,10 +231,10 @@ export function createIdxName(statement: string): string {
   let parenthesis = 1;
   let i = 0;
   while (parenthesis > 0 && i < info.length) {
-    if (info[i] == "(") {
+    if (info[i] === "(") {
       parenthesis++;
     }
-    if (info[i] == ")") {
+    if (info[i] === ")") {
       parenthesis--;
     }
     i++;
@@ -256,8 +256,12 @@ export function createIdxName(statement: string): string {
       idxName += "_" + value;
     }
   }
-
-  idxName += "_rec_idx";
+  const suffix =
+    statement.indexOf("STORING") >= 0 ? "_storing_rec_idx" : "_rec_idx";
+  // The table name is fully qualified at this point, but we don't need the full name,
+  // so just use the last value (also an index name can't have ".")
+  const idxNameArr = idxName.split(".");
+  idxName = idxNameArr[idxNameArr.length - 1].replace(/\s/g, "_") + suffix;
 
   return statement.replace(
     "CREATE INDEX ON ",

@@ -111,6 +111,11 @@ func (p synthetic) HasConcurrentSchemaChanges() bool {
 	return false
 }
 
+// ConcurrentSchemaChangeJobIDs implements catalog.Descriptor.
+func (p synthetic) ConcurrentSchemaChangeJobIDs() []catpb.JobID {
+	return nil
+}
+
 // SkipNamespace implements the descriptor interface.
 // We never store synthetic descriptors.
 func (p synthetic) SkipNamespace() bool {
@@ -120,6 +125,11 @@ func (p synthetic) SkipNamespace() bool {
 // GetObjectType implements the Object interface.
 func (p synthetic) GetObjectType() privilege.ObjectType {
 	return privilege.Schema
+}
+
+// GetObjectTypeString implements the Object interface.
+func (p synthetic) GetObjectTypeString() string {
+	return string(privilege.Schema)
 }
 
 // GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.

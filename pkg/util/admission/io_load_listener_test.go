@@ -25,6 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
@@ -49,11 +52,14 @@ func TestIOLoadListener(t *testing.T) {
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
+				L0MinimumSizePerSubLevel.Override(ctx, &st.SV, 0)
 				ioll = &ioLoadListener{
 					settings:              st,
 					kvRequester:           req,
 					perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
 					diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
+					l0CompactedBytes:      metric.NewCounter(l0CompactedBytes),
+					l0TokensProduced:      metric.NewCounter(l0TokensProduced),
 				}
 				// The mutex is needed by ioLoadListener but is not useful in this
 				// test -- the channels provide synchronization and prevent this
@@ -80,12 +86,27 @@ func TestIOLoadListener(t *testing.T) {
 				if d.HasArg("ingested-bytes") {
 					d.ScanArgs(t, "ingested-bytes", &req.stats.ingestedAccountedBytes)
 				}
+				belowRaft := false
+				if d.HasArg("below-raft") {
+					d.ScanArgs(t, "below-raft", &belowRaft)
+				}
+				if !belowRaft {
+					req.stats.aboveRaftStats.workCount = req.stats.workCount
+					req.stats.aboveRaftStats.writeAccountedBytes = req.stats.writeAccountedBytes
+					req.stats.aboveRaftStats.ingestedAccountedBytes = req.stats.ingestedAccountedBytes
+				}
 				return fmt.Sprintf("%+v", req.stats)
 
 			case "set-min-flush-util":
 				var percent int
 				d.ScanArgs(t, "percent", &percent)
 				MinFlushUtilizationFraction.Override(ctx, &st.SV, float64(percent)/100)
+				return ""
+
+			case "set-min-size-per-sub-level":
+				var minSize int64
+				d.ScanArgs(t, "size", &minSize)
+				L0MinimumSizePerSubLevel.Override(ctx, &st.SV, minSize)
 				return ""
 
 			// TODO(sumeer): the output printed by set-state is hard to follow. It
@@ -120,6 +141,19 @@ func TestIOLoadListener(t *testing.T) {
 					d.ScanArgs(t, "flush-bytes", &flushBytes)
 					d.ScanArgs(t, "flush-work-sec", &flushWorkSec)
 					d.ScanArgs(t, "flush-idle-sec", &flushIdleSec)
+				} else {
+					// Make flush utilization low, but keep peak throughput sane by
+					// setting flushWorkSec > 0.
+					flushWorkSec = 1
+					flushIdleSec = 100
+				}
+				if d.HasArg("base-level") {
+					var baseLevel int
+					d.ScanArgs(t, "base-level", &baseLevel)
+					metrics.Levels[baseLevel].Size = 1000
+					var compactedBytes int
+					d.ScanArgs(t, "compacted-bytes", &compactedBytes)
+					metrics.Levels[baseLevel].BytesCompacted = uint64(compactedBytes)
 				}
 
 				cumFlushIdle += time.Duration(flushIdleSec) * time.Second
@@ -207,8 +241,10 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	ioll := ioLoadListener{
-		settings:    st,
-		kvRequester: req,
+		settings:         st,
+		kvRequester:      req,
+		l0CompactedBytes: metric.NewCounter(l0CompactedBytes),
+		l0TokensProduced: metric.NewCounter(l0TokensProduced),
 	}
 	ioll.kvGranter = kvGranter
 	// Bug 1: overflow when totalNumByteTokens is too large.
@@ -268,9 +304,14 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 	var buf redact.StringBuilder
 	for _, tt := range tests {
 		buf.Printf("%s:\n", tt.name)
-		res := (*ioLoadListener)(nil).adjustTokensInner(
-			ctx, tt.prev, tt.l0Metrics, 12, pebble.ThroughputMetric{},
-			100, 10, 0.50)
+		ioll := &ioLoadListener{
+			settings:         cluster.MakeTestingClusterSettings(),
+			l0CompactedBytes: metric.NewCounter(l0CompactedBytes),
+			l0TokensProduced: metric.NewCounter(l0TokensProduced),
+		}
+		res := ioll.adjustTokensInner(
+			ctx, tt.prev, tt.l0Metrics, 12, cumStoreCompactionStats{numOutLevelsGauge: 1},
+			pebble.ThroughputMetric{}, 100, 10, 0, 0.50)
 		buf.Printf("%s\n", res)
 	}
 	echotest.Require(t, string(redact.Sprint(buf)), filepath.Join(datapathutils.TestDataPath(t, "format_adjust_tokens_stats.txt")))
@@ -299,8 +340,9 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		req.stats.workCount = rand.Uint64()
 		req.stats.writeAccountedBytes = rand.Uint64()
 		req.stats.ingestedAccountedBytes = rand.Uint64()
-		req.stats.statsToIgnore.Bytes = rand.Uint64()
-		req.stats.statsToIgnore.ApproxIngestedIntoL0Bytes = rand.Uint64()
+		req.stats.statsToIgnore.ingestStats.Bytes = rand.Uint64()
+		req.stats.statsToIgnore.ingestStats.ApproxIngestedIntoL0Bytes = rand.Uint64()
+		req.stats.statsToIgnore.writeBytes = rand.Uint64()
 	}
 	kvGranter := &testGranterNonNegativeTokens{t: t}
 	st := cluster.MakeTestingClusterSettings()
@@ -309,6 +351,8 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		kvRequester:           req,
 		perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
 		diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
+		l0CompactedBytes:      metric.NewCounter(l0CompactedBytes),
+		l0TokensProduced:      metric.NewCounter(l0TokensProduced),
 	}
 	ioll.kvGranter = kvGranter
 	for i := 0; i < 100; i++ {
@@ -361,18 +405,28 @@ type testGranterWithIOTokens struct {
 var _ granterWithIOTokens = &testGranterWithIOTokens{}
 
 func (g *testGranterWithIOTokens) setAvailableTokens(
-	ioTokens int64, elasticDiskBandwidthTokens int64, maxIOTokens int64, maxElasticTokens int64,
-) (tokensUsed int64) {
-	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s elastic-disk-bw-tokens=%s max-byte-tokens=%s max-disk-bw-tokens=%s",
+	ioTokens int64,
+	elasticIOTokens int64,
+	elasticDiskBandwidthTokens int64,
+	maxIOTokens int64,
+	maxElasticIOTokens int64,
+	maxElasticDiskBandwidthTokens int64,
+	lastTick bool,
+) (tokensUsed int64, tokensUsedByElasticWork int64) {
+	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s(elastic %s) "+
+		"elastic-disk-bw-tokens=%s max-byte-tokens=%s(elastic %s) max-disk-bw-tokens=%s lastTick=%t",
 		tokensForTokenTickDurationToString(ioTokens),
+		tokensForTokenTickDurationToString(elasticIOTokens),
 		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens),
 		tokensForTokenTickDurationToString(maxIOTokens),
-		tokensForTokenTickDurationToString(maxElasticTokens),
+		tokensForTokenTickDurationToString(maxElasticIOTokens),
+		tokensForTokenTickDurationToString(maxElasticDiskBandwidthTokens),
+		lastTick,
 	)
 	if g.allTokensUsed {
-		return ioTokens * 2
+		return ioTokens * 2, 0
 	}
-	return 0
+	return 0, 0
 }
 
 func (g *testGranterWithIOTokens) getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64 {
@@ -407,11 +461,18 @@ type testGranterNonNegativeTokens struct {
 var _ granterWithIOTokens = &testGranterNonNegativeTokens{}
 
 func (g *testGranterNonNegativeTokens) setAvailableTokens(
-	ioTokens int64, elasticDiskBandwidthTokens int64, _ int64, _ int64,
-) (tokensUsed int64) {
+	ioTokens int64,
+	elasticIOTokens int64,
+	elasticDiskBandwidthTokens int64,
+	_ int64,
+	_ int64,
+	_ int64,
+	_ bool,
+) (tokensUsed int64, tokensUsedByElasticWork int64) {
 	require.LessOrEqual(g.t, int64(0), ioTokens)
+	require.LessOrEqual(g.t, int64(0), elasticIOTokens)
 	require.LessOrEqual(g.t, int64(0), elasticDiskBandwidthTokens)
-	return 0
+	return 0, 0
 }
 
 func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64 {
@@ -499,4 +560,85 @@ func TestTokenAllocationTicker(t *testing.T) {
 	// Skip to the future in which case remainingTicks must be exhausted.
 	ticker.adjustmentIntervalStartTime = timeutil.Now().Add(-17 * time.Second)
 	require.Equal(t, 0, int(ticker.remainingTicks()))
+}
+
+func TestComputeCumStoreCompactionStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		name       string
+		baseLevel  int
+		writeBytes int64
+		sizeBytes  int64
+		expected   cumStoreCompactionStats
+	}{
+		{
+			name: "base-l6-zero",
+			expected: cumStoreCompactionStats{
+				numOutLevelsGauge: 1,
+			},
+		},
+		{
+			name:       "base-l6",
+			baseLevel:  6,
+			writeBytes: 50,
+			sizeBytes:  500,
+			expected: cumStoreCompactionStats{
+				writeBytes:        50,
+				numOutLevelsGauge: 1,
+			},
+		},
+		{
+			name:       "base-l2",
+			baseLevel:  2,
+			writeBytes: 97,
+			sizeBytes:  397,
+			expected: cumStoreCompactionStats{
+				writeBytes:        97,
+				numOutLevelsGauge: 5,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := pebble.Metrics{}
+			var cumSizeBytes int64
+			var cumWriteBytes uint64
+			divisor := int64(len(m.Levels) - tc.baseLevel)
+			for i := tc.baseLevel; i < len(m.Levels); i++ {
+				m.Levels[i].Size = tc.sizeBytes / divisor
+				cumSizeBytes += m.Levels[i].Size
+				m.Levels[i].BytesCompacted = uint64(tc.writeBytes / divisor)
+				cumWriteBytes += m.Levels[i].BytesCompacted
+			}
+			if cumSizeBytes < tc.sizeBytes {
+				m.Levels[tc.baseLevel].Size += tc.sizeBytes - cumSizeBytes
+			}
+			if cumWriteBytes < uint64(tc.writeBytes) {
+				m.Levels[tc.baseLevel].BytesCompacted += uint64(tc.writeBytes) - cumWriteBytes
+			}
+			require.Equal(t, tc.expected, computeCumStoreCompactionStats(&m))
+		})
+	}
+}
+
+func TestComputeL0CompactionTokensLowerBound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.Equal(t, int64(1000), computeL0CompactionTokensLowerBound(cumStoreCompactionStats{
+		writeBytes:        3000,
+		numOutLevelsGauge: 1,
+	}, cumStoreCompactionStats{
+		writeBytes:        8000,
+		numOutLevelsGauge: 5,
+	}))
+
+	require.Equal(t, int64(0), computeL0CompactionTokensLowerBound(cumStoreCompactionStats{
+		writeBytes:        1000,
+		numOutLevelsGauge: 1,
+	}, cumStoreCompactionStats{
+		writeBytes:        500,
+		numOutLevelsGauge: 2,
+	}))
 }

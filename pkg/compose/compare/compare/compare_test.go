@@ -65,6 +65,8 @@ func TestCompare(t *testing.T) {
 			addr: "postgresql://root@cockroach1:26257/postgres?sslmode=disable",
 			init: []string{
 				"SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing'",
+				"SET extra_float_digits = 0",   // For Postgres Compat when casting floats to strings.
+				"SET null_ordered_last = true", // For Postgres Compat, see https://www.cockroachlabs.com/docs/stable/order-by#parameters
 				fmt.Sprintf("SET CLUSTER SETTING enterprise.license = '%s'", license),
 				"drop database if exists postgres",
 				"create database postgres",
@@ -74,6 +76,8 @@ func TestCompare(t *testing.T) {
 			addr: "postgresql://root@cockroach2:26257/postgres?sslmode=disable",
 			init: []string{
 				"SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing'",
+				"SET extra_float_digits = 0",   // For Postgres Compat when casting floats to strings.
+				"SET null_ordered_last = true", // For Postgres Compat https://www.cockroachlabs.com/docs/stable/order-by#parameters
 				fmt.Sprintf("SET CLUSTER SETTING enterprise.license = '%s'", license),
 				"drop database if exists postgres",
 				"create database postgres",
@@ -109,10 +113,8 @@ func TestCompare(t *testing.T) {
 				{
 					name: "cockroach2",
 					mutators: []randgen.Mutator{
-						randgen.StatisticsMutator,
 						randgen.ForeignKeyMutator,
 						randgen.ColumnFamilyMutator,
-						randgen.StatisticsMutator,
 						randgen.IndexStoringMutator,
 						randgen.PartialIndexMutator,
 					},

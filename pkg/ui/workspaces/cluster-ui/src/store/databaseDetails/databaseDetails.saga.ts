@@ -8,19 +8,26 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, put, takeLatest } from "redux-saga/effects";
+import { all, call, put, takeEvery } from "redux-saga/effects";
 
-import { actions } from "./databaseDetails.reducer";
-import { ErrorWithKey, getDatabaseDetails } from "src/api";
+import { databaseDetailsReducer } from "./databaseDetails.reducer";
+import {
+  DatabaseDetailsReqParams,
+  ErrorWithKey,
+  getDatabaseDetails,
+} from "src/api";
 import moment from "moment";
 import { PayloadAction } from "@reduxjs/toolkit";
 
-export function* refreshDatabaseDetailsSaga(action: PayloadAction<string>) {
+const actions = databaseDetailsReducer.actions;
+export function* refreshDatabaseDetailsSaga(
+  action: PayloadAction<DatabaseDetailsReqParams>,
+) {
   yield put(actions.request(action.payload));
 }
 
 export function* requestDatabaseDetailsSaga(
-  action: PayloadAction<string>,
+  action: PayloadAction<DatabaseDetailsReqParams>,
 ): any {
   try {
     const result = yield call(
@@ -30,14 +37,14 @@ export function* requestDatabaseDetailsSaga(
     );
     yield put(
       actions.received({
-        key: action.payload,
+        key: action.payload.database,
         databaseDetailsResponse: result,
       }),
     );
   } catch (e) {
     const err: ErrorWithKey = {
       err: e,
-      key: action.payload,
+      key: action.payload.database,
     };
     yield put(actions.failed(err));
   }
@@ -45,7 +52,7 @@ export function* requestDatabaseDetailsSaga(
 
 export function* databaseDetailsSaga() {
   yield all([
-    takeLatest(actions.refresh, refreshDatabaseDetailsSaga),
-    takeLatest(actions.request, requestDatabaseDetailsSaga),
+    takeEvery(actions.refresh, refreshDatabaseDetailsSaga),
+    takeEvery(actions.request, requestDatabaseDetailsSaga),
   ]);
 }

@@ -5,6 +5,10 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT);
 build
 ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j) NOT VALID;
 ----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 - [[UniqueWithoutIndexConstraintUnvalidated:{DescID: 104, ConstraintID: 2}, PUBLIC], ABSENT]
   {columnIds: [2], constraintId: 2, tableId: 104}
 - [[ConstraintWithoutIndexName:{DescID: 104, Name: unique_j, ConstraintID: 2}, PUBLIC], ABSENT]

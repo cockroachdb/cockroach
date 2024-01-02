@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -21,16 +20,19 @@ go_library(
         "//pkg/base",
         "//pkg/ccl/baseccl",
         "//pkg/ccl/cliccl/cliflagsccl",
+        "//pkg/ccl/securityccl/fipsccl",
         "//pkg/ccl/sqlproxyccl",
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",
         "//pkg/ccl/storageccl/engineccl/enginepbccl",
         "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl/cliccl",
         "//pkg/cli",
+        "//pkg/cli/clierror",
         "//pkg/cli/clierrorplus",
         "//pkg/cli/cliflagcfg",
         "//pkg/cli/cliflags",
         "//pkg/cli/democluster",
+        "//pkg/cli/exit",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/log",
@@ -42,7 +44,9 @@ go_library(
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_olekukonko_tablewriter//:tablewriter",
         "@com_github_spf13_cobra//:cobra",
+        "@com_github_spf13_pflag//:pflag",
     ],
 )
 
@@ -53,7 +57,7 @@ go_test(
         "ear_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
     embed = [":cliccl"],
     tags = ["ccl_test"],
     deps = [
@@ -65,14 +69,14 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/storage",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/util/envutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_spf13_cobra//:cobra",
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

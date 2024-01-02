@@ -38,7 +38,7 @@ func declareKeysRecomputeStats(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	// We don't declare any user key in the range. This is OK since all we're doing is computing a
 	// stats delta, and applying this delta commutes with other operations on the same key space.
 	//
@@ -58,6 +58,7 @@ func declareKeysRecomputeStats(
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(rdKey, uuid.Nil)})
 	// Disable the assertions which check that all reads were previously declared.
 	latchSpans.DisableUndeclaredAccessAssertions()
+	return nil
 }
 
 // RecomputeStats recomputes the MVCCStats stored for this range and adjust them accordingly,
@@ -74,7 +75,7 @@ func RecomputeStats(
 
 	args = nil // avoid accidental use below
 
-	actualMS, err := rditer.ComputeStatsForRange(desc, reader, cArgs.Header.Timestamp.WallTime)
+	actualMS, err := rditer.ComputeStatsForRange(ctx, desc, reader, cArgs.Header.Timestamp.WallTime)
 	if err != nil {
 		return result.Result{}, err
 	}

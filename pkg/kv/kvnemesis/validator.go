@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -227,6 +226,7 @@ func (o *observedWrite) isDelete() bool {
 
 type observedRead struct {
 	Key        roachpb.Key
+	SkipLocked bool
 	Value      roachpb.Value
 	ValidTimes disjointTimeSpans
 }
@@ -237,6 +237,7 @@ type observedScan struct {
 	Span          roachpb.Span
 	IsDeleteRange bool
 	Reverse       bool
+	SkipLocked    bool
 	KVs           []roachpb.KeyValue
 	Valid         multiKeyTimeSpan
 }
@@ -249,8 +250,9 @@ type validator struct {
 	// Observations for the current atomic unit. This is reset between units, in
 	// checkAtomic, which then calls processOp (which might recurse owing to the
 	// existence of txn closures, batches, etc).
-	curObservations []observedOp
-	buffering       bufferingType
+	curObservations   []observedOp
+	observationFilter observationFilter
+	buffering         bufferingType
 
 	// NB: The Generator carefully ensures that each value written is unique
 	// globally over a run, so there's a 1:1 relationship between a value that was
@@ -344,6 +346,18 @@ func (v *validator) tryConsumeRangedWrite(
 	return consumed, len(consumed) > 0
 }
 
+// observationFilter describes which observations should be included in the
+// validator's observations.
+type observationFilter int
+
+const (
+	// observeAll includes all observations.
+	observeAll observationFilter = iota
+	// observeLocking includes only observations for operations that acquire locks
+	// (i.e. writes and locking reads).
+	observeLocking
+)
+
 type bufferingType byte
 
 const (
@@ -393,10 +407,27 @@ func (v *validator) processOp(op Operation) {
 			break
 		}
 		read := &observedRead{
-			Key:   t.Key,
-			Value: roachpb.Value{RawBytes: t.Result.Value},
+			Key:        t.Key,
+			SkipLocked: t.SkipLocked,
+			Value:      roachpb.Value{RawBytes: t.Result.Value},
 		}
-		v.curObservations = append(v.curObservations, read)
+		var observe bool
+		switch v.observationFilter {
+		case observeAll:
+			observe = true
+		case observeLocking:
+			// NOTE: even if t.ForUpdate || t.ForShare, we only consider the read to
+			// be locking if it has a guaranteed durability. Furthermore, we only
+			// consider the read as an observation if it found and returned a value,
+			// otherwise no lock would have been acquired on the non-existent key.
+			// Gets do not acquire gap locks.
+			observe = t.GuaranteedDurability && read.Value.IsPresent()
+		default:
+			panic("unexpected")
+		}
+		if observe {
+			v.curObservations = append(v.curObservations, read)
+		}
 
 		if v.buffering == bufferingSingle {
 			v.checkAtomic(`get`, t.Result)
@@ -466,14 +497,22 @@ func (v *validator) processOp(op Operation) {
 		}
 		v.curObservations = append(v.curObservations, deleteOps...)
 		// The span ought to be empty right after the DeleteRange.
-		v.curObservations = append(v.curObservations, &observedScan{
-			Span: roachpb.Span{
-				Key:    t.Key,
-				EndKey: t.EndKey,
-			},
-			IsDeleteRange: true, // just for printing
-			KVs:           nil,
-		})
+		//
+		// However, we do not add this observation if the observation filter is
+		// observeLocking because the DeleteRange's read is not locking. This means
+		// that for isolation levels that permit write skew, the DeleteRange does
+		// not prevent new keys from being inserted in the deletion span between the
+		// transaction's read and write timestamps.
+		if v.observationFilter != observeLocking {
+			v.curObservations = append(v.curObservations, &observedScan{
+				Span: roachpb.Span{
+					Key:    t.Key,
+					EndKey: t.EndKey,
+				},
+				IsDeleteRange: true, // just for printing
+				KVs:           nil,
+			})
+		}
 
 		if v.buffering == bufferingSingle {
 			v.checkAtomic(`deleteRange`, t.Result)
@@ -544,12 +583,17 @@ func (v *validator) processOp(op Operation) {
 
 		// The span ought to be empty right after the DeleteRange, even if parts of
 		// the DeleteRange that didn't materialize due to a shadowing operation.
-		v.curObservations = append(v.curObservations, &observedScan{
-			Span: roachpb.Span{
-				Key:    t.Key,
-				EndKey: t.EndKey,
-			},
-		})
+		//
+		// See above for why we do not add this observation if the observation
+		// filter is observeLocking.
+		if v.observationFilter != observeLocking {
+			v.curObservations = append(v.curObservations, &observedScan{
+				Span: roachpb.Span{
+					Key:    t.Key,
+					EndKey: t.EndKey,
+				},
+			})
+		}
 
 		if v.buffering == bufferingSingle {
 			v.checkAtomic(`deleteRangeUsingTombstone`, t.Result)
@@ -653,21 +697,43 @@ func (v *validator) processOp(op Operation) {
 		if _, isErr := v.checkError(op, t.Result); isErr {
 			break
 		}
-		scan := &observedScan{
-			Span: roachpb.Span{
-				Key:    t.Key,
-				EndKey: t.EndKey,
-			},
-			KVs:     make([]roachpb.KeyValue, len(t.Result.Values)),
-			Reverse: t.Reverse,
-		}
-		for i, kv := range t.Result.Values {
-			scan.KVs[i] = roachpb.KeyValue{
-				Key:   kv.Key,
-				Value: roachpb.Value{RawBytes: kv.Value},
+		switch v.observationFilter {
+		case observeAll:
+			scan := &observedScan{
+				Span: roachpb.Span{
+					Key:    t.Key,
+					EndKey: t.EndKey,
+				},
+				Reverse:    t.Reverse,
+				SkipLocked: t.SkipLocked,
+				KVs:        make([]roachpb.KeyValue, len(t.Result.Values)),
 			}
+			for i, kv := range t.Result.Values {
+				scan.KVs[i] = roachpb.KeyValue{
+					Key:   kv.Key,
+					Value: roachpb.Value{RawBytes: kv.Value},
+				}
+			}
+			v.curObservations = append(v.curObservations, scan)
+		case observeLocking:
+			// If we are only observing locking operations then we only want to
+			// consider the scan to be locking if it has a guaranteed durability.
+			// Furthermore, we only consider the individual keys that were returned to
+			// be locked, not the entire span that was scanned. Scans do not acquire
+			// gap locks.
+			if t.GuaranteedDurability {
+				for _, kv := range t.Result.Values {
+					read := &observedRead{
+						Key:        kv.Key,
+						SkipLocked: t.SkipLocked,
+						Value:      roachpb.Value{RawBytes: kv.Value},
+					}
+					v.curObservations = append(v.curObservations, read)
+				}
+			}
+		default:
+			panic("unexpected")
 		}
-		v.curObservations = append(v.curObservations, scan)
 
 		if v.buffering == bufferingSingle {
 			atomicScanType := `scan`
@@ -701,25 +767,29 @@ func (v *validator) processOp(op Operation) {
 		//
 		// So we ignore the results of failIfError, calling it only for its side
 		// effect of perhaps registering a failure with the validator.
-		v.failIfError(op, t.Result, exceptRollback, exceptAmbiguous)
+		v.failIfError(
+			op, t.Result,
+			exceptRollback, exceptAmbiguous, exceptSharedLockPromotionError, exceptSkipLockedReplayError,
+			exceptSkipLockedUnsupportedError,
+		)
 
 		ops := t.Ops
 		if t.CommitInBatch != nil {
 			ops = append(ops, t.CommitInBatch.Ops...)
 		}
+		if t.IsoLevel.ToleratesWriteSkew() {
+			// If the transaction ran under an isolation level that permits write skew
+			// then we only validate the atomicity of locking operations (writes and
+			// locking reads). Non-locking reads may be inconsistent with the commit
+			// timestamp of the transaction.
+			v.observationFilter = observeLocking
+		}
 		v.buffering = bufferingBatchOrTxn
 		for _, op := range ops {
 			v.processOp(op)
 		}
-		prevFailures := v.failures
 		atomicTxnType := fmt.Sprintf(`%s txn`, t.IsoLevel.StringLower())
 		v.checkAtomic(atomicTxnType, t.Result)
-		if t.IsoLevel != isolation.Serializable {
-			// TODO(nvanbenschoten): for now, we run snapshot and read committed
-			// transactions in the mix but don't validate their results. Doing so
-			// is non-trivial. See #100169 and #100170
-			v.failures = prevFailures
-		}
 	case *SplitOperation:
 		execTimestampStrictlyOptional = true
 		v.failIfError(op, t.Result) // splits should never return *any* error
@@ -745,16 +815,14 @@ func (v *validator) processOp(op Operation) {
 			// However, I think the right thing to do is sniff this inside the
 			// AdminMerge code and retry so the client never sees it. In the meantime,
 			// no-op. #44377
-		} else if resultIsErrorStr(t.Result, `merge failed: cannot merge ranges when (rhs)|(lhs) is in a joint state or has learners`) {
+		} else if resultIsErrorStr(t.Result, `merge failed: cannot merge ranges when (lhs|rhs) is in a joint state or has learners`) {
 			// This operation executed concurrently with one that was changing
 			// replicas.
 		} else if resultIsErrorStr(t.Result, `merge failed: ranges not collocated`) {
 			// A merge requires that the two ranges have replicas on the same nodes,
 			// but Generator intentiontally does not try to avoid this so that this
 			// edge case is exercised.
-		} else if resultIsErrorStr(t.Result, `merge failed: waiting for all left-hand replicas to initialize`) {
-			// Probably should be transparently retried.
-		} else if resultIsErrorStr(t.Result, `merge failed: waiting for all right-hand replicas to catch up`) {
+		} else if resultIsErrorStr(t.Result, `merge failed: waiting for all (left|right)-hand replicas to (initialize|catch up)`) {
 			// Probably should be transparently retried.
 		} else if resultIsErrorStr(t.Result, `merge failed: non-deletion intent on local range descriptor`) {
 			// Probably should be transparently retried.
@@ -802,6 +870,7 @@ func (v *validator) processOp(op Operation) {
 func (v *validator) checkAtomic(atomicType string, result Result) {
 	observations := v.curObservations
 	v.curObservations = nil
+	v.observationFilter = observeAll
 	v.buffering = bufferingSingle
 
 	// Only known-uncommitted results may come without a timestamp. Whenever we
@@ -990,8 +1059,10 @@ func (v *validator) checkAtomicCommitted(
 					panic(err)
 				}
 			} else { // ranged write
+				key := storage.EngineKey{Key: o.Key}.Encode()
+				endKey := storage.EngineKey{Key: o.EndKey}.Encode()
 				suffix := storage.EncodeMVCCTimestampSuffix(o.Timestamp)
-				if err := batch.RangeKeyUnset(o.Key, o.EndKey, suffix, nil); err != nil {
+				if err := batch.RangeKeyUnset(key, endKey, suffix, nil); err != nil {
 					panic(err)
 				}
 			}
@@ -1035,13 +1106,15 @@ func (v *validator) checkAtomicCommitted(
 					panic(err)
 				}
 			} else {
+				key := storage.EngineKey{Key: o.Key}.Encode()
+				endKey := storage.EngineKey{Key: o.EndKey}.Encode()
 				suffix := storage.EncodeMVCCTimestampSuffix(writeTS)
-				if err := batch.RangeKeySet(o.Key, o.EndKey, suffix, o.Value.RawBytes, nil); err != nil {
+				if err := batch.RangeKeySet(key, endKey, suffix, o.Value.RawBytes, nil); err != nil {
 					panic(err)
 				}
 			}
 		case *observedRead:
-			o.ValidTimes = validReadTimes(batch, o.Key, o.Value.RawBytes)
+			o.ValidTimes = validReadTimes(batch, o.Key, o.Value.RawBytes, o.SkipLocked /* missingKeyValid */)
 		case *observedScan:
 			// All kvs should be within scan boundary.
 			for _, kv := range o.KVs {
@@ -1062,7 +1135,7 @@ func (v *validator) checkAtomicCommitted(
 			if !sort.IsSorted(orderedKVs) {
 				failure = `scan result not ordered correctly`
 			}
-			o.Valid = validScanTime(batch, o.Span, o.KVs)
+			o.Valid = validScanTime(batch, o.Span, o.KVs, o.SkipLocked /* missingKeysValid */)
 		default:
 			panic(errors.AssertionFailedf(`unknown observedOp: %T %s`, observation, observation))
 		}
@@ -1203,6 +1276,9 @@ func (v *validator) checkError(
 	sl := []func(error) bool{
 		exceptAmbiguous, exceptOmitted, exceptRetry,
 		exceptDelRangeUsingTombstoneStraddlesRangeBoundary,
+		exceptSharedLockPromotionError,
+		exceptSkipLockedReplayError,
+		exceptSkipLockedUnsupportedError,
 	}
 	sl = append(sl, extraExceptions...)
 	return v.failIfError(op, r, sl...)
@@ -1230,6 +1306,9 @@ func (v *validator) checkNonAmbError(
 func (v *validator) failIfError(
 	op Operation, r Result, exceptions ...func(err error) bool,
 ) (ambiguous, hasError bool) {
+	exceptions = append(exceptions[:len(exceptions):len(exceptions)], func(err error) bool {
+		return errors.Is(err, errInjected)
+	})
 	switch r.Type {
 	case ResultType_Unknown:
 		err := errors.AssertionFailedf(`unknown result %s`, op)
@@ -1301,15 +1380,26 @@ func mustGetStringValue(value []byte) string {
 	return string(b)
 }
 
-func validReadTimes(b *pebble.Batch, key roachpb.Key, value []byte) disjointTimeSpans {
+func validReadTimes(
+	b *pebble.Batch, key roachpb.Key, value []byte, missingKeyValid bool,
+) disjointTimeSpans {
+	if len(value) == 0 && missingKeyValid {
+		// If no value was returned for the key and this is allowed, all times are
+		// valid for this read.
+		return disjointTimeSpans{{Start: hlc.MinTimestamp, End: hlc.MaxTimestamp}}
+	}
+
 	var hist []storage.MVCCValue
 	lowerBound := storage.EncodeMVCCKey(storage.MVCCKey{Key: key})
 	upperBound := storage.EncodeMVCCKey(storage.MVCCKey{Key: key.Next()})
-	iter := b.NewIter(&pebble.IterOptions{
+	iter, err := b.NewIter(&pebble.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: lowerBound,
 		UpperBound: upperBound,
 	})
+	if err != nil {
+		panic(err)
+	}
 	defer func() { _ = iter.Close() }()
 
 	iter.SeekGE(lowerBound)
@@ -1358,6 +1448,7 @@ func validReadTimes(b *pebble.Batch, key roachpb.Key, value []byte) disjointTime
 
 		// Handle a point key - put it into `hist`.
 		valB, err := iter.ValueAndErr()
+		valB = append([]byte{}, valB...)
 		if err != nil {
 			panic(err)
 		}
@@ -1391,7 +1482,9 @@ func validReadTimes(b *pebble.Batch, key roachpb.Key, value []byte) disjointTime
 	return validTimes
 }
 
-func validScanTime(b *pebble.Batch, span roachpb.Span, kvs []roachpb.KeyValue) multiKeyTimeSpan {
+func validScanTime(
+	b *pebble.Batch, span roachpb.Span, kvs []roachpb.KeyValue, missingKeysValid bool,
+) multiKeyTimeSpan {
 	valid := multiKeyTimeSpan{
 		Gaps: disjointTimeSpans{{Start: hlc.MinTimestamp, End: hlc.MaxTimestamp}},
 	}
@@ -1406,7 +1499,7 @@ func validScanTime(b *pebble.Batch, span roachpb.Span, kvs []roachpb.KeyValue) m
 		// NB: we use value uniqueness here, but we could also use seqnos, so this
 		// is only a left-over of past times rather than an actual reliance on
 		// unique values.
-		validTimes := validReadTimes(b, kv.Key, kv.Value.RawBytes)
+		validTimes := validReadTimes(b, kv.Key, kv.Value.RawBytes, missingKeysValid)
 		if len(validTimes) > 1 {
 			panic(errors.AssertionFailedf(
 				`invalid number of read time spans for a (key,non-nil-value) pair in scan results: %s->%s: %v`,
@@ -1433,7 +1526,10 @@ func validScanTime(b *pebble.Batch, span roachpb.Span, kvs []roachpb.KeyValue) m
 	// Note that this iterator ignores MVCC range deletions. We use this iterator
 	// only to *discover* point keys; we then invoke validReadTimes for each of
 	// them which *does* take into account MVCC range deletions.
-	iter := b.NewIter(nil)
+	iter, err := b.NewIter(nil)
+	if err != nil {
+		panic(err)
+	}
 	defer func() { _ = iter.Close() }()
 
 	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: span.Key}))
@@ -1454,7 +1550,7 @@ func validScanTime(b *pebble.Batch, span roachpb.Span, kvs []roachpb.KeyValue) m
 		if _, ok := missingKeys[string(mvccKey.Key)]; !ok {
 			// Key not in scan response. Only valid if scan was before key's time, or
 			// at a time when the key was deleted.
-			missingKeys[string(mvccKey.Key)] = validReadTimes(b, mvccKey.Key, nil)
+			missingKeys[string(mvccKey.Key)] = validReadTimes(b, mvccKey.Key, nil, missingKeysValid)
 		}
 	}
 
@@ -1497,7 +1593,11 @@ func printObserved(observedOps ...observedOp) string {
 					opCode, o.Key, o.EndKey, ts, mustGetStringValue(o.Value.RawBytes), o.Seq)
 			}
 		case *observedRead:
-			fmt.Fprintf(&buf, "[r]%s:", o.Key)
+			opCode := "r"
+			if o.SkipLocked {
+				opCode += "(skip-locked)"
+			}
+			fmt.Fprintf(&buf, "[%s]%s:", opCode, o.Key)
 			validTimes := o.ValidTimes
 			if len(validTimes) == 0 {
 				validTimes = append(validTimes, timeSpan{})
@@ -1516,6 +1616,9 @@ func printObserved(observedOps ...observedOp) string {
 			}
 			if o.Reverse {
 				opCode = "rs"
+			}
+			if o.SkipLocked {
+				opCode += "(skip-locked)"
 			}
 			var kvs strings.Builder
 			for i, kv := range o.KVs {

@@ -115,6 +115,10 @@ type Metadata struct {
 	// mutation operators, used to determine the logical properties of WithScan.
 	withBindings map[WithID]Expr
 
+	// hoistedUncorrelatedSubqueries is used to track uncorrelated subqueries
+	// that have been hoisted.
+	hoistedUncorrelatedSubqueries map[Expr]struct{}
+
 	// dataSourceDeps stores each data source object that the query depends on.
 	dataSourceDeps map[cat.StableID]cat.DataSource
 
@@ -424,12 +428,23 @@ func (md *Metadata) CheckDependencies(
 		if names, ok := md.objectRefsByName[id]; ok {
 			for _, name := range names {
 				definition, err := optCatalog.ResolveFunction(
-					ctx, name.ToUnresolvedName(), &evalCtx.SessionData().SearchPath,
+					ctx, tree.MakeUnresolvedFunctionName(name.ToUnresolvedName()),
+					&evalCtx.SessionData().SearchPath,
 				)
 				if err != nil {
 					return false, maybeSwallowMetadataResolveErr(err)
 				}
-				toCheck, err := definition.MatchOverload(overload.Types.Types(), name.Schema(), &evalCtx.SessionData().SearchPath)
+				// NOTE: We match for all types of routines here, including
+				// procedures so that if a function has been dropped and a
+				// procedure is created with the same signature, we do not get a
+				// "<func> is not a function" error here. Instead, we'll return
+				// false and attempt to rebuild the statement.
+				toCheck, err := definition.MatchOverload(
+					overload.Types.Types(),
+					name.Schema(),
+					&evalCtx.SessionData().SearchPath,
+					tree.UDFRoutine|tree.BuiltinRoutine|tree.ProcedureRoutine,
+				)
 				if err != nil || toCheck.Oid != overload.Oid || toCheck.Version != overload.Version {
 					return false, err
 				}
@@ -442,17 +457,25 @@ func (md *Metadata) CheckDependencies(
 		}
 	}
 
+	// Check that the role still has execution privilege on the user defined
+	// functions.
+	for _, overload := range md.udfDeps {
+		if err := optCatalog.CheckExecutionPrivilege(ctx, overload.Oid); err != nil {
+			return false, err
+		}
+	}
+
 	// Check that any references to builtin functions do not now resolve to a UDF
 	// with the same signature (e.g. after changes to the search path).
 	for name := range md.builtinRefsByName {
 		definition, err := optCatalog.ResolveFunction(
-			ctx, &name, &evalCtx.SessionData().SearchPath,
+			ctx, tree.MakeUnresolvedFunctionName(&name), &evalCtx.SessionData().SearchPath,
 		)
 		if err != nil {
 			return false, maybeSwallowMetadataResolveErr(err)
 		}
 		for i := range definition.Overloads {
-			if definition.Overloads[i].IsUDF {
+			if definition.Overloads[i].Type == tree.UDFRoutine {
 				return false, nil
 			}
 		}
@@ -540,9 +563,9 @@ func (md *Metadata) AllUserDefinedTypes() []*types.T {
 	return md.userDefinedTypesSlice
 }
 
-// AllUserDefinedFunctions returns all user defined functions used in this query.
-func (md *Metadata) AllUserDefinedFunctions() map[cat.StableID]*tree.Overload {
-	return md.udfDeps
+// HasUserDefinedFunctions returns true if the query references a UDF.
+func (md *Metadata) HasUserDefinedFunctions() bool {
+	return len(md.udfDeps) > 0
 }
 
 // AddUserDefinedFunction adds a user-defined function to the metadata for this
@@ -550,7 +573,7 @@ func (md *Metadata) AllUserDefinedFunctions() map[cat.StableID]*tree.Overload {
 func (md *Metadata) AddUserDefinedFunction(
 	overload *tree.Overload, name *tree.UnresolvedObjectName,
 ) {
-	if !overload.IsUDF {
+	if overload.Type != tree.UDFRoutine {
 		return
 	}
 	id := cat.StableID(catid.UserDefinedOIDToID(overload.Oid))
@@ -707,8 +730,9 @@ func (md *Metadata) DuplicateTable(
 		partialIndexPredicates:        partialIndexPredicates,
 		indexPartitionLocalities:      tabMeta.indexPartitionLocalities,
 		checkConstraintsStats:         checkConstraintsStats,
-		notVisibleIndexMap:            tabMeta.notVisibleIndexMap,
 	}
+	newTabMeta.indexVisibility.cached = tabMeta.indexVisibility.cached
+	newTabMeta.indexVisibility.notVisible = tabMeta.indexVisibility.notVisible
 	md.tables = append(md.tables, newTabMeta)
 	regionConfig, ok := md.TableAnnotation(tabID, regionConfigAnnID).(*multiregion.RegionConfig)
 	if ok {
@@ -963,11 +987,13 @@ func (md *Metadata) getAllReferencedTables(
 // AllDataSourceNames returns the fully qualified names of all datasources
 // referenced by the metadata. This includes all tables, sequences, and views
 // that are directly stored in the metadata, as well as tables that are
-// recursively referenced from foreign keys.
+// recursively referenced from foreign keys. If includeVirtualTables is false,
+// then virtual tables are not returned.
 func (md *Metadata) AllDataSourceNames(
 	ctx context.Context,
 	catalog cat.Catalog,
 	fullyQualifiedName func(ds cat.DataSource) (cat.DataSourceName, error),
+	includeVirtualTables bool,
 ) (tables, sequences, views []tree.TableName, _ error) {
 	// Catalog objects can show up multiple times in our lists, so deduplicate
 	// them.
@@ -990,6 +1016,17 @@ func (md *Metadata) AllDataSourceNames(
 	}
 	var err error
 	refTables := md.getAllReferencedTables(ctx, catalog)
+	if !includeVirtualTables {
+		// Update refTables in-place to remove all virtual tables.
+		i := 0
+		for j := 0; j < len(refTables); j++ {
+			if t, ok := refTables[j].(cat.Table); !ok || !t.IsVirtualTable() {
+				refTables[i] = refTables[j]
+				i++
+			}
+		}
+		refTables = refTables[:i]
+	}
 	tables, err = getNames(len(refTables), func(i int) cat.DataSource {
 		return refTables[i]
 	})
@@ -1040,6 +1077,24 @@ func (md *Metadata) ForEachWithBinding(fn func(WithID, Expr)) {
 	for id, expr := range md.withBindings {
 		fn(id, expr)
 	}
+}
+
+// AddHoistedUncorrelatedSubquery marks the given uncorrelated subquery
+// expression as hoisted. It is used to prevent hoisting the same uncorrelated
+// subquery twice because that may cause two children of an expression to have
+// intersecting columns (see #114703).
+func (md *Metadata) AddHoistedUncorrelatedSubquery(subquery Expr) {
+	if md.hoistedUncorrelatedSubqueries == nil {
+		md.hoistedUncorrelatedSubqueries = make(map[Expr]struct{})
+	}
+	md.hoistedUncorrelatedSubqueries[subquery] = struct{}{}
+}
+
+// IsHoistedUncorrelatedSubquery returns true if the given subquery was
+// previously marked as hoisted with AddHoistedUncorrelatedSubquery.
+func (md *Metadata) IsHoistedUncorrelatedSubquery(subquery Expr) bool {
+	_, ok := md.hoistedUncorrelatedSubqueries[subquery]
+	return ok
 }
 
 // TestingDataSourceDeps exposes the dataSourceDeps for testing.

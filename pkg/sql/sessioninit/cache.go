@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -32,17 +31,17 @@ import (
 )
 
 // CacheEnabledSettingName is the name of the CacheEnabled cluster setting.
-var CacheEnabledSettingName = "server.authentication_cache.enabled"
+const CacheEnabledSettingName = "server.authentication_cache.enabled"
 
 // CacheEnabled is a cluster setting that determines if the
 // sessioninit.Cache and associated logic is enabled.
 var CacheEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	CacheEnabledSettingName,
 	"enables a cache used during authentication to avoid lookups to system tables "+
 		"when retrieving per-user authentication-related information",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // Cache is a shared cache for hashed passwords and other information used
 // during user authentication and session initialization.
@@ -59,10 +58,6 @@ type Cache struct {
 	// populateCacheGroup is used to ensure that there is at most one in-flight
 	// request for populating each cache entry.
 
-	// AuditConfig is the cluster's audit configuration. See the 'sql.log.user_audit'
-	// cluster setting to see how this is configured.
-	AuditConfig *auditlogging.AuditConfigLock
-
 	populateCacheGroup *singleflight.Group
 	stopper            *stop.Stopper
 }
@@ -75,6 +70,8 @@ type AuthInfo struct {
 	CanLoginSQLRoleOpt bool
 	// CanLoginDBConsoleRoleOpt is set to false if the user has NOLOGIN role option.
 	CanLoginDBConsoleRoleOpt bool
+	// CanUseReplicationRoleOpt is set to true if the user has the REPLICATION role option.
+	CanUseReplicationRoleOpt bool
 	// HashedPassword is the hashed password and can be nil.
 	HashedPassword password.PasswordHash
 	// ValidUntil is the VALID UNTIL role option.
@@ -100,9 +97,6 @@ func NewCache(account mon.BoundAccount, stopper *stop.Stopper) *Cache {
 		boundAccount:       account,
 		populateCacheGroup: singleflight.NewGroup("load-value", "key"),
 		stopper:            stopper,
-		AuditConfig: &auditlogging.AuditConfigLock{
-			Config: auditlogging.EmptyAuditConfig(),
-		},
 	}
 }
 

@@ -25,11 +25,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// InfoStorage can be used to read and write rows to system.jobs_info table. All
-// operations are scoped under the txn and are are executed on behalf of Job j.
+// InfoStorage can be used to read and write rows to system.job_info table. All
+// operations are scoped under the txn and are executed on behalf of Job j.
 type InfoStorage struct {
 	j   *Job
 	txn isql.Txn
+
+	// claimChecked is true if the claim session has already been
+	// checked once in this transaction. It may be set directly by
+	// callers if they know they've already checked the claim.
+	claimChecked bool
 }
 
 // InfoStorage returns a new InfoStorage with the passed in job and txn.
@@ -44,7 +49,11 @@ func InfoStorageForJob(txn isql.Txn, jobID jobspb.JobID) InfoStorage {
 	return InfoStorage{j: &Job{id: jobID}, txn: txn}
 }
 
-func (i InfoStorage) checkClaimSession(ctx context.Context) error {
+func (i *InfoStorage) checkClaimSession(ctx context.Context) error {
+	if i.claimChecked {
+		return nil
+	}
+
 	row, err := i.txn.QueryRowEx(ctx, "check-claim-session", i.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		`SELECT claim_session_id FROM system.jobs WHERE id = $1`, i.j.ID())
@@ -62,6 +71,7 @@ func (i InfoStorage) checkClaimSession(ctx context.Context) error {
 		return errors.Errorf(
 			"expected session %q but found %q", i.j.Session().ID(), sqlliveness.SessionID(storedSession))
 	}
+	i.claimChecked = true
 
 	return nil
 }
@@ -280,38 +290,38 @@ const (
 )
 
 const (
-	legacyPayloadKey  = "legacy_payload"
-	legacyProgressKey = "legacy_progress"
+	LegacyPayloadKey  = "legacy_payload"
+	LegacyProgressKey = "legacy_progress"
 )
 
 // GetLegacyPayloadKey returns the info_key whose value is the jobspb.Payload of
 // the job.
 func GetLegacyPayloadKey() string {
-	return legacyPayloadKey
+	return LegacyPayloadKey
 }
 
 // GetLegacyProgressKey returns the info_key whose value is the jobspb.Progress
 // of the job.
 func GetLegacyProgressKey() string {
-	return legacyProgressKey
+	return LegacyProgressKey
 }
 
-// GetLegacyPayload returns the job's Payload from the system.jobs_info table.
+// GetLegacyPayload returns the job's Payload from the system.job_info table.
 func (i InfoStorage) GetLegacyPayload(ctx context.Context) ([]byte, bool, error) {
-	return i.Get(ctx, legacyPayloadKey)
+	return i.Get(ctx, LegacyPayloadKey)
 }
 
-// WriteLegacyPayload writes the job's Payload to the system.jobs_info table.
+// WriteLegacyPayload writes the job's Payload to the system.job_info table.
 func (i InfoStorage) WriteLegacyPayload(ctx context.Context, payload []byte) error {
-	return i.Write(ctx, legacyPayloadKey, payload)
+	return i.Write(ctx, LegacyPayloadKey, payload)
 }
 
-// GetLegacyProgress returns the job's Progress from the system.jobs_info table.
+// GetLegacyProgress returns the job's Progress from the system.job_info table.
 func (i InfoStorage) GetLegacyProgress(ctx context.Context) ([]byte, bool, error) {
-	return i.Get(ctx, legacyProgressKey)
+	return i.Get(ctx, LegacyProgressKey)
 }
 
-// WriteLegacyProgress writes the job's Progress to the system.jobs_info table.
+// WriteLegacyProgress writes the job's Progress to the system.job_info table.
 func (i InfoStorage) WriteLegacyProgress(ctx context.Context, progress []byte) error {
-	return i.Write(ctx, legacyProgressKey, progress)
+	return i.Write(ctx, LegacyProgressKey, progress)
 }

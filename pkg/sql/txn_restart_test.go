@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -213,12 +212,12 @@ func checkRestarts(t *testing.T, magicVals *filterVals) {
 //		defer log.Scope(t).Close(t)
 //		aborter := NewTxnAborter()
 //		defer aborter.Close(t)
-//		params, cmdFilters := tests.CreateTestServerParams()
+//		var params base.TestServerArgs
 //		params.Knobs.SQLExecutor = aborter.executorKnobs()
 //		s, sqlDB, _ := serverutils.StartServer(t, params)
 //		defer s.Stopper().Stop(context.Background())
 //		{
-//			pgURL, cleanup := sqlutils.PGUrl(t, s.ServingRPCAddr(), "TestTxnAutoRetry", url.User(security.RootUser)
+//			pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "TestTxnAutoRetry", url.User(security.RootUser)
 //			defer cleanup()
 //			if err := aborter.Init(pgURL); err != nil {
 //				t.Fatal(err)
@@ -454,12 +453,12 @@ func TestTxnAutoRetry(t *testing.T) {
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, cmdFilters := tests.CreateTestServerParams()
+	params, cmdFilters := createTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	{
-		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "TestTxnAutoRetry", url.User(username.RootUser))
+		pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "TestTxnAutoRetry", url.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -633,12 +632,12 @@ func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	{
-		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "TestAbortedTxnOnlyRetriedOnce", url.User(username.RootUser))
+		pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "TestAbortedTxnOnlyRetriedOnce", url.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -789,12 +788,12 @@ func TestTxnUserRestart(t *testing.T) {
 			t.Run(fmt.Sprintf("err=%s,stgy=%d", tc.expectedErr, rs), func(t *testing.T) {
 				aborter := NewTxnAborter()
 				defer aborter.Close(t)
-				params, cmdFilters := tests.CreateTestServerParams()
+				params, cmdFilters := createTestServerParams()
 				params.Knobs.SQLExecutor = aborter.executorKnobs()
 				s, sqlDB, _ := serverutils.StartServer(t, params)
 				defer s.Stopper().Stop(context.Background())
 				{
-					pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "TestTxnUserRestart", url.User(username.RootUser))
+					pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "TestTxnUserRestart", url.User(username.RootUser))
 					defer cleanup()
 					if err := aborter.Init(pgURL); err != nil {
 						t.Fatal(err)
@@ -869,7 +868,7 @@ func TestCommitWaitState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	if _, err := sqlDB.Exec(`
@@ -905,12 +904,12 @@ func TestErrorOnCommitFinalizesTxn(t *testing.T) {
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	{
-		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "TestErrorOnCommitFinalizesTxn", url.User(username.RootUser))
+		pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "TestErrorOnCommitFinalizesTxn", url.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -992,12 +991,12 @@ func TestRollbackInRestartWait(t *testing.T) {
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	{
-		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "TestRollbackInRestartWait", url.User(username.RootUser))
+		pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "TestRollbackInRestartWait", url.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -1053,7 +1052,7 @@ func TestUnexpectedStatementInRestartWait(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -1104,7 +1103,7 @@ func TestNonRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, cmdFilters := tests.CreateTestServerParams()
+	params, cmdFilters := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -1181,7 +1180,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 						txn := ba.Txn
 						txn.ResetObservedTimestamps()
 						now := s.Clock().NowAsClockTimestamp()
-						txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
+						txn.UpdateObservedTimestamp(s.NodeID(), now)
 						return kvpb.NewErrorWithTxn(kvpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
 					}
 				}
@@ -1196,7 +1195,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 		DisableMaxOffsetCheck: true,
 	}
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs.Store = storeTestingKnobs
 	params.Knobs.KVClient = clientTestingKnobs
 	var sqlDB *gosql.DB
@@ -1246,7 +1245,7 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 		},
 	}
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs.Store = testingKnobs
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -1265,7 +1264,7 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 					txn := args.Hdr.Txn
 					txn.ResetObservedTimestamps()
 					now := s.Clock().NowAsClockTimestamp()
-					txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
+					txn.UpdateObservedTimestamp(s.NodeID(), now)
 					return kvpb.NewErrorWithTxn(kvpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
 				}
 			}
@@ -1317,7 +1316,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 	// +2 since the first two available ids are allocated to the database and
 	// public schema.
 	firstTableID := func() (id uint32) {
-		tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
+		tc := serverutils.StartCluster(t, 3, /* numNodes */
 			base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs:      base.TestServerArgs{UseDatabase: "test"},
@@ -1337,7 +1336,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 
 	restarted := true
 
-	tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
+	tc := serverutils.StartCluster(t, 3, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -1465,7 +1464,7 @@ func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -1528,7 +1527,7 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -1621,7 +1620,7 @@ func TestTxnAutoRetryReasonAvailable(t *testing.T) {
 	const numRetries = 3
 	retryCount := 0
 
-	params, cmdFilters := tests.CreateTestServerParams()
+	params, cmdFilters := createTestServerParams()
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		BeforeRestart: func(ctx context.Context, reason error) {
 			retryCount++

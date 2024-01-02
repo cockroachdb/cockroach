@@ -117,7 +117,7 @@ GRANT SELECT ON t TO testuser WITH GRANT OPTION
 
 user testuser
 
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM t
 ----
 k  INT8  false  NULL  ·  {t_pkey}  false

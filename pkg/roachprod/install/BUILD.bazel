@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -12,12 +11,15 @@ go_library(
         "install.go",
         "iterm2.go",
         "nodes.go",
+        "run_options.go",
+        "services.go",
         "session.go",
         "staging.go",
     ],
     embedsrcs = [
         "scripts/download.sh",
         "scripts/start.sh",
+        "scripts/open_ports.sh",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/install",
     visibility = ["//visibility:public"],
@@ -33,6 +35,7 @@ go_library(
         "//pkg/roachprod/vm/aws",
         "//pkg/roachprod/vm/gce",
         "//pkg/roachprod/vm/local",
+        "//pkg/testutils",
         "//pkg/util/intsets",
         "//pkg/util/log",
         "//pkg/util/retry",
@@ -49,15 +52,18 @@ go_test(
     name = "install_test",
     srcs = [
         "cluster_synced_test.go",
+        "cockroach_test.go",
+        "services_test.go",
         "staging_test.go",
         "start_template_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":install"],
     deps = [
+        "//pkg/roachprod/cloud",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/local",
         "//pkg/testutils/datapathutils",
         "//pkg/util/retry",
         "@com_github_cockroachdb_datadriven//:datadriven",
@@ -65,5 +71,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

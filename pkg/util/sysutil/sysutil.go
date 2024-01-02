@@ -76,6 +76,11 @@ func IsErrTimedOut(err error) bool {
 	return errors.Is(err, syscall.ETIMEDOUT)
 }
 
+// IsAddrInUse returns true if an error is an EADDRINUSE error.
+func IsAddrInUse(err error) bool {
+	return errors.Is(err, syscall.EADDRINUSE)
+}
+
 // InterruptSelf sends Interrupt to the process itself.
 func InterruptSelf() error {
 	pr, err := os.FindProcess(os.Getpid())

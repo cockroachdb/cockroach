@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -48,8 +47,9 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// We will set up the following chain:
 	//
@@ -75,7 +75,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	txn := kv.NewTxn(ctx, s.DB(), s.NodeID())
+	txn := kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID())
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Mon:     evalCtx.TestingMon,
@@ -89,10 +89,10 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	streamingMemAcc := evalCtx.TestingMon.MakeBoundAccount()
 	defer streamingMemAcc.Close(ctx)
 
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&spec, keys.SystemSQLCodec,
+		&spec, s.Codec(),
 		desc, desc.GetPrimaryIndex(),
 		[]descpb.ColumnID{desc.PublicColumns()[0].GetID()},
 	); err != nil {
@@ -103,11 +103,11 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 		Spans:     make([]roachpb.Span, 1),
 	}
 	var err error
-	tr.Spans[0].Key, err = randgen.TestingMakePrimaryIndexKey(desc, 0)
+	tr.Spans[0].Key, err = randgen.TestingMakePrimaryIndexKeyForTenant(desc, s.Codec(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tr.Spans[0].EndKey, err = randgen.TestingMakePrimaryIndexKey(desc, numRows+1)
+	tr.Spans[0].EndKey, err = randgen.TestingMakePrimaryIndexKeyForTenant(desc, s.Codec(), numRows+1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,5 +200,38 @@ func BenchmarkRenderPlanning(b *testing.B) {
 				}
 			})
 		}
+	}
+}
+
+// BenchmarkNestedAndPlanning benchmarks how long it takes to run a query with
+// many expressions logically AND'ed in a single output column.
+func BenchmarkNestedAndPlanning(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{SQLMemoryPoolSize: 10 << 30})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	// Disable fallback to the row-by-row processing wrapping.
+	sqlDB.Exec(b, "SET CLUSTER SETTING sql.distsql.vectorize_render_wrapping.min_render_count = 9999999")
+	sqlDB.Exec(b, "CREATE TABLE bench (i INT)")
+	for _, numRenders := range []int{1 << 4, 1 << 8, 1 << 12} {
+		var sb strings.Builder
+		sb.WriteString("SELECT ")
+		for i := 0; i < numRenders; i++ {
+			if i > 0 {
+				sb.WriteString(" AND ")
+			}
+			sb.WriteString(fmt.Sprintf("i < %d", i+1))
+		}
+		sb.WriteString(" FROM bench")
+		query := sb.String()
+		b.Run(fmt.Sprintf("renders=%d", numRenders), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				sqlDB.Exec(b, query)
+			}
+		})
 	}
 }

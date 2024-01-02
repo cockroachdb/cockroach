@@ -204,7 +204,7 @@ func BenchmarkResolveFunction(b *testing.B) {
 			rs := p.(resolver.SchemaResolver)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				fd, err := rs.ResolveFunction(ctx, &tc.name, sp)
+				fd, err := rs.ResolveFunction(ctx, tree.MakeUnresolvedFunctionName(&tc.name), sp)
 				require.NoError(b, err)
 				require.NotNil(b, fd)
 			}

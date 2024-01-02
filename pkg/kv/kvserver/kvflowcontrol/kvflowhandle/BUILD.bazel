@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -7,6 +6,7 @@ go_library(
         "connected_stream.go",
         "kvflowhandle.go",
         "kvflowhandle_metrics.go",
+        "noop.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle",
     visibility = ["//visibility:public"],
@@ -14,7 +14,9 @@ go_library(
         "//pkg/base",
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowtokentracker",
+        "//pkg/roachpb",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -26,7 +28,7 @@ go_library(
 go_test(
     name = "kvflowhandle_test",
     srcs = ["kvflowhandle_test.go"],
-    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
     deps = [
         ":kvflowhandle",
         "//pkg/kv/kvserver/kvflowcontrol",
@@ -34,13 +36,14 @@ go_test(
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/echotest",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "@com_github_gogo_protobuf//jsonpb",
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -44,7 +44,8 @@ func registerFixtures(r registry.Registry) {
 	// this.
 	//
 	// Example invocation:
-	// FIXTURE_VERSION=v20.2.0-beta.1 roachtest --local run generate-fixtures --debug --cockroach ./cockroach tag:fixtures
+	//   FIXTURE_VERSION=v20.2.0-beta.1 roachtest --local run generate-fixtures \
+	//     --debug --cockroach ./cockroach --suite fixtures
 	runFixtures := func(
 		ctx context.Context,
 		t test.Test,
@@ -60,12 +61,13 @@ func registerFixtures(r registry.Registry) {
 		makeVersionFixtureAndFatal(ctx, t, c, fixtureVersion)
 	}
 	spec := registry.TestSpec{
-		Name:    "generate-fixtures",
-		Timeout: 30 * time.Minute,
-		Tags:    registry.Tags("fixtures"),
-		Owner:   registry.OwnerDevInf,
-		Cluster: r.MakeClusterSpec(4),
-		Run:     runFixtures,
+		Name:             "generate-fixtures",
+		Timeout:          30 * time.Minute,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Fixtures),
+		Owner:            registry.OwnerDevInf,
+		Cluster:          r.MakeClusterSpec(4),
+		Run:              runFixtures,
 	}
 	r.Add(spec)
 }

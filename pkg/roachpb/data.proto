@@ -369,12 +369,6 @@ message Transaction {
   // large diff that doesn't seem worth it, given that we never feed this
   // timestamp back into a clock.
   util.hlc.Timestamp last_heartbeat = 5 [(gogoproto.nullable) = false];
-  // This flag is set if the transaction's timestamp was "leaked" beyond the
-  // transaction (e.g. via cluster_logical_timestamp()). If true, this prevents
-  // the transaction's timestamp from being pushed, which means that the txn
-  // can't commit at a higher timestamp without resorting to a client-side
-  // retry.
-  bool commit_timestamp_fixed = 16;
   // The transaction's read timestamp. All reads are performed at this
   // timestamp, ensuring that the transaction runs on top of a consistent
   // snapshot of the database.
@@ -392,6 +386,18 @@ message Transaction {
   // successful refresh or, if the refresh is unsuccessful, after a transaction
   // restart.
   util.hlc.Timestamp read_timestamp = 15 [(gogoproto.nullable) = false];
+  // This flag is set if the transaction's read timestamp is fixed and can not
+  // be modified. If true, this prevents the transaction's timestamp from being
+  // adjusted by a read refresh or, for read committed transactions, by a read
+  // timestamp step.
+  //
+  // For serializable transactions (who do not tolerate write skew), this flag
+  // also has the effect of fixing the transaction's commit timestamp. This
+  // means that the txn can not commit at a higher timestamp than its read
+  // timestamp without resorting to a client-side retry. For this reason, the
+  // flag is set if the transaction's timestamp was "leaked" beyond the
+  // transaction (e.g. via cluster_logical_timestamp()).
+  bool read_timestamp_fixed = 16;
   // The transaction's global uncertainty limit is its initial timestamp +
   // maximum cluster-wide clock skew. This value defines the inclusive upper
   // bound of the transaction's uncertainty interval.
@@ -495,6 +501,25 @@ message Transaction {
   repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 18
     [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
 
+  // Admission control (AC) fields. AC needs the tuple (TenantID, Priority,
+  // CreateTime). TenantID can be inferred from the key space that is being
+  // operated on (in the future we will generalize the AC concept of TenantID,
+  // but for now this is tied to the serverless concept), so does not need to
+  // be stored. CreateTime is the same as TxnMeta.MinTimestamp. So we only
+  // store the AdmissionPriority.
+
+  // AdmissionPriority is the priority assigned for admission control, at
+  // transaction creation time. It is immutable.
+  //
+  // TODO(sumeer): Use gogoproto.customtype to make this
+  // admissionpb.WorkPriority.
+  sint32 admission_priority = 19;
+
+  // When set to true, all of the transaction's writes will be filtered out by
+  // rangefeeds, and will not be available in changefeeds. This allows users to
+  // choose which writes are exported on a per-transaction basis.
+  bool omit_in_rangefeeds = 20;
+
   reserved 3, 6, 9, 13, 14;
 }
 
@@ -526,16 +551,15 @@ message TransactionRecord {
   reserved 2, 3, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16;
 }
 
-// A Intent is a Span together with a Transaction metadata. Intents messages
-// are used to reference persistent on-disk write intents. They are used on
-// the return path of e.g. scans, to report the existence of a write intent
-// on a key.
+// A Lock is a Key together with a Transaction metadata (the lock holder) and a
+// strength. They are used on the return path of e.g. scans, to report the
+// existence of a locks on a key.
 //
-// Note: avoid constructing Intent directly; consider using MakeIntent() instead.
-message Intent {
+// Note: avoid constructing Lock directly; use MakeLock or MakeIntent instead.
+message Lock {
   // SingleKeySpan preserves wire compatibility with an earlier version of this
-  // proto which used a Span. An Intent never spans keys, so there was no need
-  // for this to contain an EndKey.
+  // proto which used a Span. A Lock never spans keys, so there was no need for
+  // this to contain an EndKey.
   message SingleKeySpan {
     reserved 1, 2, 4;
     // The start key of the key range.
@@ -543,6 +567,7 @@ message Intent {
   }
   SingleKeySpan single_key_span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  kv.kvserver.concurrency.lock.Strength strength = 3;
 }
 
 // A LockAcquisition represents the action of a Transaction acquiring a lock
@@ -591,6 +616,8 @@ message LockStateInfo {
   // The readers and writers currently waiting on the lock.  Stable ordering
   // is not guaranteed.
   repeated kv.kvserver.concurrency.lock.Waiter waiters = 6 [(gogoproto.nullable) = false];
+  // The strength of the lock is being held at.
+  kv.kvserver.concurrency.lock.Strength lock_strength = 7;
 }
 
 // A SequencedWrite is a point write to a key with a certain sequence number.

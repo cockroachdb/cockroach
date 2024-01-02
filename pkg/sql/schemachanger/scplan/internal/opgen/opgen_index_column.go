@@ -21,12 +21,13 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC, emit(func(column *scpb.IndexColumn) *scop.AddColumnToIndex {
 				return &scop.AddColumnToIndex{
-					TableID:   column.TableID,
-					ColumnID:  column.ColumnID,
-					IndexID:   column.IndexID,
-					Kind:      column.Kind,
-					Direction: column.Direction,
-					Ordinal:   column.OrdinalInKind,
+					TableID:      column.TableID,
+					ColumnID:     column.ColumnID,
+					IndexID:      column.IndexID,
+					Kind:         column.Kind,
+					Direction:    column.Direction,
+					Ordinal:      column.OrdinalInKind,
+					InvertedKind: column.InvertedKind,
 				}
 			})),
 		),

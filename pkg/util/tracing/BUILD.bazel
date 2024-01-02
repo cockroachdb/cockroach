@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -44,7 +43,6 @@ go_library(
         "@io_opentelemetry_go_otel//attribute",
         "@io_opentelemetry_go_otel//codes",
         "@io_opentelemetry_go_otel//semconv/v1.4.0:v1_4_0",
-        "@io_opentelemetry_go_otel_exporters_jaeger//:jaeger",
         "@io_opentelemetry_go_otel_exporters_otlp_otlptrace_otlptracegrpc//:otlptracegrpc",
         "@io_opentelemetry_go_otel_exporters_zipkin//:zipkin",
         "@io_opentelemetry_go_otel_sdk//resource",
@@ -66,7 +64,6 @@ go_test(
         "tracer_external_test.go",
         "tracer_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":tracing"],
     deps = [
         "//pkg/base",
@@ -76,7 +73,6 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings",
-        "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
@@ -101,5 +97,3 @@ go_test(
         "@org_golang_x_sync//errgroup",
     ],
 )
-
-get_x_data(name = "get_x_data")

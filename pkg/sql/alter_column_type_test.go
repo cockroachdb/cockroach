@@ -20,10 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -42,7 +40,7 @@ func TestInsertBeforeOldColumnIsDropped(t *testing.T) {
 	ctx := context.Background()
 
 	var s serverutils.TestServerInterface
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	childJobStartNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
 	var doOnce sync.Once
@@ -117,7 +115,7 @@ func TestInsertBeforeOldColumnIsDroppedUsingExpr(t *testing.T) {
 	ctx := context.Background()
 
 	var s serverutils.TestServerInterface
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	childJobStartNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
 	var doOnce sync.Once
@@ -193,7 +191,7 @@ func TestVisibilityDuringAlterColumnType(t *testing.T) {
 	ctx := context.Background()
 	swapNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeComputedColumnSwap: func() {
@@ -257,8 +255,7 @@ func TestAlterColumnTypeFailureRollback(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, db, kvDB := serverutils.StartServer(t, params)
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	defer s.Stopper().Stop(ctx)
 
@@ -272,7 +269,7 @@ func TestAlterColumnTypeFailureRollback(t *testing.T) {
 
 	// Ensure that the add column and column swap mutations are cleaned up.
 	testutils.SucceedsSoon(t, func() error {
-		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.ApplicationLayer().Codec(), "t", "test")
 		if len(desc.AllMutations()) != 0 {
 			return errors.New("expected no mutations on TableDescriptor")
 		}
@@ -286,7 +283,7 @@ func TestQueryIntToString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	// Decrease the adopt loop interval so that retries happen quickly.
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
@@ -317,7 +314,7 @@ func TestSchemaChangeBeforeAlterColumnType(t *testing.T) {
 	swapNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforePrimaryKeySwap: func() {
@@ -364,7 +361,7 @@ func TestSchemaChangeWhileExecutingAlterColumnType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	childJobStartNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
 	var doOnce sync.Once

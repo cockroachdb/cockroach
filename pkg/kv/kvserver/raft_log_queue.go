@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -85,8 +86,7 @@ import (
 // kv.raft_log.enable_loosely_coupled_truncation. When not doing loose
 // coupling (legacy), the proposal causes immediate truncation -- this is
 // correct because other externally maintained invariants ensure that the
-// state machine is durable (though we have some concerns in
-// https://github.com/cockroachdb/cockroach/issues/38566).
+// state machine is durable.
 //
 // NB: Loosely coupled truncation loses the pending truncations that were
 // queued in-memory when a node restarts. This is considered ok for now since
@@ -116,15 +116,13 @@ import (
 // to https://github.com/cockroachdb/cockroach/issues/78412 we have changed
 // the default to false for v22.1.
 // TODO(sumeer): update the above comment when we have a revised plan.
-var looselyCoupledTruncationEnabled = func() *settings.BoolSetting {
-	s := settings.RegisterBoolSetting(
-		settings.SystemOnly,
-		"kv.raft_log.loosely_coupled_truncation.enabled",
-		"set to true to loosely couple the raft log truncation",
-		false)
-	s.SetVisibility(settings.Reserved)
-	return s
-}()
+var looselyCoupledTruncationEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.raft_log.loosely_coupled_truncation.enabled",
+	"set to true to loosely couple the raft log truncation",
+	false,
+	settings.WithVisibility(settings.Reserved),
+)
 
 const (
 	// raftLogQueueTimerDuration is the duration between truncations.
@@ -181,8 +179,10 @@ func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.RaftLogQueueSuccesses,
 			failures:             store.metrics.RaftLogQueueFailures,
+			storeFailures:        store.metrics.StoreFailures,
 			pending:              store.metrics.RaftLogQueuePending,
 			processingNanos:      store.metrics.RaftLogQueueProcessingNanos,
+			disabledConfig:       kvserverbase.RaftLogQueueEnabled,
 		},
 	)
 	return rlq
@@ -304,8 +304,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	updateRaftProgressFromActivity(
 		ctx, raftStatus.Progress, r.descRLocked().Replicas().Descriptors(),
 		func(replicaID roachpb.ReplicaID) bool {
-			return r.mu.lastUpdateTimes.isFollowerActiveSince(
-				ctx, replicaID, now, r.store.cfg.RangeLeaseDuration)
+			return r.mu.lastUpdateTimes.isFollowerActiveSince(replicaID, now, r.store.cfg.RangeLeaseDuration)
 		},
 	)
 	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)

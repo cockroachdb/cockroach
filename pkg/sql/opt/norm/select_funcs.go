@@ -21,7 +21,7 @@ import (
 // CanMapOnSetOp determines whether the filter can be mapped to either
 // side of a set operator.
 func (c *CustomFuncs) CanMapOnSetOp(filter *memo.FiltersItem) bool {
-	if memo.CanBeCompositeSensitive(c.mem.Metadata(), filter) {
+	if memo.CanBeCompositeSensitive(filter) {
 		// In general, it is not safe to remap a composite-sensitive filter.
 		// For example:
 		//  - the set operation is Except
@@ -416,4 +416,11 @@ func (c *CustomFuncs) addConjuncts(
 		filters = append(filters, c.f.ConstructFiltersItem(t))
 	}
 	return filters, true
+}
+
+// ForDuplicateRemoval returns true if the Ordinality expression was constructed
+// for the purposes of duplicate removal, and the actual values returned does
+// not matter.
+func (c *CustomFuncs) ForDuplicateRemoval(private *memo.OrdinalityPrivate) (ok bool) {
+	return private.ForDuplicateRemoval
 }

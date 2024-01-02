@@ -11,13 +11,13 @@
 import { all, call, put, takeLatest, takeEvery } from "redux-saga/effects";
 
 import { actions } from "./transactionInsightDetails.reducer";
+import { PayloadAction } from "@reduxjs/toolkit";
+import { ErrorWithKey, SqlApiResponse } from "src/api";
 import {
   getTxnInsightDetailsApi,
   TxnInsightDetailsRequest,
   TxnInsightDetailsResponse,
-} from "src/api/txnInsightsApi";
-import { PayloadAction } from "@reduxjs/toolkit";
-import { ErrorWithKey, SqlApiResponse } from "src/api";
+} from "../../../api/txnInsightDetailsApi";
 
 export function* refreshTransactionInsightDetailsSaga(
   action: PayloadAction<TxnInsightDetailsRequest>,

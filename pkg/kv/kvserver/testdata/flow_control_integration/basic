@@ -1,0 +1,68 @@
+echo
+----
+----
+-- Flow token metrics, before issuing the regular 1MiB replicated write.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 24 MiB  
+  kvadmission.flow_controller.elastic_tokens_deducted    | 0 B     
+  kvadmission.flow_controller.elastic_tokens_returned    | 0 B     
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B     
+  kvadmission.flow_controller.regular_tokens_available   | 48 MiB  
+  kvadmission.flow_controller.regular_tokens_deducted    | 0 B     
+  kvadmission.flow_controller.regular_tokens_returned    | 0 B     
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B     
+
+
+-- (Issuing + admitting a regular 1MiB, triply replicated write...)
+
+
+-- Stream counts as seen by n1 post-write. We should see three {regular,elastic}
+-- streams given there are three nodes and we're using a replication factor of
+-- three.
+SELECT name, value
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission.flow_controller%stream%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_blocked_stream_count | 0  
+  kvadmission.flow_controller.elastic_stream_count         | 3  
+  kvadmission.flow_controller.regular_blocked_stream_count | 0  
+  kvadmission.flow_controller.regular_stream_count         | 3  
+
+
+-- Another view of the stream count, using /inspectz-backed vtables.
+SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles
+GROUP BY (range_id)
+ORDER BY streams DESC;
+
+  range_id | stream_count  
+-----------+---------------
+  68       | 3             
+
+
+-- Flow token metrics from n1 after issuing the regular 1MiB replicated write,
+-- and it being admitted on n1, n2 and n3. We should see 3*1MiB = 3MiB of
+-- {regular,elastic} tokens deducted and returned, and {8*3=24MiB,16*3=48MiB} of
+-- {regular,elastic} tokens available. Everything should be accounted for.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 24 MiB   
+  kvadmission.flow_controller.elastic_tokens_deducted    | 3.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 3.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B      
+  kvadmission.flow_controller.regular_tokens_available   | 48 MiB   
+  kvadmission.flow_controller.regular_tokens_deducted    | 3.0 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 3.0 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B      
+----
+----
+
+# vim:ft=sql

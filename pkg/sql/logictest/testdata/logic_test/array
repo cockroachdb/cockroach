@@ -1104,6 +1104,15 @@ SELECT array_replace(ARRAY[1,2,NULL,4], NULL::INT, 3), array_replace(NULL::INT[]
 
 # ARRAY_POSITION function
 
+query error unknown signature: array_position\(int, string\)
+SELECT array_position(2, 'wed'::text)
+
+query error unknown signature: array_position\(string, string\)
+SELECT array_position('1,wed', 'wed'::text)
+
+query error unknown signature: array_position\(string\[\], int\)
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 1);
+
 query I
 SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon')
 ----
@@ -1116,6 +1125,53 @@ NULL
 
 query I
 SELECT array_position(NULL::STRING[], 'abc')
+----
+NULL
+
+query error array_position\(\): initial position must not be null
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon', null)
+
+query error unknown signature: array_position\(int, string, int\)
+SELECT array_position(2, 'wed'::text, 2)
+
+query error unknown signature: array_position\(string, string, int\)
+SELECT array_position('1,wed', 'wed'::text, 1)
+
+query error unknown signature: array_position\(string\[\], int, int\)
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 1, 1);
+
+query I
+SELECT array_position('{sun,mon,tue,wed,thu,fri,sat,mon}', 'mon'::TEXT, 2)
+----
+2
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon', 3)
+----
+8
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'tue', 4)
+----
+NULL
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'abc', 1)
+----
+NULL
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'wed', 9)
+----
+NULL
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'wed', 0)
+----
+4
+
+query I
+SELECT array_position(NULL::STRING[], 'abc', 1)
 ----
 NULL
 
@@ -1190,6 +1246,50 @@ query T
 SELECT string_to_array('foofoofoofoo', 'foo', 'foo')
 ----
 {"","","","",""}
+
+# jsonb_array_to_string_array function
+
+statement ok
+CREATE TABLE str_arr(j JSONB)
+
+statement ok
+INSERT INTO str_arr
+VALUES
+    ('{"a": ["foo", "bar", "z"]}'),
+    ('{"a": ["1", "2", "3"]}'),
+    ('{"a": []}'),
+    ('{"b": "not-array"}')
+
+query T
+SELECT jsonb_array_to_string_array(j -> 'a') FROM str_arr ORDER BY j ASC
+----
+{}
+{1,2,3}
+{foo,bar,z}
+{}
+
+query error input argument must be JSON array type
+SELECT jsonb_array_to_string_array(j -> 'b') FROM str_arr ORDER BY j ASC
+
+query T
+SELECT jsonb_array_to_string_array('[1, 2, 3]':::JSONB)
+----
+{1,2,3}
+
+query T
+SELECT jsonb_array_to_string_array('[true, false, false, true]':::JSONB)
+----
+{true,false,false,true}
+
+query T
+SELECT jsonb_array_to_string_array('[null]':::JSONB)
+----
+{NULL}
+
+query T
+SELECT jsonb_array_to_string_array('[1, "abc", true, ["a", "b"], {"b": "foo"}, null]':::JSONB)
+----
+{1,abc,true,"[\"a\", \"b\"]","{\"b\": \"foo\"}",NULL}
 
 # Regression test for #23429.
 
@@ -2308,7 +2408,7 @@ RESET distsql_workmem
 
 # Regression test for incorrect planning in the vectorized engine for
 # concatenating a string with a string array (#85295).
-query T
+query T nosort
 SELECT ('foo'::STRING || col::STRING[])::STRING[] FROM (VALUES (ARRAY['bar':::STRING]), (ARRAY['baz':::STRING])) AS t (col);
 ----
 {foo,bar}

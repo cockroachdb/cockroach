@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -59,9 +58,9 @@ func startGossipAtAddr(
 	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 	rpcContext.NodeID.Set(ctx, nodeID)
 
-	server, err := rpc.NewServer(rpcContext)
+	server, err := rpc.NewServer(ctx, rpcContext)
 	require.NoError(t, err)
-	g := NewTest(nodeID, stopper, registry, zonepb.DefaultZoneConfigRef())
+	g := NewTest(nodeID, stopper, registry)
 	RegisterGossipServer(server, g)
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, addr)
 	require.NoError(t, err)
@@ -119,16 +118,16 @@ func startFakeServerGossips(
 	clock := hlc.NewClockForTesting(nil)
 	lRPCContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
-	lserver, err := rpc.NewServer(lRPCContext)
+	lserver, err := rpc.NewServer(ctx, lRPCContext)
 	require.NoError(t, err)
-	local := NewTest(localNodeID, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	local := NewTest(localNodeID, stopper, metric.NewRegistry())
 	RegisterGossipServer(lserver, local)
 	lln, err := netutil.ListenAndServeGRPC(stopper, lserver, util.IsolatedTestAddr)
 	require.NoError(t, err)
 	local.start(lln.Addr())
 
 	rRPCContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
-	rserver, err := rpc.NewServer(rRPCContext)
+	rserver, err := rpc.NewServer(ctx, rRPCContext)
 	require.NoError(t, err)
 	remote := newFakeGossipServer(rserver, stopper)
 	rln, err := netutil.ListenAndServeGRPC(stopper, rserver, util.IsolatedTestAddr)
@@ -476,10 +475,10 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		nodeID := roachpb.NodeID(i + 1)
 
 		rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
-		server, err := rpc.NewServer(rpcContext)
+		server, err := rpc.NewServer(ctx, rpcContext)
 		require.NoError(t, err)
 		// node ID must be non-zero
-		gnode := NewTest(nodeID, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+		gnode := NewTest(nodeID, stopper, metric.NewRegistry())
 		RegisterGossipServer(server, gnode)
 		g = append(g, gnode)
 

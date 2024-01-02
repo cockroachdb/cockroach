@@ -1,0 +1,47 @@
+# By default, we search for C-test-failure.
+build-issue-queries
+----
+Existing issue query:
+  repo:"repo" user:"org" is:issue is:open in:title sort:created-desc "foo: bar failed" label:O-robot label:branch-master -label:X-noreuse
+Related issues query:
+  repo:"repo" user:"org" is:issue is:open in:title sort:created-desc "foo: bar failed" label:O-robot -label:branch-master
+
+# With no labels to match and no C-test-failure label, we should be searching
+# for O-robot.
+build-issue-queries labels=(foo,bar)
+----
+Existing issue query:
+  repo:"repo" user:"org" is:issue is:open in:title sort:created-desc "foo: bar failed" label:O-robot label:branch-master -label:X-noreuse
+Related issues query:
+  repo:"repo" user:"org" is:issue is:open in:title sort:created-desc "foo: bar failed" label:O-robot -label:branch-master
+
+# We must search only for issues that also have B-metamorphic-enabled set.
+build-issue-queries labels=(C-test-failure,B-metamorphic-enabled) label-match-set=(C-test-failure,B-metamorphic-enabled)
+----
+Existing issue query:
+  repo:"repo" user:"org" is:issue is:open in:title sort:created-desc "foo: bar failed" label:O-robot label:C-test-failure label:B-metamorphic-enabled label:branch-master -label:X-noreuse
+Related issues query:
+  repo:"repo" user:"org" is:issue is:open in:title sort:created-desc "foo: bar failed" label:O-robot label:C-test-failure label:B-metamorphic-enabled -label:branch-master
+
+# We must search only for issues that do NOT have B-metamorphic-enabled set.
+build-issue-queries labels=(C-test-failure) label-match-set=(C-test-failure,B-metamorphic-enabled)
+----
+Existing issue query:
+  repo:"repo" user:"org" is:issue is:open in:title sort:created-desc "foo: bar failed" label:O-robot label:C-test-failure label:branch-master -label:B-metamorphic-enabled -label:X-noreuse
+Related issues query:
+  repo:"repo" user:"org" is:issue is:open in:title sort:created-desc "foo: bar failed" label:O-robot label:C-test-failure -label:B-metamorphic-enabled -label:branch-master
+
+# The extra label should not affect the search.
+build-issue-queries labels=(C-test-failure,B-metamorphic-enabled,extra-label) label-match-set=(C-test-failure,B-metamorphic-enabled)
+----
+Existing issue query:
+  repo:"repo" user:"org" is:issue is:open in:title sort:created-desc "foo: bar failed" label:O-robot label:C-test-failure label:B-metamorphic-enabled label:branch-master -label:X-noreuse
+Related issues query:
+  repo:"repo" user:"org" is:issue is:open in:title sort:created-desc "foo: bar failed" label:O-robot label:C-test-failure label:B-metamorphic-enabled -label:branch-master
+
+build-issue-queries labels=(extra-label) label-match-set=(C-test-failure,B-metamorphic-enabled)
+----
+Existing issue query:
+  repo:"repo" user:"org" is:issue is:open in:title sort:created-desc "foo: bar failed" label:O-robot label:branch-master -label:C-test-failure -label:B-metamorphic-enabled -label:X-noreuse
+Related issues query:
+  repo:"repo" user:"org" is:issue is:open in:title sort:created-desc "foo: bar failed" label:O-robot -label:C-test-failure -label:B-metamorphic-enabled -label:branch-master

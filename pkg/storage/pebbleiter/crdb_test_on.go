@@ -14,6 +14,7 @@
 package pebbleiter
 
 import (
+	"context"
 	"math/rand"
 	"time"
 
@@ -87,6 +88,16 @@ func (b *rangeKeyBuf) mangle() {
 
 func (i *assertionIter) Clone(cloneOpts pebble.CloneOptions) (Iterator, error) {
 	iter, err := i.Iterator.Clone(cloneOpts)
+	if err != nil {
+		return nil, err
+	}
+	return MaybeWrap(iter), nil
+}
+
+func (i *assertionIter) CloneWithContext(
+	ctx context.Context, cloneOpts pebble.CloneOptions,
+) (Iterator, error) {
+	iter, err := i.Iterator.CloneWithContext(ctx, cloneOpts)
 	if err != nil {
 		return nil, err
 	}

@@ -14,14 +14,12 @@ import (
 	"context"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -37,19 +35,19 @@ func TestOverrideStorePoolStatusString(t *testing.T) {
 	const nodeCount = 5
 
 	stopper, g, _, testStorePool, mnl := CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return nodeCount }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
 	sg := gossiputil.NewStoreGossiper(g)
 
 	livenessOverrides := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus)
-	sp := NewOverrideStorePool(testStorePool, func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+	sp := NewOverrideStorePool(testStorePool, func(nid roachpb.NodeID) livenesspb.NodeLivenessStatus {
 		if overriddenLiveness, ok := livenessOverrides[nid]; ok {
 			return overriddenLiveness
 		}
 
-		return mnl.NodeLivenessFunc(nid, now, timeUntilStoreDead)
+		return mnl.NodeLivenessFunc(nid)
 	}, func() int {
 		excluded := 0
 		for _, overriddenLiveness := range livenessOverrides {
@@ -98,11 +96,12 @@ func TestOverrideStorePoolStatusString(t *testing.T) {
 	// Mark node 5 as draining.
 	mnl.SetNodeStatus(5, livenesspb.NodeLivenessStatus_DRAINING)
 
-	require.Equal(t, "1: range-count=0 fraction-used=0.00\n"+
-		"2 (status=1): range-count=0 fraction-used=0.00\n"+
-		"3 (status=5): range-count=0 fraction-used=0.00\n"+
-		"4: range-count=0 fraction-used=0.00\n"+
-		"5 (status=7): range-count=0 fraction-used=0.00\n",
+	require.Equal(t,
+		"1: range-count=0 fraction-used=0.00\n"+
+			"2 (status=dead): range-count=0 fraction-used=0.00\n"+
+			"3 (status=decommissioning): range-count=0 fraction-used=0.00\n"+
+			"4: range-count=0 fraction-used=0.00\n"+
+			"5 (status=draining): range-count=0 fraction-used=0.00\n",
 		sp.String(),
 	)
 }
@@ -118,19 +117,19 @@ func TestOverrideStorePoolDecommissioningReplicas(t *testing.T) {
 	const nodeCount = 5
 
 	stopper, g, _, testStorePool, mnl := CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return nodeCount }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
 	sg := gossiputil.NewStoreGossiper(g)
 
 	livenessOverrides := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus)
-	sp := NewOverrideStorePool(testStorePool, func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+	sp := NewOverrideStorePool(testStorePool, func(nid roachpb.NodeID) livenesspb.NodeLivenessStatus {
 		if overriddenLiveness, ok := livenessOverrides[nid]; ok {
 			return overriddenLiveness
 		}
 
-		return mnl.NodeLivenessFunc(nid, now, timeUntilStoreDead)
+		return mnl.NodeLivenessFunc(nid)
 	}, func() int {
 		excluded := 0
 		for _, overriddenLiveness := range livenessOverrides {
@@ -235,19 +234,19 @@ func TestOverrideStorePoolGetStoreList(t *testing.T) {
 
 	// We're going to manually mark stores dead in this test.
 	stopper, g, _, testStorePool, mnl := CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return nodeCount }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
 	sg := gossiputil.NewStoreGossiper(g)
 
 	livenessOverrides := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus)
-	sp := NewOverrideStorePool(testStorePool, func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+	sp := NewOverrideStorePool(testStorePool, func(nid roachpb.NodeID) livenesspb.NodeLivenessStatus {
 		if overriddenLiveness, ok := livenessOverrides[nid]; ok {
 			return overriddenLiveness
 		}
 
-		return mnl.NodeLivenessFunc(nid, now, timeUntilStoreDead)
+		return mnl.NodeLivenessFunc(nid)
 	}, func() int {
 		excluded := 0
 		for _, overriddenLiveness := range livenessOverrides {

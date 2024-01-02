@@ -21,7 +21,7 @@ import {
 import { RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
 
-import LoadingError from "../sqlActivity/errorComponent";
+import LoadingError, { mergeErrors } from "../sqlActivity/errorComponent";
 import { Pagination } from "src/pagination";
 import {
   SortSetting,
@@ -155,8 +155,8 @@ export class SessionsPage extends React.Component<
     if (
       this.props.onSortingChange &&
       columnTitle &&
-      (sortSetting.columnTitle != columnTitle ||
-        sortSetting.ascending != ascending)
+      (sortSetting.columnTitle !== columnTitle ||
+        sortSetting.ascending !== ascending)
     ) {
       this.props.onSortingChange("Sessions", columnTitle, ascending);
     }
@@ -298,7 +298,7 @@ export class SessionsPage extends React.Component<
       .filter((s: SessionInfo) => {
         const isInternal = (s: SessionInfo) =>
           s.session.application_name.startsWith(internalAppNamePrefix);
-        if (filters.app && filters.app != "All") {
+        if (filters.app && filters.app !== "All") {
           const apps = filters.app.split(",");
           let showInternal = false;
           if (apps.includes(internalAppNamePrefix)) {
@@ -321,17 +321,17 @@ export class SessionsPage extends React.Component<
           TimestampToMoment(s.session.start),
           "seconds",
         );
-        return sessionTime >= timeValue || timeValue === "empty";
+        return timeValue === "empty" || sessionTime >= Number(timeValue);
       })
       .filter((s: SessionInfo) => {
-        if (filters.username && filters.username != "All") {
+        if (filters.username && filters.username !== "All") {
           const usernames = filters.username.split(",");
           return usernames.includes(s.session.username);
         }
         return true;
       })
       .filter((s: SessionInfo) => {
-        if (filters.sessionStatus && filters.sessionStatus != "All") {
+        if (filters.sessionStatus && filters.sessionStatus !== "All") {
           const statuses = filters.sessionStatus.split(",");
           return statuses.includes(getStatusString(s.session.status));
         }
@@ -459,6 +459,7 @@ export class SessionsPage extends React.Component<
           renderError={() =>
             LoadingError({
               statsType: "sessions",
+              error: mergeErrors(this.props.sessionsError),
             })
           }
         />

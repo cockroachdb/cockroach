@@ -125,6 +125,9 @@ export const transaction = {
 export const transactionDetailsData: StatementsResponse = {
   stmts_total_runtime_secs: 1,
   txns_total_runtime_secs: 1,
+  oldest_aggregated_ts_returned: timestamp,
+  stmts_source_table: "crdb_internal.statement_activity",
+  txns_source_table: "crdb_internal.transaction_activity",
   statements: [
     {
       key: {
@@ -541,3 +544,5 @@ export const timeScale: TimeScale = {
   fixedWindowEnd: moment.utc("2021.12.31"),
   key: "Custom",
 };
+
+export const requestTime = moment.utc("2023.01.5");

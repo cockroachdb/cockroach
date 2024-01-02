@@ -17,6 +17,7 @@ import (
 
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -44,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/tochar"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -223,6 +225,12 @@ type Context struct {
 	// CompactEngineSpan is used to force compaction of a span in a store.
 	CompactEngineSpan CompactEngineSpanFunc
 
+	// GetTableMetrics is used in crdb_internal.sstable_metrics.
+	GetTableMetrics GetTableMetricsFunc
+
+	// ScanStorageInternalKeys is used in crdb_internal.scan_storage_internal_keys.
+	ScanStorageInternalKeys ScanStorageInternalKeysFunc
+
 	// SetCompactionConcurrency is used to change the compaction concurrency of
 	// a store.
 	SetCompactionConcurrency SetCompactionConcurrencyFunc
@@ -230,6 +238,10 @@ type Context struct {
 	// KVStoresIterator is used by various crdb_internal builtins to directly
 	// access stores on this node.
 	KVStoresIterator kvserverbase.StoresIterator
+
+	// InspectzServer is used to power various crdb_internal vtables, exposing
+	// the equivalent of /inspectz but through SQL.
+	InspectzServer inspectzpb.InspectzServer
 
 	// ConsistencyChecker is to generate the results in calls to
 	// crdb_internal.check_consistency.
@@ -270,6 +282,14 @@ type Context struct {
 	// JobsProfiler is the interface for builtins to extract job specific
 	// execution details that may have been aggregated during a job's lifetime.
 	JobsProfiler JobsProfiler
+
+	// RoutineSender allows nested routines in tail-call position to defer their
+	// execution until control returns to the parent routine. It is only valid
+	// during local execution. It may be unset.
+	RoutineSender DeferredRoutineSender
+
+	// ULIDEntropy is the entropy source for ULID generation.
+	ULIDEntropy ulid.MonotonicReader
 }
 
 // JobsProfiler is the interface used to fetch job specific execution details
@@ -278,6 +298,10 @@ type JobsProfiler interface {
 	// GenerateExecutionDetailsJSON generates a JSON blob of the job specific
 	// execution details.
 	GenerateExecutionDetailsJSON(ctx context.Context, evalCtx *Context, jobID jobspb.JobID) ([]byte, error)
+
+	// RequestExecutionDetailFiles triggers the collection of execution details
+	// for the specified jobID that are then persisted to `system.job_info`.
+	RequestExecutionDetailFiles(ctx context.Context, jobID jobspb.JobID) error
 }
 
 // DescIDGenerator generates unique descriptor IDs.
@@ -417,6 +441,23 @@ func (p *fakePlannerWithMonitor) EnforceHomeRegion() bool {
 func (p *fakePlannerWithMonitor) MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx) {
 }
 
+// Optimizer is part of the cat.Catalog interface.
+func (p *fakePlannerWithMonitor) Optimizer() interface{} {
+	return nil
+}
+
+// PLpgSQLFetchCursor is part of the eval.Planner interface.
+func (p *fakePlannerWithMonitor) PLpgSQLFetchCursor(
+	ctx context.Context, cursorStmt *tree.CursorStmt,
+) (res tree.Datums, err error) {
+	return nil, nil
+}
+
+// AutoCommit is part of the eval.Planner interface.
+func (p *fakePlannerWithMonitor) AutoCommit() bool {
+	return false
+}
+
 type fakeStreamManagerFactory struct {
 	StreamManagerFactory
 }
@@ -520,7 +561,19 @@ func (ec *Context) GetClusterTimestamp() (*tree.DDecimal, error) {
 	if ec.Txn == nil {
 		return nil, ErrNilTxnInClusterContext
 	}
-	ts := ec.Txn.CommitTimestamp()
+
+	// CommitTimestamp panics for isolation levels that can operate across
+	// multiple timestamps. Prevent this with a gate at the SQL level and return
+	// a pgerror until we decide how this will officially behave. See #103245.
+	if ec.TxnIsoLevel.ToleratesWriteSkew() {
+		treeIso := tree.IsolationLevelFromKVTxnIsolationLevel(ec.TxnIsoLevel)
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "unsupported in %s isolation", treeIso.String())
+	}
+
+	ts, err := ec.Txn.CommitTimestamp()
+	if err != nil {
+		return nil, err
+	}
 	if ts.IsEmpty() {
 		return nil, errors.AssertionFailedf("zero cluster timestamp in txn")
 	}
@@ -776,7 +829,10 @@ type StreamManagerFactory interface {
 type ReplicationStreamManager interface {
 	// StartReplicationStream starts a stream replication job for the specified
 	// tenant on the producer side.
-	StartReplicationStream(ctx context.Context, tenantName roachpb.TenantName) (streampb.ReplicationProducerSpec, error)
+	StartReplicationStream(ctx context.Context, tenantName roachpb.TenantName, req streampb.ReplicationProducerRequest) (streampb.ReplicationProducerSpec, error)
+
+	// SetupSpanConfigsStream creates and plans a replication stream to stream the span config updates for a specific tenant.
+	SetupSpanConfigsStream(ctx context.Context, tenantName roachpb.TenantName) (ValueGenerator, error)
 
 	// HeartbeatReplicationStream sends a heartbeat to the replication stream producer, indicating
 	// consumer has consumed until the given 'frontier' timestamp. This updates the producer job
@@ -815,22 +871,18 @@ type ReplicationStreamManager interface {
 // StreamIngestManager represents a collection of APIs that streaming replication supports
 // on the ingestion side.
 type StreamIngestManager interface {
-	// CompleteStreamIngestion signals a running stream ingestion job to complete on the consumer side.
-	CompleteStreamIngestion(
-		ctx context.Context,
-		ingestionJobID jobspb.JobID,
-		cutoverTimestamp hlc.Timestamp,
-	) error
-
 	// GetStreamIngestionStats gets a statistics summary for a stream ingestion job.
-	GetStreamIngestionStats(
-		ctx context.Context,
-		streamIngestionDetails jobspb.StreamIngestionDetails,
-		jobProgress jobspb.Progress,
-	) (*streampb.StreamIngestionStats, error)
-
 	GetReplicationStatsAndStatus(
 		ctx context.Context,
 		ingestionJobID jobspb.JobID,
 	) (*streampb.StreamIngestionStats, string, error)
+
+	// RevertTenantToTimestamp reverts the given tenant to the given
+	// timestamp. This is a non-transactional destructive operation that
+	// should be used with care.
+	RevertTenantToTimestamp(
+		ctx context.Context,
+		tenantName roachpb.TenantName,
+		revertTo hlc.Timestamp,
+	) error
 }

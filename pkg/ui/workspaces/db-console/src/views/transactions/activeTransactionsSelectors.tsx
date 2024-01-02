@@ -17,12 +17,16 @@ import {
 import {
   selectAppName,
   selectActiveTransactions,
-  selectExecutionStatus,
   selectClusterLocksMaxApiSizeReached,
 } from "src/selectors";
 import { refreshLiveWorkload } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
+
+export const ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED =
+  "isAutoRefreshEnabled/ActiveExecutions";
+export const ACTIVE_EXECUTIONS_DISPLAY_REFRESH_ALERT =
+  "displayRefreshAlert/ActiveTransactionsPage";
 
 const transactionsColumnsLocalSetting = new LocalSetting<
   AdminUIState,
@@ -53,15 +57,24 @@ const sortSettingLocalSetting = new LocalSetting<AdminUIState, SortSetting>(
   { ascending: false, columnTitle: "startTime" },
 );
 
+// autoRefreshLocalSetting is shared between the Active Statements and Active
+// Transactions components.
+export const autoRefreshLocalSetting = new LocalSetting<AdminUIState, boolean>(
+  ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED,
+  (state: AdminUIState) => state.localSettings,
+  true,
+);
+
 export const mapStateToActiveTransactionsPageProps = (state: AdminUIState) => ({
   selectedColumns: transactionsColumnsLocalSetting.selectorToArray(state),
   transactions: selectActiveTransactions(state),
   sessionsError: state.cachedData?.sessions.lastError,
   filters: filtersLocalSetting.selector(state),
-  executionStatus: selectExecutionStatus(),
   sortSetting: sortSettingLocalSetting.selector(state),
   internalAppNamePrefix: selectAppName(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
+  isAutoRefreshEnabled: autoRefreshLocalSetting.selector(state),
+  lastUpdated: state.cachedData?.sessions.setAt,
 });
 
 // This object is just for convenience so we don't need to supply dispatch to
@@ -74,4 +87,7 @@ export const activeTransactionsPageActionCreators: ActiveTransactionsViewDispatc
       filtersLocalSetting.set(filters),
     onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
     refreshLiveWorkload,
+    onAutoRefreshToggle: (isToggled: boolean) =>
+      autoRefreshLocalSetting.set(isToggled),
+    onManualRefresh: () => refreshLiveWorkload(),
   };

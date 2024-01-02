@@ -38,7 +38,7 @@ import (
 // DirectScansEnabled is a cluster setting that controls whether the KV
 // projection pushdown infrastructure can be used.
 var DirectScansEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.direct_columnar_scans.enabled",
 	"set to true to enable the 'direct' columnar scans in the KV layer",
 	directScansEnabledDefault,
@@ -46,8 +46,6 @@ var DirectScansEnabled = settings.RegisterBoolSetting(
 
 var directScansEnabledDefault = util.ConstantWithMetamorphicTestBool(
 	"direct-scans-enabled",
-	// TODO(yuzefovich, 23.1): update the default to 'true' for multi-tenant
-	// setups.
 	false,
 )
 

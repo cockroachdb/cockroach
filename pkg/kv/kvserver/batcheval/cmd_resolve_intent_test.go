@@ -111,7 +111,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 
 				if !ranged {
 					cArgs.Args = &ri
-					declareKeysResolveIntent(&desc, &h, &ri, &latchSpans, &lockSpans, 0)
+					require.NoError(t, declareKeysResolveIntent(&desc, &h, &ri, &latchSpans, &lockSpans, 0))
 					batch := spanset.NewBatch(engine.NewBatch(), &latchSpans)
 					defer batch.Close()
 					if _, err := ResolveIntent(ctx, batch, cArgs, &kvpb.ResolveIntentResponse{}); err != nil {
@@ -119,7 +119,9 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 					}
 				} else {
 					cArgs.Args = &rir
-					declareKeysResolveIntentRange(&desc, &h, &rir, &latchSpans, &lockSpans, 0)
+					require.NoError(
+						t, declareKeysResolveIntentRange(&desc, &h, &rir, &latchSpans, &lockSpans, 0),
+					)
 					batch := spanset.NewBatch(engine.NewBatch(), &latchSpans)
 					defer batch.Close()
 					if _, err := ResolveIntentRange(ctx, batch, cArgs, &kvpb.ResolveIntentRangeResponse{}); err != nil {
@@ -151,7 +153,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 	ts := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
 	endKey := roachpb.Key("z")
-	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1)
+	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1, 0, false /* omitInRangefeeds */)
 	desc := roachpb.RangeDescriptor{
 		RangeID:  99,
 		StartKey: roachpb.RKey(k),
@@ -169,13 +171,13 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 		// Write a first value at key.
 		v.SetString("a")
 		txn.Sequence = 0
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
+		if _, err := storage.MVCCPut(ctx, batch, k, ts, v, storage.MVCCWriteOptions{Txn: &txn}); err != nil {
 			t.Fatal(err)
 		}
 		// Write another value.
 		v.SetString("b")
 		txn.Sequence = 1
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
+		if _, err := storage.MVCCPut(ctx, batch, k, ts, v, storage.MVCCWriteOptions{Txn: &txn}); err != nil {
 			t.Fatal(err)
 		}
 		if err := batch.Commit(true); err != nil {
@@ -205,7 +207,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 			}
 			ri.Key = k
 
-			declareKeysResolveIntent(&desc, &h, &ri, &spans, nil, 0)
+			require.NoError(t, declareKeysResolveIntent(&desc, &h, &ri, &spans, nil, 0))
 			rbatch = spanset.NewBatch(db.NewBatch(), &spans)
 			defer rbatch.Close()
 
@@ -229,7 +231,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 			rir.Key = k
 			rir.EndKey = endKey
 
-			declareKeysResolveIntentRange(&desc, &h, &rir, &spans, nil, 0)
+			require.NoError(t, declareKeysResolveIntentRange(&desc, &h, &rir, &spans, nil, 0))
 			rbatch = spanset.NewBatch(db.NewBatch(), &spans)
 			defer rbatch.Close()
 
@@ -295,7 +297,7 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 		}
 		values[i] = roachpb.MakeValueFromBytes([]byte{b})
 	}
-	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, 0, ts, 0, 1)
+	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, 0, ts, 0, 1, 0, false /* omitInRangefeeds */)
 
 	testutils.RunTrueAndFalse(t, "ranged", func(t *testing.T, ranged bool) {
 		db := storage.NewDefaultInMemForTesting()
@@ -305,7 +307,7 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 
 		for i, testKey := range testKeys {
-			err := storage.MVCCPut(ctx, batch, nil, testKey, ts, hlc.ClockTimestamp{}, values[i], &txn)
+			_, err := storage.MVCCPut(ctx, batch, testKey, ts, values[i], storage.MVCCWriteOptions{Txn: &txn})
 			require.NoError(t, err)
 		}
 		initialBytes := batch.Len()

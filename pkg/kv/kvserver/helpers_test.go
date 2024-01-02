@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -55,7 +56,7 @@ func (s *Store) Transport() *RaftTransport {
 }
 
 func (s *Store) FindTargetAndTransferLease(
-	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig,
+	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf *roachpb.SpanConfig,
 ) (bool, error) {
 	transferStatus, err := s.replicateQueue.shedLease(
 		ctx, repl, desc, conf, allocator.TransferLeaseOptions{ExcludeLeaseRepl: true},
@@ -80,14 +81,14 @@ func (s *Store) AddReplica(repl *Replica) error {
 // ComputeMVCCStats immediately computes correct total MVCC usage statistics
 // for the store, returning the computed values (but without modifying the
 // store).
-func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
+func (s *Store) ComputeMVCCStats(reader storage.Reader) (enginepb.MVCCStats, error) {
 	var totalStats enginepb.MVCCStats
 	var err error
 
 	now := s.Clock().PhysicalNow()
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		var stats enginepb.MVCCStats
-		stats, err = rditer.ComputeStatsForRange(r.Desc(), s.TODOEngine(), now)
+		stats, err = rditer.ComputeStatsForRange(context.Background(), r.Desc(), reader, now)
 		if err != nil {
 			return false
 		}
@@ -95,6 +96,10 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 		return true
 	})
 	return totalStats, err
+}
+
+func (s *Store) UpdateLivenessMap() {
+	s.updateLivenessMap()
 }
 
 // ConsistencyQueueShouldQueue invokes the shouldQueue method on the
@@ -226,8 +231,53 @@ func (s *Store) RaftSchedulerPriorityIDs() []roachpb.RangeID {
 	return s.scheduler.PriorityIDs()
 }
 
+// GetStoreMetric retrieves the count of the store metric whose metadata name
+// matches with the given name parameter. If the specified metric cannot be
+// found, the function will return an error.
+func (sm *StoreMetrics) GetStoreMetric(name string) (int64, error) {
+	var c int64
+	var found bool
+	sm.registry.Each(func(n string, v interface{}) {
+		if name == n {
+			switch t := v.(type) {
+			case *metric.Counter:
+				c = t.Count()
+				found = true
+			case *metric.Gauge:
+				c = t.Value()
+				found = true
+			}
+		}
+	})
+	if !found {
+		return -1, errors.Errorf("cannot find metric for %s", name)
+	}
+	return c, nil
+}
+
+// GetStoreMetrics fetches the count of each specified Store metric from the
+// `metricNames` parameter and returns the result as a map. The keys in the map
+// represent the metric metadata names, while the corresponding values indicate
+// the count of each metric. If any of the specified metric cannot be found or
+// is not a counter, the function will return an error.
+//
+// Assumption: 1. The metricNames parameter should consist of string literals
+// that match the metadata names used for metric counters. 2. Each metric name
+// provided in `metricNames` must exist, unique and be a counter type.
+func (sm *StoreMetrics) GetStoreMetrics(metricsNames []string) (map[string]int64, error) {
+	metrics := make(map[string]int64)
+	for _, metricName := range metricsNames {
+		count, err := sm.GetStoreMetric(metricName)
+		if err != nil {
+			return map[string]int64{}, errors.Errorf("cannot find metric for %s", metricName)
+		}
+		metrics[metricName] = count
+	}
+	return metrics, nil
+}
+
 func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
-	liveness.TimeUntilStoreDead.Override(context.Background(), &cfg.Settings.SV, liveness.TestTimeUntilStoreDeadOff)
+	liveness.TimeUntilNodeDead.Override(context.Background(), &cfg.Settings.SV, liveness.TestTimeUntilNodeDeadOff)
 	return storepool.NewStorePool(
 		cfg.AmbientCtx,
 		cfg.Settings,
@@ -237,7 +287,7 @@ func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
 		func() int {
 			return 1
 		},
-		func(roachpb.NodeID, hlc.Timestamp, time.Duration) livenesspb.NodeLivenessStatus {
+		func(roachpb.NodeID) livenesspb.NodeLivenessStatus {
 			return livenesspb.NodeLivenessStatus_LIVE
 		},
 		/* deterministic */ false,
@@ -269,7 +319,7 @@ func (r *Replica) RaftUnlock() {
 }
 
 func (r *Replica) RaftReportUnreachable(id roachpb.ReplicaID) error {
-	return r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
+	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.ReportUnreachable(uint64(id))
 		return false /* unquiesceAndWakeLeader */, nil
 	})
@@ -280,6 +330,20 @@ func (r *Replica) LastAssignedLeaseIndex() kvpb.LeaseAppliedIndex {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.proposalBuf.LastAssignedLeaseIndexRLocked()
+}
+
+// Campaign campaigns the replica.
+func (r *Replica) Campaign(ctx context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.campaignLocked(ctx)
+}
+
+// ForceCampaign force-campaigns the replica.
+func (r *Replica) ForceCampaign(ctx context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.forceCampaignLocked(ctx)
 }
 
 // LastAssignedLeaseIndexRLocked is like LastAssignedLeaseIndex, but requires
@@ -296,7 +360,7 @@ func (r *Replica) InitQuotaPool(quota uint64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var appliedIndex kvpb.RaftIndex
-	err := r.withRaftGroupLocked(false, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, err error) {
+	err := r.withRaftGroupLocked(func(r *raft.RawNode) (unquiesceAndWakeLeader bool, err error) {
 		appliedIndex = kvpb.RaftIndex(r.BasicStatus().Applied)
 		return false, nil
 	})
@@ -336,12 +400,18 @@ func (r *Replica) QuotaReleaseQueueLen() int {
 	return len(r.mu.quotaReleaseQueue)
 }
 
+func (r *Replica) NumPendingProposals() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.numPendingProposalsRLocked()
+}
+
 func (r *Replica) IsFollowerActiveSince(
 	ctx context.Context, followerID roachpb.ReplicaID, threshold time.Duration,
 ) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.lastUpdateTimes.isFollowerActiveSince(ctx, followerID, timeutil.Now(), threshold)
+	return r.mu.lastUpdateTimes.isFollowerActiveSince(followerID, timeutil.Now(), threshold)
 }
 
 // GetTSCacheHighWater returns the high water mark of the replica's timestamp
@@ -355,7 +425,7 @@ func (r *Replica) GetTSCacheHighWater() hlc.Timestamp {
 
 // ShouldBackpressureWrites returns whether writes to the range should be
 // subject to backpressure.
-func (r *Replica) ShouldBackpressureWrites() bool {
+func (r *Replica) ShouldBackpressureWrites(_ context.Context) bool {
 	return r.shouldBackpressureWrites()
 }
 
@@ -373,12 +443,6 @@ func (r *Replica) GetCachedLastTerm() kvpb.RaftTerm {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.lastTermNotDurable
-}
-
-func (r *Replica) IsRaftGroupInitialized() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.mu.internalRaftGroup != nil
 }
 
 // SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call
@@ -481,15 +545,25 @@ func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.
 }
 
 func (r *Replica) MaybeUnquiesce() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */)
+	ctx := context.Background()
+	return r.maybeUnquiesce(ctx, true /* wakeLeader */, true /* mayCampaign */)
 }
 
-func (r *Replica) MaybeUnquiesceAndWakeLeader() bool {
+// MaybeUnquiesceAndPropose will unquiesce the range and submit a noop proposal.
+// This is useful when unquiescing the leader and wanting to also unquiesce
+// followers, since the leader may otherwise simply quiesce again immediately.
+func (r *Replica) MaybeUnquiesceAndPropose() (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.maybeUnquiesceAndWakeLeaderLocked()
+	if !r.canUnquiesceRLocked() {
+		return false, nil
+	}
+	return true, r.withRaftGroupLocked(func(r *raft.RawNode) (bool, error) {
+		if err := r.Propose(nil); err != nil {
+			return false, err
+		}
+		return true /* unquiesceAndWakeLeader */, nil
+	})
 }
 
 func (r *Replica) ReadCachedProtectedTS() (readAt, earliestProtectionTimestamp hlc.Timestamp) {
@@ -575,4 +649,17 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 			}
 		}
 	}
+}
+
+// getMapsDiff returns the difference between the values of corresponding
+// metrics in two maps. Assumption: beforeMap and afterMap contain the same set
+// of keys.
+func getMapsDiff(beforeMap map[string]int64, afterMap map[string]int64) map[string]int64 {
+	diffMap := make(map[string]int64)
+	for metricName, beforeValue := range beforeMap {
+		if v, ok := afterMap[metricName]; ok {
+			diffMap[metricName] = v - beforeValue
+		}
+	}
+	return diffMap
 }

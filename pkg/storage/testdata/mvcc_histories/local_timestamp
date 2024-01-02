@@ -255,56 +255,68 @@ with t=A ts=20 localTs=10
   put k=k12 v=v
 ----
 >> put k=k1 v=v t=A ts=20 localTs=10
-stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+put: lock acquisition = {k1 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k2 v=v t=A ts=20 localTs=10
-stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+put: lock acquisition = {k2 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k3 v=v t=A ts=20 localTs=10
-stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+put: lock acquisition = {k3 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k4 v=v t=A ts=20 localTs=10
-stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+put: lock acquisition = {k4 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k5 v=v t=A ts=20 localTs=10
-stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+put: lock acquisition = {k5 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k6 v=v t=A ts=20 localTs=10
-stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+put: lock acquisition = {k6 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k7 v=v t=A ts=20 localTs=10
-stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+put: lock acquisition = {k7 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k8 v=v t=A ts=20 localTs=10
-stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+put: lock acquisition = {k8 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k9 v=v t=A ts=20 localTs=10
-stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+put: lock acquisition = {k9 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k10 v=v t=A ts=20 localTs=10
-stats: key_count=+1 key_bytes=+16 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+83 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+put: lock acquisition = {k10 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+16 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+83 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k11 v=v t=A ts=20 localTs=10
-stats: key_count=+1 key_bytes=+16 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+83 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+put: lock acquisition = {k11 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+16 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+83 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k12 v=v t=A ts=20 localTs=10
-stats: key_count=+1 key_bytes=+16 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+83 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+put: lock acquisition = {k12 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+16 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+83 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
-meta: "k1"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
+meta: "k1"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k1"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
-meta: "k10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k10"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
-meta: "k11"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k11"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k11"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
-meta: "k12"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k12"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k12"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
-meta: "k2"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k2"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k2"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
-meta: "k3"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k3"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k3"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
-meta: "k4"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k4"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
-meta: "k5"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k5"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k5"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
-meta: "k6"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k6"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k6"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
-meta: "k7"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k7"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k7"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
-meta: "k8"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k8"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k8"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
-meta: "k9"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k9"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k9"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
-stats: key_count=12 key_bytes=183 val_count=12 val_bytes=804 live_count=12 live_bytes=987 intent_count=12 intent_bytes=372 separated_intent_count=12 intent_age=960
+stats: key_count=12 key_bytes=183 val_count=12 val_bytes=804 live_count=12 live_bytes=987 intent_count=12 intent_bytes=372 lock_count=12 lock_age=960
 
 run ok
 with t=A
@@ -312,7 +324,7 @@ with t=A
   txn_advance ts=30
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
 
 run stats ok
 with t=A localTs=20
@@ -330,55 +342,67 @@ with t=A localTs=20
   put k=k12 v=v2
 ----
 >> put k=k1 v=v2 t=A localTs=20
-stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+put: lock acquisition = {k1 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k2 v=v2 t=A localTs=20
-stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+put: lock acquisition = {k2 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k3 v=v2 t=A localTs=20
-stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+put: lock acquisition = {k3 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k4 v=v2 t=A localTs=20
-stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+put: lock acquisition = {k4 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k5 v=v2 t=A localTs=20
-stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+put: lock acquisition = {k5 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k6 v=v2 t=A localTs=20
-stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+put: lock acquisition = {k6 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k7 v=v2 t=A localTs=20
-stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+put: lock acquisition = {k7 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k8 v=v2 t=A localTs=20
-stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+put: lock acquisition = {k8 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k9 v=v2 t=A localTs=20
-stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+put: lock acquisition = {k9 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k10 v=v2 t=A localTs=20
-stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+put: lock acquisition = {k10 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k11 v=v2 t=A localTs=20
-stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+put: lock acquisition = {k11 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k12 v=v2 t=A localTs=20
-stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+put: lock acquisition = {k12 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> at end:
-meta: "k1"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k1"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k1"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
-meta: "k10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k10"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
-meta: "k11"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k11"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k11"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
-meta: "k12"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k12"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k12"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
-meta: "k2"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k2"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k2"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
-meta: "k3"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k3"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k3"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
-meta: "k4"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k4"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
-meta: "k5"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k5"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k5"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
-meta: "k6"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k6"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k6"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
-meta: "k7"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k7"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k7"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
-meta: "k8"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k8"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k8"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
-meta: "k9"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k9"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k9"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
-stats: key_count=12 key_bytes=183 val_count=12 val_bytes=1116 live_count=12 live_bytes=1299 intent_count=12 intent_bytes=384 separated_intent_count=12 intent_age=840
+stats: key_count=12 key_bytes=183 val_count=12 val_bytes=1116 live_count=12 live_bytes=1299 intent_count=12 intent_bytes=384 lock_count=12 lock_age=840
 
 run stats ok
 with t=A
@@ -397,41 +421,53 @@ with t=A
   resolve_intent k=k12 status=COMMITTED clockWhilePending=40
 ----
 >> resolve_intent k=k1 status=ABORTED t=A
-stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
+resolve_intent: "k1" -> resolved key = true
+stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> resolve_intent k=k2 status=ABORTED clockWhilePending=20 t=A
-stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
+resolve_intent: "k2" -> resolved key = true
+stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> resolve_intent k=k3 status=ABORTED clockWhilePending=30 t=A
-stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
+resolve_intent: "k3" -> resolved key = true
+stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> resolve_intent k=k4 status=ABORTED clockWhilePending=40 t=A
-stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
+resolve_intent: "k4" -> resolved key = true
+stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> resolve_intent k=k5 status=PENDING t=A
-stats: val_bytes=+2 live_bytes=+2 intent_age=-10
+resolve_intent: "k5" -> resolved key = true
+stats: val_bytes=+2 live_bytes=+2 lock_age=-10
 >> resolve_intent k=k6 status=PENDING clockWhilePending=20 t=A
-stats: val_bytes=+2 live_bytes=+2 intent_age=-10
+resolve_intent: "k6" -> resolved key = true
+stats: val_bytes=+2 live_bytes=+2 lock_age=-10
 >> resolve_intent k=k7 status=PENDING clockWhilePending=30 t=A
-stats: val_bytes=+2 live_bytes=+2 intent_age=-10
+resolve_intent: "k7" -> resolved key = true
+stats: val_bytes=+2 live_bytes=+2 lock_age=-10
 >> resolve_intent k=k8 status=PENDING clockWhilePending=40 t=A
-stats: val_bytes=-11 live_bytes=-11 intent_bytes=-13 intent_age=-10
+resolve_intent: "k8" -> resolved key = true
+stats: val_bytes=-11 live_bytes=-11 intent_bytes=-13 lock_age=-10
 >> resolve_intent k=k9 status=COMMITTED t=A
-stats: val_bytes=-73 live_bytes=-73 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
+resolve_intent: "k9" -> resolved key = true
+stats: val_bytes=-73 live_bytes=-73 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> resolve_intent k=k10 status=COMMITTED clockWhilePending=20 t=A
-stats: val_bytes=-73 live_bytes=-73 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
+resolve_intent: "k10" -> resolved key = true
+stats: val_bytes=-73 live_bytes=-73 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> resolve_intent k=k11 status=COMMITTED clockWhilePending=30 t=A
-stats: val_bytes=-73 live_bytes=-73 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
+resolve_intent: "k11" -> resolved key = true
+stats: val_bytes=-73 live_bytes=-73 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> resolve_intent k=k12 status=COMMITTED clockWhilePending=40 t=A
-stats: val_bytes=-86 live_bytes=-86 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
+resolve_intent: "k12" -> resolved key = true
+stats: val_bytes=-86 live_bytes=-86 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
 data: "k10"/40.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
 data: "k11"/40.000000000,0 -> {localTs=30.000000000,0}/BYTES/v2
 data: "k12"/40.000000000,0 -> /BYTES/v2
-meta: "k5"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k5"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k5"/40.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
-meta: "k6"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k6"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k6"/40.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
-meta: "k7"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k7"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k7"/40.000000000,0 -> {localTs=30.000000000,0}/BYTES/v2
-meta: "k8"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=7 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k8"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=7 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k8"/40.000000000,0 -> /BYTES/v2
 data: "k9"/40.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
-stats: key_count=8 key_bytes=123 val_count=8 val_bytes=434 live_count=8 live_bytes=557 intent_count=4 intent_bytes=115 separated_intent_count=4 intent_age=240
+stats: key_count=8 key_bytes=123 val_count=8 val_bytes=434 live_count=8 live_bytes=557 intent_count=4 intent_bytes=115 lock_count=4 lock_age=240

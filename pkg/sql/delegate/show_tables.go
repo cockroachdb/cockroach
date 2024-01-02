@@ -21,7 +21,7 @@ import (
 )
 
 var showEstimatedRowCountClusterSetting = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.show_tables.estimated_row_count.enabled",
 	"whether the estimated_row_count is shown on SHOW TABLES. Turning this off "+
 		"will improve SHOW TABLES performance.",
@@ -44,7 +44,7 @@ func (d *delegator) delegateShowTables(n *tree.ShowTables) (tree.Statement, erro
 	// name to have an explicit catalog but no explicit schema. This would arise
 	// when doing SHOW TABLES FROM <db>. Without this logic, we would not show the
 	// tables from other schemas than public.
-	if name.ExplicitSchema && name.ExplicitCatalog && name.SchemaName == tree.PublicSchemaName &&
+	if name.ExplicitSchema && name.ExplicitCatalog && name.SchemaName == catconstants.PublicSchemaName &&
 		n.ExplicitSchema && !n.ExplicitCatalog && n.SchemaName == name.CatalogName {
 		name.SchemaName, name.ExplicitSchema = "", false
 	}

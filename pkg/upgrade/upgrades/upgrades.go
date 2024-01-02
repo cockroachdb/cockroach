@@ -19,15 +19,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
-	"github.com/cockroachdb/errors"
 )
 
 // SettingsDefaultOverrides documents the effect of several migrations that add
 // an explicit value for a setting, effectively changing the "default value"
 // from what was defined in code.
-var SettingsDefaultOverrides = map[string]string{
+var SettingsDefaultOverrides = map[settings.InternalKey]string{
 	"diagnostics.reporting.enabled": "true",
 	"cluster.secret":                "<random>",
 }
@@ -55,278 +55,135 @@ var registry = make(map[roachpb.Version]upgradebase.Upgrade)
 var upgrades = []upgradebase.Upgrade{
 	upgrade.NewPermanentTenantUpgrade(
 		"add users and roles",
-		toCV(clusterversion.VPrimordial1),
+		clusterversion.VPrimordial1.Version(),
 		addRootUser,
 		// v22_2StartupMigrationName - this upgrade corresponds to 3 old
 		// startupmigrations, out of which "make root a member..." is the last one.
 		"make root a member of the admin role",
+		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
 	),
 	upgrade.NewPermanentTenantUpgrade(
 		"enable diagnostics reporting",
-		toCV(clusterversion.VPrimordial2),
+		clusterversion.VPrimordial2.Version(),
 		optInToDiagnosticsStatReporting,
 		"enable diagnostics reporting", // v22_2StartupMigrationName
+		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
 	),
 	upgrade.NewPermanentSystemUpgrade(
 		"populate initial version cluster setting table entry",
-		toCV(clusterversion.VPrimordial3),
+		clusterversion.VPrimordial3.Version(),
 		populateVersionSetting,
 		"populate initial version cluster setting table entry", // v22_2StartupMigrationName
+		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
 	),
 	upgrade.NewPermanentTenantUpgrade(
 		"initialize the cluster.secret setting",
-		toCV(clusterversion.VPrimordial4),
+		clusterversion.VPrimordial4.Version(),
 		initializeClusterSecret,
 		"initialize cluster.secret", // v22_2StartupMigrationName
+		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
 	),
 	upgrade.NewPermanentTenantUpgrade(
 		"update system.locations with default location data",
-		toCV(clusterversion.VPrimordial5),
+		clusterversion.VPrimordial5.Version(),
 		updateSystemLocationData,
 		"update system.locations with default location data", // v22_2StartupMigrationName
+		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
 	),
-	// Introduced in v2.1.
-	// TODO(knz): bake this migration into v19.1.
 	upgrade.NewPermanentTenantUpgrade(
 		"create default databases",
-		toCV(clusterversion.VPrimordial6),
+		clusterversion.VPrimordial6.Version(),
 		createDefaultDbs,
 		"create default databases", // v22_2StartupMigrationName
-	),
-	upgrade.NewTenantUpgrade(
-		"update system.statement_diagnostics_requests to support sampling probabilities",
-		toCV(clusterversion.TODODelete_V22_2SampledStmtDiagReqs),
-		upgrade.NoPrecondition,
-		sampledStmtDiagReqsMigration,
-	),
-	upgrade.NewTenantUpgrade(
-		"add the system.external_connections table",
-		toCV(clusterversion.TODODelete_V22_2SystemExternalConnectionsTable),
-		upgrade.NoPrecondition,
-		systemExternalConnectionsTableMigration,
+		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
 	),
 	upgrade.NewPermanentTenantUpgrade(
 		"add default SQL schema telemetry schedule",
-		toCV(clusterversion.Permanent_V22_2SQLSchemaTelemetryScheduledJobs),
+		clusterversion.Permanent_V22_2SQLSchemaTelemetryScheduledJobs.Version(),
 		ensureSQLSchemaTelemetrySchedule,
 		"add default SQL schema telemetry schedule",
-	),
-	upgrade.NewTenantUpgrade("add columns to system.tenants and populate a system tenant entry",
-		toCV(clusterversion.V23_1TenantNamesStateAndServiceMode),
-		upgrade.NoPrecondition,
-		extendTenantsTable,
-	),
-	upgrade.NewTenantUpgrade("set the value or system.descriptor_id_seq for the system tenant",
-		toCV(clusterversion.V23_1DescIDSequenceForSystemTenant),
-		upgrade.NoPrecondition,
-		descIDSequenceForSystemTenant,
-	),
-	upgrade.NewTenantUpgrade("add a partial predicate and full statistics ID columns to system.table_statistics",
-		toCV(clusterversion.V23_1AddPartialStatisticsColumns),
-		upgrade.NoPrecondition,
-		alterSystemTableStatisticsAddPartialPredicateAndID,
-	),
-	upgrade.NewTenantUpgrade(
-		"create system.job_info table",
-		toCV(clusterversion.V23_1CreateSystemJobInfoTable),
-		upgrade.NoPrecondition,
-		systemJobInfoTableMigration,
-	),
-	upgrade.NewTenantUpgrade("add role_id and member_id columns to system.role_members",
-		toCV(clusterversion.V23_1RoleMembersTableHasIDColumns),
-		upgrade.NoPrecondition,
-		alterSystemRoleMembersAddIDColumns,
-	),
-	upgrade.NewTenantUpgrade("backfill role_id and member_id columns in system.role_members",
-		toCV(clusterversion.V23_1RoleMembersIDColumnsBackfilled),
-		upgrade.NoPrecondition,
-		backfillSystemRoleMembersIDColumns,
-	),
-	upgrade.NewTenantUpgrade(
-		"add job_type column to system.jobs table",
-		toCV(clusterversion.V23_1AddTypeColumnToJobsTable),
-		upgrade.NoPrecondition,
-		alterSystemJobsAddJobType,
-	),
-	upgrade.NewTenantUpgrade(
-		"backfill job_type column in system.jobs table",
-		toCV(clusterversion.V23_1BackfillTypeColumnInJobsTable),
-		upgrade.NoPrecondition,
-		backfillJobTypeColumn,
-	),
-	upgrade.NewTenantUpgrade(
-		"create virtual column indexes_usage based on (statistics->'statistics'->'indexes') with index "+
-			"on table system.statement_statistics",
-		toCV(clusterversion.V23_1_AlterSystemStatementStatisticsAddIndexesUsage),
-		upgrade.NoPrecondition,
-		createIndexOnIndexUsageOnSystemStatementStatistics,
-	),
-	upgrade.NewTenantUpgrade(
-		"add column sql_addr to table system.sql_instances",
-		toCV(clusterversion.V23_1AlterSystemSQLInstancesAddSQLAddr),
-		upgrade.NoPrecondition,
-		alterSystemSQLInstancesAddSqlAddr,
+		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
 	),
 	upgrade.NewPermanentSystemUpgrade("add tables and jobs to support persisting key visualizer samples",
-		toCV(clusterversion.V23_1KeyVisualizerTablesAndJobs),
+		clusterversion.Permanent_V23_1KeyVisualizerTablesAndJobs.Version(),
 		keyVisualizerTablesMigration,
 		"initialize key visualizer tables and jobs",
-	),
-	upgrade.NewTenantUpgrade("delete descriptors of dropped functions",
-		toCV(clusterversion.V23_1_DeleteDroppedFunctionDescriptors),
-		upgrade.NoPrecondition,
-		deleteDescriptorsOfDroppedFunctions,
+		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
 	),
 	upgrade.NewPermanentTenantUpgrade("create jobs metrics polling job",
-		toCV(clusterversion.V23_1_CreateJobsMetricsPollingJob),
+		clusterversion.Permanent_V23_1_CreateJobsMetricsPollingJob.Version(),
 		createJobsMetricsPollingJob,
 		"create jobs metrics polling job",
-	),
-	upgrade.NewTenantUpgrade(
-		"add user_id column to system.privileges table",
-		toCV(clusterversion.V23_1SystemPrivilegesTableHasUserIDColumn),
-		upgrade.NoPrecondition,
-		alterSystemPrivilegesAddUserIDColumn,
-	),
-	upgrade.NewTenantUpgrade(
-		"backfill user_id column in system.privileges table",
-		toCV(clusterversion.V23_1SystemPrivilegesTableUserIDColumnBackfilled),
-		upgrade.NoPrecondition,
-		backfillSystemPrivilegesUserIDColumn,
-	),
-	upgrade.NewTenantUpgrade(
-		"add user_id column to system.web_sessions table",
-		toCV(clusterversion.V23_1WebSessionsTableHasUserIDColumn),
-		upgrade.NoPrecondition,
-		alterWebSessionsTableAddUserIDColumn,
-	),
-	upgrade.NewTenantUpgrade(
-		"backfill user_id column in system.web_sessions table",
-		toCV(clusterversion.V23_1WebSessionsTableUserIDColumnBackfilled),
-		upgrade.NoPrecondition,
-		backfillWebSessionsTableUserIDColumn,
-	),
-	upgrade.NewTenantUpgrade(
-		"add column sql_addr to table system.sql_instances",
-		toCV(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates),
-		upgrade.NoPrecondition,
-		waitForSchemaChangerElementMigration,
-	),
-	upgrade.NewTenantUpgrade(
-		"add secondary index on (path,username) to table system.privileges",
-		toCV(clusterversion.V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername),
-		upgrade.NoPrecondition,
-		alterSystemPrivilegesAddSecondaryIndex,
-	),
-	upgrade.NewTenantUpgrade(
-		"add role_id column to system.database_role_settings table",
-		toCV(clusterversion.V23_1DatabaseRoleSettingsHasRoleIDColumn),
-		upgrade.NoPrecondition,
-		alterDatabaseRoleSettingsTableAddRoleIDColumn,
-	),
-	upgrade.NewTenantUpgrade(
-		"backfill role_id column in system.database_role_settings table",
-		toCV(clusterversion.V23_1DatabaseRoleSettingsRoleIDColumnBackfilled),
-		upgrade.NoPrecondition,
-		backfillDatabaseRoleSettingsTableRoleIDColumn,
-	),
-	upgrade.NewTenantUpgrade(
-		"backfill system tables with regional by row compatible indexes",
-		toCV(clusterversion.V23_1_SystemRbrReadNew),
-		upgrade.NoPrecondition,
-		backfillRegionalByRowIndex,
-	),
-	upgrade.NewTenantUpgrade(
-		"clean up old indexes for regional by row compatible system tables",
-		toCV(clusterversion.V23_1_SystemRbrCleanup),
-		upgrade.NoPrecondition,
-		cleanUpRegionalByTableIndex,
-	),
-	upgrade.NewTenantUpgrade(
-		"add owner_id column to system.external_connections table",
-		toCV(clusterversion.V23_1ExternalConnectionsTableHasOwnerIDColumn),
-		upgrade.NoPrecondition,
-		alterExternalConnectionsTableAddOwnerIDColumn,
-	),
-	upgrade.NewTenantUpgrade(
-		"backfill owner_id column in system.external_connections table",
-		toCV(clusterversion.V23_1ExternalConnectionsTableOwnerIDColumnBackfilled),
-		upgrade.NoPrecondition,
-		backfillExternalConnectionsTableOwnerIDColumn,
-	),
-	upgrade.NewTenantUpgrade(
-		"backfill the system.jobs_info table with the payload and progress of each job in the system.jobs table",
-		toCV(clusterversion.V23_1JobInfoTableIsBackfilled),
-		upgrade.NoPrecondition,
-		backfillJobInfoTable,
-	),
-	upgrade.NewTenantUpgrade("ensure all GC jobs send DeleteRange requests",
-		toCV(clusterversion.V23_1_UseDelRangeInGCJob),
-		checkForPausedGCJobs,
-		waitForDelRangeInGCJob,
-	),
-	upgrade.NewSystemUpgrade(
-		"create system.tenant_tasks and system.task_payloads",
-		toCV(clusterversion.V23_1_TaskSystemTables),
-		createTaskSystemTables,
+		upgrade.RestoreActionNotRequired("jobs are not restored"),
 	),
 	upgrade.NewPermanentTenantUpgrade("create auto config runner job",
-		toCV(clusterversion.V23_1_CreateAutoConfigRunnerJob),
+		clusterversion.Permanent_V23_1_CreateAutoConfigRunnerJob.Version(),
 		createAutoConfigRunnerJob,
 		"create auto config runner job",
-	),
-	upgrade.NewTenantUpgrade(
-		"create and index new computed columns on system sql stats tables",
-		toCV(clusterversion.V23_1AddSQLStatsComputedIndexes),
-		upgrade.NoPrecondition,
-		createComputedIndexesOnSystemSQLStatistics,
-	),
-	upgrade.NewTenantUpgrade(
-		"create statement_activity and transaction_activity tables",
-		toCV(clusterversion.V23_1AddSystemActivityTables),
-		upgrade.NoPrecondition,
-		systemStatisticsActivityTableMigration,
+		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
 	),
 	upgrade.NewPermanentSystemUpgrade(
 		"change TTL for SQL Stats system tables",
-		toCV(clusterversion.V23_1ChangeSQLStatsTTL),
+		clusterversion.Permanent_V23_1ChangeSQLStatsTTL.Version(),
 		sqlStatsTTLChange,
 		"change TTL for SQL Stats system tables",
-	),
-	upgrade.NewTenantUpgrade(
-		"stop writing payload and progress to system.jobs",
-		toCV(clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs),
-		upgrade.NoPrecondition,
-		alterPayloadColumnToNullable,
-	),
-	upgrade.NewSystemUpgrade(
-		"create system.tenant_id_seq",
-		toCV(clusterversion.V23_1_TenantIDSequence),
-		tenantIDSequenceForSystemTenant,
+		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
 	),
 	upgrade.NewPermanentTenantUpgrade(
 		"create sql activity updater job",
-		toCV(clusterversion.V23_1CreateSystemActivityUpdateJob),
+		clusterversion.Permanent_V23_1CreateSystemActivityUpdateJob.Version(),
 		createActivityUpdateJobMigration,
 		"create statement_activity and transaction_activity job",
+		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
+	),
+
+	newFirstUpgrade(clusterversion.V23_2Start.Version()),
+
+	upgrade.NewTenantUpgrade(
+		"update system.statement_diagnostics_requests to support plan gist matching",
+		clusterversion.V23_2_StmtDiagForPlanGist.Version(),
+		upgrade.NoPrecondition,
+		stmtDiagForPlanGistMigration,
+		upgrade.RestoreActionNotRequired("diagnostics requests are unique to the cluster on which they were requested"),
 	),
 	upgrade.NewTenantUpgrade(
-		"enable partially visible indexes",
-		toCV(clusterversion.V23_2_PartiallyVisibleIndexes),
+		"create system.region_liveness table",
+		clusterversion.V23_2_RegionaLivenessTable.Version(),
 		upgrade.NoPrecondition,
-		NoTenantUpgradeFunc,
+		createRegionLivenessTables,
+		upgrade.RestoreActionNotRequired("ephemeral table that is not backed up or restored"),
 	),
+	upgrade.NewPermanentTenantUpgrade(
+		"create system.mvcc_statistics table and job",
+		clusterversion.Permanent_V23_2_MVCCStatisticsTable.Version(),
+		createMVCCStatisticsTableAndJobMigration,
+		"create system.mvcc_statistics table and job",
+		upgrade.RestoreActionNotRequired("table is relevant to the storage cluster and is not restored"),
+	),
+	upgrade.NewTenantUpgrade(
+		"create transaction_execution_insights and statement_execution_insights tables",
+		clusterversion.V23_2_AddSystemExecInsightsTable.Version(),
+		upgrade.NoPrecondition,
+		systemExecInsightsTableMigration,
+		upgrade.RestoreActionNotRequired("execution insights are specific to the cluster that executed some query and are not restored"),
+	),
+
+	newFirstUpgrade(clusterversion.V24_1Start.Version()),
+
+	upgrade.NewTenantUpgrade(
+		"drop unused payload and progress columns from system.jobs table",
+		clusterversion.V24_1_DropPayloadAndProgressFromSystemJobsTable.Version(),
+		upgrade.NoPrecondition,
+		dropPayloadProgressFromSystemJobs,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.jobs table"),
+	),
+
+	// Note: when starting a new release version, the first upgrade (for
+	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
 
 func init() {
 	for _, m := range upgrades {
-		if _, exists := registry[m.Version()]; exists {
-			panic(errors.AssertionFailedf("duplicate upgrade registration for %v", m.Version()))
-		}
 		registry[m.Version()] = m
 	}
-}
-
-func toCV(key clusterversion.Key) roachpb.Version {
-	return clusterversion.ByKey(key)
 }

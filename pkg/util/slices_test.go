@@ -79,3 +79,71 @@ func TestCombinesUniqueStrings(t *testing.T) {
 		require.Equal(t, tc.expected, output)
 	}
 }
+
+func TestFilter(t *testing.T) {
+	numbers := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+	evens := Filter(numbers, func(i int) bool {
+		return i%2 == 0
+	})
+	odds := Filter(numbers, func(i int) bool {
+		return i%2 == 1
+	})
+
+	// Assert filtering works.
+	require.Equal(t, []int{1, 3, 5, 7, 9}, odds)
+	require.Equal(t, []int{0, 2, 4, 6, 8}, evens)
+
+	// Assert/demonstrate that filtering does not mutate the original slice.
+	require.Equal(t, []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, numbers)
+
+	// The filtered slices' capacity is correctly set and the original slice's
+	// capacity is unmodified.
+	require.Equal(t, len(odds), cap(odds))
+	require.Equal(t, len(evens), cap(evens))
+	require.Equal(t, len(numbers), cap(numbers))
+
+	// And some weird cases.
+	require.Equal(t, []int{}, Filter(nil, func(i int) bool {
+		return true
+	}))
+	require.Equal(t, []int{}, Filter([]int{}, func(i int) bool {
+		return true
+	}))
+	require.Equal(t, []int{}, Filter(numbers, func(i int) bool {
+		return false
+	}))
+}
+
+func TestMap(t *testing.T) {
+	require.Equal(t, []bool{}, Map(nil, func(i int) bool {
+		require.Fail(t, "should not be called")
+		return true
+	}))
+	require.Equal(t, []bool{}, Map([]int{}, func(i int) bool {
+		require.Fail(t, "should not be called")
+		return true
+	}))
+	require.Equal(t, []bool{false, true, false, true, false}, Map([]int{1, 2, 3, 4, 5}, func(i int) bool {
+		return i%2 == 0
+	}))
+}
+
+func TestMapFrom(t *testing.T) {
+	require.Equal(t, map[int]bool{}, MapFrom(nil, func(i int) (int, bool) {
+		require.Fail(t, "should not be called")
+		return 0, false
+	}))
+	require.Equal(t, map[int]bool{}, MapFrom([]int{}, func(i int) (int, bool) {
+		require.Fail(t, "should not be called")
+		return 0, false
+	}))
+	require.Equal(t, map[int]int{
+		1: 1,
+		2: 4,
+		3: 9,
+		4: 16,
+		5: 25,
+	}, MapFrom([]int{1, 1, 2, 3, 4, 5, 5}, func(i int) (int, int) {
+		return i, i * i
+	}))
+}

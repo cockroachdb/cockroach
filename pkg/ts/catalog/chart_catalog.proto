@@ -18,8 +18,7 @@ import "gogoproto/gogo.proto";
 import "io/prometheus/client/metrics.proto";
 
 // AxisUnits describes the Unit options available in the Admin UI. It is defined here
-// as opposed to importing the value from the Admin UI because the existing pb doesn't
-// include an UNSET value, which we use to check for defaults.
+// as opposed to importing the value from the Admin UI for historical reasons.
 enum AxisUnits {
   // UNSET_UNITS expresses that the metric's DisplayUnit wasn't explicitly set.
   UNSET_UNITS = 0;
@@ -29,6 +28,20 @@ enum AxisUnits {
   BYTES = 2;
   // DURATION expresses that the metric's measurement represents some unit of time.
   DURATION = 3;
+  // CONST expresses that the metric's measurement is a constant value.
+  CONST = 4;
+  // NANOSECONDS expresses that the metric's measurement is in nanoseconds.
+  NANOSECONDS = 5;
+  // PERCENT expresses that the metric's measurement is a percentage value.
+  PERCENT = 6;
+  // SECONDS expresses that the metric's measurement is in seconds.
+  SECONDS = 7;
+  // TIMESTAMP_NS expresses that the metric's measurement is a time since the
+  // Unix epoch in nanoseconds.
+  TIMESTAMP_NS = 8;
+  // TIMESTAMP_SEC expresses that the metric's measurement is a time since the
+  // Unix epoch in seconds.
+  TIMESTAMP_SEC = 9;
 }
 
 // DescribeAggregator works as a proxy for cockroach.ts.tspb.TimeSeriesQueryAggregator
@@ -128,5 +141,19 @@ message ChartSection {
   repeated ChartSection subsections = 6;
   // charts are the IndividualCharts that are grouped into this section.
   repeated IndividualChart charts = 7;
+  // metricLayer indicates which layer the metrics are coming from.
+  required MetricLayer metricLayer = 8 [(gogoproto.nullable) = false];
 }
 
+// MetricLayer is the component layer at which metrics are collected.
+enum MetricLayer {
+  // STORAGE indicates that the metric relates to the storage/KV layers.
+  STORAGE = 0;
+  // APPLICATION indicates that the metric relates to the application
+  // (SQL/RPC/HTTP) layer.
+  APPLICATION = 1;
+  // SERVER indicates that the metric relates to the server layer:
+  // they are not application-level, but are included
+  // when the SQL service is running as a separate process.
+  SERVER = 2;
+}

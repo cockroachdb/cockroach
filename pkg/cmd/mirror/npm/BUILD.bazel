@@ -1,219 +1,37 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
-load("@build_bazel_rules_nodejs//:index.bzl", "js_library", "nodejs_binary", "npm_package_bin")
-load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
-load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
-load(":index.bzl", "json_to_yarn_lock", "yarn_lock_to_json")
-
-# Declare a pair of JS libraries that we can excute with nodejs_binary.
-js_library(
-    name = "yarn-lock-json__lib",
-    package_name = "@cockroachlabs/yarn-lock-json",
-    srcs = [
-        "package.json",
-        "parse.js",
-        "stringify.js",
-    ],
-    visibility = ["//visibility:private"],
-    deps = [
-        "@npm_mirror_npm//:node_modules",
-    ],
-)
-
-_LOCKFILES = {
-    "this": "//" + package_name() + ":yarn.lock",
-    "eslint-plugin-crdb": "//pkg/ui/workspaces/eslint-plugin-crdb:yarn.lock",
-    "crdb-protobuf-client": "//pkg/ui/workspaces/db-console/src/js:yarn.lock",
-    "cluster-ui": "//pkg/ui/workspaces/cluster-ui:yarn.lock",
-    "db-console": "//pkg/ui/workspaces/db-console:yarn.lock",
-    "e2e-tests": "//pkg/ui/workspaces/e2e-tests:yarn.lock",
-}
-
-# Declare a task that's executable with 'bazel run' only.
-nodejs_binary(
-    name = "yarn-lock-parse",
-    data = [
-        ":yarn-lock-json__lib",
-    ],
-    entry_point = "parse.js",
-    visibility = ["//visibility:private"],
-)
-
-# Declare a task that's executable with 'bazel run' only.
-nodejs_binary(
-    name = "yarn-lock-stringify",
-    data = [
-        ":yarn-lock-json__lib",
-    ],
-    entry_point = "stringify.js",
-    visibility = ["//visibility:private"],
-)
-
-# Convert all yarn.lock files to their JSON representations...
-[
-    yarn_lock_to_json(
-        name = k + ".yarn.json",
-        yarn_lock = v,
-    )
-    for [
-        k,
-        v,
-    ] in _LOCKFILES.items()
-]
-
-# ...use JSON representations to mirror dependencies to GCS
-# and output JSON files with new locations...
-go_library(
-    name = "ui_lib",
-    srcs = [
-        "main.go",
-        "model.go",
-    ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/mirror/ui",
-    visibility = ["//visibility:private"],
-    deps = [
-        "//pkg/build/bazel",
-        "@com_google_cloud_go_storage//:storage",
-        "@org_golang_google_api//googleapi",
-        "@org_golang_x_sync//errgroup",
-    ],
-)
-
-go_binary(
-    name = "mirror_npm",
-    embed = [":ui_lib"],
-    visibility = ["//visibility:public"],
-)
-
-run_binary(
-    name = "generate_yarn_lock_json_new",
-    srcs = [
-        ":cluster-ui.yarn.json",
-        ":crdb-protobuf-client.yarn.json",
-        ":db-console.yarn.json",
-        ":e2e-tests.yarn.json",
-        ":eslint-plugin-crdb.yarn.json",
-        ":this.yarn.json",
-    ],
-    outs = [
-        "__cluster-ui.yarn.json.new",
-        "__crdb-protobuf-client.yarn.json.new",
-        "__db-console.yarn.json.new",
-        "__e2e-tests.yarn.json.new",
-        "__eslint-plugin-crdb.yarn.json.new",
-        "__this.yarn.json.new",
-    ],
-    args = [
-        "$(location :cluster-ui.yarn.json)",
-        "$(location :crdb-protobuf-client.yarn.json)",
-        "$(location :db-console.yarn.json)",
-        "$(location :e2e-tests.yarn.json)",
-        "$(location :eslint-plugin-crdb.yarn.json)",
-        "$(location :this.yarn.json)",
-    ],
-    tool = ":mirror_npm",
-)
+load("@bazel_skylib//rules:native_binary.bzl", "native_test")
 
 go_binary(
     name = "mirror_npm_dependencies",
     args = [
         "--mirror",
-        "$(location :cluster-ui.yarn.json)",
-        "$(location :crdb-protobuf-client.yarn.json)",
-        "$(location :db-console.yarn.json)",
-        "$(location :e2e-tests.yarn.json)",
-        "$(location :eslint-plugin-crdb.yarn.json)",
-        "$(location :this.yarn.json)",
+        "$(location //pkg/ui:pnpm-lock.yaml)",
     ],
     data = [
-        ":cluster-ui.yarn.json",
-        ":crdb-protobuf-client.yarn.json",
-        ":db-console.yarn.json",
-        ":e2e-tests.yarn.json",
-        ":eslint-plugin-crdb.yarn.json",
-        ":this.yarn.json",
+        "//pkg/ui:pnpm-lock.yaml",
     ],
-    embed = [":ui_lib"],
+    embed = [":npm_lib"],
 )
 
-# ...and convert those back to the canonical format.
-[
-    json_to_yarn_lock(
-        name = k + ".yarn.lock.new",
-        json = "__{}.yarn.json.new".format(k),
-    )
-    for [
-        k,
-        v,
-    ] in _LOCKFILES.items()
-]
-
-# Emit a script that copies those *.yarn.lock.new files back out into the Bazel workspace.
-write_file(
-    name = "update_yarn_lock_sh",
-    out = "update-yarn-lock-files.sh",
-    content = [
-        # This depends on bash, would need tweaks for Windows
-        "#!/usr/bin/env bash",
-        # Bazel gives us a way to access the source folder!
-        "cd $BUILD_WORKSPACE_DIRECTORY",
-    ] + [
-        # Paths are now relative to the workspace.
-        # We can copy files from bazel-bin to the sources
-        "cp -fv _bazel/bin/{0}/__{1}.yarn.lock.new {2}".format(
-            package_name(),
-            k,
-            v.replace("//", "").replace(":", "/"),
-        )
-        for [
-            k,
-            v,
-        ] in _LOCKFILES.items()
-    ],
+go_binary(
+    name = "list_unmirrored_dependencies_bin",
+    embed = [":npm_lib"],
 )
 
-# And a 'bazel run' task to execute that script.
-sh_binary(
-    name = "update_yarn_lock",
-    srcs = [":update_yarn_lock_sh"],
-    data = [
-        ":{}.yarn.lock.new".format(k)
-        for k in _LOCKFILES.keys()
+# It's tempting to want to move this target into //pkg/ui and leave the
+# go_binary here. Doing so and attempting to run this test target would cause
+# Bazel to attempt to download NPM dependencies *before* this target executes.
+# Since unmirrored dependencies can't be downloaded, the result is that this
+# target would never actually execute, and no list of unmirrored dependencies
+# could be presented to users.
+native_test(
+    name = "list_unmirrored_dependencies",
+    src = ":list_unmirrored_dependencies_bin",
+    out = "list_unmirrored_dependencies_runner",
+    args = [
+        "$(location //pkg/ui:pnpm-lock.yaml)",
     ],
-)
-
-# Define a diffing test for each regenerated yarn.lock file...
-[
-    diff_test(
-        name = "compare_{}.yarn.lock".format(k),
-        # Leading and trailing newlines and whitespace are intentional, to make
-        # the resolution more obvious.
-        failure_message = """
-
-    '<' is what's in your workspace
-    '>' is what Bazel thinks it should be
-
-
-    You've likely got a new NPM dependency that hasn't yet been mirrored to GCS.
-    Run './dev ui mirror-deps' to discover and mirror new dependencies.
-""",
-        file1 = v,
-        file2 = k + ".yarn.lock.new",
-    )
-    for [
-        k,
-        v,
-    ] in _LOCKFILES.items()
-]
-
-# ...and an overall test suite to compare them all.
-test_suite(
-    name = "are_lockfiles_updated",
-    tests = [
-        ":compare_{}.yarn.lock".format(k)
-        for k in _LOCKFILES.keys()
-    ],
+    data = ["//pkg/ui:pnpm-lock.yaml"],
 )
 
 go_library(
@@ -226,9 +44,9 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "@com_google_cloud_go_storage//:storage",
+        "@in_gopkg_yaml_v3//:yaml_v3",
         "@org_golang_google_api//googleapi",
+        "@org_golang_google_api//iterator",
         "@org_golang_x_sync//errgroup",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -19,7 +19,6 @@
 # generated go files.
 
 load("@io_bazel_rules_go//go:def.bzl", "GoSource")
-load(":bindata.bzl", "BINDATA_SRCS")
 load(":docs.bzl", "DOCS_SRCS")
 load(":execgen.bzl", "EXECGEN_SRCS")
 load(":gomock.bzl", "GOMOCK_SRCS")
@@ -31,6 +30,7 @@ load(":parser.bzl", "PARSER_SRCS")
 load(":schemachanger.bzl", "SCHEMACHANGER_SRCS")
 load(":diagrams.bzl", "DIAGRAMS_SRCS")
 load(":bnf.bzl", "BNF_SRCS")
+load(":ui.bzl", "UI_SRCS")
 
 # GeneratedFileInfo provides two pieces of information to the _hoist_files
 # rule. It provides the set of files to be hoisted via the generated_files
@@ -289,12 +289,6 @@ def docs():
         srcs = DOCS_SRCS,
     )
 
-def bindata():
-    _hoist_no_prefix(
-        name = "bindata",
-        srcs = BINDATA_SRCS,
-    )
-
 def parser():
     _hoist_no_prefix(
         name = "parser",
@@ -317,6 +311,12 @@ def bnf():
     _hoist_no_prefix(
         name = "bnf",
         srcs = BNF_SRCS,
+    )
+
+def ui():
+    _hoist_no_prefix(
+        name = "ui",
+        srcs = UI_SRCS,
     )
 
 def gen(name, srcs):

@@ -33,7 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -268,6 +270,13 @@ const (
 	headerSize            = tagPos + 1
 )
 
+var _ redact.SafeFormatter = ValueType(0)
+
+// Safeformat implements the redact.SafeFormatter interface.
+func (t ValueType) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.SafeString(redact.SafeString(t.String()))
+}
+
 func (v Value) checksum() uint32 {
 	if len(v.RawBytes) < checksumSize {
 		return 0
@@ -316,7 +325,7 @@ func (v Value) Verify(key []byte) error {
 	}
 	if sum := v.checksum(); sum != 0 {
 		if computedSum := v.computeChecksum(key); computedSum != sum {
-			return fmt.Errorf("%s: invalid checksum (%x) value [% x]",
+			return errors.Errorf("%s: invalid checksum (%x) value [% x]",
 				Key(key), computedSum, v.RawBytes)
 		}
 	}
@@ -497,7 +506,7 @@ func (v *Value) SetProto(msg protoutil.Message) error {
 	// directly into the Value.RawBytes field instead of allocating a separate
 	// []byte and copying.
 	v.ensureRawBytes(headerSize + msg.Size())
-	if _, err := protoutil.MarshalTo(msg, v.RawBytes[headerSize:]); err != nil {
+	if _, err := protoutil.MarshalToSizedBuffer(msg, v.RawBytes[headerSize:]); err != nil {
 		return err
 	}
 	// Special handling for timeseries data.
@@ -570,7 +579,7 @@ func (v *Value) SetTuple(data []byte) {
 // BYTES an error will be returned.
 func (v Value) GetBytes() ([]byte, error) {
 	if tag := v.GetTag(); tag != ValueType_BYTES {
-		return nil, fmt.Errorf("value type is not %s: %s", ValueType_BYTES, tag)
+		return nil, errors.Errorf("value type is not %s: %s", ValueType_BYTES, tag)
 	}
 	return v.dataBytes(), nil
 }
@@ -580,11 +589,11 @@ func (v Value) GetBytes() ([]byte, error) {
 // will be returned.
 func (v Value) GetFloat() (float64, error) {
 	if tag := v.GetTag(); tag != ValueType_FLOAT {
-		return 0, fmt.Errorf("value type is not %s: %s", ValueType_FLOAT, tag)
+		return 0, errors.Errorf("value type is not %s: %s", ValueType_FLOAT, tag)
 	}
 	dataBytes := v.dataBytes()
 	if len(dataBytes) != 8 {
-		return 0, fmt.Errorf("float64 value should be exactly 8 bytes: %d", len(dataBytes))
+		return 0, errors.Errorf("float64 value should be exactly 8 bytes: %d", len(dataBytes))
 	}
 	_, u, err := encoding.DecodeUint64Ascending(dataBytes)
 	if err != nil {
@@ -597,7 +606,7 @@ func (v Value) GetFloat() (float64, error) {
 // tag is not GEO an error will be returned.
 func (v Value) GetGeo() (geopb.SpatialObject, error) {
 	if tag := v.GetTag(); tag != ValueType_GEO {
-		return geopb.SpatialObject{}, fmt.Errorf("value type is not %s: %s", ValueType_GEO, tag)
+		return geopb.SpatialObject{}, errors.Errorf("value type is not %s: %s", ValueType_GEO, tag)
 	}
 	var ret geopb.SpatialObject
 	err := protoutil.Unmarshal(v.dataBytes(), &ret)
@@ -609,11 +618,11 @@ func (v Value) GetGeo() (geopb.SpatialObject, error) {
 func (v Value) GetBox2D() (geopb.BoundingBox, error) {
 	box := geopb.BoundingBox{}
 	if tag := v.GetTag(); tag != ValueType_BOX2D {
-		return box, fmt.Errorf("value type is not %s: %s", ValueType_BOX2D, tag)
+		return box, errors.Errorf("value type is not %s: %s", ValueType_BOX2D, tag)
 	}
 	dataBytes := v.dataBytes()
 	if len(dataBytes) != 32 {
-		return box, fmt.Errorf("float64 value should be exactly 32 bytes: %d", len(dataBytes))
+		return box, errors.Errorf("float64 value should be exactly 32 bytes: %d", len(dataBytes))
 	}
 	var err error
 	var val uint64
@@ -646,14 +655,14 @@ func (v Value) GetBox2D() (geopb.BoundingBox, error) {
 // an error will be returned.
 func (v Value) GetBool() (bool, error) {
 	if tag := v.GetTag(); tag != ValueType_INT {
-		return false, fmt.Errorf("value type is not %s: %s", ValueType_INT, tag)
+		return false, errors.Errorf("value type is not %s: %s", ValueType_INT, tag)
 	}
 	i, n := binary.Varint(v.dataBytes())
 	if n <= 0 {
-		return false, fmt.Errorf("int64 varint decoding failed: %d", n)
+		return false, errors.Errorf("int64 varint decoding failed: %d", n)
 	}
 	if i > 1 || i < 0 {
-		return false, fmt.Errorf("invalid bool: %d", i)
+		return false, errors.Errorf("invalid bool: %d", i)
 	}
 	return i != 0, nil
 }
@@ -662,11 +671,11 @@ func (v Value) GetBool() (bool, error) {
 // tag is not INT or the value cannot be decoded an error will be returned.
 func (v Value) GetInt() (int64, error) {
 	if tag := v.GetTag(); tag != ValueType_INT {
-		return 0, fmt.Errorf("value type is not %s: %s", ValueType_INT, tag)
+		return 0, errors.Errorf("value type is not %s: %s", ValueType_INT, tag)
 	}
 	i, n := binary.Varint(v.dataBytes())
 	if n <= 0 {
-		return 0, fmt.Errorf("int64 varint decoding failed: %d", n)
+		return 0, errors.Errorf("int64 varint decoding failed: %d", n)
 	}
 	return i, nil
 }
@@ -683,7 +692,7 @@ func (v Value) GetProto(msg protoutil.Message) error {
 	}
 
 	if tag := v.GetTag(); tag != expectedTag {
-		return fmt.Errorf("value type is not %s: %s", expectedTag, tag)
+		return errors.Errorf("value type is not %s: %s", expectedTag, tag)
 	}
 	return protoutil.Unmarshal(v.dataBytes(), msg)
 }
@@ -692,7 +701,7 @@ func (v Value) GetProto(msg protoutil.Message) error {
 // tag is not TIME an error will be returned.
 func (v Value) GetTime() (time.Time, error) {
 	if tag := v.GetTag(); tag != ValueType_TIME {
-		return time.Time{}, fmt.Errorf("value type is not %s: %s", ValueType_TIME, tag)
+		return time.Time{}, errors.Errorf("value type is not %s: %s", ValueType_TIME, tag)
 	}
 	_, t, err := encoding.DecodeTimeAscending(v.dataBytes())
 	return t, err
@@ -702,7 +711,7 @@ func (v Value) GetTime() (time.Time, error) {
 // tag is not TIMETZ an error will be returned.
 func (v Value) GetTimeTZ() (timetz.TimeTZ, error) {
 	if tag := v.GetTag(); tag != ValueType_TIMETZ {
-		return timetz.TimeTZ{}, fmt.Errorf("value type is not %s: %s", ValueType_TIMETZ, tag)
+		return timetz.TimeTZ{}, errors.Errorf("value type is not %s: %s", ValueType_TIMETZ, tag)
 	}
 	_, t, err := encoding.DecodeTimeTZAscending(v.dataBytes())
 	return t, err
@@ -712,7 +721,7 @@ func (v Value) GetTimeTZ() (timetz.TimeTZ, error) {
 // the tag is not DURATION an error will be returned.
 func (v Value) GetDuration() (duration.Duration, error) {
 	if tag := v.GetTag(); tag != ValueType_DURATION {
-		return duration.Duration{}, fmt.Errorf("value type is not %s: %s", ValueType_DURATION, tag)
+		return duration.Duration{}, errors.Errorf("value type is not %s: %s", ValueType_DURATION, tag)
 	}
 	_, t, err := encoding.DecodeDurationAscending(v.dataBytes())
 	return t, err
@@ -722,7 +731,7 @@ func (v Value) GetDuration() (duration.Duration, error) {
 // the tag is not BITARRAY an error will be returned.
 func (v Value) GetBitArray() (bitarray.BitArray, error) {
 	if tag := v.GetTag(); tag != ValueType_BITARRAY {
-		return bitarray.BitArray{}, fmt.Errorf("value type is not %s: %s", ValueType_BITARRAY, tag)
+		return bitarray.BitArray{}, errors.Errorf("value type is not %s: %s", ValueType_BITARRAY, tag)
 	}
 	_, t, err := encoding.DecodeUntaggedBitArrayValue(v.dataBytes())
 	return t, err
@@ -732,7 +741,7 @@ func (v Value) GetBitArray() (bitarray.BitArray, error) {
 // tag is not DECIMAL an error will be returned.
 func (v Value) GetDecimal() (apd.Decimal, error) {
 	if tag := v.GetTag(); tag != ValueType_DECIMAL {
-		return apd.Decimal{}, fmt.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
+		return apd.Decimal{}, errors.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
 	}
 	return encoding.DecodeNonsortingDecimal(v.dataBytes(), nil)
 }
@@ -742,7 +751,7 @@ func (v Value) GetDecimal() (apd.Decimal, error) {
 // tag is not DECIMAL an error will be returned.
 func (v Value) GetDecimalInto(d *apd.Decimal) error {
 	if tag := v.GetTag(); tag != ValueType_DECIMAL {
-		return fmt.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
+		return errors.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
 	}
 	return encoding.DecodeIntoNonsortingDecimal(d, v.dataBytes(), nil)
 }
@@ -764,7 +773,7 @@ func (v Value) GetTimeseries() (InternalTimeSeriesData, error) {
 // error will be returned.
 func (v Value) GetTuple() ([]byte, error) {
 	if tag := v.GetTag(); tag != ValueType_TUPLE {
-		return nil, fmt.Errorf("value type is not %s: %s", ValueType_TUPLE, tag)
+		return nil, errors.Errorf("value type is not %s: %s", ValueType_TUPLE, tag)
 	}
 	return v.dataBytes(), nil
 }
@@ -810,10 +819,18 @@ func (v Value) computeChecksum(key []byte) uint32 {
 // In `1:3:Float/6.28`, the `1` is the column id diff as stored, `3` is the
 // computed (i.e. not stored) actual column id, `Float` is the type, and `6.28`
 // is the encoded value.
-func (v Value) PrettyPrint() string {
+func (v Value) PrettyPrint() (ret string) {
 	if len(v.RawBytes) == 0 {
 		return "/<empty>"
 	}
+	// In certain cases untagged bytes could be malformed because they are
+	// coming from user input, in which case recover with an error instead
+	// of crashing.
+	defer func() {
+		if r := recover(); r != nil {
+			ret = fmt.Sprintf("/<err: paniced parsing with %v>", r)
+		}
+	}()
 	var buf bytes.Buffer
 	t := v.GetTag()
 	buf.WriteRune('/')
@@ -933,6 +950,10 @@ func (TransactionStatus) SafeValue() {}
 //
 // baseKey can be nil, in which case it will be set when sending the first
 // write.
+//
+// omitInRangefeeds controls whether the transaction's writes are exposed via
+// rangefeeds. When set to true, all the transaction's writes will be
+// filtered out by rangefeeds, and will not be available in changefeeds.
 func MakeTransaction(
 	name string,
 	baseKey Key,
@@ -941,6 +962,8 @@ func MakeTransaction(
 	now hlc.Timestamp,
 	maxOffsetNs int64,
 	coordinatorNodeID int32,
+	admissionPriority admissionpb.WorkPriority,
+	omitInRangefeeds bool,
 ) Transaction {
 	u := uuid.FastMakeV4()
 	// TODO(nvanbenschoten): technically, gul should be a synthetic timestamp.
@@ -963,6 +986,13 @@ func MakeTransaction(
 		LastHeartbeat:          now,
 		ReadTimestamp:          now,
 		GlobalUncertaintyLimit: gul,
+		AdmissionPriority:      int32(admissionPriority),
+		// When set to true OmitInRangefeeds indicates that none of the
+		// transaction's writes will appear in rangefeeds. Should be set to false
+		// for all transactions that write to internal system tables and most other
+		// transactions unless specifically stated otherwise (e.g. by the
+		// disable_changefeed_replication session variable).
+		OmitInRangefeeds: omitInRangefeeds,
 	}
 }
 
@@ -1160,7 +1190,7 @@ func (t *Transaction) Restart(
 	// Reset all epoch-scoped state.
 	t.Sequence = 0
 	t.WriteTooOld = false
-	t.CommitTimestampFixed = false
+	t.ReadTimestampFixed = false
 	t.LockSpans = nil
 	t.InFlightWrites = nil
 	t.IgnoredSeqNums = nil
@@ -1208,15 +1238,16 @@ func (t *Transaction) BumpReadTimestamp(timestamp hlc.Timestamp) {
 // others) for the transaction. If t.ID is empty, then the transaction is
 // copied from o.
 func (t *Transaction) Update(o *Transaction) {
+	ctx := context.TODO()
 	if o == nil {
 		return
 	}
-	o.AssertInitialized(context.TODO())
+	o.AssertInitialized(ctx)
 	if t.ID == (uuid.UUID{}) {
 		*t = *o
 		return
 	} else if t.ID != o.ID {
-		log.Fatalf(context.Background(), "updating txn %s with different txn %s", t.String(), o.String())
+		log.Fatalf(ctx, "updating txn %s with different txn %s", t.String(), o.String())
 		return
 	}
 	if len(t.Key) == 0 {
@@ -1226,11 +1257,17 @@ func (t *Transaction) Update(o *Transaction) {
 
 	// Update epoch-scoped state, depending on the two transactions' epochs.
 	if t.Epoch < o.Epoch {
+		// Ensure that the transaction status makes sense. If the transaction
+		// has already been finalized, then it should remain finalized.
+		if !t.Status.IsFinalized() {
+			t.Status = o.Status
+		} else if t.Status == COMMITTED {
+			log.Warningf(ctx, "updating COMMITTED txn %s with txn at later epoch %s", t.String(), o.String())
+		}
 		// Replace all epoch-scoped state.
 		t.Epoch = o.Epoch
-		t.Status = o.Status
 		t.WriteTooOld = o.WriteTooOld
-		t.CommitTimestampFixed = o.CommitTimestampFixed
+		t.ReadTimestampFixed = o.ReadTimestampFixed
 		t.Sequence = o.Sequence
 		t.LockSpans = o.LockSpans
 		t.InFlightWrites = o.InFlightWrites
@@ -1246,7 +1283,7 @@ func (t *Transaction) Update(o *Transaction) {
 			}
 		case ABORTED:
 			if o.Status == COMMITTED {
-				log.Warningf(context.Background(), "updating ABORTED txn %s with COMMITTED txn %s", t.String(), o.String())
+				log.Warningf(ctx, "updating ABORTED txn %s with COMMITTED txn %s", t.String(), o.String())
 			}
 		case COMMITTED:
 			// Nothing to do.
@@ -1256,7 +1293,7 @@ func (t *Transaction) Update(o *Transaction) {
 			// If neither of the transactions has a bumped ReadTimestamp, then the
 			// WriteTooOld flag is cumulative.
 			t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
-			t.CommitTimestampFixed = t.CommitTimestampFixed || o.CommitTimestampFixed
+			t.ReadTimestampFixed = t.ReadTimestampFixed || o.ReadTimestampFixed
 		} else if t.ReadTimestamp.Less(o.ReadTimestamp) {
 			// If `o` has a higher ReadTimestamp (i.e. it's the result of a refresh,
 			// which refresh generally clears the WriteTooOld field), then it dictates
@@ -1264,7 +1301,7 @@ func (t *Transaction) Update(o *Transaction) {
 			// concurrently with any requests whose response's WriteTooOld field
 			// matters.
 			t.WriteTooOld = o.WriteTooOld
-			t.CommitTimestampFixed = o.CommitTimestampFixed
+			t.ReadTimestampFixed = o.ReadTimestampFixed
 		}
 		// If t has a higher ReadTimestamp, than it gets to dictate the
 		// WriteTooOld field - so there's nothing to update.
@@ -1291,7 +1328,7 @@ func (t *Transaction) Update(o *Transaction) {
 			// aborted.
 			t.Status = ABORTED
 		case COMMITTED:
-			log.Warningf(context.Background(), "updating txn %s with COMMITTED txn at earlier epoch %s", t.String(), o.String())
+			log.Warningf(ctx, "updating txn %s with COMMITTED txn at earlier epoch %s", t.String(), o.String())
 		}
 	}
 
@@ -1317,6 +1354,12 @@ func (t *Transaction) Update(o *Transaction) {
 
 	// Ratchet the transaction priority.
 	t.UpgradePriority(o.Priority)
+	// Defensive, since AdmissionPriority does not change. We have already
+	// handled the case of t being uninitialized at the beginning of this
+	// function.
+	t.AdmissionPriority = o.AdmissionPriority
+	// OmitInRangefeeds doesn't change.
+	t.OmitInRangefeeds = o.OmitInRangefeeds
 }
 
 // UpgradePriority sets transaction priority to the maximum of current
@@ -1959,17 +2002,43 @@ func (l *Lease) Equal(that interface{}) bool {
 	return true
 }
 
-// MakeIntent makes an intent with the given txn and key.
-// This is suitable for use when constructing WriteIntentError.
-func MakeIntent(txn *enginepb.TxnMeta, key Key) Intent {
-	var i Intent
-	i.Key = key
-	i.Txn = *txn
-	return i
+// MakeLock makes a lock with the given txn, key, and strength.
+// This is suitable for use when constructing a LockConflictError or
+// WriteIntentError.
+func MakeLock(txn *enginepb.TxnMeta, key Key, str lock.Strength) Lock {
+	var l Lock
+	l.Txn = *txn
+	l.Key = key
+	l.Strength = str
+	return l
 }
 
-// AsIntents takes a transaction and a slice of keys and
-// returns it as a slice of intents.
+// Intent is an intent-strength lock. The type is a specialization of Lock and
+// should be constructed using MakeIntent.
+type Intent Lock
+
+// MakeIntent makes an intent-strength lock with the given txn and key.
+func MakeIntent(txn *enginepb.TxnMeta, key Key) Intent {
+	return Intent(MakeLock(txn, key, lock.Intent))
+}
+
+// AsLock casts an Intent to a Lock.
+func (i Intent) AsLock() Lock {
+	return Lock(i)
+}
+
+// AsLockPtr casts a *Intent to a *Lock.
+func (i *Intent) AsLockPtr() *Lock {
+	return (*Lock)(i)
+}
+
+// AsLocks casts a slice of Intents to a slice of Locks.
+func AsLocks(s []Intent) []Lock {
+	return *(*[]Lock)(unsafe.Pointer(&s))
+}
+
+// AsIntents takes a transaction and a slice of keys and returns it as a slice
+// of intent-strength locks.
 func AsIntents(txn *enginepb.TxnMeta, keys []Key) []Intent {
 	ret := make([]Intent, len(keys))
 	for i := range keys {
@@ -1979,18 +2048,26 @@ func AsIntents(txn *enginepb.TxnMeta, keys []Key) []Intent {
 }
 
 // MakeLockAcquisition makes a lock acquisition message from the given
-// txn, key, and durability level.
-func MakeLockAcquisition(txn *Transaction, key Key, dur lock.Durability) LockAcquisition {
+// txn, key, durability level, and lock strength.
+func MakeLockAcquisition(
+	txn enginepb.TxnMeta,
+	key Key,
+	dur lock.Durability,
+	str lock.Strength,
+	ignoredSeqNums []enginepb.IgnoredSeqNumRange,
+) LockAcquisition {
 	return LockAcquisition{
-		Span:       Span{Key: key},
-		Txn:        txn.TxnMeta,
-		Durability: dur,
-		// TODO(arul): The lock table only supports/expects locks with Intent lock
-		// strength. This will change once we generalize the lock table for
-		// different strengths.
-		Strength:       lock.Intent,
-		IgnoredSeqNums: txn.IgnoredSeqNums,
+		Span:           Span{Key: key},
+		Txn:            txn,
+		Durability:     dur,
+		Strength:       str,
+		IgnoredSeqNums: ignoredSeqNums,
 	}
+}
+
+// Empty returns true if the lock acquisition is empty.
+func (m *LockAcquisition) Empty() bool {
+	return m.Span.Equal(Span{})
 }
 
 // MakeLockUpdate makes a lock update from the given txn and span.
@@ -2266,15 +2343,24 @@ func (a Spans) ContainsKey(key Key) bool {
 // SpansOverhead is the overhead of Spans in bytes.
 const SpansOverhead = int64(unsafe.Sizeof(Spans{}))
 
-// MemUsage returns the size of the Spans in bytes for memory accounting
-// purposes.
-func (a Spans) MemUsage() int64 {
-	// Slice the full capacity of a so we can account for the memory
-	// used by spans past the length of a.
-	aCap := a[:cap(a)]
-	size := SpansOverhead
-	for i := range aCap {
-		size += aCap[i].MemUsage()
+// MemUsageUpToLen returns the size of the Spans in bytes for memory accounting
+// purposes. The method assumes that all spans in [len(a), cap(a)] range are
+// empty and will panic in test builds when not.
+func (a Spans) MemUsageUpToLen() int64 {
+	if buildutil.CrdbTestBuild {
+		l := len(a)
+		aCap := a[:cap(a)]
+		for _, s := range aCap[l:] {
+			if len(s.Key) > 0 || len(s.EndKey) > 0 {
+				panic(errors.AssertionFailedf(
+					"spans are not empty past length: %v (len=%d, cap=%d)", aCap, l, cap(a)),
+				)
+			}
+		}
+	}
+	size := SpansOverhead + int64(cap(a)-len(a))*SpanOverhead
+	for i := range a {
+		size += a[i].MemUsage()
 	}
 	return size
 }
@@ -2286,6 +2372,43 @@ func (a Spans) String() string {
 			buf.WriteString(", ")
 		}
 		buf.WriteString(span.String())
+	}
+	return buf.String()
+}
+
+// BoundedString returns a stringified representation of Spans while adhering to
+// the provided hint on the length (although not religiously). The following
+// heuristics are used:
+// - if there are no more than 6 spans, then all are printed,
+// - otherwise, at least 3 "head" and at least 3 "tail" spans are always printed
+//   - the bytes "budget" is consumed from the "head".
+func (a Spans) BoundedString(bytesHint int) string {
+	if len(a) <= 6 {
+		return a.String()
+	}
+	var buf bytes.Buffer
+	var i int
+	headEndIdx, tailStartIdx := 2, len(a)-3
+	for i = range a {
+		if i != 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(a[i].String())
+		if buf.Len() >= bytesHint && i >= headEndIdx && i+1 < tailStartIdx {
+			// If the bytes budget has been consumed, and we've included at
+			// least 3 spans from the "head", and we have more than 3 spans left
+			// total, we stop iteration from the front.
+			break
+		}
+	}
+	if i+1 < len(a) {
+		buf.WriteString(" ... ")
+		for i = tailStartIdx; i < len(a); i++ {
+			if i != tailStartIdx {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(a[i].String())
+		}
 	}
 	return buf.String()
 }

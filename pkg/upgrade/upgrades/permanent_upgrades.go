@@ -111,7 +111,7 @@ func populateVersionSetting(
 	if v == (roachpb.Version{}) {
 		// The cluster was bootstrapped at v1.0 (or even earlier), so just use
 		// the TestingBinaryMinSupportedVersion of the binary.
-		v = clusterversion.TestingBinaryMinSupportedVersion
+		v = clusterversion.MinSupported.Version()
 	}
 
 	b, err := protoutil.Marshal(&clusterversion.ClusterVersion{Version: v})
@@ -129,23 +129,7 @@ func populateVersionSetting(
 		ctx, "insert-setting", nil, /* txn */
 		fmt.Sprintf(`INSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', now(), 'm') ON CONFLICT(name) DO NOTHING`, b),
 	)
-	if err != nil {
-		return err
-	}
-
-	// Tenant ID 0 indicates that we're overriding the value for all
-	// tenants.
-	tenantID := tree.NewDInt(0)
-	_, err = ie.Exec(
-		ctx,
-		"insert-setting", nil, /* txn */
-		fmt.Sprintf(`INSERT INTO system.tenant_settings (tenant_id, name, value, "last_updated", "value_type") VALUES (%d, 'version', x'%x', now(), 'm') ON CONFLICT(tenant_id, name) DO NOTHING`, tenantID, b),
-	)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func initializeClusterSecret(

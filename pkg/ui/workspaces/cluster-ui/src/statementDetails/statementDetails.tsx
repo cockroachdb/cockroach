@@ -38,6 +38,10 @@ import {
   TimestampToMoment,
   unique,
   batchStatements,
+  formatNumberForDisplay,
+  Duration,
+  Count,
+  longToInt,
 } from "src/util";
 import { getValidErrorsList, Loading } from "src/loading";
 import { Button } from "src/button";
@@ -94,6 +98,7 @@ import { CockroachCloudContext } from "../contexts";
 import { filterByTimeScale } from "./diagnostics/diagnosticsUtils";
 import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
 import { Timestamp } from "../timestamp";
+import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
 
 type StatementDetailsResponse =
   cockroach.server.serverpb.StatementDetailsResponse;
@@ -144,6 +149,7 @@ export interface StatementDetailsDispatchProps {
     ascending: boolean,
   ) => void;
   onBackToStatementsClick?: () => void;
+  onRequestTimeChange: (t: moment.Moment) => void;
 }
 
 export interface StatementDetailsStateProps {
@@ -160,6 +166,7 @@ export interface StatementDetailsStateProps {
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   hasAdminRole?: UIConfigState["hasAdminRole"];
   statementFingerprintInsights?: StmtInsightEvent[];
+  requestTime: moment.Moment;
 }
 
 export type StatementDetailsOwnProps = StatementDetailsDispatchProps &
@@ -250,6 +257,7 @@ export class StatementDetails extends React.Component<
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
+    this.props.onRequestTimeChange(moment());
   };
 
   refreshStatementDetails = (): void => {
@@ -351,7 +359,9 @@ export class StatementDetails extends React.Component<
     // This is necessary for when the new statementFingerprintID does not have data for the given time frame.
     // The new query text and the formatted query text would be an empty string, and we need to invalidate the old
     // query text and formatted query text.
-    if (this.props.statementFingerprintID != prevProps.statementFingerprintID) {
+    if (
+      this.props.statementFingerprintID !== prevProps.statementFingerprintID
+    ) {
       this.setState({ query: null, formattedQuery: null });
     }
   }
@@ -427,6 +437,7 @@ export class StatementDetails extends React.Component<
             renderError={() =>
               LoadingError({
                 statsType: "statements",
+                error: error,
               })
             }
           />
@@ -491,7 +502,7 @@ export class StatementDetails extends React.Component<
           <TimeScaleDropdown
             options={timeScale1hMinOptions}
             currentScale={this.props.timeScale}
-            setTimeScale={this.props.onTimeScaleChange}
+            setTimeScale={this.changeTimeScale}
           />
         </PageConfigItem>
       </PageConfig>
@@ -510,7 +521,7 @@ export class StatementDetails extends React.Component<
           <TimeScaleDropdown
             options={timeScale1hMinOptions}
             currentScale={this.props.timeScale}
-            setTimeScale={this.props.onTimeScaleChange}
+            setTimeScale={this.changeTimeScale}
           />
         </PageConfigItem>
       </PageConfig>
@@ -531,7 +542,7 @@ export class StatementDetails extends React.Component<
             intent="danger"
             title={LoadingError({
               statsType: "statements",
-              timeout: true,
+              error: this.props.statementsError,
             })}
           />
         )}
@@ -654,8 +665,8 @@ export class StatementDetails extends React.Component<
     const cpuTimeseries: AlignedData =
       generateCPUTimeseries(statsPerAggregatedTs);
     const cpuOps: Partial<Options> = {
-      axes: [{}, { label: "CPU Time" }],
-      series: [{}, { label: "CPU Time" }],
+      axes: [{}, { label: "SQL CPU Time" }],
+      series: [{}, { label: "SQL CPU Time" }],
       legend: { show: false },
       width: cardWidth,
     };
@@ -690,6 +701,8 @@ export class StatementDetails extends React.Component<
       });
     }
 
+    const duration = (v: number) => Duration(v * 1e9);
+
     return (
       <>
         <PageConfig>
@@ -697,15 +710,15 @@ export class StatementDetails extends React.Component<
             <TimeScaleDropdown
               options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
-              setTimeScale={this.props.onTimeScaleChange}
+              setTimeScale={this.changeTimeScale}
             />
           </PageConfigItem>
         </PageConfig>
         <p className={timeScaleStylesCx("time-label", "label-margin")}>
-          Showing aggregated stats from{" "}
-          <span className={timeScaleStylesCx("bold")}>
-            <FormattedTimescale ts={this.props.timeScale} />
-          </span>
+          <TimeScaleLabel
+            timeScale={this.props.timeScale}
+            requestTime={moment(this.props.requestTime)}
+          />
         </p>
         <section className={cx("section")}>
           <Row gutter={24}>
@@ -766,6 +779,68 @@ export class StatementDetails extends React.Component<
                   value={renderTransactionType(implicit_txn)}
                 />
                 <SummaryCardItem label="Last execution time" value={lastExec} />
+              </SummaryCard>
+            </Col>
+          </Row>
+          <Row gutter={24} className={cx("margin-left-neg")}>
+            <Col className="gutter-row" span={12}>
+              <SummaryCard className={cx("summary-card")}>
+                <SummaryCardItem
+                  label="Statement Time"
+                  value={`${formatNumberForDisplay(
+                    stats?.service_lat.mean,
+                    duration,
+                  )}`}
+                />
+                <span className={summaryCardStylesCx("summary-small-info")}>
+                  {`Execution: ${formatNumberForDisplay(
+                    stats?.run_lat.mean,
+                    duration,
+                  )} /
+                  Planning: 
+                  ${formatNumberForDisplay(stats?.plan_lat.mean, duration)}`}
+                </span>
+                <SummaryCardItem
+                  label="Rows Processed"
+                  value={`${Count(
+                    Number(stats?.rows_read?.mean),
+                  )} Reads / ${Count(
+                    Number(stats?.rows_written?.mean),
+                  )} Writes`}
+                />
+                <SummaryCardItem
+                  label="Execution Retries"
+                  value={Count(
+                    longToInt(stats?.count) -
+                      longToInt(stats?.first_attempt_count),
+                  )}
+                />
+                <SummaryCardItem
+                  label="Execution Count"
+                  value={Count(longToInt(stats?.count))}
+                />
+              </SummaryCard>
+            </Col>
+            <Col className="gutter-row" span={12}>
+              <SummaryCard className={cx("summary-card")}>
+                <SummaryCardItem
+                  label="Contention Time"
+                  value={formatNumberForDisplay(
+                    stats?.exec_stats?.contention_time.mean,
+                    duration,
+                  )}
+                />
+                <SummaryCardItem
+                  label="SQL CPU Time"
+                  value={formatNumberForDisplay(
+                    stats?.exec_stats?.cpu_sql_nanos.mean,
+                    Duration,
+                  )}
+                />
+                <SummaryCardItem
+                  label="Client Wait Time"
+                  value={formatNumberForDisplay(stats?.idle_lat.mean, duration)}
+                />
               </SummaryCard>
             </Col>
           </Row>
@@ -834,7 +909,7 @@ export class StatementDetails extends React.Component<
             </Col>
             <Col className="gutter-row" span={12}>
               <BarGraphTimeSeries
-                title={`CPU Time${noSamples}`}
+                title={`SQL CPU Time${noSamples}`}
                 alignedData={cpuTimeseries}
                 uPlotOptions={cpuOps}
                 tooltip={unavailableTooltip}
@@ -895,7 +970,10 @@ export class StatementDetails extends React.Component<
         <p className={timeScaleStylesCx("time-label", "label-margin")}>
           Showing explain plans from{" "}
           <span className={timeScaleStylesCx("bold")}>
-            <FormattedTimescale ts={this.props.timeScale} />
+            <FormattedTimescale
+              ts={this.props.timeScale}
+              requestTime={moment(this.props.requestTime)}
+            />
           </span>
         </p>
         <section className={cx("section")}>
@@ -933,8 +1011,8 @@ export class StatementDetails extends React.Component<
         activateDiagnosticsRef={this.activateDiagnosticsRef}
         diagnosticsReports={this.props.diagnosticsReports}
         dismissAlertMessage={this.props.dismissStatementDiagnosticsAlertMessage}
-        hasData={this.hasDiagnosticReports()}
         statementFingerprint={fingerprint}
+        requestTime={moment(this.props.requestTime)}
         onDownloadDiagnosticBundleClick={this.props.onDiagnosticBundleDownload}
         onDiagnosticCancelRequestClick={report =>
           this.props.onDiagnosticCancelRequest(report)
@@ -944,7 +1022,8 @@ export class StatementDetails extends React.Component<
         }
         onSortingChange={this.props.onSortingChange}
         currentScale={this.props.timeScale}
-        onChangeTimeScale={this.props.onTimeScaleChange}
+        onChangeTimeScale={this.changeTimeScale}
+        planGists={this.props.statementDetails.statement.stats.plan_gists}
       />
     );
   };

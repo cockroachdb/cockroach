@@ -25,6 +25,9 @@ import (
 )
 
 var npgsqlReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+
+// WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
+// This is used by docs automation to produce a list of supported versions for ORM's.
 var npgsqlSupportedTag = "v7.0.2"
 
 // This test runs npgsql's full test suite against a single cockroach node.
@@ -39,8 +42,7 @@ func registerNpgsql(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -76,7 +78,7 @@ func registerNpgsql(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo snap install dotnet-sdk --classic && \
+			`sudo snap install dotnet-sdk --channel=7.0/stable --classic && \
 sudo snap alias dotnet-sdk.dotnet dotnet && \
 sudo ln -s /snap/dotnet-sdk/current/dotnet /usr/local/bin/dotnet`,
 		); err != nil {
@@ -103,6 +105,11 @@ sudo ln -s /snap/dotnet-sdk/current/dotnet /usr/local/bin/dotnet`,
 		t.L().Printf("Latest npgsql release is %s.", latestTag)
 		t.L().Printf("Supported release is %s.", npgsqlSupportedTag)
 
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Nodes(1), "echo -n {pgport:1}")
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		// The `sed` command configures the test to not run on .NET 3.1 since we
 		// haven't installed it on this system. (The tests will only run on .NET 7.)
 		// The git patch changes the connection string and test setup.
@@ -115,7 +122,7 @@ sudo ln -s /snap/dotnet-sdk/current/dotnet /usr/local/bin/dotnet`,
 			"modify connection settings",
 			fmt.Sprintf(`cd /mnt/data1/npgsql && \
 sed -e 's/netcoreapp3.1//g' -i test/Directory.Build.props && \
-echo '%s' | git apply --ignore-whitespace -`, npgsqlPatch),
+echo '%s' | git apply --ignore-whitespace -`, fmt.Sprintf(npgsqlPatch, result.Stdout)),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -126,7 +133,7 @@ echo '%s' | git apply --ignore-whitespace -`, npgsqlPatch),
 
 		t.Status("running npgsql test suite")
 		// Running the test suite is expected to error out, so swallow the error.
-		result, err := c.RunWithDetailsSingleNode(
+		result, err = c.RunWithDetailsSingleNode(
 			ctx, t.L(), node,
 			`cd /mnt/data1/npgsql && dotnet test test/Npgsql.Tests --logger trx`,
 		)
@@ -166,11 +173,12 @@ echo '%s' | git apply --ignore-whitespace -`, npgsqlPatch),
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "npgsql",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `driver`),
+		Name:             "npgsql",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.Driver),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNpgsql(ctx, t, c)
 		},
@@ -189,7 +197,7 @@ index ecfdd85f..17527129 100644
      /// </summary>
      public const string DefaultConnectionString =
 -        "Server=localhost;Username=npgsql_tests;Password=npgsql_tests;Database=npgsql_tests;Timeout=0;Command Timeout=0;SSL Mode=Disable";
-+        "Server=127.0.0.1;Username=npgsql_tests;Password=npgsql_tests;Database=npgsql_tests;Port=26257;Timeout=0;Command Timeout=0;SSL Mode=Prefer;Include Error Detail=true";
++        "Server=127.0.0.1;Username=npgsql_tests;Password=npgsql_tests;Database=npgsql_tests;Port=%s;Timeout=0;Command Timeout=0;SSL Mode=Prefer;Include Error Detail=true";
  
      /// <summary>
      /// The connection string that will be used when opening the connection to the tests database.

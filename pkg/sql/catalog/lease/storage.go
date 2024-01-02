@@ -48,13 +48,14 @@ import (
 // the manager. Some of these fields belong on the manager, in any case, since
 // they're only used by the manager and not by the store itself.
 type storage struct {
-	nodeIDContainer *base.SQLIDContainer
-	db              isql.DB
-	clock           *hlc.Clock
-	settings        *cluster.Settings
-	codec           keys.SQLCodec
-	regionPrefix    *atomic.Value
-	sysDBCache      *catkv.SystemDatabaseCache
+	nodeIDContainer         *base.SQLIDContainer
+	db                      isql.DB
+	clock                   *hlc.Clock
+	settings                *cluster.Settings
+	codec                   keys.SQLCodec
+	regionPrefix            *atomic.Value
+	sessionBasedLeasingMode sessionBasedLeasingModeReader
+	sysDBCache              *catkv.SystemDatabaseCache
 
 	// group is used for all calls made to acquireNodeLease to prevent
 	// concurrent lease acquisitions from the store.
@@ -71,6 +72,7 @@ type leaseFields struct {
 	version      descpb.DescriptorVersion
 	instanceID   base.SQLInstanceID
 	expiration   tree.DTimestamp
+	sessionID    []byte
 }
 
 type writer interface {
@@ -78,10 +80,15 @@ type writer interface {
 	insertLease(context.Context, *kv.Txn, leaseFields) error
 }
 
+type sessionBasedLeasingModeReader interface {
+	sessionBasedLeasingModeAtLeast(minimumMode SessionBasedLeasingMode) bool
+	getSessionBasedLeasingMode() SessionBasedLeasingMode
+}
+
 // LeaseRenewalDuration controls the default time before a lease expires when
 // acquisition to renew the lease begins.
 var LeaseRenewalDuration = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease_renewal_fraction",
 	"controls the default time before a lease expires when acquisition to renew the lease begins",
 	base.DefaultDescriptorLeaseRenewalTimeout)
@@ -89,7 +96,7 @@ var LeaseRenewalDuration = settings.RegisterDurationSetting(
 // LeaseRenewalCrossValidate controls if cross validation should be done during
 // lease renewal.
 var LeaseRenewalCrossValidate = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease_renewal_cross_validation.enabled",
 	"controls if cross validation should be done during lease renewal",
 	base.DefaultLeaseRenewalCrossValidate)

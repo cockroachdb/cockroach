@@ -37,7 +37,9 @@ var MinTenantID = MustMakeTenantID(2)
 
 // MaxTenantID is the maximum ID of a (non-system) tenant in a multi-tenant
 // cluster.
-var MaxTenantID = MustMakeTenantID(math.MaxUint64)
+// We use MaxUint64-1 to ensure that we can always compute an end key
+// for the keyspace by adding 1 to the tenant ID.
+var MaxTenantID = MustMakeTenantID(math.MaxUint64 - 1)
 
 func init() {
 	// Inject the string representation of SystemTenantID into the log package

@@ -111,16 +111,14 @@ sinks: { stderr: { channels: 'all except DEV ,sessions' } }
 ----
 sinks:
   stderr:
-    channels: [OPS, HEALTH, STORAGE, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS,
-      SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]
+    channels: [OPS, HEALTH, STORAGE, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]
 
 yaml
 sinks: { stderr: { channels: 'all except [DEV, sessions]' } }
 ----
 sinks:
   stderr:
-    channels: [OPS, HEALTH, STORAGE, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS,
-      SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]
+    channels: [OPS, HEALTH, STORAGE, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]
 
 # Verify that channels can be filtered separately.
 yaml
@@ -135,6 +133,8 @@ yaml
 file-defaults:
      dir: /default/dir
      filter: ERROR
+     format: foo
+     format-options: {bar: baz}
      redact: true
      redactable: false
      max-file-size: 10MB
@@ -171,6 +171,9 @@ file-defaults:
   max-file-size: 9.5MiB
   max-group-size: 95MiB
   filter: ERROR
+  format: foo
+  format-options:
+    bar: baz
   redact: true
   redactable: false
 sinks:

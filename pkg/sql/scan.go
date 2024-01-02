@@ -88,10 +88,11 @@ type scanNode struct {
 	// set to zero.
 	estimatedRowCount uint64
 
-	// lockingStrength and lockingWaitPolicy represent the row-level locking
-	// mode of the Scan.
+	// lockingStrength, lockingWaitPolicy, and lockingDurability represent the
+	// row-level locking mode of the Scan.
 	lockingStrength   descpb.ScanLockingStrength
 	lockingWaitPolicy descpb.ScanLockingWaitPolicy
+	lockingDurability descpb.ScanLockingDurability
 
 	// containsSystemColumns holds whether or not this scan is expected to
 	// produce any system columns.

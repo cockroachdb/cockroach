@@ -272,14 +272,13 @@ func makeCriticalLocalitiesVisitor(
 	nodeChecker nodeChecker,
 ) criticalLocalitiesVisitor {
 	allLocalities := expandLocalities(nodeLocalities)
-	v := criticalLocalitiesVisitor{
+	return criticalLocalitiesVisitor{
 		allLocalities: allLocalities,
 		cfg:           cfg,
 		storeResolver: storeResolver,
 		nodeChecker:   nodeChecker,
+		report:        make(LocalityReport),
 	}
-	v.reset(ctx)
-	return v
 }
 
 // expandLocalities expands each locality in its input into multiple localities,
@@ -316,17 +315,6 @@ func (v *criticalLocalitiesVisitor) failed() bool {
 // calls.
 func (v *criticalLocalitiesVisitor) Report() LocalityReport {
 	return v.report
-}
-
-// reset is part of the rangeVisitor interface.
-func (v *criticalLocalitiesVisitor) reset(ctx context.Context) {
-	*v = criticalLocalitiesVisitor{
-		allLocalities: v.allLocalities,
-		cfg:           v.cfg,
-		storeResolver: v.storeResolver,
-		nodeChecker:   v.nodeChecker,
-		report:        make(LocalityReport, len(v.report)),
-	}
 }
 
 // visitNewZone is part of the rangeVisitor interface.

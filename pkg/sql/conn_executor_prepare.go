@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
 
@@ -47,7 +48,7 @@ func (ex *connExecutor) execPrepare(
 		// information about the previous transaction. We expect to execute
 		// this command in NoTxn.
 		if _, ok := parseCmd.AST.(*tree.ShowCommitTimestamp); !ok {
-			return ex.beginImplicitTxn(ctx, parseCmd.AST)
+			return ex.beginImplicitTxn(ctx, parseCmd.AST, ex.QualityOfService())
 		}
 	} else if _, isAbortedTxn := ex.machine.CurState().(stateAborted); isAbortedTxn {
 		if !ex.isAllowedInAbortedTxn(parseCmd.AST) {
@@ -72,7 +73,7 @@ func (ex *connExecutor) execPrepare(
 		ex.deletePreparedStmt(ctx, "")
 	}
 
-	stmt := makeStatement(parseCmd.Statement, ex.generateID())
+	stmt := makeStatement(parseCmd.Statement, ex.server.cfg.GenerateID())
 	_, err := ex.addPreparedStmt(
 		ctx,
 		parseCmd.Name,
@@ -165,7 +166,8 @@ func (ex *connExecutor) addPreparedStmt(
 	return prepared, nil
 }
 
-// prepare prepares the given statement.
+// prepare prepares the given statement. This is used to create the plan in the
+// "extended" pgwire protocol.
 //
 // placeholderHints may contain partial type information for placeholders.
 // prepare will populate the missing types. It can be nil.
@@ -195,21 +197,6 @@ func (ex *connExecutor) prepare(
 		return prepared, nil
 	}
 
-	// Prohibit preparing of EXPLAIN ANALYZE since we won't be able to execute
-	// it anyway.
-	var isExplainAnalyze bool
-	switch s := stmt.AST.(type) {
-	case *tree.ExplainAnalyze:
-		isExplainAnalyze = true
-	case *tree.Prepare:
-		if _, ok := s.Statement.(*tree.ExplainAnalyze); ok {
-			isExplainAnalyze = true
-		}
-	}
-	if isExplainAnalyze {
-		return nil, pgerror.Newf(pgcode.Syntax, "EXPLAIN ANALYZE can only be used as a top-level statement")
-	}
-
 	origNumPlaceholders := stmt.NumPlaceholders
 	switch stmt.AST.(type) {
 	case *tree.Prepare, *tree.CopyTo:
@@ -235,6 +222,10 @@ func (ex *connExecutor) prepare(
 			// the planner here would break the assumptions of the instrumentation.
 			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime())
+		}
+
+		if err := ex.maybeUpgradeToSerializable(ctx, stmt); err != nil {
+			return err
 		}
 
 		if placeholderHints == nil {
@@ -283,13 +274,21 @@ func (ex *connExecutor) prepare(
 
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
+		p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 		flags, err = ex.populatePrepared(ctx, txn, placeholderHints, p, origin)
 		return err
 	}
 
 	// Use the existing transaction.
-	if err := prepare(ctx, ex.state.mu.txn); err != nil && origin != PreparedStatementOriginSessionMigration {
-		return nil, err
+	if err := prepare(ctx, ex.state.mu.txn); err != nil {
+		if origin != PreparedStatementOriginSessionMigration {
+			return nil, err
+		} else {
+			f := tree.NewFmtCtx(tree.FmtMarkRedactionNode | tree.FmtSimple)
+			f.FormatNode(stmt.AST)
+			redactableStmt := redact.SafeString(f.CloseAndGetString())
+			log.Warningf(ctx, "could not prepare statement during session migration (%s): %v", redactableStmt, err)
+		}
 	}
 
 	// Account for the memory used by this prepared statement.
@@ -320,8 +319,15 @@ func (ex *connExecutor) populatePrepared(
 		return 0, err
 	}
 	p.extendedEvalCtx.PrepareOnly = true
-	if err := ex.handleAOST(ctx, p.stmt.AST); err != nil {
-		return 0, err
+	// If the statement is being prepared by a session migration, then we should
+	// not evaluate the AS OF SYSTEM TIME timestamp. During session migration,
+	// there is no way for the statement being prepared to be executed in this
+	// transaction, so there's no need to fix the timestamp, unlike how we must
+	// for pgwire- or SQL-level prepared statements.
+	if origin != PreparedStatementOriginSessionMigration {
+		if err := ex.handleAOST(ctx, p.stmt.AST); err != nil {
+			return 0, err
+		}
 	}
 
 	// PREPARE has a limited subset of statements it can be run with. Postgres
@@ -331,7 +337,7 @@ func (ex *connExecutor) populatePrepared(
 	// However, we must be able to handle every type of statement below because
 	// the Postgres extended protocol requires running statements via the prepare
 	// and execute paths.
-	flags, err := p.prepareUsingOptimizer(ctx)
+	flags, err := p.prepareUsingOptimizer(ctx, origin)
 	if err != nil {
 		log.VEventf(ctx, 1, "optimizer prepare failed: %v", err)
 		return 0, err
@@ -344,14 +350,26 @@ func (ex *connExecutor) populatePrepared(
 func (ex *connExecutor) execBind(
 	ctx context.Context, bindCmd BindStmt,
 ) (fsm.Event, fsm.EventPayload) {
+	var ps *PreparedStatement
 	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
+		if bindCmd.PreparedStatementName != "" {
+			err = errors.WithDetailf(err, "statement name %q", bindCmd.PreparedStatementName)
+		}
+		if bindCmd.PortalName != "" {
+			err = errors.WithDetailf(err, "portal name %q", bindCmd.PortalName)
+		}
+		if ps != nil && ps.StatementSummary != "" {
+			err = errors.WithDetailf(err, "statement summary %q", ps.StatementSummary)
+		}
 		return eventNonRetriableErr{IsCommit: fsm.False}, eventNonRetriableErrPayload{err: err}
 	}
 
-	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
+	var ok bool
+	ps, ok = ex.extraTxnState.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
 	if !ok {
 		return retErr(newPreparedStmtDNEError(ex.sessionData(), bindCmd.PreparedStatementName))
 	}
+
 	ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(bindCmd.PreparedStatementName)
 
 	// We need to make sure type resolution happens within a transaction.
@@ -365,7 +383,7 @@ func (ex *connExecutor) execBind(
 		// executing SHOW COMMIT TIMESTAMP as it would destroy the information
 		// about the previously committed transaction.
 		if _, ok := ps.AST.(*tree.ShowCommitTimestamp); !ok {
-			return ex.beginImplicitTxn(ctx, ps.AST)
+			return ex.beginImplicitTxn(ctx, ps.AST, ex.QualityOfService())
 		}
 	} else if _, isAbortedTxn := ex.machine.CurState().(stateAborted); isAbortedTxn {
 		if !ex.isAllowedInAbortedTxn(ps.AST) {
@@ -437,7 +455,7 @@ func (ex *connExecutor) execBind(
 		if len(bindCmd.Args) != int(numQArgs) {
 			return retErr(
 				pgwirebase.NewProtocolViolationErrorf(
-					"bind message supplies %d parameters, but prepared statement \"%s\" requires %d", len(bindCmd.Args), bindCmd.PreparedStatementName, numQArgs))
+					"bind message supplies %d parameters, but requires %d", len(bindCmd.Args), numQArgs))
 		}
 
 		resolve := func(ctx context.Context, txn *kv.Txn) (err error) {
@@ -497,9 +515,14 @@ func (ex *connExecutor) execBind(
 
 	numCols := len(ps.Columns)
 	if (len(bindCmd.OutFormats) > 1) && (len(bindCmd.OutFormats) != numCols) {
-		return retErr(pgwirebase.NewProtocolViolationErrorf(
+		err := pgwirebase.NewProtocolViolationErrorf(
 			"expected 1 or %d for number of format codes, got %d",
-			numCols, len(bindCmd.OutFormats)))
+			numCols, len(bindCmd.OutFormats))
+		// A user is hitting this error unexpectedly and rarely, dump extra info,
+		// should be okay since this should be a very rare error.
+		log.Infof(ctx, "%s outformats: %v, AST: %T, prepared statements: %s", err.Error(),
+			bindCmd.OutFormats, ps.AST, ex.extraTxnState.prepStmtsNamespace.String())
+		return retErr(err)
 	}
 
 	columnFormatCodes := bindCmd.OutFormats

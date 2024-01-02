@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -80,7 +81,7 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 			return nil, pgerror.Newf(pgcode.InvalidSchemaName, "unknown schema %q", scName)
 		}
 
-		if scName == tree.PublicSchema {
+		if scName == catconstants.PublicSchemaName {
 			return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot drop schema %q", scName)
 		}
 
@@ -162,13 +163,15 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 	}
 
 	// Create the job to drop the schema.
-	p.createDropSchemaJob(
+	if err := p.createDropSchemaJob(
 		schemaIDs,
 		n.d.getDroppedTableDetails(),
 		n.d.typesToDelete,
 		n.d.functionsToDelete,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
-	)
+	); err != nil {
+		return err
+	}
 
 	// Log Drop Schema event. This is an auditable log event and is recorded
 	// in the same transaction as table descriptor update.
@@ -234,7 +237,11 @@ func (p *planner) createDropSchemaJob(
 	typesToDrop []*typedesc.Mutable,
 	functionsToDrop []*funcdesc.Mutable,
 	jobDesc string,
-) {
+) error {
+	if err := p.checkDDLAtomicity(); err != nil {
+		return err
+	}
+
 	typeIDs := make([]descpb.ID, 0, len(typesToDrop))
 	for _, t := range typesToDrop {
 		typeIDs = append(typeIDs, t.ID)
@@ -257,10 +264,12 @@ func (p *planner) createDropSchemaJob(
 			// The version distinction for database jobs doesn't matter for jobs that
 			// drop schemas.
 			FormatVersion: jobspb.DatabaseJobFormatVersion,
+			SessionData:   &p.SessionData().SessionData,
 		},
 		Progress:      jobspb.SchemaChangeProgress{},
 		NonCancelable: true,
 	})
+	return nil
 }
 
 func (n *dropSchemaNode) Next(params runParams) (bool, error) { return false, nil }

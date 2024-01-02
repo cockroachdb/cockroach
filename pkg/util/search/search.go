@@ -216,17 +216,3 @@ func (ls *lineSearcher) step(pass bool) (found bool) {
 func mid(a, b int) int {
 	return (a + b) / 2
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}

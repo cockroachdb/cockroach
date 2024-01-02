@@ -80,17 +80,14 @@ const serverHBAConfSetting = "server.host_based_authentication.configuration"
 
 // connAuthConf is the cluster setting that holds the HBA
 // configuration.
-var connAuthConf = func() *settings.StringSetting {
-	s := settings.RegisterValidatedStringSetting(
-		settings.TenantWritable,
-		serverHBAConfSetting,
-		"host-based authentication configuration to use during connection authentication",
-		"",
-		checkHBASyntaxBeforeUpdatingSetting,
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
+var connAuthConf = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	serverHBAConfSetting,
+	"host-based authentication configuration to use during connection authentication",
+	"",
+	settings.WithValidateString(checkHBASyntaxBeforeUpdatingSetting),
+	settings.WithPublic,
+)
 
 // loadLocalHBAConfigUponRemoteSettingChange initializes the local
 // node's cache of the HBA configuration each time the cluster setting
@@ -425,7 +422,7 @@ func requireClusterVersion(versionkey clusterversion.Key) CheckHBAEntry {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				`HBA authentication method %q requires all nodes to be upgraded to %s`,
 				e.Method,
-				clusterversion.ByKey(versionkey),
+				versionkey,
 			)
 		}
 		return nil

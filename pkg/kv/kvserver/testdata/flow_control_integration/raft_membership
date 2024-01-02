@@ -1,0 +1,112 @@
+echo
+----
+----
+-- (Issuing 1x1MiB, 3x replicated write that's not admitted.)
+
+
+-- Flow token metrics from n1 after issuing 1x1MiB regular 3x replicated write
+-- that's not admitted. We see 1*1MiB*3=3MiB deductions of regular tokens with
+-- no corresponding returns.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%regular_tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.regular_tokens_available   | 45 MiB   
+  kvadmission.flow_controller.regular_tokens_deducted    | 3.0 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 0 B      
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B      
+
+
+-- (Adding a voting replica on n4.)
+
+
+-- Observe the total tracked tokens per-stream on n1. s1-s3 should have 1MiB
+-- tracked each, and s4 should have none.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  68       | 1        | 1.0 MiB               
+  68       | 2        | 1.0 MiB               
+  68       | 3        | 1.0 MiB               
+  68       | 4        | 0 B                   
+
+
+-- (Issuing 1x1MiB, 4x replicated write that's not admitted.)
+
+
+-- Observe the individual tracked tokens per-stream on the scratch range. s1-s3
+-- should have 2MiB tracked (they've observed 2x1MiB writes), s4 should have
+-- 1MiB.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  68       | 1        | 2.0 MiB               
+  68       | 2        | 2.0 MiB               
+  68       | 3        | 2.0 MiB               
+  68       | 4        | 1.0 MiB               
+
+
+-- (Removing voting replica from n3.)
+
+
+-- (Adding non-voting replica to n5.)
+
+
+-- (Issuing 1x1MiB, 4x replicated write (w/ one non-voter) that's not admitted.
+
+
+-- Observe the individual tracked tokens per-stream on the scratch range. s1-s2
+-- should have 3MiB tracked (they've observed 3x1MiB writes), there should be
+-- no s3 since it was removed, s4 and s5 should have 2MiB and 1MiB
+-- respectively.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  68       | 1        | 3.0 MiB               
+  68       | 2        | 3.0 MiB               
+  68       | 4        | 2.0 MiB               
+  68       | 5        | 1.0 MiB               
+
+
+-- (Allow below-raft admission to proceed.)
+
+
+-- Observe that there no tracked tokens across s1,s2,s4,s5.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  68       | 1        | 0 B                   
+  68       | 2        | 0 B                   
+  68       | 4        | 0 B                   
+  68       | 5        | 0 B                   
+
+
+-- Flow token metrics from n1 after work gets admitted. All {regular,elastic}
+-- tokens deducted are returned, including from when s3 was removed as a raft
+-- member.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 40 MiB  
+  kvadmission.flow_controller.elastic_tokens_deducted    | 11 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 11 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B     
+  kvadmission.flow_controller.regular_tokens_available   | 80 MiB  
+  kvadmission.flow_controller.regular_tokens_deducted    | 11 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 11 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B     
+----
+----
+
+# vim:ft=sql

@@ -1,0 +1,24 @@
+diff --git a/pkg/ccl/logictestccl/tests/5node/generated_test.go b/pkg/ccl/logictestccl/tests/5node/generated_test.go
+index 1b993b58790..4ffc2bcc1b3 100644
+--- a/pkg/ccl/logictestccl/tests/5node/generated_test.go
++++ b/pkg/ccl/logictestccl/tests/5node/generated_test.go
+@@ -69,6 +69,7 @@ func TestLogic_tmp(t *testing.T) {
+        defer leaktest.AfterTest(t)()
+        var glob string
+        glob = filepath.Join(cclLogicTestDir, "_*")
++       print("im a diff too! dont stress me!")
+        logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
+ }
+
+diff --git a/pkg/spanconfig/spanconfigstore/store_test.go b/pkg/spanconfig/spanconfigstore/store_test.go
+index 9ef7c9f0893..fbed4ab1fc4 100644
+--- a/pkg/spanconfig/spanconfigstore/store_test.go
++++ b/pkg/spanconfig/spanconfigstore/store_test.go
+@@ -119,6 +119,7 @@ func (s *spanConfigStore) TestingSplitKeys(
+ // spanconfigtestutils.Parse{Target,Config,SpanConfigRecord} for more details.
+ func TestDataDriven(t *testing.T) {
+        defer leaktest.AfterTest(t)()
++       fmt.Printf("im a diff!")
+
+        ctx := context.Background()
+        boundsReader := newMockBoundsReader()

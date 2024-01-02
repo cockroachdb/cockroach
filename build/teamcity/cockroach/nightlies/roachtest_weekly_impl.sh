@@ -10,7 +10,11 @@ if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "roachtest-weekly-bazel $(date)" -N "" -f ~/.ssh/id_rsa
 fi
 
-source $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh
+arch=amd64
+if [[ ${FIPS_ENABLED:-0} == 1 ]]; then
+  arch=amd64-fips
+fi
+$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh $arch
 
 artifacts=/artifacts
 source $root/build/teamcity/util/roachtest_util.sh
@@ -28,7 +32,7 @@ source $root/build/teamcity/util/roachtest_util.sh
 # NB(3): If you make changes here, you should probably make the same change in
 # build/teamcity-weekly-roachtest.sh
 timeout -s INT $((7800*60)) build/teamcity-roachtest-invoke.sh \
-  tag:weekly \
+  --suite weekly \
   --cluster-id "${TC_BUILD_ID}" \
   --zones "us-central1-b,us-west1-b,europe-west2-b" \
   --artifacts=/artifacts \

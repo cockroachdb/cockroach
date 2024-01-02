@@ -11,7 +11,6 @@ package upgradeinterlockccl
 import (
 	"context"
 	gosql "database/sql"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -32,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
@@ -59,13 +58,13 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 	defer close(resumeChannel)
 	defer close(completedChannel)
 
-	bv := clusterversion.TestingBinaryVersion
-	msv := clusterversion.TestingBinaryMinSupportedVersion
+	bv := clusterversion.Latest.Version()
+	msv := clusterversion.MinSupported.Version()
 
 	// If there are any non-empty errors expected on the upgrade, then we're
 	// expecting it to fail.
 	expectingUpgradeToFail := test.ExpUpgradeErr[variant][0] != ""
-	finalUpgradeVersion := clusterversion.TestingBinaryVersion
+	finalUpgradeVersion := clusterversion.Latest.Version()
 	if expectingUpgradeToFail {
 		finalUpgradeVersion = msv
 	}
@@ -96,9 +95,7 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		// the system.sql_instances table) for the failed SQL server to
 		// be removed as quickly as possible. This is because a failed
 		// instance in that table can cause RPC attempts to that server
-		// to fail. The changes below in the other server setup will
-		// ensure that the failed SQL server expires quickly. Here we
-		// need to also ensure that it will be reclaimed quickly.
+		// to fail.
 		instancestorage.ReclaimLoopInterval.Override(ctx, &s.SV, 500*time.Millisecond)
 	}
 
@@ -109,13 +106,20 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		// because a failed instance in that table can cause RPC attempts to
 		// that server to fail. To accomplish this, we decrease the default
 		// TTL and heartbeat for the sessions so that they expire and are
-		// cleaned up faster.
-		slinstance.DefaultTTL.Override(ctx, &s.SV, 250*time.Millisecond)
-		slinstance.DefaultHeartBeat.Override(ctx, &s.SV, 50*time.Millisecond)
+		// cleaned up faster. In cases where this test is being stressed, we
+		// extend the TTL by 10x to handle cases where the system is too
+		// overloaded to heartbeat at sub-second intervals.
+		ttlOverride := 250 * time.Millisecond
+		if skip.Stress() {
+			ttlOverride *= 10
+		}
+		heartbeatOverride := ttlOverride / 10
+		slinstance.DefaultTTL.Override(ctx, &s.SV, ttlOverride)
+		slinstance.DefaultHeartBeat.Override(ctx, &s.SV, heartbeatOverride)
 	}
 
-	// Initialize the version to the BinaryMinSupportedVersion so that
-	// we can perform upgrades.
+	// Initialize the version to the MinSupportedVersion so that we can perform
+	// upgrades.
 	settings := cluster.MakeTestingClusterSettingsWithVersions(bv, msv, false /* initializeVersion */)
 	disableBackgroundTasks(settings)
 	require.NoError(t, clusterversion.Initialize(ctx, msv, &settings.SV))
@@ -124,7 +128,7 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		ServerArgs: base.TestServerArgs{
 			// Test validates tenant behavior. No need for the default test
 			// tenant.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Settings:          settings,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -142,17 +146,7 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	connectToTenant := func(t *testing.T, addr string) (_ *gosql.DB, cleanup func()) {
-		pgURL, cleanupPGUrl := sqlutils.PGUrl(t, addr, "Tenant", url.User(username.RootUser))
-		tenantDB, err := gosql.Open("postgres", pgURL.String())
-		require.NoError(t, err)
-		return tenantDB, func() {
-			tenantDB.Close()
-			cleanupPGUrl()
-		}
-	}
-
-	mkTenant := func(t *testing.T, id roachpb.TenantID, bv roachpb.Version, minBv roachpb.Version) (tenantDB *gosql.DB, cleanup func()) {
+	mkTenant := func(t *testing.T, id roachpb.TenantID, bv roachpb.Version, minBv roachpb.Version) (tenantDB *gosql.DB, stopTenant func()) {
 		settings := cluster.MakeTestingClusterSettingsWithVersions(bv, minBv, false /* initializeVersion */)
 		disableBackgroundTasks(settings)
 		if test.ExpStartupErr[variant] != "" {
@@ -162,6 +156,9 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		tenantArgs := base.TestTenantArgs{
 			TenantID: id,
 			TestingKnobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				UpgradeManager: &upgradebase.TestingKnobs{
 					InterlockPausePoint:               test.PausePoint,
@@ -171,17 +168,17 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 			},
 			Settings: settings,
 		}
-		tenant, err := tc.Server(0).StartTenant(ctx, tenantArgs)
+		tenant, err := tc.Server(0).TenantController().StartTenant(ctx, tenantArgs)
 		require.NoError(t, err)
-		return connectToTenant(t, tenant.SQLAddr())
+		return tenant.SQLConn(t), func() { tenant.AppStopper().Stop(ctx) }
 	}
 
 	logf("creating an initial tenant server")
 	// Create a tenant before upgrading anything, and verify its
 	// version.
 	tenantID := serverutils.TestTenantID()
-	tenant, cleanup := mkTenant(t, tenantID, bv, msv)
-	defer cleanup()
+	tenant, stopTenant := mkTenant(t, tenantID, bv, msv)
+	defer stopTenant()
 	initialTenantRunner := sqlutils.MakeSQLRunner(tenant)
 
 	logf("verifying the tenant version")
@@ -290,11 +287,16 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 	}
 	require.NoError(t, clusterversion.Initialize(ctx, otherMsv, &otherServerSettings.SV))
 	otherServerStopper := stop.NewStopper()
-	otherServer, otherServerStartError := tc.Server(0).StartTenant(ctx,
+	otherServer, otherServerStartError := tc.Server(0).TenantController().StartTenant(ctx,
 		base.TestTenantArgs{
 			Stopper:  otherServerStopper,
 			TenantID: tenantID,
 			Settings: otherServerSettings,
+			TestingKnobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
+			},
 		})
 
 	var otherTenantRunner *sqlutils.SQLRunner
@@ -304,9 +306,8 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		logf("shutting down the other tenant server")
 		otherServerStopper.Stop(ctx)
 	} else if otherServerStartError == nil {
-		defer otherServer.Stopper().Stop(ctx)
-		otherTenant, otherCleanup := connectToTenant(t, otherServer.SQLAddr())
-		defer otherCleanup()
+		defer otherServer.AppStopper().Stop(ctx)
+		otherTenant := otherServer.SQLConn(t)
 		otherTenantRunner = sqlutils.MakeSQLRunner(otherTenant)
 		numTenantsStr = "2"
 	}

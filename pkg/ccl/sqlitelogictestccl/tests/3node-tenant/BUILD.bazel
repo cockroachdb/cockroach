@@ -1,21 +1,21 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "3node-tenant_test",
     size = "enormous",
     srcs = ["generated_test.go"],
-    args = ["-test.timeout=7195s"],
     data = [
         "//c-deps:libgeos",  # keep
         "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep
     ],
+    exec_properties = {"Pool": "large"},
     shard_count = 48,
     tags = [
         "ccl_test",
         "cpu:2",
     ],
     deps = [
+        "//pkg/base",
         "//pkg/build/bazel",
         "//pkg/ccl",
         "//pkg/security/securityassets",
@@ -30,5 +30,3 @@ go_test(
         "//pkg/util/randutil",
     ],
 )
-
-get_x_data(name = "get_x_data")

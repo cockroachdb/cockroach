@@ -28,7 +28,7 @@ import (
 // to the checkpoint record. The default is set using the same reasoning as
 // changefeed.frontier_checkpoint_max_bytes.
 var restoreCheckpointMaxBytes = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"restore.frontier_checkpoint_max_bytes",
 	"controls the maximum size of the restore checkpoint frontier as a the sum of the (span,"+
 		"timestamp) tuples",
@@ -49,7 +49,7 @@ type progressTracker struct {
 		// fields that may get updated while read are put in the lock.
 		syncutil.Mutex
 
-		checkpointFrontier *spanUtils.Frontier
+		checkpointFrontier spanUtils.Frontier
 
 		// res tracks the amount of data that has been ingested.
 		res roachpb.RowCount
@@ -87,7 +87,7 @@ func makeProgressTracker(
 ) (*progressTracker, error) {
 
 	var (
-		checkpointFrontier  *spanUtils.Frontier
+		checkpointFrontier  spanUtils.Frontier
 		err                 error
 		nextRequiredSpanKey map[string]roachpb.Key
 		inFlightSpanFeeder  chan execinfrapb.RestoreSpanEntry
@@ -119,10 +119,16 @@ func makeProgressTracker(
 	pt.endTime = endTime
 	return pt, nil
 }
-
+func (pt *progressTracker) close() {
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+	if pt.mu.checkpointFrontier != nil {
+		pt.mu.checkpointFrontier.Release()
+	}
+}
 func loadCheckpointFrontier(
 	requiredSpans roachpb.Spans, persistedSpans []jobspb.RestoreProgress_FrontierEntry,
-) (*spanUtils.Frontier, error) {
+) (spanUtils.Frontier, error) {
 	numRequiredSpans := len(requiredSpans) - 1
 	contiguousSpan := roachpb.Span{
 		Key:    requiredSpans[0].Key,
@@ -146,7 +152,7 @@ func loadCheckpointFrontier(
 // first N spans in the frontier that remain below the maxBytes memory limit
 // will return.
 func persistFrontier(
-	frontier *spanUtils.Frontier, maxBytes int64,
+	frontier spanUtils.Frontier, maxBytes int64,
 ) []jobspb.RestoreProgress_FrontierEntry {
 	var used int64
 	completedSpansSlice := make([]jobspb.RestoreProgress_FrontierEntry, 0)
@@ -176,18 +182,20 @@ func (pt *progressTracker) updateJobCallback(
 ) {
 	switch d := progressDetails.(type) {
 	case *jobspb.Progress_Restore:
-		pt.mu.Lock()
-		if pt.useFrontier {
-			// TODO (msbutler): this requires iterating over every span in the frontier,
-			// and rewriting every completed required span to disk.
-			// We may want to be more intelligent about this.
-			d.Restore.Checkpoint = persistFrontier(pt.mu.checkpointFrontier, pt.maxBytes)
-		} else {
-			if pt.mu.highWaterMark >= 0 {
-				d.Restore.HighWater = pt.mu.inFlightImportSpans[pt.mu.highWaterMark].Key
+		func() {
+			pt.mu.Lock()
+			defer pt.mu.Unlock()
+			if pt.useFrontier {
+				// TODO (msbutler): this requires iterating over every span in the frontier,
+				// and rewriting every completed required span to disk.
+				// We may want to be more intelligent about this.
+				d.Restore.Checkpoint = persistFrontier(pt.mu.checkpointFrontier, pt.maxBytes)
+			} else {
+				if pt.mu.highWaterMark >= 0 {
+					d.Restore.HighWater = pt.mu.inFlightImportSpans[pt.mu.highWaterMark].Key
+				}
 			}
-		}
-		pt.mu.Unlock()
+		}()
 	default:
 		log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
 	}

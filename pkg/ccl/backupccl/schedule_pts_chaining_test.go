@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -37,7 +38,7 @@ import (
 // Returns schedule IDs for full and incremental schedules, plus a cleanup function.
 func (th *testHelper) createSchedules(
 	t *testing.T, backupStmt string, opts ...string,
-) (int64, int64, func()) {
+) (jobspb.ScheduleID, jobspb.ScheduleID, func()) {
 	backupOpts := ""
 	if len(opts) > 0 {
 		backupOpts = fmt.Sprintf(" WITH %s", strings.Join(opts, ", "))
@@ -80,7 +81,7 @@ func checkPTSRecord(
 		require.NoError(t, err)
 		return nil
 	}))
-	encodedScheduleID := []byte(strconv.FormatInt(schedule.ScheduleID(), 10))
+	encodedScheduleID := []byte(strconv.FormatInt(int64(schedule.ScheduleID()), 10))
 	require.Equal(t, encodedScheduleID, ptsRecord.Meta)
 	require.Equal(t, jobsprotectedts.GetMetaType(jobsprotectedts.Schedules), ptsRecord.MetaType)
 	require.Equal(t, timestamp, ptsRecord.Timestamp)
@@ -401,6 +402,20 @@ func TestScheduleChainingWithDatabaseExpansion(t *testing.T) {
 
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
+
+	roundedCurrentTime := th.cfg.DB.KV().Clock().PhysicalTime().Round(time.Minute * 5)
+	if roundedCurrentTime.Hour() == 0 && roundedCurrentTime.Minute() == 0 {
+		// The backup schedule in this test uses the following crontab recurrence:
+		// '*/2 * * * *'. In english, this means "run a full backup now, and then
+		// run a full backup every day at midnight, and an incremental every 2
+		// minutes. This test relies on an incremental backup running after the
+		// first full backup and pulling up the PTS record. But, what happens if the
+		// first full backup gets scheduled to run within 2 minutes of midnight? A
+		// second full backup may get scheduled before the expected incremental
+		// backup, breaking the invariant the test expects. For this reason, skip
+		// the test if it's running close to midnight which is rare.
+		skip.IgnoreLint(t, "test flakes when the machine clock is too close to midnight")
+	}
 
 	th.sqlDB.Exec(t, `
 CREATE DATABASE db;

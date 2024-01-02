@@ -71,6 +71,34 @@ func (i *immediateVisitor) RemoveOwnerBackReferenceInSequence(
 	return nil
 }
 
+func (i *immediateVisitor) AddOwnerBackReferenceInSequence(
+	ctx context.Context, op scop.AddOwnerBackReferenceInSequence,
+) error {
+	seq, err := i.checkOutTable(ctx, op.SequenceID)
+	if err != nil || seq.Dropped() {
+		return err
+	}
+	opts := seq.GetSequenceOpts()
+	opts.SequenceOwner.OwnerColumnID = op.ColumnID
+	opts.SequenceOwner.OwnerTableID = op.TableID
+	return nil
+}
+
+func (i *immediateVisitor) AddSequenceOwner(ctx context.Context, op scop.AddSequenceOwner) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	col, err := catalog.MustFindColumnByID(tbl, op.ColumnID)
+	if err != nil {
+		return err
+	}
+	ids := catalog.MakeDescriptorIDSet(col.ColumnDesc().OwnsSequenceIds...)
+	ids.Add(op.OwnedSequenceID)
+	col.ColumnDesc().OwnsSequenceIds = ids.Ordered()
+	return nil
+}
+
 func (i *immediateVisitor) RemoveSequenceOwner(
 	ctx context.Context, op scop.RemoveSequenceOwner,
 ) error {
@@ -79,7 +107,7 @@ func (i *immediateVisitor) RemoveSequenceOwner(
 		return err
 	}
 	col, err := catalog.MustFindColumnByID(tbl, op.ColumnID)
-	if err != nil || col == nil {
+	if err != nil {
 		return err
 	}
 	ids := catalog.MakeDescriptorIDSet(col.ColumnDesc().OwnsSequenceIds...)
@@ -533,10 +561,11 @@ func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObj
 		t.ParentSchemaID = sc.GetID()
 
 		ol := descpb.SchemaDescriptor_FunctionSignature{
-			ID:         obj.GetID(),
-			ArgTypes:   make([]*types.T, len(t.GetParams())),
-			ReturnType: t.GetReturnType().Type,
-			ReturnSet:  t.GetReturnType().ReturnSet,
+			ID:          obj.GetID(),
+			ArgTypes:    make([]*types.T, len(t.GetParams())),
+			ReturnType:  t.GetReturnType().Type,
+			ReturnSet:   t.GetReturnType().ReturnSet,
+			IsProcedure: t.IsProcedure(),
 		}
 		for i := range t.Params {
 			ol.ArgTypes[i] = t.Params[i].Type

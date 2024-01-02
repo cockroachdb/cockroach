@@ -12,6 +12,7 @@ import React from "react";
 import moment from "moment-timezone";
 import { createSelector } from "reselect";
 
+import * as protos from "src/js/protos";
 import { hoverOff, hoverOn, HoverState } from "src/redux/hover";
 import { findChildrenOfType } from "src/util/find";
 import {
@@ -47,6 +48,13 @@ import {
   WithTimezone,
 } from "@cockroachlabs/cluster-ui";
 import _ from "lodash";
+import { isSecondaryTenant } from "src/redux/tenants";
+import { Tooltip } from "antd";
+import "antd/lib/tooltip/style";
+import { MonitoringIcon } from "src/views/shared/components/icons/monitoring";
+import { unique } from "src/util/arrays";
+
+type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 export interface OwnProps extends MetricsDataComponentProps {
   isKvGraph?: boolean;
@@ -59,6 +67,8 @@ export interface OwnProps extends MetricsDataComponentProps {
   hoverOff?: typeof hoverOff;
   hoverState?: HoverState;
   preCalcGraphSize?: boolean;
+  legendAsTooltip?: boolean;
+  showMetricsInTooltip?: boolean;
 }
 
 export type LineGraphProps = OwnProps & WithTimezoneProps;
@@ -271,6 +281,16 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
     return false;
   }
 
+  hasDataPoints = (data: TSResponse): boolean => {
+    let hasData = false;
+    data?.results?.map(result => {
+      if (result?.datapoints?.length > 0) {
+        hasData = true;
+      }
+    });
+    return hasData;
+  };
+
   componentDidUpdate(prevProps: Readonly<LineGraphProps>) {
     if (
       !this.props.data?.results ||
@@ -337,6 +357,7 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
         this.setNewTimeRange,
         () => this.xAxisDomain,
         () => this.yAxisDomain,
+        this.props.legendAsTooltip,
       );
 
       if (this.u) {
@@ -354,17 +375,77 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   render() {
-    const { title, subtitle, tooltip, data, preCalcGraphSize } = this.props;
+    const {
+      title,
+      subtitle,
+      tooltip,
+      data,
+      tenantSource,
+      preCalcGraphSize,
+      legendAsTooltip,
+      showMetricsInTooltip,
+    } = this.props;
+    let tt = tooltip;
+    const addLines: React.ReactNode = tooltip ? (
+      <>
+        <br />
+        <br />
+      </>
+    ) : null;
+    // Extend tooltip to include metrics names
+    if (showMetricsInTooltip) {
+      if (data?.results?.length === 1) {
+        tt = (
+          <>
+            {tt}
+            {addLines}
+            Metric: {data.results[0].query.name}
+          </>
+        );
+      } else if (data?.results?.length > 1) {
+        const metrics = unique(data.results.map(m => m.query.name));
+        tt = (
+          <>
+            {tt}
+            {addLines}
+            Metrics:
+            <ul>
+              {metrics.map(m => (
+                <li key={m}>{m}</li>
+              ))}
+            </ul>
+          </>
+        );
+      }
+    }
 
+    if (!this.hasDataPoints(data) && isSecondaryTenant(tenantSource)) {
+      return (
+        <div className="linegraph-empty">
+          <div className="header-empty">
+            <Tooltip placement="bottom" title={tooltip}>
+              <span className="title-empty">{title}</span>
+            </Tooltip>
+          </div>
+          <div className="body-empty">
+            <MonitoringIcon />
+            <span className="body-text-empty">
+              {"Metric is not currently available for this tenant."}
+            </span>
+          </div>
+        </div>
+      );
+    }
+    const legendClassName = legendAsTooltip ? "linegraph-tooltip" : "linegraph";
     return (
       <Visualization
         title={title}
         subtitle={subtitle}
-        tooltip={tooltip}
+        tooltip={tt}
         loading={!data}
         preCalcGraphSize={preCalcGraphSize}
       >
-        <div className="linegraph">
+        <div className={legendClassName}>
           <div ref={this.el} />
         </div>
       </Visualization>

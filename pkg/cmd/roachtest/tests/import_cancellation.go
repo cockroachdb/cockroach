@@ -14,57 +14,46 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
 	"github.com/cockroachdb/errors"
 )
 
 func registerImportCancellation(r registry.Registry) {
-	for _, rangeTombstones := range []bool{true, false} {
-		r.Add(registry.TestSpec{
-			Name:      fmt.Sprintf(`import-cancellation/rangeTs=%t`, rangeTombstones),
-			Owner:     registry.OwnerDisasterRecovery,
-			Benchmark: true,
-			Timeout:   4 * time.Hour,
-			Cluster:   r.MakeClusterSpec(6, spec.CPU(32)),
-			Leases:    registry.MetamorphicLeases,
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runImportCancellation(ctx, t, c, rangeTombstones)
-			},
-		})
-	}
+	r.Add(registry.TestSpec{
+		Name:             `import-cancellation`,
+		Owner:            registry.OwnerSQLQueries,
+		Timeout:          6 * time.Hour,
+		Cluster:          r.MakeClusterSpec(6, spec.CPU(32)),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			if c.Cloud() != spec.GCE && !c.IsLocal() {
+				t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
+			}
+			runImportCancellation(ctx, t, c)
+		},
+	})
 }
 
-func runImportCancellation(
-	ctx context.Context, t test.Test, c cluster.Cluster, rangeTombstones bool,
-) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload") // required for tpch
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+	startOpts := maybeUseMemoryBudget(t, 50)
+	startOpts.RoachprodOpts.ScheduleBackups = true
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings())
 	t.Status("starting csv servers")
 	c.Run(ctx, c.All(), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
-
-	// Download the tpch queries file. After the import, we'll run tpch queries
-	// against the imported tables.
-	const queriesFilename = "tpch"
-	const queriesURL = "https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/tpch-queries"
-	t.Status(fmt.Sprintf("downloading %s query file from %s", queriesFilename, queriesURL))
-	if err := c.RunE(ctx, c.Node(1), fmt.Sprintf("curl %s > %s", queriesURL, queriesFilename)); err != nil {
-		t.Fatal(err)
-	}
-	numQueries, err := getNumQueriesInFile(queriesFilename, queriesURL)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// Create the tables.
 	conn := c.Conn(ctx, t.L(), 1)
@@ -76,21 +65,6 @@ func runImportCancellation(
 		t.Fatal(err)
 	}
 	if _, err := conn.Exec(`SET CLUSTER SETTING kv.bulk_ingest.max_index_buffer_size = '2gb'`); err != nil {
-		t.Fatal(err)
-	}
-	// Enable MVCC Range tombstones, if required.
-	rtEnable := "f"
-	if rangeTombstones {
-		rtEnable = "t"
-	}
-	stmt := fmt.Sprintf(`SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = '%s'`, rtEnable)
-	if _, err := conn.Exec(stmt); err != nil {
-		t.Fatal(err)
-	}
-	// Increase AddSSTable concurrency to speed up the imports. Otherwise the
-	// lineitem (the largest tpch table) IMPORT will extend the test duration
-	// significantly.
-	if _, err := conn.Exec(`SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 10`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -108,7 +82,7 @@ func runImportCancellation(
 		"lineitem": 2,
 	}
 	for tbl := range tablesToNumFiles {
-		fixtureURL := fmt.Sprintf("gs://cockroach-fixtures/tpch-csv/schema/%s.sql?AUTH=implicit", tbl)
+		fixtureURL := fmt.Sprintf("gs://cockroach-fixtures-us-east1/tpch-csv/schema/%s.sql?AUTH=implicit", tbl)
 		createStmt, err := readCreateTableFromFixture(fixtureURL, conn)
 		if err != nil {
 			t.Fatal(err)
@@ -157,7 +131,7 @@ func runImportCancellation(
 	// that becomes GC'd.
 	for tbl := range tablesToNumFiles {
 		stmt := fmt.Sprintf(`ALTER TABLE csv.%s CONFIGURE ZONE USING gc.ttlseconds = $1`, tbl)
-		_, err = conn.ExecContext(ctx, stmt, 60*60*4 /* 4 hours */)
+		_, err := conn.ExecContext(ctx, stmt, 60*60*4 /* 4 hours */)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -168,16 +142,29 @@ func runImportCancellation(
 	// the TPCH workload should observe it.
 	m.Go(func(ctx context.Context) error {
 		t.WorkerStatus(`running tpch workload`)
+		// --enable-checks flag verifies the results against the expected output
+		// for Scale Factor 1, so since we're using Scale Factor 100 some TPCH
+		// queries are expected to return different results - skip those.
+		var queries string
+		var numQueries int
+		for i := 1; i <= tpch.NumQueries; i++ {
+			switch i {
+			case 11, 13, 16, 18, 20:
+				// These five queries return different results on SF1 and SF100.
+			default:
+				if len(queries) > 0 {
+					queries += ","
+				}
+				queries += strconv.Itoa(i)
+				numQueries++
+			}
+		}
 		// maxOps flag will allow us to exit the workload once all the queries
 		// were run 2 times.
-		const numRunsPerQuery = 2
-		const maxLatency = 500 * time.Second
-		maxOps := numRunsPerQuery * numQueries
+		maxOps := 2 * numQueries
 		cmd := fmt.Sprintf(
-			"./workload run querybench --db=csv --concurrency=1 --query-file=%s "+
-				"--num-runs=%d --max-ops=%d {pgurl%s} "+
-				"--histograms="+t.PerfArtifactsDir()+"/stats.json --histograms-max-latency=%s",
-			queriesFilename, numRunsPerQuery, maxOps, c.All(), maxLatency.String())
+			"./workload run tpch --db=csv --concurrency=1 --queries=%s --max-ops=%d {pgurl%s} "+
+				"--enable-checks=true", queries, maxOps, c.All())
 		if err := c.RunE(ctx, c.Node(1), cmd); err != nil {
 			t.Fatal(err)
 		}
@@ -199,9 +186,9 @@ func (t *importCancellationTest) makeFilename(tableName string, number int, numF
 	// Tables with more than one files have the number as a suffix on the
 	// filename, `<tablename>.tbl.1`. Tables with a single file do not.
 	if numFiles > 1 {
-		return fmt.Sprintf(`'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.%[2]d?AUTH=implicit'`, tableName, number)
+		return fmt.Sprintf(`'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.%[2]d?AUTH=implicit'`, tableName, number)
 	}
-	return fmt.Sprintf(`'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl?AUTH=implicit'`, tableName)
+	return fmt.Sprintf(`'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl?AUTH=implicit'`, tableName)
 }
 
 func (t *importCancellationTest) runImportSequence(

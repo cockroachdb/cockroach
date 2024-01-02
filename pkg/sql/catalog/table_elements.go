@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -177,7 +177,7 @@ type Index interface {
 	GetInvisibility() float64
 	GetPredicate() string
 	GetType() descpb.IndexDescriptor_Type
-	GetGeoConfig() geoindex.Config
+	GetGeoConfig() geopb.Config
 	GetVersion() descpb.IndexDescriptorVersion
 	GetEncodingType() catenumpb.IndexDescriptorEncodingType
 
@@ -987,6 +987,17 @@ func ColumnTypesWithInvertedCol(columns []Column, invertedCol Column) []*types.T
 		}
 	}
 	return t
+}
+
+// ColumnsByIDs returns a map of Columns keyed by their ID for the given table.
+func ColumnsByIDs(tbl TableDescriptor) map[descpb.ColumnID]Column {
+	cols := tbl.AllColumns()
+	byID := make(map[descpb.ColumnID]Column, len(cols))
+	for i := range cols {
+		col := cols[i]
+		byID[col.GetID()] = col
+	}
+	return byID
 }
 
 // ColumnNeedsBackfill returns true if adding or dropping (according to

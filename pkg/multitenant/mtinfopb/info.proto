@@ -14,7 +14,9 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb";
 
 import "gogoproto/gogo.proto";
 import "kv/kvpb/api.proto";
+import "roachpb/data.proto";
 import "multitenant/tenantcapabilities/tenantcapabilitiespb/capabilities.proto";
+import "util/hlc/timestamp.proto";
 
 // ProtoInfo represents the metadata for a tenant as
 // stored in the "info" column of the "system.tenants" table.
@@ -42,18 +44,24 @@ message ProtoInfo {
   // DeprecatedDataState is the state of the tenant's keyspace (DEPRECATED).
   optional DeprecatedDataState deprecated_data_state = 2 [(gogoproto.nullable) = false];
 
-  // DroppedName is the name the tenant had before DROP TENANT was
-  // run on the tenant. It should be empty for active or adding
-  // tenants.
+  // DroppedName is the name the tenant had before DROP VIRTUAL
+  // CLUSTER was run on the tenant. It should be empty for active or
+  // adding tenants.
   optional string dropped_name = 3 [
     (gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
 
-  // TenantReplicationJobID is set if this tenant is the target tenant
+  // PhysicalReplicationConsumerJobID is set if this tenant is the target tenant
   // of a running tenant replication job.
-  optional int64 tenant_replication_job_id = 4 [
+  optional int64 physical_replication_consumer_job_id = 4 [
      (gogoproto.nullable) = false,
-     (gogoproto.customname) = "TenantReplicationJobID",
+     (gogoproto.customname) = "PhysicalReplicationConsumerJobID",
+     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
+
+  // PhysicalReplicationProducerJobIDs contains any physical
+  // replication producer jobs that are using this tenant as a source.
+  repeated int64 physical_replication_producer_job_ids = 6 [
+     (gogoproto.customname) = "PhysicalReplicationProducerJobIDs",
      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
 
   // Capabilities encapsulate a set of capabilities that a specific tenant
@@ -62,8 +70,45 @@ message ProtoInfo {
     (gogoproto.nullable) = false
   ];
 
-  // Next ID: 7
+  // If this tenant was previously a physical replication target that
+  // was promoted, PreviousSourceTenant holds information about the
+  // source cluster of that replication stream.
+  optional PreviousSourceTenant previous_source_tenant = 7;
+
+  // LastReverTenantTimestamp is the timestamp at which we last called
+  // RevertRange in preparation for a stream resumption into this
+  // tenant.
+  //
+  // This is cleared on ALTER VIRTUAL CLUSTER START SERVICE and CREATE
+  // VIRTUAL CLUSTER FROM REPLICATION STREAM.
+  optional util.hlc.Timestamp last_revert_tenant_timestamp = 8 [(gogoproto.nullable) = false];
+
+  // Next ID: 9
 }
+
+message PreviousSourceTenant {
+  option (gogoproto.equal) = true;
+
+  // TODO(ssd): It would be nice to store something here that
+  // identified a particular MVCC history so that we could also use
+  // this to compare against things like restored tenants.
+  optional bytes cluster_id = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "ClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  optional roachpb.TenantID tenant_id = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TenantID"
+  ];
+
+  // CutoverTimestamp is the time at which we cutover from the source
+  // tenant.
+  optional util.hlc.Timestamp cutover_timestamp = 3 [(gogoproto.nullable) = false];
+}
+
+
 
 // SQLInfo contain the additional tenant metadata from the other
 // columns in system.tenants not otherwise encoded in ProtoInfo.

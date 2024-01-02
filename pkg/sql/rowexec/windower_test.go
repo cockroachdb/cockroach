@@ -37,6 +37,8 @@ import (
 
 func TestWindowerAccountingForResults(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	monitor := mon.NewMonitorWithLimit(

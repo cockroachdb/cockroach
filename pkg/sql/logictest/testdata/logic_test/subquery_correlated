@@ -1314,7 +1314,7 @@ CREATE TABLE t98691 (
 statement ok
 INSERT INTO t98691 VALUES (1, 10)
 
-query B
+query B nosort
 SELECT (NULL, NULL) = ANY (
   SELECT a, b FROM t98691 WHERE a > i
 ) FROM (VALUES (0), (0)) v(i)
@@ -1325,10 +1325,29 @@ NULL
 statement ok
 INSERT INTO t98691 VALUES (NULL, NULL)
 
-query B
+query B nosort
 SELECT (2, 20) = ANY (
   SELECT a, b FROM t98691 WHERE a > i OR a IS NULL
 ) FROM (VALUES (0), (0)) v(i)
 ----
 NULL
 NULL
+
+# Regression test for #108057 - maintain the precision of the a+x operation.
+statement ok
+CREATE TABLE xy108057 (x DECIMAL(10, 2) PRIMARY KEY, y DECIMAL(10, 2));
+CREATE TABLE ab108057 (a DECIMAL(10, 0), b DECIMAL(10, 0));
+
+statement ok
+INSERT INTO xy108057 VALUES (1.00, 1.00);
+INSERT INTO ab108057 VALUES (1, 1);
+
+query RRRR
+SELECT * FROM xy108057 INNER JOIN LATERAL (SELECT a, a+x FROM ab108057) ON a = x
+----
+1.00  1.00  1  2.00
+
+query RRRR
+SELECT * FROM ab108057 INNER JOIN LATERAL (SELECT x, x+a FROM xy108057) ON a = x
+----
+1  1  1.00  2.00

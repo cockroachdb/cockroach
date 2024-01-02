@@ -1,0 +1,40 @@
+lex
+''
+----
+SCONST str:
+
+lex
+'IDENTIFY_SYSTEM'
+----
+SCONST str:IDENTIFY_SYSTEM
+
+lex
+'a''a'
+----
+SCONST str:a'a
+
+lex
+""
+----
+IDENT str:
+
+lex
+"IDENTIFY_SYSTEM"
+----
+IDENT str:IDENTIFY_SYSTEM
+
+lex
+"a""a"
+----
+IDENT str:a"a
+
+# unfinished quotes
+lex
+'abc
+----
+id:2 str:unfinished quote: '
+
+lex
+"abc
+----
+id:2 str:unfinished quote: "

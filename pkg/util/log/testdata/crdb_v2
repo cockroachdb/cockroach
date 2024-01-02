@@ -43,6 +43,63 @@ I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T2,noval,p�
 #
 W060102 15:04:05.654321 11 1@util/log/format_crdb_v2_test.go:123  [T2,noval,p3,longKey=456]   hello world
 #
+I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T2,Vabc,noval,p‹3›,longKey=‹456›]  ={"Timestamp":123,"EventType":"rename_database","Event":"‹rename from `hello` to `world`›"}
+#
+W060102 15:04:05.654321 11 1@util/log/format_crdb_v2_test.go:123  [T2,Vabc,noval,p3,longKey=456]   hello world
+#
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [-]  ={"Timestamp":123,"EventType":"rename_database","Event":"‹rename from `hello` to `world`›"}
 #
 W060102 15:04:05.654321 11 1@util/log/format_crdb_v2_test.go:123  [-]   hello world
+
+run tz=america/new_york
+----
+#
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]   hello ‹world›
+#
+I060102 10:04:05.654321-050000 11 :123  [-]   
+#
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  ={"Timestamp":123,"EventType":"rename_database","Event":"‹rename from `hello` to `world`›"}
+#
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  ={"Timestamp":123,"EventType":"rename_database","Event":"‹rename from `hello` to `world`›"}
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  !this is a fake stack
+#
+W060102 10:04:05.654321-050000 11 1@util/log/format_crdb_v2_test.go:123  [T1,noval,s1,long=2]   hello world
+#
+E060102 10:04:05.654321-050000 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]   hello ‹world›
+#
+W060102 10:04:05.654321-050000 11 1@util/log/format_crdb_v2_test.go:123  [T1,noval,s1,long=2] 123  hello world
+#
+E060102 10:04:05.654321-050000 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]   hello ‹stack›
+E060102 10:04:05.654321-050000 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  !this is a fake stack
+#
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123  [T1,noval,s1,long=2]   maybe multi
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123  [T1,noval,s1,long=2]  +line
+#
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]   maybe ‹multi›
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  +‹line›
+#
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]   maybe ‹multi›
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  +‹line with stack›
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  !this is a fake stack
+#
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123  [T1,noval,s1,long=2]   aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123  [T1,noval,s1,long=2]  |aaaaaaaaaaaa
+#
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  ={"Timestamp":123,"EventType":"rename_database","Event":"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  |‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›"}
+#
+E060102 10:04:05.654321-050000 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]   hello ‹stack›
+E060102 10:04:05.654321-050000 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  !this is aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+E060102 10:04:05.654321-050000 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  |aaaaaaaaaaaaaaaaaaaa fake stack
+#
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123 ⋮ [T2,noval,p‹3›,longKey=‹456›]  ={"Timestamp":123,"EventType":"rename_database","Event":"‹rename from `hello` to `world`›"}
+#
+W060102 10:04:05.654321-050000 11 1@util/log/format_crdb_v2_test.go:123  [T2,noval,p3,longKey=456]   hello world
+#
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123 ⋮ [T2,Vabc,noval,p‹3›,longKey=‹456›]  ={"Timestamp":123,"EventType":"rename_database","Event":"‹rename from `hello` to `world`›"}
+#
+W060102 10:04:05.654321-050000 11 1@util/log/format_crdb_v2_test.go:123  [T2,Vabc,noval,p3,longKey=456]   hello world
+#
+I060102 10:04:05.654321-050000 11 util/log/format_crdb_v2_test.go:123 ⋮ [-]  ={"Timestamp":123,"EventType":"rename_database","Event":"‹rename from `hello` to `world`›"}
+#
+W060102 10:04:05.654321-050000 11 1@util/log/format_crdb_v2_test.go:123  [-]   hello world

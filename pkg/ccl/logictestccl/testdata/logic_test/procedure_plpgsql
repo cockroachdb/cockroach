@@ -1,0 +1,181 @@
+# LogicTest: !local-mixed-23.1
+
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  i INT,
+  s STRING
+)
+
+statement ok
+CREATE PROCEDURE my_upsert(arg_k INT, new_i INT, new_s STRING) AS $$
+  DECLARE
+    c INT;
+  BEGIN
+    SELECT count(*) INTO c FROM t WHERE k = arg_k;
+    IF c > 0 THEN
+      UPDATE t SET i = new_i, s = new_s WHERE k = arg_k;
+    ELSE
+      INSERT INTO t VALUES (arg_k, new_i, new_s);
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL
+
+statement ok
+CALL my_upsert(1, 10, 'foo')
+
+statement ok
+CALL my_upsert(2, 20, 'bar')
+
+query IIT rowsort
+SELECT * FROM t
+----
+1  10  foo
+2  20  bar
+
+statement ok
+CALL my_upsert(1, 100, 'baz')
+
+query IIT rowsort
+SELECT * FROM t
+----
+1  100  baz
+2  20   bar
+
+subtest composite_into
+
+# Regression test for #114683 - if the target of a SELECT INTO statement is a
+# single composite-typed variable, the columns will be wrapped with a tuple,
+# which will be assigned to the variable.
+statement ok
+CREATE TABLE t114683 (x INT, y INT);
+INSERT INTO t114683 (SELECT t, t%6 FROM generate_series(1, 13) g(t));
+
+statement ok
+CREATE OR REPLACE PROCEDURE get_rows(n INT) LANGUAGE PLpgSQL AS $$
+  DECLARE
+    v t114683;
+    count INT;
+    i INT := 0;
+  BEGIN
+    count := (SELECT count(*) FROM t114683);
+    WHILE i < count LOOP
+      IF n = 0 THEN
+        SELECT x, y INTO v FROM t114683 ORDER BY y, x OFFSET i;
+      ELSIF n = 1 THEN
+        SELECT ROW(x, y) INTO v FROM t114683 ORDER BY y, x OFFSET i;
+      ELSIF n = 2 THEN
+        SELECT ROW(x, y) INTO v FROM t114683 ORDER BY y, x OFFSET i;
+        RAISE NOTICE 'v: %', v::TEXT::t114683;
+      ELSIF n = 3 THEN
+        SELECT x, y, x+y INTO v FROM t114683 ORDER BY y, x OFFSET i;
+      ELSE
+        SELECT x INTO v FROM t114683 ORDER BY y, x OFFSET i;
+      END IF;
+      RAISE NOTICE 'v: %', v;
+      i := i + 1;
+    END LOOP;
+  END
+$$;
+
+query T noticetrace
+CALL get_rows(0);
+----
+NOTICE: v: (6,0)
+NOTICE: v: (12,0)
+NOTICE: v: (1,1)
+NOTICE: v: (7,1)
+NOTICE: v: (13,1)
+NOTICE: v: (2,2)
+NOTICE: v: (8,2)
+NOTICE: v: (3,3)
+NOTICE: v: (9,3)
+NOTICE: v: (4,4)
+NOTICE: v: (10,4)
+NOTICE: v: (5,5)
+NOTICE: v: (11,5)
+
+statement error pgcode 22P02 could not parse
+CALL get_rows(1);
+
+# Casting to text and then to "t114683" shows the error that should occur in
+# the previous test case.
+statement error pgcode 22P02 could not parse
+CALL get_rows(2);
+
+# The number of columns exceeds the length of the INTO variable.
+query T noticetrace
+CALL get_rows(3);
+----
+NOTICE: v: (6,0)
+NOTICE: v: (12,0)
+NOTICE: v: (1,1)
+NOTICE: v: (7,1)
+NOTICE: v: (13,1)
+NOTICE: v: (2,2)
+NOTICE: v: (8,2)
+NOTICE: v: (3,3)
+NOTICE: v: (9,3)
+NOTICE: v: (4,4)
+NOTICE: v: (10,4)
+NOTICE: v: (5,5)
+NOTICE: v: (11,5)
+
+# The number of columns is less than the length of the INTO variable.
+query T noticetrace
+CALL get_rows(4);
+----
+NOTICE: v: (6,)
+NOTICE: v: (12,)
+NOTICE: v: (1,)
+NOTICE: v: (7,)
+NOTICE: v: (13,)
+NOTICE: v: (2,)
+NOTICE: v: (8,)
+NOTICE: v: (3,)
+NOTICE: v: (9,)
+NOTICE: v: (4,)
+NOTICE: v: (10,)
+NOTICE: v: (5,)
+NOTICE: v: (11,)
+
+# The target of a FETCH statement has the same behavior as above.
+statement ok
+CREATE OR REPLACE PROCEDURE get_rows(n INT) LANGUAGE PLpgSQL AS $$
+  DECLARE
+    curs REFCURSOR;
+    v t114683;
+  BEGIN
+    IF n = 0 THEN
+      OPEN curs FOR SELECT 1, 2;
+    ELSIF n = 1 THEN
+      OPEN curs FOR SELECT ROW(1, 2);
+    ELSIF n = 2 THEN
+      OPEN curs FOR SELECT 1, 2, 3;
+    ELSE
+      OPEN curs FOR SELECT 1;
+    END IF;
+    FETCH curs INTO v;
+    RAISE NOTICE '%', v;
+  END
+$$;
+
+query T noticetrace
+CALL get_rows(0);
+----
+NOTICE: (1,2)
+
+statement error pgcode 42846 invalid cast
+CALL get_rows(1);
+
+query T noticetrace
+CALL get_rows(2);
+----
+NOTICE: (1,2)
+
+query T noticetrace
+CALL get_rows(3);
+----
+NOTICE: (1,)
+
+subtest end

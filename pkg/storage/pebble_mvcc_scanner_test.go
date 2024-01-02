@@ -17,10 +17,12 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -70,14 +72,19 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, k := range keys {
-		err = eng.PutIntent(context.Background(), k, metaBytes, uuid)
+		lockTableKey, _ := LockTableKey{
+			Key:      k,
+			Strength: lock.Intent,
+			TxnUUID:  uuid,
+		}.ToEngineKey(nil)
+		err = eng.PutEngineKey(lockTableKey, metaBytes)
 		require.NoError(t, err)
 	}
 
 	reader := eng.NewReadOnly(StandardDurability)
 	defer reader.Close()
-	iter := reader.NewMVCCIterator(
-		MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("d")})
+	iter, err := reader.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("d")})
+	require.NoError(t, err)
 	defer iter.Close()
 
 	// Look for older versions that come after the scanner has exhausted its
@@ -124,6 +131,8 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 
 func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// This test has been observed to trip the disk-stall detector under -race.
+	skip.UnderRace(t, "large copies and memfs mutexes can cause excessive delays within VFS stack")
 
 	eng := createTestPebbleEngine()
 	defer eng.Close()
@@ -142,8 +151,8 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 
 	reader := eng.NewReadOnly(StandardDurability)
 	defer reader.Close()
-	iter := reader.NewMVCCIterator(
-		MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("e")})
+	iter, err := reader.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("e")})
+	require.NoError(t, err)
 	defer iter.Close()
 
 	ts := hlc.Timestamp{WallTime: 2}
@@ -156,7 +165,7 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 	}
 	var results pebbleResults
 	mvccScanner.init(nil /* txn */, uncertainty.Interval{}, &results)
-	_, _, _, err := mvccScanner.scan(context.Background())
+	_, _, _, err = mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
 	kvData := results.finish()
@@ -215,14 +224,15 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		defer batch.Close()
 		for i := 0; i < 10; i++ {
 			key := makeKey(nil, i)
-			require.NoError(t, MVCCPut(context.Background(), batch, nil, key, ts1, hlc.ClockTimestamp{}, val, &txn1))
+			_, err := MVCCPut(context.Background(), batch, key, ts1, val, MVCCWriteOptions{Txn: &txn1})
+			require.NoError(t, err)
 		}
 		require.NoError(t, batch.Commit(true))
 	}()
 
 	// iterator that can span over all the written keys.
-	iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
-		IterOptions{LowerBound: makeKey(nil, 0), UpperBound: makeKey(nil, 11)})
+	iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: makeKey(nil, 0), UpperBound: makeKey(nil, 11)})
+	require.NoError(t, err)
 	defer iter.Close()
 
 	// Narrow scan succeeds with a budget of 6000.

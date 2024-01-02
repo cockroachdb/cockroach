@@ -1,4 +1,4 @@
-create-replication-clusters
+create-replication-clusters no-external-conn
 ----
 
 start-replication-stream
@@ -21,19 +21,26 @@ CREATE FUNCTION strip_host(s string) returns string language sql AS $$ select co
 ----
 
 query-sql as=destination-system
-SELECT strip_host(description) FROM [SHOW JOBS] WHERE job_type='STREAM INGESTION'
+SELECT strip_host(description) FROM [SHOW JOBS] WHERE job_type='REPLICATION STREAM INGESTION'
 ----
-CREATE TENANT destination FROM REPLICATION OF source ON 'postgres://root@?sslcert=redacted&sslkey=redacted&sslmode=verify-full&sslrootcert=redacted'
+CREATE VIRTUAL CLUSTER destination FROM REPLICATION OF source ON ('postgres://root@?sslcert=redacted&sslkey=redacted&sslmode=verify-full&sslrootcert=redacted')
 
 query-sql as=destination-system
 SELECT strip_host(source_cluster_uri) FROM [SHOW TENANT destination WITH REPLICATION STATUS]
 ----
 postgres://root@?sslcert=redacted&sslkey=redacted&sslmode=verify-full&sslrootcert=redacted
 
+# The session on the source should have an app name set.
+query-sql as=source-system
+SELECT application_name FROM [SHOW SESSIONS] WHERE application_name LIKE '%repstream%' LIMIT 1
+----
+repstream job id=$_producerJobID
+
+
 query-sql as=source-system
 SHOW TENANT source WITH REPLICATION STATUS
 ----
-10 source ready none <nil> <nil> <nil> <nil> <nil> <nil>
+10 source ready shared <nil> <nil> <nil> <nil> <nil> <nil>
 
 exec-sql as=source-tenant
 CREATE TABLE d.x (id INT PRIMARY KEY, n INT);
@@ -51,7 +58,7 @@ query-sql as=source-system
 SHOW TENANTS
 ----
 1 system ready shared
-10 source ready none
+10 source ready shared
 
 query-sql as=destination-system
 SHOW TENANTS
@@ -75,7 +82,13 @@ cutover ts=$ts
 start-replicated-tenant
 ----
 
-compare-tenant-fingerprints from=$start to=$ts with_revisions
+query-sql as=destination-system
+SHOW TENANTS
+----
+1 system ready shared
+2 destination ready shared
+
+compare-tenant-fingerprints from=$start to=$ts with_revisions table_fingerprints
 ----
 
 compare-replication-results

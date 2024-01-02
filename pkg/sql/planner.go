@@ -12,6 +12,8 @@ package sql
 
 import (
 	"context"
+	crypto_rand "crypto/rand"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -55,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -126,6 +129,8 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	}
 	evalCtx.CompactEngineSpan = execCfg.CompactEngineSpanFunc
 	evalCtx.SetCompactionConcurrency = execCfg.CompactionConcurrencyFunc
+	evalCtx.GetTableMetrics = execCfg.GetTableMetricsFunc
+	evalCtx.ScanStorageInternalKeys = execCfg.ScanStorageInternalKeysFunc
 	evalCtx.TestingKnobs = execCfg.EvalContextTestingKnobs
 	evalCtx.ClusterID = execCfg.NodeInfo.LogicalClusterID()
 	evalCtx.ClusterName = execCfg.RPCContext.ClusterName()
@@ -138,6 +143,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.DistSQLPlanner = execCfg.DistSQLPlanner
 	evalCtx.VirtualSchemas = execCfg.VirtualSchemas
 	evalCtx.KVStoresIterator = execCfg.KVStoresIterator
+	evalCtx.InspectzServer = execCfg.InspectzServer
 }
 
 // copy returns a deep copy of ctx.
@@ -177,14 +183,10 @@ type planner struct {
 	// never be accessed directly. Nothing explicitly resets this field.
 	internalSQLTxn internalTxn
 
-	// isInternalPlanner is set to true when this planner is not bound to
-	// a SQL session.
-	isInternalPlanner bool
-
 	atomic struct {
-		// innerPlansMustUseLeafTxn is set to 1 if the "outer" plan is using
-		// the LeafTxn forcing the "inner" plans to use the LeafTxns too. An
-		// example of this is apply-join iterations when the main query has
+		// innerPlansMustUseLeafTxn is a counter that is non-zero if the "outer"
+		// plan is using the LeafTxn forcing the "inner" plans to use the LeafTxns,
+		// too. An example of this is apply-join iterations when the main query has
 		// concurrency.
 		//
 		// Note that even though the planner is not safe for concurrent usage,
@@ -196,7 +198,7 @@ type planner struct {
 		// planNodeToRowSource adapter before the "outer" query figured out that
 		// it must use the LeafTxn. Solving that issue properly is not trivial
 		// and is tracked in #41992.
-		innerPlansMustUseLeafTxn uint32
+		innerPlansMustUseLeafTxn int32
 	}
 
 	monitor *mon.BytesMonitor
@@ -295,10 +297,6 @@ func (p *planner) resumeFlowForPausablePortal(recv *DistSQLReceiver) error {
 	defer cleanup()
 	flow.Resume(recv)
 	return recv.commErr
-}
-
-func (evalCtx *extendedEvalContext) setSessionID(sessionID clusterunique.ID) {
-	evalCtx.SessionID = sessionID
 }
 
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by each
@@ -401,14 +399,15 @@ func newInternalPlanner(
 	p.txn = txn
 	p.stmt = Statement{}
 	p.cancelChecker.Reset(ctx)
-	p.isInternalPlanner = true
 
 	p.semaCtx = tree.MakeSemaContext()
 	p.semaCtx.SearchPath = &sd.SearchPath
 	p.semaCtx.TypeResolver = p
 	p.semaCtx.FunctionResolver = p
+	p.semaCtx.NameResolver = p
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
+	p.semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(execCfg.Settings.Version)
 
 	plannerMon := mon.NewMonitor(redact.Sprintf("internal-planner.%s.%s", user, opName),
 		mon.MemoryResource,
@@ -455,10 +454,11 @@ func newInternalPlanner(
 	p.extendedEvalCtx.ExecCfg = execCfg
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
-	p.extendedEvalCtx.Descs = params.collection
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
+	p.sqlCursors = emptySqlCursors{}
+	p.preparedStatements = emptyPreparedStatements{}
 	p.createdSequences = emptyCreatedSequences{}
 
 	p.schemaResolver.descCollection = p.Descriptors()
@@ -466,6 +466,7 @@ func newInternalPlanner(
 	p.schemaResolver.txn = p.txn
 	p.schemaResolver.authAccessor = p
 	p.evalCatalogBuiltins.Init(execCfg.Codec, p.txn, p.Descriptors())
+	p.extendedEvalCtx.CatalogBuiltins = &p.evalCatalogBuiltins
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create
@@ -505,12 +506,14 @@ func internalExtendedEvalCtx(
 	var sqlStatsController eval.SQLStatsController
 	var schemaTelemetryController eval.SchemaTelemetryController
 	var indexUsageStatsController eval.IndexUsageStatsController
+	var sqlStatsProvider *persistedsqlstats.PersistedSQLStats
 	if ief := execCfg.InternalDB; ief != nil {
 		if ief.server != nil {
 			indexUsageStats = ief.server.indexUsageStats
 			sqlStatsController = ief.server.sqlStatsController
 			schemaTelemetryController = ief.server.schemaTelemetryController
 			indexUsageStatsController = ief.server.indexUsageStatsController
+			sqlStatsProvider = ief.server.sqlStats
 		} else {
 			// If the indexUsageStats is nil from the sql.Server, we create a dummy
 			// index usage stats collector. The sql.Server in the ExecutorConfig
@@ -521,6 +524,7 @@ func internalExtendedEvalCtx(
 			sqlStatsController = &persistedsqlstats.Controller{}
 			schemaTelemetryController = &schematelemetrycontroller.Controller{}
 			indexUsageStatsController = &idxusage.Controller{}
+			sqlStatsProvider = &persistedsqlstats.PersistedSQLStats{}
 		}
 	}
 	ret := extendedEvalContext{
@@ -539,14 +543,33 @@ func internalExtendedEvalCtx(
 			ConsistencyChecker:             execCfg.ConsistencyChecker,
 			StmtDiagnosticsRequestInserter: execCfg.StmtDiagnosticsRecorder.InsertRequest,
 			RangeStatsFetcher:              execCfg.RangeStatsFetcher,
+			ULIDEntropy:                    ulid.Monotonic(crypto_rand.Reader, 0),
 		},
 		Tracing:         &SessionTracing{},
 		Descs:           tables,
 		indexUsageStats: indexUsageStats,
+		statsProvider:   sqlStatsProvider,
+		jobs:            newTxnJobsCollection(),
 	}
 	ret.SetDeprecatedContext(ctx)
 	ret.copyFromExecCfg(execCfg)
 	return ret
+}
+
+// ExtendedEvalContextCopyAndReset returns a function that produces
+// extendedEvalContexts for parallel subquery, cascade, and check execution.
+func (p *planner) ExtendedEvalContextCopyAndReset() *extendedEvalContext {
+	evalCtx := p.ExtendedEvalContextCopy()
+	p.ExtendedEvalContextReset(evalCtx)
+	return evalCtx
+}
+
+// ExtendedEvalContextReset resets context fields so that the context may be
+// reused across subquery, cascade, and check execution.
+func (p *planner) ExtendedEvalContextReset(evalCtx *extendedEvalContext) {
+	evalCtx.Placeholders = &p.semaCtx.Placeholders
+	evalCtx.Annotations = &p.semaCtx.Annotations
+	evalCtx.SessionID = p.ExtendedEvalContext().SessionID
 }
 
 // SemaCtx provides access to the planner's SemaCtx.
@@ -607,7 +630,7 @@ func (p *planner) LeaseMgr() *lease.Manager {
 }
 
 func (p *planner) AuditConfig() *auditlogging.AuditConfigLock {
-	return p.execCfg.SessionInitCache.AuditConfig
+	return p.execCfg.AuditConfig
 }
 
 func (p *planner) Txn() *kv.Txn {
@@ -885,6 +908,7 @@ func (p *planner) resetPlanner(
 	p.semaCtx.NameResolver = p
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
+	p.semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(p.execCfg.Settings.Version)
 
 	p.autoCommit = false
 
@@ -900,12 +924,12 @@ func (p *planner) resetPlanner(
 func (p *planner) GetReplicationStreamManager(
 	ctx context.Context,
 ) (eval.ReplicationStreamManager, error) {
-	return repstream.GetReplicationStreamManager(ctx, p.EvalContext(), p.InternalSQLTxn())
+	return repstream.GetReplicationStreamManager(ctx, p.EvalContext(), p.InternalSQLTxn(), p.ExtendedEvalContext().SessionID)
 }
 
 // GetStreamIngestManager returns a StreamIngestManager.
 func (p *planner) GetStreamIngestManager(ctx context.Context) (eval.StreamIngestManager, error) {
-	return repstream.GetStreamIngestManager(ctx, p.EvalContext(), p.InternalSQLTxn())
+	return repstream.GetStreamIngestManager(ctx, p.EvalContext(), p.InternalSQLTxn(), p.ExtendedEvalContext().SessionID)
 }
 
 // SpanStats returns a stats for the given span of keys.
@@ -944,7 +968,7 @@ func (p *planner) GetDetailsForSpanStats(
 	return p.QueryIteratorEx(
 		ctx,
 		"crdb_internal.database_span_stats",
-		sessiondata.NoSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		query,
 		args...,
 	)
@@ -957,4 +981,19 @@ func (p *planner) MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx) 
 	}
 	p.SemaCtx().Annotations = tree.MakeAnnotations(numAnnotations)
 	p.ExtendedEvalContext().Annotations = &p.SemaCtx().Annotations
+}
+
+// Optimizer is part of the eval.Planner interface.
+func (p *planner) Optimizer() interface{} {
+	return p.optPlanningCtx.Optimizer()
+}
+
+// AutoCommit is part of the eval.Planner interface.
+func (p *planner) AutoCommit() bool {
+	return p.autoCommit
+}
+
+// mustUseLeafTxn returns true if inner plans must use a leaf transaction.
+func (p *planner) mustUseLeafTxn() bool {
+	return atomic.LoadInt32(&p.atomic.innerPlansMustUseLeafTxn) >= 1
 }

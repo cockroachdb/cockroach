@@ -155,13 +155,23 @@ func dropSecondaryIndex(
 		// using the expression column.
 		dropAdditionallyForExpressionIndex(next, sie)
 	}
-	// Finally, drop the index's public elements and trigger a GC job.
-	b.QueryByID(sie.TableID).
-		Filter(hasIndexIDAttrFilter(sie.IndexID)).
-		Filter(publicTargetFilter).
-		ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-			b.Drop(e)
-		})
+	// Finally, drop all elements associated with this index.
+	tblElts := b.QueryByID(sie.TableID)
+	if sie.TemporaryIndexID != 0 {
+		// If this secondary index has an associated temporary index, which happens
+		// when it is newly added, but now needs to be dropped (e.g. CREATE INDEX
+		// followed by DROP INDEX), we also need to drop the temporary index.
+		tblElts = tblElts.
+			Filter(orFilter(hasIndexIDAttrFilter(sie.IndexID), hasIndexIDAttrFilter(sie.TemporaryIndexID))).
+			Filter(orFilter(publicTargetFilter, transientTargetFilter))
+	} else {
+		tblElts = tblElts.
+			Filter(hasIndexIDAttrFilter(sie.IndexID)).
+			Filter(publicTargetFilter)
+	}
+	tblElts.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		b.Drop(e)
+	})
 }
 
 // maybeDropDependentViews attempts to drop all views that depend
@@ -185,9 +195,7 @@ func maybeDropDependentViews(
 			if dropBehavior != tree.DropCascade {
 				// Get view name for the error message
 				_, _, ns := scpb.FindNamespace(b.QueryByID(ve.ViewID))
-				panic(errors.WithHintf(
-					sqlerrors.NewDependentObjectErrorf("cannot drop index %q because view %q depends on it",
-						toBeDroppedIndexName, ns.Name), "you can drop %q instead.", ns.Name))
+				panic(sqlerrors.NewDependentBlocksOpError("drop", "index", toBeDroppedIndexName, "view", ns.Name))
 			} else {
 				dropCascadeDescriptor(b, ve.ViewID)
 			}
@@ -212,9 +220,7 @@ func maybeDropDependentFunctions(
 			if dropBehavior != tree.DropCascade {
 				// Get view name for the error message
 				_, _, fnName := scpb.FindFunctionName(b.QueryByID(e.FunctionID))
-				panic(errors.WithHintf(
-					sqlerrors.NewDependentObjectErrorf("cannot drop index %q because function %q depends on it",
-						toBeDroppedIndexName, fnName.Name), "you can drop %q instead.", fnName.Name))
+				panic(sqlerrors.NewDependentBlocksOpError("drop", "index", toBeDroppedIndexName, "function", fnName.Name))
 			} else {
 				dropCascadeDescriptor(b, e.FunctionID)
 			}
@@ -259,16 +265,19 @@ func maybeDropDependentFKConstraints(
 
 	// dropDependentFKConstraint is a helper function that drops a dependent
 	// FK constraint with ID `fkConstraintID`.
-	dropDependentFKConstraint := func(fkConstraintID catid.ConstraintID) {
-		b.BackReferences(tableID).Filter(hasConstraintIDAttrFilter(fkConstraintID)).
-			ForEachElementStatus(func(
+	dropDependentFKConstraint := func(fkTableID catid.DescID, fkConstraintID catid.ConstraintID) {
+		b.BackReferences(tableID).Filter(hasTableID(fkTableID)).Filter(hasConstraintIDAttrFilter(fkConstraintID)).
+			ForEach(func(
 				current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 			) {
 				b.Drop(e)
 			})
 	}
 
-	b.BackReferences(tableID).ForEachElementStatus(func(
+	// Iterate over all FKs inbound to this table and decide whether any other
+	// unique constraints will satisfy them if we were to drop the current unique
+	// constraint.
+	b.BackReferences(tableID).Filter(containsDescIDFilter(tableID)).ForEach(func(
 		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 	) {
 		switch t := e.(type) {
@@ -277,13 +286,13 @@ func maybeDropDependentFKConstraints(
 				return
 			}
 			ensureCascadeBehavior(t.TableID)
-			dropDependentFKConstraint(t.ConstraintID)
+			dropDependentFKConstraint(t.TableID, t.ConstraintID)
 		case *scpb.ForeignKeyConstraintUnvalidated:
 			if !shouldDropFK(t.ReferencedColumnIDs) {
 				return
 			}
 			ensureCascadeBehavior(t.TableID)
-			dropDependentFKConstraint(t.ConstraintID)
+			dropDependentFKConstraint(t.TableID, t.ConstraintID)
 		}
 	})
 }
@@ -339,7 +348,7 @@ func maybeDropAdditionallyForShardedIndex(
 		}
 
 		// This check constraint uses the shard column. Resolve it and drop its elements.
-		constraintElements(b, toBeDroppedIndex.TableID, e.ConstraintID).ForEachElementStatus(func(
+		constraintElements(b, toBeDroppedIndex.TableID, e.ConstraintID).ForEach(func(
 			current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 		) {
 			if target != scpb.ToAbsent {
@@ -349,7 +358,7 @@ func maybeDropAdditionallyForShardedIndex(
 	})
 
 	// Drop the shard column's resolved elements.
-	shardColElms.ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+	shardColElms.ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		if target != scpb.ToAbsent {
 			b.Drop(e)
 		}
@@ -360,7 +369,7 @@ func maybeDropAdditionallyForShardedIndex(
 // expression column if the to-be-dropped index is an expression index
 // and no other index uses this expression column.
 func dropAdditionallyForExpressionIndex(b BuildCtx, toBeDroppedIndex *scpb.SecondaryIndex) {
-	keyColumnIDs, _, _ := getSortedColumnIDsInIndex(b, toBeDroppedIndex.TableID, toBeDroppedIndex.IndexID)
+	keyColumnIDs, _, _ := getSortedColumnIDsInIndexByKind(b, toBeDroppedIndex.TableID, toBeDroppedIndex.IndexID)
 	scpb.ForEachColumn(b.QueryByID(toBeDroppedIndex.TableID), func(
 		current scpb.Status, target scpb.TargetStatus, ce *scpb.Column,
 	) {
@@ -377,7 +386,7 @@ func dropAdditionallyForExpressionIndex(b BuildCtx, toBeDroppedIndex *scpb.Secon
 		// This expression column was created when we created the to-be-dropped as an "expression" index.
 		// We also know no other index uses this column, so we will need to resolve this column and
 		// drop its constituent elements.
-		columnElements(b, toBeDroppedIndex.TableID, ce.ColumnID).ForEachElementStatus(func(
+		columnElements(b, toBeDroppedIndex.TableID, ce.ColumnID).ForEach(func(
 			current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 		) {
 			if target != scpb.ToAbsent {
@@ -401,7 +410,7 @@ func anyIndexUsesColOtherThan(
 	scpb.ForEachPrimaryIndex(b.QueryByID(relationID), func(
 		_ scpb.Status, _ scpb.TargetStatus, e *scpb.PrimaryIndex,
 	) {
-		keyColumnIDs, _, _ := getSortedColumnIDsInIndex(b, e.TableID, e.IndexID)
+		keyColumnIDs, _, _ := getSortedColumnIDsInIndexByKind(b, e.TableID, e.IndexID)
 		used = used || (e.IndexID != indexID && hasColID(keyColumnIDs))
 	})
 
@@ -413,7 +422,7 @@ func anyIndexUsesColOtherThan(
 	scpb.ForEachSecondaryIndex(b.QueryByID(relationID), func(
 		_ scpb.Status, _ scpb.TargetStatus, e *scpb.SecondaryIndex,
 	) {
-		keyColumnIDs, keySuffixColumnIDs, storingColumnIDs := getSortedColumnIDsInIndex(b, e.TableID, e.IndexID)
+		keyColumnIDs, keySuffixColumnIDs, storingColumnIDs := getSortedColumnIDsInIndexByKind(b, e.TableID, e.IndexID)
 		used = used || (e.IndexID != indexID &&
 			(hasColID(keyColumnIDs) ||
 				hasColID(keySuffixColumnIDs) ||
@@ -444,7 +453,7 @@ func explicitColumnStartIdx(b BuildCtx, ie *scpb.Index) int {
 // of index element `ie`.
 func explicitKeyColumnIDsWithoutShardColumn(b BuildCtx, ie *scpb.Index) descpb.ColumnIDs {
 	// Retrieve all key column IDs in index `ie`.
-	indexKeyColumnIDs, _, _ := getSortedColumnIDsInIndex(b, ie.TableID, ie.IndexID)
+	indexKeyColumnIDs, _, _ := getSortedColumnIDsInIndexByKind(b, ie.TableID, ie.IndexID)
 
 	// Exclude implicit key columns, if any.
 	explicitColIDs := indexKeyColumnIDs[explicitColumnStartIdx(b, ie):]
@@ -488,7 +497,7 @@ func isIndexUniqueAndCanServeFK(
 		return false
 	}
 
-	keyColIDs, _, _ := getSortedColumnIDsInIndex(b, ie.TableID, ie.IndexID)
+	keyColIDs, _, _ := getSortedColumnIDsInIndexByKind(b, ie.TableID, ie.IndexID)
 	implicitKeyColIDs := keyColIDs[:explicitColumnStartIdx(b, ie)]
 	explicitKeyColIDsWithoutShardCol := explicitKeyColumnIDsWithoutShardColumn(b, ie)
 	allKeyColIDsWithoutShardCol := descpb.ColumnIDs(append(implicitKeyColIDs, explicitKeyColIDsWithoutShardCol...))
@@ -507,7 +516,7 @@ func hasColsUniquenessConstraintOtherThan(
 	b BuildCtx, tableID descpb.ID, columnIDs []descpb.ColumnID, otherThan descpb.ConstraintID,
 ) (ret bool) {
 	b.QueryByID(tableID).Filter(publicTargetFilter).Filter(publicStatusFilter).
-		ForEachElementStatus(func(
+		ForEach(func(
 			current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 		) {
 			if ret {

@@ -40,6 +40,35 @@ type JobDeps interface {
 	SystemDeps() SystemDeps
 }
 
+// RestoreBehavior explains what the behavior of a given upgrade migration is
+// during restoration of table, database or a cluster backups.
+//
+// For example, a migration that modifies every descriptor in the catalog e.g.
+// to populate a new field, needs to also insert itself into RESTORE, so that
+// when raw descriptors from a backup that could predate that migration, and
+// thus not have that field populated, are injected into the catalog, they are
+// migrated accordingly to uphold the invariant that all descriptors in the
+// catalog are migrated. Such a migration would use `RestoreActionImplemented`
+// and then a sentence specifying what is done during restore, for example:
+// RestoreActionImplemented("new field is populated during allocateDescriptorRequests").
+//
+// If an upgrade migration only affects state that is not restored, such as the
+// system tables that contain instance information and liveness, it can use a
+// RestoreActionNotRequired string explaining this fact, e.g.
+// `RestoreActionNotRequired("liveness table is not restored").
+type RestoreBehavior string
+
+// RestoreActionNotRequired is used to signal an upgrade migration only affects
+// persisted state that is not written by restore. The string should mention
+// why no action is required.
+type RestoreActionNotRequired = RestoreBehavior
+
+// RestoreActionImplemented is used to signal an upgrade migration affects state
+// that is written by restore and has implemented the requisite logic in restore
+// to perform the equivalent upgrade on restored data as it is restored. The
+// string should mention what is done during restore and where it is done.
+type RestoreActionImplemented = RestoreBehavior
+
 type upgrade struct {
 	description string
 	// v is the version that this upgrade is associated with. The upgrade runs
@@ -55,6 +84,8 @@ type upgrade struct {
 	// into permanent upgrades. We don't want to run the upgrade if the
 	// startupmigration had run.
 	v22_2StartupMigrationName string
+
+	restore RestoreBehavior
 }
 
 // Version is part of the upgradebase.Upgrade interface.
@@ -78,4 +109,8 @@ func (m *upgrade) V22_2StartupMigrationName() string {
 		panic("V22_2StartupMigrationName() called on non-permanent upgrade.")
 	}
 	return m.v22_2StartupMigrationName
+}
+
+func (m *upgrade) RestoreBehavior() string {
+	return string(m.restore)
 }

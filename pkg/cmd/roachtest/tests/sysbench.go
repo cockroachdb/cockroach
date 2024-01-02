@@ -13,14 +13,15 @@ package tests
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
@@ -65,13 +66,15 @@ type sysbenchOptions struct {
 
 func (o *sysbenchOptions) cmd(haproxy bool) string {
 	pghost := "{pghost:1}"
+	pgport := "{pgport:1}"
 	if haproxy {
 		pghost = "127.0.0.1"
+		pgport = "26257"
 	}
 	return fmt.Sprintf(`sysbench \
 		--db-driver=pgsql \
 		--pgsql-host=%s \
-		--pgsql-port=26257 \
+		--pgsql-port=%s \
 		--pgsql-user=root \
 		--pgsql-password= \
 		--pgsql-db=sysbench \
@@ -83,6 +86,7 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 		--auto_inc=false \
 		%s`,
 		pghost,
+		pgport,
 		int(o.duration.Seconds()),
 		o.concurrency,
 		o.tables,
@@ -97,7 +101,6 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	loadNode := c.Node(c.Spec().NodeCount)
 
 	t.Status("installing cockroach")
-	c.Put(ctx, t.Cockroach(), "./cockroach", allNodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 	err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), allNodes[0]))
 	require.NoError(t, err)
@@ -117,24 +120,29 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	m := c.NewMonitor(ctx, roachNodes)
 	m.Go(func(ctx context.Context) error {
 		t.Status("preparing workload")
-		c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE sysbench"`)
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.Run(ctx, c.Node(1), fmt.Sprintf(`./cockroach sql --insecure --url=%s -e "CREATE DATABASE sysbench"`, pgurl))
 		c.Run(ctx, loadNode, opts.cmd(false /* haproxy */)+" prepare")
 
 		t.Status("running workload")
 		cmd := opts.cmd(true /* haproxy */) + " run"
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), loadNode, cmd)
-		if err != nil {
-			return err
-		}
 
 		// Sysbench occasionally segfaults. When that happens, don't fail the
 		// test.
-		if strings.Contains(result.Stderr, "Segmentation fault") {
+		if result.RemoteExitStatus == errors.SegmentationFaultExitCode {
 			t.L().Printf("sysbench segfaulted; passing test anyway")
 			return nil
 		}
 
-		return result.Err
+		if err != nil {
+			return err
+		}
+
+		return nil
 	})
 	m.Wait()
 }
@@ -153,9 +161,11 @@ func registerSysbench(r registry.Registry) {
 		}
 
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
-			Owner:   registry.OwnerTestEng,
-			Cluster: r.MakeClusterSpec(n+1, spec.CPU(cpus)),
+			Name:             fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
+			Owner:            registry.OwnerTestEng,
+			Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus)),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runSysbench(ctx, t, c, opts)
 			},

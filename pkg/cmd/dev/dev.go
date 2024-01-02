@@ -26,6 +26,8 @@ type dev struct {
 	os   *os.OS
 	exec *exec.Exec
 
+	debug bool
+
 	knobs struct { // testing knobs
 		skipDoctorCheck           bool
 		skipCacheCheckDuringBuild bool
@@ -126,7 +128,6 @@ Typical usage:
 		makeDoctorCmd(ret.doctor),
 		makeGenerateCmd(ret.generate),
 		makeGoCmd(ret.gocmd),
-		makeMergeTestXMLsCmd(ret.mergeTestXMLs),
 		makeTestLogicCmd(ret.testlogic),
 		makeLintCmd(ret.lint),
 		makeTestCmd(ret.test),
@@ -136,8 +137,7 @@ Typical usage:
 	)
 
 	// Add all the shared flags.
-	var debugVar bool
-	ret.cli.PersistentFlags().BoolVar(&debugVar, "debug", false, "enable debug logging for dev")
+	ret.cli.PersistentFlags().BoolVar(&ret.debug, "debug", false, "enable debug logging for dev")
 	ret.cli.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		skipDoctorCheckCommands := []string{
 			"builder",
@@ -154,7 +154,7 @@ Typical usage:
 				return err
 			}
 		}
-		if debugVar {
+		if ret.debug {
 			ret.log.SetOutput(stdos.Stderr)
 		}
 		return nil

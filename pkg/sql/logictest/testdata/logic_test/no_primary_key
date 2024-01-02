@@ -53,12 +53,12 @@ SELECT rowid FROM t WHERE a = 10
 11
 
 query TTBTTTB
-SHOW COLUMNS FROM t
+SELECT * FROM [SHOW COLUMNS FROM t] ORDER BY 1
 ----
 a      INT8    true   NULL            ·  {t_pkey}  false
 b      INT8    true   NULL            ·  {t_pkey}  false
-rowid  INT8    false  unique_rowid()  ·  {t_pkey}  true
 c      STRING  true   NULL            ·  {t_pkey}  false
+rowid  INT8    false  unique_rowid()  ·  {t_pkey}  true
 
 statement ok
 CREATE INDEX a_idx ON t (a)

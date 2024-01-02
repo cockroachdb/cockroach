@@ -33,10 +33,10 @@ import (
 func TestProgressTracker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 	c := makeCoverUtils(ctx, t, &execCfg)
 
 	requiredSpans := []roachpb.Span{c.sp("a", "e"), c.sp("f", "i")}
@@ -46,14 +46,6 @@ func TestProgressTracker(t *testing.T) {
 		details, err := gogotypes.MarshalAny(&restoreProgress)
 		require.NoError(t, err)
 		return &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{ProgressDetails: *details}
-	}
-
-	pSp := func(spans ...roachpb.Span) []jobspb.RestoreProgress_FrontierEntry {
-		pSpans := make([]jobspb.RestoreProgress_FrontierEntry, 0)
-		for _, sp := range spans {
-			pSpans = append(pSpans, jobspb.RestoreProgress_FrontierEntry{Span: sp, Timestamp: completedSpanTime})
-		}
-		return pSpans
 	}
 
 	// testStep characterizes an update to the span frontier and the expected
@@ -103,5 +95,63 @@ func TestProgressTracker(t *testing.T) {
 
 		persistedSpans = persistFrontier(pt.mu.checkpointFrontier, 0)
 		require.Equal(t, step.expectedPersisted, persistedSpans, "step %d", i)
+	}
+}
+
+func pSp(spans ...roachpb.Span) []jobspb.RestoreProgress_FrontierEntry {
+	pSpans := make([]jobspb.RestoreProgress_FrontierEntry, 0)
+	for _, sp := range spans {
+		pSpans = append(pSpans, jobspb.RestoreProgress_FrontierEntry{Span: sp, Timestamp: completedSpanTime})
+	}
+	return pSpans
+}
+
+func TestPersistedFrontierEqual(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	type testCase struct {
+		ps1   []jobspb.RestoreProgress_FrontierEntry
+		ps2   []jobspb.RestoreProgress_FrontierEntry
+		equal bool
+	}
+
+	sp := func(start, end string) roachpb.Span {
+		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
+	}
+
+	for _, tc := range []testCase{
+		{
+			ps1:   pSp(sp("a", "c"), sp("d", "e")),
+			ps2:   pSp(sp("a", "c"), sp("d", "e")),
+			equal: true,
+		},
+		{
+			ps1:   pSp(sp("a", "c")),
+			ps2:   pSp(sp("a", "c"), sp("d", "e")),
+			equal: false,
+		},
+		{
+			ps1:   pSp(sp("a", "c")),
+			equal: false,
+		},
+		{
+			ps1:   pSp(sp("a", "c"), sp("d", "e")),
+			ps2:   pSp(sp("a", "c"), sp("d", "f")),
+			equal: false,
+		},
+		{
+			ps1:   pSp(sp("a", "c"), sp("d", "e")),
+			ps2:   pSp(sp("a", "e")),
+			equal: false,
+		},
+	} {
+		var (
+			ps1Entries jobspb.RestoreFrontierEntries
+			ps2Entries jobspb.RestoreFrontierEntries
+		)
+		ps1Entries = tc.ps1
+		ps2Entries = tc.ps2
+		require.Equal(t, tc.equal, ps1Entries.Equal(ps2Entries))
+		require.Equal(t, tc.equal, ps2Entries.Equal(ps1Entries))
+
 	}
 }

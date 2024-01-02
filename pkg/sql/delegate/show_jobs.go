@@ -33,6 +33,7 @@ SELECT job_id, job_type, description, statement, user_name, status,
 	if n.Options != nil {
 		if n.Options.ExecutionDetails {
 			baseQuery.WriteString(`, NULLIF(crdb_internal.job_execution_details(job_id)->>'plan_diagram'::STRING, '') AS plan_diagram`)
+			baseQuery.WriteString(`, NULLIF(crdb_internal.job_execution_details(job_id)->>'per_component_fraction_progressed'::STRING, '') AS component_fraction_progressed`)
 		}
 	}
 

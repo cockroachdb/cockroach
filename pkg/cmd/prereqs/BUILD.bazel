@@ -1,5 +1,4 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
     name = "prereqs_lib",
@@ -14,16 +13,3 @@ go_binary(
     embed = [":prereqs_lib"],
     visibility = ["//visibility:public"],
 )
-
-go_test(
-    name = "prereqs_test",
-    size = "small",
-    srcs = ["prereqs_test.go"],
-    args = ["-test.timeout=55s"],
-    data = glob(["testdata/**"]),
-    embed = [":prereqs_lib"],
-    tags = ["broken_in_bazel"],
-    deps = ["//pkg/testutils"],
-)
-
-get_x_data(name = "get_x_data")

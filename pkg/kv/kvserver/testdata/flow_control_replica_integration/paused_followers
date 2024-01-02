@@ -1,0 +1,45 @@
+# Observe how the integration layer deals with paused followers. Start off with
+# a triply replicated range r1/t1, with replicas on n1/s1, n2/s2, and n3/s3
+# (with replica IDs 1-3 respectively).
+init tenant=t1 range=r1 replid=1
+----
+
+state descriptor=(1,2,3) applied=1/10
+----
+
+# Set up replid=1 (declared in init above) to be the raft leader. It should
+# connect to all three replication streams.
+integration op=became-leader
+----
+initialized flow control handle for r1/t1
+connected to replication stream t1/s1 starting at log-position=1/10
+disconnected from replication stream t1/s2
+disconnected from replication stream t1/s3
+connected to replication stream t1/s2 starting at log-position=1/10
+connected to replication stream t1/s3 starting at log-position=1/10
+
+# Pause replid=2. Observe that we disconnect the stream to t1/s2.
+state descriptor=(1,2,3) paused=(2)
+----
+
+integration op=followers-paused
+----
+disconnected from replication stream t1/s2
+
+# The integration layer maintains internal state about the set of paused
+# followers we've already disconnected from. Informing it of paused followers
+# again simply no-ops.
+integration op=followers-paused
+----
+
+# Unpause replid=2 and pause replid=3. We should see us disconnect from t1/s3
+# and reconnect to t1/s2 using our current applied state.
+state descriptor=(1,2,3) paused=(3) applied=1/11
+----
+
+integration op=followers-paused
+----
+disconnected from replication stream t1/s3
+connected to replication stream t1/s2 starting at log-position=1/11
+
+# vim:ft=sh

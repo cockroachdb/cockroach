@@ -14,6 +14,7 @@ import (
 	"context"
 	"reflect"
 	"runtime/pprof"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -143,8 +145,8 @@ func (r *Replica) SendWithWriteBytes(
 	// accounting.
 	r.recordBatchRequestLoad(ctx, ba)
 
-	// If the internal Raft group is not initialized, create it and wake the leader.
-	r.maybeInitializeRaftGroup(ctx)
+	// If the internal Raft group is quiesced, wake it and the leader.
+	r.maybeUnquiesce(ctx, true /* wakeLeader */, true /* mayCampaign */)
 
 	isReadOnly := ba.IsReadOnly()
 	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
@@ -415,7 +417,7 @@ var _ batchExecutionFn = (*Replica).executeReadOnlyBatch
 // still needs to worry about coordinating with non-conflicting operations when
 // accessing shared data structures.
 //
-// If the execution function hits a concurrency error like a WriteIntentError or
+// If the execution function hits a concurrency error like a LockConflictError or
 // a TransactionPushError it will propagate the error back to this method, which
 // handles the process of retrying batch execution after addressing the error.
 func (r *Replica) executeBatchWithConcurrencyRetries(
@@ -470,6 +472,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			ReadConsistency: ba.ReadConsistency,
 			WaitPolicy:      ba.WaitPolicy,
 			LockTimeout:     ba.LockTimeout,
+			AdmissionHeader: ba.AdmissionHeader,
 			PoisonPolicy:    pp,
 			Requests:        ba.Requests,
 			LatchSpans:      latchSpans, // nil if g != nil
@@ -477,19 +480,25 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		}, requestEvalKind)
 		if pErr != nil {
 			if poisonErr := (*poison.PoisonedError)(nil); errors.As(pErr.GoError(), &poisonErr) {
-				// NB: we make the breaker error (which may be nil at this point, but
-				// usually is not) a secondary error, meaning it is not in the error
-				// chain. That is fine; the important bits to investigate
-				// programmatically are the ReplicaUnavailableError (which contains the
-				// descriptor) and the *PoisonedError (which contains the concrete
-				// subspan that caused this request to fail). We mark
-				// circuit.ErrBreakerOpen into the chain as well so that we have the
-				// invariant that all replica circuit breaker errors contain both
-				// ErrBreakerOpen and ReplicaUnavailableError.
-				pErr = kvpb.NewError(r.replicaUnavailableError(errors.CombineErrors(
-					errors.Mark(poisonErr, circuit.ErrBreakerOpen),
-					r.breaker.Signal().Err(),
-				)))
+				// It's possible that intent resolution accessed txn info anchored on a
+				// different range and hit a poisoned latch there, in which case we want
+				// to propagate its ReplicaUnavailableError instead of creating one for
+				// this range (which likely isn't tripped).
+				if !errors.HasType(pErr.GoError(), (*kvpb.ReplicaUnavailableError)(nil)) {
+					// NB: we make the breaker error (which may be nil at this point, but
+					// usually is not) a secondary error, meaning it is not in the error
+					// chain. That is fine; the important bits to investigate
+					// programmatically are the ReplicaUnavailableError (which contains the
+					// descriptor) and the *PoisonedError (which contains the concrete
+					// subspan that caused this request to fail). We mark
+					// circuit.ErrBreakerOpen into the chain as well so that we have the
+					// invariant that all replica circuit breaker errors contain both
+					// ErrBreakerOpen and ReplicaUnavailableError.
+					pErr = kvpb.NewError(r.replicaUnavailableError(errors.CombineErrors(
+						errors.Mark(poisonErr, circuit.ErrBreakerOpen),
+						r.breaker.Signal().Err(),
+					)))
+				}
 			}
 			return nil, nil, pErr
 		} else if resp != nil {
@@ -538,10 +547,10 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		requestEvalKind = concurrency.PessimisticEval
 
 		switch t := pErr.GetDetail().(type) {
-		case *kvpb.WriteIntentError:
+		case *kvpb.LockConflictError:
 			// Drop latches, but retain lock wait-queues.
 			g.AssertLatches()
-			if g, pErr = r.handleWriteIntentError(ctx, ba, g, pErr, t); pErr != nil {
+			if g, pErr = r.handleLockConflictError(ctx, ba, g, pErr, t); pErr != nil {
 				return nil, nil, pErr
 			}
 		case *kvpb.TransactionPushError:
@@ -613,8 +622,8 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 // the request can immediately proceed to retrying pessimistically.
 func isConcurrencyRetryError(pErr *kvpb.Error) bool {
 	switch pErr.GetDetail().(type) {
-	case *kvpb.WriteIntentError:
-		// If a request hits a WriteIntentError, it adds the conflicting intent
+	case *kvpb.LockConflictError:
+		// If a request hits a LockConflictError, it adds the conflicting intent
 		// to the lockTable through a process called "lock discovery". It then
 		// waits in the lock's wait-queue during its next sequencing pass.
 	case *kvpb.TransactionPushError:
@@ -684,14 +693,14 @@ func isConcurrencyRetryError(pErr *kvpb.Error) bool {
 // operating under. If the operation was performed on a follower that does not
 // hold the lease (e.g. a follower read), the provided lease will be empty.
 func maybeAttachLease(pErr *kvpb.Error, lease *roachpb.Lease) *kvpb.Error {
-	if wiErr, ok := pErr.GetDetail().(*kvpb.WriteIntentError); ok {
+	if lcErr, ok := pErr.GetDetail().(*kvpb.LockConflictError); ok {
 		// If we hit an intent on the leaseholder, attach information about the
-		// lease to WriteIntentErrors, which is necessary to keep the lock-table
+		// lease to LockConflictErrors, which is necessary to keep the lock-table
 		// in sync with the applied state.
 		//
 		// However, if we hit an intent during a follower read, the lock-table will
 		// be disabled, so we won't be able to use it to wait for the resolution of
-		// the intent. Instead of waiting locally, we replace the WriteIntentError
+		// the intent. Instead of waiting locally, we replace the LockConflictError
 		// with an InvalidLeaseError so that the request will be redirected to the
 		// leaseholder. Beyond implementation constraints, waiting for conflicting
 		// intents on the leaseholder instead of on a follower is preferable
@@ -731,24 +740,24 @@ func maybeAttachLease(pErr *kvpb.Error, lease *roachpb.Lease) *kvpb.Error {
 		if lease.Empty() /* followerRead */ {
 			return kvpb.NewErrorWithTxn(&kvpb.InvalidLeaseError{}, pErr.GetTxn())
 		}
-		wiErr.LeaseSequence = lease.Sequence
-		return kvpb.NewErrorWithTxn(wiErr, pErr.GetTxn())
+		lcErr.LeaseSequence = lease.Sequence
+		return kvpb.NewErrorWithTxn(lcErr, pErr.GetTxn())
 	}
 	return pErr
 }
 
-func (r *Replica) handleWriteIntentError(
+func (r *Replica) handleLockConflictError(
 	ctx context.Context,
 	ba *kvpb.BatchRequest,
 	g *concurrency.Guard,
 	pErr *kvpb.Error,
-	t *kvpb.WriteIntentError,
+	t *kvpb.LockConflictError,
 ) (*concurrency.Guard, *kvpb.Error) {
-	if r.store.cfg.TestingKnobs.DontPushOnWriteIntentError {
+	if r.store.cfg.TestingKnobs.DontPushOnLockConflictError {
 		return g, pErr
 	}
 	// g's latches will be dropped, but it retains its spot in lock wait-queues.
-	return r.concMgr.HandleWriterIntentError(ctx, g, t.LeaseSequence, t)
+	return r.concMgr.HandleLockConflictError(ctx, g, t.LeaseSequence, t)
 }
 
 func (r *Replica) handleTransactionPushError(
@@ -765,7 +774,7 @@ func (r *Replica) handleTransactionPushError(
 	dontRetry := r.store.cfg.TestingKnobs.DontRetryPushTxnFailures
 	if !dontRetry && ba.IsSinglePushTxnRequest() {
 		pushReq := ba.Requests[0].GetInner().(*kvpb.PushTxnRequest)
-		dontRetry = txnwait.ShouldPushImmediately(pushReq)
+		dontRetry = txnwait.ShouldPushImmediately(pushReq, t.PusheeTxn.Status, ba.WaitPolicy)
 	}
 	if dontRetry {
 		return g, pErr
@@ -1176,11 +1185,17 @@ func (r *Replica) collectSpans(
 	// than the request timestamp, and may have to retry at a higher timestamp.
 	// This is still safe as we're only ever writing at timestamps higher than the
 	// timestamp any write latch would be declared at.
-	batcheval.DeclareKeysForBatch(desc, &ba.Header, latchSpans)
+	err := batcheval.DeclareKeysForBatch(desc, &ba.Header, latchSpans)
+	if err != nil {
+		return nil, nil, concurrency.PessimisticEval, err
+	}
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
-			cmd.DeclareKeys(desc, &ba.Header, inner, latchSpans, lockSpans, r.Clock().MaxOffset())
+			err := cmd.DeclareKeys(desc, &ba.Header, inner, latchSpans, lockSpans, r.Clock().MaxOffset())
+			if err != nil {
+				return nil, nil, concurrency.PessimisticEval, err
+			}
 			if considerOptEvalForLimit {
 				switch inner.(type) {
 				case *kvpb.ScanRequest, *kvpb.ReverseScanRequest:
@@ -1253,22 +1268,59 @@ func (r *Replica) collectSpans(
 // either after a write request has achieved consensus and been applied to Raft
 // or after a read-only request has finished evaluation.
 type endCmds struct {
-	repl *Replica
-	g    *concurrency.Guard
-	st   kvserverpb.LeaseStatus // empty for follower reads
+	repl             *Replica
+	g                *concurrency.Guard
+	st               kvserverpb.LeaseStatus // empty for follower reads
+	replicatingSince time.Time
+}
+
+// makeUnreplicatedEndCmds sets up an endCmds to track an unreplicated,
+// that is, read-only, command.
+func makeUnreplicatedEndCmds(
+	repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus,
+) endCmds {
+	return makeReplicatedEndCmds(repl, g, st, time.Time{})
+}
+
+// makeReplicatedEndCmds initializes an endCmds representing a command that
+// needs to undergo replication. This is not used for read-only commands
+// (including read-write commands that end up not queueing any mutations to the
+// state machine).
+func makeReplicatedEndCmds(
+	repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus, replicatingSince time.Time,
+) endCmds {
+	return endCmds{repl: repl, g: g, st: st, replicatingSince: replicatingSince}
+}
+
+func makeEmptyEndCmds() endCmds {
+	return endCmds{}
 }
 
 // move moves the endCmds into the return value, clearing and making a call to
 // done on the receiver a no-op.
 func (ec *endCmds) move() endCmds {
 	res := *ec
-	*ec = endCmds{}
+	*ec = makeEmptyEndCmds()
 	return res
 }
 
+// poison marks the Guard held by the endCmds as poisoned, which
+// induces fail-fast behavior for requests waiting for our latches.
+// This method must only be called for commands in the Replica.mu.proposals
+// map and the Replica mutex must be held throughout.
 func (ec *endCmds) poison() {
 	if ec.repl == nil {
-		// Already cleared.
+		// Already cleared. This path may no longer be hit thanks to a re-work
+		// of reproposals[1]. The caller to poison holds the replica mutex and
+		// the command is in r.mu.proposals, meaning the command hasn't been
+		// signaled by log application yet, i.e. latches must not have been
+		// released (even if refreshProposalsLocked has already signaled the
+		// client with an ambiguous result).
+		//
+		// [1]: https://github.com/cockroachdb/cockroach/pull/106750
+		//
+		// TODO(repl): verify that and put an assertion here. This is similar to
+		// the TODO on ProposalData.endCmds.
 		return
 	}
 	ec.repl.concMgr.PoisonReq(ec.g)
@@ -1285,7 +1337,8 @@ func (ec *endCmds) done(
 	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, pErr *kvpb.Error,
 ) {
 	if ec.repl == nil {
-		// The endCmds were cleared.
+		// The endCmds were cleared. This may no longer be necessary, see the comment on
+		// ProposalData.endCmds.
 		return
 	}
 	defer ec.move() // clear
@@ -1298,9 +1351,18 @@ func (ec *endCmds) done(
 		ec.repl.updateTimestampCache(ctx, &ec.st, ba, br, pErr)
 	}
 
-	// Release the latches acquired by the request and exit lock wait-queues.
-	// Must be done AFTER the timestamp cache is updated. ec.g is only set when
-	// the Raft proposal has assumed responsibility for the request.
+	if ts := ec.replicatingSince; !ts.IsZero() {
+		ec.repl.store.metrics.RaftReplicationLatency.RecordValue(timeutil.Since(ts).Nanoseconds())
+	}
+
+	// Release the latches acquired by the request and exit lock wait-queues. Must
+	// be done AFTER the timestamp cache is updated. ec.g is set both for reads
+	// and for writes. For writes, it is set only when the Raft proposal has
+	// assumed responsibility for the request.
+	//
+	// TODO(replication): at the time of writing, there is no code path in which
+	// this method is called and the Guard is not set. Consider removing this
+	// check and upgrading the previous observation to an invariant.
 	if ec.g != nil {
 		ec.repl.concMgr.FinishReq(ec.g)
 	}

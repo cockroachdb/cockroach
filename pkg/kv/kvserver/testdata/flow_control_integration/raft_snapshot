@@ -1,0 +1,191 @@
+echo
+----
+----
+-- Flow token metrics from n1 after issuing 1 regular 1MiB 5x replicated write
+-- that's not admitted. Since this test is ignoring crashed nodes for token
+-- deduction purposes, we see a deduction of 5MiB {regular,elastic} tokens.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 35 MiB   
+  kvadmission.flow_controller.elastic_tokens_deducted    | 5.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 0 B      
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B      
+  kvadmission.flow_controller.regular_tokens_available   | 75 MiB   
+  kvadmission.flow_controller.regular_tokens_deducted    | 5.0 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 0 B      
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B      
+
+
+-- Observe the total tracked tokens per-stream on n1. 1MiB is tracked for n1-n5.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+	   FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  68       | 1        | 1.0 MiB               
+  68       | 2        | 1.0 MiB               
+  68       | 3        | 1.0 MiB               
+  68       | 4        | 1.0 MiB               
+  68       | 5        | 1.0 MiB               
+
+
+-- (Killing n2 and n3, but preventing their tokens from being returned +
+-- artificially allowing tokens to get deducted.)
+
+
+-- Observe the total tracked tokens per-stream on n1. 1MiB is (still) tracked
+-- for n1-n5. Typically n2, n3 would release their tokens, but this test is
+-- intentionally suppressing that behavior to observe token returns only once
+-- issuing a raft snapshot.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+	   FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  68       | 1        | 1.0 MiB               
+  68       | 2        | 1.0 MiB               
+  68       | 3        | 1.0 MiB               
+  68       | 4        | 1.0 MiB               
+  68       | 5        | 1.0 MiB               
+
+
+-- (Issuing another 1MiB of 5x replicated writes while n2 and n3 are down and
+-- below-raft admission is paused.)
+
+
+-- Flow token metrics from n1 after issuing 1 regular 1MiB 5x replicated write
+-- that's not admitted. We'll have deducted another 5*1MiB=5MiB worth of tokens.
+-- Normally we wouldn't deduct tokens for n2 and n3 since they're dead (both
+-- according to the per-replica last-updated map, and according broken
+-- RaftTransport streams). But this test is intentionally suppressing that
+-- behavior to observe token returns when sending raft snapshots.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 30 MiB  
+  kvadmission.flow_controller.elastic_tokens_deducted    | 10 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 0 B     
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B     
+  kvadmission.flow_controller.regular_tokens_available   | 70 MiB  
+  kvadmission.flow_controller.regular_tokens_deducted    | 10 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 0 B     
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B     
+
+
+-- Observe the total tracked tokens per-stream on n1. 2MiB is tracked for n1-n5;
+-- see last comment for an explanation why we're still deducting for n2, n3.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+	   FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  68       | 1        | 2.0 MiB               
+  68       | 2        | 2.0 MiB               
+  68       | 3        | 2.0 MiB               
+  68       | 4        | 2.0 MiB               
+  68       | 5        | 2.0 MiB               
+
+
+-- (Truncating raft log.)
+
+
+-- (Restarting n2 and n3.)
+
+
+-- Flow token metrics from n1 after restarting n2 and n3. We've returned the
+-- 2MiB previously held by those nodes (2MiB each). We're reacting to it's raft
+-- progress state, noting that since we've truncated our log, we need to catch
+-- it up via snapshot. So we release all held tokens.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 34 MiB   
+  kvadmission.flow_controller.elastic_tokens_deducted    | 10 MiB   
+  kvadmission.flow_controller.elastic_tokens_returned    | 4.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B      
+  kvadmission.flow_controller.regular_tokens_available   | 74 MiB   
+  kvadmission.flow_controller.regular_tokens_deducted    | 10 MiB   
+  kvadmission.flow_controller.regular_tokens_returned    | 4.0 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B      
+
+
+-- Observe the total tracked tokens per-stream on n1. There's nothing tracked
+-- for n2 and n3 anymore.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+   FROM crdb_internal.kv_flow_control_handles
+   WHERE total_tracked_tokens > 0
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  68       | 1        | 2.0 MiB               
+  68       | 4        | 2.0 MiB               
+  68       | 5        | 2.0 MiB               
+
+
+-- (Allow below-raft admission to proceed.)
+
+
+-- Observe flow token dispatch metrics from n4.
+SELECT name, value
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission.flow_token_dispatch.pending_nodes%'
+ORDER BY name ASC;
+
+  kvadmission.flow_token_dispatch.pending_nodes | 0  
+
+
+-- Flow token metrics from n1 after work gets admitted. We see the remaining
+-- 6MiB of {regular,elastic} tokens returned.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 40 MiB  
+  kvadmission.flow_controller.elastic_tokens_deducted    | 10 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 10 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B     
+  kvadmission.flow_controller.regular_tokens_available   | 80 MiB  
+  kvadmission.flow_controller.regular_tokens_deducted    | 10 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 10 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B     
+
+
+-- Observe the total tracked tokens per-stream on n1; there should be nothing.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+   FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  68       | 1        | 0 B                   
+  68       | 2        | 0 B                   
+  68       | 3        | 0 B                   
+  68       | 4        | 0 B                   
+  68       | 5        | 0 B                   
+
+
+-- Another view of tokens, using /inspectz-backed vtables.
+SELECT store_id,
+	   crdb_internal.humanize_bytes(available_regular_tokens),
+	   crdb_internal.humanize_bytes(available_elastic_tokens)
+  FROM crdb_internal.kv_flow_controller
+ ORDER BY store_id ASC;
+
+  range_id | regular_available | elastic_available  
+-----------+-------------------+--------------------
+  1        | 16 MiB            | 8.0 MiB            
+  2        | 16 MiB            | 8.0 MiB            
+  3        | 16 MiB            | 8.0 MiB            
+  4        | 16 MiB            | 8.0 MiB            
+  5        | 16 MiB            | 8.0 MiB            
+----
+----
+
+# vim:ft=sql

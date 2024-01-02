@@ -18,12 +18,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync/atomic"
 	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
@@ -76,28 +74,11 @@ type Container struct {
 	st      *cluster.Settings
 	appName string
 
-	// uniqueStmtFingerprintLimit is the limit on number of unique statement
-	// fingerprints we can store in memory.
-	uniqueStmtFingerprintLimit *settings.IntSetting
-
-	// uniqueTxnFingerprintLimit is the limit on number of unique transaction
-	// fingerprints we can store in memory.
-	uniqueTxnFingerprintLimit *settings.IntSetting
-
-	atomic struct {
-		// uniqueStmtFingerprintCount is the number of unique statement fingerprints
-		// we are storing in memory.
-		uniqueStmtFingerprintCount *int64
-
-		// uniqueTxnFingerprintCount is the number of unique transaction fingerprints
-		// we are storing in memory.
-		uniqueTxnFingerprintCount *int64
-	}
+	// uniqueServerCount is a server level counter of all the unique fingerprints
+	uniqueServerCount *SQLStatsAtomicCounters
 
 	mu struct {
-		// TODO(arul): This can be refactored to have a RWLock instead, and have all
-		// usages acquire a read lock whenever appropriate. See #55285.
-		syncutil.Mutex
+		syncutil.RWMutex
 
 		// acc is the memory account that tracks memory allocations related to stmts
 		// and txns within this Container struct.
@@ -129,10 +110,7 @@ var _ sqlstats.ApplicationStats = &Container{}
 // New returns a new instance of Container.
 func New(
 	st *cluster.Settings,
-	uniqueStmtFingerprintLimit *settings.IntSetting,
-	uniqueTxnFingerprintLimit *settings.IntSetting,
-	uniqueStmtFingerprintCount *int64,
-	uniqueTxnFingerprintCount *int64,
+	uniqueServerCount *SQLStatsAtomicCounters,
 	mon *mon.BytesMonitor,
 	appName string,
 	knobs *sqlstats.TestingKnobs,
@@ -140,14 +118,13 @@ func New(
 	latencyInformation insights.LatencyInformation,
 ) *Container {
 	s := &Container{
-		st:                         st,
-		appName:                    appName,
-		uniqueStmtFingerprintLimit: uniqueStmtFingerprintLimit,
-		uniqueTxnFingerprintLimit:  uniqueTxnFingerprintLimit,
-		mon:                        mon,
-		knobs:                      knobs,
-		insights:                   insightsWriter,
-		latencyInformation:         latencyInformation,
+		st:                 st,
+		appName:            appName,
+		mon:                mon,
+		knobs:              knobs,
+		insights:           insightsWriter,
+		latencyInformation: latencyInformation,
+		uniqueServerCount:  uniqueServerCount,
 	}
 
 	if mon != nil {
@@ -158,16 +135,13 @@ func New(
 	s.mu.txns = make(map[appstatspb.TransactionFingerprintID]*txnStats)
 	s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time)
 
-	s.atomic.uniqueStmtFingerprintCount = uniqueStmtFingerprintCount
-	s.atomic.uniqueTxnFingerprintCount = uniqueTxnFingerprintCount
-
 	return s
 }
 
 // IterateAggregatedTransactionStats implements sqlstats.ApplicationStats
 // interface.
 func (s *Container) IterateAggregatedTransactionStats(
-	_ context.Context, _ *sqlstats.IteratorOptions, visitor sqlstats.AggregatedTransactionVisitor,
+	_ context.Context, _ sqlstats.IteratorOptions, visitor sqlstats.AggregatedTransactionVisitor,
 ) error {
 	txnStat := func() appstatspb.TxnStats {
 		s.txnCounts.mu.Lock()
@@ -184,18 +158,18 @@ func (s *Container) IterateAggregatedTransactionStats(
 }
 
 // StmtStatsIterator returns an instance of StmtStatsIterator.
-func (s *Container) StmtStatsIterator(options *sqlstats.IteratorOptions) *StmtStatsIterator {
+func (s *Container) StmtStatsIterator(options sqlstats.IteratorOptions) StmtStatsIterator {
 	return NewStmtStatsIterator(s, options)
 }
 
 // TxnStatsIterator returns an instance of TxnStatsIterator.
-func (s *Container) TxnStatsIterator(options *sqlstats.IteratorOptions) *TxnStatsIterator {
+func (s *Container) TxnStatsIterator(options sqlstats.IteratorOptions) TxnStatsIterator {
 	return NewTxnStatsIterator(s, options)
 }
 
 // IterateStatementStats implements sqlstats.Provider interface.
 func (s *Container) IterateStatementStats(
-	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
+	ctx context.Context, options sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
 ) error {
 	iter := s.StmtStatsIterator(options)
 
@@ -210,7 +184,7 @@ func (s *Container) IterateStatementStats(
 
 // IterateTransactionStats implements sqlstats.Provider interface.
 func (s *Container) IterateTransactionStats(
-	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
+	ctx context.Context, options sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
 ) error {
 	iter := s.TxnStatsIterator(options)
 
@@ -246,10 +220,7 @@ func NewTempContainerFromExistingStmtStats(
 
 	container = New(
 		nil, /* st */
-		nil, /* uniqueStmtFingerprintLimit */
-		nil, /* uniqueTxnFingerprintLimit */
-		nil, /* uniqueStmtFingerprintCount */
-		nil, /* uniqueTxnFingerprintCount */
+		nil, /* uniqueServerCount */
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
@@ -300,6 +271,10 @@ func NewTempContainerFromExistingStmtStats(
 	return container, nil /* remaining */, nil /* err */
 }
 
+func (s *Container) MaybeLogDiscardMessage(ctx context.Context) {
+	s.uniqueServerCount.maybeLogDiscardMessage(ctx)
+}
+
 // NewTempContainerFromExistingTxnStats creates a new Container by ingesting a slice
 // of CollectedTransactionStatistics sorted by .StatsData.App field.
 // It consumes the first chunk of the slice where all entries in the chunk
@@ -320,10 +295,7 @@ func NewTempContainerFromExistingTxnStats(
 
 	container = New(
 		nil, /* st */
-		nil, /* uniqueStmtFingerprintLimit */
-		nil, /* uniqueTxnFingerprintLimit */
-		nil, /* uniqueStmtFingerprintCount */
-		nil, /* uniqueTxnFingerprintCount */
+		nil, /* uniqueServerCount */
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
@@ -352,20 +324,13 @@ func NewTempContainerFromExistingTxnStats(
 // NewApplicationStatsWithInheritedOptions implements the
 // sqlstats.ApplicationStats interface.
 func (s *Container) NewApplicationStatsWithInheritedOptions() sqlstats.ApplicationStats {
-	var (
-		uniqueStmtFingerprintCount int64
-		uniqueTxnFingerprintCount  int64
-	)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return New(
 		s.st,
-		sqlstats.MaxSQLStatsStmtFingerprintsPerExplicitTxn,
 		// There is no need to constraint txn fingerprint limit since in temporary
 		// container, there will never be more than one transaction fingerprint.
-		nil, // uniqueTxnFingerprintLimit
-		&uniqueStmtFingerprintCount,
-		&uniqueTxnFingerprintCount,
+		nil, // uniqueServerCount
 		s.mon,
 		s.appName,
 		s.knobs,
@@ -560,18 +525,8 @@ func (s *Container) getStatsForStmtWithKeyLocked(
 	if !ok && createIfNonexistent {
 		// If the uniqueStmtFingerprintCount is nil, then we don't check for
 		// fingerprint limit.
-		if s.atomic.uniqueStmtFingerprintCount != nil {
-			// We check if we have reached the limit of unique fingerprints we can
-			// store.
-			limit := s.uniqueStmtFingerprintLimit.Get(&s.st.SV)
-			incrementedFingerprintCount :=
-				atomic.AddInt64(s.atomic.uniqueStmtFingerprintCount, int64(1) /* delts */)
-
-			// Abort if we have exceeded limit of unique statement fingerprints.
-			if incrementedFingerprintCount > limit {
-				atomic.AddInt64(s.atomic.uniqueStmtFingerprintCount, -int64(1) /* delts */)
-				return stats, false /* created */, true /* throttled */
-			}
+		if s.uniqueServerCount != nil && !s.uniqueServerCount.tryAddStmtFingerprint() {
+			return stats, false /* created */, true /* throttled */
 		}
 		stats = &stmtStats{}
 		stats.ID = stmtFingerprintID
@@ -605,17 +560,8 @@ func (s *Container) getStatsForTxnWithKeyLocked(
 	if !ok && createIfNonexistent {
 		// If the uniqueTxnFingerprintCount is nil, then we don't check for
 		// fingerprint limit.
-		if s.atomic.uniqueTxnFingerprintCount != nil {
-			limit := s.uniqueTxnFingerprintLimit.Get(&s.st.SV)
-			incrementedFingerprintCount :=
-				atomic.AddInt64(s.atomic.uniqueTxnFingerprintCount, int64(1) /* delts */)
-
-			// If we have exceeded limit of fingerprint count, decrement the counter
-			// and abort.
-			if incrementedFingerprintCount > limit {
-				atomic.AddInt64(s.atomic.uniqueTxnFingerprintCount, -int64(1) /* delts */)
-				return nil /* stats */, false /* created */, true /* throttled */
-			}
+		if s.uniqueServerCount != nil && !s.uniqueServerCount.tryAddTxnFingerprint() {
+			return nil /* stats */, false /* created */, true /* throttled */
 		}
 		stats = &txnStats{}
 		stats.statementFingerprintIDs = stmtFingerprintIDs
@@ -634,9 +580,11 @@ func (s *Container) SaveToLog(ctx context.Context, appName string) {
 	}
 	var buf bytes.Buffer
 	for key, stats := range s.mu.stmts {
-		stats.mu.Lock()
-		json, err := json.Marshal(stats.mu.data)
-		stats.mu.Unlock()
+		json, err := func() ([]byte, error) {
+			stats.mu.Lock()
+			defer stats.mu.Unlock()
+			return json.Marshal(stats.mu.data)
+		}()
 		if err != nil {
 			log.Errorf(ctx, "error while marshaling stats for %q // %q: %v", appName, key.String(), err)
 			continue
@@ -672,8 +620,9 @@ func (s *Container) Free(ctx context.Context) {
 }
 
 func (s *Container) freeLocked(ctx context.Context) {
-	atomic.AddInt64(s.atomic.uniqueStmtFingerprintCount, int64(-len(s.mu.stmts)))
-	atomic.AddInt64(s.atomic.uniqueTxnFingerprintCount, int64(-len(s.mu.txns)))
+	if s.uniqueServerCount != nil {
+		s.uniqueServerCount.freeByCnt(int64(len(s.mu.stmts)), int64(len(s.mu.txns)))
+	}
 
 	s.mu.acc.Clear(ctx)
 }
@@ -686,7 +635,7 @@ func (s *Container) MergeApplicationStatementStats(
 ) (discardedStats uint64) {
 	if err := other.IterateStatementStats(
 		ctx,
-		&sqlstats.IteratorOptions{},
+		sqlstats.IteratorOptions{},
 		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 			if transformer != nil {
 				transformer(statistics)
@@ -737,7 +686,7 @@ func (s *Container) MergeApplicationTransactionStats(
 ) (discardedStats uint64) {
 	if err := other.IterateTransactionStats(
 		ctx,
-		&sqlstats.IteratorOptions{},
+		sqlstats.IteratorOptions{},
 		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
 			txnStats, _, throttled :=
 				s.getStatsForTxnWithKey(

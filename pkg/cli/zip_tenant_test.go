@@ -21,20 +21,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 )
 
 // TestTenantZip tests the operation of zip for a tenant server.
 func TestTenantZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	skip.UnderRace(t, "test too slow under race")
 
 	tenants := []struct {
 		testName      string
+		preZip        func(*testing.T, TestCLI)
 		addTenantArgs func(params TestCLIParams) TestCLIParams
 	}{
 		{
-			testName: "testzip tenant separate process",
+			testName: "testzip external process virtualization",
 			addTenantArgs: func(params TestCLIParams) TestCLIParams {
 				tenantDir, tenantDirCleanupFn := testutils.TempDir(t)
 				defer tenantDirCleanupFn()
@@ -47,7 +51,7 @@ func TestTenantZip(t *testing.T) {
 			},
 		},
 		{
-			testName: "testzip shared process tenant",
+			testName: "testzip shared process virtualization",
 			addTenantArgs: func(params TestCLIParams) TestCLIParams {
 				params.SharedProcessTenantArgs = &base.TestSharedProcessTenantArgs{
 					TenantName: "test-tenant",
@@ -55,6 +59,20 @@ func TestTenantZip(t *testing.T) {
 				}
 				params.UseSystemTenant = true
 				return params
+			},
+		},
+		{
+			testName: "testzip shared process virtualization with default tenant",
+			addTenantArgs: func(params TestCLIParams) TestCLIParams {
+				params.SharedProcessTenantArgs = &base.TestSharedProcessTenantArgs{
+					TenantName: "test-tenant",
+					TenantID:   serverutils.TestTenantID(),
+				}
+				params.UseSystemTenant = true
+				return params
+			},
+			preZip: func(_ *testing.T, c TestCLI) {
+				c.RunWithArgs([]string{"sql", "-e", "SET CLUSTER SETTING server.controller.default_target_cluster = 'test-tenant'"})
 			},
 		},
 	}
@@ -72,6 +90,10 @@ func TestTenantZip(t *testing.T) {
 				Insecure: true,
 			}))
 			defer c.Cleanup()
+
+			if tenant.preZip != nil {
+				tenant.preZip(t, c)
+			}
 
 			out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s " + os.DevNull)
 			if err != nil {

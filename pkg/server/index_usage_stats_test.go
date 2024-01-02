@@ -12,16 +12,15 @@ package server
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -58,7 +57,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 4, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 4, base.TestClusterArgs{})
 
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
@@ -72,29 +71,19 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	}
 
 	expectedStatsIndexB := roachpb.IndexUsageStatistics{
-		TotalReadCount: 2,
-		LastRead:       timeutil.Now(),
-	}
-
-	expectedStatsIndexPrimary := roachpb.IndexUsageStatistics{
 		TotalReadCount: 1,
 		LastRead:       timeutil.Now(),
 	}
 
-	firstPgURL, firstServerConnCleanup := sqlutils.PGUrl(
-		t, firstServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
-	defer firstServerConnCleanup()
+	expectedStatsIndexPrimary := roachpb.IndexUsageStatistics{
+		TotalReadCount: 2,
+		LastRead:       timeutil.Now(),
+	}
 
-	firstServerSQLConn, err := gosql.Open("postgres", firstPgURL.String())
-	require.NoError(t, err)
-
-	defer func() {
-		err := firstServerSQLConn.Close()
-		require.NoError(t, err)
-	}()
+	firstServerSQLConn := firstServer.SQLConn(t)
 
 	// Create table on the first node.
-	_, err = firstServerSQLConn.Exec("CREATE TABLE t (k INT PRIMARY KEY, a INT, b INT, c INT, INDEX(a), INDEX(b))")
+	_, err := firstServerSQLConn.Exec("CREATE TABLE t (k INT PRIMARY KEY, a INT, b INT, c INT, INDEX(a), INDEX(b))")
 	require.NoError(t, err)
 
 	_, err = firstServerSQLConn.Exec("INSERT INTO t VALUES (1, 10, 100, 0), (2, 20, 200, 0), (3, 30, 300, 0)")
@@ -131,26 +120,11 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 		IndexID: 3, // t@t_b_idx
 	}
 
-	err = firstServerSQLConn.Close()
-	require.NoError(t, err)
-
-	firstServerConnCleanup()
-
 	// Run some queries on the second node.
 	secondServer := testCluster.Server(1 /* idx */)
 	secondLocalStatsReader := secondServer.SQLServer().(*sql.Server).GetLocalIndexStatistics()
 
-	secondPgURL, secondServerConnCleanup := sqlutils.PGUrl(
-		t, secondServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
-	defer secondServerConnCleanup()
-
-	secondServerSQLConn, err := gosql.Open("postgres", secondPgURL.String())
-	require.NoError(t, err)
-
-	defer func() {
-		err := secondServerSQLConn.Close()
-		require.NoError(t, err)
-	}()
+	secondServerSQLConn := secondServer.SQLConn(t)
 
 	// Records a non-full scan over t_a_idx.
 	_, err = secondServerSQLConn.Exec("SELECT k, a FROM t WHERE a = 0")
@@ -172,17 +146,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	fourthServer := testCluster.Server(3 /* idx */)
 	fourthLocalStatsReader := fourthServer.SQLServer().(*sql.Server).GetLocalIndexStatistics()
 
-	fourthPgURL, fourthServerConnCleanup := sqlutils.PGUrl(
-		t, fourthServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
-	defer fourthServerConnCleanup()
-
-	fourthServerSQLConn, err := gosql.Open("postgres", fourthPgURL.String())
-	require.NoError(t, err)
-
-	defer func() {
-		err := fourthServerSQLConn.Close()
-		require.NoError(t, err)
-	}()
+	fourthServerSQLConn := fourthServer.SQLConn(t)
 
 	// Test that total_reads / last_read was not populated by an explicit CREATE INDEX query.
 	_, err = fourthServerSQLConn.Exec("CREATE TABLE test(num INT PRIMARY KEY, letter CHAR)")
@@ -261,7 +225,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 
 	// Test cluster-wide RPC.
 	var resp serverpb.IndexUsageStatisticsResponse
-	err = getStatusJSONProto(thirdServer, "indexusagestatistics", &resp)
+	err = srvtestutils.GetStatusJSONProto(thirdServer, "indexusagestatistics", &resp)
 	require.NoError(t, err)
 
 	statsEntries := 0
@@ -292,7 +256,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	_, err = secondServerSQLConn.Exec("SELECT k, a FROM t WHERE a = 0")
 	require.NoError(t, err)
 
-	err = getStatusJSONProto(thirdServer, "indexusagestatistics", &resp)
+	err = srvtestutils.GetStatusJSONProto(thirdServer, "indexusagestatistics", &resp)
 	require.NoError(t, err)
 
 	statsEntries = 0
@@ -360,7 +324,7 @@ CREATE TABLE schema.test_table (
 `)
 
 	// Get Table IDs.
-	userName, err := userFromIncomingRPCContext(ctx)
+	userName, err := authserver.UserFromIncomingRPCContext(ctx)
 	require.NoError(t, err)
 
 	testCases := []struct {

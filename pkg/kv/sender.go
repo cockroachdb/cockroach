@@ -124,6 +124,14 @@ type TxnSender interface {
 	// SetDebugName sets the txn's debug name.
 	SetDebugName(name string)
 
+	// GetOmitInRangefeeds returns the value of the OmitInRangefeeds attribute of
+	// the Transaction proto.
+	GetOmitInRangefeeds() bool
+
+	// SetOmitInRangefeeds sets the OmitInRangefeeds attribute to true in the
+	// Transaction proto.
+	SetOmitInRangefeeds()
+
 	// String returns a string representation of the txn.
 	String() string
 
@@ -164,6 +172,10 @@ type TxnSender interface {
 	// This method is only valid when called on RootTxns.
 	ReleaseSavepoint(context.Context, SavepointToken) error
 
+	// CanUseSavepoint checks whether it would be valid to roll back or release
+	// the given savepoint in the current transaction state. It will never error.
+	CanUseSavepoint(context.Context, SavepointToken) bool
+
 	// SetFixedTimestamp makes the transaction run in an unusual way, at
 	// a "fixed timestamp": Timestamp and ReadTimestamp are set to ts,
 	// there's no clock uncertainty, and the txn's deadline is set to ts
@@ -177,22 +189,41 @@ type TxnSender interface {
 	// transaction has been used in the current epoch to read or write.
 	SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) error
 
-	// ManualRestart bumps the transactions epoch, and can upgrade the
-	// timestamp and priority.
-	// An uninitialized timestamp can be passed to leave the timestamp
-	// alone.
+	// GenerateForcedRetryableErr constructs, handles, and returns a retryable
+	// error that will cause the transaction to be (partially or fully) retried.
 	//
-	// Used by the SQL layer which sometimes knows that a transaction
-	// will not be able to commit and prefers to restart early.
-	// It is also used after synchronizing concurrent actors using a txn
-	// when a retryable error is seen.
-	// TODO(andrei): this second use should go away once we move to a
-	// TxnAttempt model.
-	ManualRestart(context.Context, roachpb.UserPriority, hlc.Timestamp)
+	// The transaction's timestamp is upgraded to the specified timestamp. An
+	// uninitialized timestamp can be passed to leave the timestamp alone.
+	//
+	// If mandated by the transaction's isolation level (PerStatementReadSnapshot
+	// == false) or by the mustRestart flag, the transaction's epoch is also
+	// bumped and all prior writes are discarded. Otherwise, the transaction's
+	// epoch is not bumped.
+	//
+	// The method returns a TransactionRetryWithProtoRefreshError with a
+	// payload initialized from this transaction, which must be cleared by a
+	// call to ClearRetryableErr before continuing to use the TxnSender.
+	//
+	// Used by the SQL layer which sometimes knows that a transaction will not
+	// be able to commit and prefers to restart early.
+	GenerateForcedRetryableErr(
+		ctx context.Context, ts hlc.Timestamp, mustRestart bool, msg redact.RedactableString,
+	) error
 
 	// UpdateStateOnRemoteRetryableErr updates the txn in response to an
 	// error encountered when running a request through the txn.
 	UpdateStateOnRemoteRetryableErr(context.Context, *kvpb.Error) *kvpb.Error
+
+	// GetRetryableErr returns an error if the TxnSender had a retryable error,
+	// otherwise nil. In this state Send() always fails with the same retryable
+	// error. ClearRetryableErr can be called to clear this error and make
+	// TxnSender usable again.
+	GetRetryableErr(ctx context.Context) *kvpb.TransactionRetryWithProtoRefreshError
+
+	// ClearRetryableErr clears the retryable error. Returns an error if the
+	// TxnSender was not in a retryable error state or if the TxnSender was
+	// aborted.
+	ClearRetryableErr(ctx context.Context) error
 
 	// DisablePipelining instructs the TxnSender not to pipeline
 	// requests. It should rarely be necessary to call this method. It
@@ -207,23 +238,29 @@ type TxnSender interface {
 	// timestamp. Use CommitTimestamp() when needed.
 	ReadTimestamp() hlc.Timestamp
 
-	// CommitTimestamp returns the transaction's start timestamp.
-	//
-	// This method is guaranteed to always return the same value while
-	// the transaction is open. To achieve this, the first call to this
-	// method also anchors the start timestamp and prevents the sender
-	// from automatically pushing transactions forward (i.e. handling
-	// certain forms of contention / txn conflicts automatically).
-	//
-	// In other words, using this method just once increases the
-	// likelihood that a retry error will bubble up to a client.
-	//
-	// See CommitTimestampFixed() below.
-	CommitTimestamp() hlc.Timestamp
+	// ReadTimestampFixed returns true if the read timestamp has been fixed
+	// and cannot be pushed forward.
+	ReadTimestampFixed() bool
 
-	// CommitTimestampFixed returns true if the commit timestamp has
-	// been fixed to the start timestamp and cannot be pushed forward.
-	CommitTimestampFixed() bool
+	// CommitTimestamp returns the transaction's commit timestamp.
+	//
+	// If the transaction is committed, the method returns the timestamp at
+	// which the transaction performed all of its writes.
+	//
+	// If the transaction is aborted, the method returns an error.
+	//
+	// If the transaction is pending and running under serializable isolation,
+	// the method returns the transaction's current provisional commit
+	// timestamp. It also fixes the transaction's read timestamp to ensure
+	// that the transaction cannot be pushed to a later timestamp and still
+	// commit. It does so by disabling read refreshes. As a result, using this
+	// method just once increases the likelihood that a retry error will
+	// bubble up to a client.
+	//
+	// If the transaction is pending and running under a weak isolation level,
+	// the method returns an error. Fixing the commit timestamp early is not
+	// supported for transactions running under weak isolation levels.
+	CommitTimestamp() (hlc.Timestamp, error)
 
 	// ProvisionalCommitTimestamp returns the transaction's provisional
 	// commit timestamp. This can move forward throughout the txn's
@@ -263,27 +300,29 @@ type TxnSender interface {
 	// IsLocking returns whether the transaction has begun acquiring locks.
 	IsLocking() bool
 
-	// PrepareRetryableError generates a
-	// TransactionRetryWithProtoRefreshError with a payload initialized
-	// from this txn.
-	PrepareRetryableError(ctx context.Context, msg redact.RedactableString) error
-
 	// TestingCloneTxn returns a clone of the transaction's current
 	// proto. This is for use by tests only. Use
 	// GetLeafTxnInitialState() instead when creating leaf transactions.
 	TestingCloneTxn() *roachpb.Transaction
 
-	// Step creates a sequencing point in the current transaction. A
-	// sequencing point establishes a snapshot baseline for subsequent
-	// read-only operations: until the next sequencing point, read-only
-	// operations observe the data at the time the snapshot was
-	// established and ignore writes performed since.
+	// Step creates an internal sequencing point in the current transaction. An
+	// internal sequencing point establishes a snapshot baseline for subsequent
+	// read-only operations of the transaction's own writes: until the next
+	// sequencing point, read-only operations observe the transaction's writes at
+	// the time the snapshot was established and ignore writes performed by the
+	// transaction since.
+	//
+	// Additionally, for Read Committed transactions, if allowReadTimestampStep is
+	// set, Step also advances the transaction's external read snapshot (i.e.
+	// ReadTimestamp) to a timestamp captured from the local HLC clock. This
+	// ensures that subsequent read-only operations observe the writes of other
+	// transactions that were committed before the time the new snapshot was
+	// established. For more detail on the interaction between transaction
+	// isolation levels and Step, see (isolation.Level).PerStatementReadSnapshot.
 	//
 	// Step() can only be called after stepping mode has been enabled
 	// using ConfigureStepping(SteppingEnabled).
-	//
-	// The method is idempotent.
-	Step(context.Context) error
+	Step(ctx context.Context, allowReadTimestampStep bool) error
 
 	// GetReadSeqNum gets the read sequence point for the current transaction.
 	GetReadSeqNum() enginepb.TxnSeq
@@ -293,10 +332,10 @@ type TxnSender interface {
 
 	// ConfigureStepping sets the sequencing point behavior.
 	//
-	// Note that a Sender is initially in the non-stepping mode,
-	// i.e. uses reads-own-writes by default. This makes the step
-	// behavior opt-in and backward-compatible with existing code which
-	// does not need it.
+	// Note that a Sender is initially in the non-stepping mode, i.e. by default,
+	// it uses reads-own-writes and, under Read Committed, establishes a new read
+	// snapshot per batch. This makes the step behavior opt-in and
+	// backward-compatible with existing code which does not need it.
 	//
 	// Calling ConfigureStepping(SteppingEnabled) when the stepping mode
 	// is currently disabled implies calling Step(), for convenience.
@@ -317,20 +356,17 @@ type TxnSender interface {
 	// observe the writes performed by this transaction.
 	DeferCommitWait(ctx context.Context) func(context.Context) error
 
-	// GetTxnRetryableErr returns an error if the TxnSender had a retryable error,
-	// otherwise nil. In this state Send() always fails with the same retryable
-	// error. ClearTxnRetryableErr can be called to clear this error and make
-	// TxnSender usable again.
-	GetTxnRetryableErr(ctx context.Context) *kvpb.TransactionRetryWithProtoRefreshError
-
-	// ClearTxnRetryableErr clears the retryable error, if any.
-	ClearTxnRetryableErr(ctx context.Context)
-
 	// HasPerformedReads returns true if a read has been performed.
 	HasPerformedReads() bool
 
 	// HasPerformedWrites returns true if a write has been performed.
 	HasPerformedWrites() bool
+
+	// TestingShouldRetry returns true if transaction retry errors should be
+	// randomly returned to callers. Note that it is the responsibility of
+	// (*kv.DB).Txn() to return the retries. This lives here since the
+	// TxnSender is what has access to the server's client testing knobs.
+	TestingShouldRetry() bool
 }
 
 // SteppingMode is the argument type to ConfigureStepping.

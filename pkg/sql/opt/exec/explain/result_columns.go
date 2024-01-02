@@ -11,6 +11,8 @@
 package explain
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -42,13 +44,22 @@ func getResultColumns(
 	case filterOp, invertedFilterOp, limitOp, max1RowOp, sortOp, topKOp, bufferOp, hashSetOpOp,
 		streamingSetOpOp, unionAllOp, distinctOp, saveTableOp, recursiveCTEOp:
 		// These ops inherit the columns from their first input.
+		if len(inputs) == 0 {
+			return nil, nil
+		}
 		return inputs[0], nil
 
 	case simpleProjectOp:
+		if len(inputs) == 0 {
+			return nil, nil
+		}
 		a := args.(*simpleProjectArgs)
 		return projectCols(inputs[0], a.Cols, nil /* colNames */), nil
 
 	case serializingProjectOp:
+		if len(inputs) == 0 {
+			return nil, nil
+		}
 		a := args.(*serializingProjectArgs)
 		return projectCols(inputs[0], a.Cols, a.ColNames), nil
 
@@ -67,19 +78,34 @@ func getResultColumns(
 		return args.(*renderArgs).Columns, nil
 
 	case projectSetOp:
+		if len(inputs) == 0 {
+			return nil, nil
+		}
 		return appendColumns(inputs[0], args.(*projectSetArgs).ZipCols...), nil
 
 	case applyJoinOp:
+		if len(inputs) == 0 {
+			return nil, nil
+		}
 		a := args.(*applyJoinArgs)
 		return joinColumns(a.JoinType, inputs[0], a.RightColumns), nil
 
 	case hashJoinOp:
+		if len(inputs) < 2 {
+			return nil, nil
+		}
 		return joinColumns(args.(*hashJoinArgs).JoinType, inputs[0], inputs[1]), nil
 
 	case mergeJoinOp:
+		if len(inputs) < 2 {
+			return nil, nil
+		}
 		return joinColumns(args.(*mergeJoinArgs).JoinType, inputs[0], inputs[1]), nil
 
 	case lookupJoinOp:
+		if len(inputs) == 0 {
+			return nil, nil
+		}
 		a := args.(*lookupJoinArgs)
 		cols := joinColumns(a.JoinType, inputs[0], tableColumns(a.Table, a.LookupCols))
 		// The following matches the behavior of execFactory.ConstructLookupJoin.
@@ -89,16 +115,25 @@ func getResultColumns(
 		return cols, nil
 
 	case ordinalityOp:
+		if len(inputs) == 0 {
+			return nil, nil
+		}
 		return appendColumns(inputs[0], colinfo.ResultColumn{
 			Name: args.(*ordinalityArgs).ColName,
 			Typ:  types.Int,
 		}), nil
 
 	case groupByOp:
+		if len(inputs) == 0 {
+			return nil, nil
+		}
 		a := args.(*groupByArgs)
 		return groupByColumns(inputs[0], a.GroupCols, a.Aggregations), nil
 
 	case scalarGroupByOp:
+		if len(inputs) == 0 {
+			return nil, nil
+		}
 		a := args.(*scalarGroupByArgs)
 		return groupByColumns(inputs[0], nil /* groupCols */, a.Aggregations), nil
 
@@ -106,6 +141,9 @@ func getResultColumns(
 		return args.(*windowArgs).Window.Cols, nil
 
 	case invertedJoinOp:
+		if len(inputs) == 0 {
+			return nil, nil
+		}
 		a := args.(*invertedJoinArgs)
 		cols := joinColumns(a.JoinType, inputs[0], tableColumns(a.Table, a.LookupCols))
 		// The following matches the behavior of execFactory.ConstructInvertedJoin.
@@ -150,7 +188,10 @@ func getResultColumns(
 
 	case deleteOp:
 		a := args.(*deleteArgs)
-		return tableColumns(a.Table, a.ReturnCols), nil
+		return appendColumns(
+			tableColumns(a.Table, a.ReturnCols),
+			a.Passthrough...,
+		), nil
 
 	case opaqueOp:
 		if args.(*opaqueArgs).Metadata != nil {
@@ -193,7 +234,7 @@ func getResultColumns(
 
 	case createTableOp, createTableAsOp, createViewOp, controlJobsOp, controlSchedulesOp,
 		cancelQueriesOp, cancelSessionsOp, createStatisticsOp, errorIfRowsOp, deleteRangeOp,
-		createFunctionOp:
+		createFunctionOp, callOp:
 		// These operations produce no columns.
 		return nil, nil
 
@@ -215,6 +256,12 @@ func tableColumns(table cat.Table, ordinals exec.TableColumnOrdinalSet) colinfo.
 			cols = append(cols, colinfo.ResultColumn{
 				Name: string(col.ColName()),
 				Typ:  col.DatumType(),
+			})
+		} else {
+			// Give downstream operators something to chew on so that they don't panic.
+			cols = append(cols, colinfo.ResultColumn{
+				Name: fmt.Sprintf("unknownCol-%d", i),
+				Typ:  types.Unknown,
 			})
 		}
 	}
@@ -255,7 +302,9 @@ func groupByColumns(
 	columns := make(colinfo.ResultColumns, 0, len(groupCols)+len(aggregations))
 	if inputCols != nil {
 		for _, col := range groupCols {
-			columns = append(columns, inputCols[col])
+			if len(inputCols) > int(col) {
+				columns = append(columns, inputCols[col])
+			}
 		}
 	}
 	for _, agg := range aggregations {

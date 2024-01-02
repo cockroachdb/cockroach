@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -42,7 +44,7 @@ var consistencyCheckRate = settings.RegisterByteSizeSetting(
 		"negatively impact performance.",
 	8<<20, // 8MB
 	settings.PositiveInt,
-).WithPublic()
+	settings.WithPublic)
 
 // consistencyCheckRateBurstFactor we use this to set the burst parameter on the
 // quotapool.RateLimiter. It seems overkill to provide a user setting for this,
@@ -97,9 +99,11 @@ func newConsistencyQueue(store *Store) *consistencyQueue {
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.ConsistencyQueueSuccesses,
 			failures:             store.metrics.ConsistencyQueueFailures,
+			storeFailures:        store.metrics.StoreFailures,
 			pending:              store.metrics.ConsistencyQueuePending,
 			processingNanos:      store.metrics.ConsistencyQueueProcessingNanos,
 			processTimeoutFunc:   makeRateLimitedTimeoutFunc(consistencyCheckRate),
+			disabledConfig:       kvserverbase.ConsistencyQueueEnabled,
 		},
 	)
 	return q
@@ -116,7 +120,7 @@ func (q *consistencyQueue) shouldQueue(
 			},
 			isNodeAvailable: func(nodeID roachpb.NodeID) bool {
 				if repl.store.cfg.NodeLiveness != nil {
-					return repl.store.cfg.NodeLiveness.IsAvailableNotDraining(nodeID)
+					return repl.store.cfg.NodeLiveness.GetNodeVitalityFromCache(nodeID).IsLive(livenesspb.ConsistencyQueue)
 				}
 				// Some tests run without a NodeLiveness configured.
 				return true

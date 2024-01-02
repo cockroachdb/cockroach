@@ -49,9 +49,11 @@ func declareKeysAddSSTable(
 	latchSpans *spanset.SpanSet,
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
-) {
+) error {
 	args := req.(*kvpb.AddSSTableRequest)
-	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+	if err := DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset); err != nil {
+		return err
+	}
 	// We look up the range descriptor key to return its span.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 
@@ -72,6 +74,7 @@ func declareKeysAddSSTable(
 			Key: keys.MVCCRangeKeyGCKey(rs.GetRangeID()),
 		})
 	}
+	return nil
 }
 
 // AddSSTableRewriteConcurrency sets the concurrency of a single SST rewrite.
@@ -141,6 +144,38 @@ func EvalAddSSTable(
 	defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", start.Key, end.Key)
 
+	// If this is a remote sst, just link it in and skip the rest of eval, since
+	// we do not do anything that touches the data inside an sst for remote ssts
+	// at the point of ingesting them.
+	if path := args.RemoteFile.Path; path != "" {
+		if len(args.Data) > 0 {
+			return result.Result{}, errors.AssertionFailedf("remote sst cannot include content")
+		}
+		log.VEventf(ctx, 1, "AddSSTable remote file %s in %s", path, args.RemoteFile.Locator)
+
+		// We have no idea if the SST being ingested contains keys that will shadow
+		// existing keys or not, so we need to force its mvcc stats to be estimates.
+		s := *args.MVCCStats
+		s.ContainsEstimates++
+		ms.Add(s)
+
+		return result.Result{
+			Replicated: kvserverpb.ReplicatedEvalResult{
+				AddSSTable: &kvserverpb.ReplicatedEvalResult_AddSSTable{
+					RemoteFileLoc:   args.RemoteFile.Locator,
+					RemoteFilePath:  path,
+					BackingFileSize: args.RemoteFile.BackingFileSize,
+					Span:            roachpb.Span{Key: start.Key, EndKey: end.Key},
+				},
+				// Since the remote SST could contain keys at any timestamp, consider it
+				// a history mutation.
+				MVCCHistoryMutation: &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
+					Spans: []roachpb.Span{{Key: start.Key, EndKey: end.Key}},
+				},
+			},
+		}, nil
+	}
+
 	if min := addSSTableCapacityRemainingLimit.Get(&cArgs.EvalCtx.ClusterSettings().SV); min > 0 {
 		cap, err := cArgs.EvalCtx.GetEngineCapacity()
 		if err != nil {
@@ -195,13 +230,13 @@ func EvalAddSSTable(
 	}
 
 	var statsDelta enginepb.MVCCStats
-	maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 	checkConflicts := args.DisallowConflicts || args.DisallowShadowing ||
 		!args.DisallowShadowingBelow.IsEmpty()
 	if checkConflicts {
 		// If requested, check for MVCC conflicts with existing keys. This enforces
 		// all MVCC invariants by returning WriteTooOldError for any existing
-		// values at or above the SST timestamp, returning WriteIntentError to
+		// values at or above the SST timestamp, returning LockConflictError to
 		// resolve any encountered intents, and accurately updating MVCC stats.
 		//
 		// Additionally, if DisallowShadowing or DisallowShadowingBelow is set, it
@@ -231,22 +266,24 @@ func EvalAddSSTable(
 
 		log.VEventf(ctx, 2, "checking conflicts for SSTable [%s,%s)", start.Key, end.Key)
 		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end, leftPeekBound, rightPeekBound,
-			args.DisallowShadowing, args.DisallowShadowingBelow, sstTimestamp, maxIntents, usePrefixSeek)
+			args.DisallowShadowing, args.DisallowShadowingBelow, sstTimestamp, maxLockConflicts, usePrefixSeek)
 		statsDelta.Add(sstReqStatsDelta)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
 		}
 
 	} else {
-		// If not checking for MVCC conflicts, at least check for separated intents.
-		// The caller is expected to make sure there are no writers across the span,
-		// and thus no or few intents, so this is cheap in the common case.
-		log.VEventf(ctx, 2, "checking conflicting intents for SSTable [%s,%s)", start.Key, end.Key)
-		intents, err := storage.ScanIntents(ctx, readWriter, start.Key, end.Key, maxIntents, 0)
+		// If not checking for MVCC conflicts, at least check for locks. The
+		// caller is expected to make sure there are no writers across the span,
+		// and thus no or few locks, so this is cheap in the common case.
+		log.VEventf(ctx, 2, "checking conflicting locks for SSTable [%s,%s)", start.Key, end.Key)
+		locks, err := storage.ScanLocks(
+			ctx, readWriter, start.Key, end.Key, maxLockConflicts, 0,
+			storage.BatchEvalReadCategory)
 		if err != nil {
-			return result.Result{}, errors.Wrap(err, "scanning intents")
-		} else if len(intents) > 0 {
-			return result.Result{}, &kvpb.WriteIntentError{Intents: intents}
+			return result.Result{}, errors.Wrap(err, "scanning locks")
+		} else if len(locks) > 0 {
+			return result.Result{}, &kvpb.LockConflictError{Locks: locks}
 		}
 	}
 
@@ -367,7 +404,7 @@ func EvalAddSSTable(
 
 	reply := resp.(*kvpb.AddSSTableResponse)
 	reply.RangeSpan = cArgs.EvalCtx.Desc().KeySpan().AsRawSpanWithNoLocals()
-	reply.AvailableBytes = cArgs.EvalCtx.GetMaxBytes() - cArgs.EvalCtx.GetMVCCStats().Total() - stats.Total()
+	reply.AvailableBytes = cArgs.EvalCtx.GetMaxBytes(ctx) - cArgs.EvalCtx.GetMVCCStats().Total() - stats.Total()
 
 	// If requested, locate and return the start of the span following the file
 	// span which may be non-empty, that is, the first key after the file's end
@@ -377,13 +414,17 @@ func EvalAddSSTable(
 	// addition, and instead just use this key-only iterator. If a caller actually
 	// needs to know what data is there, it must issue its own real Scan.
 	if args.ReturnFollowingLikelyNonEmptySpanStart {
-		existingIter := spanset.DisableReaderAssertions(readWriter).NewMVCCIterator(
+		existingIter, err := spanset.DisableReaderAssertions(readWriter).NewMVCCIterator(
+			ctx,
 			storage.MVCCKeyIterKind, // don't care if it is committed or not, just that it isn't empty.
 			storage.IterOptions{
-				KeyTypes:   storage.IterKeyTypePointsAndRanges,
-				UpperBound: reply.RangeSpan.EndKey,
-			},
-		)
+				KeyTypes:     storage.IterKeyTypePointsAndRanges,
+				UpperBound:   reply.RangeSpan.EndKey,
+				ReadCategory: storage.BatchEvalReadCategory,
+			})
+		if err != nil {
+			return result.Result{}, errors.Wrap(err, "error when creating iterator for non-empty span")
+		}
 		defer existingIter.Close()
 		existingIter.SeekGE(end)
 		if ok, err := existingIter.Valid(); err != nil {

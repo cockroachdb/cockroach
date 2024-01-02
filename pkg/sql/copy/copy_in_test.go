@@ -25,17 +25,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -51,8 +52,7 @@ func TestCopyFromNullInfNaN(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
@@ -152,8 +152,7 @@ func TestCopyFromRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
@@ -307,13 +306,14 @@ func TestCopyFromBinary(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "StartServer" /* prefix */, url.User(username.RootUser))
+	pgURL, cleanupGoDB := s.PGUrl(
+		t, serverutils.CertsDirPrefix("StartServer"), serverutils.User(username.RootUser),
+	)
 	defer cleanupGoDB()
 	conn, err := pgx.Connect(ctx, pgURL.String())
 	if err != nil {
@@ -374,8 +374,7 @@ func TestCopyFromError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
@@ -502,16 +501,27 @@ func TestCopyFromRetries(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			params, _ := tests.CreateTestServerParams()
+			var params base.TestServerArgs
 			var attemptNumber int
 			params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-				BeforeCopyFromInsert: func() error {
+				BeforeCopyFromInsert: func(txn *kv.Txn) error {
+					if !tc.inTxn {
+						// When we're not in an explicit txn, we expect that all
+						// txns used by the COPY use the background QoS.
+						if txn.AdmissionHeader().Priority != int32(admissionpb.UserLowPri) {
+							t.Errorf(
+								"unexpected QoS level %d (expected %d)",
+								txn.AdmissionHeader().Priority, admissionpb.UserLowPri,
+							)
+						}
+					}
 					attemptNumber++
 					return tc.hook(attemptNumber)
 				},
 			}
-			s, db, _ := serverutils.StartServer(t, params)
-			defer s.Stopper().Stop(context.Background())
+			srv, db, _ := serverutils.StartServer(t, params)
+			defer srv.Stopper().Stop(context.Background())
+			s := srv.ApplicationLayer()
 
 			_, err := db.Exec(
 				`CREATE TABLE t (
@@ -523,8 +533,9 @@ func TestCopyFromRetries(t *testing.T) {
 			ctx := context.Background()
 
 			// Use pgx instead of lib/pq as pgx doesn't require copy to be in a txn.
-			pgURL, cleanupGoDB := sqlutils.PGUrl(
-				t, s.ServingSQLAddr(), "StartServer" /* prefix */, url.User(username.RootUser))
+			pgURL, cleanupGoDB := s.PGUrl(
+				t, serverutils.CertsDirPrefix("StartServer"), serverutils.User(username.RootUser),
+			)
 			defer cleanupGoDB()
 			pgxConn, err := pgx.Connect(ctx, pgURL.String())
 			require.NoError(t, err)
@@ -575,8 +586,7 @@ func TestCopyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
@@ -629,8 +639,7 @@ func TestCopyFromFKCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	db.SetMaxOpenConns(1)
@@ -675,17 +684,19 @@ func TestCopyInReleasesLeases(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	tdb := sqlutils.MakeSQLRunner(db)
-	defer s.Stopper().Stop(ctx)
 	tdb.Exec(t, `CREATE TABLE t (k INT8 PRIMARY KEY)`)
 	tdb.Exec(t, `CREATE USER foo WITH PASSWORD 'testabc'`)
 	tdb.Exec(t, `GRANT admin TO foo`)
 
-	userURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(t,
-		s.ServingSQLAddr(), t.Name(), url.UserPassword("foo", "testabc"),
-		false /* withClientCerts */)
+	userURL, cleanupFn := s.PGUrl(t,
+		serverutils.CertsDirPrefix(t.Name()),
+		serverutils.UserPassword("foo", "testabc"),
+		serverutils.ClientCerts(false),
+	)
 	defer cleanupFn()
 	conn, err := sqltestutils.PGXConn(t, userURL)
 	require.NoError(t, err)
@@ -720,11 +731,10 @@ func TestMessageSizeTooBig(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, _, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
 
-	url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "copytest", url.User(username.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, srv.ApplicationLayer().AdvSQLAddr(), "copytest", url.User(username.RootUser))
 	defer cleanup()
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -755,21 +765,24 @@ func TestMessageSizeTooBig(t *testing.T) {
 // Test that a big copy results in an error and not crash.
 func TestCopyExceedsSQLMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	for _, v := range []string{"on", "off"} {
 		for _, a := range []string{"on", "off"} {
 			for _, f := range []string{"on", "off"} {
 				t.Run(fmt.Sprintf("vector=%v/atomic=%v/fastpath=%v", v, a, f), func(t *testing.T) {
+					defer log.Scope(t).Close(t)
+
 					ctx := context.Background()
 					// Sometimes startup fails with lower than 10MiB.
 					params := base.TestServerArgs{
 						SQLMemoryPoolSize: 10 << 20,
 					}
-					s, _, _ := serverutils.StartServer(t, params)
-					defer s.Stopper().Stop(ctx)
+					srv := serverutils.StartServerOnly(t, params)
+					defer srv.Stopper().Stop(ctx)
 
-					url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "copytest", url.User(username.RootUser))
+					s := srv.ApplicationLayer()
+
+					url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
 					defer cleanup()
 					var sqlConnCtx clisqlclient.Context
 					conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())

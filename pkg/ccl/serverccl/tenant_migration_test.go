@@ -22,14 +22,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestValidateTargetTenantClusterVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	prev := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryMinSupportedVersion}
-	cur := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryVersion}
+	prev := clusterversion.ClusterVersion{Version: clusterversion.MinSupported.Version()}
+	cur := clusterversion.ClusterVersion{Version: clusterversion.Latest.Version()}
 	// In cases where we use prev as the binary version for the test, set the
 	// minimum supported version to prev's binary version - 1 Major version.
 	prevMsv := clusterversion.ClusterVersion{
@@ -73,54 +74,58 @@ func TestValidateTargetTenantClusterVersion(t *testing.T) {
 
 	// tenant's minimum supported version <= target version <= node's binary version
 	for i, test := range tests {
-		st := cluster.MakeTestingClusterSettingsWithVersions(
-			test.binaryVersion,
-			test.binaryMinSupportedVersion,
-			false, /* initializeVersion */
-		)
+		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
+			defer log.Scope(t).Close(t)
 
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-			// Disable the default test tenant, since we create one explicitly
-			// below.
-			DefaultTestTenant: base.TestTenantDisabled,
-			Settings:          st,
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					BinaryVersionOverride: test.binaryVersion,
-					// We're bumping cluster versions manually ourselves. We
-					// want to avoid racing with the auto-upgrade process.
-					DisableAutomaticVersionUpgrade: make(chan struct{}),
-				},
-			},
-		})
+			makeSettings := func() *cluster.Settings {
+				st := cluster.MakeTestingClusterSettingsWithVersions(
+					test.binaryVersion,
+					test.binaryMinSupportedVersion,
+					false, /* initializeVersion */
+				)
+				return st
+			}
 
-		ctx := context.Background()
-		upgradePod, err := s.StartTenant(ctx,
-			base.TestTenantArgs{
-				Settings: st,
-				TenantID: serverutils.TestTenantID(),
-				TestingKnobs: base.TestingKnobs{
+			s := serverutils.StartServerOnly(t, base.TestServerArgs{
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
+				Settings:          makeSettings(),
+				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						BinaryVersionOverride: test.binaryVersion,
+						// We're bumping cluster versions manually ourselves. We
+						// want to avoid racing with the auto-upgrade process.
+						DisableAutomaticVersionUpgrade: make(chan struct{}),
 					},
 				},
 			})
-		if err != nil {
-			t.Fatal(err)
-		}
+			defer s.Stopper().Stop(context.Background())
 
-		tmServer := upgradePod.MigrationServer().(*server.TenantMigrationServer)
-		req := &serverpb.ValidateTargetClusterVersionRequest{
-			ClusterVersion: &test.targetClusterVersion,
-		}
+			ctx := context.Background()
+			upgradePod, err := s.TenantController().StartTenant(ctx,
+				base.TestTenantArgs{
+					Settings: makeSettings(),
+					TenantID: serverutils.TestTenantID(),
+					TestingKnobs: base.TestingKnobs{
+						Server: &server.TestingKnobs{
+							BinaryVersionOverride: test.binaryVersion,
+						},
+					},
+				})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer upgradePod.AppStopper().Stop(context.Background())
 
-		_, err = tmServer.ValidateTargetClusterVersion(context.Background(), req)
-		if !testutils.IsError(err, test.expErrMatch) {
-			t.Fatalf("test %d: got error %s, wanted error matching '%s'", i, err, test.expErrMatch)
-		}
+			tmServer := upgradePod.MigrationServer().(*server.TenantMigrationServer)
+			req := &serverpb.ValidateTargetClusterVersionRequest{
+				ClusterVersion: &test.targetClusterVersion,
+			}
 
-		upgradePod.Stopper().Stop(context.Background())
-		s.Stopper().Stop(context.Background())
+			_, err = tmServer.ValidateTargetClusterVersion(context.Background(), req)
+			if !testutils.IsError(err, test.expErrMatch) {
+				t.Fatalf("test %d: got error %s, wanted error matching '%s'", i, err, test.expErrMatch)
+			}
+		})
 	}
 }
 
@@ -132,8 +137,8 @@ func TestValidateTargetTenantClusterVersion(t *testing.T) {
 func TestBumpTenantClusterVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	prev := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryMinSupportedVersion}
-	cur := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryVersion}
+	prev := clusterversion.ClusterVersion{Version: clusterversion.MinSupported.Version()}
+	cur := clusterversion.ClusterVersion{Version: clusterversion.Latest.Version()}
 	// In cases where we use prev as the binary version for the test, set the
 	// minimum supported version to prev's binary version - 1 Major version.
 	prevMsv := clusterversion.ClusterVersion{
@@ -183,17 +188,20 @@ func TestBumpTenantClusterVersion(t *testing.T) {
 	ctx := context.Background()
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("config=%d", i), func(t *testing.T) {
-			st := cluster.MakeTestingClusterSettingsWithVersions(
-				test.binaryVersion.Version,
-				test.minSupportedVersion.Version,
-				false, /* initializeVersion */
-			)
+			defer log.Scope(t).Close(t)
 
-			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-				// Disable the default tenant because we're creating one
-				// explicitly below.
-				DefaultTestTenant: base.TestTenantDisabled,
-				Settings:          st,
+			makeSettings := func() *cluster.Settings {
+				st := cluster.MakeTestingClusterSettingsWithVersions(
+					test.binaryVersion.Version,
+					test.minSupportedVersion.Version,
+					false, /* initializeVersion */
+				)
+				return st
+			}
+
+			s := serverutils.StartServerOnly(t, base.TestServerArgs{
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
+				Settings:          makeSettings(),
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						// This test wants to bootstrap at the previously active
@@ -208,9 +216,9 @@ func TestBumpTenantClusterVersion(t *testing.T) {
 			})
 			defer s.Stopper().Stop(context.Background())
 
-			tenant, err := s.StartTenant(ctx,
+			tenant, err := s.TenantController().StartTenant(ctx,
 				base.TestTenantArgs{
-					Settings: st,
+					Settings: makeSettings(),
 					TenantID: serverutils.TestTenantID(),
 					TestingKnobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
@@ -221,7 +229,7 @@ func TestBumpTenantClusterVersion(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer tenant.Stopper().Stop(context.Background())
+			defer tenant.AppStopper().Stop(context.Background())
 
 			// Check to see our initial active cluster versions are what we
 			// expect.

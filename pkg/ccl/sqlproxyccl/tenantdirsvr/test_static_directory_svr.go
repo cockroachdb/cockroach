@@ -145,7 +145,16 @@ func (d *TestStaticDirectoryServer) WatchPods(
 	removeListener := func(e *list.Element) chan *tenant.WatchPodsResponse {
 		d.mu.Lock()
 		defer d.mu.Unlock()
-		return d.mu.podEventListeners.Remove(e).(chan *tenant.WatchPodsResponse)
+		// Check for existence before removing the entry.
+		//
+		// list.Remove(e) will always return e.Value regardless of whether the
+		// element exists in the list.
+		for el := d.mu.podEventListeners.Front(); el != nil; el = el.Next() {
+			if el.Value == e.Value {
+				return d.mu.podEventListeners.Remove(el).(chan *tenant.WatchPodsResponse)
+			}
+		}
+		return nil
 	}
 
 	// Construct the channel with a small buffer to allow for a burst of
@@ -248,7 +257,16 @@ func (d *TestStaticDirectoryServer) WatchTenants(
 	removeListener := func(e *list.Element) chan *tenant.WatchTenantsResponse {
 		d.mu.Lock()
 		defer d.mu.Unlock()
-		return d.mu.tenantEventListeners.Remove(e).(chan *tenant.WatchTenantsResponse)
+		// Check for existence before removing the entry.
+		//
+		// list.Remove(e) will always return e.Value regardless of whether the
+		// element exists in the list.
+		for el := d.mu.tenantEventListeners.Front(); el != nil; el = el.Next() {
+			if el.Value == e.Value {
+				return d.mu.tenantEventListeners.Remove(el).(chan *tenant.WatchTenantsResponse)
+			}
+		}
+		return nil
 	}
 
 	// Construct the channel with a small buffer to allow for a burst of

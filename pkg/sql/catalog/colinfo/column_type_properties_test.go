@@ -55,6 +55,7 @@ func TestCanHaveCompositeKeyEncoding(t *testing.T) {
 		{types.Jsonb, true},
 		{types.Name, false},
 		{types.Oid, false},
+		{types.RefCursor, false},
 		{types.String, false},
 		{types.StringArray, false},
 		{types.Time, false},

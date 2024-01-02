@@ -16,12 +16,7 @@ import {
   DurationToNumber,
   TimestampToMoment,
 } from "src/util/convert";
-import {
-  BytesWithPrecision,
-  Count,
-  DATE_FORMAT,
-  DATE_FORMAT_24_TZ,
-} from "src/util/format";
+import { BytesWithPrecision, Count, DATE_FORMAT } from "src/util/format";
 import { Link } from "react-router-dom";
 import React from "react";
 
@@ -44,7 +39,7 @@ import {
 } from "src/dropdown/dropdown";
 import { Button } from "src/button/button";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import { computeOrUseStmtSummary } from "../util";
+import { computeOrUseStmtSummary, FixLong } from "../util";
 import {
   statisticsTableTitles,
   StatisticType,
@@ -90,7 +85,7 @@ const StatementTableCell = (props: { session: ISession }) => {
   const { session } = props;
 
   if (!(session.active_queries?.length > 0)) {
-    if (session.last_active_query == "") {
+    if (session.last_active_query === "") {
       return <div>{"N/A"}</div>;
     }
     return <div>{session.last_active_query}</div>;
@@ -116,7 +111,7 @@ function formatSessionStart(session: ISession) {
 }
 
 function formatStatementStart(session: ISession) {
-  if (session.active_queries.length == 0) {
+  if (session.active_queries.length === 0) {
     return <>N/A</>;
   }
   const start = moment
@@ -235,10 +230,16 @@ export function makeSessionsColumns(
       title: statisticsTableTitles.memUsage(statType),
       className: cx("cl-table__col-session"),
       cell: session =>
-        BytesWithPrecision(session.session.alloc_bytes?.toNumber(), 0) +
+        BytesWithPrecision(
+          FixLong(session.session.alloc_bytes ?? 0).toNumber(),
+          0,
+        ) +
         "/" +
-        BytesWithPrecision(session.session.max_alloc_bytes?.toNumber(), 0),
-      sort: session => session.session.alloc_bytes?.toNumber(),
+        BytesWithPrecision(
+          FixLong(session.session.max_alloc_bytes ?? 0).toNumber(),
+          0,
+        ),
+      sort: session => FixLong(session.session.alloc_bytes ?? 0).toNumber(),
     },
     {
       name: "clientAddress",

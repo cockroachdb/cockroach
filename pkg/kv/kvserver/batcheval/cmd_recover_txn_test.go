@@ -37,7 +37,7 @@ func TestRecoverTxn(t *testing.T) {
 	ctx := context.Background()
 	k, k2 := roachpb.Key("a"), roachpb.Key("b")
 	ts := hlc.Timestamp{WallTime: 1}
-	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1)
+	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1, 0, false /* omitInRangefeeds */)
 	txn.Status = roachpb.STAGING
 	txn.LockSpans = []roachpb.Span{{Key: k}}
 	txn.InFlightWrites = []roachpb.SequencedWrite{{Key: k2, Sequence: 0}}
@@ -49,7 +49,7 @@ func TestRecoverTxn(t *testing.T) {
 		// Write the transaction record.
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 		txnRecord := txn.AsRecord()
-		if err := storage.MVCCPutProto(ctx, db, nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRecord); err != nil {
+		if err := storage.MVCCPutProto(ctx, db, txnKey, hlc.Timestamp{}, &txnRecord, storage.MVCCWriteOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -104,7 +104,7 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 	ctx := context.Background()
 	k := roachpb.Key("a")
 	ts := hlc.Timestamp{WallTime: 1}
-	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1)
+	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1, 0, false /* omitInRangefeeds */)
 	txn.Status = roachpb.STAGING
 
 	testCases := []struct {
@@ -225,7 +225,7 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 			// request is evaluated.
 			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			txnRecord := c.changedTxn.AsRecord()
-			if err := storage.MVCCPutProto(ctx, db, nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRecord); err != nil {
+			if err := storage.MVCCPutProto(ctx, db, txnKey, hlc.Timestamp{}, &txnRecord, storage.MVCCWriteOptions{}); err != nil {
 				t.Fatal(err)
 			}
 

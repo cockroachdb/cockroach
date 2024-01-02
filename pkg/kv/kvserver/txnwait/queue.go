@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -66,27 +67,32 @@ func TestingOverrideTxnLivenessThreshold(t time.Duration) func() {
 	}
 }
 
-// ShouldPushImmediately returns whether the PushTxn request should
-// proceed without queueing. This is true for pushes which are neither
-// ABORT nor TIMESTAMP, but also for ABORT and TIMESTAMP pushes where
-// the pushee has min priority or pusher has max priority.
-func ShouldPushImmediately(req *kvpb.PushTxnRequest) bool {
-	if req.Force {
+// ShouldPushImmediately returns whether the PushTxn request should proceed
+// without queueing. This is true for pushes which are neither ABORT nor
+// TIMESTAMP, but also for ABORT and TIMESTAMP pushes with WaitPolicy_Error or
+// where the pusher has priority.
+func ShouldPushImmediately(
+	req *kvpb.PushTxnRequest, pusheeStatus roachpb.TransactionStatus, wp lock.WaitPolicy,
+) bool {
+	if req.Force || wp == lock.WaitPolicy_Error {
 		return true
 	}
 	return CanPushWithPriority(
 		req.PushType,
 		req.PusherTxn.IsoLevel, req.PusheeTxn.IsoLevel,
 		req.PusherTxn.Priority, req.PusheeTxn.Priority,
+		pusheeStatus,
 	)
 }
 
 // CanPushWithPriority returns true if the pusher can perform the specified push
-// type on the pushee, based on the two txns' isolation levels and priorities.
+// type on the pushee, based on the two txns' isolation levels, their priorities,
+// and the pushee's status.
 func CanPushWithPriority(
 	pushType kvpb.PushTxnType,
 	pusherIso, pusheeIso isolation.Level,
 	pusherPri, pusheePri enginepb.TxnPriority,
+	pusheeStatus roachpb.TransactionStatus,
 ) bool {
 	// Normalize the transaction priorities so that normal user priorities are
 	// considered equal for the purposes of pushing.
@@ -103,6 +109,15 @@ func CanPushWithPriority(
 	case kvpb.PUSH_ABORT:
 		return pusherPri > pusheePri
 	case kvpb.PUSH_TIMESTAMP:
+		// If the pushee transaction is STAGING, only let the PUSH_TIMESTAMP through
+		// to disrupt the transaction commit if the pusher has a higher priority. If
+		// the priorities are equal, the PUSH_TIMESTAMP should wait for the commit
+		// to complete.
+		if pusheeStatus == roachpb.STAGING {
+			return pusherPri > pusheePri
+		}
+		// Otherwise, the pushee has not yet started committing...
+
 		// If the pushee transaction tolerates write skew, the PUSH_TIMESTAMP is
 		// harmless, so let it through.
 		return pusheeIso.ToleratesWriteSkew() ||
@@ -474,12 +489,8 @@ func (q *Queue) releaseWaitingQueriesLocked(ctx context.Context, txnID uuid.UUID
 // If the transaction is successfully pushed while this method is waiting,
 // the first return value is a non-nil PushTxnResponse object.
 func (q *Queue) MaybeWaitForPush(
-	ctx context.Context, req *kvpb.PushTxnRequest,
+	ctx context.Context, req *kvpb.PushTxnRequest, wp lock.WaitPolicy,
 ) (*kvpb.PushTxnResponse, *kvpb.Error) {
-	if ShouldPushImmediately(req) {
-		return nil, nil
-	}
-
 	q.mu.Lock()
 	// If the txn wait queue is not enabled or if the request is not
 	// contained within the replica, do nothing. The request can fall
@@ -501,6 +512,9 @@ func (q *Queue) MaybeWaitForPush(
 	if txn := pending.getTxn(); isPushed(req, txn) {
 		q.mu.Unlock()
 		return createPushTxnResponse(txn), nil
+	} else if ShouldPushImmediately(req, txn.Status, wp) {
+		q.mu.Unlock()
+		return nil, nil
 	}
 
 	push := &waitingPush{
@@ -967,7 +981,7 @@ func (q *Queue) queryTxnStatus(
 		//
 		// Scenario:
 		// - we're aborted and don't know if we have a read-write conflict
-		// - the push above fails and we get a WriteIntentError
+		// - the push above fails and we get a LockConflictError
 		// - we try to update our transaction (right here, and if we don't we might
 		// be stuck in a race, that's why we do this - the txn proto we're using
 		// might be outdated)

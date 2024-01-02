@@ -12,12 +12,14 @@ package server_test
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -37,83 +39,59 @@ func TestAddNewStoresToExistingNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Nine stores is a lot of goroutines.
 	skip.UnderStress(t, "too many new stores and nodes for stress")
+	skip.UnderRace(t, "too many new stores and nodes for race")
+	skip.UnderDeadlock(t, "too many new stores and nodes for deadlock")
 
 	ctx := context.Background()
 
-	n1s1, n1cleanup1 := testutils.TempDir(t)
-	defer n1cleanup1()
-	n2s1, n2cleanup1 := testutils.TempDir(t)
-	defer n2cleanup1()
-	n3s1, n3cleanup1 := testutils.TempDir(t)
-	defer n3cleanup1()
+	ser := server.NewStickyVFSRegistry()
 
-	numNodes := 3
-	tcArgs := base.TestClusterArgs{
-		ServerArgsPerNode: map[int]base.TestServerArgs{
-			// NB: on my local (beefy) machine, upreplication
-			// takes ~6s. This is pretty hefty compared to ~1s
-			// with ephemeral stores. But - we need the real
-			// stores here. At the time of writing, we perform
-			// ~100 change replicas txns, all in all, and
-			// 0.06s for a replication change does seem ok.
-			0: {StoreSpecs: []base.StoreSpec{{Path: n1s1}}},
-			1: {StoreSpecs: []base.StoreSpec{{Path: n2s1}}},
-			2: {StoreSpecs: []base.StoreSpec{{Path: n3s1}}},
-		},
+	const (
+		numNodes                     = 3
+		numStoresPerNodeInitially    = 1
+		numStoresPerNodeAfterRestart = 3
+	)
+
+	mkClusterArgs := func(numNodes, numStoresPerNode int) base.TestClusterArgs {
+		tcArgs := base.TestClusterArgs{
+			// NB: it's important that this test wait for full replication. Otherwise,
+			// with only a single voter on the range that allocates store IDs, it can
+			// pass erroneously. StartTestCluster already calls it, but we call it
+			// again explicitly.
+			ReplicationMode:   base.ReplicationAuto,
+			ServerArgsPerNode: map[int]base.TestServerArgs{},
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TODOTestTenantDisabled,
+			},
+		}
+		for srvIdx := 0; srvIdx < numNodes; srvIdx++ {
+			serverArgs := base.TestServerArgs{}
+			serverArgs.Knobs.Server = &server.TestingKnobs{StickyVFSRegistry: ser}
+			for storeIdx := 0; storeIdx < numStoresPerNode; storeIdx++ {
+				id := fmt.Sprintf("s%d.%d", srvIdx+1, storeIdx+1)
+				serverArgs.StoreSpecs = append(
+					serverArgs.StoreSpecs,
+					base.StoreSpec{InMemory: true, StickyVFSID: id},
+				)
+			}
+			tcArgs.ServerArgsPerNode[srvIdx] = serverArgs
+		}
+		return tcArgs
 	}
 
-	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
-	// NB: it's important that this test wait for full replication. Otherwise,
-	// with only a single voter on the range that allocates store IDs, it can
-	// pass erroneously. StartTestCluster already calls it, but we call it
-	// again explicitly.
-	if err := tc.WaitForFullReplication(); err != nil {
-		log.Fatalf(ctx, "while waiting for full replication: %v", err)
-	}
+	tc := testcluster.StartTestCluster(t, numNodes, mkClusterArgs(numNodes, numStoresPerNodeInitially))
 	clusterID := tc.Server(0).StorageClusterID()
 	tc.Stopper().Stop(ctx)
 
-	// Add two additional stores to each node.
-	n1s2, n1cleanup2 := testutils.TempDir(t)
-	defer n1cleanup2()
-	n2s2, n2cleanup2 := testutils.TempDir(t)
-	defer n2cleanup2()
-	n3s2, n3cleanup2 := testutils.TempDir(t)
-	defer n3cleanup2()
-
-	n1s3, n1cleanup3 := testutils.TempDir(t)
-	defer n1cleanup3()
-	n2s3, n2cleanup3 := testutils.TempDir(t)
-	defer n2cleanup3()
-	n3s3, n3cleanup3 := testutils.TempDir(t)
-	defer n3cleanup3()
-
-	tcArgs = base.TestClusterArgs{
-		// We need ParallelStart since this is an existing cluster. If
-		// we started sequentially, then the first node would hang forever
-		// waiting for the KV layer to become available, but that only
-		// happens when the second node also starts.
-		ParallelStart:   true,
-		ReplicationMode: base.ReplicationManual, // saves time
-		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {
-				StoreSpecs: []base.StoreSpec{
-					{Path: n1s1}, {Path: n1s2}, {Path: n1s3},
-				},
-			},
-			1: {
-				StoreSpecs: []base.StoreSpec{
-					{Path: n2s1}, {Path: n2s2}, {Path: n2s3},
-				},
-			},
-			2: {
-				StoreSpecs: []base.StoreSpec{
-					{Path: n3s1}, {Path: n3s2}, {Path: n3s3},
-				},
-			},
-		},
-	}
+	tcArgs := mkClusterArgs(numNodes, numStoresPerNodeAfterRestart)
+	tcArgs.ReplicationMode = base.ReplicationManual // saves time, ok now
+	// We need ParallelStart since this is an existing cluster. If
+	// we started sequentially, then the first node would hang forever
+	// waiting for the KV layer to become available, but that only
+	// happens when the second node also starts.
+	tcArgs.ParallelStart = true
 
 	// Start all nodes with additional stores.
 	tc = testcluster.StartTestCluster(t, numNodes, tcArgs)

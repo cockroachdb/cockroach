@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,11 +30,12 @@ import (
 // range results are filtered for the client.
 func TestRangeLookupPrefetchFiltering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestTenantDisabled, // we're going to manually add tenants
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					DisableMergeQueue: true,
@@ -44,7 +46,7 @@ func TestRangeLookupPrefetchFiltering(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	ten2ID := roachpb.MustMakeTenantID(2)
-	tenant2, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{
+	tenant2, err := tc.Server(0).TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: ten2ID,
 	})
 	require.NoError(t, err)

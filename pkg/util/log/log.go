@@ -14,12 +14,17 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
 func init() {
+	// Inject logging functions into the errors package.
 	errors.SetWarningFn(Warningf)
+	// Inject logging functions into the syncutil package.
+	syncutil.LogExpensiveLogEnabled = untypedExpensiveLogEnabled
+	syncutil.LogVEventfDepth = untypedVEventfDepth
 }
 
 // Severity aliases a type.
@@ -65,4 +70,17 @@ func ExpensiveLogEnabled(ctx context.Context, level Level) bool {
 		return true
 	}
 	return false
+}
+
+// untypedExpensiveLogEnabled is like ExpensiveLogEnabled, but takes an untyped
+// level argument.
+func untypedExpensiveLogEnabled(ctx context.Context, level int32) bool {
+	return ExpensiveLogEnabled(ctx, Level(level))
+}
+
+// untypedVEventfDepth is like VEventfDepth, but takes an untyped level argument.
+func untypedVEventfDepth(
+	ctx context.Context, depth int, level int32, format string, args ...interface{},
+) {
+	VEventfDepth(ctx, depth+1, Level(level), format, args...)
 }

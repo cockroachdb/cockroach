@@ -30,6 +30,7 @@ const mapStateToProps = (
     insightError: state.cachedData?.stmtInsights?.lastError,
     timeScale: selectTimeScale(state),
     hasAdminRole: selectHasAdminRole(state),
+    useObsService: false,
   };
 };
 

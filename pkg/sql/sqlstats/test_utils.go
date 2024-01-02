@@ -30,9 +30,9 @@ type TestingKnobs struct {
 	// by the flush operation to calculate aggregated_ts timestamp.
 	StubTimeNow func() time.Time
 
-	// AOSTClause overrides the AS OF SYSTEM TIME clause in queries used in
+	// aostClause overrides the AS OF SYSTEM TIME clause in queries used in
 	// persistedsqlstats.
-	AOSTClause string
+	aostClause string
 
 	// JobMonitorUpdateCheckInterval if non-zero indicates the frequency at
 	// which the job monitor needs to check whether the schedule needs to be
@@ -51,8 +51,31 @@ func (*TestingKnobs) ModuleTestingKnobs() {}
 // used when reading from statements and transactions system tables.
 func (knobs *TestingKnobs) GetAOSTClause() string {
 	if knobs != nil {
-		return knobs.AOSTClause
+		return knobs.aostClause
 	}
 
 	return "AS OF SYSTEM TIME follower_read_timestamp()"
+}
+
+// CreateTestingKnobs creates a testing knob in the unit tests.
+//
+// Note: SQL Stats’s read path uses follower read (AS OF SYSTEM TIME
+// follower_read_timestamp()) to ensure that contention between reads and writes
+// (SQL Stats flush / SQL Stats cleanup) is minimized.
+//
+// However, in a new cluster in unit tests, system tables are created using the
+// migration framework. The migration framework goes through a list of
+// registered migrations and creates the stats system tables. By using follower
+// read, we shift the transaction read timestamp far enough to the past. This
+// means it is possible in the unit tests, the read timestamp would be chosen to
+// be before the creation of the stats table. This can cause 'descriptor not
+// found' error when accessing the stats system table.
+//
+// Additionally, we don't want to completely remove the AOST clause in the unit
+// test. Therefore, `AS OF SYSTEM TIME '-1us'` is a compromise used to get
+// around the 'descriptor not found' error.
+func CreateTestingKnobs() *TestingKnobs {
+	return &TestingKnobs{
+		aostClause: "AS OF SYSTEM TIME '-1us'",
+	}
 }

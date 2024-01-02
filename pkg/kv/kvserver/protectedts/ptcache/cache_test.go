@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -68,7 +70,7 @@ func (idb *internalDBWithLastCommit) Txn(
 		return f(ctx, txn)
 	})
 	if err == nil {
-		idb.lastCommit = kvTxn.CommitTimestamp()
+		idb.lastCommit, err = kvTxn.CommitTimestamp()
 	}
 	return err
 }
@@ -76,8 +78,10 @@ func (idb *internalDBWithLastCommit) Txn(
 // TestCacheBasic exercises the basic behavior of the Cache.
 func TestCacheBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t,
+	srv := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				ProtectedTS: &protectedts.TestingKnobs{
@@ -85,7 +89,9 @@ func TestCacheBasic(t *testing.T) {
 				},
 			},
 		})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
 	insqlDB := s.InternalDB().(isql.DB)
 	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
@@ -100,7 +106,7 @@ func TestCacheBasic(t *testing.T) {
 		DB:       insqlDB,
 		Storage:  m,
 	})
-	require.NoError(t, c.Start(ctx, s.Stopper()))
+	require.NoError(t, c.Start(ctx, s.AppStopper()))
 
 	// Make sure that protected timestamp gets updated.
 	ts := waitForAsOfAfter(t, c, hlc.Timestamp{})
@@ -109,7 +115,7 @@ func TestCacheBasic(t *testing.T) {
 	waitForAsOfAfter(t, c, ts)
 
 	// Then we'll add a record and make sure it gets seen.
-	sp := tableSpan(42)
+	sp := tableSpan(s.Codec(), 42)
 	r, createdAt := protect(t, p, s.Clock().Now(), sp)
 	testutils.SucceedsSoon(t, func() error {
 		var coveredBy []*ptpb.Record
@@ -145,24 +151,37 @@ func TestCacheBasic(t *testing.T) {
 
 func TestRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	st := &scanTracker{}
 	ptsKnobs := &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
 	}
-	s, _, _ := serverutils.StartServer(t,
+	srv := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
-			// Disable span configs to avoid measuring protected timestamp lookups
-			// performed by the AUTO SPAN CONFIG RECONCILIATION job.
-			DisableSpanConfigs: true,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter: st.requestFilter,
 				},
+				// Disable span configs to avoid measuring protected timestamp lookups
+				// performed by the AUTO SPAN CONFIG RECONCILIATION job.
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true,
+				},
 				ProtectedTS: ptsKnobs,
 			},
 		})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	func() {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		st.codec = s.Codec()
+		st.active = true
+	}()
+
 	db := s.InternalDB().(isql.DB)
 	m := ptstorage.New(s.ClusterSettings(), ptsKnobs)
 	p := withDatabase(m, db)
@@ -175,24 +194,28 @@ func TestRefresh(t *testing.T) {
 		DB:       db,
 		Storage:  m,
 	})
-	require.NoError(t, c.Start(ctx, s.Stopper()))
+	require.NoError(t, c.Start(ctx, s.AppStopper()))
+
 	t.Run("already up-to-date", func(t *testing.T) {
 		ts := waitForAsOfAfter(t, c, hlc.Timestamp{})
 		st.resetCounters()
 		require.NoError(t, c.Refresh(ctx, ts))
 		st.verifyCounters(t, 0, 0) // already up to date
 	})
+
 	t.Run("needs refresh, no change", func(t *testing.T) {
 		ts := waitForAsOfAfter(t, c, hlc.Timestamp{})
 		require.NoError(t, c.Refresh(ctx, ts.Next()))
 		st.verifyCounters(t, 1, 0) // just need to scan meta
 	})
+
 	t.Run("needs refresh, with change", func(t *testing.T) {
-		_, createdAt := protect(t, p, s.Clock().Now(), metaTableSpan)
+		_, createdAt := protect(t, p, s.Clock().Now(), metaTableSpan(s.Codec()))
 		st.resetCounters()
 		require.NoError(t, c.Refresh(ctx, createdAt))
 		st.verifyCounters(t, 2, 1) // need to scan meta and then scan everything
 	})
+
 	t.Run("cancelation returns early", func(t *testing.T) {
 		withCancel, cancel := context.WithCancel(ctx)
 		defer cancel()
@@ -200,7 +223,7 @@ func TestRefresh(t *testing.T) {
 		st.setFilter(func(ba *kvpb.BatchRequest) *kvpb.Error {
 			if scanReq, ok := ba.GetArg(kvpb.Scan); ok {
 				scan := scanReq.(*kvpb.ScanRequest)
-				if scan.Span().Overlaps(metaTableSpan) {
+				if scan.Span().Overlaps(metaTableSpan(s.Codec())) {
 					<-done
 				}
 			}
@@ -215,7 +238,7 @@ func TestRefresh(t *testing.T) {
 		st.setFilter(func(ba *kvpb.BatchRequest) *kvpb.Error {
 			if scanReq, ok := ba.GetArg(kvpb.Scan); ok {
 				scan := scanReq.(*kvpb.ScanRequest)
-				if scan.Span().Overlaps(metaTableSpan) {
+				if scan.Span().Overlaps(metaTableSpan(s.Codec())) {
 					return kvpb.NewError(errors.New("boom"))
 				}
 			}
@@ -224,12 +247,13 @@ func TestRefresh(t *testing.T) {
 		defer st.setFilter(nil)
 		require.Regexp(t, "boom", c.Refresh(ctx, s.Clock().Now()).Error())
 	})
+
 	t.Run("error propagates while fetching records", func(t *testing.T) {
-		protect(t, p, s.Clock().Now(), metaTableSpan)
+		protect(t, p, s.Clock().Now(), metaTableSpan(s.Codec()))
 		st.setFilter(func(ba *kvpb.BatchRequest) *kvpb.Error {
 			if scanReq, ok := ba.GetArg(kvpb.Scan); ok {
 				scan := scanReq.(*kvpb.ScanRequest)
-				if scan.Span().Overlaps(recordsTableSpan) {
+				if scan.Span().Overlaps(recordsTableSpan(s.Codec())) {
 					return kvpb.NewError(errors.New("boom"))
 				}
 			}
@@ -238,9 +262,10 @@ func TestRefresh(t *testing.T) {
 		defer st.setFilter(nil)
 		require.Regexp(t, "boom", c.Refresh(ctx, s.Clock().Now()).Error())
 	})
+
 	t.Run("Iterate does not hold mutex", func(t *testing.T) {
 		inIterate := make(chan chan struct{})
-		rec, createdAt := protect(t, p, s.Clock().Now(), metaTableSpan)
+		rec, createdAt := protect(t, p, s.Clock().Now(), metaTableSpan(s.Codec()))
 		require.NoError(t, c.Refresh(ctx, createdAt))
 		go c.Iterate(ctx, keys.MinKey, keys.MaxKey, func(r *ptpb.Record) (wantMore bool) {
 			if r.ID.GetUUID() != rec.ID.GetUUID() {
@@ -268,9 +293,11 @@ func TestRefresh(t *testing.T) {
 
 func TestStart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-	setup := func() (serverutils.TestServerInterface, *ptcache.Cache) {
-		s, _, _ := serverutils.StartServer(t,
+	setup := func() (serverutils.ApplicationLayerInterface, *ptcache.Cache, func()) {
+		srv := serverutils.StartServerOnly(t,
 			base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					ProtectedTS: &protectedts.TestingKnobs{
@@ -278,6 +305,7 @@ func TestStart(t *testing.T) {
 					},
 				},
 			})
+		s := srv.ApplicationLayer()
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		p := execCfg.ProtectedTimestampProvider
 		// Set the poll interval to be very long.
@@ -287,29 +315,39 @@ func TestStart(t *testing.T) {
 			DB:       execCfg.InternalDB,
 			Storage:  p,
 		})
-		return s, c
+		return s, c, func() { srv.Stopper().Stop(ctx) }
 	}
 
 	t.Run("double start", func(t *testing.T) {
-		tc, c := setup()
-		defer tc.Stopper().Stop(ctx)
-		require.NoError(t, c.Start(ctx, tc.Stopper()))
-		require.EqualError(t, c.Start(ctx, tc.Stopper()),
+		defer log.Scope(t).Close(t)
+
+		s, c, cleanup := setup()
+		defer cleanup()
+		require.NoError(t, c.Start(ctx, s.AppStopper()))
+		require.EqualError(t, c.Start(ctx, s.AppStopper()),
 			"cannot start a Cache more than once")
 	})
+
 	t.Run("already stopped", func(t *testing.T) {
-		s, c := setup()
-		s.Stopper().Stop(ctx)
-		require.EqualError(t, c.Start(ctx, s.Stopper()),
+		defer log.Scope(t).Close(t)
+
+		s, c, cleanup := setup()
+		defer cleanup()
+		s.AppStopper().Stop(ctx)
+		require.EqualError(t, c.Start(ctx, s.AppStopper()),
 			stop.ErrUnavailable.Error())
 	})
 }
 
 func TestQueryRecord(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
 	db := s.InternalDB().(isql.DB)
 	storage := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
@@ -322,12 +360,12 @@ func TestQueryRecord(t *testing.T) {
 		DB:       db,
 		Storage:  storage,
 	})
-	require.NoError(t, c.Start(ctx, s.Stopper()))
+	require.NoError(t, c.Start(ctx, s.AppStopper()))
 
 	// Wait for the initial fetch.
 	waitForAsOfAfter(t, c, hlc.Timestamp{})
 	// Create two records.
-	sp42 := tableSpan(42)
+	sp42 := tableSpan(s.Codec(), 42)
 	r1, createdAt1 := protect(t, p, s.Clock().Now(), sp42)
 	r2, createdAt2 := protect(t, p, s.Clock().Now(), sp42)
 	// Ensure they both don't exist and that the read timestamps precede the
@@ -366,9 +404,14 @@ func TestQueryRecord(t *testing.T) {
 }
 
 func TestIterate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
 	db := s.InternalDB().(isql.DB)
 	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
@@ -383,11 +426,11 @@ func TestIterate(t *testing.T) {
 		DB:       db,
 		Storage:  m,
 	})
-	require.NoError(t, c.Start(ctx, s.Stopper()))
+	require.NoError(t, c.Start(ctx, s.AppStopper()))
 
-	sp42 := tableSpan(42)
-	sp43 := tableSpan(43)
-	sp44 := tableSpan(44)
+	sp42 := tableSpan(s.Codec(), 42)
+	sp43 := tableSpan(s.Codec(), 43)
+	sp44 := tableSpan(s.Codec(), 44)
 	r1, _ := protect(t, p, s.Clock().Now(), sp42)
 	r2, _ := protect(t, p, s.Clock().Now(), sp43)
 	r3, _ := protect(t, p, s.Clock().Now(), sp44)
@@ -433,8 +476,11 @@ func (recs *records) sorted() []*ptpb.Record {
 }
 
 func TestGetProtectionTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t,
+	srv := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				ProtectedTS: &protectedts.TestingKnobs{
@@ -442,7 +488,9 @@ func TestGetProtectionTimestamps(t *testing.T) {
 				},
 			},
 		})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 
@@ -451,9 +499,9 @@ func TestGetProtectionTimestamps(t *testing.T) {
 			WallTime: int64(nanos),
 		}
 	}
-	sp42 := tableSpan(42)
-	sp43 := tableSpan(43)
-	sp44 := tableSpan(44)
+	sp42 := tableSpan(s.Codec(), 42)
+	sp43 := tableSpan(s.Codec(), 43)
+	sp44 := tableSpan(s.Codec(), 44)
 	sp4243 := roachpb.Span{Key: sp42.Key, EndKey: sp43.EndKey}
 
 	for _, testCase := range []struct {
@@ -524,7 +572,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 				DB:       s.InternalDB().(isql.DB),
 				Storage:  storage,
 			})
-			require.NoError(t, c.Start(ctx, s.Stopper()))
+			require.NoError(t, c.Start(ctx, s.AppStopper()))
 
 			testCase.test(t, p, c, func(records ...*ptpb.Record) {
 				for _, r := range records {
@@ -536,9 +584,14 @@ func TestGetProtectionTimestamps(t *testing.T) {
 }
 
 func TestSettingChangedLeadsToFetch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
 	db := s.InternalDB().(isql.DB)
 	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
@@ -552,7 +605,7 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 		DB:       db,
 		Storage:  m,
 	})
-	require.NoError(t, c.Start(ctx, s.Stopper()))
+	require.NoError(t, c.Start(ctx, s.AppStopper()))
 
 	// Make sure that the initial state has been fetched.
 	ts := waitForAsOfAfter(t, c, hlc.Timestamp{})
@@ -580,10 +633,10 @@ func waitForAsOfAfter(t *testing.T, c protectedts.Cache, ts hlc.Timestamp) (asOf
 	return asOf
 }
 
-func tableSpan(tableID uint32) roachpb.Span {
+func tableSpan(codec keys.SQLCodec, tableID uint32) roachpb.Span {
 	return roachpb.Span{
-		Key:    keys.SystemSQLCodec.TablePrefix(tableID),
-		EndKey: keys.SystemSQLCodec.TablePrefix(tableID).PrefixEnd(),
+		Key:    codec.TablePrefix(tableID),
+		EndKey: codec.TablePrefix(tableID).PrefixEnd(),
 	}
 }
 
@@ -604,13 +657,17 @@ func protect(
 	return r, createdAt
 }
 
-var (
-	metaTableSpan    = tableSpan(uint32(systemschema.ProtectedTimestampsMetaTable.GetID()))
-	recordsTableSpan = tableSpan(uint32(systemschema.ProtectedTimestampsRecordsTable.GetID()))
-)
+func metaTableSpan(codec keys.SQLCodec) roachpb.Span {
+	return tableSpan(codec, uint32(systemschema.ProtectedTimestampsMetaTable.GetID()))
+}
+func recordsTableSpan(codec keys.SQLCodec) roachpb.Span {
+	return tableSpan(codec, uint32(systemschema.ProtectedTimestampsRecordsTable.GetID()))
+}
 
 type scanTracker struct {
 	mu                syncutil.Mutex
+	active            bool
+	codec             keys.SQLCodec
 	metaTableScans    int
 	recordsTableScans int
 	filterFunc        func(ba *kvpb.BatchRequest) *kvpb.Error
@@ -639,11 +696,14 @@ func (st *scanTracker) setFilter(f func(*kvpb.BatchRequest) *kvpb.Error) {
 func (st *scanTracker) requestFilter(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	if !st.active {
+		return nil
+	}
 	if scanReq, ok := ba.GetArg(kvpb.Scan); ok {
 		scan := scanReq.(*kvpb.ScanRequest)
-		if scan.Span().Overlaps(metaTableSpan) {
+		if scan.Span().Overlaps(metaTableSpan(st.codec)) {
 			st.metaTableScans++
-		} else if scan.Span().Overlaps(recordsTableSpan) {
+		} else if scan.Span().Overlaps(recordsTableSpan(st.codec)) {
 			st.recordsTableScans++
 		}
 	}

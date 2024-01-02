@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/pgrepltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -106,11 +107,11 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.alterDefaultPrivileges(ctx, n)
 	case *tree.AlterFunctionOptions:
 		return p.AlterFunctionOptions(ctx, n)
-	case *tree.AlterFunctionRename:
+	case *tree.AlterRoutineRename:
 		return p.AlterFunctionRename(ctx, n)
-	case *tree.AlterFunctionSetOwner:
+	case *tree.AlterRoutineSetOwner:
 		return p.AlterFunctionSetOwner(ctx, n)
-	case *tree.AlterFunctionSetSchema:
+	case *tree.AlterRoutineSetSchema:
 		return p.AlterFunctionSetSchema(ctx, n)
 	case *tree.AlterFunctionDepExtension:
 		return p.AlterFunctionDepExtension(ctx, n)
@@ -191,7 +192,7 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.Discard(ctx, n)
 	case *tree.DropDatabase:
 		return p.DropDatabase(ctx, n)
-	case *tree.DropFunction:
+	case *tree.DropRoutine:
 		return p.DropFunction(ctx, n)
 	case *tree.DropIndex:
 		return p.DropIndex(ctx, n)
@@ -212,13 +213,13 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 	case *tree.DropView:
 		return p.DropView(ctx, n)
 	case *tree.FetchCursor:
-		return p.FetchCursor(ctx, &n.CursorStmt, false /* isMove */)
+		return p.FetchCursor(ctx, &n.CursorStmt)
 	case *tree.Grant:
 		return p.Grant(ctx, n)
 	case *tree.GrantRole:
 		return p.GrantRole(ctx, n)
 	case *tree.MoveCursor:
-		return p.FetchCursor(ctx, &n.CursorStmt, true /* isMove */)
+		return p.FetchCursor(ctx, &n.CursorStmt)
 	case *tree.ReassignOwnedBy:
 		return p.ReassignOwnedBy(ctx, n)
 	case *tree.RefreshMaterializedView:
@@ -281,6 +282,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.Truncate(ctx, n)
 	case *tree.Unlisten:
 		return p.Unlisten(ctx, n)
+	case *pgrepltree.IdentifySystem:
+		return p.IdentifySystem(ctx, n)
 	case tree.CCLOnlyStatement:
 		plan, err := p.maybePlanHook(ctx, stmt)
 		if plan == nil && err == nil {
@@ -310,9 +313,9 @@ func init() {
 		&tree.AlterDatabaseSetZoneConfigExtension{},
 		&tree.AlterDefaultPrivileges{},
 		&tree.AlterFunctionOptions{},
-		&tree.AlterFunctionRename{},
-		&tree.AlterFunctionSetOwner{},
-		&tree.AlterFunctionSetSchema{},
+		&tree.AlterRoutineRename{},
+		&tree.AlterRoutineSetOwner{},
+		&tree.AlterRoutineSetSchema{},
 		&tree.AlterFunctionDepExtension{},
 		&tree.AlterIndex{},
 		&tree.AlterIndexVisible{},
@@ -351,7 +354,7 @@ func init() {
 		&tree.Discard{},
 		&tree.DropDatabase{},
 		&tree.DropExternalConnection{},
-		&tree.DropFunction{},
+		&tree.DropRoutine{},
 		&tree.DropIndex{},
 		&tree.DropOwnedBy{},
 		&tree.DropRole{},
@@ -396,6 +399,8 @@ func init() {
 		&tree.ShowTransactionStatus{},
 		&tree.Truncate{},
 		&tree.Unlisten{},
+
+		&pgrepltree.IdentifySystem{},
 
 		// CCL statements (without Export which has an optimizer operator).
 		&tree.AlterBackup{},

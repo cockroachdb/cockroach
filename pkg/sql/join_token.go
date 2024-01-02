@@ -26,7 +26,7 @@ import (
 // FeatureTLSAutoJoinEnabled is used to enable and disable the TLS auto-join
 // feature.
 var FeatureTLSAutoJoinEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"feature.tls_auto_join.enabled",
 	"set to true to enable tls auto join through join tokens, false to disable; default is false",
 	false,

@@ -17,12 +17,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -46,6 +48,10 @@ func (d *fakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
 }
 
 func (d *fakeResumer) OnFailOrCancel(context.Context, interface{}, error) error {
+	return nil
+}
+
+func (d *fakeResumer) CollectProfile(context.Context, interface{}) error {
 	return nil
 }
 
@@ -110,16 +116,84 @@ func TestShowChangefeedJobsBasic(t *testing.T) {
 	cdcTest(t, testFn, feedTestOmitSinks("webhook", "sinkless"), feedTestNoExternalConnection)
 }
 
+// TestShowChangefeedJobsRedacted verifies that SHOW CHANGEFEED JOB, SHOW
+// CHANGEFEED JOBS, and SHOW JOBS redact sensitive information (including keys
+// and secrets) for its output. Regression for #113503.
+func TestShowChangefeedJobsRedacted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, stopServer := makeServer(t)
+	defer stopServer()
+
+	knobs := s.TestingKnobs.
+		DistSQL.(*execinfra.TestingKnobs).
+		Changefeed.(*TestingKnobs)
+	knobs.WrapSink = func(s Sink, _ jobspb.JobID) Sink {
+		if _, ok := s.(*externalConnectionKafkaSink); ok {
+			return s
+		}
+		return &externalConnectionKafkaSink{sink: s}
+	}
+
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+	const apiSecret = "bar"
+	const certSecret = "Zm9v"
+	for _, tc := range []struct {
+		name                string
+		uri                 string
+		expectedSinkURI     string
+		expectedDescription string
+	}{
+		{
+			name: "api_secret",
+			uri:  fmt.Sprintf("confluent-cloud://nope?api_key=fee&api_secret=%s", apiSecret),
+		},
+		{
+			name: "sasl_password",
+			uri:  fmt.Sprintf("kafka://nope/?sasl_enabled=true&sasl_handshake=false&sasl_password=%s&sasl_user=aa", apiSecret),
+		},
+		{
+			name: "ca_cert",
+			uri:  fmt.Sprintf("kafka://nope?ca_cert=%s&tls_enabled=true", certSecret),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE foo INTO '%s'`, tc.uri)
+			var jobID jobspb.JobID
+			sqlDB.QueryRow(t, createStmt).Scan(&jobID)
+			var sinkURI, description string
+			sqlDB.QueryRow(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOB $1]", jobID).Scan(&sinkURI, &description)
+			expectedSinkURI := strings.Replace(tc.uri, apiSecret, "redacted", 1)
+			expectedSinkURI = strings.Replace(expectedSinkURI, certSecret, "redacted", 1)
+			expectedDescription := strings.Replace(createStmt, apiSecret, "redacted", 1)
+			expectedDescription = strings.Replace(expectedDescription, certSecret, "redacted", 1)
+			require.Equal(t, sinkURI, expectedSinkURI)
+			require.Equal(t, description, expectedDescription)
+		})
+	}
+
+	t.Run("jobs", func(t *testing.T) {
+		queryStr := sqlDB.QueryStr(t, "SELECT description from [SHOW JOBS]")
+		require.NotContains(t, queryStr, apiSecret)
+		require.NotContains(t, queryStr, certSecret)
+		queryStr = sqlDB.QueryStr(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOBS]")
+		require.NotContains(t, queryStr, apiSecret)
+		require.NotContains(t, queryStr, certSecret)
+	})
+}
+
 func TestShowChangefeedJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	bucket, accessKey, secretKey := checkS3Credentials(t)
 
-	params, _ := tests.CreateTestServerParams()
-	s, rawSQLDB, _ := serverutils.StartServer(t, params)
+	s, rawSQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
-	registry := s.JobRegistry().(*jobs.Registry)
+	registry := s.ApplicationLayer().JobRegistry().(*jobs.Registry)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
@@ -239,12 +313,21 @@ func TestShowChangefeedJobsStatusChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	ctx := context.Background()
+
+	var params base.TestServerArgs
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-	s, rawSQLDB, _ := serverutils.StartServer(t, params)
+	srv, rawSQLDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+
+	for _, l := range []serverutils.ApplicationLayerInterface{s, srv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
+
 	registry := s.JobRegistry().(*jobs.Registry)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
-	defer s.Stopper().Stop(context.Background())
 
 	query := `CREATE TABLE foo (a string)`
 	sqlDB.Exec(t, query)
@@ -259,9 +342,6 @@ func TestShowChangefeedJobsStatusChange(t *testing.T) {
 			}
 			return &r
 		})
-
-	query = `SET CLUSTER SETTING kv.rangefeed.enabled = true`
-	sqlDB.Exec(t, query)
 
 	var changefeedID jobspb.JobID
 
@@ -286,8 +366,7 @@ func TestShowChangefeedJobsNoResults(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	s, rawSQLDB, _ := serverutils.StartServer(t, params)
+	s, rawSQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
 	defer s.Stopper().Stop(context.Background())
 
@@ -417,7 +496,7 @@ func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
 		out = obtainJobRowFn()
 
 		require.Equal(t, jobID, out.id, "Expected id:%d but found id:%d", jobID, out.id)
-		require.Equal(t, "CREATE CHANGEFEED FOR TABLE d.public.bar INTO 'kafka://does.not.matter/' WITH resolved = '5s'", out.description, "Expected description:%s but found description:%s", "CREATE CHANGEFEED FOR TABLE bar INTO 'kafka://does.not.matter/ WITH resolved = '5s''", out.description)
+		require.Equal(t, "CREATE CHANGEFEED FOR TABLE d.public.bar INTO 'kafka://does.not.matter/' WITH OPTIONS (resolved = '5s')", out.description, "Expected description:%s but found description:%s", "CREATE CHANGEFEED FOR TABLE bar INTO 'kafka://does.not.matter/ WITH resolved = '5s''", out.description)
 		require.Equal(t, sinkURI, out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", sinkURI, out.SinkURI)
 		require.Equal(t, "bar", out.topics, "Expected topics:%s but found topics:%s", "bar", sortedTopics)
 		require.Equal(t, "{d.public.bar}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{d.public.bar}", string(out.FullTableNames))

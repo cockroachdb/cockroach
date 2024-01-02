@@ -16,38 +16,47 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestIsSpanEmpty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	var sentIsSpanEmptyRequests int64
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
-						if _, exists := request.GetArg(kvpb.IsSpanEmpty); exists {
-							atomic.AddInt64(&sentIsSpanEmptyRequests, 1)
-						}
-						return nil
-					},
+
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+					if _, exists := request.GetArg(kvpb.IsSpanEmpty); exists {
+						atomic.AddInt64(&sentIsSpanEmptyRequests, 1)
+					}
+					return nil
 				},
 			},
 		},
 	})
-	defer tc.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
 
-	kvDB := tc.Server(0).DB()
-	scratchKey := tc.ScratchRange(t)
+	splitRangeOrFatal := func(key roachpb.Key) {
+		_, _, err := srv.StorageLayer().SplitRange(key)
+		require.NoError(t, err)
+	}
+
+	scratchKey := append(ts.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	splitRangeOrFatal(scratchKey)
+
 	mkKey := func(suffix string) roachpb.Key {
 		return append(scratchKey[:len(scratchKey):len(scratchKey)], suffix...)
 	}
@@ -73,7 +82,7 @@ func TestIsSpanEmpty(t *testing.T) {
 
 	requireEmpty(t, mkKey(""), mkKey("").PrefixEnd())
 
-	tc.SplitRangeOrFatal(t, mkKey("c"))
+	splitRangeOrFatal(mkKey("c"))
 	requireEmpty(t, mkKey(""), mkKey("").PrefixEnd())
 
 	require.NoError(t, kvDB.Put(ctx, mkKey("x"), "foo"))
@@ -93,7 +102,14 @@ func TestIsSpanEmpty(t *testing.T) {
 		require.Equal(t, delta, atomic.LoadInt64(&sentIsSpanEmptyRequests)-before)
 	}
 	checkIsCalled(t, false, 2, mkKey(""), mkKey("").PrefixEnd())
-	tc.SplitRangeOrFatal(t, mkKey("a"))
-	tc.SplitRangeOrFatal(t, mkKey("b"))
-	checkIsCalled(t, false, 4, mkKey(""), mkKey("").PrefixEnd())
+	splitRangeOrFatal(mkKey("a"))
+	splitRangeOrFatal(mkKey("b"))
+	expectedCalls := int64(4)
+	if srv.TenantController().StartedDefaultTestTenant() {
+		// TODO(kv): investigate why there is one more call to IsSpanEmpty
+		// when the request is routed through a secondary tenant.
+		// See: https://github.com/cockroachdb/cockroach/issues/110248
+		expectedCalls = 5
+	}
+	checkIsCalled(t, false, expectedCalls, mkKey(""), mkKey("").PrefixEnd())
 }

@@ -1,5 +1,4 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "scbackup",
@@ -11,6 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs",
+        "//pkg/jobs/jobspb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/nstree",
@@ -21,4 +21,29 @@ go_library(
     ],
 )
 
-get_x_data(name = "get_x_data")
+go_test(
+    name = "scbackup_test",
+    srcs = [
+        "job_test.go",
+        "main_test.go",
+    ],
+    deps = [
+        ":scbackup",
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/nstree",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/isql",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/testutils/serverutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

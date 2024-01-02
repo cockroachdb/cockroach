@@ -22,46 +22,48 @@ ALTER TABLE defaultdb.foo ALTER PRIMARY KEY USING COLUMNS (j)
   {comment: pkey is a constraint, constraintId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 104}
-- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
-  {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
-- [[IndexName:{DescID: 104, Name: pkey, IndexID: 2}, PUBLIC], ABSENT]
-  {indexId: 2, name: pkey, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, indexId: 2, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
-  {columnId: 1, indexId: 2, kind: STORED, tableId: 104}
-- [[IndexComment:{DescID: 104, IndexID: 2, Comment: pkey is an index}, PUBLIC], ABSENT]
-  {comment: pkey is an index, indexId: 2, tableId: 104}
-- [[ConstraintComment:{DescID: 104, ConstraintID: 2, Comment: pkey is a constraint}, PUBLIC], ABSENT]
-  {comment: pkey is a constraint, constraintId: 2, tableId: 104}
-- [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
-  {indexId: 2, tableId: 104}
-- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
-  {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
-  {columnId: 2, indexId: 3, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
-  {columnId: 1, indexId: 3, kind: STORED, tableId: 104}
-- [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
-  {indexId: 3, tableId: 104}
-- [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT]
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT]
   {constraintId: 4, indexId: 4, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 5}
+- [[IndexName:{DescID: 104, Name: pkey, IndexID: 4}, PUBLIC], ABSENT]
+  {indexId: 4, name: pkey, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 4, kind: STORED, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}, PUBLIC], ABSENT]
+  {columnId: 2, indexId: 4, tableId: 104}
+- [[IndexComment:{DescID: 104, IndexID: 4, Comment: pkey is an index}, PUBLIC], ABSENT]
+  {comment: pkey is an index, indexId: 4, tableId: 104}
+- [[ConstraintComment:{DescID: 104, ConstraintID: 4, Comment: pkey is a constraint}, PUBLIC], ABSENT]
+  {comment: pkey is a constraint, constraintId: 4, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 4}, PUBLIC], ABSENT]
   {indexId: 4, tableId: 104}
 - [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
-  {constraintId: 5, indexId: 5, isUnique: true, isUsingSecondaryEncoding: true, sourceIndexId: 1, tableId: 104}
+  {constraintId: 5, indexId: 5, isUnique: true, sourceIndexId: 1, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 1, indexId: 5, kind: STORED, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 2, indexId: 5, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 5, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT]
-  {columnId: 1, indexId: 4, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, PUBLIC], ABSENT]
-  {columnId: 1, indexId: 5, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}, PUBLIC], ABSENT]
-  {columnId: 2, indexId: 4, kind: KEY_SUFFIX, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, PUBLIC], ABSENT]
-  {columnId: 2, indexId: 5, kind: KEY_SUFFIX, tableId: 104}
-- [[IndexName:{DescID: 104, Name: foo_i_key, IndexID: 4}, PUBLIC], ABSENT]
-  {indexId: 4, name: foo_i_key, tableId: 104}
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4, RecreateSourceIndexID: 0}, PUBLIC], ABSENT]
+  {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 4, tableId: 104, temporaryIndexId: 3}
+- [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+  {indexId: 2, tableId: 104}
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 4}, TRANSIENT_ABSENT], ABSENT]
+  {constraintId: 3, indexId: 3, isUnique: true, isUsingSecondaryEncoding: true, sourceIndexId: 4, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+  {indexId: 3, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 2, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 1, indexId: 3, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, indexId: 2, kind: KEY_SUFFIX, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 2, indexId: 3, kind: KEY_SUFFIX, tableId: 104}
+- [[IndexName:{DescID: 104, Name: foo_i_key, IndexID: 2}, PUBLIC], ABSENT]
+  {indexId: 2, name: foo_i_key, tableId: 104}
 
 build
 ALTER TABLE defaultdb.bar ALTER PRIMARY KEY USING COLUMNS (i)
@@ -86,22 +88,24 @@ ALTER TABLE defaultdb.bar ALTER PRIMARY KEY USING COLUMNS (i)
   {indexId: 1, name: bar_pkey, tableId: 105}
 - [[IndexData:{DescID: 105, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
 - [[PrimaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 105, temporaryIndexId: 3}
 - [[IndexName:{DescID: 105, Name: bar_pkey, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 2, name: bar_pkey, tableId: 105}
-- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
-  {columnId: 1, indexId: 2, tableId: 105}
 - [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 2, indexId: 2, kind: STORED, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 1, indexId: 2, tableId: 105}
 - [[IndexData:{DescID: 105, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 2, tableId: 105}
 - [[TemporaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 105}
-- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
-  {columnId: 1, indexId: 3, tableId: 105}
 - [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 2, indexId: 3, kind: STORED, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 1, indexId: 3, tableId: 105}
 - [[IndexData:{DescID: 105, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, tableId: 105}
 - [[PrimaryIndex:{DescID: 105, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC], ABSENT]

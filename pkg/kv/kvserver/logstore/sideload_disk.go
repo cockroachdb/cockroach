@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble/vfs"
 	"golang.org/x/time/rate"
 )
 
@@ -37,11 +38,10 @@ var _ SideloadStorage = &DiskSideloadStorage{}
 //
 // TODO(pavelkalinnikov): remove the interface, this type is the only impl.
 type DiskSideloadStorage struct {
-	st         *cluster.Settings
-	limiter    *rate.Limiter
-	dir        string
-	dirCreated bool
-	eng        storage.Engine
+	st      *cluster.Settings
+	limiter *rate.Limiter
+	dir     string
+	eng     storage.Engine
 }
 
 func sideloadedPath(baseDir string, rangeID roachpb.RangeID) string {
@@ -50,7 +50,7 @@ func sideloadedPath(baseDir string, rangeID roachpb.RangeID) string {
 	// per directory, respectively. Newer FS typically have no such limitation,
 	// but still.
 	//
-	// For example, r1828 will end up in baseDir/r1XXX/r1828.
+	// For example, r1828 will end up in baseDir/sideloading/r1XXX/r1828.
 	return filepath.Join(
 		baseDir,
 		"sideloading",
@@ -76,12 +76,6 @@ func NewDiskSideloadStorage(
 	}
 }
 
-func (ss *DiskSideloadStorage) createDir() error {
-	err := ss.eng.MkdirAll(ss.dir, os.ModePerm)
-	ss.dirCreated = ss.dirCreated || err == nil
-	return err
-}
-
 // Dir implements SideloadStorage.
 func (ss *DiskSideloadStorage) Dir() string {
 	return ss.dir
@@ -102,13 +96,35 @@ func (ss *DiskSideloadStorage) Put(
 		} else if !oserror.IsNotExist(err) {
 			return err
 		}
-		// createDir() ensures ss.dir exists but will not create any subdirectories
-		// within ss.dir because filename() does not make subdirectories in ss.dir.
-		if err := ss.createDir(); err != nil {
+		// Ensure that ss.dir exists. The filename() is placed directly in ss.dir,
+		// so the next loop iteration should succeed.
+		if err := mkdirAllAndSyncParents(ss.eng, ss.dir, os.ModePerm); err != nil {
 			return err
 		}
 		continue
 	}
+}
+
+// Sync implements SideloadStorage.
+func (ss *DiskSideloadStorage) Sync() error {
+	dir, err := ss.eng.OpenDir(ss.dir)
+	// The directory can be missing because we did not Put() any entry to it yet,
+	// or it has been removed by TruncateTo() or Clear().
+	//
+	// TODO(pavelkalinnikov): if ss.dir existed and has been removed, we should
+	// sync the parent of ss.dir, to persist the removal. Otherwise it may come
+	// back after a restart. Alternatively, and more likely, we should cleanup
+	// leftovers upon restart - we have other TODOs for that.
+	if oserror.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if err := dir.Sync(); err != nil {
+		_ = dir.Close()
+		return err
+	}
+	return dir.Close()
 }
 
 // Get implements SideloadStorage.
@@ -170,9 +186,7 @@ func (ss *DiskSideloadStorage) purgeFile(ctx context.Context, filename string) (
 
 // Clear implements SideloadStorage.
 func (ss *DiskSideloadStorage) Clear(_ context.Context) error {
-	err := ss.eng.RemoveAll(ss.dir)
-	ss.dirCreated = ss.dirCreated && err != nil
-	return err
+	return ss.eng.RemoveAll(ss.dir)
 }
 
 // TruncateTo implements SideloadStorage.
@@ -187,18 +201,19 @@ func (ss *DiskSideloadStorage) possiblyTruncateTo(
 	ctx context.Context, from kvpb.RaftIndex, to kvpb.RaftIndex, doTruncate bool,
 ) (bytesFreed, bytesRetained int64, _ error) {
 	deletedAll := true
-	if err := ss.forEach(ctx, func(index kvpb.RaftIndex, filename string) error {
+	if err := ss.forEach(ctx, func(index kvpb.RaftIndex, filename string) (bool, error) {
 		if index >= to {
 			size, err := ss.fileSize(filename)
 			if err != nil {
-				return err
+				return false, err
 			}
 			bytesRetained += size
 			deletedAll = false
-			return nil
+			return true, nil
 		}
 		if index < from {
-			return nil
+			// TODO(pavelkalinnikov): these files may never be removed. Clean them up.
+			return true, nil
 		}
 		// index is in [from, to)
 		var fileSize int64
@@ -209,10 +224,10 @@ func (ss *DiskSideloadStorage) possiblyTruncateTo(
 			fileSize, err = ss.fileSize(filename)
 		}
 		if err != nil {
-			return err
+			return false, err
 		}
 		bytesFreed += fileSize
-		return nil
+		return true, nil
 	}); err != nil {
 		return 0, 0, err
 	}
@@ -222,11 +237,31 @@ func (ss *DiskSideloadStorage) possiblyTruncateTo(
 		// Not worth trying to figure out which one, just try to delete.
 		err := ss.eng.Remove(ss.dir)
 		if err != nil && !oserror.IsNotExist(err) {
+			// TODO(pavelkalinnikov): this is possible because deletedAll can be left
+			// true despite existence of files with index < from which are skipped.
 			log.Infof(ctx, "unable to remove sideloaded dir %s: %v", ss.dir, err)
 			err = nil // handled
 		}
 	}
 	return bytesFreed, bytesRetained, nil
+}
+
+// HasAnyEntry implements SideloadStorage.
+func (ss *DiskSideloadStorage) HasAnyEntry(
+	ctx context.Context, from, to kvpb.RaftIndex,
+) (bool, error) {
+	// Find any file at index in [from, to).
+	found := false
+	if err := ss.forEach(ctx, func(index kvpb.RaftIndex, _ string) (bool, error) {
+		if index >= from && index < to {
+			found = true
+			return false, nil // stop the iteration
+		}
+		return true, nil
+	}); err != nil {
+		return false, err
+	}
+	return found, nil
 }
 
 // BytesIfTruncatedFromTo implements SideloadStorage.
@@ -236,15 +271,17 @@ func (ss *DiskSideloadStorage) BytesIfTruncatedFromTo(
 	return ss.possiblyTruncateTo(ctx, from, to, false /* doTruncate */)
 }
 
+// forEach runs the given visit function for each file in the sideloaded storage
+// directory. If visit returns false, forEach terminates early and returns nil.
+// If visit returns an error, forEach terminates early and returns an error.
 func (ss *DiskSideloadStorage) forEach(
-	ctx context.Context, visit func(index kvpb.RaftIndex, filename string) error,
+	ctx context.Context, visit func(index kvpb.RaftIndex, filename string) (bool, error),
 ) error {
+	// TODO(pavelkalinnikov): consider making the List method iterative.
 	matches, err := ss.eng.List(ss.dir)
 	if oserror.IsNotExist(err) {
-		// Nothing to do.
-		return nil
-	}
-	if err != nil {
+		return nil // nothing to do
+	} else if err != nil {
 		return err
 	}
 	for _, match := range matches {
@@ -264,8 +301,10 @@ func (ss *DiskSideloadStorage) forEach(
 			log.Infof(ctx, "unexpected file %s in sideloaded directory %s", match, ss.dir)
 			continue
 		}
-		if err := visit(kvpb.RaftIndex(logIdx), match); err != nil {
+		if keepGoing, err := visit(kvpb.RaftIndex(logIdx), match); err != nil {
 			return errors.Wrapf(err, "matching pattern %q on dir %s", match, ss.dir)
+		} else if !keepGoing {
+			return nil
 		}
 	}
 	return nil
@@ -275,13 +314,66 @@ func (ss *DiskSideloadStorage) forEach(
 func (ss *DiskSideloadStorage) String() string {
 	var buf strings.Builder
 	var count int
-	if err := ss.forEach(context.Background(), func(_ kvpb.RaftIndex, filename string) error {
+	if err := ss.forEach(context.Background(), func(_ kvpb.RaftIndex, filename string) (bool, error) {
 		count++
 		_, _ = fmt.Fprintln(&buf, filename)
-		return nil
+		return true, nil
 	}); err != nil {
 		return err.Error()
 	}
 	fmt.Fprintf(&buf, "(%d files)\n", count)
 	return buf.String()
+}
+
+// mkdirAllAndSyncParents creates the given directory and all its missing
+// parents if any. For every newly created directly, it syncs the corresponding
+// parent directory. The directories are created using the provided permissions
+// mask, with the same semantics as in os.MkdirAll.
+//
+// For example, if path is "/x/y/z", and "/x" previously existed, then this func
+// creates "/x/y" and "/x/y/z", and syncs directories "/x" and "/x/y".
+//
+// TODO(pavelkalinnikov): this does not work well with paths containing . and ..
+// elements inside the data-dir directory. We don't construct the path this way
+// though, right now any non-canonical part of the path would be only in the
+// <data-dir> path.
+//
+// TODO(pavelkalinnikov): have a type-safe canonical path type which can be
+// iterated without thinking about . and .. placeholders.
+func mkdirAllAndSyncParents(fs vfs.FS, path string, perm os.FileMode) error {
+	// Find the lowest existing directory in the hierarchy.
+	var exists string
+	for dir, parent := path, ""; ; dir = parent {
+		if _, err := fs.Stat(dir); err == nil {
+			exists = dir
+			break
+		} else if !oserror.IsNotExist(err) {
+			return errors.Wrapf(err, "could not get dir info: %s", dir)
+		}
+		parent = fs.PathDir(dir)
+		// NB: not checking against the separator, to be platform-agnostic.
+		if dir == "." || parent == dir { // reached the topmost dir or the root
+			return errors.Newf("topmost dir does not exist: %s", dir)
+		}
+	}
+
+	// Create the destination directory and any of its missing parents.
+	if err := fs.MkdirAll(path, perm); err != nil {
+		return errors.Wrapf(err, "could not create all directories: %s", path)
+	}
+
+	// Sync parent directories up to the lowest existing ancestor, included.
+	for dir, parent := path, ""; dir != exists; dir = parent {
+		parent = fs.PathDir(dir)
+		if handle, err := fs.OpenDir(parent); err != nil {
+			return errors.Wrapf(err, "could not open parent dir: %s", parent)
+		} else if err := handle.Sync(); err != nil {
+			_ = handle.Close()
+			return errors.Wrapf(err, "could not sync parent dir: %s", parent)
+		} else if err := handle.Close(); err != nil {
+			return errors.Wrapf(err, "could not close parent dir: %s", parent)
+		}
+	}
+
+	return nil
 }

@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -23,7 +22,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/stats",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",
@@ -40,8 +38,6 @@ go_library(
         "//pkg/sql/memsize",
         "//pkg/sql/opt/cat",
         "//pkg/sql/parser",
-        "//pkg/sql/pgwire/pgcode",
-        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/eval",
@@ -51,11 +47,13 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/cache",
         "//pkg/util/encoding",
+        "//pkg/util/errorutil",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
+        "//pkg/util/sentryutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
@@ -83,8 +81,8 @@ go_test(
         "simple_linear_regression_test.go",
         "stats_cache_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":stats"],
+    shard_count = 8,
     deps = [
         "//pkg/base",
         "//pkg/jobs",
@@ -163,5 +161,3 @@ go_proto_library(
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("//pkg/util/interval/generic:gen.bzl", "gen_interval_btree")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
@@ -38,7 +37,6 @@ go_test(
         "signal_test.go",
         ":latch_interval_btree_test.go",  # keep
     ],
-    args = ["-test.timeout=895s"],
     embed = [":spanlatch"],
     shard_count = 16,
     deps = [
@@ -60,5 +58,3 @@ gen_interval_btree(
     package = "spanlatch",
     type = "*latch",
 )
-
-get_x_data(name = "get_x_data")

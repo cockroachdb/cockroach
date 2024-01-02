@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -172,6 +174,10 @@ type mutationBuilder struct {
 	// uniqueChecks contains unique check queries; see buildUnique* methods.
 	uniqueChecks memo.UniqueChecksExpr
 
+	// fastPathUniqueChecks contains fast path unique check queries which are used for
+	// insert fast path; see buildInsertionCheck.
+	fastPathUniqueChecks memo.FastPathUniqueChecksExpr
+
 	// fkChecks contains foreign key check queries; see buildFK* methods.
 	fkChecks memo.FKChecksExpr
 
@@ -198,6 +204,10 @@ type mutationBuilder struct {
 	// arbiterPredicateHelper is used to prevent allocating the helper
 	// separately.
 	arbiterPredicateHelper arbiterPredicateHelper
+
+	// inputForInsertExpr stores the result of outscope.expr from the most
+	// recent call to buildInputForInsert.
+	inputForInsertExpr memo.RelExpr
 }
 
 func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias tree.TableName) {
@@ -306,7 +316,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	// together with the table being updated.
 	fromClausePresent := len(from) > 0
 	if fromClausePresent {
-		fromScope := mb.b.buildFromTables(from, noRowLocking, inScope)
+		fromScope := mb.b.buildFromTables(from, noLocking, inScope)
 
 		// Check that the same table name is not used multiple times.
 		mb.b.validateJoinTableNames(mb.fetchScope, fromScope)
@@ -336,7 +346,8 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	// SELECT + ORDER BY (which may add projected expressions)
 	projectionsScope := mb.outScope.replace()
 	projectionsScope.appendColumnsFromScope(mb.outScope)
-	orderByScope := mb.b.analyzeOrderBy(orderBy, mb.outScope, projectionsScope, tree.RejectGenerators)
+	orderByScope := mb.b.analyzeOrderBy(orderBy, mb.outScope, projectionsScope,
+		exprKindOrderByUpdate, tree.RejectGenerators|tree.RejectAggregates)
 	mb.b.buildOrderBy(mb.outScope, projectionsScope, orderByScope)
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 
@@ -415,7 +426,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 	// USING
 	usingClausePresent := len(using) > 0
 	if usingClausePresent {
-		usingScope := mb.b.buildFromTables(using, noRowLocking, inScope)
+		usingScope := mb.b.buildFromTables(using, noLocking, inScope)
 
 		// Check that the same table name is not used multiple times.
 		mb.b.validateJoinTableNames(mb.fetchScope, usingScope)
@@ -448,7 +459,8 @@ func (mb *mutationBuilder) buildInputForDelete(
 	// SELECT + ORDER BY (which may add projected expressions)
 	projectionsScope := mb.outScope.replace()
 	projectionsScope.appendColumnsFromScope(mb.outScope)
-	orderByScope := mb.b.analyzeOrderBy(orderBy, mb.outScope, projectionsScope, tree.RejectGenerators)
+	orderByScope := mb.b.analyzeOrderBy(orderBy, mb.outScope, projectionsScope,
+		exprKindOrderByDelete, tree.RejectGenerators|tree.RejectAggregates)
 	mb.b.buildOrderBy(mb.outScope, projectionsScope, orderByScope)
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 
@@ -725,6 +737,16 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 			continue
 		}
 
+		// Create a new scope for resolving column references in computed column
+		// expressions. We cannot use mb.outScope because columns in that scope
+		// may be ambiguous, by design. We build a scope that contains a single
+		// column for each column in the target table, representing either an
+		// existing value (a column from mb.fetchColIDs) or a new value (a
+		// column from mb.upsertColIDs, mb.updateColIDs, or mb.insertColIDs).
+		if !pb.HasResolveScope() {
+			pb.SetResolveScope(mb.computedColumnScope())
+		}
+
 		tabColID := mb.tabID.ColumnID(i)
 		expr := mb.parseComputedExpr(tabColID)
 
@@ -780,7 +802,8 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 		mutationCols := mb.mutationColumnIDs()
 
 		for i, n := 0, mb.tab.CheckCount(); i < n; i++ {
-			expr, err := parser.ParseExpr(mb.tab.Check(i).Constraint)
+			check := mb.tab.Check(i)
+			expr, err := parser.ParseExpr(check.Constraint())
 			if err != nil {
 				panic(err)
 			}
@@ -803,12 +826,62 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 			// expression are being mutated.
 			if !isUpdate || referencedCols.Intersects(mutationCols) {
 				mb.checkColIDs[i] = scopeCol.id
+
+				// TODO(michae2): Under weaker isolation levels we need to use shared
+				// locking to enforce multi-column-family check constraints. Disallow it
+				// for now.
+				//
+				// When do we need the locking? If:
+				// - The check constraint involves a column family that is updated
+				//   (otherwise we don't need to do anything to maintain this constraint)
+				// - And the check constraint involves a column family that is *not*
+				//   updated, but *is* read. In this case we don't have an intent, so
+				//   we need a lock. But we're not currently taking that lock.
+				if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
+					// Find the columns referenced in the check constraint that are being
+					// read and updated.
+					var readColOrds, updateColOrds intsets.Fast
+					for j, n := 0, check.ColumnCount(); j < n; j++ {
+						ord := check.ColumnOrdinal(j)
+						if mb.fetchColIDs[ord] != 0 {
+							readColOrds.Add(ord)
+						}
+						if mb.updateColIDs[ord] != 0 {
+							updateColOrds.Add(ord)
+						}
+					}
+					// If some of the check constraint column families are being updated
+					// but others are only being read, return an error.
+					if updateColOrds.Len() > 0 {
+						readColFamilies := getColumnFamilySet(readColOrds, mb.tab)
+						updateColFamilies := getColumnFamilySet(updateColOrds, mb.tab)
+						if readColFamilies.Difference(updateColFamilies).Len() > 0 {
+							panic(unimplemented.NewWithIssuef(112488,
+								"multi-column-family check constraints are not yet supported under read committed isolation",
+							))
+						}
+					}
+				}
 			}
 		}
 
 		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 		mb.outScope = projectionsScope
 	}
+}
+
+// getColumnFamilySet gets the set of column families represented in colOrdinals.
+func getColumnFamilySet(colOrdinals intsets.Fast, tab cat.Table) intsets.Fast {
+	families := intsets.Fast{}
+	for i := 0; i < tab.FamilyCount(); i++ {
+		fam := tab.Family(i)
+		for j := 0; j < fam.ColumnCount(); j++ {
+			if colOrdinals.Contains(fam.Column(j).Ordinal) {
+				families.Add(i)
+			}
+		}
+	}
+	return families
 }
 
 // mutationColumnIDs returns the set of all column IDs that will be mutated.
@@ -909,6 +982,39 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 		mb.b.constructProjectForScope(mb.outScope, projectionScope)
 		mb.outScope = projectionScope
 	}
+}
+
+// computedColumnScope returns a new scope that can be used to build computed
+// column expressions. Columns will never be ambiguous because each column in
+// the returned scope maps to a single column in the target table.
+//
+// The columns included in the scope depend on the state of mb.upsertColIDs,
+// mb.updateColIDs, mb.fetchColIDs, and mb.insertColIDs, using the same order of
+// preference as disambiguateColumns (see mapToReturnColID). Therefore, this
+// function will return different scopes at different stages of building a
+// mutation statement. For example, when building the scan portion of an UPDATE,
+// the scope will include columns from mb.fetchColIDs, while it will include
+// columns from mb.updateColIDs or mb.fetchColIDs when building the SET portion
+// of an UPDATE.
+func (mb *mutationBuilder) computedColumnScope() *scope {
+	s := mb.b.allocScope()
+	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+		colID := mb.mapToReturnColID(i)
+		if colID == 0 {
+			continue
+		}
+		col := mb.outScope.getColumn(colID)
+		if col == nil {
+			panic(errors.AssertionFailedf("expected to find column %d in scope", colID))
+		}
+		targetCol := mb.tab.Column(i)
+		s.cols = append(s.cols, scopeColumn{
+			name: scopeColName(targetCol.ColName()),
+			typ:  col.typ,
+			id:   col.id,
+		})
+	}
+	return s
 }
 
 // disambiguateColumns ranges over the scope and ensures that at most one column

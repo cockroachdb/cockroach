@@ -11,16 +11,15 @@
 package state
 
 import (
-	"math"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -96,7 +95,7 @@ func TestRangeMap(t *testing.T) {
 	require.Equal(t, firstRange.startKey, MinKey)
 	require.Equal(t, firstRange.desc.StartKey, MinKey.ToRKey())
 	require.Equal(t, firstRange.desc.EndKey, MaxKey.ToRKey())
-	require.Equal(t, defaultSpanConfig, firstRange.SpanConfig())
+	require.Equal(t, defaultSpanConfig, *firstRange.SpanConfig())
 
 	k2 := Key(1)
 	k3 := Key(2)
@@ -385,13 +384,20 @@ func TestOrderedStateLists(t *testing.T) {
 	// Test a skewed distribution with 100 stores, 10k ranges and 1m keyspace.
 	s = NewStateSkewedDistribution(100, 10000, 3, 1000000, settings)
 	assertListsOrdered(s)
+
+	const defaultSeed = 42
+	s = NewStateRandDistribution(defaultSeed, 7, 1400, 10000, 3, settings)
+	assertListsOrdered(s)
+
+	s = NewStateWeightedRandDistribution(defaultSeed, []float64{0.0, 0.1, 0.3, 0.6}, 1400, 10000, 3, settings)
+	assertListsOrdered(s)
 }
 
 // TestNewStateDeterministic asserts that the state returned from the new state
 // utility functions is deterministic.
 func TestNewStateDeterministic(t *testing.T) {
 	settings := config.DefaultSimulationSettings()
-
+	const defaultSeed = 42
 	testCases := []struct {
 		desc       string
 		newStateFn func() State
@@ -410,6 +416,18 @@ func TestNewStateDeterministic(t *testing.T) {
 				return NewStateWithDistribution([]float64{0.2, 0.2, 0.2, 0.2, 0.2}, 5, 3, 10000, settings)
 			},
 		},
+		{
+			desc: "rand distribution ",
+			newStateFn: func() State {
+				return NewStateRandDistribution(defaultSeed, 7, 1400, 10000, 3, settings)
+			},
+		},
+		{
+			desc: "weighted rand distribution ",
+			newStateFn: func() State {
+				return NewStateWeightedRandDistribution(defaultSeed, []float64{0.0, 0.1, 0.3, 0.6}, 1400, 10000, 3, settings)
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -418,6 +436,35 @@ func TestNewStateDeterministic(t *testing.T) {
 			for i := 0; i < 5; i++ {
 				require.Equal(t, ref.Ranges(), tc.newStateFn().Ranges())
 			}
+		})
+	}
+}
+
+// TestRandDistribution asserts that the distribution returned from
+// randDistribution and weightedRandDistribution sum up to 1.
+func TestRandDistribution(t *testing.T) {
+	const defaultSeed = 42
+	randSource := rand.New(rand.NewSource(defaultSeed))
+	testCases := []struct {
+		desc         string
+		distribution []float64
+	}{
+		{
+			desc:         "random distribution",
+			distribution: randDistribution(randSource, 7),
+		},
+		{
+			desc:         "weighted random distribution",
+			distribution: weightedRandDistribution(randSource, []float64{0.0, 0.1, 0.3, 0.6}),
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			total := float64(0)
+			for i := 0; i < len(tc.distribution); i++ {
+				total += tc.distribution[i]
+			}
+			require.Equal(t, float64(1), total)
 		})
 	}
 }
@@ -564,7 +611,7 @@ func TestSetSpanConfig(t *testing.T) {
 				Key:    tc.start.ToRKey().AsRawKey(),
 				EndKey: tc.end.ToRKey().AsRawKey(),
 			}
-			s.SetSpanConfig(span, config)
+			s.SetSpanConfig(span, &config)
 			for _, rng := range s.Ranges() {
 				start, _, ok := s.RangeSpan(rng.RangeID())
 				require.True(t, ok)
@@ -605,9 +652,9 @@ func TestSetNodeLiveness(t *testing.T) {
 
 		// Liveness status returend should ignore time till store dead or the
 		// timestamp given.
-		require.Equal(t, livenesspb.NodeLivenessStatus_LIVE, liveFn(1, hlc.Timestamp{}, math.MaxInt64))
-		require.Equal(t, livenesspb.NodeLivenessStatus_DEAD, liveFn(2, hlc.Timestamp{}, math.MaxInt64))
-		require.Equal(t, livenesspb.NodeLivenessStatus_DECOMMISSIONED, liveFn(3, hlc.Timestamp{}, math.MaxInt64))
+		require.Equal(t, livenesspb.NodeLivenessStatus_LIVE, liveFn(1))
+		require.Equal(t, livenesspb.NodeLivenessStatus_DEAD, liveFn(2))
+		require.Equal(t, livenesspb.NodeLivenessStatus_DECOMMISSIONED, liveFn(3))
 	})
 
 	t.Run("node count fn", func(t *testing.T) {
@@ -687,4 +734,34 @@ US_West
     └── [17 18]
 `, complexTopology.String())
 
+}
+
+func TestCapacityOverride(t *testing.T) {
+	settings := config.DefaultSimulationSettings()
+	tick := settings.StartTime
+	s := LoadClusterInfo(ClusterInfoWithStoreCount(1, 1), settings)
+	storeID, rangeID := StoreID(1), RangeID(1)
+	_, ok := s.AddReplica(rangeID, storeID, roachpb.VOTER_FULL)
+	require.True(t, ok)
+
+	override := NewCapacityOverride()
+	override.QueriesPerSecond = 42
+
+	// Overwrite the QPS store capacity field.
+	s.SetCapacityOverride(storeID, override)
+
+	// Record 100 QPS of load, this should not change the store capacity QPS as
+	// we set it above, however it should change the written keys field.
+	s.ApplyLoad(workload.LoadBatch{workload.LoadEvent{
+		Key:    1,
+		Writes: 500,
+	}})
+	s.TickClock(tick.Add(5 * time.Second))
+
+	capacity := s.StoreDescriptors(false /* cached */, storeID)[0].Capacity
+	require.Equal(t, 42.0, capacity.QueriesPerSecond)
+	// NB: Writes per second isn't used and is currently returned as the sum of
+	// writes to the store - we expect it to be 500 instead of 100 for that
+	// reason.
+	require.Equal(t, 500.0, capacity.WritesPerSecond)
 }

@@ -23,7 +23,12 @@ func (d *delegator) delegateShowChangefeedJobs(n *tree.ShowChangefeedJobs) (tree
 	// Note: changefeed_details may contain sensitive credentials in sink_uri. This information is redacted when marshaling
 	// to JSON in ChangefeedDetails.MarshalJSONPB.
 	const (
-		selectClause = `
+		// In 23.1, we can use the job_type column to filter jobs.
+		queryTarget23_1 = `
+			crdb_internal.system_jobs
+  			WHERE job_type = 'CHANGEFEED'
+		`
+		baseSelectClause = `
 WITH payload AS (
   SELECT 
     id, 
@@ -32,8 +37,7 @@ WITH payload AS (
       payload, false, true
     )->'changefeed' AS changefeed_details 
   FROM 
-    crdb_internal.system_jobs
-  WHERE job_type = 'CHANGEFEED'
+    %s
 ) 
 SELECT 
   job_id, 
@@ -68,6 +72,8 @@ FROM
   crdb_internal.jobs 
   INNER JOIN payload ON id = job_id`
 	)
+
+	selectClause := fmt.Sprintf(baseSelectClause, queryTarget23_1)
 
 	var whereClause, orderbyClause string
 	if n.Jobs == nil {

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -27,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -60,11 +60,10 @@ type engineWithLocation struct {
 	Location
 }
 
-// TODO(jackson): Tie this to the mapping in SetMinVersion.
-var latestReleaseFormatMajorVersion = pebble.FormatPrePebblev1Marked // v22.2
+var previousReleaseFormatMajorVersion = pebbleFormatVersion(clusterversion.PreviousRelease.Version())
 
-var latestReleaseFormatMajorVersionOpt ConfigOption = func(cfg *engineConfig) error {
-	cfg.PebbleConfig.Opts.FormatMajorVersion = latestReleaseFormatMajorVersion
+var previousReleaseFormatMajorVersionOpt ConfigOption = func(cfg *engineConfig) error {
+	cfg.PebbleConfig.Opts.FormatMajorVersion = previousReleaseFormatMajorVersion
 	return nil
 }
 
@@ -86,7 +85,7 @@ func getInitialStateEngine(
 
 	opts := append([]ConfigOption{
 		MustExist,
-		latestReleaseFormatMajorVersionOpt,
+		previousReleaseFormatMajorVersionOpt,
 	}, initial.ConfigOptions()...)
 
 	var loc Location
@@ -131,7 +130,7 @@ func buildInitialState(
 		e.Close()
 		buildFS = e.Location.fs
 	} else {
-		opts := append([]ConfigOption{latestReleaseFormatMajorVersionOpt}, initial.ConfigOptions()...)
+		opts := append([]ConfigOption{previousReleaseFormatMajorVersionOpt}, initial.ConfigOptions()...)
 
 		// Regardless of whether the initial conditions specify an in-memory engine
 		// or not, we build the conditions using an in-memory engine for
@@ -217,7 +216,7 @@ var _ initialState = mvccBenchData{}
 func (d mvccBenchData) Key() []string {
 	key := []string{
 		"mvcc",
-		fmt.Sprintf("fmtver_%d", latestReleaseFormatMajorVersion),
+		fmt.Sprintf("fmtver_%d", previousReleaseFormatMajorVersion),
 		fmt.Sprintf("numKeys_%d", d.numKeys),
 		fmt.Sprintf("numVersions_%d", d.numVersions),
 		fmt.Sprintf("valueBytes_%d", d.valueBytes),
@@ -292,6 +291,7 @@ func (d mvccBenchData) Build(ctx context.Context, b *testing.B, eng Engine) erro
 			cf = (cf + 1) % uint32(d.numColumnFamilies)
 		} else {
 			keySlice[i] = roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(i)))
+
 		}
 		keyVersions := rng.Intn(d.numVersions) + 1
 		for j := 0; j < keyVersions; j++ {
@@ -326,14 +326,15 @@ func (d mvccBenchData) Build(ctx context.Context, b *testing.B, eng Engine) erro
 			txn.ReadTimestamp = ts
 			txn.WriteTimestamp = ts
 		}
-		require.NoError(b, MVCCPut(ctx, batch, nil, key, ts, hlc.ClockTimestamp{}, value, txn))
+		_, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{Txn: txn})
+		require.NoError(b, err)
 	}
 
 	resolveLastIntent := func(batch Batch, idx int) {
 		key := keySlice[idx]
 		txnMeta := txn.TxnMeta
 		txnMeta.WriteTimestamp = hlc.Timestamp{WallTime: int64(counts[idx]) * 5}
-		if _, _, _, err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.LockUpdate{
+		if _, _, _, _, err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.LockUpdate{
 			Span:   roachpb.Span{Key: key},
 			Status: roachpb.COMMITTED,
 			Txn:    txnMeta,
@@ -395,5 +396,122 @@ func (d mvccBenchData) Build(ctx context.Context, b *testing.B, eng Engine) erro
 		return err
 	}
 
+	return nil
+}
+
+// mvccImportedData defines an mvcc data generator that simulates the keys created
+// by multiple import runs. The generator rotates through the `layers` and
+// generates a run of ascending keys until the keyCount is reached. Like
+// sequential imports, no layer will have a key that overlaps with another
+// layer. A given run length is chosen uniformly over the interval
+// [0,streakBound). As an example, for 2 imports and streakBound of 5, and a key
+// count of 9, we could generate the following data:
+//
+// t10 (import 2):      x x x x   x x
+// t5 (import 1) :  x x         x
+//
+//	  -------------------------
+//	key  1 2 3 4 5 6 7 8 9
+//
+// A larger streakBound creates longer runs of keys, which are more likely to
+// get rolled back using a delete range tombstone.
+type mvccImportedData struct {
+	streakBound int
+	keyCount    int
+	layers      int
+	valueBytes  int
+}
+
+var _ initialState = mvccImportedData{}
+
+func (i mvccImportedData) Key() []string {
+	key := []string{
+		"mvcc",
+		fmt.Sprintf("fmtver_%d", previousReleaseFormatMajorVersion),
+		fmt.Sprintf("streak_%d", i.streakBound),
+		fmt.Sprintf("keys_%d", i.keyCount),
+		fmt.Sprintf("valueBytes_%d", i.valueBytes),
+		fmt.Sprintf("layers_%d", i.layers),
+	}
+	return key
+}
+func (i mvccImportedData) ConfigOptions() []ConfigOption { return nil }
+func (i mvccImportedData) Base() initialState            { return nil }
+func (i mvccImportedData) Build(ctx context.Context, b *testing.B, eng Engine) error {
+	// The creation of the database is time consuming, especially for larger
+	// numbers of versions. The database is persisted between runs and stored in
+	// a directory with the path elements returned by Key().
+
+	// Generate the same data every time.
+	rng := rand.New(rand.NewSource(1449168817))
+	keysByLayer := i.genLayers(b, rng)
+	for layer := 0; layer < i.layers; layer++ {
+		batch := eng.NewBatch()
+		if err := i.writeLayer(ctx, eng, batch, rng, keysByLayer[layer], layer); err != nil {
+			return err
+		}
+		if err := batch.Commit(false /* sync */); err != nil {
+			return err
+		}
+		batch.Close()
+	}
+	return nil
+}
+
+func (i mvccImportedData) genLayers(b *testing.B, rng *rand.Rand) [][]roachpb.Key {
+	keys := make([][]roachpb.Key, i.layers)
+	for layer := 0; layer < i.layers; layer++ {
+		keys[layer] = make([]roachpb.Key, 0, i.keyCount)
+	}
+	keyID := 0
+	remaining := i.keyCount
+	streakCount := 0
+	for remaining > 0 {
+		currentLayer := streakCount % i.layers
+		streak := rng.Intn(i.streakBound)
+		if streak > remaining {
+			streak = remaining
+		}
+		b.Logf("%d streak; layer %d: adding %d keys %d-%d\n", i.streakBound, currentLayer, streak, keyID, keyID+streak)
+		for s := 0; s < streak; s++ {
+			keys[currentLayer] = append(keys[currentLayer], roachpb.Key(encoding.EncodeUvarintAscending(nil, uint64(keyID))))
+			keyID++
+			remaining--
+		}
+		streakCount++
+	}
+	return keys
+}
+
+func (i mvccImportedData) writeLayer(
+	ctx context.Context, eng Engine, batch Batch, rng *rand.Rand, keys []roachpb.Key, layer int,
+) error {
+	for idx, key := range keys {
+		// TODO (msbulter): share common code with mvccBenchData
+		//
+		// Output the keys in ~20 batches. If we used a single batch to output all
+		// of the keys pebble would create a single sstable. We want multiple
+		// sstables in order to exercise filtering of which sstables are examined
+		// during iterator seeking. We fix the number of batches we output so that
+		// optimizations which change the data size result in the same number of
+		// sstables.
+		if scaled := len(keys) / 20; idx > 0 && (idx%scaled) == 0 {
+			log.Infof(ctx, "committing (%d/~%d)", idx/scaled, 20)
+			if err := batch.Commit(false /* sync */); err != nil {
+				return err
+			}
+			batch.Close()
+			batch = eng.NewBatch()
+			if err := eng.Flush(); err != nil {
+				return err
+			}
+		}
+		ts := hlc.Timestamp{WallTime: int64((layer + 1) * 5)}
+		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, i.valueBytes))
+		value.InitChecksum(key)
+		if _, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{}); err != nil {
+			return err
+		}
+	}
 	return nil
 }

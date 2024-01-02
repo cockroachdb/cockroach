@@ -8,7 +8,22 @@ DECLARE
 BEGIN
 RETURN 1 + 2;
 END
-<NOT DONE YET>
+ -- normalized!
+DECLARE
+BEGIN
+RETURN ((1) + (2));
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+RETURN _ + _;
+END
+ -- literals removed
+DECLARE
+BEGIN
+RETURN 1 + 2;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -22,8 +37,25 @@ BEGIN
 x := 1 + 2;
 RETURN x;
 END
-<NOT DONE YET>
-
+ -- normalized!
+DECLARE
+BEGIN
+x := ((1) + (2));
+RETURN (x);
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+x := _ + _;
+RETURN x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := 1 + 2;
+RETURN _;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -33,25 +65,179 @@ END
 ----
 DECLARE
 BEGIN
-RETURN (1, "string");
+RETURN (1, 'string');
 END
-<NOT DONE YET>
+ -- normalized!
+DECLARE
+BEGIN
+RETURN (((1), ('string')));
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+RETURN (_, '_');
+END
+ -- literals removed
+DECLARE
+BEGIN
+RETURN (1, 'string');
+END
+ -- identifiers removed
 
-
-
-parse
+error
 DECLARE
 BEGIN
   RETURN QUERY SELECT 1 + 1;
 END
 ----
-expected parse error: at or near ";": syntax error: unimplemented: this syntax
+----
+at or near "query": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  RETURN QUERY SELECT 1 + 1;
+         ^
+HINT: You have attempted to use a feature that is not yet implemented.
 
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
 
-parse
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
+
+error
 DECLARE
 BEGIN
   RETURN QUERY EXECUTE a dynamic command;
 END
 ----
-expected parse error: at or near "query": syntax error: unimplemented: this syntax
+----
+at or near "query": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  RETURN QUERY EXECUTE a dynamic command;
+         ^
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
+
+error
+DECLARE
+BEGIN
+  RETURN NEXT 1 + 1;
+END
+----
+----
+at or near "next": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  RETURN NEXT 1 + 1;
+         ^
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
+
+error
+DECLARE
+BEGIN
+  RETURN;
+END
+----
+at or near "return": syntax error: missing expression
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  RETURN;
+  ^
+
+error
+DECLARE
+BEGIN
+  RETURN (NULL;
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  RETURN (NULL;
+END
+   ^
+
+error
+DECLARE
+BEGIN
+  RETURN  NULL);
+END
+----
+at or near "null": syntax error: mismatched parentheses
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  RETURN  NULL);
+          ^
+
+error
+DECLARE
+BEGIN
+  RETURN (1, ('string');
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  RETURN (1, ('string');
+END
+   ^
+
+error
+DECLARE
+BEGIN
+  RETURN 1, 'string';
+END
+----
+at or near "string": syntax error: query returned 2 columns
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  RETURN 1, 'string';
+            ^
+
+error
+DECLARE
+BEGIN
+  RETURN 1, (2, 3, 4, 5);
+END
+----
+at or near ")": syntax error: query returned 2 columns
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  RETURN 1, (2, 3, 4, 5);
+                       ^

@@ -124,6 +124,7 @@ type eventTxnStartPayload struct {
 	// any new Txn started using this payload.
 	qualityOfService sessiondatapb.QoSLevel
 	isoLevel         isolation.Level
+	omitInRangefeeds bool
 }
 
 // makeEventTxnStartPayload creates an eventTxnStartPayload.
@@ -135,6 +136,7 @@ func makeEventTxnStartPayload(
 	tranCtx transitionCtx,
 	qualityOfService sessiondatapb.QoSLevel,
 	isoLevel isolation.Level,
+	omitInRangefeeds bool,
 ) eventTxnStartPayload {
 	return eventTxnStartPayload{
 		pri:                 pri,
@@ -144,6 +146,7 @@ func makeEventTxnStartPayload(
 		tranCtx:             tranCtx,
 		qualityOfService:    qualityOfService,
 		isoLevel:            isoLevel,
+		omitInRangefeeds:    omitInRangefeeds,
 	}
 }
 
@@ -514,6 +517,7 @@ func noTxnToOpen(args fsm.Args) error {
 		payload.tranCtx,
 		payload.qualityOfService,
 		payload.isoLevel,
+		payload.omitInRangefeeds,
 	)
 	ts.setAdvanceInfo(
 		advCode,
@@ -552,11 +556,14 @@ func cleanupAndFinishOnError(args fsm.Args) error {
 
 func prepareTxnForRetry(args fsm.Args) error {
 	ts := args.Extended.(*txnState)
-	func() {
+	err := func() error {
 		ts.mu.Lock()
 		defer ts.mu.Unlock()
-		ts.mu.txn.PrepareForRetry(ts.Ctx)
+		return ts.mu.txn.PrepareForRetry(ts.Ctx)
 	}()
+	if err != nil {
+		return err
+	}
 	ts.setAdvanceInfo(
 		advanceOne,
 		noRewind,
@@ -567,11 +574,16 @@ func prepareTxnForRetry(args fsm.Args) error {
 
 func moveToCommitWaitAfterInternalCommit(args fsm.Args) error {
 	ts := args.Extended.(*txnState)
-	txnID, commitTimestamp := func() (uuid.UUID, hlc.Timestamp) {
+	txnID, commitTimestamp, err := func() (uuid.UUID, hlc.Timestamp, error) {
 		ts.mu.Lock()
 		defer ts.mu.Unlock()
-		return ts.mu.txn.ID(), ts.mu.txn.CommitTimestamp()
+		txnID := ts.mu.txn.ID()
+		commitTimestamp, err := ts.mu.txn.CommitTimestamp()
+		return txnID, commitTimestamp, err
 	}()
+	if err != nil {
+		return err
+	}
 	ts.setAdvanceInfo(
 		advanceOne,
 		noRewind,
@@ -587,13 +599,16 @@ func moveToCommitWaitAfterInternalCommit(args fsm.Args) error {
 func prepareTxnForRetryWithRewind(args fsm.Args) error {
 	pl := args.Payload.(eventRetriableErrPayload)
 	ts := args.Extended.(*txnState)
-	func() {
+	err := func() error {
 		ts.mu.Lock()
 		defer ts.mu.Unlock()
-		ts.mu.txn.PrepareForRetry(ts.Ctx)
 		ts.mu.autoRetryReason = pl.err
 		ts.mu.autoRetryCounter++
+		return ts.mu.txn.PrepareForRetry(ts.Ctx)
 	}()
+	if err != nil {
+		return err
+	}
 	// The caller will call rewCap.rewindAndUnlock().
 	ts.setAdvanceInfo(
 		rewind,

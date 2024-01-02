@@ -1,5 +1,4 @@
 # LogicTest: 3node-tenant-multiregion
-# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 
 # Only the root user can modify the system database's regions.
 user root
@@ -21,7 +20,7 @@ ALTER DATABASE system PRIMARY REGION "test"
 statement ok
 ALTER DATABASE system ADD REGION "test1"
 
-query TTBBT colnames
+query TTBBT colnames,rowsort
 SHOW REGIONS FROM DATABASE system
 ----
 database  region  primary  secondary  zones
@@ -33,7 +32,7 @@ system    test1   false    false      {}
 statement ok
 CREATE DATABASE "defaults-to-system";
 
-query TTBBT colnames
+query TTBBT colnames,rowsort
 SHOW REGIONS FROM DATABASE "defaults-to-system"
 ----
 database            region  primary  secondary  zones

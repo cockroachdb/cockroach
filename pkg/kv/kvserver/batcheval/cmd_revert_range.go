@@ -43,9 +43,12 @@ func declareKeysRevertRange(
 	latchSpans *spanset.SpanSet,
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
-) {
+) error {
 	args := req.(*kvpb.RevertRangeRequest)
-	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+	err := DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+	if err != nil {
+		return err
+	}
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
@@ -68,23 +71,31 @@ func declareKeysRevertRange(
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 		Key: keys.MVCCRangeKeyGCKey(rs.GetRangeID()),
 	})
+	return nil
 }
 
 // isEmptyKeyTimeRange checks if the span has no writes in (since,until].
 func isEmptyKeyTimeRange(
-	readWriter storage.ReadWriter, from, to roachpb.Key, since, until hlc.Timestamp,
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	from, to roachpb.Key,
+	since, until hlc.Timestamp,
 ) (bool, error) {
 	// Use a TBI to check if there is anything to delete -- the first key Seek hits
 	// may not be in the time range but the fact the TBI found any key indicates
 	// that there is *a* key in the SST that is in the time range. Thus we should
 	// proceed to iteration that actually checks timestamps on each key.
-	iter := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-		KeyTypes:         storage.IterKeyTypePointsAndRanges,
-		LowerBound:       from,
-		UpperBound:       to,
-		MinTimestampHint: since.Next(), // make exclusive
-		MaxTimestampHint: until,
+	iter, err := readWriter.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
+		KeyTypes:     storage.IterKeyTypePointsAndRanges,
+		LowerBound:   from,
+		UpperBound:   to,
+		MinTimestamp: since.Next(), // make exclusive
+		MaxTimestamp: until,
+		ReadCategory: storage.BatchEvalReadCategory,
 	})
+	if err != nil {
+		return false, err
+	}
 	defer iter.Close()
 	iter.SeekGE(storage.MVCCKey{Key: from})
 	ok, err := iter.Valid()
@@ -119,7 +130,7 @@ func RevertRange(
 	}
 
 	if empty, err := isEmptyKeyTimeRange(
-		readWriter, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp,
+		ctx, readWriter, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp,
 	); err != nil {
 		return result.Result{}, err
 	} else if empty {

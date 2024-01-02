@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
@@ -32,20 +33,28 @@ func InitPut(
 	args := cArgs.Args.(*kvpb.InitPutRequest)
 	h := cArgs.Header
 
-	if args.FailOnTombstones && cArgs.EvalCtx.EvalKnobs().DisableInitPutFailOnTombstones {
-		args.FailOnTombstones = false
+	failOnTombstones := args.FailOnTombstones && !cArgs.EvalCtx.EvalKnobs().DisableInitPutFailOnTombstones
+	opts := storage.MVCCWriteOptions{
+		Txn:                            h.Txn,
+		LocalTimestamp:                 cArgs.Now,
+		Stats:                          cArgs.Stats,
+		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
+		OmitInRangefeeds:               cArgs.OmitInRangefeeds,
+		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		Category:                       storage.BatchEvalReadCategory,
 	}
 
 	var err error
+	var acq roachpb.LockAcquisition
 	if args.Blind {
-		err = storage.MVCCBlindInitPut(
-			ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, args.Value, args.FailOnTombstones, h.Txn)
+		acq, err = storage.MVCCBlindInitPut(
+			ctx, readWriter, args.Key, h.Timestamp, args.Value, failOnTombstones, opts)
 	} else {
-		err = storage.MVCCInitPut(
-			ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, args.Value, args.FailOnTombstones, h.Txn)
+		acq, err = storage.MVCCInitPut(
+			ctx, readWriter, args.Key, h.Timestamp, args.Value, failOnTombstones, opts)
 	}
 	if err != nil {
 		return result.Result{}, err
 	}
-	return result.FromAcquiredLocks(h.Txn, args.Key), nil
+	return result.WithAcquiredLocks(acq), nil
 }

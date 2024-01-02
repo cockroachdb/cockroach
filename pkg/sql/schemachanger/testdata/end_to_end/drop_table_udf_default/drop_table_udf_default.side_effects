@@ -1,0 +1,174 @@
+/* setup */
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE TABLE t (i INT PRIMARY KEY, b INT DEFAULT f());
+----
+...
++object {100 101 t} -> 105
+
+/* test */
+DROP TABLE t;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: DROP TABLE
+increment telemetry for sql.schema.drop_table
+write *eventpb.DropTable to event log:
+  sql:
+    descriptorId: 105
+    statement: DROP TABLE ‹defaultdb›.‹public›.‹t›
+    tag: DROP TABLE
+    user: root
+  tableName: defaultdb.public.t
+## StatementPhase stage 1 of 1 with 33 MutationType ops
+delete object namespace entry {100 101 t} -> 105
+upsert descriptor #104
+   function:
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 2
+  -    id: 105
+     functionBody: SELECT 1;
+     id: 104
+  ...
+         oid: 20
+         width: 64
+  -  version: "2"
+  +  version: "3"
+     volatility: VOLATILE
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 36 MutationType ops
+delete object namespace entry {100 101 t} -> 105
+upsert descriptor #104
+   function:
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 2
+  -    id: 105
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 104
+  +      name: f
+     functionBody: SELECT 1;
+     id: 104
+  ...
+         oid: 20
+         width: 64
+  -  version: "2"
+  +  version: "3"
+     volatility: VOLATILE
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 105
+  +      name: t
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP TABLE ‹defaultdb›.‹public›.‹t›
+  +        statement: DROP TABLE t
+  +        statementTag: DROP TABLE
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+create job #1 (non-cancelable: true): "DROP TABLE defaultdb.public.t"
+  descriptor IDs: [104 105]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
+upsert descriptor #104
+   function:
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 104
+  -      name: f
+     functionBody: SELECT 1;
+     id: 104
+  ...
+         oid: 20
+         width: 64
+  -  version: "3"
+  +  version: "4"
+     volatility: VOLATILE
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 105
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP TABLE ‹defaultdb›.‹public›.‹t›
+  -        statement: DROP TABLE t
+  -        statementTag: DROP TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     dropTime: <redacted>"
+     families:
+  ...
+     state: DROP
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+create job #2 (non-cancelable: true): "GC for DROP TABLE defaultdb.public.t"
+  descriptor IDs: [105]
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 105
+commit transaction #3
+notified job registry to adopt jobs: [2]
+# end PostCommitPhase

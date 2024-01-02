@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/safesql"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
@@ -40,10 +42,10 @@ import (
 func (s *statusServer) IndexUsageStatistics(
 	ctx context.Context, req *serverpb.IndexUsageStatisticsRequest,
 ) (*serverpb.IndexUsageStatisticsResponse, error) {
-	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -72,13 +74,7 @@ func (s *statusServer) IndexUsageStatistics(
 		return statusClient.IndexUsageStatistics(ctx, localReq)
 	}
 
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := s.dialNode(ctx, nodeID)
-		return client, err
-	}
-
-	fetchIndexUsageStats := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
-		statusClient := client.(serverpb.StatusClient)
+	fetchIndexUsageStats := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return statusClient.IndexUsageStatistics(ctx, localReq)
 	}
 
@@ -96,9 +92,12 @@ func (s *statusServer) IndexUsageStatistics(
 	// It's unfortunate that we cannot use paginatedIterateNodes here because we
 	// need to aggregate all stats before returning. Returning a partial result
 	// yields an incorrect result.
-	if err := s.iterateNodes(ctx,
+	if err := iterateNodes(ctx,
+		s.serverIterator, s.stopper,
 		"requesting index usage stats",
-		dialFn, fetchIndexUsageStats, aggFn, errFn); err != nil {
+		noTimeout,
+		s.dialNode,
+		fetchIndexUsageStats, aggFn, errFn); err != nil {
 		return nil, err
 	}
 
@@ -130,10 +129,10 @@ func indexUsageStatsLocal(
 func (s *statusServer) ResetIndexUsageStats(
 	ctx context.Context, req *serverpb.ResetIndexUsageStatsRequest,
 ) (*serverpb.ResetIndexUsageStatsResponse, error) {
-	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireRepairClusterMetadataPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -173,13 +172,7 @@ func (s *statusServer) ResetIndexUsageStats(
 		return statusClient.ResetIndexUsageStats(ctx, localReq)
 	}
 
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := s.dialNode(ctx, nodeID)
-		return client, err
-	}
-
-	resetIndexUsageStats := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
-		statusClient := client.(serverpb.StatusClient)
+	resetIndexUsageStats := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return statusClient.ResetIndexUsageStats(ctx, localReq)
 	}
 
@@ -192,9 +185,12 @@ func (s *statusServer) ResetIndexUsageStats(
 		combinedError = errors.CombineErrors(combinedError, nodeFnError)
 	}
 
-	if err := s.iterateNodes(ctx,
+	if err := iterateNodes(ctx,
+		s.serverIterator, s.stopper,
 		"Resetting index usage stats",
-		dialFn, resetIndexUsageStats, aggFn, errFn); err != nil {
+		noTimeout,
+		s.dialNode,
+		resetIndexUsageStats, aggFn, errFn); err != nil {
 		return nil, err
 	}
 
@@ -207,10 +203,10 @@ func (s *statusServer) ResetIndexUsageStats(
 func (s *statusServer) TableIndexStats(
 	ctx context.Context, req *serverpb.TableIndexStatsRequest,
 ) (*serverpb.TableIndexStatsResponse, error) {
-	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
 		return nil, err
 	}
 	return getTableIndexUsageStats(ctx, req, s.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics(),
@@ -228,7 +224,7 @@ func getTableIndexUsageStats(
 	st *cluster.Settings,
 	execConfig *sql.ExecutorConfig,
 ) (*serverpb.TableIndexStatsResponse, error) {
-	userName, err := userFromIncomingRPCContext(ctx)
+	userName, err := authserver.UserFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +235,7 @@ func getTableIndexUsageStats(
 		return nil, err
 	}
 
-	q := makeSQLQuery()
+	q := safesql.NewQuery()
 	// TODO(#72930): Implement virtual indexes on index_usages_statistics and table_indexes
 	q.Append(`
 		SELECT
@@ -387,7 +383,7 @@ func getDatabaseIndexRecommendations(
 		return []*serverpb.IndexRecommendation{}, nil
 	}
 
-	userName, err := userFromIncomingRPCContext(ctx)
+	userName, err := authserver.UserFromIncomingRPCContext(ctx)
 	if err != nil {
 		return []*serverpb.IndexRecommendation{}, err
 	}

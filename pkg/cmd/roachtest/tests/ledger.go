@@ -28,16 +28,17 @@ func registerLedger(r registry.Registry) {
 	// https://github.com/cockroachdb/cockroach/issues/66184
 	const azs = "us-central1-f,us-central1-b,us-central1-c"
 	r.Add(registry.TestSpec{
-		Name:      fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
-		Owner:     registry.OwnerKV,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.Zones(azs)),
+		Name:             fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
+		Owner:            registry.OwnerKV,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.GCEZones(azs)),
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			roachNodes := c.Range(1, nodes)
 			gatewayNodes := c.Range(1, nodes/3)
 			loadNode := c.Node(nodes + 1)
 
-			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 
 			// Don't start a scheduled backup on this perf sensitive roachtest that reports to roachperf.

@@ -21,14 +21,6 @@ ALTER TABLE defaultdb.foo ALTER COLUMN i SET DATA TYPE STRING
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo DROP COLUMN o, ADD COLUMN p INT
-----
-
-unimplemented
-ALTER TABLE defaultdb.foo ADD COLUMN p INT, DROP COLUMN o
-----
-
-unimplemented
 ALTER TABLE defaultdb.foo ADD COLUMN p INT NOT NULL UNIQUE
 ----
 

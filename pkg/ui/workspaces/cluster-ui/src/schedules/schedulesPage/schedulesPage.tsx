@@ -14,7 +14,7 @@ import { Helmet } from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 import { Schedules } from "src/api/schedulesApi";
 import { Delayed } from "src/delayed";
-import { Dropdown, DropdownOption } from "src/dropdown";
+import { Dropdown } from "src/dropdown";
 import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { SortSetting } from "src/sortedtable";

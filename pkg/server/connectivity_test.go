@@ -46,7 +46,7 @@ func TestClusterConnectivity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(irfansharif): Teach TestServer to accept a list of join addresses
+	// TODO(irfansharif): Teach testServer to accept a list of join addresses
 	// instead of just one.
 
 	var testConfigurations = []struct {
@@ -207,7 +207,7 @@ func TestClusterConnectivity(t *testing.T) {
 					ctx := context.Background()
 					serv := tc.Server(bootstrapNode)
 
-					target := serv.ServingRPCAddr()
+					target := serv.AdvRPCAddr()
 					dialOpts, err := tc.Server(bootstrapNode).RPCContext().GRPCDialOptions(ctx, target, rpc.SystemClass)
 					if err != nil {
 						return err
@@ -326,7 +326,7 @@ func TestJoinVersionGate(t *testing.T) {
 		return nil
 	})
 
-	var newVersion = clusterversion.TestingBinaryVersion
+	var newVersion = clusterversion.Latest.Version()
 	var oldVersion = prev(newVersion)
 
 	knobs := base.TestingKnobs{
@@ -337,13 +337,13 @@ func TestJoinVersionGate(t *testing.T) {
 
 	oldVersionServerArgs := commonArg
 	oldVersionServerArgs.Knobs = knobs
-	oldVersionServerArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
+	oldVersionServerArgs.JoinAddr = tc.Servers[0].AdvRPCAddr()
 
 	serv, err := tc.AddServer(oldVersionServerArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer serv.Stop()
+	defer serv.Stop(context.Background())
 
 	ctx := context.Background()
 	if err := serv.Start(ctx); !errors.Is(errors.Cause(err), server.ErrIncompatibleBinaryVersion) {

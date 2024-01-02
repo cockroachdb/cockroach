@@ -10,9 +10,12 @@ with t=A
   txn_step  seq=25
   put       k=k v=c localTs=25,0
 ----
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=15 Replicated Intent []}
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20 Replicated Intent []}
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} ts=50.000000000,0 del=false klen=12 vlen=19 ih={{15 {localTs=15.000000000,0}/BYTES/a}{20 {localTs=20.000000000,0}/BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} ts=50.000000000,0 del=false klen=12 vlen=19 ih={{15 {localTs=15.000000000,0}/BYTES/a}{20 {localTs=20.000000000,0}/BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/50.000000000,0 -> {localTs=25.000000000,0}/BYTES/c
 
 # Rollback to a previous sequence number. Should be able to read before and
@@ -26,10 +29,11 @@ with t=A
   get             k=k
 ----
 get: "k" -> /BYTES/b @50.000000000,0
+resolve_intent: "k" -> resolved key = true
 get: "k" -> /BYTES/b @50.000000000,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
-meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=19 ih={{15 {localTs=15.000000000,0}/BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=19 ih={{15 {localTs=15.000000000,0}/BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/50.000000000,0 -> {localTs=20.000000000,0}/BYTES/b
 
 # Rollback and commit at a previous sequence number. Committed value should have
@@ -41,6 +45,7 @@ with t=A
   txn_ignore_seqs seqs=(20-20)
   resolve_intent k=k status=COMMITTED
 ----
+resolve_intent: "k" -> resolved key = true
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
 data: "k"/50.000000000,0 -> {localTs=15.000000000,0}/BYTES/a

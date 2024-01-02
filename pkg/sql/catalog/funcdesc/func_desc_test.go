@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -190,7 +191,7 @@ func TestValidateFuncDesc(t *testing.T) {
 			},
 		},
 		{
-			"user testuser must not have [SELECT] privileges on function \"f\"",
+			"user testuser must not have [SELECT] privileges on routine \"f\"",
 			descpb.FunctionDescriptor{
 				Name:           "f",
 				ID:             funcDescID,
@@ -659,6 +660,7 @@ func TestToOverload(t *testing.T) {
 				Volatility:        catpb.Function_IMMUTABLE,
 				NullInputBehavior: catpb.Function_RETURNS_NULL_ON_NULL_INPUT,
 				FunctionBody:      "ANY QUERIES",
+				Lang:              catpb.Function_SQL,
 			},
 			expected: tree.Overload{
 				Oid: oid.Oid(100001),
@@ -670,7 +672,8 @@ func TestToOverload(t *testing.T) {
 				Class:      tree.GeneratorClass,
 				Volatility: volatility.Leakproof,
 				Body:       "ANY QUERIES",
-				IsUDF:      true,
+				Type:       tree.UDFRoutine,
+				Language:   tree.RoutineLangSQL,
 			},
 		},
 		{
@@ -683,6 +686,7 @@ func TestToOverload(t *testing.T) {
 				Volatility:        catpb.Function_IMMUTABLE,
 				NullInputBehavior: catpb.Function_RETURNS_NULL_ON_NULL_INPUT,
 				FunctionBody:      "ANY QUERIES",
+				Lang:              catpb.Function_SQL,
 			},
 			expected: tree.Overload{
 				Oid: oid.Oid(100001),
@@ -693,7 +697,8 @@ func TestToOverload(t *testing.T) {
 				ReturnSet:  false,
 				Volatility: volatility.Leakproof,
 				Body:       "ANY QUERIES",
-				IsUDF:      true,
+				Type:       tree.UDFRoutine,
+				Language:   tree.RoutineLangSQL,
 			},
 		},
 		{
@@ -706,6 +711,7 @@ func TestToOverload(t *testing.T) {
 				Volatility:        catpb.Function_STABLE,
 				NullInputBehavior: catpb.Function_RETURNS_NULL_ON_NULL_INPUT,
 				FunctionBody:      "ANY QUERIES",
+				Lang:              catpb.Function_SQL,
 			},
 			expected: tree.Overload{
 				Oid: oid.Oid(100001),
@@ -717,7 +723,8 @@ func TestToOverload(t *testing.T) {
 				ReturnSet:  true,
 				Volatility: volatility.Stable,
 				Body:       "ANY QUERIES",
-				IsUDF:      true,
+				Type:       tree.UDFRoutine,
+				Language:   tree.RoutineLangSQL,
 			},
 		},
 		{
@@ -730,6 +737,7 @@ func TestToOverload(t *testing.T) {
 				Volatility:        catpb.Function_IMMUTABLE,
 				NullInputBehavior: catpb.Function_CALLED_ON_NULL_INPUT,
 				FunctionBody:      "ANY QUERIES",
+				Lang:              catpb.Function_SQL,
 			},
 			expected: tree.Overload{
 				Oid: oid.Oid(100001),
@@ -741,8 +749,9 @@ func TestToOverload(t *testing.T) {
 				ReturnSet:         true,
 				Volatility:        volatility.Leakproof,
 				Body:              "ANY QUERIES",
-				IsUDF:             true,
+				Type:              tree.UDFRoutine,
 				CalledOnNullInput: true,
+				Language:          tree.RoutineLangSQL,
 			},
 		},
 		{
@@ -755,6 +764,7 @@ func TestToOverload(t *testing.T) {
 				Volatility:        catpb.Function_STABLE,
 				NullInputBehavior: catpb.Function_RETURNS_NULL_ON_NULL_INPUT,
 				FunctionBody:      "ANY QUERIES",
+				Lang:              catpb.Function_SQL,
 			},
 			expected: tree.Overload{
 				Oid: oid.Oid(100001),
@@ -765,7 +775,8 @@ func TestToOverload(t *testing.T) {
 				ReturnSet:  true,
 				Volatility: volatility.Leakproof,
 				Body:       "ANY QUERIES",
-				IsUDF:      true,
+				Type:       tree.UDFRoutine,
+				Language:   tree.RoutineLangSQL,
 			},
 			err: "function 1 is leakproof but not immutable",
 		},
@@ -789,6 +800,66 @@ func TestToOverload(t *testing.T) {
 			overload.ReturnType = nil
 			tc.expected.ReturnType = nil
 			require.Equal(t, tc.expected, *overload)
+		})
+	}
+}
+
+func TestStripDanglingBackReferences(t *testing.T) {
+	type testCase struct {
+		name                  string
+		input, expectedOutput descpb.FunctionDescriptor
+		validIDs              catalog.DescriptorIDSet
+	}
+
+	testData := []testCase{
+		{
+			name: "depended on by",
+			input: descpb.FunctionDescriptor{
+				Name: "foo",
+				ID:   105,
+				DependedOnBy: []descpb.FunctionDescriptor_Reference{
+					{
+						ID:        104,
+						ColumnIDs: []descpb.ColumnID{1},
+					},
+					{
+						ID:        12345,
+						ColumnIDs: []descpb.ColumnID{1},
+					},
+				},
+				Privileges: &catpb.PrivilegeDescriptor{
+					Version: catpb.Version23_2,
+				},
+			},
+			expectedOutput: descpb.FunctionDescriptor{
+				Name: "foo",
+				ID:   105,
+				DependedOnBy: []descpb.FunctionDescriptor_Reference{
+					{
+						ID:        104,
+						ColumnIDs: []descpb.ColumnID{1},
+					},
+				},
+				Privileges: &catpb.PrivilegeDescriptor{
+					Version: catpb.Version23_2,
+				},
+			},
+			validIDs: catalog.MakeDescriptorIDSet(104, 105),
+		},
+	}
+
+	for _, test := range testData {
+		t.Run(test.name, func(t *testing.T) {
+			b := funcdesc.NewBuilder(&test.input)
+			require.NoError(t, b.RunPostDeserializationChanges())
+			out := funcdesc.NewBuilder(&test.expectedOutput)
+			require.NoError(t, out.RunPostDeserializationChanges())
+			require.NoError(t, b.StripDanglingBackReferences(test.validIDs.Contains, func(id jobspb.JobID) bool {
+				return false
+			}))
+			desc := b.BuildCreatedMutableFunction()
+			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingBackReferences))
+			require.Equal(t, out.BuildCreatedMutableFunction().FuncDesc(), desc.FuncDesc())
 		})
 	}
 }

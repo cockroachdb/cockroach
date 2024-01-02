@@ -1,0 +1,55 @@
+parse
+CREATE_REPLICATION_SLOT "slot_Name1" PHYSICAL
+----
+CREATE_REPLICATION_SLOT "slot_Name1" PHYSICAL
+CREATE_REPLICATION_SLOT "slot_Name1" PHYSICAL -- literals removed
+
+parse
+CREATE_REPLICATION_SLOT "slot_Name1" PHYSICAL EXPORT_SNAPSHOT
+----
+CREATE_REPLICATION_SLOT "slot_Name1" PHYSICAL (snapshot 'export') -- normalized!
+CREATE_REPLICATION_SLOT "slot_Name1" PHYSICAL (snapshot '_') -- literals removed
+
+parse
+CREATE_REPLICATION_SLOT "slot_Name1" TEMPORARY PHYSICAL EXPORT_SNAPSHOT TWO_PHASE
+----
+CREATE_REPLICATION_SLOT "slot_Name1" TEMPORARY PHYSICAL (snapshot 'export', two_phase 'true') -- normalized!
+CREATE_REPLICATION_SLOT "slot_Name1" TEMPORARY PHYSICAL (snapshot '_', two_phase '_') -- literals removed
+
+parse
+CREATE_REPLICATION_SLOT "slot_Name1" TEMPORARY PHYSICAL (a b, c 'd', e 1234, "F")
+----
+CREATE_REPLICATION_SLOT "slot_Name1" TEMPORARY PHYSICAL (a 'b', c 'd', e 1234, "F") -- normalized!
+CREATE_REPLICATION_SLOT "slot_Name1" TEMPORARY PHYSICAL (a '_', c '_', e _, "F") -- literals removed
+
+parse error
+CREATE_REPLICATION_SLOT "slot_Name1" LOGICAL
+----
+at or near "LOGICAL": syntax error
+DETAIL: source SQL:
+CREATE_REPLICATION_SLOT "slot_Name1" LOGICAL
+                                     ^
+
+parse
+CREATE_REPLICATION_SLOT "slot_Name1" LOGICAL wal2json
+----
+CREATE_REPLICATION_SLOT "slot_Name1" LOGICAL wal2json
+CREATE_REPLICATION_SLOT "slot_Name1" LOGICAL wal2json -- literals removed
+
+parse
+CREATE_REPLICATION_SLOT "slot_Name1" LOGICAL wal2json EXPORT_SNAPSHOT
+----
+CREATE_REPLICATION_SLOT "slot_Name1" LOGICAL wal2json (snapshot 'export') -- normalized!
+CREATE_REPLICATION_SLOT "slot_Name1" LOGICAL wal2json (snapshot '_') -- literals removed
+
+parse
+CREATE_REPLICATION_SLOT "slot_Name1" TEMPORARY LOGICAL wal2json EXPORT_SNAPSHOT TWO_PHASE
+----
+CREATE_REPLICATION_SLOT "slot_Name1" TEMPORARY LOGICAL wal2json (snapshot 'export', two_phase 'true') -- normalized!
+CREATE_REPLICATION_SLOT "slot_Name1" TEMPORARY LOGICAL wal2json (snapshot '_', two_phase '_') -- literals removed
+
+parse
+CREATE_REPLICATION_SLOT "slot_Name1" TEMPORARY LOGICAL wal2json (a b, c 'd', e 1234, "F")
+----
+CREATE_REPLICATION_SLOT "slot_Name1" TEMPORARY LOGICAL wal2json (a 'b', c 'd', e 1234, "F") -- normalized!
+CREATE_REPLICATION_SLOT "slot_Name1" TEMPORARY LOGICAL wal2json (a '_', c '_', e _, "F") -- literals removed

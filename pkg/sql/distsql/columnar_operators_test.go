@@ -105,6 +105,9 @@ var aggregateFuncToNumArguments = map[execinfrapb.AggregatorSpec_Func]int{
 	execinfrapb.FinalCorr:               1,
 	execinfrapb.FinalSqrdiff:            3,
 	execinfrapb.ArrayCatAgg:             1,
+	execinfrapb.MergeStatsMetadata:      1,
+	execinfrapb.MergeStatementStats:     1,
+	execinfrapb.MergeTransactionStats:   1,
 }
 
 // TestAggregateFuncToNumArguments ensures that all aggregate functions are
@@ -183,6 +186,11 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 				execinfrapb.PercentileContImpl:
 				// We skip percentile functions because those can only be
 				// planned as window functions.
+			case execinfrapb.MergeStatsMetadata,
+				execinfrapb.MergeStatementStats,
+				execinfrapb.MergeTransactionStats:
+				// We skip merge statistics functions because they
+				// require custom JSON objects.
 			default:
 				found = true
 			}
@@ -418,9 +426,7 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 							ordCols    []execinfrapb.Ordering_Column
 						)
 						if rng.Float64() < randTypesProbability {
-							// If we're spilling, don't generate un-key-encodable types, since
-							// the row engine can't handle them.
-							inputTypes = generateRandomSupportedTypesWithUnencodable(rng, nCols, !spillForced)
+							inputTypes = generateRandomSupportedTypes(rng, nCols)
 							rows = randgen.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 						} else {
 							inputTypes = intTyps[:nCols]
@@ -539,7 +545,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 						inputTypes []*types.T
 					)
 					if rng.Float64() < randTypesProbability {
-						inputTypes = generateRandomSupportedTypesWithUnencodable(rng, nCols, !spillForced)
+						inputTypes = generateRandomSupportedTypes(rng, nCols)
 						rows = randgen.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 					} else {
 						inputTypes = intTyps[:nCols]
@@ -613,7 +619,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 						inputTypes []*types.T
 					)
 					if rng.Float64() < randTypesProbability {
-						inputTypes = generateRandomSupportedTypesWithUnencodable(rng, nCols, !spillForced)
+						inputTypes = generateRandomSupportedTypes(rng, nCols)
 						rows = randgen.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 					} else {
 						inputTypes = intTyps[:nCols]
@@ -733,8 +739,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 								usingRandomTypes         bool
 							)
 							if rng.Float64() < randTypesProbability {
-								// HashRowContainers can't deal with non-keyencodable types.
-								lInputTypes = generateRandomSupportedTypesWithUnencodable(rng, nCols, false /* withUnencodable */)
+								lInputTypes = generateRandomSupportedTypes(rng, nCols)
 								lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 								rInputTypes = append(rInputTypes[:0], lInputTypes...)
 								rEqCols = append(rEqCols[:0], lEqCols...)
@@ -1333,17 +1338,8 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 }
 
 // generateRandomSupportedTypes generates nCols random types that are supported
-// by the vectorized engine.
+// by the vectorized engine natively (i.e. datum-backed types are skipped).
 func generateRandomSupportedTypes(rng *rand.Rand, nCols int) []*types.T {
-	return generateRandomSupportedTypesWithUnencodable(rng, nCols, true /* withUnencodable */)
-}
-
-// generateRandomSupportedTypesWithUnencodable generates nCols random types that
-// are supported by the vectorized engine. If withUnencodable is false, it won't
-// generate types that aren't key-encodable.
-func generateRandomSupportedTypesWithUnencodable(
-	rng *rand.Rand, nCols int, withUnencodable bool,
-) []*types.T {
 	typs := make([]*types.T, 0, nCols)
 	for len(typs) < nCols {
 		typ := randgen.RandType(rng)
@@ -1351,11 +1347,6 @@ func generateRandomSupportedTypesWithUnencodable(
 		if family == typeconv.DatumVecCanonicalTypeFamily {
 			// At the moment, we disallow datum-backed types.
 			// TODO(yuzefovich): remove this.
-			continue
-		}
-		if !withUnencodable && (family == types.JsonFamily || family == types.ArrayFamily) {
-			// This is so that the row engine, which has to spill using key encoding,
-			// can avoid running tests with types that don't have a key encoding.
 			continue
 		}
 		typs = append(typs, typ)

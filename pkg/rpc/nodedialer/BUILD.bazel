@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -24,7 +23,6 @@ go_test(
     name = "nodedialer_test",
     size = "small",
     srcs = ["nodedialer_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":nodedialer"],
     deps = [
         "//pkg/clusterversion",
@@ -48,5 +46,3 @@ go_test(
         "@org_golang_google_grpc//codes",
     ],
 )
-
-get_x_data(name = "get_x_data")

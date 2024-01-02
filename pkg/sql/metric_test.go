@@ -21,11 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/stretchr/testify/require"
 )
 
 type queryCounter struct {
@@ -57,7 +58,7 @@ func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			// Disable SELECT called for delete orphaned leases to keep
@@ -65,8 +66,9 @@ func TestQueryCounts(t *testing.T) {
 			DisableDeleteOrphanedLeases: true,
 		},
 	}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
@@ -118,7 +120,7 @@ func TestQueryCounts(t *testing.T) {
 			}
 
 			// Force metric snapshot refresh.
-			if err := s.WriteSummaries(); err != nil {
+			if err := srv.WriteSummaries(); err != nil {
 				t.Fatal(err)
 			}
 
@@ -177,7 +179,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "retry loop", func(t *testing.T, retry bool) {
-		params, cmdFilters := tests.CreateTestServerParams()
+		params, cmdFilters := createTestServerParams()
 		s, sqlDB, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(context.Background())
 
@@ -282,7 +284,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 func TestAbortCountErrorDuringTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -317,7 +319,7 @@ func TestSavepointMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -389,4 +391,29 @@ func TestSavepointMetrics(t *testing.T) {
 	if _, err := checkCounterDelta(s, sql.MetaTxnRollbackStarted, accum.txnRollbackCount, 2); err != nil {
 		t.Error(err)
 	}
+}
+
+func TestMemMetricsCorrectlyRegistered(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	r := metric.NewRegistry()
+	mm := sql.MakeMemMetrics("test", base.DefaultHistogramWindowInterval())
+	r.AddMetricStruct(mm)
+
+	expectedMetrics := []string{
+		"sql.mem.test.max",
+		"sql.mem.test.current",
+		"sql.mem.test.txn.max",
+		"sql.mem.test.txn.current",
+		"sql.mem.test.session.max",
+		"sql.mem.test.session.current",
+		"sql.mem.test.session.prepared.max",
+		"sql.mem.test.session.prepared.current",
+	}
+	var registered []string
+	r.Each(func(name string, val interface{}) {
+		registered = append(registered, name)
+	})
+	require.ElementsMatch(t, expectedMetrics, registered)
 }

@@ -13,7 +13,6 @@ package jobs
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -21,12 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -59,36 +60,36 @@ const (
 RETURNING id;`
 )
 
-func (r *Registry) maybeDumpTrace(
-	resumerCtx context.Context, resumer Resumer, jobID, traceID int64, jobErr error,
-) {
-	if _, ok := resumer.(TraceableJob); !ok || r.td == nil {
-		return
-	}
-	dumpMode := traceableJobDumpTraceMode.Get(&r.settings.SV)
-	if dumpMode == int64(noDump) {
+// maybeDumpTrace will conditionally persist the trace recording of the job's
+// current resumer for consumption by job profiler tools. This method must be
+// invoked before the tracing span corresponding to the job's current resumer is
+// Finish()'ed.
+func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, jobID jobspb.JobID) {
+	if tj, ok := resumer.(TraceableJob); !ok || !tj.DumpTraceAfterRun() {
 		return
 	}
 
 	// Make a new ctx to use in the trace dumper. This is because the resumerCtx
 	// could have been canceled at this point.
 	dumpCtx, _ := r.makeCtx()
-
-	ieNotBoundToTxn := r.db.Executor()
-
-	// If the job has failed, and the dump mode is set to anything
-	// except noDump, then we should dump the trace.
-	// The string comparison is unfortunate but is used to differentiate a job
-	// that has failed from a job that has been canceled.
-	if jobErr != nil && !HasErrJobCanceled(jobErr) && resumerCtx.Err() == nil {
-		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, ieNotBoundToTxn)
+	sp := tracing.SpanFromContext(resumerCtx)
+	if sp == nil || sp.IsNoop() {
+		// Should never be true since TraceableJobs force real tracing spans to be
+		// attached to the context.
 		return
 	}
 
-	// If the dump mode is set to `dumpOnStop` then we should dump the
-	// trace when the job is any of paused, canceled, succeeded or failed state.
-	if dumpMode == int64(dumpOnStop) {
-		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, ieNotBoundToTxn)
+	if !r.settings.Version.IsActive(dumpCtx, clusterversion.V23_1) {
+		return
+	}
+
+	resumerTraceFilename := fmt.Sprintf("%s/resumer-trace/%s",
+		r.ID().String(), timeutil.Now().Format("20060102_150405.00"))
+	td := jobspb.TraceData{CollectedSpans: sp.GetConfiguredRecording()}
+	if err := r.db.Txn(dumpCtx, func(ctx context.Context, txn isql.Txn) error {
+		return WriteProtobinExecutionDetailFile(dumpCtx, resumerTraceFilename, &td, txn, jobID)
+	}); err != nil {
+		log.Warning(dumpCtx, "failed to write trace on resumer trace file")
 	}
 }
 
@@ -129,7 +130,7 @@ const (
 	// NextRunClause calculates the next execution time of a job with exponential backoff delay, calculated
 	// using last_run and num_runs values.
 	NextRunClause = `
-COALESCE(last_run, created) + least(
+COALESCE(last_run::timestamptz, created::timestamptz) + least(
 	IF(
 		args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT >= 0.0,
 		args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT,
@@ -146,22 +147,11 @@ COALESCE(last_run, created) + least(
 	processQueryWithBackoff = processQueryBase + ", " + canRunArgs +
 		" WHERE " + processQueryWhereBase + " AND " + canRunClause
 
-	// resumeQueryBaseCols selects NULL values for the payload and progress that
-	// will be read from the system.job_info table. This allows us to get results
-	// aligned with deprecatedResumeQueryBaseCols below.
-	resumeQueryBaseCols    = "status, NULL, NULL, crdb_internal.sql_liveness_is_alive(claim_session_id)"
+	resumeQueryBaseCols    = "status, crdb_internal.sql_liveness_is_alive(claim_session_id)"
 	resumeQueryWithBackoff = `SELECT ` + resumeQueryBaseCols + `, ` + canRunClause + ` AS can_run,` +
 		` created_by_type, created_by_id  FROM system.jobs, ` + canRunArgs + " WHERE " + resumeQueryWhereBase
 
-	// deprecatedResumeQueryBaseCols loads the payload and progress from
-	// system.jobs instead of the system.job_info table.
-	//
-	// TODO(adityamaru): Remove the deprecated queries once we are outside the
-	// compatability window for 22.2.
-	deprecatedResumeQueryBaseCols    = "status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)"
-	resumeQueryWhereBase             = `id = $1 AND claim_session_id = $2`
-	deprecatedResumeQueryWithBackoff = `SELECT ` + deprecatedResumeQueryBaseCols + `, ` + canRunClause + ` AS can_run,` +
-		` created_by_type, created_by_id  FROM system.jobs, ` + canRunArgs + " WHERE " + resumeQueryWhereBase
+	resumeQueryWhereBase = `id = $1 AND claim_session_id = $2`
 )
 
 // getProcessQuery returns the query that selects the jobs that are claimed
@@ -260,18 +250,11 @@ func (r *Registry) resumeJob(
 ) (retErr error) {
 	log.Infof(ctx, "job %d: resuming execution", jobID)
 
-	readPayloadAndProgressFromJobInfo := r.settings.Version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled)
-	var resumeQuery string
-	if readPayloadAndProgressFromJobInfo {
-		resumeQuery = resumeQueryWithBackoff
-	} else {
-		resumeQuery = deprecatedResumeQueryWithBackoff
-	}
 	args := []interface{}{jobID, s.ID().UnsafeBytes(),
 		r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay()}
 	row, err := r.db.Executor().QueryRowEx(
 		ctx, "get-job-row", nil,
-		sessiondata.NodeUserSessionDataOverride, resumeQuery, args...,
+		sessiondata.NodeUserSessionDataOverride, resumeQueryWithBackoff, args...,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "job %d: could not query job table row", jobID)
@@ -290,7 +273,7 @@ func (r *Registry) resumeJob(
 		return errors.Errorf("job %d: status changed to %s which is not resumable`", jobID, status)
 	}
 
-	if isAlive := *row[3].(*tree.DBool); !isAlive {
+	if isAlive := *row[1].(*tree.DBool); !isAlive {
 		return errors.Errorf("job %d: claim with session id %s has expired", jobID, s.ID())
 	}
 
@@ -308,11 +291,11 @@ func (r *Registry) resumeJob(
 	//  - Ur(j): Remove jobID of j from adoptedJobs, enabling further resumers
 	//  - Up(n1->2): Update number of runs from 1 to 2
 	//  - Fl(j): Job j fails
-	if !(*row[4].(*tree.DBool)) {
+	if !(*row[2].(*tree.DBool)) {
 		return nil
 	}
 
-	createdBy, err := unmarshalCreatedBy(row[5], row[6])
+	createdBy, err := unmarshalCreatedBy(row[3], row[4])
 	if err != nil {
 		return err
 	}
@@ -320,41 +303,29 @@ func (r *Registry) resumeJob(
 
 	payload := &jobspb.Payload{}
 	progress := &jobspb.Progress{}
-	if readPayloadAndProgressFromJobInfo {
-		if err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			infoStorage := job.InfoStorage(txn)
-			payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
-			if err != nil {
-				return err
-			}
-			if !exists {
-				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job payload not found in system.job_info")
-			}
-			if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
-				return err
-			}
-
-			progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx)
-			if err != nil {
-				return err
-			}
-			if !exists {
-				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job progress not found in system.job_info")
-			}
-			return protoutil.Unmarshal(progressBytes, progress)
-		}); err != nil {
-			return err
-		}
-	} else {
-		payload, err = UnmarshalPayload(row[1])
+	if err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job.InfoStorage(txn)
+		payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
 		if err != nil {
 			return err
 		}
+		if !exists {
+			return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job payload not found in system.job_info")
+		}
+		if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
+			return err
+		}
 
-		progress, err = UnmarshalProgress(row[2])
+		progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx)
 		if err != nil {
 			return err
 		}
+		if !exists {
+			return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job progress not found in system.job_info")
+		}
+		return protoutil.Unmarshal(progressBytes, progress)
+	}); err != nil {
+		return err
 	}
 
 	job.mu.payload = *payload
@@ -372,7 +343,7 @@ func (r *Registry) resumeJob(
 	if opts, ok := getRegisterOptions(payload.Type()); ok && opts.disableTenantCostControl {
 		resumeCtx = multitenant.WithTenantCostControlExemption(resumeCtx)
 	}
-	if alreadyAdopted := r.addAdoptedJob(jobID, s, cancel); alreadyAdopted {
+	if alreadyAdopted := r.addAdoptedJob(jobID, s, cancel, resumer); alreadyAdopted {
 		// Not needing the context after all. Avoid leaking resources.
 		cancel()
 		return nil
@@ -402,7 +373,7 @@ func (r *Registry) resumeJob(
 // false, it means that the job is already registered as running and should not
 // be run again.
 func (r *Registry) addAdoptedJob(
-	jobID jobspb.JobID, session sqlliveness.Session, cancel context.CancelFunc,
+	jobID jobspb.JobID, session sqlliveness.Session, cancel context.CancelFunc, resumer Resumer,
 ) (alreadyAdopted bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -415,6 +386,7 @@ func (r *Registry) addAdoptedJob(
 		session: session,
 		cancel:  cancel,
 		isIdle:  false,
+		resumer: resumer,
 	}
 	return false
 }
@@ -426,14 +398,15 @@ func (r *Registry) runJob(
 		return errors.Newf("refusing to start %q; job registry is draining", taskName)
 	}
 
-	job.mu.Lock()
 	var finalResumeError error
-	if job.mu.payload.FinalResumeError != nil {
-		finalResumeError = errors.DecodeError(ctx, *job.mu.payload.FinalResumeError)
-	}
-	username := job.mu.payload.UsernameProto.Decode()
-	typ := job.mu.payload.Type()
-	job.mu.Unlock()
+	username, typ := func() (username.SQLUsername, jobspb.Type) {
+		job.mu.Lock()
+		defer job.mu.Unlock()
+		if job.mu.payload.FinalResumeError != nil {
+			finalResumeError = errors.DecodeError(ctx, *job.mu.payload.FinalResumeError)
+		}
+		return job.mu.payload.UsernameProto.Decode(), job.mu.payload.Type()
+	}()
 
 	// Make sure that we remove the job from the running set when this returns.
 	defer r.unregister(job.ID())
@@ -451,24 +424,11 @@ func (r *Registry) runJob(
 	if tj, ok := resumer.(TraceableJob); ok && tj.ForceRealSpan() {
 		spanOptions = append(spanOptions, tracing.WithRecording(tracingpb.RecordingStructured))
 	}
-	// TODO(ajwerner): Move this writing up the trace ID down into
-	// stepThroughStateMachine where we're already often (and soon with
-	// exponential backoff, always) updating the job in that call.
+
 	ctx, span := r.ac.Tracer.StartSpanCtx(ctx,
 		fmt.Sprintf("%s-%d", typ.String(), job.ID()), spanOptions...)
 	span.SetTag("job-id", attribute.Int64Value(int64(job.ID())))
 	defer span.Finish()
-	if span.TraceID() != 0 {
-		if err := job.NoTxn().Update(ctx, func(txn isql.Txn, md JobMetadata,
-			ju *JobUpdater) error {
-			progress := *md.Progress
-			progress.TraceID = span.TraceID()
-			ju.UpdateProgress(&progress)
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
 
 	// Run the actual job.
 	err := r.stepThroughStateMachine(ctx, execCtx, resumer, job, status, finalResumeError)
@@ -484,7 +444,7 @@ func (r *Registry) runJob(
 	// and further updates to the job record from this node may
 	// fail.
 	r.maybeClearLease(job, err)
-	r.maybeDumpTrace(ctx, resumer, int64(job.ID()), int64(span.TraceID()), err)
+	r.maybeDumpTrace(ctx, resumer, job.ID())
 	if r.knobs.AfterJobStateMachine != nil {
 		r.knobs.AfterJobStateMachine()
 	}

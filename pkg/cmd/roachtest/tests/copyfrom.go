@@ -15,17 +15,22 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
-const tpchLineitemFmt = `https://storage.googleapis.com/cockroach-fixtures/tpch-csv/sf-%d/lineitem.tbl.1`
+const tpchLineitemFmt = `https://storage.googleapis.com/cockroach-fixtures-us-east1/tpch-csv/sf-%d/lineitem.tbl.1`
 
 // There's an extra dummy field because the file above ends lines with delimiter and standard CSV behavior is to
 // interpret that as a column.
@@ -73,12 +78,31 @@ func initTest(ctx context.Context, t test.Test, c cluster.Cluster, sf int) {
 }
 
 func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
-	start := timeutil.Now()
-	det, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), fmt.Sprintf(`cat /tmp/lineitem-table.csv | %s -c "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';"`, pg))
-	if err != nil {
-		t.L().Printf("stdout:\n%v\n", det.Stdout)
-		t.L().Printf("stderr:\n%v\n", det.Stderr)
-		t.Fatal(err)
+	var err error
+	var start time.Time
+	var det install.RunResultDetails
+
+	rOpts := base.DefaultRetryOptions()
+	rOpts.MaxRetries = 5
+	rOpts.MaxBackoff = 10 * time.Second
+	r := retry.StartWithCtx(ctx, rOpts)
+	succeeded := false
+	for r.Next() {
+		start = timeutil.Now()
+		det, err = c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), fmt.Sprintf(`cat /tmp/lineitem-table.csv | %s -c "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';"`, pg))
+		if err == nil {
+			succeeded = true
+			break
+		}
+		if pgerror.GetPGCode(err) != pgcode.SerializationFailure {
+			t.L().Printf("stdout:\n%v\n", det.Stdout)
+			t.L().Printf("stderr:\n%v\n", det.Stderr)
+			t.Fatal(err)
+		}
+		t.L().Printf("retrying due to retryable error: \n%s\n", err)
+	}
+	if !succeeded {
+		t.Fatalf("exceeded the limit of retries for serializable errors")
 	}
 	dur := timeutil.Since(start)
 	t.L().Printf("%v\n", det.Stdout)
@@ -112,8 +136,11 @@ func runCopyFromPG(ctx context.Context, t test.Test, c cluster.Cluster, sf int) 
 }
 
 func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int, atomic bool) {
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+	startOpts := option.DefaultStartOpts()
+	// Enable the verbose logging on relevant files to have better understanding
+	// in case the test fails.
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=copy_from=2,insert=2")
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
 	initTest(ctx, t, c, sf)
 	db, err := c.ConnE(ctx, t.L(), 1)
 	require.NoError(t, err)
@@ -127,7 +154,7 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 			t.Fatal(err)
 		}
 	}
-	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), "")
+	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), "" /* tenant */, 0 /* sqlInstance */)
 	require.NoError(t, err)
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
@@ -156,31 +183,37 @@ func registerCopyFrom(r registry.Registry) {
 	for _, tc := range testcases {
 		tc := tc
 		r.Add(registry.TestSpec{
-			Name:      fmt.Sprintf("copyfrom/crdb-atomic/sf=%d/nodes=%d", tc.sf, tc.nodes),
-			Owner:     registry.OwnerSQLQueries,
-			Benchmark: true,
-			Cluster:   r.MakeClusterSpec(tc.nodes),
-			Leases:    registry.MetamorphicLeases,
+			Name:             fmt.Sprintf("copyfrom/crdb-atomic/sf=%d/nodes=%d", tc.sf, tc.nodes),
+			Owner:            registry.OwnerSQLQueries,
+			Benchmark:        true,
+			Cluster:          r.MakeClusterSpec(tc.nodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCopyFromCRDB(ctx, t, c, tc.sf, true /*atomic*/)
 			},
 		})
 		r.Add(registry.TestSpec{
-			Name:      fmt.Sprintf("copyfrom/crdb-nonatomic/sf=%d/nodes=%d", tc.sf, tc.nodes),
-			Owner:     registry.OwnerSQLQueries,
-			Benchmark: true,
-			Cluster:   r.MakeClusterSpec(tc.nodes),
-			Leases:    registry.MetamorphicLeases,
+			Name:             fmt.Sprintf("copyfrom/crdb-nonatomic/sf=%d/nodes=%d", tc.sf, tc.nodes),
+			Owner:            registry.OwnerSQLQueries,
+			Benchmark:        true,
+			Cluster:          r.MakeClusterSpec(tc.nodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCopyFromCRDB(ctx, t, c, tc.sf, false /*atomic*/)
 			},
 		})
 		r.Add(registry.TestSpec{
-			Name:      fmt.Sprintf("copyfrom/pg/sf=%d/nodes=%d", tc.sf, tc.nodes),
-			Owner:     registry.OwnerSQLQueries,
-			Benchmark: true,
-			Cluster:   r.MakeClusterSpec(tc.nodes),
-			Leases:    registry.MetamorphicLeases,
+			Name:             fmt.Sprintf("copyfrom/pg/sf=%d/nodes=%d", tc.sf, tc.nodes),
+			Owner:            registry.OwnerSQLQueries,
+			Benchmark:        true,
+			Cluster:          r.MakeClusterSpec(tc.nodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCopyFromPG(ctx, t, c, tc.sf)
 			},

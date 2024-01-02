@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -215,15 +217,19 @@ func (t *typeSchemaChanger) getTypeDescFromStore(
 // and its array type descriptor (if one exists). If a descriptor is not found,
 // it is assumed dropped, and the error is swallowed.
 func refreshTypeDescriptorLeases(
-	ctx context.Context, leaseMgr *lease.Manager, typeDesc catalog.TypeDescriptor,
+	ctx context.Context, leaseMgr *lease.Manager, db *kv.DB, typeDesc catalog.TypeDescriptor,
 ) error {
 	var err error
 	var ids = []descpb.ID{typeDesc.GetID()}
 	if aID := typeDesc.TypeDesc().ArrayTypeID; aID != descpb.InvalidID {
 		ids = append(ids, aID)
 	}
+	cachedRegions, err := regions.NewCachedDatabaseRegions(ctx, db, leaseMgr)
+	if err != nil {
+		return err
+	}
 	for _, id := range ids {
-		if _, updateErr := WaitToUpdateLeases(ctx, leaseMgr, id); updateErr != nil {
+		if _, updateErr := WaitToUpdateLeases(ctx, leaseMgr, cachedRegions, id); updateErr != nil {
 			// Swallow the descriptor not found error.
 			if errors.Is(updateErr, catalog.ErrDescriptorNotFound) {
 				log.Infof(ctx,
@@ -256,7 +262,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	}
 
 	// Make sure all of the leases have dropped before attempting to validate.
-	if err := refreshTypeDescriptorLeases(ctx, leaseMgr, typeDesc); err != nil {
+	if err := refreshTypeDescriptorLeases(ctx, leaseMgr, t.execCfg.DB, typeDesc); err != nil {
 		return err
 	}
 
@@ -480,7 +486,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		}
 
 		// Finally, make sure all of the type descriptor leases are updated.
-		if err := refreshTypeDescriptorLeases(ctx, leaseMgr, typeDesc); err != nil {
+		if err := refreshTypeDescriptorLeases(ctx, leaseMgr, t.execCfg.DB, typeDesc); err != nil {
 			return err
 		}
 	}
@@ -1086,8 +1092,8 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		var unionUnnests strings.Builder
 		var query strings.Builder
 
-		// Construct a query of the form:
-		// SELECT unnest FROM (
+		// Construct a query of the form to count usage of this enum value:
+		// SELECT COUNT(unnest) FROM (
 		//	SELECT unnest(c1) FROM [SELECT %d AS t]
 		//	UNION
 		//	SELECT unnest(c2) FROM [SELECT %d AS t]
@@ -1119,7 +1125,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		if firstClause {
 			continue
 		}
-		query.WriteString("SELECT unnest FROM (")
+		query.WriteString("SELECT count(unnest) FROM (")
 		query.WriteString(unionUnnests.String())
 
 		sqlPhysRep, err := convertToSQLStringRepresentation(member.PhysicalRepresentation)
@@ -1136,7 +1142,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 			User:     username.RootUserName(),
 			Database: dbDesc.GetName(),
 		}
-		rows, err := txn.QueryRowEx(
+		row, err := txn.QueryRowEx(
 			ctx,
 			"count-array-type-value-usage",
 			txn.KV(),
@@ -1146,7 +1152,10 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
-		if len(rows) > 0 {
+		if row == nil {
+			return errors.New("failed to count array type value usage")
+		}
+		if int64(tree.MustBeDInt(row[0])) != 0 {
 			// Use an FQN in the error message.
 			parentSchema, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, desc.GetParentSchemaID())
 			if err != nil {
@@ -1297,6 +1306,11 @@ func (t *typeChangeResumer) OnFailOrCancel(
 		}
 	}
 
+	return nil
+}
+
+// CollectProfile supports the jobs.Resumer interface.
+func (t *typeChangeResumer) CollectProfile(_ context.Context, _ interface{}) error {
 	return nil
 }
 

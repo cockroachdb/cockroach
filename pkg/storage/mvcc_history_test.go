@@ -57,7 +57,7 @@ var (
 	cmdDeleteRangeTombstoneKnownStats = util.ConstantWithMetamorphicTestBool(
 		"mvcc-histories-deleterange-tombstome-known-stats", false)
 	mvccHistoriesReader = util.ConstantWithMetamorphicTestChoice("mvcc-histories-reader",
-		"engine", "readonly", "batch", "snapshot").(string)
+		"engine", "readonly", "batch", "snapshot", "efos").(string)
 	mvccHistoriesUseBatch   = util.ConstantWithMetamorphicTestBool("mvcc-histories-use-batch", false)
 	mvccHistoriesPeekBounds = util.ConstantWithMetamorphicTestChoice("mvcc-histories-peek-bounds",
 		"none", "left", "right", "both").(string)
@@ -71,41 +71,42 @@ var (
 //
 // The input files use the following DSL:
 //
-// run            [ok|trace|stats|error]
+// run            [ok|trace|stats|error|log-ops]
 //
 // txn_begin      t=<name> [ts=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
 // txn_remove     t=<name>
-// txn_restart    t=<name>
+// txn_restart    t=<name> [epoch=<int>]
 // txn_update     t=<name> t2=<name>
-// txn_step       t=<name> [n=<int>]
+// txn_step       t=<name> [n=<int>] [seq=<int>]
 // txn_advance    t=<name> ts=<int>[,<int>]
 // txn_status     t=<name> status=<txnstatus>
 // txn_ignore_seqs t=<name> seqs=[<int>-<int>[,<int>-<int>...]]
 //
-// resolve_intent t=<name> k=<key> [status=<txnstatus>] [clockWhilePending=<int>[,<int>]] [targetBytes=<int>]
-// resolve_intent_range t=<name> k=<key> end=<key> [status=<txnstatus>] [maxKeys=<int>] [targetBytes=<int>]
-// check_intent   k=<key> [none]
-// add_lock       t=<name> k=<key>
+// resolve_intent         t=<name> k=<key> [status=<txnstatus>] [clockWhilePending=<int>[,<int>]] [targetBytes=<int>]
+// resolve_intent_range   t=<name> k=<key> end=<key> [status=<txnstatus>] [maxKeys=<int>] [targetBytes=<int>]
+// check_intent           k=<key> [none]
+// add_unreplicated_lock  t=<name> k=<key>
+// check_for_acquire_lock t=<name> k=<key> str=<strength> [maxLockConflicts=<int>]
+// acquire_lock           t=<name> k=<key> str=<strength> [maxLockConflicts=<int>]
 //
-// cput           [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
-// del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
-// del_range      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
-// del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key> [idempotent] [noCoveredStats]
-// del_range_pred [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key> [startTime=<int>,max=<int>,maxBytes=<int>,rangeThreshold=<int>]
-// increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
-// initput        [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [failOnTombstones]
-// merge          [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
-// put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
+// cput           [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> v=<string> [raw] [cond=<string>]
+// del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key>
+// del_range      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> end=<key> [max=<max>] [returnKeys]
+// del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [maxLockConflicts=<int>] k=<key> end=<key> [idempotent] [noCoveredStats]
+// del_range_pred [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [maxLockConflicts=<int>] k=<key> end=<key> [startTime=<int>,max=<int>,maxBytes=<int>,rangeThreshold=<int>]
+// increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> [inc=<val>]
+// initput        [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> v=<string> [raw] [failOnTombstones]
+// put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> v=<string> [raw]
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key>
+// put_blind_inline	k=<key> v=<string> [prev=<string>]
 // get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [maxKeys=<int>] [targetBytes=<int>] [allowEmpty]
 // scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [wholeRows[=<int>]] [allowEmpty]
-// export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxIntents=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey] [fingerprint]
+// export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxLockConflicts=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey] [fingerprint]
 //
-// iter_new       [k=<key>] [end=<key>] [prefix] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]]
+// iter_new       [k=<key>] [end=<key>] [prefix] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]] [minTimestamp=<int>[,<int>]] [maxTimestamp=<int>[,<int>]]
 // iter_new_incremental [k=<key>] [end=<key>] [startTs=<int>[,<int>]] [endTs=<int>[,<int>]] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]] [intents=error|aggregate|emit]
 // iter_seek_ge   k=<key> [ts=<int>[,<int>]]
 // iter_seek_lt   k=<key> [ts=<int>[,<int>]]
-// iter_seek_intent_ge k=<key> txn=<name>
 // iter_next
 // iter_next_ignoring_time
 // iter_next_key_ignoring_time
@@ -172,6 +173,13 @@ func TestMVCCHistories(t *testing.T) {
 		{Key: keys.MinKey, EndKey: roachpb.LocalMax},
 		{Key: keys.LocalMax, EndKey: roachpb.KeyMax},
 	}
+	// lockTableSpan returns the span of the lock table that corresponds to the
+	// given span.
+	lockTableSpan := func(s roachpb.Span) roachpb.Span {
+		k, _ := keys.LockTableSingleKey(s.Key, nil)
+		ek, _ := keys.LockTableSingleKey(s.EndKey, nil)
+		return roachpb.Span{Key: k, EndKey: ek}
+	}
 
 	// Timestamp for MVCC stats calculations, in nanoseconds.
 	const statsTS = 100e9
@@ -201,8 +209,8 @@ func TestMVCCHistories(t *testing.T) {
 			var hasData bool
 
 			for _, span := range spans {
-				err = engine.MVCCIterate(
-					span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypeRangesOnly,
+				err = engine.MVCCIterate(context.Background(), span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypeRangesOnly,
+					storage.UnknownReadCategory,
 					func(_ storage.MVCCKeyValue, rangeKeys storage.MVCCRangeKeyStack) error {
 						hasData = true
 						buf.Printf("rangekey: %s/[", rangeKeys.Bounds)
@@ -221,8 +229,8 @@ func TestMVCCHistories(t *testing.T) {
 					return err
 				}
 
-				err = engine.MVCCIterate(
-					span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+				err = engine.MVCCIterate(context.Background(), span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+					storage.UnknownReadCategory,
 					func(r storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 						hasData = true
 						if r.Key.Timestamp.IsEmpty() {
@@ -349,11 +357,80 @@ func TestMVCCHistories(t *testing.T) {
 					}
 				}
 			}
+			return nil
+		}
 
+		// reportLockTable outputs the contents of the lock table.
+		reportLockTable := func(e *evalCtx, buf *redact.StringBuilder) error {
+			// Replicated locks.
+			ltStart := keys.LocalRangeLockTablePrefix
+			ltEnd := keys.LocalRangeLockTablePrefix.PrefixEnd()
+			iter, err := engine.NewEngineIterator(context.Background(), storage.IterOptions{UpperBound: ltEnd})
+			if err != nil {
+				return err
+			}
+			defer iter.Close()
+
+			var meta enginepb.MVCCMetadata
+			for valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: ltStart}); ; valid, err = iter.NextEngineKey() {
+				if err != nil {
+					return err
+				} else if !valid {
+					break
+				}
+				eKey, err := iter.EngineKey()
+				if err != nil {
+					return err
+				}
+				ltKey, err := eKey.ToLockTableKey()
+				if err != nil {
+					return errors.Wrapf(err, "decoding LockTable key: %v", eKey)
+				}
+				if ltKey.Strength == lock.Intent {
+					// Ignore intents, which are reported by reportDataEntries.
+					continue
+				}
+				// Unmarshal.
+				v, err := iter.UnsafeValue()
+				if err != nil {
+					return err
+				}
+				if err := protoutil.Unmarshal(v, &meta); err != nil {
+					return errors.Wrapf(err, "unmarshaling mvcc meta: %v", ltKey)
+				}
+				buf.Printf("lock (%s): %v/%s -> %+v\n",
+					lock.Replicated, ltKey.Key, ltKey.Strength, &meta)
+			}
+
+			// Unreplicated locks.
+			if len(e.unreplLocks) > 0 {
+				var ks []string
+				for k := range e.unreplLocks {
+					ks = append(ks, k)
+				}
+				sort.Strings(ks)
+				for _, k := range ks {
+					txn := e.unreplLocks[k]
+					buf.Printf("lock (%s): %v/%s -> %+v\n",
+						lock.Unreplicated, k, lock.Exclusive, txn)
+				}
+			}
 			return nil
 		}
 
 		e := newEvalCtx(ctx, engine)
+		defer func() {
+			require.NoError(t, engine.Compact())
+			m := engine.GetMetrics().Metrics
+			if m.Keys.MissizedTombstonesCount > 0 {
+				// A missized tombstone is a Pebble DELSIZED tombstone that encodes
+				// the wrong size of the value it deletes. This kind of tombstone is
+				// written when ClearOptions.ValueSizeKnown=true. If this assertion
+				// failed, something might be awry in the code clearing the key. Are
+				// we feeding the wrong value length to ValueSize?
+				t.Fatalf("expected to find 0 missized tombstones; found %d", m.Keys.MissizedTombstonesCount)
+			}
+		}()
 		defer e.close()
 		if strings.Contains(path, "_nometamorphiciter") {
 			e.noMetamorphicIter = true
@@ -372,6 +449,15 @@ func TestMVCCHistories(t *testing.T) {
 			e.t = t
 			e.td = d
 
+			defer func() {
+				if e.iter != nil {
+					if r := recover(); r != nil {
+						e.iter.Close()
+						panic(r)
+					}
+				}
+			}()
+
 			switch d.Cmd {
 			case "skip":
 				if len(d.CmdArgs) == 0 {
@@ -389,11 +475,13 @@ func TestMVCCHistories(t *testing.T) {
 				// Options:
 				// - trace: emit intermediate results after each operation.
 				// - stats: emit MVCC statistics for each operation and at the end.
+				// - log-ops: emit any MVCC Logical operations at the end.
 				// - error: expect an error to occur. The specific error type/ message
 				//   to expect is spelled out in the expected output.
 				//
 				trace := e.hasArg("trace")
 				stats := e.hasArg("stats")
+				logOps := e.hasArg("log-ops")
 				expectError := e.hasArg("error")
 
 				// buf will accumulate the actual output, which the
@@ -401,7 +489,10 @@ func TestMVCCHistories(t *testing.T) {
 				// output.
 				var buf redact.StringBuilder
 				e.results.buf = &buf
-				e.results.traceIntentWrites = trace
+				e.results.traceClearKey = trace
+
+				e.logOps = logOps
+				e.opLog = nil
 
 				// We reset the stats such that they accumulate for all commands
 				// in a single test.
@@ -413,7 +504,7 @@ func TestMVCCHistories(t *testing.T) {
 
 				// pos is the original <file>:<lineno> prefix computed by
 				// datadriven. It points to the top "run" command itself.
-				// We editing d.Pos in-place below by extending `pos` upon
+				// We are editing d.Pos in-place below by extending `pos` upon
 				// each new line of the script.
 				pos := d.Pos
 
@@ -458,19 +549,30 @@ func TestMVCCHistories(t *testing.T) {
 						}
 					}
 					if printLocks {
-						var ks []string
-						for k := range e.locks {
-							ks = append(ks, k)
-						}
-						sort.Strings(ks)
-						buf.Printf("lock-table: {")
-						for i, k := range ks {
-							if i > 0 {
-								buf.Printf(", ")
+						err = reportLockTable(e, &buf)
+						if err != nil {
+							if foundErr == nil {
+								// Handle the error below.
+								foundErr = err
+							} else {
+								buf.Printf("error reading locks: (%T:) %v\n", err, err)
 							}
-							buf.Printf("%s:%s", k, e.locks[k].ID)
 						}
-						buf.Printf("}\n")
+					}
+					if logOps {
+						prettyPrintOp := func(op enginepb.MVCCLogicalOp) string {
+							switch t := op.GetValue().(type) {
+							case *enginepb.MVCCWriteValueOp:
+								return fmt.Sprintf("write_value: key=%s, ts=%s", roachpb.Key(t.Key), t.Timestamp)
+							case *enginepb.MVCCDeleteRangeOp:
+								return fmt.Sprintf("delete_range: startKey=%s endKey=%s ts=%s", roachpb.Key(t.StartKey), roachpb.Key(t.EndKey), t.Timestamp)
+							default:
+								return fmt.Sprintf("%T", t)
+							}
+						}
+						for _, op := range e.opLog {
+							buf.Printf("logical op: %s\n", prettyPrintOp(op))
+						}
 					}
 				}
 
@@ -539,18 +641,22 @@ func TestMVCCHistories(t *testing.T) {
 					}
 
 					cmd := e.getCmd()
-					txnChange = txnChange || cmd.typ == typTxnUpdate
-					dataChange = dataChange || cmd.typ == typDataUpdate
-					locksChange = locksChange || cmd.typ == typLocksUpdate
+					txnChangeForCmd := cmd.typ&typTxnUpdate != 0
+					dataChangeForCmd := cmd.typ&typDataUpdate != 0
+					locksChangeForCmd := cmd.typ&typLocksUpdate != 0
+					txnChange = txnChange || txnChangeForCmd
+					dataChange = dataChange || dataChangeForCmd
+					locksChange = locksChange || locksChangeForCmd
+					statsForCmd := stats && (dataChangeForCmd || locksChangeForCmd)
 
-					if trace || (stats && cmd.typ == typDataUpdate) {
+					if trace || statsForCmd {
 						// If tracing is also requested by the datadriven input,
 						// we'll trace the statement in the actual results too.
 						buf.Printf(">> %s", d.Cmd)
 						for i := range d.CmdArgs {
 							buf.Printf(" %s", &d.CmdArgs[i])
 						}
-						buf.Printf("\n")
+						_ = buf.WriteByte('\n')
 					}
 
 					// Record the engine and evaluated stats before the command, so
@@ -558,9 +664,15 @@ func TestMVCCHistories(t *testing.T) {
 					var msEngineBefore enginepb.MVCCStats
 					if stats {
 						for _, span := range spans {
-							ms, err := storage.ComputeStats(e.engine, span.Key, span.EndKey, statsTS)
+							ms, err := storage.ComputeStats(ctx, e.engine, span.Key, span.EndKey, statsTS)
 							require.NoError(t, err)
 							msEngineBefore.Add(ms)
+
+							lockSpan := lockTableSpan(span)
+							lockMs, err := storage.ComputeStats(
+								ctx, e.engine, lockSpan.Key, lockSpan.EndKey, statsTS)
+							require.NoError(t, err)
+							msEngineBefore.Add(lockMs)
 						}
 					}
 					msEvalBefore := *e.ms
@@ -576,17 +688,23 @@ func TestMVCCHistories(t *testing.T) {
 						// If tracing is enabled, we report the intermediate results
 						// after each individual step in the script.
 						// This may modify foundErr too.
-						reportResults(cmd.typ == typTxnUpdate, cmd.typ == typDataUpdate, cmd.typ == typLocksUpdate)
+						reportResults(txnChangeForCmd, dataChangeForCmd, dataChangeForCmd)
 					}
 
-					if stats && cmd.typ == typDataUpdate {
+					if statsForCmd {
 						// If stats are enabled, emit evaluated stats returned by the
 						// command, and compare them with the real computed stats diff.
 						var msEngineDiff enginepb.MVCCStats
 						for _, span := range spans {
-							ms, err := storage.ComputeStats(e.engine, span.Key, span.EndKey, statsTS)
+							ms, err := storage.ComputeStats(ctx, e.engine, span.Key, span.EndKey, statsTS)
 							require.NoError(t, err)
 							msEngineDiff.Add(ms)
+
+							lockSpan := lockTableSpan(span)
+							lockMs, err := storage.ComputeStats(
+								ctx, e.engine, lockSpan.Key, lockSpan.EndKey, statsTS)
+							require.NoError(t, err)
+							msEngineDiff.Add(lockMs)
 						}
 						msEngineDiff.Subtract(msEngineBefore)
 
@@ -629,12 +747,18 @@ func TestMVCCHistories(t *testing.T) {
 				}
 
 				// Calculate and output final stats if requested and the data changed.
-				if stats && dataChange {
+				if stats && (dataChange || locksChange) {
 					var msFinal enginepb.MVCCStats
 					for _, span := range spans {
-						ms, err := storage.ComputeStats(e.engine, span.Key, span.EndKey, statsTS)
+						ms, err := storage.ComputeStats(ctx, e.engine, span.Key, span.EndKey, statsTS)
 						require.NoError(t, err)
 						msFinal.Add(ms)
+
+						lockSpan := lockTableSpan(span)
+						lockMs, err := storage.ComputeStats(
+							ctx, e.engine, lockSpan.Key, lockSpan.EndKey, statsTS)
+						require.NoError(t, err)
+						msFinal.Add(lockMs)
 					}
 					buf.Printf("stats: %s\n", formatStats(msFinal, false))
 				}
@@ -691,7 +815,7 @@ type cmd struct {
 type cmdType int
 
 const (
-	typReadOnly cmdType = iota
+	typReadOnly cmdType = 1 << iota
 	typTxnUpdate
 	typDataUpdate
 	typLocksUpdate
@@ -708,10 +832,12 @@ var commands = map[string]cmd{
 	"txn_step":        {typTxnUpdate, cmdTxnStep},
 	"txn_update":      {typTxnUpdate, cmdTxnUpdate},
 
-	"resolve_intent":       {typDataUpdate, cmdResolveIntent},
-	"resolve_intent_range": {typDataUpdate, cmdResolveIntentRange},
-	"check_intent":         {typReadOnly, cmdCheckIntent},
-	"add_lock":             {typLocksUpdate, cmdAddLock},
+	"resolve_intent":         {typDataUpdate | typLocksUpdate, cmdResolveIntent},
+	"resolve_intent_range":   {typDataUpdate | typLocksUpdate, cmdResolveIntentRange},
+	"check_intent":           {typReadOnly, cmdCheckIntent},
+	"add_unreplicated_lock":  {typLocksUpdate, cmdAddUnreplicatedLock},
+	"check_for_acquire_lock": {typReadOnly, cmdCheckForAcquireLock},
+	"acquire_lock":           {typLocksUpdate, cmdAcquireLock},
 
 	"clear":                 {typDataUpdate, cmdClear},
 	"clear_range":           {typDataUpdate, cmdClearRange},
@@ -730,6 +856,7 @@ var commands = map[string]cmd{
 	"initput":               {typDataUpdate, cmdInitPut},
 	"merge":                 {typDataUpdate, cmdMerge},
 	"put":                   {typDataUpdate, cmdPut},
+	"put_blind_inline":      {typDataUpdate, cmdPutBlindInline},
 	"put_rangekey":          {typDataUpdate, cmdPutRangeKey},
 	"scan":                  {typReadOnly, cmdScan},
 	"is_span_empty":         {typReadOnly, cmdIsSpanEmpty},
@@ -739,7 +866,6 @@ var commands = map[string]cmd{
 	"iter_new_read_as_of":         {typReadOnly, cmdIterNewReadAsOf},    // readAsOfIterator
 	"iter_seek_ge":                {typReadOnly, cmdIterSeekGE},
 	"iter_seek_lt":                {typReadOnly, cmdIterSeekLT},
-	"iter_seek_intent_ge":         {typReadOnly, cmdIterSeekIntentGE},
 	"iter_next":                   {typReadOnly, cmdIterNext},
 	"iter_next_ignoring_time":     {typReadOnly, cmdIterNextIgnoringTime},    // MVCCIncrementalIterator
 	"iter_next_key_ignoring_time": {typReadOnly, cmdIterNextKeyIgnoringTime}, // MVCCIncrementalIterator
@@ -821,6 +947,11 @@ func cmdTxnRestart(e *evalCtx) error {
 	up := roachpb.NormalUserPriority
 	tp := enginepb.MinTxnPriority
 	txn.Restart(up, tp, ts)
+	if e.hasArg("epoch") {
+		var epoch int
+		e.scanArg("epoch", &epoch)
+		txn.Epoch = enginepb.TxnEpoch(epoch)
+	}
 	e.results.txn = txn
 	return nil
 }
@@ -862,30 +993,29 @@ func cmdTxnUpdate(e *evalCtx) error {
 	return nil
 }
 
-type intentPrintingReadWriter struct {
+type clearKeyPrintingReadWriter struct {
 	storage.ReadWriter
 	buf *redact.StringBuilder
 }
 
-func (rw intentPrintingReadWriter) PutIntent(
-	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
+func (rw clearKeyPrintingReadWriter) ClearEngineKey(
+	key storage.EngineKey, opts storage.ClearOptions,
 ) error {
-	rw.buf.Printf("called PutIntent(%v, _, %v)\n",
-		key, txnUUID)
-	return rw.ReadWriter.PutIntent(ctx, key, value, txnUUID)
+	rw.buf.Printf("called ClearEngineKey(%v)\n", key)
+	return rw.ReadWriter.ClearEngineKey(key, opts)
 }
 
-func (rw intentPrintingReadWriter) ClearIntent(
-	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) error {
-	rw.buf.Printf("called ClearIntent(%v, TDNUM(%t), %v)\n",
-		key, txnDidNotUpdateMeta, txnUUID)
-	return rw.ReadWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID)
+func (rw clearKeyPrintingReadWriter) SingleClearEngineKey(key storage.EngineKey) error {
+	rw.buf.Printf("called SingleClearEngineKey(%v)\n", key)
+	return rw.ReadWriter.SingleClearEngineKey(key)
 }
 
-func (e *evalCtx) tryWrapForIntentPrinting(rw storage.ReadWriter) storage.ReadWriter {
-	if e.results.traceIntentWrites {
-		return intentPrintingReadWriter{ReadWriter: rw, buf: e.results.buf}
+func (e *evalCtx) tryWrapForClearKeyPrinting(rw storage.ReadWriter) storage.ReadWriter {
+	if e.results.traceClearKey {
+		return clearKeyPrintingReadWriter{
+			ReadWriter: rw,
+			buf:        e.results.buf,
+		}
 	}
 	return rw
 }
@@ -922,9 +1052,28 @@ func cmdResolveIntentRange(e *evalCtx) error {
 	}
 
 	return e.withWriter("resolve_intent_range", func(rw storage.ReadWriter) error {
-		_, _, _, _, err := storage.MVCCResolveWriteIntentRange(e.ctx, rw, e.ms, intent,
-			storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: maxKeys, TargetBytes: targetBytes})
-		return err
+		opts := storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: maxKeys, TargetBytes: targetBytes}
+		numKeys, numBytes, resumeSpan, resumeReason, replLocksReleased, err :=
+			storage.MVCCResolveWriteIntentRange(
+				e.ctx, rw, e.ms, intent, opts)
+		if err != nil {
+			return err
+		}
+		var maybeNumBytes string
+		if e.hasArg("batched") {
+			// If !batched, we don't reliably track the number of bytes resolved and
+			// don't want the output to change depending on the mvccHistoriesUseBatch
+			// metamorphic variable.
+			maybeNumBytes = fmt.Sprintf(", %d bytes", numBytes)
+		}
+		e.results.buf.Printf("resolve_intent_range: %v-%v -> resolved %d key(s)%s\n", start, end, numKeys, maybeNumBytes)
+		if resumeSpan != nil {
+			e.results.buf.Printf("resolve_intent_range: resume span [%s,%s) %s\n", resumeSpan.Key, resumeSpan.EndKey, resumeReason)
+		}
+		if replLocksReleased {
+			e.results.buf.Printf("resolve_intent_range: released shared or exclusive locks\n")
+		}
+		return nil
 	})
 }
 
@@ -939,9 +1088,27 @@ func (e *evalCtx) resolveIntent(
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key})
 	intent.Status = resolveStatus
 	intent.ClockWhilePending = roachpb.ObservedTimestamp{Timestamp: clockWhilePending}
-	_, _, _, err := storage.MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent,
-		storage.MVCCResolveWriteIntentOptions{TargetBytes: targetBytes})
-	return err
+	ok, numBytes, resumeSpan, replLocksReleased, err :=
+		storage.MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent,
+			storage.MVCCResolveWriteIntentOptions{TargetBytes: targetBytes})
+	if err != nil {
+		return err
+	}
+	var maybeNumBytes string
+	if e.hasArg("batched") {
+		// If !batched, we don't reliably track the number of bytes resolved and
+		// don't want the output to change depending on the mvccHistoriesUseBatch
+		// metamorphic variable.
+		maybeNumBytes = fmt.Sprintf(", %d bytes", numBytes)
+	}
+	e.results.buf.Printf("resolve_intent: %v -> resolved key = %t%s\n", key, ok, maybeNumBytes)
+	if resumeSpan != nil {
+		e.results.buf.Printf("resolve_intent: resume span [%s,%s)\n", resumeSpan.Key, resumeSpan.EndKey)
+	}
+	if replLocksReleased {
+		e.results.buf.Printf("resolve_intent: released shared or exclusive locks\n")
+	}
+	return nil
 }
 
 func cmdCheckIntent(e *evalCtx) error {
@@ -953,7 +1120,10 @@ func cmdCheckIntent(e *evalCtx) error {
 
 	return e.withReader(func(r storage.Reader) error {
 		var meta enginepb.MVCCMetadata
-		iter := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
+		iter, err := r.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
+		if err != nil {
+			return err
+		}
 		defer iter.Close()
 		iter.SeekGE(storage.MVCCKey{Key: key})
 		ok, err := iter.Valid()
@@ -979,18 +1149,38 @@ func cmdCheckIntent(e *evalCtx) error {
 	})
 }
 
-func cmdAddLock(e *evalCtx) error {
+func cmdAddUnreplicatedLock(e *evalCtx) error {
 	txn := e.getTxn(mandatory)
 	key := e.getKey()
-	e.locks[string(key)] = txn
+	e.unreplLocks[string(key)] = &txn.TxnMeta
 	return nil
+}
+
+func cmdCheckForAcquireLock(e *evalCtx) error {
+	return e.withReader(func(r storage.Reader) error {
+		txn := e.getTxn(optional)
+		key := e.getKey()
+		str := e.getStrength()
+		maxLockConflicts := e.getMaxLockConflicts()
+		return storage.MVCCCheckForAcquireLock(e.ctx, r, txn, str, key, maxLockConflicts)
+	})
+}
+
+func cmdAcquireLock(e *evalCtx) error {
+	return e.withWriter("acquire_lock", func(rw storage.ReadWriter) error {
+		txn := e.getTxn(optional)
+		key := e.getKey()
+		str := e.getStrength()
+		maxLockConflicts := e.getMaxLockConflicts()
+		return storage.MVCCAcquireLock(e.ctx, rw, txn, str, key, e.ms, maxLockConflicts)
+	})
 }
 
 func cmdClear(e *evalCtx) error {
 	key := e.getKey()
 	ts := e.getTs(nil)
 	return e.withWriter("clear", func(rw storage.ReadWriter) error {
-		return rw.ClearMVCC(storage.MVCCKey{Key: key, Timestamp: ts})
+		return rw.ClearMVCC(storage.MVCCKey{Key: key, Timestamp: ts}, storage.ClearOptions{})
 	})
 }
 
@@ -1052,7 +1242,7 @@ func cmdGCClearRange(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
 	gcTs := e.getTs(nil)
 	return e.withWriter("gc_clear_range", func(rw storage.ReadWriter) error {
-		cms, err := storage.ComputeStats(rw, key, endKey, 100e9)
+		cms, err := storage.ComputeStats(context.Background(), rw, key, endKey, 100e9)
 		require.NoError(e.t, err, "failed to compute range stats")
 		return storage.MVCCGarbageCollectWholeRange(e.ctx, rw, e.ms, key, endKey, gcTs, cms)
 	})
@@ -1087,8 +1277,19 @@ func cmdCPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("cput", func(rw storage.ReadWriter) error {
-		if err := storage.MVCCConditionalPut(e.ctx, rw, e.ms, key, ts, localTs, val, expVal, behavior, txn); err != nil {
+		opts := storage.MVCCWriteOptions{
+			Txn:                            txn,
+			LocalTimestamp:                 localTs,
+			Stats:                          e.ms,
+			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
+			MaxLockConflicts:               e.getMaxLockConflicts(),
+		}
+		acq, err := storage.MVCCConditionalPut(e.ctx, rw, key, ts, val, expVal, behavior, opts)
+		if err != nil {
 			return err
+		}
+		if !acq.Empty() {
+			e.results.buf.Printf("cput: lock acquisition = %v\n", acq)
 		}
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
@@ -1108,8 +1309,19 @@ func cmdInitPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("initput", func(rw storage.ReadWriter) error {
-		if err := storage.MVCCInitPut(e.ctx, rw, e.ms, key, ts, localTs, val, failOnTombstones, txn); err != nil {
+		opts := storage.MVCCWriteOptions{
+			Txn:                            txn,
+			LocalTimestamp:                 localTs,
+			Stats:                          e.ms,
+			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
+			MaxLockConflicts:               e.getMaxLockConflicts(),
+		}
+		acq, err := storage.MVCCInitPut(e.ctx, rw, key, ts, val, failOnTombstones, opts)
+		if err != nil {
 			return err
+		}
+		if !acq.Empty() {
+			e.results.buf.Printf("initput: lock acquisition = %v\n", acq)
 		}
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
@@ -1125,7 +1337,14 @@ func cmdDelete(e *evalCtx) error {
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del", func(rw storage.ReadWriter) error {
-		foundKey, err := storage.MVCCDelete(e.ctx, rw, e.ms, key, ts, localTs, txn)
+		opts := storage.MVCCWriteOptions{
+			Txn:                            txn,
+			LocalTimestamp:                 localTs,
+			Stats:                          e.ms,
+			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
+			MaxLockConflicts:               e.getMaxLockConflicts(),
+		}
+		foundKey, acq, err := storage.MVCCDelete(e.ctx, rw, key, ts, opts)
 		if err == nil || errors.HasType(err, &kvpb.WriteTooOldError{}) {
 			// We want to output foundKey even if a WriteTooOldError is returned,
 			// since the error may be swallowed/deferred during evaluation.
@@ -1133,6 +1352,9 @@ func cmdDelete(e *evalCtx) error {
 		}
 		if err != nil {
 			return err
+		}
+		if !acq.Empty() {
+			e.results.buf.Printf("del: lock acquisition = %v\n", acq)
 		}
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
@@ -1154,10 +1376,20 @@ func cmdDeleteRange(e *evalCtx) error {
 
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del_range", func(rw storage.ReadWriter) error {
-		deleted, resumeSpan, num, err := storage.MVCCDeleteRange(
-			e.ctx, rw, e.ms, key, endKey, int64(max), ts, localTs, txn, returnKeys)
+		opts := storage.MVCCWriteOptions{
+			Txn:                            txn,
+			LocalTimestamp:                 localTs,
+			Stats:                          e.ms,
+			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
+			MaxLockConflicts:               e.getMaxLockConflicts(),
+		}
+		deleted, resumeSpan, num, acqs, err := storage.MVCCDeleteRange(
+			e.ctx, rw, key, endKey, int64(max), ts, opts, returnKeys)
 		if err != nil {
 			return err
+		}
+		if len(acqs) != 0 {
+			e.results.buf.Printf("del_range: lock acquisitions = %v\n", acqs)
 		}
 		e.results.buf.Printf("del_range: %v-%v -> deleted %d key(s)\n", key, endKey, num)
 		for _, key := range deleted {
@@ -1179,6 +1411,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	ts := e.getTs(nil)
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 	idempotent := e.hasArg("idempotent")
+	maxLockConflicts := e.getMaxLockConflicts()
 
 	var msCovered *enginepb.MVCCStats
 	if cmdDeleteRangeTombstoneKnownStats && !e.hasArg("noCoveredStats") {
@@ -1186,7 +1419,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 		// before the start key -- don't attempt to compute covered stats for these
 		// to avoid iterator panics.
 		if key.Compare(endKey) < 0 && key.Compare(keys.LocalMax) >= 0 {
-			ms, err := storage.ComputeStats(e.engine, key, endKey, ts.WallTime)
+			ms, err := storage.ComputeStats(context.Background(), e.engine, key, endKey, ts.WallTime)
 			if err != nil {
 				return err
 			}
@@ -1197,7 +1430,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	return e.withWriter("del_range_ts", func(rw storage.ReadWriter) error {
 		rw, leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(rw, key, endKey)
 		return storage.MVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, localTs,
-			leftPeekBound, rightPeekBound, idempotent, 0, msCovered)
+			leftPeekBound, rightPeekBound, idempotent, maxLockConflicts, msCovered)
 	})
 }
 
@@ -1222,10 +1455,11 @@ func cmdDeleteRangePredicate(e *evalCtx) error {
 	if e.hasArg("rangeThreshold") {
 		e.scanArg("rangeThreshold", &rangeThreshold)
 	}
+	maxLockConflicts := e.getMaxLockConflicts()
 	return e.withWriter("del_range_pred", func(rw storage.ReadWriter) error {
 		rw, leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(rw, key, endKey)
 		resumeSpan, err := storage.MVCCPredicateDeleteRange(e.ctx, rw, e.ms, key, endKey, ts, localTs,
-			leftPeekBound, rightPeekBound, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), 0)
+			leftPeekBound, rightPeekBound, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), maxLockConflicts)
 
 		if resumeSpan != nil {
 			e.results.buf.Printf("del_range_pred: resume span [%s,%s)\n", resumeSpan.Key,
@@ -1308,11 +1542,21 @@ func cmdIncrement(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("increment", func(rw storage.ReadWriter) error {
-		curVal, err := storage.MVCCIncrement(e.ctx, rw, e.ms, key, ts, localTs, txn, inc)
+		opts := storage.MVCCWriteOptions{
+			Txn:                            txn,
+			LocalTimestamp:                 localTs,
+			Stats:                          e.ms,
+			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
+			MaxLockConflicts:               e.getMaxLockConflicts(),
+		}
+		curVal, acq, err := storage.MVCCIncrement(e.ctx, rw, key, ts, opts, inc)
 		if err != nil {
 			return err
 		}
 		e.results.buf.Printf("inc: current value = %d\n", curVal)
+		if !acq.Empty() {
+			e.results.buf.Printf("inc: lock acquisition = %v\n", acq)
+		}
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
@@ -1344,13 +1588,42 @@ func cmdPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("put", func(rw storage.ReadWriter) error {
-		if err := storage.MVCCPut(e.ctx, rw, e.ms, key, ts, localTs, val, txn); err != nil {
+		opts := storage.MVCCWriteOptions{
+			Txn:                            txn,
+			LocalTimestamp:                 localTs,
+			Stats:                          e.ms,
+			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
+			MaxLockConflicts:               e.getMaxLockConflicts(),
+		}
+		acq, err := storage.MVCCPut(e.ctx, rw, key, ts, val, opts)
+		if err != nil {
 			return err
+		}
+		if !acq.Empty() {
+			e.results.buf.Printf("put: lock acquisition = %v\n", acq)
 		}
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
 		return nil
+	})
+}
+
+func cmdPutBlindInline(e *evalCtx) error {
+	key := e.getKey()
+
+	var val, prev roachpb.Value
+	if e.hasArg("v") {
+		val = e.getValInternal("v")
+		val.InitChecksum(key)
+	}
+	if e.hasArg("prev") {
+		prev = e.getValInternal("prev")
+		prev.InitChecksum(key)
+	}
+
+	return e.withWriter("put_blind_inline", func(rw storage.ReadWriter) error {
+		return storage.MVCCBlindPutInlineWithPrev(e.ctx, rw, e.ms, key, val, prev)
 	})
 }
 
@@ -1386,8 +1659,8 @@ func cmdExport(e *evalCtx) error {
 			StripIndexPrefixAndTimestamp: e.hasArg("stripped"),
 		},
 	}
-	if e.hasArg("maxIntents") {
-		e.scanArg("maxIntents", &opts.MaxIntents)
+	if e.hasArg("maxLockConflicts") {
+		e.scanArg("maxLockConflicts", &opts.MaxLockConflicts)
 	}
 	if e.hasArg("targetSize") {
 		e.scanArg("targetSize", &opts.TargetSize)
@@ -1576,7 +1849,7 @@ func cmdScan(e *evalCtx) error {
 		// ascertain no result is populated in the intents when an error
 		// occurs.
 		for _, intent := range res.Intents {
-			e.results.buf.Printf("scan: intent %v {%s}\n", intent.Intent_SingleKeySpan.Key, intent.Txn)
+			e.results.buf.Printf("scan: intent %v {%s}\n", intent.Key, intent.Txn)
 		}
 		for _, val := range res.KVs {
 			e.results.buf.Printf("scan: %v -> %v @%v\n", val.Key, val.Value.PrettyPrint(), val.Value.Timestamp)
@@ -1645,13 +1918,22 @@ func cmdIterNew(e *evalCtx) error {
 	if e.hasArg("maskBelow") {
 		opts.RangeKeyMaskingBelow = e.getTsWithName("maskBelow")
 	}
+	if e.hasArg("minTimestamp") {
+		opts.MinTimestamp = e.getTsWithName("minTimestamp")
+	}
+	if e.hasArg("maxTimestamp") {
+		opts.MaxTimestamp = e.getTsWithName("maxTimestamp")
+	}
 
 	if e.iter != nil {
 		e.iter.Close()
 	}
 
 	r := e.newReader()
-	iter := r.NewMVCCIterator(kind, opts)
+	iter, err := r.NewMVCCIterator(context.Background(), kind, opts)
+	if err != nil {
+		return err
+	}
 	iter = newMetamorphicIterator(e.t, e.metamorphicIterSeed(), iter).(storage.MVCCIterator)
 	if opts.Prefix != iter.IsPrefix() {
 		return errors.Errorf("prefix iterator returned IsPrefix=false")
@@ -1715,7 +1997,11 @@ func cmdIterNewIncremental(e *evalCtx) error {
 	}
 
 	r := e.newReader()
-	it := storage.SimpleMVCCIterator(storage.NewMVCCIncrementalIterator(r, opts))
+	mvccIter, err := storage.NewMVCCIncrementalIterator(context.Background(), r, opts)
+	if err != nil {
+		return err
+	}
+	it := storage.SimpleMVCCIterator(mvccIter)
 	// Can't metamorphically move the iterator around since when intents get aggregated
 	// or emitted we can't undo that later at the level of the metamorphic iterator.
 	if opts.IntentPolicy == storage.MVCCIncrementalIterIntentPolicyError {
@@ -1744,7 +2030,11 @@ func cmdIterNewReadAsOf(e *evalCtx) error {
 		opts.UpperBound = keys.MaxKey
 	}
 	r := e.newReader()
-	innerIter := newMetamorphicIterator(e.t, e.metamorphicIterSeed(), r.NewMVCCIterator(storage.MVCCKeyIterKind, opts))
+	mvccIter, err := r.NewMVCCIterator(context.Background(), storage.MVCCKeyIterKind, opts)
+	if err != nil {
+		return err
+	}
+	innerIter := newMetamorphicIterator(e.t, e.metamorphicIterSeed(), mvccIter)
 	iter := &iterWithCloser{innerIter, r.Close}
 	e.iter = storage.NewReadAsOfIterator(iter, asOf)
 	e.iterRangeKeys.Clear()
@@ -1755,16 +2045,6 @@ func cmdIterSeekGE(e *evalCtx) error {
 	key := e.getKey()
 	ts := e.getTs(nil)
 	e.iter.SeekGE(storage.MVCCKey{Key: key, Timestamp: ts})
-	printIter(e)
-	return nil
-}
-
-func cmdIterSeekIntentGE(e *evalCtx) error {
-	key := e.getKey()
-	var txnName string
-	e.scanArg("txn", &txnName)
-	txn := e.txns[txnName]
-	e.mvccIter().SeekIntentGE(key, txn.ID)
 	printIter(e)
 	return nil
 }
@@ -2050,7 +2330,7 @@ func formatStats(ms enginepb.MVCCStats, delta bool) string {
 	order := []string{"key_count", "key_bytes", "val_count", "val_bytes",
 		"range_key_count", "range_key_bytes", "range_val_count", "range_val_bytes",
 		"live_count", "live_bytes", "gc_bytes_age",
-		"intent_count", "intent_bytes", "separated_intent_count", "intent_age"}
+		"intent_count", "intent_bytes", "lock_count", "lock_bytes", "lock_age"}
 	sort.SliceStable(fields, func(i, j int) bool {
 		for _, name := range order {
 			if fields[i][1] == name {
@@ -2087,13 +2367,46 @@ func formatStats(ms enginepb.MVCCStats, delta bool) string {
 	return s
 }
 
+// boundSettingReader wraps a storage.Reader and sets unset bounds on
+// NewMVCCIterator.
+type boundSettingReader struct {
+	storage.Reader
+}
+
+// NewMVCCIterator implements the Reader interface.
+func (b boundSettingReader) NewMVCCIterator(
+	ctx context.Context, iterKind storage.MVCCIterKind, opts storage.IterOptions,
+) (storage.MVCCIterator, error) {
+	if !opts.Prefix {
+		if len(opts.LowerBound) == 0 {
+			// This logic exists because intentInterleavingIter does not support
+			// iterator bounds spanning the local and global keyspace.
+			if len(opts.UpperBound) != 0 && keys.IsLocal(opts.UpperBound) {
+				opts.LowerBound = keys.MinKey
+			} else {
+				opts.LowerBound = keys.LocalMax
+			}
+		}
+		if len(opts.UpperBound) == 0 {
+			// NB: The above conditional will force a LocalMax min key if lower bound
+			// was initially unset, and LocalMax is not local.
+			if len(opts.LowerBound) != 0 && keys.IsLocal(opts.LowerBound) {
+				opts.UpperBound = keys.LocalMax
+			} else {
+				opts.UpperBound = keys.MaxKey
+			}
+		}
+	}
+	return b.Reader.NewMVCCIterator(ctx, iterKind, opts)
+}
+
 // evalCtx stored the current state of the environment of a running
 // script.
 type evalCtx struct {
 	results struct {
-		buf               *redact.StringBuilder
-		txn               *roachpb.Transaction
-		traceIntentWrites bool
+		buf           *redact.StringBuilder
+		txn           *roachpb.Transaction
+		traceClearKey bool
 	}
 	ctx               context.Context
 	st                *cluster.Settings
@@ -2104,22 +2417,24 @@ type evalCtx struct {
 	t                 *testing.T
 	td                *datadriven.TestData
 	txns              map[string]*roachpb.Transaction
-	txnCounter        uint128.Uint128
-	locks             map[string]*roachpb.Transaction
+	txnCounter        uint32
+	unreplLocks       map[string]*enginepb.TxnMeta
 	ms                *enginepb.MVCCStats
 	sstWriter         *storage.SSTWriter
 	sstFile           *storage.MemObject
 	ssts              [][]byte
+
+	logOps bool
+	opLog  []enginepb.MVCCLogicalOp
 }
 
 func newEvalCtx(ctx context.Context, engine storage.Engine) *evalCtx {
 	return &evalCtx{
-		ctx:        ctx,
-		st:         cluster.MakeTestingClusterSettings(),
-		engine:     engine,
-		txns:       make(map[string]*roachpb.Transaction),
-		txnCounter: uint128.FromInts(0, 1),
-		locks:      make(map[string]*roachpb.Transaction),
+		ctx:         ctx,
+		st:          cluster.MakeTestingClusterSettings(),
+		engine:      engine,
+		txns:        make(map[string]*roachpb.Transaction),
+		unreplLocks: make(map[string]*enginepb.TxnMeta),
 	}
 }
 
@@ -2176,6 +2491,10 @@ func (e *evalCtx) getResolve() (bool, roachpb.TransactionStatus) {
 		return false, roachpb.PENDING
 	}
 	return true, e.getTxnStatus()
+}
+
+func (e *evalCtx) getAmbiguousReplay() bool {
+	return e.hasArg("ambiguousReplay")
 }
 
 func (e *evalCtx) getTs(txn *roachpb.Transaction) hlc.Timestamp {
@@ -2246,6 +2565,8 @@ func (e *evalCtx) newReader() storage.Reader {
 		return e.engine.NewBatch()
 	case "snapshot":
 		return e.engine.NewSnapshot()
+	case "efos":
+		return boundSettingReader{e.engine.NewEventuallyFileOnlySnapshot([]roachpb.Span{{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}})}
 	default:
 		e.t.Fatalf("unknown reader type %q", mvccHistoriesReader)
 		return nil
@@ -2259,10 +2580,29 @@ func (e *evalCtx) withReader(fn func(storage.Reader) error) error {
 	return fn(r)
 }
 
+type opLoggerWriter struct {
+	storage.ReadWriter
+
+	// TODO(ssd): I reused OpLoggerBatch here to avoid having two
+	// implementations of the operation handling. We can't use
+	// OpLoggerBatch directly because we don't always have a
+	// batch. We could modify OpLoggerBatch so it was usable in
+	// any case without a wrapper, but I didn't want to add
+	// conditionals or indirection into the production path just
+	// for testing.
+	logger *storage.OpLoggerBatch
+}
+
+func (ol *opLoggerWriter) LogLogicalOp(
+	op storage.MVCCLogicalOpType, details storage.MVCCLogicalOpDetails,
+) {
+	ol.logger.LogLogicalOpOnly(op, details)
+}
+
 // withWriter calls the given closure with a writer. The writer is
 // metamorphically chosen to be a batch, which will be committed and closed when
 // done.
-func (e *evalCtx) withWriter(cmd string, fn func(_ storage.ReadWriter) error) error {
+func (e *evalCtx) withWriter(cmd string, fn func(storage.ReadWriter) error) error {
 	var rw storage.ReadWriter
 	rw = e.engine
 	var batch storage.Batch
@@ -2271,7 +2611,17 @@ func (e *evalCtx) withWriter(cmd string, fn func(_ storage.ReadWriter) error) er
 		defer batch.Close()
 		rw = batch
 	}
-	rw = e.tryWrapForIntentPrinting(rw)
+
+	opLogger := &storage.OpLoggerBatch{}
+	if e.logOps {
+		rw = &opLoggerWriter{
+			ReadWriter: rw,
+			logger:     opLogger,
+		}
+	}
+
+	rw = e.tryWrapForClearKeyPrinting(rw)
+
 	err := fn(rw)
 	if e.hasArg("batched") {
 		batchStatus := "non-empty"
@@ -2288,6 +2638,9 @@ func (e *evalCtx) withWriter(cmd string, fn func(_ storage.ReadWriter) error) er
 				return err
 			}
 		}
+	}
+	if e.logOps {
+		e.opLog = append(e.opLog, opLogger.LogicalOps()...)
 	}
 	return err
 }
@@ -2327,6 +2680,34 @@ func (e *evalCtx) getKeyRange() (sk, ek roachpb.Key) {
 	return sk, ek
 }
 
+func (e *evalCtx) getStrength() lock.Strength {
+	e.t.Helper()
+	var strS string
+	e.scanArg("str", &strS)
+	switch strS {
+	case "none":
+		return lock.None
+	case "shared":
+		return lock.Shared
+	case "exclusive":
+		return lock.Exclusive
+	case "intent":
+		return lock.Intent
+	default:
+		e.Fatalf("unknown lock strength: %s", strS)
+		return 0
+	}
+}
+
+func (e *evalCtx) getMaxLockConflicts() int64 {
+	e.t.Helper()
+	var maxLockConflicts int64
+	if e.hasArg("maxLockConflicts") {
+		e.scanArg("maxLockConflicts", &maxLockConflicts)
+	}
+	return maxLockConflicts
+}
+
 func (e *evalCtx) getTenantCodec() keys.SQLCodec {
 	if e.hasArg("tenant-prefix") {
 		var tenantID int
@@ -2344,7 +2725,7 @@ func (e *evalCtx) newTxn(
 	}
 	txn := &roachpb.Transaction{
 		TxnMeta: enginepb.TxnMeta{
-			ID:             uuid.FromUint128(e.txnCounter),
+			ID:             e.newTxnID(),
 			Key:            []byte(key),
 			WriteTimestamp: ts,
 			Sequence:       0,
@@ -2354,9 +2735,16 @@ func (e *evalCtx) newTxn(
 		GlobalUncertaintyLimit: globalUncertaintyLimit,
 		Status:                 roachpb.PENDING,
 	}
-	e.txnCounter = e.txnCounter.Add(1)
 	e.txns[txnName] = txn
 	return txn, nil
+}
+
+func (e *evalCtx) newTxnID() uuid.UUID {
+	// Generate txn IDs in the upper 32 bits of the UUID so that differences are
+	// visible in UUID.Short formatting, which is used by TxnMeta.String.
+	e.txnCounter++
+	hi := uint64(e.txnCounter) << 32
+	return uuid.FromUint128(uint128.Uint128{Hi: hi})
 }
 
 func (e *evalCtx) sst() *storage.SSTWriter {
@@ -2401,30 +2789,30 @@ func (e *evalCtx) lookupTxn(txnName string) (*roachpb.Transaction, error) {
 func (e *evalCtx) newLockTableView(
 	txn *roachpb.Transaction, ts hlc.Timestamp,
 ) storage.LockTableView {
-	return &mockLockTableView{locks: e.locks, txn: txn, ts: ts}
+	return &mockLockTableView{unreplLocks: e.unreplLocks, txn: txn, ts: ts}
 }
 
 // mockLockTableView is a mock implementation of LockTableView.
 type mockLockTableView struct {
-	locks map[string]*roachpb.Transaction
-	txn   *roachpb.Transaction
-	ts    hlc.Timestamp
+	unreplLocks map[string]*enginepb.TxnMeta
+	txn         *roachpb.Transaction
+	ts          hlc.Timestamp
 }
 
 func (lt *mockLockTableView) IsKeyLockedByConflictingTxn(
 	k roachpb.Key, s lock.Strength,
-) (bool, *enginepb.TxnMeta) {
-	holder, ok := lt.locks[string(k)]
+) (bool, *enginepb.TxnMeta, error) {
+	holder, ok := lt.unreplLocks[string(k)]
 	if !ok {
-		return false, nil
+		return false, nil, nil
 	}
 	if lt.txn != nil && lt.txn.ID == holder.ID {
-		return false, nil
+		return false, nil, nil
 	}
 	if s == lock.None && lt.ts.Less(holder.WriteTimestamp) {
-		return false, nil
+		return false, nil, nil
 	}
-	return true, &holder.TxnMeta
+	return true, holder, nil
 }
 
 func (e *evalCtx) visitWrappedIters(fn func(it storage.SimpleMVCCIterator) (done bool)) {

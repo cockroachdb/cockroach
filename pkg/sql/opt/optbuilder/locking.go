@@ -11,18 +11,23 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/errors"
 )
 
-// lockingSpec maintains a collection of FOR [KEY] UPDATE/SHARE items that apply
-// to a given scope. Locking clauses can be applied to the lockingSpec as they
-// come into scope in the AST. The lockingSpec can then be consolidated down to
-// a single row-level locking specification for different tables to determine
-// how scans over those tables should perform row-level locking, if at all.
+// lockingItem represents a single FOR UPDATE / FOR SHARE item in a locking
+// clause (perhaps with multiple targets). It wraps a tree.LockingItem with
+// extra information needed for semantic analysis and plan building.
 //
-// A SELECT statement may contain zero, one, or more than one row-level locking
-// clause. Each of these clauses consist of two different properties.
+// A locking item specifies several locking properties.
 //
 // The first property is locking strength (see tree.LockingStrength). Locking
 // strength represents the degree of protection that a row-level lock provides.
@@ -48,21 +53,74 @@ import (
 //	SKIP LOCKED
 //	NOWAIT
 //
-// In addition to these two properties, locking clauses can contain an optional
-// list of target relations. When provided, the locking clause applies only to
-// those relations in the target list. When not provided, the locking clause
-// applies to all relations in the current scope.
+// In addition to these properties, locking items can contain an optional list
+// of target relations. When provided, the locking item applies only to those
+// relations in the target list. When not provided, the locking item applies to
+// all relations in the current scope.
 //
-// Put together, a complex locking spec might look like:
+// Locking clauses consist of multiple locking items.
+//
+// For example, a complex locking clause might look like:
 //
 //	SELECT ... FROM ... FOR SHARE NOWAIT FOR UPDATE OF t1, t2
 //
-// which would be represented as:
+// which would be represented as two locking items:
 //
 //	[ {ForShare, LockWaitError, []}, {ForUpdate, LockWaitBlock, [t1, t2]} ]
-type lockingSpec []*tree.LockingItem
+type lockingItem struct {
+	item *tree.LockingItem
 
-// noRowLocking indicates that no row-level locking has been specified.
+	// targetsFound is used to validate that we matched all of the lock targets.
+	targetsFound intsets.Fast
+
+	// builders has one lockBuilder for each data source that matched this
+	// item. Each lockBuilder here will become one Lock operator in the plan.
+	builders []*lockBuilder
+}
+
+// lockBuilder is a helper for building Lock operators for a single data
+// source. It keeps track of the PK columns of the table. The same lockBuilder
+// may be referenced by multiple lockingItems.
+type lockBuilder struct {
+	table   opt.TableID
+	keyCols opt.ColList
+}
+
+// newLockBuilder constructs a lockBuilder for the passed table.
+func newLockBuilder(tabMeta *opt.TableMeta) *lockBuilder {
+	primaryIndex := tabMeta.Table.Index(cat.PrimaryIndex)
+	lb := &lockBuilder{
+		table:   tabMeta.MetaID,
+		keyCols: make(opt.ColList, primaryIndex.KeyColumnCount()),
+	}
+	for i := range lb.keyCols {
+		lb.keyCols[i] = lb.table.IndexColumnID(primaryIndex, i)
+	}
+	return lb
+}
+
+// lockingSpec maintains a collection of FOR [KEY] UPDATE/SHARE items that apply
+// to the current scope. Locking items can apply as they come into scope in the
+// AST, or as data sources match locking targets within FROM lists.
+//
+// For example, for a statement like:
+//
+//	SELECT * FROM a, (SELECT * FROM b, c FOR SHARE NOWAIT FOR UPDATE OF c) FOR SHARE
+//
+// while building each scan, the lockingSpec would look different:
+//
+//   - while building a it would be:
+//     [{ForShare, LockWaitBlock, []}]
+//
+//   - while building b it would be:
+//     [{ForShare, LockWaitBlock, []}, {ForShare, LockWaitError, []}]
+//
+//   - while building c it would be:
+//     [{ForShare, LockWaitBlock, []}, {ForShare, LockWaitError, []}, {ForUpdate, LockWaitBlock, [c]}]
+type lockingSpec []*lockingItem
+
+// noRowLocking indicates that no row-level locking applies to the current
+// scope.
 var noRowLocking lockingSpec
 
 // isSet returns whether the spec contains any row-level locking modes.
@@ -70,100 +128,105 @@ func (lm lockingSpec) isSet() bool {
 	return len(lm) != 0
 }
 
-// get returns the first row-level locking mode in the spec. If the spec was the
-// outcome of filter operation, this will be the only locking mode in the spec.
+// get returns the combined row-level locking mode from all currently-applied
+// locking items.
 func (lm lockingSpec) get() opt.Locking {
-	if lm.isSet() {
-		spec := lm[0]
-		return opt.Locking{
+	var l opt.Locking
+	for _, li := range lm {
+		spec := li.item
+		l = l.Max(opt.Locking{
 			Strength:   spec.Strength,
 			WaitPolicy: spec.WaitPolicy,
-			// We use fully-durable locks for all SELECT FOR UPDATE statements,
-			// regardless of locking strength and wait policy. Unlike mutation
-			// statements, SELECT FOR UPDATE statements do not lay down intents, so we
-			// cannot rely on the durability of intents to guarantee exclusion until
-			// commit as we do for mutation statements.
-			Durability: tree.LockDurabilityGuaranteed,
-		}
+			Form:       spec.Form,
+		})
 	}
-	return opt.Locking{}
+	return l
 }
 
-// apply merges the locking clause into the current locking spec. The effect of
-// applying new locking clauses to an existing spec is always to strengthen the
-// locking approaches it represents, either through increasing locking strength
-// or using more aggressive wait policies.
-func (lm *lockingSpec) apply(locking tree.LockingClause) {
-	// TODO(nvanbenschoten): If we wanted to eagerly prune superfluous locking
-	// items so that they don't need to get merged away in each call to filter,
-	// this would be the place to do it. We don't expect to see multiple FOR
-	// UPDATE clauses very often, so it's probably not worth it.
-	if len(*lm) == 0 {
-		// NB: avoid allocation, but also prevent future mutation of AST.
-		l := len(locking)
-		*lm = lockingSpec(locking[:l:l])
-		return
-	}
-	*lm = append(*lm, locking...)
+// lockingContext holds the locking information for the current scope.
+type lockingContext struct {
+	// lockScope is the stack of locking items that are currently in scope. This
+	// might include locking items that do not currently apply because they have
+	// an unmatched target.
+	lockScope []*lockingItem
+
+	// locking is the stack of locking items that apply to the current scope,
+	// either because they did not have a target or because one of their targets
+	// matched an ancestor of this scope.
+	locking lockingSpec
+
+	// isNullExtended is set to true if this lockingContext is being passed down
+	// to the null-extended side of an outer join. This is needed so that we can
+	// return an error if the locking is set when we are building a table scan and
+	// isNullExtended is true.
+	isNullExtended bool
 }
 
-// filter returns the desired row-level locking mode for the specified table as
-// a new consolidated lockingSpec. If no matching locking mode is found then the
-// resulting spec will remain un-set. If a matching locking mode for the table
-// is found then the resulting spec will contain exclusively that locking mode
-// and will no longer be restricted to specific target relations.
-func (lm lockingSpec) filter(alias tree.Name) lockingSpec {
-	var ret lockingSpec
-	var copied bool
-	updateRet := func(li *tree.LockingItem, len1 []*tree.LockingItem) {
-		if ret == nil && len(li.Targets) == 0 {
-			// Fast-path. We don't want the resulting spec to include targets,
-			// so we only allow this if the item we want to copy has none.
-			ret = len1
-			return
+// noLocking indicates that no row-level locking has been specified.
+var noLocking lockingContext
+
+// push pushes a locking item onto the scope stack, and also applies it if it
+// has no targets.
+func (lockCtx *lockingContext) push(li *tree.LockingItem) {
+	item := &lockingItem{
+		item: li,
+	}
+	lockCtx.lockScope = append(lockCtx.lockScope, item)
+	if len(li.Targets) == 0 {
+		lockCtx.locking = append(lockCtx.locking, item)
+	}
+}
+
+// pop removes and returns the topmost locking item from the scope stack.
+func (lockCtx *lockingContext) pop() *lockingItem {
+	n := len(lockCtx.lockScope)
+	if n == 0 {
+		panic(errors.AssertionFailedf("tried to pop non-existent locking item"))
+	}
+	item := lockCtx.lockScope[n-1]
+	lockCtx.lockScope = lockCtx.lockScope[:n-1]
+	// For now we do not bother explicitly popping the lockingSpec stack. Instead
+	// we rely on passing lockingContext by value in optbuilder, meaning
+	// lockingSpec is implicitly popped when returning.
+	return item
+}
+
+// blankLockingScope is a sentinel locking item that, when pushed, prevents
+// lockCtx.filter from matching targets outside it.
+var blankLockingScope lockingItem = lockingItem{item: &tree.LockingItem{}}
+
+// filter applies any locking items that match the specified data source alias.
+func (lockCtx *lockingContext) filter(alias tree.Name) {
+	// Search backward through locking scopes to find all of the matching items
+	// inside the innermost blankLockingScope. Unlike for variable scopes, for
+	// locking scopes *all* of the matching items apply, not just the first. This
+	// means in some cases we might apply the same locking item multiple times, if
+	// it has multiple targets and they match more than once. This is fine.
+	for i := len(lockCtx.lockScope) - 1; i >= 0; i-- {
+		item := lockCtx.lockScope[i]
+		if item == &blankLockingScope {
+			break
 		}
-		if !copied {
-			retCpy := make(lockingSpec, 1)
-			retCpy[0] = new(tree.LockingItem)
-			if len(ret) == 1 {
-				*retCpy[0] = *ret[0]
+		// Only consider locking items with targets. (Locking items without targets
+		// were already applied in push.)
+		for i, target := range item.item.Targets {
+			if target.ObjectName == alias {
+				lockCtx.locking = append(lockCtx.locking, item)
+				item.targetsFound.Add(i)
 			}
-			ret = retCpy
-			copied = true
-		}
-		// From https://www.postgresql.org/docs/12/sql-select.html#SQL-FOR-UPDATE-SHARE
-		// > If the same table is mentioned (or implicitly affected) by more
-		// > than one locking clause, then it is processed as if it was only
-		// > specified by the strongest one.
-		ret[0].Strength = ret[0].Strength.Max(li.Strength)
-		// > Similarly, a table is processed as NOWAIT if that is specified in
-		// > any of the clauses affecting it. Otherwise, it is processed as SKIP
-		// > LOCKED if that is specified in any of the clauses affecting it.
-		ret[0].WaitPolicy = ret[0].WaitPolicy.Max(li.WaitPolicy)
-	}
-
-	for i, li := range lm {
-		len1 := lm[i : i+1 : i+1]
-		if len(li.Targets) == 0 {
-			// If no targets are specified, the clause affects all tables.
-			updateRet(li, len1)
-		} else {
-			// If targets are specified, the clause affects only those tables.
-			for _, target := range li.Targets {
-				if target.ObjectName == alias {
-					updateRet(li, len1)
-					break
-				}
-			}
 		}
 	}
-	return ret
 }
 
-// withoutTargets returns a new lockingSpec with all locking clauses that apply
-// only to a subset of tables removed.
-func (lm lockingSpec) withoutTargets() lockingSpec {
-	return lm.filter("")
+// withoutTargets hides all unapplied locking items in scope, so that they
+// cannot be applied. Already applied locking items remain applied.
+func (lockCtx *lockingContext) withoutTargets() {
+	lockCtx.lockScope = append(lockCtx.lockScope, &blankLockingScope)
+	// Reset isNullExtended if no lock applies at this point, since we shouldn't
+	// throw an error if locking is introduced lower in the plan tree.
+	if !lockCtx.locking.isSet() {
+		lockCtx.isNullExtended = false
+	}
 }
 
 // ignoreLockingForCTE is a placeholder for the following comment:
@@ -178,3 +241,202 @@ func (lm lockingSpec) withoutTargets() lockingSpec {
 // > If you want row locking to occur within a WITH query, specify a locking
 // > clause within the WITH query.
 func (lm lockingSpec) ignoreLockingForCTE() {}
+
+// analyzeLockArgs analyzes all locking clauses currently in scope and adds the
+// PK columns needed for those clauses to lockScope.
+func (b *Builder) analyzeLockArgs(
+	lockCtx lockingContext, inScope, projectionsScope *scope,
+) (lockScope *scope) {
+	if !b.shouldBuildLockOp() {
+		return nil
+	}
+
+	// Get all the PK cols of all lockBuilders in scope.
+	var pkCols opt.ColSet
+	for _, item := range lockCtx.lockScope {
+		for _, lb := range item.builders {
+			for _, col := range lb.keyCols {
+				pkCols.Add(col)
+			}
+		}
+	}
+
+	if pkCols.Empty() {
+		return nil
+	}
+
+	lockScope = inScope.push()
+	lockScope.cols = make([]scopeColumn, 0, pkCols.Len())
+
+	for i := range inScope.cols {
+		if pkCols.Contains(inScope.cols[i].id) {
+			lockScope.appendColumn(&inScope.cols[i])
+		}
+	}
+	return lockScope
+}
+
+// buildLockArgs adds the PK columns needed for all locking clauses currently in
+// scope to the projectionsScope.
+func (b *Builder) buildLockArgs(inScope, projectionsScope, lockScope *scope) {
+	if lockScope == nil {
+		return
+	}
+	projectionsScope.addExtraColumns(lockScope.cols)
+}
+
+// validate checks that the locking item is well-formed, and that all of its
+// targets matched a data source in the FROM clause.
+func (item *lockingItem) validate() {
+	li := item.item
+
+	// Validate locking strength.
+	switch li.Strength {
+	case tree.ForNone:
+		// AST nodes should not be created with this locking strength.
+		panic(errors.AssertionFailedf("locking item without strength"))
+	case tree.ForUpdate:
+		// Exclusive locking on the entire row.
+	case tree.ForNoKeyUpdate:
+		// Exclusive locking on only non-key(s) of the row. Currently unimplemented
+		// and treated identically to ForUpdate.
+	case tree.ForShare:
+		// Shared locking on the entire row.
+	case tree.ForKeyShare:
+		// Shared locking on only key(s) of the row. Currently unimplemented and
+		// treated identically to ForShare.
+	default:
+		panic(errors.AssertionFailedf("unknown locking strength: %d", li.Strength))
+	}
+
+	// Validating locking wait policy.
+	switch li.WaitPolicy {
+	case tree.LockWaitBlock:
+		// Default. Block on conflicting locks.
+	case tree.LockWaitSkipLocked:
+		// Skip rows that can't be locked.
+	case tree.LockWaitError:
+		// Raise an error on conflicting locks.
+	default:
+		panic(errors.AssertionFailedf("unknown locking wait policy: %d", li.WaitPolicy))
+	}
+
+	// Validate locking form.
+	switch li.Form {
+	case tree.LockRecord:
+		// Default. Only lock existing rows.
+	case tree.LockPredicate:
+		// Lock both existing rows and gaps between rows.
+	default:
+		panic(errors.AssertionFailedf("unknown locking form: %d", li.Form))
+	}
+
+	// Validate locking targets by checking that all targets are well-formed and
+	// all were found somewhere in the FROM clause.
+	for i, target := range li.Targets {
+		// Insist on unqualified alias names here. We could probably do
+		// something smarter, but it's better to just mirror Postgres
+		// exactly. See transformLockingClause in Postgres' source.
+		if target.CatalogName != "" || target.SchemaName != "" {
+			panic(pgerror.Newf(pgcode.Syntax,
+				"%s must specify unqualified relation names", li.Strength))
+		}
+		// Validate that at some point we found this target.
+		if !item.targetsFound.Contains(i) {
+			panic(pgerror.Newf(
+				pgcode.UndefinedTable,
+				"relation %q in %s clause not found in FROM clause",
+				target.ObjectName, li.Strength,
+			))
+		}
+	}
+}
+
+// shouldUseGuaranteedDurability returns whether we should use
+// guaranteed-durable locking for SELECT FOR UPDATE, SELECT FOR SHARE, or
+// constraint checks.
+func (b *Builder) shouldUseGuaranteedDurability() bool {
+	return b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2) &&
+		(b.evalCtx.TxnIsoLevel != isolation.Serializable ||
+			b.evalCtx.SessionData().DurableLockingForSerializable)
+}
+
+// shouldBuildLockOp returns whether we should use the Lock operator for SELECT
+// FOR UPDATE or SELECT FOR SHARE.
+func (b *Builder) shouldBuildLockOp() bool {
+	return b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2) &&
+		(b.evalCtx.TxnIsoLevel != isolation.Serializable ||
+			b.evalCtx.SessionData().OptimizerUseLockOpForSerializable)
+}
+
+// buildLocking constructs one Lock operator for each data source that this
+// lockingItem applied to.
+func (b *Builder) buildLocking(item *lockingItem, inScope *scope) {
+	locking := lockingSpec{item}.get()
+	// Under weaker isolation levels we use fully-durable locks for SELECT FOR
+	// UPDATE.
+	if b.shouldUseGuaranteedDurability() {
+		locking.Durability = tree.LockDurabilityGuaranteed
+	}
+	for i := range item.builders {
+		b.buildLock(item.builders[i], locking, inScope)
+	}
+}
+
+// buildLock constructs a Lock operator for a single data source at a single
+// locking strength.
+func (b *Builder) buildLock(lb *lockBuilder, locking opt.Locking, inScope *scope) {
+	md := b.factory.Metadata()
+	tab := md.Table(lb.table)
+	// We need to use a fresh table reference to have control over the exact
+	// column families locked.
+	newTabID := md.DuplicateTable(lb.table, b.factory.RemapCols)
+	newTab := md.Table(newTabID)
+	// Add remapped columns for the new table reference. For now we lock all
+	// column families of the primary index of the table, so include all ordinary
+	// and mutation columns.
+	ordinals := tableOrdinals(newTab, columnKinds{
+		includeMutations: true,
+		includeSystem:    false,
+		includeInverted:  false,
+	})
+	var lockCols opt.ColSet
+	for _, ord := range ordinals {
+		lockCols.Add(newTabID.ColumnID(ord))
+	}
+	private := &memo.LockPrivate{
+		Table:     newTabID,
+		KeySource: lb.table,
+		Locking:   locking,
+		KeyCols:   lb.keyCols,
+		LockCols:  lockCols,
+		// ExtraCols might include some of the primary key columns needed to lock the
+		// row, if they weren't in the output of the SELECT FOR UPDATE.
+		Cols: inScope.colSetWithExtraCols(),
+	}
+	// Validate that all of the PK cols are found within the input scope.
+	scopeCols := private.Cols
+	for _, keyCol := range private.KeyCols {
+		if !scopeCols.Contains(keyCol) {
+			panic(errors.AssertionFailedf("cols missing key column %d", keyCol))
+		}
+	}
+	if private.Locking.WaitPolicy == tree.LockWaitSkipLocked && tab.FamilyCount() > 1 {
+		// TODO(rytaft): We may be able to support this if enough columns are
+		// pruned that only a single family is scanned.
+		panic(pgerror.Newf(pgcode.FeatureNotSupported,
+			"SKIP LOCKED cannot be used for tables with multiple column families",
+		))
+	}
+	inScope.expr = b.factory.ConstructLock(inScope.expr, private)
+}
+
+// lockingSpecForClause converts a lockingClause to a lockingSpec.
+func lockingSpecForClause(lockingClause tree.LockingClause) (lm lockingSpec) {
+	for _, li := range lockingClause {
+		lm = append(lm, &lockingItem{
+			item: li,
+		})
+	}
+	return lm
+}

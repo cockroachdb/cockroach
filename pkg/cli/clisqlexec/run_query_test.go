@@ -49,7 +49,7 @@ func TestRunQuery(t *testing.T) {
 	c := cli.NewCLITest(cli.TestCLIParams{T: t})
 	defer c.Cleanup()
 
-	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.Server.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
@@ -179,7 +179,7 @@ func TestUtfName(t *testing.T) {
 	c := cli.NewCLITest(cli.TestCLIParams{T: t})
 	defer c.Cleanup()
 
-	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.Server.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())

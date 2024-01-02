@@ -361,7 +361,7 @@ func ResolveExisting(
 		}
 
 		// No luck so far. Compatibility with CockroachDB v1.1: try D.public.T instead.
-		found, prefix, result, err = r.LookupObject(ctx, lookupFlags, u.Schema(), tree.PublicSchema, u.Object())
+		found, prefix, result, err = r.LookupObject(ctx, lookupFlags, u.Schema(), catconstants.PublicSchemaName, u.Object())
 		if found && err == nil {
 			prefix.ExplicitSchema = true
 			prefix.ExplicitDatabase = true
@@ -421,7 +421,7 @@ func ResolveTarget(
 			return found, scMeta.NamePrefix(), scMeta, err
 		}
 		// No luck so far. Compatibility with CockroachDB v1.1: use D.public.T instead.
-		if found, scMeta, err = r.LookupSchema(ctx, u.Schema(), tree.PublicSchema); found || err != nil {
+		if found, scMeta, err = r.LookupSchema(ctx, u.Schema(), catconstants.PublicSchemaName); found || err != nil {
 			if err == nil {
 				scMeta.ExplicitDatabase, scMeta.ExplicitSchema = true, true
 			}
@@ -669,10 +669,10 @@ func resolvePrefixWithExplicitSchema(
 		return found, scMeta, err
 	}
 	// No luck so far. Compatibility with CockroachDB v1.1: use D.public.T instead.
-	if found, scMeta, err = r.LookupSchema(ctx, tp.Schema(), tree.PublicSchema); found || err != nil {
+	if found, scMeta, err = r.LookupSchema(ctx, tp.Schema(), catconstants.PublicSchemaName); found || err != nil {
 		if err == nil {
 			tp.CatalogName = tp.SchemaName
-			tp.SchemaName = tree.PublicSchemaName
+			tp.SchemaName = catconstants.PublicSchemaName
 			tp.ExplicitCatalog = true
 		}
 		return found, scMeta, err

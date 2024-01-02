@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -77,12 +78,12 @@ func NewTestSchemaGenerator(
 		Privileges:        dbPrivs,
 		DefaultPrivileges: dbDefaultPrivs,
 		Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-			tree.PublicSchema: {ID: 0 /* will be replaced later */},
+			catconstants.PublicSchemaName: {ID: 0 /* will be replaced later */},
 		},
 	}
 	g.models.publicSc = descpb.SchemaDescriptor{
 		Version:    1,
-		Name:       tree.PublicSchema,
+		Name:       catconstants.PublicSchemaName,
 		Privileges: publicSchemaPrivs,
 	}
 	g.models.sc = descpb.SchemaDescriptor{
@@ -101,7 +102,7 @@ const genEnabledSettingName = "sql.schema.test_object_generator.enabled"
 // force disable the functionality from an unprivileged secondary
 // tenant.
 var genEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	genEnabledSettingName,
 	"enable the generate_test_objects function",
 	true,
@@ -110,7 +111,7 @@ var genEnabled = settings.RegisterBoolSetting(
 const genEnabledForNonAdminsSettingName = "sql.schema.test_object_generator.non_admin.enabled"
 
 var genEnabledForNonAdmins = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	genEnabledForNonAdminsSettingName,
 	"allow non-admin users to use the generate_test_objects function",
 	false,
@@ -340,7 +341,7 @@ func (g *testSchemaGenerator) prepareCounts(
 			if namePattern.ExplicitSchema {
 				namePattern.ExplicitCatalog = true
 				namePattern.CatalogName = namePattern.SchemaName
-				namePattern.SchemaName = tree.PublicSchemaName
+				namePattern.SchemaName = catconstants.PublicSchemaName
 				g.gencfg.useGeneratedPublicSchema = true
 			} else {
 				panic(genError{pgerror.Newf(pgcode.Syntax, "missing database name pattern")})

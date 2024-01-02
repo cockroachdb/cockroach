@@ -38,7 +38,7 @@ func TestGetAllRevisionsCPULimiterPagination(t *testing.T) {
 	ctx := context.Background()
 	first := true
 	var numRequests int
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 			TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
 				for _, ru := range request.Requests {
@@ -61,7 +61,8 @@ func TestGetAllRevisionsCPULimiterPagination(t *testing.T) {
 			},
 		}},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	beforeCreate := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}

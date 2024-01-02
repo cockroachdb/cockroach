@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -86,6 +87,8 @@ func TestDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+		defer log.Scope(t).Close(t)
+
 		scKnobs := &spanconfig.TestingKnobs{
 			// Instead of relying on the GC job to wait out TTLs and clear out
 			// descriptors, let's simply exclude dropped tables to simulate
@@ -99,9 +102,7 @@ func TestDataDriven(t *testing.T) {
 		}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				// Test fails when run under the default test tenant. More
-				// investigation is required.
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					SpanConfig:       scKnobs,
@@ -141,7 +142,6 @@ func TestDataDriven(t *testing.T) {
 			switch d.Cmd {
 			case "initialize":
 				secondaryTenant := spanConfigTestCluster.InitializeTenant(ctx, tenantID)
-				spanConfigTestCluster.AllowSecondaryTenantToSetZoneConfigurations(t, tenantID)
 				spanConfigTestCluster.EnsureTenantCanSetZoneConfigurationsOrFatal(t, secondaryTenant)
 
 			case "exec-sql":

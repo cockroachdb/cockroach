@@ -14,42 +14,28 @@ import (
 	"context"
 	"testing"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type interceptingTransport struct {
-	kvcoord.Transport
-	intercept func(context.Context, *kvpb.BatchRequest, *kvpb.BatchResponse, error) (*kvpb.BatchResponse, error)
-}
-
-func (f *interceptingTransport) SendNext(
-	ctx context.Context, ba *kvpb.BatchRequest,
-) (*kvpb.BatchResponse, error) {
-	br, err := f.Transport.SendNext(ctx, ba)
-	return f.intercept(ctx, ba, br, err)
-}
-
 // TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit sets up a situation
 // in which DistSender retries an (unbeknownst to it) successful EndTxn(commit=true)
 // RPC. It documents that this triggers an assertion failure in TxnCoordSender.
 //
-// See: https://github.com/cockroachdb/cockroach/issues/67765
+// See: https://github.com/cockroachdb/cockroach/issues/103817
 func TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -65,32 +51,31 @@ func TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit(t *testing.T
 		},
 	}
 	args.ServerArgs.Knobs.KVClient = &kvcoord.ClientTestingKnobs{
-		TransportFactory: func(
-			options kvcoord.SendOptions,
-			dialer *nodedialer.Dialer,
-			slice kvcoord.ReplicaSlice,
-		) (kvcoord.Transport, error) {
-			tf, err := kvcoord.GRPCTransportFactory(options, dialer, slice)
-			if err != nil {
-				return nil, err
-			}
-			return &interceptingTransport{
-				Transport: tf,
-				intercept: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, err error) (*kvpb.BatchResponse, error) {
-					if err != nil || ba.Txn == nil || br.Txn == nil ||
-						ba.Txn.Status != roachpb.PENDING || br.Txn.Status != roachpb.COMMITTED ||
-						!keys.ScratchRangeMin.Equal(br.Txn.Key) {
-						// Only want to inject error on successful commit for "our" txn.
-						return br, err
-					}
-					err = circuit.ErrBreakerOpen
-					assert.True(t, grpcutil.RequestDidNotStart(err)) // avoid Fatal on goroutine
+		TransportFactory: func(factory kvcoord.TransportFactory) kvcoord.TransportFactory {
+			return func(options kvcoord.SendOptions, slice kvcoord.ReplicaSlice) (kvcoord.Transport, error) {
+				tf, err := factory(options, slice)
+				if err != nil {
 					return nil, err
-				},
-			}, nil
+				}
+				return &interceptingTransport{
+					Transport: tf,
+					afterSend: func(ctx context.Context, req *interceptedReq, resp *interceptedResp) (overrideResp *interceptedResp) {
+						if resp.err != nil || req.ba.Txn == nil || resp.br.Txn == nil ||
+							req.ba.Txn.Status != roachpb.PENDING || resp.br.Txn.Status != roachpb.COMMITTED ||
+							!keys.ScratchRangeMin.Equal(resp.br.Txn.Key) {
+							// Only want to inject error on successful commit for "our" txn.
+							return nil
+						}
+
+						err := &netutil.InitialHeartbeatFailedError{}
+						assert.True(t, grpcutil.RequestDidNotStart(err)) // avoid Fatal on goroutine
+						return &interceptedResp{err: err}
+					},
+				}, nil
+
+			}
+
 		},
-		// Turn the assertion into an error returned via the txn.
-		DisableCommitSanityCheck: true,
 	}
 
 	tc := testcluster.StartTestCluster(t, 1, args)

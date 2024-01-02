@@ -37,9 +37,8 @@ func TestCommitTSIntervals(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 
 	var i interceptor
-	ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Manually starts a tenant below. No need to start one here.
-		DefaultTestTenant: base.TestTenantDisabled,
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manual,

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -21,12 +22,12 @@ import (
 )
 
 var parameterRe = regexp.MustCompile(`{[^{}]*}`)
-var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+)?(:[a-z0-9\-]+)?}`)
+var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+)?}`)
-var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?}`)
-var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)?}`)
+var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
+var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)}`)
 var storeDirRe = regexp.MustCompile(`{store-dir}`)
-var logDirRe = regexp.MustCompile(`{log-dir}`)
+var logDirRe = regexp.MustCompile(`{log-dir(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var certsDirRe = regexp.MustCompile(`{certs-dir}`)
 
 // expander expands a string which contains templated parameters for cluster
@@ -109,10 +110,41 @@ func (e *expander) maybeExpandMap(
 	return strings.Join(result, " "), nil
 }
 
+// extractVirtualClusterInfo extracts the virtual cluster name and
+// instance from the given group match, if available. If no
+// information is provided, the system interface is assumed and if no
+// instance is provided, the first instance is assumed.
+func extractVirtualClusterInfo(matches []string) (string, int, error) {
+	// Defaults if the passed in group match is empty.
+	virtualClusterName := SystemInterfaceName
+	sqlInstance := 0
+
+	// Extract the cluster name and instance matches.
+	trim := func(s string) string {
+		// Trim off the leading ':' in the capture group.
+		return s[1:]
+	}
+	virtualClusterNameMatch := matches[0]
+	sqlInstanceMatch := matches[1]
+
+	if virtualClusterNameMatch != "" {
+		virtualClusterName = trim(virtualClusterNameMatch)
+	}
+	if sqlInstanceMatch != "" {
+		var err error
+		sqlInstance, err = strconv.Atoi(trim(sqlInstanceMatch))
+		if err != nil {
+			return "", 0, err
+		}
+	}
+	return virtualClusterName, sqlInstance, nil
+}
+
 // maybeExpandPgURL is an expanderFunc for {pgurl:<nodeSpec>}
 func (e *expander) maybeExpandPgURL(
 	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
 ) (string, bool, error) {
+	var err error
 	m := pgURLRe.FindStringSubmatch(s)
 	if m == nil {
 		return s, false, nil
@@ -121,20 +153,17 @@ func (e *expander) maybeExpandPgURL(
 	if e.pgURLs == nil {
 		e.pgURLs = make(map[string]map[Node]string)
 	}
-	tenant := "system"
-	if m[2] != "" {
-		// Trim off the leading ':' in the capture group.
-		tenant = m[2][1:]
+	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[2:])
+	if err != nil {
+		return "", false, err
 	}
-	if e.pgURLs[tenant] == nil {
-		var err error
-		e.pgURLs[tenant], err = c.pgurls(ctx, l, allNodes(len(c.VMs)), tenant)
+	if e.pgURLs[virtualClusterName] == nil {
+		e.pgURLs[virtualClusterName], err = c.pgurls(ctx, l, allNodes(len(c.VMs)), virtualClusterName, sqlInstance)
 		if err != nil {
 			return "", false, err
 		}
 	}
-
-	s, err := e.maybeExpandMap(c, e.pgURLs[tenant], m[1])
+	s, err = e.maybeExpandMap(c, e.pgURLs[virtualClusterName], m[1])
 	return s, err == nil, err
 }
 
@@ -167,15 +196,23 @@ func (e *expander) maybeExpandPgPort(
 	if m == nil {
 		return s, false, nil
 	}
+	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[2:])
+	if err != nil {
+		return "", false, err
+	}
 
 	if e.pgPorts == nil {
 		e.pgPorts = make(map[Node]string, len(c.VMs))
 		for _, node := range allNodes(len(c.VMs)) {
-			e.pgPorts[node] = fmt.Sprint(c.NodePort(node))
+			desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
+			if err != nil {
+				return s, false, err
+			}
+			e.pgPorts[node] = fmt.Sprint(desc.Port)
 		}
 	}
 
-	s, err := e.maybeExpandMap(c, e.pgPorts, m[1])
+	s, err = e.maybeExpandMap(c, e.pgPorts, m[1])
 	return s, err == nil, err
 }
 
@@ -191,7 +228,8 @@ func (e *expander) maybeExpandUIPort(
 	if e.uiPorts == nil {
 		e.uiPorts = make(map[Node]string, len(c.VMs))
 		for _, node := range allNodes(len(c.VMs)) {
-			e.uiPorts[node] = fmt.Sprint(c.NodeUIPort(node))
+			// TODO(herko): Add support for separate-process services.
+			e.uiPorts[node] = fmt.Sprint(c.NodeUIPort(ctx, node))
 		}
 	}
 
@@ -213,10 +251,15 @@ func (e *expander) maybeExpandStoreDir(
 func (e *expander) maybeExpandLogDir(
 	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
 ) (string, bool, error) {
-	if !logDirRe.MatchString(s) {
+	m := logDirRe.FindStringSubmatch(s)
+	if m == nil {
 		return s, false, nil
 	}
-	return c.LogDir(e.node), true, nil
+	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[1:])
+	if err != nil {
+		return "", false, err
+	}
+	return c.LogDir(e.node, virtualClusterName, sqlInstance), true, nil
 }
 
 // maybeExpandCertsDir is an expanderFunc for "{certs-dir}"

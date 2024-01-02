@@ -7,6 +7,13 @@ CREATE TABLE t (
 ----
 
 exec-ddl
+CREATE TABLE t_cast (
+  a STRING PRIMARY KEY,
+  v CHAR AS (a) VIRTUAL
+)
+----
+
+exec-ddl
 CREATE TABLE t_idx (
   a INT PRIMARY KEY,
   b INT,
@@ -87,6 +94,22 @@ project
       └── projections
            └── a:1 + b:2 [as=v:3]
 
+# The projection for v should be casted to match the column type.
+build
+SELECT * FROM t_cast
+----
+project
+ ├── columns: a:1!null v:2!null
+ └── project
+      ├── columns: v:2!null a:1!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan t_cast
+      │    ├── columns: a:1!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      │    └── computed column expressions
+      │         └── v:2
+      │              └── a:1::CHAR
+      └── projections
+           └── a:1::CHAR [as=v:2]
+
 # -- INSERT tests --
 
 build
@@ -154,6 +177,24 @@ project
            │    └── (1, 1)
            └── projections
                 └── column1:6 + column2:7 [as=v_comp:8]
+
+# The projection for v should be casted to match the column type.
+build
+INSERT INTO t_cast VALUES ('foo')
+----
+insert t_cast
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => a:1
+ │    └── v_cast:6 => v:2
+ └── project
+      ├── columns: v_cast:6!null column1:5!null
+      ├── values
+      │    ├── columns: column1:5!null
+      │    └── ('foo',)
+      └── projections
+           └── assignment-cast: CHAR [as=v_cast:6]
+                └── column1:5
 
 build
 INSERT INTO t_idx VALUES (1, 1)
@@ -310,6 +351,28 @@ project
            │         └── a:6 + b:7 [as=v:8]
            └── filters
                 └── v:8 = 1
+
+# The projection for v should be casted to match the column type.
+build
+DELETE FROM t_cast RETURNING v
+----
+project
+ ├── columns: v:2!null
+ └── delete t_cast
+      ├── columns: a:1!null v:2!null
+      ├── fetch columns: a:5 v:6
+      ├── return-mapping:
+      │    ├── a:5 => a:1
+      │    └── v:6 => v:2
+      └── project
+           ├── columns: v:6!null a:5!null crdb_internal_mvcc_timestamp:7 tableoid:8
+           ├── scan t_cast
+           │    ├── columns: a:5!null crdb_internal_mvcc_timestamp:7 tableoid:8
+           │    └── computed column expressions
+           │         └── v:6
+           │              └── a:5::CHAR
+           └── projections
+                └── a:5::CHAR [as=v:6]
 
 build
 DELETE FROM t_idx WHERE a > 1
@@ -520,6 +583,40 @@ update t
       │         └── a:6 + 1 [as=a_new:11]
       └── projections
            └── a_new:11 + b:7 [as=v_comp:12]
+
+# The projections for v should be casted to match the column type.
+build
+UPDATE t_cast SET a = 'foo' RETURNING v
+----
+project
+ ├── columns: v:2!null
+ └── update t_cast
+      ├── columns: a:1!null v:2!null
+      ├── fetch columns: a:5 v:6
+      ├── update-mapping:
+      │    ├── a_new:9 => a:1
+      │    └── v_cast:10 => v:2
+      ├── return-mapping:
+      │    ├── a_new:9 => a:1
+      │    └── v_cast:10 => v:2
+      └── project
+           ├── columns: v_cast:10!null a:5!null v:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 a_new:9!null
+           ├── project
+           │    ├── columns: a_new:9!null a:5!null v:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+           │    ├── project
+           │    │    ├── columns: v:6!null a:5!null crdb_internal_mvcc_timestamp:7 tableoid:8
+           │    │    ├── scan t_cast
+           │    │    │    ├── columns: a:5!null crdb_internal_mvcc_timestamp:7 tableoid:8
+           │    │    │    └── computed column expressions
+           │    │    │         └── v:6
+           │    │    │              └── a:5::CHAR
+           │    │    └── projections
+           │    │         └── a:5::CHAR [as=v:6]
+           │    └── projections
+           │         └── 'foo' [as=a_new:9]
+           └── projections
+                └── assignment-cast: CHAR [as=v_cast:10]
+                     └── a_new:9
 
 build
 UPDATE t_idx SET a=a+1
@@ -819,6 +916,26 @@ project
            └── projections
                 └── column1:6 + column2:7 [as=v_comp:8]
 
+# The projection for v should be casted to match the column type.
+build
+UPSERT INTO t_cast VALUES ('foo') RETURNING v
+----
+project
+ ├── columns: v:2!null
+ └── upsert t_cast
+      ├── columns: a:1!null v:2!null
+      ├── upsert-mapping:
+      │    ├── column1:5 => a:1
+      │    └── v_cast:6 => v:2
+      └── project
+           ├── columns: v_cast:6!null column1:5!null
+           ├── values
+           │    ├── columns: column1:5!null
+           │    └── ('foo',)
+           └── projections
+                └── assignment-cast: CHAR [as=v_cast:6]
+                     └── column1:5
+
 build
 UPSERT INTO t_check VALUES (1, 1)
 ----
@@ -889,6 +1006,50 @@ project
                 │    └── column2:7
                 └── first-agg [as=v_comp:8]
                      └── v_comp:8
+
+# The projections for v should be casted to match the column type.
+build
+INSERT INTO t_cast VALUES ('foo') ON CONFLICT DO NOTHING RETURNING v
+----
+project
+ ├── columns: v:2!null
+ └── insert t_cast
+      ├── columns: a:1!null v:2!null
+      ├── arbiter indexes: t_cast_pkey
+      ├── insert-mapping:
+      │    ├── column1:5 => a:1
+      │    └── v_cast:6 => v:2
+      ├── return-mapping:
+      │    ├── column1:5 => a:1
+      │    └── v_cast:6 => v:2
+      └── upsert-distinct-on
+           ├── columns: column1:5!null v_cast:6!null
+           ├── grouping columns: column1:5!null
+           ├── anti-join (hash)
+           │    ├── columns: column1:5!null v_cast:6!null
+           │    ├── project
+           │    │    ├── columns: v_cast:6!null column1:5!null
+           │    │    ├── values
+           │    │    │    ├── columns: column1:5!null
+           │    │    │    └── ('foo',)
+           │    │    └── projections
+           │    │         └── assignment-cast: CHAR [as=v_cast:6]
+           │    │              └── column1:5
+           │    ├── project
+           │    │    ├── columns: v:8!null a:7!null
+           │    │    ├── scan t_cast
+           │    │    │    ├── columns: a:7!null
+           │    │    │    ├── computed column expressions
+           │    │    │    │    └── v:8
+           │    │    │    │         └── a:7::CHAR
+           │    │    │    └── flags: disabled not visible index feature
+           │    │    └── projections
+           │    │         └── a:7::CHAR [as=v:8]
+           │    └── filters
+           │         └── column1:5 = a:7
+           └── aggregations
+                └── first-agg [as=v_cast:6]
+                     └── v_cast:6
 
 build
 INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO NOTHING
@@ -1327,3 +1488,270 @@ project
                 │         └── null [type=unknown]
                 └── cast: STRING [type=string]
                      └── null [type=unknown]
+
+# The following 8 tests check whether a virtual computed column as the key to
+# a unique index projects the computed column expression correctly while it's
+# being mutated (e.g. ADD/DROP COLUMN).
+exec-ddl
+CREATE TABLE t1 (
+  a INT PRIMARY KEY,
+  b INT,
+  "b_plus_one:delete-only" INT AS (b + 1) VIRTUAL,
+  UNIQUE INDEX "b_plus_one_idx:delete-only" (b_plus_one)
+)
+----
+
+opt
+UPSERT INTO t1 VALUES (1, 2) RETURNING a, b
+----
+upsert t1
+ ├── columns: a:1!null b:2!null
+ ├── arbiter indexes: t1_pkey
+ ├── canary column: a:8
+ ├── fetch columns: a:8 b:9 b_plus_one:10
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    └── column2:7 => b:2
+ ├── update-mapping:
+ │    └── column2:7 => b:2
+ ├── return-mapping:
+ │    ├── upsert_a:13 => a:1
+ │    └── column2:7 => b:2
+ └── project
+      ├── columns: upsert_a:13 column1:6!null column2:7!null a:8 b:9 b_plus_one:10
+      ├── left-join (cross)
+      │    ├── columns: column1:6!null column2:7!null a:8 b:9 b_plus_one:10
+      │    ├── values
+      │    │    ├── columns: column1:6!null column2:7!null
+      │    │    └── (1, 2)
+      │    ├── project
+      │    │    ├── columns: b_plus_one:10 a:8!null b:9
+      │    │    ├── scan t1
+      │    │    │    ├── columns: a:8!null b:9
+      │    │    │    ├── constraint: /8: [/1 - /1]
+      │    │    │    └── flags: disabled not visible index feature
+      │    │    └── projections
+      │    │         └── b:9 + 1 [as=b_plus_one:10]
+      │    └── filters (true)
+      └── projections
+           └── CASE WHEN a:8 IS NULL THEN column1:6 ELSE a:8 END [as=upsert_a:13]
+
+opt
+UPDATE t1 SET b = b-1 WHERE a = 1 AND b = 2 RETURNING a, b
+----
+update t1
+ ├── columns: a:1!null b:2!null
+ ├── fetch columns: a:6 b:7 b_plus_one:8
+ ├── update-mapping:
+ │    └── b_new:11 => b:2
+ ├── return-mapping:
+ │    ├── a:6 => a:1
+ │    └── b_new:11 => b:2
+ └── project
+      ├── columns: b_new:11!null b_plus_one:8!null a:6!null b:7!null
+      ├── select
+      │    ├── columns: a:6!null b:7!null
+      │    ├── scan t1
+      │    │    ├── columns: a:6!null b:7
+      │    │    └── constraint: /6: [/1 - /1]
+      │    └── filters
+      │         └── b:7 = 2
+      └── projections
+           ├── b:7 - 1 [as=b_new:11]
+           └── b:7 + 1 [as=b_plus_one:8]
+
+opt
+DELETE FROM t1 WHERE a = 2 AND b = 2 RETURNING a, b
+----
+delete t1
+ ├── columns: a:1!null b:2!null
+ ├── fetch columns: a:6 b:7 b_plus_one:8
+ ├── return-mapping:
+ │    ├── a:6 => a:1
+ │    └── b:7 => b:2
+ └── project
+      ├── columns: b_plus_one:8!null a:6!null b:7!null
+      ├── select
+      │    ├── columns: a:6!null b:7!null
+      │    ├── scan t1
+      │    │    ├── columns: a:6!null b:7
+      │    │    └── constraint: /6: [/2 - /2]
+      │    └── filters
+      │         └── b:7 = 2
+      └── projections
+           └── b:7 + 1 [as=b_plus_one:8]
+
+opt
+INSERT INTO t1 VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b=t1.b+100 RETURNING a, b
+----
+upsert t1
+ ├── columns: a:1!null b:2
+ ├── arbiter indexes: t1_pkey
+ ├── canary column: a:8
+ ├── fetch columns: a:8 b:9 b_plus_one:10
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    └── column2:7 => b:2
+ ├── update-mapping:
+ │    └── upsert_b:15 => b:2
+ ├── return-mapping:
+ │    ├── upsert_a:14 => a:1
+ │    └── upsert_b:15 => b:2
+ └── project
+      ├── columns: upsert_a:14 upsert_b:15 column1:6!null column2:7!null a:8 b:9 b_plus_one:10
+      ├── left-join (cross)
+      │    ├── columns: column1:6!null column2:7!null a:8 b:9 b_plus_one:10
+      │    ├── values
+      │    │    ├── columns: column1:6!null column2:7!null
+      │    │    └── (1, 2)
+      │    ├── project
+      │    │    ├── columns: b_plus_one:10 a:8!null b:9
+      │    │    ├── scan t1
+      │    │    │    ├── columns: a:8!null b:9
+      │    │    │    ├── constraint: /8: [/1 - /1]
+      │    │    │    └── flags: disabled not visible index feature
+      │    │    └── projections
+      │    │         └── b:9 + 1 [as=b_plus_one:10]
+      │    └── filters (true)
+      └── projections
+           ├── CASE WHEN a:8 IS NULL THEN column1:6 ELSE a:8 END [as=upsert_a:14]
+           └── CASE WHEN a:8 IS NULL THEN column2:7 ELSE b:9 + 100 END [as=upsert_b:15]
+
+exec-ddl
+CREATE TABLE t11 (
+  a INT PRIMARY KEY,
+  b INT,
+  "b_plus_one:write-only" INT AS (b + 1) VIRTUAL,
+  UNIQUE INDEX "b_plus_one_idx:write-only" (b_plus_one)
+)
+----
+
+opt
+UPSERT INTO t11 VALUES (1, 2) RETURNING a, b
+----
+upsert t11
+ ├── columns: a:1!null b:2!null
+ ├── arbiter indexes: t11_pkey
+ ├── canary column: a:9
+ ├── fetch columns: a:9 b:10 b_plus_one:11
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    └── b_plus_one_comp:8 => b_plus_one:3
+ ├── update-mapping:
+ │    ├── column2:7 => b:2
+ │    └── b_plus_one_comp:8 => b_plus_one:3
+ ├── return-mapping:
+ │    ├── upsert_a:14 => a:1
+ │    └── column2:7 => b:2
+ └── project
+      ├── columns: upsert_a:14 column1:6!null column2:7!null b_plus_one_comp:8!null a:9 b:10 b_plus_one:11
+      ├── left-join (cross)
+      │    ├── columns: column1:6!null column2:7!null b_plus_one_comp:8!null a:9 b:10 b_plus_one:11
+      │    ├── values
+      │    │    ├── columns: column1:6!null column2:7!null b_plus_one_comp:8!null
+      │    │    └── (1, 2, 3)
+      │    ├── project
+      │    │    ├── columns: b_plus_one:11 a:9!null b:10
+      │    │    ├── scan t11
+      │    │    │    ├── columns: a:9!null b:10
+      │    │    │    ├── constraint: /9: [/1 - /1]
+      │    │    │    └── flags: disabled not visible index feature
+      │    │    └── projections
+      │    │         └── b:10 + 1 [as=b_plus_one:11]
+      │    └── filters (true)
+      └── projections
+           └── CASE WHEN a:9 IS NULL THEN column1:6 ELSE a:9 END [as=upsert_a:14]
+
+opt
+UPDATE t11 SET b = b-1 WHERE a = 1 AND b = 2 RETURNING a, b
+----
+update t11
+ ├── columns: a:1!null b:2!null
+ ├── fetch columns: a:6 b:7 b_plus_one:8
+ ├── update-mapping:
+ │    ├── b_new:11 => b:2
+ │    └── b_plus_one_comp:12 => b_plus_one:3
+ ├── return-mapping:
+ │    ├── a:6 => a:1
+ │    └── b_new:11 => b:2
+ └── project
+      ├── columns: b_plus_one_comp:12!null a:6!null b:7!null b_plus_one:8!null b_new:11!null
+      ├── project
+      │    ├── columns: b_new:11!null b_plus_one:8!null a:6!null b:7!null
+      │    ├── select
+      │    │    ├── columns: a:6!null b:7!null
+      │    │    ├── scan t11
+      │    │    │    ├── columns: a:6!null b:7
+      │    │    │    └── constraint: /6: [/1 - /1]
+      │    │    └── filters
+      │    │         └── b:7 = 2
+      │    └── projections
+      │         ├── b:7 - 1 [as=b_new:11]
+      │         └── b:7 + 1 [as=b_plus_one:8]
+      └── projections
+           └── b_new:11 + 1 [as=b_plus_one_comp:12]
+
+opt
+DELETE FROM t11 WHERE a = 2 AND b = 2 RETURNING a, b
+----
+delete t11
+ ├── columns: a:1!null b:2!null
+ ├── fetch columns: a:6 b:7 b_plus_one:8
+ ├── return-mapping:
+ │    ├── a:6 => a:1
+ │    └── b:7 => b:2
+ └── project
+      ├── columns: b_plus_one:8!null a:6!null b:7!null
+      ├── select
+      │    ├── columns: a:6!null b:7!null
+      │    ├── scan t11
+      │    │    ├── columns: a:6!null b:7
+      │    │    └── constraint: /6: [/2 - /2]
+      │    └── filters
+      │         └── b:7 = 2
+      └── projections
+           └── b:7 + 1 [as=b_plus_one:8]
+
+opt
+INSERT INTO t11 VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b=t11.b+100 RETURNING a, b
+----
+upsert t11
+ ├── columns: a:1!null b:2
+ ├── arbiter indexes: t11_pkey
+ ├── canary column: a:9
+ ├── fetch columns: a:9 b:10 b_plus_one:11
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    └── b_plus_one_comp:8 => b_plus_one:3
+ ├── update-mapping:
+ │    ├── upsert_b:17 => b:2
+ │    └── upsert_b_plus_one:18 => b_plus_one:3
+ ├── return-mapping:
+ │    ├── upsert_a:16 => a:1
+ │    └── upsert_b:17 => b:2
+ └── project
+      ├── columns: upsert_a:16 upsert_b:17 upsert_b_plus_one:18 column1:6!null column2:7!null b_plus_one_comp:8!null a:9 b:10 b_plus_one:11
+      ├── project
+      │    ├── columns: b_new:14 column1:6!null column2:7!null b_plus_one_comp:8!null a:9 b:10 b_plus_one:11
+      │    ├── left-join (cross)
+      │    │    ├── columns: column1:6!null column2:7!null b_plus_one_comp:8!null a:9 b:10 b_plus_one:11
+      │    │    ├── values
+      │    │    │    ├── columns: column1:6!null column2:7!null b_plus_one_comp:8!null
+      │    │    │    └── (1, 2, 3)
+      │    │    ├── project
+      │    │    │    ├── columns: b_plus_one:11 a:9!null b:10
+      │    │    │    ├── scan t11
+      │    │    │    │    ├── columns: a:9!null b:10
+      │    │    │    │    ├── constraint: /9: [/1 - /1]
+      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── projections
+      │    │    │         └── b:10 + 1 [as=b_plus_one:11]
+      │    │    └── filters (true)
+      │    └── projections
+      │         └── b:10 + 100 [as=b_new:14]
+      └── projections
+           ├── CASE WHEN a:9 IS NULL THEN column1:6 ELSE a:9 END [as=upsert_a:16]
+           ├── CASE WHEN a:9 IS NULL THEN column2:7 ELSE b_new:14 END [as=upsert_b:17]
+           └── CASE WHEN a:9 IS NULL THEN b_plus_one_comp:8 ELSE b_new:14 + 1 END [as=upsert_b_plus_one:18]

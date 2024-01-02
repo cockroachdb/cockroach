@@ -12,6 +12,7 @@ package state
 
 import (
 	"fmt"
+	"math/rand"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -27,6 +28,9 @@ type requestCounts []requestCount
 
 func (s requestCounts) Len() int { return len(s) }
 func (s requestCounts) Less(i, j int) bool {
+	if s[i].req == s[j].req {
+		return i < j
+	}
 	return s[i].req > s[j].req
 }
 func (s requestCounts) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
@@ -58,6 +62,79 @@ func exactDistribution(counts []int) []float64 {
 	}
 	for i, count := range counts {
 		distribution[i] = float64(count) / float64(total)
+	}
+	return distribution
+}
+
+// weighted struct handles weighted random index selection from an input array,
+// weightedStores.
+//
+// For example, consider input weightedStores = [0.1, 0.2, 0.7].
+// - newWeighted constructs cumulative weighs, creating cumulativeWeighted [0.1,
+// 0.3, 1.0].
+// - rand function then randomly selects a number n within the range of [0.0,
+// 1.0) and finds which bucket ([0.0, 0.1], (0.1, 0.3], (0.3, 1.0]) n falls
+// under. It finds the smallest index within cumulativeWeights that >= n. Thus,
+// indices with greater weights have a higher probability of being selected as
+// they cover larger cumulative weights range. For instance, if it selects 0.5,
+// Rand would return index 2 since 0.7 is the smallest index that is >= 0.5.
+type weighted struct {
+	cumulativeWeights []float64
+}
+
+// newWeighted constructs cumulative weights that are used later to select a
+// single random index from weightedStores based on the associated weights.
+func newWeighted(weightedStores []float64) weighted {
+	cumulativeWeights := make([]float64, len(weightedStores))
+	prefixSumWeight := float64(0)
+	for i, item := range weightedStores {
+		prefixSumWeight += item
+		cumulativeWeights[i] = prefixSumWeight
+	}
+	if cumulativeWeights[len(weightedStores)-1] != float64(1) {
+		panic(fmt.Sprintf("total cumulative weights for all stores should sum up to 1 but got %.2f\n",
+			cumulativeWeights[len(weightedStores)-1]))
+	}
+	return weighted{cumulativeWeights: cumulativeWeights}
+}
+
+// rand randomly picks an index from weightedStores based on the associated
+// weights.
+func (w weighted) rand(randSource *rand.Rand) int {
+	r := randSource.Float64()
+	index := sort.Search(len(w.cumulativeWeights), func(i int) bool { return w.cumulativeWeights[i] >= r })
+	return index
+}
+
+// weightedRandDistribution generates a weighted random distribution across
+// stores. It achieves this by randomly selecting an index from weightedStores
+// 10 times while considering the weights, and repeating this process ten times.
+// The output is a weighted random distribution reflecting the selections made.
+func weightedRandDistribution(randSource *rand.Rand, weightedStores []float64) []float64 {
+	w := newWeighted(weightedStores)
+	numSamples := 10
+	votes := make([]int, len(weightedStores))
+	for i := 0; i < numSamples; i++ {
+		index := w.rand(randSource)
+		votes[index] += 1
+	}
+	return exactDistribution(votes)
+}
+
+// randDistribution generates a random distribution across stores. It achieves
+// this by creating an array of size n, selecting random numbers from [0, 10)
+// for each index, and returning the exact distribution of this result.
+func randDistribution(randSource *rand.Rand, n int) []float64 {
+	total := float64(0)
+	distribution := make([]float64, n)
+	for i := 0; i < n; i++ {
+		num := float64(randSource.Intn(10))
+		distribution[i] = num
+		total += num
+	}
+
+	for i := 0; i < n; i++ {
+		distribution[i] = distribution[i] / total
 	}
 	return distribution
 }
@@ -153,32 +230,32 @@ func RangesInfoWithDistribution(
 // their weights, a best effort apporach is taken so that the total number of
 // aggregate matches numNodes.
 func ClusterInfoWithDistribution(
-	numNodes int, storesPerNode int, regions []string, regionNodeWeights []float64,
+	nodeCount int, storesPerNode int, regions []string, regionNodeWeights []float64,
 ) ClusterInfo {
 	ret := ClusterInfo{}
 
 	ret.Regions = make([]Region, len(regions))
-	availableNodes := numNodes
+	availableNodes := nodeCount
 	for i, name := range regions {
-		allocatedNodes := int(float64(numNodes) * (regionNodeWeights[i]))
+		allocatedNodes := int(float64(nodeCount) * (regionNodeWeights[i]))
 		if allocatedNodes > availableNodes {
 			allocatedNodes = availableNodes
 		}
 		availableNodes -= allocatedNodes
 		ret.Regions[i] = Region{
 			Name:  name,
-			Zones: []Zone{{Name: name + "_1", NodeCount: allocatedNodes, StoresPerNode: storesPerNode}},
+			Zones: []Zone{NewZone(name+"_1", allocatedNodes, storesPerNode)},
 		}
 	}
 
 	return ret
 }
 
-// ClusterInfoWithStores returns a new ClusterInfo with the specified number of
-// stores. There will be only one store per node and a single region and zone.
-func ClusterInfoWithStoreCount(stores int, storesPerNode int) ClusterInfo {
+// ClusterInfoWithStoreCount returns a new ClusterInfo with the specified number of
+// stores. There will be storesPerNode stores per node and a single region and zone.
+func ClusterInfoWithStoreCount(nodeCount int, storesPerNode int) ClusterInfo {
 	return ClusterInfoWithDistribution(
-		stores,
+		nodeCount,
 		storesPerNode,
 		[]string{"AU_EAST"}, /* regions */
 		[]float64{1},        /* regionNodeWeights */
@@ -236,6 +313,61 @@ func RangesInfoEvenDistribution(
 	stores int, ranges int, keyspace int, replicationFactor int, rangeSize int64,
 ) RangesInfo {
 	distribution := evenDistribution(stores)
+	storeList := makeStoreList(stores)
+
+	spanConfig := defaultSpanConfig
+	spanConfig.NumReplicas = int32(replicationFactor)
+	spanConfig.NumVoters = int32(replicationFactor)
+
+	return RangesInfoWithDistribution(
+		storeList, distribution, distribution, ranges, spanConfig,
+		int64(MinKey), int64(keyspace), rangeSize)
+}
+
+// RangesInfoWeightedRandDistribution returns a RangesInfo, where ranges are
+// generated with a weighted random distribution across stores.
+func RangesInfoWeightedRandDistribution(
+	randSource *rand.Rand,
+	weightedStores []float64,
+	ranges int,
+	keyspace int,
+	replicationFactor int,
+	rangeSize int64,
+) RangesInfo {
+	if randSource == nil || len(weightedStores) == 0 {
+		panic("randSource cannot be nil and weightedStores must be non-empty in order to generate weighted random range info")
+	}
+	distribution := weightedRandDistribution(randSource, weightedStores)
+	storeList := makeStoreList(len(weightedStores))
+	spanConfig := defaultSpanConfig
+	spanConfig.NumReplicas = int32(replicationFactor)
+	spanConfig.NumVoters = int32(replicationFactor)
+	return RangesInfoWithDistribution(
+		storeList,
+		distribution,
+		distribution,
+		ranges,
+		spanConfig,
+		int64(MinKey),
+		int64(keyspace),
+		rangeSize, /* rangeSize */
+	)
+}
+
+// RangesInfoRandDistribution returns a RangesInfo, where ranges are generated
+// with a random distribution across stores.
+func RangesInfoRandDistribution(
+	randSource *rand.Rand,
+	stores int,
+	ranges int,
+	keyspace int,
+	replicationFactor int,
+	rangeSize int64,
+) RangesInfo {
+	if randSource == nil {
+		panic("randSource cannot be nil in order to generate random range info")
+	}
+	distribution := randDistribution(randSource, stores)
 	storeList := makeStoreList(stores)
 
 	spanConfig := defaultSpanConfig
@@ -315,5 +447,37 @@ func NewStateSkewedDistribution(
 ) State {
 	clusterInfo := ClusterInfoWithStoreCount(stores, 1 /* storesPerNode */)
 	rangesInfo := RangesInfoSkewedDistribution(stores, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
+	return LoadConfig(clusterInfo, rangesInfo, settings)
+}
+
+// NewStateRandDistribution returns a new State where the replica count per
+// store is randomized.
+func NewStateRandDistribution(
+	seed int64,
+	stores int,
+	ranges int,
+	keyspace int,
+	replicationFactor int,
+	settings *config.SimulationSettings,
+) State {
+	randSource := rand.New(rand.NewSource(seed))
+	clusterInfo := ClusterInfoWithStoreCount(stores, 1 /* storesPerNode */)
+	rangesInfo := RangesInfoRandDistribution(randSource, stores, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
+	return LoadConfig(clusterInfo, rangesInfo, settings)
+}
+
+// NewStateWeightedRandDistribution returns a new State where the replica count
+// per store is weighted randomized based on weightedStores.
+func NewStateWeightedRandDistribution(
+	seed int64,
+	weightedStores []float64,
+	ranges int,
+	keyspace int,
+	replicationFactor int,
+	settings *config.SimulationSettings,
+) State {
+	randSource := rand.New(rand.NewSource(seed))
+	clusterInfo := ClusterInfoWithStoreCount(len(weightedStores), 1 /* storesPerNode */)
+	rangesInfo := RangesInfoWeightedRandDistribution(randSource, weightedStores, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
 	return LoadConfig(clusterInfo, rangesInfo, settings)
 }

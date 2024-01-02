@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	otel_collector_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	otel_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/common/v1"
@@ -60,7 +61,7 @@ type EventsExporterInterface interface {
 	//
 	// SendEvent can be called before Start(). Such events will be buffered
 	// (within the buffering limits) and sent after Start() is eventually called.
-	SendEvent(ctx context.Context, typ obspb.EventType, event otel_logs_pb.LogRecord)
+	SendEvent(ctx context.Context, typ obspb.EventType, event *otel_logs_pb.LogRecord)
 }
 
 // NoopEventsExporter is an EventsExporter that ignores events.
@@ -83,7 +84,7 @@ func (nop NoopEventsExporter) SetDialer(
 }
 
 // SendEvent is part of the EventsExporterInterface.
-func (nop NoopEventsExporter) SendEvent(context.Context, obspb.EventType, otel_logs_pb.LogRecord) {}
+func (nop NoopEventsExporter) SendEvent(context.Context, obspb.EventType, *otel_logs_pb.LogRecord) {}
 
 // EventExporterTestingKnobs can be passed to Server to adjust flushing for the
 // EventExporter.
@@ -94,6 +95,10 @@ type EventExporterTestingKnobs struct {
 	// FlushTriggerByteSize, if set, overrides the default trigger value for the
 	// EventExporter.
 	FlushTriggerByteSize uint64
+	// TestConsumer, if set, sets the consumer to be used by the embedded ingest
+	// component used. This allows us to capture consumed events when running
+	// in embedded mode, so we can make assertions against them in tests.
+	TestConsumer obslib.EventConsumer
 }
 
 var _ base.ModuleTestingKnobs = &EventExporterTestingKnobs{}
@@ -142,6 +147,8 @@ type EventsExporter struct {
 	otelClient otel_collector_pb.LogsServiceClient
 	conn       *grpc.ClientConn
 }
+
+var _ EventsExporterInterface = (*EventsExporter)(nil)
 
 // ValidateOTLPTargetAddr validates the target address filling the possible
 // missing port with the default.
@@ -213,6 +220,12 @@ func NewEventsExporter(
 				Version: "1.0",
 			},
 		},
+		obspb.StatementInsightsStatsEvent: {
+			instrumentationScope: otel_pb.InstrumentationScope{
+				Name:    string(obspb.StatementInsightsStatsEvent),
+				Version: "1.0",
+			},
+		},
 	}
 	s.buf.mu.memAccount = memMonitor.MakeBoundAccount()
 	return s
@@ -227,6 +240,7 @@ type NodeInfo struct {
 	NodeID int32
 	// BinaryVersion is the executable's version.
 	BinaryVersion string
+	TenantID      int64
 }
 
 // SetDialer configures the dialer to be used when opening network connections.
@@ -252,6 +266,10 @@ func (s *EventsExporter) SetNodeInfo(nodeInfo NodeInfo) {
 			{
 				Key:   obspb.NodeBinaryVersion,
 				Value: &otel_pb.AnyValue{Value: &otel_pb.AnyValue_StringValue{StringValue: nodeInfo.BinaryVersion}},
+			},
+			{
+				Key:   obspb.TenantID,
+				Value: &otel_pb.AnyValue{Value: &otel_pb.AnyValue_IntValue{IntValue: nodeInfo.TenantID}},
 			},
 		},
 	}
@@ -312,27 +330,31 @@ func (s *EventsExporter) Start(ctx context.Context, stopper *stop.Stopper) error
 					{Resource: &s.resource},
 				},
 			}
-			s.buf.mu.Lock()
-			// Iterate through the different types of events.
-			req.ResourceLogs[0].ScopeLogs = make([]otel_logs_pb.ScopeLogs, 0, len(s.buf.mu.events))
-			for _, buf := range s.buf.mu.events {
-				events, sizeBytes := buf.moveContents()
-				if len(events) == 0 {
-					continue
+			func() {
+				s.buf.mu.Lock()
+				defer s.buf.mu.Unlock()
+				// Iterate through the different types of events.
+				req.ResourceLogs[0].ScopeLogs = make([]*otel_logs_pb.ScopeLogs, 0, len(s.buf.mu.events))
+				for _, buf := range s.buf.mu.events {
+					events, sizeBytes := buf.moveContents()
+					if len(events) == 0 {
+						continue
+					}
+					totalEvents += len(events)
+					s.buf.mu.sizeBytes -= sizeBytes
+					msgSize += sizeBytes
+					req.ResourceLogs[0].ScopeLogs = append(req.ResourceLogs[0].ScopeLogs,
+						&otel_logs_pb.ScopeLogs{Scope: &buf.instrumentationScope, LogRecords: events})
 				}
-				totalEvents += len(events)
-				s.buf.mu.sizeBytes -= sizeBytes
-				msgSize += sizeBytes
-				req.ResourceLogs[0].ScopeLogs = append(req.ResourceLogs[0].ScopeLogs,
-					otel_logs_pb.ScopeLogs{Scope: &buf.instrumentationScope, LogRecords: events})
-			}
-			s.buf.mu.Unlock()
+			}()
 
 			if len(req.ResourceLogs[0].ScopeLogs) > 0 {
 				_, err := s.otelClient.Export(ctx, req, grpc.WaitForReady(true))
-				s.buf.mu.Lock()
-				s.buf.mu.memAccount.Shrink(ctx, int64(msgSize))
-				s.buf.mu.Unlock()
+				func() {
+					s.buf.mu.Lock()
+					defer s.buf.mu.Unlock()
+					s.buf.mu.memAccount.Shrink(ctx, int64(msgSize))
+				}()
 				if err != nil {
 					log.Warningf(ctx, "failed to export events: %s", err)
 				} else {
@@ -418,7 +440,7 @@ func (bufs *eventsBuffers) maybeDropEventsForSizeLocked(
 // instrumentationScope).
 type eventsBuffer struct {
 	instrumentationScope otel_pb.InstrumentationScope
-	events               []otel_logs_pb.LogRecord
+	events               []*otel_logs_pb.LogRecord
 	sizeBytes            uint64
 	// droppedEvents maintains the count of events that have been dropped from the
 	// buffer because of memory limits.
@@ -427,7 +449,7 @@ type eventsBuffer struct {
 
 // moveContents empties the buffer, returning all the events in it, and their
 // total byte size.
-func (b *eventsBuffer) moveContents() ([]otel_logs_pb.LogRecord, uint64) {
+func (b *eventsBuffer) moveContents() ([]*otel_logs_pb.LogRecord, uint64) {
 	events := b.events
 	sizeBytes := b.sizeBytes
 	b.events = nil
@@ -464,15 +486,14 @@ var unrecognizedEventPayloadEveryN = log.Every(time.Minute)
 // SendEvent can be called before Start(). Such events will be buffered
 // (within the buffering limits) and sent after Start() is eventually called.
 func (s *EventsExporter) SendEvent(
-	ctx context.Context, typ obspb.EventType, event otel_logs_pb.LogRecord,
+	ctx context.Context, typ obspb.EventType, event *otel_logs_pb.LogRecord,
 ) {
 	// Make sure there's room for the new event. If there isn't, we'll drop
 	// events from the front of the buffer (the oldest), until there is room.
 	newEventSize, err := sizeOfEvent(event)
 	if err != nil {
 		if unrecognizedEventPayloadEveryN.ShouldLog() {
-			evCpy := event // copy escapes to the heap
-			log.Infof(ctx, "unrecognized event payload for event type: %s (%v)", typ, &evCpy)
+			log.Infof(ctx, "unrecognized event payload for event type: %s (%v)", typ, event)
 		}
 	}
 	s.buf.mu.Lock()
@@ -485,8 +506,7 @@ func (s *EventsExporter) SendEvent(
 	buf, ok := s.buf.mu.events[typ]
 	if !ok {
 		if unrecognizedEventEveryN.ShouldLog() {
-			evCpy := event // copy escapes to the heap
-			log.Infof(ctx, "unrecognized event of type: %s (%s)", typ, &evCpy)
+			log.Infof(ctx, "unrecognized event of type: %s (%s)", typ, event)
 		}
 	}
 	if err := s.buf.mu.memAccount.Grow(ctx, int64(newEventSize)); err != nil {
@@ -513,7 +533,7 @@ func (s *EventsExporter) SendEvent(
 //
 // Returns an error if the event has a payload for which we haven't implemented
 // a measurement.
-func sizeOfEvent(event otel_logs_pb.LogRecord) (uint64, error) {
+func sizeOfEvent(event *otel_logs_pb.LogRecord) (uint64, error) {
 	switch {
 	case event.Body.GetBytesValue() != nil:
 		return uint64(len(event.Body.GetBytesValue())), nil

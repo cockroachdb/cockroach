@@ -599,6 +599,20 @@ message EngineStatsResponse {
   repeated EngineStatsInfo stats = 1 [ (gogoproto.nullable) = false ];
 }
 
+message DownloadSpanRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
+}
+
+message DownloadSpanResponse {
+  // ErrorsByNodeID contains any errors that occurred during fan-out calls to other nodes.
+  map<int32, string> errors_by_node_id = 1 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+    (gogoproto.customname) = "ErrorsByNodeID",
+    (gogoproto.nullable) = false
+  ];
+}
+
 message TraceEvent {
   google.protobuf.Timestamp time = 1
       [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
@@ -668,6 +682,9 @@ message LogsRequest {
 message LogEntriesResponse {
   repeated cockroach.util.log.Entry entries = 1
       [ (gogoproto.nullable) = false ];
+  // parse_errors contains list of errors that occurred during retrieving individual log entries
+  // that don't prevent to return at least partial response.
+  repeated string parse_errors = 2;
 }
 
 message LogFilesListRequest {
@@ -753,7 +770,7 @@ message GetFilesResponse {
 }
 
 message ProfileRequest {
-  // node_id is a string so that "local" can be used to specify that no
+  // node_id is a string so that "local" or "all" can be used to specify that no
   // forwarding is necessary. node_id translates to a KV node ID on a storage
   // server and SQL instance ID on a SQL only server.
   string node_id = 1;
@@ -771,7 +788,18 @@ message ProfileRequest {
   Type type = 5;
 
   int32 seconds = 6; // applies only to Type=CPU, defaults to 30
-  bool labels = 7; // applies only to Type=CPU, defaults to false
+
+  // Labels can be specified for Type=CPU or Type=GOROUTINE.
+  //
+  // - If true for CPU profiles, we request a CPU profile with pprof labels.
+  //
+  // - If true for GOROUTINE profiles, we request an aggregated goroutine
+  // profile with debug=1.
+  bool labels = 7;
+
+  // LabelFilter only applies to Type=GOROUTINE. Only goroutines with a pprof
+  // label matching the filter will be returned.
+  string label_filter = 9;
 
   // SenderServerVersion is the server version of the node sending the Profile
   // request. If this field is set then the node processing the request will
@@ -880,6 +908,9 @@ message TxnInfo {
   // Time elapsed since this transaction started execution.
   google.protobuf.Duration elapsed_time = 16
   [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
+
+  // The isolation level of the transaction.
+  string isolation_level = 17;
 }
 
 // ActiveQuery represents a query in flight on some Session.
@@ -1017,6 +1048,11 @@ message Session {
   // The session's total active time.
   google.protobuf.Duration total_active_time = 18 [(gogoproto.nullable) = false,
     (gogoproto.stdduration) = true];
+
+  // The numerical ID attached to the session which is used to mimic a Postgres
+  // backend PID for compatibility with the query cancellation protocol. Unlike
+  // in Postgres, this value does not correspond to a real process ID.
+  uint32 pg_backend_pid = 19 [ (gogoproto.customname) = "PGBackendPID" ];
 }
 
 // An error wrapper object for ListSessionsResponse.
@@ -1624,6 +1660,16 @@ message StatementsResponse {
   float stmts_total_runtime_secs = 6;
 
   float txns_total_runtime_secs = 7;
+
+  // OldestAggregatedTsReturned is the timestamp of the oldest entry returned,
+  // or null if there is no data returned.
+  google.protobuf.Timestamp oldest_aggregated_ts_returned = 8 [(gogoproto.stdtime) = true];
+
+  // StmtsSourceTable returns the table used to return the statements data.
+  string stmts_source_table = 9;
+
+  // TxnsSourceTable returns the table used to return the transactions data.
+  string txns_source_table = 10;
 }
 
 enum StatsSortOptions {
@@ -1786,6 +1832,17 @@ message CreateStatementDiagnosticsReportRequest {
   // likelihood? Or provide a hint for how long T is for the currently chosen
   // sampling probability.
   double sampling_probability = 4;
+  // PlanGist, when set, indicates a particular plan that we want collect
+  // diagnostics for. This can be useful when a single fingerprint can result in
+  // multiple plans.
+  //
+  // There is a caveat to using this filtering: since the plan gist for a
+  // running query is only available after the optimizer has done its part, the
+  // trace will only include things after the optimizer is done.
+  string plan_gist = 5;
+  // AntiPlanGist, when set, indicates that any plan not matching PlanGist will
+  // do.
+  bool anti_plan_gist = 6;
 }
 
 message CreateStatementDiagnosticsReportResponse {
@@ -1991,6 +2048,79 @@ message CriticalNodesResponse {
   repeated roachpb.NodeDescriptor critical_nodes = 1 [(gogoproto.nullable) = false];
   roachpb.SpanConfigConformanceReport report = 2 [(gogoproto.nullable) = false];
 }
+
+message NetworkConnectivityRequest {
+  string node_id = 1 [
+    (gogoproto.customname) = "NodeID"
+  ];
+}
+
+message NetworkConnectivityResponse {
+  enum ConnectionStatus {
+    // Indicates that system couldn't get information about nodes connection.
+    UNKNOWN = 0;
+    // Source node established connection to target node.
+    ESTABLISHED = 1;
+    // Indicates that node is attempting to establish connection to target node for the first time.
+    ESTABLISHING = 2;
+    // Indicates that connection state is unhealthy.
+    ERROR = 3;
+  }
+
+  message Peer {
+    google.protobuf.Duration latency = 1 [
+      (gogoproto.nullable) = false,
+      (gogoproto.stdduration) = true
+    ];
+    ConnectionStatus status = 2;
+    string address = 4;
+    roachpb.Locality locality = 5;
+    string error = 6;
+  }
+
+  message Connectivity {
+    map<int32, Peer> peers = 1 [
+      (gogoproto.nullable) = false,
+      (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    ];
+  }
+
+  map<int32, Connectivity> connections = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+
+  // errors contains any errors that occurred during fan-out calls to other nodes.
+  map<int32, string> errors_by_node_id = 2 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+    (gogoproto.customname) = "ErrorsByNodeID",
+    (gogoproto.nullable) = false
+  ];
+}
+
+message RequestJobProfilerExecutionDetailsRequest {
+  int64 job_id = 1;
+}
+
+message RequestJobProfilerExecutionDetailsResponse {}
+
+ message GetJobProfilerExecutionDetailRequest {
+   int64 job_id = 1;
+   string filename = 2;
+ }
+
+ message GetJobProfilerExecutionDetailResponse {
+   bytes data = 1;
+ }
+
+ message ListJobProfilerExecutionDetailsRequest {
+  int64 job_id = 1;
+ }
+
+ message ListJobProfilerExecutionDetailsResponse {
+   repeated string files = 1;
+ }
+
 
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
@@ -2307,6 +2437,12 @@ service Status {
     };
   }
 
+  rpc DownloadSpan(DownloadSpanRequest) returns (DownloadSpanResponse) {
+    option (google.api.http) = {
+      get : "/_status/downloadspans"
+    };
+  }
+
   rpc HotRanges(HotRangesRequest) returns (HotRangesResponse) {
     option (google.api.http) = {
       get : "/_status/hotranges"
@@ -2454,4 +2590,30 @@ service Status {
   // ListExecutionInsights returns potentially problematic statements cluster-wide,
   // along with actions we suggest the application developer might take to remedy them.
   rpc ListExecutionInsights(ListExecutionInsightsRequest) returns (ListExecutionInsightsResponse) {}
+
+  rpc NetworkConnectivity(NetworkConnectivityRequest) returns (NetworkConnectivityResponse) {
+    option (google.api.http) = {
+      get: "/_status/connectivity"
+    };
+  }
+
+  rpc RequestJobProfilerExecutionDetails(RequestJobProfilerExecutionDetailsRequest) returns(RequestJobProfilerExecutionDetailsResponse) {
+    option (google.api.http) = {
+      get: "/_status/request_job_profiler_execution_details/{job_id}"
+    };
+  }
+
+
+  rpc GetJobProfilerExecutionDetails(GetJobProfilerExecutionDetailRequest) returns (GetJobProfilerExecutionDetailResponse) {
+    option (google.api.http) = {
+      get: "/_status/job_profiler_execution_details/{job_id}"
+    };
+  }
+
+  rpc ListJobProfilerExecutionDetails(ListJobProfilerExecutionDetailsRequest) returns
+    (ListJobProfilerExecutionDetailsResponse) {
+    option (google.api.http) = {
+      get: "/_status/list_job_profiler_execution_details/{job_id}"
+    };
+  }
 }

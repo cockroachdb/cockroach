@@ -15,7 +15,6 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -148,7 +146,7 @@ func (t *truncateNode) Close(context.Context)        {}
 // split points that we re-create on a table after a truncate. It's scaled by
 // the number of nodes in the cluster.
 var PreservedSplitCountMultiple = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.truncate.preserved_split_count_multiple",
 	"set to non-zero to cause TRUNCATE to preserve range splits from the "+
 		"table's indexes. The multiple given will be multiplied with the number of "+
@@ -255,10 +253,7 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		Indexes:  droppedIndexes,
 		ParentID: tableDesc.ID,
 	}
-	record := CreateGCJobRecord(
-		jobDesc, p.User(), details,
-		!storage.CanUseMVCCRangeTombstones(ctx, p.execCfg.Settings),
-	)
+	record := CreateGCJobRecord(jobDesc, p.User(), details)
 	if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
 		ctx, record, p.ExecCfg().JobRegistry.MakeJobID(), p.InternalSQLTxn(),
 	); err != nil {
@@ -417,7 +412,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 
 	// Re-split the new set of indexes along the same split points as the old
 	// indexes.
-	var b kv.Batch
+	b := p.Txn().NewBatch()
 	tablePrefix := execCfg.Codec.TablePrefix(uint32(tableID))
 
 	// Fetch all of the range descriptors for this index.
@@ -512,12 +507,12 @@ func (p *planner) copySplitPointsToNewIndexes(
 		})
 	}
 
-	if err = p.txn.DB().Run(ctx, &b); err != nil {
+	if err = p.txn.DB().Run(ctx, b); err != nil {
 		return err
 	}
 
 	// Now scatter the ranges, after we've finished splitting them.
-	b = kv.Batch{}
+	b = p.Txn().NewBatch()
 	b.AddRawRequest(&kvpb.AdminScatterRequest{
 		// Scatter all of the data between the start key of the first new index, and
 		// the PrefixEnd of the last new index.
@@ -528,7 +523,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 		RandomizeLeases: true,
 	})
 
-	return p.txn.DB().Run(ctx, &b)
+	return p.txn.DB().Run(ctx, b)
 }
 
 func (p *planner) reassignIndexComments(

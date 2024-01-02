@@ -258,6 +258,12 @@ func (ba *BatchRequest) IsSinglePushTxnRequest() bool {
 	return ba.isSingleRequestWithMethod(PushTxn)
 }
 
+// IsSingleRecoverTxnRequest returns true iff the batch contains a single request,
+// and that request is a RecoverTxnRequest.
+func (ba *BatchRequest) IsSingleRecoverTxnRequest() bool {
+	return ba.isSingleRequestWithMethod(RecoverTxn)
+}
+
 // IsSingleHeartbeatTxnRequest returns true iff the batch contains a single
 // request, and that request is a HeartbeatTxn.
 func (ba *BatchRequest) IsSingleHeartbeatTxnRequest() bool {
@@ -389,14 +395,7 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 		}
 	}
 	// Unreachable.
-	var sb strings.Builder
-	for i, args := range ba.Requests {
-		if i > 0 {
-			sb.WriteString(",")
-		}
-		sb.WriteString(args.String())
-	}
-	panic(fmt.Sprintf("unreachable. Batch requests: %s", sb.String()))
+	panic(fmt.Sprintf("unreachable. Batch requests: %s", TruncatedRequestsString(ba.Requests, 1024)))
 }
 
 // hasFlag returns true iff one of the requests within the batch contains the
@@ -796,7 +795,7 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 
 // SafeFormat implements redact.SafeFormatter.
 // It gives a brief summary of the contained requests and keys in the batch.
-func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+func (ba BatchRequest) SafeFormat(s redact.SafePrinter, verb rune) {
 	for count, arg := range ba.Requests {
 		// Limit the strings to provide just a summary. Without this limit
 		// a log message with a BatchRequest can be very long.
@@ -811,32 +810,16 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 		}
 
 		req := arg.GetInner()
-		if et, ok := req.(*EndTxnRequest); ok {
-			h := req.Header()
-			s.Printf("%s(", req.Method())
-			if et.Commit {
-				if et.IsParallelCommit() {
-					s.Printf("parallel commit")
-				} else {
-					s.Printf("commit")
-				}
-			} else {
-				s.Printf("abort")
-			}
-			if et.InternalCommitTrigger != nil {
-				s.Printf(" %s", et.InternalCommitTrigger.Kind())
-			}
-			s.Printf(") [%s]", h.Key)
+		if safeFormatterReq, ok := req.(SafeFormatterRequest); ok {
+			safeFormatterReq.SafeFormat(s, verb)
 		} else {
-			h := req.Header()
-			if req.Method() == PushTxn {
-				pushReq := req.(*PushTxnRequest)
-				s.Printf("PushTxn(%s,%s->%s)",
-					pushReq.PushType, pushReq.PusherTxn.Short(), pushReq.PusheeTxn.Short())
-			} else {
-				s.Print(req.Method())
-			}
+			s.Print(req.Method())
+		}
+		h := req.Header()
+		if len(h.EndKey) > 0 {
 			s.Printf(" [%s,%s)", h.Key, h.EndKey)
+		} else {
+			s.Printf(" [%s]", h.Key)
 		}
 	}
 	{
@@ -846,6 +829,12 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 	}
 	if ba.WaitPolicy != lock.WaitPolicy_Block {
 		s.Printf(", [wait-policy: %s]", ba.WaitPolicy)
+	}
+	if ba.LockTimeout != 0 {
+		s.Printf(", [lock-timeout: %s]", ba.LockTimeout)
+	}
+	if ba.AmbiguousReplayProtection {
+		s.Printf(", [protect-ambiguous-replay]")
 	}
 	if ba.CanForwardReadTimestamp {
 		s.Printf(", [can-forward-ts]")
@@ -859,6 +848,12 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 			s.Printf(", max_ts_bound: %s", cfg.MaxTimestampBound)
 		}
 		s.Printf("]")
+	}
+	if ba.MaxSpanRequestKeys != 0 || ba.TargetBytes != 0 {
+		s.Printf(", [max_span_request_keys: %d], [target_bytes: %d]", ba.MaxSpanRequestKeys, ba.TargetBytes)
+	}
+	if ba.AllowEmpty {
+		s.Print(", [allow-empty]")
 	}
 }
 

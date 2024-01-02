@@ -379,13 +379,22 @@ func (b *Batch) AddRawRequest(reqs ...kvpb.Request) {
 	}
 }
 
-func (b *Batch) get(key interface{}, forUpdate bool) {
+func (b *Batch) get(
+	key interface{}, str kvpb.KeyLockingStrengthType, dur kvpb.KeyLockingDurabilityType,
+) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	b.appendReqs(kvpb.NewGet(k, forUpdate))
+	switch str {
+	case kvpb.NonLocking:
+		b.appendReqs(kvpb.NewGet(k))
+	case kvpb.ForShare, kvpb.ForUpdate:
+		b.appendReqs(kvpb.NewLockingGet(k, str, dur))
+	default:
+		panic(errors.AssertionFailedf("unknown str %d", str))
+	}
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -397,19 +406,32 @@ func (b *Batch) get(key interface{}, forUpdate bool) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Get(key interface{}) {
-	b.get(key, false /* forUpdate */)
+	b.get(key, kvpb.NonLocking, kvpb.Invalid)
 }
 
-// GetForUpdate retrieves the value for a key. An unreplicated, exclusive lock
-// is acquired on the key, if it exists. A new result will be appended to the
-// batch which will contain a single row.
+// GetForUpdate retrieves the value for a key, returning the retrieved key/value
+// or an error. An Exclusive lock with the supplied durability is acquired on
+// the key, if it exists. It is not considered an error for the key not to
+// exist.
 //
 //	r, err := db.GetForUpdate("a")
 //	// string(r.Rows[0].Key) == "a"
 //
 // key can be either a byte slice or a string.
-func (b *Batch) GetForUpdate(key interface{}) {
-	b.get(key, true /* forUpdate */)
+func (b *Batch) GetForUpdate(key interface{}, dur kvpb.KeyLockingDurabilityType) {
+	b.get(key, kvpb.ForUpdate, dur)
+}
+
+// GetForShare retrieves the value for a key. A shared lock with the supplied
+// durability is acquired on the key, if it exists. A new result will be
+// appended to the batch which will contain a single row.
+//
+//	r, err := db.GetForShare("a")
+//	// string(r.Rows[0].Key) == "a"
+//
+// key can be either a byte slice or a string.
+func (b *Batch) GetForShare(key interface{}, dur kvpb.KeyLockingDurabilityType) {
+	b.get(key, kvpb.ForShare, dur)
 }
 
 func (b *Batch) put(key, value interface{}, inline bool) {
@@ -716,7 +738,12 @@ func (b *Batch) Inc(key interface{}, value int64) {
 	b.initResult(1, 1, notRaw, nil)
 }
 
-func (b *Batch) scan(s, e interface{}, isReverse, forUpdate bool) {
+func (b *Batch) scan(
+	s, e interface{},
+	isReverse bool,
+	str kvpb.KeyLockingStrengthType,
+	dur kvpb.KeyLockingDurabilityType,
+) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -727,10 +754,21 @@ func (b *Batch) scan(s, e interface{}, isReverse, forUpdate bool) {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	if !isReverse {
-		b.appendReqs(kvpb.NewScan(begin, end, forUpdate))
-	} else {
-		b.appendReqs(kvpb.NewReverseScan(begin, end, forUpdate))
+	switch str {
+	case kvpb.NonLocking:
+		if !isReverse {
+			b.appendReqs(kvpb.NewScan(begin, end))
+		} else {
+			b.appendReqs(kvpb.NewReverseScan(begin, end))
+		}
+	case kvpb.ForShare, kvpb.ForUpdate:
+		if !isReverse {
+			b.appendReqs(kvpb.NewLockingScan(begin, end, str, dur))
+		} else {
+			b.appendReqs(kvpb.NewLockingReverseScan(begin, end, str, dur))
+		}
+	default:
+		panic(errors.AssertionFailedf("unknown str %d", str))
 	}
 	b.initResult(1, 0, notRaw, nil)
 }
@@ -743,19 +781,31 @@ func (b *Batch) scan(s, e interface{}, isReverse, forUpdate bool) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Scan(s, e interface{}) {
-	b.scan(s, e, false /* isReverse */, false /* forUpdate */)
+	b.scan(s, e, false /* isReverse */, kvpb.NonLocking, kvpb.Invalid)
 }
 
-// ScanForUpdate retrieves the key/values between begin (inclusive) and end
-// (exclusive) in ascending order. Unreplicated, exclusive locks are acquired on
-// each of the returned keys.
+// ScanForUpdate retrieves the rows between begin (inclusive) and end
+// (exclusive) in ascending order. Exclusive locks with the supplied durability
+// are acquired on each of the returned keys.
 //
 // A new result will be appended to the batch which will contain "rows" (each
 // row is a key/value pair) and Result.Err will indicate success or failure.
 //
 // key can be either a byte slice or a string.
-func (b *Batch) ScanForUpdate(s, e interface{}) {
-	b.scan(s, e, false /* isReverse */, true /* forUpdate */)
+func (b *Batch) ScanForUpdate(s, e interface{}, dur kvpb.KeyLockingDurabilityType) {
+	b.scan(s, e, false /* isReverse */, kvpb.ForUpdate, dur)
+}
+
+// ScanForShare retrieves the key/values between begin (inclusive) and end
+// (exclusive) in ascending order. Shared locks with the supplied durability are
+// acquired on each of the returned keys.
+//
+// A new result will be appended to the batch which will contain "rows" (each
+// row is a key/value pair) and Result.Err will indicate success or failure.
+//
+// key can be either a byte slice or a string.
+func (b *Batch) ScanForShare(s, e interface{}, dur kvpb.KeyLockingDurabilityType) {
+	b.scan(s, e, false /* isReverse */, kvpb.ForShare, dur)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -766,19 +816,31 @@ func (b *Batch) ScanForUpdate(s, e interface{}) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) ReverseScan(s, e interface{}) {
-	b.scan(s, e, true /* isReverse */, false /* forUpdate */)
+	b.scan(s, e, true /* isReverse */, kvpb.NonLocking, kvpb.Invalid)
 }
 
 // ReverseScanForUpdate retrieves the rows between begin (inclusive) and end
-// (exclusive) in descending order. Unreplicated, exclusive locks are acquired
-// on each of the returned keys.
+// (exclusive) in descending order. Exclusive locks with the supplied durability
+// are acquired on each of the returned keys.
 //
 // A new result will be appended to the batch which will contain "rows" (each
 // "row" is a key/value pair) and Result.Err will indicate success or failure.
 //
 // key can be either a byte slice or a string.
-func (b *Batch) ReverseScanForUpdate(s, e interface{}) {
-	b.scan(s, e, true /* isReverse */, true /* forUpdate */)
+func (b *Batch) ReverseScanForUpdate(s, e interface{}, dur kvpb.KeyLockingDurabilityType) {
+	b.scan(s, e, true /* isReverse */, kvpb.ForUpdate, dur)
+}
+
+// ReverseScanForShare retrieves the rows between begin (inclusive) and end
+// (exclusive) in descending order. Shared locks with the supplied durability
+// are acquired on each of the returned keys.
+//
+// A new result will be appended to the batch which will contain "rows" (each
+// "row" is a key/value pair) and Result.Err will indicate success or failure.
+//
+// key can be either a byte slice or a string.
+func (b *Batch) ReverseScanForShare(s, e interface{}, dur kvpb.KeyLockingDurabilityType) {
+	b.scan(s, e, true /* isReverse */, kvpb.ForShare, dur)
 }
 
 // Del deletes one or more keys.
@@ -973,6 +1035,7 @@ func (b *Batch) adminRelocateRange(
 func (b *Batch) addSSTable(
 	s, e interface{},
 	data []byte,
+	remoteFile kvpb.AddSSTableRequest_RemoteFile,
 	disallowConflicts bool,
 	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
@@ -996,6 +1059,7 @@ func (b *Batch) addSSTable(
 			EndKey: end,
 		},
 		Data:                           data,
+		RemoteFile:                     remoteFile,
 		DisallowConflicts:              disallowConflicts,
 		DisallowShadowing:              disallowShadowing,
 		DisallowShadowingBelow:         disallowShadowingBelow,

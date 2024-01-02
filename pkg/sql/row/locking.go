@@ -27,16 +27,12 @@ func GetKeyLockingStrength(lockStrength descpb.ScanLockingStrength) lock.Strengt
 		// Promote to FOR_SHARE.
 		fallthrough
 	case descpb.ScanLockingStrength_FOR_SHARE:
-		// We currently perform no per-key locking when FOR_SHARE is used
-		// because Shared locks have not yet been implemented.
-		return lock.None
+		return lock.Shared
 
 	case descpb.ScanLockingStrength_FOR_NO_KEY_UPDATE:
 		// Promote to FOR_UPDATE.
 		fallthrough
 	case descpb.ScanLockingStrength_FOR_UPDATE:
-		// We currently perform exclusive per-key locking when FOR_UPDATE is
-		// used because Update locks have not yet been implemented.
 		return lock.Exclusive
 
 	default:
@@ -44,9 +40,9 @@ func GetKeyLockingStrength(lockStrength descpb.ScanLockingStrength) lock.Strengt
 	}
 }
 
-// getWaitPolicy returns the configured lock wait policy to use for key-value
+// GetWaitPolicy returns the configured lock wait policy to use for key-value
 // scans.
-func getWaitPolicy(lockWaitPolicy descpb.ScanLockingWaitPolicy) lock.WaitPolicy {
+func GetWaitPolicy(lockWaitPolicy descpb.ScanLockingWaitPolicy) lock.WaitPolicy {
 	switch lockWaitPolicy {
 	case descpb.ScanLockingWaitPolicy_BLOCK:
 		return lock.WaitPolicy_Block
@@ -59,5 +55,20 @@ func getWaitPolicy(lockWaitPolicy descpb.ScanLockingWaitPolicy) lock.WaitPolicy 
 
 	default:
 		panic(errors.AssertionFailedf("unknown wait policy %s", lockWaitPolicy))
+	}
+}
+
+// GetKeyLockingDurability returns the configured lock durability to use for
+// key-value scans.
+func GetKeyLockingDurability(lockDurability descpb.ScanLockingDurability) lock.Durability {
+	switch lockDurability {
+	case descpb.ScanLockingDurability_BEST_EFFORT:
+		return lock.Unreplicated
+
+	case descpb.ScanLockingDurability_GUARANTEED:
+		return lock.Replicated
+
+	default:
+		panic(errors.AssertionFailedf("unknown lock durability %s", lockDurability))
 	}
 }

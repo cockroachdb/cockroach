@@ -19,9 +19,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -54,7 +57,7 @@ func TestSimplePaginate(t *testing.T) {
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "simple_paginate"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "paginate":
-			var input interface{}
+			var input []int
 			if len(d.CmdArgs) != 2 {
 				return "expected 2 args: paginate <limit> <offset>"
 			}
@@ -332,7 +335,7 @@ func TestRPCPaginator(t *testing.T) {
 			dialFn := func(ctx context.Context, id roachpb.NodeID) (client interface{}, err error) {
 				return id, nil
 			}
-			nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (res interface{}, err error) {
+			nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (res []testNodeResponse, err error) {
 				numResponses := tc.numResponses[nodeID]
 				// If a negative value is stored, return an error instead.
 				if numResponses < 0 {
@@ -353,10 +356,8 @@ func TestRPCPaginator(t *testing.T) {
 				t.Run(fmt.Sprintf("limit=%d", limit), func(t *testing.T) {
 					var response []testNodeResponse
 					errorsDetected := 0
-					responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
-						if val, ok := resp.([]testNodeResponse); ok {
-							response = append(response, val...)
-						}
+					responseFn := func(nodeID roachpb.NodeID, resp []testNodeResponse) {
+						response = append(response, resp...)
 					}
 					errorFn := func(nodeID roachpb.NodeID, nodeFnError error) {
 						errorsDetected++
@@ -373,7 +374,7 @@ func TestRPCPaginator(t *testing.T) {
 					for {
 						nodesToQuery := []roachpb.NodeID{pagState.inProgress}
 						nodesToQuery = append(nodesToQuery, pagState.nodesToQuery...)
-						paginator := rpcNodePaginator{
+						paginator := rpcNodePaginator[interface{}, testNodeResponse]{
 							limit:        limit,
 							numNodes:     len(nodesToQuery),
 							errorCtx:     "test",
@@ -389,7 +390,7 @@ func TestRPCPaginator(t *testing.T) {
 						// Issue requests in parallel.
 						for idx, nodeID := range nodesToQuery {
 							go func(nodeID roachpb.NodeID, idx int) {
-								paginator.queryNode(ctx, nodeID, idx)
+								paginator.queryNode(ctx, nodeID, idx, noTimeout)
 							}(nodeID, idx)
 						}
 
@@ -411,4 +412,51 @@ func TestRPCPaginator(t *testing.T) {
 		})
 	}
 
+}
+
+func TestRPCPaginatorWithTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	server := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer server.Stopper().Stop(ctx)
+
+	s := server.StatusServer().(*systemStatusServer)
+
+	nodeFn := func(ctx context.Context, client serverpb.StatusClient, nodeID roachpb.NodeID) ([]interface{}, error) {
+		select {
+		case <-time.After(time.Second * 10):
+		case <-ctx.Done():
+			break
+		}
+
+		// Return an error that mimics the error returned when a rpc's context is cancelled:
+		return nil, errors.New("some error")
+	}
+	responseFn := func(nodeID roachpb.NodeID, resp []interface{}) {
+		// noop
+	}
+
+	var timeoutError error
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		timeoutError = err
+		log.Infof(ctx, "error from node %d: %v", nodeID, err)
+	}
+
+	pagState := paginationState{}
+
+	_, _ = paginatedIterateNodes(
+		ctx,
+		s.statusServer,
+		"test-paginate-with-timeout",
+		1000,
+		pagState,
+		[]roachpb.NodeID{},
+		time.Second*2,
+		nodeFn,
+		responseFn,
+		errorFn,
+	)
+
+	require.ErrorContains(t, timeoutError, "operation \"node fn\" timed out")
 }

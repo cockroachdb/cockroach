@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -21,6 +20,9 @@ go_library(
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvpb",
+        "//pkg/multitenant/mtinfopb",
+        "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
@@ -31,7 +33,6 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/ts/tspb",
-        "//pkg/util/errorutil",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -60,11 +61,9 @@ go_test(
         "tenant_scan_range_descriptors_test.go",
         "tenant_trace_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":kvtenant"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/config",
         "//pkg/gossip",
         "//pkg/keys",
@@ -74,9 +73,10 @@ go_test(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/load",
+        "//pkg/multitenant/mtinfopb",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/security",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -99,6 +99,7 @@ go_test(
         "//pkg/util/stop",
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
@@ -106,5 +107,3 @@ go_test(
         "@org_golang_google_grpc//status",
     ],
 )
-
-get_x_data(name = "get_x_data")

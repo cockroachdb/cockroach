@@ -14,7 +14,7 @@ import {
   flattenStatementStats,
 } from "src/util/appStats/appStats";
 import { FixFingerprintHexValue } from "src/util/format";
-import { unset } from "src/util/constants";
+import { INTERNAL_APP_NAME_PREFIX, unset } from "src/util/constants";
 import { createSelector } from "@reduxjs/toolkit";
 import { SqlStatsResponse } from "src/api/statementsApi";
 import { Filters, getTimeValueInSeconds } from "src/queryFilter";
@@ -43,7 +43,7 @@ export function filterBySearchQuery(
     );
 }
 
-export function filteredStatementsData(
+export function filterStatementsData(
   filters: Filters,
   search: string,
   statements: AggregateStatistics[],
@@ -72,6 +72,8 @@ export function filteredStatementsData(
     .map(app => app.trim())
     .filter(appName => !!appName);
 
+  const includeInternalApps = !!appNames?.includes(INTERNAL_APP_NAME_PREFIX);
+
   // Return statements filtered by the values selected on the filter and
   // the search text. A statement must match all selected filters to be
   // displayed on the table.
@@ -90,14 +92,23 @@ export function filteredStatementsData(
         return databases.length === 0 || databases.includes(statement.database);
       }
     })
-    .filter(
-      statement =>
-        !appNames?.length || appNames.includes(statement.applicationName),
-    )
+    .filter(statement => {
+      const isInternal = statement.applicationName?.startsWith(
+        INTERNAL_APP_NAME_PREFIX,
+      );
+      return (
+        !appNames?.length ||
+        (includeInternalApps && isInternal) ||
+        appNames?.includes(
+          statement.applicationName ? statement.applicationName : unset,
+        )
+      );
+    })
     .filter(statement => (filters.fullScan ? statement.fullScan : true))
     .filter(
       statement =>
-        statement.stats.service_lat.mean >= timeValue || timeValue === "empty",
+        timeValue === "empty" ||
+        statement.stats.service_lat.mean >= Number(timeValue),
     )
     .filter(
       statement =>

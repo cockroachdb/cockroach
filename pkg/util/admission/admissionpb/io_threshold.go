@@ -7,7 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-//
 
 package admissionpb
 
@@ -42,9 +41,29 @@ func (iot *IOThreshold) Score() (float64, bool) {
 	if iot == nil || iot.L0NumFilesThreshold == 0 || iot.L0NumSubLevelsThreshold == 0 {
 		return 0, false
 	}
+	numSubLevels := iot.L0NumSubLevels
+	if iot.L0MinimumSizePerSubLevel > 0 {
+		// Upper-bound on number of sub-levels. See the comment for the cluster
+		// setting admission.l0_sub_level_count_overload_threshold.
+		maxNumSubLevels := int64(math.Round(float64(iot.L0Size) / float64(iot.L0MinimumSizePerSubLevel)))
+		// Say numSubLevels is 30 and maxNumSubLevels is 5. We don't want to
+		// ignore the huge disparity, since that could allow the numSubLevels to
+		// grow to a huge value. So we place a lower-bound. The divisor of 3 was
+		// chosen somewhat arbitrarily.
+		//
+		// NB: the lower-bound can be greater than the upper-bound, in which case
+		// the lower-bound takes precedence.
+		minNumSubLevels := numSubLevels / 3
+		if numSubLevels > maxNumSubLevels {
+			numSubLevels = maxNumSubLevels
+		}
+		if numSubLevels < minNumSubLevels {
+			numSubLevels = minNumSubLevels
+		}
+	}
 	f := math.Max(
 		float64(iot.L0NumFiles)/float64(iot.L0NumFilesThreshold),
-		float64(iot.L0NumSubLevels)/float64(iot.L0NumSubLevelsThreshold),
+		float64(numSubLevels)/float64(iot.L0NumSubLevelsThreshold),
 	)
 	return f, f > 1.0
 }

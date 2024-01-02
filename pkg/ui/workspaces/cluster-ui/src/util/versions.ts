@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { getLogger } from "./logger";
+
 const versionPrefix = "10000";
 export type SemVersion = [number, number, number];
 
@@ -51,7 +53,9 @@ export function parseStringToVersion(
   if (inputString.startsWith(versionPrefix)) {
     inputString = inputString.split(versionPrefix)[1];
     if (!inputString) {
-      console.log("Unable to split version string while parsing", inputString);
+      getLogger().warn(
+        "Unable to split version string while parsing: " + inputString,
+      );
       return [0, 0, 0];
     }
   }
@@ -60,15 +64,14 @@ export function parseStringToVersion(
   const matches = inputString.match(regex);
 
   if (matches) {
-    const [, majorVersion, minorVersion, patchVersion, buildNumber] = matches;
+    const [, majorVersion, minorVersion, patchVersion] = matches;
     const parsedMajorVersion = parseInt(majorVersion);
     const parsedMinorVersion = parseInt(minorVersion) || 0;
     const parsedPatchVersion = parseInt(patchVersion) || 0;
-    const parsedBuildNumber = parseInt(buildNumber) || 0;
 
     return [parsedMajorVersion, parsedMinorVersion, parsedPatchVersion];
   } else {
-    console.log("Version string did not match", inputString);
+    getLogger().warn("Version string did not match: " + inputString);
     return [0, 0, 0];
   }
 }

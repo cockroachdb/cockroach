@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -73,6 +74,24 @@ func Decode(
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDInt(tree.DInt(i)), rkey, err
+	case types.PGLSNFamily:
+		var i uint64
+		if dir == encoding.Ascending {
+			rkey, i, err = encoding.DecodeUvarintAscending(key)
+		} else {
+			rkey, i, err = encoding.DecodeUvarintDescending(key)
+		}
+		return a.NewDPGLSN(tree.DPGLSN{LSN: lsn.LSN(i)}), rkey, err
+	case types.RefCursorFamily:
+		var r string
+		if dir == encoding.Ascending {
+			// Perform a deep copy so that r would never reference the key's
+			// memory which might keep the BatchResponse alive.
+			rkey, r, err = encoding.DecodeUnsafeStringAscendingDeepCopy(key, nil)
+		} else {
+			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
+		}
+		return a.NewDRefCursor(tree.DString(r)), rkey, err
 	case types.FloatFamily:
 		var f float64
 		if dir == encoding.Ascending {

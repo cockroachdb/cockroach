@@ -21,9 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -34,6 +32,7 @@ var MergeQueueEnabled = settings.RegisterBoolSetting(
 	"kv.range_merge.queue_enabled",
 	"whether the automatic merge queue is enabled",
 	true,
+	settings.WithName("kv.range_merge.queue.enabled"),
 )
 
 // ReplicateQueueEnabled is a setting that controls whether the replicate queue
@@ -42,6 +41,51 @@ var ReplicateQueueEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.replicate_queue.enabled",
 	"whether the replicate queue is enabled",
+	true,
+)
+
+// ReplicaGCQueueEnabled is a setting that controls whether the replica GC queue
+// is enabled.
+var ReplicaGCQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.replica_gc_queue.enabled",
+	"whether the replica gc queue is enabled",
+	true,
+)
+
+// RaftLogQueueEnabled is a setting that controls whether the raft log queue is
+// enabled.
+var RaftLogQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.raft_log_queue.enabled",
+	"whether the raft log queue is enabled",
+	true,
+)
+
+// RaftSnapshotQueueEnabled is a setting that controls whether the raft snapshot
+// queue is enabled.
+var RaftSnapshotQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.raft_snapshot_queue.enabled",
+	"whether the raft snapshot queue is enabled",
+	true,
+)
+
+// ConsistencyQueueEnabled is a setting that controls whether the consistency
+// queue is enabled.
+var ConsistencyQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.consistency_queue.enabled",
+	"whether the consistency queue is enabled",
+	true,
+)
+
+// TimeSeriesMaintenanceQueueEnabled is a setting that controls whether the
+// timeseries maintenance queue is enabled.
+var TimeSeriesMaintenanceQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.timeseries_maintenance_queue.enabled",
+	"whether the timeseries maintenance queue is enabled",
 	true,
 )
 
@@ -62,6 +106,10 @@ var MVCCGCQueueEnabled = settings.RegisterBoolSetting(
 	"whether the MVCC GC queue is enabled",
 	true,
 )
+
+// RangeFeedRefreshInterval is injected from kvserver to avoid import cycles
+// when accessed from kvcoord.
+var RangeFeedRefreshInterval *settings.DurationSetting
 
 // CmdIDKey is a Raft command id. This will be logged unredacted - keep it random.
 type CmdIDKey string
@@ -231,17 +279,11 @@ func IntersectSpan(
 
 // SplitByLoadMergeDelay wraps "kv.range_split.by_load_merge_delay".
 var SplitByLoadMergeDelay = settings.RegisterDurationSetting(
-	settings.SystemOnly,
+	settings.SystemVisible, // used by TRUNCATE in SQL
 	"kv.range_split.by_load_merge_delay",
 	"the delay that range splits created due to load will wait before considering being merged away",
 	5*time.Minute,
-	func(v time.Duration) error {
-		const minDelay = 5 * time.Second
-		if v < minDelay {
-			return errors.Errorf("cannot be set to a value below %s", minDelay)
-		}
-		return nil
-	},
+	settings.DurationWithMinimum(5*time.Second),
 )
 
 const (
@@ -256,14 +298,9 @@ const (
 
 // MaxCommandSize wraps "kv.raft.command.max_size".
 var MaxCommandSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.SystemVisible, // used by SQL/bulk to determine mutation batch sizes
 	"kv.raft.command.max_size",
 	"maximum size of a raft command",
 	MaxCommandSizeDefault,
-	func(size int64) error {
-		if size < MaxCommandSizeFloor {
-			return fmt.Errorf("max_size must be greater than %s", humanizeutil.IBytes(MaxCommandSizeFloor))
-		}
-		return nil
-	},
+	settings.ByteSizeWithMinimum(MaxCommandSizeFloor),
 )

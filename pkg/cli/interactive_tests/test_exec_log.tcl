@@ -14,7 +14,7 @@ system "if test -e $logfile; then false; fi"
 end_test
 
 start_test "Check that the exec log is created after enabled"
-send "SET CLUSTER   SETTING sql.trace.log_statement_execute = TRUE;\r"
+send "SET CLUSTER   SETTING sql.log.all_statements.enabled = TRUE;\r"
 eexpect "SET CLUSTER SETTING"
 eexpect root@
 system "test -e $logfile"
@@ -33,7 +33,7 @@ eexpect "does not exist"
 eexpect root@
 
 # Check logging after disable
-send "SET CLUSTER SETTING sql.trace.log_statement_execute = FALSE;\r"
+send "SET CLUSTER SETTING sql.log.all_statements.enabled = FALSE;\r"
 eexpect root@
 send "SELECT 'lov' || 'ely';\r"
 eexpect "lovely"
@@ -59,7 +59,7 @@ system "if grep -q lovely $logfile; then false; fi"
 end_test
 
 # Re-enable logging for the next test.
-send "SET CLUSTER   SETTING sql.trace.log_statement_execute = TRUE;\r"
+send "SET CLUSTER   SETTING sql.log.all_statements.enabled = TRUE;\r"
 eexpect "SET CLUSTER SETTING"
 eexpect root@
 
@@ -97,31 +97,23 @@ send "SELECT 550+5;\r"
 eexpect 555
 eexpect root@
 
-flush_server_logs
+# Use this distinct query to be the boundary - if we see this stmt in the
+# exec log, then we should expect all the previous statements in the log too.
 
-# Now check the items are there in the log file. We need to iterate
-# because flush_server_logs only syncs on flush of cockroach.log, not
-# the exec log.
-#
-# We also check the last statement first, this ensures that every
-# previous statement is also in the log file after this check
-# succeeds.
-system "for i in `seq 1 3`; do
-  grep 'SELECT ..*550..* +' $logfile && exit 0;
-  echo still waiting;
-  sleep 1;
-done;
-echo 'not finding two separate txn counter values?';
-grep 'SELECT ..*550..* +' $logfile;
-exit 1;"
+send "SELECT 111;\r"
+eexpect 111
+eexpect root@
+
+flush_and_sync_logs $logfile "SELECT ..*111..*"
+
 
 # Two separate single-stmt txns.
-system "n=`grep 'SELECT ..*550..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 2; then echo unexpected \$n; exit 1; fi"
+system "n=`grep 'SELECT ..*550..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 2; then echo unexpected \$n; exit 1; fi"
 # Same txns.
-system "n=`grep 'SELECT ..*660..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
-system "n=`grep 'SELECT ..*770..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
-system "n=`grep 'SELECT ..*880..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
-system "n=`grep 'SELECT ..*990..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
+system "n=`grep 'SELECT ..*660..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
+system "n=`grep 'SELECT ..*770..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
+system "n=`grep 'SELECT ..*880..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
+system "n=`grep 'SELECT ..*990..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
 
 end_test
 

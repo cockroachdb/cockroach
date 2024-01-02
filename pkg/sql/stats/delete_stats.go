@@ -40,11 +40,11 @@ const (
 // TableStatisticsRetentionPeriod controls the cluster setting for the
 // retention period of statistics that are not collected by default.
 var TableStatisticsRetentionPeriod = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.non_default_columns.min_retention_period",
 	"minimum retention period for table statistics collected on non-default columns",
 	defaultKeepTime,
-).WithPublic()
+	settings.WithPublic)
 
 // DeleteOldStatsForColumns deletes old statistics from the
 // system.table_statistics table. For the given tableID and columnIDs,
@@ -121,6 +121,18 @@ func DeleteOldStatsForOtherColumns(
                AND "columnIDs"::string NOT IN (%s)
                AND "createdAt" < now() - $2`, columnIDsPlaceholders.String()),
 		placeholderVals...,
+	)
+	return err
+}
+
+// deleteStatsForDroppedTables deletes all statistics for at most 'limit' number
+// of dropped tables.
+func deleteStatsForDroppedTables(ctx context.Context, ex isql.Executor, limit int64) error {
+	_, err := ex.Exec(
+		ctx, "delete-statistics-for-dropped-tables", nil, /* txn */
+		fmt.Sprintf(`DELETE FROM system.table_statistics
+                            WHERE "tableID" NOT IN (SELECT table_id FROM crdb_internal.tables)
+                            LIMIT %d`, limit),
 	)
 	return err
 }

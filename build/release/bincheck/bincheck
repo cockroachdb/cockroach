@@ -32,7 +32,7 @@ echo "Generating encryption key:"
 echo ""
 
 # Start node with encryption enabled.
-"$cockroach" start-single-node --insecure --listening-url-file="$urlfile" --enterprise-encryption=path=cockroach-data,key=aes-128.key,old-key=plain --pid-file="$pidfile" &
+"$cockroach" start-single-node --listen-addr 127.0.0.1:26257 --insecure --listening-url-file="$urlfile" --enterprise-encryption=path=cockroach-data,key=aes-128.key,old-key=plain --pid-file="$pidfile" &
 
 trap "kill -9 $! || true" EXIT
 for i in {0..8}

@@ -20,6 +20,8 @@ import (
 
 var informationSchemaMap = map[string]*tree.CreateTable{}
 var pgCatalogMap = map[string]*tree.CreateTable{}
+var pgCatalogViewsMap = map[string]*tree.CreateView{}
+var crdbInternalMap = map[string]*tree.CreateTable{}
 var systemMap = map[string]*tree.CreateTable{}
 
 var informationSchemaTables = []string{
@@ -46,8 +48,6 @@ var pgCatalogTables = []string{
 	vtable.PGCatalogDatabase,
 	vtable.PGCatalogDefaultACL,
 	vtable.PGCatalogDepend,
-	vtable.PGCatalogDescription,
-	vtable.PGCatalogSharedDescription,
 	vtable.PGCatalogEnum,
 	vtable.PGCatalogEventTrigger,
 	vtable.PGCatalogExtension,
@@ -83,6 +83,16 @@ var pgCatalogTables = []string{
 	vtable.PGCatalogSharedSecurityLabel,
 	vtable.PGCatalogViews,
 	vtable.PGCatalogAggregate,
+}
+
+var pgCatalogViews = []string{
+	vtable.PGCatalogDescription,
+	vtable.PGCatalogSharedDescription,
+}
+
+var crdbInternalTables = []string{
+	vtable.CrdbInternalCatalogComments,
+	vtable.CrdbInternalBuiltinFunctionComments,
 }
 
 var systemTables = []string{
@@ -125,6 +135,9 @@ var systemTables = []string{
 	systemschema.TenantSettingsTableSchema,
 	systemschema.SpanCountTableSchema,
 	systemschema.SystemPrivilegeTableSchema,
+	systemschema.SystemMVCCStatisticsSchema,
+	systemschema.TxnExecutionStatsTableSchema,
+	systemschema.StatementExecutionStatsTableSchema,
 }
 
 func init() {
@@ -153,9 +166,36 @@ func init() {
 		}
 	}
 
+	// Build a map that maps the names of the various virtual tables
+	// to their CREATE VIEW AST.
+	buildViewMap := func(catalogName, schemaName string, tableList []string, viewMap map[string]*tree.CreateView) {
+		for _, table := range tableList {
+			parsed, err := parser.ParseOne(table)
+			if err != nil {
+				panic(errors.Wrap(err, "error initializing virtual table map"))
+			}
+
+			cv, ok := parsed.AST.(*tree.CreateView)
+			if !ok {
+				panic(errors.New("virtual view schemas must be CREATE VIEW statements"))
+			}
+
+			cv.Name.SchemaName = tree.Name(schemaName)
+			cv.Name.ExplicitSchema = true
+
+			cv.Name.CatalogName = tree.Name(catalogName)
+			cv.Name.ExplicitCatalog = true
+
+			name := cv.Name
+			viewMap[name.ObjectName.String()] = cv
+		}
+	}
+
+	buildMap("system", "public", systemTables, systemMap)
+	buildMap(testDB, "crdb_internal", crdbInternalTables, crdbInternalMap)
 	buildMap(testDB, "information_schema", informationSchemaTables, informationSchemaMap)
 	buildMap(testDB, "pg_catalog", pgCatalogTables, pgCatalogMap)
-	buildMap("system", "public", systemTables, systemMap)
+	buildViewMap(testDB, "pg_catalog", pgCatalogViews, pgCatalogViewsMap)
 }
 
 // Resolve returns true and the AST node describing the virtual table referenced.
@@ -173,7 +213,22 @@ func resolveVTable(name *tree.TableName) (*tree.CreateTable, bool) {
 	case name.SchemaName == "pg_catalog":
 		schema, ok := pgCatalogMap[name.ObjectName.String()]
 		return schema, ok
+
+	case name.SchemaName == "crdb_internal":
+		schema, ok := crdbInternalMap[name.ObjectName.String()]
+		return schema, ok
 	}
 
+	return nil, false
+}
+
+// resolveVirtualView returns true and the AST node describing the virtual view
+// referenced.
+func resolveVirtualView(name *tree.TableName) (*tree.CreateView, bool) {
+	switch {
+	case name.SchemaName == "pg_catalog":
+		schema, ok := pgCatalogViewsMap[name.ObjectName.String()]
+		return schema, ok
+	}
 	return nil, false
 }

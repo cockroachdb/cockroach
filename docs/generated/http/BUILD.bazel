@@ -4,7 +4,6 @@ genrule(
         "//pkg/build:build_proto",
         "//pkg/clusterversion:clusterversion_proto",
         "//pkg/config/zonepb:zonepb_proto",
-        "//pkg/geo/geoindex:geoindex_proto",
         "//pkg/geo/geopb:geopb_proto",
         "//pkg/gossip:gossip_proto",
         "//pkg/jobs/jobspb:jobspb_proto",
@@ -57,6 +56,7 @@ genrule(
         "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:timestamp_proto",
         "@go_googleapis//google/api:annotations_proto",
+        "@go_googleapis//google/api:http_proto",
         "@io_etcd_go_raft_v3//raftpb:raftpb_proto",
     ],
     outs = [

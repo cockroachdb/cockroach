@@ -38,8 +38,7 @@ export const TimeFrameControls = ({
     onArrowClick(direction);
 
   const left = disabledArrows.includes(ArrowDirection.LEFT);
-  const center = disabledArrows.includes(ArrowDirection.CENTER);
-  const right = disabledArrows.includes(ArrowDirection.RIGHT);
+  const canForward = !disabledArrows.includes(ArrowDirection.RIGHT);
   const delay = 0.3;
 
   return (
@@ -67,9 +66,10 @@ export const TimeFrameControls = ({
           mouseLeaveDelay={delay}
         >
           <Button
-            onClick={handleChangeArrow(ArrowDirection.RIGHT)}
-            disabled={right}
-            className={cx("_action", right ? "disabled" : "active")}
+            onClick={handleChangeArrow(
+              canForward ? ArrowDirection.RIGHT : ArrowDirection.CENTER,
+            )}
+            className={cx("_action", "active")}
             aria-label={"next time interval"}
           >
             <CaretRight className={cx("icon")} />
@@ -84,8 +84,7 @@ export const TimeFrameControls = ({
       >
         <Button
           onClick={handleChangeArrow(ArrowDirection.CENTER)}
-          disabled={center}
-          className={cx("_action", center ? "disabled" : "active", "btn__now")}
+          className={cx("_action", "active", "btn__now")}
         >
           Now
         </Button>

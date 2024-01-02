@@ -1,13 +1,9 @@
-load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
-load("@npm_eslint_plugin_crdb//@bazel/typescript:index.bzl", "ts_project")
-load("@npm_eslint_plugin_crdb//jest:index.bzl", "jest_test")
+load("@aspect_rules_js//js:defs.bzl", "js_library")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@aspect_rules_js//npm:defs.bzl", "npm_package")
 
-exports_files(
-    [
-        "yarn.lock",
-    ],
-    visibility = ["//visibility:public"],
-)
+npm_link_all_packages(name = "node_modules")
 
 ts_project(
     name = "ts_project",
@@ -19,14 +15,11 @@ ts_project(
     root_dir = "src",
     tsconfig = "tsconfig.json",
     validate = False,
-    deps = [
-        "@npm_eslint_plugin_crdb//@typescript-eslint/utils",
-    ],
+    deps = [":node_modules"],
 )
 
 js_library(
-    name = "eslint-plugin-crdb",
-    package_name = "@cockroachlabs/eslint-plugin-crdb",
+    name = "eslint-plugin-crdb-lib",
     srcs = [
         "package.json",
     ],
@@ -34,4 +27,14 @@ js_library(
     deps = [
         ":ts_project",
     ],
+)
+
+npm_package(
+    name = "eslint-plugin-crdb",
+    srcs = [
+        "package.json",
+        ":eslint-plugin-crdb-lib",
+    ],
+    package = "@cockroachlabs/eslint-plugin-crdb",
+    visibility = ["//visibility:public"],
 )

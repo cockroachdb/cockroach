@@ -45,6 +45,14 @@ func (s *srf) Walk(v tree.Visitor) tree.Expr {
 func (s *srf) TypeCheck(
 	_ context.Context, ctx *tree.SemaContext, desired *types.T,
 ) (tree.TypedExpr, error) {
+	if ctx.Properties.IsSet(tree.RejectGenerators) {
+		// srf replacement can happen before type-checking, so we need to check
+		// invalid usage here.
+		return nil, tree.NewInvalidFunctionUsageError(tree.GeneratorClass, ctx.TypeCheckContext())
+	}
+	if ctx.Properties.Ancestors.Has(tree.ConditionalAncestor) {
+		return nil, tree.NewInvalidFunctionUsageError(tree.GeneratorClass, "conditional expressions")
+	}
 	if ctx.Properties.Derived.SeenGenerator {
 		// This error happens if this srf struct is nested inside a raw srf that
 		// has not yet been replaced. This is possible since scope.replaceSRF first
@@ -81,7 +89,8 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	// context.
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 	b.semaCtx.Properties.Require(exprKindFrom.String(),
-		tree.RejectAggregates|tree.RejectWindowApplications|tree.RejectNestedGenerators)
+		tree.RejectAggregates|tree.RejectWindowApplications|
+			tree.RejectNestedGenerators|tree.RejectProcedures)
 	inScope.context = exprKindFrom
 
 	// Build each of the provided expressions.
@@ -111,7 +120,10 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		var outCol *scopeColumn
 		startCols := len(outScope.cols)
 
-		isRecordReturningUDF := def != nil && funcExpr.ResolvedOverload().IsUDF && texpr.ResolvedType().Family() == types.TupleFamily && b.insideDataSource
+		isRecordReturningUDF := def != nil && funcExpr.ResolvedOverload().Type == tree.UDFRoutine &&
+			texpr.ResolvedType().Family() == types.TupleFamily && b.insideDataSource
+		var scalar opt.ScalarExpr
+		_, isScopedColumn := texpr.(*scopeColumn)
 
 		if def == nil || (funcExpr.ResolvedOverload().Class != tree.GeneratorClass && !isRecordReturningUDF) || (b.shouldCreateDefaultColumn(texpr) && !isRecordReturningUDF) {
 			if def != nil && len(funcExpr.ResolvedOverload().ReturnLabels) > 0 {
@@ -123,7 +135,22 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 			outCol = outScope.addColumn(scopeColName(tree.Name(alias)), texpr)
 		}
 
-		scalar := b.buildScalar(texpr, inScope, outScope, outCol, nil)
+		if isScopedColumn {
+			// Function `buildScalar` treats a `scopeColumn` as a passthrough column
+			// for projection when a non-nil `outScope` is passed in, resulting in no
+			// scalar expression being built, but project set does not have
+			// passthrough columns and must build a new scalar. Handle this case by
+			// passing a nil `outScope` to `buildScalar`.
+			scalar = b.buildScalar(texpr, inScope, nil, nil, nil)
+
+			// Update the output column in outScope to refer to a new column ID.
+			// We need to use an out column which doesn't overlap with outer columns.
+			// Pre-existing function `populateSynthesizedColumn` does the necessary
+			// steps for us.
+			b.populateSynthesizedColumn(&outScope.cols[len(outScope.cols)-1], scalar)
+		} else {
+			scalar = b.buildScalar(texpr, inScope, outScope, outCol, nil)
+		}
 		numExpectedOutputCols := len(outScope.cols) - startCols
 		cols := make(opt.ColList, 0, numExpectedOutputCols)
 		for j := startCols; j < len(outScope.cols); j++ {
@@ -150,10 +177,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	}
 
 	// Construct the zip as a ProjectSet with empty input.
-	input := b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
-		Cols: opt.ColList{},
-		ID:   b.factory.Metadata().NextUniqueID(),
-	})
+	input := b.factory.ConstructNoColsRow()
 	outScope.expr = b.factory.ConstructProjectSet(input, zip)
 	if len(outScope.cols) == 1 {
 		outScope.singleSRFColumn = true

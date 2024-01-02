@@ -26,22 +26,24 @@ ALTER TABLE defaultdb.bar ADD PRIMARY KEY (i)
   {indexId: 1, name: bar_pkey, tableId: 105}
 - [[IndexData:{DescID: 105, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
 - [[PrimaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 105, temporaryIndexId: 3}
 - [[IndexName:{DescID: 105, Name: bar_pkey, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 2, name: bar_pkey, tableId: 105}
-- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
-  {columnId: 1, indexId: 2, tableId: 105}
 - [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 2, indexId: 2, kind: STORED, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 1, indexId: 2, tableId: 105}
 - [[IndexData:{DescID: 105, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 2, tableId: 105}
 - [[TemporaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 105}
-- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
-  {columnId: 1, indexId: 3, tableId: 105}
 - [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 2, indexId: 3, kind: STORED, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 1, indexId: 3, tableId: 105}
 - [[IndexData:{DescID: 105, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, tableId: 105}
 - [[PrimaryIndex:{DescID: 105, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC], ABSENT]

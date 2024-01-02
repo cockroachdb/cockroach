@@ -192,10 +192,19 @@ var ShowSyntaxColumns = ResultColumns{
 }
 
 // ShowFingerprintsColumns are the result columns of a
-// SHOW EXPERIMENTAL_FINGERPRINTS statement.
+// SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE statement.
 var ShowFingerprintsColumns = ResultColumns{
 	{Name: "index_name", Typ: types.String},
 	{Name: "fingerprint", Typ: types.String},
+}
+
+// ShowTenantFingerprintsColumns are the result columns of a SHOW
+// EXPERIMENTAL_FINGERPRINTS FROM TENANT statement.
+var ShowTenantFingerprintsColumns = ResultColumns{
+	{Name: "tenant_name", Typ: types.String},
+	{Name: "start_ts", Typ: types.Decimal},
+	{Name: "end_ts", Typ: types.Decimal},
+	{Name: "fingerprint", Typ: types.Int},
 }
 
 // ShowCompletionsColumns are the result columns of a
@@ -283,7 +292,7 @@ func init() {
 	}
 }
 
-// TenantColumns appear in all SHOW TENANT queries.
+// TenantColumns appear in all SHOW VIRTUAL CLUSTER queries.
 var TenantColumns = ResultColumns{
 	{Name: "id", Typ: types.Int},
 	{Name: "name", Typ: types.String},
@@ -292,7 +301,7 @@ var TenantColumns = ResultColumns{
 }
 
 // TenantColumnsWithReplication is appended to TenantColumns for
-// SHOW TENANT ... WITH REPLICATION STATUS queries.
+// SHOW VIRTUAL CLUSTER ... WITH REPLICATION STATUS queries.
 var TenantColumnsWithReplication = ResultColumns{
 	{Name: "source_tenant_name", Typ: types.String},
 	{Name: "source_cluster_uri", Typ: types.String},
@@ -306,7 +315,7 @@ var TenantColumnsWithReplication = ResultColumns{
 }
 
 // TenantColumnsWithCapabilities is appended to TenantColumns for
-// SHOW TENANT ... WITH CAPABILITIES queries.
+// SHOW VIRTUAL CLUSTER ... WITH CAPABILITIES queries.
 var TenantColumnsWithCapabilities = ResultColumns{
 	{Name: "capability_name", Typ: types.String},
 	{Name: "capability_value", Typ: types.String},
@@ -344,3 +353,11 @@ const RangesExtraRenders = `
 	coalesce((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT, 0) +
 	coalesce((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT, 0) AS range_size
 `
+
+// IdentifySystemColumns is the schema for IDENTIFY_SYSTEM.
+var IdentifySystemColumns = ResultColumns{
+	{Name: "systemid", Typ: types.String},
+	{Name: "timeline", Typ: types.Int4},
+	{Name: "xlogpos", Typ: types.String},
+	{Name: "dbname", Typ: types.String},
+}

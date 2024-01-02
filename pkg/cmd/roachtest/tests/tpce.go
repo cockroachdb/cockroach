@@ -109,7 +109,7 @@ type tpceOptions struct {
 	customers int // --customers
 	nodes     int // use to determine where the workload is run from, how data is partitioned, and workload concurrency
 	cpus      int // used to determine workload concurrency
-	ssds      int // used during cluster init and permitted AddSST concurrency
+	ssds      int // used during cluster init
 
 	// Promethues specific flags.
 	//
@@ -145,10 +145,9 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 	if opts.start == nil {
 		opts.start = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			t.Status("installing cockroach")
-			c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
-
 			startOpts := option.DefaultStartOpts()
 			startOpts.RoachprodOpts.StoreCount = opts.ssds
+			roachtestutil.SetDefaultSQLPort(c, &startOpts.RoachprodOpts)
 			settings := install.MakeClusterSettings(install.NumRacksOption(racks))
 			c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
 		}
@@ -162,11 +161,6 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 	{
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
-		if _, err := db.ExecContext(
-			ctx, "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = $1", 4*opts.ssds,
-		); err != nil {
-			t.Fatal(err)
-		}
 		if _, err := db.ExecContext(
 			ctx, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
 		); err != nil {
@@ -252,16 +246,21 @@ func registerTPCE(r registry.Registry) {
 		ssds:      1,
 	}
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("tpce/c=%d/nodes=%d", smallNightly.customers, smallNightly.nodes),
-		Owner:   registry.OwnerTestEng,
-		Timeout: 4 * time.Hour,
-		Cluster: r.MakeClusterSpec(smallNightly.nodes+1, spec.CPU(smallNightly.cpus), spec.SSD(smallNightly.ssds)),
+		Name:             fmt.Sprintf("tpce/c=%d/nodes=%d", smallNightly.customers, smallNightly.nodes),
+		Owner:            registry.OwnerTestEng,
+		Timeout:          4 * time.Hour,
+		Cluster:          r.MakeClusterSpec(smallNightly.nodes+1, spec.CPU(smallNightly.cpus), spec.SSD(smallNightly.ssds)),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		// Never run with runtime assertions as this makes this test take
+		// too long to complete.
+		CockroachBinary: registry.StandardCockroach,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCE(ctx, t, c, smallNightly)
 		},
 	})
 
-	// Weekly, large sclae configuration.
+	// Weekly, large scale configuration.
 	largeWeekly := tpceOptions{
 		customers: 100_000,
 		nodes:     5,
@@ -269,11 +268,13 @@ func registerTPCE(r registry.Registry) {
 		ssds:      2,
 	}
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("tpce/c=%d/nodes=%d", largeWeekly.customers, largeWeekly.nodes),
-		Owner:   registry.OwnerTestEng,
-		Tags:    registry.Tags("weekly"),
-		Timeout: 36 * time.Hour,
-		Cluster: r.MakeClusterSpec(largeWeekly.nodes+1, spec.CPU(largeWeekly.cpus), spec.SSD(largeWeekly.ssds)),
+		Name:             fmt.Sprintf("tpce/c=%d/nodes=%d", largeWeekly.customers, largeWeekly.nodes),
+		Owner:            registry.OwnerTestEng,
+		Benchmark:        true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Weekly),
+		Timeout:          36 * time.Hour,
+		Cluster:          r.MakeClusterSpec(largeWeekly.nodes+1, spec.CPU(largeWeekly.cpus), spec.SSD(largeWeekly.ssds)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCE(ctx, t, c, largeWeekly)
 		},

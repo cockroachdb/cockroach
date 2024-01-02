@@ -118,6 +118,25 @@ func makeRequiredConstraintForRegion(r catpb.RegionName) zonepb.Constraint {
 	}
 }
 
+// TestingConvertRegionToZoneConfig converts a given region config into a zone
+// configuration, ensuring the result is fully hydrated. Refer to the
+// zoneConfigForMultiRegionDatabase function for details on how the conversion
+// is made. Note that this should only be used for testing purposes.
+func TestingConvertRegionToZoneConfig(
+	regionConfig multiregion.RegionConfig,
+) (zonepb.ZoneConfig, error) {
+	zc, err := zoneConfigForMultiRegionDatabase(regionConfig)
+
+	// Hardcode settings based on DefaultZoneConfig() to ensure that generated
+	// zone configuration is fully hydrated for AsSpanConfig() conversion.
+	defaultZoneConfig := zonepb.DefaultZoneConfig()
+	zc.RangeMinBytes = defaultZoneConfig.RangeMinBytes
+	zc.RangeMaxBytes = defaultZoneConfig.RangeMaxBytes
+	zc.GC = defaultZoneConfig.GC
+	zc.NullVoterConstraintsIsEmpty = defaultZoneConfig.NullVoterConstraintsIsEmpty
+	return zc, err
+}
+
 // zoneConfigForMultiRegionDatabase generates a ZoneConfig stub for a
 // multi-region database such that at least one replica (voting or non-voting)
 // is constrained to each region defined within the given `regionConfig` and
@@ -778,8 +797,7 @@ func prepareZoneConfigForMultiRegionTable(
 	if currentZoneConfigWithRaw == nil {
 		currentZoneConfigWithRaw = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
 	}
-	newZoneConfig := *zonepb.NewZoneConfig()
-	newZoneConfig = *currentZoneConfigWithRaw.ZoneConfigProto()
+	newZoneConfig := *currentZoneConfigWithRaw.ZoneConfigProto()
 
 	var hasNewSubzones bool
 	for _, opt := range opts {
@@ -878,6 +896,7 @@ func generateAndValidateZoneConfigForMultiRegionDatabase(
 	regionProvider descs.RegionProvider,
 	execConfig *ExecutorConfig,
 	regionConfig multiregion.RegionConfig,
+	currentZoneConfig *zonepb.ZoneConfig,
 	validateLocalities bool,
 ) (zonepb.ZoneConfig, error) {
 	// Build a zone config based on the RegionConfig information.
@@ -898,7 +917,7 @@ func generateAndValidateZoneConfigForMultiRegionDatabase(
 		return zonepb.ZoneConfig{}, err
 	}
 
-	if err := validateZoneAttrsAndLocalities(ctx, regionProvider, execConfig, &dbZoneConfig); err != nil {
+	if err := validateZoneAttrsAndLocalities(ctx, regionProvider, execConfig, currentZoneConfig, &dbZoneConfig); err != nil {
 		// If we are validating localities this is fatal, otherwise let's log any
 		// errors as warnings.
 		if validateLocalities {
@@ -922,8 +941,17 @@ func ApplyZoneConfigFromDatabaseRegionConfig(
 	validateLocalities bool,
 	kvTrace bool,
 ) error {
+	currentZone := zonepb.NewZoneConfig()
+	if currentZoneConfigWithRaw, err := txn.Descriptors().GetZoneConfig(
+		ctx, txn.KV(), dbID,
+	); err != nil {
+		return err
+	} else if currentZoneConfigWithRaw != nil {
+		currentZone = currentZoneConfigWithRaw.ZoneConfigProto()
+	}
+
 	// Build a zone config based on the RegionConfig information.
-	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(ctx, txn.Regions(), execConfig, regionConfig, validateLocalities)
+	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(ctx, txn.Regions(), execConfig, regionConfig, currentZone, validateLocalities)
 	if err != nil {
 		return err
 	}
@@ -1148,7 +1176,7 @@ func (p *planner) maybeInitializeMultiRegionDatabase(
 		regionConfig.RegionEnumID(),
 		regionLabels,
 		desc,
-		tree.NewQualifiedTypeName(desc.Name, tree.PublicSchema, tree.RegionEnum),
+		tree.NewQualifiedTypeName(desc.Name, catconstants.PublicSchemaName, tree.RegionEnum),
 		EnumTypeMultiRegion,
 	); err != nil {
 		return err
@@ -1415,8 +1443,6 @@ func SynthesizeRegionConfig(
 		return multiregion.RegionConfig{}, err
 	}
 
-	regionConfig := multiregion.RegionConfig{}
-
 	var regionNames, transitioningRegionNames, addingRegionNames catpb.RegionNames
 	_ = regionEnumDesc.ForEachRegion(func(name catpb.RegionName, transition descpb.TypeDescriptor_EnumMember_Direction) error {
 		switch transition {
@@ -1439,7 +1465,7 @@ func SynthesizeRegionConfig(
 		}
 		return nil
 	})
-	regionConfig = multiregion.MakeRegionConfig(
+	regionConfig := multiregion.MakeRegionConfig(
 		regionNames,
 		dbDesc.GetRegionConfig().PrimaryRegion,
 		dbDesc.GetRegionConfig().SurvivalGoal,
@@ -1723,9 +1749,9 @@ type zoneConfigForMultiRegionValidator interface {
 	getExpectedTableZoneConfig(desc catalog.TableDescriptor) (zonepb.ZoneConfig, error)
 	transitioningRegions() catpb.RegionNames
 
-	newMismatchFieldError(descType string, descName string, field string) error
-	newMissingSubzoneError(descType string, descName string, field string) error
-	newExtraSubzoneError(descType string, descName string, field string) error
+	newMismatchFieldError(descType string, descName string, mismatch zonepb.DiffWithZoneMismatch) error
+	newMissingSubzoneError(descType string, descName string, mismatch zonepb.DiffWithZoneMismatch) error
+	newExtraSubzoneError(descType string, descName string, mismatch zonepb.DiffWithZoneMismatch) error
 }
 
 // zoneConfigForMultiRegionValidatorSetInitialRegion implements
@@ -1767,21 +1793,23 @@ func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) wrapErr(err error) e
 }
 
 func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) newMismatchFieldError(
-	descType string, descName string, field string,
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
 		pgerror.Newf(
 			pgcode.InvalidObjectDefinition,
-			"zone configuration for %s %s has field %q set which will be overwritten when setting the the initial PRIMARY REGION",
+			"zone configuration for %s %s has field %q set which will be overwritten when setting the the initial PRIMARY REGION (expected=%s actual=%s)",
 			descType,
 			descName,
-			field,
+			mismatch.Field,
+			mismatch.Expected,
+			mismatch.Actual,
 		),
 	)
 }
 
 func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) newMissingSubzoneError(
-	descType string, descName string, field string,
+	descType string, descName string, _ zonepb.DiffWithZoneMismatch,
 ) error {
 	// There can never be a missing subzone as we only compare against
 	// blank zone configs.
@@ -1793,15 +1821,17 @@ func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) newMissingSubzoneErr
 }
 
 func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) newExtraSubzoneError(
-	descType string, descName string, field string,
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
 		pgerror.Newf(
 			pgcode.InvalidObjectDefinition,
-			"zone configuration for %s %s has field %q set which will be overwritten when setting the initial PRIMARY REGION",
+			"zone configuration for %s %s has field %q set which will be overwritten when setting the initial PRIMARY REGION (expected=%s actual=%s)",
 			descType,
 			descName,
-			field,
+			mismatch.Field,
+			mismatch.Expected,
+			mismatch.Actual,
 		),
 	)
 }
@@ -1846,15 +1876,17 @@ type zoneConfigForMultiRegionValidatorModifiedByUser struct {
 var _ zoneConfigForMultiRegionValidator = (*zoneConfigForMultiRegionValidatorModifiedByUser)(nil)
 
 func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newMismatchFieldError(
-	descType string, descName string, field string,
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
 		pgerror.Newf(
 			pgcode.InvalidObjectDefinition,
-			"attempting to update zone configuration for %s %s which contains modified field %q",
+			"attempting to update zone configuration for %s %s which contains modified field %q (expected=%s actual=%s)",
 			descType,
 			descName,
-			field,
+			mismatch.Field,
+			mismatch.Expected,
+			mismatch.Actual,
 		),
 	)
 }
@@ -1872,7 +1904,7 @@ func (v *zoneConfigForMultiRegionValidatorModifiedByUser) wrapErr(err error) err
 }
 
 func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newMissingSubzoneError(
-	descType string, descName string, field string,
+	descType string, descName string, _ zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
 		pgerror.Newf(
@@ -1885,15 +1917,17 @@ func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newMissingSubzoneError
 }
 
 func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newExtraSubzoneError(
-	descType string, descName string, field string,
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
 		pgerror.Newf(
 			pgcode.InvalidObjectDefinition,
-			"attempting to update zone config which contains an extra zone configuration for %s %s with field %s populated",
+			"attempting to update zone config which contains an extra zone configuration for %s %s with field %s populated (expected=%s actual=%s)",
 			descType,
 			descName,
-			field,
+			mismatch.Field,
+			mismatch.Expected,
+			mismatch.Actual,
 		),
 	)
 }
@@ -1907,19 +1941,21 @@ type zoneConfigForMultiRegionValidatorValidation struct {
 var _ zoneConfigForMultiRegionValidator = (*zoneConfigForMultiRegionValidatorValidation)(nil)
 
 func (v *zoneConfigForMultiRegionValidatorValidation) newMismatchFieldError(
-	descType string, descName string, field string,
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return pgerror.Newf(
 		pgcode.InvalidObjectDefinition,
-		"zone configuration for %s %s contains incorrectly configured field %q",
+		"zone configuration for %s %s contains incorrectly configured field %q (expected=%s actual=%s)",
 		descType,
 		descName,
-		field,
+		mismatch.Field,
+		mismatch.Expected,
+		mismatch.Actual,
 	)
 }
 
 func (v *zoneConfigForMultiRegionValidatorValidation) newMissingSubzoneError(
-	descType string, descName string, field string,
+	descType string, descName string, _ zonepb.DiffWithZoneMismatch,
 ) error {
 	return pgerror.Newf(
 		pgcode.InvalidObjectDefinition,
@@ -1930,14 +1966,16 @@ func (v *zoneConfigForMultiRegionValidatorValidation) newMissingSubzoneError(
 }
 
 func (v *zoneConfigForMultiRegionValidatorValidation) newExtraSubzoneError(
-	descType string, descName string, field string,
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return pgerror.Newf(
 		pgcode.InvalidObjectDefinition,
-		"extraneous zone configuration for %s %s with field %s populated",
+		"extraneous zone configuration for %s %s with field %s populated (expected=%s actual=%s)",
 		descType,
 		descName,
-		field,
+		mismatch.Field,
+		mismatch.Expected,
+		mismatch.Actual,
 	)
 }
 
@@ -2016,7 +2054,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabase(
 		return zoneConfigForMultiRegionValidator.newMismatchFieldError(
 			"database",
 			dbName.String(),
-			mismatch.Field,
+			mismatch,
 		)
 	}
 	return nil
@@ -2247,21 +2285,21 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 			return zoneConfigForMultiRegionValidator.newMissingSubzoneError(
 				descType,
 				name,
-				mismatch.Field,
+				mismatch,
 			)
 		}
 		if mismatch.IsExtraSubzone {
 			return zoneConfigForMultiRegionValidator.newExtraSubzoneError(
 				descType,
 				name,
-				mismatch.Field,
+				mismatch,
 			)
 		}
 
 		return zoneConfigForMultiRegionValidator.newMismatchFieldError(
 			descType,
 			name,
-			mismatch.Field,
+			mismatch,
 		)
 	}
 
@@ -2444,6 +2482,7 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 		"namespace",
 		"table_statistics",
 		"web_sessions",
+		"region_liveness",
 	}
 
 	rbrTables := []string{
@@ -2536,11 +2575,36 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 		return nil
 	}
 
+	// Transforms the crdb_region type into a proper enum.
+	setCrdbRegionColumnType := func(descriptor *tabledesc.Mutable) (tree.Name, error) {
+		// Change crdb_region type to the multi-region enum
+		column, err := getMutableColumn(descriptor, "crdb_region")
+		if err != nil {
+			return "", err
+		}
+		column.Type = enumType
+
+		// Add a back reference to the table
+		backReferenceJob := fmt.Sprintf("add back ref on mr-enum for system table %s", descriptor.GetName())
+		if err = p.addTypeBackReference(ctx, regionEnumID, descriptor.GetID(), backReferenceJob); err != nil {
+			return "", err
+		}
+		return tree.Name(column.Name), nil
+	}
+
 	// Configure global system tables
 	for _, tableName := range globalTables {
 		descriptor, err := getDescriptor(tableName)
 		if err != nil {
 			return err
+		}
+
+		// Set the type of crdb_region column for the liveness table.
+		if tableName == "region_liveness" {
+			_, err = setCrdbRegionColumnType(descriptor)
+			if err != nil {
+				return err
+			}
 		}
 
 		descriptor.SetTableLocalityGlobal()
@@ -2558,19 +2622,11 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 		}
 
 		// Change crdb_region type to the multi-region enum
-		column, err := getMutableColumn(descriptor, "crdb_region")
+		columName, err := setCrdbRegionColumnType(descriptor)
 		if err != nil {
 			return err
 		}
-		column.Type = enumType
-
-		// Add a back reference to the table
-		backReferenceJob := fmt.Sprintf("add back ref on mr-enum for system table %s", tableName)
-		if err = p.addTypeBackReference(ctx, regionEnumID, descriptor.GetID(), backReferenceJob); err != nil {
-			return err
-		}
-
-		descriptor.SetTableLocalityRegionalByRow(tree.Name(column.Name))
+		descriptor.SetTableLocalityRegionalByRow(columName)
 		if err := partitionByRegion(descriptor); err != nil {
 			return err
 		}
@@ -2626,10 +2682,21 @@ func (zv *zoneConfigValidator) ValidateDbZoneConfig(
 	if err != nil {
 		return err
 	}
+
+	currentZone := zonepb.NewZoneConfig()
+	if currentZoneConfigWithRaw, err := zv.descs.GetZoneConfig(
+		ctx, zv.txn, db.GetID(),
+	); err != nil {
+		return err
+	} else if currentZoneConfigWithRaw != nil {
+		currentZone = currentZoneConfigWithRaw.ZoneConfigProto()
+	}
+
 	_, err = generateAndValidateZoneConfigForMultiRegionDatabase(ctx,
 		zv.regionProvider,
 		zv.execCfg,
 		regionConfig,
+		currentZone,
 		true, /*validateLocalities*/
 	)
 	if err != nil {

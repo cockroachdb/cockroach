@@ -45,7 +45,7 @@ case "${cmd}" in
            --maintenance-policy "MIGRATE" \
            --image-project "ubuntu-os-cloud" \
            --image-family "ubuntu-2004-lts" \
-           --boot-disk-size "100" \
+           --boot-disk-size "250" \
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${NAME}" \
            --scopes "cloud-platform" \
@@ -220,7 +220,7 @@ case "${cmd}" in
     gcloud compute instances describe ${NAME} --format="table(name,status,lastStartTimestamp,lastStopTimestamp)"
     ;;
     *)
-    echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, delete, status, ssh, or sync"
+    echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, delete, status, ssh, get, or sync"
     exit 1
     ;;
 esac

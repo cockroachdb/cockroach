@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/redact"
 	sentry "github.com/getsentry/sentry-go"
@@ -55,6 +56,7 @@ func (it interceptingTransport) Configure(sentry.ClientOptions) {}
 
 func TestCrashReportingPacket(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	var packets []*sentry.Event
@@ -98,7 +100,7 @@ func TestCrashReportingPacket(t *testing.T) {
 	func() {
 		defer expectPanic("after server start")
 		defer logcrash.RecoverAndReportPanic(ctx, &st.SV)
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs})
 		s.Stopper().Stop(ctx)
 		panic(redact.Safe(panicPost))
 	}()
@@ -117,7 +119,7 @@ func TestCrashReportingPacket(t *testing.T) {
 			if runtime.Compiler == "gccgo" {
 				message += "[0-9]+" // TODO(bdarnell): verify on gccgo
 			} else {
-				message += "1058"
+				message += "1059"
 			}
 			message += " (TestCrashReportingPacket)"
 			return message
@@ -130,7 +132,7 @@ func TestCrashReportingPacket(t *testing.T) {
 			if runtime.Compiler == "gccgo" {
 				message += "[0-9]+" // TODO(bdarnell): verify on gccgo
 			} else {
-				message += "1066"
+				message += "1067"
 			}
 			message += " (TestCrashReportingPacket)"
 			return message
@@ -189,6 +191,7 @@ func TestCrashReportingPacket(t *testing.T) {
 
 func TestInternalErrorReporting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	var packets []*sentry.Event

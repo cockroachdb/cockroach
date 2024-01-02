@@ -45,6 +45,10 @@ func (r *traceSpanResumer) ForceRealSpan() bool {
 	return true
 }
 
+func (r *traceSpanResumer) DumpTraceAfterRun() bool {
+	return true
+}
+
 type traceSpanResumer struct {
 	ctx               context.Context
 	recordedSpanCh    chan struct{}
@@ -65,9 +69,15 @@ func (r *traceSpanResumer) OnFailOrCancel(ctx context.Context, execCtx interface
 	return errors.New("unimplemented")
 }
 
+// CollectProfile implements the jobs.Resumer interface.
+func (r *traceSpanResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 func TestDebugJobTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
 
 	ctx := context.Background()
 	argsFn := func(args *base.TestServerArgs) {
@@ -78,7 +88,7 @@ func TestDebugJobTrace(t *testing.T) {
 	defer c.Cleanup()
 	c.omitArgs = true
 
-	registry := c.TestServer.JobRegistry().(*jobs.Registry)
+	registry := c.Server.JobRegistry().(*jobs.Registry)
 	jobCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -103,7 +113,7 @@ func TestDebugJobTrace(t *testing.T) {
 	// to inject our traceSpanResumer.
 	var job *jobs.StartableJob
 	id := registry.MakeJobID()
-	require.NoError(t, c.TestServer.InternalDB().(isql.DB).Txn(ctx, func(
+	require.NoError(t, c.Server.InternalDB().(isql.DB).Txn(ctx, func(
 		ctx context.Context, txn isql.Txn,
 	) (err error) {
 		err = registry.CreateStartableJobWithTxn(ctx, &job, id, txn, jobs.Record{
@@ -120,7 +130,7 @@ func TestDebugJobTrace(t *testing.T) {
 	<-recordedSpanCh
 
 	args := []string{strconv.Itoa(int(id))}
-	pgURL, cleanup := sqlutils.PGUrl(t, c.TestServer.ServingSQLAddr(),
+	pgURL, cleanup := sqlutils.PGUrl(t, c.Server.AdvSQLAddr(),
 		"TestDebugJobTrace", url.User(username.RootUser))
 	defer cleanup()
 

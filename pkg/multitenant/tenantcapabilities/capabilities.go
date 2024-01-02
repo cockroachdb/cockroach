@@ -10,7 +10,12 @@
 
 package tenantcapabilities
 
-import "github.com/cockroachdb/redact"
+import (
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+)
 
 // ID represents a handle to a tenant capability.
 type ID uint8
@@ -79,6 +84,11 @@ const (
 	// span configs.
 	TenantSpanConfigBounds // span_config_bounds
 
+	// CanDebugProcess describes the ability of a tenant to set vmodule on the
+	// process and run pprof profiles and tools. This can reveal information
+	// across tenant boundaries.
+	CanDebugProcess // can_debug_process
+
 	MaxCapabilityID ID = iota - 1
 )
 
@@ -109,4 +119,27 @@ var capabilities = [MaxCapabilityID + 1]Capability{
 	CanViewTSDBMetrics:     boolCapability(CanViewTSDBMetrics),
 	ExemptFromRateLimiting: boolCapability(ExemptFromRateLimiting),
 	TenantSpanConfigBounds: spanConfigBoundsCapability(TenantSpanConfigBounds),
+	CanDebugProcess:        boolCapability(CanDebugProcess),
+}
+
+// EnableAll enables maximum access to services.
+func EnableAll(t *tenantcapabilitiespb.TenantCapabilities) {
+	for i := ID(1); i <= MaxCapabilityID; i++ {
+		val, err := GetValueByID(t, i)
+		if err != nil {
+			panic(err)
+		}
+		switch v := val.(type) {
+		case TypedValue[bool]:
+			// Access to the service is enabled.
+			v.Set(true)
+
+		case TypedValue[*spanconfigbounds.Bounds]:
+			// No bound.
+			v.Set(nil)
+
+		default:
+			panic(errors.AssertionFailedf("unhandled type: %T", val))
+		}
+	}
 }

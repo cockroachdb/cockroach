@@ -92,9 +92,11 @@ func registerKVBenchSpec(r registry.Registry, b kvBenchSpec) {
 		// for --max-rate.
 		// TODO(andrei): output something to roachperf and start running them
 		// nightly.
-		Tags:    registry.Tags("manual"),
-		Owner:   registry.OwnerKV,
-		Cluster: nodes,
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.ManualOnly,
+		Owner:            registry.OwnerKV,
+		Benchmark:        true,
+		Cluster:          nodes,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKVBench(ctx, t, c, b)
 		},
@@ -202,9 +204,6 @@ func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSp
 	roachNodes := loadGrp.roachNodes
 	loadNodes := loadGrp.loadNodes
 
-	if err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", roachNodes); err != nil {
-		t.Fatal(err)
-	}
 	if err := c.PutE(ctx, t.L(), t.DeprecatedWorkload(), "./workload", loadNodes); err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +228,7 @@ func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSp
 		// Wipe cluster before starting a new run because factors like load-based
 		// splitting can significantly change the underlying layout of the table and
 		// affect benchmark results.
-		c.Wipe(ctx, roachNodes)
+		c.Wipe(ctx, false /* preserveCerts */, roachNodes)
 		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), roachNodes)
 		time.Sleep(restartWait)
 

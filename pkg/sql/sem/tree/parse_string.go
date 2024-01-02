@@ -67,6 +67,10 @@ func ParseAndRequireString(
 			return nil, false, typErr
 		}
 		d, err = ParseDIntervalWithTypeMetadata(intervalStyle(ctx), s, itm)
+	case types.PGLSNFamily:
+		d, err = ParseDPGLSN(s)
+	case types.RefCursorFamily:
+		d = NewDRefCursor(s)
 	case types.Box2DFamily:
 		d, err = ParseDBox2D(s)
 	case types.GeographyFamily:
@@ -111,7 +115,7 @@ func ParseAndRequireString(
 	case types.VoidFamily:
 		d = DVoidDatum
 	default:
-		return nil, false, errors.AssertionFailedf("unknown type %s (%T)", t, t)
+		return nil, false, errors.AssertionFailedf("unknown type %s", t.SQLStringForError())
 	}
 	if err != nil {
 		return d, dependsOnContext, err

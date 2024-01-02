@@ -14,14 +14,28 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/errors"
 )
 
-// AWSMachineType selects a machine type given the desired number of CPUs and
-// memory per CPU ratio. Also returns the architecture of the selected machine type.
-func AWSMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+// TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
+func SelectAWSMachineType(
+	cpus int, mem MemPerCPU, shouldSupportLocalSSD bool, arch vm.CPUArch,
+) (string, vm.CPUArch, error) {
+	return SelectAWSMachineTypeOld(cpus, mem, arch)
+}
+
+// TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
+func SelectGCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+	return SelectGCEMachineTypeOld(cpus, mem, arch)
+}
+
+// SelectAWSMachineType selects a machine type given the desired number of CPUs
+// and memory per CPU ratio. Also returns the architecture of the selected
+// machine type.
+func SelectAWSMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch, error) {
 	// TODO(erikgrinaker): These have significantly less RAM than
 	// their GCE counterparts. Consider harmonizing them.
-	family := "c5d" // 2 GB RAM per CPU
+	family := "c6id" // 2 GB RAM per CPU
 	selectedArch := vm.ArchAMD64
 	if arch == vm.ArchFIPS {
 		selectedArch = vm.ArchFIPS
@@ -31,12 +45,12 @@ func AWSMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArc
 	}
 
 	if mem == High {
-		family = "m5d" // 4 GB RAM per CPU
+		family = "m6i" // 4 GB RAM per CPU
 		if arch == vm.ArchARM64 {
 			family = "m7g" // 4 GB RAM per CPU (graviton3)
 		}
 	} else if mem == Low {
-		panic("low memory per CPU not available for AWS")
+		return "", "", errors.New("low memory per CPU not available for AWS")
 	}
 
 	var size string
@@ -49,49 +63,131 @@ func AWSMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArc
 		size = "2xlarge"
 	case cpus <= 16:
 		size = "4xlarge"
-	case cpus <= 36:
-		size = "9xlarge"
-		if family == "c7g" || family == "m7g" {
-			size = "8xlarge"
-		}
-	case cpus <= 72:
-		size = "18xlarge"
-		if family == "c7g" || family == "m7g" {
-			size = "16xlarge"
-		}
+	case cpus <= 32:
+		size = "8xlarge"
+	case cpus <= 48:
+		size = "12xlarge"
+	case cpus <= 64:
+		size = "16xlarge"
 	case cpus <= 96:
 		size = "24xlarge"
 	default:
-		panic(fmt.Sprintf("no aws machine type with %d cpus", cpus))
+		return "", "", errors.Newf("no aws machine type with %d cpus", cpus)
 	}
 
-	// There is no m7g.24xlarge, fall back to m5d.24xlarge.
+	// There is no m7g.24xlarge, fall back to m6i.24xlarge.
 	if family == "m7g" && size == "24xlarge" {
-		family = "m5d"
+		family = "m6i"
 		selectedArch = vm.ArchAMD64
 	}
-	// There is no c7g.24xlarge, fall back to c5d.24xlarge.
+	// There is no c7g.24xlarge, fall back to c6id.24xlarge.
 	if family == "c7g" && size == "24xlarge" {
-		family = "c5d"
+		family = "c6id"
 		selectedArch = vm.ArchAMD64
 	}
 
-	// There is no c5d.24xlarge, fall back to m5d.24xlarge.
-	if family == "c5d" && size == "24xlarge" {
-		family = "m5d"
-	}
-
-	return fmt.Sprintf("%s.%s", family, size), selectedArch
+	return fmt.Sprintf("%s.%s", family, size), selectedArch, nil
 }
 
-// GCEMachineType selects a machine type given the desired number of CPUs and
-// memory per CPU ratio. Also returns the architecture of the selected machine type.
-func GCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
-	// TODO(peter): This is awkward: at or below 16 cpus, use n1-standard so that
+// SelectAWSMachineType selects a machine type given the desired number of CPUs,
+// memory per CPU, support for locally-attached SSDs and CPU architecture. It
+// returns a compatible machine type and its architecture.
+//
+// When MemPerCPU is Standard, the memory per CPU ratio is 4 GB. For High, it is 8 GB.
+// For Auto, it's 4 GB up to and including 16 CPUs, then 2 GB. Low is not supported.
+//
+// N.B. in some cases, the selected architecture and machine type may be different from the requested one. E.g.,
+// graviton3 with >= 24xlarge (96 vCPUs) isn't available, so we fall back to (c|m|r)6i.24xlarge.
+// N.B. cpus is expected to be an even number; validation is deferred to a specific cloud provider.
+//
+// At the time of writing, the intel machines are all third-generation Xeon, "Ice Lake" which are isomorphic to
+// GCE's n2-(standard|highmem|custom) _with_ --minimum-cpu-platform="Intel Ice Lake" (roachprod's default).
+func SelectAWSMachineTypeNew(
+	cpus int, mem MemPerCPU, shouldSupportLocalSSD bool, arch vm.CPUArch,
+) (string, vm.CPUArch, error) {
+	family := "m6i" // 4 GB RAM per CPU
+	selectedArch := vm.ArchAMD64
+
+	if arch == vm.ArchFIPS {
+		// N.B. FIPS is available in any AMD64 machine configuration.
+		selectedArch = vm.ArchFIPS
+	} else if arch == vm.ArchARM64 {
+		family = "m7g" // 4 GB RAM per CPU (graviton3)
+		selectedArch = vm.ArchARM64
+	}
+
+	switch mem {
+	case Auto:
+		if cpus > 16 {
+			family = "c6i" // 2 GB RAM per CPU
+
+			if arch == vm.ArchARM64 {
+				family = "c7g" // 2 GB RAM per CPU (graviton3)
+			}
+		}
+	case Standard:
+		// nothing to do, family is already configured as per above
+	case High:
+		family = "r6i" // 8 GB RAM per CPU
+		// N.B. graviton3 doesn't support x8 memory multiplier, so we fall back.
+		if arch == vm.ArchARM64 {
+			selectedArch = vm.ArchAMD64
+		}
+	case Low:
+		return "", "", errors.New("low memory per CPU not available for AWS")
+	}
+
+	var size string
+	switch {
+	case cpus <= 2:
+		size = "large"
+	case cpus <= 4:
+		size = "xlarge"
+	case cpus <= 8:
+		size = "2xlarge"
+	case cpus <= 16:
+		size = "4xlarge"
+	case cpus <= 32:
+		size = "8xlarge"
+	case cpus <= 48:
+		size = "12xlarge"
+	case cpus <= 64:
+		size = "16xlarge"
+	case cpus <= 96:
+		size = "24xlarge"
+	default:
+		// N.B. some machines can go up to 192 vCPUs, but we never exceed 96 in tests.
+		size = "24xlarge"
+	}
+	// There is no m7g.24xlarge (or c7g.24xlarge), fall back to (c|m|r)6i.24xlarge.
+	if selectedArch == vm.ArchARM64 && size == "24xlarge" {
+		switch mem {
+		case Auto:
+			family = "c6i"
+		case Standard:
+			family = "m6i"
+		case High:
+			family = "r6i"
+		}
+		selectedArch = vm.ArchAMD64
+	}
+	if shouldSupportLocalSSD {
+		// All of the above instance families can be modified to support local SSDs by appending "d".
+		family += "d"
+	}
+
+	return fmt.Sprintf("%s.%s", family, size), selectedArch, nil
+}
+
+// SelectGCEMachineType selects a machine type given the desired number of CPUs
+// and memory per CPU ratio. Also returns the architecture of the selected
+// machine type.
+func SelectGCEMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+	// TODO(peter): This is awkward: at or below 16 cpus, use n2-standard so that
 	// the machines have a decent amount of RAM. We could use custom machine
 	// configurations, but the rules for the amount of RAM per CPU need to be
 	// determined (you can't request any arbitrary amount of RAM).
-	series := "n1"
+	series := "n2"
 	selectedArch := vm.ArchAMD64
 	if arch == vm.ArchFIPS {
 		selectedArch = vm.ArchFIPS
@@ -116,31 +212,114 @@ func GCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArc
 		kind = "standard"
 		selectedArch = vm.ArchARM64
 	}
+	// N.B. n2 family does not support single CPU machines.
+	if series == "n2" && cpus == 1 {
+		cpus = 2
+	}
 	return fmt.Sprintf("%s-%s-%d", series, kind, cpus), selectedArch
 }
 
-// AzureMachineType selects a machine type given the desired number of CPUs and
+// SelectGCEMachineType selects a machine type given the desired number of CPUs,
+// memory per CPU, and CPU architecture.  It returns a compatible machine type
+// and its architecture.
+//
+// When MemPerCPU is Standard, the memory per CPU ratio is 4 GB. For High, it is 8 GB.
+// For Auto, it's 4 GB up to and including 16 CPUs, then 2 GB. Low is 1 GB.
+//
+// N.B. in some cases, the selected architecture and machine type may be different from the requested one. E.g.,
+// single CPU machines are not available, so we fall back to dual CPU machines.
+// N.B. cpus is expected to be an even number; validation is deferred to a specific cloud provider.
+//
+// At the time of writing, the intel machines are all third-generation xeon, "Ice Lake" assuming
+// --minimum-cpu-platform="Intel Ice Lake" (roachprod's default). This is isomorphic to AWS's m6i or c6i.
+// The only exception is low memory machines (n2-highcpu-xxx), which aren't available in AWS.
+func SelectGCEMachineTypeNew(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+	series := "n2"
+	selectedArch := vm.ArchAMD64
+
+	if arch == vm.ArchFIPS {
+		// N.B. FIPS is available in any AMD64 machine configuration.
+		selectedArch = vm.ArchFIPS
+	} else if arch == vm.ArchARM64 {
+		selectedArch = vm.ArchARM64
+		series = "t2a" // Ampere Altra
+	}
+	var kind string
+	switch mem {
+	case Auto:
+		if cpus > 16 {
+			// We'll use 2GB RAM per CPU for custom machines.
+			kind = "custom"
+			if arch == vm.ArchARM64 {
+				// T2A doesn't support custom, fall back to n2.
+				series = "n2"
+				selectedArch = vm.ArchAMD64
+			}
+		} else {
+			kind = "standard"
+		}
+	case Standard:
+		kind = "standard" // 4 GB RAM per CPU
+	case High:
+		kind = "highmem" // 8 GB RAM per CPU
+		if arch == vm.ArchARM64 {
+			// T2A doesn't support highmem, fall back to n2.
+			series = "n2"
+			selectedArch = vm.ArchAMD64
+		}
+	case Low:
+		kind = "highcpu" // 1 GB RAM per CPU
+		if arch == vm.ArchARM64 {
+			// T2A doesn't support highcpu, fall back to n2.
+			series = "n2"
+			selectedArch = vm.ArchAMD64
+		}
+	}
+	// T2A doesn't support cpus > 48, fall back to n2.
+	if selectedArch == vm.ArchARM64 && cpus > 48 {
+		series = "n2"
+		selectedArch = vm.ArchAMD64
+	}
+	// N.B. n2 does not support single CPU machines.
+	if series == "n2" && cpus == 1 {
+		cpus = 2
+	}
+	if kind == "custom" {
+		// We use 2GB RAM per CPU for custom machines.
+		return fmt.Sprintf("%s-custom-%d-%d", series, cpus, 2048*cpus), selectedArch
+	}
+	return fmt.Sprintf("%s-%s-%d", series, kind, cpus), selectedArch
+}
+
+// SelectAzureMachineType selects a machine type given the desired number of CPUs and
 // memory per CPU ratio.
-func AzureMachineType(cpus int, mem MemPerCPU) string {
+func SelectAzureMachineType(cpus int, mem MemPerCPU, ssd bool) (string, error) {
 	if mem != Auto && mem != Standard {
-		panic(fmt.Sprintf("custom memory per CPU not implemented for Azure, memory ratio requested: %d", mem))
+		return "", errors.Newf("custom memory per CPU not implemented for Azure, memory ratio requested: %d", mem)
+	}
+	var premiumStorage string
+	// If not using Local SSD, the machine type must support premium/ultra storage.
+	if !ssd {
+		premiumStorage = "s"
 	}
 	switch {
 	case cpus <= 2:
-		return "Standard_D2_v3"
+		return fmt.Sprintf("Standard_D2%s_v3", premiumStorage), nil
 	case cpus <= 4:
-		return "Standard_D4_v3"
+		return fmt.Sprintf("Standard_D4%s_v3", premiumStorage), nil
 	case cpus <= 8:
-		return "Standard_D8_v3"
+		return fmt.Sprintf("Standard_D8%s_v3", premiumStorage), nil
 	case cpus <= 16:
-		return "Standard_D16_v3"
+		return fmt.Sprintf("Standard_D16%s_v3", premiumStorage), nil
 	case cpus <= 36:
-		return "Standard_D32_v3"
+		return fmt.Sprintf("Standard_D32%s_v3", premiumStorage), nil
 	case cpus <= 48:
-		return "Standard_D48_v3"
+		return fmt.Sprintf("Standard_D48%s_v3", premiumStorage), nil
 	case cpus <= 64:
-		return "Standard_D64_v3"
+		return fmt.Sprintf("Standard_D64%s_v3", premiumStorage), nil
+	case cpus <= 96:
+		return fmt.Sprintf("Standard_D96%s_v5", premiumStorage), nil
 	default:
-		panic(fmt.Sprintf("no azure machine type with %d cpus", cpus))
+		return "", errors.Newf("no azure machine type with %d cpus", cpus)
 	}
 }

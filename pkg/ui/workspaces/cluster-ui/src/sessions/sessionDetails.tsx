@@ -57,6 +57,7 @@ import { CircleFilled } from "../icon";
 import { createTimeScaleFromDateRange, TimeScale } from "src/timeScaleDropdown";
 import moment from "moment-timezone";
 import { Timestamp } from "../timestamp";
+import { FixLong } from "../util";
 
 const cx = classNames.bind(styles);
 const statementsPageCx = classNames.bind(statementsPageStyles);
@@ -93,7 +94,9 @@ export const MemoryUsageItem: React.FC<{
   <SummaryCardItem
     label={"Memory Usage"}
     value={
-      Bytes(alloc_bytes?.toNumber()) + "/" + Bytes(max_alloc_bytes?.toNumber())
+      Bytes(FixLong(alloc_bytes ?? 0).toNumber()) +
+      "/" +
+      Bytes(FixLong(max_alloc_bytes ?? 0).toNumber())
     }
   />
 );
@@ -213,6 +216,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
             renderError={() =>
               LoadingError({
                 statsType: "sessions",
+                error: this.props.sessionError,
               })
             }
           />
@@ -265,6 +269,11 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
           <h3>Unable to find session</h3>
           There is no session with the id{" "}
           {getMatchParamByName(this.props.match, sessionAttr)}.
+          <br />
+          {`The session’s details may no longer be available because they were
+          removed from cache, which is controlled by the cluster settings
+          'sql.closed_session_cache.capacity' and
+          'sql.closed_session_cache.time_to_live'.`}
         </section>
       );
     }

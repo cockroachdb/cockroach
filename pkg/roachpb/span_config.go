@@ -18,12 +18,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// StoreMatchesConstraint returns whether a store's attributes or node's
-// locality match the constraint's spec. It notably ignores whether the
-// constraint is required, prohibited, positive, or otherwise.
-func StoreMatchesConstraint(store StoreDescriptor, c Constraint) bool {
+// MatchesConstraint return whether the given attributes and locality tags match
+// the constraint's spec. It ignores whether the constraint is required,
+// prohibited, positive, or otherwise.
+func MatchesConstraint(storeAttrs, nodeAttrs Attributes, nodeLocality Locality, c Constraint) bool {
 	if c.Key == "" {
-		for _, attrs := range []Attributes{store.Attrs, store.Node.Attrs} {
+		for _, attrs := range []Attributes{storeAttrs, nodeAttrs} {
 			for _, attr := range attrs.Attrs {
 				if attr == c.Value {
 					return true
@@ -32,7 +32,7 @@ func StoreMatchesConstraint(store StoreDescriptor, c Constraint) bool {
 		}
 		return false
 	}
-	for _, tier := range store.Node.Locality.Tiers {
+	for _, tier := range nodeLocality.Tiers {
 		if c.Key == tier.Key && c.Value == tier.Value {
 			return true
 		}
@@ -45,6 +45,17 @@ var emptySpanConfig = &SpanConfig{}
 // IsEmpty returns true if s is an empty SpanConfig.
 func (s *SpanConfig) IsEmpty() bool {
 	return s.Equal(emptySpanConfig)
+}
+
+// HasConfigurationChange is true if there is a change to this SpanConfig that
+// is initiated by the end user (directly or indirectly) rather than by a
+// background system process (like a PTS update).
+func (s *SpanConfig) HasConfigurationChange(other SpanConfig) bool {
+	this := *s
+	// Clear out the protection policies from both SpanConfigs.
+	this.GCPolicy.ProtectionPolicies = nil
+	other.GCPolicy.ProtectionPolicies = nil
+	return !this.Equal(other)
 }
 
 // TTL returns the implies TTL as a time.Duration.

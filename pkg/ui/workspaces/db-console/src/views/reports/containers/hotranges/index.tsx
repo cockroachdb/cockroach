@@ -38,8 +38,8 @@ const HotRanges = (props: HotRangesProps) => {
       page_size: pageSize,
       page_token: pageToken,
     });
-    getHotRanges(request).then(response => {
-      if (response.ranges.length == 0) {
+    getHotRanges(request, moment.duration(30, "minutes")).then(response => {
+      if (response.ranges.length === 0) {
         return;
       }
       setPageToken(response.next_page_token);

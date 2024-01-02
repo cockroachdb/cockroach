@@ -334,6 +334,7 @@ func TestSerializedRegistryInvariants(t *testing.T) {
 
 func addContentionEvent(r *contention.Registry, ev kvpb.ContentionEvent) {
 	r.AddContentionEvent(contentionpb.ExtendedContentionEvent{
-		BlockingEvent: ev,
+		BlockingEvent:  ev,
+		ContentionType: contentionpb.ContentionType_LOCK_WAIT,
 	})
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/sentryutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -411,7 +412,7 @@ func (f *Factory) onMaxConstructorStackDepthExceeded() {
 	if buildutil.CrdbTestBuild {
 		panic(err)
 	}
-	errorutil.SendReport(f.ctx, &f.evalCtx.Settings.SV, err)
+	sentryutil.SendReport(f.ctx, &f.evalCtx.Settings.SV, err)
 }
 
 // onConstructRelational is called as a final step by each factory method that
@@ -458,6 +459,14 @@ func (f *Factory) onConstructScalar(scalar opt.ScalarExpr) opt.ScalarExpr {
 // columns. It is used to create a dummy input for operators like CreateTable.
 func (f *Factory) ConstructZeroValues() memo.RelExpr {
 	return f.ConstructValues(memo.EmptyScalarListExpr, &memo.ValuesPrivate{
+		Cols: opt.ColList{},
+		ID:   f.Metadata().NextUniqueID(),
+	})
+}
+
+// ConstructNoColsRow constructs a Values operator with no columns and one row.
+func (f *Factory) ConstructNoColsRow() memo.RelExpr {
+	return f.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
 		Cols: opt.ColList{},
 		ID:   f.Metadata().NextUniqueID(),
 	})

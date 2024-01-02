@@ -14,14 +14,17 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 )
 
 // metadataUpdater which implements scexec.MetaDataUpdater that is used to update
@@ -83,7 +86,7 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID d
 }
 
 // DeleteSchedule implement scexec.DescriptorMetadataUpdater.
-func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) error {
+func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID jobspb.ScheduleID) error {
 	_, err := mu.txn.ExecEx(
 		ctx,
 		"delete-schedule",
@@ -91,6 +94,26 @@ func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) 
 		sessiondata.RootUserSessionDataOverride,
 		"DELETE FROM system.scheduled_jobs WHERE schedule_id = $1",
 		scheduleID,
+	)
+	return err
+}
+
+// UpdateTTLScheduleLabel implement scexec.DescriptorMetadataUpdater.
+func (mu metadataUpdater) UpdateTTLScheduleLabel(
+	ctx context.Context, tbl *tabledesc.Mutable,
+) error {
+	if !tbl.HasRowLevelTTL() {
+		return nil
+	}
+
+	_, err := mu.txn.ExecEx(
+		ctx,
+		"update-ttl-schedule-label",
+		mu.txn.KV(),
+		sessiondata.RootUserSessionDataOverride,
+		"UPDATE system.scheduled_jobs SET schedule_name = $1 WHERE schedule_id = $2",
+		ttlbase.BuildScheduleLabel(tbl),
+		tbl.RowLevelTTL.ScheduleID,
 	)
 	return err
 }

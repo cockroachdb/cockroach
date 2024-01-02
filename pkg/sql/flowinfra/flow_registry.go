@@ -40,11 +40,12 @@ func IsNoInboundStreamConnectionError(err error) bool {
 // SettingFlowStreamTimeout is a cluster setting that sets the default flow
 // stream timeout.
 var SettingFlowStreamTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.flow_stream_timeout",
 	"amount of time incoming streams wait for a flow to be set up before erroring out",
 	10*time.Second,
 	settings.NonNegativeDuration,
+	settings.WithName("sql.distsql.flow_stream.timeout"),
 )
 
 // expectedConnectionTime is the expected time taken by a flow to connect to its
@@ -287,8 +288,7 @@ func (fr *FlowRegistry) RegisterFlow(
 
 	if draining {
 		return &flowRetryableError{cause: errors.Errorf(
-			"could not register flowID %s because the registry is draining",
-			id,
+			"could not register flow because the registry is draining",
 		)}
 	}
 	entry := fr.getEntryLocked(id)
@@ -367,13 +367,13 @@ func (fr *FlowRegistry) cancelPendingStreams(
 // ConnectInboundStream calls for the flow will fail to find it and time out.
 func (fr *FlowRegistry) UnregisterFlow(id execinfrapb.FlowID) {
 	fr.Lock()
+	defer fr.Unlock()
 	entry := fr.flows[id]
 	if entry.streamTimer != nil {
 		entry.streamTimer.Stop()
 		entry.streamTimer = nil
 	}
 	fr.releaseEntryLocked(id)
-	fr.Unlock()
 }
 
 // waitForFlow waits until the flow with the given id gets registered - up to

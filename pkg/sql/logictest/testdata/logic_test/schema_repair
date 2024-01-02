@@ -115,6 +115,9 @@ SELECT * FROM crdb_internal.unsafe_upsert_descriptor($corrupt_id, crdb_internal.
 statement ok
 SELECT * FROM corruptdesc;
 
+statement ok
+DROP TABLE lostdata
+
 # Test the crdb_internal.force_delete_table_data function
 subtest force_delete_data
 
@@ -186,6 +189,9 @@ select * from crdb_internal.unsafe_upsert_descriptor($t_id, crdb_internal.json_t
 query I
 SELECT * FROM forcedeletemydata ORDER BY v ASC
 ----
+
+statement ok
+DROP TABLE forcedeletemydata
 
 # Test that corrupt back-references should not prevent objects from being queried.
 subtest queryable_despite_corrupt_back_refs
@@ -261,41 +267,38 @@ a
 statement error pgcode XXUUU referenced descriptor not found
 ALTER TYPE corrupt_backref_typ DROP VALUE 'b'
 
-# This is required to pass the validation tests when the logic test completes.
-subtest cleanup_corrupt_backref
+subtest repairable_catalog_corruptions
 
-query TB
-SELECT
-  name,
-	crdb_internal.unsafe_delete_descriptor(id, true)
-FROM
-	system.namespace
-WHERE
-	name LIKE '%corrupt_backref_%'
-ORDER BY
-  name
+# Inject some corruption into the system.namespace table.
+query B
+SELECT crdb_internal.unsafe_upsert_namespace_entry(104,105,'dangling',12345,true)
+UNION ALL
+SELECT crdb_internal.unsafe_upsert_namespace_entry(104,105,'dangling2',12345,true)
 ----
-_corrupt_backref_typ  true
-corrupt_backref_fk    true
-corrupt_backref_typ   true
-corrupt_backref_view  true
+true
+true
 
-query TBB
-SELECT
-  name,
-	crdb_internal.force_delete_table_data(id),
-	crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id)
-FROM
-	system.namespace
-WHERE
-	name LIKE '%corrupt_backref_%'
-ORDER BY
-  name
+query IITIT
+SELECT * FROM "".crdb_internal.kv_repairable_catalog_corruptions ORDER BY 1,2,3,4
 ----
-_corrupt_backref_typ  true  true
-corrupt_backref_fk    true  true
-corrupt_backref_typ   true  true
-corrupt_backref_view  true  true
+104  105  _corrupt_backref_typ  114    descriptor
+104  105  corrupt_backref_fk    109    descriptor
+104  105  corrupt_backref_typ   113    descriptor
+104  105  corrupt_backref_view  111    descriptor
+104  105  dangling              12345  namespace
+104  105  dangling2             12345  namespace
+
+query ITB
+SELECT id, corruption, crdb_internal.repair_catalog_corruption(id, corruption)
+FROM "".crdb_internal.kv_repairable_catalog_corruptions
+ORDER BY 1
+----
+109    descriptor  true
+111    descriptor  true
+113    descriptor  true
+114    descriptor  true
+12345  namespace   true
+12345  namespace   NULL
 
 # Check that `SET descriptor_validation = off ` disables validation.
 # We do so by corrupting a table descriptor and assert on the successful

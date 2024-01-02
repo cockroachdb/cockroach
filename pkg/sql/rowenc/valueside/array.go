@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // encodeArray produces the value encoding for an array.
@@ -210,7 +209,8 @@ func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 		return encoding.Geo, nil
 	case types.DecimalFamily:
 		return encoding.Decimal, nil
-	case types.BytesFamily, types.StringFamily, types.CollatedStringFamily, types.EnumFamily:
+	case types.BytesFamily, types.StringFamily, types.CollatedStringFamily,
+		types.EnumFamily, types.RefCursorFamily:
 		return encoding.Bytes, nil
 	case types.TimestampFamily, types.TimestampTZFamily:
 		return encoding.Time, nil
@@ -227,6 +227,8 @@ func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 		return encoding.True, nil
 	case types.BitFamily:
 		return encoding.BitArray, nil
+	case types.PGLSNFamily:
+		return encoding.Int, nil
 	case types.UuidFamily:
 		return encoding.UUID, nil
 	case types.INetFamily:
@@ -236,9 +238,7 @@ func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 	case types.TupleFamily:
 		return encoding.Tuple, nil
 	default:
-		return 0, errors.AssertionFailedf(
-			"no known encoding type for %s", redact.Safe(t.Family().Name()),
-		)
+		return 0, errors.AssertionFailedf("no known encoding type for %s", t.Family().Name())
 	}
 }
 func checkElementType(paramType *types.T, elemType *types.T) error {
@@ -279,6 +279,8 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedDecimalValue(b, &t.Decimal), nil
 	case *tree.DDate:
 		return encoding.EncodeUntaggedIntValue(b, t.UnixEpochDaysWithOrig()), nil
+	case *tree.DPGLSN:
+		return encoding.EncodeUntaggedIntValue(b, int64(t.LSN)), nil
 	case *tree.DBox2D:
 		return encoding.EncodeUntaggedBox2DValue(b, t.CartesianBoundingBox.BoundingBox)
 	case *tree.DGeography:

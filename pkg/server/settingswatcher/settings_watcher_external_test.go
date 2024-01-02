@@ -34,9 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -48,18 +48,22 @@ import (
 // picked up.
 func TestSettingWatcherOnTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(ctx)
+	s0 := srv.ApplicationLayer()
 
-	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
 	const systemOnlySetting = "kv.snapshot_rebalance.max_rate"
 	toSet := map[string][]interface{}{
 		"kv.queue.process.guaranteed_time_budget": {"17s", "20s"},
 		"sql.txn_stats.sample_rate":               {.23, .55},
-		"cluster.organization":                    {"foobar", "bazbax"},
+		"cluster.label":                           {"foobar", "bazbax"},
 		// Include a system-only setting to verify that we don't try to change its
 		// value (which would cause a panic in test builds).
 		systemOnlySetting: {2 << 20, 4 << 20},
@@ -67,17 +71,30 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	fakeTenant := roachpb.MustMakeTenantID(2)
 	systemTable := keys.SystemSQLCodec.TablePrefix(keys.SettingsTableID)
 	fakeCodec := keys.MakeSQLCodec(fakeTenant)
-	fakeTenantPrefix := keys.MakeTenantPrefix(fakeTenant)
+	fakeTenantSpan := keys.MakeTenantSpan(fakeTenant)
 
-	db := tc.Server(0).DB()
 	getSourceClusterRows := func() []kv.KeyValue {
 		rows, err := db.Scan(ctx, systemTable, systemTable.PrefixEnd(), 0 /* maxRows */)
 		require.NoError(t, err)
 		return rows
 	}
 	filterSystemOnly := func(rows []kv.KeyValue) (filtered []kv.KeyValue) {
+		sys := []roachpb.Key{
+			roachpb.Key(systemOnlySetting),
+			roachpb.Key("kv.closed_timestamp.target_duration"),
+			roachpb.Key("kv.closed_timestamp.side_transport_interval"),
+			roachpb.Key("kv.rangefeed.closed_timestamp_refresh_interval"),
+		}
+		isSys := func(key roachpb.Key) bool {
+			for _, s := range sys {
+				if bytes.Contains(key, s) {
+					return true
+				}
+			}
+			return false
+		}
 		for _, row := range rows {
-			if !bytes.Contains(row.Key, []byte(systemOnlySetting)) {
+			if !isSys(row.Key) {
 				filtered = append(filtered, row)
 			}
 		}
@@ -86,8 +103,8 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	copySettingsFromSystemToFakeTenant := func() int {
 		_, err := db.DelRange(
 			ctx,
-			fakeTenantPrefix,
-			fakeTenantPrefix.PrefixEnd(),
+			fakeTenantSpan.Key,
+			fakeTenantSpan.EndKey,
 			false,
 		)
 		require.NoError(t, err)
@@ -95,7 +112,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		for _, row := range rows {
 			rem, _, err := keys.DecodeTenantPrefix(row.Key)
 			require.NoError(t, err)
-			tenantKey := append(fakeTenantPrefix, rem...)
+			tenantKey := append(fakeTenantSpan.Key, rem...)
 			row.Value.ClearChecksum()
 			row.Value.Timestamp = hlc.Timestamp{}
 			require.NoError(t, db.Put(ctx, tenantKey, row.Value))
@@ -113,7 +130,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		for i, kv := range got {
 			rem, _, err := keys.DecodeTenantPrefix(kv.Key)
 			require.NoError(t, err)
-			tenantKey := append(fakeTenantPrefix, rem...)
+			tenantKey := append(fakeTenantSpan.Key, rem...)
 			if !tenantKey.Equal(expected[i].Key) {
 				return errors.Errorf("mismatched key %d: %v expected, got %d", i, expected[i].Key, tenantKey)
 			}
@@ -133,9 +150,9 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		tdb.Exec(t, "SET CLUSTER SETTING "+k+" = $1", v[0])
 	}
 	copySettingsFromSystemToFakeTenant()
-	s0 := tc.Server(0)
+
 	tenantSettings := cluster.MakeTestingClusterSettings()
-	tenantSettings.SV.SetNonSystemTenant()
+	tenantSettings.SV.SpecializeForVirtualCluster()
 
 	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
 	// Remove in v23.2.
@@ -147,7 +164,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	storage := &fakeStorage{}
 	sw := settingswatcher.New(s0.Clock(), fakeCodec, tenantSettings,
 		s0.ExecutorConfig().(sql.ExecutorConfig).RangeFeedFactory,
-		s0.Stopper(), storage)
+		s0.AppStopper(), storage)
 	require.NoError(t, sw.Start(ctx))
 	require.NoError(t, checkSettingsValuesMatch(s0.ClusterSettings(), tenantSettings))
 	for k, v := range toSet {
@@ -161,6 +178,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	// checkpointing code while also speeding up the test.
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
 	copySettingsFromSystemToFakeTenant()
 	testutils.SucceedsSoon(t, func() error {
 		return checkStoredValuesMatch(storage.getKVs())
@@ -198,7 +216,14 @@ type fakeStorage struct {
 func (f *fakeStorage) SnapshotKVs(ctx context.Context, kvs []roachpb.KeyValue) {
 	f.Lock()
 	defer f.Unlock()
-	f.kvs = kvs
+	nonDeletions := make([]roachpb.KeyValue, 0, len(kvs))
+	for _, kv := range kvs {
+		if !kv.Value.IsPresent() {
+			continue
+		}
+		nonDeletions = append(nonDeletions, kv)
+	}
+	f.kvs = nonDeletions
 	f.numWrites++
 }
 
@@ -214,19 +239,21 @@ func (f *fakeStorage) getNumWrites() int {
 	return f.numWrites
 }
 
-var _ = settings.RegisterStringSetting(settings.TenantWritable, "str.foo", "desc", "")
-var _ = settings.RegisterStringSetting(settings.TenantWritable, "str.bar", "desc", "bar")
-var _ = settings.RegisterIntSetting(settings.TenantWritable, "i0", "desc", 0)
-var _ = settings.RegisterIntSetting(settings.TenantWritable, "i1", "desc", 1)
+var _ = settings.RegisterStringSetting(settings.ApplicationLevel, "str.foo", "desc", "")
+var _ = settings.RegisterStringSetting(settings.ApplicationLevel, "str.bar", "desc", "bar")
+var _ = settings.RegisterIntSetting(settings.ApplicationLevel, "i0", "desc", 0)
+var _ = settings.RegisterIntSetting(settings.ApplicationLevel, "i1", "desc", 1)
 
 func TestSettingsWatcherWithOverrides(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	// Set up a test cluster for the system table.
-	ts, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	stopper := ts.Stopper()
-	defer stopper.Stop(ctx)
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+	stopper := ts.AppStopper()
 
 	r := sqlutils.MakeSQLRunner(db)
 	// Set some settings (to verify handling of existing rows).
@@ -240,19 +267,19 @@ func TestSettingsWatcherWithOverrides(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	f, err := rangefeed.NewFactory(stopper, kvDB, st, &rangefeed.TestingKnobs{})
 	require.NoError(t, err)
-	w := settingswatcher.NewWithOverrides(ts.Clock(), keys.SystemSQLCodec, st, f, stopper, m, nil)
+	w := settingswatcher.NewWithOverrides(ts.Clock(), ts.Codec(), st, f, stopper, m, nil)
 	require.NoError(t, w.Start(ctx))
 
-	expect := func(setting, value string) {
+	expect := func(setting settings.InternalKey, value string) {
 		t.Helper()
-		s, ok := settings.LookupForLocalAccess(setting, settings.ForSystemTenant)
+		s, ok := settings.LookupForLocalAccessByKey(setting, settings.ForSystemTenant)
 		require.True(t, ok)
 		require.Equal(t, value, s.String(&st.SV))
 	}
 
-	expectSoon := func(setting, value string) {
+	expectSoon := func(setting settings.InternalKey, value string) {
 		t.Helper()
-		s, ok := settings.LookupForLocalAccess(setting, settings.ForSystemTenant)
+		s, ok := settings.LookupForLocalAccessByKey(setting, settings.ForSystemTenant)
 		require.True(t, ok)
 		testutils.SucceedsSoon(t, func() error {
 			if actual := s.String(&st.SV); actual != value {
@@ -301,7 +328,7 @@ func TestSettingsWatcherWithOverrides(t *testing.T) {
 	expectSoon("i1", "10")
 
 	// Verify that version cannot be overridden.
-	version, ok := settings.LookupForLocalAccess("version", settings.ForSystemTenant)
+	version, ok, _ := settings.LookupForLocalAccess("version", settings.ForSystemTenant)
 	require.True(t, ok)
 	versionValue := version.String(&st.SV)
 
@@ -314,32 +341,30 @@ func TestSettingsWatcherWithOverrides(t *testing.T) {
 
 // testingOverrideMonitor is a test-only implementation of OverrideMonitor.
 type testingOverrideMonitor struct {
-	ch chan struct{}
-
 	mu struct {
 		syncutil.Mutex
-		overrides map[string]settings.EncodedValue
+		ch        chan struct{}
+		overrides map[settings.InternalKey]settings.EncodedValue
 	}
 }
 
 var _ settingswatcher.OverridesMonitor = (*testingOverrideMonitor)(nil)
 
 func newTestingOverrideMonitor() *testingOverrideMonitor {
-	m := &testingOverrideMonitor{
-		ch: make(chan struct{}, 1),
-	}
-	m.mu.overrides = make(map[string]settings.EncodedValue)
+	m := &testingOverrideMonitor{}
+	m.mu.ch = make(chan struct{})
+	m.mu.overrides = make(map[settings.InternalKey]settings.EncodedValue)
 	return m
 }
 
 func (m *testingOverrideMonitor) notify() {
-	select {
-	case m.ch <- struct{}{}:
-	default:
-	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	close(m.mu.ch)
+	m.mu.ch = make(chan struct{})
 }
 
-func (m *testingOverrideMonitor) set(key string, val string, valType string) {
+func (m *testingOverrideMonitor) set(key settings.InternalKey, val string, valType string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -349,26 +374,29 @@ func (m *testingOverrideMonitor) set(key string, val string, valType string) {
 	}
 }
 
-func (m *testingOverrideMonitor) unset(key string) {
+func (m *testingOverrideMonitor) unset(key settings.InternalKey) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.mu.overrides, key)
 }
 
-// RegisterOverridesChannel is part of the settingswatcher.OverridesMonitor interface.
-func (m *testingOverrideMonitor) RegisterOverridesChannel() <-chan struct{} {
-	return m.ch
+// WaitForStart is part of the settingswatcher.OverridesMonitor interface.
+func (m *testingOverrideMonitor) WaitForStart(ctx context.Context) error {
+	return nil
 }
 
 // Overrides is part of the settingswatcher.OverridesMonitor interface.
-func (m *testingOverrideMonitor) Overrides() map[string]settings.EncodedValue {
+func (m *testingOverrideMonitor) Overrides() (
+	map[settings.InternalKey]settings.EncodedValue,
+	<-chan struct{},
+) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	res := make(map[string]settings.EncodedValue)
+	res := make(map[settings.InternalKey]settings.EncodedValue)
 	for k, v := range m.mu.overrides {
 		res[k] = v
 	}
-	return res
+	return res, m.mu.ch
 }
 
 // Test that an error occurring during processing of the
@@ -376,9 +404,12 @@ func (m *testingOverrideMonitor) Overrides() map[string]settings.EncodedValue {
 // rangefeed failure.
 func TestOverflowRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
 	defer s.Stopper().Stop(ctx)
 
 	sideSettings := cluster.MakeTestingClusterSettings()
@@ -410,6 +441,7 @@ func TestOverflowRestart(t *testing.T) {
 	// checkpointing code while also speeding up the test.
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
 
 	checkSettings := func() {
 		testutils.SucceedsSoon(t, func() error {
@@ -440,7 +472,7 @@ func TestOverflowRestart(t *testing.T) {
 // two settings do not match. It generally gets used with SucceeedsSoon.
 func CheckSettingsValuesMatch(t *testing.T, a, b *cluster.Settings) error {
 	for _, k := range settings.Keys(false /* forSystemTenant */) {
-		s, ok := settings.LookupForLocalAccess(k, false /* forSystemTenant */)
+		s, ok := settings.LookupForLocalAccessByKey(k, false /* forSystemTenant */)
 		require.True(t, ok)
 		if s.Class() == settings.SystemOnly {
 			continue
@@ -456,6 +488,7 @@ func CheckSettingsValuesMatch(t *testing.T, a, b *cluster.Settings) error {
 // do), that the setting value that clients read does not regress.
 func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -468,6 +501,8 @@ func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 	interceptedStreamCh := make(chan kvpb.RangeFeedEventSink)
 	cancelCtx, cancel := context.WithCancel(ctx)
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRangefeedFilter: func(args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink) *kvpb.Error {
@@ -494,7 +529,7 @@ func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 	)
 
 	fakeSetting := settings.RegisterStringSetting(
-		settings.TenantWritable, fakeSettingName, "for testing", defaultFakeSettingValue,
+		settings.ApplicationLevel, fakeSettingName, "for testing", defaultFakeSettingValue,
 	)
 
 	// Set a cluster setting in the real cluster and read its raw KV.
@@ -502,7 +537,7 @@ func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 	// The tenant prefix, if one exists, will have been stripped from the
 	// key.
 	getSettingKVForFakeSetting := func(t *testing.T) roachpb.KeyValue {
-		codec := s.ExecutorConfig().(sql.ExecutorConfig).Codec
+		codec := s.Codec()
 		k := codec.TablePrefix(keys.SettingsTableID)
 		rows, err := s.DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 		require.NoError(t, err)
@@ -590,4 +625,105 @@ func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 	settingIsSoon(t, defaultFakeSettingValue)
 	require.NoError(t, stream.Send(newRangeFeedEvent(setting1KV, ts1)))
 	settingStillHasValueAfterAShortWhile(t, defaultFakeSettingValue)
+}
+
+var _ = settings.RegisterStringSetting(settings.SystemVisible, "str.baz", "desc", "initial")
+var _ = settings.RegisterStringSetting(settings.SystemOnly, "str.yay", "desc", "")
+
+// TestNotifyCalledUponReadOnlySettingChanges verifies that the notify
+// function callback is called when a SystemVisible setting is
+// updated in system.settings.
+func TestNotifyCalledUponReadOnlySettingChanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sysDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t))
+
+	ts := s.ApplicationLayer()
+	st := ts.ClusterSettings()
+	stopper := ts.AppStopper()
+
+	mu := struct {
+		syncutil.Mutex
+		updated []kvpb.TenantSetting
+	}{}
+	reset := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		mu.updated = nil
+	}
+	contains := func(key settings.InternalKey) (bool, string) {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, s := range mu.updated {
+			if s.InternalKey == key {
+				return true, s.Value.Value
+			}
+		}
+		return false, ""
+	}
+
+	notify := func(_ context.Context, updated []kvpb.TenantSetting) {
+		mu.Lock()
+		defer mu.Unlock()
+		mu.updated = append(mu.updated, updated...)
+	}
+
+	f, err := rangefeed.NewFactory(stopper, kvDB, st, &rangefeed.TestingKnobs{})
+	require.NoError(t, err)
+	w := settingswatcher.NewWithNotifier(ctx, ts.Clock(), ts.Codec(), st, f, stopper, notify, nil)
+	require.NoError(t, w.Start(ctx))
+
+	t.Run("initial scan", func(t *testing.T) {
+		// The notifier is called at least once for all the
+		// pre-existing SystemVisible settings.
+		testutils.SucceedsSoon(t, func() error {
+			for _, k := range settings.SystemVisibleKeys() {
+				seen, v := contains(k)
+				if !seen {
+					return errors.Newf("%s not seen yet", k)
+				}
+				if k == "str.baz" {
+					require.Equal(t, "initial", v)
+				}
+			}
+			return nil
+		})
+	})
+
+	t.Run("update", func(t *testing.T) {
+		reset()
+
+		// Update a setting using SQL and verify the notifier is called for
+		// it eventually. Also verify that changes to other settings are
+		// not notified.
+		sysDB.Exec(t, "SET CLUSTER SETTING str.yay = 'newval'")
+		sysDB.Exec(t, "SET CLUSTER SETTING str.foo = 'newval'")
+		sysDB.Exec(t, "SET CLUSTER SETTING str.baz = 'newval'")
+		testutils.SucceedsSoon(t, func() error {
+			seen, v := contains("str.baz")
+			if !seen {
+				return errors.New("not seen yet")
+			}
+			require.Equal(t, "newval", v)
+
+			// The rangefeed event for str.baz was delivered after those for
+			// str.foo and str.yay. If we had incorrectly notified an update
+			// for non-SystemVisible setting, they would show up in the
+			// updated list.
+			mu.Lock()
+			defer mu.Unlock()
+			if len(mu.updated) != 1 {
+				t.Errorf("expected 1 setting update, got: %+v", mu.updated)
+			}
+			return nil
+		})
+	})
 }

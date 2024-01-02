@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -31,7 +30,7 @@ func TestEagerReplication(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		// Need to trick the server to think it's part of a cluster, otherwise it
 		// will set the default zone config to require 1 replica and the split
 		// bellow will not trigger a replication attempt.
@@ -44,9 +43,8 @@ func TestEagerReplication(t *testing.T) {
 			},
 		},
 	})
-	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
 	// Make sure everything goes through the replicate queue, so the start count

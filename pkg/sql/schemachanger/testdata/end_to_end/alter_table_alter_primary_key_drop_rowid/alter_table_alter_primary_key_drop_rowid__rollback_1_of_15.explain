@@ -1,0 +1,42 @@
+/* setup */
+CREATE TABLE t (a INT NOT NULL);
+
+/* test */
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
+EXPLAIN (DDL) rollback at post-commit stage 1 of 15;
+----
+Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›);
+ └── PostCommitNonRevertiblePhase
+      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
+           ├── 3 elements transitioning toward PUBLIC
+           │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104 (t), ColumnID: 2 (rowid+)}
+           │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104 (t), Name: "rowid", ColumnID: 2 (rowid+)}
+           │    └── VALIDATED     → PUBLIC ColumnNotNull:{DescID: 104 (t), ColumnID: 2 (rowid+), IndexID: 0}
+           ├── 10 elements transitioning toward ABSENT
+           │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (rowid+), IndexID: 2 (t_pkey-)}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 2 (t_pkey-)}
+           │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey-)}
+           │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (rowid+), IndexID: 3}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 3}
+           │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2 (t_pkey-)}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 4 (t_pkey-)}
+           │    └── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 4 (t_pkey-)}
+           └── 16 Mutation operations
+                ├── SetColumnName {"ColumnID":2,"Name":"rowid","TableID":104}
+                ├── MakeValidatedColumnNotNullPublic {"ColumnID":2,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"TableID":104}
+                ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":104}
+                ├── RefreshStats {"TableID":104}
+                ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
+                ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
+                ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":4,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

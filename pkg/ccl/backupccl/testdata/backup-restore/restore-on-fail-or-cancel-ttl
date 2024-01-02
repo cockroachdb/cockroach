@@ -34,7 +34,7 @@ job cancel=a
 ----
 
 query-sql
-SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%';
+SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl%';
 ----
 0
 
@@ -75,7 +75,7 @@ job cancel=b
 ----
 
 query-sql
-SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%';
+SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl%';
 ----
 0
 

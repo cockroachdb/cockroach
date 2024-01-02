@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -34,6 +33,7 @@ go_library(
         "//pkg/util/tochar",
         "//pkg/util/tracing",
         "//pkg/util/tracing/grpcinterceptor",
+        "//pkg/util/ulid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
@@ -50,7 +50,6 @@ go_test(
         "setup_flow_after_drain_test.go",
         "vectorized_panic_propagation_test.go",
     ],
-    args = ["-test.timeout=895s"],
     embed = [":distsql"],
     deps = [
         "//pkg/base",
@@ -103,5 +102,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/r3"
 	"github.com/golang/geo/s2"
@@ -43,7 +45,7 @@ const clippingBoundsDelta = 0.01
 // writes on this index must use the same config. Writes must use the same
 // config to correctly process deletions. Reads must use the same config since
 // the bounds affect when a read needs to look at the exceedsBoundsCellID.
-func NewS2GeometryIndex(cfg S2GeometryConfig) GeometryIndex {
+func NewS2GeometryIndex(cfg geopb.S2GeometryConfig) GeometryIndex {
 	// TODO(sumeer): Sanity check cfg.
 	return &s2GeometryIndex{
 		rc: &s2.RegionCoverer{
@@ -65,9 +67,9 @@ func NewS2GeometryIndex(cfg S2GeometryConfig) GeometryIndex {
 // INDEX.
 
 // DefaultGeometryIndexConfig returns a default config for a geometry index.
-func DefaultGeometryIndexConfig() *Config {
-	return &Config{
-		S2Geometry: &S2GeometryConfig{
+func DefaultGeometryIndexConfig() *geopb.Config {
+	return &geopb.Config{
+		S2Geometry: &geopb.S2GeometryConfig{
 			// Bounding box similar to the circumference of the earth (~2B meters)
 			MinX:     -(1 << 31),
 			MaxX:     (1 << 31) - 1,
@@ -79,7 +81,7 @@ func DefaultGeometryIndexConfig() *Config {
 }
 
 // GeometryIndexConfigForSRID returns a geometry index config for srid.
-func GeometryIndexConfigForSRID(srid geopb.SRID) (*Config, error) {
+func GeometryIndexConfigForSRID(srid geopb.SRID) (*geopb.Config, error) {
 	if srid == 0 {
 		return DefaultGeometryIndexConfig(), nil
 	}
@@ -118,8 +120,8 @@ func GeometryIndexConfigForSRID(srid geopb.SRID) (*Config, error) {
 	boundsExpansion := 2 * clippingBoundsDelta
 	deltaX := (maxX - minX) * boundsExpansion
 	deltaY := (maxY - minY) * boundsExpansion
-	return &Config{
-		S2Geometry: &S2GeometryConfig{
+	return &geopb.Config{
+		S2Geometry: &geopb.S2GeometryConfig{
 			MinX:     minX - deltaX,
 			MaxX:     maxX + deltaX,
 			MinY:     minY - deltaY,
@@ -277,6 +279,14 @@ func (s *s2GeometryIndex) DFullyWithin(
 
 // Converts to geom.T and clips to the rectangle bounds of the index.
 func (s *s2GeometryIndex) convertToGeomTAndTryClip(g geo.Geometry) (geom.T, bool, error) {
+	// Anything with a NaN coordinate should be marked as clipped.
+	if bbox := g.BoundingBoxRef(); bbox != nil && (math.IsNaN(bbox.LoX) || math.IsNaN(bbox.HiX) ||
+		math.IsNaN(bbox.LoY) || math.IsNaN(bbox.HiY)) {
+		return nil, false, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"cannot index a geometry with NaN coordinates",
+		)
+	}
 	gt, err := g.AsGeomT()
 	if err != nil {
 		return nil, false, err

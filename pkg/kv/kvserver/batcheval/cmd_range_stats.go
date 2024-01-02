@@ -34,11 +34,15 @@ func declareKeysRangeStats(
 	latchSpans *spanset.SpanSet,
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
-) {
-	DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+) error {
+	err := DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+	if err != nil {
+		return err
+	}
 	// The request will return the descriptor and lease.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(rs.GetRangeID())})
+	return nil
 }
 
 // RangeStats returns the MVCC statistics for a range.

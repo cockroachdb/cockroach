@@ -371,3 +371,43 @@ func TestReplicaDescriptorsCanMakeProgressRandom(t *testing.T) {
 	log.Infof(ctx, "progress: %d cases. no progress: %d cases. skipped: %d cases.",
 		progress, noProgress, skipped)
 }
+
+func TestReplicaSetOperations(t *testing.T) {
+	rs := func(ids ...uint64) ReplicaSet {
+		replicas := make([]ReplicaDescriptor, 0, len(ids))
+		for _, id := range ids {
+			replicas = append(replicas, rd(VOTER_FULL, id))
+		}
+		return MakeReplicaSet(replicas)
+	}
+	var empty []ReplicaDescriptor
+	t.Run("subtract", func(t *testing.T) {
+		require.Equal(t, rs(1, 2, 3).Subtract(rs(2, 3)), rs(1).Descriptors())
+		require.Equal(t, rs(1, 2, 3).Subtract(rs()), rs(1, 2, 3).Descriptors())
+		require.Equal(t, rs(1, 2, 3).Subtract(rs(4, 5, 6)), rs(1, 2, 3).Descriptors())
+		require.Equal(t, rs(1, 2).Subtract(rs(6, 1)), rs(2).Descriptors())
+		require.Equal(t, rs().Subtract(rs(6, 1)), empty)
+	})
+	t.Run("difference", func(t *testing.T) {
+		{ // {1,2,3}.difference({2,3,4})
+			added, removed := rs(1, 2, 3).Difference(rs(2, 3, 4))
+			require.Equal(t, added, rs(4).Descriptors())
+			require.Equal(t, removed, rs(1).Descriptors())
+		}
+		{ // {1,2,3}.difference({1,2,3})
+			added, removed := rs(1, 2, 3).Difference(rs(1, 2, 3))
+			require.Equal(t, added, empty)
+			require.Equal(t, removed, empty)
+		}
+		{ // {}.difference({1,2,3})
+			added, removed := rs().Difference(rs(1, 2, 3))
+			require.Equal(t, added, rs(1, 2, 3).Descriptors())
+			require.Equal(t, removed, empty)
+		}
+		{ // {1,2,3}.difference({})
+			added, removed := rs(1, 2, 3).Difference(rs())
+			require.Equal(t, added, empty)
+			require.Equal(t, removed, rs(1, 2, 3).Descriptors())
+		}
+	})
+}

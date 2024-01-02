@@ -19,7 +19,7 @@ SET application_name = world
 statement ok
 SELECT 2
 
-query B
+query B rowsort
 SELECT count > 0 FROM crdb_internal.node_statement_statistics WHERE application_name IN ('hello', 'world')
 ----
 true
@@ -134,16 +134,16 @@ SELECT x FROM test WHERE y = 1/z
 # Set a cluster setting to make it show up below. Which one is set
 # does not matter.
 statement ok
-SET CLUSTER SETTING debug.panic_on_failed_assertions = true;
+SET CLUSTER SETTING debug.panic_on_failed_assertions.enabled = true;
 
 statement ok
-RESET CLUSTER SETTING debug.panic_on_failed_assertions
+RESET CLUSTER SETTING debug.panic_on_failed_assertions.enabled
 
 statement ok
 SHOW application_name
 
 statement ok
-SHOW CLUSTER SETTING debug.panic_on_failed_assertions
+SHOW CLUSTER SETTING debug.panic_on_failed_assertions.enabled
 
 statement ok
 SET application_name = '';
@@ -167,37 +167,12 @@ SELECT x FROM test WHERE y = (_ / z)                              !+
 SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)                 ·
 SELECT x FROM test WHERE y IN (_, _, __more1_10__)                   +
 SELECT x FROM test WHERE y NOT IN (_, _, __more1_10__)               ·
-SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT  ·
-SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _        ·
+SET CLUSTER SETTING "debug.panic_on_failed_assertions.enabled" = DEFAULT  ·
+SET CLUSTER SETTING "debug.panic_on_failed_assertions.enabled" = _        ·
 SET application_name = '_'                                        ·
 SET distsql = "on"                                                ·
-SHOW CLUSTER SETTING "debug.panic_on_failed_assertions"           ·
+SHOW CLUSTER SETTING "debug.panic_on_failed_assertions.enabled"           ·
 SHOW application_name                                             ·
-
-# Check that names are anonymized properly:
-# - virtual table names are preserved, but not the db prefix (#22700)
-# - function names are preserved
-query T
-SELECT anonymized
-  FROM test.crdb_internal.node_statement_statistics
- WHERE application_name = 'valuetest' ORDER BY key
-----
-INSERT INTO _ VALUES (_, _, __more1_10__), (__more1_10__)
-SELECT (_, _, __more1_10__) FROM _ WHERE _
-SELECT _ FROM _.crdb_internal.node_statement_statistics
-SELECT sin(_)
-SELECT sqrt(_)
-SELECT _ FROM (VALUES (_, _, __more1_10__), (__more1_10__)) AS _ (_)
-SELECT _ FROM _ WHERE _ = (_ / _)
-SELECT _ FROM _ WHERE _ IN (_, _, _ + _, _, _)
-SELECT _ FROM _ WHERE _ IN (_, _, __more1_10__)
-SELECT _ FROM _ WHERE _ NOT IN (_, _, __more1_10__)
-SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT
-SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _
-SET application_name = '_'
-SET distsql = _
-SHOW CLUSTER SETTING "debug.panic_on_failed_assertions"
-SHOW application_name
 
 # Check that the latency measurements looks reasonable, protecting
 # against failure to measure (#22877).
@@ -208,10 +183,10 @@ SHOW application_name
 # The latency metrics are expressed in seconds. Check that some time
 # was consumed, but not so much to verify that the computation has not
 # incorrectly overflowed.
-query TBBBBB colnames
+query TBBBBB colnames,nosort
 SELECT key,
        service_lat_avg > 0 and service_lat_avg < 10 as svc_ok,
-       parse_lat_avg > 0   and parse_lat_avg < 10   as parse_ok,
+       parse_lat_avg > 0   and parse_lat_avg < 11   as parse_ok,
        plan_lat_avg > 0    and plan_lat_avg < 10    as plan_ok,
        run_lat_avg > 0     and run_lat_avg < 10     as run_ok,
                            overhead_lat_avg < 10    as ovh_ok
@@ -298,7 +273,7 @@ statement ok
 BEGIN
 
 query TTI
-SELECT * FROM app_stmts_view
+SELECT * FROM app_stmts_view ORDER BY 2
 ----
 11619138756491374338  SELECT _        1
 12989550133819508941  SELECT _, _     1
@@ -322,19 +297,19 @@ SET CLUSTER SETTING sql.metrics.max_mem_txn_fingerprints = 0
 # We now have two additional statement fingerprints because of the two queries we ran against the crdb_internal view
 # prior to setting the fingerprint limit to 0.
 query TTI
-SELECT * FROM app_stmts_view
+SELECT * FROM app_stmts_view ORDER BY 2
 ----
-7450916591118342552   SELECT * FROM app_stmts_view        1
-738932590625820206    SELECT * FROM txn_fingerprint_view  1
-11619138756491374338  SELECT _                            1
-12989550133819508941  SELECT _, _                         1
-10964754960692259604  SELECT _, _, _                      1
+15045407606492622104  SELECT * FROM app_stmts_view ORDER BY _  1
+738932590625820206    SELECT * FROM txn_fingerprint_view       1
+11619138756491374338  SELECT _                                 1
+12989550133819508941  SELECT _, _                              1
+10964754960692259604  SELECT _, _, _                           1
 
 query TTI rowsort
 SELECT * FROM txn_fingerprint_view
 ----
-2090134368184080810  {11619138756491374338,12989550133819508941,10964754960692259604}  1
-9556717914237561995  {7450916591118342552,738932590625820206}                          1
+2090134368184080810   {11619138756491374338,12989550133819508941,10964754960692259604}  1
+16408814675491704331  {15045407606492622104,738932590625820206}                         1
 
 # Run more fingerprints to ensure that we are still updating our existing fingerprint but not creating more
 # fingerprints.
@@ -348,19 +323,19 @@ statement ok
 BEGIN
 
 query TTI
-SELECT * FROM app_stmts_view
+SELECT * FROM app_stmts_view ORDER BY 2
 ----
-7450916591118342552   SELECT * FROM app_stmts_view        1
-738932590625820206    SELECT * FROM txn_fingerprint_view  1
-11619138756491374338  SELECT _                            2
-12989550133819508941  SELECT _, _                         2
-10964754960692259604  SELECT _, _, _                      2
+15045407606492622104  SELECT * FROM app_stmts_view ORDER BY _  1
+738932590625820206    SELECT * FROM txn_fingerprint_view       1
+11619138756491374338  SELECT _                                 2
+12989550133819508941  SELECT _, _                              2
+10964754960692259604  SELECT _, _, _                           2
 
 query TTI rowsort
 SELECT * FROM txn_fingerprint_view
 ----
-2090134368184080810  {11619138756491374338,12989550133819508941,10964754960692259604}  2
-9556717914237561995  {7450916591118342552,738932590625820206}                          1
+2090134368184080810   {11619138756491374338,12989550133819508941,10964754960692259604}  2
+16408814675491704331  {15045407606492622104,738932590625820206}                         1
 
 statement ok
 COMMIT
@@ -379,9 +354,9 @@ statement ok
 BEGIN
 
 query TTI
-SELECT * FROM app_stmts_view
+SELECT * FROM app_stmts_view ORDER BY 2
 ----
-7450916591118342552   SELECT * FROM app_stmts_view                                           2
+15045407606492622104  SELECT * FROM app_stmts_view ORDER BY _                                2
 738932590625820206    SELECT * FROM txn_fingerprint_view                                     2
 11619138756491374338  SELECT _                                                               2
 11619138756491374338  SELECT _                                                               1
@@ -395,9 +370,9 @@ SELECT * FROM app_stmts_view
 query TTI rowsort
 SELECT * FROM txn_fingerprint_view
 ----
-2090134368184080810  {11619138756491374338,12989550133819508941,10964754960692259604}  2
-4151720013906157265  {11619138756491374338,12989550133819508941,13598297958913191023}  1
-9556717914237561995  {7450916591118342552,738932590625820206}                          2
+2090134368184080810   {11619138756491374338,12989550133819508941,10964754960692259604}  2
+4151720013906157265   {11619138756491374338,12989550133819508941,13598297958913191023}  1
+16408814675491704331  {15045407606492622104,738932590625820206}                         2
 
 statement ok
 COMMIT

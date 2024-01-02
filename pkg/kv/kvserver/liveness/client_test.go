@@ -58,9 +58,7 @@ func TestNodeLivenessAppearsAtStart(t *testing.T) {
 		nodeID := tc.Server(i).NodeID()
 		nl := tc.Server(i).NodeLiveness().(*liveness.NodeLiveness)
 
-		if live, err := nl.IsLive(nodeID); err != nil {
-			t.Fatal(err)
-		} else if !live {
+		if !nl.GetNodeVitalityFromCache(nodeID).IsLive(livenesspb.IsAliveNotification) {
 			t.Fatalf("node %d not live", nodeID)
 		}
 
@@ -80,9 +78,9 @@ func TestNodeLivenessAppearsAtStart(t *testing.T) {
 	}
 }
 
-// TestGetLivenessesFromKV verifies that fetching liveness records from KV
+// TestScanNodeVitalityFromKV verifies that fetching liveness records from KV
 // directly retrieves all the records we expect.
-func TestGetLivenessesFromKV(t *testing.T) {
+func TestScanNodeVitalityFromKV(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -96,39 +94,30 @@ func TestGetLivenessesFromKV(t *testing.T) {
 	for i := 0; i < tc.NumServers(); i++ {
 		nodeID := tc.Server(i).NodeID()
 		nl := tc.Server(i).NodeLiveness().(*liveness.NodeLiveness)
+		require.True(t, nl.GetNodeVitalityFromCache(nodeID).IsLive(livenesspb.IsAliveNotification))
 
-		if live, err := nl.IsLive(nodeID); err != nil {
-			t.Fatal(err)
-		} else if !live {
-			t.Fatalf("node %d not live", nodeID)
-		}
-
-		livenesses, err := nl.GetLivenessesFromKV(ctx)
+		livenesses, err := nl.ScanNodeVitalityFromKV(ctx)
 		assert.Nil(t, err)
 		assert.Equal(t, len(livenesses), tc.NumServers())
 
 		var nodeIDs []roachpb.NodeID
-		for _, liveness := range livenesses {
-			nodeIDs = append(nodeIDs, liveness.NodeID)
+		for nodeID, liveness := range livenesses {
+			nodeIDs = append(nodeIDs, nodeID)
 
 			// We expect epoch=1 as nodes first create a liveness record at epoch=0,
 			// and then increment it during their first heartbeat.
-			if liveness.Epoch != 1 {
-				t.Fatalf("expected epoch=1, got epoch=%d", liveness.Epoch)
-			}
-			if !liveness.Membership.Active() {
-				t.Fatalf("expected membership=active, got membership=%s", liveness.Membership)
-			}
+			require.Equal(t, int64(1), liveness.GetInternalLiveness().Epoch)
+			require.Equal(t, livenesspb.MembershipStatus_ACTIVE, liveness.MembershipStatus())
+			// The scan will also update the cache, verify the epoch is updated there also.
+			require.Equal(t, int64(1), nl.GetNodeVitalityFromCache(nodeID).GenLiveness().Epoch)
 		}
 
 		sort.Slice(nodeIDs, func(i, j int) bool {
 			return nodeIDs[i] < nodeIDs[j]
 		})
 		for i := range nodeIDs {
-			expNodeID := roachpb.NodeID(i + 1) // Node IDs are 1-indexed.
-			if nodeIDs[i] != expNodeID {
-				t.Fatalf("expected nodeID=%d, got %d", expNodeID, nodeIDs[i])
-			}
+			// Node IDs are 1-indexed.
+			require.Equal(t, roachpb.NodeID(i+1), nodeIDs[i])
 		}
 	}
 
@@ -187,7 +176,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	tc.WaitForNodeLiveness(t)
 	log.Infof(ctx, "waiting done")
 
-	firstServer := tc.Server(0).(*server.TestServer)
+	firstServer := tc.Server(0)
 
 	liveNodeID := firstServer.NodeID()
 
@@ -214,10 +203,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	log.Infof(ctx, "checking status map")
 
 	// See what comes up in the status.
-	admin, err := tc.GetAdminClient(ctx, t, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	admin := tc.GetAdminClient(t, 0)
 
 	type testCase struct {
 		nodeID         roachpb.NodeID
@@ -245,7 +231,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 				// doesn't allow durations below 1m15s, which is much too long
 				// for a test.
 				// We do this in every SucceedsSoon attempt, so we'll be good.
-				liveness.TimeUntilStoreDead.Override(ctx, &firstServer.ClusterSettings().SV, liveness.TestTimeUntilStoreDead)
+				liveness.TimeUntilNodeDead.Override(ctx, &firstServer.ClusterSettings().SV, liveness.TestTimeUntilNodeDead)
 
 				log.Infof(ctx, "checking expected status (%s) for node %d", expectedStatus, nodeID)
 				resp, err := admin.Liveness(ctx, &serverpb.LivenessRequest{})
@@ -279,14 +265,13 @@ func TestNodeLivenessDecommissionedCallback(t *testing.T) {
 	tArgs := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				OnDecommissionedCallback: func(rec livenesspb.Liveness) {
+				OnDecommissionedCallback: func(id roachpb.NodeID) {
 					cb.Lock()
 					if cb.m == nil {
 						cb.m = map[roachpb.NodeID]bool{}
 					}
-					cb.m[rec.NodeID] = rec.Membership == livenesspb.MembershipStatus_DECOMMISSIONED
+					cb.m[id] = true
 					cb.Unlock()
-
 				},
 			},
 		},
@@ -325,15 +310,30 @@ func TestNodeLivenessDecommissionedCallback(t *testing.T) {
 			}
 			return nil
 		})
-
 	}
 }
 
-// TestNodeLivenessNodeCount tests GetNodeCount() and GetNodeCountWithOverrides,
-// which are critical for computing the number of needed voters for a range.
-func TestNodeLivenessNodeCount(t *testing.T) {
+func getActiveNodes(nl *liveness.NodeLiveness) []roachpb.NodeID {
+	var nodes []roachpb.NodeID
+	for id, nv := range nl.ScanNodeVitalityFromCache() {
+		if !nv.IsDecommissioning() && !nv.IsDecommissioned() {
+			nodes = append(nodes, id)
+		}
+	}
+
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i] < nodes[j] })
+	return nodes
+}
+
+// TestGetActiveNodes tests ScanNodeVitalityFromCache() and is similar to the
+// code used within the store_pool for computing the number of active node.
+func TestGetActiveNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// This test starts a 5 node cluster and is prone to overload remote execution
+	// during race and deadlock builds.
+	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 
 	numNodes := 5
 	ctx := context.Background()
@@ -342,12 +342,15 @@ func TestNodeLivenessNodeCount(t *testing.T) {
 
 	// At this point StartTestCluster has waited for all nodes to become live.
 	nl1 := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness)
-	require.Equal(t, numNodes, nl1.GetNodeCount())
+	require.Equal(t, []roachpb.NodeID{1, 2, 3, 4, 5}, getActiveNodes(nl1))
 
 	// Mark n5 as decommissioning, which should reduce node count.
-	chg, err := nl1.SetMembershipStatus(ctx, 5, livenesspb.MembershipStatus_DECOMMISSIONING)
+	_, err := nl1.SetMembershipStatus(ctx, 5, livenesspb.MembershipStatus_DECOMMISSIONING)
 	require.NoError(t, err)
-	require.True(t, chg)
+	// Since we are already checking the expected membership status below, there
+	// is no benefit to additionally checking the returned statusChanged flag, as
+	// it can be inaccurate if the write experiences an AmbiguousResultError.
+	// Checking for nil error and the expected status is sufficient.
 	testutils.SucceedsSoon(t, func() error {
 		l, ok := nl1.GetLiveness(5)
 		if !ok || !l.Membership.Decommissioning() {
@@ -356,12 +359,11 @@ func TestNodeLivenessNodeCount(t *testing.T) {
 		numNodes -= 1
 		return nil
 	})
-	require.Equal(t, numNodes, nl1.GetNodeCount())
+	require.Equal(t, []roachpb.NodeID{1, 2, 3, 4}, getActiveNodes(nl1))
 
 	// Mark n5 as decommissioning -> decommissioned, which should not change node count.
-	chg, err = nl1.SetMembershipStatus(ctx, 5, livenesspb.MembershipStatus_DECOMMISSIONED)
+	_, err = nl1.SetMembershipStatus(ctx, 5, livenesspb.MembershipStatus_DECOMMISSIONED)
 	require.NoError(t, err)
-	require.True(t, chg)
 	testutils.SucceedsSoon(t, func() error {
 		l, ok := nl1.GetLiveness(5)
 		if !ok || !l.Membership.Decommissioned() {
@@ -369,20 +371,5 @@ func TestNodeLivenessNodeCount(t *testing.T) {
 		}
 		return nil
 	})
-	require.Equal(t, numNodes, nl1.GetNodeCount())
-
-	// Override n5 as decommissioning, which should not change node count.
-	overrides := map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
-		5: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
-	}
-	require.Equal(t, numNodes, nl1.GetNodeCountWithOverrides(nil))
-	require.Equal(t, numNodes, nl1.GetNodeCountWithOverrides(overrides))
-
-	// Override n4 as dead, which should not change node count.
-	overrides[4] = livenesspb.NodeLivenessStatus_DEAD
-	require.Equal(t, numNodes, nl1.GetNodeCountWithOverrides(overrides))
-
-	// Override n3 as decommissioning, which should reduce node count.
-	overrides[3] = livenesspb.NodeLivenessStatus_DECOMMISSIONING
-	require.Equal(t, numNodes-1, nl1.GetNodeCountWithOverrides(overrides))
+	require.Equal(t, []roachpb.NodeID{1, 2, 3, 4}, getActiveNodes(nl1))
 }

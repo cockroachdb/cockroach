@@ -25,18 +25,43 @@ var NilMetrics = (*Metrics)(nil)
 // Metrics encapsulates the metrics tracking interactions with cloud storage
 // providers.
 type Metrics struct {
+	// Readers counts the cloud storage readers opened.
+	Readers *metric.Counter
 	// ReadBytes counts the bytes read from cloud storage.
 	ReadBytes *metric.Counter
+	// Writers counts the cloud storage writers opened.
+	Writers *metric.Counter
 	// WriteBytes counts the bytes written to cloud storage.
 	WriteBytes *metric.Counter
+	// Listings counts the listing calls made to cloud storage.
+	Listings *metric.Counter
+	// ListingResults counts the listing results from cloud storage.
+	ListingResults *metric.Counter
+	// ConnsOpened, ConnsReused and TLSHandhakes track connection http info for cloud
+	// storage when collecting this info is enabled.
+	ConnsOpened, ConnsReused, TLSHandhakes *metric.Counter
 }
 
 // MakeMetrics returns a new instance of Metrics.
 func MakeMetrics() metric.Struct {
+	cloudReaders := metric.Metadata{
+		Name:        "cloud.readers_opened",
+		Help:        "Readers opened by all cloud operations",
+		Measurement: "Files",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
 	cloudReadBytes := metric.Metadata{
 		Name:        "cloud.read_bytes",
 		Help:        "Bytes read from all cloud operations",
 		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	cloudWriters := metric.Metadata{
+		Name:        "cloud.writers_opened",
+		Help:        "Writers opened by all cloud operations",
+		Measurement: "files",
 		Unit:        metric.Unit_BYTES,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
@@ -47,9 +72,51 @@ func MakeMetrics() metric.Struct {
 		Unit:        metric.Unit_BYTES,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
+	listings := metric.Metadata{
+		Name:        "cloud.listings",
+		Help:        "Listing operations by all cloud operations",
+		Measurement: "Calls",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	listingResults := metric.Metadata{
+		Name:        "cloud.listing_results",
+		Help:        "Listing results by all cloud operations",
+		Measurement: "Results",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	connsOpened := metric.Metadata{
+		Name:        "cloud.conns_opened",
+		Help:        "HTTP connections opened by cloud operations",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	connsReused := metric.Metadata{
+		Name:        "cloud.conns_reused",
+		Help:        "HTTP connections reused by cloud operations",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	tlsHandhakes := metric.Metadata{
+		Name:        "cloud.tls_handshakes",
+		Help:        "TLS handshakes done by cloud operations",
+		Measurement: "Handshakes",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
 	return &Metrics{
-		ReadBytes:  metric.NewCounter(cloudReadBytes),
-		WriteBytes: metric.NewCounter(cloudWriteBytes),
+		Readers:        metric.NewCounter(cloudReaders),
+		ReadBytes:      metric.NewCounter(cloudReadBytes),
+		Writers:        metric.NewCounter(cloudWriters),
+		WriteBytes:     metric.NewCounter(cloudWriteBytes),
+		Listings:       metric.NewCounter(listings),
+		ListingResults: metric.NewCounter(listingResults),
+		ConnsOpened:    metric.NewCounter(connsOpened),
+		ConnsReused:    metric.NewCounter(connsReused),
+		TLSHandhakes:   metric.NewCounter(tlsHandhakes),
 	}
 }
 
@@ -58,79 +125,41 @@ var _ metric.Struct = (*Metrics)(nil)
 // MetricStruct implements the metric.Struct interface.
 func (m *Metrics) MetricStruct() {}
 
-// MetricsRecorder is the interface that describes the methods that can be used
-// to mutate the metrics corresponding to cloud operations.
-type MetricsRecorder interface {
-	// RecordReadBytes records the bytes read.
-	RecordReadBytes(int64)
-	// RecordWriteBytes records the bytes written.
-	RecordWriteBytes(int64)
-	// Metrics returns the underlying Metrics struct.
-	Metrics() *Metrics
-}
-
-var _ MetricsRecorder = &Metrics{}
-
-// RecordReadBytes implements the MetricsRecorder interface.
-func (m *Metrics) RecordReadBytes(bytes int64) {
-	if m == nil {
-		return
-	}
-	m.ReadBytes.Inc(bytes)
-}
-
-// RecordWriteBytes implements the MetricsRecorder interface.
-func (m *Metrics) RecordWriteBytes(bytes int64) {
-	if m == nil {
-		return
-	}
-	m.WriteBytes.Inc(bytes)
-}
-
-// Metrics implements the MetricsRecorder interface.
-func (m *Metrics) Metrics() *Metrics {
-	return m
-}
-
-type metricsReadWriter struct {
-	metricsRecorder MetricsRecorder
-}
-
-func newMetricsReadWriter(m MetricsRecorder) ReadWriterInterceptor {
-	return &metricsReadWriter{metricsRecorder: m}
-}
-
 // Reader implements the ReadWriterInterceptor interface.
-func (m *metricsReadWriter) Reader(
+func (m *Metrics) Reader(
 	_ context.Context, _ ExternalStorage, r ioctx.ReadCloserCtx,
 ) ioctx.ReadCloserCtx {
+	if m == nil {
+		return r
+	}
+	m.Readers.Inc(1)
 	return &metricsReader{
-		inner:           r,
-		metricsRecorder: m.metricsRecorder,
+		inner: r,
+		m:     m,
 	}
 }
 
 // Writer implements the ReadWriterInterceptor interface.
-func (m *metricsReadWriter) Writer(
-	_ context.Context, _ ExternalStorage, w io.WriteCloser,
-) io.WriteCloser {
+func (m *Metrics) Writer(_ context.Context, _ ExternalStorage, w io.WriteCloser) io.WriteCloser {
+	if m == nil {
+		return w
+	}
+	m.Writers.Inc(1)
 	return &metricsWriter{
-		w:               w,
-		metricsRecorder: m.metricsRecorder,
+		w: w,
+		m: m,
 	}
 }
 
-var _ ReadWriterInterceptor = &metricsReadWriter{}
-
 type metricsReader struct {
-	inner           ioctx.ReadCloserCtx
-	metricsRecorder MetricsRecorder
+	inner ioctx.ReadCloserCtx
+	m     *Metrics
 }
 
 // Read implements the ioctx.ReadCloserCtx interface.
 func (mr *metricsReader) Read(ctx context.Context, p []byte) (int, error) {
 	n, err := mr.inner.Read(ctx, p)
-	mr.metricsRecorder.RecordReadBytes(int64(n))
+	mr.m.ReadBytes.Inc(int64(n))
 	return n, err
 }
 
@@ -140,14 +169,14 @@ func (mr *metricsReader) Close(ctx context.Context) error {
 }
 
 type metricsWriter struct {
-	w               io.WriteCloser
-	metricsRecorder MetricsRecorder
+	w io.WriteCloser
+	m *Metrics
 }
 
 // Write implements the WriteCloser interface.
 func (mw *metricsWriter) Write(p []byte) (int, error) {
 	n, err := mw.w.Write(p)
-	mw.metricsRecorder.RecordWriteBytes(int64(n))
+	mw.m.WriteBytes.Inc(int64(n))
 	return n, err
 }
 

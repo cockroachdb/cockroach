@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
 )
 
@@ -43,7 +42,7 @@ type JobRegistry interface {
 	MakeJobID() jobspb.JobID
 	CreateJobWithTxn(ctx context.Context, record jobs.Record, jobID jobspb.JobID, txn isql.Txn) (*jobs.Job, error)
 	UpdateJobWithTxn(
-		ctx context.Context, jobID jobspb.JobID, txn isql.Txn, useReadLock bool, updateFunc jobs.UpdateFn,
+		ctx context.Context, jobID jobspb.JobID, txn isql.Txn, updateFunc jobs.UpdateFn,
 	) error
 	CheckPausepoint(name string) error
 }
@@ -130,8 +129,7 @@ func (t nameEntry) GetID() descpb.ID {
 func (d *txnDeps) UpdateSchemaChangeJob(
 	ctx context.Context, id jobspb.JobID, callback scexec.JobUpdateCallback,
 ) error {
-	const useReadLock = false
-	return d.jobRegistry.UpdateJobWithTxn(ctx, id, d.txn, useReadLock, func(
+	return d.jobRegistry.UpdateJobWithTxn(ctx, id, d.txn, func(
 		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
 		return callback(md, ju.UpdateProgress, ju.UpdatePayload)
@@ -238,6 +236,13 @@ func (d *txnDeps) Run(ctx context.Context) error {
 	return nil
 }
 
+// InitializeSequence implements the scexec.Caatalog interface.
+func (d *txnDeps) InitializeSequence(id descpb.ID, startVal int64) {
+	batch := d.getOrCreateBatch()
+	sequenceKey := d.codec.SequenceKey(uint32(id))
+	batch.Inc(sequenceKey, startVal)
+}
+
 // Reset implements the scexec.Catalog interface.
 func (d *txnDeps) Reset(ctx context.Context) error {
 	d.descsCollection.ResetUncommitted(ctx)
@@ -270,10 +275,6 @@ func (d *txnDeps) MakeJobID() jobspb.JobID {
 
 func (d *txnDeps) CheckPausepoint(name string) error {
 	return d.jobRegistry.CheckPausepoint(name)
-}
-
-func (d *txnDeps) UseLegacyGCJob(ctx context.Context) bool {
-	return !storage.CanUseMVCCRangeTombstones(ctx, d.settings)
 }
 
 func (d *txnDeps) SchemaChangerJobID() jobspb.JobID {

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -45,8 +44,7 @@ func TestCleanupSchemaObjects(t *testing.T) {
 	defer lease.TestingDisableTableLeases()()
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	conn, err := db.Conn(ctx)
@@ -153,7 +151,7 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 	}
 	settings := cluster.MakeTestingClusterSettings()
 	TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Microsecond)
-	tc := serverutils.StartNewTestCluster(
+	tc := serverutils.StartCluster(
 		t,
 		numNodes,
 		base.TestClusterArgs{
@@ -233,7 +231,7 @@ func TestTemporarySchemaDropDatabase(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	numNodes := 3
-	tc := serverutils.StartNewTestCluster(
+	tc := serverutils.StartCluster(
 		t,
 		numNodes,
 		base.TestClusterArgs{

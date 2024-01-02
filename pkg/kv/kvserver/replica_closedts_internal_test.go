@@ -668,7 +668,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 			// Write an intent.
-			txn := roachpb.MakeTransaction("test", intentKey, 0, 0, intentTS, 0, 0)
+			txn := roachpb.MakeTransaction("test", intentKey, 0, 0, intentTS, 0, 0, 0, false /* omitInRangefeeds */)
 			{
 				pArgs := putArgs(intentKey, []byte("val"))
 				assignSeqNumsForReqs(&txn, &pArgs)
@@ -713,7 +713,7 @@ func TestQueryResolvedTimestampResolvesAbandonedIntents(t *testing.T) {
 
 	// Write an intent.
 	key := roachpb.Key("a")
-	txn := roachpb.MakeTransaction("test", key, 0, 0, ts10, 0, 0)
+	txn := roachpb.MakeTransaction("test", key, 0, 0, ts10, 0, 0, 0, false /* omitInRangefeeds */)
 	pArgs := putArgs(key, []byte("val"))
 	assignSeqNumsForReqs(&txn, &pArgs)
 	_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), kvpb.Header{Txn: &txn}, &pArgs)
@@ -847,7 +847,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				minTSBound: ts20,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
-					"conflicting intents on .*",
+					"conflicting locks on .*",
 				),
 			},
 			{
@@ -856,7 +856,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				minTSBound: ts30,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
-					"conflicting intents on .*",
+					"conflicting locks on .*",
 				),
 			},
 			{
@@ -865,7 +865,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				minTSBound: ts40,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
-					"conflicting intents on .*",
+					"conflicting locks on .*",
 				),
 			},
 			{
@@ -880,7 +880,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				minTSBound: ts20,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
-					"conflicting intents on .*",
+					"conflicting locks on .*",
 				),
 			},
 			{
@@ -889,7 +889,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				minTSBound: ts30,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
-					"conflicting intents on .*",
+					"conflicting locks on .*",
 				),
 			},
 			{
@@ -898,7 +898,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				minTSBound: ts40,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
-					"conflicting intents on .*",
+					"conflicting locks on .*",
 				),
 			},
 			{
@@ -976,7 +976,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 				// Write an intent.
-				txn := roachpb.MakeTransaction("test", intentKey, 0, 0, intentTS, 0, 0)
+				txn := roachpb.MakeTransaction("test", intentKey, 0, 0, intentTS, 0, 0, 0, false /* omitInRangefeeds */)
 				pArgs := putArgs(intentKey, []byte("val"))
 				assignSeqNumsForReqs(&txn, &pArgs)
 				_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), kvpb.Header{Txn: &txn}, &pArgs)
@@ -1062,7 +1062,7 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 			send(kvpb.Header{Timestamp: makeTS(ts)}, &pArgs)
 		}
 		writeIntent := func(k string, ts int64) {
-			txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, 0, makeTS(ts), 0, 0)
+			txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, 0, makeTS(ts), 0, 0, 0, false /* omitInRangefeeds */)
 			pArgs := putArgs(roachpb.Key(k), val)
 			assignSeqNumsForReqs(&txn, &pArgs)
 			send(kvpb.Header{Txn: &txn}, &pArgs)

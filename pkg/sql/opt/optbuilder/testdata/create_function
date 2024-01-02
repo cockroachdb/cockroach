@@ -54,7 +54,7 @@ create-function
  ├── CREATE FUNCTION f()
  │   	RETURNS STRING
  │   	LANGUAGE SQL
- │   	AS $$SELECT 'MON'::STRING;$$
+ │   	AS $$SELECT x'40':::@100001::STRING;$$
  └── dependencies
       └── workday
 
@@ -102,7 +102,7 @@ create-function
  │   	RETURNS INT8
  │   	LANGUAGE SQL
  │   	AS $$SELECT a FROM t.public.ab;
- │   SELECT nextval('s');$$
+ │   SELECT nextval('s':::STRING);$$
  └── dependencies
       ├── ab [columns: a]
       └── s

@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -7,7 +6,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/raftlog",
         "//pkg/roachpb",
         "//pkg/settings",
@@ -15,6 +18,7 @@ go_library(
         "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
+        "//pkg/util/grunning",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
@@ -23,5 +27,3 @@ go_library(
         "@io_etcd_go_raft_v3//raftpb",
     ],
 )
-
-get_x_data(name = "get_x_data")

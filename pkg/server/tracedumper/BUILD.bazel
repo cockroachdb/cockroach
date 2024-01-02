@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -11,11 +10,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/server/dumpstore",
-        "//pkg/settings",
-        "//pkg/settings/cluster",
         "//pkg/sql/isql",
         "//pkg/util/log",
-        "//pkg/util/timeutil",
         "//pkg/util/tracing/zipper",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -27,15 +23,14 @@ go_test(
         "main_test.go",
         "tracedumper_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":tracedumper"],
     deps = [
+        "//pkg/base",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/dumpstore",
         "//pkg/sql/isql",
-        "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
@@ -44,5 +39,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

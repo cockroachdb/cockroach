@@ -144,9 +144,12 @@ accept requests.`,
 
 	// TODO(knz): Remove this once https://github.com/cockroachdb/cockroach/issues/84604
 	// is addressed.
-	SecondaryTenantPortOffset = FlagInfo{
-		Name:        "secondary-tenant-port-offset",
-		Description: "TCP port number offset to use for the secondary in-memory tenant.",
+	ApplicationInternalRPCPortRange = FlagInfo{
+		Name: "internal-rpc-port-range",
+		Description: `
+TCP port range to use for the internal RPC service for application-level servers.
+This service is used for node-to-node RPC traffic and to serve data for 'debug zip'.
+`,
 	}
 
 	SQLMem = FlagInfo{
@@ -381,8 +384,8 @@ shell. This flag may be specified multiple times.`,
 	TableDisplayFormat = FlagInfo{
 		Name: "format",
 		Description: `
-Selects how to display table rows in results. Possible values: tsv,
-csv, table, records, sql, raw, html. If left unspecified, defaults to
+Selects how to display table rows in results. Possible values: tsv, csv,
+table, records, ndjson, json, sql, html, raw. If left unspecified, defaults to
 tsv for non-interactive sessions and table for interactive sessions.`,
 	}
 
@@ -777,8 +780,8 @@ Disable use of "external" IO, such as to S3, GCS, or the file system (nodelocal)
 	ExternalIOEnableNonAdminImplicitAndArbitraryOutbound = FlagInfo{
 		Name: "external-io-enable-non-admin-implicit-access",
 		Description: `
-Allow non-admin users to specify arbitrary network addressses (e.g. https:// URIs or custom endpoints in s3:// URIs) and 
-implicit credentials (machine account/role providers) when running operations like IMPORT/EXPORT/BACKUP/etc. 
+Allow non-admin users to specify arbitrary network addressses (e.g. https:// URIs or custom endpoints in s3:// URIs) and
+implicit credentials (machine account/role providers) when running operations like IMPORT/EXPORT/BACKUP/etc.
 Note: that --external-io-disable-http or --external-io-disable-implicit-credentials still apply, this only removes the admin-user requirement.`,
 	}
 
@@ -1022,6 +1025,29 @@ which use 'cockroach-data-tenant-X' for tenant 'X')
 Storage engine to use for all stores on this cockroach node. The only option is pebble. Deprecated;
 only present for backward compatibility.
 `,
+	}
+
+	SecondaryCache = FlagInfo{
+		Name: "experimental-secondary-cache",
+		Description: `
+Enables the use of a secondary cache to store objects from shared storage (see
+--experimental-shared-storage) inside local paths for each store. A size must
+be specified with this flag, which will be the maximum size for the secondary
+cache on each store on this node:
+<PRE>
+
+  --experimental-secondary-cache=20GiB
+
+</PRE>
+The size can be given in various ways:
+<PRE>
+
+  --experimental-secondary-cache=10000000000     -> 10000000000 bytes
+  --experimental-secondary-cache=20GB            -> 20000000000 bytes
+  --experimental-secondary-cache=20GiB           -> 21474836480 bytes
+  --experimental-secondary-cache=20%             -> 20% of available space
+  --experimental-secondary-cache=0.2             -> 20% of available space
+  --experimental-secondary-cache=.2              -> 20% of available space</PRE>`,
 	}
 
 	SharedStorage = FlagInfo{
@@ -1624,7 +1650,7 @@ this flag is applied.`,
 	ZipRedactLogs = FlagInfo{
 		Name: "redact-logs",
 		Description: `
-DEPRECATED: Redact text that may contain confidential data or PII from 
+DEPRECATED: Redact text that may contain confidential data or PII from
 retrieved log entries.
 <PRE>
 
@@ -1647,8 +1673,36 @@ necessary to support CockroachDB.
 	ZipIncludeRangeInfo = FlagInfo{
 		Name: "include-range-info",
 		Description: `
-Include information about each individual range in nodes/*/ranges/*.json files.
-For large clusters, this can dramatically increase debug zip size/file count.
+Include one file per node with information about the KV ranges stored on that node, 
+in nodes/{node ID}/ranges.json. This information can be vital when debugging issues 
+that involve the KV storage layer, such as data placement, load balancing, performance 
+or other behaviors. In certain situations, on large clusters with large numbers of ranges, 
+these files can be omitted if and only if the issue being investigated is already known to
+be in another layer of the system (for example, an error message about an unsupported 
+feature or incompatible value in a SQL schema change or statement). Note however many 
+higher-level issues are ultimately related to the underlying KV storage layer described 
+by these files so only set this to false if directed to do so by Cockroach Labs support.
+`,
+	}
+
+	ZipIncludeGoroutineStacks = FlagInfo{
+		Name: "include-goroutine-stacks",
+		Description: `
+Fetch stack traces for all goroutines running on each targeted node in nodes/*/stacks.txt
+and nodes/*/stacks_with_labels.txt files. Note that fetching stack traces for all goroutines is
+a "stop-the-world" operation, which can momentarily have negative impacts on SQL service
+latency. Note that any periodic goroutine dumps previously taken on the node will still be
+included in nodes/*/goroutines/*.txt.gz, as these would have already been generated and don't
+require any additional stop-the-world operations to be collected.
+`,
+	}
+
+	ZipIncludeRunningJobTraces = FlagInfo{
+		Name: "include-running-job-traces",
+		Description: `
+Include information about each running, traceable job in jobs/*/*/trace.zip
+files. This involves collecting cluster-wide traces for each running job in the
+cluster.
 `,
 	}
 
@@ -1690,7 +1744,7 @@ dependencies on other tables.
 	ImportMaxRowSize = FlagInfo{
 		Name: "max-row-size",
 		Description: `
-Override limits on line size when importing Postgres dump files. This setting 
+Override limits on line size when importing Postgres dump files. This setting
 may need to be tweaked if the Postgres dump file has extremely long lines.
 `,
 	}
@@ -1811,7 +1865,7 @@ without any other details.
 	ExportDestination = FlagInfo{
 		Name: "destination",
 		Description: `
-The destination to export data. 
+The destination to export data.
 If the export format is readable and this flag left unspecified,
 defaults to display the exported data in the terminal output.
 `,
@@ -1820,7 +1874,7 @@ defaults to display the exported data in the terminal output.
 	ExportTableFormat = FlagInfo{
 		Name: "format",
 		Description: `
-Selects the format to export table rows from backups. 
+Selects the format to export table rows from backups.
 Only csv is supported at the moment.
 `,
 	}
@@ -1833,9 +1887,9 @@ Only csv is supported at the moment.
 	StartKey = FlagInfo{
 		Name: "start-key",
 		Description: `
-Start key and format as [<format>:]<key>. Supported formats: raw, hex, bytekey. 
+Start key and format as [<format>:]<key>. Supported formats: raw, hex, bytekey.
 The raw format supports escaped text. For example, "raw:\x01k" is
-the prefix for range local keys. 
+the prefix for range local keys.
 The bytekey format does not require table-key prefix.`,
 	}
 
@@ -1870,7 +1924,7 @@ host, or a full well-formed URI.
 </PRE>
 If a destination is not specified, the default URI scheme and host will be used,
 and the basename from the source will be used as the destination directory.
-For example: 'userfile://defaultdb.public.userfiles_root/yourdirectory' 
+For example: 'userfile://defaultdb.public.userfiles_root/yourdirectory'
 <PRE>
 
 </PRE>

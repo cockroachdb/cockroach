@@ -4,5 +4,5 @@ echo
   b := &kv.Batch{}
   b.Put(tk(1), sv(21)) // <nil>
   b.DelRange(tk(2), tk(3), true /* @s22 */) // <nil>
-  db1.Run(ctx, b) // @<ts> <nil>
+  db0.Run(ctx, b) // @<ts> <nil>
 }

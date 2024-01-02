@@ -66,6 +66,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/ttycolor"
@@ -97,8 +99,13 @@ Create a ballast file to fill the store directory up to a given amount
 
 // PopulateStorageConfigHook is a callback set by CCL code.
 // It populates any needed fields in the StorageConfig.
-// It must do nothing in OSS code.
+// It must stay unset in OSS code.
 var PopulateStorageConfigHook func(*base.StorageConfig) error
+
+// EncryptedStorePathsHook is a callback set by CCL code.
+// It returns the store paths that are encrypted.
+// It must stay unset in OSS code.
+var EncryptedStorePathsHook func() []string
 
 func parsePositiveInt(arg string) (int64, error) {
 	i, err := strconv.ParseInt(arg, 10, 64)
@@ -357,13 +364,15 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		splitScan = true
 		endKey = keys.LocalMax
 	}
-	if err := db.MVCCIterate(debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind,
-		storage.IterKeyTypePointsAndRanges, iterFunc); err != nil {
+	if err := db.MVCCIterate(
+		cmd.Context(), debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind,
+		storage.IterKeyTypePointsAndRanges, storage.UnknownReadCategory, iterFunc); err != nil {
 		return err
 	}
 	if splitScan {
-		if err := db.MVCCIterate(keys.LocalMax, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind,
-			storage.IterKeyTypePointsAndRanges, iterFunc); err != nil {
+		if err := db.MVCCIterate(cmd.Context(), keys.LocalMax, debugCtx.endKey.Key,
+			storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsAndRanges,
+			storage.UnknownReadCategory, iterFunc); err != nil {
 			return err
 		}
 	}
@@ -462,7 +471,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	desc, err := loadRangeDescriptor(db, rangeID)
+	desc, err := loadRangeDescriptor(cmd.Context(), db, rangeID)
 	if err != nil {
 		return err
 	}
@@ -471,7 +480,8 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	defer snapshot.Close()
 
 	var results int
-	return rditer.IterateReplicaKeySpans(&desc, snapshot, debugCtx.replicated,
+	return rditer.IterateReplicaKeySpans(cmd.Context(), &desc, snapshot, debugCtx.replicated,
+		rditer.ReplicatedSpansAll,
 		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
 				switch keyType {
@@ -519,7 +529,7 @@ Prints all range descriptors in a store with a history of changes.
 }
 
 func loadRangeDescriptor(
-	db storage.Engine, rangeID roachpb.RangeID,
+	ctx context.Context, db storage.Engine, rangeID roachpb.RangeID,
 ) (roachpb.RangeDescriptor, error) {
 	var desc roachpb.RangeDescriptor
 	handleKV := func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
@@ -556,8 +566,9 @@ func loadRangeDescriptor(
 	end := keys.LocalRangeMax
 
 	// NB: Range descriptor keys can have intents.
-	if err := db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind,
-		storage.IterKeyTypePointsOnly, handleKV); err != nil {
+	if err := db.MVCCIterate(
+		ctx, start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+		storage.UnknownReadCategory, handleKV); err != nil {
 		return roachpb.RangeDescriptor{}, err
 	}
 	if desc.RangeID == rangeID {
@@ -579,7 +590,8 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	end := keys.LocalRangeMax
 
 	// NB: Range descriptor keys can have intents.
-	return db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+	return db.MVCCIterate(cmd.Context(), start, end, storage.MVCCKeyAndIntentsIterKind,
+		storage.IterKeyTypePointsOnly, storage.UnknownReadCategory,
 		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 			if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
 				return nil
@@ -704,8 +716,8 @@ The default value for --schema is 'cockroach.sql.sqlbase.Descriptor'.
 For example:
 
 $ cat debug/system.descriptor.txt | cockroach debug decode-proto
-id	descriptor	hex_descriptor
-1	\022!\012\006system\020\001\032\025\012\011\012\005admin\0200\012\010\012\004root\0200	{"database": {"id": 1, "modificationTime": {}, "name": "system", "privileges": {"users": [{"privileges": 48, "user": "admin"}, {"privileges": 48, "user": "root"}]}}}
+id	descriptor
+1	{"database": {"id": 1, "modificationTime": {}, "name": "system", "privileges": {"users": [{"privileges": 48, "user": "admin"}, {"privileges": 48, "user": "root"}]}}}
 ...
 
 decode-proto can be used to decode protos as captured by Chrome Dev
@@ -756,7 +768,8 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 		string(storage.EncodeMVCCKey(storage.MakeMVCCMetadataKey(end))))
 
 	// NB: raft log does not have intents.
-	return db.MVCCIterate(start, end, storage.MVCCKeyIterKind, storage.IterKeyTypePointsOnly,
+	return db.MVCCIterate(cmd.Context(), start, end, storage.MVCCKeyIterKind,
+		storage.IterKeyTypePointsOnly, storage.UnknownReadCategory,
 		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 			kvserver.PrintMVCCKeyValue(kv)
 			return nil
@@ -786,14 +799,14 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 
 	var rangeID roachpb.RangeID
 	gcTTL := 24 * time.Hour
-	intentAgeThreshold := gc.IntentAgeThreshold.Default()
-	intentBatchSize := gc.MaxIntentsPerCleanupBatch.Default()
+	lockAgeThreshold := gc.LockAgeThreshold.Default()
+	lockBatchSize := gc.MaxLocksPerCleanupBatch.Default()
 	txnCleanupThreshold := gc.TxnCleanupThreshold.Default()
 
 	if len(args) > 3 {
 		var err error
-		if intentAgeThreshold, err = parsePositiveDuration(args[3]); err != nil {
-			return errors.Wrapf(err, "unable to parse %v as intent age threshold", args[3])
+		if lockAgeThreshold, err = parsePositiveDuration(args[3]); err != nil {
+			return errors.Wrapf(err, "unable to parse %v as lock age threshold", args[3])
 		}
 	}
 	if len(args) > 2 {
@@ -858,12 +871,12 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 			&desc, snap,
 			now, thresh,
 			gc.RunOptions{
-				IntentAgeThreshold:              intentAgeThreshold,
-				MaxIntentsPerIntentCleanupBatch: intentBatchSize,
-				TxnCleanupThreshold:             txnCleanupThreshold,
+				LockAgeThreshold:              lockAgeThreshold,
+				MaxLocksPerIntentCleanupBatch: lockBatchSize,
+				TxnCleanupThreshold:           txnCleanupThreshold,
 			},
 			gcTTL, gc.NoopGCer{},
-			func(_ context.Context, _ []roachpb.Intent) error { return nil },
+			func(_ context.Context, _ []roachpb.Lock) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction) error { return nil },
 		)
 		if err != nil {
@@ -935,7 +948,7 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	}
 
 	{
-		approxBytesBefore, err := db.ApproximateDiskBytes(roachpb.KeyMin, roachpb.KeyMax)
+		approxBytesBefore, _, _, err := db.ApproximateDiskBytes(roachpb.KeyMin, roachpb.KeyMax)
 		if err != nil {
 			return errors.Wrap(err, "while computing approximate size before compaction")
 		}
@@ -965,7 +978,7 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	fmt.Printf("%s\n", db.GetMetrics())
 
 	{
-		approxBytesAfter, err := db.ApproximateDiskBytes(roachpb.KeyMin, roachpb.KeyMax)
+		approxBytesAfter, _, _, err := db.ApproximateDiskBytes(roachpb.KeyMin, roachpb.KeyMax)
 		if err != nil {
 			return errors.Wrap(err, "while computing approximate size after compaction")
 		}
@@ -1271,10 +1284,13 @@ func runDebugIntentCount(cmd *cobra.Command, args []string) error {
 		}
 	})
 
-	iter := db.NewEngineIterator(storage.IterOptions{
+	iter, err := db.NewEngineIterator(ctx, storage.IterOptions{
 		LowerBound: keys.LockTableSingleKeyStart,
 		UpperBound: keys.LockTableSingleKeyEnd,
 	})
+	if err != nil {
+		return err
+	}
 	defer iter.Close()
 	seekKey := storage.EngineKey{Key: keys.LockTableSingleKeyStart}
 
@@ -1383,7 +1399,7 @@ func (m lockValueFormatter) Format(f fmt.State, c rune) {
 // It is necessary because an FS must be passed to tool.New before
 // the command line flags are parsed (i.e. before we can determine
 // if we have an encrypted FS).
-var pebbleToolFS = &swappableFS{vfs.Default}
+var pebbleToolFS = &autoDecryptFS{}
 
 func init() {
 	DebugCmd.AddCommand(debugCmds...)
@@ -1411,7 +1427,16 @@ func init() {
 	pebbleTool := tool.New(
 		tool.Mergers(storage.MVCCMerger),
 		tool.DefaultComparer(storage.EngineComparer),
-		tool.FS(&absoluteFS{pebbleToolFS}),
+		tool.FS(pebbleToolFS),
+		tool.OpenErrEnhancer(func(err error) error {
+			if pebble.IsCorruptionError(err) {
+				// None of the wrappers provided by the error library allow adding a
+				// message that shows up with "%s" after the original message.
+				// nolint:errwrap
+				return errors.Newf("%v\nIf this is an encrypted store, make sure the correct encryption key is set.", err)
+			}
+			return err
+		}),
 	)
 	DebugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	f := DebugPebbleCmd.PersistentFlags()
@@ -1517,9 +1542,12 @@ func init() {
 	f.Var(&debugLogChanSel, "only-channels", "selection of channels to include in the output diagram.")
 
 	f = debugTimeSeriesDumpCmd.Flags()
-	f.Var(&debugTimeSeriesDumpOpts.format, "format", "output format (text, csv, tsv, raw)")
+	f.Var(&debugTimeSeriesDumpOpts.format, "format", "output format (text, csv, tsv, raw, openmetrics)")
 	f.Var(&debugTimeSeriesDumpOpts.from, "from", "oldest timestamp to include (inclusive)")
 	f.Var(&debugTimeSeriesDumpOpts.to, "to", "newest timestamp to include (inclusive)")
+	f.StringVar(&debugTimeSeriesDumpOpts.clusterLabel, "cluster-label",
+		"", "prometheus label for cluster name")
+	f.StringVar(&debugTimeSeriesDumpOpts.yaml, "yaml", debugTimeSeriesDumpOpts.yaml, "full path to create the tsdump.yaml with storeID: nodeID mappings (raw format only). This file is required when loading the raw tsdump for troubleshooting.")
 
 	f = debugSendKVBatchCmd.Flags()
 	f.StringVar(&debugSendKVBatchContext.traceFormat, "trace", debugSendKVBatchContext.traceFormat,
@@ -1554,34 +1582,38 @@ func initPebbleCmds(cmd *cobra.Command, pebbleTool *tool.T) {
 				if err != nil {
 					return err
 				}
-				pebbleTool.EnableSharedStorage(storage.MakeExternalStorageWrapper(context.Background(), es))
+				wrapper := storage.MakeExternalStorageWrapper(context.Background(), es)
+				factory := remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
+					"": wrapper,
+				})
+				pebbleTool.ConfigureSharedStorage(factory, remote.CreateOnSharedLower, "" /* createOnSharedLocator */)
 			}
-			return pebbleCryptoInitializer()
+			pebbleCryptoInitializer(cmd.Context())
+			return nil
 		}
 		initPebbleCmds(c, pebbleTool)
 	}
 }
 
-func pebbleCryptoInitializer() error {
-	storageConfig := base.StorageConfig{
-		Settings: serverCfg.Settings,
-		Dir:      serverCfg.Stores.Specs[0].Path,
-	}
+func pebbleCryptoInitializer(ctx context.Context) {
+	if EncryptedStorePathsHook != nil && PopulateStorageConfigHook != nil {
+		encryptedPaths := EncryptedStorePathsHook()
+		resolveFn := func(dir string) (vfs.FS, error) {
+			storageConfig := base.StorageConfig{
+				Settings: serverCfg.Settings,
+				Dir:      dir,
+			}
+			if err := PopulateStorageConfigHook(&storageConfig); err != nil {
+				return nil, err
+			}
+			_, encryptedEnv, err := storage.ResolveEncryptedEnvOptions(
+				ctx, &storageConfig, vfs.Default, false /* readOnly */)
+			if err != nil {
+				return nil, err
+			}
+			return encryptedEnv.FS, nil
 
-	if PopulateStorageConfigHook != nil {
-		if err := PopulateStorageConfigHook(&storageConfig); err != nil {
-			return err
 		}
+		pebbleToolFS.Init(encryptedPaths, resolveFn)
 	}
-
-	_, encryptedEnv, err := storage.ResolveEncryptedEnvOptions(&storageConfig, vfs.Default, false /* readOnly */)
-	if err != nil {
-		return err
-	}
-	if encryptedEnv != nil {
-		pebbleToolFS.set(encryptedEnv.FS)
-	} else {
-		pebbleToolFS.set(vfs.Default)
-	}
-	return nil
 }

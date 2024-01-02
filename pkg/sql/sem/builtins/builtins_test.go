@@ -14,8 +14,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"math/bits"
 	"math/rand"
+	"sort"
+	"strconv"
 	"testing"
 	"time"
 
@@ -31,12 +34,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/constraints"
 )
 
 func TestCategory(t *testing.T) {
@@ -79,43 +82,195 @@ func TestGenerateUniqueIDOrder(t *testing.T) {
 	}
 }
 
-// TestMapToUniqueUnorderedID verifies that the mapping preserves the ones count.
-func TestMapToUniqueUnorderedID(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	for i := 0; i < 30; i++ {
-		// RandInput is [0][63 random bits].
-		randInput := uint64(rand.Int63())
-		output := mapToUnorderedUniqueInt(randInput)
+// sorterWithSwapCount implements sort.Interface and wraps a slice of data
+// with a counter that tracks the number of swaps performed during sorting.
+type sorterWithSwapCount[T constraints.Ordered] struct {
+	data      []T
+	swapCount int
+}
 
-		inputOnesCount := bits.OnesCount64(randInput)
-		outputOnesCount := bits.OnesCount64(output)
-		require.Equalf(t, inputOnesCount, outputOnesCount, "input: %b, output: "+
-			"%b\nExpected: %d, got: %d", randInput, output, inputOnesCount,
-			outputOnesCount)
+func (s *sorterWithSwapCount[_]) Len() int {
+	return len(s.data)
+}
+
+func (s *sorterWithSwapCount[_]) Less(i, j int) bool {
+	return s.data[i] < s.data[j]
+}
+
+func (s *sorterWithSwapCount[_]) Swap(i, j int) {
+	s.data[i], s.data[j] = s.data[j], s.data[i]
+	s.swapCount += 1
+}
+
+var _ sort.Interface = &sorterWithSwapCount[tree.DInt]{}
+
+// TestGenerateUniqueUnorderedIDOrder verifies the expected lack of ordering
+// for IDs produced by GenerateUniqueUnorderedID.
+func TestGenerateUniqueUnorderedIDOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Our null hypothesis is that the mean number of swaps required to sort a
+	// slice of generated IDs is the same as the mean number of swaps required to
+	// sort a slice (of the same length) of random numbers.
+	//
+	// We determined experimentally (by using the same test as below but with
+	// rand.Int63() instead of GenerateUniqueUnorderedID and numTrials = 100000)
+	// that the number of swaps required to sort a slice of 101 (numGensPerTrial)
+	// random numbers fits a normal distribution with the following mean and
+	// standard deviation:
+	const (
+		distMean   = 271
+		distStdDev = 21
+	)
+
+	// We test our null hypothesis by running 100 trials and then performing
+	// a z-test (https://en.wikipedia.org/wiki/Z-test) for the observed mean
+	// number of swaps.
+	const (
+		numTrials       = 100
+		numGensPerTrial = 101
+	)
+
+	// We then compare it against the critical value of +-2.58,
+	// which corresponds to a confidence level of 99%.
+	const (
+		confidenceLevel = 0.99
+		pValue          = 1 - confidenceLevel
+		criticalVal     = 2.58
+	)
+
+	// Run trials.
+	swapCounts := make([]int, numTrials)
+	{
+		for i := 0; i < numTrials; i++ {
+			gens := make([]tree.DInt, numGensPerTrial)
+			for i := range gens {
+				gens[i] = GenerateUniqueUnorderedID(1 /* instanceID */)
+			}
+			s := &sorterWithSwapCount[tree.DInt]{
+				data: gens,
+			}
+			sort.Sort(s)
+			swapCounts[i] = s.swapCount
+		}
+
+		t.Logf("swap counts: %#v", swapCounts)
+	}
+
+	// Compute z-score.
+	var zScore float64
+	{
+		swapCountsSum := 0
+		for _, c := range swapCounts {
+			swapCountsSum += c
+		}
+		swapCountsMean := float64(swapCountsSum) / float64(numTrials)
+
+		t.Logf("mean: %f", swapCountsMean)
+
+		stdErr := float64(distStdDev) / math.Sqrt(numTrials)
+		zScore = (swapCountsMean - float64(distMean)) / stdErr
+
+		t.Logf("z-score: %f", zScore)
+	}
+
+	// Compare z-score to critical value.
+	if zScore < -criticalVal || zScore > criticalVal {
+		t.Fatalf("there is evidence that the generated IDs are not unordered (p < %s)",
+			strconv.FormatFloat(pValue, 'f' /* fmt */, -1 /* prec */, 64 /* bitSize */))
 	}
 }
 
+func TestMapToUnorderedUniqueInt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("preserves number of one bits", func(t *testing.T) {
+		for i := 0; i < 30; i++ {
+			// RandInput is [0][63 random bits].
+			randInput := uint64(rand.Int63())
+			output := mapToUnorderedUniqueInt(randInput)
+
+			inputOnesCount := bits.OnesCount64(randInput)
+			outputOnesCount := bits.OnesCount64(output)
+			require.Equalf(t, inputOnesCount, outputOnesCount, "input: %b, output: "+
+				"%b\nExpected: %d, got: %d", randInput, output, inputOnesCount,
+				outputOnesCount)
+		}
+	})
+
+	t.Run("correctly reverses timestamp", func(t *testing.T) {
+		for name, tc := range map[string]struct {
+			input    uint64
+			expected uint64
+		}{
+			"asymmetrical timestamp": {
+				input:    0b0101100000000000000000000000000000000000000000000000000000000001,
+				expected: 0b0000000000000000000000000000000000000000000001101000000000000001,
+			},
+			"symmetrical timestamp": {
+				input:    0b0100000000000000000000000000000000000000000000001000000000000101,
+				expected: 0b0100000000000000000000000000000000000000000000001000000000000101,
+			},
+			"max timestamp": {
+				input:    0b0111111111111111111111111111111111111111111111111000000000000001,
+				expected: 0b0111111111111111111111111111111111111111111111111000000000000001,
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				actual := mapToUnorderedUniqueInt(tc.input)
+				require.Equalf(t,
+					tc.expected, actual,
+					"actual unordered unique int does not match expected:\n"+
+						"%064b (expected)\n"+
+						"%064b (actual)",
+					tc.expected, actual,
+				)
+			})
+		}
+	})
+}
+
 // TestSerialNormalizationWithUniqueUnorderedID makes sure that serial
-// normalization can use unique_unordered_id() and a split in a table followed
-// by insertions guarantees a (somewhat) uniform distribution of the data.
+// normalization can use the unordered_rowid mode and a large number of
+// insertions (80k) results in a (somewhat) uniform distribution of the data.
 func TestSerialNormalizationWithUniqueUnorderedID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "the test is too slow and the goodness of fit test "+
 		"assumes large N")
+	skip.UnderDeadlock(t, "the test is too slow")
 
 	ctx := context.Background()
-	const attempts = 2
-	// This test can flake when the random data is not distributed evenly.
-	err := retry.WithMaxAttempts(ctx, retry.Options{}, attempts, func() error {
 
-		params := base.TestServerArgs{}
-		s, db, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(ctx)
+	// Since this is a statistical test, an occasional observation of non-uniformity
+	// is not in and of itself a huge concern. As such, we'll only fail the test if
+	// a majority of our observations show statistically significant amounts of
+	// non-uniformity.
+	const numObservations = 10
+	numNonUniformObservations := 0
+	for i := 0; i < numObservations; i++ {
+		// We use an anonymous function because of the defer in each iteration.
+		func() {
+			t.Logf("starting observation %d", i)
 
-		tdb := sqlutils.MakeSQLRunner(db)
-		// Create a new table with serial primary key i (unordered_rowid) and int j (index).
-		tdb.Exec(t, `
+			params := base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					SQLEvalContext: &eval.TestingKnobs{
+						// We disable the randomization of some batch sizes because
+						// with some low values the test takes much longer.
+						ForceProductionValues: true,
+					},
+				},
+			}
+			s, db, _ := serverutils.StartServer(t, params)
+			defer s.Stopper().Stop(ctx)
+
+			tdb := sqlutils.MakeSQLRunner(db)
+			// Create a new table with serial primary key i (unordered_rowid) and int j (index).
+			tdb.Exec(t, `
 SET serial_normalization TO 'unordered_rowid';
 CREATE DATABASE t;
 USE t;
@@ -124,30 +279,29 @@ CREATE TABLE t (
   j INT
 )`)
 
-		numberOfRows := 10000
-
-		// Insert rows.
-		tdb.Exec(t, fmt.Sprintf(`
+			// Insert rows.
+			numberOfRows := 80000
+			tdb.Exec(t, fmt.Sprintf(`
 INSERT INTO t(j) SELECT * FROM generate_series(1, %d);
 `, numberOfRows))
 
-		// Build an equi-width histogram over the key range. The below query will
-		// generate the key bounds for each high-order bit pattern as defined by
-		// prefixBits. For example, if this were 3, we'd get the following groups:
-		//
-		//            low         |        high
-		//  ----------------------+----------------------
-		//                      0 | 2305843009213693952
-		//    2305843009213693952 | 4611686018427387904
-		//    4611686018427387904 | 6917529027641081856
-		//    6917529027641081856 | 9223372036854775807
-		//
-		const prefixBits = 4
-		var keyCounts pq.Int64Array
-		tdb.QueryRow(t, `
+			// Build an equi-width histogram over the key range. The below query will
+			// generate the key bounds for each high-order bit pattern as defined by
+			// prefixBits. For example, if this were 3, we'd get the following groups:
+			//
+			//            low         |        high
+			//  ----------------------+----------------------
+			//                      0 | 2305843009213693952
+			//    2305843009213693952 | 4611686018427387904
+			//    4611686018427387904 | 6917529027641081856
+			//    6917529027641081856 | 9223372036854775807
+			//
+			const prefixBits = 4
+			var keyCounts pq.Int64Array
+			tdb.QueryRow(t, `
   WITH boundaries AS (
-                     SELECT i << (64 - $1) AS p FROM ROWS FROM (generate_series(0, (1<<($1-1)) -1)) AS t (i)
-                     UNION ALL SELECT (((1 << 62) - 1) << 1)+1 -- int63 max value
+                     SELECT i << (64 - $1) AS p FROM ROWS FROM (generate_series(0, (1 << ($1 - 1)) - 1)) AS t (i)
+                     UNION ALL SELECT (((1 << 62) - 1) << 1) + 1 -- int63 max value
                   ),
        groups AS (
                 SELECT *
@@ -157,55 +311,61 @@ INSERT INTO t(j) SELECT * FROM generate_series(1, %d);
        counts AS (
                   SELECT count(i) AS c
                     FROM t, groups
-                   WHERE low <= i AND high > i
+                   WHERE low < i AND i <= high
                 GROUP BY (low, high)
               )
 SELECT array_agg(c)
   FROM counts;`, prefixBits).Scan(&keyCounts)
 
-		t.Log("Key counts in each split range")
-		for i, keyCount := range keyCounts {
-			t.Logf("range %d: %d\n", i, keyCount)
-		}
-		require.Len(t, keyCounts, 1<<(prefixBits-1))
+			t.Log("Key counts in each split range")
+			for i, keyCount := range keyCounts {
+				t.Logf("range %d: %d\n", i, keyCount)
+			}
+			require.Len(t, keyCounts, 1<<(prefixBits-1))
 
-		// To check that the distribution over ranges is not uniform, we use a
-		// chi-square goodness of fit statistic. We'll set our null hypothesis as
-		// 'each range in the distribution should have the same probability of getting
-		// a row inserted' and we'll check if we can reject the null hypothesis if
-		// chi-square is greater than the critical value we currently set as 35.2585,
-		// a deliberate choice that gives us a p-value of 0.00001 according to
-		// https://www.fourmilab.ch/rpkp/experiments/analysis/chiCalc.html. If we are
-		// able to reject the null hypothesis, then the distribution is not uniform,
-		// and we raise an error. This test has 7 degrees of freedom (categories - 1).
-		chiSquared := discreteUniformChiSquared(keyCounts)
-		criticalValue := 35.2585
-		if chiSquared >= criticalValue {
-			return errors.Newf("chiSquared value of %f must be"+
-				" less than criticalVal %f to guarantee distribution is relatively uniform",
-				chiSquared, criticalValue)
-		}
-		return nil
-	})
-	require.NoError(t, err)
+			// To check that the distribution over ranges is not uniform, we use a
+			// chi-square goodness of fit statistic. We'll set our null hypothesis as
+			// 'each range in the distribution should have the same probability of getting
+			// a row inserted' and we'll check if we can reject the null hypothesis if
+			// chi-squared is greater than the critical value we currently set as 35.2585,
+			// a deliberate choice that gives us a p-value of 0.00001 according to
+			// https://www.fourmilab.ch/rpkp/experiments/analysis/chiCalc.html. If we are
+			// able to reject the null hypothesis, then the distribution is not uniform,
+			// and we raise an error. This test has 7 degrees of freedom (categories - 1).
+			chiSquared := discreteUniformChiSquared(keyCounts)
+			criticalValue := 35.2585
+			if chiSquared > criticalValue {
+				t.Logf("chiSquared value of %f > criticalVal %f indicates that the distribution "+
+					"is non-uniform (statistically significant, p < 0.00001)",
+					chiSquared, criticalValue)
+				numNonUniformObservations += 1
+			} else {
+				t.Logf("chiSquared value of %f <= criticalVal %f indicates that the distribution "+
+					"is relatively uniform",
+					chiSquared, criticalValue)
+			}
+		}()
+	}
+
+	if numNonUniformObservations >= numObservations/2 {
+		t.Fatalf("a majority of our observations indicate the distribution is non-uniform")
+	}
 }
 
 // discreteUniformChiSquared calculates the chi-squared statistic (ref:
 // https://www.itl.nist.gov/div898/handbook/eda/section3/eda35f.htm) to be used
 // in our hypothesis testing for the distribution of rows among ranges.
-func discreteUniformChiSquared(counts []int64) float64 {
+func discreteUniformChiSquared(buckets []int64) float64 {
 	var n int64
-	for _, c := range counts {
+	for _, c := range buckets {
 		n += c
 	}
-	p := float64(1) / float64(len(counts))
-	var stat float64
-	for _, c := range counts {
-		oSubE := float64(c)/float64(n) - p
-		stat += (oSubE * oSubE) / p
+	expectedPerBucket := float64(n) / float64(len(buckets))
+	var chiSquared float64
+	for _, c := range buckets {
+		chiSquared += math.Pow(float64(c)-expectedPerBucket, 2) / expectedPerBucket
 	}
-	stat *= float64(n)
-	return stat
+	return chiSquared
 }
 
 func TestStringToArrayAndBack(t *testing.T) {
@@ -770,5 +930,78 @@ func TestPGBuiltinsCalledOnNull(t *testing.T) {
 	for i, tc := range testCases {
 		res := tdb.QueryStr(t, tc.sql)
 		require.Equalf(t, [][]string{{"NULL"}}, res, "failed test case %d", i+1)
+	}
+}
+
+func TestBitmaskOrAndXor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCases := []struct {
+		bitFn    func(string, string) (*tree.DBitArray, error)
+		a        string
+		b        string
+		expected string
+	}{
+		{bitmaskOr, "010", "0", "010"},
+		{bitmaskOr, "010", "101", "111"},
+		{bitmaskOr, "010", "101", "111"},
+		{bitmaskOr, "010", "1010", "1010"},
+		{bitmaskOr, "0100010", "1010", "0101010"},
+		{bitmaskOr, "001010010000", "0101010100", "001111010100"},
+		{bitmaskOr, "001010010111", "", "001010010111"},
+		{bitmaskOr, "", "1000100", "1000100"},
+		{bitmaskAnd, "010", "101", "000"},
+		{bitmaskAnd, "010", "01", "000"},
+		{bitmaskAnd, "111", "000", "000"},
+		{bitmaskAnd, "110", "101", "100"},
+		{bitmaskAnd, "0100010", "1010", "0000010"},
+		{bitmaskAnd, "001010010000", "0101010100", "000000010000"},
+		{bitmaskAnd, "001010010000", "", "000000000000"},
+		{bitmaskAnd, "", "01000100", "00000000"},
+		{bitmaskXor, "010", "101", "111"},
+		{bitmaskXor, "010", "01", "011"},
+		{bitmaskXor, "101", "100", "001"},
+		{bitmaskXor, "110", "001", "111"},
+		{bitmaskXor, "0101010", "1011", "0100001"},
+		{bitmaskXor, "001010010000", "0101010100", "001111000100"},
+		{bitmaskXor, "001010010000", "", "001010010000"},
+		{bitmaskXor, "", "01000100", "01000100"},
+	}
+	for _, tc := range testCases {
+		bitArray, err := tc.bitFn(tc.a, tc.b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resultStr := bitArray.BitArray.String()
+		if resultStr != tc.expected {
+			t.Errorf("expected %s, found %s", tc.expected, resultStr)
+		}
+	}
+}
+
+func BenchmarkGenerateID(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	for _, fn := range []string{
+		"gen_random_uuid",
+		"gen_random_ulid",
+	} {
+		b.Run(fn, func(b *testing.B) {
+			for _, rowCount := range []int{1, 10, 100, 1000} {
+				b.Run(fmt.Sprintf("rows=%d", rowCount), func(b *testing.B) {
+					q := fmt.Sprintf(`select %s() from generate_series(0, %d);`, fn, rowCount)
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						db.Exec(b, q)
+					}
+					b.StopTimer()
+				})
+			}
+		})
 	}
 }

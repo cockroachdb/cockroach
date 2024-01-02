@@ -34,7 +34,6 @@ func registerHotSpotSplits(r registry.Registry) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		appNode := c.Node(c.Spec().NodeCount)
 
-		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", appNode)
@@ -98,8 +97,10 @@ func registerHotSpotSplits(r registry.Registry) {
 		// Test OOMs below this version because of scans over the large rows.
 		// No problem in 20.1 thanks to:
 		// https://github.com/cockroachdb/cockroach/pull/45323.
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() {
 				concurrency = 32

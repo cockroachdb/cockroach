@@ -16,9 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -26,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -142,104 +139,12 @@ SELECT nextval(105:::REGCLASS);`,
 		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typn)
 		require.NoError(t, err)
 		require.Equal(t, "notmyworkday", typ.GetName())
-		require.Equal(t,
-			[]descpb.ID{110},
-			typ.GetReferencingDescriptorIDs(),
-		)
+		require.Equal(t, 1, typ.NumReferencingDescriptors())
+		require.Equal(t, descpb.ID(110), typ.GetReferencingDescriptorID(0))
 
 		return nil
 	})
 	require.NoError(t, err)
-}
-
-func TestVersionGatingUDFInCheckConstraints(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	t.Run("new_schema_changer_version_enabled", func(t *testing.T) {
-		params, _ := tests.CreateTestServerParams()
-		// Override binary version to be older.
-		params.Knobs.Server = &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V23_1),
-		}
-
-		s, sqlDB, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(context.Background())
-
-		_, err := sqlDB.Exec(`CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$`)
-		require.NoError(t, err)
-		_, err = sqlDB.Exec(`CREATE TABLE t(a INT CHECK (f() > 0));`)
-		require.NoError(t, err)
-	})
-
-	t.Run("new_schema_changer_version_disabled", func(t *testing.T) {
-		params, _ := tests.CreateTestServerParams()
-		// Override binary version to be older.
-		params.Knobs.Server = &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V23_1 - 1),
-		}
-
-		s, sqlDB, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(context.Background())
-
-		// Need to turn new schema changer off, because function related rules are
-		// only valid in 23.1.
-		_, err := sqlDB.Exec(`SET use_declarative_schema_changer = 'off'`)
-		require.NoError(t, err)
-		_, err = sqlDB.Exec(`CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$`)
-		require.NoError(t, err)
-		_, err = sqlDB.Exec(`CREATE TABLE t(a INT CHECK (f() > 0));`)
-		require.Equal(t, "pq: unimplemented: usage of user-defined function from relations not supported", err.Error())
-	})
-}
-
-func TestVersionGatingUDFInColumnDefault(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	t.Run("new_schema_changer_version_enabled", func(t *testing.T) {
-		params, _ := tests.CreateTestServerParams()
-		// Override binary version to be older.
-		params.Knobs.Server = &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V23_1),
-		}
-
-		s, sqlDB, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(context.Background())
-
-		_, err := sqlDB.Exec(`CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$`)
-		require.NoError(t, err)
-		_, err = sqlDB.Exec(`CREATE TABLE t(a INT DEFAULT f());`)
-		require.NoError(t, err)
-		_, err = sqlDB.Exec(`ALTER TABLE t ALTER COLUMN a SET DEFAULT (f() + 1)`)
-		require.NoError(t, err)
-	})
-
-	t.Run("new_schema_changer_version_disabled", func(t *testing.T) {
-		params, _ := tests.CreateTestServerParams()
-		// Override binary version to be older.
-		params.Knobs.Server = &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V23_1 - 1),
-		}
-
-		s, sqlDB, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(context.Background())
-
-		// Need to turn new schema changer off, because function related rules are
-		// only valid in 23.1.
-		_, err := sqlDB.Exec(`SET use_declarative_schema_changer = 'off'`)
-		require.NoError(t, err)
-		_, err = sqlDB.Exec(`CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$`)
-		require.NoError(t, err)
-		_, err = sqlDB.Exec(`CREATE TABLE t(a INT DEFAULT f());`)
-		require.Equal(t, "pq: unimplemented: usage of user-defined function from relations not supported", err.Error())
-		_, err = sqlDB.Exec(`CREATE TABLE t(a INT);`)
-		require.NoError(t, err)
-		_, err = sqlDB.Exec(`ALTER TABLE t ALTER COLUMN a SET DEFAULT (f() + 1)`)
-		require.Equal(t, "pq: unimplemented: usage of user-defined function from relations not supported", err.Error())
-	})
 }
 
 func TestCreateOrReplaceFunctionUpdateReferences(t *testing.T) {
@@ -335,7 +240,8 @@ SELECT nextval(106:::REGCLASS);`,
 		typn := tree.MakeQualifiedTypeName("defaultdb", "public", "notmyworkday")
 		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typn)
 		require.NoError(t, err)
-		require.Equal(t, []descpb.ID{112}, typ.GetReferencingDescriptorIDs())
+		require.Equal(t, 1, typ.NumReferencingDescriptors())
+		require.Equal(t, descpb.ID(112), typ.GetReferencingDescriptorID(0))
 
 		// All objects with "1" suffix should have back references to the function,
 		// "2" should have empty references since it's not used yet.
@@ -378,7 +284,8 @@ SELECT nextval(107:::REGCLASS);`,
 		typn := tree.MakeQualifiedTypeName("defaultdb", "public", "notmyworkday")
 		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typn)
 		require.NoError(t, err)
-		require.Equal(t, []descpb.ID{112}, typ.GetReferencingDescriptorIDs())
+		require.Equal(t, 1, typ.NumReferencingDescriptors())
+		require.Equal(t, descpb.ID(112), typ.GetReferencingDescriptorID(0))
 
 		// Now all objects with "2" suffix in name should have back references "1"
 		// had before, and "1" should have empty references.
@@ -417,7 +324,7 @@ COMMIT;
 	require.Contains(t, err.Error(), "transaction committed but schema change aborted")
 	_, err = sqlDB.Exec(`SELECT f()`)
 	require.Error(t, err, "")
-	require.Contains(t, err.Error(), "unknown function: f(): function undefined")
+	require.Contains(t, err.Error(), "unknown function: f()")
 
 	// Make data valid for the unique index so that the job won't fail.
 	tDB.Exec(t, `DELETE FROM t WHERE a = 2`)

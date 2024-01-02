@@ -1,0 +1,155 @@
+# LogicTest: local
+
+statement ok
+CREATE USER alice
+
+statement ok
+CREATE USER bob
+
+statement ok
+CREATE USER chuck
+
+statement ok
+CREATE USER dave
+
+statement ok
+CREATE ROLE meeter
+
+statement ok
+CREATE ROLE greeter
+
+statement ok
+CREATE ROLE granter
+
+statement ok
+GRANT granter TO alice,bob,chuck,dave
+
+statement ok
+GRANT meeter TO granter
+
+statement ok
+GRANT greeter TO alice WITH ADMIN OPTION
+
+query TTBB colnames,rowsort
+SELECT * FROM "".crdb_internal.kv_inherited_role_members
+----
+role     inheriting_member  member_is_explicit  member_is_admin
+granter  alice              true                false
+greeter  alice              true                true
+meeter   alice              false               false
+granter  bob                true                false
+meeter   bob                false               false
+granter  chuck              true                false
+meeter   chuck              false               false
+granter  dave               true                false
+meeter   dave               false               false
+meeter   granter            true                false
+admin    root               true                true
+
+query TTB colnames,rowsort
+SHOW GRANTS ON ROLE
+----
+role_name  member   is_admin
+admin      root     true
+granter    alice    false
+granter    bob      false
+granter    chuck    false
+granter    dave     false
+greeter    alice    true
+meeter     granter  false
+
+statement ok
+GRANT ALL ON DATABASE defaultdb TO meeter WITH GRANT OPTION
+
+query TTTB colnames
+SHOW GRANTS ON DATABASE defaultdb FOR alice
+----
+database_name  grantee  privilege_type  is_grantable
+defaultdb      meeter   ALL             true
+
+statement ok
+CREATE SCHEMA sc
+
+statement ok
+GRANT ALL ON SCHEMA sc TO meeter WITH GRANT OPTION
+
+query TTTTB colnames
+SHOW GRANTS ON SCHEMA sc FOR alice
+----
+database_name  schema_name  grantee  privilege_type  is_grantable
+test           sc           meeter   ALL             true
+
+statement ok
+CREATE SEQUENCE sq
+
+statement ok
+GRANT ALL ON SEQUENCE sq TO meeter WITH GRANT OPTION
+
+query TTTTTB colnames
+SHOW GRANTS ON SEQUENCE sq FOR alice
+----
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+test           public       sq          meeter   ALL             true
+
+statement ok
+CREATE TABLE tbl (i INT PRIMARY KEY);
+
+statement ok
+GRANT ALL ON TABLE tbl TO meeter WITH GRANT OPTION
+
+query TTTTTB colnames
+SHOW GRANTS ON TABLE tbl FOR alice
+----
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+test           public       tbl         meeter   ALL             true
+
+statement ok
+CREATE TYPE typ AS ENUM ('a', 'b')
+
+statement ok
+GRANT ALL ON TYPE typ TO meeter WITH GRANT OPTION
+
+query TTTTTB colnames
+SHOW GRANTS ON TYPE typ FOR alice
+----
+database_name  schema_name  type_name  grantee  privilege_type  is_grantable
+test           public       typ        meeter   ALL             true
+
+statement ok
+CREATE FUNCTION fn(IN x INT)
+	RETURNS INT
+	STABLE
+	LANGUAGE SQL
+	AS $$
+SELECT x + 1;
+$$
+
+statement ok
+GRANT EXECUTE ON FUNCTION fn TO meeter WITH GRANT OPTION
+
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION fn FOR alice
+----
+database_name  schema_name  routine_id   routine_signature   grantee  privilege_type  is_grantable
+test           public       100111       fn(int8)            meeter   EXECUTE         true
+
+statement ok
+CREATE EXTERNAL CONNECTION conn AS 'nodelocal://1/foo';
+
+statement ok
+GRANT ALL ON EXTERNAL CONNECTION conn TO meeter WITH GRANT OPTION
+
+query TTTB colnames
+SHOW GRANTS ON EXTERNAL CONNECTION conn FOR alice
+----
+connection_name  grantee  privilege_type  is_grantable
+conn             meeter   ALL             true
+
+statement ok
+GRANT SYSTEM ALL TO meeter WITH GRANT OPTION
+
+query TTB colnames
+SHOW SYSTEM GRANTS FOR alice
+----
+grantee  privilege_type  is_grantable
+meeter   ALL             true

@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	// Enable CCL statements.
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -42,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -52,8 +52,8 @@ import (
 var (
 	flagRSGTime                    = flag.Duration("rsg", 0, "random syntax generator test duration")
 	flagRSGGoRoutines              = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
-	flagRSGExecTimeout             = flag.Duration("rsg-exec-timeout", 15*time.Second, "timeout duration when executing a statement")
-	flagRSGExecColumnChangeTimeout = flag.Duration("rsg-exec-column-change-timeout", 20*time.Second, "timeout duration when executing a statement for random column changes")
+	flagRSGExecTimeout             = flag.Duration("rsg-exec-timeout", 35*time.Second, "timeout duration when executing a statement")
+	flagRSGExecColumnChangeTimeout = flag.Duration("rsg-exec-column-change-timeout", 50*time.Second, "timeout duration when executing a statement for random column changes")
 )
 
 func verifyFormat(sql string) error {
@@ -175,6 +175,7 @@ func (db *verifyFormatDB) execWithResettableTimeout(
 	}()
 	retry := true
 	targetDuration := duration
+	cancellationChannel := ctx.Done()
 	for retry {
 		retry = false
 		err := func() error {
@@ -201,6 +202,17 @@ func (db *verifyFormatDB) execWithResettableTimeout(
 					}
 					return &nonCrasher{sql: sql, err: err}
 				}
+				return nil
+			case <-cancellationChannel:
+				// Sanity: The context is cancelled when the test is about to
+				// timeout. We will log whatever statement we're waiting on for
+				// debugging purposes. Sometimes queries won't respect
+				// cancellation due to lib/pq limitations.
+				t.Logf("Context cancelled while executing: %q", sql)
+				// We will intentionally retry, which will us to wait for the
+				// go routine to complete above to avoid leaking it.
+				retry = true
+				cancellationChannel = nil
 				return nil
 			case <-time.After(targetDuration):
 				db.mu.Lock()
@@ -285,6 +297,9 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		if strings.HasPrefix(s, "SET SESSION CHARACTERISTICS AS TRANSACTION") {
 			return errors.New("setting session characteristics is unsupported")
 		}
+		if strings.HasPrefix(s, "DROP DATABASE") {
+			return errors.New("dropping the database is likely to timeout since it needs to drop a lot of dependent objects")
+		}
 		if strings.Contains(s, "READ ONLY") || strings.Contains(s, "read_only") {
 			return errors.New("READ ONLY settings are unsupported")
 		}
@@ -294,7 +309,7 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		if strings.Contains(s, "EXPERIMENTAL SCRUB DATABASE SYSTEM") {
 			return errors.New("See #43693")
 		}
-		// Recreate the database on every run in case it was dropped or renamed in
+		// Recreate the database on every run in case it was renamed in
 		// a previous run. Should always succeed.
 		if err := db.exec(t, ctx, `CREATE DATABASE IF NOT EXISTS ident`); err != nil {
 			return err
@@ -348,13 +363,24 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				switch lower {
 				case "pg_sleep":
 					continue
+				case "crdb_internal.create_sql_schema_telemetry_job":
+					// We can create a crazy number of telemtry jobs accidentally,
+					// within the test. Leading to terrible contention.
+					continue
+				case "crdb_internal.gen_rand_ident":
+					// Generates random identifiers, so a large number are dangerous and
+					// can take a long time.
+					continue
 				case "st_frechetdistance", "st_buffer":
 					// Some spatial function are slow and testing them here
 					// is not worth it.
 					continue
 				case "crdb_internal.reset_sql_stats",
 					"crdb_internal.check_consistency",
-					"crdb_internal.request_statement_bundle":
+					"crdb_internal.request_statement_bundle",
+					"crdb_internal.reset_activity_tables",
+					"crdb_internal.revalidate_unique_constraints_in_all_tables",
+					"crdb_internal.validate_ttl_scheduled_jobs":
 					// Skipped due to long execution time.
 					continue
 				}
@@ -416,7 +442,12 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 			limit = " LIMIT 100"
 		}
 		s := fmt.Sprintf("SELECT %s(%s) %s", nb.name, strings.Join(args, ", "), limit)
-		return db.exec(t, ctx, s)
+		// Use a re-settable timeout since in concurrent scenario some operations may
+		// involve schema changes like truncates. In general this should make
+		// this test more resilient as the timeouts are reset as long progress
+		// is made on *some* connection.
+		t.Logf("Running %q", s)
+		return db.execWithResettableTimeout(t, ctx, s, *flagRSGExecTimeout, *flagRSGGoRoutines)
 	})
 }
 
@@ -447,9 +478,10 @@ func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 	}
 
 	testRandomSyntax(t, true, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
-		return db.exec(t, ctx, `
-			CREATE DATABASE ident;
-		`)
+		if err := db.exec(t, ctx, "SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '30s'"); err != nil {
+			return err
+		}
+		return db.exec(t, ctx, `CREATE DATABASE ident;`)
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		n := r.Intn(len(roots))
 		s := r.Generate(roots[n], 30)
@@ -461,18 +493,40 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	numTables := *flagRSGGoRoutines
 	roots := []string{
 		"alter_table_cmd",
 	}
 
+	// The goroutines will use round-robin to pick the next table to modify.
+	tableIDMu := syncutil.Mutex{}
+	tableID := 0
+	incrementTableID := func() int {
+		tableIDMu.Lock()
+		defer tableIDMu.Unlock()
+		tableID++
+		if tableID >= numTables {
+			tableID = 0
+		}
+		return tableID
+	}
+
 	testRandomSyntax(t, true, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
-		return db.exec(t, ctx, `
-			CREATE DATABASE ident;
-			CREATE TABLE ident.ident (ident decimal);
-		`)
+		if err := db.exec(t, ctx, "SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '30s'"); err != nil {
+			return err
+		}
+		if err := db.exec(t, ctx, `CREATE DATABASE ident;`); err != nil {
+			return err
+		}
+		for i := 0; i < numTables; i++ {
+			if err := db.exec(t, ctx, fmt.Sprintf(`CREATE TABLE ident.ident%d (ident decimal);`, i)); err != nil {
+				return err
+			}
+		}
+		return nil
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		n := r.Intn(len(roots))
-		s := fmt.Sprintf("ALTER TABLE ident.ident %s", r.Generate(roots[n], 500))
+		s := fmt.Sprintf("ALTER TABLE ident.ident%d %s", incrementTableID(), r.Generate(roots[n], 500))
 		// Execute with a resettable timeout, where we allow up to N go-routines worth
 		// of resets. This should be the maximum theoretical time we can get
 		// stuck behind other work.
@@ -489,7 +543,7 @@ var ignoredErrorPatterns = []string{
 	"unsupported binary operator",
 	"unsupported comparison operator",
 	"memory budget exceeded",
-	"generator functions are not allowed in",
+	"set-returning functions are not allowed in",
 	"txn already encountered an error; cannot be used anymore",
 	"no data source matches prefix",
 	"index .* already contains column",
@@ -506,7 +560,6 @@ var ignoredErrorPatterns = []string{
 	"index .* in the middle of being added",
 	"could not mark job .* as succeeded",
 	"failed to read backup descriptor",
-	"AS OF SYSTEM TIME: cannot specify timestamp in the future",
 	"AS OF SYSTEM TIME: timestamp before 1970-01-01T00:00:00Z is invalid",
 	"BACKUP for requested time  needs option 'revision_history'",
 	"RESTORE timestamp: supplied backups do not cover requested time",
@@ -612,12 +665,15 @@ var ignoredRegex = regexp.MustCompile(strings.Join(ignoredErrorPatterns, "|"))
 func TestRandomSyntaxSQLSmith(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
+	defer ccl.TestingEnableEnterprise()() // allow usage of partitions
 
 	var smither *sqlsmith.Smither
 
 	tableStmts := make([]string, 0)
 	testRandomSyntax(t, true, "defaultdb", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+		if err := db.exec(t, ctx, "SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '30s'"); err != nil {
+			return err
+		}
 		setups := []string{sqlsmith.RandTableSetupName, "seed"}
 		for _, s := range setups {
 			randTables := sqlsmith.Setups[s](r.Rnd)
@@ -766,16 +822,15 @@ func testRandomSyntax(
 		skip.IgnoreLint(t, "enable with '-rsg <duration>'")
 	}
 	ctx := context.Background()
-	defer ccl.TestingEnableEnterprise()()
 
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	params.UseDatabase = databaseName
 	// Catch panics and return them as errors.
 	params.Knobs.PGWireTestingKnobs = &sql.PGWireTestingKnobs{
 		CatchPanics: true,
 	}
-	s, rawDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, rawDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
 	db := &verifyFormatDB{db: rawDB}
 	err := db.exec(t, ctx, "SET CLUSTER SETTING schemachanger.job.max_retry_backoff='1s'")
 	require.NoError(t, err)
@@ -790,7 +845,8 @@ func testRandomSyntax(
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := rsg.NewRSG(timeutil.Now().UnixNano(), string(yBytes), allowDuplicates)
+	_, seed := randutil.NewTestRand()
+	r, err := rsg.NewRSG(seed, string(yBytes), allowDuplicates)
 	if err != nil {
 		t.Fatal(err)
 	}

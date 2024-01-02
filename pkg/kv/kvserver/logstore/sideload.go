@@ -34,6 +34,9 @@ type SideloadStorage interface {
 	// Writes the given contents to the file specified by the given index and
 	// term. Overwrites the file if it already exists.
 	Put(_ context.Context, index kvpb.RaftIndex, term kvpb.RaftTerm, contents []byte) error
+	// Sync syncs the underlying filesystem metadata so that all the preceding
+	// mutations, such as Put and TruncateTo, are durable.
+	Sync() error
 	// Load the file at the given index and term. Return errSideloadedFileNotFound when no
 	// such file is present.
 	Get(_ context.Context, index kvpb.RaftIndex, term kvpb.RaftTerm) ([]byte, error)
@@ -46,6 +49,8 @@ type SideloadStorage interface {
 	Purge(_ context.Context, index kvpb.RaftIndex, term kvpb.RaftTerm) (int64, error)
 	// Clear files that may have been written by this SideloadStorage.
 	Clear(context.Context) error
+	// HasAnyEntry returns whether there is any entry in [from, to).
+	HasAnyEntry(_ context.Context, from, to kvpb.RaftIndex) (bool, error)
 	// TruncateTo removes all files belonging to an index strictly smaller than
 	// the given one. Returns the number of bytes freed, the number of bytes in
 	// files that remain, or an error.
@@ -126,7 +131,7 @@ func MaybeSideloadEntries(
 		{
 			data := make([]byte, raftlog.RaftCommandPrefixLen+e.Cmd.Size())
 			raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], typ, e.ID)
-			_, err := protoutil.MarshalTo(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
+			_, err := protoutil.MarshalToSizedBuffer(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 			if err != nil {
 				return nil, 0, 0, 0, errors.Wrap(err, "while marshaling stripped sideloaded command")
 			}
@@ -140,8 +145,12 @@ func MaybeSideloadEntries(
 		sideloadedEntriesSize += int64(len(dataToSideload))
 	}
 
-	if output == nil {
-		// We never saw a sideloaded command.
+	if output != nil { // there is at least one sideloaded command
+		// Sync the sideloaded storage directory so that the commands are durable.
+		if err := sideloaded.Sync(); err != nil {
+			return nil, 0, 0, 0, err
+		}
+	} else { // we never saw a sideloaded command
 		output = input
 	}
 
@@ -215,7 +224,7 @@ func MaybeInlineSideloadedRaftCommand(
 	{
 		data := make([]byte, raftlog.RaftCommandPrefixLen+e.Cmd.Size())
 		raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], typ, e.ID)
-		_, err := protoutil.MarshalTo(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
+		_, err := protoutil.MarshalToSizedBuffer(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 		if err != nil {
 			return nil, err
 		}

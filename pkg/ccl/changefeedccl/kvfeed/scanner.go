@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -53,7 +51,6 @@ type kvScanner interface {
 
 type scanRequestScanner struct {
 	settings                *cluster.Settings
-	gossip                  gossip.OptionalGossip
 	db                      *kv.DB
 	onBackfillRangeCallback func(int64) (func(), func())
 }
@@ -65,8 +62,9 @@ func (p *scanRequestScanner) Scan(ctx context.Context, sink kvevent.Writer, cfg 
 	defer cancel()
 
 	if log.V(2) {
-		log.Infof(ctx, "performing scan on %v at %v withDiff %v",
-			cfg.Spans, cfg.Timestamp, cfg.WithDiff)
+		var sp roachpb.Spans = cfg.Spans
+		log.Infof(ctx, "performing scan on %s at %v withDiff %v",
+			sp, cfg.Timestamp, cfg.WithDiff)
 	}
 
 	sender := p.db.NonTransactionalSender()
@@ -190,7 +188,7 @@ func (p *scanRequestScanner) exportSpan(
 	for remaining := &span; remaining != nil; {
 		start := timeutil.Now()
 		b := txn.NewBatch()
-		r := kvpb.NewScan(remaining.Key, remaining.EndKey, false /* forUpdate */).(*kvpb.ScanRequest)
+		r := kvpb.NewScan(remaining.Key, remaining.EndKey).(*kvpb.ScanRequest)
 		r.ScanFormat = kvpb.BATCH_RESPONSE
 		b.Header.TargetBytes = targetBytesPerScan
 		b.AdmissionHeader = kvpb.AdmissionHeader{
@@ -255,7 +253,7 @@ func (p *scanRequestScanner) exportSpan(
 func getRangesToProcess(
 	ctx context.Context, ds *kvcoord.DistSender, targetSpans []roachpb.Span,
 ) ([]roachpb.Span, int, error) {
-	ranges, numNodes, err := AllRangeSpans(ctx, ds, targetSpans)
+	ranges, numNodes, err := ds.AllRangeSpans(ctx, targetSpans)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -314,46 +312,15 @@ func slurpScanResponse(
 			if err != nil {
 				return errors.Wrapf(err, `decoding changes for %s`, span)
 			}
+			if log.V(3) {
+				log.Infof(ctx, "scanResponse: %s@%s", keys.PrettyPrint(nil, keyBytes), ts)
+			}
 			if err = sink.Add(ctx, kvevent.NewBackfillKVEvent(keyBytes, ts, valBytes, withDiff, backfillTS)); err != nil {
 				return errors.Wrapf(err, `buffering changes for %s`, span)
 			}
 		}
 	}
 	return nil
-}
-
-// AllRangeSpans returns the list of all ranges that cover input spans along with the
-// nodeCountHint indicating the number of nodes that host those ranges.
-func AllRangeSpans(
-	ctx context.Context, ds *kvcoord.DistSender, spans []roachpb.Span,
-) (_ []roachpb.Span, nodeCountHint int, _ error) {
-	ranges := make([]roachpb.Span, 0, len(spans))
-
-	it := kvcoord.MakeRangeIterator(ds)
-	var replicas util.FastIntMap
-
-	for i := range spans {
-		rSpan, err := keys.SpanAddr(spans[i])
-		if err != nil {
-			return nil, 0, err
-		}
-		for it.Seek(ctx, rSpan.Key, kvcoord.Ascending); ; it.Next(ctx) {
-			if !it.Valid() {
-				return nil, 0, it.Error()
-			}
-			ranges = append(ranges, roachpb.Span{
-				Key: it.Desc().StartKey.AsRawKey(), EndKey: it.Desc().EndKey.AsRawKey(),
-			})
-			for _, r := range it.Desc().InternalReplicas {
-				replicas.Set(int(r.NodeID), 0)
-			}
-			if !it.NeedAnother(rSpan) {
-				break
-			}
-		}
-	}
-
-	return ranges, replicas.Len(), nil
 }
 
 // maxConcurrentScanRequests returns the number of concurrent scan requests.

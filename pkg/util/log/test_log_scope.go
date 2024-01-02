@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -32,9 +33,10 @@ import (
 // test, and enforces that logging output is not written to this
 // directory beyond the lifetime of the scope.
 type TestLogScope struct {
-	logDir    string
-	cleanupFn func()
-	previous  struct {
+	logDir               string
+	cleanupFn            func()
+	undeclaredOutputsDir string
+	previous             struct {
 		appliedConfig           string
 		stderrSinkInfoTemplate  sinkInfo
 		stderrSinkInfo          *sinkInfo
@@ -107,6 +109,9 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 	// We'll use this as a double-check that our save and restore
 	// logic work properly.
 	sc.previous.appliedConfig = DescribeAppliedConfig()
+	if logging.metrics == nil {
+		SetLogMetrics(&TestLogMetricsImpl{})
+	}
 
 	logging.allSinkInfos.mu.Lock()
 	sc.previous.allSinkInfos = logging.allSinkInfos.mu.sinkInfos
@@ -140,7 +145,11 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 	logging.mu.Unlock()
 
 	err := func() error {
-		tempDir, err := os.MkdirTemp("", "log"+fileutil.EscapeFilename(t.Name()))
+		isRemote := os.Getenv("REMOTE_EXEC")
+		if len(isRemote) > 0 {
+			sc.undeclaredOutputsDir = os.Getenv("TEST_UNDECLARED_OUTPUTS_DIR")
+		}
+		tempDir, err := os.MkdirTemp(sc.undeclaredOutputsDir, "log"+fileutil.EscapeFilename(t.Name()))
 		if err != nil {
 			return err
 		}
@@ -158,7 +167,7 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 			return err
 		}
 
-		t.Logf("test logs captured to: %s", sc.logDir)
+		t.Logf("test logs captured to: %s", sc.printableLogDirectory())
 		return nil
 	}()
 	if err != nil {
@@ -353,6 +362,15 @@ func (l *TestLogScope) SetupSingleFileLogging() (cleanup func()) {
 	return cleanup
 }
 
+// printableLogDirectory returns a human-readable version of the log directory
+// suitable for printing to the console.
+func (l *TestLogScope) printableLogDirectory() string {
+	if len(l.undeclaredOutputsDir) > 0 {
+		return "outputs.zip/" + strings.TrimPrefix(l.logDir, l.undeclaredOutputsDir+"/")
+	}
+	return l.logDir
+}
+
 // GetDirectory retrieves the log directory for this scope.
 func (l *TestLogScope) GetDirectory() string {
 	return l.logDir
@@ -365,7 +383,7 @@ func (l *TestLogScope) Rotate(t tShim) {
 	t.Helper()
 	t.Logf("-- test log scope file rotation --")
 	// Ensure remaining logs are written.
-	Flush()
+	FlushFiles()
 
 	if err := logging.allSinkInfos.iterFileSinks(func(l *fileSink) error {
 		l.mu.Lock()
@@ -387,7 +405,7 @@ func (l *TestLogScope) Close(t tShim) {
 	t.Logf("-- test log scope end --")
 
 	// Ensure any remaining logs are written to files.
-	Flush()
+	FlushFiles()
 
 	if l.logDir != "" {
 		defer func() {
@@ -405,7 +423,7 @@ func (l *TestLogScope) Close(t tShim) {
 						"Details cannot be printed yet because we are still unwinding.\n"+
 						"Hopefully the test harness prints the panic below, otherwise check the test logs.\n\n")
 				}
-				fmt.Fprintln(OrigStderr, "test logs left over in:", l.logDir)
+				fmt.Fprintln(OrigStderr, "test logs left over in:", l.printableLogDirectory())
 			} else {
 				// Clean up.
 				if err := os.RemoveAll(l.logDir); err != nil {
@@ -485,3 +503,14 @@ func isDirEmpty(dirname string) (bool, error) {
 	}
 	return len(list) == 0, nil
 }
+
+// TestLogMetricsImpl is a dummy implementation of the LogMetrics
+// interface, used for tests. This allows tests that exercise codepaths
+// making use of log metrics proceed without error.
+//
+// NB: All operations performed against *TestLogMetricsImpl are no-ops.
+type TestLogMetricsImpl struct{}
+
+func (t *TestLogMetricsImpl) IncrementCounter(_ Metric, _ int64) {}
+
+var _ LogMetrics = (*TestLogMetricsImpl)(nil)

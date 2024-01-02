@@ -15,11 +15,13 @@ import (
 	"fmt"
 	"math/rand"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -28,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -99,7 +103,10 @@ func TestPebbleIterReuse(t *testing.T) {
 		}
 	}
 
-	iter1 := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: []byte{40}, UpperBound: []byte{50}})
+	iter1, err := batch.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: []byte{40}, UpperBound: []byte{50}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	valuesCount := 0
 	// Seek to a value before the lower bound. Identical to seeking to the lower bound.
 	iter1.SeekGE(MVCCKey{Key: []byte{30}})
@@ -128,7 +135,10 @@ func TestPebbleIterReuse(t *testing.T) {
 	// is lower than the previous iterator's lower bound. This should still result
 	// in the right amount of keys being returned; the lower bound from the
 	// previous iterator should get zeroed.
-	iter2 := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: []byte{10}})
+	iter2, err := batch.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: []byte{10}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	valuesCount = 0
 	// This is a peculiar test that is disregarding how local and global keys
 	// affect the behavior of MVCCIterators. This test is writing []byte{0}
@@ -313,19 +323,26 @@ func TestPebbleIterConsistency(t *testing.T) {
 	// Since an iterator is created on pebbleReadOnly, pebbleBatch before
 	// writing a newer version of "a", the newer version will not be visible to
 	// iterators that are created later.
-	roEngine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("a")}).Close()
-	batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("a")}).Close()
-	eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("a")}).Close()
+	iter, err := roEngine.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("a")})
+	require.NoError(t, err)
+	iter.Close()
+	batchIter, err := batch.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("a")})
+	require.NoError(t, err)
+	batchIter.Close()
+	engIter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("a")})
+	require.NoError(t, err)
+	engIter.Close()
 	// Pin the state for iterators.
-	require.Nil(t, roEngine2.PinEngineStateForIterators())
-	require.Nil(t, batch2.PinEngineStateForIterators())
+	require.Nil(t, roEngine2.PinEngineStateForIterators(UnknownReadCategory))
+	require.Nil(t, batch2.PinEngineStateForIterators(UnknownReadCategory))
 
 	// Write a newer version of "a"
 	k2 := MVCCKey{Key: []byte("a"), Timestamp: ts2}
 	v2 := MVCCValue{Value: roachpb.MakeValueFromString("a2")}
 	require.NoError(t, eng.PutMVCC(k2, v2))
 
-	checkMVCCIter := func(iter MVCCIterator) {
+	checkMVCCIter := func(iter MVCCIterator, err error) {
+		require.NoError(t, err)
 		defer iter.Close()
 		iter.SeekGE(MVCCKey{Key: []byte("a")})
 		valid, err := iter.Valid()
@@ -338,7 +355,8 @@ func TestPebbleIterConsistency(t *testing.T) {
 		require.False(t, valid)
 		require.NoError(t, err)
 	}
-	checkEngineIter := func(iter EngineIterator) {
+	checkEngineIter := func(iter EngineIterator, err error) {
+		require.NoError(t, err)
 		defer iter.Close()
 		valid, err := iter.SeekEngineKeyGE(EngineKey{Key: []byte("a")})
 		require.Equal(t, true, valid)
@@ -355,25 +373,26 @@ func TestPebbleIterConsistency(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	checkMVCCIter(roEngine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
-	checkMVCCIter(roEngine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{Prefix: true}))
-	checkMVCCIter(batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
-	checkMVCCIter(batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{Prefix: true}))
-	checkMVCCIter(roEngine2.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
-	checkMVCCIter(roEngine2.NewMVCCIterator(MVCCKeyIterKind, IterOptions{Prefix: true}))
-	checkMVCCIter(batch2.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
-	checkMVCCIter(batch2.NewMVCCIterator(MVCCKeyIterKind, IterOptions{Prefix: true}))
+	checkMVCCIter(roEngine.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
+	checkMVCCIter(roEngine.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{Prefix: true}))
+	checkMVCCIter(batch.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
+	checkMVCCIter(batch.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{Prefix: true}))
+	checkMVCCIter(roEngine2.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
+	checkMVCCIter(roEngine2.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{Prefix: true}))
+	checkMVCCIter(batch2.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
+	checkMVCCIter(batch2.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{Prefix: true}))
 
-	checkEngineIter(roEngine.NewEngineIterator(IterOptions{UpperBound: []byte("b")}))
-	checkEngineIter(roEngine.NewEngineIterator(IterOptions{Prefix: true}))
-	checkEngineIter(batch.NewEngineIterator(IterOptions{UpperBound: []byte("b")}))
-	checkEngineIter(batch.NewEngineIterator(IterOptions{Prefix: true}))
-	checkEngineIter(roEngine2.NewEngineIterator(IterOptions{UpperBound: []byte("b")}))
-	checkEngineIter(roEngine2.NewEngineIterator(IterOptions{Prefix: true}))
-	checkEngineIter(batch2.NewEngineIterator(IterOptions{UpperBound: []byte("b")}))
-	checkEngineIter(batch2.NewEngineIterator(IterOptions{Prefix: true}))
+	checkEngineIter(roEngine.NewEngineIterator(context.Background(), IterOptions{UpperBound: []byte("b")}))
+	checkEngineIter(roEngine.NewEngineIterator(context.Background(), IterOptions{Prefix: true}))
+	checkEngineIter(batch.NewEngineIterator(context.Background(), IterOptions{UpperBound: []byte("b")}))
+	checkEngineIter(batch.NewEngineIterator(context.Background(), IterOptions{Prefix: true}))
+	checkEngineIter(roEngine2.NewEngineIterator(context.Background(), IterOptions{UpperBound: []byte("b")}))
+	checkEngineIter(roEngine2.NewEngineIterator(context.Background(), IterOptions{Prefix: true}))
+	checkEngineIter(batch2.NewEngineIterator(context.Background(), IterOptions{UpperBound: []byte("b")}))
+	checkEngineIter(batch2.NewEngineIterator(context.Background(), IterOptions{Prefix: true}))
 
-	checkIterSeesBothValues := func(iter MVCCIterator) {
+	checkIterSeesBothValues := func(iter MVCCIterator, err error) {
+		require.NoError(t, err)
 		defer iter.Close()
 		iter.SeekGE(MVCCKey{Key: []byte("a")})
 		count := 0
@@ -388,7 +407,7 @@ func TestPebbleIterConsistency(t *testing.T) {
 		require.Equal(t, 2, count)
 	}
 	// The eng iterator will see both values.
-	checkIterSeesBothValues(eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
+	checkIterSeesBothValues(eng.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
 	// The indexed batches will see 2 values since the second one is written to the batch.
 	require.NoError(t, batch.PutMVCC(
 		MVCCKey{Key: []byte("a"), Timestamp: ts2},
@@ -398,8 +417,8 @@ func TestPebbleIterConsistency(t *testing.T) {
 		MVCCKey{Key: []byte("a"), Timestamp: ts2},
 		MVCCValue{Value: roachpb.MakeValueFromString("a2")},
 	))
-	checkIterSeesBothValues(batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
-	checkIterSeesBothValues(batch2.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
+	checkIterSeesBothValues(batch.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
+	checkIterSeesBothValues(batch2.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
 }
 
 func BenchmarkMVCCKeyCompare(b *testing.B) {
@@ -440,10 +459,6 @@ func makeRandEncodedKeys() [][]byte {
 			// 20% of keys have a logical component.
 			k.Timestamp.Logical = rng.Int31n(4) + 1
 		}
-		if rng.Int31n(1000) == 0 && !k.Timestamp.IsEmpty() {
-			// 0.1% of keys have a synthetic component.
-			k.Timestamp.Synthetic = true
-		}
 		keys[i] = EncodeMVCCKey(k)
 	}
 	return keys
@@ -459,7 +474,7 @@ type testValue struct {
 func intent(key roachpb.Key, val string, ts hlc.Timestamp) testValue {
 	var value = roachpb.MakeValueFromString(val)
 	value.InitChecksum(key)
-	tx := roachpb.MakeTransaction(fmt.Sprintf("txn-%v", key), key, isolation.Serializable, roachpb.NormalUserPriority, ts, 1000, 99)
+	tx := roachpb.MakeTransaction(fmt.Sprintf("txn-%v", key), key, isolation.Serializable, roachpb.NormalUserPriority, ts, 1000, 99, 0, false /* omitInRangefeeds */)
 	var txn = &tx
 	return testValue{key, value, ts, txn}
 }
@@ -474,7 +489,7 @@ func fillInData(ctx context.Context, engine Engine, data []testValue) error {
 	batch := engine.NewBatch()
 	defer batch.Close()
 	for _, val := range data {
-		if err := MVCCPut(ctx, batch, nil, val.key, val.timestamp, hlc.ClockTimestamp{}, val.value, val.txn); err != nil {
+		if _, err := MVCCPut(ctx, batch, val.key, val.timestamp, val.value, MVCCWriteOptions{Txn: val.txn}); err != nil {
 			return err
 		}
 	}
@@ -487,10 +502,6 @@ func ts(ts int64) hlc.Timestamp {
 
 func key(k int) roachpb.Key {
 	return []byte(fmt.Sprintf("%05d", k))
-}
-
-func requireTxnForValue(t *testing.T, val testValue, intent roachpb.Intent) {
-	require.Equal(t, val.txn.Key, intent.Txn.Key)
 }
 
 // nonFatalLogger implements pebble.Logger by recording that a fatal log event
@@ -590,7 +601,7 @@ func TestPebbleMVCCTimeIntervalCollector(t *testing.T) {
 	// Nothing added.
 	finishAndCheck(0, 0)
 	uuid := uuid.Must(uuid.FromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
-	ek, _ := LockTableKey{aKey, lock.Exclusive, uuid[:]}.ToEngineKey(nil)
+	ek, _ := LockTableKey{aKey, lock.Intent, uuid}.ToEngineKey(nil)
 	require.NoError(t, collector.Add(pebble.InternalKey{UserKey: ek.Encode()}, []byte("foo")))
 	// The added key was not an MVCCKey.
 	finishAndCheck(0, 0)
@@ -749,13 +760,13 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 						}
 						expect = append(expect, kv)
 					}
-
-					iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-						KeyTypes:         keyType,
-						UpperBound:       keys.MaxKey,
-						MinTimestampHint: tc.minTimestamp,
-						MaxTimestampHint: tc.maxTimestamp,
+					iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
+						KeyTypes:     keyType,
+						UpperBound:   keys.MaxKey,
+						MinTimestamp: tc.minTimestamp,
+						MaxTimestamp: tc.maxTimestamp,
 					})
+					require.NoError(t, err)
 					defer iter.Close()
 					require.Equal(t, expect, scanIter(t, iter))
 				})
@@ -801,7 +812,7 @@ func TestPebbleMVCCTimeIntervalWithClears(t *testing.T) {
 	require.NoError(t, eng.Flush())
 
 	// Clear a@5 and [c-d)@7 in a separate SST.
-	require.NoError(t, eng.ClearMVCC(pointKey("a", 5)))
+	require.NoError(t, eng.ClearMVCC(pointKey("a", 5), ClearOptions{}))
 	require.NoError(t, eng.ClearMVCCRangeKey(rangeKey("c", "d", 7)))
 	require.NoError(t, eng.Flush())
 
@@ -823,26 +834,18 @@ func TestPebbleMVCCTimeIntervalWithClears(t *testing.T) {
 			rangeKV("d", "e", 9, MVCCValue{}),
 		}},
 		"at cleared point": {wallTS(5), wallTS(5), []interface{}{
-			pointKV("a", 7, "a7"),
-			pointKV("a", 3, "a3"),
+			// a@7 and a@3's timestamps fall outside [5,5].
 			rangeKV("b", "c", 5, MVCCValue{}),
 			rangeKV("d", "e", 9, MVCCValue{}),
 		}},
-		// NB: This reveals a@5 which has been deleted, because the SST block
-		// containing the point clear does not satisfy the [7-7] filter.
 		"at cleared range": {wallTS(7), wallTS(7), []interface{}{
+			// a@5 and a@3's timestamps fall outside [7,7].
 			pointKV("a", 7, "a7"),
-			pointKV("a", 5, "a5"),
-			pointKV("a", 3, "a3"),
 			rangeKV("b", "c", 5, MVCCValue{}),
 			rangeKV("d", "e", 9, MVCCValue{}),
 		}},
-		// NB: This reveals a@5 which has been deleted, because the SST block
-		// containing the point clear does not satisfy the [1-3] filter. Range keys
-		// are not filtered.
 		"touches lower": {wallTS(1), wallTS(3), []interface{}{
-			pointKV("a", 7, "a7"),
-			pointKV("a", 5, "a5"),
+			// a@7 and a@5's timestamps fall outside [1,3].
 			pointKV("a", 3, "a3"),
 			rangeKV("b", "c", 5, MVCCValue{}),
 			rangeKV("d", "e", 9, MVCCValue{}),
@@ -870,13 +873,15 @@ func TestPebbleMVCCTimeIntervalWithClears(t *testing.T) {
 						}
 						expect = append(expect, kv)
 					}
-
-					iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-						KeyTypes:         keyType,
-						UpperBound:       keys.MaxKey,
-						MinTimestampHint: tc.minTimestamp,
-						MaxTimestampHint: tc.maxTimestamp,
+					iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
+						KeyTypes:     keyType,
+						UpperBound:   keys.MaxKey,
+						MinTimestamp: tc.minTimestamp,
+						MaxTimestamp: tc.maxTimestamp,
 					})
+					if err != nil {
+						t.Fatal(err)
+					}
 					defer iter.Close()
 					require.Equal(t, expect, scanIter(t, iter))
 				})
@@ -950,13 +955,15 @@ func TestPebbleMVCCTimeIntervalWithRangeClears(t *testing.T) {
 						}
 						expect = append(expect, kv)
 					}
-
-					iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-						KeyTypes:         keyType,
-						UpperBound:       keys.MaxKey,
-						MinTimestampHint: tc.minTimestamp,
-						MaxTimestampHint: tc.maxTimestamp,
+					iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
+						KeyTypes:     keyType,
+						UpperBound:   keys.MaxKey,
+						MinTimestamp: tc.minTimestamp,
+						MaxTimestamp: tc.maxTimestamp,
 					})
+					if err != nil {
+						t.Fatal(err)
+					}
 					defer iter.Close()
 					require.Equal(t, expect, scanIter(t, iter))
 				})
@@ -972,14 +979,15 @@ func TestPebbleTablePropertyFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Set up a static property collector which always writes the same table
-	// properties [5-7] regardless of the SSTable contents. We keep the default
-	// block property collects too, which will use the actual SSTable timestamps.
+	// properties [1-7] regardless of the SSTable contents. We keep the default
+	// block property collects too, which will use the actual SSTable
+	// timestamps.
 	overrideOptions := func(cfg *engineConfig) error {
 		cfg.Opts.TablePropertyCollectors = []func() pebble.TablePropertyCollector{
 			func() pebble.TablePropertyCollector {
 				return &staticTablePropertyCollector{
 					props: map[string]string{
-						"crdb.ts.min": "\x00\x00\x00\x00\x00\x00\x00\x05", // WallTime: 5
+						"crdb.ts.min": "\x00\x00\x00\x00\x00\x00\x00\x01", // WallTime: 1
 						"crdb.ts.max": "\x00\x00\x00\x00\x00\x00\x00\x07", // WallTime: 7
 					},
 				}
@@ -999,41 +1007,37 @@ func TestPebbleTablePropertyFilter(t *testing.T) {
 	// Table and block properties now think the SST covers these spans:
 	//
 	// Block properties: [1-7]
-	// Table properties: [5-7]
+	// Table properties: [1-7]
 	//
 	// Both must be satisfied in order for the (only) SST to be included.
 	testcases := map[string]struct {
 		minTimestamp int64
 		maxTimestamp int64
-		expectResult bool
+		expectResult []interface{}
 	}{
-		"tableprop lower inclusive": {4, 5, true},
-		"tableprop upper inclusive": {7, 8, true},
-		"tableprop exact":           {5, 7, true},
-		"tableprop within":          {6, 6, true},
-		"tableprop covering":        {4, 8, true},
-		"tableprop below":           {3, 4, false},
-		"both above":                {8, 9, false},
-		"blockprop only":            {1, 3, false}, // needs both block and table props
+		"tableprop lower inclusive": {4, 5, []interface{}(nil)},
+		"tableprop upper inclusive": {7, 8, []interface{}{pointKV("b", 7, "b7")}},
+		"tableprop exact":           {5, 7, []interface{}{pointKV("b", 7, "b7")}},
+		"tableprop within":          {6, 6, []interface{}(nil)},
+		"tableprop covering":        {4, 8, []interface{}{pointKV("b", 7, "b7")}},
+		"tableprop below":           {3, 4, []interface{}(nil)},
+		"both above":                {8, 9, []interface{}(nil)},
+		"blockprop only":            {1, 3, []interface{}{pointKV("a", 1, "a1")}}, // needs both block and table props
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-				UpperBound:       keys.MaxKey,
-				MinTimestampHint: hlc.Timestamp{WallTime: tc.minTimestamp},
-				MaxTimestampHint: hlc.Timestamp{WallTime: tc.maxTimestamp},
+			iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
+				UpperBound:   keys.MaxKey,
+				MinTimestamp: hlc.Timestamp{WallTime: tc.minTimestamp},
+				MaxTimestamp: hlc.Timestamp{WallTime: tc.maxTimestamp},
 			})
+			if err != nil {
+				t.Fatal(err)
+			}
 			defer iter.Close()
 
 			kvs := scanIter(t, iter)
-			if tc.expectResult {
-				require.Equal(t, []interface{}{
-					pointKV("a", 1, "a1"),
-					pointKV("b", 7, "b7"),
-				}, kvs)
-			} else {
-				require.Empty(t, kvs)
-			}
+			require.Equal(t, tc.expectResult, kvs)
 		})
 	}
 }
@@ -1079,11 +1083,14 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	defer roGuaranteed.Close()
 	roGuaranteedPinned := eng.NewReadOnly(GuaranteedDurability)
 	defer roGuaranteedPinned.Close()
-	require.NoError(t, roGuaranteedPinned.PinEngineStateForIterators())
+	require.NoError(t, roGuaranteedPinned.PinEngineStateForIterators(UnknownReadCategory))
 	// Returns the value found or nil.
 	checkGetAndIter := func(reader Reader) []byte {
 		v := mvccGetRaw(t, reader, k)
-		iter := reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: k.Key.Next()})
+		iter, err := reader.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: k.Key.Next()})
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer iter.Close()
 		iter.SeekGE(k)
 		valid, err := iter.Valid()
@@ -1146,15 +1153,19 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 
 	readOnly := eng.NewReadOnly(StandardDurability)
 	defer readOnly.Close()
-	require.NoError(t, readOnly.PinEngineStateForIterators())
+	require.NoError(t, readOnly.PinEngineStateForIterators(UnknownReadCategory))
 
 	snapshot := eng.NewSnapshot()
 	defer snapshot.Close()
-	require.NoError(t, snapshot.PinEngineStateForIterators())
+	require.NoError(t, snapshot.PinEngineStateForIterators(UnknownReadCategory))
+
+	efos := eng.NewEventuallyFileOnlySnapshot([]roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}})
+	defer efos.Close()
+	require.NoError(t, efos.PinEngineStateForIterators(UnknownReadCategory))
 
 	batch := eng.NewBatch()
 	defer batch.Close()
-	require.NoError(t, batch.PinEngineStateForIterators())
+	require.NoError(t, batch.PinEngineStateForIterators(UnknownReadCategory))
 
 	// These writes should not be visible to any of the pinned iterators.
 	require.NoError(t, eng.PutMVCC(a1, vx))
@@ -1165,13 +1176,20 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 		"Engine":   eng,
 		"ReadOnly": readOnly,
 		"Snapshot": snapshot,
+		"EFOS":     efos,
 		"Batch":    batch,
 	}
 	for name, r := range testcases {
 		t.Run(name, func(t *testing.T) {
 			// Make sure we can create two iterators of the same type.
-			i1 := r.NewMVCCIterator(MVCCKeyIterKind, IterOptions{LowerBound: a1.Key, UpperBound: keys.MaxKey})
-			i2 := r.NewMVCCIterator(MVCCKeyIterKind, IterOptions{LowerBound: b1.Key, UpperBound: keys.MaxKey})
+			i1, err := r.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{LowerBound: a1.Key, UpperBound: keys.MaxKey})
+			if err != nil {
+				t.Fatal(err)
+			}
+			i2, err := r.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{LowerBound: b1.Key, UpperBound: keys.MaxKey})
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			// Make sure the iterators are independent.
 			i1.SeekGE(a1)
@@ -1195,9 +1213,15 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 			i2.Close()
 
 			// Quick check for engine iterators too.
-			e1 := r.NewEngineIterator(IterOptions{UpperBound: keys.MaxKey})
+			e1, err := r.NewEngineIterator(context.Background(), IterOptions{UpperBound: keys.MaxKey})
+			if err != nil {
+				t.Fatal(err)
+			}
 			defer e1.Close()
-			e2 := r.NewEngineIterator(IterOptions{UpperBound: keys.MaxKey})
+			e2, err := r.NewEngineIterator(context.Background(), IterOptions{UpperBound: keys.MaxKey})
+			if err != nil {
+				t.Fatal(err)
+			}
 			defer e2.Close()
 		})
 	}
@@ -1208,7 +1232,7 @@ func TestShortAttributeExtractor(t *testing.T) {
 
 	var txnUUID [uuid.Size]byte
 	lockKey, _ := LockTableKey{
-		Key: roachpb.Key("a"), Strength: lock.Exclusive, TxnUUID: txnUUID[:]}.ToEngineKey(nil)
+		Key: roachpb.Key("a"), Strength: lock.Intent, TxnUUID: txnUUID}.ToEngineKey(nil)
 	v := MVCCValue{}
 	tombstoneVal, err := EncodeMVCCValue(v)
 	require.NoError(t, err)
@@ -1362,7 +1386,7 @@ func TestApproximateDiskBytes(t *testing.T) {
 	require.NoError(t, err)
 	defer p.Close()
 
-	key := func(i int) roachpb.Key {
+	keyFunc := func(i int) roachpb.Key {
 		return keys.SystemSQLCodec.TablePrefix(uint32(i))
 	}
 
@@ -1370,7 +1394,7 @@ func TestApproximateDiskBytes(t *testing.T) {
 	b := p.NewWriteBatch()
 	for i := 0; i < 1000; i++ {
 		require.NoError(t, b.PutMVCC(
-			MVCCKey{Key: key(i), Timestamp: hlc.Timestamp{WallTime: int64(i + 1)}},
+			MVCCKey{Key: keyFunc(i), Timestamp: hlc.Timestamp{WallTime: int64(i + 1)}},
 			MVCCValue{Value: roachpb.Value{RawBytes: randutil.RandBytes(rng, 100)}},
 		))
 	}
@@ -1378,7 +1402,7 @@ func TestApproximateDiskBytes(t *testing.T) {
 	require.NoError(t, p.Flush())
 
 	approxBytes := func(span roachpb.Span) uint64 {
-		v, err := p.ApproximateDiskBytes(span.Key, span.EndKey)
+		v, _, _, err := p.ApproximateDiskBytes(span.Key, span.EndKey)
 		require.NoError(t, err)
 		t.Logf("%s (%x-%x): %d bytes", span, span.Key, span.EndKey, v)
 		return v
@@ -1386,9 +1410,194 @@ func TestApproximateDiskBytes(t *testing.T) {
 
 	all := approxBytes(roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax})
 	for i := 0; i < 1000; i++ {
-		s := roachpb.Span{Key: key(i), EndKey: key(i + 1)}
+		s := roachpb.Span{Key: keyFunc(i), EndKey: keyFunc(i + 1)}
 		if v := approxBytes(s); v >= all {
 			t.Errorf("ApproximateDiskBytes(%q) = %d >= entire DB size %d", s, v, all)
 		}
 	}
+}
+
+func TestConvertFilesToBatchAndCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	const ingestEngine = 0
+	const batchEngine = 1
+	var engs [batchEngine + 1]Engine
+	mem := vfs.NewMem()
+	for i := range engs {
+		engs[i] = InMemFromFS(ctx, mem, fmt.Sprintf("eng-%d", i), st)
+		defer engs[i].Close()
+	}
+	// Populate points that will have MVCC value and an intent.
+	points := []testValue{
+		intent(key(1), "value1", ts(1000)),
+		value(key(2), "value2", ts(1000)),
+		intent(key(2), "value3", ts(2000)),
+		intent(key(5), "value4", ts(1500)),
+		intent(key(6), "value4", ts(2500)),
+	}
+	for i := range engs {
+		// Put points
+		require.NoError(t, fillInData(ctx, engs[i], points))
+		// Put wide range keys that will be partially cleared.
+		require.NoError(t, engs[i].PutMVCCRangeKey(MVCCRangeKey{
+			StartKey:  key(1),
+			EndKey:    key(7),
+			Timestamp: ts(2300),
+		}, MVCCValue{}))
+		require.NoError(t, engs[i].PutMVCCRangeKey(MVCCRangeKey{
+			StartKey:  key(0),
+			EndKey:    key(8),
+			Timestamp: ts(2700),
+		}, MVCCValue{}))
+	}
+	// Ingest into [2, 6) with 2 files.
+	fileName1 := "file1"
+	f1, err := mem.Create(fileName1)
+	require.NoError(t, err)
+	w1 := MakeIngestionSSTWriter(ctx, st, objstorageprovider.NewFileWritable(f1))
+	startKey := key(2)
+	endKey := key(6)
+	lkStart, _ := keys.LockTableSingleKey(startKey, nil)
+	lkEnd, _ := keys.LockTableSingleKey(endKey, nil)
+	require.NoError(t, w1.ClearRawRange(lkStart, lkEnd, true, true))
+	// Not a real lock table key, since lacks a version, but it doesn't matter
+	// for this test. We can't use MVCCPut since the intent and the
+	// corresponding provisional value belong in different ssts.
+	lk3, _ := keys.LockTableSingleKey(key(3), nil)
+	require.NoError(t, w1.PutEngineKey(EngineKey{Key: lk3}, []byte("")))
+	require.NoError(t, w1.Finish())
+	w1.Close()
+
+	fileName2 := "file2"
+	f2, err := mem.Create(fileName2)
+	require.NoError(t, err)
+	w2 := MakeIngestionSSTWriter(ctx, st, objstorageprovider.NewFileWritable(f2))
+	require.NoError(t, w2.ClearRawRange(startKey, endKey, true, true))
+	val := roachpb.MakeValueFromString("value5")
+	val.InitChecksum(key(3))
+	require.NoError(t, w2.PutMVCC(
+		MVCCKey{Key: key(3), Timestamp: ts(2800)}, MVCCValue{Value: val}))
+	require.NoError(t, w2.Finish())
+	w2.Close()
+
+	require.NoError(t, engs[batchEngine].ConvertFilesToBatchAndCommit(
+		ctx, []string{fileName1, fileName2}, []roachpb.Span{
+			{Key: lkStart, EndKey: lkEnd}, {Key: startKey, EndKey: endKey},
+		}))
+	require.NoError(t, engs[ingestEngine].IngestLocalFiles(ctx, []string{fileName1, fileName2}))
+	outputState := func(eng Engine) []string {
+		it, err := eng.NewEngineIterator(context.Background(), IterOptions{
+			UpperBound: roachpb.KeyMax,
+			KeyTypes:   IterKeyTypePointsAndRanges,
+		})
+		require.NoError(t, err)
+		defer it.Close()
+		var state []string
+		valid, err := it.SeekEngineKeyGE(EngineKey{Key: roachpb.KeyMin})
+		for valid {
+			hasPoint, hasRange := it.HasPointAndRange()
+			if hasPoint {
+				k, err := it.EngineKey()
+				require.NoError(t, err)
+				v, err := it.UnsafeValue()
+				require.NoError(t, err)
+				state = append(state, fmt.Sprintf("point %s = %x\n", k, v))
+			}
+			if hasRange {
+				k, err := it.EngineRangeBounds()
+				require.NoError(t, err)
+				v := it.EngineRangeKeys()
+				for i := range v {
+					state = append(state, fmt.Sprintf(
+						"range [%s,%s) = %x/%x\n", k.Key, k.EndKey, v[i].Value, v[i].Version))
+				}
+			}
+			valid, err = it.NextEngineKey()
+		}
+		require.NoError(t, err)
+		return state
+	}
+	require.Equal(t, outputState(engs[ingestEngine]), outputState(engs[batchEngine]))
+}
+
+func TestCompactionConcurrencyEnvVars(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	maxProcsBefore := runtime.GOMAXPROCS(0)
+	defer runtime.GOMAXPROCS(maxProcsBefore)
+
+	type testCase struct {
+		maxProcs             int
+		rocksDBConcurrency   string
+		cockroachConcurrency string
+		want                 int
+	}
+	cases := []testCase{
+		// Defaults
+		{32, "", "", 3},
+		{4, "", "", 3},
+		{3, "", "", 2},
+		{2, "", "", 1},
+		{1, "", "", 1},
+		// Old COCKROACH_ROCKSDB_CONCURRENCY env var is set. The user-provided
+		// value includes 1 slot for flushes, so resulting compaction
+		// concurrency is n-1.
+		{32, "4", "", 3},
+		{4, "4", "", 3},
+		{2, "4", "", 3},
+		{1, "4", "", 3},
+		{32, "8", "", 7},
+		{4, "8", "", 7},
+		{2, "8", "", 7},
+		{1, "8", "", 7},
+		// New COCKROACH_CONCURRENT_COMPACTIONS env var is set.
+		{32, "", "4", 4},
+		{4, "", "4", 4},
+		{2, "", "4", 4},
+		{1, "", "4", 4},
+		{32, "", "8", 8},
+		{4, "", "8", 8},
+		{2, "", "8", 8},
+		{1, "", "8", 8},
+		// Both settings are set; COCKROACH_CONCURRENT_COMPACTIONS supersedes
+		// COCKROACH_ROCKSDB_CONCURRENCY.
+		{32, "8", "4", 4},
+		{4, "1", "4", 4},
+		{2, "2", "4", 4},
+		{1, "5", "4", 4},
+		{32, "1", "8", 8},
+		{4, "2", "8", 8},
+		{2, "4", "8", 8},
+		{1, "1", "8", 8},
+	}
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("GOMAXPROCS=%d,old=%q,new=%q", tc.maxProcs, tc.rocksDBConcurrency, tc.cockroachConcurrency),
+			func(t *testing.T) {
+				runtime.GOMAXPROCS(tc.maxProcs)
+
+				if tc.rocksDBConcurrency == "" {
+					defer envutil.TestUnsetEnv(t, "COCKROACH_ROCKSDB_CONCURRENCY")()
+				} else {
+					defer envutil.TestSetEnv(t, "COCKROACH_ROCKSDB_CONCURRENCY", tc.rocksDBConcurrency)()
+				}
+				if tc.cockroachConcurrency == "" {
+					defer envutil.TestUnsetEnv(t, "COCKROACH_CONCURRENT_COMPACTIONS")()
+				} else {
+					defer envutil.TestSetEnv(t, "COCKROACH_CONCURRENT_COMPACTIONS", tc.cockroachConcurrency)()
+				}
+				require.Equal(t, tc.want, getMaxConcurrentCompactions())
+			})
+	}
+}
+
+func TestMinimumSupportedFormatVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	require.Equal(t, pebbleFormatVersionMap[clusterversion.MinSupported], MinimumSupportedFormatVersion,
+		"MinimumSupportedFormatVersion must match the format version for %s", clusterversion.MinSupported)
 }

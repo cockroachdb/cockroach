@@ -98,7 +98,7 @@ DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
 statement ok
 INSERT INTO a VALUES(3, 4)
 
-query II
+query II nosort
 FETCH 3 foo
 ----
 1  2
@@ -108,7 +108,7 @@ statement ok
 CLOSE foo;
 DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
 
-query II
+query II nosort
 FETCH 3 foo
 ----
 1  2
@@ -180,7 +180,7 @@ statement ok
 BEGIN;
 DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
 
-query II
+query II nosort
 FETCH ALL foo
 ----
 1  2
@@ -195,7 +195,7 @@ statement ok
 CLOSE foo;
 DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
 
-query II
+query II nosort
 FETCH FORWARD ALL foo
 ----
 1  2
@@ -236,14 +236,14 @@ FETCH NEXT foo
 ----
 3  4
 
-query II
+query II nosort
 FETCH FORWARD 3 foo
 ----
 4  5
 5  6
 6  7
 
-query II
+query II nosort
 FETCH FORWARD 3 foo
 ----
 7  8

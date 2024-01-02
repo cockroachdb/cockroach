@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
@@ -25,11 +24,12 @@ go_proto_library(
 
 go_library(
     name = "kvflowcontrolpb",
-    srcs = ["raft_log_position.go"],
+    srcs = ["kvflowcontrol.go"],
     embed = [":kvflowcontrolpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_redact//:redact"],
+    deps = [
+        "//pkg/util/admission/admissionpb",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
 )
-
-get_x_data(name = "get_x_data")

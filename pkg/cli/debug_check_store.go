@@ -130,7 +130,7 @@ func worker(ctx context.Context, in checkInput) checkResult {
 		res.err = err
 		return res
 	}
-	ms, err := rditer.ComputeStatsForRange(desc, eng, claimedMS.LastUpdateNanos)
+	ms, err := rditer.ComputeStatsForRange(ctx, desc, eng, claimedMS.LastUpdateNanos)
 	if err != nil {
 		res.err = err
 		return res

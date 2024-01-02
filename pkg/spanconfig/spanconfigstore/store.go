@@ -25,20 +25,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// EnabledSetting is a hidden cluster setting to enable the use of the span
-// configs infrastructure in KV. It switches each store in the cluster from
-// using the gossip backed system config span to instead using the span configs
-// infrastructure. It has no effect if COCKROACH_DISABLE_SPAN_CONFIGS
-// is set.
-//
-// TODO(irfansharif): We should remove this.
-var EnabledSetting = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"spanconfig.store.enabled",
-	`use the span config infrastructure in KV instead of the system config span`,
-	true,
-)
-
 // FallbackConfigOverride is a hidden cluster setting to override the fallback
 // config used for ranges with no explicit span configs set.
 var FallbackConfigOverride = settings.RegisterProtobufSetting(
@@ -56,7 +42,7 @@ var boundsEnabled = settings.RegisterBoolSetting(
 	"spanconfig.bounds.enabled",
 	"dictates whether span config bounds are consulted when serving span configs for secondary tenants",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // Store is an in-memory data structure to store, retrieve, and incrementally
 // update the span configuration state. Internally, it makes use of an interval
@@ -190,6 +176,9 @@ func (s *Store) getFallbackConfig() roachpb.SpanConfig {
 	if conf := FallbackConfigOverride.Get(&s.settings.SV).(*roachpb.SpanConfig); !conf.IsEmpty() {
 		return *conf
 	}
+	if s.knobs != nil && s.knobs.OverrideFallbackConf != nil {
+		return s.knobs.OverrideFallbackConf(s.fallback)
+	}
 	return s.fallback
 }
 
@@ -210,13 +199,37 @@ func (s *Store) ForEachOverlappingSpanConfig(
 ) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.mu.spanConfigStore.forEachOverlapping(span, func(sp roachpb.Span, conf roachpb.SpanConfig) error {
+	var foundOverlapping bool
+	err := s.mu.spanConfigStore.forEachOverlapping(span, func(sp roachpb.Span, conf roachpb.SpanConfig) error {
+		foundOverlapping = true
 		config, err := s.getSpanConfigForKeyRLocked(ctx, roachpb.RKey(sp.Key))
 		if err != nil {
 			return err
 		}
 		return f(sp, config)
 	})
+	if err != nil {
+		return err
+	}
+	// For a span that doesn't overlap with any span configs, we use the fallback
+	// config combined with the system span configs that may be applicable to the
+	// span.
+	//
+	// For example, when a table is dropped and all of its data (including the
+	// range deletion tombstone installed by the drop) is GC'ed, the associated
+	// schema change GC job will delete the table's span config. In this case, we
+	// will not find any overlapping span configs for the table's span, but a
+	// system span config, such as a cluster wide protection policy, may still be
+	// applicable to the replica with the empty table span.
+	if !foundOverlapping {
+		log.VInfof(ctx, 3, "no overlapping span config found for span %s", span)
+		config, err := s.getSpanConfigForKeyRLocked(ctx, roachpb.RKey(span.Key))
+		if err != nil {
+			return err
+		}
+		return f(span, config)
+	}
+	return nil
 }
 
 // Clone returns a copy of the Store.

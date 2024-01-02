@@ -1,5 +1,3 @@
-# LogicTest: !local-mixed-22.2-23.1
-
 ## Tests for span construction/manipulation builtins
 
 subtest tenant_span_0_arg
@@ -41,6 +39,20 @@ SELECT crdb_internal.tenant_span(2)
 
 subtest end
 
+subtest tenant_span_at_uint_boundary
+
+query T
+SELECT crdb_internal.pretty_key(crdb_internal.tenant_span(108)[2], 0)
+----
+/109
+
+query T
+SELECT crdb_internal.pretty_key(crdb_internal.tenant_span(109)[2], 0)
+----
+/110
+
+subtest end
+
 subtest table_span
 
 query T
@@ -66,5 +78,15 @@ query T
 SELECT encode(crdb_internal.trim_tenant_prefix('\xfe8828a09b'), 'hex');
 ----
 fe8828a09b
+
+subtest end
+
+subtest fingerprint_handles_null_args
+
+query error StartKey cannot be NULL
+SELECT crdb_internal.fingerprint(ARRAY[NULL, NULL]::BYTES[], now(), false);
+
+query error EndKey cannot be NULL
+SELECT crdb_internal.fingerprint(ARRAY['\\x8989', NULL]::BYTES[], now(), false);
 
 subtest end

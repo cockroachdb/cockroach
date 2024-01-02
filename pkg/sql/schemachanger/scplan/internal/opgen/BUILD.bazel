@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -51,11 +50,11 @@ go_library(
         "opgen_schema.go",
         "opgen_schema_child.go",
         "opgen_schema_comment.go",
-        "opgen_schema_name.go",
         "opgen_schema_parent.go",
         "opgen_secondary_index.go",
         "opgen_secondary_index_partial.go",
         "opgen_sequence.go",
+        "opgen_sequence_option.go",
         "opgen_sequence_owner.go",
         "opgen_table.go",
         "opgen_table_comment.go",
@@ -103,9 +102,6 @@ go_test(
     name = "opgen_test",
     size = "small",
     srcs = ["register_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":opgen"],
     deps = ["//pkg/sql/schemachanger/scpb"],
 )
-
-get_x_data(name = "get_x_data")

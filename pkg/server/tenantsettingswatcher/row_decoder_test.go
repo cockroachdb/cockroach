@@ -15,13 +15,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,14 +30,18 @@ import (
 // rows stored in the tenant_settings table of a real cluster.
 func TestRowDecoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
 
-	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb := sqlutils.MakeSQLRunner(db)
 
-	toSet := map[string]struct {
+	toSet := map[settings.InternalKey]struct {
 		tenantID int
 		val      string
 		typ      string
@@ -64,10 +69,10 @@ func TestRowDecoder(t *testing.T) {
 		)
 	}
 
-	tableID, err := tc.Server(0).SystemTableIDResolver().(catalog.SystemTableIDResolver).LookupSystemTableID(ctx, "tenant_settings")
+	tableID, err := ts.SystemTableIDResolver().(catalog.SystemTableIDResolver).LookupSystemTableID(ctx, "tenant_settings")
 	require.NoError(t, err)
-	k := keys.SystemSQLCodec.TablePrefix(uint32(tableID))
-	rows, err := tc.Server(0).DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
+	k := ts.Codec().TablePrefix(uint32(tableID))
+	rows, err := kvDB.Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 	require.NoError(t, err)
 	dec := tenantsettingswatcher.MakeRowDecoder()
 	for _, row := range rows {
@@ -79,11 +84,11 @@ func TestRowDecoder(t *testing.T) {
 		tenantID, setting, tombstone, err := dec.DecodeRow(kv)
 		require.NoError(t, err)
 		require.False(t, tombstone)
-		if exp, ok := toSet[setting.Name]; ok {
+		if exp, ok := toSet[setting.InternalKey]; ok {
 			require.Equal(t, exp.tenantID, int(tenantID.InternalValue))
 			require.Equal(t, exp.val, setting.Value.Value)
 			require.Equal(t, exp.typ, setting.Value.Type)
-			delete(toSet, setting.Name)
+			delete(toSet, setting.InternalKey)
 		}
 
 		// Test the tombstone logic while we're here.
@@ -92,7 +97,7 @@ func TestRowDecoder(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, tombstone)
 		require.Equal(t, tenantID, tombstoneTenantID)
-		require.Equal(t, setting.Name, tombstoneSetting.Name)
+		require.Equal(t, setting.InternalKey, tombstoneSetting.InternalKey)
 		require.Zero(t, tombstoneSetting.Value.Value)
 		require.Zero(t, tombstoneSetting.Value.Type)
 	}

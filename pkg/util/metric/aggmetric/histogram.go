@@ -11,9 +11,37 @@
 package aggmetric
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	io_prometheus_client "github.com/prometheus/client_model/go"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/tick"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/google/btree"
+	prometheusgo "github.com/prometheus/client_model/go"
 )
+
+var now = timeutil.Now
+
+// TestingSetNow changes the clock used by the metric system. For use by
+// testing to precisely control the clock. Also sets the time in the `tick`
+// package, and pkg/util/metric.
+//
+// TODO(obs): I know this is janky. It's temporary. An upcoming patch will
+// merge this package, pkg/util/metric, and pkg/util/aggmetric, after which
+// we can get rid of all this TestingSetNow chaining.
+func TestingSetNow(f func() time.Time) func() {
+	tickNowResetFn := tick.TestingSetNow(f)
+	metricNowResetFn := metric.TestingSetNow(f)
+	origNow := now
+	now = f
+	return func() {
+		now = origNow
+		tickNowResetFn()
+		metricNowResetFn()
+	}
+}
 
 // AggHistogram maintains a value as the sum of its children. The histogram will
 // report to crdb-internal time series only the aggregate histogram of all of its
@@ -23,12 +51,21 @@ type AggHistogram struct {
 	h      metric.IHistogram
 	create func() metric.IHistogram
 	childSet
+	ticker struct {
+		// We use a RWMutex, because we don't want child histograms to contend when
+		// recording values, unless we're rotating histograms for the parent & children.
+		// In this instance, the "writer" for the RWMutex is the ticker, and the "readers"
+		// are all the child histograms recording their values.
+		syncutil.RWMutex
+		*tick.Ticker
+	}
 }
 
 var _ metric.Iterable = (*AggHistogram)(nil)
 var _ metric.PrometheusIterable = (*AggHistogram)(nil)
 var _ metric.PrometheusExportable = (*AggHistogram)(nil)
 var _ metric.WindowedHistogram = (*AggHistogram)(nil)
+var _ metric.CumulativeHistogram = (*AggHistogram)(nil)
 
 // NewHistogram constructs a new AggHistogram.
 func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHistogram {
@@ -39,6 +76,23 @@ func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHisto
 		h:      create(),
 		create: create,
 	}
+	a.ticker.Ticker = tick.NewTicker(
+		now(),
+		opts.Duration/metric.WindowedHistogramWrapNum,
+		func() {
+			// Atomically rotate the histogram window for the
+			// parent histogram, and all the child histograms.
+			a.h.Tick()
+			a.childSet.apply(func(childItem btree.Item) {
+				childHist, ok := childItem.(*Histogram)
+				if !ok {
+					panic(errors.AssertionFailedf(
+						"unable to assert type of child for histogram %q when rotating histogram windows",
+						opts.Metadata.Name))
+				}
+				childHist.h.Tick()
+			})
+		})
 	a.init(childLabels)
 	return a
 }
@@ -59,45 +113,37 @@ func (a *AggHistogram) GetUnit() metric.Unit { return a.h.GetUnit() }
 func (a *AggHistogram) GetMetadata() metric.Metadata { return a.h.GetMetadata() }
 
 // Inspect is part of the metric.Iterable interface.
-func (a *AggHistogram) Inspect(f func(interface{})) { f(a) }
-
-// TotalWindowed is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) TotalWindowed() (int64, float64) {
-	return a.h.TotalWindowed()
+func (a *AggHistogram) Inspect(f func(interface{})) {
+	func() {
+		a.ticker.Lock()
+		defer a.ticker.Unlock()
+		tick.MaybeTick(&a.ticker)
+	}()
+	f(a)
 }
 
-// Total is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) Total() (int64, float64) {
-	return a.h.Total()
+// CumulativeSnapshot is part of the metric.CumulativeHistogram interface.
+func (a *AggHistogram) CumulativeSnapshot() metric.HistogramSnapshot {
+	return a.h.CumulativeSnapshot()
 }
 
-// MeanWindowed is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) MeanWindowed() float64 {
-	return a.h.MeanWindowed()
-}
-
-// Mean is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) Mean() float64 {
-	return a.h.Mean()
-}
-
-// ValueAtQuantileWindowed is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) ValueAtQuantileWindowed(q float64) float64 {
-	return a.h.ValueAtQuantileWindowed(q)
+// WindowedSnapshot is part of the metric.WindowedHistogram interface.
+func (a *AggHistogram) WindowedSnapshot() metric.HistogramSnapshot {
+	return a.h.WindowedSnapshot()
 }
 
 // GetType is part of the metric.PrometheusExportable interface.
-func (a *AggHistogram) GetType() *io_prometheus_client.MetricType {
+func (a *AggHistogram) GetType() *prometheusgo.MetricType {
 	return a.h.GetType()
 }
 
 // GetLabels is part of the metric.PrometheusExportable interface.
-func (a *AggHistogram) GetLabels() []*io_prometheus_client.LabelPair {
+func (a *AggHistogram) GetLabels() []*prometheusgo.LabelPair {
 	return a.h.GetLabels()
 }
 
 // ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (a *AggHistogram) ToPrometheusMetric() *io_prometheus_client.Metric {
+func (a *AggHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	return a.h.ToPrometheusMetric()
 }
 
@@ -124,7 +170,7 @@ type Histogram struct {
 }
 
 // ToPrometheusMetric constructs a prometheus metric for this Histogram.
-func (g *Histogram) ToPrometheusMetric() *io_prometheus_client.Metric {
+func (g *Histogram) ToPrometheusMetric() *prometheusgo.Metric {
 	return g.h.ToPrometheusMetric()
 }
 
@@ -142,6 +188,8 @@ func (g *Histogram) Unlink() {
 // excess of the configured maximum value for that histogram results in
 // recording the maximum value instead.
 func (g *Histogram) RecordValue(v int64) {
+	g.parent.ticker.RLock()
+	defer g.parent.ticker.RUnlock()
 	g.h.RecordValue(v)
 	g.parent.h.RecordValue(v)
 }

@@ -4,7 +4,26 @@ BEGIN
 MOVE NEXT FROM emp_cur;
 END
 ----
-expected parse error: at or near "move": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+MOVE 1 FROM emp_cur;
+END
+ -- normalized!
+DECLARE
+BEGIN
+MOVE 1 FROM emp_cur;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+MOVE 1 FROM emp_cur;
+END
+ -- literals removed
+DECLARE
+BEGIN
+MOVE 1 FROM _;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -12,7 +31,26 @@ BEGIN
 MOVE PRIOR FROM var;
 END
 ----
-expected parse error: at or near "move": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+MOVE -1 FROM var;
+END
+ -- normalized!
+DECLARE
+BEGIN
+MOVE -1 FROM var;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+MOVE -1 FROM var;
+END
+ -- literals removed
+DECLARE
+BEGIN
+MOVE -1 FROM _;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -20,7 +58,26 @@ BEGIN
 FETCH NEXT FROM emp_cur INTO x,y;
 END
 ----
-expected parse error: at or near "fetch": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+FETCH 1 FROM emp_cur INTO x, y;
+END
+ -- normalized!
+DECLARE
+BEGIN
+FETCH 1 FROM emp_cur INTO x, y;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+FETCH 1 FROM emp_cur INTO x, y;
+END
+ -- literals removed
+DECLARE
+BEGIN
+FETCH 1 FROM _ INTO _, _;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -28,7 +85,26 @@ BEGIN
 FETCH emp_cur INTO x,y;
 END
 ----
-expected parse error: at or near "fetch": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+FETCH 1 FROM emp_cur INTO x, y;
+END
+ -- normalized!
+DECLARE
+BEGIN
+FETCH 1 FROM emp_cur INTO x, y;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+FETCH 1 FROM emp_cur INTO x, y;
+END
+ -- literals removed
+DECLARE
+BEGIN
+FETCH 1 FROM _ INTO _, _;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -36,4 +112,687 @@ BEGIN
 FETCH ABSOLUTE 2 FROM emp_cur INTO x,y;
 END
 ----
-expected parse error: at or near "fetch": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+FETCH ABSOLUTE 2 FROM emp_cur INTO x, y;
+END
+ -- normalized!
+DECLARE
+BEGIN
+FETCH ABSOLUTE 2 FROM emp_cur INTO x, y;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+FETCH ABSOLUTE 2 FROM emp_cur INTO x, y;
+END
+ -- literals removed
+DECLARE
+BEGIN
+FETCH ABSOLUTE 2 FROM _ INTO _, _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+FETCH emp_cur INTO x;
+END
+----
+DECLARE
+BEGIN
+FETCH 1 FROM emp_cur INTO x;
+END
+ -- normalized!
+DECLARE
+BEGIN
+FETCH 1 FROM emp_cur INTO x;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+FETCH 1 FROM emp_cur INTO x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+FETCH 1 FROM _ INTO _;
+END
+ -- identifiers removed
+
+error
+DECLARE
+BEGIN
+FETCH emp_cur INTO;
+END
+----
+at or near "into": syntax error: missing expression
+DETAIL: source SQL:
+DECLARE
+BEGIN
+FETCH emp_cur INTO;
+              ^
+
+error
+DECLARE
+BEGIN
+FETCH emp_cur;
+END
+----
+at or near "emp_cur": syntax error: invalid syntax for FETCH
+DETAIL: source SQL:
+DECLARE
+BEGIN
+FETCH emp_cur;
+      ^
+
+error
+DECLARE
+BEGIN
+MOVE NEXT FROM emp_cur INTO x, y;
+END
+----
+at or near ";": at or near "x": syntax error
+DETAIL: source SQL:
+x, y
+^
+--
+source SQL:
+DECLARE
+BEGIN
+MOVE NEXT FROM emp_cur INTO x, y;
+                                ^
+
+parse
+DECLARE
+BEGIN
+MOVE NEXT FROM emp_cur;
+END
+----
+DECLARE
+BEGIN
+MOVE 1 FROM emp_cur;
+END
+ -- normalized!
+DECLARE
+BEGIN
+MOVE 1 FROM emp_cur;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+MOVE 1 FROM emp_cur;
+END
+ -- literals removed
+DECLARE
+BEGIN
+MOVE 1 FROM _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+MOVE PRIOR FROM emp_cur;
+END
+----
+DECLARE
+BEGIN
+MOVE -1 FROM emp_cur;
+END
+ -- normalized!
+DECLARE
+BEGIN
+MOVE -1 FROM emp_cur;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+MOVE -1 FROM emp_cur;
+END
+ -- literals removed
+DECLARE
+BEGIN
+MOVE -1 FROM _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+MOVE FIRST FROM emp_cur;
+END
+----
+DECLARE
+BEGIN
+MOVE FIRST FROM emp_cur;
+END
+ -- normalized!
+DECLARE
+BEGIN
+MOVE FIRST FROM emp_cur;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+MOVE FIRST FROM emp_cur;
+END
+ -- literals removed
+DECLARE
+BEGIN
+MOVE FIRST FROM _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+MOVE LAST FROM emp_cur;
+END
+----
+DECLARE
+BEGIN
+MOVE LAST FROM emp_cur;
+END
+ -- normalized!
+DECLARE
+BEGIN
+MOVE LAST FROM emp_cur;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+MOVE LAST FROM emp_cur;
+END
+ -- literals removed
+DECLARE
+BEGIN
+MOVE LAST FROM _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+MOVE ABSOLUTE 5 FROM emp_cur;
+END
+----
+DECLARE
+BEGIN
+MOVE ABSOLUTE 5 FROM emp_cur;
+END
+ -- normalized!
+DECLARE
+BEGIN
+MOVE ABSOLUTE 5 FROM emp_cur;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+MOVE ABSOLUTE 5 FROM emp_cur;
+END
+ -- literals removed
+DECLARE
+BEGIN
+MOVE ABSOLUTE 5 FROM _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+MOVE FIRST FROM emp_cur;
+END
+----
+DECLARE
+BEGIN
+MOVE FIRST FROM emp_cur;
+END
+ -- normalized!
+DECLARE
+BEGIN
+MOVE FIRST FROM emp_cur;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+MOVE FIRST FROM emp_cur;
+END
+ -- literals removed
+DECLARE
+BEGIN
+MOVE FIRST FROM _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+MOVE RELATIVE 3 FROM emp_cur;
+END
+----
+DECLARE
+BEGIN
+MOVE RELATIVE 3 FROM emp_cur;
+END
+ -- normalized!
+DECLARE
+BEGIN
+MOVE RELATIVE 3 FROM emp_cur;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+MOVE RELATIVE 3 FROM emp_cur;
+END
+ -- literals removed
+DECLARE
+BEGIN
+MOVE RELATIVE 3 FROM _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+MOVE FORWARD 3 FROM emp_cur;
+END
+----
+DECLARE
+BEGIN
+MOVE 3 FROM emp_cur;
+END
+ -- normalized!
+DECLARE
+BEGIN
+MOVE 3 FROM emp_cur;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+MOVE 3 FROM emp_cur;
+END
+ -- literals removed
+DECLARE
+BEGIN
+MOVE 3 FROM _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+MOVE BACKWARD 3 FROM emp_cur;
+END
+----
+DECLARE
+BEGIN
+MOVE -3 FROM emp_cur;
+END
+ -- normalized!
+DECLARE
+BEGIN
+MOVE -3 FROM emp_cur;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+MOVE -3 FROM emp_cur;
+END
+ -- literals removed
+DECLARE
+BEGIN
+MOVE -3 FROM _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+MOVE FORWARD ALL FROM emp_cur;
+END
+----
+DECLARE
+BEGIN
+MOVE ALL FROM emp_cur;
+END
+ -- normalized!
+DECLARE
+BEGIN
+MOVE ALL FROM emp_cur;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+MOVE ALL FROM emp_cur;
+END
+ -- literals removed
+DECLARE
+BEGIN
+MOVE ALL FROM _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+MOVE BACKWARD ALL FROM emp_cur;
+END
+----
+DECLARE
+BEGIN
+MOVE BACKWARD ALL FROM emp_cur;
+END
+ -- normalized!
+DECLARE
+BEGIN
+MOVE BACKWARD ALL FROM emp_cur;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+MOVE BACKWARD ALL FROM emp_cur;
+END
+ -- literals removed
+DECLARE
+BEGIN
+MOVE BACKWARD ALL FROM _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+FETCH NEXT FROM emp_cur INTO x;
+END
+----
+DECLARE
+BEGIN
+FETCH 1 FROM emp_cur INTO x;
+END
+ -- normalized!
+DECLARE
+BEGIN
+FETCH 1 FROM emp_cur INTO x;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+FETCH 1 FROM emp_cur INTO x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+FETCH 1 FROM _ INTO _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+FETCH PRIOR FROM emp_cur INTO x;
+END
+----
+DECLARE
+BEGIN
+FETCH -1 FROM emp_cur INTO x;
+END
+ -- normalized!
+DECLARE
+BEGIN
+FETCH -1 FROM emp_cur INTO x;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+FETCH -1 FROM emp_cur INTO x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+FETCH -1 FROM _ INTO _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+FETCH FIRST FROM emp_cur INTO x;
+END
+----
+DECLARE
+BEGIN
+FETCH FIRST FROM emp_cur INTO x;
+END
+ -- normalized!
+DECLARE
+BEGIN
+FETCH FIRST FROM emp_cur INTO x;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+FETCH FIRST FROM emp_cur INTO x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+FETCH FIRST FROM _ INTO _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+FETCH LAST FROM emp_cur INTO x;
+END
+----
+DECLARE
+BEGIN
+FETCH LAST FROM emp_cur INTO x;
+END
+ -- normalized!
+DECLARE
+BEGIN
+FETCH LAST FROM emp_cur INTO x;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+FETCH LAST FROM emp_cur INTO x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+FETCH LAST FROM _ INTO _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+FETCH ABSOLUTE 5 FROM emp_cur INTO x;
+END
+----
+DECLARE
+BEGIN
+FETCH ABSOLUTE 5 FROM emp_cur INTO x;
+END
+ -- normalized!
+DECLARE
+BEGIN
+FETCH ABSOLUTE 5 FROM emp_cur INTO x;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+FETCH ABSOLUTE 5 FROM emp_cur INTO x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+FETCH ABSOLUTE 5 FROM _ INTO _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+FETCH FIRST FROM emp_cur INTO x;
+END
+----
+DECLARE
+BEGIN
+FETCH FIRST FROM emp_cur INTO x;
+END
+ -- normalized!
+DECLARE
+BEGIN
+FETCH FIRST FROM emp_cur INTO x;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+FETCH FIRST FROM emp_cur INTO x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+FETCH FIRST FROM _ INTO _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+FETCH RELATIVE 3 FROM emp_cur INTO x;
+END
+----
+DECLARE
+BEGIN
+FETCH RELATIVE 3 FROM emp_cur INTO x;
+END
+ -- normalized!
+DECLARE
+BEGIN
+FETCH RELATIVE 3 FROM emp_cur INTO x;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+FETCH RELATIVE 3 FROM emp_cur INTO x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+FETCH RELATIVE 3 FROM _ INTO _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+FETCH FORWARD 3 FROM emp_cur INTO x;
+END
+----
+DECLARE
+BEGIN
+FETCH 3 FROM emp_cur INTO x;
+END
+ -- normalized!
+DECLARE
+BEGIN
+FETCH 3 FROM emp_cur INTO x;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+FETCH 3 FROM emp_cur INTO x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+FETCH 3 FROM _ INTO _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+FETCH BACKWARD 3 FROM emp_cur INTO x;
+END
+----
+DECLARE
+BEGIN
+FETCH -3 FROM emp_cur INTO x;
+END
+ -- normalized!
+DECLARE
+BEGIN
+FETCH -3 FROM emp_cur INTO x;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+FETCH -3 FROM emp_cur INTO x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+FETCH -3 FROM _ INTO _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+FETCH FORWARD ALL FROM emp_cur INTO x;
+END
+----
+DECLARE
+BEGIN
+FETCH ALL FROM emp_cur INTO x;
+END
+ -- normalized!
+DECLARE
+BEGIN
+FETCH ALL FROM emp_cur INTO x;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+FETCH ALL FROM emp_cur INTO x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+FETCH ALL FROM _ INTO _;
+END
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+FETCH BACKWARD ALL FROM emp_cur INTO x;
+END
+----
+DECLARE
+BEGIN
+FETCH BACKWARD ALL FROM emp_cur INTO x;
+END
+ -- normalized!
+DECLARE
+BEGIN
+FETCH BACKWARD ALL FROM emp_cur INTO x;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+FETCH BACKWARD ALL FROM emp_cur INTO x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+FETCH BACKWARD ALL FROM _ INTO _;
+END
+ -- identifiers removed

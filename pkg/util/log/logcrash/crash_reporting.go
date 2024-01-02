@@ -13,6 +13,7 @@ package logcrash
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -52,26 +53,28 @@ var (
 	// Doing this, rather than just using a default of `true`, means that a node
 	// will not errantly send a report using a default before loading settings.
 	DiagnosticsReportingEnabled = settings.RegisterBoolSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"diagnostics.reporting.enabled",
 		"enable reporting diagnostic metrics to cockroach labs",
 		false,
-	).WithPublic()
+		settings.WithPublic)
 
-	// CrashReports wraps "diagnostics.reporting.send_crash_reports".
+	// CrashReports wraps "diagnostics.reporting.send_crash_reports.enabled".
 	CrashReports = settings.RegisterBoolSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"diagnostics.reporting.send_crash_reports",
 		"send crash and panic reports",
 		true,
+		settings.WithName("diagnostics.reporting.send_crash_reports.enabled"),
 	)
 
-	// PanicOnAssertions wraps "debug.panic_on_failed_assertions"
+	// PanicOnAssertions wraps "debug.panic_on_failed_assertions.enabled"
 	PanicOnAssertions = settings.RegisterBoolSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"debug.panic_on_failed_assertions",
 		"panic when an assertion fails rather than reporting",
 		false,
+		settings.WithName("debug.panic_on_failed_assertions.enabled"),
 	)
 
 	// startTime records when the process started so that crash reports can
@@ -88,6 +91,11 @@ var (
 	// used for code paths where the container is not available.
 	globalSettings atomic.Value
 )
+
+func init() {
+	// Inject ReportOrPanic into the log package.
+	log.SetReportOrPanicFn(ReportOrPanic)
+}
 
 // SetGlobalSettings sets the *settings.Values container that will be refreshed
 // at runtime -- ideally we should have no other *Values containers floating
@@ -192,7 +200,7 @@ func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth 
 
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
-	log.Flush()
+	log.FlushAllSync()
 }
 
 // PanicAsError turns r into an error if it is not one already.
@@ -254,6 +262,7 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 	crashReportingActive = true
 
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		scope.SetTags(getTagsFromEnvironment())
 		scope.SetTags(map[string]string{
 			"cmd":          cmd,
 			"platform":     info.Platform,
@@ -263,7 +272,23 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 			"buildchannel": info.Channel,
 			"envchannel":   info.EnvChannel,
 		})
+
 	})
+}
+
+func getTagsFromEnvironment() map[string]string {
+	tags := map[string]string{}
+	rawTags := envutil.EnvOrDefaultString("COCKROACH_CRASH_REPORT_TAGS", "")
+	if len(rawTags) > 0 {
+		envTags := strings.Split(rawTags, ";")
+		for _, tag := range envTags {
+			parts := strings.Split(tag, "=")
+			if len(parts) == 2 {
+				tags[parts[0]] = parts[1]
+			}
+		}
+	}
+	return tags
 }
 
 func uptimeTag(now time.Time) string {
@@ -391,7 +416,7 @@ func ReportOrPanic(
 	if !build.IsRelease() || (sv != nil && PanicOnAssertions.Get(sv)) {
 		panic(err)
 	}
-	log.Warningf(ctx, "%v", err)
+	log.Errorf(ctx, "%v", err)
 	sendCrashReport(ctx, sv, err, ReportTypeError)
 }
 

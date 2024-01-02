@@ -37,12 +37,13 @@ import (
 // in roachperf.
 func registerElasticControlForBackups(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:      "admission-control/elastic-backup",
-		Owner:     registry.OwnerAdmissionControl,
-		Benchmark: true,
-		Tags:      registry.Tags(`weekly`),
-		Cluster:   r.MakeClusterSpec(4, spec.CPU(8)),
-		Leases:    registry.MetamorphicLeases,
+		Name:             "admission-control/elastic-backup",
+		Owner:            registry.OwnerAdmissionControl,
+		Benchmark:        true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Weekly),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(8)),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount < 4 {
 				t.Fatalf("expected at least 4 nodes, found %d", c.Spec().NodeCount)
@@ -70,9 +71,9 @@ func registerElasticControlForBackups(r registry.Registry) {
 				)
 
 			if t.SkipInit() {
-				t.Status(fmt.Sprintf("running tpcc for %s (<%s)", workloadDuration, time.Minute))
+				t.Status(fmt.Sprintf("running tpcc for %s (<%s)", workloadDuration, estimatedSetupTime))
 			} else {
-				t.Status(fmt.Sprintf("initializing + running tpcc for %s (<%s)", workloadDuration, 10*time.Minute))
+				t.Status(fmt.Sprintf("initializing + running tpcc for %s (<%s)", workloadDuration, estimatedSetupTime))
 			}
 
 			runTPCC(ctx, t, c, tpccOptions{
@@ -94,9 +95,10 @@ func registerElasticControlForBackups(r registry.Registry) {
 					m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
 					m.Go(func(ctx context.Context) error {
 						t.Status(fmt.Sprintf("during: creating full backup schedule to run every 20m (<%s)", time.Minute))
+						gcsBackupTestingBucket := backupTestingBucket
 						_, err := db.ExecContext(ctx,
 							`CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '*/20 * * * *' FULL BACKUP ALWAYS WITH SCHEDULE OPTIONS ignore_existing_backups;`,
-							"gs://cockroachdb-backup-testing/"+c.Name()+"?AUTH=implicit",
+							"gs://"+gcsBackupTestingBucket+"/"+c.Name()+"?AUTH=implicit",
 						)
 						return err
 					})

@@ -27,7 +27,19 @@ docker volume inspect bzlhome
     }
 ]
 
+docker help
+----
+
+git rev-parse --git-dir
+----
+
+git rev-parse --git-common-dir
+----
+
 mkdir crdb-checkout/artifacts
+----
+
+chmod crdb-checkout/artifacts 0777
 ----
 
 docker run --rm -it -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/build/bazelutil/empty.bazelrc:/cockroach/.bazelrc.user -v crdb-checkout/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 502:502 cockroachdb/bazel:20220328-163955
@@ -62,7 +74,19 @@ docker volume inspect bzlhome
     }
 ]
 
+docker help
+----
+
+git rev-parse --git-dir
+----
+
+git rev-parse --git-common-dir
+----
+
 mkdir crdb-checkout/artifacts
+----
+
+chmod crdb-checkout/artifacts 0777
 ----
 
 docker run --rm -i -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/build/bazelutil/empty.bazelrc:/cockroach/.bazelrc.user -v crdb-checkout/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 502:502 cockroachdb/bazel:20220328-163955 echo hi

@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -8,6 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl/auditloggingccl",
         "//pkg/ccl/backupccl",
         "//pkg/ccl/buildccl",
         "//pkg/ccl/changefeedccl",
@@ -20,6 +20,9 @@ go_library(
         "//pkg/ccl/multitenantccl",
         "//pkg/ccl/oidcccl",
         "//pkg/ccl/partitionccl",
+        "//pkg/ccl/pgcryptoccl",
+        "//pkg/ccl/plpgsqlccl",
+        "//pkg/ccl/securityccl/fipsccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/storageccl/engineccl",
         "//pkg/ccl/streamingccl/streamingest",
@@ -29,5 +32,3 @@ go_library(
         "//pkg/server",
     ],
 )
-
-get_x_data(name = "get_x_data")

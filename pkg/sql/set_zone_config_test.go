@@ -12,13 +12,17 @@ package sql
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/gogo/protobuf/proto"
@@ -69,6 +73,10 @@ func TestValidateNoRepeatKeysInZone(t *testing.T) {
 func TestValidateZoneAttrsAndLocalitiesForSecondaryTenants(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	codec := keys.MakeSQLCodec(serverutils.TestTenantID())
+	settings := cluster.MakeTestingClusterSettings()
 
 	getRegions := func(ctx context.Context) (*serverpb.RegionsResponse, error) {
 		return &serverpb.RegionsResponse{
@@ -125,33 +133,36 @@ func TestValidateZoneAttrsAndLocalitiesForSecondaryTenants(t *testing.T) {
 		},
 		{
 			cfg:   `constraints: ["+rack=us-east1"]`,
-			errRe: `invalid constraint attribute: "rack"`,
+			errRe: `operation is disabled within a virtual cluster`,
 		},
 		{
 			cfg:   `constraints: ["-rack=us-east1"]`,
-			errRe: `invalid constraint attribute: "rack"`,
+			errRe: `operation is disabled within a virtual cluster`,
 		},
 		{
 			cfg:   `constraints: ["+ssd"]`,
-			errRe: `invalid constraint attribute: ""`,
+			errRe: `operation is disabled within a virtual cluster`,
 		},
 		{
 			cfg:   `constraints: ["-ssd"]`,
-			errRe: `invalid constraint attribute: ""`,
+			errRe: `operation is disabled within a virtual cluster`,
 		},
 	}
 
-	for _, tc := range testCases {
-		var zone zonepb.ZoneConfig
-		err := yaml.UnmarshalStrict([]byte(tc.cfg), &zone)
-		require.NoError(t, err)
-
-		err = validateZoneLocalitiesForSecondaryTenants(context.Background(), getRegions, &zone)
-		if tc.errRe == "" {
+	for _, anyConstraintAllowed := range []bool{false, true} {
+		SecondaryTenantsAllZoneConfigsEnabled.Override(ctx, &settings.SV, anyConstraintAllowed)
+		for _, tc := range testCases {
+			var zone zonepb.ZoneConfig
+			err := yaml.UnmarshalStrict([]byte(tc.cfg), &zone)
 			require.NoError(t, err)
-		} else {
-			require.Error(t, err)
-			require.True(t, testutils.IsError(err, tc.errRe), "expected %s; got %s", tc.errRe, err.Error())
+
+			err = validateZoneLocalitiesForSecondaryTenants(ctx, getRegions, zonepb.NewZoneConfig(), &zone, codec, settings)
+			if tc.errRe == "" || (anyConstraintAllowed && strings.HasPrefix(tc.errRe, "operation is disabled within a virtual cluster")) {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.True(t, testutils.IsError(err, tc.errRe), "expected %s; got %s", tc.errRe, err.Error())
+			}
 		}
 	}
 }
@@ -301,7 +312,7 @@ func TestValidateZoneAttrsAndLocalitiesForSystemTenant(t *testing.T) {
 			t.Fatalf("#%d: expected parse err for %q; got success", i, tc.cfg)
 		}
 
-		err = validateZoneAttrsAndLocalitiesForSystemTenant(context.Background(), tc.nodes, &zone)
+		err = validateZoneAttrsAndLocalitiesForSystemTenant(context.Background(), tc.nodes, zonepb.NewZoneConfig(), &zone)
 		if err != nil && tc.expectErr == expectSuccess {
 			t.Errorf("#%d: expected success for %q; got %v", i, tc.cfg, err)
 		} else if err == nil && tc.expectErr == expectValidateErr {

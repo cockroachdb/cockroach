@@ -39,14 +39,14 @@ func runDebugJobTrace(_ *cobra.Command, args []string) (resErr error) {
 	if err != nil {
 		return err
 	}
-
-	sqlConn, err := makeSQLClient("cockroach debug job-trace", useSystemDb)
+	ctx := context.Background()
+	sqlConn, err := makeSQLClient(ctx, "cockroach debug job-trace", useSystemDb)
 	if err != nil {
 		return errors.Wrap(err, "could not establish connection to cluster")
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, sqlConn.Close()) }()
 
-	return constructJobTraceZipBundle(context.Background(), sqlConn, jobID)
+	return constructJobTraceZipBundle(ctx, sqlConn, jobID)
 }
 
 func getJobTraceID(sqlConn clisqlclient.Conn, jobID int64) (int64, error) {

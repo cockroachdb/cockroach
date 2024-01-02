@@ -31,7 +31,6 @@ func TestCPUProfiler(t *testing.T) {
 	sv.Init(ctx, s.Version)
 	cpuProfileInterval.Override(ctx, sv, time.Hour)
 	cpuUsageCombined.Override(ctx, sv, 80)
-	cpuProfileEnabled.Override(ctx, sv, true)
 	pastTime := time.Date(2023, 1, 1, 1, 1, 1, 1, time.UTC)
 	cases := []struct {
 		name                 string
@@ -69,7 +68,7 @@ func TestCPUProfiler(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			p := makeProfiler(
-				newProfileStore(dumpStore, cpuProfFileNamePrefix, HeapFileNameSuffix, s),
+				newProfileStore(dumpStore, cpuProfFileNamePrefix, heapFileNameSuffix, s),
 				func() int64 { return cpuUsageCombined.Get(sv) },
 				func() time.Duration { return cpuProfileInterval.Get(sv) },
 			)

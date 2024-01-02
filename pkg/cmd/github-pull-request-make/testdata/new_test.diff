@@ -1,0 +1,55 @@
+index 6c20afaef23..879494bdadd 100644
+--- a/pkg/ccl/streamingccl/streamclient/client_test.go
++++ b/pkg/ccl/streamingccl/streamclient/client_test.go
+@@ -15,13 +15,19 @@ import (
+        "testing"
+        "time"
+
++       "github.com/cockroachdb/cockroach/pkg/base"
+        "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+        "github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+        "github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+        "github.com/cockroachdb/cockroach/pkg/roachpb"
++       "github.com/cockroachdb/cockroach/pkg/security/username"
++       "github.com/cockroachdb/cockroach/pkg/sql/isql"
++       "github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
++       "github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+        "github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+        "github.com/cockroachdb/cockroach/pkg/util/hlc"
+        "github.com/cockroachdb/cockroach/pkg/util/leaktest"
++       "github.com/cockroachdb/cockroach/pkg/util/log"
+        "github.com/cockroachdb/cockroach/pkg/util/syncutil"
+        "github.com/cockroachdb/cockroach/pkg/util/timeutil"
+        "github.com/cockroachdb/errors"
+@@ -138,8 +144,47 @@ func TestGetFirstActiveClientEmpty(t *testing.T) {
+
+ }
+
++func TestExternalConnectionClient(t *testing.T) {
++       defer leaktest.AfterTest(t)()
++       defer log.Scope(t).Close(t)
++
++       ctx := context.Background()
++
++       srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDis
+abled})
++       defer srv.Stopper().Stop(ctx)
++
++       sql := sqlutils.MakeSQLRunner(db)
++       pgURL, cleanupSinkCert := sqlutils.PGUrl(t, srv.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
++       defer cleanupSinkCert()
++
++       externalConnection := "replication-source-addr"
++       sql.Exec(t, fmt.Sprintf(`CREATE EXTERNAL CONNECTION "%s" AS "%s"`,
++               externalConnection, pgURL.String()))
++       nonExistentConnection := "i-dont-exist"
++       address := streamingccl.StreamAddress(fmt.Sprintf("external://%s", externalConnection))
++       dontExistAddress := streamingccl.StreamAddress(fmt.Sprintf("external://%s", nonExistentConnection))
++
++       isqlDB := srv.InternalDB().(isql.DB)
++       client, err := NewStreamClient(ctx, address, isqlDB)
++       require.NoError(t, err)
++       require.NoError(t, client.Dial(ctx))
++       _, err = NewStreamClient(ctx, dontExistAddress, isqlDB)
++       require.Contains(t, err.Error(), "failed to load external connection object")
++ }

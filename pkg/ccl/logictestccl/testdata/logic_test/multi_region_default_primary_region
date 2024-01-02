@@ -1,4 +1,3 @@
-# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
 
 statement ok
@@ -34,7 +33,7 @@ db        ap-southeast-2  true     false      {ap-az1,ap-az2,ap-az3}
 statement ok
 CREATE DATABASE db_explicit_primary_region PRIMARY REGION "us-east-1" REGIONS "ap-southeast-2"
 
-query TTBBT colnames
+query TTBBT colnames,rowsort
 SHOW REGIONS FROM DATABASE db_explicit_primary_region
 ----
 database                    region          primary  secondary  zones

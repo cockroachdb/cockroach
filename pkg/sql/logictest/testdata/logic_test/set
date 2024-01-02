@@ -243,7 +243,7 @@ SET vectorize = experimental_always
 statement ok
 SET vectorize = off
 
-statement error invalid value for parameter "vectorize": "bogus"
+statement error invalid value for parameter "vectorize": "bogus"\nHINT: Available values: off,on,experimental_always
 SET vectorize = bogus
 
 statement ok
@@ -770,9 +770,9 @@ ijk
 
 # Show a notice if a custom session variable has the same name as a cluster setting.
 query T noticetrace
-SET server.shutdown.drain_wait = '10s'
+SET server.shutdown.initial_wait = '10s'
 ----
-NOTICE: setting custom variable "server.shutdown.drain_wait"
+NOTICE: setting custom variable "server.shutdown.initial_wait"
 HINT: did you mean SET CLUSTER SETTING?
 
 # Test that RESET ALL changes custom options to empty strings.
@@ -872,3 +872,43 @@ SET enable_auto_rehoming = bogus
 
 statement error pq: parameter "enable_auto_rehoming" requires a Boolean value
 SET experimental_enable_auto_rehoming = bogus
+
+statement error cannot set max_retries_for_read_committed to a negative value: -1
+SET max_retries_for_read_committed = -1
+
+statement error cannot set max_retries_for_read_committed to a value greater than 2147483647: 2147483648
+SET max_retries_for_read_committed = 2147483648
+
+statement ok
+SET max_retries_for_read_committed = 5
+
+query T
+SHOW max_retries_for_read_committed
+----
+5
+
+subtest new_session_resets_var
+
+user root nodeidx=0
+
+query T
+SHOW application_name
+----
+·
+
+statement ok
+SET application_name TO '🥭db'
+
+query T
+SHOW application_name
+----
+🥭db
+
+user root nodeidx=0 newsession
+
+query T
+SHOW application_name
+----
+·
+
+subtest end

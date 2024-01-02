@@ -22,9 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -100,16 +102,6 @@ type RelExpr interface {
 	// expression. setNext will panic if the next pointer has already been set.
 	setNext(e RelExpr)
 }
-
-// RelRequiredPropsExpr encapsulates a relational expression and required
-// physical props that must be used when optimizing the relational expression.
-type RelRequiredPropsExpr struct {
-	RelExpr
-	PhysProps *physical.Required
-}
-
-// RelListExpr is an ordered list of relational expressions.
-type RelListExpr []RelRequiredPropsExpr
 
 // ScalarPropsExpr is implemented by scalar expressions which cache scalar
 // properties, like FiltersExpr and ProjectionsExpr. These expressions are also
@@ -673,6 +665,98 @@ func (sj *SemiJoinExpr) getMultiplicity() props.JoinMultiplicity {
 	return sj.multiplicity
 }
 
+// UDFDefinition stores details about the SQL body of a UDF. It is stored
+// separately from the call-site to allow different invocations of the same UDF
+// to point to the same definition; this is necessary for recursive UDFs.
+type UDFDefinition struct {
+	// Name is the name of the function.
+	Name string
+
+	// Typ is the return type of the function.
+	Typ *types.T
+
+	// Volatility is the user-provided volatility of the function given during
+	// CREATE FUNCTION.
+	//
+	// Volatility affects the visibility of mutations made by the statement
+	// calling the function. A volatile function will see these mutations. Also,
+	// statements within a volatile function's body will see changes made by
+	// previous statements in the function body. In contrast, a stable,
+	// immutable, or leakproof function will see a snapshot of the data as of the
+	// start of the statement calling the function.
+	Volatility volatility.V
+
+	// SetReturning is true if the UDF has a SETOF return type.
+	SetReturning bool
+
+	// CalledOnNullInput is true if the function should be called when any of its
+	// inputs are NULL. If false, the function will not be evaluated in the
+	// presence of NULL inputs, and will instead evaluate directly to NULL.
+	//
+	// Note that this field only affects evaluation of UDFs within project-set
+	// operators. Non-scalar UDFs are always in a project-set operator, while
+	// scalar UDFs can be if used as a data source (e.g. SELECT * FROM udf()).
+	CalledOnNullInput bool
+
+	// MultiColDataSource is true if the function may return multiple columns.
+	// This is only the case if the UDF returns a RECORD type and is used as a
+	// data source.
+	MultiColDataSource bool
+
+	// IsRecursive indicates whether the UDF recursively calls itself. This
+	// applies to direct as well as indirect recursive calls (mutual recursion).
+	IsRecursive bool
+
+	// RoutineType indicates whether this routine is a UDF, stored procedure, or
+	// builtin function.
+	RoutineType tree.RoutineType
+
+	// Params is the list of columns representing parameters of the function. The
+	// i-th column in the list corresponds to the i-th parameter of the function.
+	// During execution of the UDF, these columns are replaced with the arguments
+	// of the function invocation.
+	Params opt.ColList
+
+	// Body contains a relational expression for each statement in the function
+	// body. It is unset during construction of a recursive UDF.
+	Body []RelExpr
+
+	// BodyProps contains the physical properties with which each body statement
+	// should be optimized if it is rebuilt. Each props corresponds to the RelExpr
+	// at the same position in Body.
+	BodyProps []*physical.Required
+
+	// ExceptionBlock contains information needed for exception-handling when the
+	// body of this routine returns an error. It can be unset.
+	ExceptionBlock *ExceptionBlock
+
+	// BlockState is shared between the routines that encapsulate a PLpgSQL block.
+	// It is used to coordinate between the nested routines during exception
+	// handling.
+	BlockState *tree.BlockState
+
+	// CursorDeclaration contains the information needed to open a SQL cursor with
+	// the result of the *first* body statement. If it is set, there will be at
+	// least two body statements - one to open the cursor, and one to evaluate the
+	// result of the routine. This invariant is enforced when the PLpgSQL routine
+	// is built. CursorDeclaration may be unset.
+	CursorDeclaration *tree.RoutineOpenCursor
+}
+
+// ExceptionBlock contains the information needed to match and handle errors in
+// the EXCEPTION block of a routine defined with PLpgSQL.
+type ExceptionBlock struct {
+	// Codes is a list of pgcode strings (see pgcode/codes.go). When the body of a
+	// routine with an ExceptionBlock returns an error, the code of that error is
+	// compared against the Codes slice for a match. As a special case, the code
+	// may be "OTHERS", indicating that (almost) any error code should be matched.
+	Codes []pgcode.Code
+
+	// Actions contains routine definitions that represent exception handlers for
+	// each code in the Codes slice.
+	Actions []*UDFDefinition
+}
+
 // WindowFrame denotes the definition of a window frame for an individual
 // window function, excluding the OFFSET expressions, if present.
 type WindowFrame struct {
@@ -871,24 +955,22 @@ func (lj *LookupJoinPrivate) GetConstPrefixFilter(md *opt.Metadata) (pos int, ok
 	return 0, false
 }
 
-// ColIsEquivalentWithLookupIndexPrefix returns true if there is a term in
-// `LookupExpr` equating the first column in the lookup index with `col`.
-func (lj *LookupJoinPrivate) ColIsEquivalentWithLookupIndexPrefix(
-	md *opt.Metadata, col opt.ColumnID,
+// LookupIndexPrefixIsEquatedWithColInColSet returns true if there is a term in
+// `LookupExpr` equating the first column in the lookup index with a column in
+// `colSet`.
+func (lj *LookupJoinPrivate) LookupIndexPrefixIsEquatedWithColInColSet(
+	md *opt.Metadata, colSet opt.ColSet,
 ) bool {
 	lookupTable := md.Table(lj.Table)
 	lookupIndex := lookupTable.Index(lj.Index)
 
 	idxCol := lj.Table.IndexColumnID(lookupIndex, 0)
-	var desiredEquivalentCols opt.ColSet
-	desiredEquivalentCols.Add(idxCol)
-	desiredEquivalentCols.Add(col)
 
 	for i := range lj.LookupExpr {
 		props := lj.LookupExpr[i].ScalarProps()
 
 		equivCols := props.FuncDeps.ComputeEquivGroup(idxCol)
-		if desiredEquivalentCols.SubsetOf(equivCols) {
+		if colSet.Intersects(equivCols) {
 			return true
 		}
 	}
@@ -1005,7 +1087,7 @@ func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 			// This does not necessarily hold for "composite" types like decimals or
 			// collated strings. For example if d is a decimal, d::TEXT can have
 			// different values for equal values of d, like 1 and 1.0.
-			if !CanBeCompositeSensitive(mem.Metadata(), item.Element) {
+			if !CanBeCompositeSensitive(item.Element) {
 				prj.internalFuncDeps.AddSynthesizedCol(from, item.Col)
 			}
 		}

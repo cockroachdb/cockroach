@@ -19,7 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -35,30 +37,37 @@ import (
 )
 
 var (
-	queryWait = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+	// QueryShutdownTimeout is the max amount of time waiting for
+	// queries to stop execution.
+	QueryShutdownTimeout = settings.RegisterDurationSetting(
+		settings.ApplicationLevel,
 		"server.shutdown.query_wait",
-		"the timeout for waiting for active queries to finish during a drain "+
+		"the timeout for waiting for active transactions to finish during a drain "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 			"after changing this setting)",
 		10*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Hour),
-	).WithPublic()
+		settings.WithName("server.shutdown.transactions.timeout"),
+		settings.WithPublic)
 
-	drainWait = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+	// DrainWait is the initial wait time before a drain effectively starts.
+	DrainWait = settings.RegisterDurationSetting(
+		settings.ApplicationLevel,
 		"server.shutdown.drain_wait",
 		"the amount of time a server waits in an unready state before proceeding with a drain "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 			"after changing this setting. --drain-wait is to specify the duration of the "+
-			"whole draining process, while server.shutdown.drain_wait is to set the "+
+			"whole draining process, while server.shutdown.initial_wait is to set the "+
 			"wait time for health probes to notice that the node is not ready.)",
 		0*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Hour),
-	).WithPublic()
+		settings.WithName("server.shutdown.initial_wait"),
+		settings.WithPublic)
 
-	connectionWait = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+	// ConnectionShutdownTimeout is the max amount of time waiting for
+	// clients to disconnect.
+	ConnectionShutdownTimeout = settings.RegisterDurationSetting(
+		settings.ApplicationLevel,
 		"server.shutdown.connection_wait",
 		"the maximum amount of time a server waits for all SQL connections to "+
 			"be closed before proceeding with a drain. "+
@@ -66,16 +75,20 @@ var (
 			"after changing this setting)",
 		0*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Hour),
-	).WithPublic()
+		settings.WithName("server.shutdown.connections.timeout"),
+		settings.WithPublic)
 
-	jobRegistryWait = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+	// JobShutdownTimeout is the max amount of time waiting for jobs to
+	// stop executing.
+	JobShutdownTimeout = settings.RegisterDurationSetting(
+		settings.ApplicationLevel,
 		"server.shutdown.jobs_wait",
 		"the maximum amount of time a server waits for all currently executing jobs "+
 			"to notice drain request and to perform orderly shutdown",
 		10*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Minute),
-	).WithPublic()
+		settings.WithName("server.shutdown.jobs.timeout"),
+		settings.WithPublic)
 )
 
 // Drain puts the node into the specified drain mode(s) and optionally
@@ -100,7 +113,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		// Connect to the target node.
 		client, err := s.dialNode(ctx, roachpb.NodeID(nodeID))
 		if err != nil {
-			return serverError(ctx, err)
+			return srverrors.ServerError(ctx, err)
 		}
 		return delegateDrain(ctx, req, client, stream)
 	}
@@ -196,7 +209,7 @@ func (s *drainServer) maybeShutdownAfterDrain(
 		// away (and who knows whether gRPC-goroutines are tied up in some
 		// stopper task somewhere).
 		s.grpc.Stop()
-		s.stopTrigger.signalStop(ctx, MakeShutdownRequest(ShutdownReasonDrainRPC, nil /* err */))
+		s.stopTrigger.signalStop(ctx, serverctl.MakeShutdownRequest(serverctl.ShutdownReasonDrainRPC, nil /* err */))
 	}()
 
 	select {
@@ -323,7 +336,7 @@ func (s *drainServer) drainInner(
 		// We are on a KV node, with a server controller.
 		//
 		// First tell the controller to stop starting new servers.
-		s.serverCtl.draining.Set(true)
+		s.serverCtl.SetDraining()
 
 		// Then shut down tenant servers orchestrated from
 		// this node.
@@ -377,21 +390,21 @@ func (s *drainServer) drainClients(
 		log.Ops.Warningf(ctx, "error showing alive SQL connections: %v", err)
 	}
 
-	// Wait the duration of drainWait.
+	// Wait the duration of DrainWait.
 	// This will fail load balancer checks and delay draining so that client
 	// traffic can move off this node.
 	// Note delay only happens on first call to drain.
 	if shouldDelayDraining {
 		log.Ops.Info(ctx, "waiting for health probes to notice that the node "+
 			"is not ready for new sql connections")
-		s.drainSleepFn(drainWait.Get(&s.sqlServer.execCfg.Settings.SV))
+		s.drainSleepFn(DrainWait.Get(&s.sqlServer.execCfg.Settings.SV))
 	}
 
 	// Wait for users to close the existing SQL connections.
 	// During this phase, the server is rejecting new SQL connections.
 	// The server exits this phase either once all SQL connections are closed,
 	// or the connectionMaxWait timeout elapses, whichever happens earlier.
-	if err := s.sqlServer.pgServer.WaitForSQLConnsToClose(ctx, connectionWait.Get(&s.sqlServer.execCfg.Settings.SV), s.stopper); err != nil {
+	if err := s.sqlServer.pgServer.WaitForSQLConnsToClose(ctx, ConnectionShutdownTimeout.Get(&s.sqlServer.execCfg.Settings.SV), s.stopper); err != nil {
 		return err
 	}
 
@@ -404,7 +417,7 @@ func (s *drainServer) drainClients(
 	// registry is now unavailable due to the drain.
 	{
 		_ = timeutil.RunWithTimeout(ctx, "drain-job-registry",
-			jobRegistryWait.Get(&s.sqlServer.execCfg.Settings.SV),
+			JobShutdownTimeout.Get(&s.sqlServer.execCfg.Settings.SV),
 			func(ctx context.Context) error {
 				s.sqlServer.jobRegistry.DrainRequested(ctx)
 				return nil
@@ -415,16 +428,16 @@ func (s *drainServer) drainClients(
 	s.sqlServer.statsRefresher.SetDraining()
 
 	// Drain any remaining SQL connections.
-	// The queryWait duration is a timeout for waiting for SQL queries to finish.
+	// The QueryShutdownTimeout duration is a timeout for waiting for SQL queries to finish.
 	// If the timeout is reached, any remaining connections
 	// will be closed.
-	queryMaxWait := queryWait.Get(&s.sqlServer.execCfg.Settings.SV)
+	queryMaxWait := QueryShutdownTimeout.Get(&s.sqlServer.execCfg.Settings.SV)
 	if err := s.sqlServer.pgServer.Drain(ctx, queryMaxWait, reporter, s.stopper); err != nil {
 		return err
 	}
 
 	// Drain all distributed SQL execution flows.
-	// The queryWait duration is used to wait on currently running flows to finish.
+	// The QueryShutdownTimeout duration is used to wait on currently running flows to finish.
 	s.sqlServer.distSQLServer.Drain(ctx, queryMaxWait, reporter)
 
 	// Flush in-memory SQL stats into the statement stats system table.
@@ -445,25 +458,24 @@ func (s *drainServer) drainClients(
 	// tasks that may issue SQL statements have shut down.
 	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter)
 
-	// Mark this phase in the logs to clarify the context of any subsequent
-	// errors/warnings, if any.
-	log.Infof(ctx, "SQL server drained successfully; SQL queries cannot execute any more")
-
 	session, err := s.sqlServer.sqlLivenessProvider.Release(ctx)
 	if err != nil {
 		return err
 	}
-
-	instanceID := s.sqlServer.sqlIDContainer.SQLInstanceID()
-	err = s.sqlServer.sqlInstanceStorage.ReleaseInstance(ctx, session, instanceID)
-	if err != nil {
-		return err
+	// If we started a sql session on this node.
+	if session != "" {
+		instanceID := s.sqlServer.sqlIDContainer.SQLInstanceID()
+		err = s.sqlServer.sqlInstanceStorage.ReleaseInstance(ctx, session, instanceID)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Mark the node as fully drained.
 	s.sqlServer.gracefulDrainComplete.Set(true)
-
-	// Done. This executes the defers set above to drain SQL leases.
+	// Mark this phase in the logs to clarify the context of any subsequent
+	// errors/warnings, if any.
+	log.Infof(ctx, "SQL server drained successfully; SQL queries cannot execute any more")
 	return nil
 }
 
@@ -493,7 +505,11 @@ func (s *drainServer) logOpenConns(ctx context.Context) error {
 		for {
 			select {
 			case <-ticker.C:
-				log.Ops.Infof(ctx, "number of open connections: %d\n", s.sqlServer.pgServer.GetConnCancelMapLen())
+				openConns := s.sqlServer.pgServer.GetConnCancelMapLen()
+				log.Ops.Infof(ctx, "number of open connections: %d\n", openConns)
+				if openConns == 0 {
+					return
+				}
 			case <-s.stopper.ShouldQuiesce():
 				return
 			case <-ctx.Done():

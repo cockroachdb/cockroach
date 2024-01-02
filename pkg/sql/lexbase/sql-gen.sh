@@ -17,7 +17,7 @@ GENYACC=$LANG-gen.y
         awk '{print $0")>_\\1 <union> /* <\\2> */_"}' > types_regex.tmp
 
     sed -E -f types_regex.tmp < $1 | \
-        if [ $LANG != plpgsql ]; then \
+        if [ $LANG != plpgsql ] && [ $LANG != pgrepl ]; then \
             awk -f $3 | \
           sed -Ee 's,//.*$$,,g;s,/[*]([^*]|[*][^/])*[*]/, ,g;s/ +$$//g' > $GENYACC
         else
@@ -31,4 +31,3 @@ GENYACC=$LANG-gen.y
         echo "$ret"; exit 1; \
       fi;
     rm $GENYACC
-    $6 -w $4

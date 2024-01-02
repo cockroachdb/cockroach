@@ -41,7 +41,7 @@ CREATE SEQUENCE d.s
 # parent should come before full_test due to dependency ordering.
 # if dependency's aren't considered, full_test will appear first due to
 # lexicographical ordering.
-query T
+query T nosort
 SELECT crdb_internal.show_create_all_tables('d')
 ----
 CREATE TABLE public.parent (
@@ -89,7 +89,7 @@ GRANT CREATE on DATABASE d TO testuser
 # CREATE privilege on the database.
 # TODO(richardjcai): Replace this with CONNECT and
 # add CONNECT privilege required on the builtin description once #59676 is in.
-query T
+query T nosort
 SELECT crdb_internal.show_create_all_tables('d')
 ----
 CREATE TABLE public.parent (
@@ -162,7 +162,7 @@ CREATE SEQUENCE s;
 CREATE TABLE s_tbl (id INT PRIMARY KEY DEFAULT nextval('s'), v INT,  FAMILY f1 (id, v));
 
 # Table order should be B, A, E, G, F, D, C, sequence s, s_tbl.
-query T
+query T nosort
 SELECT crdb_internal.show_create_all_tables('test_fk_order')
 ----
 CREATE TABLE public.b (
@@ -245,7 +245,7 @@ statement ok
 ALTER TABLE loop_a ADD CONSTRAINT b_id_delete_constraint
 FOREIGN KEY (b_id) REFERENCES loop_b (id) ON DELETE CASCADE;
 
-query T
+query T nosort
 SELECT crdb_internal.show_create_all_tables('test_cycle')
 ----
 CREATE TABLE public.loop_b (
@@ -350,7 +350,7 @@ CREATE SCHEMA sc2;
 CREATE TABLE sc1.t (x int);
 CREATE TABLE sc2.t (x int);
 
-query T
+query T nosort
 SELECT crdb_internal.show_create_all_tables('test_schema')
 ----
 CREATE TABLE sc1.t (
@@ -380,7 +380,7 @@ CREATE SEQUENCE public.s1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 123 
 statement ok
 USE test_schema;
 
-query T
+query T nosort
 BEGIN;
 SELECT crdb_internal.show_create_all_tables('test_schema');
 COMMIT;
@@ -396,7 +396,7 @@ CREATE TABLE sc2.t (
     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 
-query T
+query T nosort
 BEGIN;
 SELECT * FROM sc1.t;
 SELECT crdb_internal.show_create_all_tables('test_schema');

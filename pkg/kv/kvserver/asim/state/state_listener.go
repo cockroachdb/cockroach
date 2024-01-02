@@ -28,3 +28,10 @@ type NewCapacityListener interface {
 	// the store with ID StoreID.
 	NewCapacityNotify(roachpb.StoreCapacity, StoreID)
 }
+
+// ConfigChangeListener listens for notification of configuration changes such
+// as stores being added.
+type ConfigChangeListener interface {
+	// StoreAddNotify notifies that a new store has been added with ID storeID.
+	StoreAddNotify(StoreID, State)
+}

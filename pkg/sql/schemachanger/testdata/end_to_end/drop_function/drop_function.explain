@@ -1,0 +1,113 @@
+/* setup */
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE VIEW v AS SELECT a FROM t;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+CREATE TABLE t2(a notmyworkday);
+
+/* test */
+EXPLAIN (DDL) DROP FUNCTION f;
+----
+Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 11 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109 (f-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109 (f-), Name: "public"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109 (f-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED Function:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 109 (f-), ReferencedDescID: 101 (public)}
+ │         │    ├── PUBLIC → ABSENT  FunctionName:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  FunctionVolatility:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  FunctionNullInputBehavior:{DescID: 109 (f-)}
+ │         │    └── PUBLIC → ABSENT  FunctionBody:{DescID: 109 (f-)}
+ │         └── 12 Mutation operations
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":109}
+ │              ├── RemoveObjectParent {"ObjectID":109,"ParentSchemaID":101}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNam..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionVol..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionLea..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNul..."}
+ │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":109}
+ │              ├── RemoveBackReferencesInRelations {"BackReferencedID":109}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"public"}
+ │              └── RemoveUserPrivileges {"DescriptorID":109,"User":"root"}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 11 elements transitioning toward ABSENT
+ │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 109 (f-)}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 109 (f-), Name: "admin"}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 109 (f-), Name: "public"}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 109 (f-), Name: "root"}
+ │    │    │    ├── DROPPED → PUBLIC Function:{DescID: 109 (f-)}
+ │    │    │    ├── ABSENT  → PUBLIC SchemaChild:{DescID: 109 (f-), ReferencedDescID: 101 (public)}
+ │    │    │    ├── ABSENT  → PUBLIC FunctionName:{DescID: 109 (f-)}
+ │    │    │    ├── ABSENT  → PUBLIC FunctionVolatility:{DescID: 109 (f-)}
+ │    │    │    ├── ABSENT  → PUBLIC FunctionLeakProof:{DescID: 109 (f-)}
+ │    │    │    ├── ABSENT  → PUBLIC FunctionNullInputBehavior:{DescID: 109 (f-)}
+ │    │    │    └── ABSENT  → PUBLIC FunctionBody:{DescID: 109 (f-)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 11 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109 (f-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109 (f-), Name: "public"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109 (f-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED Function:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 109 (f-), ReferencedDescID: 101 (public)}
+ │         │    ├── PUBLIC → ABSENT  FunctionName:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  FunctionVolatility:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  FunctionNullInputBehavior:{DescID: 109 (f-)}
+ │         │    └── PUBLIC → ABSENT  FunctionBody:{DescID: 109 (f-)}
+ │         └── 19 Mutation operations
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":109}
+ │              ├── RemoveObjectParent {"ObjectID":109,"ParentSchemaID":101}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNam..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionVol..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionLea..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNul..."}
+ │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":109}
+ │              ├── RemoveBackReferencesInRelations {"BackReferencedID":109}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"public"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"root"}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":109,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ └── PostCommitNonRevertiblePhase
+      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward ABSENT
+           │    └── DROPPED → ABSENT Function:{DescID: 109 (f-)}
+           └── 8 Mutation operations
+                ├── DeleteDescriptor {"DescriptorID":109}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":107}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":108}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":109}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

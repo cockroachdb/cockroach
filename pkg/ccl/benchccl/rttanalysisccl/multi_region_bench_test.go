@@ -10,11 +10,13 @@ package rttanalysisccl
 
 import (
 	gosql "database/sql"
+	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/bench/rttanalysis"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
 const numNodes = 4
@@ -32,7 +34,23 @@ var reg = rttanalysis.NewRegistry(numNodes, rttanalysis.MakeClusterConstructor(f
 	if _, err := db.Exec("SET CLUSTER SETTING server.eventlog.enabled = false"); err != nil {
 		tb.Fatal(err)
 	}
-	return db, cleanup
+	if _, err := db.Exec("CREATE USER testuser"); err != nil {
+		tb.Fatal(err)
+	}
+	if _, err := db.Exec("GRANT admin TO testuser"); err != nil {
+		tb.Fatal(err)
+	}
+	url, testuserCleanup := sqlutils.PGUrl(
+		tb, cluster.Server(0).ApplicationLayer().AdvSQLAddr(), "rttanalysisccl", url.User("testuser"),
+	)
+	conn, err := gosql.Open("postgres", url.String())
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return conn, func() {
+		cleanup()
+		testuserCleanup()
+	}
 }))
 
 func TestBenchmarkExpectation(t *testing.T) { reg.RunExpectations(t) }

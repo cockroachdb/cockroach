@@ -477,6 +477,12 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.InsertOp, opt.UpdateOp, opt.UpsertOp, opt.DeleteOp:
 		return sb.colStatMutation(colSet, e)
 
+	case opt.LockOp:
+		return sb.colStatLock(colSet, e.(*LockExpr))
+
+	case opt.BarrierOp:
+		return sb.colStatBarrier(colSet, e.(*BarrierExpr))
+
 	case opt.SequenceSelectOp:
 		return sb.colStatSequenceSelect(colSet, e.(*SequenceSelectExpr))
 
@@ -845,15 +851,21 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 
 	// Make a copy of the stats so we don't modify the original.
 	spanStatsUnion.CopyFrom(s)
+	origRowCount := s.RowCount
+	origSelectivity := s.Selectivity
 
 	// Get the stats for each span and union them together.
 	c.InitSingleSpan(&keyCtx, scan.Constraint.Spans.Get(0))
 	sb.constrainScan(scan, &c, pred, relProps, &spanStatsUnion)
+	s.RowCount = origRowCount
+	s.Selectivity = origSelectivity
 	for i, n := 1, scan.Constraint.Spans.Count(); i < n; i++ {
 		spanStats.CopyFrom(s)
 		c.InitSingleSpan(&keyCtx, scan.Constraint.Spans.Get(i))
 		sb.constrainScan(scan, &c, pred, relProps, &spanStats)
 		spanStatsUnion.UnionWith(&spanStats)
+		s.RowCount = origRowCount
+		s.Selectivity = origSelectivity
 	}
 
 	// Now that we have the correct row count, use the combined spans and the
@@ -1331,7 +1343,17 @@ func (sb *statisticsBuilder) buildJoin(
 	corr := sb.correlationFromMultiColDistinctCountsForJoin(constrainedCols, leftCols, rightCols, join, s)
 	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, join, s, corr))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
-	s.ApplySelectivity(sb.selectivityFromNullsRemoved(join, relProps.NotNullCols, constrainedCols))
+
+	// Ignore columns that are already null in the input when calculating
+	// selectivity from null-removing filters - the selectivity would always be
+	// 1.
+	ignoreCols := constrainedCols
+	if relProps.NotNullCols.Intersects(h.leftProps.NotNullCols) ||
+		relProps.NotNullCols.Intersects(h.rightProps.NotNullCols) {
+		ignoreCols = ignoreCols.Union(h.leftProps.NotNullCols)
+		ignoreCols.UnionWith(h.rightProps.NotNullCols)
+	}
+	s.ApplySelectivity(sb.selectivityFromNullsRemoved(join, relProps.NotNullCols, ignoreCols))
 
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromMultiColDistinctCounts and selectivityFromEquivalencies.
@@ -1425,8 +1447,8 @@ func (sb *statisticsBuilder) buildJoin(
 				sb.adjustNullCountsForOuterJoins(
 					colStat,
 					h.joinType,
-					leftSideCols,
-					rightSideCols,
+					leftSideCols.Empty(),
+					rightSideCols.Empty(),
 					leftNullCount,
 					leftStats.RowCount,
 					rightNullCount,
@@ -1489,10 +1511,6 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		return colStat
 
 	default:
-		// Column stats come from both sides of join.
-		leftCols := leftProps.OutputCols.Intersection(colSet)
-		rightCols := rightProps.OutputCols.Intersection(colSet)
-
 		// Join selectivity affects the distinct counts for different columns
 		// in different ways depending on the type of join.
 		//
@@ -1510,14 +1528,16 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		inputRowCount := leftProps.Statistics().RowCount * rightProps.Statistics().RowCount
 		leftNullCount := leftProps.Statistics().RowCount
 		rightNullCount := rightProps.Statistics().RowCount
-		if rightCols.Empty() {
+		leftColsAreEmpty := !leftProps.OutputCols.Intersects(colSet)
+		rightColsAreEmpty := !rightProps.OutputCols.Intersects(colSet)
+		if rightColsAreEmpty {
 			colStat = sb.copyColStat(colSet, s, sb.colStatFromJoinLeft(colSet, join))
 			leftNullCount = colStat.NullCount
 			switch joinType {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.RightJoinOp:
 				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
-		} else if leftCols.Empty() {
+		} else if leftColsAreEmpty {
 			colStat = sb.copyColStat(colSet, s, sb.colStatFromJoinRight(colSet, join))
 			rightNullCount = colStat.NullCount
 			switch joinType {
@@ -1525,6 +1545,9 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
 		} else {
+			// Column stats come from both sides of join.
+			leftCols := leftProps.OutputCols.Intersection(colSet)
+			rightCols := rightProps.OutputCols.Intersection(colSet)
 			// Make a copy of the input column stats so we don't modify the originals.
 			leftColStat := *sb.colStatFromJoinLeft(leftCols, join)
 			rightColStat := *sb.colStatFromJoinRight(rightCols, join)
@@ -1561,8 +1584,8 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 			sb.adjustNullCountsForOuterJoins(
 				colStat,
 				joinType,
-				leftCols,
-				rightCols,
+				leftColsAreEmpty,
+				rightColsAreEmpty,
 				leftNullCount,
 				leftProps.Statistics().RowCount,
 				rightNullCount,
@@ -1629,37 +1652,38 @@ func innerJoinNullCount(
 // It adds an expected number of nulls created by column extension on
 // non-matching rows (such as on right cols for left joins and both for full).
 //
-// The caller should ensure that if leftCols are empty then leftNullCount
-// equals leftRowCount, and if rightCols are empty then rightNullCount equals
-// rightRowCount.
+// The caller should ensure that if leftColsAreEmpty is true then leftNullCount
+// equals leftRowCount, and if rightColsAreEmpty is true then rightNullCount
+// equals rightRowCount.
 func (sb *statisticsBuilder) adjustNullCountsForOuterJoins(
 	colStat *props.ColumnStatistic,
 	joinType opt.Operator,
-	leftCols, rightCols opt.ColSet,
+	leftColsAreEmpty, rightColsAreEmpty bool,
 	leftNullCount, leftRowCount, rightNullCount, rightRowCount, rowCount, innerJoinRowCount float64,
 ) {
 	// Adjust null counts for non-inner joins, adding nulls created due to column
 	// extension - such as right columns for non-matching rows in left joins.
 	switch joinType {
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-		if !rightCols.Empty() {
-			colStat.NullCount += (rowCount - innerJoinRowCount) * leftNullCount / leftRowCount
+		if !rightColsAreEmpty && leftNullCount > 0 && rowCount > innerJoinRowCount {
+			addedRows := max(rowCount-innerJoinRowCount, epsilon)
+			colStat.NullCount += addedRows * leftNullCount / leftRowCount
 		}
 
 	case opt.RightJoinOp:
-		if !leftCols.Empty() {
-			colStat.NullCount += (rowCount - innerJoinRowCount) * rightNullCount / rightRowCount
+		if !leftColsAreEmpty && rightNullCount > 0 && rowCount > innerJoinRowCount {
+			addedRows := max(rowCount-innerJoinRowCount, epsilon)
+			colStat.NullCount += addedRows * rightNullCount / rightRowCount
 		}
 
 	case opt.FullJoinOp:
-		leftJoinRowCount := max(innerJoinRowCount, leftRowCount)
-		rightJoinRowCount := max(innerJoinRowCount, rightRowCount)
-
-		if !leftCols.Empty() {
-			colStat.NullCount += (rightJoinRowCount - innerJoinRowCount) * rightNullCount / rightRowCount
+		if !leftColsAreEmpty && rightNullCount > 0 && rightRowCount > innerJoinRowCount {
+			addedRows := max(rightRowCount-innerJoinRowCount, epsilon)
+			colStat.NullCount += addedRows * rightNullCount / rightRowCount
 		}
-		if !rightCols.Empty() {
-			colStat.NullCount += (leftJoinRowCount - innerJoinRowCount) * leftNullCount / leftRowCount
+		if !rightColsAreEmpty && leftNullCount > 0 && leftRowCount > innerJoinRowCount {
+			addedRows := max(leftRowCount-innerJoinRowCount, epsilon)
+			colStat.NullCount += addedRows * leftNullCount / leftRowCount
 		}
 	}
 }
@@ -2650,6 +2674,70 @@ func (sb *statisticsBuilder) colStatMutation(
 	return colStat
 }
 
+// +------+
+// | Lock |
+// +------+
+
+func (sb *statisticsBuilder) buildLock(lock *LockExpr, relProps *props.Relational) {
+	s := relProps.Statistics()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+	s.Available = sb.availabilityFromInput(lock)
+
+	inputStats := lock.Input.Relational().Statistics()
+
+	s.RowCount = inputStats.RowCount
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatLock(colSet opt.ColSet, lock *LockExpr) *props.ColumnStatistic {
+	s := lock.Relational().Statistics()
+
+	inColStat := sb.colStatFromChild(colSet, lock, 0 /* childIdx */)
+
+	// Construct colstat using the corresponding input stats.
+	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = inColStat.DistinctCount
+	colStat.NullCount = inColStat.NullCount
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
+	return colStat
+}
+
+// +---------+
+// | Barrier |
+// +---------+
+
+func (sb *statisticsBuilder) buildBarrier(barrier *BarrierExpr, relProps *props.Relational) {
+	s := relProps.Statistics()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+	s.Available = sb.availabilityFromInput(barrier)
+
+	inputStats := barrier.Input.Relational().Statistics()
+
+	s.RowCount = inputStats.RowCount
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatBarrier(
+	colSet opt.ColSet, barrier *BarrierExpr,
+) *props.ColumnStatistic {
+	s := barrier.Relational().Statistics()
+
+	inColStat := sb.colStatFromChild(colSet, barrier, 0 /* childIdx */)
+
+	// Construct colstat using the corresponding input stats.
+	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = inColStat.DistinctCount
+	colStat.NullCount = inColStat.NullCount
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
+	return colStat
+}
+
 // +-----------------+
 // | Sequence Select |
 // +-----------------+
@@ -2965,20 +3053,6 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 		}
 		return e.Relational().Statistics().RowCount
 	}
-}
-
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 //////////////////////////////////////////////////
@@ -3469,8 +3543,7 @@ func (sb *statisticsBuilder) updateNullCountsFromNotNullCols(
 	notNullCols opt.ColSet, s *props.Statistics,
 ) {
 	notNullCols.ForEach(func(col opt.ColumnID) {
-		colSet := opt.MakeColSet(col)
-		colStat, ok := s.ColStats.Lookup(colSet)
+		colStat, ok := s.ColStats.LookupSingleton(col)
 		if ok {
 			colStat.NullCount = 0
 		}

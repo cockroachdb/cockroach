@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
@@ -82,16 +81,14 @@ go_test(
         "vectorized_meta_propagation_test.go",
         "vectorized_panic_propagation_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":colflow"],
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
-        "//pkg/keys",
         "//pkg/kv",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -150,5 +147,3 @@ disallowed_imports_test(
         "//pkg/sql/rowflow",
     ],
 )
-
-get_x_data(name = "get_x_data")

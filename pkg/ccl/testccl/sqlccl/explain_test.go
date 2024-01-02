@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -33,8 +34,7 @@ func TestExplainRedactDDL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 99005)
-	skip.UnderStressWithIssue(t, 99005)
+	skip.UnderDeadlock(t, "the test is too slow")
 
 	const numStatements = 10
 
@@ -42,8 +42,7 @@ func TestExplainRedactDDL(t *testing.T) {
 	rng, seed := randutil.NewTestRand()
 	t.Log("seed:", seed)
 
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	defer sqlDB.Close()
 

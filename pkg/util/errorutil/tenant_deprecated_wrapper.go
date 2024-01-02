@@ -76,7 +76,7 @@ func (w TenantSQLDeprecatedWrapper) Optional() (interface{}, bool) {
 func (w TenantSQLDeprecatedWrapper) OptionalErr(issue int) (interface{}, error) {
 	v, ok := w.Optional()
 	if !ok {
-		return nil, UnsupportedWithMultiTenancy(issue)
+		return nil, UnsupportedUnderClusterVirtualization(issue)
 	}
 	return v, nil
 }

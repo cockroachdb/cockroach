@@ -30,9 +30,11 @@ func TestBatchReset(t *testing.T) {
 		// Use the data backing the ColVecs slice as a proxy for when things get
 		// reallocated.
 		vecsBefore := b.ColVecs()
+		//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
 		ptrBefore := (*reflect.SliceHeader)(unsafe.Pointer(&vecsBefore))
 		b.Reset(typs, n, coldata.StandardColumnFactory)
 		vecsAfter := b.ColVecs()
+		//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
 		ptrAfter := (*reflect.SliceHeader)(unsafe.Pointer(&vecsAfter))
 		assert.Equal(t, shouldReuse, ptrBefore.Data == ptrAfter.Data)
 		assert.Equal(t, n, b.Length())

@@ -1,5 +1,5 @@
 profile
 replication-source
 ----
-canonical profile name: multitenant+app+sharedservice
+canonical profile name: virtual+app+sharedservice+repl
 server started

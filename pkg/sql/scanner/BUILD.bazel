@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -21,7 +20,6 @@ go_test(
         "scan_test.go",
         ":gen-token-names",  # keep
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":scanner"],
     deps = [
@@ -53,5 +51,3 @@ genrule(
         "//pkg/gen:__pkg__",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -21,11 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	clientrf "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -116,7 +118,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	ts := tc.Servers[0]
-	firstStore, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+	firstStore, pErr := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -149,7 +151,7 @@ func TestReplicaRangefeed(t *testing.T) {
 		stream := newTestStream()
 		streams[i] = stream
 		srv := tc.Servers[i]
-		store, err := srv.Stores().GetStore(srv.GetFirstStoreID())
+		store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -159,8 +161,9 @@ func TestReplicaRangefeed(t *testing.T) {
 					Timestamp: initTime,
 					RangeID:   rangeID,
 				},
-				Span:     rangefeedSpan,
-				WithDiff: true,
+				Span:          rangefeedSpan,
+				WithDiff:      true,
+				WithFiltering: true,
 			}
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
 			defer timer.Stop()
@@ -298,7 +301,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	}
 
 	server1 := tc.Servers[1]
-	store1, pErr := server1.Stores().GetStore(server1.GetFirstStoreID())
+	store1, pErr := server1.GetStores().(*kvserver.Stores).GetStore(server1.GetFirstStoreID())
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -398,6 +401,63 @@ func TestReplicaRangefeed(t *testing.T) {
 		true /* ingestAsWrites */, ts7)
 	require.Nil(t, pErr)
 
+	// Delete range non-transactionally.
+	ts8 := initTime.Add(0, 8)
+	dArgs := delRangeArgs(roachpb.Key("c"), roachpb.Key("d"), true /* useRangeTombstone */)
+	_, err = kv.SendWrappedWith(ctx, db, kvpb.Header{Timestamp: ts8}, dArgs)
+	require.Nil(t, err)
+
+	// Insert a key transactionally with omitInRangefeeds = true.
+	ts9 := initTime.Add(0, 9)
+	pErr = store1.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		pErr = txn.SetFixedTimestamp(ctx, ts9)
+		require.Nil(t, pErr)
+		txn.SetOmitInRangefeeds()
+		return txn.Put(ctx, roachpb.Key("n"), []byte("val"))
+	})
+	require.Nil(t, err)
+	// Read to force intent resolution.
+	_, pErr = store1.DB().Get(ctx, roachpb.Key("n"))
+	require.Nil(t, err)
+
+	// Delete range transactionally with omitInRangefeeds = true.
+	ts10 := initTime.Add(0, 10)
+	pErr = store1.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		pErr = txn.SetFixedTimestamp(ctx, ts10)
+		require.Nil(t, pErr)
+		txn.SetOmitInRangefeeds()
+		_, err := txn.DelRange(ctx, "f", "g", false)
+		return err
+	})
+	require.Nil(t, pErr)
+	// Read to force intent resolution.
+	_, pErr = store1.DB().Get(ctx, roachpb.Key("f"))
+	require.Nil(t, pErr)
+
+	// Insert a key non-transactionally.
+	ts11 := initTime.Add(0, 11)
+	pArgs = putArgs(roachpb.Key("o"), []byte("val11"))
+	_, err = kv.SendWrappedWith(ctx, db, kvpb.Header{Timestamp: ts11}, pArgs)
+	require.Nil(t, err)
+
+	// Insert a key transactionally with omitInRangefeeds = true and 1PC.
+	ts12 := initTime.Add(0, 12)
+	pErr = store1.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		pErr = txn.SetFixedTimestamp(ctx, ts12)
+		require.Nil(t, pErr)
+		txn.SetOmitInRangefeeds()
+		b := txn.NewBatch()
+		b.Put(roachpb.Key("o"), []byte("val12"))
+		return txn.CommitInBatch(ctx, b)
+	})
+	require.Nil(t, err)
+
+	// Insert a key non-transactionally.
+	ts13 := initTime.Add(0, 13)
+	pArgs = putArgs(roachpb.Key("o"), []byte("val13"))
+	_, err = kv.SendWrappedWith(ctx, db, kvpb.Header{Timestamp: ts13}, pArgs)
+	require.Nil(t, err)
+
 	// Wait for all streams to observe the expected events.
 	expVal2 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val2"), ts2)
 	expVal3 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val3"), ts3)
@@ -412,6 +472,12 @@ func TestReplicaRangefeed(t *testing.T) {
 	expVal7q.Timestamp = ts7
 	expVal1NoTS, expVal4NoTS := expVal1, expVal4
 	expVal1NoTS.Timestamp, expVal4NoTS.Timestamp = hlc.Timestamp{}, hlc.Timestamp{}
+	expVal11 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val11"), ts11)
+	expVal12 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val12"), ts12)
+	expVal12.InitChecksum([]byte("o")) // kv.Txn sets value checksum
+	expVal12NoTS := expVal12
+	expVal12NoTS.Timestamp = hlc.Timestamp{}
+	expVal13 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val13"), ts13)
 	expEvents = append(expEvents, []*kvpb.RangeFeedEvent{
 		{Val: &kvpb.RangeFeedValue{
 			Key: roachpb.Key("c"), Value: expVal2,
@@ -434,6 +500,17 @@ func TestReplicaRangefeed(t *testing.T) {
 		}},
 		{Val: &kvpb.RangeFeedValue{
 			Key: roachpb.Key("q"), Value: expVal7q, PrevValue: expVal6q,
+		}},
+		{DeleteRange: &kvpb.RangeFeedDeleteRange{
+			Span: roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}, Timestamp: ts8,
+		}},
+		{Val: &kvpb.RangeFeedValue{
+			Key: roachpb.Key("o"), Value: expVal11,
+		}},
+		{Val: &kvpb.RangeFeedValue{
+			// Even though the event that wrote val12 is filtered out, we want to keep
+			// val2 as a previous value of the next event.
+			Key: roachpb.Key("o"), Value: expVal13, PrevValue: expVal12NoTS,
 		}},
 	}...)
 	// here
@@ -470,7 +547,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < numNodes; i++ {
 			ts := tc.Servers[i]
-			store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+			store, pErr := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -501,6 +578,61 @@ func waitErrorFuture(f *future.ErrorFuture) error {
 	return resultErr
 }
 
+func TestScheduledProcessorKillSwitch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	kvserver.RangefeedSchedulerDisabled = true
+	defer func() { kvserver.RangefeedSchedulerDisabled = false }()
+
+	ctx := context.Background()
+	ts, err := serverutils.NewServer(base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	require.NoError(t, err, "failed to start test server")
+	require.NoError(t, ts.Start(ctx), "start server")
+	defer ts.Stopper().Stop(ctx)
+
+	db := ts.SystemLayer().SQLConn(t)
+	_, err = db.Exec("set cluster setting kv.rangefeed.enabled = t")
+	require.NoError(t, err, "can't enable rangefeeds")
+	_, err = db.Exec("set cluster setting kv.rangefeed.scheduler.enabled = t")
+	require.NoError(t, err, "can't enable rangefeed scheduler")
+
+	sr, err := ts.ScratchRange()
+	require.NoError(t, err, "can't create scratch range")
+	f := ts.RangeFeedFactory().(*clientrf.Factory)
+	rf, err := f.RangeFeed(ctx, "test-feed", []roachpb.Span{{Key: sr, EndKey: sr.PrefixEnd()}},
+		hlc.Timestamp{},
+		func(ctx context.Context, value *kvpb.RangeFeedValue) {},
+	)
+	require.NoError(t, err, "failed to start rangefeed")
+	defer rf.Close()
+
+	rd, err := ts.LookupRange(sr)
+	require.NoError(t, err, "failed to get descriptor for scratch range")
+
+	stores := ts.GetStores().(*kvserver.Stores)
+	_ = stores.VisitStores(func(s *kvserver.Store) error {
+		repl, err := s.GetReplica(rd.RangeID)
+		require.NoError(t, err, "failed to find scratch range replica in store")
+		var proc rangefeed.Processor
+		// Note that we can't rely on checkpoint or event because client rangefeed
+		// call can return and emit first checkpoint and data before processor is
+		// actually attached to replica.
+		testutils.SucceedsSoon(t, func() error {
+			proc = kvserver.TestGetReplicaRangefeedProcessor(repl)
+			if proc == nil {
+				return errors.New("scratch range must have processor")
+			}
+			return nil
+		})
+		require.IsType(t, (*rangefeed.LegacyProcessor)(nil), proc,
+			"kill switch didn't prevent scheduled processor creation")
+		return nil
+	})
+}
+
 func TestReplicaRangefeedErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -529,7 +661,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		)
 
 		ts := tc.Servers[0]
-		store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+		store, pErr := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -622,7 +754,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		streamErrC := make(chan error, 1)
 		rangefeedSpan := mkSpan("a", "z")
 		ts := tc.Servers[removeStore]
-		store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -657,7 +789,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		streamErrC := make(chan error, 1)
 		rangefeedSpan := mkSpan("a", "z")
 		ts := tc.Servers[0]
-		store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -688,7 +820,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		ts := tc.Servers[0]
-		store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -754,22 +886,22 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		ts2 := tc.Servers[2]
-		partitionStore, err := ts2.Stores().GetStore(ts2.GetFirstStoreID())
+		partitionStore, err := ts2.GetStores().(*kvserver.Stores).GetStore(ts2.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
 		}
 		ts := tc.Servers[0]
-		firstStore, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		firstStore, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
 		}
-		secondStore, err := tc.Servers[1].Stores().GetStore(tc.Servers[1].GetFirstStoreID())
+		secondStore, err := tc.Servers[1].GetStores().(*kvserver.Stores).GetStore(tc.Servers[1].GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		for _, server := range tc.Servers {
-			store, err := server.Stores().GetStore(server.GetFirstStoreID())
+			store, err := server.GetStores().(*kvserver.Stores).GetStore(server.GetFirstStoreID())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -814,9 +946,9 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		})
 
 		// Partition the replica from the rest of its range.
-		partitionStore.Transport().Listen(partitionStore.Ident.StoreID, &unreliableRaftHandler{
-			rangeID:            rangeID,
-			RaftMessageHandler: partitionStore,
+		partitionStore.Transport().ListenIncomingRaftMessages(partitionStore.Ident.StoreID, &unreliableRaftHandler{
+			rangeID:                    rangeID,
+			IncomingRaftMessageHandler: partitionStore,
 		})
 
 		// Perform a write on the range.
@@ -849,9 +981,9 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		}
 
 		// Remove the partition. Snapshot should follow.
-		partitionStore.Transport().Listen(partitionStore.Ident.StoreID, &unreliableRaftHandler{
-			rangeID:            rangeID,
-			RaftMessageHandler: partitionStore,
+		partitionStore.Transport().ListenIncomingRaftMessages(partitionStore.Ident.StoreID, &unreliableRaftHandler{
+			rangeID:                    rangeID,
+			IncomingRaftMessageHandler: partitionStore,
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we just truncated can
@@ -891,7 +1023,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		ts := tc.Servers[0]
-		store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -960,7 +1092,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		ts := tc.Servers[0]
-		store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1034,7 +1166,7 @@ func TestReplicaRangefeedMVCCHistoryMutationError(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 	ts := tc.Servers[0]
-	store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+	store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 	require.NoError(t, err)
 	tc.SplitRangeOrFatal(t, splitKey)
 	tc.AddVotersOrFatal(t, splitKey, tc.Target(1), tc.Target(2))
@@ -1116,7 +1248,8 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, db, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
+	tc, db, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
 
@@ -1245,8 +1378,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 
-	cargs := aggressiveResolvedTimestampClusterArgs
-	cargs.ReplicationMode = base.ReplicationManual
+	cargs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
 	manualClock := hlc.NewHybridManualClock()
 	cargs.ServerArgs = base.TestServerArgs{
 		Settings: st,
@@ -1255,6 +1387,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 				WallClock: manualClock,
 			},
 			Store: &kvserver.StoreTestingKnobs{
+				DisableMaxOffsetCheck: true, // has been seen to cause flakes
 				TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 					// Once reject is set, the test wants full control over the requests
 					// evaluating on the scratch range. On that range, we'll reject
@@ -1285,7 +1418,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 			},
 		},
 	}
-	tci := serverutils.StartNewTestCluster(t, 2, cargs)
+	tci := serverutils.StartCluster(t, 2, cargs)
 	tc := tci.(*testcluster.TestCluster)
 	defer tc.Stopper().Stop(ctx)
 
@@ -1430,8 +1563,7 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 
 	var timeoutSimulated bool
 
-	cargs := aggressiveResolvedTimestampClusterArgs
-	cargs.ReplicationMode = base.ReplicationManual
+	cargs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
 	manualClock := hlc.NewHybridManualClock()
 	cargs.ServerArgs = base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -1477,7 +1609,7 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 			},
 		},
 	}
-	tci := serverutils.StartNewTestCluster(t, 2, cargs)
+	tci := serverutils.StartCluster(t, 2, cargs)
 	tc := tci.(*testcluster.TestCluster)
 	defer tc.Stopper().Stop(ctx)
 
