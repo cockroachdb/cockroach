@@ -903,16 +903,7 @@ func parsePrometheusMetric(s string) (*prometheusMetric, bool) {
 func runFollowerReadsMixedVersionSingleRegionTest(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(),
-		// The http requests to the admin UI performed by the test don't play
-		// well with secure clusters. As of the time of writing, they return
-		// either of the following errors:
-		//  tls: failed to verify certificate: x509: “node” certificate is not standards compliant
-		//  tls: failed to verify certificate: x509: certificate signed by unknown authority
-		//
-		// Disable secure mode for simplicity.
-		mixedversion.ClusterSettingOption(install.SecureOption(false)),
-	)
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All())
 	topology := topologySpec{multiRegion: false}
 
 	var data map[int]int64

@@ -2398,7 +2398,13 @@ func (c *clusterImpl) pgURLErr(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption, opts roachprod.PGURLOptions,
 ) ([]string, error) {
 	opts.Secure = c.localCertsDir != ""
-	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(node), c.localCertsDir, opts)
+	certsDir := "certs"
+	// For external connections, we need to use the locally downloaded
+	// certs as it does not have access to ./certs.
+	if opts.External {
+		certsDir = c.localCertsDir
+	}
+	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(node), certsDir, opts)
 	if err != nil {
 		return nil, err
 	}

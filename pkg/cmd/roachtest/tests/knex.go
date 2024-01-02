@@ -131,7 +131,7 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 			ctx,
 			t.L(),
 			node,
-			`cd /mnt/data1/knex/ && POSTGRES_USER='roach' POSTGRES_PASSWORD='system' POSTGRES_SSL=true DB='cockroachdb' npm test`,
+			`cd /mnt/data1/knex/ &&DB='cockroachdb' npm test`,
 		)
 		rawResultsStr := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResultsStr)

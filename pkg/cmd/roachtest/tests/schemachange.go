@@ -63,7 +63,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			c.Run(ctx, c.Node(1), `./workload init kv --drop --db=test`, pgurl)
+			c.Run(ctx, c.Node(1), fmt.Sprintf(`./workload init kv --drop --db=test '%s'`, pgurl))
 			for node := 1; node <= c.Spec().NodeCount; node++ {
 				node := node
 				// TODO(dan): Ideally, the test would fail if this queryload failed,

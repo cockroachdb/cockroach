@@ -44,7 +44,7 @@ func DefaultPGUrl(
 	auth install.PGAuthMode,
 ) (string, error) {
 	opts := roachprod.PGURLOptions{Auth: auth}
-	pgurl, err := c.ExternalPGUrl(ctx, l, node, opts)
+	pgurl, err := c.InternalPGUrl(ctx, l, node, opts)
 	if err != nil {
 		return "", err
 	}

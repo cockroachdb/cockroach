@@ -15,8 +15,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -261,26 +258,14 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 			if err != nil {
 				q.Fatal(err)
 			}
-			sessionID, err := roachtestutil.GetSessionID(ctx, q.c, q.t.L(), q.c.Node(i))
+			url := fmt.Sprintf("https://%s/_status/ranges/local", adminAddrs[0])
+			client, err := roachtestutil.DefaultHttpClientWithSessionCookie(ctx, q.c, q.t.L(), q.c.Node(i), url)
 			if err != nil {
 				q.Fatal(err)
 			}
-			client := httputil.DefaultClient
-			url, err := url.Parse(fmt.Sprintf("https://%s/_status/ranges/local", adminAddrs[0]))
-			if err != nil {
-				q.Fatal(err)
-			}
-
 			var data []byte
 			func() {
-				req := &http.Request{
-					Method: "GET",
-					URL:    url,
-					Header: map[string][]string{
-						"Cookie": {sessionID},
-					},
-				}
-				response, err := client.Do(req)
+				response, err := client.Get(url)
 				if err != nil {
 					q.Fatal(err)
 				}

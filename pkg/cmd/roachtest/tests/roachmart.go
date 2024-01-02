@@ -56,7 +56,7 @@ func registerRoachmart(r registry.Registry) {
 			t.Fatal(err)
 		}
 		// See https://github.com/cockroachdb/cockroach/issues/94062 for the --data-loader.
-		roachmartRun(ctx, 0, "./workload", "init", "roachmart", "--data-loader=INSERT", pgurl)
+		roachmartRun(ctx, 0, "./workload", "init", "roachmart", "--data-loader=INSERT", fmt.Sprintf("'%s'", pgurl))
 
 		duration := " --duration=" + ifLocal(c, "10s", "10m")
 

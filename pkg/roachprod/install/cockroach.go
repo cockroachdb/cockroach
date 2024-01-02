@@ -509,22 +509,26 @@ func (c *SyncedCluster) NodeURL(
 	u.Host = fmt.Sprintf("%s:%d", host, port)
 	v := url.Values{}
 	if c.Secure {
+		password := virtualClusterName
+		if virtualClusterName == "" {
+			password = SystemInterfaceName
+		}
 		var user string
 		switch auth {
 		case AuthCert:
 			user = "root"
 		case AuthPassword:
-			u.User = url.UserPassword(Username, SystemInterfaceName)
+			u.User = url.UserPassword(Username, password)
 			v.Add("sslmode", "allow")
 		case AuthCertPassword:
 			user = Username
-			u.User = url.UserPassword(Username, SystemInterfaceName)
+			u.User = url.UserPassword(Username, password)
 		}
 
 		if auth != AuthPassword {
-			v.Add("sslcert", fmt.Sprintf("%s/client.%s.crt", "certs", user))
-			v.Add("sslkey", fmt.Sprintf("%s/client.%s.key", "certs", user))
-			v.Add("sslrootcert", fmt.Sprintf("%s/ca.crt", "certs"))
+			v.Add("sslcert", fmt.Sprintf("%s/client.%s.crt", c.PGUrlCertsDir, user))
+			v.Add("sslkey", fmt.Sprintf("%s/client.%s.key", c.PGUrlCertsDir, user))
+			v.Add("sslrootcert", fmt.Sprintf("%s/ca.crt", c.PGUrlCertsDir))
 			v.Add("sslmode", "verify-full")
 		}
 	} else {

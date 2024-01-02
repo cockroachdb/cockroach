@@ -196,8 +196,8 @@ index ecfdd85f..17527129 100644
      /// test database.
      /// </summary>
      public const string DefaultConnectionString =
--        "Server=localhost;Username=npgsql_tests;AuthPassword=npgsql_tests;Database=npgsql_tests;Timeout=0;Command Timeout=0;SSL Mode=Disable";
-+        "Server=127.0.0.1;Username=npgsql_tests;AuthPassword=npgsql_tests;Database=npgsql_tests;Port=%s;Timeout=0;Command Timeout=0;SSL Mode=Prefer;Include Error Detail=true";
+-        "Server=localhost;Username=npgsql_tests;Password=npgsql_tests;Database=npgsql_tests;Timeout=0;Command Timeout=0;SSL Mode=Disable";
++        "Server=127.0.0.1;Username=npgsql_tests;Password=npgsql_tests;Database=npgsql_tests;Port=%s;Timeout=0;Command Timeout=0;SSL Mode=Prefer;Include Error Detail=true";
  
      /// <summary>
      /// The connection string that will be used when opening the connection to the tests database.
