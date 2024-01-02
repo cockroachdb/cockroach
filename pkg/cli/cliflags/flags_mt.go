@@ -47,6 +47,11 @@ wait for the tenant id to be fully written to the file (with a newline character
 		Description: "Listen address for incoming connections.",
 	}
 
+	ProxyProtocolListenAddr = FlagInfo{
+		Name:        "proxy-protocol-listen-addr",
+		Description: "Listen address for incoming connections which require proxy protocol headers.",
+	}
+
 	ThrottleBaseDelay = FlagInfo{
 		Name:        "throttle-base-delay",
 		Description: "Initial value for the exponential backoff used to throttle connection attempts.",
@@ -94,6 +99,9 @@ wait for the tenant id to be fully written to the file (with a newline character
 		Description: "If true, proxy will not attempt to rebalance connections.",
 	}
 
+	// TODO(joel): Remove this flag, and use --listen-addr for a non-proxy
+	// protocol listener, and use --proxy-protocol-listen-addr for a proxy
+	// protocol listener.
 	RequireProxyProtocol = FlagInfo{
 		Name: "require-proxy-protocol",
 		Description: `Requires PROXY protocol on the SQL listener. The HTTP

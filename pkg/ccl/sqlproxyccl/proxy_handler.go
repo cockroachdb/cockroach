@@ -73,6 +73,10 @@ type ProxyOptions struct {
 	Denylist string
 	// ListenAddr is the listen address for incoming connections.
 	ListenAddr string
+	// ProxyProtocolListenAddr is the optional listen address for incoming
+	// connections for which it will be enforced that the connections have proxy
+	// headers set.
+	ProxyProtocolListenAddr string
 	// ListenCert is the file containing PEM-encoded x509 certificate for listen
 	// address. Set to "*" to auto-generate self-signed cert.
 	ListenCert string
@@ -113,8 +117,10 @@ type ProxyOptions struct {
 	DisableConnectionRebalancing bool
 	// RequireProxyProtocol changes the server's behavior to support the PROXY
 	// protocol (SQL=required, HTTP=best-effort). With this set to true, the
-	// PROXY info from upstream will be trusted on both HTTP and SQL, if the
-	// headers are allowed.
+	// PROXY info from upstream will be trusted on both HTTP and SQL (on the
+	// ListenAddr port), if the headers are allowed. The ProxyProtocolListenAddr
+	// port, if specified, will require the proxy protocol regardless of
+	// RequireProxyProtocol.
 	RequireProxyProtocol bool
 
 	// testingKnobs are knobs used for testing.
