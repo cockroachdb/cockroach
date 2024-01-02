@@ -9,7 +9,40 @@ SET CLUSTER SETTING server.oidc_authentication.client_id = "fake_client_id"
 statement ok
 SET CLUSTER SETTING server.oidc_authentication.client_secret = "fake_client_secret"
 
-# Verify that the sensitive cluster settings cannot be viewed.
+statement ok
+SET CLUSTER SETTING server.redact_sensitive_settings.enabled = false
+
+# Verify that the sensitive cluster settings can be viewed. Even though testuser
+# does not have MODIFYCLUSTERSETTING, they can view the values since the redaction
+# cluster setting is disabled.
+
+user testuser
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_id
+----
+fake_client_id
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_secret
+----
+fake_client_secret
+
+query TT rowsort
+SELECT variable, value
+FROM [show all cluster settings]
+WHERE variable ILIKE 'server.oidc_authentication.client_%'
+----
+server.oidc_authentication.client_id      fake_client_id
+server.oidc_authentication.client_secret  fake_client_secret
+
+user root
+
+statement ok
+SET CLUSTER SETTING server.redact_sensitive_settings.enabled = true
+
+# Verify that the sensitive cluster settings cannot be viewed now that
+# the redaction cluster setting is enabled.
 
 user testuser
 
