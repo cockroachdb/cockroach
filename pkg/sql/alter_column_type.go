@@ -336,6 +336,18 @@ func alterColumnTypeGeneral(
 			SyntaxMode: tree.CastShort,
 		}
 		inverseExpr = tree.Serialize(&oldColComputeExpr)
+
+		// Validate that the column can be automatically cast to toType without explicit casting.
+		if validCast := cast.ValidCast(col.GetType(), toType, cast.ContextAssignment); !validCast {
+			return errors.WithHintf(
+				pgerror.Newf(
+					pgcode.DatatypeMismatch,
+					"column %q cannot be cast automatically to type %s",
+					col.GetName(),
+					toType.SQLString(),
+				), "You might need to specify \"USING %s\".", s,
+			)
+		}
 	}
 	// Create the default expression for the new column.
 	hasDefault := col.HasDefault()

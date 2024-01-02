@@ -504,14 +504,6 @@ func (mdb MockRangeDescriptorDB) RangeLookup(
 	return mdb(key, useReverseScan)
 }
 
-func (mdb MockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
-	rs, _, err := mdb(roachpb.RKey(roachpb.KeyMin), false)
-	if err != nil || len(rs) == 0 {
-		return nil, err
-	}
-	return &rs[0], nil
-}
-
 // withMetaRecursion returns a new MockRangeDescriptorDB that will behave the
 // same as the receiver, but will also recurse into the provided
 // RangeDescriptorCache on each lookup to simulate the use of a descriptor's
@@ -1526,7 +1518,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 	rDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) (
 		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
 	) {
-		if key.Equal(roachpb.KeyMin) {
+		if keys.RangeMetaKey(key).Equal(roachpb.RKeyMin) {
 			atomic.AddInt32(&numFirstRange, 1)
 		}
 		return []roachpb.RangeDescriptor{desc}, nil, nil
@@ -1983,7 +1975,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 		FirstRangeProvider: n.Nodes[0].Gossip,
 		Settings:           cluster.MakeTestingClusterSettings(),
 	})
-	if _, err := ds.FirstRange(); err == nil {
+	if _, err := ds.firstRangeProvider.GetFirstRangeDescriptor(); err == nil {
 		t.Errorf("expected not to find first range descriptor")
 	}
 	expectedDesc := &roachpb.RangeDescriptor{}
@@ -1998,7 +1990,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	}
 	const maxCycles = 25
 	n.SimulateNetwork(func(cycle int, network *simulation.Network) bool {
-		desc, err := ds.FirstRange()
+		desc, err := ds.firstRangeProvider.GetFirstRangeDescriptor()
 		if err != nil {
 			if cycle >= maxCycles {
 				t.Errorf("could not get range descriptor after %d cycles", cycle)
@@ -4197,7 +4189,7 @@ func TestConnectionClass(t *testing.T) {
 	rDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) (
 		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
 	) {
-		if key.Equal(roachpb.KeyMin) {
+		if keys.RangeMetaKey(key).Equal(roachpb.RKeyMin) {
 			return []roachpb.RangeDescriptor{{
 				RangeID:  1,
 				StartKey: roachpb.RKeyMin,
