@@ -132,10 +132,13 @@ func runDiskStalledDetection(
 	workloadStartAt := timeutil.Now()
 	m := c.NewMonitor(ctx, c.Range(1, 3))
 	m.Go(func(ctx context.Context) error {
+		// NB: Since we stall node 1, we run the workload only on nodes 2-3 so
+		// the post-stall QPS isn't affected by the fact that 1/3rd of workload
+		// workers just can't connect to a working node.
 		c.Run(ctx, c.Node(4), `./cockroach workload run kv --read-percent 50 `+
 			`--duration 10m --concurrency 256 --max-rate 2048 --tolerate-errors `+
 			` --min-block-bytes=512 --max-block-bytes=512 `+
-			`{pgurl:1-3}`)
+			`{pgurl:2-3}`)
 		return nil
 	})
 	defer m.Wait()
