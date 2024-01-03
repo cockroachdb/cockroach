@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -154,9 +153,6 @@ func WithRangeObserver(observer func(ForEachRangeFn)) RangeFeedOption {
 	})
 }
 
-// A "kill switch" to disable multiplexing rangefeed if severe issues discovered with new implementation.
-var enableMuxRangeFeed = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_MULTIPLEXING_RANGEFEED", true)
-
 // RangeFeed divides a RangeFeed request on range boundaries and establishes a
 // RangeFeed to each of the individual ranges. It streams back results on the
 // provided channel.
@@ -232,7 +228,7 @@ func (ds *DistSender) RangeFeedSpans(
 
 	rl := newCatchupScanRateLimiter(&ds.st.SV)
 
-	if enableMuxRangeFeed && cfg.useMuxRangeFeed {
+	if cfg.useMuxRangeFeed {
 		return muxRangeFeed(ctx, cfg, spans, ds, rr, rl, eventCh)
 	}
 
