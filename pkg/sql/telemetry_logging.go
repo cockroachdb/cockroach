@@ -266,11 +266,10 @@ func (t *telemetryLoggingMetrics) shouldEmitStatementLog(
 		// We should hold the lock while resetting the skipped queries.
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		skippedQueryCount = t.skippedQueryCount.Swap(0)
 		if !isTxnMode {
 			t.mu.lastSampledTime = newTime
 		}
-		return true, skippedQueryCount
+		return true, t.skippedQueryCount.Swap(0)
 	}
 
 	if isTxnMode {
@@ -318,9 +317,8 @@ func (t *telemetryLoggingMetrics) shouldEmitStatementLog(
 		return false, t.skippedQueryCount.Add(1)
 	}
 
-	skippedQueryCount = t.skippedQueryCount.Swap(0)
 	t.mu.lastSampledTime = newTime
-	return true, skippedQueryCount
+	return true, t.skippedQueryCount.Swap(0)
 }
 
 func (t *telemetryLoggingMetrics) getQueryLevelStats(
