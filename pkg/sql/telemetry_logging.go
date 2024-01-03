@@ -182,7 +182,7 @@ func (t *telemetryLoggingMetrics) shouldEmitTransactionLog(force, isInternal boo
 	if telemetrySamplingMode.Get(&t.st.SV) != telemetryModeTransaction {
 		return false
 	}
-	if isInternal && telemetryInternalQueriesEnabled.Get(&t.st.SV) {
+	if isInternal && !telemetryInternalQueriesEnabled.Get(&t.st.SV) {
 		return false
 	}
 	maxEventFrequency := telemetryTransactionSamplingFrequency.Get(&t.st.SV)
