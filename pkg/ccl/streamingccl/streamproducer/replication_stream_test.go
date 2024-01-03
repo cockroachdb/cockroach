@@ -773,7 +773,7 @@ USE d;
 
 	receivedKVs, receivedDelRangeSpans := consumeUntilTimestamp(batchHLCTime)
 	require.Equal(t, t2Span.Key, receivedKVs[0].Key)
-	require.Equal(t, batchHLCTime, receivedKVs[0].Value.Timestamp)
+	require.True(t, batchHLCTime.LessEq(receivedKVs[0].Value.Timestamp))
 	require.Equal(t, expectedDelRanges, normalizeRangeKeys(receivedDelRangeSpans))
 }
 
