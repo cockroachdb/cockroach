@@ -150,7 +150,7 @@ func (a *Asserter) Propose(
 	replicaID roachpb.ReplicaID,
 	cmdID, seedID kvserverbase.CmdIDKey,
 	cmd *kvserverpb.RaftCommand,
-	req kvpb.BatchRequest,
+	req *kvpb.BatchRequest,
 ) {
 	a.forRange(rangeID).propose(replicaID, cmdID, seedID, cmd, req)
 }
@@ -159,7 +159,7 @@ func (r *rangeAsserter) propose(
 	replicaID roachpb.ReplicaID,
 	cmdID, seedID kvserverbase.CmdIDKey,
 	cmd *kvserverpb.RaftCommand,
-	req kvpb.BatchRequest,
+	req *kvpb.BatchRequest,
 ) {
 	fail := func(msg string, args ...interface{}) {
 		panic(fmt.Sprintf("r%d/%d cmd %s: %s (%s)",
