@@ -257,13 +257,6 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 
 		columnIDs := make([]descpb.ColumnID, len(columns))
 		for i := range columns {
-			if columns[i].IsVirtual() {
-				return nil, pgerror.Newf(
-					pgcode.InvalidColumnReference,
-					"cannot create statistics on virtual column %q",
-					columns[i].ColName(),
-				)
-			}
 			columnIDs[i] = columns[i].GetID()
 		}
 		col, err := catalog.MustFindColumnByID(tableDesc, columnIDs[0])
@@ -380,19 +373,6 @@ func createStatsDefaultColumns(
 	// ID if they have not already been added. Histogram stats are collected for
 	// every indexed column.
 	addIndexColumnStatsIfNotExists := func(colID descpb.ColumnID, isInverted bool) error {
-		col, err := catalog.MustFindColumnByID(desc, colID)
-		if err != nil {
-			return err
-		}
-
-		// Do not collect stats for virtual computed columns. DistSQLPlanner
-		// cannot currently collect stats for these columns because it plans
-		// table readers on the table's primary index which does not include
-		// virtual computed columns.
-		if col.IsVirtual() {
-			return nil
-		}
-
 		colIDs := []descpb.ColumnID{colID}
 
 		// Check for existing stats and remember the requested stats.
@@ -471,16 +451,7 @@ func createStatsDefaultColumns(
 				if err != nil {
 					return nil, err
 				}
-				if col.IsVirtual() {
-					continue
-				}
 				colIDs = append(colIDs, col.GetID())
-			}
-
-			// Do not attempt to create multi-column stats with no columns. This
-			// can happen when an index contains only virtual computed columns.
-			if len(colIDs) == 0 {
-				continue
 			}
 
 			// Check for existing stats and remember the requested stats.
@@ -526,12 +497,6 @@ func createStatsDefaultColumns(
 	nonIdxCols := 0
 	for i := 0; i < len(desc.PublicColumns()) && nonIdxCols < maxNonIndexCols; i++ {
 		col := desc.PublicColumns()[i]
-
-		// Do not collect stats for virtual computed columns.
-		if col.IsVirtual() {
-			continue
-		}
-
 		colIDs := []descpb.ColumnID{col.GetID()}
 
 		// Check for existing stats.

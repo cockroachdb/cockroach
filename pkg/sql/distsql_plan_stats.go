@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -22,9 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -368,14 +372,60 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		return nil, errors.New("no stats requested")
 	}
 
-	// Calculate the set of columns we need to scan.
+	// Calculate the set of columns we need to scan and any virtual computed cols.
 	var colCfg scanColumnsConfig
 	var tableColSet catalog.TableColSet
+	var requestedCols []catalog.Column
+	var virtComputedCols []catalog.Column
 	for _, s := range reqStats {
 		for _, c := range s.columns {
 			if !tableColSet.Contains(c) {
 				tableColSet.Add(c)
-				colCfg.wantedColumns = append(colCfg.wantedColumns, c)
+				col, err := catalog.MustFindColumnByID(desc, c)
+				if err != nil {
+					return nil, err
+				}
+				requestedCols = append(requestedCols, col)
+				if col.IsVirtual() {
+					virtComputedCols = append(virtComputedCols, col)
+				} else {
+					colCfg.wantedColumns = append(colCfg.wantedColumns, c)
+				}
+			}
+		}
+	}
+
+	// Add columns to the scan that are referenced by virtual computed column
+	// expressions but were not in the requested statistics.
+	if len(virtComputedCols) != 0 {
+		exprStrings := make([]string, 0, len(virtComputedCols))
+		for _, col := range virtComputedCols {
+			exprStrings = append(exprStrings, col.GetComputeExpr())
+		}
+
+		virtComputedExprs, err := parser.ParseExprs(exprStrings)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, expr := range virtComputedExprs {
+			refColIDs, err := schemaexpr.ExtractColumnIDs(desc, expr)
+			if err != nil {
+				return nil, err
+			}
+			refColIDs.ForEach(func(c descpb.ColumnID) {
+				if !tableColSet.Contains(c) {
+					if _, err = catalog.MustFindColumnByID(desc, c); err != nil {
+						fmt.Println("could not find column!")
+						return
+					}
+					tableColSet.Add(c)
+					// Add the referenced column to the scan.
+					colCfg.wantedColumns = append(colCfg.wantedColumns, c)
+				}
+			})
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -385,10 +435,6 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	err := scan.initDescDefaults(colCfg)
 	if err != nil {
 		return nil, err
-	}
-	var colIdxMap catalog.TableColMap
-	for i, c := range scan.cols {
-		colIdxMap.Set(c.GetID(), i)
 	}
 	var sb span.Builder
 	sb.Init(planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index)
@@ -412,8 +458,79 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		}
 	}
 
+	// Add rendering of virtual computed columns.
+	if len(virtComputedCols) != 0 {
+		// Resolve names and types.
+		semaCtx := tree.MakeSemaContext()
+		virtComputedExprs, _, err := schemaexpr.MakeComputedExprs(
+			ctx,
+			virtComputedCols,
+			scan.cols,
+			desc,
+			tree.NewUnqualifiedTableName(tree.Name(desc.GetName())),
+			planCtx.EvalContext(),
+			&semaCtx,
+		)
+		if err != nil {
+			fmt.Println("error from MakeComputedExprs:", err)
+			return nil, err
+		}
+
+		// Build render expressions for all requested columns.
+		exprs := make(tree.TypedExprs, len(requestedCols))
+		resultCols := colinfo.ResultColumnsFromColumns(desc.GetID(), requestedCols)
+
+		ivh := tree.MakeIndexedVarHelper(nil, len(scan.cols))
+		var scanIdx, virtIdx int
+		for i, col := range requestedCols {
+			if col.IsVirtual() {
+				if virtIdx > len(virtComputedExprs) {
+					return nil, errors.AssertionFailedf(
+						"virtual computed column expressions do not match requested columns",
+					)
+				}
+				exprs[i] = virtComputedExprs[virtIdx]
+				virtIdx++
+			} else {
+				// Confirm that the scan columns contain the requested column in the
+				// expected order.
+				if scanIdx > len(scan.cols) || scan.cols[scanIdx].GetID() != col.GetID() {
+					return nil, errors.AssertionFailedf("scan columns do not match requested columns")
+				}
+				exprs[i] = ivh.IndexedVarWithType(scanIdx, scan.cols[scanIdx].GetType())
+				scanIdx++
+			}
+		}
+
+		var rb renderBuilder
+		rb.init(exec.Node(planNode(&scan)), exec.OutputOrdering{})
+		for i, expr := range exprs {
+			exprs[i] = rb.r.ivarHelper.Rebind(expr)
+		}
+		rb.setOutput(exprs, resultCols)
+
+		err = dsp.createPlanForRender(ctx, p, rb.r, planCtx)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// No virtual computed columns. Confirm that the scan columns match the
+		// requested columns.
+		for i, col := range requestedCols {
+			if i > len(scan.cols) || scan.cols[i].GetID() != col.GetID() {
+				return nil, errors.AssertionFailedf("scan columns do not match requested columns")
+			}
+		}
+	}
+
+	// Output of the scan or render will be in requestedCols order.
+	var colIdxMap catalog.TableColMap
+	for i, col := range requestedCols {
+		colIdxMap.Set(col.GetID(), i)
+	}
+
 	var sketchSpecs, invSketchSpecs []execinfrapb.SketchSpec
-	sampledColumnIDs := make([]descpb.ColumnID, len(scan.cols))
+	sampledColumnIDs := make([]descpb.ColumnID, len(requestedCols))
 	for _, s := range reqStats {
 		spec := execinfrapb.SketchSpec{
 			SketchType:          execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
