@@ -2206,7 +2206,7 @@ func (k kafkaManager) getConnectionString(ctx context.Context) (string, error) {
 		return "", errors.Wrap(err, "error running az account set")
 	}
 
-	cmdStr = "az eventhubs namespace authorization-rule keys list --resource-group cdc-roachtest-test --namespace-name cdceventhubs --name roachtest"
+	cmdStr = "az eventhubs namespace authorization-rule keys list --authorization-rule-name cdc-roachtest-auth-rule --namespace-name cdc-roachtest --resource-group e2e-infra-event-hub-rg"
 	results, err = k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, cmdStr)
 	k.t.L().Printf("az eventhubs connection string:%s\n", results.Stdout)
 	if err != nil {
