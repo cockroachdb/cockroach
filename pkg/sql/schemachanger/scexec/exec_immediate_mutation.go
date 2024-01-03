@@ -12,6 +12,7 @@ package scexec
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -135,8 +136,11 @@ func (s *immediateState) exec(ctx context.Context, c Catalog) error {
 	s.descriptorsToDelete.ForEach(func(id descpb.ID) {
 		s.modifiedDescriptors.Remove(id)
 	})
-	for _, desc := range s.newDescriptors {
-		if err := c.CreateOrUpdateDescriptor(ctx, desc); err != nil {
+	for _, newDescID := range getOrderedNewDescriptorIDs(s.newDescriptors) {
+		// Create new descs by the ascending order of their ID. This determinism
+		// helps avoid flakes in end-to-end tests in which we assert a particular
+		// order of desc upsertion.
+		if err := c.CreateOrUpdateDescriptor(ctx, s.newDescriptors[newDescID]); err != nil {
 			return err
 		}
 	}
@@ -179,4 +183,18 @@ func (s *immediateState) exec(ctx context.Context, c Catalog) error {
 		c.InitializeSequence(s.id, s.startVal)
 	}
 	return c.Validate(ctx)
+}
+
+// getOrderedNewDescriptorIDs returns ids in `newDescriptors` in ascending order.
+func getOrderedNewDescriptorIDs(
+	newDescriptors map[descpb.ID]catalog.MutableDescriptor,
+) []descpb.ID {
+	res := make([]descpb.ID, 0, len(newDescriptors))
+	for id := range newDescriptors {
+		res = append(res, id)
+	}
+	sort.Slice(res, func(i, j int) bool {
+		return res[i] < res[j]
+	})
+	return res
 }
