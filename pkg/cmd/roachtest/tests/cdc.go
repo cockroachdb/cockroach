@@ -404,10 +404,6 @@ var (
 	featureEnabled  featureState = 2
 )
 
-func (s featureState) bool() bool {
-	return s == featureEnabled
-}
-
 type enthropy struct {
 	*rand.Rand
 }
@@ -465,7 +461,6 @@ func (f *enumFeatureFlag) enabled(r enthropy, choose func(enthropy) string) (str
 // cdcFeatureFlags describes various cdc feature flags.
 // zero value cdcFeatureFlags uses metamorphic settings for features.
 type cdcFeatureFlags struct {
-	MuxRangefeed         featureFlag
 	RangeFeedScheduler   featureFlag
 	SchemaLockTables     featureFlag
 	DistributionStrategy enumFeatureFlag
@@ -2637,16 +2632,6 @@ func (cfc *changefeedCreator) applySettings() error {
 	// kv.rangefeed.enabled is required for changefeeds to run
 	if _, err := cfc.db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
 		return err
-	}
-
-	muxEnabled := cfc.flags.MuxRangefeed.enabled(cfc.rng)
-	if muxEnabled != featureUnset {
-		cfc.logger.Printf("Setting changefeed.mux_rangefeed.enabled to %t", muxEnabled.bool())
-		if _, err := cfc.db.Exec(
-			"SET CLUSTER SETTING changefeed.mux_rangefeed.enabled = $1", muxEnabled.bool(),
-		); err != nil {
-			return err
-		}
 	}
 
 	rangeDistribution, rangeDistributionEnabled := cfc.flags.DistributionStrategy.enabled(cfc.rng,
