@@ -204,8 +204,9 @@ func rangeFeed(
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) (err error) {
 		if useMuxRangeFeed {
-			opts = append(opts, kvcoord.WithMuxRangeFeed())
 			ctx = context.WithValue(ctx, useMuxRangeFeedCtxKey{}, struct{}{})
+		} else {
+			opts = append(opts, kvcoord.WithoutMuxRangeFeed())
 		}
 		return ds.RangeFeed(ctx, []roachpb.Span{sp}, startFrom, events, opts...)
 	})
@@ -912,7 +913,6 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 	var numRestartStreams atomic.Int32
 
 	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, ts.Clock().Now(), ignoreValues, true,
-		kvcoord.WithMuxRangeFeed(),
 		kvcoord.TestingWithMuxRangeFeedRequestSenderCapture(
 			// We expect a single mux sender since we have 1 node in this test.
 			func(nodeID roachpb.NodeID, capture func(request *kvpb.RangeFeedRequest) error) {
@@ -1042,7 +1042,6 @@ func TestMuxRangeFeedDoesNotDeadlockWithLocalStreams(t *testing.T) {
 
 	allSeen, onValue := observeNValues(1000)
 	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startFrom, onValue, true,
-		kvcoord.WithMuxRangeFeed(),
 		kvcoord.TestingWithBeforeSendRequest(func() {
 			// Prior to sending rangefeed request, block for just a bit
 			// to make deadlock more likely.

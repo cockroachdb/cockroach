@@ -84,11 +84,11 @@ var rangefeedRangeStuckThreshold = settings.RegisterDurationSetting(
 type ForEachRangeFn func(fn ActiveRangeFeedIterFn) error
 
 type rangeFeedConfig struct {
-	useMuxRangeFeed bool
-	overSystemTable bool
-	withDiff        bool
-	withFiltering   bool
-	rangeObserver   func(ForEachRangeFn)
+	disableMuxRangeFeed bool
+	overSystemTable     bool
+	withDiff            bool
+	withFiltering       bool
+	rangeObserver       func(ForEachRangeFn)
 
 	knobs struct {
 		// onRangefeedEvent invoked on each rangefeed event.
@@ -115,10 +115,14 @@ type optionFunc func(*rangeFeedConfig)
 
 func (o optionFunc) set(c *rangeFeedConfig) { o(c) }
 
-// WithMuxRangeFeed configures range feed to use MuxRangeFeed RPC.
-func WithMuxRangeFeed() RangeFeedOption {
+// WithoutMuxRangeFeed configures range feed to use legacy RangeFeed RPC.
+//
+// TODO(erikgrinaker): this should be removed when support for the legacy
+// RangeFeed protocol is no longer needed in mixed-version clusters, and we
+// don't need test coverage for it.
+func WithoutMuxRangeFeed() RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
-		c.useMuxRangeFeed = true
+		c.disableMuxRangeFeed = true
 	})
 }
 
@@ -228,7 +232,7 @@ func (ds *DistSender) RangeFeedSpans(
 
 	rl := newCatchupScanRateLimiter(&ds.st.SV)
 
-	if cfg.useMuxRangeFeed {
+	if !cfg.disableMuxRangeFeed {
 		return muxRangeFeed(ctx, cfg, spans, ds, rr, rl, eventCh)
 	}
 
