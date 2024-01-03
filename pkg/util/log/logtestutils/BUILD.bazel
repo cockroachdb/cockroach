@@ -11,8 +11,10 @@ go_library(
     deps = [
         "//pkg/sql/execstats",
         "//pkg/util/log",
+        "//pkg/util/log/eventpb",
         "//pkg/util/log/logconfig",
         "//pkg/util/log/logpb",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
