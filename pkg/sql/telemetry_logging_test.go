@@ -39,17 +39,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testQuery struct {
-	query          string
-	logTime        float64
-	tracingEnabled bool
-}
-
-type expectedStmtLog struct {
-	logMsg            string
-	skippedQueryCount int
-}
-
 // TestTelemetryLogging verifies that telemetry events are logged to the telemetry log
 // and are sampled according to the configured sample rate.
 func TestTelemetryLogging(t *testing.T) {
