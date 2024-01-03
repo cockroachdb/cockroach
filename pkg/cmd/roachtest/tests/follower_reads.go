@@ -110,6 +110,22 @@ func registerFollowerReads(r registry.Registry) {
 		Suites:           registry.Suites(registry.Nightly),
 		Run:              runFollowerReadsMixedVersionSingleRegionTest,
 	})
+
+	r.Add(registry.TestSpec{
+		Name:            "follower-reads/mixed-version/survival=region/locality=global/reads=strong",
+		Skip:            "#117302",
+		Owner:           registry.OwnerKV,
+		RequiresLicense: true,
+		Cluster: r.MakeClusterSpec(
+			6, /* nodeCount */
+			spec.CPU(4),
+			spec.Geo(),
+			spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
+		),
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		Run:              runFollowerReadsMixedVersionGlobalTableTest,
+	})
 }
 
 // The survival goal of a multi-region database: ZONE or REGION.
@@ -665,7 +681,7 @@ func verifySQLLatency(
 		}},
 	}
 	var response tspb.TimeSeriesQueryResponse
-	if err := httputil.PostJSON(http.Client{}, url, &request, &response); err != nil {
+	if err := httputil.PostProtobuf(ctx, http.Client{}, url, &request, &response); err != nil {
 		t.Fatal(err)
 	}
 	perTenSeconds := response.Results[0].Datapoints
@@ -882,25 +898,57 @@ func parsePrometheusMetric(s string) (*prometheusMetric, bool) {
 	}, true
 }
 
-// runFollowerReadsMixedVersionSingleRegionTest runs a follower-reads test while
-// performing a cluster upgrade. The point is to exercise the closed-timestamp
-// mechanism in a mixed-version cluster. Running in a single region is
-// sufficient for this purpose; we're not testing non-voting replicas here
-// (which are used in multi-region tests).
+// runFollowerReadsMixedVersionSingleRegionTest runs a follower-reads test in a
+// single region while performing a cluster upgrade. The point is to exercise
+// the closed-timestamp mechanism in a mixed-version cluster. Running in a
+// single region is sufficient for this purpose; we're not testing non-voting
+// replicas here (which are used in multi-region tests).
 func runFollowerReadsMixedVersionSingleRegionTest(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(),
-		// The http requests to the admin UI performed by the test don't play
-		// well with secure clusters. As of the time of writing, they return
-		// either of the following errors:
-		//  tls: failed to verify certificate: x509: “node” certificate is not standards compliant
-		//  tls: failed to verify certificate: x509: certificate signed by unknown authority
-		//
-		// Disable secure mode for simplicity.
-		mixedversion.ClusterSettingOption(install.SecureOption(false)),
-	)
 	topology := topologySpec{multiRegion: false}
+	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness)
+}
+
+// runFollowerReadsMixedVersionGlobalTableTest runs a multi-region follower-read
+// test with a region-survivable global table while performing a cluster upgrade.
+// The point is to exercise global tables in a mixed-version cluster.
+func runFollowerReadsMixedVersionGlobalTableTest(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) {
+	topology := topologySpec{
+		multiRegion: true,
+		locality:    global,
+		survival:    region,
+	}
+	runFollowerReadsMixedVersionTest(ctx, t, c, topology, strong,
+		// Disable fixtures because we're using a 6-node, multi-region cluster.
+		mixedversion.NeverUseFixtures,
+		// Use a longer upgrade timeout to give the migrations enough time to finish
+		// considering the cross-region latency.
+		mixedversion.UpgradeTimeout(60*time.Minute),
+	)
+}
+
+// runFollowerReadsMixedVersionSingleRegionTest runs a follower-reads test while
+// performing a cluster upgrade.
+func runFollowerReadsMixedVersionTest(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	topology topologySpec,
+	rc readConsistency,
+	opts ...mixedversion.CustomOption,
+) {
+	// The http requests to the admin UI performed by the test don't play
+	// well with secure clusters. As of the time of writing, they return
+	// either of the following errors:
+	//  tls: failed to verify certificate: x509: “node” certificate is not standards compliant
+	//  tls: failed to verify certificate: x509: certificate signed by unknown authority
+	//
+	// Disable secure mode for simplicity.
+	opts = append(opts, mixedversion.ClusterSettingOption(install.SecureOption(false)))
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), opts...)
 
 	var data map[int]int64
 	runInit := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
@@ -909,7 +957,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	}
 
 	runFollowerReads := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-		runFollowerReadsTest(ctx, t, c, topology, exactStaleness, data)
+		runFollowerReadsTest(ctx, t, c, topology, rc, data)
 		return nil
 	}
 
