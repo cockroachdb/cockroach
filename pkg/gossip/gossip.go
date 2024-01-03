@@ -343,7 +343,7 @@ func (g *Gossip) GetNodeMetrics() *Metrics {
 // SetNodeDescriptor adds the node descriptor to the gossip network.
 func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	ctx := g.AnnotateCtx(context.TODO())
-	log.Infof(ctx, "NodeDescriptor set to %+v", desc)
+	log.VInfof(ctx, 1, "NodeDescriptor set to %+v", desc)
 	if desc.Address.IsEmpty() {
 		log.Fatalf(ctx, "n%d address is empty", desc.NodeID)
 	}
@@ -434,9 +434,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 
 	// If a new address was found, immediately signal bootstrap.
 	if newAddressFound {
-		if log.V(1) {
-			log.Ops.Infof(ctx, "found new addresses from storage; signaling bootstrap")
-		}
+		log.Ops.VInfof(ctx, 1, "found new addresses from storage; signaling bootstrap")
 		g.signalStalledLocked()
 	}
 	return nil
@@ -710,9 +708,8 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 		log.Errorf(ctx, "%v", err)
 		return
 	}
-	if log.V(1) {
-		log.Infof(ctx, "updateNodeAddress called on %q with desc %+v", key, desc)
-	}
+
+	log.VInfof(ctx, 1, "updateNodeAddress called on %q with desc %+v", key, desc)
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -782,9 +779,7 @@ func (g *Gossip) updateStoreMap(key string, content roachpb.Value) {
 		return
 	}
 
-	if log.V(1) {
-		log.Infof(ctx, "updateStoreMap called on %q with desc %+v", key, desc)
-	}
+	log.VInfof(ctx, 1, "updateStoreMap called on %q with desc %+v", key, desc)
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
