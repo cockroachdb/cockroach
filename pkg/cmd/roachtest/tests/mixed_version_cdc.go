@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -370,14 +371,6 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 	}
 
 	var ff cdcFeatureFlags
-	muxSupported, err := cmvt.muxRangeFeedSupported(r, h)
-	if err != nil {
-		return err
-	}
-	if !muxSupported {
-		ff.MuxRangefeed.v = &featureUnset
-	}
-
 	schedulerSupported, err := cmvt.rangefeedSchedulerSupported(r, h)
 	if err != nil {
 		return err
@@ -434,10 +427,17 @@ func (cmvt *cdcMixedVersionTester) initWorkload(
 func (cmvt *cdcMixedVersionTester) muxRangeFeedSupported(
 	r *rand.Rand, h *mixedversion.Helper,
 ) (bool, error) {
-	return h.ClusterVersionAtLeast(r, v222CV)
+	cv, err := h.ClusterVersion(r)
+	if err != nil {
+		return false, err
+	}
+	// Mux setting only exists in 22.2 to 23.2 inclusive.
+	return cv.AtLeast(roachpb.MustParseVersion(v222CV)) &&
+		!cv.AtLeast(roachpb.MustParseVersion(v241CV)), nil
 }
 
 const v232CV = "23.2"
+const v241CV = "24.1"
 
 func (cmvt *cdcMixedVersionTester) rangefeedSchedulerSupported(
 	r *rand.Rand, h *mixedversion.Helper,
