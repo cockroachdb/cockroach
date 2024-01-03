@@ -296,7 +296,7 @@ func (r *Replica) evalAndPropose(
 			Cmd:        proposal.command,
 			QuotaAlloc: proposal.quotaAlloc,
 			CmdID:      idKey,
-			Req:        *ba,
+			Req:        ba,
 			// SeedID not set, since this is not a reproposal.
 		}
 		if pErr = filter(filterArgs); pErr != nil {
