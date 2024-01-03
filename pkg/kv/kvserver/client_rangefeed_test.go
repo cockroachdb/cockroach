@@ -275,7 +275,7 @@ func TestRangefeedIsRoutedToNonVoter(t *testing.T) {
 	}
 	rangefeedCancel()
 	require.Regexp(t, "context canceled", <-rangefeedErrChan)
-	require.Regexp(t, `attempting to create a RangeFeed over replica .n2,s2.:\dNON_VOTER`,
+	require.Regexp(t, `MuxRangeFeed starting for span .* replica .n2,s2.:\dNON_VOTER`,
 		getRecAndFinish().String())
 }
 
