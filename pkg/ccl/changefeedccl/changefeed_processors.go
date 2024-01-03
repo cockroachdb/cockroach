@@ -787,6 +787,11 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 	if err != nil {
 		return err
 	}
+	sv := &ca.flowCtx.Cfg.Settings.SV
+
+	defer func(ctx context.Context) {
+		maybeLogBehindSpan(ctx, "aggregator", ca.frontier, advanced, sv)
+	}(ca.Ctx())
 
 	// The resolved sliMetric data backs the aggregator_progress metric
 	if advanced {
@@ -804,7 +809,6 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 	checkpointFrontier := advanced &&
 		(forceFlush || timeutil.Now().After(ca.nextHighWaterFlush))
 
-	sv := &ca.flowCtx.Cfg.Settings.SV
 	if checkpointFrontier {
 		defer func() {
 			ca.nextHighWaterFlush = nextFlushWithJitter(
@@ -935,9 +939,6 @@ type changeFrontier struct {
 	// lastEmitResolved is the last time a resolved timestamp was emitted.
 	lastEmitResolved time.Time
 
-	// slowLogEveryN rate-limits the logging of slow spans
-	slowLogEveryN log.EveryN
-
 	// lastProtectedTimestampUpdate is the last time the protected timestamp
 	// record was updated to the frontier's highwater mark
 	lastProtectedTimestampUpdate time.Time
@@ -973,6 +974,9 @@ const (
 	runStatusUpdateFrequency time.Duration = time.Minute
 	slowSpanMaxFrequency                   = 10 * time.Second
 )
+
+// slowLogEveryN rate-limits the logging of slow spans
+var slowLogEveryN = log.Every(slowSpanMaxFrequency)
 
 // jobState encapsulates changefeed job state.
 type jobState struct {
@@ -1110,12 +1114,11 @@ func newChangeFrontierProcessor(
 	}
 
 	cf := &changeFrontier{
-		flowCtx:       flowCtx,
-		spec:          spec,
-		memAcc:        memMonitor.MakeBoundAccount(),
-		input:         input,
-		frontier:      sf,
-		slowLogEveryN: log.Every(slowSpanMaxFrequency),
+		flowCtx:  flowCtx,
+		spec:     spec,
+		memAcc:   memMonitor.MakeBoundAccount(),
+		input:    input,
+		frontier: sf,
 	}
 
 	if cfKnobs, ok := flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
@@ -1442,7 +1445,7 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 		return err
 	}
 
-	cf.maybeLogBehindSpan(frontierChanged)
+	maybeLogBehindSpan(cf.Ctx(), "coordinator", cf.frontier, frontierChanged, &cf.flowCtx.Cfg.Settings.SV)
 
 	// If frontier changed, we emit resolved timestamp.
 	emitResolved := frontierChanged
@@ -1662,50 +1665,51 @@ func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
 	return nil
 }
 
-func (cf *changeFrontier) isBehind() bool {
-	frontier := cf.frontier.Frontier()
+func frontierIsBehind(frontier hlc.Timestamp, sv *settings.Values) bool {
 	if frontier.IsEmpty() {
 		// During backfills we consider ourselves "behind" for the purposes of
 		// maintaining protected timestamps
 		return true
 	}
 
-	return timeutil.Since(frontier.GoTime()) > cf.slownessThreshold()
+	return timeutil.Since(frontier.GoTime()) > slownessThreshold(sv)
 }
 
 // Potentially log the most behind span in the frontier for debugging if the
 // frontier is behind
-func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) {
-	if !cf.isBehind() {
+func maybeLogBehindSpan(
+	ctx context.Context,
+	description string,
+	frontier span.Frontier,
+	frontierChanged bool,
+	sv *settings.Values,
+) {
+	// Do not log when we're "behind" due to a backfill
+	frontierTS := frontier.Frontier()
+	if frontierTS.IsEmpty() {
 		return
 	}
 
-	// Do not log when we're "behind" due to a backfill
-	frontier := cf.frontier.Frontier()
-	if frontier.IsEmpty() {
+	if !frontierIsBehind(frontierTS, sv) {
 		return
 	}
 
 	now := timeutil.Now()
-	resolvedBehind := now.Sub(frontier.GoTime())
+	resolvedBehind := now.Sub(frontierTS.GoTime())
 
-	description := "sinkless feed"
-	if !cf.isSinkless() {
-		description = fmt.Sprintf("job %d", cf.spec.JobID)
-	}
-	if frontierChanged && cf.slowLogEveryN.ShouldProcess(now) {
-		log.Infof(cf.Ctx(), "%s new resolved timestamp %s is behind by %s",
-			description, frontier, resolvedBehind)
+	if frontierChanged && slowLogEveryN.ShouldProcess(now) {
+		log.Infof(ctx, "%s new resolved timestamp %s is behind by %s",
+			description, frontierTS, resolvedBehind)
 	}
 
-	if cf.slowLogEveryN.ShouldProcess(now) {
-		s := cf.frontier.PeekFrontierSpan()
-		log.Infof(cf.Ctx(), "%s span %s is behind by %s", description, s, resolvedBehind)
+	if slowLogEveryN.ShouldProcess(now) {
+		s := frontier.PeekFrontierSpan()
+		log.Infof(ctx, "%s span %s is behind by %s", description, s, resolvedBehind)
 	}
 }
 
-func (cf *changeFrontier) slownessThreshold() time.Duration {
-	clusterThreshold := changefeedbase.SlowSpanLogThreshold.Get(&cf.flowCtx.Cfg.Settings.SV)
+func slownessThreshold(sv *settings.Values) time.Duration {
+	clusterThreshold := changefeedbase.SlowSpanLogThreshold.Get(sv)
 	if clusterThreshold > 0 {
 		return clusterThreshold
 	}
@@ -1718,8 +1722,8 @@ func (cf *changeFrontier) slownessThreshold() time.Duration {
 	//
 	// TODO(ssd): We should probably take into account the flush
 	// frequency here.
-	pollInterval := changefeedbase.TableDescriptorPollInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
-	closedtsInterval := closedts.TargetDuration.Get(&cf.flowCtx.Cfg.Settings.SV)
+	pollInterval := changefeedbase.TableDescriptorPollInterval.Get(sv)
+	closedtsInterval := closedts.TargetDuration.Get(sv)
 	return time.Second + 10*(pollInterval+closedtsInterval)
 }
 
@@ -1727,12 +1731,6 @@ func (cf *changeFrontier) slownessThreshold() time.Duration {
 func (cf *changeFrontier) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	cf.close()
-}
-
-// isSinkless returns true if this changeFrontier is sinkless and thus does not
-// have a job.
-func (cf *changeFrontier) isSinkless() bool {
-	return cf.spec.JobID == 0
 }
 
 // type alias to make it possible to embed and forward calls (e.g. Frontier())
@@ -1819,9 +1817,7 @@ func (f *schemaChangeFrontier) ForwardResolvedSpan(r jobspb.ResolvedSpan) (bool,
 		f.boundaryType = r.BoundaryType
 	}
 
-	if f.latestTs.Less(r.Timestamp) {
-		f.latestTs = r.Timestamp
-	}
+	f.latestTs.Forward(r.Timestamp)
 	return f.Forward(r.Span, r.Timestamp)
 }
 
