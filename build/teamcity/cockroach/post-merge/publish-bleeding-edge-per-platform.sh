@@ -21,5 +21,5 @@ export google_credentials="$gcs_credentials"
 source "build/teamcity-support.sh"  # For log_into_gcloud
 log_into_gcloud
 export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
-$BAZEL_BIN/pkg/cmd/publish-artifacts/publish-artifacts_/publish-artifacts --gcs-bucket="$gcs_bucket" --platform=$platform
+$BAZEL_BIN/pkg/cmd/publish-artifacts/publish-artifacts_/publish-artifacts --gcs-bucket="$gcs_bucket" --platform="$platform"
 EOF
