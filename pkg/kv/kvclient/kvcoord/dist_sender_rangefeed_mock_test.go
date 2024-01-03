@@ -35,16 +35,6 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 )
 
-// TestingSetEnableMuxRangeFeed adjusts enable rangefeed env variable
-// for testing.
-func TestingSetEnableMuxRangeFeed(enabled bool) func() {
-	old := enableMuxRangeFeed
-	enableMuxRangeFeed = enabled
-	return func() {
-		enableMuxRangeFeed = old
-	}
-}
-
 // Tests that the range feed handles transport errors appropriately. In
 // particular, that when encountering other decommissioned nodes it will refresh
 // its range descriptor and retry, but if this node is decommissioned it will
@@ -168,8 +158,8 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 					})
 
 					var opts []RangeFeedOption
-					if useMuxRangeFeed {
-						opts = append(opts, WithMuxRangeFeed())
+					if !useMuxRangeFeed {
+						opts = append(opts, WithoutMuxRangeFeed())
 					}
 					err := ds.RangeFeed(ctx, []roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}}, hlc.Timestamp{}, nil, opts...)
 					require.Error(t, err)

@@ -221,14 +221,6 @@ var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
 	settings.WithName("changefeed.batch_reduction_retry.enabled"),
 	settings.WithPublic)
 
-// UseMuxRangeFeed enables the use of MuxRangeFeed RPC.
-var UseMuxRangeFeed = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"changefeed.mux_rangefeed.enabled",
-	"if true, changefeed uses multiplexing rangefeed RPC",
-	util.ConstantWithMetamorphicTestBool("changefeed.mux_rangefeed.enabled", false),
-)
-
 // EventConsumerWorkers specifies the maximum number of workers to use when
 // processing  events.
 var EventConsumerWorkers = settings.RegisterIntSetting(

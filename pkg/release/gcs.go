@@ -108,5 +108,5 @@ func (p *GCSProvider) PutObject(input *PutObjectInput) error {
 
 // URL returns key's representation that can be used by gcsutil
 func (p GCSProvider) URL(key string) string {
-	return "gcs://" + p.bucket + "/" + strings.TrimPrefix(key, "/")
+	return "gs://" + p.bucket + "/" + strings.TrimPrefix(key, "/")
 }

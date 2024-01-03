@@ -28,8 +28,13 @@ const (
 
 func main() {
 	var gcsBucket string
+	var platforms release.Platforms
 	flag.StringVar(&gcsBucket, "gcs-bucket", "", "GCS bucket")
+	flag.Var(&platforms, "platform", "platforms to build")
 	flag.Parse()
+	if len(platforms) == 0 {
+		platforms = release.DefaultPlatforms()
+	}
 
 	if gcsBucket == "" {
 		log.Fatal("GCS bucket is not set")
@@ -66,7 +71,7 @@ func main() {
 	}
 	versionStr := string(bytes.TrimSpace(out))
 
-	run(providers, runFlags{
+	run(providers, platforms, runFlags{
 		pkgDir: pkg,
 		branch: branch,
 		sha:    versionStr,
@@ -79,15 +84,13 @@ type runFlags struct {
 	pkgDir string
 }
 
-func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.ExecFn) {
-	for _, platform := range []release.Platform{
-		release.PlatformLinux,
-		release.PlatformLinuxFIPS,
-		release.PlatformLinuxArm,
-		release.PlatformMacOS,
-		release.PlatformMacOSArm,
-		release.PlatformWindows,
-	} {
+func run(
+	providers []release.ObjectPutGetter,
+	platforms release.Platforms,
+	flags runFlags,
+	execFn release.ExecFn,
+) {
+	for _, platform := range platforms {
 		var o opts
 		o.Platform = platform
 		o.ReleaseVersions = []string{flags.sha}

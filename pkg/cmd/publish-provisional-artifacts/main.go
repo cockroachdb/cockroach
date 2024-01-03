@@ -31,12 +31,14 @@ const (
 var provisionalReleasePrefixRE = regexp.MustCompile(`^provisional_[0-9]{12}_`)
 
 func main() {
+	var platforms release.Platforms
 	var gcsBucket string
 	var outputDirectory string
 	var buildTagOverride string
 	var doProvisional bool
 	var isRelease bool
 	var doBless bool
+	flag.Var(&platforms, "platform", "platforms to build")
 	flag.BoolVar(&isRelease, "release", false, "build in release mode instead of bleeding-edge mode")
 	flag.StringVar(&gcsBucket, "gcs-bucket", "", "GCS bucket")
 	flag.StringVar(&outputDirectory, "output-directory", "",
@@ -46,6 +48,9 @@ func main() {
 	flag.BoolVar(&doBless, "bless", false, "bless provisional binaries")
 
 	flag.Parse()
+	if len(platforms) == 0 {
+		platforms = release.DefaultPlatforms()
+	}
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	// GCS bucket is required now
@@ -83,7 +88,7 @@ func main() {
 		log.Fatalf("%s: out=%q err=%s", cmd.Args, shaOut, err)
 	}
 
-	run(providers, runFlags{
+	run(providers, platforms, runFlags{
 		doProvisional:    doProvisional,
 		doBless:          doBless,
 		isRelease:        isRelease,
@@ -106,7 +111,12 @@ type runFlags struct {
 	outputDirectory  string
 }
 
-func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.ExecFn) {
+func run(
+	providers []release.ObjectPutGetter,
+	platforms release.Platforms,
+	flags runFlags,
+	execFn release.ExecFn,
+) {
 	// TODO(dan): non-release builds currently aren't broken into the two
 	// phases. Instead, the provisional phase does them both.
 	if !flags.isRelease {
@@ -142,15 +152,6 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 	} else {
 		versionStr = flags.sha
 		updateLatest = true
-	}
-
-	platforms := []release.Platform{
-		release.PlatformLinux,
-		release.PlatformLinuxFIPS,
-		release.PlatformMacOS,
-		release.PlatformMacOSArm,
-		release.PlatformWindows,
-		release.PlatformLinuxArm,
 	}
 	var cockroachBuildOpts []opts
 	for _, platform := range platforms {
