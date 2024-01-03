@@ -860,7 +860,11 @@ func (f *FuncDepSet) MakeNotNull(notNullCols opt.ColSet) {
 		}
 	}
 
-	f.tryToReduceKey(notNullCols)
+	// Avoid calling tryToReduceKey unless either a new dependency has been
+	// created, or a lax key may be reduced.
+	if firstLaxFD != nil || f.hasKey == laxKey {
+		f.tryToReduceKey(notNullCols)
+	}
 }
 
 // AddEquivalency adds two FDs to the set that establish a strict equivalence
@@ -1047,7 +1051,8 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 	//   (3)-->(4)
 	//
 	if !constCols.Empty() {
-		f.AddConstants(constCols)
+		// We'll reduce the key later before returning, so avoid the extra work.
+		f.addConstantsNoKeyReduction(constCols)
 	}
 
 	// Forget all equivalencies that involve un-projected columns.
@@ -1954,7 +1959,17 @@ func (f *FuncDepSet) tryToReduceKey(notNullCols opt.ColSet) {
 		}
 
 	case strictKey:
-		f.key = f.ReduceCols(f.key)
+		// Fast path: skip the call to ReduceCols if it will have no effect.
+		depsNeedReduce := false
+		for i := range f.deps {
+			if f.deps[i].to.Intersects(f.key) {
+				depsNeedReduce = true
+				break
+			}
+		}
+		if depsNeedReduce || f.equiv.Intersects(f.key) {
+			f.key = f.ReduceCols(f.key)
+		}
 	}
 }
 
