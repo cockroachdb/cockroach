@@ -432,7 +432,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		// Assert existing calls.
 		require.Equal(t, 1, dialSQLServerCount)
 		require.Equal(t, 1, reportFailureFnCount)
-		count, _ := c.DialTenantLatency.Total()
+		count, _ := c.DialTenantLatency.CumulativeSnapshot().Total()
 		require.Equal(t, count, int64(1))
 		require.Equal(t, c.DialTenantRetries.Count(), int64(0))
 
@@ -454,7 +454,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		// Assert existing calls.
 		require.Equal(t, 2, dialSQLServerCount)
 		require.Equal(t, 2, reportFailureFnCount)
-		count, _ = c.DialTenantLatency.Total()
+		count, _ = c.DialTenantLatency.CumulativeSnapshot().Total()
 		require.Equal(t, count, int64(2))
 		require.Equal(t, c.DialTenantRetries.Count(), int64(0))
 	})
@@ -480,7 +480,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		conn, err := c.dialTenantCluster(ctx, nil /* requester */)
 		require.EqualError(t, err, "baz")
 		require.Nil(t, conn)
-		count, _ := c.DialTenantLatency.Total()
+		count, _ := c.DialTenantLatency.CumulativeSnapshot().Total()
 		require.Equal(t, count, int64(1))
 		require.Equal(t, c.DialTenantRetries.Count(), int64(0))
 	})
@@ -553,7 +553,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		require.Equal(t, 3, addrLookupFnCount)
 		require.Equal(t, 2, dialSQLServerCount)
 		require.Equal(t, 1, reportFailureFnCount)
-		count, _ := c.DialTenantLatency.Total()
+		count, _ := c.DialTenantLatency.CumulativeSnapshot().Total()
 		require.Equal(t, count, int64(1))
 		require.Equal(t, c.DialTenantRetries.Count(), int64(2))
 	})

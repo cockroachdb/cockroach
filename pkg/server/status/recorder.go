@@ -622,21 +622,29 @@ type registryRecorder struct {
 	timestampNanos int64
 }
 
+// extractValue extracts the metric value(s) for the given metric and passes it, along with the metric name, to the
+// provided callback function.
 func extractValue(name string, mtr interface{}, fn func(string, float64)) error {
 	switch mtr := mtr.(type) {
 	case metric.WindowedHistogram:
-		// Use cumulative stats here
-		count, sum := mtr.Total()
+		// Use cumulative stats here. Count and Sum must be calculated against the cumulative histogram.
+		cumulative, ok := mtr.(metric.CumulativeHistogram)
+		if !ok {
+			return errors.Newf(`extractValue called on histogram metric %q that does not implement the
+				CumulativeHistogram interface. All histogram metrics are expected to implement this interface`, name)
+		}
+		count, sum := cumulative.CumulativeSnapshot().Total()
 		fn(name+"-count", float64(count))
 		fn(name+"-sum", sum)
 		// Use windowed stats for avg and quantiles
-		avg := mtr.MeanWindowed()
+		windowedSnapshot := mtr.WindowedSnapshot()
+		avg := windowedSnapshot.Mean()
 		if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 			avg = 0
 		}
 		fn(name+"-avg", avg)
 		for _, pt := range recordHistogramQuantiles {
-			fn(name+pt.suffix, mtr.ValueAtQuantileWindowed(pt.quantile))
+			fn(name+pt.suffix, windowedSnapshot.ValueAtQuantile(pt.quantile))
 		}
 	case metric.PrometheusExportable:
 		// NB: this branch is intentionally at the bottom since all metrics implement it.
