@@ -294,8 +294,8 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier) {
 	if f.scanConfig.overSystemTable {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithSystemTablePriority())
 	}
-	if useMuxRangeFeed {
-		rangefeedOpts = append(rangefeedOpts, kvcoord.WithMuxRangeFeed())
+	if !useMuxRangeFeed {
+		rangefeedOpts = append(rangefeedOpts, kvcoord.WithoutMuxRangeFeed())
 	}
 	if f.withDiff {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithDiff())

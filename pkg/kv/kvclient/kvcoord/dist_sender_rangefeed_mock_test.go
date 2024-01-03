@@ -158,8 +158,8 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 					})
 
 					var opts []RangeFeedOption
-					if useMuxRangeFeed {
-						opts = append(opts, WithMuxRangeFeed())
+					if !useMuxRangeFeed {
+						opts = append(opts, WithoutMuxRangeFeed())
 					}
 					err := ds.RangeFeed(ctx, []roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}}, hlc.Timestamp{}, nil, opts...)
 					require.Error(t, err)
