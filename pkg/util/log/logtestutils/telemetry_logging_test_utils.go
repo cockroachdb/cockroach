@@ -11,9 +11,13 @@
 package logtestutils
 
 import (
+	"encoding/json"
+	"strings"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -76,4 +80,143 @@ func (s *StubTracingStatus) TracingStatus() bool {
 	s.RWMutex.RLock()
 	defer s.RWMutex.RUnlock()
 	return s.isTracing
+}
+
+// These fields should be constant in each test run.
+// Note that they won't appear in the output if the field is omitted.
+var includeByDefault = map[string]struct{}{
+	"EventType":               {},
+	"User":                    {},
+	"Statement":               {},
+	"Tag":                     {},
+	"ApplicationName":         {},
+	"PlaceholderValues":       {},
+	"NumRows":                 {},
+	"SQLSTATE":                {},
+	"ErrorText":               {},
+	"NumRetries":              {},
+	"FullTableScan":           {},
+	"FullIndexScan":           {},
+	"StmtPosInTxn":            {},
+	"SkippedQueries":          {},
+	"Distribution":            {},
+	"PlanGist":                {},
+	"Database":                {},
+	"StatementFingerprintID":  {},
+	"MaxFullScanRowsEstimate": {},
+	"TotalScanRowsEstimate":   {},
+	"OutputRowsEstimate":      {},
+	"RowsRead":                {},
+	"RowsWritten":             {},
+	"InnerJoinCount":          {},
+	"LeftOuterJoinCount":      {},
+	"FullOuterJoinCount":      {},
+	"SemiJoinCount":           {},
+	"AntiJoinCount":           {},
+	"IntersectAllJoinCount":   {},
+	"ExceptAllJoinCount":      {},
+	"HashJoinCount":           {},
+	"CrossJoinCount":          {},
+	"IndexJoinCount":          {},
+	"LookupJoinCount":         {},
+	"MergeJoinCount":          {},
+	"InvertedJoinCount":       {},
+	"ApplyJoinCount":          {},
+	"ZigZagJoinCount":         {},
+	"KVRowsRead":              {},
+	"IndexRecommendations":    {},
+	"ScanCount":               {},
+	"Indexes":                 {},
+}
+
+// printJSONMap prints a map as a JSON string. In the future we can
+// add more filtering logic here to include additional fields but the default
+// fields are sufficient for testing for now.
+func printJSONMap(data map[string]interface{}) string {
+	filteredJson := make(map[string]interface{})
+	for k, v := range data {
+		if _, found := includeByDefault[k]; found {
+			filteredJson[k] = v
+		}
+	}
+
+	jsonStr, err := json.Marshal(filteredJson)
+	if err != nil {
+		return "Error:" + err.Error()
+	}
+
+	return string(jsonStr)
+}
+
+type TelemetryLogSpy struct {
+	testState *testing.T
+
+	mu struct {
+		syncutil.RWMutex
+		logs    []string
+		filters []func(entry logpb.Entry) bool
+		format  func(entry logpb.Entry) string
+	}
+}
+
+func NewSampledQueryLogScrubVolatileFields(testState *testing.T) *TelemetryLogSpy {
+	s := &TelemetryLogSpy{
+		testState: testState,
+	}
+	s.mu.filters = append(s.mu.filters, func(entry logpb.Entry) bool {
+		return strings.Contains(entry.Message, "sampled_query")
+	})
+	s.mu.format = func(entry logpb.Entry) string {
+		var jsonMap map[string]interface{}
+		if err := json.Unmarshal([]byte(entry.Message[entry.StructuredStart:entry.StructuredEnd]), &jsonMap); err != nil {
+			s.testState.Fatal(err)
+		}
+		return printJSONMap(jsonMap)
+	}
+
+	return s
+}
+
+func (s *TelemetryLogSpy) AddFilter(f func(entry logpb.Entry) bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.filters = append(s.mu.filters, f)
+}
+
+func (s *TelemetryLogSpy) GetLastNLogs(n int) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return strings.Join(s.mu.logs[len(s.mu.logs)-n:], "\n")
+}
+
+func (s *TelemetryLogSpy) Count() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.mu.logs)
+}
+
+func (s *TelemetryLogSpy) Intercept(entry []byte) {
+	var logEntry logpb.Entry
+
+	if err := json.Unmarshal(entry, &logEntry); err != nil {
+		s.testState.Fatal(err)
+	}
+
+	if logEntry.Channel != logpb.Channel_TELEMETRY {
+		return
+	}
+
+	if s.mu.filters != nil {
+		for _, filter := range s.mu.filters {
+			if !filter(logEntry) {
+				return
+			}
+		}
+	}
+
+	formattedLogStr := s.mu.format(logEntry)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.logs = append(s.mu.logs, formattedLogStr)
 }

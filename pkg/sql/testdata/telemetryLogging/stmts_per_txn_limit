@@ -1,0 +1,48 @@
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.max_event_frequency = 99999;
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 1;
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;
+----
+
+spy-sql
+BEGIN; SELECT 1; SELECT 2; COMMIT;
+----
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICAgYC","SkippedQueries":1,"Statement":"SELECT ‹1›","StatementFingerprintID":16085855936700856000,"StmtPosInTxn":1,"Tag":"SELECT","User":"root"}
+
+spy-sql
+SELECT 5;
+----
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICAgYC","SkippedQueries":2,"Statement":"SELECT ‹5›","StatementFingerprintID":16085855936700856000,"StmtPosInTxn":1,"Tag":"SELECT","User":"root"}
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 3;
+----
+
+spy-sql
+BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
+----
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICAgYC","SkippedQueries":1,"Statement":"SELECT ‹1›","StatementFingerprintID":16085855936700856000,"StmtPosInTxn":1,"Tag":"SELECT","User":"root"}
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICAgYC","Statement":"SELECT ‹2›","StatementFingerprintID":16085855936700856000,"StmtPosInTxn":2,"Tag":"SELECT","User":"root"}
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICAgYC","Statement":"SELECT ‹3›","StatementFingerprintID":16085855936700856000,"StmtPosInTxn":3,"Tag":"SELECT","User":"root"}
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 4;
+----
+
+spy-sql
+BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
+----
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICAgYC","SkippedQueries":1,"Statement":"SELECT ‹1›","StatementFingerprintID":16085855936700856000,"StmtPosInTxn":1,"Tag":"SELECT","User":"root"}
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICAgYC","Statement":"SELECT ‹2›","StatementFingerprintID":16085855936700856000,"StmtPosInTxn":2,"Tag":"SELECT","User":"root"}
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICAgYC","Statement":"SELECT ‹3›","StatementFingerprintID":16085855936700856000,"StmtPosInTxn":3,"Tag":"SELECT","User":"root"}
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICAgYC","Statement":"SELECT ‹4›","StatementFingerprintID":16085855936700856000,"StmtPosInTxn":4,"Tag":"SELECT","User":"root"}

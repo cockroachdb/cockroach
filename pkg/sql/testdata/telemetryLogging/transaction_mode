@@ -1,0 +1,102 @@
+# Test that transaction mode for telemetry logging logs all stmts for a tracked txn.
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.max_event_frequency = 10;
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 100;
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;
+----
+
+exec-sql
+CREATE TABLE t()
+----
+
+spy-sql unixSecs=0.1
+BEGIN; TRUNCATE t; COMMIT
+----
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","PlanGist":"Ais=","SkippedQueries":1,"Statement":"TRUNCATE TABLE defaultdb.public.t","StatementFingerprintID":802230861479752300,"StmtPosInTxn":1,"Tag":"TRUNCATE","User":"root"}
+
+spy-sql unixSecs=1
+BEGIN; SELECT 1; SELECT 2; SELECT 3; COMMIT
+----
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICAgYC","SkippedQueries":2,"Statement":"SELECT ‹1›","StatementFingerprintID":16085855936700856000,"StmtPosInTxn":1,"Tag":"SELECT","User":"root"}
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICAgYC","Statement":"SELECT ‹2›","StatementFingerprintID":16085855936700856000,"StmtPosInTxn":2,"Tag":"SELECT","User":"root"}
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICAgYC","Statement":"SELECT ‹3›","StatementFingerprintID":16085855936700856000,"StmtPosInTxn":3,"Tag":"SELECT","User":"root"}
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","Statement":"COMMIT TRANSACTION","StatementFingerprintID":14457747517729698000,"StmtPosInTxn":4,"Tag":"COMMIT","User":"root"}
+
+# Skipped
+spy-sql unixSecs=1
+SELECT 1, 2
+----
+
+# Logged due to tracing.
+spy-sql unixSecs=1 tracing=true
+SELECT 1, 2
+----
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICBAYE","SkippedQueries":1,"Statement":"SELECT ‹1›, ‹2›","StatementFingerprintID":1569305422589581000,"StmtPosInTxn":1,"Tag":"SELECT","User":"root"}
+
+# Skipped
+spy-sql unixSecs=1.05
+SELECT * FROM t LIMIT 1
+----
+
+# Skipped
+spy-sql unixSecs=1.08
+SELECT * FROM t LIMIT 1
+----
+
+# Logged
+spy-sql unixSecs=1.1
+SELECT * FROM t LIMIT 2
+----
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"full","EventType":"sampled_query","Indexes":["104@2"],"PlanGist":"AgHQAQQAAAAAAg==","ScanCount":1,"SkippedQueries":2,"Statement":"SELECT * FROM \"\".\"\".t LIMIT ‹2›","StatementFingerprintID":17888549871399373000,"StmtPosInTxn":1,"Tag":"SELECT","User":"root"}
+
+spy-sql unixSecs=1.15
+BEGIN; SELECT * FROM t LIMIT 3; COMMIT
+----
+
+spy-sql unixSecs=1.2
+BEGIN; SELECT * FROM t LIMIT 4; SELECT * FROM t LIMIT 5; COMMIT
+----
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"full","EventType":"sampled_query","Indexes":["104@2"],"PlanGist":"AgHQAQQAAAAAAg==","ScanCount":1,"SkippedQueries":4,"Statement":"SELECT * FROM \"\".\"\".t LIMIT ‹4›","StatementFingerprintID":17888549871399373000,"StmtPosInTxn":1,"Tag":"SELECT","User":"root"}
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"full","EventType":"sampled_query","Indexes":["104@2"],"PlanGist":"AgHQAQQAAAAAAg==","ScanCount":1,"Statement":"SELECT * FROM \"\".\"\".t LIMIT ‹5›","StatementFingerprintID":17888549871399373000,"StmtPosInTxn":2,"Tag":"SELECT","User":"root"}
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","Statement":"COMMIT TRANSACTION","StatementFingerprintID":14457747517729698000,"StmtPosInTxn":3,"Tag":"COMMIT","User":"root"}
+
+subtest txn_retry_is_sampled
+
+exec-sql
+CREATE SEQUENCE seq START WITH 1
+----
+
+reset-last-sampled
+----
+
+spy-sql unixSecs=1
+SELECT 1, 2, 3
+----
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICBgYG","Statement":"SELECT ‹1›, ‹2›, ‹3›","StatementFingerprintID":16698501115058330000,"StmtPosInTxn":1,"Tag":"SELECT","User":"root"}
+
+txn-restart-stub-time unixSecs=2
+----
+
+# The stub time will only be advanced in the retry.
+spy-sql unixSecs=1
+BEGIN;
+SELECT 'hello';
+SELECT CASE nextval('seq') WHEN 1 THEN crdb_internal.force_retry('1s') ELSE 2 END;
+COMMIT;
+----
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRetries":1,"NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICAgYC","SkippedQueries":3,"Statement":"SELECT ‹'hello'›","StatementFingerprintID":15578946620736494000,"StmtPosInTxn":1,"Tag":"SELECT","User":"root"}
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRetries":1,"NumRows":1,"OutputRowsEstimate":1,"PlanGist":"AgICAgYC","Statement":"SELECT CASE nextval(‹'seq'›) WHEN ‹1› THEN crdb_internal.force_retry(‹'00:00:01'›) ELSE ‹2› END","StatementFingerprintID":9891387630896048000,"StmtPosInTxn":2,"Tag":"SELECT","User":"root"}
+{"ApplicationName":"telemetry-logging-datadriven","Database":"defaultdb","Distribution":"local","EventType":"sampled_query","NumRetries":1,"Statement":"COMMIT TRANSACTION","StatementFingerprintID":14457747517729698000,"StmtPosInTxn":3,"Tag":"COMMIT","User":"root"}
+
+subtest end
