@@ -171,6 +171,9 @@ func BallastSize(size int64) ConfigOption {
 func SharedStorage(sharedStorage cloud.ExternalStorage) ConfigOption {
 	return func(cfg *engineConfig) error {
 		cfg.SharedStorage = sharedStorage
+		if cfg.SharedStorage != nil && cfg.Opts.FormatMajorVersion < pebble.FormatMinForSharedObjects {
+			cfg.Opts.FormatMajorVersion = pebble.FormatMinForSharedObjects
+		}
 		return nil
 	}
 }
