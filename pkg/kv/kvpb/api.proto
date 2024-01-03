@@ -3506,8 +3506,9 @@ message JoinNodeResponse {
 service Internal {
   rpc Batch              (BatchRequest)              returns (BatchResponse)                  {}
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
-  // RangeFeed RPC is deprecated.  Use MuxRangeFeed instead.
-  // To be removed at version 23.1
+  // RangeFeed RPC is deprecated. Use MuxRangeFeed instead.
+  // This should be removed when support is no longer needed in
+  // mixed-version clusters, possibly in 24.2.
   rpc RangeFeed          (RangeFeedRequest)          returns (stream RangeFeedEvent)          {}
   rpc MuxRangeFeed       (stream RangeFeedRequest)   returns (stream MuxRangeFeedEvent) {}
   rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
