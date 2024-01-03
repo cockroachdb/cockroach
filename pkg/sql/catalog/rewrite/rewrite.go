@@ -114,6 +114,10 @@ func TableDescs(
 			if err != nil {
 				return err
 			}
+			viewQuery, err = rewriteTypesInView(viewQuery, descriptorRewrites)
+			if err != nil {
+				return err
+			}
 			table.ViewQuery = viewQuery
 		}
 
@@ -353,8 +357,45 @@ func rewriteTypesInExpr(expr string, rewrites jobspb.DescRewriteMap) (string, er
 	if err != nil {
 		return "", err
 	}
+	ctx := makeTypeReplaceFmtCtx(rewrites)
+	ctx.FormatNode(parsed)
+	return ctx.CloseAndGetString(), nil
+}
 
-	ctx := tree.NewFmtCtx(
+// rewriteTypesInView rewrites all explicit ID type references in the input view
+// query string according to rewrites.
+func rewriteTypesInView(viewQuery string, rewrites jobspb.DescRewriteMap) (string, error) {
+	stmt, err := parser.ParseOne(viewQuery)
+	if err != nil {
+		return "", err
+	}
+	ctx := makeTypeReplaceFmtCtx(rewrites)
+	ctx.FormatNode(stmt.AST)
+	return ctx.CloseAndGetString(), nil
+}
+
+func rewriteTypesInRoutine(fnBody string, rewrites jobspb.DescRewriteMap) (string, error) {
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	stmts, err := parser.Parse(fnBody)
+	if err != nil {
+		return "", err
+	}
+	for i, stmt := range stmts {
+		if i > 0 {
+			fmtCtx.WriteString("\n")
+		}
+		typeReplaceCtx := makeTypeReplaceFmtCtx(rewrites)
+		typeReplaceCtx.FormatNode(stmt.AST)
+		fmtCtx.WriteString(typeReplaceCtx.CloseAndGetString())
+		fmtCtx.WriteString(";")
+	}
+	return fmtCtx.CloseAndGetString(), nil
+}
+
+// makeTypeReplaceFmtCtx returns a FmtCtx which rewrites explicit ID references
+// according to the rewrites map.
+func makeTypeReplaceFmtCtx(rewrites jobspb.DescRewriteMap) *tree.FmtCtx {
+	return tree.NewFmtCtx(
 		tree.FmtSerializable,
 		tree.FmtIndexedTypeFormat(func(ctx *tree.FmtCtx, ref *tree.OIDTypeReference) {
 			newRef := ref
@@ -365,8 +406,6 @@ func rewriteTypesInExpr(expr string, rewrites jobspb.DescRewriteMap) (string, er
 			ctx.WriteString(newRef.SQLString())
 		}),
 	)
-	ctx.FormatNode(parsed)
-	return ctx.CloseAndGetString(), nil
 }
 
 // rewriteSequencesInExpr rewrites all sequence IDs in the input expression
@@ -908,6 +947,10 @@ func FunctionDescs(
 			fnBody = dbNameReplaced
 		}
 		fnBody, err := rewriteSequencesInFunction(fnBody, descriptorRewrites)
+		if err != nil {
+			return err
+		}
+		fnBody, err = rewriteTypesInRoutine(fnBody, descriptorRewrites)
 		if err != nil {
 			return err
 		}
