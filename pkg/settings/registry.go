@@ -229,10 +229,11 @@ var retiredSettings = map[InternalKey]struct{}{
 	"bulkio.restore.remove_regions.enabled":                    {},
 
 	// removed as of 24.1
-	"storage.mvcc.range_tombstones.enabled":        {},
-	"changefeed.balance_range_distribution.enable": {},
-	"kv.rangefeed.catchup_scan_concurrency":        {},
-	"kv.rangefeed.scheduler.enabled":               {},
+	"storage.mvcc.range_tombstones.enabled":                {},
+	"changefeed.balance_range_distribution.enable":         {},
+	"kv.rangefeed.catchup_scan_concurrency":                {},
+	"kv.rangefeed.scheduler.enabled":                       {},
+	"physical_replication.producer.mux_rangefeeds.enabled": {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
