@@ -2649,16 +2649,6 @@ func (cfc *changefeedCreator) applySettings() error {
 		}
 	}
 
-	schedEnabled := cfc.flags.RangeFeedScheduler.enabled(cfc.rng)
-	if schedEnabled != featureUnset {
-		cfc.logger.Printf("Setting kv.rangefeed.scheduler.enabled to %t", schedEnabled.bool())
-		if _, err := cfc.db.Exec(
-			"SET CLUSTER SETTING kv.rangefeed.scheduler.enabled = $1", schedEnabled.bool(),
-		); err != nil {
-			return err
-		}
-	}
-
 	rangeDistribution, rangeDistributionEnabled := cfc.flags.DistributionStrategy.enabled(cfc.rng,
 		chooseDistributionStrategy)
 	if rangeDistributionEnabled == featureEnabled {

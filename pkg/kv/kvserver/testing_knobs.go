@@ -384,8 +384,7 @@ type StoreTestingKnobs struct {
 	// This can be useful for testing conditions which require commands to be
 	// applied in separate batches.
 	MaxApplicationBatchSize int
-	// RangeFeedPushTxnsInterval overrides the default value for
-	// rangefeed.Config.PushTxnsInterval.
+	// RangeFeedPushTxnsInterval overrides the default rangefeed txn push interval.
 	RangeFeedPushTxnsInterval time.Duration
 	// RangeFeedPushTxnsAge overrides the default value for
 	// rangefeed.Config.PushTxnsAge.

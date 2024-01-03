@@ -2427,8 +2427,12 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 // startRangefeedTxnPushNotifier starts a worker that would periodically
 // enqueue txn push event for rangefeed processors to let them push lagging
 // transactions.
-// Note that this is only affecting scheduler based rangefeeds.
 func (s *Store) startRangefeedTxnPushNotifier(ctx context.Context) {
+	interval := rangefeed.DefaultPushTxnsInterval
+	if i := s.TestingKnobs().RangeFeedPushTxnsInterval; i > 0 {
+		interval = i
+	}
+
 	_ /* err */ = s.stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{
 		TaskName: "transaction-rangefeed-push-notifier",
 		SpanOpt:  stop.SterileRootSpan,
@@ -2449,7 +2453,7 @@ func (s *Store) startRangefeedTxnPushNotifier(ctx context.Context) {
 			return batch
 		}
 
-		ticker := time.NewTicker(rangefeed.DefaultPushTxnsInterval)
+		ticker := time.NewTicker(interval)
 		for {
 			select {
 			case <-ticker.C:

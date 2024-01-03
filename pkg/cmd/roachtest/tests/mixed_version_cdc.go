@@ -442,7 +442,13 @@ const v232CV = "23.2"
 func (cmvt *cdcMixedVersionTester) rangefeedSchedulerSupported(
 	r *rand.Rand, h *mixedversion.Helper,
 ) (bool, error) {
-	return h.ClusterVersionAtLeast(r, v232CV)
+	cv, err := h.ClusterVersion(r)
+	if err != nil {
+		return false, err
+	}
+	// kv.rangefeed.scheduler.enabled only exists in 23.2. In 24.1, it is enabled
+	// unconditionally.
+	return cv.Major == 23 && cv.Minor == 2 && cv.Internal == 0, nil
 }
 
 func (cmvt *cdcMixedVersionTester) distributionStrategySupported(
