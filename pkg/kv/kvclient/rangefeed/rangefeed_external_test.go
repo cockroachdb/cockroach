@@ -12,7 +12,6 @@ package rangefeed_test
 
 import (
 	"context"
-	"fmt"
 	"runtime/pprof"
 	"sync"
 	"testing"
@@ -57,31 +56,24 @@ var (
 
 type kvs = storageutils.KVs
 
-type feedProcessorType struct {
+type rangefeedType struct {
 	useMuxRangefeed bool
-	useScheduler    bool
 }
 
-func (t feedProcessorType) String() string {
+func (t rangefeedType) String() string {
 	if t.useMuxRangefeed {
-		return fmt.Sprintf("mux/scheduler=%t", t.useScheduler)
+		return "mux"
 	} else {
-		return fmt.Sprintf("single/scheduler=%t", t.useScheduler)
+		return "single"
 	}
 }
 
-var procTypes = []feedProcessorType{
+var rangefeedTypes = []rangefeedType{
 	{
 		useMuxRangefeed: false,
-		useScheduler:    false,
 	},
 	{
 		useMuxRangefeed: true,
-		useScheduler:    false,
-	},
-	{
-		useMuxRangefeed: true,
-		useScheduler:    true,
 	},
 }
 
@@ -91,13 +83,9 @@ func TestRangeFeedIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "feed_type", procTypes, func(t *testing.T, s feedProcessorType) {
+	testutils.RunValues(t, "rangefeed_type", rangefeedTypes, func(t *testing.T, s rangefeedType) {
 		ctx := context.Background()
 		settings := cluster.MakeClusterSettings()
-		// We must enable desired scheduler settings before we start cluster,
-		// otherwise we will trigger processor restarts later and this test can't
-		// handle duplicated events.
-		kvserver.RangeFeedUseScheduler.Override(ctx, &settings.SV, s.useScheduler)
 		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 			Settings: settings,
 		})
@@ -194,13 +182,9 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "feed_type", procTypes, func(t *testing.T, s feedProcessorType) {
+	testutils.RunValues(t, "rangefeed_type", rangefeedTypes, func(t *testing.T, s rangefeedType) {
 		ctx := context.Background()
 		settings := cluster.MakeClusterSettings()
-		// We must enable desired scheduler settings before we start cluster,
-		// otherwise we will trigger processor restarts later and this test can't
-		// handle duplicated events.
-		kvserver.RangeFeedUseScheduler.Override(ctx, &settings.SV, s.useScheduler)
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      base.TestServerArgs{Settings: settings},
@@ -326,13 +310,9 @@ func TestWithOnCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "feed_type", procTypes, func(t *testing.T, s feedProcessorType) {
+	testutils.RunValues(t, "rangefeed_type", rangefeedTypes, func(t *testing.T, s rangefeedType) {
 		ctx := context.Background()
 		settings := cluster.MakeClusterSettings()
-		// We must enable desired scheduler settings before we start cluster,
-		// otherwise we will trigger processor restarts later and this test can't
-		// handle duplicated events.
-		kvserver.RangeFeedUseScheduler.Override(ctx, &settings.SV, s.useScheduler)
 		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 			Settings: settings,
 		})
@@ -433,13 +413,9 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "feed_type", procTypes, func(t *testing.T, s feedProcessorType) {
+	testutils.RunValues(t, "rangefeed_type", rangefeedTypes, func(t *testing.T, s rangefeedType) {
 		ctx := context.Background()
 		settings := cluster.MakeClusterSettings()
-		// We must enable desired scheduler settings before we start cluster,
-		// otherwise we will trigger processor restarts later and this test can't
-		// handle duplicated events.
-		kvserver.RangeFeedUseScheduler.Override(ctx, &settings.SV, s.useScheduler)
 		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 			Settings: settings,
 		})
@@ -554,13 +530,9 @@ func TestWithOnSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "feed_type", procTypes, func(t *testing.T, s feedProcessorType) {
+	testutils.RunValues(t, "rangefeed_type", rangefeedTypes, func(t *testing.T, s rangefeedType) {
 		ctx := context.Background()
 		settings := cluster.MakeClusterSettings()
-		// We must enable desired scheduler settings before we start cluster,
-		// otherwise we will trigger processor restarts later and this test can't
-		// handle duplicated events.
-		kvserver.RangeFeedUseScheduler.Override(ctx, &settings.SV, s.useScheduler)
 		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 			Settings:          settings,
 			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109473),
@@ -658,15 +630,11 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 
 	storage.DisableMetamorphicSimpleValueEncoding(t)
 
-	testutils.RunValues(t, "feed_type", procTypes, func(t *testing.T, s feedProcessorType) {
+	testutils.RunValues(t, "rangefeed_type", rangefeedTypes, func(t *testing.T, s rangefeedType) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
 		settings := cluster.MakeClusterSettings()
-		// We must enable desired scheduler settings before we start cluster,
-		// otherwise we will trigger processor restarts later and this test can't
-		// handle duplicated events.
-		kvserver.RangeFeedUseScheduler.Override(ctx, &settings.SV, s.useScheduler)
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109473),
@@ -773,13 +741,9 @@ func TestWithOnDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "feed_type", procTypes, func(t *testing.T, s feedProcessorType) {
+	testutils.RunValues(t, "rangefeed_type", rangefeedTypes, func(t *testing.T, s rangefeedType) {
 		ctx := context.Background()
 		settings := cluster.MakeClusterSettings()
-		// We must enable desired scheduler settings before we start cluster,
-		// otherwise we will trigger processor restarts later and this test can't
-		// handle duplicated events.
-		kvserver.RangeFeedUseScheduler.Override(ctx, &settings.SV, s.useScheduler)
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Settings: settings,
@@ -961,13 +925,9 @@ func TestUnrecoverableErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "feed_type", procTypes, func(t *testing.T, s feedProcessorType) {
+	testutils.RunValues(t, "rangefeed_type", rangefeedTypes, func(t *testing.T, s rangefeedType) {
 		ctx := context.Background()
 		settings := cluster.MakeClusterSettings()
-		// We must enable desired scheduler settings before we start cluster,
-		// otherwise we will trigger processor restarts later and this test can't
-		// handle duplicated events.
-		kvserver.RangeFeedUseScheduler.Override(ctx, &settings.SV, s.useScheduler)
 		srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109472),
 			Knobs: base.TestingKnobs{
@@ -1062,15 +1022,11 @@ func TestMVCCHistoryMutationError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "feed_type", procTypes, func(t *testing.T, s feedProcessorType) {
+	testutils.RunValues(t, "rangefeed_type", rangefeedTypes, func(t *testing.T, s rangefeedType) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
 		settings := cluster.MakeClusterSettings()
-		// We must enable desired scheduler settings before we start cluster,
-		// otherwise we will trigger processor restarts later and this test can't
-		// handle duplicated events.
-		kvserver.RangeFeedUseScheduler.Override(ctx, &settings.SV, s.useScheduler)
 		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 			Settings: settings,
 		})
@@ -1153,13 +1109,9 @@ func TestRangefeedWithLabelsOption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "feed_type", procTypes, func(t *testing.T, s feedProcessorType) {
+	testutils.RunValues(t, "rangefeed_type", rangefeedTypes, func(t *testing.T, s rangefeedType) {
 		ctx := context.Background()
 		settings := cluster.MakeClusterSettings()
-		// We must enable desired scheduler settings before we start cluster,
-		// otherwise we will trigger processor restarts later and this test can't
-		// handle duplicated events.
-		kvserver.RangeFeedUseScheduler.Override(ctx, &settings.SV, s.useScheduler)
 		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 			Settings: settings,
 		})
@@ -1273,13 +1225,9 @@ func TestRangeFeedStartTimeExclusive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "feed_type", procTypes, func(t *testing.T, s feedProcessorType) {
+	testutils.RunValues(t, "rangefeed_type", rangefeedTypes, func(t *testing.T, s rangefeedType) {
 		ctx := context.Background()
 		settings := cluster.MakeClusterSettings()
-		// We must enable desired scheduler settings before we start cluster,
-		// otherwise we will trigger processor restarts later and this test can't
-		// handle duplicated events.
-		kvserver.RangeFeedUseScheduler.Override(ctx, &settings.SV, s.useScheduler)
 		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 			Settings: settings,
 		})

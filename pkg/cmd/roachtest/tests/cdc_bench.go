@@ -39,7 +39,6 @@ import (
 )
 
 type cdcBenchScanType string
-type cdcBenchServer string
 type cdcBenchProtocol string
 
 const (
@@ -62,10 +61,6 @@ const (
 	// practice it can.
 	cdcBenchColdCatchupScan cdcBenchScanType = "catchup-cold"
 
-	cdcBenchNoServer        cdcBenchServer = ""
-	cdcBenchProcessorServer cdcBenchServer = "processor" // legacy processor
-	cdcBenchSchedulerServer cdcBenchServer = "scheduler" // new scheduler
-
 	cdcBenchNoProtocol        cdcBenchProtocol = ""
 	cdcBenchRangefeedProtocol cdcBenchProtocol = "rangefeed" // basic rangefeed protocol
 	cdcBenchMuxProtocol       cdcBenchProtocol = "mux"       // multiplexing rangefeed protocol
@@ -74,7 +69,6 @@ const (
 var (
 	cdcBenchScanTypes = []cdcBenchScanType{
 		cdcBenchInitialScan, cdcBenchCatchupScan, cdcBenchColdCatchupScan}
-	cdcBenchServers   = []cdcBenchServer{cdcBenchProcessorServer, cdcBenchSchedulerServer}
 	cdcBenchProtocols = []cdcBenchProtocol{cdcBenchRangefeedProtocol, cdcBenchMuxProtocol}
 )
 
@@ -133,30 +127,28 @@ func registerCDCBench(r registry.Registry) {
 				RequiresLicense:  true,
 				Timeout:          time.Hour,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runCDCBenchWorkload(ctx, t, c, ranges, readPercent, "", "", "")
+					runCDCBenchWorkload(ctx, t, c, ranges, readPercent, "", "")
 				},
 			})
 
 			// Workloads with a concurrent changefeed running.
-			for _, server := range cdcBenchServers {
-				for _, protocol := range cdcBenchProtocols {
-					server, protocol := server, protocol // pin loop variables
-					r.Add(registry.TestSpec{
-						Name: fmt.Sprintf(
-							"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=%s/format=%s/sink=null",
-							readPercent, nodes, cpus, formatSI(ranges), server, protocol, format),
-						Owner:            registry.OwnerCDC,
-						Benchmark:        true,
-						Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
-						CompatibleClouds: registry.AllExceptAWS,
-						Suites:           registry.Suites(registry.Nightly),
-						RequiresLicense:  true,
-						Timeout:          time.Hour,
-						Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-							runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, protocol, format)
-						},
-					})
-				}
+			for _, protocol := range cdcBenchProtocols {
+				protocol := protocol // pin loop variables
+				r.Add(registry.TestSpec{
+					Name: fmt.Sprintf(
+						"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=scheduler/protocol=%s/format=%s/sink=null",
+						readPercent, nodes, cpus, formatSI(ranges), protocol, format),
+					Owner:            registry.OwnerCDC,
+					Benchmark:        true,
+					Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
+					CompatibleClouds: registry.AllExceptAWS,
+					Suites:           registry.Suites(registry.Nightly),
+					RequiresLicense:  true,
+					Timeout:          time.Hour,
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						runCDCBenchWorkload(ctx, t, c, ranges, readPercent, protocol, format)
+					},
+				})
 			}
 		}
 	}
@@ -382,7 +374,6 @@ func runCDCBenchWorkload(
 	c cluster.Cluster,
 	numRanges int64,
 	readPercent int,
-	server cdcBenchServer,
 	protocol cdcBenchProtocol,
 	format string,
 ) {
@@ -403,8 +394,7 @@ func runCDCBenchWorkload(
 		insertCount = 1_000_000 // ingest some data to read
 	}
 	// Either of these will disable changefeeds. Make sure they're all disabled.
-	if server == "" || protocol == "" || format == "" {
-		require.Empty(t, server)
+	if protocol == "" || format == "" {
 		require.Empty(t, protocol)
 		require.Empty(t, format)
 		cdcEnabled = false
@@ -423,16 +413,6 @@ func runCDCBenchWorkload(
 	case cdcBenchNoProtocol:
 	default:
 		t.Fatalf("unknown protocol %q", protocol)
-	}
-
-	switch server {
-	case cdcBenchProcessorServer:
-		settings.ClusterSettings["kv.rangefeed.scheduler.enabled"] = "false"
-	case cdcBenchSchedulerServer:
-		settings.ClusterSettings["kv.rangefeed.scheduler.enabled"] = "true"
-	case cdcBenchNoServer:
-	default:
-		t.Fatalf("unknown server type %q", server)
 	}
 
 	c.Start(ctx, t.L(), opts, settings, nData)
