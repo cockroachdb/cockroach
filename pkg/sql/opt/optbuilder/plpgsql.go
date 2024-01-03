@@ -1305,6 +1305,7 @@ func (b *plpgsqlBuilder) makeContinuation(name string) continuation {
 			Typ:               b.returnType,
 			CalledOnNullInput: true,
 			BlockState:        b.blockState,
+			RoutineType:       tree.UDFRoutine,
 		},
 		s: s,
 	}
