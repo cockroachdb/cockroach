@@ -88,9 +88,6 @@ type Config struct {
 
 	// Knobs are kvfeed testing knobs.
 	Knobs TestingKnobs
-
-	// UseMux enables MuxRangeFeed rpc
-	UseMux bool
 }
 
 // Run will run the kvfeed. The feed runs synchronously and returns an
@@ -131,7 +128,7 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.InitialHighWater, cfg.EndTime,
 		cfg.Codec,
 		cfg.SchemaFeed,
-		sc, pff, bf, cfg.UseMux, cfg.Targets, cfg.Knobs)
+		sc, pff, bf, cfg.Targets, cfg.Knobs)
 	f.onBackfillCallback = cfg.MonitoringCfg.OnBackfillCallback
 	f.rangeObserver = startLaggingRangesObserver(g, cfg.MonitoringCfg.LaggingRangesCallback,
 		cfg.MonitoringCfg.LaggingRangesPollingInterval, cfg.MonitoringCfg.LaggingRangesThreshold)
@@ -260,8 +257,6 @@ type kvFeed struct {
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass
 	schemaChangePolicy changefeedbase.SchemaChangePolicy
 
-	useMux bool
-
 	targets changefeedbase.Targets
 
 	// These dependencies are made available for test injection.
@@ -288,7 +283,6 @@ func newKVFeed(
 	sc kvScanner,
 	pff physicalFeedFactory,
 	bf func() kvevent.Buffer,
-	useMux bool,
 	targets changefeedbase.Targets,
 	knobs TestingKnobs,
 ) *kvFeed {
@@ -309,7 +303,6 @@ func newKVFeed(
 		scanner:             sc,
 		physicalFeed:        pff,
 		bufferFactory:       bf,
-		useMux:              useMux,
 		targets:             targets,
 		knobs:               knobs,
 	}
@@ -573,7 +566,6 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 		WithDiff:      f.withDiff,
 		WithFiltering: f.withFiltering,
 		Knobs:         f.knobs,
-		UseMux:        f.useMux,
 		RangeObserver: f.rangeObserver,
 	}
 
