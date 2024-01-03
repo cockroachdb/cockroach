@@ -267,7 +267,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 			kafka.t.Fatal(err)
 		}
 		sinkURI = fmt.Sprintf(
-			`kafka://roachtest-cdc.servicebus.windows.net:9093?tls_enabled=true&sasl_enabled=true&sasl_user=$ConnectionString&sasl_password=%s&sasl_mechanism=PLAIN`,
+			`kafka://cdc-roachtest.servicebus.windows.net:9093?tls_enabled=true&sasl_enabled=true&sasl_user=$ConnectionString&sasl_password=%s&sasl_mechanism=PLAIN&topic_name=testing`,
 			url.QueryEscape(connectionString),
 		)
 	default:
@@ -2181,19 +2181,9 @@ func (k kafkaManager) getConnectionString(ctx context.Context) (string, error) {
 	azureTenantID := os.Getenv("AZURE_TENANT_ID")
 
 	k.t.Status("getting azure event hub connection string")
-	cmdStr := "echo $AZURE_CLIENT_ID"
+	// az login --service-principal -t <Tenant-ID> -u <Client-ID> -p=<Client-secret>
+	cmdStr := fmt.Sprintf("az login --service-principal -t %s -u %s -p=%s", azureTenantID, azureClientID, azureClientSecret)
 	results, err := k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, cmdStr)
-	if err != nil {
-		return "", errors.Wrap(err, "error running $AZURE_CLIENT_ID")
-	}
-	if results.Stdout == "" {
-		return "", errors.Errorf("$AZURE_CLIENT_ID is empty, please set env vars AZURE_CLIENT_ID properly")
-	}
-	k.t.L().Printf("$AZURE_CLIENT_ID is:%s\n", results.Stdout)
-
-	// az login --service-principal -t <Tenant-ID> -u <Client-ID> -p <Client-secret>
-	cmdStr = fmt.Sprintf("az login --service-principal -t %s -u %s -p %s", azureTenantID, azureClientID, azureClientSecret)
-	results, err = k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, cmdStr)
 	k.t.L().Printf("az login%s\n", results.Stdout)
 	if err != nil {
 		return "", errors.Wrap(err, "error running az login")
@@ -2206,7 +2196,8 @@ func (k kafkaManager) getConnectionString(ctx context.Context) (string, error) {
 		return "", errors.Wrap(err, "error running az account set")
 	}
 
-	cmdStr = "az eventhubs namespace authorization-rule keys list --authorization-rule-name cdc-roachtest-auth-rule --namespace-name cdc-roachtest --resource-group e2e-infra-event-hub-rg"
+	cmdStr = "az eventhubs namespace authorization-rule keys list --name cdc-roachtest-auth-rule " +
+		"--namespace-name cdc-roachtest --resource-group e2e-infra-event-hub-rg"
 	results, err = k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, cmdStr)
 	k.t.L().Printf("az eventhubs connection string:%s\n", results.Stdout)
 	if err != nil {
