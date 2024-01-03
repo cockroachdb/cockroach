@@ -290,10 +290,14 @@ func (r *Replica) evalAndPropose(
 	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
 		filterArgs := kvserverbase.ProposalFilterArgs{
 			Ctx:        ctx,
+			RangeID:    r.RangeID,
+			StoreID:    r.store.StoreID(),
+			ReplicaID:  r.replicaID,
 			Cmd:        proposal.command,
 			QuotaAlloc: proposal.quotaAlloc,
 			CmdID:      idKey,
 			Req:        *ba,
+			// SeedID not set, since this is not a reproposal.
 		}
 		if pErr = filter(filterArgs); pErr != nil {
 			return nil, nil, "", nil, pErr

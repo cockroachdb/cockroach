@@ -66,7 +66,7 @@ type StoreTestingKnobs struct {
 	// drop Raft proposals before they are handed to etcd/raft to begin the
 	// process of replication. Dropped proposals are still eligible to be
 	// reproposed due to ticks.
-	TestingProposalSubmitFilter func(*ProposalData) (drop bool, err error)
+	TestingProposalSubmitFilter func(kvserverbase.ProposalFilterArgs) (drop bool, err error)
 
 	// TestingAfterRaftLogSync is invoked after completion of a synced write to
 	// Raft log for the given replica, before the corresponding message is sent
@@ -98,7 +98,8 @@ type StoreTestingKnobs struct {
 	// Users have to expect the filter to be invoked twice for each command, once
 	// from ephemerealReplicaAppBatch.Stage, and once from replicaAppBatch.Stage;
 	// this has to do with wanting to early-ack successful proposals. The second
-	// call is conditional on the first call succeeding.
+	// call is conditional on the first call succeeding. The field
+	// ApplyFilterArgs.Ephemeral will be true for the initial call.
 	//
 	// Consider using a TestPostApplyFilter instead, and use a
 	// TestingApplyCalledTwiceFilter only to inject forced errors.
@@ -373,6 +374,9 @@ type StoreTestingKnobs struct {
 	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
 	// applying a snapshot.
 	BeforeSnapshotSSTIngestion func(IncomingSnapshot, []string) error
+	// AfterSnapshotApplication is run after a snapshot is applied, before
+	// releasing the replica mutex.
+	AfterSnapshotApplication func(roachpb.ReplicaDescriptor, kvserverpb.ReplicaState, IncomingSnapshot)
 	// OnRelocatedOne intercepts the return values of s.relocateOne after they
 	// have successfully been put into effect.
 	OnRelocatedOne func(_ []kvpb.ReplicationChange, leaseTarget *roachpb.ReplicationTarget)

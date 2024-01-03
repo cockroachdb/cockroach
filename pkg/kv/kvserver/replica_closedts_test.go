@@ -513,13 +513,13 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 		}
 	}
 
-	blockTransfer := func(p *kvserver.ProposalData) {
+	blockTransfer := func(args kvserverbase.ProposalFilterArgs) {
 		blockedRID := roachpb.RangeID(atomic.LoadInt64(&blockedRangeID))
-		ba := p.Request
+		ba := args.Req
 		if ba.RangeID != blockedRID {
 			return
 		}
-		_, ok := p.Request.GetArg(kvpb.TransferLease)
+		_, ok := args.Req.GetArg(kvpb.TransferLease)
 		if !ok {
 			return
 		}
@@ -554,9 +554,9 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 							return nil
 						},
 					},
-					TestingProposalSubmitFilter: func(p *kvserver.ProposalData) (drop bool, _ error) {
-						blockTransfer(p)
-						return false, nil
+					TestingProposalSubmitFilter: func(args kvserverbase.ProposalFilterArgs) (bool, error) {
+						blockTransfer(args)
+						return false /* drop */, nil
 					},
 				},
 			},
