@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -690,6 +691,50 @@ func expectNotice(
 	sqlDB.Exec(t, sql)
 
 	require.Equal(t, expected, actual)
+}
+
+// These retry opts are configured so that we don't perform a read transaction
+// on the job record too often. It's important to avoid contending
+// with the write txn which updates the job progress. If we read too often, we
+// may continously invalidate the writes, preventing checkpoints from
+// being written.
+var jobRecordPollFrequency = 3 * time.Second
+
+var jobRecordRetryOpts = retry.Options{
+	InitialBackoff: jobRecordPollFrequency,
+	Multiplier:     1,
+	MaxBackoff:     5 * time.Second,
+	MaxRetries:     30,
+}
+
+// waitForCheckpoint waits for the specified job to have a non-empty checkpoint
+func waitForCheckpoint(t *testing.T, jf cdctest.EnterpriseTestFeed, jr *jobs.Registry) {
+	for r := retry.Start(jobRecordRetryOpts); ; {
+		t.Log("waiting for checkpoint")
+		progress := loadProgress(t, jf, jr)
+		if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
+			t.Logf("read checkpoint %v", p.Checkpoint)
+			return
+		}
+		if !r.Next() {
+			t.Fatal("could not read checkpoint")
+		}
+	}
+}
+
+// waitForHighwater waits for the specified job to have a non-nil highwater.
+func waitForHighwater(t *testing.T, jf cdctest.EnterpriseTestFeed, jr *jobs.Registry) {
+	for r := retry.Start(jobRecordRetryOpts); ; {
+		t.Log("waiting for highwater")
+		progress := loadProgress(t, jf, jr)
+		if hw := progress.GetHighWater(); hw != nil && !hw.IsEmpty() {
+			t.Logf("read highwater %s", hw)
+			return
+		}
+		if !r.Next() {
+			t.Fatal("could not read highwater")
+		}
+	}
 }
 
 func loadProgress(

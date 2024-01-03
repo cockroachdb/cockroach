@@ -21,6 +21,7 @@ go_test(
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "@com_github_stretchr_testify//require",
     ],
 )

@@ -67,17 +67,24 @@ func (l *fluentSink) exitCode() exit.Code {
 func (l *fluentSink) output(b []byte, opts sinkOutputOptions) (err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	logging.metrics.IncrementCounter(FluentSinkWriteAttempt, 1)
+
 	// Try to write and reconnect immediately if the first write fails.
 	_ = l.tryWriteLocked(b)
 	if l.mu.good {
 		return nil
 	}
 
+	logging.metrics.IncrementCounter(FluentSinkConnectionAttempt, 1)
 	if err := l.ensureConnLocked(b); err != nil {
 		logging.metrics.IncrementCounter(FluentSinkConnectionError, 1)
 		return err
 	}
-	return l.tryWriteLocked(b)
+	if err := l.tryWriteLocked(b); err != nil {
+		logging.metrics.IncrementCounter(FluentSinkWriteError, 1)
+		return err
+	}
+	return nil
 }
 
 func (l *fluentSink) closeLocked() {
