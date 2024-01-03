@@ -162,7 +162,7 @@ func StartAlwaysFlush() {
 // RefreshHttpSinkHeaders will iterate over all http sinks and replace the sink's
 // dynamicHeaders with newly generated dynamicHeaders.
 func RefreshHttpSinkHeaders() error {
-	return logging.allSinkInfos.iterHttpSinks(func(hs *httpSink) error {
+	return logging.allSinkInfos.iterHTTPSinks(func(hs *httpSink) error {
 		return hs.RefreshDynamicHeaders()
 	})
 }

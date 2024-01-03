@@ -104,11 +104,15 @@ func (r *sinkInfoRegistry) iterBufferedSinks(fn func(bs *bufferedSink) error) er
 
 // iterHttpSink iterates over all the http sinks and stops at the first error
 // encountered.
-func (r *sinkInfoRegistry) iterHttpSinks(fn func(hs *httpSink) error) error {
+func (r *sinkInfoRegistry) iterHTTPSinks(fn func(hs *httpSink) error) error {
 	return r.iter(func(si *sinkInfo) error {
 		if hs, ok := si.sink.(*httpSink); ok {
-			if err := fn(hs); err != nil {
-				return err
+			return fn(hs)
+		}
+		// Many times we buffer HTTP sinks, so be sure to check that case as well.
+		if bs, isBuffered := si.sink.(*bufferedSink); isBuffered {
+			if ch, ok := bs.child.(*httpSink); ok {
+				return fn(ch)
 			}
 		}
 		return nil
