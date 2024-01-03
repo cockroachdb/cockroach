@@ -501,7 +501,7 @@ func CalcReplicaDigest(
 	var uuidBuf [uuid.Size]byte
 	hasher := sha512.New()
 
-	if efos, ok := snap.(storage.EventuallyFileOnlyReader); ok {
+	if efos, ok := snap.(storage.EventuallyFileOnlyReader); ok && !statsOnly {
 		// We start off by waiting for this snapshot to become a file-only snapshot.
 		// This is preferable as it reduces the amount of in-memory tables
 		// (memtables) pinned for the iterations below, and reduces errors later on
