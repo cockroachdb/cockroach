@@ -1,0 +1,13 @@
+# Uninitialized replica without a RaftReplicaID should error.
+new-replica range-id=5
+----
+ok
+
+load-and-reconcile trace=true
+----
+no RaftReplicaID for <nil>
+beginning range descriptor iteration
+range descriptor iteration done: 0 keys, 0 range descriptors (by suffix: map[]); scan stats: <redacted>
+loaded replica ID for 0/0 replicas
+loaded Raft state for 1/1 replicas
+loaded 1 replicas
