@@ -174,11 +174,11 @@ func registerPgjdbc(r registry.Registry) {
 		t.Status("running pgjdbc test suite")
 		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
-		_ = c.RunE(ctx, node,
+		_ = c.RunE(ctx, option.OnNodes(node),
 			`cd /mnt/data1/pgjdbc/pgjdbc/ && ../gradlew test`,
 		)
 
-		_ = c.RunE(ctx, node,
+		_ = c.RunE(ctx, option.OnNodes(node),
 			`mkdir -p ~/logs/report/pgjdbc-results`,
 		)
 

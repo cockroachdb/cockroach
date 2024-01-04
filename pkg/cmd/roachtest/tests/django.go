@@ -200,7 +200,7 @@ func registerDjango(r registry.Registry) {
 			t.L().Printf("Test results for app %s: %s", testName, rawResults)
 			t.L().Printf("Test stdout for app %s:", testName)
 			if err := c.RunE(
-				ctx, node, fmt.Sprintf("cd /mnt/data1/django/tests && cat %s.stdout", testName),
+				ctx, option.OnNodes(node), fmt.Sprintf("cd /mnt/data1/django/tests && cat %s.stdout", testName),
 			); err != nil {
 				t.Fatal(err)
 			}

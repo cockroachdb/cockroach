@@ -125,7 +125,7 @@ func (h *Helper) BackgroundCommand(cmd string, nodes option.NodeListOption) cont
 	desc := fmt.Sprintf("run command: %q", cmd)
 	return h.Background(desc, func(ctx context.Context, l *logger.Logger) error {
 		l.Printf("running command `%s` on nodes %v in the background", cmd, nodes)
-		return h.runner.cluster.RunE(ctx, nodes, cmd)
+		return h.runner.cluster.RunE(ctx, option.OnNodes(nodes), cmd)
 	})
 }
 

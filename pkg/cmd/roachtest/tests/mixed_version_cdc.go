@@ -417,7 +417,7 @@ func (cmvt *cdcMixedVersionTester) initWorkload(
 		Flag("seed", r.Int63()).
 		Arg("{pgurl%s}", cmvt.crdbNodes)
 
-	if err := cmvt.c.RunE(ctx, option.NodeListOption{h.RandomNode(r, cmvt.workloadNodes)}, bankInit.String()); err != nil {
+	if err := cmvt.c.RunE(ctx, option.OnNodes(option.NodeListOption{h.RandomNode(r, cmvt.workloadNodes)}), bankInit.String()); err != nil {
 		return err
 	}
 	close(cmvt.workloadInit)

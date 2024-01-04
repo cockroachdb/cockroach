@@ -113,8 +113,8 @@ func runAdmissionControlFollowerOverload(
 
 	resetSystemdUnits := func() {
 		for _, cmd := range []string{"stop", "reset-failed"} {
-			_ = c.RunE(ctx, c.Node(4), "sudo", "systemctl", cmd, "kv-n12")
-			_ = c.RunE(ctx, c.Node(4), "sudo", "systemctl", cmd, "kv-n3")
+			_ = c.RunE(ctx, option.OnNodes(c.Node(4)), "sudo", "systemctl", cmd, "kv-n12")
+			_ = c.RunE(ctx, option.OnNodes(c.Node(4)), "sudo", "systemctl", cmd, "kv-n3")
 		}
 	}
 
@@ -158,11 +158,11 @@ func runAdmissionControlFollowerOverload(
 	if cfg.kv0N12 {
 		args := strings.Fields("./cockroach workload init kv {pgurl:1}")
 		args = append(args, strings.Fields(cfg.kvN12ExtraArgs)...)
-		c.Run(ctx, c.Node(1), args...)
+		c.Run(ctx, option.OnNodes(c.Node(1)), args...)
 	}
 	if cfg.kv50N3 {
 		args := strings.Fields("./cockroach workload init kv --db kvn3 {pgurl:1}")
-		c.Run(ctx, c.Node(1), args...)
+		c.Run(ctx, option.OnNodes(c.Node(1)), args...)
 	}
 
 	// Node 3 should not have any leases (excepting kvn3, if present).
@@ -233,7 +233,7 @@ sudo systemd-run --property=Type=exec \
 --property=StandardError=file:/home/ubuntu/logs/kv-n12.stderr.log \
 --remain-after-exit --unit kv-n12 -- ./cockroach workload run kv --read-percent 0 \
 --max-rate 400 --concurrency 400 --min-block-bytes 5000 --max-block-bytes 5000 --tolerate-errors {pgurl:1-2}`
-		c.Run(ctx, c.Node(4), deployWorkload)
+		c.Run(ctx, option.OnNodes(c.Node(4)), deployWorkload)
 	}
 	if cfg.kv50N3 {
 		// On n3, we run a "trickle" workload that does not add much work to the
@@ -247,7 +247,7 @@ sudo systemd-run --property=Type=exec \
 --remain-after-exit --unit kv-n3 -- ./cockroach workload run kv --db kvn3 \
 --read-percent 50 --max-rate 100 --concurrency 1000 --min-block-bytes 100 --max-block-bytes 100 \
 --prometheus-port 2113 --tolerate-errors {pgurl:3}`
-		c.Run(ctx, c.Node(4), deployWorkload)
+		c.Run(ctx, option.OnNodes(c.Node(4)), deployWorkload)
 	}
 	t.L().Printf("deployed workload")
 
@@ -266,7 +266,7 @@ sudo systemd-run --property=Type=exec \
 		//   └─md0         9:0    0 872.3G  0 raid0 /mnt/data1
 		//
 		// and so the actual write throttle is about 2x what was set.
-		c.Run(ctx, c.Node(3), "sudo", "systemctl", "set-property", "cockroach", "'IOWriteBandwidthMax={store-dir} 20971520'")
+		c.Run(ctx, option.OnNodes(c.Node(3)), "sudo", "systemctl", "set-property", "cockroach", "'IOWriteBandwidthMax={store-dir} 20971520'")
 		t.L().Printf("installed write throughput limit on n3")
 	}
 

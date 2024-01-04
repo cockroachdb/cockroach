@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -53,7 +54,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 	startOpts.RoachprodOpts.ScheduleBackups = true
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings())
 	t.Status("starting csv servers")
-	c.Run(ctx, c.All(), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
+	c.Run(ctx, option.OnNodes(c.All()), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 	// Create the tables.
 	conn := c.Conn(ctx, t.L(), 1)
@@ -165,7 +166,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 		cmd := fmt.Sprintf(
 			"./workload run tpch --db=csv --concurrency=1 --queries=%s --max-ops=%d {pgurl%s} "+
 				"--enable-checks=true", queries, maxOps, c.All())
-		if err := c.RunE(ctx, c.Node(1), cmd); err != nil {
+		if err := c.RunE(ctx, option.OnNodes(c.Node(1)), cmd); err != nil {
 			t.Fatal(err)
 		}
 		return nil

@@ -360,7 +360,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 					curlCmd := fmt.Sprintf(
 						"curl %s > logs/bundle_%s_%d.zip", url, runConfig.setupNames[setupIdx], i,
 					)
-					if err = c.RunE(ctx, c.Node(1), curlCmd); err != nil {
+					if err = c.RunE(ctx, option.OnNodes(c.Node(1)), curlCmd); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -572,16 +572,16 @@ func smithcmpTestRun(
 		configURL  = `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/cmd/roachtest/tests/` + configFile
 	)
 	firstNode := c.Node(1)
-	if err := c.RunE(ctx, firstNode, fmt.Sprintf("curl %s > %s", configURL, configFile)); err != nil {
+	if err := c.RunE(ctx, option.OnNodes(firstNode), fmt.Sprintf("curl %s > %s", configURL, configFile)); err != nil {
 		t.Fatal(err)
 	}
 	// smithcmp cannot access the pgport env variable, so we must edit the config file here
 	// to tell it the port to use.
-	if err := c.RunE(ctx, firstNode, fmt.Sprintf(`port=$(echo -n {pgport:1}) && sed -i "s|26257|$port|g" %s`, configFile)); err != nil {
+	if err := c.RunE(ctx, option.OnNodes(firstNode), fmt.Sprintf(`port=$(echo -n {pgport:1}) && sed -i "s|26257|$port|g" %s`, configFile)); err != nil {
 		t.Fatal(err)
 	}
 	cmd := fmt.Sprintf("./%s %s", tpchVecSmithcmp, configFile)
-	if err := c.RunE(ctx, firstNode, cmd); err != nil {
+	if err := c.RunE(ctx, option.OnNodes(firstNode), cmd); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -131,7 +131,7 @@ func registerImportTPCC(r registry.Registry) {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		t.Status("starting csv servers")
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
+		c.Run(ctx, option.OnNodes(c.All()), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		t.Status("running workload")
 		m := c.NewMonitor(ctx)
@@ -154,13 +154,13 @@ func registerImportTPCC(r registry.Registry) {
 			// total elapsed time. This is used by roachperf to compute and display
 			// the average MB/sec per node.
 			tick()
-			c.Run(ctx, c.Node(1), cmd)
+			c.Run(ctx, option.OnNodes(c.Node(1)), cmd)
 			tick()
 
 			// Upload the perf artifacts to any one of the nodes so that the test
 			// runner copies it into an appropriate directory path.
 			dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-			if err := c.RunE(ctx, c.Node(1), "mkdir -p "+filepath.Dir(dest)); err != nil {
+			if err := c.RunE(ctx, option.OnNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
 				log.Errorf(ctx, "failed to create perf dir: %+v", err)
 			}
 			if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
@@ -328,7 +328,7 @@ func registerImportTPCH(r registry.Registry) {
 					// Upload the perf artifacts to any one of the nodes so that the test
 					// runner copies it into an appropriate directory path.
 					dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-					if err := c.RunE(ctx, c.Node(1), "mkdir -p "+filepath.Dir(dest)); err != nil {
+					if err := c.RunE(ctx, option.OnNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
 						log.Errorf(ctx, "failed to create perf dir: %+v", err)
 					}
 					if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
@@ -354,7 +354,7 @@ func registerImportDecommissioned(r registry.Registry) {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		t.Status("starting csv servers")
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
+		c.Run(ctx, option.OnNodes(c.All()), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		// Decommission a node.
 		nodeToDecommission := 2
@@ -363,7 +363,7 @@ func registerImportDecommissioned(r registry.Registry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.Run(ctx, c.Node(nodeToDecommission),
+		c.Run(ctx, option.OnNodes(c.Node(nodeToDecommission)),
 			fmt.Sprintf(`./cockroach node decommission --insecure --self --wait=all --url=%s`, pgurl))
 
 		// Wait for a bit for node liveness leases to expire.
@@ -374,7 +374,7 @@ func registerImportDecommissioned(r registry.Registry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.Run(ctx, c.Node(1), tpccImportCmd(warehouses, pgurl))
+		c.Run(ctx, option.OnNodes(c.Node(1)), tpccImportCmd(warehouses, pgurl))
 	}
 
 	r.Add(registry.TestSpec{

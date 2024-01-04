@@ -184,12 +184,12 @@ func waitForPort(
 func runImportBankDataSplit(ctx context.Context, rows, ranges int, t test.Test, c cluster.Cluster) {
 	csvPort := 8081
 	csvCmd := importBankCSVServerCommand("./cockroach", csvPort)
-	c.Run(ctx, c.All(), csvCmd+` &> logs/workload-csv-server.log < /dev/null &`)
+	c.Run(ctx, option.OnNodes(c.All()), csvCmd+` &> logs/workload-csv-server.log < /dev/null &`)
 	if err := waitForPort(ctx, t.L(), c.All(), csvPort, c); err != nil {
 		t.Fatal(err)
 	}
 	importNode := 1
-	c.Run(ctx, c.Node(importNode), importBankCommand("./cockroach", rows, ranges, csvPort, importNode))
+	c.Run(ctx, option.OnNodes(c.Node(importNode)), importBankCommand("./cockroach", rows, ranges, csvPort, importNode))
 }
 
 func importBankData(ctx context.Context, rows int, t test.Test, c cluster.Cluster) string {
@@ -343,14 +343,14 @@ func registerBackup(r registry.Registry) {
 				// total elapsed time. This is used by roachperf to compute and display
 				// the average MB/sec per node.
 				tick()
-				c.Run(ctx, c.Node(1), `./cockroach sql --insecure --url=`+pgurl+` -e "
+				c.Run(ctx, option.OnNodes(c.Node(1)), `./cockroach sql --insecure --url=`+pgurl+` -e "
 				BACKUP bank.bank TO 'gs://`+backupTestingBucket+`/`+dest+`?AUTH=implicit'"`)
 				tick()
 
 				// Upload the perf artifacts to any one of the nodes so that the test
 				// runner copies it into an appropriate directory path.
 				dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-				if err := c.RunE(ctx, c.Node(1), "mkdir -p "+filepath.Dir(dest)); err != nil {
+				if err := c.RunE(ctx, option.OnNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
 					log.Errorf(ctx, "failed to create perf dir: %+v", err)
 				}
 				if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
@@ -634,7 +634,7 @@ func runBackupMVCCRangeTombstones(
 		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 	}
 	t.Status("starting csv servers")
-	c.Run(ctx, c.All(), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
+	c.Run(ctx, option.OnNodes(c.All()), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 	conn := c.Conn(ctx, t.L(), 1, option.TenantName(config.tenantName))
 

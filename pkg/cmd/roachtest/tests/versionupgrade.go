@@ -116,7 +116,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 			}
 
 			l.Printf("executing workload init on node %d", node)
-			return c.RunE(ctx, c.Node(node), fmt.Sprintf("%s init schemachange {pgurl%s}", workloadPath, c.All()))
+			return c.RunE(ctx, option.OnNodes(c.Node(node)), fmt.Sprintf("%s init schemachange {pgurl%s}", workloadPath, c.All()))
 		})
 	mvt.InMixedVersion(
 		"run backup",
@@ -176,7 +176,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 				Arg("{pgurl:1-%d}", len(c.All())).
 				String()
 
-			return c.RunE(ctx, c.Node(randomNode), runCmd)
+			return c.RunE(ctx, option.OnNodes(c.Node(randomNode)), runCmd)
 		},
 	)
 
@@ -390,17 +390,17 @@ func makeVersionFixtureAndFatal(
 			u.c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.All())
 
 			binaryPath := clusterupgrade.CockroachPathForVersion(t, fixtureVersion)
-			c.Run(ctx, c.All(), binaryPath, "debug", "pebble", "db", "checkpoint",
+			c.Run(ctx, option.OnNodes(c.All()), binaryPath, "debug", "pebble", "db", "checkpoint",
 				"{store-dir}", "{store-dir}/"+name)
 			// The `cluster-bootstrapped` marker can already be found within
 			// store-dir, but the rocksdb checkpoint step above does not pick it
 			// up as it isn't recognized by RocksDB. We copy the marker
 			// manually, it's necessary for roachprod created clusters. See
 			// #54761.
-			c.Run(ctx, c.Node(1), "cp", "{store-dir}/cluster-bootstrapped", "{store-dir}/"+name)
+			c.Run(ctx, option.OnNodes(c.Node(1)), "cp", "{store-dir}/cluster-bootstrapped", "{store-dir}/"+name)
 			// Similar to the above - newer versions require the min version file to open a store.
-			c.Run(ctx, c.All(), "cp", fmt.Sprintf("{store-dir}/%s", storage.MinVersionFilename), "{store-dir}/"+name)
-			c.Run(ctx, c.All(), "tar", "-C", "{store-dir}/"+name, "-czf", "{log-dir}/"+name+".tgz", ".")
+			c.Run(ctx, option.OnNodes(c.All()), "cp", fmt.Sprintf("{store-dir}/%s", storage.MinVersionFilename), "{store-dir}/"+name)
+			c.Run(ctx, option.OnNodes(c.All()), "tar", "-C", "{store-dir}/"+name, "-czf", "{log-dir}/"+name+".tgz", ".")
 			t.Fatalf(`successfully created checkpoints; failing test on purpose.
 
 Invoke the following to move the archives to the right place and commit the

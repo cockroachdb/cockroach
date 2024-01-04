@@ -257,7 +257,7 @@ func runCDCBenchScan(
 	// NB: don't scatter -- the ranges end up fairly well-distributed anyway, and
 	// the scatter can often fail with 100k ranges.
 	t.L().Printf("creating table with %s ranges", humanize.Comma(numRanges))
-	c.Run(ctx, nCoord, fmt.Sprintf(
+	c.Run(ctx, option.OnNodes(nCoord), fmt.Sprintf(
 		`./cockroach workload init kv --splits %d {pgurl:%d}`, numRanges, nData[0]))
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
 
@@ -270,7 +270,7 @@ func runCDCBenchScan(
 		loader = "insert"
 	}
 	t.L().Printf("ingesting %s rows using %s", humanize.Comma(numRows), loader)
-	c.Run(ctx, nCoord, fmt.Sprintf(
+	c.Run(ctx, option.OnNodes(nCoord), fmt.Sprintf(
 		`./cockroach workload init kv --insert-count %d --data-loader %s {pgurl:%d}`,
 		numRows, loader, nData[0]))
 
@@ -398,7 +398,7 @@ func runCDCBenchWorkload(
 	// NB: don't scatter -- the ranges end up fairly well-distributed anyway, and
 	// the scatter can often fail with 100k ranges.
 	t.L().Printf("creating table with %s ranges", humanize.Comma(numRanges))
-	c.Run(ctx, nWorkload, fmt.Sprintf(
+	c.Run(ctx, option.OnNodes(nWorkload), fmt.Sprintf(
 		`./cockroach workload init kv --splits %d {pgurl:%d}`, numRanges, nData[0]))
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
 
@@ -410,7 +410,7 @@ func runCDCBenchWorkload(
 		const batchSize = 1000
 		batches := (insertCount-1)/batchSize + 1 // ceiling division
 		t.L().Printf("ingesting %s rows", humanize.Comma(insertCount))
-		c.Run(ctx, nWorkload, fmt.Sprintf(
+		c.Run(ctx, option.OnNodes(nWorkload), fmt.Sprintf(
 			`./cockroach workload run kv --seed %d --read-percent 0 --batch %d --max-ops %d {pgurl:%d}`,
 			workloadSeed, batchSize, batches, nData[0]))
 	}
@@ -498,7 +498,7 @@ func runCDCBenchWorkload(
 			extra += ` --tolerate-errors`
 		}
 		t.L().Printf("running workload")
-		err := c.RunE(ctx, nWorkload, fmt.Sprintf(
+		err := c.RunE(ctx, option.OnNodes(nWorkload), fmt.Sprintf(
 			`./cockroach workload run kv --seed %d --histograms=%s/stats.json `+
 				`--concurrency %d --duration %s --write-seq R%d --read-percent %d %s {pgurl:%d-%d}`,
 			workloadSeed, t.PerfArtifactsDir(), concurrency, duration, insertCount, readPercent, extra,
@@ -606,7 +606,7 @@ func writeCDCBenchStats(
 
 	// Upload the perf artifacts to the given node.
 	path := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-	if err := c.RunE(ctx, node, "mkdir -p "+filepath.Dir(path)); err != nil {
+	if err := c.RunE(ctx, option.OnNodes(node), "mkdir -p "+filepath.Dir(path)); err != nil {
 		return err
 	}
 	if err := c.PutString(ctx, bytesBuf.String(), path, 0755, node); err != nil {

@@ -1019,7 +1019,7 @@ func exportToRoachperf(
 	// Upload the perf artifacts to any one of the nodes so that the test
 	// runner copies it into an appropriate directory path.
 	dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-	if err := c.RunE(ctx, c.Node(1), "mkdir -p "+filepath.Dir(dest)); err != nil {
+	if err := c.RunE(ctx, option.OnNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
 		log.Errorf(ctx, "failed to create perf dir: %+v", err)
 	}
 	if err := c.PutString(ctx, bytesBuf.String(), dest, 0755, c.Node(1)); err != nil {

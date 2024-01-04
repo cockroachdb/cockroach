@@ -46,7 +46,7 @@ func registerRoachmart(r registry.Registry) {
 				"--orders=100",
 				fmt.Sprintf("--partition=%v", partition))
 
-			if err := c.RunE(ctx, c.Node(nodes[i].i), args...); err != nil {
+			if err := c.RunE(ctx, option.OnNodes(c.Node(nodes[i].i)), args...); err != nil {
 				t.Fatal(err)
 			}
 		}

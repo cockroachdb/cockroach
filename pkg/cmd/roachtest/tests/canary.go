@@ -112,7 +112,7 @@ func repeatRunE(
 		}
 		attempt++
 		t.L().Printf("attempt %d - %s", attempt, operation)
-		lastError = c.RunE(ctx, node, args...)
+		lastError = c.RunE(ctx, option.OnNodes(node), args...)
 		if lastError != nil {
 			t.L().Printf("error - retrying: %s", lastError)
 			continue
@@ -301,5 +301,5 @@ func gitCloneWithRecurseSubmodules(
 		fi
 	'`, dest, branch, src),
 	}
-	return errors.Wrap(c.RunE(ctx, node, cmd...), "gitCloneWithRecurseSubmodules")
+	return errors.Wrap(c.RunE(ctx, option.OnNodes(node), cmd...), "gitCloneWithRecurseSubmodules")
 }

@@ -62,7 +62,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 	checkConcurrency := func(ctx context.Context, t test.Test, c cluster.Cluster, concurrency int) error {
 		// Make sure to kill any workloads running from the previous
 		// iteration.
-		_ = c.RunE(ctx, c.Node(numNodes), "killall workload")
+		_ = c.RunE(ctx, option.OnNodes(c.Node(numNodes)), "killall workload")
 
 		restartCluster(ctx, c, t)
 
@@ -144,7 +144,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 						"--count-errors --queries=%d --concurrency=%d --max-ops=%d",
 					numNodes-1, queryNum, concurrency, maxOps,
 				)
-				if err := c.RunE(ctx, c.Node(numNodes), cmd); err != nil {
+				if err := c.RunE(ctx, option.OnNodes(c.Node(numNodes)), cmd); err != nil {
 					return err
 				}
 			}

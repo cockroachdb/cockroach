@@ -133,7 +133,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 			Flag("cycle-length", 20000).
 			Arg("%s", pgurl).
 			String()
-		c.Run(ctx, c.Node(1), cmd)
+		c.Run(ctx, option.OnNodes(c.Node(1)), cmd)
 
 		execSQLOrFail("alter database kv configure zone using gc.ttlseconds = $1", 120)
 
@@ -153,7 +153,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 				Flag("max-rate", 1800).
 				Arg("{pgurl%s}", c.Node(1)).
 				String()
-			err := c.RunE(wlCtx, c.Node(1), cmd)
+			err := c.RunE(wlCtx, option.OnNodes(c.Node(1)), cmd)
 			wlFailure <- err
 		}()
 

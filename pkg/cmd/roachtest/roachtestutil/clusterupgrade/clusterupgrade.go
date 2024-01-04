@@ -215,12 +215,12 @@ func uploadBinaryVersion(
 	} else {
 		dir := filepath.Dir(dstBinary)
 		// Avoid staging the binary if it already exists.
-		if err := c.RunE(ctx, nodes, "test -e", dstBinary); err == nil {
+		if err := c.RunE(ctx, option.OnNodes(nodes), "test -e", dstBinary); err == nil {
 			return dstBinary, nil
 		}
 
 		// Ensure binary directory exists.
-		if err := c.RunE(ctx, nodes, "mkdir -p", dir); err != nil {
+		if err := c.RunE(ctx, option.OnNodes(nodes), "mkdir -p", dir); err != nil {
 			return "", err
 		}
 
@@ -253,7 +253,7 @@ func uploadBinaryVersion(
 func InstallFixtures(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, nodes option.NodeListOption, v *Version,
 ) error {
-	if err := c.RunE(ctx, nodes, "mkdir -p {store-dir}"); err != nil {
+	if err := c.RunE(ctx, option.OnNodes(nodes), "mkdir -p {store-dir}"); err != nil {
 		return fmt.Errorf("creating store-dir: %w", err)
 	}
 
@@ -271,7 +271,7 @@ func InstallFixtures(
 		}
 	}
 	// Extract fixture. Fail if there's already an LSM in the store dir.
-	if err := c.RunE(ctx, nodes, "ls {store-dir}/marker.* 1> /dev/null 2>&1 && exit 1 || (cd {store-dir} && tar -xf fixture.tgz)"); err != nil {
+	if err := c.RunE(ctx, option.OnNodes(nodes), "ls {store-dir}/marker.* 1> /dev/null 2>&1 && exit 1 || (cd {store-dir} && tar -xf fixture.tgz)"); err != nil {
 		return fmt.Errorf("extracting fixtures: %w", err)
 	}
 

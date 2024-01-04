@@ -53,7 +53,7 @@ func registerLedger(r registry.Registry) {
 				// See https://github.com/cockroachdb/cockroach/issues/94062 for the --data-loader.
 				cmd := fmt.Sprintf("./workload run ledger --init --data-loader=INSERT --histograms="+t.PerfArtifactsDir()+"/stats.json"+
 					concurrency+duration+" {pgurl%s}", gatewayNodes)
-				c.Run(ctx, loadNode, cmd)
+				c.Run(ctx, option.OnNodes(loadNode), cmd)
 				return nil
 			})
 			m.Wait()

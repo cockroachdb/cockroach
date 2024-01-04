@@ -578,7 +578,7 @@ func (t *Test) clusterArch() vm.CPUArch {
 func (t *Test) runCommandFunc(nodes option.NodeListOption, cmd string) userFunc {
 	return func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
 		l.Printf("running command `%s` on nodes %v", cmd, nodes)
-		return t.cluster.RunE(ctx, nodes, cmd)
+		return t.cluster.RunE(ctx, option.OnNodes(nodes), cmd)
 	}
 }
 

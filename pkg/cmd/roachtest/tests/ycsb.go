@@ -94,7 +94,7 @@ func registerYCSB(r registry.Registry) {
 					" --splits=%d --histograms="+t.PerfArtifactsDir()+"/stats.json"+args+
 					" {pgurl:1-%d}",
 				wl, conc, nodes, nodes)
-			c.Run(ctx, c.Node(nodes+1), cmd)
+			c.Run(ctx, option.OnNodes(c.Node(nodes+1)), cmd)
 			return nil
 		})
 		m.Wait()

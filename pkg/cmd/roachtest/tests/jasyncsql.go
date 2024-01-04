@@ -57,7 +57,7 @@ func registerJasyncSQL(r registry.Registry) {
 
 		if err := c.RunE(
 			ctx,
-			node,
+			option.OnNodes(node),
 			"cd /mnt/data1 && git clone https://github.com/jasync-sql/jasync-sql.git",
 		); err != nil {
 			t.Fatal(err)
@@ -65,7 +65,7 @@ func registerJasyncSQL(r registry.Registry) {
 
 		// TODO: Currently we are pointing to a JasyncSQL branch, we will change
 		// this once the official release is available
-		if err := c.RunE(ctx, node, fmt.Sprintf("cd /mnt/data1/jasync-sql && git checkout %s",
+		if err := c.RunE(ctx, option.OnNodes(node), fmt.Sprintf("cd /mnt/data1/jasync-sql && git checkout %s",
 			supportedJasyncCommit)); err != nil {
 			t.Fatal(err)
 		}
@@ -92,15 +92,15 @@ func registerJasyncSQL(r registry.Registry) {
 
 		_ = c.RunE(
 			ctx,
-			node,
+			option.OnNodes(node),
 			`cd /mnt/data1/jasync-sql && PGUSER=root PGHOST=localhost PGPORT={pgport:1} PGDATABASE=defaultdb ./gradlew :postgresql-async:test`,
 		)
 
-		_ = c.RunE(ctx, node, `mkdir -p ~/logs/report/jasyncsql-results`)
+		_ = c.RunE(ctx, option.OnNodes(node), `mkdir -p ~/logs/report/jasyncsql-results`)
 
 		t.Status("making test directory")
 
-		_ = c.RunE(ctx, node,
+		_ = c.RunE(ctx, option.OnNodes(node),
 			`mkdir -p ~/logs/report/jasyncsql-results`,
 		)
 

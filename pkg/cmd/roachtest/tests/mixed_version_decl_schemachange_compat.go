@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -67,7 +68,7 @@ func fetchCorpusToTmpDir(
 		versionsToCheck = []string{versionNumber, alternateVersion}
 	}
 	for i, version := range versionsToCheck {
-		err = c.RunE(ctx, c.Node(1),
+		err = c.RunE(ctx, option.OnNodes(c.Node(1)),
 			fmt.Sprintf(" gsutil cp gs://cockroach-corpus/corpus-%s/corpus %s",
 				version,
 				corpusFilePath))

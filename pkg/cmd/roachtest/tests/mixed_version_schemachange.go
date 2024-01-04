@@ -17,6 +17,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
@@ -68,7 +69,7 @@ func runSchemaChangeMixedVersions(
 			Flag("concurrency", concurrency).
 			Arg("{pgurl%s}", c.All()).
 			String()
-		if err := c.RunE(ctx, workloadNode, runCmd); err != nil {
+		if err := c.RunE(ctx, option.OnNodes(workloadNode), runCmd); err != nil {
 			return err
 		}
 
@@ -78,15 +79,12 @@ func runSchemaChangeMixedVersions(
 		runCmd = roachtestutil.NewCommand("%s debug doctor examine cluster", test.DefaultCockroachPath).
 			Flag("url", doctorURL).
 			String()
-		return c.RunE(ctx,
-			workloadNode,
-			//option.NodeListOption{randomNode},
-			runCmd)
+		return c.RunE(ctx, option.OnNodes(workloadNode), runCmd)
 	}
 
 	// Stage our workload node with the schemachange workload.
 	mvt.OnStartup("set up schemachange workload", func(ctx context.Context, l *logger.Logger, r *rand.Rand, helper *mixedversion.Helper) error {
-		return c.RunE(ctx, workloadNode, fmt.Sprintf("./workload init schemachange {pgurl%s}", workloadNode))
+		return c.RunE(ctx, option.OnNodes(workloadNode), fmt.Sprintf("./workload init schemachange {pgurl%s}", workloadNode))
 	})
 
 	mvt.InMixedVersion("run schemachange workload and validation in mixed version", schemaChangeAndValidationStep)

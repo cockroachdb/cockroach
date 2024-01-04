@@ -60,13 +60,13 @@ func registerDiskFull(r registry.Registry) {
 					"./cockroach workload run kv --tolerate-errors --init --read-percent=0"+
 						" --concurrency=10 --duration=4m {pgurl:2-%d}",
 					nodes)
-				c.Run(ctx, c.Node(nodes+1), cmd)
+				c.Run(ctx, option.OnNodes(c.Node(nodes+1)), cmd)
 				return nil
 			})
 
 			// Each node should have an automatically created
 			// EMERGENCY_BALLAST file in the auxiliary directory.
-			c.Run(ctx, c.Range(1, nodes), "stat {store-dir}/auxiliary/EMERGENCY_BALLAST")
+			c.Run(ctx, option.OnNodes(c.Range(1, nodes)), "stat {store-dir}/auxiliary/EMERGENCY_BALLAST")
 
 			m.Go(func(ctx context.Context) error {
 				const n = 1
@@ -76,7 +76,7 @@ func registerDiskFull(r registry.Registry) {
 				// (size=100%). The "|| true" is used to ignore the
 				// error returned by `debug ballast`.
 				m.ExpectDeath()
-				c.Run(ctx, c.Node(n), "./cockroach debug ballast {store-dir}/largefile --size=100% || true")
+				c.Run(ctx, option.OnNodes(c.Node(n)), "./cockroach debug ballast {store-dir}/largefile --size=100% || true")
 
 				// Node 1 should forcibly exit due to a full disk.
 				for isLive := true; isLive; {
@@ -138,7 +138,7 @@ func registerDiskFull(r registry.Registry) {
 				// file removed and has been successfully restarted.
 				t.L().Printf("removing the emergency ballast on n%d\n", n)
 				m.ExpectDeath()
-				c.Run(ctx, c.Node(n), "rm -f {store-dir}/auxiliary/EMERGENCY_BALLAST")
+				c.Run(ctx, option.OnNodes(c.Node(n)), "rm -f {store-dir}/auxiliary/EMERGENCY_BALLAST")
 				if err := c.StartE(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(n)); err != nil {
 					t.Fatal(err)
 				}
@@ -148,14 +148,14 @@ func registerDiskFull(r registry.Registry) {
 				// added to induce the out-of-disk condition.
 				time.Sleep(30 * time.Second)
 				t.L().Printf("removing n%d's large file to free up available disk space.\n", n)
-				c.Run(ctx, c.Node(n), "rm -f {store-dir}/largefile")
+				c.Run(ctx, option.OnNodes(c.Node(n)), "rm -f {store-dir}/largefile")
 
 				// When CockroachDB detects that it has sufficient
 				// capacity available, it should recreate the emergency
 				// ballast file automatically.
 				t.L().Printf("waiting for node n%d's emergency ballast to be restored.\n", n)
 				for {
-					err := c.RunE(ctx, c.Node(1), "stat {store-dir}/auxiliary/EMERGENCY_BALLAST")
+					err := c.RunE(ctx, option.OnNodes(c.Node(1)), "stat {store-dir}/auxiliary/EMERGENCY_BALLAST")
 					if err == nil {
 						return nil
 					}

@@ -136,7 +136,7 @@ grep "force-commit" . -lr | xargs sed -i 's/-- force-commit//g'`,
 			t.Fatal(err)
 		}
 
-		if err := c.RunE(ctx, node,
+		if err := c.RunE(ctx, option.OnNodes(node),
 			`cd /mnt/data1/flowable-engine/ && \
 ./mvnw clean test -Dtest=Flowable6Test#testLongServiceTaskLoop -Ddatabase=cockroachdb`,
 		); err != nil {

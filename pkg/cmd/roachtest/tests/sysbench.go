@@ -109,8 +109,8 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	if err = c.Install(ctx, t.L(), loadNode, "haproxy"); err != nil {
 		t.Fatal(err)
 	}
-	c.Run(ctx, loadNode, "./cockroach gen haproxy --insecure --url {pgurl:1}")
-	c.Run(ctx, loadNode, "haproxy -f haproxy.cfg -D")
+	c.Run(ctx, option.OnNodes(loadNode), "./cockroach gen haproxy --insecure --url {pgurl:1}")
+	c.Run(ctx, option.OnNodes(loadNode), "haproxy -f haproxy.cfg -D")
 
 	t.Status("installing sysbench")
 	if err := c.Install(ctx, t.L(), loadNode, "sysbench"); err != nil {
@@ -124,8 +124,8 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.Run(ctx, c.Node(1), fmt.Sprintf(`./cockroach sql --insecure --url=%s -e "CREATE DATABASE sysbench"`, pgurl))
-		c.Run(ctx, loadNode, opts.cmd(false /* haproxy */)+" prepare")
+		c.Run(ctx, option.OnNodes(c.Node(1)), fmt.Sprintf(`./cockroach sql --insecure --url=%s -e "CREATE DATABASE sysbench"`, pgurl))
+		c.Run(ctx, option.OnNodes(loadNode), opts.cmd(false /* haproxy */)+" prepare")
 
 		t.Status("running workload")
 		cmd := opts.cmd(true /* haproxy */) + " run"

@@ -139,7 +139,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 					Flag("port", "{pgport:1}").
 					String()
 				t.L().Printf("SQL: %s", dumpRangesCmd)
-				err = c.RunE(ctx, c.Node(1), dumpRangesCmd)
+				err = c.RunE(ctx, option.OnNodes(c.Node(1)), dumpRangesCmd)
 				require.NoError(t, err)
 			}
 
@@ -268,7 +268,7 @@ sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP;
 sudo iptables-save
 `
 		t.L().Printf("partitioning using iptables; config cmd:\n%s", netConfigCmd)
-		require.NoError(t, c.RunE(ctx, c.Node(expectedLeaseholder), netConfigCmd))
+		require.NoError(t, c.RunE(ctx, option.OnNodes(c.Node(expectedLeaseholder)), netConfigCmd))
 
 		// (attempt to) restore iptables when test end, so that cluster
 		// can be investigated afterwards.
@@ -280,7 +280,7 @@ sudo iptables -D OUTPUT -p tcp --dport 26257 -j DROP;
 sudo iptables-save
 `
 			t.L().Printf("restoring iptables; config cmd:\n%s", restoreNet)
-			require.NoError(t, c.RunE(ctx, c.Node(expectedLeaseholder), restoreNet))
+			require.NoError(t, c.RunE(ctx, option.OnNodes(c.Node(expectedLeaseholder)), restoreNet))
 		}()
 
 		t.L().Printf("waiting while clients attempt to connect...")

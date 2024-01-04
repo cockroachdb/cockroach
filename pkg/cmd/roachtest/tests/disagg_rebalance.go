@@ -52,7 +52,7 @@ func registerDisaggRebalance(r registry.Registry) {
 			)
 			m := c.NewMonitor(ctx, c.Range(1, 3))
 			m.Go(func(ctx context.Context) error {
-				return c.RunE(ctx, c.Node(1), cmd)
+				return c.RunE(ctx, option.OnNodes(c.Node(1)), cmd)
 			})
 			m.Wait()
 
@@ -66,7 +66,7 @@ func registerDisaggRebalance(r registry.Registry) {
 					warehouses,
 				)
 
-				return c.RunE(ctx, c.Node(1), cmd)
+				return c.RunE(ctx, option.OnNodes(c.Node(1)), cmd)
 			})
 
 			select {

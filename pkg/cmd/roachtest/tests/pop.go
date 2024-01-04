@@ -81,22 +81,22 @@ func registerPop(r registry.Registry) {
 
 		t.Status("building and setting up tests")
 
-		err = c.RunE(ctx, node, fmt.Sprintf(`cd %s && go build -v -tags sqlite -o tsoda ./soda`, popPath))
+		err = c.RunE(ctx, option.OnNodes(node), fmt.Sprintf(`cd %s && go build -v -tags sqlite -o tsoda ./soda`, popPath))
 		require.NoError(t, err)
 
-		err = c.RunE(ctx, node, fmt.Sprintf(`cd %s && ./tsoda drop -e cockroach -c ./database.yml -p ./testdata/migrations`, popPath))
+		err = c.RunE(ctx, option.OnNodes(node), fmt.Sprintf(`cd %s && ./tsoda drop -e cockroach -c ./database.yml -p ./testdata/migrations`, popPath))
 		require.NoError(t, err)
 
-		err = c.RunE(ctx, node, fmt.Sprintf(`cd %s && ./tsoda create -e cockroach -c ./database.yml -p ./testdata/migrations`, popPath))
+		err = c.RunE(ctx, option.OnNodes(node), fmt.Sprintf(`cd %s && ./tsoda create -e cockroach -c ./database.yml -p ./testdata/migrations`, popPath))
 		require.NoError(t, err)
 
-		err = c.RunE(ctx, node, fmt.Sprintf(`cd %s && ./tsoda migrate -e cockroach -c ./database.yml -p ./testdata/migrations`, popPath))
+		err = c.RunE(ctx, option.OnNodes(node), fmt.Sprintf(`cd %s && ./tsoda migrate -e cockroach -c ./database.yml -p ./testdata/migrations`, popPath))
 		require.NoError(t, err)
 
 		t.Status("running pop test suite")
 
 		// No tests are expected to fail.
-		err = c.RunE(ctx, node, fmt.Sprintf(`cd %s && SODA_DIALECT=cockroach go test -race -tags sqlite -v ./... -count=1`, popPath))
+		err = c.RunE(ctx, option.OnNodes(node), fmt.Sprintf(`cd %s && SODA_DIALECT=cockroach go test -race -tags sqlite -v ./... -count=1`, popPath))
 		require.NoError(t, err, "error while running pop tests")
 	}
 

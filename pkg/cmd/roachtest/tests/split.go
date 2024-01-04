@@ -58,7 +58,7 @@ type kvSplitLoad struct {
 
 func (ksl kvSplitLoad) init(ctx context.Context, t test.Test, c cluster.Cluster) error {
 	t.Status("running uniform kv workload")
-	return c.RunE(ctx, c.Node(c.Spec().NodeCount), fmt.Sprintf("./workload init kv {pgurl:1-%d}", c.Spec().NodeCount-1))
+	return c.RunE(ctx, option.OnNodes(c.Node(c.Spec().NodeCount)), fmt.Sprintf("./workload init kv {pgurl:1-%d}", c.Spec().NodeCount-1))
 }
 
 func (ksl kvSplitLoad) rangeCount(db *gosql.DB) (int, error) {
@@ -74,7 +74,7 @@ func (ksl kvSplitLoad) run(ctx context.Context, t test.Test, c cluster.Cluster) 
 		extraFlags += fmt.Sprintf("--min-block-bytes=%d --max-block-bytes=%d ",
 			ksl.blockSize, ksl.blockSize)
 	}
-	return c.RunE(ctx, c.Node(c.Spec().NodeCount), fmt.Sprintf("./workload run kv "+
+	return c.RunE(ctx, option.OnNodes(c.Node(c.Spec().NodeCount)), fmt.Sprintf("./workload run kv "+
 		"--init --concurrency=%d --read-percent=%d --span-percent=%d %s {pgurl:1-%d} --duration='%s'",
 		ksl.concurrency, ksl.readPercent, ksl.spanPercent, extraFlags, c.Spec().NodeCount-1,
 		ksl.waitDuration.String()))
@@ -100,7 +100,7 @@ func (ysl ycsbSplitLoad) init(ctx context.Context, t test.Test, c cluster.Cluste
 		extraArgs += "--insert-hash"
 	}
 
-	return c.RunE(ctx, c.Node(c.Spec().NodeCount), fmt.Sprintf(
+	return c.RunE(ctx, option.OnNodes(c.Node(c.Spec().NodeCount)), fmt.Sprintf(
 		"./workload init ycsb --insert-count=%d --workload=%s %s {pgurl:1-%d}",
 		ysl.insertCount, ysl.workload, extraArgs, c.Spec().NodeCount-1))
 }
@@ -115,7 +115,7 @@ func (ysl ycsbSplitLoad) run(ctx context.Context, t test.Test, c cluster.Cluster
 		extraArgs += "--insert-hash"
 	}
 
-	return c.RunE(ctx, c.Node(c.Spec().NodeCount), fmt.Sprintf(
+	return c.RunE(ctx, option.OnNodes(c.Node(c.Spec().NodeCount)), fmt.Sprintf(
 		"./workload run ycsb --record-count=%d --workload=%s --concurrency=%d "+
 			"--duration='%s' %s {pgurl:1-%d}",
 		ysl.insertCount, ysl.workload, ysl.concurrency,
@@ -639,7 +639,7 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 
 			// NB: would probably be faster to use --data-loader=IMPORT here, but IMPORT
 			// will disregard our preference to keep things in a single range.
-			c.Run(ctx, c.Node(1), fmt.Sprintf("./workload init bank "+
+			c.Run(ctx, option.OnNodes(c.Node(1)), fmt.Sprintf("./workload init bank "+
 				"--rows=%d --payload-bytes=%d --data-loader INSERT --ranges=1 {pgurl:1}", rows, payload))
 
 			if rc, s := rangeCount(t); rc != 1 {

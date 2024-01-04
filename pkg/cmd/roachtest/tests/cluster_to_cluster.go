@@ -211,7 +211,7 @@ type streamingWorkload interface {
 func defaultWorkloadDriver(
 	workloadCtx context.Context, setup *c2cSetup, c cluster.Cluster, workload streamingWorkload,
 ) error {
-	return c.RunE(workloadCtx, setup.workloadNode, workload.sourceRunCmd(setup.src.name, setup.src.gatewayNodes))
+	return c.RunE(workloadCtx, option.OnNodes(setup.workloadNode), workload.sourceRunCmd(setup.src.name, setup.src.gatewayNodes))
 }
 
 type replicateTPCC struct {
@@ -656,7 +656,7 @@ func (rd *replicationDriver) preStreamingWorkload(ctx context.Context) {
 	if initCmd := rd.rs.workload.sourceInitCmd(rd.setup.src.name, rd.setup.src.nodes); initCmd != "" {
 		rd.t.Status("populating source cluster before replication")
 		initStart := timeutil.Now()
-		rd.c.Run(ctx, rd.setup.workloadNode, initCmd)
+		rd.c.Run(ctx, option.OnNodes(rd.setup.workloadNode), initCmd)
 		rd.t.L().Printf("src cluster workload initialization took %s",
 			timeutil.Since(initStart))
 	}

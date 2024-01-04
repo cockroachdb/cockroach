@@ -80,3 +80,8 @@ type StopOpts struct {
 func DefaultStopOpts() StopOpts {
 	return StopOpts{RoachprodOpts: roachprod.DefaultStopOpts()}
 }
+
+// OnNodes returns a RunOptions that will run on the given nodes.
+func OnNodes(nodes NodeListOption) install.RunOptions {
+	return install.OnNodes(nodes.InstallNodes())
+}

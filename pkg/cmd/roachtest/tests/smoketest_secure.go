@@ -83,7 +83,7 @@ func multitenantSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// init kv and check new database was done right
 	cmd := fmt.Sprintf("./cockroach workload init kv '%s'", ten.secureURL())
-	err = c.RunE(ctx, c.Node(2), cmd)
+	err = c.RunE(ctx, option.OnNodes(c.Node(2)), cmd)
 	require.NoError(t, err)
 
 	sqlutils.MakeSQLRunner(db).CheckQueryResultsRetry(t, fmt.Sprintf(`

@@ -81,7 +81,7 @@ func registerDatabaseDrop(r registry.Registry) {
 				//
 				// TODO(irfansharif): Make this versioning business a bit more
 				// explicit throughout. It works, but too tacitly.
-				c.Run(ctx, c.All(), fmt.Sprintf("cp %s ./cockroach", path))
+				c.Run(ctx, option.OnNodes(c.All()), fmt.Sprintf("cp %s ./cockroach", path))
 
 				// Set up TPC-E with 100k customers.
 				//

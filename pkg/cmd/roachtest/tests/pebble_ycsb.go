@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -163,7 +164,7 @@ func runPebbleYCSB(
 // runPebbleCmd runs the given command on all worker nodes in the test cluster.
 func runPebbleCmd(ctx context.Context, t test.Test, c cluster.Cluster, cmd string) {
 	t.L().PrintfCtx(ctx, "> %s", cmd)
-	err := c.RunE(ctx, c.All(), cmd)
+	err := c.RunE(ctx, option.OnNodes(c.All()), cmd)
 	t.L().Printf("> result: %+v", err)
 	if err := ctx.Err(); err != nil {
 		t.L().Printf("(note: incoming context was canceled: %s", err)

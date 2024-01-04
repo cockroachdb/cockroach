@@ -50,7 +50,7 @@ func registerNetworkLogging(r registry.Registry) {
 
 		t.Status("installing FluentBit containers on CRDB nodes")
 		// Create FluentBit container on the node with a TCP input and dev/null output.
-		err := c.RunE(ctx, crdbNodes, fmt.Sprintf(
+		err := c.RunE(ctx, option.OnNodes(crdbNodes), fmt.Sprintf(
 			"sudo docker run -d -p %d:%d --name=fluentbit fluent/fluent-bit -i tcp -o null",
 			fluentBitTCPPort,
 			fluentBitTCPPort))
@@ -96,14 +96,14 @@ func registerNetworkLogging(r registry.Registry) {
 		// Init & run a workload on the workload node.
 		t.Status("initializing workload")
 		initWorkloadCmd := fmt.Sprintf("./cockroach workload init kv %s ", secureUrls[0])
-		c.Run(ctx, workloadNode, initWorkloadCmd)
+		c.Run(ctx, option.OnNodes(workloadNode), initWorkloadCmd)
 
 		t.Status("running workload")
 		m := c.NewMonitor(ctx, crdbNodes)
 		m.Go(func(ctx context.Context) error {
 			joinedURLs := strings.Join(workloadPGURLs, " ")
 			runWorkloadCmd := fmt.Sprintf("./cockroach workload run kv --concurrency=32 --duration=1h %s", joinedURLs)
-			return c.RunE(ctx, workloadNode, runWorkloadCmd)
+			return c.RunE(ctx, option.OnNodes(workloadNode), runWorkloadCmd)
 		})
 		m.Wait()
 	}

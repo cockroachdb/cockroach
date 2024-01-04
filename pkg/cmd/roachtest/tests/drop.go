@@ -47,7 +47,7 @@ func registerDrop(r registry.Registry) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			c.Run(ctx, c.Node(1), tpccImportCmd(warehouses, pgurl))
+			c.Run(ctx, option.OnNodes(c.Node(1)), tpccImportCmd(warehouses, pgurl))
 
 			// Don't open the DB connection until after the data has been imported.
 			// Otherwise the ALTER TABLE query below might fail to find the

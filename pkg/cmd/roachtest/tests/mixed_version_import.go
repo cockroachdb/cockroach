@@ -16,6 +16,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -50,7 +51,7 @@ func runImportMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster,
 		node := h.RandomNode(r, c.All())
 		cmd := tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, warehouses) + fmt.Sprintf(" {pgurl%s}", c.Node(node))
 		l.Printf("executing %q on node %d", cmd, node)
-		return c.RunE(ctx, c.Node(node), cmd)
+		return c.RunE(ctx, option.OnNodes(c.Node(node)), cmd)
 	}
 	mvt.InMixedVersion("import", runImport)
 	mvt.AfterUpgradeFinalized("import", runImport)

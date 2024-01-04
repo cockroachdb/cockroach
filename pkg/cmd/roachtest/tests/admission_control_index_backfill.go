@@ -92,7 +92,7 @@ func registerIndexBackfill(r registry.Registry) {
 						// path. The reason it can't just poke at the running
 						// CRDB process is because when grabbing snapshots, CRDB
 						// is not running.
-						c.Run(ctx, c.All(), fmt.Sprintf("cp %s ./cockroach", path))
+						c.Run(ctx, option.OnNodes(c.All()), fmt.Sprintf("cp %s ./cockroach", path))
 						settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))
 						startOpts := option.DefaultStartOptsNoBackups()
 						roachtestutil.SetDefaultSQLPort(c, &startOpts.RoachprodOpts)

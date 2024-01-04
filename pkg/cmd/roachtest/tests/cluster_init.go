@@ -150,7 +150,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 
 		t.L().Printf("sending init command to node %d", initNode)
-		c.Run(ctx, c.Node(initNode),
+		c.Run(ctx, option.OnNodes(c.Node(initNode)),
 			fmt.Sprintf(`./cockroach init --insecure --port={pgport:%d}`, initNode))
 
 		// This will only succeed if 3 nodes joined the cluster.

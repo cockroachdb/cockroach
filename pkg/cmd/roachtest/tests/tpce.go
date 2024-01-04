@@ -89,7 +89,7 @@ func (ts *tpceSpec) newCmd(o tpceCmdOptions) *roachtestutil.Command {
 // import of the data and schema creation.
 func (ts *tpceSpec) init(ctx context.Context, t test.Test, c cluster.Cluster, o tpceCmdOptions) {
 	cmd := ts.newCmd(o).Option("init")
-	c.Run(ctx, c.Node(ts.loadNode), fmt.Sprintf("%s %s", cmd, ts.roachNodeIPFlags[0]))
+	c.Run(ctx, option.OnNodes(c.Node(ts.loadNode)), fmt.Sprintf("%s %s", cmd, ts.roachNodeIPFlags[0]))
 }
 
 // run runs the tpce workload on cluster that has been initialized with the tpce schema.

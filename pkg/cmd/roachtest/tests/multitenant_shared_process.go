@@ -58,12 +58,12 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 			t.Status(`initialize tpcc workload`)
 			initCmd := fmt.Sprintf(`./workload init tpcc --data-loader import --warehouses %d {pgurl%s:%s}`,
 				tpccWarehouses, crdbNodes, appTenantName)
-			c.Run(ctx, workloadNode, initCmd)
+			c.Run(ctx, option.OnNodes(workloadNode), initCmd)
 
 			t.Status(`run tpcc workload`)
 			runCmd := fmt.Sprintf(`./workload run tpcc --warehouses %d --tolerate-errors --duration 10m {pgurl%s:%s}`,
 				tpccWarehouses, crdbNodes, appTenantName)
-			c.Run(ctx, workloadNode, runCmd)
+			c.Run(ctx, option.OnNodes(workloadNode), runCmd)
 		},
 	})
 }
