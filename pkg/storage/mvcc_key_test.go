@@ -259,28 +259,23 @@ func TestDecodeUnnormalizedMVCCKey(t *testing.T) {
 			equalToNormal: false,
 		},
 		"synthetic": {
-			encoded: "666f6f00000000000000000000000000010e",
-			// Synthetic bit set to true when decoded by older versions of the code.
-			expected: MVCCKey{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 0, Logical: 0}},
-			// See comment above on "zero walltime and logical".
-			equalToNormal: false,
+			encoded:       "666f6f00000000000000000000000000010e",
+			expected:      MVCCKey{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 0, Logical: 0, Synthetic: true}},
+			equalToNormal: true,
 		},
 		"walltime and synthetic": {
-			encoded: "666f6f0016cf10bc0505574100000000010e",
-			// Synthetic bit set to true when decoded by older versions of the code.
-			expected:      MVCCKey{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1643550788737652545, Logical: 0}},
+			encoded:       "666f6f0016cf10bc0505574100000000010e",
+			expected:      MVCCKey{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1643550788737652545, Logical: 0, Synthetic: true}},
 			equalToNormal: true,
 		},
 		"logical and synthetic": {
-			encoded: "666f6f0000000000000000000000ffff010e",
-			// Synthetic bit set to true when decoded by older versions of the code.
-			expected:      MVCCKey{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 0, Logical: 65535}},
+			encoded:       "666f6f0000000000000000000000ffff010e",
+			expected:      MVCCKey{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 0, Logical: 65535, Synthetic: true}},
 			equalToNormal: true,
 		},
 		"walltime, logical, and synthetic": {
-			encoded: "666f6f0016cf10bc050557410000ffff010e",
-			// Synthetic bit set to true when decoded by older versions of the code.
-			expected:      MVCCKey{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535}},
+			encoded:       "666f6f0016cf10bc050557410000ffff010e",
+			expected:      MVCCKey{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535, Synthetic: true}},
 			equalToNormal: true,
 		},
 	}
@@ -392,6 +387,7 @@ func BenchmarkDecodeMVCCKey(b *testing.B) {
 		"empty":            {},
 		"walltime":         {WallTime: 1643550788737652545},
 		"walltime+logical": {WallTime: 1643550788737652545, Logical: 4096},
+		"all":              {WallTime: 1643550788737652545, Logical: 4096, Synthetic: true},
 	}
 	if testing.Short() {
 		// Reduce the number of configurations under -short.
