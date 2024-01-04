@@ -496,7 +496,7 @@ func CalcReplicaDigest(
 
 	// Iterate over all the data in the range.
 	var intBuf [8]byte
-	var legacyTimestamp hlc.LegacyTimestamp
+	var timestamp hlc.Timestamp
 	var timestampBuf []byte
 	var uuidBuf [uuid.Size]byte
 	hasher := sha512.New()
@@ -556,13 +556,13 @@ func CalcReplicaDigest(
 		if _, err := hasher.Write(unsafeKey.Key); err != nil {
 			return err
 		}
-		legacyTimestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
-		if size := legacyTimestamp.Size(); size > cap(timestampBuf) {
+		timestamp = unsafeKey.Timestamp
+		if size := timestamp.Size(); size > cap(timestampBuf) {
 			timestampBuf = make([]byte, size)
 		} else {
 			timestampBuf = timestampBuf[:size]
 		}
-		if _, err := protoutil.MarshalToSizedBuffer(&legacyTimestamp, timestampBuf); err != nil {
+		if _, err := protoutil.MarshalToSizedBuffer(&timestamp, timestampBuf); err != nil {
 			return err
 		}
 		if _, err := hasher.Write(timestampBuf); err != nil {
@@ -600,13 +600,13 @@ func CalcReplicaDigest(
 		if _, err := hasher.Write(rangeKV.RangeKey.EndKey); err != nil {
 			return err
 		}
-		legacyTimestamp = rangeKV.RangeKey.Timestamp.ToLegacyTimestamp()
-		if size := legacyTimestamp.Size(); size > cap(timestampBuf) {
+		timestamp = rangeKV.RangeKey.Timestamp
+		if size := timestamp.Size(); size > cap(timestampBuf) {
 			timestampBuf = make([]byte, size)
 		} else {
 			timestampBuf = timestampBuf[:size]
 		}
-		if _, err := protoutil.MarshalToSizedBuffer(&legacyTimestamp, timestampBuf); err != nil {
+		if _, err := protoutil.MarshalToSizedBuffer(&timestamp, timestampBuf); err != nil {
 			return err
 		}
 		if _, err := hasher.Write(timestampBuf); err != nil {
