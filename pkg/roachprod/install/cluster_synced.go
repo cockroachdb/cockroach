@@ -1351,35 +1351,6 @@ func (c *SyncedCluster) RunWithDetails(
 	return results, nil
 }
 
-var roachprodRetryOptions = retry.Options{
-	InitialBackoff: 10 * time.Second,
-	Multiplier:     2,
-	MaxBackoff:     5 * time.Minute,
-	MaxRetries:     10,
-}
-
-// RepeatRun is the same function as c.Run, but with an automatic retry loop.
-func (c *SyncedCluster) RepeatRun(
-	ctx context.Context, l *logger.Logger, stdout, stderr io.Writer, nodes Nodes, title,
-	cmd string,
-) error {
-	var lastError error
-	for attempt, r := 0, retry.StartWithCtx(ctx, roachprodRetryOptions); r.Next(); {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		attempt++
-		l.Printf("attempt %d - %s", attempt, title)
-		lastError = c.Run(ctx, l, stdout, stderr, WithNodes(nodes), title, cmd)
-		if lastError != nil {
-			l.Printf("error - retrying: %s", lastError)
-			continue
-		}
-		return nil
-	}
-	return errors.Wrapf(lastError, "all attempts failed for %s", title)
-}
-
 // Wait TODO(peter): document
 func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 	display := fmt.Sprintf("%s: waiting for nodes to start", c.Name)
