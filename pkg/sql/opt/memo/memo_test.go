@@ -424,6 +424,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseProvidedOrderingFix = false
 	notStale()
 
+	// Stale optimizer_merge_joins_enabled.
+	evalCtx.SessionData().OptimizerMergeJoinsEnabled = true
+	stale()
+	evalCtx.SessionData().OptimizerMergeJoinsEnabled = false
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
