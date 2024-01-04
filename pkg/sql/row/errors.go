@@ -49,11 +49,15 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 			break
 		}
 		j := origPErr.Index.Index
-		_, kv, err := b.GetResult(int(j))
-		if err != nil {
-			return err
+		if j >= int32(len(b.Results)) {
+			return errors.AssertionFailedf("index %d outside of results: %+v", j, b.Results)
 		}
-		return NewUniquenessConstraintViolationError(ctx, tableDesc, kv.Key, v.ActualValue)
+		result := b.Results[j]
+		if len(result.Rows) == 0 {
+			break
+		}
+		key := result.Rows[0].Key
+		return NewUniquenessConstraintViolationError(ctx, tableDesc, key, v.ActualValue)
 
 	case *kvpb.WriteIntentError:
 		key := v.Locks[0].Key
