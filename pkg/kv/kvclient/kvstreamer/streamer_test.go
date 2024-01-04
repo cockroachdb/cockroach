@@ -557,8 +557,7 @@ func TestStreamerVaryingResponseSizes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStress(t, "the test is too memory intensive")
-	skip.UnderRace(t, "the test is too memory intensive")
+	skip.UnderDuress(t)
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
