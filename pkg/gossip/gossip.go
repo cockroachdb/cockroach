@@ -271,7 +271,6 @@ func New(
 ) *Gossip {
 	ambient.SetEventLog("gossip", "gossip")
 	g := &Gossip{
-		server:            newServer(ambient, clusterID, nodeID, stopper, registry),
 		Connected:         make(chan struct{}),
 		outgoing:          makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsOutgoingGauge)),
 		bootstrapping:     map[string]struct{}{},
@@ -285,6 +284,7 @@ func New(
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
 		locality:          locality,
 	}
+	g.server = newServer(ambient, clusterID, nodeID, stopper, registry, g)
 
 	stopper.AddCloser(stop.CloserFn(g.server.AmbientContext.FinishEventLog))
 
@@ -857,6 +857,40 @@ func (g *Gossip) getNodeDescriptor(
 	return nil, kvpb.NewNodeDescNotFoundError(nodeID)
 }
 
+// getRandomNodeDescriptor returns a random node descriptor chosen from nodeDescs
+// that is not this node or whose id is excludeID.
+func (g *Gossip) getRandomNodeDescriptor(excludeID roachpb.NodeID) (*roachpb.NodeDescriptor,
+	error) {
+	isValidCandidate := func(desc *roachpb.NodeDescriptor) bool {
+		return desc != nil && desc.NodeID != g.NodeID.Get() && desc.NodeID != excludeID
+	}
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	count := 0
+	g.nodeDescs.Range(func(key int64, value unsafe.Pointer) bool {
+		if isValidCandidate((*roachpb.NodeDescriptor)(value)) {
+			count++
+		}
+		return true
+	})
+	if count <= 0 {
+		return nil, errors.Errorf("nodeDescs is empty")
+	}
+	randomIdx := rand.Intn(count)
+	var randomDesc *roachpb.NodeDescriptor
+	g.nodeDescs.Range(func(key int64, value unsafe.Pointer) bool {
+		if isValidCandidate((*roachpb.NodeDescriptor)(value)) {
+			if randomIdx == 0 {
+				randomDesc = (*roachpb.NodeDescriptor)(value)
+				return false
+			}
+			randomIdx--
+		}
+		return true
+	})
+	return randomDesc, nil
+}
+
 // getNodeIDAddress looks up the address of the node by ID. The method accepts a
 // flag indicating whether the mutex is held by the caller. This method is
 // called externally via GetNodeIDAddress or internally when looking up a
@@ -868,7 +902,7 @@ func (g *Gossip) getNodeIDAddress(
 	if err != nil {
 		return nil, err
 	}
-	return nd.AddressForLocality(g.locality), nil
+	return nd.AddressForLocality(&g.locality), nil
 }
 
 // AddInfo adds or updates an info object. Returns an error if info

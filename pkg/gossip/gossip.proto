@@ -13,6 +13,7 @@ package cockroach.gossip;
 option go_package = "github.com/cockroachdb/cockroach/pkg/gossip";
 
 import "roachpb/data.proto";
+import "roachpb/metadata.proto";
 import "util/hlc/timestamp.proto";
 import "util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
@@ -42,6 +43,8 @@ message Request {
   bytes cluster_id = 5 [(gogoproto.nullable) = false,
                         (gogoproto.customname) = "ClusterID",
                         (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  // Locality of the connecting node.
+  roachpb.Locality locality = 6;
 }
 
 // Response is returned from the Gossip.Gossip RPC.

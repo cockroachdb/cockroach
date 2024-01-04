@@ -12,7 +12,6 @@ package gossip
 
 import (
 	"context"
-	"math/rand"
 	"net"
 	"sync"
 	"time"
@@ -41,6 +40,9 @@ type server struct {
 
 	clusterID *base.ClusterIDContainer
 	NodeID    *base.NodeIDContainer
+
+	// Pointer to the Gossip node to which this server belongs.
+	g *Gossip
 
 	stopper *stop.Stopper
 
@@ -74,6 +76,7 @@ func newServer(
 	nodeID *base.NodeIDContainer,
 	stopper *stop.Stopper,
 	registry *metric.Registry,
+	gossip *Gossip,
 ) *server {
 	s := &server{
 		AmbientContext: ambient,
@@ -83,6 +86,7 @@ func newServer(
 		tighten:        make(chan struct{}, 1),
 		nodeMetrics:    makeMetrics(),
 		serverMetrics:  makeMetrics(),
+		g:              gossip,
 	}
 
 	s.mu.is = newInfoStore(s.AmbientContext, nodeID, util.UnresolvedAddr{}, stopper)
@@ -259,19 +263,19 @@ func (s *server) gossipReceiver(
 					delete(s.mu.nodeMap, addr)
 				}(args.NodeID, args.Addr)
 			} else {
-				// If we don't have any space left, forward the client along to a peer.
-				var alternateAddr util.UnresolvedAddr
-				var alternateNodeID roachpb.NodeID
-				// Choose a random peer for forwarding.
-				altIdx := rand.Intn(len(s.mu.nodeMap))
-				for addr, info := range s.mu.nodeMap {
-					if altIdx == 0 {
-						alternateAddr = addr
-						alternateNodeID = info.peerID
-						break
-					}
-					altIdx--
+				// If we don't have any space left, redirect this client to a random node.
+				desc, err := s.g.getRandomNodeDescriptor(args.NodeID)
+				if err != nil {
+					return err
 				}
+				locality := args.Locality
+				if locality == nil {
+					// For backwards compatibility, use this server's locality when it isn't provided
+					// by the client. This should be removed, and we should make locality non nullable.
+					locality = &s.g.locality
+				}
+				alternateAddr := desc.AddressForLocality(locality)
+				alternateNodeID := desc.NodeID
 
 				s.nodeMetrics.ConnectionsRefused.Inc(1)
 				log.Infof(ctx, "refusing gossip from n%d (max %d conns); forwarding to n%d (%s)",
@@ -279,12 +283,12 @@ func (s *server) gossipReceiver(
 
 				*reply = Response{
 					NodeID:          s.NodeID.Get(),
-					AlternateAddr:   &alternateAddr,
+					AlternateAddr:   alternateAddr,
 					AlternateNodeID: alternateNodeID,
 				}
 
 				s.mu.Unlock()
-				err := senderFn(reply)
+				err = senderFn(reply)
 				s.mu.Lock()
 				// Naively, we would return err here unconditionally, but that
 				// introduces a race. Specifically, the client may observe the

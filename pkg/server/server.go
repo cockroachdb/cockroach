@@ -1246,7 +1246,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		stores,
 		planStore,
 		g,
-		cfg.Locality,
+		&cfg.Locality,
 		rpcContext,
 		cfg.TestingKnobs.LOQRecovery,
 		func(ctx context.Context, id roachpb.NodeID) error {

@@ -85,7 +85,7 @@ func NewServer(
 	stores *kvserver.Stores,
 	planStore PlanStore,
 	g *gossip.Gossip,
-	loc roachpb.Locality,
+	loc *roachpb.Locality,
 	rpcCtx *rpc.Context,
 	knobs base.ModuleTestingKnobs,
 	decommission func(context.Context, roachpb.NodeID) error,
@@ -651,7 +651,7 @@ func checkRangeHealth(
 // For latter, errors marked with errMarkRetry marker are retried. It is up
 // to the visitor to mark appropriate errors are retryable.
 func makeVisitAvailableNodes(
-	g *gossip.Gossip, loc roachpb.Locality, rpcCtx *rpc.Context,
+	g *gossip.Gossip, loc *roachpb.Locality, rpcCtx *rpc.Context,
 ) visitNodeAdminFn {
 	return func(ctx context.Context, retryOpts retry.Options,
 		nodeFilter func(nodeID roachpb.NodeID) bool,
@@ -736,7 +736,7 @@ func makeVisitAvailableNodes(
 //
 // For latter, errors marked with errMarkRetry marker are retried. It is up
 // to the visitor to mark appropriate errors are retryable.
-func makeVisitNode(g *gossip.Gossip, loc roachpb.Locality, rpcCtx *rpc.Context) visitNodeStatusFn {
+func makeVisitNode(g *gossip.Gossip, loc *roachpb.Locality, rpcCtx *rpc.Context) visitNodeStatusFn {
 	return func(ctx context.Context, nodeID roachpb.NodeID, retryOpts retry.Options,
 		visitor func(client serverpb.StatusClient) error,
 	) error {
