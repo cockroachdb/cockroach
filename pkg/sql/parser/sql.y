@@ -1105,6 +1105,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 // Other ALTER VIRTUAL CLUSTER statements.
 %type <tree.Statement> alter_virtual_cluster_replication_stmt
 %type <tree.Statement> alter_virtual_cluster_rename_stmt
+%type <tree.Statement> alter_virtual_cluster_reset_stmt
 %type <tree.Statement> alter_virtual_cluster_service_stmt
 
 // ALTER PARTITION
@@ -6776,12 +6777,13 @@ set_csetting_stmt:
 // %Text:
 // ALTER VIRTUAL CLUSTER REPLICATION, ALTER VIRTUAL CLUSTER SETTING,
 // ALTER VIRTUAL CLUSTER CAPABILITY, ALTER VIRTUAL CLUSTER RENAME,
-// ALTER VIRTUAL CLUSTER SERVICE
+// ALTER VIRTUAL CLUSTER RESET, ALTER VIRTUAL CLUSTER SERVICE
 alter_virtual_cluster_stmt:
   alter_virtual_cluster_replication_stmt // EXTEND WITH HELP: ALTER VIRTUAL CLUSTER REPLICATION
 | alter_virtual_cluster_csetting_stmt    // EXTEND WITH HELP: ALTER VIRTUAL CLUSTER SETTING
 | alter_virtual_cluster_capability_stmt  // EXTEND WITH HELP: ALTER VIRTUAL CLUSTER CAPABILITY
 | alter_virtual_cluster_rename_stmt      // EXTEND WITH HELP: ALTER VIRTUAL CLUSTER RENAME
+| alter_virtual_cluster_reset_stmt       // EXTEND WITH HELP: ALTER VIRTUAL CLUSTER RESET
 | alter_virtual_cluster_service_stmt     // EXTEND WITH HELP: ALTER VIRTUAL CLUSTER SERVICE
 | ALTER virtual_cluster error   // SHOW HELP: ALTER VIRTUAL CLUSTER
 
@@ -6790,6 +6792,21 @@ virtual_cluster_spec:
   { $$.val = &tree.TenantSpec{IsName: true, Expr: $1.expr()} }
 | '[' a_expr ']'
   { $$.val = &tree.TenantSpec{IsName: false, Expr: $2.expr()} }
+
+
+// %Help: ALTER VIRTUAL CLUSTER RESET - reset data state of a virtual cluster
+// %Category: Experimental
+// %Text:
+// ALTER VIRTUAL CLUSTER <virtual_cluster_spec> RESET DATA TO SYSTEM TIME <time>
+alter_virtual_cluster_reset_stmt:
+  ALTER virtual_cluster virtual_cluster_spec  RESET DATA TO SYSTEM TIME d_expr
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantReset{
+      TenantSpec: $3.tenantSpec(),
+      Timestamp: $9.expr(),
+    }
+  }
 
 // %Help: ALTER VIRTUAL CLUSTER RENAME - rename a virtual cluster
 // %Category: Experimental
