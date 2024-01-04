@@ -1347,7 +1347,14 @@ func (sb *statisticsBuilder) buildJoin(
 	// Ignore columns that are already null in the input when calculating
 	// selectivity from null-removing filters - the selectivity would always be
 	// 1.
-	ignoreCols := constrainedCols
+	//
+	// NOTE: Aliasing constrainedCols without copying it is safe here because
+	// constrainedCols is not used after this point of the function. We set
+	// constrainedCols to the empty set to prevent future changes to this
+	// function from unknowingly breaking this invariant.
+	var ignoreCols opt.ColSet
+	ignoreCols, constrainedCols = constrainedCols, opt.ColSet{}
+	_ = constrainedCols
 	if relProps.NotNullCols.Intersects(h.leftProps.NotNullCols) ||
 		relProps.NotNullCols.Intersects(h.rightProps.NotNullCols) {
 		ignoreCols = ignoreCols.Union(h.leftProps.NotNullCols)
@@ -2871,7 +2878,7 @@ func (sb *statisticsBuilder) finalizeFromRowCountAndDistinctCounts(
 		product := 1.0
 		maxDistinct := 0.0
 		colStat.Cols.ForEach(func(col opt.ColumnID) {
-			if singleColStat, ok := s.ColStats.Lookup(opt.MakeColSet(col)); ok {
+			if singleColStat, ok := s.ColStats.LookupSingleton(col); ok {
 				if singleColStat.DistinctCount > 1 {
 					product *= singleColStat.DistinctCount
 				}
@@ -3754,10 +3761,10 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 	// group.
 	minDistinctCount := s.RowCount
 	minNullCount := s.RowCount
-	equivGroup.ForEach(func(i opt.ColumnID) {
-		colSet := opt.MakeColSet(i)
-		colStat, ok := s.ColStats.Lookup(colSet)
+	equivGroup.ForEach(func(col opt.ColumnID) {
+		colStat, ok := s.ColStats.LookupSingleton(col)
 		if !ok {
+			colSet := opt.MakeColSet(col)
 			colStat, _ = sb.colStatFromInput(colSet, e)
 			colStat = sb.copyColStat(colSet, s, colStat)
 			if colStat.NullCount > 0 && colSet.Intersects(notNullCols) {
@@ -3775,8 +3782,8 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 
 	// Set the distinct and null counts to the minimum for all columns in this
 	// equivalency group.
-	equivGroup.ForEach(func(i opt.ColumnID) {
-		colStat, _ := s.ColStats.Lookup(opt.MakeColSet(i))
+	equivGroup.ForEach(func(col opt.ColumnID) {
+		colStat, _ := s.ColStats.LookupSingleton(col)
 		colStat.DistinctCount = minDistinctCount
 		colStat.NullCount = minNullCount
 	})
@@ -3891,7 +3898,7 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	multiColNullCount := -1.0
 	minLocalSel := props.OneSelectivity
 	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
-		colStat, ok := s.ColStats.Lookup(opt.MakeColSet(col))
+		colStat, ok := s.ColStats.LookupSingleton(col)
 		if !ok {
 			multiColSet.Remove(col)
 			continue
@@ -3975,7 +3982,7 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 		var lowDistinctCountCols opt.ColSet
 		multiColSet.ForEach(func(col opt.ColumnID) {
 			// We already know the column stat exists if it's in multiColSet.
-			colStat, _ := s.ColStats.Lookup(opt.MakeColSet(col))
+			colStat, _ := s.ColStats.LookupSingleton(col)
 			if colStat.DistinctCount <= 1 {
 				lowDistinctCountCols.Add(col)
 			}
@@ -4110,7 +4117,7 @@ func (sb *statisticsBuilder) selectivityFromSingleColDistinctCounts(
 	selectivity = props.OneSelectivity
 	selectivityUpperBound = props.OneSelectivity
 	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
-		colStat, ok := s.ColStats.Lookup(opt.MakeColSet(col))
+		colStat, ok := s.ColStats.LookupSingleton(col)
 		if !ok {
 			continue
 		}
@@ -4172,7 +4179,7 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 	selectivity = props.OneSelectivity
 	selectivityUpperBound = props.OneSelectivity
 	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
-		colStat, ok := s.ColStats.Lookup(opt.MakeColSet(col))
+		colStat, ok := s.ColStats.LookupSingleton(col)
 		if !ok {
 			continue
 		}
@@ -4462,18 +4469,17 @@ func (sb *statisticsBuilder) selectivityFromEquivalency(
 	// Find the maximum input distinct count for all columns in this equivalency
 	// group.
 	maxDistinctCount := float64(0)
-	equivGroup.ForEach(func(i opt.ColumnID) {
-		if derivedEquivCols.Contains(i) {
+	equivGroup.ForEach(func(col opt.ColumnID) {
+		if derivedEquivCols.Contains(col) {
 			// Don't apply selectivity from derived equivalencies internally
 			// manufactured by lookup join solely to facilitate index lookups.
 			return
 		}
 		// If any of the distinct counts were updated by the filter, we want to use
 		// the updated value.
-		colSet := opt.MakeColSet(i)
-		colStat, ok := s.ColStats.Lookup(colSet)
+		colStat, ok := s.ColStats.LookupSingleton(col)
 		if !ok {
-			colStat, _ = sb.colStatFromInput(colSet, e)
+			colStat, _ = sb.colStatFromInput(opt.MakeColSet(col), e)
 		}
 		if maxDistinctCount < colStat.DistinctCount {
 			maxDistinctCount = colStat.DistinctCount
@@ -4514,19 +4520,18 @@ func (sb *statisticsBuilder) selectivityFromEquivalencySemiJoin(
 	// equivalency group from the right (left).
 	minDistinctCountRight := math.MaxFloat64
 	maxDistinctCountLeft := float64(0)
-	equivGroup.ForEach(func(i opt.ColumnID) {
+	equivGroup.ForEach(func(col opt.ColumnID) {
 		// If any of the distinct counts were updated by the filter, we want to use
 		// the updated value.
-		colSet := opt.MakeColSet(i)
-		colStat, ok := s.ColStats.Lookup(colSet)
+		colStat, ok := s.ColStats.LookupSingleton(col)
 		if !ok {
-			colStat, _ = sb.colStatFromInput(colSet, e)
+			colStat, _ = sb.colStatFromInput(opt.MakeColSet(col), e)
 		}
-		if leftOutputCols.Contains(i) {
+		if leftOutputCols.Contains(col) {
 			if maxDistinctCountLeft < colStat.DistinctCount {
 				maxDistinctCountLeft = colStat.DistinctCount
 			}
-		} else if rightOutputCols.Contains(i) {
+		} else if rightOutputCols.Contains(col) {
 			if minDistinctCountRight > colStat.DistinctCount {
 				minDistinctCountRight = colStat.DistinctCount
 			}
@@ -4579,7 +4584,7 @@ func (sb *statisticsBuilder) tryReduceCols(
 	}
 
 	for i, ok := reducedCols.Next(0); ok; i, ok = reducedCols.Next(i + 1) {
-		colStat, ok := s.ColStats.Lookup(opt.MakeColSet(i))
+		colStat, ok := s.ColStats.LookupSingleton(i)
 		if !ok || colStat.DistinctCount != 1 {
 			// The reduced columns are not all constant, so return the original
 			// column set.

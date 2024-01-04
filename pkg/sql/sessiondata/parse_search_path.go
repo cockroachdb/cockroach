@@ -143,6 +143,11 @@ func doParseSearchPathFromString(s string) ([]string, bool) {
 		result: make([]string, 0, strings.Count(s, ",")),
 	}
 
+	// Empty strings are valid search paths.
+	if parser.eof() {
+		return parser.result, true
+	}
+
 	parser.eatWhitespace()
 	if parser.eof() {
 		return nil, false

@@ -86,6 +86,18 @@ func (eq *EquivSet) AreColsEquiv(left, right opt.ColumnID) bool {
 	return false
 }
 
+// Group returns the group of columns equivalent to the given column. It
+// returns the empty set if no such group exists. The returned should not be
+// mutated without being copied first.
+func (eq *EquivSet) Group(col opt.ColumnID) opt.ColSet {
+	for i := range eq.groups {
+		if eq.groups[i].Contains(col) {
+			return eq.groups[i]
+		}
+	}
+	return opt.ColSet{}
+}
+
 // tryMergeGroups attempts to merge the equality group at the given index with
 // any of the *following* groups. If a group can be merged, it is removed after
 // its columns are added to the given group.
