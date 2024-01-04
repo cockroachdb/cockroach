@@ -265,9 +265,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		// volatility of stable functions. If folded, we only get a scalar and lose
 		// the volatility.
 		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
-			var plBuilder plpgsqlBuilder
-			plBuilder.init(b, nil /* colRefs */, paramTypes, stmt.AST, funcReturnType)
-			stmtScope = plBuilder.build(stmt.AST, bodyScope)
+			plBuilder := newPLpgSQLBuilder(
+				b, cf.Name.Object(), nil /* colRefs */, paramTypes, funcReturnType,
+			)
+			stmtScope = plBuilder.buildBlock(stmt.AST, bodyScope)
 		})
 		checkStmtVolatility(targetVolatility, stmtScope, stmt)
 

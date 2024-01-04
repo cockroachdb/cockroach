@@ -146,23 +146,6 @@ type plpgsqlBuilder struct {
 	// expressions.
 	colRefs *opt.ColSet
 
-	// params tracks the names and types for the original function parameters.
-	params []tree.ParamType
-
-	// decls is the set of variable declarations for a PL/pgSQL function.
-	decls []ast.Declaration
-
-	// varTypes maps from the name of each variable to its type.
-	varTypes map[tree.Name]*types.T
-
-	// constants tracks the variables that were declared as constant.
-	constants map[tree.Name]struct{}
-
-	// cursors is the set of cursor declarations for a PL/pgSQL routine. It is set
-	// for bound cursor declarations, which allow a query to be associated with a
-	// cursor before it is opened.
-	cursors map[tree.Name]ast.CursorDeclaration
-
 	// returnType is the return type of the PL/pgSQL function.
 	returnType *types.T
 
@@ -178,87 +161,151 @@ type plpgsqlBuilder struct {
 	// statements that follow the loop.
 	exitContinuations []continuation
 
-	// blockState is shared state for all routines that make up a PLpgSQL block,
-	// including the implicit block that surrounds the body statements.
-	blockState *tree.BlockState
+	// blocks is a stack containing every block in the path from the root block to
+	// the current block. It is necessary to track the entire stack because
+	// variables from a parent block can be referenced in a child block.
+	blocks []plBlock
 
-	hasExceptionBlock bool
-	identCounter      int
+	identCounter int
 }
 
-func (b *plpgsqlBuilder) init(
-	ob *Builder, colRefs *opt.ColSet, params []tree.ParamType, block *ast.Block, returnType *types.T,
-) {
-	if block.Label != "" {
+func newPLpgSQLBuilder(
+	ob *Builder,
+	routineName string,
+	colRefs *opt.ColSet,
+	params []tree.ParamType,
+	returnType *types.T,
+) *plpgsqlBuilder {
+	const initialBlocksCap = 2
+	b := &plpgsqlBuilder{
+		ob:         ob,
+		colRefs:    colRefs,
+		returnType: returnType,
+		blocks:     make([]plBlock, 0, initialBlocksCap),
+	}
+	// Build the initial block for the routine parameters, which are considered
+	// PL/pgSQL variables.
+	b.pushBlock(plBlock{
+		label:    routineName,
+		vars:     make([]ast.Variable, 0, len(params)),
+		varTypes: make(map[ast.Variable]*types.T),
+	})
+	for _, param := range params {
+		b.addVariable(ast.Variable(param.Name), param.Typ)
+	}
+	return b
+}
+
+// plBlock encapsulates the local state of a PL/pgSQL block, including cursor
+// and variable declarations, as well the exception handler and label.
+type plBlock struct {
+	// label is the label provided for the block, if any. It can be used when
+	// resolving a PL/pgSQL variable.
+	label string
+
+	// vars is an ordered list of variables declared in a PL/pgSQL block.
+	vars []ast.Variable
+
+	// varTypes maps from the name of each variable in the scope to its type.
+	varTypes map[ast.Variable]*types.T
+
+	// constants tracks the variables that were declared as constant.
+	constants map[ast.Variable]struct{}
+
+	// cursors is the set of cursor declarations for a PL/pgSQL block. It is set
+	// for bound cursor declarations, which allow a query to be associated with a
+	// cursor before it is opened.
+	cursors map[ast.Variable]ast.CursorDeclaration
+
+	// hasExceptionHandler tracks whether this block has an exception handler.
+	hasExceptionHandler bool
+
+	// state is shared for all sub-routines that make up a PLpgSQL block,
+	// including the implicit block that surrounds the body statements. It is used
+	// for exception handling and cursor declarations. Note that the state is not
+	// shared between parent and child or sibling blocks - it is unique within a
+	// given block.
+	state *tree.BlockState
+}
+
+// buildBlock constructs an expression that returns the result of executing a
+// PL/pgSQL block, including variable declarations and exception handlers.
+func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
+	if len(b.blocks) == 0 {
+		// There should always be a root block for the routine parameters.
+		panic(errors.AssertionFailedf("expected at least one PLpgSQL block"))
+	}
+	if astBlock.Label != "" {
 		panic(blockLabelErr)
 	}
-	b.ob = ob
-	b.colRefs = colRefs
-	b.params = params
-	b.returnType = returnType
-	b.varTypes = make(map[tree.Name]*types.T)
-	b.cursors = make(map[tree.Name]ast.CursorDeclaration)
-	for i := range block.Decls {
-		switch dec := block.Decls[i].(type) {
-		case *ast.Declaration:
-			b.decls = append(b.decls, *dec)
-		case *ast.CursorDeclaration:
-			// Declaration of a bound cursor declares a variable of type refcursor.
-			b.decls = append(b.decls, ast.Declaration{Var: dec.Name, Typ: types.RefCursor})
-			b.cursors[dec.Name] = *dec
-		}
+	if b.block().hasExceptionHandler {
+		// The parent block has an exception handler. Exception handlers and nested
+		// blocks are not yet compatible.
+		panic(nestedBlockExceptionErr)
 	}
-	for _, param := range b.params {
-		b.addVariableType(tree.Name(param.Name), param.Typ)
-	}
-	for _, dec := range b.decls {
-		typ, err := tree.ResolveType(b.ob.ctx, dec.Typ, b.ob.semaCtx.TypeResolver)
-		if err != nil {
-			panic(err)
-		}
-		b.addVariableType(dec.Var, typ)
-		if dec.NotNull {
-			panic(notNullVarErr)
-		}
-		if dec.Collate != "" {
-			panic(collatedVarErr)
-		}
-		if types.IsRecordType(typ) {
-			panic(recordVarErr)
-		}
-	}
-}
-
-// build constructs an expression that returns the result of executing a
-// PL/pgSQL function. See buildPLpgSQLStatements for more details.
-func (b *plpgsqlBuilder) build(block *ast.Block, s *scope) *scope {
+	// Push the scope to ensure that routine parameters are not treated as
+	// passthrough columns.
 	s = s.push()
 	b.ensureScopeHasExpr(s)
-
-	b.constants = make(map[tree.Name]struct{})
-	for _, dec := range b.decls {
-		if dec.Expr != nil {
-			// Some variable declarations initialize the variable.
-			s = b.addPLpgSQLAssign(s, dec.Var, dec.Expr)
-		} else {
-			// Uninitialized variables are null.
-			s = b.addPLpgSQLAssign(s, dec.Var, &tree.CastExpr{Expr: tree.DNull, Type: dec.Typ})
-		}
-		if dec.Constant {
-			// Add to the constants map after initializing the variable, since
-			// constant variables only prevent assignment, not initialization.
-			b.constants[dec.Var] = struct{}{}
+	block := b.pushBlock(plBlock{
+		label:     astBlock.Label,
+		vars:      make([]ast.Variable, 0, len(astBlock.Decls)),
+		varTypes:  make(map[ast.Variable]*types.T),
+		constants: make(map[ast.Variable]struct{}),
+		cursors:   make(map[ast.Variable]ast.CursorDeclaration),
+	})
+	// First, handle the variable declarations.
+	defer b.popBlock()
+	for i := range astBlock.Decls {
+		switch dec := astBlock.Decls[i].(type) {
+		case *ast.Declaration:
+			if dec.NotNull {
+				panic(notNullVarErr)
+			}
+			if dec.Collate != "" {
+				panic(collatedVarErr)
+			}
+			typ, err := tree.ResolveType(b.ob.ctx, dec.Typ, b.ob.semaCtx.TypeResolver)
+			if err != nil {
+				panic(err)
+			}
+			if types.IsRecordType(typ) {
+				panic(recordVarErr)
+			}
+			b.addVariable(dec.Var, typ)
+			if dec.Expr != nil {
+				// Some variable declarations initialize the variable.
+				s = b.addPLpgSQLAssign(s, dec.Var, dec.Expr)
+			} else {
+				// Uninitialized variables are null.
+				s = b.addPLpgSQLAssign(s, dec.Var, &tree.CastExpr{Expr: tree.DNull, Type: typ})
+			}
+			if dec.Constant {
+				// Add to the constants map after initializing the variable, since
+				// constant variables only prevent assignment, not initialization.
+				block.constants[dec.Var] = struct{}{}
+			}
+		case *ast.CursorDeclaration:
+			// Declaration of a bound cursor declares a variable of type refcursor.
+			b.addVariable(dec.Name, types.RefCursor)
+			s = b.addPLpgSQLAssign(s, dec.Name, &tree.CastExpr{Expr: tree.DNull, Type: types.RefCursor})
+			block.cursors[dec.Name] = *dec
 		}
 	}
+	// Perform type-checking for RECORD-returning routines. This happens after
+	// building the variable declarations, so that expressions that reference
+	// those variables can be type-checked.
 	if types.IsRecordType(b.returnType) {
 		// Infer the concrete type by examining the RETURN statements. This has to
 		// happen after building the declaration block because RETURN statements can
 		// reference declared variables.
-		recordVisitor := newRecordTypeVisitor(b.ob.ctx, b.ob.semaCtx, s)
-		ast.Walk(recordVisitor, block)
+		recordVisitor := newRecordTypeVisitor(b.ob.ctx, b.ob.semaCtx, s, astBlock)
+		ast.Walk(recordVisitor, astBlock)
 		b.returnType = recordVisitor.typ
 	}
-	if exceptions := b.buildExceptions(block); exceptions != nil {
+	// Build the exception handler. This has to happen after building the variable
+	// declarations, since the exception handler can reference the block's vars.
+	if exceptions := b.buildExceptions(astBlock); exceptions != nil {
 		// There is an implicit block around the body statements, with an optional
 		// exception handler. Note that the variable declarations are not in block
 		// scope, and exceptions thrown during variable declaration are not caught.
@@ -266,14 +313,16 @@ func (b *plpgsqlBuilder) build(block *ast.Block, s *scope) *scope {
 		// The routine is volatile to prevent inlining. Only the block and
 		// variable-assignment routines need to be volatile; see the buildExceptions
 		// comment for details.
-		b.blockState = &tree.BlockState{}
+		block.state = &tree.BlockState{}
+		block.hasExceptionHandler = true
 		blockCon := b.makeContinuation("exception_block")
 		blockCon.def.ExceptionBlock = exceptions
 		blockCon.def.Volatility = volatility.Volatile
-		b.appendPlpgSQLStmts(&blockCon, block.Body)
+		b.appendPlpgSQLStmts(&blockCon, astBlock.Body)
 		return b.callContinuation(&blockCon, s)
 	}
-	return b.buildPLpgSQLStatements(block.Body, s)
+	// Finally, build the body statements for the block.
+	return b.buildPLpgSQLStatements(astBlock.Body, s)
 }
 
 // buildPLpgSQLStatements performs the majority of the work building a PL/pgSQL
@@ -295,7 +344,6 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			b.addBarrierIfVolatile(s, returnScalar)
 			returnColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_return"))
 			returnScope := s.push()
-			b.ensureScopeHasExpr(returnScope)
 			b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, returnScalar)
 			b.ob.constructProjectForScope(s, returnScope)
 			return returnScope
@@ -304,7 +352,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// Assignment (:=) is handled by projecting a new column with the same
 			// name as the variable being assigned.
 			s = b.addPLpgSQLAssign(s, t.Var, t.Value)
-			if b.hasExceptionBlock {
+			if b.hasExceptionHandler() {
 				// If exception handling is required, we have to start a new
 				// continuation after each variable assignment. This ensures that in the
 				// event of an error, the arguments of the currently executing routine
@@ -374,7 +422,6 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// Return a single column that projects the result of the CASE statement.
 			returnColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_if"))
 			returnScope := s.push()
-			b.ensureScopeHasExpr(returnScope)
 			scalar = b.coerceType(scalar, b.returnType)
 			b.addBarrierIfVolatile(s, scalar)
 			b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, scalar)
@@ -627,7 +674,6 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			)
 			closeColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_close"))
 			closeScope := closeCon.s.push()
-			b.ensureScopeHasExpr(closeScope)
 			b.ob.synthesizeColumn(closeScope, closeColName, types.Int, nil /* expr */, closeCall)
 			b.ob.constructProjectForScope(closeCon.s, closeScope)
 			b.appendBodyStmt(&closeCon, closeScope)
@@ -697,10 +743,13 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 // the given OPEN statement.
 func (b *plpgsqlBuilder) resolveOpenQuery(open *ast.Open) tree.Statement {
 	var boundStmt tree.Statement
-	for name := range b.cursors {
-		if open.CurVar == name {
-			boundStmt = b.cursors[name].Query
-			break
+	for i := len(b.blocks) - 1; i >= 0; i-- {
+		block := &b.blocks[i]
+		for name := range block.cursors {
+			if open.CurVar == name {
+				boundStmt = block.cursors[name].Query
+				break
+			}
 		}
 	}
 	stmt := open.Query
@@ -764,7 +813,6 @@ func (b *plpgsqlBuilder) buildCursorNameGen(nameCon *continuation, nameVar ast.V
 func (b *plpgsqlBuilder) addPLpgSQLAssign(inScope *scope, ident ast.Variable, val ast.Expr) *scope {
 	typ := b.resolveVariableForAssign(ident)
 	assignScope := inScope.push()
-	b.ensureScopeHasExpr(assignScope)
 	for i := range inScope.cols {
 		col := &inScope.cols[i]
 		if col.name.ReferenceName() == ident {
@@ -850,7 +898,6 @@ func (b *plpgsqlBuilder) buildPLpgSQLRaise(inScope *scope, args memo.ScalarListE
 	)
 	raiseColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_raise"))
 	raiseScope := inScope.push()
-	b.ensureScopeHasExpr(raiseScope)
 	b.ob.synthesizeColumn(raiseScope, raiseColName, types.Int, nil /* expr */, raiseCall)
 	b.ob.constructProjectForScope(inScope, raiseScope)
 	return raiseScope
@@ -1108,7 +1155,6 @@ func (b *plpgsqlBuilder) buildExceptions(block *ast.Block) *memo.ExceptionBlock 
 			}
 		}
 	}
-	b.hasExceptionBlock = true
 	return &memo.ExceptionBlock{
 		Codes:   codes,
 		Actions: handlers,
@@ -1244,12 +1290,13 @@ func (b *plpgsqlBuilder) projectRecordVar(s *scope, name ast.Variable) *scope {
 }
 
 // makeContinuation allocates a new continuation routine with an uninitialized
-// definition.
-func (b *plpgsqlBuilder) makeContinuation(name string) continuation {
+// definition. Note that the parameters of the continuation will be determined
+// by the current block; if a child block declares new variables, its
+// continuations will have more parameters than those of its parent.
+func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 	s := b.ob.allocScope()
-	b.ensureScopeHasExpr(s)
-	params := make(opt.ColList, 0, len(b.decls)+len(b.params))
-	addParam := func(name tree.Name, typ *types.T) {
+	params := make(opt.ColList, 0, b.variableCount())
+	addParam := func(name ast.Variable, typ *types.T) {
 		colName := scopeColName(name)
 		col := b.ob.synthesizeColumn(s, colName, typ, nil /* expr */, nil /* scalar */)
 		// TODO(mgartner): Lift the 100 parameter restriction for synthesized
@@ -1257,19 +1304,24 @@ func (b *plpgsqlBuilder) makeContinuation(name string) continuation {
 		col.setParamOrd(len(params))
 		params = append(params, col.id)
 	}
-	for _, param := range b.params {
-		addParam(tree.Name(param.Name), param.Typ)
+	// Invariant: the variables of a child block always follow those of a parent
+	// block in a continuation's parameters. This ensures that a continuation
+	// from a parent block can be called in a child block simply by truncating the
+	// set of variables that are in scope for that block (see callContinuation).
+	for i := range b.blocks {
+		block := &b.blocks[i]
+		for _, name := range block.vars {
+			addParam(name, block.varTypes[name])
+		}
 	}
-	for _, dec := range b.decls {
-		addParam(dec.Var, b.varTypes[dec.Var])
-	}
+	b.ensureScopeHasExpr(s)
 	return continuation{
 		def: &memo.UDFDefinition{
 			Params:            params,
-			Name:              b.makeIdentifier(name),
+			Name:              b.makeIdentifier(conName),
 			Typ:               b.returnType,
 			CalledOnNullInput: true,
-			BlockState:        b.blockState,
+			BlockState:        b.block().state,
 			RoutineType:       tree.UDFRoutine,
 		},
 		s: s,
@@ -1318,19 +1370,31 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 	if con == nil {
 		return b.buildEndOfFunctionRaise(s)
 	}
-	args := make(memo.ScalarListExpr, 0, len(b.decls)+len(b.params))
-	addArg := func(name tree.Name, typ *types.T) {
+	args := make(memo.ScalarListExpr, 0, len(con.def.Params))
+	addArg := func(name ast.Variable, typ *types.T) {
 		_, source, _, err := s.FindSourceProvidingColumn(b.ob.ctx, name)
 		if err != nil {
 			panic(err)
 		}
 		args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
 	}
-	for _, param := range b.params {
-		addArg(tree.Name(param.Name), param.Typ)
-	}
-	for _, dec := range b.decls {
-		addArg(dec.Var, b.varTypes[dec.Var])
+	for i := range b.blocks {
+		if len(args) == len(con.def.Params) {
+			// A continuation has parameters for every variable that is in scope for
+			// the block in which it was created. If we reach the end of those
+			// parameters early, the continuation must be from an ancestor block. Any
+			// remaining variables are out of scope because control has passed back to
+			// the ancestor block.
+			//
+			// NOTE: makeContinuation maintains an invariant that variables from a
+			// parent block precede those of a child block in a continuation's
+			// parameters.
+			break
+		}
+		block := &b.blocks[i]
+		for _, name := range block.vars {
+			addArg(name, block.varTypes[name])
+		}
 	}
 	// PLpgSQL continuation routines are always in tail-call position.
 	call := b.ob.factory.ConstructUDFCall(args, &memo.UDFCallPrivate{Def: con.def, TailCall: true})
@@ -1338,7 +1402,6 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 
 	returnColName := scopeColName("").WithMetadataName(con.def.Name)
 	returnScope := s.push()
-	b.ensureScopeHasExpr(returnScope)
 	b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, call)
 	b.ob.constructProjectForScope(s, returnScope)
 	return returnScope
@@ -1401,17 +1464,21 @@ func (b *plpgsqlBuilder) coerceType(scalar opt.ScalarExpr, typ *types.T) opt.Sca
 
 // resolveVariableForAssign attempts to retrieve the type of the variable with
 // the given name, throwing an error if no such variable exists.
-func (b *plpgsqlBuilder) resolveVariableForAssign(name tree.Name) *types.T {
-	typ, ok := b.varTypes[name]
-	if !ok {
-		panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", name))
-	}
-	if b.constants != nil {
-		if _, ok := b.constants[name]; ok {
-			panic(pgerror.Newf(pgcode.ErrorInAssignment, "variable \"%s\" is declared CONSTANT", name))
+func (b *plpgsqlBuilder) resolveVariableForAssign(name ast.Variable) *types.T {
+	for i := len(b.blocks) - 1; i >= 0; i-- {
+		block := &b.blocks[i]
+		typ, ok := block.varTypes[name]
+		if !ok {
+			continue
 		}
+		if block.constants != nil {
+			if _, ok := block.constants[name]; ok {
+				panic(pgerror.Newf(pgcode.ErrorInAssignment, "variable \"%s\" is declared CONSTANT", name))
+			}
+		}
+		return typ
 	}
-	return typ
+	panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", name))
 }
 
 func (b *plpgsqlBuilder) ensureScopeHasExpr(s *scope) {
@@ -1480,14 +1547,64 @@ func (b *plpgsqlBuilder) getLoopContinuation() *continuation {
 	return nil
 }
 
-func (b *plpgsqlBuilder) addVariableType(name tree.Name, typ *types.T) {
-	if _, ok := b.varTypes[name]; ok {
-		panic(errors.WithHintf(
-			unimplemented.NewWithIssue(117508, "variable shadowing is not yet implemented"),
-			"variable \"%s\" shadows a previously defined variable", name,
-		))
+// addVariable adds a variable with the given name and type to the current
+// PL/pgSQL block scope.
+func (b *plpgsqlBuilder) addVariable(name ast.Variable, typ *types.T) {
+	curBlock := b.block()
+	if _, ok := curBlock.varTypes[name]; ok {
+		panic(pgerror.Newf(pgcode.Syntax, "duplicate declaration at or near \"%s\"", name))
 	}
-	b.varTypes[name] = typ
+	for i := range b.blocks {
+		block := &b.blocks[i]
+		if _, ok := block.varTypes[name]; ok {
+			panic(errors.WithHintf(
+				unimplemented.NewWithIssue(117508, "variable shadowing is not yet implemented"),
+				"variable \"%s\" shadows a previously defined variable", name,
+			))
+		}
+	}
+	curBlock.vars = append(curBlock.vars, name)
+	curBlock.varTypes[name] = typ
+}
+
+// block returns the block for the current PL/pgSQL block.
+func (b *plpgsqlBuilder) block() *plBlock {
+	return &b.blocks[len(b.blocks)-1]
+}
+
+// rootBlock returns the block for the root PL/pgSQL block.
+func (b *plpgsqlBuilder) rootBlock() *plBlock {
+	return &b.blocks[0]
+}
+
+func (b *plpgsqlBuilder) pushBlock(bs plBlock) *plBlock {
+	b.blocks = append(b.blocks, bs)
+	return &b.blocks[len(b.blocks)-1]
+}
+
+func (b *plpgsqlBuilder) popBlock() {
+	b.blocks = b.blocks[:len(b.blocks)-1]
+}
+
+// hasExceptionHandler returns true if any block from the root to the current
+// block has an exception handler.
+func (b *plpgsqlBuilder) hasExceptionHandler() bool {
+	for i := range b.blocks {
+		if b.blocks[i].hasExceptionHandler {
+			return true
+		}
+	}
+	return false
+}
+
+// variableCount returns the number of PL/pgSQL variables that are in scope for
+// the current block.
+func (b *plpgsqlBuilder) variableCount() int {
+	var count int
+	for i := range b.blocks {
+		count += len(b.blocks[i].varTypes)
+	}
+	return count
 }
 
 // recordTypeVisitor is used to infer the concrete return type for a
@@ -1498,23 +1615,32 @@ type recordTypeVisitor struct {
 	semaCtx *tree.SemaContext
 	s       *scope
 	typ     *types.T
+	block   *ast.Block
 }
 
 func newRecordTypeVisitor(
-	ctx context.Context, semaCtx *tree.SemaContext, s *scope,
+	ctx context.Context, semaCtx *tree.SemaContext, s *scope, block *ast.Block,
 ) *recordTypeVisitor {
-	return &recordTypeVisitor{ctx: ctx, semaCtx: semaCtx, s: s, typ: types.Unknown}
+	return &recordTypeVisitor{ctx: ctx, semaCtx: semaCtx, s: s, typ: types.Unknown, block: block}
 }
 
 var _ ast.StatementVisitor = &recordTypeVisitor{}
 
 func (r *recordTypeVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, recurse bool) {
-	if retStmt, ok := stmt.(*ast.Return); ok {
+	switch t := stmt.(type) {
+	case *ast.Block:
+		if t != r.block {
+			// This is a nested block. We can't visit it yet, since we haven't built
+			// its variable declarations, and therefore can't type-check expressions
+			// that reference those variables.
+			return t, false
+		}
+	case *ast.Return:
 		desired := types.Any
 		if r.typ != types.Unknown {
 			desired = r.typ
 		}
-		expr, _ := tree.WalkExpr(r.s, retStmt.Expr)
+		expr, _ := tree.WalkExpr(r.s, t.Expr)
 		typedExpr, err := expr.TypeCheck(r.ctx, r.semaCtx, desired)
 		if err != nil {
 			panic(err)
@@ -1606,5 +1732,8 @@ var (
 	)
 	nonCompositeErr = pgerror.New(pgcode.DatatypeMismatch,
 		"cannot return non-composite value from function returning composite type",
+	)
+	nestedBlockExceptionErr = unimplemented.New("exception handler for nested blocks",
+		"PL/pgSQL blocks cannot yet be nested within a block that has an exception handler",
 	)
 )

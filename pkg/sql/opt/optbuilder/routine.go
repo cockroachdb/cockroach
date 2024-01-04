@@ -300,9 +300,8 @@ func (b *Builder) buildRoutine(
 		}
 		var expr memo.RelExpr
 		var physProps *physical.Required
-		var plBuilder plpgsqlBuilder
-		plBuilder.init(b, colRefs, o.Types.(tree.ParamTypes), stmt.AST, rtyp)
-		stmtScope := plBuilder.build(stmt.AST, bodyScope)
+		plBuilder := newPLpgSQLBuilder(b, def.Name, colRefs, o.Types.(tree.ParamTypes), rtyp)
+		stmtScope := plBuilder.buildBlock(stmt.AST, bodyScope)
 		rtyp = finishResolveType(stmtScope)
 		expr, physProps, isMultiColDataSource =
 			b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
