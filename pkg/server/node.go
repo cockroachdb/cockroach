@@ -1410,9 +1410,34 @@ func (n *Node) batchInternal(
 		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
 		writeBytes.Release()
 	}()
+
+	// If a proxy attempt is requested, we copy the request to prevent evaluation
+	// from modifying the request. There are places on the server that can modify
+	// the request, and we can't keep these modifications if we later proxy it.
+	// Note we only ShallowCopy, so care must be taken with internal changes.
+	// For reference some of the places are:
+	//  SetActiveTimestamp - sets the Header.Timestamp
+	//  maybeStripInFlightWrites - can modify internal EndTxn requests
+	//  tryBumpBatchTimestamp - can modify the txn.ReadTimestamp
+	// TODO(baptist): Other code copies the BatchRequest, in some cases
+	// unnecessarily, to prevent modifying the passed in request. We should clean
+	// up the contract of the Send method to allow modifying the request or more
+	// strictly enforce that the callee is not allowed to change it.
+	var originalRequest *kvpb.BatchRequest
+	if args.ProxyRangeInfo != nil {
+		originalRequest = args.ShallowCopy()
+	}
 	var pErr *kvpb.Error
 	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, args)
 	if pErr != nil {
+		if originalRequest != nil {
+			if proxyResponse := n.maybeProxyRequest(ctx, originalRequest, pErr); proxyResponse != nil {
+				// If the proxy request succeeded then return its result instead of
+				// our error. If not, use our original error.
+				return proxyResponse, nil
+			}
+		}
+
 		br = &kvpb.BatchResponse{}
 		if pErr.Index != nil && keyvissettings.Enabled.Get(&n.storeCfg.Settings.SV) {
 			// Tell the SpanStatsCollector about the requests in this BatchRequest,
@@ -1464,6 +1489,58 @@ func (n *Node) batchInternal(
 	br.Error = pErr
 
 	return br, nil
+}
+
+// maybeProxyRequest is called after the server returned an error and it
+// attempts to proxy the request if it can. We attempt o proxy requests if two
+// primary conditions are met:
+// 1) The ProxyRangeInfo header is set on the request indicating the client
+// would like us to proxy this request if we can't evaluate it.
+// 2) Local evaluation has resulted in a NotLeaseHolderError which matches the
+// ProxyRangeInfo from the client.
+// If these conditions are met, attempt to send the request through our local
+// DistSender stack and use that result instead of our error.
+func (n *Node) maybeProxyRequest(
+	ctx context.Context, ba *kvpb.BatchRequest, pErr *kvpb.Error,
+) *kvpb.BatchResponse {
+	// NB: We don't handle StoreNotFound or RangeNotFound errors. If we want to
+	// support proxy requests through non-replicas we could proxy those errors
+	// as well.
+	var nlhe *kvpb.NotLeaseHolderError
+	if ok := errors.As(pErr.GetDetail(), &nlhe); !ok {
+		log.VEventf(ctx, 2, "non-proxyable errors %v", pErr)
+		return nil
+	}
+	// If because we think the client has
+	// stale information, see if our information would update the clients
+	// state. If so, rather than proxying this request, fail back to the
+	// client first.
+	leaseCompatible := nlhe.Lease != nil && ba.ProxyRangeInfo.Lease.Sequence >= nlhe.Lease.Sequence
+	descCompatible := ba.ProxyRangeInfo.Desc.Generation >= nlhe.RangeDesc.Generation
+	if !leaseCompatible || !descCompatible {
+		log.VEventf(
+			ctx,
+			2,
+			"out-of-date client information on proxy request %v != %v",
+			ba.ProxyRangeInfo,
+			pErr,
+		)
+		return nil
+	}
+
+	log.VEventf(ctx, 2, "proxy request for %v after local error %v", ba, pErr)
+	// TODO(baptist): Correctly set up the span / tracing.
+	br, pErr := n.proxySender.Send(ctx, ba)
+	if pErr == nil {
+		log.VEvent(ctx, 2, "proxy succeeded")
+		return br
+	}
+	// Wrap the error in a ProxyFailedError. It is unwrapped on the client side
+	// and handled there.
+	log.VEventf(ctx, 2, "proxy attempt resulted in error %v", pErr)
+	br = &kvpb.BatchResponse{}
+	br.Error = kvpb.NewError(kvpb.NewProxyFailedError(pErr.GoError()))
+	return br
 }
 
 // getLocalityComparison takes gatewayNodeID as input and returns the locality
