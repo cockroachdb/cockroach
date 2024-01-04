@@ -4537,7 +4537,7 @@ func TestImportDefaultNextVal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer setImportReaderParallelism(1)()
-	skip.UnderRace(t, "timeout and/or OOM")
+	skip.UnderStressRace(t, "test hits a timeout before a successful run")
 
 	const nodes = 3
 	numFiles := 1
@@ -4808,8 +4808,6 @@ func TestImportDefaultWithResume(t *testing.T) {
 func TestImportComputed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "probable OOM")
 
 	const nodes = 3
 
@@ -5421,7 +5419,7 @@ func TestImportMysql(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "probable OOM")
+	skip.UnderStressRace(t)
 
 	const (
 		nodes = 3
@@ -5553,8 +5551,6 @@ func TestImportIntoMysql(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "probable OOM")
-
 	const (
 		nodes = 3
 	)
@@ -5581,8 +5577,6 @@ func TestImportIntoMysql(t *testing.T) {
 func TestImportDelimited(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "probable OOM")
 
 	const (
 		nodes = 3
@@ -5674,8 +5668,6 @@ func TestImportPgCopy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "probable OOM")
-
 	const (
 		nodes = 3
 	)
@@ -5761,8 +5753,6 @@ func TestImportPgCopy(t *testing.T) {
 func TestImportPgDump(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "probable OOM")
 
 	const (
 		nodes = 3
@@ -6523,8 +6513,6 @@ func TestImportCockroachDump(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "probable OOM")
-
 	const (
 		nodes = 3
 	)
@@ -6623,8 +6611,6 @@ func TestCreateStatsAfterImport(t *testing.T) {
 func TestImportAvro(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "probable OOM")
 
 	const (
 		nodes = 3
@@ -6952,8 +6938,6 @@ func waitForJobResult(
 func TestDetachedImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "probable OOM")
 
 	const (
 		nodes = 3
