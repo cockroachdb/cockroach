@@ -307,7 +307,7 @@ inner-join (hash)
  ├── cardinality: [0 - 1]
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: ()
- ├── fd: ()-->(1-5,8-12), (8)==(1), (1)==(8)
+ ├── fd: ()-->(1-5,8-12), (1)==(8), (8)==(1)
  ├── select
  │    ├── columns: a.k:1!null a.i:2 f:3 s:4 j:5
  │    ├── cardinality: [0 - 1]
@@ -1322,12 +1322,12 @@ SELECT * FROM (SELECT k, i, max(s) m FROM a GROUP BY k, i) a WHERE i=k AND m='fo
 select
  ├── columns: k:1!null i:2!null m:8!null
  ├── key: (1)
- ├── fd: ()-->(8), (1)==(2), (2)==(1), (1)-->(2)
+ ├── fd: ()-->(8), (1)-->(2), (1)==(2), (2)==(1)
  ├── group-by (hash)
  │    ├── columns: k:1!null i:2!null max:8
  │    ├── grouping columns: k:1!null
  │    ├── key: (1)
- │    ├── fd: (1)==(2), (2)==(1), (1)-->(2,8)
+ │    ├── fd: (1)-->(2,8), (1)==(2), (2)==(1)
  │    ├── select
  │    │    ├── columns: k:1!null i:2!null s:4
  │    │    ├── key: (1)

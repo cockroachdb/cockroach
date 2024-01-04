@@ -347,7 +347,7 @@ func (jb *JoinOrderBuilder) Init(f *norm.Factory, evalCtx *eval.Context) {
 		applicableEdges: make(map[vertexSet]edgeSet),
 		onReorderFunc:   jb.onReorderFunc,
 		onAddJoinFunc:   jb.onAddJoinFunc,
-		equivs:          props.NewEquivSet(),
+		equivs:          props.EquivSet{},
 	}
 }
 
