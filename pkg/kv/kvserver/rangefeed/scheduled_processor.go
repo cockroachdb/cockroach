@@ -82,7 +82,7 @@ func NewScheduledProcessor(cfg Config) *ScheduledProcessor {
 		Config:     cfg,
 		scheduler:  cfg.Scheduler.NewClientScheduler(),
 		reg:        makeRegistry(cfg.Metrics),
-		rts:        makeResolvedTimestamp(),
+		rts:        makeResolvedTimestamp(cfg.Settings),
 		processCtx: cfg.AmbientContext.AnnotateCtx(context.Background()),
 
 		requestQueue: make(chan request, 20),
