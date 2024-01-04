@@ -2929,9 +2929,14 @@ message Header {
   // in a mixed-version state after a new value got added), DEFAULT is assumed.
   cockroach.rpc.ConnectionClass connection_class = 33;
 
+  // ProxyRangeInfo is the information the client used to determine it needed to
+  // proxy this request. It is set if the client is unable to directly send to
+  // the desired node, but wants it to go there.
+  RangeInfo proxy_range_info = 34;
+
   reserved 7, 10, 12, 14, 20;
 
-  // Next ID: 34
+  // Next ID: 35
 }
 
 // BoundedStalenessHeader contains configuration values pertaining to bounded

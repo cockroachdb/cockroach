@@ -4700,10 +4700,8 @@ func TestPartialPartition(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(fmt.Sprintf("%t-%d", test.useProxy, test.numServers),
 			func(t *testing.T) {
-				if test.useProxy {
-					t.Skip("proxy not supported")
-				}
 				st := cluster.MakeTestingClusterSettings()
+				kvcoord.ProxyBatchRequest.Override(ctx, &st.SV, test.useProxy)
 				// With epoch leases this test doesn't work reliably. It passes
 				// in cases where it should fail and fails in cases where it
 				// should pass.
