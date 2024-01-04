@@ -1257,11 +1257,11 @@ func (b *plpgsqlBuilder) makeContinuation(name string) continuation {
 		col.setParamOrd(len(params))
 		params = append(params, col.id)
 	}
-	for _, dec := range b.decls {
-		addParam(dec.Var, b.varTypes[dec.Var])
-	}
 	for _, param := range b.params {
 		addParam(tree.Name(param.Name), param.Typ)
+	}
+	for _, dec := range b.decls {
+		addParam(dec.Var, b.varTypes[dec.Var])
 	}
 	return continuation{
 		def: &memo.UDFDefinition{
@@ -1326,11 +1326,11 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 		}
 		args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
 	}
-	for _, dec := range b.decls {
-		addArg(dec.Var, b.varTypes[dec.Var])
-	}
 	for _, param := range b.params {
 		addArg(tree.Name(param.Name), param.Typ)
+	}
+	for _, dec := range b.decls {
+		addArg(dec.Var, b.varTypes[dec.Var])
 	}
 	// PLpgSQL continuation routines are always in tail-call position.
 	call := b.ob.factory.ConstructUDFCall(args, &memo.UDFCallPrivate{Def: con.def, TailCall: true})
