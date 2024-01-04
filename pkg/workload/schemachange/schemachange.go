@@ -248,7 +248,7 @@ func (s *schemaChange) Ops(
 			seqNum:             seqNum,
 			errorRate:          s.errorRate,
 			enumPct:            s.enumPct,
-			rng:                rng,
+			rng:                randutil.NewTestRandWithSeed(seed),
 			ops:                ops,
 			declarativeOps:     declarativeOps,
 			maxSourceTables:    s.maxSourceTables,
