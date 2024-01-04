@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -38,10 +39,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -4662,4 +4666,136 @@ func TestRefreshFailureIncludesConflictingTxn(t *testing.T) {
 			}
 		})
 	})
+}
+
+// partialPartitionTransport is a mock transport that sends an error on requests
+// to partitionedServers, otherwise it passes it to the underlying transport.
+type partialPartitionTransport struct {
+	enabled            *syncutil.AtomicBool
+	wrapped            kvcoord.Transport
+	partitionedServers map[roachpb.NodeID]bool
+}
+
+func (p partialPartitionTransport) IsExhausted() bool {
+	return p.wrapped.IsExhausted()
+}
+
+func (p partialPartitionTransport) SendNext(
+	ctx context.Context, request *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, error) {
+	if p.enabled.Get() && p.partitionedServers[p.NextReplica().NodeID] {
+		br := kvpb.BatchResponse{}
+		err := &netutil.InitialHeartbeatFailedError{WrappedErr: errors.New("simulate broken connection")}
+		p.wrapped.SkipReplica()
+		return &br, err
+	}
+	return p.wrapped.SendNext(ctx, request)
+}
+
+func (p partialPartitionTransport) NextInternalClient(
+	ctx context.Context,
+) (rpc.RestrictedInternalClient, error) {
+	return p.wrapped.NextInternalClient(ctx)
+}
+
+func (p partialPartitionTransport) NextReplica() roachpb.ReplicaDescriptor {
+	return p.wrapped.NextReplica()
+}
+
+func (p partialPartitionTransport) SkipReplica() {
+	p.wrapped.SkipReplica()
+}
+
+func (p partialPartitionTransport) Release() {}
+
+// TestPartialPartition verifies various complex success/failure scenarios.
+// The leaseholder is always on n2(idx 1) and the client is on n1(idx 0)
+func TestPartialPartition(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var partionEnabled syncutil.AtomicBool
+
+	testCases := []struct {
+		expectSuccess      bool
+		useProxy           bool
+		numServers         int
+		partitionedServers map[roachpb.NodeID]map[roachpb.NodeID]bool
+	}{
+		// --- Success scenarios ---
+		//		{5, map[roachpb.NodeID]bool{}},
+		{true, true, 5, map[roachpb.NodeID]map[roachpb.NodeID]bool{1: {2: true}}},
+		{true, true, 3, map[roachpb.NodeID]map[roachpb.NodeID]bool{1: {2: true}}},
+		{false, false, 5, map[roachpb.NodeID]map[roachpb.NodeID]bool{1: {2: true}}},
+		{false, false, 3, map[roachpb.NodeID]map[roachpb.NodeID]bool{1: {2: true}}},
+		//		{false, 3, map[roachpb.NodeID]bool{1: true, 2: true}},
+		// --- Failure scenarios ---
+	}
+	for _, test := range testCases {
+		t.Run(fmt.Sprintf("%t-%d", test.useProxy, test.numServers),
+			func(t *testing.T) {
+				// Set up bi-directional partitions for nodes in the partitioned servers list.
+				transportFactory := func(nID roachpb.NodeID) func(kvcoord.TransportFactory) kvcoord.TransportFactory {
+					return func(factory kvcoord.TransportFactory) kvcoord.TransportFactory {
+						return func(options kvcoord.SendOptions, slice kvcoord.ReplicaSlice) (kvcoord.Transport, error) {
+							transport, tErr := factory(options, slice)
+							if from, found := test.partitionedServers[nID]; found {
+								return partialPartitionTransport{&partionEnabled, transport, from}, tErr
+							}
+							return transport, tErr
+						}
+					}
+				}
+				numNodes := test.numServers
+
+				st := cluster.MakeTestingClusterSettings()
+				kvserver.ProxyBatchRequest.Override(ctx, &st.SV, test.useProxy)
+				tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+					ReplicationMode: base.ReplicationManual,
+					ServerArgsPerNode: func() map[int]base.TestServerArgs {
+						perNode := make(map[int]base.TestServerArgs)
+						for i := 0; i < numNodes; i++ {
+							perNode[i] = base.TestServerArgs{
+								Settings:         st,
+								DisableSQLServer: true,
+								Knobs: base.TestingKnobs{
+									KVClient: &kvcoord.ClientTestingKnobs{
+										TransportFactory: transportFactory(roachpb.NodeID(i + 1)),
+									},
+								},
+							}
+						}
+						return perNode
+					}(),
+				})
+
+				scratchKey := tc.ScratchRange(t)
+				// Add all the nodes as additional replicas.
+				for i := 1; i < numNodes; i++ {
+					tc.AddVotersOrFatal(t, scratchKey, tc.Targets(i)...)
+				}
+				desc := tc.LookupRangeOrFatal(t, scratchKey)
+				tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
+
+				partionEnabled.Set(true)
+
+				txn := tc.ApplicationLayer(0).DB().NewTxn(ctx, "test")
+
+				// For the failing tests, we expect them to retry "forever" until cancelled.
+				ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+				defer cancel()
+				// We don't want to hang on failures, only give it 1s to complete.
+				err := txn.Put(ctx, scratchKey, "abc")
+				if test.expectSuccess {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+				}
+
+				tc.Stopper().Stop(ctx)
+				// TODO: Add metric on number of proxied requests.
+
+			})
+	}
 }

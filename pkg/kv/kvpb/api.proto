@@ -2930,6 +2930,11 @@ message Header {
   // in a mixed-version state after a new value got added), DEFAULT is assumed.
   cockroach.rpc.ConnectionClass connection_class = 33;
 
+  // RedirectCount is the number of times this request has been redirected. To
+  // prevent infinite retries we cap this count based on the number of replicas
+  // for a range.
+  int32 redirect_count = 34;
+
   reserved 7, 10, 12, 14, 20;
 
   // Next ID: 34

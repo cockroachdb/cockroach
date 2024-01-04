@@ -50,6 +50,13 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 	true,
 )
 
+var ProxyBatchRequest = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.proxy.enabled",
+	"when true, proxy requests that fail with a NotLeaseholderError",
+	true,
+)
+
 // Send executes a command on this range, dispatching it to the
 // read-only, read-write, or admin execution path as appropriate.
 // ctx should contain the log tags from the store (and up).
@@ -199,13 +206,15 @@ func (r *Replica) SendWithWriteBytes(
 		log.Fatalf(ctx, "don't know how to handle command %s", ba)
 	}
 	if pErr != nil {
-		log.Eventf(ctx, "replica.Send got error: %s", pErr)
-	} else {
-		if filter := r.store.cfg.TestingKnobs.TestingResponseFilter; filter != nil {
-			pErr = filter(ctx, ba, br)
-		}
+		log.VEventf(ctx, 4, "replica.Send got error: %s, %s", br, pErr)
+		br, pErr = r.maybeProxyRequest(ctx, ba, br, pErr)
+		log.VEventf(ctx, 4, "after proxy: %s, %s", br, pErr)
+	}
+	if filter := r.store.cfg.TestingKnobs.TestingResponseFilter; filter != nil && pErr == nil {
+		pErr = filter(ctx, ba, br)
 	}
 
+	// TODO: Skip this if the request was proxied, or return the data from this response?
 	if pErr == nil {
 		// Return range information if it was requested. Note that we don't return it
 		// on errors because the code doesn't currently support returning both a br
@@ -219,6 +228,62 @@ func (r *Replica) SendWithWriteBytes(
 	r.recordRequestWriteBytes(writeBytes)
 	r.recordImpactOnRateLimiter(ctx, br, isReadOnly)
 	return br, writeBytes, pErr
+}
+
+func (r *Replica) maybeProxyRequest(
+	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, pErr *kvpb.Error,
+) (*kvpb.BatchResponse, *kvpb.Error) {
+	// If the setting is disabled, don't proxy.
+	if !ProxyBatchRequest.Get(&r.store.cfg.Settings.SV) {
+		log.VEventf(ctx, 1, "proxy disabled")
+		return br, pErr
+	}
+
+	var tErr *kvpb.NotLeaseHolderError
+	if !errors.As(pErr.GetDetail(), &tErr) {
+		log.VEventf(ctx, 1, "non-proxy error %v", pErr)
+		return br, pErr
+	}
+	// TODO(baptist): Do we only handle not leaseholder errors if we know who the new leaseholder is.
+	if tErr.Lease == nil {
+		log.VEventf(ctx, 1, "unknown leaseholder, don't proxy %v", pErr)
+		return br, pErr
+	}
+
+	// Special case to only forward if the client has the same information
+	// we do. This is a little overstrict, but the assumption is that the
+	// client will retry otherwise with update info if they are behind or
+	// this replica will catch up by time the client eventually if its the
+	// only one that can satisfy the request.
+	ri := r.GetRangeInfo(ctx)
+	cri := ba.ClientRangeInfo
+	log.VEventf(ctx, 1, "checking staleness %v =? %v", ri, ba.Header.ClientRangeInfo)
+	// TODO(baptist): Consider relaxing this constraint. We only care if the
+	// client has up-to-date information with us. If we have stale information
+	// we can still proxy this request. In practice it likely doesn't matter as
+	// the client will just retry once.
+	if cri.DescriptorGeneration != ri.Desc.Generation ||
+		cri.LeaseSequence != ri.Lease.Sequence ||
+		cri.ClosedTimestampPolicy != ri.ClosedTimestampPolicy {
+		return br, pErr
+	}
+
+	if ba.RedirectCount > 0 {
+		log.VEventf(ctx, 1, "too may redirects %d", ba.RedirectCount)
+		return br, pErr
+	}
+
+	if ba.GatewayNodeID == r.NodeID() {
+		log.VEventf(ctx, 1, "we are already the client, don't proxy %d", ba.GatewayNodeID)
+		return br, pErr
+	}
+	log.VEventf(ctx, 1, "proxy request %v", ba)
+
+	// TODO(baptist): Update the distsender cache if the replica has different
+	// information than the cache. This saves it learning about it through an
+	// extra round trip. This shouldn't be required for correctness, but need to
+	// validate.
+	return r.store.DB().SendProxyRequest(ctx, ba)
 }
 
 // maybeCommitWaitBeforeCommitTrigger detects batches that are attempting to
