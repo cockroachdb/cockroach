@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
 
@@ -426,14 +427,30 @@ func (cmvt *cdcMixedVersionTester) initWorkload(
 
 func (cmvt *cdcMixedVersionTester) muxRangeFeedSupported(
 	r *rand.Rand, h *mixedversion.Helper,
-) (bool, error) {
+) (bool, option.NodeListOption, error) {
 	cv, err := h.ClusterVersion(r)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	// Mux setting only exists in 22.2 to 23.2 inclusive.
-	return cv.AtLeast(roachpb.MustParseVersion(v222CV)) &&
-		!cv.AtLeast(roachpb.MustParseVersion(v241CV)), nil
+	if !cv.AtLeast(roachpb.MustParseVersion(v222CV)) ||
+		cv.AtLeast(roachpb.MustParseVersion(v241CV)) {
+		return false, nil, nil
+	}
+
+	var gatewayNodes option.NodeListOption
+	switch cmp := h.Context.ToVersion.Compare(version.MustParse("v24.1.0")); {
+	case cmp < 0:
+		// upgrading to version < 24.1 - setting is known to all nodes
+		gatewayNodes = h.Context.CockroachNodes
+	case cmp == 0:
+		// upgrading to 24.1 - setting is only known to pre-24.1 nodes
+		gatewayNodes = h.Context.NodesInPreviousVersion()
+	default:
+		// upgrading to version > 24.1 - setting is unknown to all nodes
+	}
+
+	return true, gatewayNodes, nil
 }
 
 const v232CV = "23.2"
@@ -480,14 +497,14 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// MuxRangefeed in various forms is available starting from v22.2.
 	setMuxRangeFeedEnabled := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-		supported, err := tester.muxRangeFeedSupported(r, h)
+		supported, gatewayNodes, err := tester.muxRangeFeedSupported(r, h)
 		if err != nil {
 			return err
 		}
 		if supported {
 			coin := r.Int()%2 == 0
 			l.PrintfCtx(ctx, "Setting changefeed.mux_rangefeed.enabled=%t ", coin)
-			return h.Exec(r, "SET CLUSTER SETTING changefeed.mux_rangefeed.enabled=$1", coin)
+			return h.ExecWithGateway(r, gatewayNodes, "SET CLUSTER SETTING changefeed.mux_rangefeed.enabled=$1", coin)
 		}
 		return nil
 	}
