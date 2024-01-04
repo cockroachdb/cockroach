@@ -1,4 +1,5 @@
 parse
+<<foo>>
 DECLARE
   var1 integer := 30;
 BEGIN
@@ -26,10 +27,11 @@ END;
  -- identifiers removed
 
 parse
+<<foo>>
 DECLARE
   var1 CONSTANT INTEGER COLLATE collation_name NOT NULL := 30;
 BEGIN
-END
+END foo
 ----
 DECLARE
 var1 CONSTANT INT8 COLLATE collation_name NOT NULL := 30;
@@ -192,3 +194,29 @@ DECLARE
   var1 one.two.three.four := 0;
                      ^
 HINT: try \h SET SESSION
+
+error
+<<foo>>
+BEGIN
+  SELECT 1;
+END bar
+----
+at or near "bar": syntax error: end label "bar" differs from block's label "foo"
+DETAIL: source SQL:
+<<foo>>
+BEGIN
+  SELECT 1;
+END bar
+    ^
+
+error
+BEGIN
+  SELECT 1;
+END foo
+----
+at or near "foo": syntax error: end label "foo" specified for unlabeled block
+DETAIL: source SQL:
+BEGIN
+  SELECT 1;
+END foo
+    ^

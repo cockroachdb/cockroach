@@ -189,6 +189,9 @@ type plpgsqlBuilder struct {
 func (b *plpgsqlBuilder) init(
 	ob *Builder, colRefs *opt.ColSet, params []tree.ParamType, block *ast.Block, returnType *types.T,
 ) {
+	if block.Label != "" {
+		panic(blockLabelErr)
+	}
 	b.ob = ob
 	b.colRefs = colRefs
 	b.params = params
@@ -215,22 +218,13 @@ func (b *plpgsqlBuilder) init(
 		}
 		b.addVariableType(dec.Var, typ)
 		if dec.NotNull {
-			panic(unimplemented.NewWithIssueDetail(105243,
-				"not null variable",
-				"not-null PL/pgSQL variables are not yet supported",
-			))
+			panic(notNullVarErr)
 		}
 		if dec.Collate != "" {
-			panic(unimplemented.NewWithIssueDetail(105245,
-				"variable collation",
-				"collation for PL/pgSQL variables is not yet supported",
-			))
+			panic(collatedVarErr)
 		}
 		if types.IsRecordType(typ) {
-			panic(unimplemented.NewWithIssueDetail(114874,
-				"RECORD variable",
-				"RECORD type for PL/pgSQL variables is not yet supported",
-			))
+			panic(recordVarErr)
 		}
 	}
 }
@@ -389,10 +383,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 
 		case *ast.Loop:
 			if t.Label != "" {
-				panic(unimplemented.New(
-					"LOOP label",
-					"LOOP statement labels are not yet supported",
-				))
+				panic(loopLabelErr)
 			}
 			// LOOP control flow is handled similarly to IF statements, but two
 			// continuation functions are used - one that executes the loop body, and
@@ -445,47 +436,32 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 
 		case *ast.Exit:
 			if t.Label != "" {
-				panic(unimplemented.New(
-					"EXIT label",
-					"EXIT statement labels are not yet supported",
-				))
+				panic(exitLabelErr)
 			}
 			if t.Condition != nil {
-				panic(unimplemented.New(
-					"EXIT WHEN",
-					"conditional EXIT statements are not yet supported",
-				))
+				panic(exitCondErr)
 			}
 			// EXIT statements are handled by calling the function that executes the
 			// statements after a loop. Errors if used outside a loop.
 			if con := b.getExitContinuation(); con != nil {
 				return b.callContinuation(con, s)
 			} else {
-				panic(pgerror.New(
-					pgcode.Syntax,
-					"EXIT cannot be used outside a loop, unless it has a label",
-				))
+				panic(exitOutsideLoopErr)
 			}
 
 		case *ast.Continue:
 			if t.Label != "" {
-				panic(unimplemented.New(
-					"CONTINUE label",
-					"CONTINUE statement labels are not yet supported",
-				))
+				panic(continueLabelErr)
 			}
 			if t.Condition != nil {
-				panic(unimplemented.New(
-					"CONTINUE WHEN",
-					"conditional CONTINUE statements are not yet supported",
-				))
+				panic(continueCondErr)
 			}
 			// CONTINUE statements are handled by calling the function that executes
 			// the loop body. Errors if used outside a loop.
 			if con := b.getLoopContinuation(); con != nil {
 				return b.callContinuation(con, s)
 			} else {
-				panic(pgerror.New(pgcode.Syntax, "CONTINUE cannot be used outside a loop"))
+				panic(continueOutsideLoopErr)
 			}
 
 		case *ast.Raise:
@@ -505,18 +481,13 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 
 		case *ast.Execute:
 			if t.Strict {
-				panic(unimplemented.NewWithIssuef(107854,
-					"INTO STRICT statements are not yet implemented",
-				))
+				panic(strictIntoErr)
 			}
 			if len(t.Target) > 1 {
 				seenTargets := make(map[ast.Variable]struct{})
 				for _, name := range t.Target {
 					if _, ok := seenTargets[name]; ok {
-						panic(unimplemented.New(
-							"duplicate INTO target",
-							"assigning to a variable more than once in the same INTO statement is not supported",
-						))
+						panic(dupIntoErr)
 					}
 					seenTargets[name] = struct{}{}
 				}
@@ -577,7 +548,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// function in a separate body statement that returns no results, similar
 			// to the RAISE implementation.
 			if t.Scroll == tree.Scroll {
-				panic(unimplemented.NewWithIssue(77102, "DECLARE SCROLL CURSOR"))
+				panic(scrollableCursorErr)
 			}
 			openCon := b.makeContinuation("_stmt_open")
 			openCon.def.Volatility = volatility.Volatile
@@ -606,9 +577,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			openScope := b.ob.buildStmtAtRootWithScope(query, nil /* desiredTypes */, openCon.s)
 			if openScope.expr.Relational().CanMutate {
 				// Cursors with mutations are invalid.
-				panic(pgerror.Newf(pgcode.FeatureNotSupported,
-					"DECLARE CURSOR must not contain data-modifying statements in WITH",
-				))
+				panic(cursorMutationErr)
 			}
 			b.appendBodyStmt(&openCon, openScope)
 			b.appendPlpgSQLStmts(&openCon, stmts[i+1:])
@@ -677,9 +646,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// builtin function.
 			if !t.IsMove {
 				if t.Cursor.FetchType == tree.FetchAll || t.Cursor.FetchType == tree.FetchBackwardAll {
-					panic(pgerror.New(
-						pgcode.FeatureNotSupported, "FETCH statement cannot return multiple rows",
-					))
+					panic(fetchRowsErr)
 				}
 			}
 			fetchCon := b.makeContinuation("_stmt_fetch")
@@ -719,10 +686,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			return b.callContinuation(&fetchCon, s)
 
 		default:
-			panic(unimplemented.New(
-				"unimplemented PL/pgSQL statement",
-				"attempted to use a PL/pgSQL statement that is not yet supported",
-			))
+			panic(unsupportedPLStmtErr)
 		}
 	}
 	// Call the parent continuation to execute the rest of the function.
@@ -1011,7 +975,7 @@ func (b *plpgsqlBuilder) makeRaiseFormatMessage(
 			if j > 0 {
 				// Add the next argument at the location of this parameter.
 				if argIdx >= len(args) {
-					panic(pgerror.Newf(pgcode.Syntax, "too few parameters specified for RAISE"))
+					panic(tooFewRaiseParamsErr)
 				}
 				// If the argument is NULL, postgres prints "<NULL>".
 				expr := &tree.CastExpr{Expr: args[argIdx], Type: types.String}
@@ -1024,7 +988,7 @@ func (b *plpgsqlBuilder) makeRaiseFormatMessage(
 		}
 	}
 	if argIdx < len(args) {
-		panic(pgerror.Newf(pgcode.Syntax, "too many parameters specified for RAISE"))
+		panic(tooManyRaiseParamsErr)
 	}
 	return result
 }
@@ -1110,9 +1074,7 @@ func (b *plpgsqlBuilder) buildExceptions(block *ast.Block) *memo.ExceptionBlock 
 		case pgcode.TransactionRollback, pgcode.TransactionIntegrityConstraintViolation,
 			pgcode.SerializationFailure, pgcode.StatementCompletionUnknown,
 			pgcode.DeadlockDetected:
-			panic(unimplemented.NewWithIssue(111446,
-				"catching a Transaction Retry error in a PLpgSQL EXCEPTION block is not yet implemented",
-			))
+			panic(retryableErrErr)
 		}
 		codes = append(codes, code)
 		handlers = append(handlers, handler)
@@ -1562,22 +1524,87 @@ func (r *recordTypeVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, ch
 			return stmt, false
 		}
 		if typ.Family() != types.TupleFamily {
-			panic(pgerror.New(pgcode.DatatypeMismatch,
-				"cannot return non-composite value from function returning composite type",
-			))
+			panic(nonCompositeErr)
 		}
 		if r.typ == types.Unknown {
 			r.typ = typ
 			return stmt, false
 		}
 		if !typ.Identical(r.typ) {
-			panic(errors.WithHint(
-				unimplemented.NewWithIssue(115384,
-					"returning different types from a RECORD-returning function is not yet supported",
-				),
-				"try casting all RETURN statements to the same type",
-			))
+			panic(recordReturnErr)
 		}
 	}
 	return stmt, false
 }
+
+var (
+	unsupportedPLStmtErr = unimplemented.New("unimplemented PL/pgSQL statement",
+		"attempted to use a PL/pgSQL statement that is not yet supported",
+	)
+	notNullVarErr = unimplemented.NewWithIssueDetail(105243, "not null variable",
+		"not-null PL/pgSQL variables are not yet supported",
+	)
+	collatedVarErr = unimplemented.NewWithIssueDetail(105245, "variable collation",
+		"collation for PL/pgSQL variables is not yet supported",
+	)
+	recordVarErr = unimplemented.NewWithIssueDetail(114874, "RECORD variable",
+		"RECORD type for PL/pgSQL variables is not yet supported",
+	)
+	blockLabelErr = unimplemented.New("block label",
+		"block labels are not yet supported",
+	)
+	loopLabelErr = unimplemented.New("LOOP label",
+		"LOOP statement labels are not yet supported",
+	)
+	exitLabelErr = unimplemented.New("EXIT label",
+		"EXIT statement labels are not yet supported",
+	)
+	exitCondErr = unimplemented.New("EXIT WHEN",
+		"conditional EXIT statements are not yet supported",
+	)
+	continueLabelErr = unimplemented.New("CONTINUE label",
+		"CONTINUE statement labels are not yet supported",
+	)
+	continueCondErr = unimplemented.New("CONTINUE WHEN",
+		"conditional CONTINUE statements are not yet supported",
+	)
+	strictIntoErr = unimplemented.NewWithIssuef(107854,
+		"INTO STRICT statements are not yet implemented",
+	)
+	dupIntoErr = unimplemented.New("duplicate INTO target",
+		"assigning to a variable more than once in the same INTO statement is not supported",
+	)
+	scrollableCursorErr = unimplemented.NewWithIssue(77102,
+		"DECLARE SCROLL CURSOR",
+	)
+	retryableErrErr = unimplemented.NewWithIssue(111446,
+		"catching a Transaction Retry error in a PLpgSQL EXCEPTION block is not yet implemented",
+	)
+	recordReturnErr = errors.WithHint(
+		unimplemented.NewWithIssue(115384,
+			"returning different types from a RECORD-returning function is not yet supported",
+		),
+		"try casting all RETURN statements to the same type",
+	)
+	exitOutsideLoopErr = pgerror.New(pgcode.Syntax,
+		"EXIT cannot be used outside a loop, unless it has a label",
+	)
+	continueOutsideLoopErr = pgerror.New(pgcode.Syntax,
+		"CONTINUE cannot be used outside a loop",
+	)
+	cursorMutationErr = pgerror.Newf(pgcode.FeatureNotSupported,
+		"DECLARE CURSOR must not contain data-modifying statements in WITH",
+	)
+	fetchRowsErr = pgerror.New(pgcode.FeatureNotSupported,
+		"FETCH statement cannot return multiple rows",
+	)
+	tooFewRaiseParamsErr = pgerror.Newf(pgcode.Syntax,
+		"too few parameters specified for RAISE",
+	)
+	tooManyRaiseParamsErr = pgerror.Newf(pgcode.Syntax,
+		"too many parameters specified for RAISE",
+	)
+	nonCompositeErr = pgerror.New(pgcode.DatatypeMismatch,
+		"cannot return non-composite value from function returning composite type",
+	)
+)

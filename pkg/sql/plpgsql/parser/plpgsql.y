@@ -382,6 +382,10 @@ opt_semi:
 
 pl_block: opt_block_label decl_sect BEGIN proc_sect exception_sect END opt_label
   {
+    blockLabel, blockEndLabel := $1, $7
+    if err := checkLoopLabels(blockLabel, blockEndLabel); err != nil {
+      return setErr(plpgsqllex, err)
+    }
     $$.val = &plpgsqltree.Block{
       Label: $1,
       Decls: $2.statements(),
