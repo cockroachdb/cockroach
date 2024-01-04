@@ -1492,7 +1492,7 @@ func (r *testRunner) runHTTPServer(httpPort int, stdout io.Writer, bindTo string
 	if bindTo != "" {
 		bindToDesc = bindTo
 	}
-	fmt.Fprintf(stdout, "HTTP server listening on %s, port %d.\n", bindToDesc, httpPort)
+	fmt.Fprintf(stdout, "HTTP server listening on port %d on %s: http://%s:%d/\n", httpPort, bindToDesc, bindTo, httpPort)
 	return nil
 }
 

@@ -38,7 +38,7 @@ SET use_declarative_schema_changer = 'on'
 subtest rewrite_sql
 
 statement ok
-CREATE OR REPLACE FUNCTION f_rewrite() RETURNS INT AS
+CREATE FUNCTION f_rewrite() RETURNS INT AS
 $$
   SELECT nextval('seq');
 $$ LANGUAGE SQL
@@ -49,7 +49,10 @@ SELECT get_body_str('f_rewrite');
 "SELECT nextval(106:::REGCLASS);"
 
 statement ok
-CREATE OR REPLACE FUNCTION f_rewrite() RETURNS INT AS
+DROP FUNCTION f_rewrite();
+
+statement ok
+CREATE FUNCTION f_rewrite() RETURNS INT AS
 $$
   INSERT INTO t_rewrite(v) VALUES (nextval('seq')) RETURNING v;
 $$ LANGUAGE SQL
@@ -63,7 +66,7 @@ statement ok
 DROP FUNCTION f_rewrite();
 
 statement ok
-CREATE OR REPLACE FUNCTION f_rewrite() RETURNS weekday AS
+CREATE FUNCTION f_rewrite() RETURNS weekday AS
 $$
   SELECT 'wednesday'::weekday;
 $$ LANGUAGE SQL
@@ -74,7 +77,10 @@ SELECT get_body_str('f_rewrite');
 "SELECT b'\\x80':::@100107;"
 
 statement ok
-CREATE OR REPLACE FUNCTION f_rewrite() RETURNS weekday AS
+DROP FUNCTION f_rewrite();
+
+statement ok
+CREATE FUNCTION f_rewrite() RETURNS weekday AS
 $$
   UPDATE t_rewrite SET w = 'thursday'::weekday WHERE w = 'wednesday'::weekday RETURNING w;
 $$ LANGUAGE SQL
@@ -84,12 +90,15 @@ SELECT get_body_str('f_rewrite');
 ----
 "UPDATE test.public.t_rewrite SET w = b'\\xa0':::@100107 WHERE w = b'\\x80':::@100107 RETURNING w;"
 
+statement ok
+DROP FUNCTION f_rewrite();
+
 subtest end
 
 subtest rewrite_proc
 
 statement ok
-CREATE OR REPLACE PROCEDURE p_rewrite() AS
+CREATE PROCEDURE p_rewrite() AS
 $$
   INSERT INTO t_rewrite(v) VALUES (nextval('seq')) RETURNING v;
 $$ LANGUAGE SQL
@@ -103,7 +112,7 @@ statement ok
 DROP PROCEDURE p_rewrite();
 
 statement ok
-CREATE OR REPLACE PROCEDURE p_rewrite() AS
+CREATE PROCEDURE p_rewrite() AS
 $$
   UPDATE t_rewrite SET w = 'thursday'::weekday WHERE w = 'wednesday'::weekday RETURNING w;
 $$ LANGUAGE SQL

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
@@ -37,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1506,11 +1509,8 @@ func (b *builderState) WrapFunctionBody(
 	lang catpb.Function_Language,
 	refProvider scbuildstmt.ReferenceProvider,
 ) *scpb.FunctionBody {
-	if lang != catpb.Function_PLPGSQL {
-		// TODO(#115627): fix this to work with PL/pgSQL.
-		bodyStr = b.replaceSeqNamesWithIDs(bodyStr)
-		bodyStr = b.serializeUserDefinedTypes(bodyStr)
-	}
+	bodyStr = b.replaceSeqNamesWithIDs(bodyStr, lang)
+	bodyStr = b.serializeUserDefinedTypes(bodyStr, lang)
 	fnBody := &scpb.FunctionBody{
 		FunctionID: fnID,
 		Body:       bodyStr,
@@ -1548,7 +1548,9 @@ func (b *builderState) WrapFunctionBody(
 	return fnBody
 }
 
-func (b *builderState) replaceSeqNamesWithIDs(queryStr string) string {
+func (b *builderState) replaceSeqNamesWithIDs(
+	queryStr string, lang catpb.Function_Language,
+) string {
 	replaceSeqFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		seqIdentifiers, err := seqexpr.GetUsedSequences(expr)
 		if err != nil {
@@ -1569,31 +1571,43 @@ func (b *builderState) replaceSeqNamesWithIDs(queryStr string) string {
 		return false, newExpr, nil
 	}
 
-	parsedStmts, err := parser.Parse(queryStr)
-	if err != nil {
-		panic(err)
-	}
-
-	stmts := make(tree.Statements, len(parsedStmts))
-	for i, s := range parsedStmts {
-		stmts[i] = s.AST
-	}
-
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	for i, stmt := range stmts {
-		newStmt, err := tree.SimpleStmtVisit(stmt, replaceSeqFunc)
+	switch lang {
+	case catpb.Function_SQL:
+		parsedStmts, err := parser.Parse(queryStr)
 		if err != nil {
 			panic(err)
 		}
-		if i > 0 {
-			fmtCtx.WriteString("\n")
+		stmts := make(tree.Statements, len(parsedStmts))
+		for i, s := range parsedStmts {
+			stmts[i] = s.AST
 		}
+		for i, stmt := range stmts {
+			newStmt, err := tree.SimpleStmtVisit(stmt, replaceSeqFunc)
+			if err != nil {
+				panic(err)
+			}
+			if i > 0 {
+				fmtCtx.WriteString("\n")
+			}
+			fmtCtx.FormatNode(newStmt)
+			fmtCtx.WriteString(";")
+		}
+	case catpb.Function_PLPGSQL:
+		var stmts plpgsqltree.Statement
+		plstmt, err := plpgsql.Parse(queryStr)
+		if err != nil {
+			panic(errors.Wrap(err, "failed to parse query string"))
+		}
+		stmts = plstmt.AST
+
+		v := utils.SQLStmtVisitor{Fn: replaceSeqFunc}
+		newStmt := plpgsqltree.Walk(&v, stmts)
 		fmtCtx.FormatNode(newStmt)
-		fmtCtx.WriteString(";")
+	default:
+		panic(errors.AssertionFailedf("unexpected function language: %s", lang))
 	}
-
 	return fmtCtx.String()
-
 }
 
 func (b *builderState) getSequenceFromName(seqName string) *scpb.Sequence {
@@ -1606,7 +1620,9 @@ func (b *builderState) getSequenceFromName(seqName string) *scpb.Sequence {
 	return seq
 }
 
-func (b *builderState) serializeUserDefinedTypes(queryStr string) string {
+func (b *builderState) serializeUserDefinedTypes(
+	queryStr string, lang catpb.Function_Language,
+) string {
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		var innerExpr tree.Expr
 		var typRef tree.ResolvableTypeReference
@@ -1646,31 +1662,74 @@ func (b *builderState) serializeUserDefinedTypes(queryStr string) string {
 		}
 		return false, parsedExpr, nil
 	}
-
-	var stmts tree.Statements
-	parsedStmts, err := parser.Parse(queryStr)
-	if err != nil {
-		panic(err)
-	}
-	stmts = make(tree.Statements, len(parsedStmts))
-	for i, stmt := range parsedStmts {
-		stmts[i] = stmt.AST
+	// replaceTypeFunc is a visitor function that replaces type annotations
+	// containing user defined types with their IDs. This is currently only
+	// necessary for some kinds of PLpgSQL statements.
+	replaceTypeFunc := func(typ tree.ResolvableTypeReference) (newTyp tree.ResolvableTypeReference, err error) {
+		if typ == nil {
+			return typ, nil
+		}
+		// semaCtx may be nil if this is a virtual view being created at
+		// init time.
+		var typeResolver tree.TypeReferenceResolver
+		if b.semaCtx != nil {
+			typeResolver = b.semaCtx.TypeResolver
+		}
+		var t *types.T
+		t, err = tree.ResolveType(b.ctx, typ, typeResolver)
+		if err != nil {
+			return typ, err
+		}
+		if !t.UserDefined() {
+			return typ, nil
+		}
+		return &tree.OIDTypeReference{OID: t.Oid()}, nil
 	}
 
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	for i, stmt := range stmts {
-		newStmt, err := tree.SimpleStmtVisit(stmt, replaceFunc)
+	switch lang {
+	case catpb.Function_SQL:
+		var stmts tree.Statements
+		parsedStmts, err := parser.Parse(queryStr)
 		if err != nil {
 			panic(err)
 		}
-		if i > 0 {
-			fmtCtx.WriteString("\n")
+		stmts = make(tree.Statements, len(parsedStmts))
+		for i, stmt := range parsedStmts {
+			stmts[i] = stmt.AST
 		}
+		for i, stmt := range stmts {
+			newStmt, err := tree.SimpleStmtVisit(stmt, replaceFunc)
+			if err != nil {
+				panic(err)
+			}
+			if i > 0 {
+				fmtCtx.WriteString("\n")
+			}
+			fmtCtx.FormatNode(newStmt)
+			fmtCtx.WriteString(";")
+		}
+	case catpb.Function_PLPGSQL:
+		var stmts plpgsqltree.Statement
+		plstmt, err := plpgsql.Parse(queryStr)
+		if err != nil {
+			panic(errors.Wrap(err, "failed to parse query string"))
+		}
+		stmts = plstmt.AST
+
+		v := utils.SQLStmtVisitor{Fn: replaceFunc}
+		newStmt := plpgsqltree.Walk(&v, stmts)
+		// Some PLpgSQL statements (i.e., declarations), may contain type
+		// annotations containing the UDT. We need to walk the AST to replace them,
+		// too.
+		v2 := utils.TypeRefVisitor{Fn: replaceTypeFunc}
+		newStmt = plpgsqltree.Walk(&v2, newStmt)
 		fmtCtx.FormatNode(newStmt)
 		fmtCtx.WriteString(";")
+	default:
+		panic(errors.AssertionFailedf("unexpected function language: %s", lang))
 	}
 	return fmtCtx.CloseAndGetString()
-
 }
 
 func (b *builderState) ResolveDatabasePrefix(schemaPrefix *tree.ObjectNamePrefix) {

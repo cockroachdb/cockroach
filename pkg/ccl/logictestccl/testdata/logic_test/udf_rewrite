@@ -38,7 +38,7 @@ SET use_declarative_schema_changer = 'on'
 subtest rewrite_plpgsql
 
 statement ok
-CREATE OR REPLACE FUNCTION f_rewrite() RETURNS INT AS
+CREATE FUNCTION f_rewrite() RETURNS INT AS
 $$
   DECLARE
     i INT := nextval('seq');
@@ -189,7 +189,7 @@ statement ok
 DROP FUNCTION f_rewrite();
 
 statement ok
-CREATE OR REPLACE FUNCTION f_rewrite() RETURNS weekday AS
+CREATE FUNCTION f_rewrite() RETURNS weekday AS
 $$
   DECLARE
     day weekday := 'wednesday'::weekday;
@@ -345,7 +345,7 @@ subtest end
 subtest rewrite_proc
 
 statement ok
-CREATE OR REPLACE PROCEDURE p_rewrite() AS
+CREATE PROCEDURE p_rewrite() AS
 $$
   BEGIN
     INSERT INTO t_rewrite(v) VALUES (nextval('seq')) RETURNING v;
@@ -361,7 +361,7 @@ statement ok
 DROP PROCEDURE p_rewrite();
 
 statement ok
-CREATE OR REPLACE PROCEDURE p_rewrite() AS
+CREATE PROCEDURE p_rewrite() AS
 $$
   BEGIN
     UPDATE t_rewrite SET w = 'thursday'::weekday WHERE w = 'wednesday'::weekday RETURNING w;
