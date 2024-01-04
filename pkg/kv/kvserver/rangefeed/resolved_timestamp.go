@@ -12,16 +12,23 @@ package rangefeed
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
+
+var DisableCommitIntentTimestampAssertion = envutil.EnvOrDefaultBool(
+	"COCKROACH_RANGEFEED_DISABLE_COMMIT_INTENT_TIMESTAMP_ASSERTION", false)
 
 // A rangefeed's "resolved timestamp" is defined as the timestamp at which no
 // future updates will be emitted to the feed at or before. The timestamp is
@@ -81,11 +88,13 @@ type resolvedTimestamp struct {
 	closedTS   hlc.Timestamp
 	resolvedTS hlc.Timestamp
 	intentQ    unresolvedIntentQueue
+	settings   *cluster.Settings
 }
 
-func makeResolvedTimestamp() resolvedTimestamp {
+func makeResolvedTimestamp(st *cluster.Settings) resolvedTimestamp {
 	return resolvedTimestamp{
-		intentQ: makeUnresolvedIntentQueue(),
+		intentQ:  makeUnresolvedIntentQueue(),
+		settings: st,
 	}
 }
 
@@ -155,6 +164,13 @@ func (rts *resolvedTimestamp) consumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
 		return rts.intentQ.UpdateTS(t.TxnID, t.Timestamp)
 
 	case *enginepb.MVCCCommitIntentOp:
+		// This assertion can be violated in mixed-version clusters, so gate it on
+		// 24.1, as well as an envvar in case we've missed something. See:
+		// https://github.com/cockroachdb/cockroach/issues/104309
+		if !DisableCommitIntentTimestampAssertion &&
+			rts.settings.Version.IsActive(context.Background(), clusterversion.V24_1Start) {
+			rts.assertOpAboveRTS(op, t.Timestamp)
+		}
 		return rts.intentQ.DecrRef(t.TxnID, t.Timestamp)
 
 	case *enginepb.MVCCAbortIntentOp:
