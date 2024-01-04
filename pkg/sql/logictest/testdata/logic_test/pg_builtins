@@ -398,6 +398,21 @@ SELECT pg_catalog.set_config('woo', 'woo', false)
 query error configuration setting.*not supported
 SELECT set_config('vacuum_cost_delay', '0', false)
 
+# Regression test for #117316. Setting an empty search_path should succeed.
+query T
+SELECT pg_catalog.set_config('search_path', '', false)
+----
+·
+
+query T
+SHOW search_path
+----
+·
+
+# Reset the search paths for subsequent tests.
+statement ok
+RESET search_path
+
 # pg_my_temp_schema
 #
 # Before a temporary schema is created, it returns 0. Afterwards, it returns the
