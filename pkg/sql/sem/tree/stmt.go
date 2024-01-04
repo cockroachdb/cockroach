@@ -545,6 +545,17 @@ func (*AlterTenantRename) StatementType() StatementType { return TypeDCL }
 func (*AlterTenantRename) StatementTag() string { return "ALTER VIRTUAL CLUSTER RENAME" }
 
 // StatementReturnType implements the Statement interface.
+func (*AlterTenantReset) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*AlterTenantReset) StatementType() StatementType { return TypeDCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterTenantReset) StatementTag() string { return "ALTER VIRTUAL CLUSTER RESET" }
+
+func (*AlterTenantReset) cclOnlyStatement() {}
+
+// StatementReturnType implements the Statement interface.
 func (*AlterTenantService) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
@@ -2258,6 +2269,7 @@ func (n *AlterTableOwner) String() string                     { return AsString(
 func (n *AlterTableSetSchema) String() string                 { return AsString(n) }
 func (n *AlterTenantCapability) String() string               { return AsString(n) }
 func (n *AlterTenantSetClusterSetting) String() string        { return AsString(n) }
+func (n *AlterTenantReset) String() string                    { return AsString(n) }
 func (n *AlterTenantRename) String() string                   { return AsString(n) }
 func (n *AlterTenantReplication) String() string              { return AsString(n) }
 func (n *AlterTenantService) String() string                  { return AsString(n) }

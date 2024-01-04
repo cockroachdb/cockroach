@@ -222,3 +222,19 @@ func (n *AlterTenantService) Format(ctx *FmtCtx) {
 		ctx.WriteString(" STOP SERVICE")
 	}
 }
+
+// AlterTenantReset represents an ALTER VIRTUAL CLUSTER RESET statement.
+type AlterTenantReset struct {
+	TenantSpec *TenantSpec
+	Timestamp  Expr
+}
+
+var _ Statement = &AlterTenantReset{}
+
+// Format implements the NodeFormatter interface.
+func (n *AlterTenantReset) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER VIRTUAL CLUSTER ")
+	ctx.FormatNode(n.TenantSpec)
+	ctx.WriteString(" RESET DATA TO SYSTEM TIME ")
+	ctx.FormatNode(n.Timestamp)
+}
