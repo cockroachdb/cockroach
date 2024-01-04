@@ -2791,8 +2791,11 @@ func (ds *DistSender) maybeIncrementErrCounters(br *kvpb.BatchResponse, err erro
 	}
 }
 
-// AllRangeSpans returns the list of all ranges that cover input spans along with the
-// nodeCountHint indicating the number of nodes that host those ranges.
+// AllRangeSpans returns a list of spans equivalent to the input list of spans
+// where each returned span represents all the keys in a range.
+//
+// For example, if the input span is {1-8} and the ranges are
+// {0-2}{2-4}{4-6}{6-8}{8-10}, then the output is {1-2}{2-4}{4-6}{6-8}{8-9}.
 func (ds *DistSender) AllRangeSpans(
 	ctx context.Context, spans []roachpb.Span,
 ) (_ []roachpb.Span, nodeCountHint int, _ error) {
@@ -2810,8 +2813,19 @@ func (ds *DistSender) AllRangeSpans(
 			if !it.Valid() {
 				return nil, 0, it.Error()
 			}
+
+			// If the range boundaries are outside the original span, trim
+			// the range.
+			startKey := it.Desc().StartKey
+			if startKey.Compare(rSpan.Key) == -1 {
+				startKey = rSpan.Key
+			}
+			endKey := it.Desc().EndKey
+			if endKey.Compare(rSpan.EndKey) == 1 {
+				endKey = rSpan.EndKey
+			}
 			ranges = append(ranges, roachpb.Span{
-				Key: it.Desc().StartKey.AsRawKey(), EndKey: it.Desc().EndKey.AsRawKey(),
+				Key: startKey.AsRawKey(), EndKey: endKey.AsRawKey(),
 			})
 			for _, r := range it.Desc().InternalReplicas {
 				replicas.Set(int(r.NodeID), 0)
