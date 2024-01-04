@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -1387,9 +1388,18 @@ func (n *Node) batchInternal(
 		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
 		writeBytes.Release()
 	}()
+
 	var pErr *kvpb.Error
 	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, args)
 	if pErr != nil {
+		if proxyResponse, wasProxied := n.maybeProxyRequest(ctx, args, pErr); wasProxied {
+			// If the proxy response succeeded, then we want to return the response
+			// immediately, however if it failed, then we need to run this request
+			// locally to see if we can satisfy it or give the client updated
+			// routing information.
+			return proxyResponse, nil
+		}
+
 		br = &kvpb.BatchResponse{}
 		if pErr.Index != nil && keyvissettings.Enabled.Get(&n.storeCfg.Settings.SV) {
 			// Tell the SpanStatsCollector about the requests in this BatchRequest,
@@ -1441,6 +1451,90 @@ func (n *Node) batchInternal(
 	br.Error = pErr
 
 	return br, nil
+}
+
+// maybeProxyRequest is called after the server returned an error and it
+// attempts to proxy the request if it can. We attempt o proxy requests if two
+// primary conditions are met:
+// 1) The ProxyRangeInfo header is set on the request indicating the client
+// would like us to proxy this request if we can't evaluate it.
+// 2) Local evaulation has resulted in a NotLeaseHolderError which matches the
+// ProxyRangeInfo from the client.
+// If these conditions are met, we will attempt to send the request through our
+// local DistSender stack and modify the result to
+func (n *Node) maybeProxyRequest(
+	ctx context.Context, ba *kvpb.BatchRequest, pErr *kvpb.Error,
+) (*kvpb.BatchResponse, bool) {
+	if ba.ProxyRangeInfo == nil {
+		log.VEvent(ctx, 3, "not a proxy request")
+		return nil, false
+	}
+
+	// The setting is also checked on the client.
+	if !kvcoord.ProxyBatchRequest.Get(&n.execCfg.Settings.SV) {
+		log.VEventf(ctx, 3, "proxy disabled")
+		return nil, false
+	}
+
+	switch tErr := pErr.GetDetail().(type) {
+	case *kvpb.StoreNotFoundError, *kvpb.RangeNotFoundError:
+		// TODO(baptist): We don't expect to hit this branch today except in
+		// cases where we are moving the range off this store and the client has
+		// stale information. If we proxy requests through non-replicas for a
+		// range we could remove this restriction and instead handle this proxy
+		// request.
+		log.VEventf(ctx, 2, "don't proxy NotFound error %v", pErr)
+		return nil, false
+	case *kvpb.NotLeaseHolderError:
+		// If we would normally return a NLHE because we think the client has
+		// stale information, see if our information would update the clients
+		// state. If so, rather than proxying this request, fail back to the
+		// client first.
+		leaseCompatible := tErr.Lease == nil || ba.ProxyRangeInfo.Lease.Sequence >= tErr.Lease.Sequence
+		descCompatible := ba.ProxyRangeInfo.Desc.Generation >= tErr.RangeDesc.Generation
+		if leaseCompatible && descCompatible {
+			log.VEventf(ctx, 2, "proxy request %v after error %v with up-tp-date info", ba, pErr)
+		} else {
+			log.VEventf(ctx, 2, "out-of-date client information on proxy request %v != %v with up-tp-date info", ba.ProxyRangeInfo, pErr)
+			return nil, false
+		}
+	default:
+		log.VEventf(ctx, 2, "local returned non-proxyable errors %v", pErr)
+		return nil, false
+	}
+
+	// TODO(baptist): The TraceInfo here is what was used for processing this
+	// request locally. Its not clear if this is useful for debugging purposes,
+	// but there isn't a clean place to put this right now. We can't send a
+	// request with non-empty TraceInfo. A fast follow-up PR needs to clean up
+	// how TraceInfo and CollectedSpans are managed for proxy requests.
+	if !ba.TraceInfo.Empty() {
+		ba.TraceInfo.Reset()
+	}
+	// The BatchRequest API requires the timestamp is empty on all requests and
+	// sets it based on the ReadTimestamp of the transaction. Clear the
+	// timestamp so BatchRequest.SetActiveTimestamp doesn't error.
+	if !ba.Timestamp.IsEmpty() {
+		ba.Timestamp.Reset()
+	}
+	// Send the request through our local dist_sender.
+	br, pErr := n.proxySender.Send(ctx, ba)
+	log.VEventf(ctx, 2, "proxy response is %v %v", br, pErr)
+
+	if pErr != nil {
+		// For connection errors, we treat it as though the proxy never happened,
+		// return the local error from attempting the proxy.
+		if grpcutil.IsClosedConnection(pErr.GoError()) {
+			log.VEventf(ctx, 2, "node received network error on proxy request: %s", pErr)
+			return nil, false
+		}
+		// For other errors, put them into a BatchResponse with this error and send
+		// this error to the client instead.
+		br = &kvpb.BatchResponse{}
+		br.Error = pErr
+	}
+
+	return br, true
 }
 
 // getLocalityComparison takes gatewayNodeID as input and returns the locality
