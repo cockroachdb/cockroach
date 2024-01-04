@@ -69,7 +69,7 @@ func registerOnlineRestore(r registry.Registry) {
 		},
 		{
 			// 400GB tpce Online Restore
-			hardware:               makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */, workloadNode: true}),
+			hardware:               makeHardwareSpecs(hardwareSpecs{ebsThroughput: 1000 /* MB/s */, workloadNode: true}),
 			backup:                 makeRestoringBackupSpecs(backupSpecs{nonRevisionHistory: true, version: "v23.1.11"}),
 			timeout:                1 * time.Hour,
 			suites:                 registry.Suites(registry.Nightly),
@@ -78,7 +78,7 @@ func registerOnlineRestore(r registry.Registry) {
 		{
 			// 8TB tpce Online Restore
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 2000,
-				ebsThroughput: 250 /* MB/s */, workloadNode: true}),
+				ebsThroughput: 1000 /* MB/s */, workloadNode: true}),
 			backup: makeRestoringBackupSpecs(backupSpecs{
 				nonRevisionHistory: true,
 				version:            "v23.1.11",

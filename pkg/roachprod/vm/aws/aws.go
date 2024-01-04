@@ -149,6 +149,10 @@ func (d *ebsDisk) Set(s string) error {
 			// 125MB/s is base throughput for gp3.
 			d.Throughput = 125
 		}
+
+		if d.IOPs < d.Throughput*4 {
+			d.IOPs = d.Throughput * 6
+		}
 	case "io1", "io2":
 		if d.IOPs == 0 {
 			return errors.AssertionFailedf("Iops required for %s disk", d.VolumeType)
