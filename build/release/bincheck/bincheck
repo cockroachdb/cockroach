@@ -56,6 +56,19 @@ EOF
 "$cockroach" sql --insecure -e 'SELECT * FROM bank.accounts' > actual
 diff -u expected actual
 
+# Verify libgeos functionality on all platforms except MacOS ARM64 and Windows
+if [[ $(uname -om) == "Darwin arm64" ]]; then
+  echo "Skipping libgeos tests"
+else
+  echo "Testing libgeos functionality"
+  cat > expected <<EOF
+is_valid
+t
+EOF
+  "$cockroach" sql --insecure -e 'SELECT ST_IsValid(ST_MakePoint(1, 1)) is_valid;' > actual
+  diff -u expected actual
+fi
+
 # Attempt a clean shutdown for good measure. We'll force-kill in the atexit
 # handler if this fails.
 kill -TERM $(cat "$pidfile") || true

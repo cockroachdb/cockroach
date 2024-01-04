@@ -399,7 +399,7 @@ func TestParseSearchPathEdgeCases(t *testing.T) {
 		expected    []string
 		expectedErr bool
 	}{
-		{input: ``, expectedErr: true},
+		{input: ``, expected: []string{}},
 		{input: `""`, expected: []string{""}},
 		{input: `  `, expectedErr: true},
 		{input: `a, `, expectedErr: true},

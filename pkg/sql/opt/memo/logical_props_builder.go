@@ -968,11 +968,7 @@ func (b *logicalPropsBuilder) buildWithScanProps(withScan *WithScanExpr, rel *pr
 	// -----------------------
 	// Inherit dependencies from the referenced expression (remapping the
 	// columns).
-	rel.FuncDeps.CopyFrom(&bindingProps.FuncDeps)
-	for i := range withScan.InCols {
-		rel.FuncDeps.AddEquivalency(withScan.InCols[i], withScan.OutCols[i])
-	}
-	rel.FuncDeps.ProjectCols(withScan.OutCols.ToSet())
+	rel.FuncDeps.RemapFrom(&bindingProps.FuncDeps, withScan.InCols, withScan.OutCols)
 
 	// Cardinality
 	// -----------
