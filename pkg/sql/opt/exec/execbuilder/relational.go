@@ -1321,11 +1321,15 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 	rightExpr := join.Child(1).(memo.RelExpr)
 	filters := join.Child(2).(*memo.FiltersExpr)
 	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
-		// We have a partial join, and we want to make sure that the relation
-		// with smaller cardinality is on the right side. Note that we assumed
-		// it during the costing.
-		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
-		// choosing a side.
+		// The execution engine always builds the hash table on the right side
+		// of the join, so it is beneficial for the smaller relation to be on
+		// the right. Note that the coster assumes that execbuilder will make
+		// this decision.
+		//
+		// There is no need to consider join hints here because there is no way
+		// to apply join hints to semi or anti joins. Join hints are only
+		// possible on explicit joins using the JOIN keyword, and semi and anti
+		// joins are only created from implicit joins without the JOIN keyword.
 		leftRowCount := leftExpr.Relational().Statistics().RowCount
 		rightRowCount := rightExpr.Relational().Statistics().RowCount
 		if leftRowCount < rightRowCount {
