@@ -47,6 +47,10 @@ const (
 	FailSlow
 )
 
+// AlwaysRetry is a retry function that always returns true to indicate that
+// the operation should be retried.
+var AlwaysRetry = func(res *RunResultDetails) bool { return true }
+
 func OnNodes(nodes Nodes) RunOptions {
 	return RunOptions{
 		Nodes: nodes,
