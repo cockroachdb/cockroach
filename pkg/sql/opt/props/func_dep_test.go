@@ -101,7 +101,7 @@ func TestFuncDeps_ComputeClosure(t *testing.T) {
 	fd2.AddConstants(c(2))
 	fd2.AddEquivalency(2, 3)
 	fd2.AddSynthesizedCol(c(4), 5)
-	verifyFD(t, fd2, "lax-key(1); ()-->(2,3), (1)~~>(4), (2)==(3), (3)==(2), (4)-->(5)")
+	verifyFD(t, fd2, "lax-key(1); ()-->(2,3), (1)~~>(4), (4)-->(5), (2)==(3), (3)==(2)")
 
 	testcases := []struct {
 		fd       *props.FuncDepSet
@@ -139,7 +139,7 @@ func TestFuncDeps_InClosureOf(t *testing.T) {
 	fd.AddLaxKey(c(1), c(1, 4))
 	fd.AddEquivalency(2, 3)
 	fd.AddSynthesizedCol(c(4), 5)
-	verifyFD(t, fd, "lax-key(1); ()-->(2,3), (1)~~>(4), (2)==(3), (3)==(2), (4)-->(5)")
+	verifyFD(t, fd, "lax-key(1); ()-->(2,3), (1)~~>(4), (4)-->(5), (2)==(3), (3)==(2)")
 
 	testcases := []struct {
 		cols     []opt.ColumnID
@@ -395,7 +395,7 @@ func TestFuncDeps_MakeMax1Row(t *testing.T) {
 	abcde.AddEquivalency(1, 2)
 	abcde.AddEquivalency(3, 4)
 	abcde.MakeMax1Row(c(1, 2, 3))
-	verifyFD(t, abcde, "key(); ()-->(1-3), (2)==(1), (1)==(2)")
+	verifyFD(t, abcde, "key(); ()-->(1-3), (1)==(2), (2)==(1)")
 	testColsAreStrictKey(t, abcde, c(), true)
 
 	// Retain partial equivalencies. (1)==(2) is extracted from (1)==(2,4).
@@ -403,7 +403,7 @@ func TestFuncDeps_MakeMax1Row(t *testing.T) {
 	abcde.AddEquivalency(1, 2)
 	abcde.AddEquivalency(1, 4)
 	abcde.MakeMax1Row(c(1, 2, 3))
-	verifyFD(t, abcde, "key(); ()-->(1-3), (2)==(1), (1)==(2)")
+	verifyFD(t, abcde, "key(); ()-->(1-3), (1)==(2), (2)==(1)")
 	testColsAreStrictKey(t, abcde, c(), true)
 
 	// No columns with equivalencies.
@@ -609,7 +609,7 @@ func TestFuncDeps_AddSynthesizedCol(t *testing.T) {
 	var anb1 props.FuncDepSet
 	anb1.CopyFrom(makeJoinFD(t))
 	anb1.AddSynthesizedCol(c(2), 100)
-	verifyFD(t, &anb1, "key(10,11); (1)-->(2-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (1)==(10), (10)==(1), (2)-->(100)")
+	verifyFD(t, &anb1, "key(10,11); (1)-->(2-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (2)-->(100), (1)==(10), (10)==(1)")
 	anb1.ProjectCols(c(1, 11, 100))
 	verifyFD(t, &anb1, "key(1,11); (1)-->(100)")
 	testColsAreStrictKey(t, &anb1, c(1, 11, 100), true)
@@ -1130,9 +1130,9 @@ func TestFuncDeps_MakeLeftOuter(t *testing.T) {
 	roj.MakeProduct(makeMnpqFD(t))
 	roj.AddEquivalency(1, 10)
 	roj.AddEquivalency(1, 2)
-	verifyFD(t, &roj, "key(10,11); (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (1)==(2,10), (10)==(1,2), (2)==(1,10)")
+	verifyFD(t, &roj, "key(10,11); (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (1)==(2,10), (2)==(1,10), (10)==(1,2)")
 	roj.MakeLeftOuter(mnpq, &props.FuncDepSet{}, preservedCols, nullExtendedCols, c(1, 2, 10, 11))
-	verifyFD(t, &roj, "key(10,11); (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(1-5,12,13), (1)==(2), (2)==(1), (1)~~>(10), (2)~~>(10)")
+	verifyFD(t, &roj, "key(10,11); (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(1-5,12,13), (1)~~>(10), (2)~~>(10), (1)==(2), (2)==(1)")
 
 	// Test filter equivalency that includes columns from both sides of join
 	// boundary.

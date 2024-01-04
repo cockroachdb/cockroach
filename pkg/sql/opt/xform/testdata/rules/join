@@ -204,7 +204,7 @@ inner-join (merge)
  ├── columns: a:1!null b:2 c:3 s:7!null t:8!null u:9!null x:12!null y:13 z:14
  ├── left ordering: +7
  ├── right ordering: +12
- ├── fd: (7)==(1,12), (12)==(1,7), (1)==(7,12)
+ ├── fd: (1)==(7,12), (7)==(1,12), (12)==(1,7)
  ├── scan stu
  │    ├── columns: s:7!null t:8!null u:9!null
  │    ├── key: (7-9)
@@ -227,7 +227,7 @@ inner-join (merge)
 memo expect=ReorderJoins
 SELECT * FROM abc, stu, xyz WHERE abc.a=stu.s AND stu.s=xyz.x
 ----
-memo (optimized, ~45KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14])
+memo (optimized, ~46KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (inner-join G8 G9 G7) (inner-join G9 G8 G7) (merge-join G2 G3 G10 inner-join,+1,+7) (merge-join G3 G2 G10 inner-join,+7,+1) (lookup-join G3 G10 abc@ab,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G5 G6 G10 inner-join,+7,+12) (merge-join G6 G5 G10 inner-join,+12,+7) (lookup-join G6 G10 stu,keyCols=[12],outCols=(1-3,7-9,12-14)) (merge-join G8 G9 G10 inner-join,+7,+12) (lookup-join G8 G10 xyz@xy,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G9 G8 G10 inner-join,+12,+7)
  │    └── [presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14]
  │         ├── best: (merge-join G5="[ordering: +7]" G6="[ordering: +(1|12)]" G10 inner-join,+7,+12)
@@ -289,7 +289,7 @@ memo (optimized, ~45KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:1
 memo
 SELECT * FROM abc, stu, xyz, pqr WHERE a = 1
 ----
-memo (optimized, ~29KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
+memo (optimized, ~30KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22]
  │         ├── best: (inner-join G3 G2 G4)
@@ -335,7 +335,7 @@ SELECT *
 FROM stu, abc, xyz, pqr
 WHERE u = a AND a = x AND x = p
 ----
-memo (optimized, ~39KB, required=[presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
+memo (optimized, ~40KB, required=[presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+3,+6) (merge-join G3 G2 G5 inner-join,+6,+3) (lookup-join G3 G5 stu@uts,keyCols=[6],outCols=(1-3,6-8,12-14,18-22))
  │    └── [presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22]
  │         ├── best: (merge-join G2="[ordering: +3]" G3="[ordering: +(6|12|18)]" G5 inner-join,+3,+6)
@@ -429,9 +429,9 @@ INNER JOIN LATERAL (
 )
 ON a = v
 ----
-memo (optimized, ~16KB, required=[presentation: a:1,b:2,c:3,v:7,s:8,t:9,u:10])
+memo (optimized, ~16KB, required=[presentation: a:1,b:2,c:3,s:8,t:9,u:10,v:7])
  ├── G1: (inner-join-apply G2 G3 G4)
- │    └── [presentation: a:1,b:2,c:3,v:7,s:8,t:9,u:10]
+ │    └── [presentation: a:1,b:2,c:3,s:8,t:9,u:10,v:7]
  │         ├── best: (inner-join-apply G2 G3 G4)
  │         └── cost: 1197.24
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
@@ -645,7 +645,7 @@ FROM
 INNER JOIN small ON medium.n = small.n
 ----
 right-join (hash)
- ├── columns: m:1 n:2!null m:6 n:7 m:11 n:12!null
+ ├── columns: m:11 n:12!null m:1 n:2!null m:6 n:7
  ├── fd: (2)==(12), (12)==(2)
  ├── scan large
  │    └── columns: large.m:6 large.n:7
@@ -677,7 +677,7 @@ INNER JOIN small
 ON result.a = small.n AND (small.m = result.b OR result.b IS NULL)
 ----
 project
- ├── columns: a:2!null b:7 m:11 n:12!null
+ ├── columns: m:11 n:12!null a:2!null b:7
  ├── fd: (2)==(12), (12)==(2)
  └── select
       ├── columns: medium.m:1 medium.n:2!null large.m:6 large.n:7 small.m:11 small.n:12!null
@@ -714,7 +714,7 @@ FROM
 INNER JOIN small ON small.n = medium.n
 ----
 project
- ├── columns: n:2!null m:11 n:12!null
+ ├── columns: m:11 n:12!null n:2!null
  ├── fd: (2)==(12), (12)==(2)
  └── semi-join (hash)
       ├── columns: medium.m:1 medium.n:2!null small.m:11 small.n:12!null
@@ -746,7 +746,7 @@ FROM
 INNER JOIN small ON small.n = medium.n
 ----
 project
- ├── columns: n:2!null m:11 n:12!null
+ ├── columns: m:11 n:12!null n:2!null
  ├── fd: (2)==(12), (12)==(2)
  └── anti-join (cross)
       ├── columns: medium.m:1 medium.n:2!null small.m:11 small.n:12!null
@@ -1056,7 +1056,7 @@ Source expression:
    │    └── filters
    │         └── t = y
    └── filters
-        └── a = x
+        └── a = s
 
 New expression 1 of 1:
   full-join (hash)
@@ -1067,7 +1067,7 @@ New expression 1 of 1:
    │    └── filters
    │         └── t = y
    └── filters
-        └── a = x
+        └── a = s
 
 ================================================================================
 ReorderJoins
@@ -1081,7 +1081,7 @@ Source expression:
    │    └── filters
    │         └── t = y
    └── filters
-        └── a = x
+        └── a = s
 
 New expression 1 of 3:
   full-join (hash)
@@ -1092,27 +1092,27 @@ New expression 1 of 3:
    │         └── t = y
    ├── scan abc
    └── filters
-        └── a = x
+        └── a = s
 
 New expression 2 of 3:
   full-join (hash)
-   ├── scan stu
    ├── full-join (hash)
+   │    ├── scan stu
    │    ├── scan abc
-   │    ├── scan xyz
    │    └── filters
-   │         └── a = x
+   │         └── a = s
+   ├── scan xyz
    └── filters
         └── t = y
 
 New expression 3 of 3:
   full-join (hash)
+   ├── scan xyz
    ├── full-join (hash)
+   │    ├── scan stu
    │    ├── scan abc
-   │    ├── scan xyz
    │    └── filters
-   │         └── a = x
-   ├── scan stu
+   │         └── a = s
    └── filters
         └── t = y
 ----
@@ -1241,7 +1241,7 @@ New expression 2 of 2:
 memo expect=ReorderJoins
 SELECT * FROM abc JOIN xyz ON a=z
 ----
-memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~14KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+9) (lookup-join G3 G5 abc@ab,keyCols=[9],outCols=(1-3,7-9))
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (inner-join G2 G3 G4)
@@ -1339,7 +1339,7 @@ opt expect=ReorderJoins
 SELECT * FROM (SELECT * FROM abc WHERE b=1) FULL OUTER JOIN xyz ON a=z
 ----
 full-join (hash)
- ├── columns: a:1 b:2 c:3 x:7 y:8 z:9
+ ├── columns: x:7 y:8 z:9 a:1 b:2 c:3
  ├── scan xyz
  │    └── columns: x:7 y:8 z:9
  ├── scan abc@bc
@@ -1355,7 +1355,7 @@ full-join (hash)
 memo expect-not=ReorderJoins
 SELECT * FROM abc INNER LOOKUP JOIN xyz ON a=x
 ----
-memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4) (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,7-9))
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,7-9))
@@ -1485,7 +1485,7 @@ right-join (hash)
 memo
 SELECT * FROM abc RIGHT OUTER JOIN xyz ON a=z
 ----
-memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~14KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (left-join G2 G3 G4) (right-join G3 G2 G4) (lookup-join G2 G5 abc@ab,keyCols=[9],outCols=(1-3,7-9)) (merge-join G3 G2 G5 right-join,+1,+9)
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (left-join G2 G3 G4)
@@ -1514,7 +1514,7 @@ opt
 SELECT * FROM (SELECT * FROM abc WHERE b=1) RIGHT OUTER JOIN xyz ON a=z
 ----
 left-join (hash)
- ├── columns: a:1 b:2 c:3 x:7 y:8 z:9
+ ├── columns: x:7 y:8 z:9 a:1 b:2 c:3
  ├── scan xyz
  │    └── columns: x:7 y:8 z:9
  ├── scan abc@bc
@@ -1815,7 +1815,7 @@ inner-join (merge)
 memo
 SELECT * FROM abc JOIN xyz ON a=x
 ----
-memo (optimized, ~15KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~16KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+7) (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,7-9)) (merge-join G3 G2 G5 inner-join,+7,+1) (lookup-join G3 G5 abc@ab,keyCols=[7],outCols=(1-3,7-9))
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (merge-join G3="[ordering: +7]" G2="[ordering: +1]" G5 inner-join,+7,+1)
@@ -1937,7 +1937,7 @@ inner-join (lookup xyz@xy)
 memo disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
 ----
-memo (optimized, ~19KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
+memo (optimized, ~20KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+2,+3,+6,+7,+8) (merge-join G2 G3 G5 inner-join,+3,+2,+1,+8,+7,+6) (lookup-join G2 G5 stu [as=r],keyCols=[1 2 3],outCols=(1-3,6-8)) (lookup-join G2 G5 stu@uts [as=r],keyCols=[3 2 1],outCols=(1-3,6-8)) (merge-join G3 G2 G5 inner-join,+6,+7,+8,+1,+2,+3) (merge-join G3 G2 G5 inner-join,+8,+7,+6,+3,+2,+1) (lookup-join G3 G5 stu [as=l],keyCols=[6 7 8],outCols=(1-3,6-8)) (lookup-join G3 G5 stu@uts [as=l],keyCols=[8 7 6],outCols=(1-3,6-8))
  │    └── [presentation: s:1,t:2,u:3,s:6,t:7,u:8]
  │         ├── best: (merge-join G2="[ordering: +1,+2,+3]" G3="[ordering: +6,+7,+8]" G5 inner-join,+1,+2,+3,+6,+7,+8)
@@ -2105,7 +2105,7 @@ opt
 SELECT * FROM stu LEFT OUTER JOIN abc ON (c,b,a) = (s,t,u)
 ----
 left-join (merge)
- ├── columns: s:1!null t:2!null u:3!null a:6 b:7 c:8
+ ├── columns: a:6 b:7 c:8 s:1!null t:2!null u:3!null
  ├── left ordering: +3,+2,+1
  ├── right ordering: +6,+7,+8
  ├── scan stu@uts
@@ -2207,7 +2207,7 @@ SELECT * FROM abc JOIN xyz ON a=x AND a=y
 inner-join (lookup abc@ab)
  ├── columns: a:1!null b:2 c:3 x:7!null y:8!null z:9
  ├── key columns: [7] = [1]
- ├── fd: (7)==(1,8), (8)==(1,7), (1)==(7,8)
+ ├── fd: (1)==(7,8), (7)==(1,8), (8)==(1,7)
  ├── select
  │    ├── columns: x:7!null y:8!null z:9
  │    ├── fd: (7)==(8), (8)==(7)
@@ -2353,7 +2353,7 @@ opt expect=GenerateLookupJoins
 SELECT * FROM small JOIN abcd ON a=m
 ----
 inner-join (lookup abcd)
- ├── columns: m:1!null n:2 a:6!null b:7 c:8
+ ├── columns: a:6!null b:7 c:8 m:1!null n:2
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
@@ -2371,7 +2371,7 @@ opt expect=GenerateLookupJoins
 SELECT * FROM small LEFT JOIN abcd ON a=m
 ----
 left-join (lookup abcd)
- ├── columns: m:1 n:2 a:6 b:7 c:8
+ ├── columns: a:6 b:7 c:8 m:1 n:2
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── left-join (lookup abcd@abcd_a_b_idx)
@@ -2388,7 +2388,7 @@ opt expect=GenerateLookupJoins
 SELECT * FROM small JOIN abcd ON a=m AND b>n
 ----
 inner-join (lookup abcd)
- ├── columns: m:1!null n:2!null a:6!null b:7!null c:8
+ ├── columns: a:6!null b:7!null c:8 m:1!null n:2!null
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
@@ -2409,7 +2409,7 @@ opt expect=GenerateLookupJoins
 SELECT * FROM small LEFT JOIN abcd ON a=m AND b>n
 ----
 left-join (lookup abcd)
- ├── columns: m:1 n:2 a:6 b:7 c:8
+ ├── columns: a:6 b:7 c:8 m:1 n:2
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── left-join (lookup abcd@abcd_a_b_idx)
@@ -2429,7 +2429,7 @@ opt expect=GenerateLookupJoins
 SELECT * FROM small JOIN abcd ON a=m AND c>n
 ----
 inner-join (lookup abcd)
- ├── columns: m:1!null n:2!null a:6!null b:7 c:8!null
+ ├── columns: a:6!null b:7 c:8!null m:1!null n:2!null
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
@@ -2449,7 +2449,7 @@ opt expect=GenerateLookupJoins
 SELECT * FROM small LEFT JOIN abcd ON a=m AND c>n
 ----
 left-join (lookup abcd)
- ├── columns: m:1 n:2 a:6 b:7 c:8
+ ├── columns: a:6 b:7 c:8 m:1 n:2
  ├── key columns: [15] = [9]
  ├── lookup columns are key
  ├── second join in paired joiner
@@ -2476,7 +2476,7 @@ GenerateLookupJoins
 Source expression:
   inner-join (hash)
    ├── columns: a:1!null b:2 c:3 x:7!null y:8!null z:9
-   ├── fd: (7)==(1,8), (8)==(1,7), (1)==(7,8)
+   ├── fd: (1)==(7,8), (7)==(1,8), (8)==(1,7)
    ├── select
    │    ├── columns: x:7!null y:8!null z:9
    │    ├── fd: (7)==(8), (8)==(7)
@@ -2494,7 +2494,7 @@ New expression 1 of 1:
   inner-join (lookup abc@ab)
    ├── columns: a:1!null b:2 c:3 x:7!null y:8!null z:9
    ├── key columns: [7] = [1]
-   ├── fd: (7)==(1,8), (8)==(1,7), (1)==(7,8)
+   ├── fd: (1)==(7,8), (7)==(1,8), (8)==(1,7)
    ├── select
    │    ├── columns: x:7!null y:8!null z:9
    │    ├── fd: (7)==(8), (8)==(7)
@@ -2924,7 +2924,7 @@ opt expect=GenerateLookupJoins
 SELECT * FROM (VALUES (1), (2)) AS u(y) LEFT JOIN t59615 t ON u.y = t.y
 ----
 left-join (lookup t59615 [as=t])
- ├── columns: y:1!null x:2 y:3 z:4
+ ├── columns: x:2 y:3 z:4 y:1!null
  ├── lookup expression
  │    └── filters
  │         ├── x:2 IN (1, 3) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3]; tight)]
@@ -3050,7 +3050,7 @@ SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS q(w, x) LEFT JOIN lookup_e
 ON q.w = t.w AND q.x = t.x
 ----
 left-join (lookup lookup_expr [as=t])
- ├── columns: w:1!null x:2 r:3 k:4 u:5 v:6 w:7 x:8 y:9 z:10
+ ├── columns: r:3 k:4 u:5 v:6 w:7 x:8 y:9 z:10 w:1!null x:2
  ├── key columns: [3 4] = [3 4]
  ├── lookup columns are key
  ├── cardinality: [3 - ]
@@ -3088,7 +3088,7 @@ SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS q(w, u) LEFT JOIN lookup_e
 ON q.w = t.w AND q.u = t.u
 ----
 left-join (lookup lookup_expr [as=t])
- ├── columns: w:1!null u:2 r:3 k:4 u:5 v:6 w:7 x:8 y:9 z:10
+ ├── columns: r:3 k:4 u:5 v:6 w:7 x:8 y:9 z:10 w:1!null u:2
  ├── key columns: [3 4] = [3 4]
  ├── lookup columns are key
  ├── cardinality: [3 - ]
@@ -3118,7 +3118,7 @@ SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS q(v, w) LEFT JOIN lookup_e
 ON q.v = t.v AND q.w = t.w
 ----
 left-join (lookup lookup_expr [as=t])
- ├── columns: v:1!null w:2 r:3 k:4 u:5 v:6 w:7 x:8 y:9 z:10
+ ├── columns: r:3 k:4 u:5 v:6 w:7 x:8 y:9 z:10 v:1!null w:2
  ├── key columns: [3 4] = [3 4]
  ├── lookup columns are key
  ├── cardinality: [3 - ]
@@ -3152,7 +3152,7 @@ SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS q(w, v) LEFT LOOKUP JOIN l
 ON (t.u = 1 OR t.u = 2) AND q.v = t.v
 ----
 left-join (lookup lookup_expr [as=t])
- ├── columns: w:1!null v:2 r:3 k:4 u:5 v:6 w:7 x:8 y:9 z:10
+ ├── columns: r:3 k:4 u:5 v:6 w:7 x:8 y:9 z:10 w:1!null v:2
  ├── key columns: [3 4] = [3 4]
  ├── lookup columns are key
  ├── cardinality: [3 - ]
@@ -3190,7 +3190,7 @@ SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS q(w, x) LEFT JOIN lookup_e
 ON q.w = t.w
 ----
 right-join (hash)
- ├── columns: w:1!null x:2 r:3 k:4 u:5 v:6 w:7 x:8 y:9 z:10
+ ├── columns: r:3 k:4 u:5 v:6 w:7 x:8 y:9 z:10 w:1!null x:2
  ├── cardinality: [3 - ]
  ├── fd: (3,4)-->(5-9)
  ├── scan lookup_expr [as=t]
@@ -3485,7 +3485,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small JOIN abcd ON a=m AND b>1
 ----
 inner-join (lookup abcd)
- ├── columns: m:1!null n:2 a:6!null b:7!null c:8
+ ├── columns: a:6!null b:7!null c:8 m:1!null n:2
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
@@ -3506,7 +3506,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small LEFT JOIN abcd ON a=m AND b>1
 ----
 left-join (lookup abcd)
- ├── columns: m:1 n:2 a:6 b:7 c:8
+ ├── columns: a:6 b:7 c:8 m:1 n:2
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── left-join (lookup abcd@abcd_a_b_idx)
@@ -3526,7 +3526,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small JOIN abcd ON a=m AND b>n AND b>1
 ----
 inner-join (lookup abcd)
- ├── columns: m:1!null n:2!null a:6!null b:7!null c:8
+ ├── columns: a:6!null b:7!null c:8 m:1!null n:2!null
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
@@ -3548,7 +3548,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small LEFT JOIN abcd ON a=m AND b>n AND b>1
 ----
 left-join (lookup abcd)
- ├── columns: m:1 n:2 a:6 b:7 c:8
+ ├── columns: a:6 b:7 c:8 m:1 n:2
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── left-join (lookup abcd@abcd_a_b_idx)
@@ -3569,7 +3569,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small JOIN abcd ON a=m AND c>n AND b>1
 ----
 inner-join (lookup abcd)
- ├── columns: m:1!null n:2!null a:6!null b:7!null c:8!null
+ ├── columns: a:6!null b:7!null c:8!null m:1!null n:2!null
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
@@ -3592,7 +3592,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small LEFT JOIN abcd ON a=m AND c>n AND b>1
 ----
 left-join (lookup abcd)
- ├── columns: m:1 n:2 a:6 b:7 c:8
+ ├── columns: a:6 b:7 c:8 m:1 n:2
  ├── key columns: [15] = [9]
  ├── lookup columns are key
  ├── second join in paired joiner
@@ -3615,7 +3615,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN abcde ON a=m AND b=10
 ----
 inner-join (lookup abcde)
- ├── columns: m:1!null n:2 a:6!null b:7!null c:8 d:9 e:10
+ ├── columns: a:6!null b:7!null c:8 d:9 e:10 m:1!null n:2
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7), (1)==(6), (6)==(1)
@@ -3638,7 +3638,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN abcde ON a=m AND c=10
 ----
 inner-join (lookup abcde)
- ├── columns: m:1!null n:2 a:6!null b:7 c:8!null d:9 e:10
+ ├── columns: a:6!null b:7 c:8!null d:9 e:10 m:1!null n:2
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(8), (1)==(6), (6)==(1)
@@ -3657,7 +3657,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN abcde ON a=m AND b=10 AND c=10
 ----
 inner-join (lookup abcde)
- ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null d:9 e:10
+ ├── columns: a:6!null b:7!null c:8!null d:9 e:10 m:1!null n:2
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7,8), (1)==(6), (6)==(1)
@@ -3681,7 +3681,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN abcde ON a=m AND b IN (10, 20, 30)
 ----
 inner-join (lookup abcde)
- ├── columns: m:1!null n:2 a:6!null b:7!null c:8 d:9 e:10
+ ├── columns: a:6!null b:7!null c:8 d:9 e:10 m:1!null n:2
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
@@ -3703,7 +3703,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN abcde ON a=m AND b IN (10, 20, 30) AND c=10
 ----
 inner-join (lookup abcde)
- ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null d:9 e:10
+ ├── columns: a:6!null b:7!null c:8!null d:9 e:10 m:1!null n:2
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(8), (1)==(6), (6)==(1)
@@ -3732,7 +3732,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN abcde ON a=m AND b=10 AND c IN (10, 20, 30)
 ----
 inner-join (lookup abcde)
- ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null d:9 e:10
+ ├── columns: a:6!null b:7!null c:8!null d:9 e:10 m:1!null n:2
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7), (1)==(6), (6)==(1)
@@ -3759,7 +3759,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN abcde ON a=m AND b IN (10, 20) AND c IN (30, 40)
 ----
 inner-join (lookup abcde)
- ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null d:9 e:10
+ ├── columns: a:6!null b:7!null c:8!null d:9 e:10 m:1!null n:2
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
@@ -3781,7 +3781,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN abcde ON a=m AND b=10 AND c=10 AND d=10
 ----
 inner-join (lookup abcde)
- ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null d:9!null e:10
+ ├── columns: a:6!null b:7!null c:8!null d:9!null e:10 m:1!null n:2
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7-9), (1)==(6), (6)==(1)
@@ -3806,7 +3806,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN abcde ON a=m AND b<10
 ----
 inner-join (lookup abcde)
- ├── columns: m:1!null n:2 a:6!null b:7!null c:8 d:9 e:10
+ ├── columns: a:6!null b:7!null c:8 d:9 e:10 m:1!null n:2
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
@@ -3855,7 +3855,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN bool_col ON a=m AND b=10 AND c=true
 ----
 inner-join (lookup bool_col)
- ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null d:9 e:10
+ ├── columns: a:6!null b:7!null c:8!null d:9 e:10 m:1!null n:2
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7,8), (1)==(6), (6)==(1)
@@ -3878,7 +3878,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN bool_col ON a=m AND b=10 AND c
 ----
 inner-join (lookup bool_col)
- ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null d:9 e:10
+ ├── columns: a:6!null b:7!null c:8!null d:9 e:10 m:1!null n:2
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7,8), (1)==(6), (6)==(1)
@@ -3901,7 +3901,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN bool_col ON a=m AND b=10 AND NOT c
 ----
 inner-join (lookup bool_col)
- ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null d:9 e:10
+ ├── columns: a:6!null b:7!null c:8!null d:9 e:10 m:1!null n:2
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7,8), (1)==(6), (6)==(1)
@@ -3940,7 +3940,7 @@ opt expect=GenerateLookupJoins
 SELECT * FROM small INNER JOIN abcd_check ON a=m
 ----
 inner-join (lookup abcd_check)
- ├── columns: m:1!null n:2 a:6!null b:7!null c:8 d:9
+ ├── columns: a:6!null b:7!null c:8 d:9 m:1!null n:2
  ├── key columns: [10] = [10]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
@@ -3960,7 +3960,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN abcd_check ON a=m AND c=30
 ----
 inner-join (lookup abcd_check)
- ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null d:9
+ ├── columns: a:6!null b:7!null c:8!null d:9 m:1!null n:2
  ├── key columns: [10] = [10]
  ├── lookup columns are key
  ├── fd: ()-->(8), (1)==(6), (6)==(1)
@@ -3991,7 +3991,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN abcd_comp ON a=m AND d=5
 ----
 inner-join (lookup abcd_comp)
- ├── columns: m:1!null n:2 a:6!null b:7 c:8 d:9!null
+ ├── columns: a:6!null b:7 c:8 d:9!null m:1!null n:2
  ├── key columns: [10] = [10]
  ├── lookup columns are key
  ├── fd: ()-->(7,9), (1)==(6), (6)==(1)
@@ -4014,7 +4014,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN abcd_comp ON a=m AND d=5 AND c=30
 ----
 inner-join (lookup abcd_comp)
- ├── columns: m:1!null n:2 a:6!null b:7 c:8!null d:9!null
+ ├── columns: a:6!null b:7 c:8!null d:9!null m:1!null n:2
  ├── key columns: [10] = [10]
  ├── lookup columns are key
  ├── fd: ()-->(7-9), (1)==(6), (6)==(1)
@@ -4198,7 +4198,7 @@ opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM t80525_a INNER LOOKUP JOIN t80525_bcd ON b = a AND c = false AND d > 0
 ----
 inner-join (lookup t80525_bcd@t80525_bcd_b_c_d_idx)
- ├── columns: a:1!null b:5!null c:6!null d:7!null
+ ├── columns: b:5!null c:6!null d:7!null a:1!null
  ├── flags: force lookup join (into right side)
  ├── lookup expression
  │    └── filters
@@ -4671,7 +4671,7 @@ FROM p101844 p LEFT LOOKUP JOIN c101844@c_p_id_id_key c
 ON c.p_id = p.id AND c.id = 1234
 ----
 left-join (lookup c101844@c_p_id_id_key [as=c])
- ├── columns: r:1!null id:2!null r:5 p_id:6 id:7
+ ├── columns: r:5 p_id:6 id:7 r:1!null id:2!null
  ├── flags: force lookup join (into right side)
  ├── key columns: [2 10] = [6 7]
  ├── lookup columns are key
@@ -7204,7 +7204,7 @@ WHERE n.name = 'Upper West Side'
 OR n.name = 'Upper East Side'
 GROUP BY n.name, n.geom
 ----
-memo (optimized, ~35KB, required=[presentation: name:16,popn_per_sqkm:22])
+memo (optimized, ~36KB, required=[presentation: name:16,popn_per_sqkm:22])
  ├── G1: (project G2 G3 name)
  │    └── [presentation: name:16,popn_per_sqkm:22]
  │         ├── best: (project G2 G3 name)
@@ -9368,7 +9368,7 @@ opt expect-not=GenerateInvertedJoins
 SELECT * FROM (VALUES ('"a"'::jsonb), ('"b"'::jsonb)) AS u(y) LEFT JOIN t59615_inv t ON t.y @> u.y
 ----
 right-join (cross)
- ├── columns: y:1!null x:2 y:3 z:4
+ ├── columns: x:2 y:3 z:4 y:1!null
  ├── cardinality: [2 - ]
  ├── immutable
  ├── scan t59615_inv [as=t]
@@ -9899,21 +9899,21 @@ project
       │              ├── columns: a:25!null b:26!null c:27!null q:31!null r:32!null
       │              ├── cardinality: [0 - 1]
       │              ├── key: ()
-      │              ├── fd: ()-->(25-27,31,32), (27)==(32), (32)==(27), (26)==(31), (31)==(26)
+      │              ├── fd: ()-->(25-27,31,32), (26)==(31), (31)==(26), (27)==(32), (32)==(27)
       │              └── inner-join (lookup zz)
       │                   ├── columns: a:25!null b:26!null c:27!null p:30!null q:31!null r:32!null
       │                   ├── key columns: [25] = [25]
       │                   ├── lookup columns are key
       │                   ├── cardinality: [0 - 1]
       │                   ├── key: ()
-      │                   ├── fd: ()-->(25-27,30-32), (31)==(26), (27)==(32), (32)==(27), (26)==(31)
+      │                   ├── fd: ()-->(25-27,30-32), (26)==(31), (31)==(26), (27)==(32), (32)==(27)
       │                   ├── inner-join (lookup zz@idx_c)
       │                   │    ├── columns: a:25!null c:27!null p:30!null q:31 r:32!null
       │                   │    ├── key columns: [32] = [27]
       │                   │    ├── lookup columns are key
       │                   │    ├── cardinality: [0 - 1]
       │                   │    ├── key: ()
-      │                   │    ├── fd: ()-->(25,27,30-32), (32)==(27), (27)==(32)
+      │                   │    ├── fd: ()-->(25,27,30-32), (27)==(32), (32)==(27)
       │                   │    ├── scan pqr
       │                   │    │    ├── columns: p:30!null q:31 r:32
       │                   │    │    ├── constraint: /30: [/0 - /0]
@@ -10006,7 +10006,7 @@ opt expect-not=PushJoinIntoIndexJoin
 SELECT * FROM (SELECT * FROM pqr ORDER BY q LIMIT 5) INNER HASH JOIN abc ON a=q
 ----
 inner-join (hash)
- ├── columns: p:1!null q:2!null r:3 s:4 t:5 a:8!null b:9 c:10
+ ├── columns: a:8!null b:9 c:10 p:1!null q:2!null r:3 s:4 t:5
  ├── flags: force hash join (store right side)
  ├── fd: (1)-->(2-5), (2)==(8), (8)==(2)
  ├── index-join pqr
@@ -10030,7 +10030,7 @@ opt expect-not=PushJoinIntoIndexJoin
 SELECT * FROM (SELECT * FROM pqr ORDER BY q LIMIT 5) INNER JOIN abc ON a=r
 ----
 inner-join (lookup abc@ab)
- ├── columns: p:1!null q:2 r:3!null s:4 t:5 a:8!null b:9 c:10
+ ├── columns: a:8!null b:9 c:10 p:1!null q:2 r:3!null s:4 t:5
  ├── key columns: [3] = [8]
  ├── fd: (1)-->(2-5), (3)==(8), (8)==(3)
  ├── index-join pqr
@@ -10058,7 +10058,7 @@ INNER JOIN LATERAL (
 ON True
 ----
 inner-join-apply
- ├── columns: s:1!null t:2!null u:3!null p:6!null q:7!null r:8 s:9 t:10 a:13!null b:14 c:15 "?column?":19
+ ├── columns: p:6!null q:7!null r:8 s:9 t:10 a:13!null b:14 c:15 "?column?":19 s:1!null t:2!null u:3!null
  ├── immutable
  ├── fd: (1-3,6)-->(7-10), (1-3,13)-->(19), (7)==(13), (13)==(7)
  ├── scan stu
@@ -10157,7 +10157,7 @@ SELECT 1 FROM (VALUES (1), (1)) JOIN (VALUES (1), (1), (1)) ON true
 UNION ALL
 SELECT 1 FROM (VALUES (1), (1), (1)) JOIN (VALUES (1), (1)) ON true
 ----
-memo (optimized, ~22KB, required=[presentation: ?column?:7])
+memo (optimized, ~23KB, required=[presentation: ?column?:7])
  ├── G1: (union-all G2 G3)
  │    └── [presentation: ?column?:7]
  │         ├── best: (union-all G2 G3)
@@ -10422,7 +10422,7 @@ opt expect=HoistProjectFromInnerJoin
 SELECT * FROM (SELECT a, a+b FROM abcd) JOIN small ON a=m
 ----
 project
- ├── columns: a:1!null "?column?":7 m:8!null n:9
+ ├── columns: m:8!null n:9 a:1!null "?column?":7
  ├── immutable
  ├── fd: (1)==(8), (8)==(1)
  ├── inner-join (lookup abcd@abcd_a_b_idx)
@@ -10490,7 +10490,7 @@ opt expect=HoistProjectFromInnerJoin set=disable_hoist_projection_in_join_limita
 SELECT * FROM (SELECT a, a+b FROM (SELECT tab1.* from abcd tab1, abcd tab2)) JOIN small ON a=m;
 ----
 project
- ├── columns: a:1!null "?column?":13 m:14!null n:15
+ ├── columns: m:14!null n:15 a:1!null "?column?":13
  ├── immutable
  ├── fd: (1)==(14), (14)==(1)
  ├── inner-join (cross)
@@ -10513,7 +10513,7 @@ opt expect-not=HoistProjectFromInnerJoin set=disable_hoist_projection_in_join_li
 SELECT * FROM (SELECT a, a+b FROM (SELECT tab1.* from abcd tab1, abcd tab2)) JOIN small ON a=m
 ----
 inner-join (hash)
- ├── columns: a:1!null "?column?":13 m:14!null n:15
+ ├── columns: m:14!null n:15 a:1!null "?column?":13
  ├── immutable
  ├── fd: (1)==(14), (14)==(1)
  ├── project
@@ -10734,7 +10734,7 @@ opt expect-not=HoistProjectFromLeftJoin
 SELECT * FROM (SELECT a, a+b FROM (SELECT tab1.* from abcd tab1, abcd tab2)) LEFT OUTER JOIN small ON a=m
 ----
 left-join (hash)
- ├── columns: a:1 "?column?":13 m:14 n:15
+ ├── columns: m:14 n:15 a:1 "?column?":13
  ├── immutable
  ├── project
  │    ├── columns: "?column?":13 tab1.a:1
@@ -11455,11 +11455,11 @@ opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
 SELECT * FROM def_part INNER JOIN abc_part ON e = a WHERE d = 1
 ----
 project
- ├── columns: r:1!null d:2!null e:3!null f:4 r:7!null a:8!null b:9 c:10 v:11!null
+ ├── columns: r:7!null a:8!null b:9 c:10 v:11!null r:1!null d:2!null e:3!null f:4
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(1-4,7-11), (8)==(3), (3)==(8)
+ ├── fd: ()-->(1-4,7-11), (3)==(8), (8)==(3)
  ├── distribution: east
  ├── inner-join (lookup abc_part)
  │    ├── columns: def_part.r:1!null d:2!null e:3!null f:4 abc_part.r:7!null a:8!null b:9 c:10
@@ -11474,7 +11474,7 @@ project
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1-4,7-10), (8)==(3), (3)==(8)
+ │    ├── fd: ()-->(1-4,7-10), (3)==(8), (8)==(3)
  │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
@@ -11507,7 +11507,7 @@ opt locality=(region=west) expect=GenerateLocalityOptimizedLookupJoin
 SELECT * FROM def_part LEFT JOIN abc_part ON e = a WHERE d = 1
 ----
 project
- ├── columns: r:1!null d:2!null e:3 f:4 r:7 a:8 b:9 c:10 v:11
+ ├── columns: r:7 a:8 b:9 c:10 v:11 r:1!null d:2!null e:3 f:4
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── key: ()
@@ -11646,11 +11646,11 @@ opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
 SELECT * FROM def_part INNER JOIN abc_part ON f = b WHERE d = 10
 ----
 project
- ├── columns: r:1!null d:2!null e:3 f:4!null r:7!null a:8!null b:9!null c:10 v:11!null
+ ├── columns: r:7!null a:8!null b:9!null c:10 v:11!null r:1!null d:2!null e:3 f:4!null
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(1-4,7-11), (9)==(4), (4)==(9)
+ ├── fd: ()-->(1-4,7-11), (4)==(9), (9)==(4)
  ├── distribution: east
  ├── inner-join (lookup abc_part)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null abc_part.r:7!null a:8!null b:9!null c:10
@@ -11658,7 +11658,7 @@ project
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1-4,7-10), (9)==(4), (4)==(9)
+ │    ├── fd: ()-->(1-4,7-10), (4)==(9), (9)==(4)
  │    ├── distribution: east
  │    ├── inner-join (lookup abc_part@b_idx)
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null abc_part.r:7!null a:8!null b:9!null
@@ -11673,7 +11673,7 @@ project
  │    │    ├── lookup columns are key
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(1-4,7-9), (9)==(4), (4)==(9)
+ │    │    ├── fd: ()-->(1-4,7-9), (4)==(9), (9)==(4)
  │    │    ├── distribution: east
  │    │    ├── locality-optimized-search
  │    │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
@@ -11707,11 +11707,11 @@ opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
 SELECT * FROM def_part INNER JOIN abc_part ON e = a AND f > b WHERE d = 1
 ----
 project
- ├── columns: r:1!null d:2!null e:3!null f:4!null r:7!null a:8!null b:9!null c:10 v:11!null
+ ├── columns: r:7!null a:8!null b:9!null c:10 v:11!null r:1!null d:2!null e:3!null f:4!null
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(1-4,7-11), (8)==(3), (3)==(8)
+ ├── fd: ()-->(1-4,7-11), (3)==(8), (8)==(3)
  ├── distribution: east
  ├── inner-join (lookup abc_part)
  │    ├── columns: def_part.r:1!null d:2!null e:3!null f:4!null abc_part.r:7!null a:8!null b:9!null c:10
@@ -11726,7 +11726,7 @@ project
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1-4,7-10), (8)==(3), (3)==(8)
+ │    ├── fd: ()-->(1-4,7-10), (3)==(8), (8)==(3)
  │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
@@ -11760,7 +11760,7 @@ opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
 SELECT * FROM def_part INNER JOIN abc_part ON e = a WHERE f = 10
 ----
 distribute
- ├── columns: r:1!null d:2!null e:3!null f:4!null r:7!null a:8!null b:9 c:10 v:11!null
+ ├── columns: r:7!null a:8!null b:9 c:10 v:11!null r:1!null d:2!null e:3!null f:4!null
  ├── immutable
  ├── key: (2)
  ├── fd: ()-->(4), (2)-->(1,3), (3)-->(1,2), (8)-->(7,9-11), (9)~~>(7,8,10), (3)==(8), (8)==(3)
@@ -11896,7 +11896,7 @@ opt locality=(region=east) expect-not=GenerateLocalityOptimizedLookupJoin set=re
 SELECT * FROM def_part INNER JOIN abc_part ON f = c WHERE d = 10
 ----
 project
- ├── columns: r:1!null d:2!null e:3 f:4!null r:7!null a:8!null b:9 c:10!null v:11!null
+ ├── columns: r:7!null a:8!null b:9 c:10!null v:11!null r:1!null d:2!null e:3 f:4!null
  ├── immutable
  ├── key: (8)
  ├── fd: ()-->(1-4,10), (8)-->(7,9,11), (9)~~>(7,8), (4)==(10), (10)==(4)
@@ -12004,7 +12004,7 @@ opt locality=(region=east) expect-not=GenerateLocalityOptimizedLookupJoin set=re
 SELECT * FROM def_part INNER JOIN abc_part ON f = v WHERE d = 1
 ----
 inner-join (lookup abc_part)
- ├── columns: r:1!null d:2!null e:3 f:4!null r:7!null a:8!null b:9 c:10 v:11!null
+ ├── columns: r:7!null a:8!null b:9 c:10 v:11!null r:1!null d:2!null e:3 f:4!null
  ├── key columns: [7 8] = [7 8]
  ├── lookup columns are key
  ├── immutable
@@ -12020,7 +12020,7 @@ inner-join (lookup abc_part)
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1-4,7,8,11), (11)==(4), (4)==(11)
+ │    ├── fd: ()-->(1-4,7,8,11), (4)==(11), (11)==(4)
  │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
@@ -12220,7 +12220,7 @@ AND time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00'
 AND name='cpu'
 ----
 left-join (lookup metric_values)
- ├── columns: id:1!null name:2 metric_id:5 time:6 value:7
+ ├── columns: metric_id:5 time:6 value:7 id:1!null name:2
  ├── lookup expression
  │    └── filters
  │         ├── id:1 = metric_id:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
@@ -12340,7 +12340,7 @@ opt expect=SplitDisjunctionOfJoinTerms
 SELECT * FROM abc INNER JOIN xyz on abc.a = xyz.x or abc.b = xyz.y
 ----
 project
- ├── columns: a:1!null b:2!null c:3 x:6 y:7 z:8
+ ├── columns: x:6 y:7 z:8 a:1!null b:2!null c:3
  ├── fd: (1,2)-->(3)
  └── distinct-on
       ├── columns: a:1!null b:2!null c:3 x:6 y:7 z:8 rowid:9!null
@@ -12400,7 +12400,7 @@ opt expect=SplitDisjunctionOfJoinTerms
 SELECT * FROM abc INNER JOIN xyz on abc.a = xyz.x or abc.b = xyz.y where abc.b < 1 and xyz.y > 1
 ----
 project
- ├── columns: a:1!null b:2!null c:3 x:6 y:7!null z:8
+ ├── columns: x:6 y:7!null z:8 a:1!null b:2!null c:3
  ├── fd: (1,2)-->(3)
  └── distinct-on
       ├── columns: a:1!null b:2!null c:3 x:6 y:7!null z:8 rowid:9!null
@@ -12769,7 +12769,7 @@ opt expect-not=SplitDisjunctionOfJoinTerms
 SELECT * FROM abc LEFT JOIN xyz on abc.a = xyz.x or abc.b = xyz.y
 ----
 left-join (cross)
- ├── columns: a:1!null b:2!null c:3 x:6 y:7 z:8
+ ├── columns: x:6 y:7 z:8 a:1!null b:2!null c:3
  ├── fd: (1,2)-->(3)
  ├── scan abc
  │    ├── columns: a:1!null b:2!null c:3
@@ -13358,7 +13358,7 @@ project
  ├── sort
  │    ├── columns: tab_17533.col1_3:3 tab_17533.col1_6:6 tab_17533.col1_7:7 tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16!null tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_2:32!null tab_17536.col1_3:33!null tab_17536.col1_6:36!null tab_17537.col1_3:43!null tab_17537.col1_4:44!null tab_17537.crdb_internal_mvcc_timestamp:49!null tab_17538.col1_2:52!null tab_17538.crdb_internal_mvcc_timestamp:59!null
  │    ├── immutable
- │    ├── fd: (19)==(29), (29)==(19), (14)==(24,44), (24)==(14,44), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16), (49)==(59), (59)==(49), (32)==(52), (52)==(32), (44)==(14,24)
+ │    ├── fd: (19)==(29), (29)==(19), (14)==(24,44), (24)==(14,44), (44)==(14,24), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16), (49)==(59), (59)==(49), (32)==(52), (52)==(32)
  │    ├── ordering: +(14|24|44),-(23|33) [actual: +14,-23]
  │    └── left-join (lookup table11 [as=tab_17533])
  │         ├── columns: tab_17533.col1_3:3 tab_17533.col1_6:6 tab_17533.col1_7:7 tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16!null tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_2:32!null tab_17536.col1_3:33!null tab_17536.col1_6:36!null tab_17537.col1_3:43!null tab_17537.col1_4:44!null tab_17537.crdb_internal_mvcc_timestamp:49!null tab_17538.col1_2:52!null tab_17538.crdb_internal_mvcc_timestamp:59!null
@@ -13366,22 +13366,22 @@ project
  │         ├── lookup columns are key
  │         ├── second join in paired joiner
  │         ├── immutable
- │         ├── fd: (19)==(29), (29)==(19), (14)==(24,44), (24)==(14,44), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16), (49)==(59), (59)==(49), (32)==(52), (52)==(32), (44)==(14,24)
+ │         ├── fd: (19)==(29), (29)==(19), (14)==(24,44), (24)==(14,44), (44)==(14,24), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16), (49)==(59), (59)==(49), (32)==(52), (52)==(32)
  │         ├── left-join (lookup table11@table1_col1_3_col1_1_expr_idx [as=tab_17533])
  │         │    ├── columns: tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16!null tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_2:32!null tab_17536.col1_3:33!null tab_17536.col1_6:36!null tab_17537.col1_3:43!null tab_17537.col1_4:44!null tab_17537.crdb_internal_mvcc_timestamp:49!null tab_17538.col1_2:52!null tab_17538.crdb_internal_mvcc_timestamp:59!null tab_17533.col1_3:65 tab_17533.rowid:70 continuation:73
  │         │    ├── key columns: [43] = [65]
  │         │    ├── first join in paired joiner; continuation column: continuation:73
  │         │    ├── immutable
- │         │    ├── fd: (19)==(29), (29)==(19), (14)==(24,44), (24)==(14,44), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16), (49)==(59), (59)==(49), (32)==(52), (52)==(32), (44)==(14,24), (70)-->(65,73)
+ │         │    ├── fd: (70)-->(65,73), (19)==(29), (29)==(19), (14)==(24,44), (24)==(14,44), (44)==(14,24), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16), (49)==(59), (59)==(49), (32)==(52), (52)==(32)
  │         │    ├── inner-join (hash)
  │         │    │    ├── columns: tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16!null tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_2:32!null tab_17536.col1_3:33!null tab_17536.col1_6:36!null tab_17537.col1_3:43!null tab_17537.col1_4:44!null tab_17537.crdb_internal_mvcc_timestamp:49!null tab_17538.col1_2:52!null tab_17538.crdb_internal_mvcc_timestamp:59!null
  │         │    │    ├── immutable
- │         │    │    ├── fd: (19)==(29), (29)==(19), (14)==(24,44), (24)==(14,44), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16), (49)==(59), (59)==(49), (32)==(52), (52)==(32), (44)==(14,24)
+ │         │    │    ├── fd: (19)==(29), (29)==(19), (14)==(24,44), (24)==(14,44), (44)==(14,24), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16), (49)==(59), (59)==(49), (32)==(52), (52)==(32)
  │         │    │    ├── inner-join (hash)
  │         │    │    │    ├── columns: tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16!null tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_2:32!null tab_17536.col1_3:33!null tab_17536.col1_6:36!null tab_17537.col1_3:43!null tab_17537.col1_4:44!null tab_17537.crdb_internal_mvcc_timestamp:49
  │         │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-more)
  │         │    │    │    ├── immutable
- │         │    │    │    ├── fd: (24)==(14,44), (44)==(14,24), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (19)==(29), (29)==(19), (14)==(24,44), (16)==(36), (36)==(16)
+ │         │    │    │    ├── fd: (14)==(24,44), (24)==(14,44), (44)==(14,24), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (19)==(29), (29)==(19), (16)==(36), (36)==(16)
  │         │    │    │    ├── scan table11 [as=tab_17537]
  │         │    │    │    │    └── columns: tab_17537.col1_3:43!null tab_17537.col1_4:44!null tab_17537.crdb_internal_mvcc_timestamp:49
  │         │    │    │    ├── inner-join (lookup table11 [as=tab_17536])
@@ -13394,7 +13394,7 @@ project
  │         │    │    │    │    │    ├── columns: tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16 tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_3:33!null tab_17536.rowid:38!null
  │         │    │    │    │    │    ├── key columns: [23 21] = [33 31]
  │         │    │    │    │    │    ├── immutable
- │         │    │    │    │    │    ├── fd: (19)==(29), (29)==(19), (14)==(24), (24)==(14), (38)-->(31,33), (23)==(33), (33)==(23), (21)==(31), (31)==(21)
+ │         │    │    │    │    │    ├── fd: (38)-->(31,33), (19)==(29), (29)==(19), (14)==(24), (24)==(14), (23)==(33), (33)==(23), (21)==(31), (31)==(21)
  │         │    │    │    │    │    ├── inner-join (hash)
  │         │    │    │    │    │    │    ├── columns: tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16 tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null
  │         │    │    │    │    │    │    ├── immutable
@@ -13476,7 +13476,7 @@ limit
  ├── columns: p_id:1!null id2:2 id3:3 crdb_region:4!null c_id:7!null c_p_id:8!null crdb_region:9!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4,7-9), (8)==(1), (1)==(8)
+ ├── fd: ()-->(1-4,7-9), (1)==(8), (8)==(1)
  ├── distribution: east
  ├── locality-optimized-search
  │    ├── columns: p_id:1!null id2:2 id3:3 p.crdb_region:4!null c_id:7!null c_p_id:8!null c.crdb_region:9!null
@@ -13535,7 +13535,7 @@ limit
  ├── columns: p_id:1!null id2:2!null id3:3 crdb_region:4!null c_id:7!null c_p_id:8!null crdb_region:9!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4,7-9), (8)==(2), (2)==(8)
+ ├── fd: ()-->(1-4,7-9), (2)==(8), (8)==(2)
  ├── distribution: east
  ├── locality-optimized-search
  │    ├── columns: p_id:1!null id2:2!null id3:3 p.crdb_region:4!null c_id:7!null c_p_id:8!null c.crdb_region:9!null
@@ -13595,7 +13595,7 @@ limit
  ├── columns: p_id:1!null id2:2!null id3:3 crdb_region:4!null c_id:7!null c_p_id:8!null crdb_region:9!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4,7-9), (8)==(2), (2)==(8)
+ ├── fd: ()-->(1-4,7-9), (2)==(8), (8)==(2)
  ├── distribution: east
  ├── inner-join (lookup parent [as=p])
  │    ├── columns: p_id:1!null id2:2!null id3:3 p.crdb_region:4!null c_id:7!null c_p_id:8!null c.crdb_region:9!null
@@ -13664,14 +13664,14 @@ distribute
  ├── columns: p_id:1!null id2:2 id3:3!null crdb_region:4!null c_id:7!null c_p_id:8!null crdb_region:9!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4,7-9), (8)==(3), (3)==(8)
+ ├── fd: ()-->(1-4,7-9), (3)==(8), (8)==(3)
  ├── distribution: east
  ├── input distribution: central,east,west
  └── limit
       ├── columns: p_id:1!null id2:2 id3:3!null p.crdb_region:4!null c_id:7!null c_p_id:8!null c.crdb_region:9!null
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(1-4,7-9), (8)==(3), (3)==(8)
+      ├── fd: ()-->(1-4,7-9), (3)==(8), (8)==(3)
       ├── inner-join (hash)
       │    ├── columns: p_id:1!null id2:2 id3:3!null p.crdb_region:4!null c_id:7!null c_p_id:8!null c.crdb_region:9!null
       │    ├── key: (1,7)
@@ -13699,7 +13699,7 @@ opt locality=(region=east) expect-not=GenerateLocalityOptimizedSearchOfLocalityO
 SELECT * FROM child c LEFT OUTER JOIN parent p ON p_id = c_p_id LIMIT 1
 ----
 left-join (lookup parent [as=p])
- ├── columns: c_id:1!null c_p_id:2 crdb_region:3!null p_id:6 id2:7 id3:8 crdb_region:9
+ ├── columns: p_id:6 id2:7 id3:8 crdb_region:9 c_id:1!null c_p_id:2 crdb_region:3!null
  ├── lookup expression
  │    └── filters
  │         ├── p.crdb_region:9 = 'east' [outer=(9), constraints=(/9: [/'east' - /'east']; tight), fd=()-->(9)]
@@ -13872,7 +13872,7 @@ limit
  ├── columns: p_id:1!null id2:2!null id3:3 crdb_region:4!null c_id:7!null c_p_id:8!null crdb_region:9!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4,7-9), (8)==(2), (2)==(8)
+ ├── fd: ()-->(1-4,7-9), (2)==(8), (8)==(2)
  ├── distribution: east
  ├── inner-join (lookup child@child_crdb_region_c_p_id_idx [as=c])
  │    ├── columns: p_id:1!null id2:2!null id3:3 p.crdb_region:4!null c_id:7!null c_p_id:8!null c.crdb_region:9!null
@@ -13904,7 +13904,7 @@ limit
  ├── columns: p_id:1!null id2:2!null id3:3 c_id:6!null c_p_id:7!null v:8!null crdb_region:9!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-3,6-9), (7)==(2), (2)==(7)
+ ├── fd: ()-->(1-3,6-9), (2)==(7), (7)==(2)
  ├── distribution: east
  ├── inner-join (lookup parent2 [as=p])
  │    ├── columns: p_id:1!null id2:2!null id3:3 c_id:6!null c_p_id:7!null v:8!null crdb_region:9!null
@@ -13963,7 +13963,7 @@ limit
  ├── columns: p_id:1!null id2:2 id3:3!null c_id:6!null c_p_id:7!null v:8!null crdb_region:9!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-3,6-9), (7)==(3), (3)==(7)
+ ├── fd: ()-->(1-3,6-9), (3)==(7), (7)==(3)
  ├── distribution: east
  ├── inner-join (lookup parent2 [as=p])
  │    ├── columns: p_id:1!null id2:2 id3:3!null c_id:6!null c_p_id:7!null v:8!null crdb_region:9!null
@@ -14170,7 +14170,7 @@ distribute
            ├── cardinality: [0 - 1]
            ├── immutable
            ├── key: ()
-           ├── fd: ()-->(1-3,6-9,12), (12)==(3), (3)==(12)
+           ├── fd: ()-->(1-3,6-9,12), (3)==(12), (12)==(3)
            ├── inner-join (hash)
            │    ├── columns: p_id:1!null id2:2 id3:3!null c_id:6!null c_p_id:7 v:8!null crdb_region:9!null column12:12!null
            │    ├── immutable
@@ -14343,7 +14343,7 @@ limit
  ├── columns: p_id:1!null id2:2!null id3:3 c_id:6!null c_p_id:7!null v:8!null crdb_region:9!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-3,6-9), (7)==(2), (2)==(7)
+ ├── fd: ()-->(1-3,6-9), (2)==(7), (7)==(2)
  ├── distribution: east
  ├── inner-join (lookup parent2 [as=p])
  │    ├── columns: p_id:1!null id2:2!null id3:3 c_id:6!null c_p_id:7!null v:8!null crdb_region:9!null

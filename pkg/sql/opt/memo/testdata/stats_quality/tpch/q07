@@ -114,7 +114,7 @@ sort
       │    │    │    │    │    ├── key columns: [1] = [12]
       │    │    │    │    │    ├── stats: [rows=322646, distinct(1)=529.63, null(1)=0, distinct(4)=1.29975, null(4)=0, distinct(10)=290857, null(10)=0, distinct(12)=529.63, null(12)=0, distinct(13)=7, null(13)=0, distinct(49)=1.29975, null(49)=0, distinct(50)=1.33333, null(50)=0, distinct(55)=1.29975, null(55)=0, distinct(56)=1.33333, null(56)=0]
       │    │    │    │    │    ├── key: (10,13,55)
-      │    │    │    │    │    ├── fd: (1)-->(4), (49)-->(50), (55)-->(56), (4)==(49), (49)==(4), (10,13)-->(12), (1)==(12), (12)==(1)
+      │    │    │    │    │    ├── fd: (1)-->(4), (49)-->(50), (55)-->(56), (10,13)-->(12), (4)==(49), (49)==(4), (1)==(12), (12)==(1)
       │    │    │    │    │    ├── inner-join (lookup supplier@s_nk)
       │    │    │    │    │    │    ├── save-table-name: q7_lookup_join_9
       │    │    │    │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) n1.n_nationkey:49(int!null) n1.n_name:50(char!null) n2.n_nationkey:55(int!null) n2.n_name:56(char!null)

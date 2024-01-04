@@ -106,7 +106,7 @@ top-k
       │    │    │    │    │    ├── key columns: [1] = [12]
       │    │    │    │    │    ├── stats: [rows=241984.5, distinct(1)=399.935, null(1)=0, distinct(2)=399.992, null(2)=0, distinct(4)=1, null(4)=0, distinct(10)=223798, null(10)=0, distinct(12)=399.935, null(12)=0, distinct(13)=7, null(13)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
       │    │    │    │    │    ├── key: (10,13)
-      │    │    │    │    │    ├── fd: ()-->(40), (1)-->(2,4), (4)==(39), (39)==(4), (10,13)-->(12), (1)==(12), (12)==(1)
+      │    │    │    │    │    ├── fd: ()-->(40), (1)-->(2,4), (10,13)-->(12), (4)==(39), (39)==(4), (1)==(12), (12)==(1)
       │    │    │    │    │    ├── inner-join (lookup supplier)
       │    │    │    │    │    │    ├── save-table-name: q21_lookup_join_8
       │    │    │    │    │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) n_nationkey:39(int!null) n_name:40(char!null)
