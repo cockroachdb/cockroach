@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -1387,9 +1388,16 @@ func (n *Node) batchInternal(
 		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
 		writeBytes.Release()
 	}()
+
 	var pErr *kvpb.Error
 	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, args)
 	if pErr != nil {
+		if proxyResponse, wasProxied := n.maybeProxyRequest(ctx, args, pErr); wasProxied {
+			// If the proxy request succeeded then return its result instead of
+			// our error. If not, use our original error.
+			return proxyResponse, nil
+		}
+
 		br = &kvpb.BatchResponse{}
 		if pErr.Index != nil && keyvissettings.Enabled.Get(&n.storeCfg.Settings.SV) {
 			// Tell the SpanStatsCollector about the requests in this BatchRequest,
@@ -1441,6 +1449,77 @@ func (n *Node) batchInternal(
 	br.Error = pErr
 
 	return br, nil
+}
+
+// maybeProxyRequest is called after the server returned an error and it
+// attempts to proxy the request if it can. We attempt o proxy requests if two
+// primary conditions are met:
+// 1) The ProxyRangeInfo header is set on the request indicating the client
+// would like us to proxy this request if we can't evaluate it.
+// 2) Local evaluation has resulted in a NotLeaseHolderError which matches the
+// ProxyRangeInfo from the client.
+// If these conditions are met, attempt to send the request through our local
+// DistSender stack and use that result instead of our error.
+func (n *Node) maybeProxyRequest(
+	ctx context.Context, ba *kvpb.BatchRequest, pErr *kvpb.Error,
+) (*kvpb.BatchResponse, bool) {
+	if ba.ProxyRangeInfo == nil {
+		return nil, false
+	}
+
+	// NB: We don't handle StoreNotFound or RangeNotFound errors. If we want to
+	// support proxy requests through non-replicas we could proxy those errors
+	// as well.
+	var nlhe *kvpb.NotLeaseHolderError
+	if ok := errors.As(pErr.GetDetail(), &nlhe); !ok {
+		log.VEventf(ctx, 2, "non-proxyable errors %v", pErr)
+		return nil, false
+	}
+	// If because we think the client has
+	// stale information, see if our information would update the clients
+	// state. If so, rather than proxying this request, fail back to the
+	// client first.
+	leaseCompatible := nlhe.Lease != nil && ba.ProxyRangeInfo.Lease.Sequence >= nlhe.Lease.Sequence
+	descCompatible := ba.ProxyRangeInfo.Desc.Generation >= nlhe.RangeDesc.Generation
+	if !leaseCompatible || !descCompatible {
+		log.VEventf(ctx, 2, "out-of-date client information on proxy request %v != %v with up-tp-date info", ba.ProxyRangeInfo, pErr)
+		return nil, false
+	}
+
+	log.VEventf(ctx, 2, "proxy request for %v after local error %v", ba, pErr)
+	return n.sendProxyRequest(ctx, ba)
+}
+
+// sendProxyRequest will send a proxyRequest through the local sender stack. If
+// the request is able to be sent, it returns the response from the remote
+// sender. If there is no network connection to the remote node, then it returns
+// false and the caller should send their original response instead.
+func (n *Node) sendProxyRequest(
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, bool) {
+	// The BatchRequest API requires the timestamp is empty on all requests and
+	// sets it based on the ReadTimestamp of the transaction. Clear the
+	// timestamp so BatchRequest.SetActiveTimestamp doesn't error.
+	if !ba.Timestamp.IsEmpty() {
+		ba.Timestamp.Reset()
+	}
+	// TODO(baptist): Correctly set up the span / tracing.
+	br, pErr := n.proxySender.Send(ctx, ba)
+	log.VEventf(ctx, 2, "proxy response is %v %v", br, pErr)
+
+	if pErr != nil {
+		// For connection errors, we treat it as though the proxy never happened.
+		if grpcutil.IsClosedConnection(pErr.GoError()) || grpcutil.RequestDidNotStart(pErr.GoError()) {
+			log.VEventf(ctx, 2, "node received network error on proxy request: %s", pErr)
+			return nil, false
+		}
+		// For other errors, put them into a BatchResponse with this error and send
+		// this error to the client instead.
+		br = &kvpb.BatchResponse{}
+		br.Error = pErr
+	}
+
+	return br, true
 }
 
 // getLocalityComparison takes gatewayNodeID as input and returns the locality
