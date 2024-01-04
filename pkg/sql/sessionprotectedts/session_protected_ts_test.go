@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -62,6 +63,7 @@ func createSessionAndProtect(
 
 func TestSessionProtectedTimestampReconciler(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t, "May cause a conn executor deadlock fixed by #114783")
 
 	ctx := context.Background()
 	defer log.Scope(t).Close(t)
