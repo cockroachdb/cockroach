@@ -63,7 +63,7 @@ var (
 	tlsClientCert = flag.String("cert", "", "TLS client certificate for accessing EngFlow, probably a .crt file")
 	tlsClientKey  = flag.String("key", "", "TLS client key for accessing EngFlow")
 
-	extraParams = flag.String("extra", "", "comma-separated list of KEY=VALUE pairs like a=b,c=d")
+	extraParams = flag.String("extra", "", "comma-separated list of keys to mark as 'true' in the produced GitHub issue")
 
 	githubApiToken = os.Getenv("GITHUB_API_TOKEN")
 )
@@ -116,14 +116,8 @@ func failurePoster(res *testResultWithXml, sha string) githubpost.FailurePoster 
 			req.ExtraParams["attempt"] = fmt.Sprintf("%d", res.attempt)
 		}
 		if *extraParams != "" {
-			for _, kv := range strings.Split(*extraParams, ",") {
-				split := strings.SplitN(kv, "=", 2)
-				key := split[0]
-				var value string
-				if len(split) > 1 {
-					value = split[1]
-				}
-				req.ExtraParams[key] = value
+			for _, key := range strings.Split(*extraParams, ",") {
+				req.ExtraParams[key] = "true"
 			}
 		}
 		return fmter, req
