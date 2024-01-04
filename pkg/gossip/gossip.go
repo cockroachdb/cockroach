@@ -255,6 +255,17 @@ type Gossip struct {
 	bootstrapAddrs map[util.UnresolvedAddr]roachpb.NodeID
 
 	locality roachpb.Locality
+	// LocalityAddresses hold private addresses accessible only from other nodes
+	// in the corresponding locality. This information is sent by local clients
+	// to remote gossip servers on initial connection (where its kept in the
+	// serverInfo struct). When a client attempts to connect but the remote
+	// server's list of incoming connections is full, the server returns a
+	// Reply message with an alternative node (chosen at random from its
+	// connections), including that node's alternate_addr and locality_addresses.
+	// The client then picks the best matching locality address in
+	// locality_addresses based on its own locality, or, if no match is found,
+	// uses alternate_addr to contact the alternative server.
+	localityAddresses []roachpb.LocalityAddress
 }
 
 // New creates an instance of a gossip node.
@@ -268,6 +279,7 @@ func New(
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	locality roachpb.Locality,
+	localityAddresses []roachpb.LocalityAddress,
 ) *Gossip {
 	g := &Gossip{
 		server:            newServer(ambient, clusterID, nodeID, stopper, registry),
@@ -283,8 +295,8 @@ func New(
 		addressExists:     map[util.UnresolvedAddr]bool{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
 		locality:          locality,
+		localityAddresses: localityAddresses,
 	}
-
 	registry.AddMetric(g.outgoing.gauge)
 
 	g.mu.Lock()
@@ -299,21 +311,24 @@ func New(
 // NewTest is a simplified wrapper around New that creates the
 // ClusterIDContainer and NodeIDContainer internally. Used for testing.
 func NewTest(nodeID roachpb.NodeID, stopper *stop.Stopper, registry *metric.Registry) *Gossip {
-	return NewTestWithLocality(nodeID, stopper, registry, roachpb.Locality{})
+	return NewTestWithLocality(nodeID, stopper, registry, roachpb.Locality{},
+		[]roachpb.LocalityAddress{})
 }
 
-// NewTestWithLocality calls NewTest with an explicit locality value.
+// NewTestWithLocality calls NewTest with an explicit locality and
+// localityAddress values.
 func NewTestWithLocality(
 	nodeID roachpb.NodeID,
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	locality roachpb.Locality,
+	localityAddress []roachpb.LocalityAddress,
 ) *Gossip {
 	c := &base.ClusterIDContainer{}
 	n := &base.NodeIDContainer{}
 	var ac log.AmbientContext
 	ac.AddLogTag("n", n)
-	gossip := New(ac, c, n, stopper, registry, locality)
+	gossip := New(ac, c, n, stopper, registry, locality, localityAddress)
 	if nodeID != 0 {
 		n.Set(context.TODO(), nodeID)
 	}
@@ -1329,6 +1344,10 @@ func (g *Gossip) tightenNetwork(ctx context.Context, rpcContext *rpc.Context) {
 	}
 }
 
+func (g *Gossip) getLocalFwdAddress(c *client) *util.UnresolvedAddr {
+	return g.locality.LookupAddress(c.forwardLocalityAddrs, c.forwardAddr)
+}
+
 func (g *Gossip) doDisconnected(c *client, rpcContext *rpc.Context) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -1336,7 +1355,8 @@ func (g *Gossip) doDisconnected(c *client, rpcContext *rpc.Context) {
 
 	// If the client was disconnected with a forwarding address, connect now.
 	if c.forwardAddr != nil {
-		g.startClientLocked(*c.forwardAddr, rpcContext)
+		addr := g.getLocalFwdAddress(c)
+		g.startClientLocked(*addr, rpcContext)
 	}
 	g.maybeSignalStatusChangeLocked()
 }

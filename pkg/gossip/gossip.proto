@@ -13,6 +13,7 @@ package cockroach.gossip;
 option go_package = "github.com/cockroachdb/cockroach/pkg/gossip";
 
 import "roachpb/data.proto";
+import "roachpb/metadata.proto";
 import "util/hlc/timestamp.proto";
 import "util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
@@ -42,6 +43,9 @@ message Request {
   bytes cluster_id = 5 [(gogoproto.nullable) = false,
                         (gogoproto.customname) = "ClusterID",
                         (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  // locality-advertise-addr of the requesting node. Sent only with initial
+  // connection Request.
+  repeated roachpb.LocalityAddress locality_addresses = 6 [(gogoproto.nullable) = false];
 }
 
 // Response is returned from the Gossip.Gossip RPC.
@@ -63,6 +67,8 @@ message Response {
   // Map of high water timestamps from infos originating at other
   // nodes, as seen by the responder.
   map<int32, int64> high_water_stamps = 6 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID", (gogoproto.nullable) = false];
+  // locality-advertise-addr of the alternative node.
+  repeated roachpb.LocalityAddress alternate_locality_addresses = 7 [(gogoproto.nullable) = false];
 }
 
 message ConnStatus {
@@ -72,6 +78,9 @@ message ConnStatus {
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   string address = 2;
   int64 age_nanos = 3;
+  // locality-advertise-addr of the node.
+  repeated roachpb.LocalityAddress locality_address = 4 [(gogoproto.customname) =
+    "LocalityAddresses", (gogoproto.nullable) = false];
 }
 
 message MetricSnap {
