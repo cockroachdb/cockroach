@@ -134,7 +134,7 @@ func TestNodeDescriptorAddressForLocality(t *testing.T) {
 		},
 	} {
 		t.Run(tc.locality.String(), func(t *testing.T) {
-			require.Equal(t, tc.expected, *desc.AddressForLocality(tc.locality))
+			require.Equal(t, tc.expected, *desc.AddressForLocality(&tc.locality))
 		})
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"net"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -41,6 +42,9 @@ type server struct {
 
 	clusterID *base.ClusterIDContainer
 	NodeID    *base.NodeIDContainer
+
+	// Pointer to the map of node descriptors maintained by Gossip.
+	nodeDescs *syncutil.IntMap
 
 	stopper *stop.Stopper
 
@@ -74,6 +78,7 @@ func newServer(
 	nodeID *base.NodeIDContainer,
 	stopper *stop.Stopper,
 	registry *metric.Registry,
+	descriptors *syncutil.IntMap,
 ) *server {
 	s := &server{
 		AmbientContext: ambient,
@@ -83,6 +88,7 @@ func newServer(
 		tighten:        make(chan struct{}, 1),
 		nodeMetrics:    makeMetrics(),
 		serverMetrics:  makeMetrics(),
+		nodeDescs:      descriptors,
 	}
 
 	s.mu.is = newInfoStore(s.AmbientContext, nodeID, util.UnresolvedAddr{}, stopper)
@@ -259,40 +265,32 @@ func (s *server) gossipReceiver(
 					delete(s.mu.nodeMap, addr)
 				}(args.NodeID, args.Addr)
 			} else {
-				// If we don't have any space left, forward the client along to a peer.
-				var alternateAddr util.UnresolvedAddr
-				var alternateNodeID roachpb.NodeID
-				// Choose a random peer for forwarding.
-				altIdx := rand.Intn(len(s.mu.nodeMap))
-				for addr, info := range s.mu.nodeMap {
-					if altIdx == 0 {
-						alternateAddr = addr
-						alternateNodeID = info.peerID
-						break
-					}
-					altIdx--
-				}
-
-				s.nodeMetrics.ConnectionsRefused.Inc(1)
-				log.Infof(ctx, "refusing gossip from n%d (max %d conns); forwarding to n%d (%s)",
-					args.NodeID, s.mu.incoming.maxSize, alternateNodeID, alternateAddr)
-
-				*reply = Response{
-					NodeID:          s.NodeID.Get(),
-					AlternateAddr:   &alternateAddr,
-					AlternateNodeID: alternateNodeID,
-				}
-
-				s.mu.Unlock()
-				err := senderFn(reply)
-				s.mu.Lock()
-				// Naively, we would return err here unconditionally, but that
+				// If we don't have any space left, redirect this client to a random
+				// node. Naively, we would return err here unconditionally, but that
 				// introduces a race. Specifically, the client may observe the
 				// end of the connection before it has a chance to receive and
-				// process this message, which instructs it to hang up anyway.
-				// Instead, we send the message and proceed to gossip
+				// process our reply, which instructs it to hang up anyway.
+				// Instead, we send the reply and proceed to gossip
 				// normally, depending on the client to end the connection.
+				// We hang up if no redirect target is find or sending a reply fails.
+				s.nodeMetrics.ConnectionsRefused.Inc(1)
+				reply, err := s.getAlternativePeerAddress(args.NodeID)
 				if err != nil {
+					log.Infof(ctx, "refusing gossip from n%d (max %d conns); closing connection -- didn't"+
+						"find an alternative to suggest: %v", args.NodeID, s.mu.incoming.maxSize, err)
+					return err
+				}
+				log.Infof(ctx, "refusing gossip from n%d (max %d conns); forwarding to "+
+					"n%d (address: %s, locality advertised addresses: %s)", args.NodeID,
+					s.mu.incoming.maxSize, reply.AlternateNodeID, reply.AlternateAddr,
+					reply.AlternateLocalityAddresses)
+				// Found an alternative node to redirect to
+				s.mu.Unlock()
+				err = senderFn(reply)
+				s.mu.Lock()
+				if err != nil {
+					log.Infof(ctx, "closing connection from n%d -- sending a reply failed: %v", args.NodeID,
+						err)
 					return err
 				}
 			}
@@ -344,6 +342,60 @@ func (s *server) gossipReceiver(
 		mergeHighWaterStamps(&recvArgs.HighWaterStamps, (*argsPtr).HighWaterStamps)
 		*argsPtr = recvArgs
 	}
+}
+
+// getAlternativePeerAddress uses getRandomNodeDescriptor to either return
+// a Response including the id and addresses of the chosen descriptor, or
+// an error.
+func (s *server) getAlternativePeerAddress(
+	clientID roachpb.NodeID,
+) (*Response, error) {
+	// If we don't have any space left, redirect this client to a random node.
+	desc, err := s.getRandomNodeDescriptor(clientID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Response{
+		NodeID:                     s.NodeID.Get(),
+		AlternateAddr:              &desc.Address,
+		AlternateNodeID:            desc.NodeID,
+		AlternateLocalityAddresses: desc.LocalityAddress,
+	}, nil
+}
+
+// getRandomNodeDescriptor returns a random node descriptor chosen from nodeDescs
+// that is not this node or whose id is excludeID.
+func (s *server) getRandomNodeDescriptor(
+	excludeID roachpb.NodeID,
+) (*roachpb.NodeDescriptor, error) {
+	// It would be nicer if we filtered nodes that we know are not alive / decommissioning.
+	isValidCandidate := func(desc *roachpb.NodeDescriptor) bool {
+		return desc != nil && desc.NodeID != s.NodeID.Get() && desc.NodeID != excludeID
+	}
+	count := 0
+	s.nodeDescs.Range(func(key int64, value unsafe.Pointer) bool {
+		if isValidCandidate((*roachpb.NodeDescriptor)(value)) {
+			count++
+		}
+		return true
+	})
+	if count <= 0 {
+		return nil, errors.Errorf("no valid descriptors found")
+	}
+	randomIdx := rand.Intn(count)
+	var randomDesc *roachpb.NodeDescriptor
+	s.nodeDescs.Range(func(key int64, value unsafe.Pointer) bool {
+		if isValidCandidate((*roachpb.NodeDescriptor)(value)) {
+			if randomIdx == 0 {
+				randomDesc = (*roachpb.NodeDescriptor)(value)
+				return false
+			}
+			randomIdx--
+		}
+		return true
+	})
+	return randomDesc, nil
 }
 
 func (s *server) maybeTightenLocked() {

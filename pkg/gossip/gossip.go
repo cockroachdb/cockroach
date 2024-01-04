@@ -270,7 +270,6 @@ func New(
 	locality roachpb.Locality,
 ) *Gossip {
 	g := &Gossip{
-		server:            newServer(ambient, clusterID, nodeID, stopper, registry),
 		Connected:         make(chan struct{}),
 		outgoing:          makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsOutgoingGauge)),
 		bootstrapping:     map[string]struct{}{},
@@ -284,7 +283,7 @@ func New(
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
 		locality:          locality,
 	}
-
+	g.server = newServer(ambient, clusterID, nodeID, stopper, registry, &g.nodeDescs)
 	registry.AddMetric(g.outgoing.gauge)
 
 	g.mu.Lock()
@@ -860,7 +859,7 @@ func (g *Gossip) getNodeIDAddress(
 	if err != nil {
 		return nil, err
 	}
-	return nd.AddressForLocality(g.locality), nil
+	return nd.AddressForLocality(&g.locality), nil
 }
 
 // AddInfo adds or updates an info object. Returns an error if info
@@ -1329,6 +1328,10 @@ func (g *Gossip) tightenNetwork(ctx context.Context, rpcContext *rpc.Context) {
 	}
 }
 
+func (g *Gossip) getLocalFwdAddress(c *client) *util.UnresolvedAddr {
+	return g.locality.LookupAddress(c.forwardLocalityAddr, c.forwardAddr)
+}
+
 func (g *Gossip) doDisconnected(c *client, rpcContext *rpc.Context) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -1336,7 +1339,8 @@ func (g *Gossip) doDisconnected(c *client, rpcContext *rpc.Context) {
 
 	// If the client was disconnected with a forwarding address, connect now.
 	if c.forwardAddr != nil {
-		g.startClientLocked(*c.forwardAddr, rpcContext)
+		addr := g.getLocalFwdAddress(c)
+		g.startClientLocked(*addr, rpcContext)
 	}
 	g.maybeSignalStatusChangeLocked()
 }

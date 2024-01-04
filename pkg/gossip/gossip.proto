@@ -13,6 +13,7 @@ package cockroach.gossip;
 option go_package = "github.com/cockroachdb/cockroach/pkg/gossip";
 
 import "roachpb/data.proto";
+import "roachpb/metadata.proto";
 import "util/hlc/timestamp.proto";
 import "util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
@@ -63,6 +64,9 @@ message Response {
   // Map of high water timestamps from infos originating at other
   // nodes, as seen by the responder.
   map<int32, int64> high_water_stamps = 6 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID", (gogoproto.nullable) = false];
+  // locality-advertise-addr of the alternative node.
+  repeated roachpb.LocalityAddress locality_address = 7 [(gogoproto.customname) =
+    "AlternateLocalityAddresses", (gogoproto.nullable) = false];
 }
 
 message ConnStatus {

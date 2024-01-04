@@ -55,6 +55,7 @@ go_test(
         "keys_test.go",
         "main_test.go",
         "node_set_test.go",
+        "server_test.go",
         "status_test.go",
         "storage_test.go",
         "util_test.go",
