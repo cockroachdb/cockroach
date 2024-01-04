@@ -949,11 +949,17 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 	leftRowCount := join.Child(0).(memo.RelExpr).Relational().Statistics().RowCount
 	rightRowCount := join.Child(1).(memo.RelExpr).Relational().Statistics().RowCount
 	if (join.Op() == opt.SemiJoinOp || join.Op() == opt.AntiJoinOp) && leftRowCount < rightRowCount {
-		// If we have a semi or an anti join, during the execbuilding we choose
-		// the relation with smaller cardinality to be on the right side, so we
-		// need to swap row counts accordingly.
-		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
-		// choosing a side.
+		// The execution engine always builds the hash table on the right side
+		// of the join, so it is beneficial for the smaller relation to be on
+		// the right. This decision is made in execbuilder because the optimizer
+		// does not have an expressions representing right semi and anti joins,
+		// it only has SemiJoin and AntiJoin. We swap row counts here to mimic
+		// the decision made in execbuilder and generate an accurate cost.
+		//
+		// There is no need to consider join hints here because there is no way
+		// to apply join hints to semi or anti joins. Join hints are only
+		// possible on explicit joins using the JOIN keyword, and semi and anti
+		// joins are only created from implicit joins without the JOIN keyword.
 		leftRowCount, rightRowCount = rightRowCount, leftRowCount
 	}
 
