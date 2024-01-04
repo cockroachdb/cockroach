@@ -1,0 +1,5 @@
+test
+CREATE DATABASE db;
+DROP DATABASE db;
+CREATE DATABASE db;
+----

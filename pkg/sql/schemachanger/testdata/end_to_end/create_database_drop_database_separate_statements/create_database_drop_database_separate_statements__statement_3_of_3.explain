@@ -1,0 +1,104 @@
+/* setup */
+
+/* test */
+CREATE DATABASE db;
+DROP DATABASE db;
+EXPLAIN (DDL) CREATE DATABASE db;
+----
+Schema change plan for CREATE DATABASE ‹db›; following CREATE DATABASE ‹db›; DROP DATABASE ‹db›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 14 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC Database:{DescID: 106 (db+)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (db+), Name: "db"}
+ │         │    ├── ABSENT → PUBLIC DatabaseData:{DescID: 106 (db+)}
+ │         │    ├── ABSENT → PUBLIC Owner:{DescID: 106 (db+)}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (db+), Name: "admin"}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (db+), Name: "public"}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (db+), Name: "root"}
+ │         │    ├── ABSENT → PUBLIC Schema:{DescID: 107 (public+)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 107 (public+), Name: "public", ReferencedDescID: 106 (db+)}
+ │         │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 107 (public+), ReferencedDescID: 106 (db+)}
+ │         │    ├── ABSENT → PUBLIC Owner:{DescID: 107 (public+)}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 107 (public+), Name: "admin"}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 107 (public+), Name: "public"}
+ │         │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 107 (public+), Name: "root"}
+ │         └── 17 Mutation operations
+ │              ├── CreateDatabaseDescriptor {"DatabaseID":106}
+ │              ├── SetNameInDescriptor {"DescriptorID":106,"Name":"db"}
+ │              ├── AddDescriptorName {"Namespace":{"DescriptorID":106,"Name":"db"}}
+ │              ├── UpdateOwner {"Owner":{"DescriptorID":106,"Owner":"root"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2048,"UserName":"public"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+ │              ├── CreateSchemaDescriptor {"SchemaID":107}
+ │              ├── SetNameInDescriptor {"DescriptorID":107,"Name":"public"}
+ │              ├── AddDescriptorName {"Namespace":{"DatabaseID":106,"DescriptorID":107,"Name":"public"}}
+ │              ├── AddSchemaParent {"Parent":{"ParentDatabaseID":106,"SchemaID":107}}
+ │              ├── UpdateOwner {"Owner":{"DescriptorID":107,"Owner":"admin"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":107,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":107,"Privileges":516,"UserName":"public"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":107,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+ │              ├── MarkDescriptorAsPublic {"DescriptorID":106}
+ │              └── MarkDescriptorAsPublic {"DescriptorID":107}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 14 elements transitioning toward PUBLIC
+      │    │    ├── PUBLIC  → ABSENT Database:{DescID: 106 (db+)}
+      │    │    ├── PUBLIC  → ABSENT Namespace:{DescID: 106 (db+), Name: "db"}
+      │    │    ├── PUBLIC  → ABSENT DatabaseData:{DescID: 106 (db+)}
+      │    │    ├── PUBLIC  → ABSENT Owner:{DescID: 106 (db+)}
+      │    │    ├── PUBLIC  → ABSENT UserPrivileges:{DescID: 106 (db+), Name: "admin"}
+      │    │    ├── PUBLIC  → ABSENT UserPrivileges:{DescID: 106 (db+), Name: "public"}
+      │    │    ├── PUBLIC  → ABSENT UserPrivileges:{DescID: 106 (db+), Name: "root"}
+      │    │    ├── PUBLIC  → ABSENT Schema:{DescID: 107 (public+)}
+      │    │    ├── PUBLIC  → ABSENT Namespace:{DescID: 107 (public+), Name: "public", ReferencedDescID: 106 (db+)}
+      │    │    ├── PUBLIC  → ABSENT SchemaParent:{DescID: 107 (public+), ReferencedDescID: 106 (db+)}
+      │    │    ├── PUBLIC  → ABSENT Owner:{DescID: 107 (public+)}
+      │    │    ├── PUBLIC  → ABSENT UserPrivileges:{DescID: 107 (public+), Name: "admin"}
+      │    │    ├── PUBLIC  → ABSENT UserPrivileges:{DescID: 107 (public+), Name: "public"}
+      │    │    └── PUBLIC  → ABSENT UserPrivileges:{DescID: 107 (public+), Name: "root"}
+      │    ├── 4 elements transitioning toward ABSENT
+      │    │    ├── DROPPED → ABSENT Database:{DescID: 104 (db-)}
+      │    │    ├── ABSENT  → PUBLIC DatabaseRoleSetting:{DescID: 104 (db-), Name: "__placeholder_role_name__"}
+      │    │    ├── PUBLIC  → ABSENT DatabaseData:{DescID: 104 (db-)}
+      │    │    └── DROPPED → ABSENT Schema:{DescID: 105 (public-)}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 14 elements transitioning toward PUBLIC
+           │    ├── ABSENT → PUBLIC Database:{DescID: 106 (db+)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (db+), Name: "db"}
+           │    ├── ABSENT → PUBLIC DatabaseData:{DescID: 106 (db+)}
+           │    ├── ABSENT → PUBLIC Owner:{DescID: 106 (db+)}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (db+), Name: "admin"}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (db+), Name: "public"}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (db+), Name: "root"}
+           │    ├── ABSENT → PUBLIC Schema:{DescID: 107 (public+)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 107 (public+), Name: "public", ReferencedDescID: 106 (db+)}
+           │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 107 (public+), ReferencedDescID: 106 (db+)}
+           │    ├── ABSENT → PUBLIC Owner:{DescID: 107 (public+)}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 107 (public+), Name: "admin"}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 107 (public+), Name: "public"}
+           │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 107 (public+), Name: "root"}
+           ├── 1 element transitioning toward ABSENT
+           │    └── PUBLIC → ABSENT DatabaseRoleSetting:{DescID: 104 (db-), Name: "__placeholder_role_name__"}
+           └── 18 Mutation operations
+                ├── RemoveDatabaseRoleSettings {"DatabaseID":104}
+                ├── CreateDatabaseDescriptor {"DatabaseID":106}
+                ├── SetNameInDescriptor {"DescriptorID":106,"Name":"db"}
+                ├── AddDescriptorName {"Namespace":{"DescriptorID":106,"Name":"db"}}
+                ├── UpdateOwner {"Owner":{"DescriptorID":106,"Owner":"root"}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2048,"UserName":"public"}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+                ├── CreateSchemaDescriptor {"SchemaID":107}
+                ├── SetNameInDescriptor {"DescriptorID":107,"Name":"public"}
+                ├── AddDescriptorName {"Namespace":{"DatabaseID":106,"DescriptorID":107,"Name":"public"}}
+                ├── AddSchemaParent {"Parent":{"ParentDatabaseID":106,"SchemaID":107}}
+                ├── UpdateOwner {"Owner":{"DescriptorID":107,"Owner":"admin"}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":107,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":107,"Privileges":516,"UserName":"public"}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":107,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+                ├── MarkDescriptorAsPublic {"DescriptorID":106}
+                └── MarkDescriptorAsPublic {"DescriptorID":107}
