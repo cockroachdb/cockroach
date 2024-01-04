@@ -1562,13 +1562,11 @@ func (s *SQLServer) preStart(
 	s.temporaryObjectCleaner.Start(ctx, stopper)
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, stopper)
-	if err := s.statsRefresher.Start(ctx, stopper, stats.DefaultRefreshInterval); err != nil {
-		return err
-	}
-	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
-	if err := s.execCfg.TableStatsCache.Start(ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory); err != nil {
-		return err
-	}
+
+	// NB: While the pgServer is started at this point, the
+	// permanent migrations have not run. We should take extreme
+	// care about what uses the SQL server before those migrations
+	// run.
 
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
@@ -1676,6 +1674,14 @@ func (s *SQLServer) preStart(
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
 	s.leaseMgr.DeleteOrphanedLeases(ctx, orphanedLeasesTimeThresholdNanos)
+
+	if err := s.statsRefresher.Start(ctx, stopper, stats.DefaultRefreshInterval); err != nil {
+		return err
+	}
+	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
+	if err := s.execCfg.TableStatsCache.Start(ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory); err != nil {
+		return err
+	}
 
 	scheduledlogging.Start(
 		ctx, stopper, s.execCfg.InternalDB, s.execCfg.Settings,
