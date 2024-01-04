@@ -31,11 +31,14 @@ import (
 type client struct {
 	log.AmbientContext
 
-	createdAt             time.Time
-	peerID                roachpb.NodeID           // Peer node ID; 0 until first gossip response
-	resolvedPlaceholder   bool                     // Whether we've resolved the nodeSet's placeholder for this client
-	addr                  net.Addr                 // Peer node network address
-	forwardAddr           *util.UnresolvedAddr     // Set if disconnected with an alternate addr
+	createdAt           time.Time
+	peerID              roachpb.NodeID // Peer node ID; 0 until first gossip response
+	resolvedPlaceholder bool           // Whether we've resolved the nodeSet's placeholder for this client
+	addr                net.Addr       // Peer node network address
+	// If redirected to an alternative node, these are the address and
+	// locality-advertise-addr of that node.
+	forwardAddr           *util.UnresolvedAddr
+	forwardLocalityAddr   []roachpb.LocalityAddress
 	remoteHighWaterStamps map[roachpb.NodeID]int64 // Remote server's high water timestamps
 	closer                chan struct{}            // Client shutdown channel
 	clientMetrics         Metrics
@@ -160,10 +163,11 @@ func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 		return g.mu.is.NodeAddr, g.mu.is.getHighWaterStamps()
 	}()
 	args := &Request{
-		NodeID:          g.NodeID.Get(),
-		Addr:            nodeAddr,
-		HighWaterStamps: highWaterStamps,
-		ClusterID:       g.clusterID.Get(),
+		NodeID:            g.NodeID.Get(),
+		Addr:              nodeAddr,
+		LocalityAddresses: g.LocalityAddresses,
+		HighWaterStamps:   highWaterStamps,
+		ClusterID:         g.clusterID.Get(),
 	}
 
 	bytesSent := int64(args.Size())
@@ -190,7 +194,8 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient, firstReq bool
 		}
 
 		args := Request{
-			NodeID:          g.NodeID.Get(),
+			NodeID: g.NodeID.Get(),
+			// TODO(shralex): seems wasteful to send the address with every request.
 			Addr:            g.mu.is.NodeAddr,
 			Delta:           delta,
 			HighWaterStamps: g.mu.is.getHighWaterStamps(),
@@ -261,12 +266,15 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 	if reply.AlternateAddr != nil {
 		if g.hasIncomingLocked(reply.AlternateNodeID) || g.hasOutgoingLocked(reply.AlternateNodeID) {
 			return errors.Errorf(
-				"received forward from n%d to n%d (%s); already have active connection, skipping",
-				reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
+				"received forward from n%d to n%d (address: %s, locality advertised "+
+					"addresses: %s); already have active connection, skipping", reply.NodeID,
+				reply.AlternateNodeID, reply.AlternateAddr)
 		}
 		c.forwardAddr = reply.AlternateAddr
-		return errors.Errorf("received forward from n%d to n%d (%s)",
-			reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
+		c.forwardLocalityAddr = reply.AlternateLocalityAddresses
+		return errors.Errorf("received forward from n%d to n%d (address: %s, "+
+			"locality advertised addresses: %s)", reply.NodeID, reply.AlternateNodeID,
+			reply.AlternateAddr, reply.AlternateLocalityAddresses)
 	}
 
 	// Check whether we're connected at this point.

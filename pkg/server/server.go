@@ -319,6 +319,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		stopper,
 		nodeRegistry,
 		cfg.Locality,
+		cfg.LocalityAddresses,
 	)
 
 	tenantCapabilitiesTestingKnobs, _ := cfg.TestingKnobs.TenantCapabilitiesTestingKnobs.(*tenantcapabilities.TestingKnobs)
@@ -1248,7 +1249,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		stores,
 		planStore,
 		g,
-		cfg.Locality,
+		&cfg.Locality,
 		rpcContext,
 		cfg.TestingKnobs.LOQRecovery,
 		func(ctx context.Context, id roachpb.NodeID) error {

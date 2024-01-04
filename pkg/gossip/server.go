@@ -30,8 +30,9 @@ import (
 )
 
 type serverInfo struct {
-	createdAt time.Time
-	peerID    roachpb.NodeID
+	createdAt       time.Time
+	peerID          roachpb.NodeID
+	LocalityAddress []roachpb.LocalityAddress
 }
 
 // server maintains an array of connected peers to which it gossips
@@ -249,8 +250,9 @@ func (s *server) gossipReceiver(
 
 				s.mu.incoming.addNode(args.NodeID)
 				s.mu.nodeMap[args.Addr] = serverInfo{
-					peerID:    args.NodeID,
-					createdAt: timeutil.Now(),
+					peerID:          args.NodeID,
+					createdAt:       timeutil.Now(),
+					LocalityAddress: args.LocalityAddresses,
 				}
 
 				defer func(nodeID roachpb.NodeID, addr util.UnresolvedAddr) {
@@ -259,28 +261,33 @@ func (s *server) gossipReceiver(
 					delete(s.mu.nodeMap, addr)
 				}(args.NodeID, args.Addr)
 			} else {
-				// If we don't have any space left, forward the client along to a peer.
+				// If we don't have any space left, redirect the client to a random peer.
 				var alternateAddr util.UnresolvedAddr
 				var alternateNodeID roachpb.NodeID
+				var alternateLocalityAddresses []roachpb.LocalityAddress
 				// Choose a random peer for forwarding.
 				altIdx := rand.Intn(len(s.mu.nodeMap))
 				for addr, info := range s.mu.nodeMap {
 					if altIdx == 0 {
 						alternateAddr = addr
 						alternateNodeID = info.peerID
+						alternateLocalityAddresses = info.LocalityAddress
 						break
 					}
 					altIdx--
 				}
 
 				s.nodeMetrics.ConnectionsRefused.Inc(1)
-				log.Infof(ctx, "refusing gossip from n%d (max %d conns); forwarding to n%d (%s)",
-					args.NodeID, s.mu.incoming.maxSize, alternateNodeID, alternateAddr)
+				log.Infof(ctx, "refusing gossip from n%d (max %d conns); forwarding to "+
+					"n%d (address: %s, locality advertised addresses: %s)", args.NodeID,
+					s.mu.incoming.maxSize, reply.AlternateNodeID, reply.AlternateAddr,
+					reply.AlternateLocalityAddresses)
 
 				*reply = Response{
-					NodeID:          s.NodeID.Get(),
-					AlternateAddr:   &alternateAddr,
-					AlternateNodeID: alternateNodeID,
+					NodeID:                     s.NodeID.Get(),
+					AlternateAddr:              &alternateAddr,
+					AlternateNodeID:            alternateNodeID,
+					AlternateLocalityAddresses: alternateLocalityAddresses,
 				}
 
 				s.mu.Unlock()
@@ -292,6 +299,7 @@ func (s *server) gossipReceiver(
 				// process this message, which instructs it to hang up anyway.
 				// Instead, we send the message and proceed to gossip
 				// normally, depending on the client to end the connection.
+				// We hang up if sending a reply fails.
 				if err != nil {
 					return err
 				}
@@ -412,9 +420,10 @@ func (s *server) status() ServerStatus {
 
 	for addr, info := range s.mu.nodeMap {
 		status.ConnStatus = append(status.ConnStatus, ConnStatus{
-			NodeID:   info.peerID,
-			Address:  addr.String(),
-			AgeNanos: timeutil.Since(info.createdAt).Nanoseconds(),
+			NodeID:            info.peerID,
+			Address:           addr.String(),
+			LocalityAddresses: info.LocalityAddress,
+			AgeNanos:          timeutil.Since(info.createdAt).Nanoseconds(),
 		})
 	}
 	return status

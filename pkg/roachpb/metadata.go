@@ -576,7 +576,7 @@ func (sc StoreCapacity) Load() load.Load {
 
 // AddressForLocality returns the network address that nodes in the specified
 // locality should use when connecting to the node described by the descriptor.
-func (n *NodeDescriptor) AddressForLocality(loc Locality) *util.UnresolvedAddr {
+func (n *NodeDescriptor) AddressForLocality(loc *Locality) *util.UnresolvedAddr {
 	// If the provided locality has any tiers that are an exact match (key
 	// and value) with a tier in the node descriptor's custom LocalityAddress
 	// list, return the corresponding address. Otherwise, return the default

@@ -518,15 +518,23 @@ func TestClientForwardUnresolved(t *testing.T) {
 
 	client := newClient(log.MakeTestingAmbientCtxWithNewTracer(), addr, makeMetrics()) // never started
 
-	newAddr := util.UnresolvedAddr{
-		NetworkField: "tcp",
-		AddressField: "localhost:2345",
+	makeAddr := func(name string) util.UnresolvedAddr {
+		return util.UnresolvedAddr{
+			NetworkField: "tcp",
+			AddressField: name,
+		}
+	}
+	newAddr := makeAddr("localhost:2345")
+	LocalityAddress := []roachpb.LocalityAddress{
+		{Address: makeAddr("2"), LocalityTier: roachpb.Tier{Key: "region", Value: "east"}},
+		{Address: makeAddr("3"), LocalityTier: roachpb.Tier{Key: "zone", Value: "a"}},
 	}
 	reply := &Response{
-		NodeID:          nodeID,
-		Addr:            *addr,
-		AlternateNodeID: nodeID + 1,
-		AlternateAddr:   &newAddr,
+		NodeID:                     nodeID,
+		Addr:                       *addr,
+		AlternateNodeID:            nodeID + 1,
+		AlternateAddr:              &newAddr,
+		AlternateLocalityAddresses: LocalityAddress,
 	}
 	local.mu.Lock()
 	local.outgoing.addPlaceholder() // so that the resolvePlaceholder in handleResponse doesn't fail
@@ -538,5 +546,84 @@ func TestClientForwardUnresolved(t *testing.T) {
 	}
 	if !client.forwardAddr.Equal(&newAddr) {
 		t.Fatalf("unexpected forward address %v, expected %v", client.forwardAddr, &newAddr)
+	}
+	if len(client.forwardLocalityAddr) != 2 ||
+		!client.forwardLocalityAddr[0].Equal(LocalityAddress[0]) ||
+		!client.forwardLocalityAddr[1].Equal(LocalityAddress[1]) {
+		t.Fatalf("unexpected forward locality address %v, expected %v", client.forwardLocalityAddr,
+			LocalityAddress)
+	}
+}
+
+// Tests that Gossip.getLocalFwdAddress does the right thing based on client locality and
+// the returned forward address and list of locality address for an alternative node..
+func TestAlternativeAddressLocality1(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	makeAddr := func(name string) util.UnresolvedAddr {
+		return util.UnresolvedAddr{
+			NetworkField: "tcp",
+			AddressField: name,
+		}
+	}
+
+	// nake a client that's never started
+	local, _ := startGossip(uuid.Nil, 10, stopper, t, metric.NewRegistry())
+	client := newClient(log.MakeTestingAmbientCtxWithNewTracer(), local.GetNodeAddr(), makeMetrics())
+
+	// Lets assume that the client tried to connect to a server and got a Response
+	// including the following redirect (forward) info, corresponding to an
+	// alternative node
+	addr := makeAddr("1")
+	client.forwardAddr = &addr
+	client.forwardLocalityAddr = []roachpb.LocalityAddress{
+		{Address: makeAddr("2"), LocalityTier: roachpb.Tier{Key: "region", Value: "east"}},
+		{Address: makeAddr("3"), LocalityTier: roachpb.Tier{Key: "zone", Value: "a"}},
+	}
+
+	// Make sure that the client chooses the correct locality address for the
+	// alternative node, based on the client's locality string
+	for _, tc := range []struct {
+		clientLocality roachpb.Locality
+		expected       util.UnresolvedAddr
+	}{
+		{
+			// when the locality string is empty the base address is chosen
+			clientLocality: roachpb.Locality{},
+			expected:       makeAddr("1"),
+		},
+		{
+			// no overlap with forwardLocalityAddr, base address is chosen
+			clientLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "west"},
+				{Key: "zone", Value: "b"},
+			}},
+			expected: makeAddr("1"),
+		},
+		{
+			// region=east is in common, use address 2
+			clientLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "east"},
+				{Key: "zone", Value: "b"},
+			}},
+			expected: makeAddr("2"),
+		},
+		{
+			// zone=a is in common, use address 3
+			clientLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "west"},
+				{Key: "zone", Value: "a"},
+			}},
+			expected: makeAddr("3"),
+		},
+	} {
+		testName := "client locality: " + tc.clientLocality.String()
+		g := Gossip{locality: tc.clientLocality}
+		t.Run(testName, func(t *testing.T) {
+			addr := g.getLocalFwdAddress(client)
+			require.Equal(t, tc.expected, *addr)
+		})
 	}
 }

@@ -255,6 +255,9 @@ type Gossip struct {
 	bootstrapAddrs map[util.UnresolvedAddr]roachpb.NodeID
 
 	locality roachpb.Locality
+	// LocalityAddress holds the private address accessible only from other nodes
+	// in the corresponding locality.
+	LocalityAddresses []roachpb.LocalityAddress
 }
 
 // New creates an instance of a gossip node.
@@ -268,6 +271,7 @@ func New(
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	locality roachpb.Locality,
+	LocalityAddresses []roachpb.LocalityAddress,
 ) *Gossip {
 	g := &Gossip{
 		server:            newServer(ambient, clusterID, nodeID, stopper, registry),
@@ -283,8 +287,8 @@ func New(
 		addressExists:     map[util.UnresolvedAddr]bool{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
 		locality:          locality,
+		LocalityAddresses: LocalityAddresses,
 	}
-
 	registry.AddMetric(g.outgoing.gauge)
 
 	g.mu.Lock()
@@ -299,21 +303,24 @@ func New(
 // NewTest is a simplified wrapper around New that creates the
 // ClusterIDContainer and NodeIDContainer internally. Used for testing.
 func NewTest(nodeID roachpb.NodeID, stopper *stop.Stopper, registry *metric.Registry) *Gossip {
-	return NewTestWithLocality(nodeID, stopper, registry, roachpb.Locality{})
+	return NewTestWithLocality(nodeID, stopper, registry, roachpb.Locality{},
+		[]roachpb.LocalityAddress{})
 }
 
-// NewTestWithLocality calls NewTest with an explicit locality value.
+// NewTestWithLocality calls NewTest with an explicit locality and
+// localityAddress values.
 func NewTestWithLocality(
 	nodeID roachpb.NodeID,
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	locality roachpb.Locality,
+	localityAddress []roachpb.LocalityAddress,
 ) *Gossip {
 	c := &base.ClusterIDContainer{}
 	n := &base.NodeIDContainer{}
 	var ac log.AmbientContext
 	ac.AddLogTag("n", n)
-	gossip := New(ac, c, n, stopper, registry, locality)
+	gossip := New(ac, c, n, stopper, registry, locality, localityAddress)
 	if nodeID != 0 {
 		n.Set(context.TODO(), nodeID)
 	}
@@ -860,7 +867,7 @@ func (g *Gossip) getNodeIDAddress(
 	if err != nil {
 		return nil, err
 	}
-	return nd.AddressForLocality(g.locality), nil
+	return nd.AddressForLocality(&g.locality), nil
 }
 
 // AddInfo adds or updates an info object. Returns an error if info
@@ -1329,6 +1336,10 @@ func (g *Gossip) tightenNetwork(ctx context.Context, rpcContext *rpc.Context) {
 	}
 }
 
+func (g *Gossip) getLocalFwdAddress(c *client) *util.UnresolvedAddr {
+	return g.locality.LookupAddress(c.forwardLocalityAddr, c.forwardAddr)
+}
+
 func (g *Gossip) doDisconnected(c *client, rpcContext *rpc.Context) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -1336,7 +1347,8 @@ func (g *Gossip) doDisconnected(c *client, rpcContext *rpc.Context) {
 
 	// If the client was disconnected with a forwarding address, connect now.
 	if c.forwardAddr != nil {
-		g.startClientLocked(*c.forwardAddr, rpcContext)
+		addr := g.getLocalFwdAddress(c)
+		g.startClientLocked(*addr, rpcContext)
 	}
 	g.maybeSignalStatusChangeLocked()
 }
