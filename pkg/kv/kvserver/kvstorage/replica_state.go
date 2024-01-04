@@ -137,20 +137,6 @@ func CreateUninitializedReplica(
 	//   the Term and Vote values for that older replica in the context of
 	//   this newer replica is harmless since it just limits the votes for
 	//   this replica.
-	//
-	// Compatibility:
-	// - v21.2 and v22.1: v22.1 unilaterally introduces RaftReplicaID (an
-	//   unreplicated range-id local key). If a v22.1 binary is rolled back at
-	//   a node, the fact that RaftReplicaID was written is harmless to a
-	//   v21.2 node since it does not read it. When a v21.2 drops an
-	//   initialized range, the RaftReplicaID will also be deleted because the
-	//   whole range-ID local key space is deleted.
-	// - v22.2: no changes: RaftReplicaID is written, but old Replicas may not
-	//   have it yet.
-	// - v23.1: at startup, we remove any uninitialized replicas that have a
-	//   HardState but no RaftReplicaID, see kvstorage.LoadAndReconcileReplicas.
-	//   So after first call to this method we have the invariant that all replicas
-	//   have a RaftReplicaID persisted.
 	sl := stateloader.Make(rangeID)
 	if err := sl.SetRaftReplicaID(ctx, eng, replicaID); err != nil {
 		return err
