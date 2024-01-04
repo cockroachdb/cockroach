@@ -43,6 +43,7 @@ func _() {
 	_ = x[MVCCHistoryMutationErrType-44]
 	_ = x[LockConflictErrType-45]
 	_ = x[ReplicaUnavailableErrType-46]
+	_ = x[ProxyFailedErrType-47]
 	_ = x[CommunicationErrType-22]
 	_ = x[InternalErrType-25]
 }
@@ -119,6 +120,8 @@ func (i ErrorDetailType) String() string {
 		return "LockConflictErrType"
 	case ReplicaUnavailableErrType:
 		return "ReplicaUnavailableErrType"
+	case ProxyFailedErrType:
+		return "ProxyFailedErrType"
 	case CommunicationErrType:
 		return "CommunicationErrType"
 	case InternalErrType:
