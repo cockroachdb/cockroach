@@ -280,7 +280,7 @@ BEGIN
   RAISE NOTICE '%', x;
 END
 ----
-at or near "notice": syntax error
+at or near "raise": syntax error: end label "raise" specified for unlabeled block
 DETAIL: source SQL:
 DECLARE
   x INT;
@@ -288,4 +288,4 @@ BEGIN
   BEGIN
   END
   RAISE NOTICE '%', x;
-        ^
+  ^
