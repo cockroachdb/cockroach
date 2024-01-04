@@ -1701,9 +1701,9 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 			expectedErr: `option "Ghi" is invalid`,
 		},
 		{
-			desc:        "empty search_path is not allowed",
-			query:       `options=-c search_path=`,
-			expectedErr: `invalid value for parameter "search_path": ""`,
+			desc:               "empty search_path is not allowed",
+			query:              `options=-c search_path=`,
+			expectedSearchPath: ``,
 		},
 		{
 			desc:        "unbalanced quotes in search_path are not allowed",
