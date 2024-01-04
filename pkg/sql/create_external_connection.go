@@ -144,6 +144,10 @@ func (p *planner) createExternalConnection(
 	// Create the External Connection and persist it in the
 	// `system.external_connections` table.
 	if err := ex.Create(params.ctx, txn); err != nil {
+		isNotExists := n.ConnectionLabelSpec.IfNotExists
+		if isNotExists && pgerror.GetPGCode(err) == pgcode.DuplicateObject {
+			return nil
+		}
 		return errors.Wrap(err, "failed to create external connection")
 	}
 
