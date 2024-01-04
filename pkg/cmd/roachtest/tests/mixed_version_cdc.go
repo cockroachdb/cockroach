@@ -426,14 +426,33 @@ func (cmvt *cdcMixedVersionTester) initWorkload(
 
 func (cmvt *cdcMixedVersionTester) muxRangeFeedSupported(
 	r *rand.Rand, h *mixedversion.Helper,
-) (bool, error) {
+) (bool, option.NodeListOption, error) {
+	// The mux setting was added in 22.2 and deleted in 24.1, so we need to first
+	// determine if the cluster version is in the range [22.2, 24.1).
 	cv, err := h.ClusterVersion(r)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
-	// Mux setting only exists in 22.2 to 23.2 inclusive.
-	return cv.AtLeast(roachpb.MustParseVersion(v222CV)) &&
-		!cv.AtLeast(roachpb.MustParseVersion(v241CV)), nil
+	if !cv.AtLeast(roachpb.MustParseVersion(v222CV)) ||
+		cv.AtLeast(roachpb.MustParseVersion(v241CV)) {
+		return false, nil, nil
+	}
+
+	// Since the setting was deleted in 24.1, there may be nodes running binaries
+	// that no longer know about the setting.
+
+	// If we are upgrading to a version < 24.1, the setting is known to all nodes.
+	if h.Context.ToVersion.Major() < 24 {
+		return true, h.Context.CockroachNodes, nil
+	}
+
+	// If we are upgrading to 24.1, the setting is only known to pre-24.1 nodes.
+	if h.Context.ToVersion.Major() == 24 && h.Context.ToVersion.Minor() == 1 && h.Context.MixedBinary() {
+		return true, h.Context.NodesInPreviousVersion(), nil
+	}
+
+	// Otherwise, the setting is unknown to all nodes.
+	return false, nil, nil
 }
 
 const v232CV = "23.2"
@@ -480,14 +499,14 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// MuxRangefeed in various forms is available starting from v22.2.
 	setMuxRangeFeedEnabled := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-		supported, err := tester.muxRangeFeedSupported(r, h)
+		supported, gatewayNodes, err := tester.muxRangeFeedSupported(r, h)
 		if err != nil {
 			return err
 		}
 		if supported {
 			coin := r.Int()%2 == 0
 			l.PrintfCtx(ctx, "Setting changefeed.mux_rangefeed.enabled=%t ", coin)
-			return h.Exec(r, "SET CLUSTER SETTING changefeed.mux_rangefeed.enabled=$1", coin)
+			return h.ExecWithGateway(r, gatewayNodes, "SET CLUSTER SETTING changefeed.mux_rangefeed.enabled=$1", coin)
 		}
 		return nil
 	}
