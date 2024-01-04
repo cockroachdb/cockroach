@@ -1097,6 +1097,26 @@ func (db *DB) send(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchRespo
 	return db.sendUsingSender(ctx, ba, db.NonTransactionalSender())
 }
 
+// SendProxyRequest sends a request from a server to another server if the
+// original server couldn't process the request due to it not being the
+// leaseholder. Most normal checks are bypassed here.
+func (db *DB) SendProxyRequest(
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, *kvpb.Error) {
+	ba.Header.RedirectCount += 1
+
+	// TODO(baptist): We need to save the old trace info and re-append after we
+	// send the request.
+	if !ba.TraceInfo.Empty() {
+		ba.TraceInfo.Reset()
+	}
+	// This is a bit of a hack to avoid adding another method to the db.factory.
+	// The NonTransactionalSender is used to grab the underlying DistSender
+	// directly. We don't need to create a txnCoordinator at this level since the
+	// original client will manage the transaction.
+	return db.factory.NonTransactionalSender().Send(ctx, ba)
+}
+
 // sendUsingSender uses the specified sender to send the batch request.
 func (db *DB) sendUsingSender(
 	ctx context.Context, ba *kvpb.BatchRequest, sender Sender,

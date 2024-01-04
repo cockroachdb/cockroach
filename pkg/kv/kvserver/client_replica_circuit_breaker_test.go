@@ -963,6 +963,8 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 	st := cluster.MakeTestingClusterSettings()
 	// TODO(erikgrinaker): We may not need this for all circuit breaker tests.
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	// TODO(baptist): Fix this behavior with proxy enabled.
+	kvpb.ProxyBatchRequest.Override(ctx, &st.SV, false) // disable proxying
 	storeKnobs := &kvserver.StoreTestingKnobs{
 		SlowReplicationThresholdOverride: func(ba *kvpb.BatchRequest) time.Duration {
 			t.Helper()

@@ -29,6 +29,7 @@ go_library(
         "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/storage/enginepb",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
