@@ -282,8 +282,11 @@ func EncodeMVCCTimestampToBuf(buf []byte, ts hlc.Timestamp) []byte {
 // buffer must have the correct size, and the timestamp must not be empty.
 func encodeMVCCTimestampToBuf(buf []byte, ts hlc.Timestamp) {
 	binary.BigEndian.PutUint64(buf, uint64(ts.WallTime))
-	if ts.Logical != 0 {
+	if ts.Logical != 0 || ts.Synthetic {
 		binary.BigEndian.PutUint32(buf[mvccEncodedTimeWallLen:], uint32(ts.Logical))
+		if ts.Synthetic {
+			buf[mvccEncodedTimeWallLen+mvccEncodedTimeLogicalLen] = 1
+		}
 	}
 }
 
@@ -295,8 +298,12 @@ func encodedMVCCKeyLength(key MVCCKey) int {
 	keyLen := len(key.Key) + mvccEncodedTimeSentinelLen
 	if !key.Timestamp.IsEmpty() {
 		keyLen += mvccEncodedTimeWallLen + mvccEncodedTimeLengthLen
-		if key.Timestamp.Logical != 0 {
+		if key.Timestamp.Logical != 0 || key.Timestamp.Synthetic {
 			keyLen += mvccEncodedTimeLogicalLen
+			if key.Timestamp.Synthetic {
+				// TODO(nvanbenschoten): stop writing Synthetic timestamps in v23.1.
+				keyLen += mvccEncodedTimeSyntheticLen
+			}
 		}
 	}
 	return keyLen
