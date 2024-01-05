@@ -537,6 +537,40 @@ project
       ├── columns: k:1!null
       └── key: (1)
 
+# Regression test for #117424 - it should be possible to use a partial index
+# with a NOT IN filter with more than one excluded value.
+exec-ddl
+CREATE TABLE t117424 (
+  a INT PRIMARY KEY,
+  b INT,
+  INDEX foo_idx (a ASC) STORING (b) WHERE b NOT IN (1)
+)
+----
+
+opt expect=GeneratePartialIndexScans
+SELECT a,b FROM t117424@foo_idx WHERE b NOT IN (1)
+----
+scan t117424@foo_idx,partial
+ ├── columns: a:1!null b:2!null
+ ├── flags: force-index=foo_idx
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt expect=GeneratePartialIndexScans
+SELECT a,b FROM t117424@foo_idx WHERE b NOT IN (1, 2)
+----
+select
+ ├── columns: a:1!null b:2!null
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan t117424@foo_idx,partial
+ │    ├── columns: a:1!null b:2!null
+ │    ├── flags: force-index=foo_idx
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── b:2 NOT IN (1, 2) [outer=(2), constraints=(/2: (/NULL - /0] [/3 - ]; tight)]
+
 # --------------------------------------------------
 # GenerateConstrainedScans
 # --------------------------------------------------

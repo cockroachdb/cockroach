@@ -11,8 +11,6 @@
 package norm
 
 import (
-	"sort"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -31,49 +29,20 @@ func (c *CustomFuncs) NeedSortedUniqueList(list memo.ScalarListExpr) bool {
 	if len(list) <= 1 {
 		return false
 	}
-	ls := listSorter{cf: c, list: list}
-	var needSortedUniqueList bool
-	for i, item := range list {
+	for _, item := range list {
 		if !opt.IsConstValueOp(item) {
 			return false
 		}
-		if i != 0 && !ls.less(i-1, i) {
-			needSortedUniqueList = true
-		}
 	}
-	return needSortedUniqueList
+	return !memo.IsSortedUniqueList(c.f.evalCtx, list)
 }
 
 // ConstructSortedUniqueList sorts the given list and removes duplicates, and
-// returns the resulting list. See the comment for listSorter.compare for
-// comparison rule details.
+// returns the resulting list. It can only be used for a list of constant exprs.
 func (c *CustomFuncs) ConstructSortedUniqueList(
 	list memo.ScalarListExpr,
 ) (memo.ScalarListExpr, *types.T) {
-	// Make a copy of the list, since it needs to stay immutable.
-	newList := make(memo.ScalarListExpr, len(list))
-	copy(newList, list)
-	ls := listSorter{cf: c, list: newList}
-
-	// Sort the list.
-	sort.Slice(ls.list, ls.less)
-
-	// Remove duplicates from the list.
-	n := 0
-	for i := range newList {
-		if i == 0 || ls.compare(i-1, i) < 0 {
-			newList[n] = newList[i]
-			n++
-		}
-	}
-	newList = newList[:n]
-
-	// Construct the type of the tuple.
-	contents := make([]*types.T, n)
-	for i := range newList {
-		contents[i] = newList[i].DataType()
-	}
-	return newList, types.MakeTuple(contents)
+	return memo.ConstructSortedUniqueList(c.f.evalCtx, list)
 }
 
 // SimplifyCoalesce discards any leading null operands, and then if the next

@@ -222,7 +222,7 @@ Initial expression
         ├── scan orders
         │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null) orders.crdb_internal_mvcc_timestamp:4(decimal) orders.tableoid:5(oid)
         │    ├── check constraint expressions
-        │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
+        │    │    └── in [type=bool, outer=(3)]
         │    │         ├── variable: status:3 [type=string]
         │    │         └── tuple [type=tuple{string, string, string}]
         │    │              ├── const: 'open' [type=string]
@@ -254,7 +254,8 @@ NormalizeInConst
          ├── scan orders
          │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null) orders.crdb_internal_mvcc_timestamp:4(decimal) orders.tableoid:5(oid)
          │    ├── check constraint expressions
-         │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
+  -      │    │    └── in [type=bool, outer=(3)]
+  +      │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
          │    │         ├── variable: status:3 [type=string]
          │    │         └── tuple [type=tuple{string, string, string}]
   -      │    │              ├── const: 'open' [type=string]

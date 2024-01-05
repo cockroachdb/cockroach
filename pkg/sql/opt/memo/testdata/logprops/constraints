@@ -1010,7 +1010,7 @@ opt
 SELECT * FROM (SELECT (x, y) AS foo FROM a) WHERE foo IN ((3, 4), (1, 2))
 ----
 select
- ├── columns: foo:6(tuple{int, int}!null)
+ ├── columns: foo:6(tuple{int, int})
  ├── project
  │    ├── columns: foo:6(tuple{int, int})
  │    ├── prune: (6)
@@ -1022,7 +1022,7 @@ select
  │              ├── variable: x:1 [type=int]
  │              └── variable: y:2 [type=int]
  └── filters
-      └── in [type=bool, outer=(6), constraints=(/6: [/(1, 2) - /(1, 2)] [/(3, 4) - /(3, 4)]; tight)]
+      └── in [type=bool, outer=(6)]
            ├── variable: foo:6 [type=tuple{int, int}]
            └── tuple [type=tuple{tuple{int, int}, tuple{int, int}}]
                 ├── tuple [type=tuple{int, int}]
@@ -1528,3 +1528,72 @@ select
       └── contains [type=bool, outer=(3), immutable, constraints=(contradiction; tight)]
            ├── variable: a:3 [type=int[]]
            └── const: ARRAY[NULL] [type=int[]]
+
+# Test NOT IN.
+# Include out of order, duplicate, adjacent and non-adjacent values.
+opt
+SELECT * FROM a WHERE x NOT IN (5, 3, -1, 2, NULL, 2)
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── prune: (2)
+ ├── scan a
+ │    ├── columns: x:1(int) y:2(int)
+ │    └── prune: (1,2)
+ └── filters
+      └── not-in [type=bool, outer=(1), constraints=(/1: (/NULL - /-2] [/0 - /1] [/4 - /4] [/6 - ]; tight)]
+           ├── variable: x:1 [type=int]
+           └── tuple [type=tuple{unknown, int, int, int, int}]
+                ├── null [type=unknown]
+                ├── const: -1 [type=int]
+                ├── const: 2 [type=int]
+                ├── const: 3 [type=int]
+                └── const: 5 [type=int]
+
+# Test NOT IN in combination with another condition on the same column
+# (which rules out some of the entries in the NOT IN condition).
+opt
+SELECT * FROM a WHERE x NOT IN (5, 3, -1, 2, NULL, 2) AND x >= 3
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── prune: (2)
+ ├── scan a
+ │    ├── columns: x:1(int) y:2(int)
+ │    └── prune: (1,2)
+ └── filters
+      └── range [type=bool, outer=(1), constraints=(/1: [/4 - /4] [/6 - ]; tight)]
+           └── and [type=bool]
+                ├── not-in [type=bool]
+                │    ├── variable: x:1 [type=int]
+                │    └── tuple [type=tuple{unknown, int, int, int, int}]
+                │         ├── null [type=unknown]
+                │         ├── const: -1 [type=int]
+                │         ├── const: 2 [type=int]
+                │         ├── const: 3 [type=int]
+                │         └── const: 5 [type=int]
+                └── ge [type=bool]
+                     ├── variable: x:1 [type=int]
+                     └── const: 3 [type=int]
+
+# Test IN in combination with a condition on another column.
+opt
+SELECT * FROM a WHERE x NOT IN (5, 3, -1, 2, NULL, 2) AND y > 4
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── scan a
+ │    ├── columns: x:1(int) y:2(int)
+ │    └── prune: (1,2)
+ └── filters
+      ├── not-in [type=bool, outer=(1), constraints=(/1: (/NULL - /-2] [/0 - /1] [/4 - /4] [/6 - ]; tight)]
+      │    ├── variable: x:1 [type=int]
+      │    └── tuple [type=tuple{unknown, int, int, int, int}]
+      │         ├── null [type=unknown]
+      │         ├── const: -1 [type=int]
+      │         ├── const: 2 [type=int]
+      │         ├── const: 3 [type=int]
+      │         └── const: 5 [type=int]
+      └── gt [type=bool, outer=(2), constraints=(/2: [/5 - ]; tight)]
+           ├── variable: y:2 [type=int]
+           └── const: 4 [type=int]

@@ -332,7 +332,7 @@ FROM a
 WHERE NOT(i IN (1,2)) AND NOT(f NOT IN (3,4)) AND NOT(f IS NULL) AND NOT(s IS NOT NULL)
 ----
 select
- ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ ├── columns: k:1!null i:2!null f:3!null s:4 j:5
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── scan a
@@ -341,7 +341,7 @@ select
  │    └── fd: (1)-->(2-5)
  └── filters
       ├── (f:3 IN (3.0, 4.0)) AND (f:3 IS NOT NULL) [outer=(3), constraints=(/3: [/3.0 - /3.0] [/4.0 - /4.0]; tight)]
-      ├── i:2 NOT IN (1, 2) [outer=(2)]
+      ├── i:2 NOT IN (1, 2) [outer=(2), constraints=(/2: (/NULL - /0] [/3 - ]; tight)]
       └── s:4 IS NULL [outer=(4), constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
 
 # Like comparisons.
