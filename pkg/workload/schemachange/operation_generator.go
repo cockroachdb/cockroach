@@ -3921,7 +3921,7 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 			return PickOne(og.params.rng, droppingEnums)
 		},
 		"ParamRefs": func() (string, error) {
-			refs, err := PickAtLeast(og.params.rng, 1, possibleParamReferences)
+			refs, err := PickBetween(og.params.rng, 1, 20, possibleParamReferences)
 			if useParamRefs && err == nil {
 				return strings.Join(refs, ", "), nil
 			}
