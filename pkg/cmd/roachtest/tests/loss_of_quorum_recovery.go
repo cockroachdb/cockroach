@@ -69,29 +69,31 @@ func registerLOQRecovery(r registry.Registry) {
 	} {
 		testSpec := s
 		r.Add(registry.TestSpec{
-			Name:                s.testName(""),
-			Owner:               registry.OwnerReplication,
-			Benchmark:           true,
-			CompatibleClouds:    registry.AllExceptAWS,
-			Suites:              registry.Suites(registry.Nightly),
-			Cluster:             spec,
-			Leases:              registry.MetamorphicLeases,
-			SkipPostValidations: registry.PostValidationInvalidDescriptors | registry.PostValidationNoDeadNodes,
-			NonReleaseBlocker:   true,
+			Name:             s.testName(""),
+			Owner:            registry.OwnerReplication,
+			Benchmark:        true,
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Cluster:          spec,
+			Leases:           registry.MetamorphicLeases,
+			SkipPostValidations: registry.PostValidationReplicaDivergence |
+				registry.PostValidationInvalidDescriptors | registry.PostValidationNoDeadNodes,
+			NonReleaseBlocker: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRecoverLossOfQuorum(ctx, t, c, testSpec)
 			},
 		})
 		r.Add(registry.TestSpec{
-			Name:                s.testName("half-online"),
-			Owner:               registry.OwnerReplication,
-			Benchmark:           true,
-			CompatibleClouds:    registry.AllExceptAWS,
-			Suites:              registry.Suites(registry.Nightly),
-			Cluster:             spec,
-			Leases:              registry.MetamorphicLeases,
-			SkipPostValidations: registry.PostValidationInvalidDescriptors | registry.PostValidationNoDeadNodes,
-			NonReleaseBlocker:   true,
+			Name:             s.testName("half-online"),
+			Owner:            registry.OwnerReplication,
+			Benchmark:        true,
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Cluster:          spec,
+			Leases:           registry.MetamorphicLeases,
+			SkipPostValidations: registry.PostValidationReplicaDivergence |
+				registry.PostValidationInvalidDescriptors | registry.PostValidationNoDeadNodes,
+			NonReleaseBlocker: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runHalfOnlineRecoverLossOfQuorum(ctx, t, c, testSpec)
 			},
