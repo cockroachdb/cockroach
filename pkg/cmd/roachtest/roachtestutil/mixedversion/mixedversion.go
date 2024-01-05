@@ -148,12 +148,21 @@ var (
 	defaultTestOptions = testOptions{
 		// We use fixtures more often than not as they are more likely to
 		// detect bugs, especially in migrations.
-		useFixturesProbability: 0.7,
-		upgradeTimeout:         clusterupgrade.DefaultUpgradeTimeout,
-		minUpgrades:            1,
-		maxUpgrades:            3,
-		predecessorFunc:        randomPredecessorHistory,
+		useFixturesProbability:  0.7,
+		upgradeTimeout:          clusterupgrade.DefaultUpgradeTimeout,
+		minUpgrades:             1,
+		maxUpgrades:             3,
+		minimumSupportedVersion: OldestSupportedVersion,
+		predecessorFunc:         randomPredecessorHistory,
 	}
+
+	// OldestSupportedVersion is the oldest cockroachdb version
+	// officially supported. If we are performing upgrades from versions
+	// older than this, we don't run user-provided hooks to avoid
+	// creating flakes in unsupported versions or rediscovering
+	// already-fixed bugs. This variable should be updated periodically
+	// as releases reach end of life.
+	OldestSupportedVersion = clusterupgrade.MustParseVersion("v22.2.0")
 )
 
 type (
@@ -234,12 +243,13 @@ type (
 	// testOptions contains some options that can be changed by the user
 	// that expose some control over the generated test plan and behaviour.
 	testOptions struct {
-		useFixturesProbability float64
-		upgradeTimeout         time.Duration
-		minUpgrades            int
-		maxUpgrades            int
-		predecessorFunc        predecessorFunc
-		settings               []install.ClusterSettingOption
+		useFixturesProbability  float64
+		upgradeTimeout          time.Duration
+		minUpgrades             int
+		maxUpgrades             int
+		minimumSupportedVersion *clusterupgrade.Version
+		predecessorFunc         predecessorFunc
+		settings                []install.ClusterSettingOption
 	}
 
 	CustomOption func(*testOptions)
@@ -337,6 +347,18 @@ func NumUpgrades(n int) CustomOption {
 	return func(opts *testOptions) {
 		opts.minUpgrades = n
 		opts.maxUpgrades = n
+	}
+}
+
+// MinimumSupportedVersion allows tests to specify that the
+// mixed-version hooks passed to the test are meant to be run only
+// after the cluster is running at least the version `v` passed. For
+// example, if `v` is v23.1.0, mixed-version hooks will only be
+// scheduled when upgrading from a version in the 23.1 releases series
+// or above.
+func MinimumSupportedVersion(v string) CustomOption {
+	return func(opts *testOptions) {
+		opts.minimumSupportedVersion = clusterupgrade.MustParseVersion(v)
 	}
 }
 
@@ -824,6 +846,25 @@ func (s finalizeUpgradeStep) Run(
 	return err
 }
 
+// waitStep does nothing but sleep for the provided duration. Most
+// commonly used to allow the cluster to stay in a certain state
+// before attempting node restarts or other upgrade events.
+type waitStep struct {
+	dur time.Duration
+}
+
+func (s waitStep) Background() shouldStop { return nil }
+
+func (s waitStep) Description() string {
+	return fmt.Sprintf("wait for %s", s.dur)
+}
+
+func (s waitStep) Run(ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper) error {
+	l.Printf("waiting for %s", s.dur)
+	time.Sleep(s.dur)
+	return nil
+}
+
 // runHookStep is a step used to run a user-provided hook (i.e.,
 // callbacks passed to `OnStartup`, `InMixedVersion`, or `AfterTest`).
 type runHookStep struct {
@@ -1008,6 +1049,22 @@ func assertValidTest(test *Test, fatalFunc func(...interface{})) {
 		err := fmt.Errorf(
 			"invalid test options: maxUpgrades (%d) must be greater than minUpgrades (%d)",
 			test.options.maxUpgrades, test.options.minUpgrades,
+		)
+		fatalFunc(errors.Wrap(err, "mixedversion.NewTest"))
+	}
+
+	currentVersion := clusterupgrade.CurrentVersion()
+	msv := test.options.minimumSupportedVersion
+	// The minimum supported version should be from an older major
+	// version or, if from the same major version, from an older minor
+	// version.
+	validVersion := msv.Major() < currentVersion.Major() ||
+		(msv.Major() == currentVersion.Major() && msv.Minor() < currentVersion.Minor())
+
+	if !validVersion {
+		err := fmt.Errorf(
+			"invalid test options: minimum supported version (%s) should be from an older release series than current version (%s)",
+			msv.Version.String(), currentVersion.Version.String(),
 		)
 		fatalFunc(errors.Wrap(err, "mixedversion.NewTest"))
 	}
