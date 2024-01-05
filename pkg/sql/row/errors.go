@@ -48,16 +48,23 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 		if origPErr.Index == nil {
 			break
 		}
-		j := origPErr.Index.Index
-		if j >= int32(len(b.Results)) {
-			return errors.AssertionFailedf("index %d outside of results: %+v", j, b.Results)
+		j := int(origPErr.Index.Index)
+		var errKey roachpb.Key
+		for i := range b.Results {
+			r := &b.Results[i]
+			if j < len(r.Rows) {
+				errKey = r.Rows[j].Key
+				break
+			} else if j < len(r.Keys) {
+				errKey = r.Keys[j]
+				break
+			}
+			j -= len(r.Rows) + len(r.Keys)
 		}
-		result := b.Results[j]
-		if len(result.Rows) == 0 {
-			break
+		if errKey == nil {
+			return errors.AssertionFailedf("index %d outside of results: %+v", origPErr.Index.Index, b.Results)
 		}
-		key := result.Rows[0].Key
-		return NewUniquenessConstraintViolationError(ctx, tableDesc, key, v.ActualValue)
+		return NewUniquenessConstraintViolationError(ctx, tableDesc, errKey, v.ActualValue)
 
 	case *kvpb.WriteIntentError:
 		key := v.Locks[0].Key

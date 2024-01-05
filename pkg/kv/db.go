@@ -130,7 +130,7 @@ type Result struct {
 	// Rows contains the key/value pairs for the operation. The number of rows
 	// returned varies by operation. For Get, Put, CPut, and Inc the number
 	// of rows returned is the number of keys operated on. For Scan the number of
-	// rows returned is the number or rows matching the scan capped by the
+	// rows returned is the number of rows matching the scan capped by the
 	// maxRows parameter and other options. For Del and DelRange Rows is nil.
 	Rows []KeyValue
 
