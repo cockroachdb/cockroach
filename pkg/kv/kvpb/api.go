@@ -2105,7 +2105,7 @@ func humanizeCount(n uint64) redact.SafeString {
 // SafeFormat implements redact.SafeFormatter.
 func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("scan stats: stepped %s times (%s internal); seeked %s times (%s internal); "+
-		"block-bytes: (total %s, cached %s); "+
+		"block-bytes: (total %s, cached %s, duration %v); "+
 		"points: (count %s, key-bytes %s, value-bytes %s, tombstoned: %s) "+
 		"ranges: (count %s), (contained-points %s, skipped-points %s) "+
 		"evaluated requests: %s gets, %s scans, %s reverse scans",
@@ -2115,6 +2115,7 @@ func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
 		humanizeCount(s.NumInternalSeeks),
 		humanizeutil.IBytes(int64(s.BlockBytes)),
 		humanizeutil.IBytes(int64(s.BlockBytesInCache)),
+		s.BlockReadDuration,
 		humanizeCount(s.PointCount),
 		humanizeutil.IBytes(int64(s.KeyBytes)),
 		humanizeutil.IBytes(int64(s.ValueBytes)),
