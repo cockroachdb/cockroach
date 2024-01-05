@@ -179,7 +179,7 @@ func setupTPCC(
 			// Do nothing.
 		case usingImport:
 			t.Status("loading fixture" + estimatedSetupTimeStr)
-			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), install.AuthCertPassword)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1293,7 +1293,7 @@ func loadTPCCBench(
 	if b.SharedProcessMT {
 		pgurl = fmt.Sprintf("{pgurl%s:%s}", roachNodes[:1], appTenantName)
 	} else {
-		pgurl, err = roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+		pgurl, err = roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), install.AuthCertPassword)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1385,7 +1385,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			if err := c.Install(ctx, t.L(), loadNodes, "haproxy"); err != nil {
 				t.Fatal(err)
 			}
-			c.Run(ctx, option.WithNodes(loadNodes), "./cockroach gen haproxy --insecure --url {pgurl:1}")
+			c.Run(ctx, option.WithNodes(loadNodes), "./cockroach gen haproxy --url {pgurl:1}")
 			// Increase the maximum connection limit to ensure that no TPC-C
 			// load gen workers get stuck during connection initialization.
 			// 10k warehouses requires at least 20,000 connections, so add a

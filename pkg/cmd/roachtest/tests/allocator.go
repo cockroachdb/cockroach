@@ -48,7 +48,7 @@ func registerAllocator(r registry.Registry) {
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), install.AuthCertPassword)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -457,13 +457,9 @@ FROM crdb_internal.kv_store_status
 		t.Fatalf("expected 0 mis-replicated ranges, but found %d", n)
 	}
 
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
-	if err != nil {
-		t.Fatal(err)
-	}
 	decom := func(id int) {
 		c.Run(ctx, option.WithNodes(c.Node(1)),
-			fmt.Sprintf("./cockroach node decommission --insecure --url=%s --wait=none %d", pgurl, id))
+			fmt.Sprintf("./cockroach node decommission --certs-dir=certs --port={pgport%s} --wait=none %d", c.Node(id), id))
 	}
 
 	// Decommission a node. The ranges should down-replicate to 7 replicas.

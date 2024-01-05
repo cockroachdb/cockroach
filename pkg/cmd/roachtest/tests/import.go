@@ -145,7 +145,7 @@ func registerImportTPCC(r registry.Registry) {
 		m.Go(func(ctx context.Context) error {
 			defer dul.Done()
 			defer hc.Done()
-			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), install.AuthCertPassword)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -359,18 +359,18 @@ func registerImportDecommissioned(r registry.Registry) {
 		// Decommission a node.
 		nodeToDecommission := 2
 		t.Status(fmt.Sprintf("decommissioning node %d", nodeToDecommission))
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(nodeToDecommission))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(nodeToDecommission), install.AuthCertPassword)
 		if err != nil {
 			t.Fatal(err)
 		}
 		c.Run(ctx, option.WithNodes(c.Node(nodeToDecommission)),
-			fmt.Sprintf(`./cockroach node decommission --insecure --self --wait=all --url=%s`, pgurl))
+			fmt.Sprintf(`./cockroach node decommission --self --wait=all --url=%s`, pgurl))
 
 		// Wait for a bit for node liveness leases to expire.
 		time.Sleep(10 * time.Second)
 
 		t.Status("running workload")
-		pgurl, err = roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+		pgurl, err = roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), install.AuthCertPassword)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -59,11 +59,11 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			})
 			m.Wait()
 
-			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), install.AuthCertPassword)
 			if err != nil {
 				t.Fatal(err)
 			}
-			c.Run(ctx, option.WithNodes(c.Node(1)), `./workload init kv --drop --db=test`, pgurl)
+			c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf(`./workload init kv --drop --db=test '%s'`, pgurl))
 			for node := 1; node <= c.Spec().NodeCount; node++ {
 				node := node
 				// TODO(dan): Ideally, the test would fail if this queryload failed,

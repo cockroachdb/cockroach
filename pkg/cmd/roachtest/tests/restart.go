@@ -37,7 +37,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	// We don't really need tpcc, we just need a good amount of traffic and a good
 	// amount of data.
 	t.Status("importing tpcc fixture")
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), install.AuthCertPassword)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	// lastIndex will be helpful because that drives the log size down eagerly
 	// when things are healthy.
 	t.Status("waiting for addsstable truncations")
-	time.Sleep(11 * time.Minute)
+	//time.Sleep(11 * time.Minute)
 
 	// Stop a node.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), restartNode)
@@ -71,8 +71,8 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	c.Run(ctx, option.WithNodes(workloadNode), "./cockroach workload run tpcc --warehouses=100 "+
 		fmt.Sprintf("--tolerate-errors --wait=false --duration=%s {pgurl:1-2}", downDuration))
 
-	// Bring it back up and make sure it can serve a query within a reasonable
-	// time limit. For now, less time than it was down for.
+	//Bring it back up and make sure it can serve a query within a reasonable
+	//time limit. For now, less time than it was down for.
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), restartNode)
 
 	// Dialing the formerly down node may still be prevented by the circuit breaker
@@ -90,11 +90,11 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	                 SELECT count(*) FROM tpcc.order_line;
 	                 SET TRACING = OFF;
 	                 SHOW TRACE FOR SESSION;`
-	pgurl, err = roachtestutil.DefaultPGUrl(ctx, c, t.L(), restartNode)
+	pgurl, err = roachtestutil.DefaultPGUrl(ctx, c, t.L(), restartNode, install.AuthPassword)
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Run(ctx, option.WithNodes(restartNode), fmt.Sprintf(`./cockroach sql --insecure --url=%s -e "%s"`, pgurl, tracedQ))
+	c.Run(ctx, option.WithNodes(restartNode), fmt.Sprintf(`./cockroach sql --url='%s' -e "%s"`, pgurl, tracedQ))
 	if took := timeutil.Since(start); took > downDuration {
 		t.Fatalf(`expected to recover within %s took %s`, downDuration, took)
 	} else {

@@ -106,7 +106,7 @@ func registerGopg(r registry.Registry) {
 
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
 			fmt.Sprintf(
-				`cd %s && PGPORT={pgport:1} PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -v ./... 2>&1 | %s | tee %s`,
+				`cd %s && PGPORT={pgport:1} PGUSER=roach PGPASSWORD=system PGSSLMODE=allow PGDATABASE=postgres go test -v ./... 2>&1 | %s | tee %s`,
 				destPath, removeColorCodes, resultsFilePath),
 		)
 

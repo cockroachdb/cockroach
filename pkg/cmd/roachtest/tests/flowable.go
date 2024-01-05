@@ -52,7 +52,7 @@ func registerFlowable(r registry.Registry) {
 			t.Fatal(err)
 		}
 		if _, err := db.ExecContext(
-			ctx, `CREATE USER flowable;`,
+			ctx, `CREATE USER flowable WITH PASSWORD '123';`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -118,7 +118,12 @@ func registerFlowable(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		//pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), node, install.AuthPassword)
+		//if err != nil {
+		//	t.Fatal(err)
+		//}
+
+		if err = repeatRunE(
 			ctx,
 			t,
 			c,
@@ -136,7 +141,7 @@ grep "force-commit" . -lr | xargs sed -i 's/-- force-commit//g'`,
 			t.Fatal(err)
 		}
 
-		if err := c.RunE(ctx, option.WithNodes(node),
+		if err = c.RunE(ctx, option.WithNodes(node),
 			`cd /mnt/data1/flowable-engine/ && \
 ./mvnw clean test -Dtest=Flowable6Test#testLongServiceTaskLoop -Ddatabase=cockroachdb`,
 		); err != nil {
@@ -144,7 +149,7 @@ grep "force-commit" . -lr | xargs sed -i 's/-- force-commit//g'`,
 		}
 
 		// Java 17 poses a problem for some other roachtests that use java.
-		if err := repeatRunE(
+		if err = repeatRunE(
 			ctx,
 			t,
 			c,
@@ -170,10 +175,11 @@ grep "force-commit" . -lr | xargs sed -i 's/-- force-commit//g'`,
 }
 
 const flowableParams = `
-jdbc.url=jdbc:postgresql://127.0.0.1:{pgport:1}/flowable?sslmode=disable
+jdbc.url=jdbc:postgresql://127.0.0.1:{pgport:1}/flowable
 jdbc.driver=org.postgresql.Driver
 jdbc.username=flowable
-jdbc.password
+jdbc.password=123
+jdbc.sslmode=allow
 `
 
 // This patch will not be needed once https://github.com/flowable/flowable-engine/pull/3752

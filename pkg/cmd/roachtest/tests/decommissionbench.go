@@ -16,7 +16,6 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
-	t "log"
 	"math"
 	"os"
 	"path/filepath"
@@ -79,7 +78,7 @@ type decommissionBenchSpec struct {
 	drainFirst bool
 
 	// When true, the test will add a node to the cluster prior to decommission,
-	// so that the upreplication will overlap with the the decommission.
+	// so that the upreplication will overlap with the decommission.
 	whileUpreplicating bool
 
 	// When true, attempts to simulate decommissioning a node with high read
@@ -401,7 +400,7 @@ func setupDecommissionBench(
 
 		t.Status(fmt.Sprintf("initializing cluster with %d warehouses", benchSpec.warehouses))
 		// Add the connection string here as the port is not decided until c.Start() is called.
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), install.AuthCertPassword)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -929,11 +928,7 @@ func runSingleDecommission(
 
 	if drainFirst {
 		h.t.Status(fmt.Sprintf("draining node%d", target))
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, h.t.L(), c.Node(target))
-		if err != nil {
-			t.Fatal(err)
-		}
-		cmd := fmt.Sprintf("./cockroach node drain --url=%s --self --insecure", pgurl)
+		cmd := fmt.Sprintf("./cockroach node drain --certs-dir=certs --port={pgport%s} --self", c.Node(target))
 		if err := h.c.RunE(ctx, option.WithNodes(h.c.Node(target)), cmd); err != nil {
 			return err
 		}

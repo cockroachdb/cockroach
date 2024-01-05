@@ -216,8 +216,10 @@ module PG::TestingHelpers
     ENV['PGPORT'] ||= "26257"
 		@port = ENV['PGPORT'].to_i
 		ENV['PGHOST'] = 'localhost'
-    ENV['PGUSER'] = 'root'
-		@conninfo = "user=root host=localhost port=#{@port} dbname=test"
+    ENV['PGUSER'] = 'roach'
+    ENV['PGPASSWORD'] = 'system'
+    ENV['PGSSLMODE'] = 'require'
+		@conninfo = "user=roach password='system' host=localhost sslmode=require port=#{@port} dbname=test"
 		@unix_socket = TEST_DIRECTORY.to_s
 	end
 
@@ -242,8 +244,8 @@ module PG::TestingHelpers
 			end
 
 			trace "Creating the test DB"
-			log_and_run @logfile, '/home/ubuntu/cockroach', 'sql', '--insecure', '-e', 'DROP DATABASE IF EXISTS test'
-			log_and_run @logfile, '/home/ubuntu/cockroach', 'sql', '--insecure', '-e', 'CREATE DATABASE test'
+			log_and_run @logfile, '/home/ubuntu/cockroach', 'sql', '--url=postgres://roach:system@localhost:26257?sslmode=allow', '-e', 'DROP DATABASE IF EXISTS test'
+			log_and_run @logfile, '/home/ubuntu/cockroach', 'sql', '--url=postgres://roach:system@localhost:26257?sslmode=allow', '-e', 'CREATE DATABASE test'
 
 		rescue => err
 			$stderr.puts "%p during test setup: %s" % [ err.class, err.message ]

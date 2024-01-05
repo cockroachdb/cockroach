@@ -98,7 +98,7 @@ func runSchemaChangeRandomLoad(
 
 	t.Status("starting cockroach nodes")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), install.AuthCertPassword)
 	if err != nil {
 		t.Fatal(err)
 	}
