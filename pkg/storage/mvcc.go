@@ -4351,6 +4351,7 @@ func recordIteratorStats(iter iteratorWithStats, scanStats *kvpb.ScanStats) {
 	scanStats.SeparatedPointCount += stats.InternalStats.SeparatedPointValue.Count
 	scanStats.SeparatedPointValueBytes += stats.InternalStats.SeparatedPointValue.ValueBytes
 	scanStats.SeparatedPointValueBytesFetched += stats.InternalStats.SeparatedPointValue.ValueBytesFetched
+	scanStats.BlockReadDuration += stats.InternalStats.BlockReadDuration
 }
 
 // mvccScanInit performs some preliminary checks on the validity of options for
