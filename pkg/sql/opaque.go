@@ -406,6 +406,7 @@ func init() {
 		&tree.AlterBackup{},
 		&tree.AlterBackupSchedule{},
 		&tree.AlterTenantReplication{},
+		&tree.AlterTenantReset{},
 		&tree.Backup{},
 		&tree.ShowBackup{},
 		&tree.Restore{},
