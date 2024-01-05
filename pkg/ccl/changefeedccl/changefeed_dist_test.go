@@ -345,7 +345,7 @@ func (rdt *rangeDistributionTester) balancedDistributionUpperBound(numNodes int)
 	return int(math.Ceil((1 + rebalanceThreshold.Get(&rdt.lastNode.ClusterSettings().SV) + 0.1) * 64 / float64(numNodes)))
 }
 
-func TestChangefeedDistributionStrategy(t *testing.T) {
+func TestChangefeedWithNoDistributionStrategy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -360,91 +360,114 @@ func TestChangefeedDistributionStrategy(t *testing.T) {
 	// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
 	// to the same node which stores it. No load balancing is performed afterwards. Thus, the distribution of
 	// ranges assigned to nodes is the same as the distribution of leaseholders on nodes.
-	t.Run("locality=none,distribution=none", func(t *testing.T) {
-		tester := newRangeDistributionTester(t, noLocality)
-		defer tester.cleanup()
+	tester := newRangeDistributionTester(t, noLocality)
+	defer tester.cleanup()
 
-		tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'default'")
-		tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
-		partitions := tester.getPartitions()
-		counts := tester.countRangesPerNode(partitions)
-		require.True(t, reflect.DeepEqual(counts, []int{2, 2, 4, 8, 16, 32, 0, 0}),
-			"unexpected counts %v, partitions: %v", counts, partitions)
-	})
+	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'default'")
+	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
+	partitions := tester.getPartitions()
+	counts := tester.countRangesPerNode(partitions)
+	require.True(t, reflect.DeepEqual(counts, []int{2, 2, 4, 8, 16, 32, 0, 0}),
+		"unexpected counts %v, partitions: %v", counts, partitions)
+}
+
+func TestChangefeedWithSimpleDistributionStrategy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The test is slow and will time out under deadlock/race/stress.
+	skip.UnderShort(t)
+	skip.UnderDuress(t)
+
+	noLocality := func(i int) []roachpb.Tier {
+		return make([]roachpb.Tier, 0)
+	}
 
 	// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
 	// to the same node which stores it. Afterwards, load balancing is performed to attempt an even distribution.
 	// Check that we roughly assign (64 ranges / 6 nodes) ranges to each node.
-	t.Run("locality=none,distribution=balanced_simple", func(t *testing.T) {
-		tester := newRangeDistributionTester(t, noLocality)
-		defer tester.cleanup()
-		tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'balanced_simple'")
-		tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
-		partitions := tester.getPartitions()
-		counts := tester.countRangesPerNode(partitions)
-		upper := int(math.Ceil((1 + rebalanceThreshold.Get(&tester.lastNode.ClusterSettings().SV)) * 64 / 6))
-		for _, count := range counts {
-			require.LessOrEqual(t, count, upper, "counts %v contains value greater than upper bound %d",
-				counts, upper)
-		}
-	})
+	tester := newRangeDistributionTester(t, noLocality)
+	defer tester.cleanup()
+	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'balanced_simple'")
+	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
+	partitions := tester.getPartitions()
+	counts := tester.countRangesPerNode(partitions)
+	upper := int(math.Ceil((1 + rebalanceThreshold.Get(&tester.lastNode.ClusterSettings().SV)) * 64 / 6))
+	for _, count := range counts {
+		require.LessOrEqual(t, count, upper, "counts %v contains value greater than upper bound %d",
+			counts, upper)
+	}
+}
+
+func TestChangefeedWithNoDistributionStrategyAndConstrainedLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The test is slow and will time out under deadlock/race/stress.
+	skip.UnderShort(t)
+	skip.UnderDuress(t)
 
 	// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
 	// to the same node which stores it. However, node of these nodes don't pass the filter. The replicas assigned
 	// to these nodes are distributed arbitrarily to any nodes which pass the filter.
-	t.Run("locality=constrained,distribution=none", func(t *testing.T) {
-		tester := newRangeDistributionTester(t, func(i int) []roachpb.Tier {
-			if i%2 == 1 {
-				return []roachpb.Tier{{Key: "y", Value: "1"}}
-			}
-			return []roachpb.Tier{}
-		})
-		defer tester.cleanup()
-		tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'default'")
-		tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', execution_locality='y=1'")
-		partitions := tester.getPartitions()
-		counts := tester.countRangesPerNode(partitions)
-
-		totalRanges := 0
-		for i, count := range counts {
-			if i%2 == 1 {
-				totalRanges += count
-			} else {
-				require.Equal(t, count, 0)
-			}
+	tester := newRangeDistributionTester(t, func(i int) []roachpb.Tier {
+		if i%2 == 1 {
+			return []roachpb.Tier{{Key: "y", Value: "1"}}
 		}
-		require.Equal(t, totalRanges, 64)
+		return []roachpb.Tier{}
 	})
+	defer tester.cleanup()
+	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'default'")
+	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', execution_locality='y=1'")
+	partitions := tester.getPartitions()
+	counts := tester.countRangesPerNode(partitions)
+
+	totalRanges := 0
+	for i, count := range counts {
+		if i%2 == 1 {
+			totalRanges += count
+		} else {
+			require.Equal(t, count, 0)
+		}
+	}
+	require.Equal(t, totalRanges, 64)
+}
+
+func TestChangefeedWithSimpleDistributionStrategyAndConstrainedLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The test is slow and will time out under deadlock/race/stress.
+	skip.UnderShort(t)
+	skip.UnderDuress(t)
 
 	// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
 	// to the same node which stores it. However, node of these nodes don't pass the filter. The replicas assigned
 	// to these nodes are distributed arbitrarily to any nodes which pass the filter.
 	// Afterwards, we perform load balancing on this set of nodes.
-	t.Run("locality=constrained,distribution=balanced_simple", func(t *testing.T) {
-		tester := newRangeDistributionTester(t, func(i int) []roachpb.Tier {
-			if i%2 == 1 {
-				return []roachpb.Tier{{Key: "y", Value: "1"}}
-			}
-			return []roachpb.Tier{}
-		})
-		defer tester.cleanup()
-		tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'balanced_simple'")
-		tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', execution_locality='y=1'")
-		partitions := tester.getPartitions()
-		counts := tester.countRangesPerNode(partitions)
-
-		upper := tester.balancedDistributionUpperBound(len(partitions))
-		totalRanges := 0
-		for i, count := range counts {
-			if i%2 == 1 {
-				require.LessOrEqual(t, count, upper)
-				totalRanges += count
-			} else {
-				require.Equal(t, count, 0)
-			}
+	tester := newRangeDistributionTester(t, func(i int) []roachpb.Tier {
+		if i%2 == 1 {
+			return []roachpb.Tier{{Key: "y", Value: "1"}}
 		}
-		require.Equal(t, totalRanges, 64)
+		return []roachpb.Tier{}
 	})
+	defer tester.cleanup()
+	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'balanced_simple'")
+	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', execution_locality='y=1'")
+	partitions := tester.getPartitions()
+	counts := tester.countRangesPerNode(partitions)
+
+	upper := tester.balancedDistributionUpperBound(len(partitions))
+	totalRanges := 0
+	for i, count := range counts {
+		if i%2 == 1 {
+			require.LessOrEqual(t, count, upper)
+			totalRanges += count
+		} else {
+			require.Equal(t, count, 0)
+		}
+	}
+	require.Equal(t, totalRanges, 64)
 }
 
 // TestDistSenderAllRangeSpans tests (*distserver).AllRangeSpans.
