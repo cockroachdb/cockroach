@@ -31,7 +31,7 @@ spec:
         spec:
           containers:
             - name: roachprod-gc-cronjob
-              image: gcr.io/cockroach-dev-inf/cockroachlabs/roachprod:2b6e80e938e
+              image: gcr.io/cockroach-dev-inf/cockroachlabs/roachprod:5bf97e5bd7b
               args:
                 - gc
                 - --gce-project=cockroach-ephemeral,cockroach-roachstress
