@@ -4266,7 +4266,7 @@ func TestConnectionClass(t *testing.T) {
 			// Verify that the request carries the class we expect it to for its span.
 			span, err := keys.Range(ba.Requests)
 			require.NoError(t, err)
-			require.Equalf(t, rpc.ConnectionClassForKey(span.Key), class,
+			require.Equalf(t, rpc.ConnectionClassForKey(span.Key, rpc.DefaultClass), class,
 				"unexpected class for span key %v", span.Key)
 		})
 	}

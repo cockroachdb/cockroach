@@ -396,7 +396,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 
 	r.rangeStr.store(r.replicaID, desc)
 	r.isInitialized.Set(desc.IsInitialized())
-	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey))
+	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey, rpc.RaftClass))
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.mu.state.Desc = desc
 	r.mu.replicaFlowControlIntegration.onDescChanged(ctx)
