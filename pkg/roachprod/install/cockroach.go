@@ -1096,7 +1096,7 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 
 	stmts := strings.Join([]string{
 		fmt.Sprintf("CREATE USER IF NOT EXISTS %s WITH LOGIN PASSWORD '%s'", Username, password),
-		fmt.Sprintf("GRANT ADMIN TO %s", Username),
+		fmt.Sprintf("GRANT ADMIN TO %s WITH ADMIN OPTION", Username),
 	}, "; ")
 
 	// We retry a few times here because cockroach process might not be

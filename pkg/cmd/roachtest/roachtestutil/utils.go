@@ -37,10 +37,13 @@ func SystemInterfaceSystemdUnitName() string {
 // DefaultPGUrl is a wrapper over roachprod.PgUrl that calls it with the arguments
 // that *almost* all roachtests want: single tenant and only a single node.
 func DefaultPGUrl(
-	ctx context.Context, c cluster.Cluster, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context,
+	c cluster.Cluster,
+	l *logger.Logger,
+	node option.NodeListOption,
+	auth install.PGAuthMode,
 ) (string, error) {
-	opts := roachprod.PGURLOptions{}
-	opts.Secure = c.IsSecure()
+	opts := roachprod.PGURLOptions{Auth: auth, Secure: c.IsSecure()}
 	pgurl, err := roachprod.PgURL(ctx, l, c.MakeNodes(node), "certs", opts)
 	if err != nil {
 		return "", err
