@@ -24,6 +24,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/opt/optbuilder",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

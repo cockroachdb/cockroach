@@ -116,20 +116,20 @@ func (cv columnVisibility) String() string {
 	}
 }
 
-// maxFuncParams is the maximum number of parameters allowed in a function.
-const maxFuncParams = 100
+// MaxFuncParams is the maximum number of parameters allowed in a function.
+const MaxFuncParams = 100
 
 // funcParamOrd is a 1-based ordinal of a function parameter.
 type funcParamOrd int8
 
 // setParamOrd sets the column's 1-based function parameter ordinal to the given
 // 0-based ordinal. Panics if the given ordinal is not in the range
-// [0, maxFuncParams).
+// [0, MaxFuncParams).
 func (c *scopeColumn) setParamOrd(ord int) {
 	if ord < 0 {
 		panic(errors.AssertionFailedf("expected non-negative argument ordinal"))
 	}
-	if ord >= maxFuncParams {
+	if ord >= MaxFuncParams {
 		panic(pgerror.New(pgcode.TooManyArguments, "functions cannot have more than 100 arguments"))
 	}
 	c.paramOrd = funcParamOrd(ord + 1)
