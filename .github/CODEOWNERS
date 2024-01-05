@@ -240,6 +240,7 @@
 /pkg/ccl/streamingccl/       @cockroachdb/disaster-recovery
 /pkg/ccl/backupccl/          @cockroachdb/disaster-recovery
 /pkg/ccl/backupccl/*_job.go  @cockroachdb/disaster-recovery @cockroachdb/jobs-prs
+/pkg/ccl/revertccl/          @cockroachdb/disaster-recovery
 /pkg/ccl/storageccl/         @cockroachdb/disaster-recovery
 /pkg/ccl/cloudccl/           @cockroachdb/disaster-recovery
 /pkg/cloud/                  @cockroachdb/disaster-recovery

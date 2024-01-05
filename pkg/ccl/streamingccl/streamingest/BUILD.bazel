@@ -22,6 +22,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/ccl/backupccl",
+        "//pkg/ccl/revertccl",
         "//pkg/ccl/streamingccl",
         "//pkg/ccl/streamingccl/replicationutils",
         "//pkg/ccl/streamingccl/streamclient",
