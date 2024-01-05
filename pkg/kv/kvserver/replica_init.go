@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -40,6 +41,18 @@ const (
 	splitQueueThrottleDuration = 5 * time.Second
 	mergeQueueThrottleDuration = 5 * time.Second
 )
+
+// defRaftConnClass is the default rpc.ConnectionClass used for non-system raft
+// traffic. Normally it is RaftClass, but can be flipped to DefaultClass if the
+// corresponding env variable is true.
+//
+// NB: for a subset of system ranges, SystemClass is used instead of this.
+var defRaftConnClass = func() rpc.ConnectionClass {
+	if envutil.EnvOrDefaultBool("COCKROACH_RAFT_USE_DEFAULT_CONNECTION_CLASS", false) {
+		return rpc.DefaultClass
+	}
+	return rpc.RaftClass
+}()
 
 // loadInitializedReplicaForTesting loads and constructs an initialized Replica,
 // after checking its invariants.
@@ -396,7 +409,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 
 	r.rangeStr.store(r.replicaID, desc)
 	r.isInitialized.Set(desc.IsInitialized())
-	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey))
+	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey, defRaftConnClass))
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.mu.state.Desc = desc
 	r.mu.replicaFlowControlIntegration.onDescChanged(ctx)
