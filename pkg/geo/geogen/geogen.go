@@ -163,14 +163,14 @@ func RandomLineString(
 	if rng.Intn(10) == 0 {
 		return geom.NewLineString(layout).SetSRID(int(srid))
 	}
-	numCoords := 3 + rand.Intn(10)
+	numCoords := 3 + rng.Intn(10)
 	randCoords := RandomValidLinearRingCoords(rng, numCoords, randomBounds, layout)
 
 	// Extract a random substring from the LineString by truncating at the ends.
 	var minTrunc, maxTrunc int
 	// Ensure we always have at least two points.
 	for maxTrunc-minTrunc < 2 {
-		minTrunc, maxTrunc = rand.Intn(numCoords+1), rand.Intn(numCoords+1)
+		minTrunc, maxTrunc = rng.Intn(numCoords+1), rng.Intn(numCoords+1)
 		// Ensure maxTrunc >= minTrunc.
 		if minTrunc > maxTrunc {
 			minTrunc, maxTrunc = maxTrunc, minTrunc
