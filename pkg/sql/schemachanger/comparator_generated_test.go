@@ -818,6 +818,11 @@ func TestSchemaChangeComparator_index_join(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/index_join"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_index_recommendations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/index_recommendations"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_inet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/inet"
