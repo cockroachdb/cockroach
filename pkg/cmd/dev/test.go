@@ -261,11 +261,16 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		}
 		// Filter out only test targets.
 		queryArgs := []string{"query", fmt.Sprintf("kind(.*_test, %s)", pkg)}
-		labels, err := d.exec.CommandContextSilent(ctx, "bazel", queryArgs...)
+		labelsBytes, err := d.exec.CommandContextSilent(ctx, "bazel", queryArgs...)
 		if err != nil {
 			return fmt.Errorf("could not query for tests within %s: got error %w", pkg, err)
 		}
-		testTargets = append(testTargets, strings.Split(strings.TrimSpace(string(labels)), "\n")...)
+		labels := strings.TrimSpace(string(labelsBytes))
+		if labels == "" {
+			log.Printf("WARNING: no test targets were found matching %s", pkg)
+			continue
+		}
+		testTargets = append(testTargets, strings.Split(labels, "\n")...)
 	}
 
 	for _, target := range testTargets {
@@ -283,7 +288,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	}
 
 	if len(testTargets) == 0 {
-		log.Printf("WARNING: no matching test targets were found")
+		log.Printf("WARNING: no matching test targets were found and no tests will be run")
 		return nil
 	}
 
