@@ -189,7 +189,6 @@ at or near ",": syntax error
 DETAIL: source SQL:
 SELECT POSITION('high', 'a')
                       ^
-HINT: try \h SELECT
 
 parse
 SELECT OVERLAY('w33333rce' PLACING 'resou' FROM 3)

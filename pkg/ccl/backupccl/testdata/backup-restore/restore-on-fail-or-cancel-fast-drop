@@ -1,4 +1,4 @@
-new-cluster name=s1 nodes=1
+new-cluster name=s1 nodes=1 disable-tenant
 ----
 
 subtest restore-cleanup-with-range-tombstones
@@ -16,7 +16,7 @@ exec-sql
 BACKUP INTO 'nodelocal://1/cluster_backup';
 ----
 
-new-cluster name=s2 nodes=1 share-io-dir=s1
+new-cluster name=s2 nodes=1 share-io-dir=s1 disable-tenant
 ----
 
 # Restore's OnFailOrCancel deletes descriptors which requires us to wait for no

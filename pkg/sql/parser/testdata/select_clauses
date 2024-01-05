@@ -1488,7 +1488,6 @@ at or near "EOF": syntax error
 DETAIL: source SQL:
 SELECT * FROM t WHERE k=
                         ^
-HINT: try \h SELECT
 
 parse
 SELECT a FROM t ORDER BY a

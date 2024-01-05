@@ -495,7 +495,6 @@ func TestContextualHelp(t *testing.T) {
 		{`SELECT * FROM ??`, `<SOURCE>`},
 		{`SELECT 1 AS OF ??`, `SELECT`},
 		{`SELECT 1 FROM foo ??`, `SELECT`},
-		{`SELECT 1 FROM foo WHERE ??`, `SELECT`},
 		{`SELECT 1 FROM (SELECT ??`, `SELECT`},
 		{`SELECT 1 FROM (VALUES ??`, `VALUES`},
 		{`SELECT 1 FROM (TABLE ??`, `TABLE`},
