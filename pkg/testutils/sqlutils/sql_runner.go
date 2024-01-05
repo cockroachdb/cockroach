@@ -84,6 +84,7 @@ func fmtMessage(message string) string {
 
 // Exec is a wrapper around gosql.Exec that kills the test on error.
 func (sr *SQLRunner) Exec(t Fataler, query string, args ...interface{}) gosql.Result {
+	helperOrNoop(t)()
 	return sr.ExecWithMessage(t, "", query, args...)
 }
 
