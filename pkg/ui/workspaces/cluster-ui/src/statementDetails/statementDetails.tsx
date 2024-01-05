@@ -313,9 +313,9 @@ export class StatementDetails extends React.Component<
     if (!this.props.isTenant) {
       this.props.refreshNodes();
       this.props.refreshNodesLiveness();
-      if (!this.props.hasViewActivityRedactedRole) {
-        this.props.refreshStatementDiagnosticsRequests();
-      }
+    }
+    if (!this.props.hasViewActivityRedactedRole) {
+      this.props.refreshStatementDiagnosticsRequests();
     }
   }
 
@@ -332,9 +332,9 @@ export class StatementDetails extends React.Component<
     if (!this.props.isTenant) {
       this.props.refreshNodes();
       this.props.refreshNodesLiveness();
-      if (!this.props.hasViewActivityRedactedRole) {
-        this.props.refreshStatementDiagnosticsRequests();
-      }
+    }
+    if (!this.props.hasViewActivityRedactedRole) {
+      this.props.refreshStatementDiagnosticsRequests();
     }
 
     // If a new, non-empty-string query text is available
@@ -474,7 +474,7 @@ export class StatementDetails extends React.Component<
         <TabPane tab="Explain Plans" key="explain-plan">
           {this.renderExplainPlanTabContent(hasTimeout, hasData)}
         </TabPane>
-        {!this.props.isTenant && !this.props.hasViewActivityRedactedRole && (
+        {!this.props.hasViewActivityRedactedRole && (
           <TabPane
             tab={`Diagnostics${
               this.hasDiagnosticReports()
