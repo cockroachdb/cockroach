@@ -183,11 +183,15 @@ func (s *schemaChange) Ops(
 
 	for i := 0; i < s.connFlags.Concurrency; i++ {
 
+		// Different worker goroutines are not allowed to share RNGs. We use a
+		// different seed for each worker so that each one generates different
+		// operations.
+		workerRng := randutil.NewTestRandWithSeed(seed + int64(i))
 		opGeneratorParams := operationGeneratorParams{
 			seqNum:             seqNum,
 			errorRate:          s.errorRate,
 			enumPct:            s.enumPct,
-			rng:                rng,
+			rng:                workerRng,
 			ops:                ops,
 			maxSourceTables:    s.maxSourceTables,
 			sequenceOwnedByPct: s.sequenceOwnedByPct,
