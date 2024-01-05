@@ -24,8 +24,12 @@ import (
 // Reader provides access to the global tenant capability state. The global
 // tenant capability state may be arbitrarily stale.
 type Reader interface {
+	// GetInfo returns the tenant information for the specified tenant.
+	GetInfo(id roachpb.TenantID) (_ Entry, _ <-chan struct{}, found bool)
+
 	// GetCapabilities returns the tenant capabilities for the specified tenant.
 	GetCapabilities(id roachpb.TenantID) (_ *tenantcapabilitiespb.TenantCapabilities, found bool)
+
 	// GetGlobalCapabilityState returns the capability state for all tenants.
 	GetGlobalCapabilityState() map[roachpb.TenantID]*tenantcapabilitiespb.TenantCapabilities
 }
