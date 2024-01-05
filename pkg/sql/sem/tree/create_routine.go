@@ -122,6 +122,7 @@ func (node *CreateRoutine) Format(ctx *FmtCtx) {
 		ctx.FormatTypeReference(node.ReturnType.Type)
 		ctx.WriteString("\n\t")
 	}
+	var isPLpgSQL bool
 	var funcBody RoutineBodyStr
 	for _, option := range node.Options {
 		switch t := option.(type) {
@@ -132,6 +133,8 @@ func (node *CreateRoutine) Format(ctx *FmtCtx) {
 			if node.IsProcedure {
 				continue
 			}
+		case RoutineLanguage:
+			isPLpgSQL = t == RoutineLangPLpgSQL
 		}
 		ctx.FormatNode(option)
 		ctx.WriteString("\n\t")
@@ -147,7 +150,10 @@ func (node *CreateRoutine) Format(ctx *FmtCtx) {
 			oldAnn := ctx.ann
 			ctx.ann = node.BodyAnnotations[i]
 			ctx.FormatNode(stmt)
-			ctx.WriteByte(';')
+			if !isPLpgSQL {
+				// PL/pgSQL statements handle printing semicolons themselves.
+				ctx.WriteByte(';')
+			}
 			ctx.ann = oldAnn
 		}
 		ctx.WriteString("$$")
@@ -155,7 +161,11 @@ func (node *CreateRoutine) Format(ctx *FmtCtx) {
 		ctx.WriteString("BEGIN ATOMIC ")
 		for _, stmt := range node.RoutineBody.Stmts {
 			ctx.FormatNode(stmt)
-			ctx.WriteString("; ")
+			if !isPLpgSQL {
+				// PL/pgSQL statements handle printing semicolons themselves.
+				ctx.WriteByte(';')
+			}
+			ctx.WriteByte(' ')
 		}
 		ctx.WriteString("END")
 	} else {

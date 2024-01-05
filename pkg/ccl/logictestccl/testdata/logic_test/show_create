@@ -186,5 +186,5 @@ f112134  CREATE FUNCTION sc.f112134()
            i := i + 1;
            END LOOP;
            RETURN x;
-           END
+           END;
          $$

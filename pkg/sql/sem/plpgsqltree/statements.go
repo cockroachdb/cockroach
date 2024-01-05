@@ -72,8 +72,12 @@ func (s *Block) CopyNode() *Block {
 	return &copyNode
 }
 
-// TODO(drewk): format Label and Exceptions fields.
 func (s *Block) Format(ctx *tree.FmtCtx) {
+	if s.Label != "" {
+		ctx.WriteString("<<")
+		ctx.FormatNameP(&s.Label)
+		ctx.WriteString(">>\n")
+	}
 	if s.Decls != nil {
 		ctx.WriteString("DECLARE\n")
 		for _, dec := range s.Decls {
@@ -92,7 +96,12 @@ func (s *Block) Format(ctx *tree.FmtCtx) {
 			ctx.FormatNode(&e)
 		}
 	}
-	ctx.WriteString("END\n")
+	ctx.WriteString("END")
+	if s.Label != "" {
+		ctx.WriteString(" ")
+		ctx.FormatNameP(&s.Label)
+	}
+	ctx.WriteString(";\n")
 }
 
 func (s *Block) PlpgSQLStatementTag() string {
@@ -863,7 +872,7 @@ func (s *Raise) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("RAISE")
 	if s.LogLevel != "" {
 		ctx.WriteString(" ")
-		ctx.WriteString(s.LogLevel)
+		ctx.WriteString(strings.ToUpper(s.LogLevel))
 	}
 	if s.Code != "" {
 		ctx.WriteString(" SQLSTATE ")

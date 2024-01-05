@@ -1725,7 +1725,6 @@ func (b *builderState) serializeUserDefinedTypes(
 		v2 := utils.TypeRefVisitor{Fn: replaceTypeFunc}
 		newStmt = plpgsqltree.Walk(&v2, newStmt)
 		fmtCtx.FormatNode(newStmt)
-		fmtCtx.WriteString(";")
 	default:
 		panic(errors.AssertionFailedf("unexpected function language: %s", lang))
 	}
