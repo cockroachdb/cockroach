@@ -1044,20 +1044,26 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 			recommendations = ih.explainIndexRecs
 		} else {
 			opc := &planner.optPlanningCtx
-			opc.reset(ctx)
 			f := opc.optimizer.Factory()
-			evalCtx := opc.p.EvalContext()
-			f.Init(ctx, evalCtx, opc.catalog)
-			f.FoldingControl().AllowStableFolds()
-			bld := optbuilder.New(ctx, &opc.p.semaCtx, evalCtx, opc.catalog, f, opc.p.stmt.AST)
-			err := bld.Build()
-			if err != nil {
-				log.Warningf(ctx, "unable to build memo: %s", err)
-			} else {
-				recommendations, err = opc.makeQueryIndexRecommendation(ctx)
+			if f.Memo() == nil || f.Memo().IsEmpty() {
+				// Run optbuild to create a memo with a root expression, if the current
+				// memo is empty.
+				opc.reset(ctx)
+				evalCtx := opc.p.EvalContext()
+				f.Init(ctx, evalCtx, opc.catalog)
+				f.FoldingControl().AllowStableFolds()
+				bld := optbuilder.New(ctx, &opc.p.semaCtx, evalCtx, opc.catalog, f, opc.p.stmt.AST)
+				err := bld.Build()
 				if err != nil {
-					log.Warningf(ctx, "unable to generate index recommendations: %s", err)
+					log.Warningf(ctx, "unable to build memo: %s", err)
+					return
 				}
+			}
+			var err error
+			recommendations, err = opc.makeQueryIndexRecommendation(ctx)
+			if err != nil {
+				log.Warningf(ctx, "unable to generate index recommendations: %s", err)
+				return
 			}
 		}
 		reset = true
