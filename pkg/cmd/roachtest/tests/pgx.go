@@ -117,7 +117,7 @@ func registerPgx(r registry.Registry) {
 			ctx, c, t, node,
 			"run pgx test suite",
 			"cd /mnt/data1/pgx && "+
-				"PGX_TEST_DATABASE='postgresql://test_admin:@localhost:{pgport:1}/pgx_test' go test -v 2>&1 | "+
+				"PGX_TEST_DATABASE='postgresql://roach:system@localhost:{pgport:1}/pgx_test?sslmode=require' go test -v 2>&1 | "+
 				"`go env GOPATH`/bin/go-junit-report",
 		)
 

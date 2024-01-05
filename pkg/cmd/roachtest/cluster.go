@@ -2687,9 +2687,16 @@ func (c *clusterImpl) ConnE(
 	for _, opt := range opts {
 		opt(connOptions)
 	}
+
+	authMode := install.AuthCertPassword
+	if connOptions.SkipAuth {
+		authMode = install.AuthRootCert
+	}
+
 	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), roachprod.PGURLOptions{
 		VirtualClusterName: connOptions.TenantName,
 		SQLInstance:        connOptions.SQLInstance,
+		Auth:               authMode,
 	})
 	if err != nil {
 		return nil, err

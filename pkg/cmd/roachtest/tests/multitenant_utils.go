@@ -359,7 +359,9 @@ func startInMemoryTenant(
 	var tenantConn *gosql.DB
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		tenantConn, err = c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName))
+		// Skip authentication here as the connection created here will be used
+		// to create an admin user.
+		tenantConn, err = c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName), option.SkipAuth(true))
 		if err != nil {
 			return err
 		}

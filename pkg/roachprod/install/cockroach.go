@@ -509,20 +509,21 @@ func (c *SyncedCluster) NodeURL(
 	u.Host = fmt.Sprintf("%s:%d", host, port)
 	v := url.Values{}
 	if c.Secure {
-		password := virtualClusterName
-		if virtualClusterName == "" {
-			password = SystemInterfaceName
+		user := Username
+		password := SystemInterfaceName
+		if serviceMode == ServiceModeShared && virtualClusterName != "" {
+			user = "secure"
+			password = "roach"
 		}
-		var user string
+
 		switch auth {
 		case AuthRootCert:
 			user = "root"
 		case AuthPassword:
-			u.User = url.UserPassword(Username, password)
+			u.User = url.UserPassword(user, password)
 			v.Add("sslmode", "allow")
 		case AuthCertPassword:
-			user = Username
-			u.User = url.UserPassword(Username, password)
+			u.User = url.UserPassword(user, password)
 		}
 
 		if auth != AuthPassword {
@@ -534,7 +535,6 @@ func (c *SyncedCluster) NodeURL(
 	} else {
 		v.Add("sslmode", "disable")
 	}
-
 	// Add the virtual cluster name option explicitly for shared-process
 	// tenants or for the system tenant. This is to make sure we connect
 	// to the system tenant in case we have previously changed the
@@ -1098,7 +1098,7 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 
 	stmts := strings.Join([]string{
 		fmt.Sprintf("CREATE USER IF NOT EXISTS %s WITH LOGIN PASSWORD '%s'", Username, password),
-		fmt.Sprintf("GRANT ADMIN TO %s", Username),
+		fmt.Sprintf("GRANT ADMIN TO %s WITH ADMIN OPTION", Username),
 	}, "; ")
 
 	// We retry a few times here because cockroach process might not be

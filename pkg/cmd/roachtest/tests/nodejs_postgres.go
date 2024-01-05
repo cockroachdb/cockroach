@@ -148,9 +148,9 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
 			fmt.Sprintf(
 				`cd /mnt/data1/node-postgres/ && sudo \
-PGPORT={pgport:1} PGUSER=%s PGSSLMODE=require PGDATABASE=postgres_node_test \
-PGSSLCERT=$HOME/certs/client.%s.crt PGSSLKEY=$HOME/certs/client.%s.key PGSSLROOTCERT=$HOME/certs/ca.crt yarn test`,
-				user, user, user,
+PGPORT={pgport:1} PGUSER=%[1]s PGSSLMODE=require PGDATABASE=postgres_node_test \
+PGSSLCERT=$HOME/certs/client.%[1]s.crt PGSSLKEY=$HOME/certs/client.%[1]s.key PGSSLROOTCERT=$HOME/certs/ca.crt yarn test`,
+				user,
 			),
 		)
 

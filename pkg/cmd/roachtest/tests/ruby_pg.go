@@ -157,7 +157,7 @@ func registerRubyPG(r registry.Registry) {
 		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
-			`cd /mnt/data1/ruby-pg/ && bundle exec rake compile test`,
+			`cd /mnt/data1/ruby-pg/ && PGUSER=roach PGPASSWORD=system PGSSLMODE=require bundle exec rake compile test`,
 		)
 
 		// Fatal for a roachprod or SSH error. A roachprod error is when result.Err==nil.

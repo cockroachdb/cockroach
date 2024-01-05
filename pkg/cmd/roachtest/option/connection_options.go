@@ -20,7 +20,11 @@ type ConnOption struct {
 	DBName      string
 	TenantName  string
 	SQLInstance int
-	Options     map[string]string
+	// SkipAuth skips authenticating and instead uses root user. Skipping is not
+	// recommended but sometimes necessary, i.e. we are creating an Admin user to
+	// enable non-root authentication.
+	SkipAuth bool
+	Options  map[string]string
 }
 
 func User(user string) func(*ConnOption) {
@@ -61,5 +65,11 @@ func ConnectTimeout(t time.Duration) func(*ConnOption) {
 func DBName(dbName string) func(*ConnOption) {
 	return func(option *ConnOption) {
 		option.DBName = dbName
+	}
+}
+
+func SkipAuth(skipAuth bool) func(*ConnOption) {
+	return func(option *ConnOption) {
+		option.SkipAuth = skipAuth
 	}
 }

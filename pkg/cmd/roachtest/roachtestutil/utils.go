@@ -35,16 +35,25 @@ func SystemInterfaceSystemdUnitName() string {
 }
 
 // DefaultPGUrl is a wrapper over ExternalPGUrl that calls it with the arguments
-// that *almost* all roachtests want: single tenant and only a single node.
+// that *almost* all roachtests want: single tenant and as a string.
 func DefaultPGUrl(
-	ctx context.Context, c cluster.Cluster, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context,
+	c cluster.Cluster,
+	l *logger.Logger,
+	nodes option.NodeListOption,
+	auth install.PGAuthMode,
 ) (string, error) {
-	opts := roachprod.PGURLOptions{}
-	pgurl, err := c.ExternalPGUrl(ctx, l, node, opts)
+	// If the cluster is running in insecure mode then the roach user
+	// won't be created. Default back to using root in that case.
+	if !c.IsSecure() {
+		auth = install.AuthRootCert
+	}
+	opts := roachprod.PGURLOptions{Auth: auth}
+	pgurls, err := c.ExternalPGUrl(ctx, l, nodes, opts)
 	if err != nil {
 		return "", err
 	}
-	return pgurl[0], nil
+	return pgurls[0], nil
 }
 
 // SetDefaultSQLPort sets the SQL port to the default of 26257 if it is
@@ -70,7 +79,7 @@ func GetSessionCookie(
 		"%s auth-session login root --port={pgport%s} --certs-dir ./certs --format raw",
 		test.DefaultCockroachPath, node,
 	)
-	res, err := c.RunWithDetailsSingleNode(ctx, l, node, loginCmd)
+	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(node), loginCmd)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to authenticate")
 	}
