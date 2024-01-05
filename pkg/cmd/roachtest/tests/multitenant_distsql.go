@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/stretchr/testify/require"
@@ -198,7 +199,7 @@ func runMultiTenantDistSQL(
 		if bundle {
 			// Open bundle and verify its contents
 			sqlConnCtx := clisqlclient.Context{}
-			pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(1), tenantName, 0)
+			pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(1), roachprod.PGURLOptions{VirtualClusterName: tenantName})
 			require.NoError(t, err)
 			conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, pgURL[0])
 			bundles, err := clisqlclient.StmtDiagListBundles(ctx, conn)
