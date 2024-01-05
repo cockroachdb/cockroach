@@ -3590,7 +3590,7 @@ func createRoutinePopulate(
 					if err != nil {
 						return err
 					}
-					bodyStr = "\n" + bodyStr + "\n"
+					bodyStr = strings.TrimSpace(bodyStr)
 					stmtStrs := strings.Split(bodyStr, "\n")
 					for i := range stmtStrs {
 						if stmtStrs[i] != "" {
@@ -3599,7 +3599,7 @@ func createRoutinePopulate(
 					}
 					p := &treeNode.Options[i]
 					// Add two new lines just for better formatting.
-					*p = tree.RoutineBodyStr(strings.Join(stmtStrs, "\n"))
+					*p = tree.RoutineBodyStr("\n" + strings.Join(stmtStrs, "\n") + "\n")
 				}
 			}
 

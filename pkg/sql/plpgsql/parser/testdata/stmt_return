@@ -7,22 +7,22 @@ END
 DECLARE
 BEGIN
 RETURN 1 + 2;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 RETURN ((1) + (2));
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 RETURN _ + _;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 RETURN 1 + 2;
-END
+END;
  -- identifiers removed
 
 parse
@@ -36,25 +36,25 @@ DECLARE
 BEGIN
 x := 1 + 2;
 RETURN x;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 x := ((1) + (2));
 RETURN (x);
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 x := _ + _;
 RETURN x;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 _ := 1 + 2;
 RETURN _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -66,22 +66,22 @@ END
 DECLARE
 BEGIN
 RETURN (1, 'string');
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 RETURN (((1), ('string')));
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 RETURN (_, '_');
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 RETURN (1, 'string');
-END
+END;
  -- identifiers removed
 
 error

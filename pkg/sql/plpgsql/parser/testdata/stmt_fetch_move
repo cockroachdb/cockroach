@@ -7,22 +7,22 @@ END
 DECLARE
 BEGIN
 MOVE 1 FROM emp_cur;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 MOVE 1 FROM emp_cur;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 MOVE 1 FROM emp_cur;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 MOVE 1 FROM _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -34,22 +34,22 @@ END
 DECLARE
 BEGIN
 MOVE -1 FROM var;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 MOVE -1 FROM var;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 MOVE -1 FROM var;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 MOVE -1 FROM _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -61,22 +61,22 @@ END
 DECLARE
 BEGIN
 FETCH 1 FROM emp_cur INTO x, y;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 FETCH 1 FROM emp_cur INTO x, y;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 FETCH 1 FROM emp_cur INTO x, y;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 FETCH 1 FROM _ INTO _, _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -88,22 +88,22 @@ END
 DECLARE
 BEGIN
 FETCH 1 FROM emp_cur INTO x, y;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 FETCH 1 FROM emp_cur INTO x, y;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 FETCH 1 FROM emp_cur INTO x, y;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 FETCH 1 FROM _ INTO _, _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -115,22 +115,22 @@ END
 DECLARE
 BEGIN
 FETCH ABSOLUTE 2 FROM emp_cur INTO x, y;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 FETCH ABSOLUTE 2 FROM emp_cur INTO x, y;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 FETCH ABSOLUTE 2 FROM emp_cur INTO x, y;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 FETCH ABSOLUTE 2 FROM _ INTO _, _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -142,22 +142,22 @@ END
 DECLARE
 BEGIN
 FETCH 1 FROM emp_cur INTO x;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 FETCH 1 FROM emp_cur INTO x;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 FETCH 1 FROM emp_cur INTO x;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 FETCH 1 FROM _ INTO _;
-END
+END;
  -- identifiers removed
 
 error
@@ -212,22 +212,22 @@ END
 DECLARE
 BEGIN
 MOVE 1 FROM emp_cur;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 MOVE 1 FROM emp_cur;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 MOVE 1 FROM emp_cur;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 MOVE 1 FROM _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -239,22 +239,22 @@ END
 DECLARE
 BEGIN
 MOVE -1 FROM emp_cur;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 MOVE -1 FROM emp_cur;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 MOVE -1 FROM emp_cur;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 MOVE -1 FROM _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -266,22 +266,22 @@ END
 DECLARE
 BEGIN
 MOVE FIRST FROM emp_cur;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 MOVE FIRST FROM emp_cur;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 MOVE FIRST FROM emp_cur;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 MOVE FIRST FROM _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -293,22 +293,22 @@ END
 DECLARE
 BEGIN
 MOVE LAST FROM emp_cur;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 MOVE LAST FROM emp_cur;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 MOVE LAST FROM emp_cur;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 MOVE LAST FROM _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -320,22 +320,22 @@ END
 DECLARE
 BEGIN
 MOVE ABSOLUTE 5 FROM emp_cur;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 MOVE ABSOLUTE 5 FROM emp_cur;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 MOVE ABSOLUTE 5 FROM emp_cur;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 MOVE ABSOLUTE 5 FROM _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -347,22 +347,22 @@ END
 DECLARE
 BEGIN
 MOVE FIRST FROM emp_cur;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 MOVE FIRST FROM emp_cur;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 MOVE FIRST FROM emp_cur;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 MOVE FIRST FROM _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -374,22 +374,22 @@ END
 DECLARE
 BEGIN
 MOVE RELATIVE 3 FROM emp_cur;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 MOVE RELATIVE 3 FROM emp_cur;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 MOVE RELATIVE 3 FROM emp_cur;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 MOVE RELATIVE 3 FROM _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -401,22 +401,22 @@ END
 DECLARE
 BEGIN
 MOVE 3 FROM emp_cur;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 MOVE 3 FROM emp_cur;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 MOVE 3 FROM emp_cur;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 MOVE 3 FROM _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -428,22 +428,22 @@ END
 DECLARE
 BEGIN
 MOVE -3 FROM emp_cur;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 MOVE -3 FROM emp_cur;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 MOVE -3 FROM emp_cur;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 MOVE -3 FROM _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -455,22 +455,22 @@ END
 DECLARE
 BEGIN
 MOVE ALL FROM emp_cur;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 MOVE ALL FROM emp_cur;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 MOVE ALL FROM emp_cur;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 MOVE ALL FROM _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -482,22 +482,22 @@ END
 DECLARE
 BEGIN
 MOVE BACKWARD ALL FROM emp_cur;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 MOVE BACKWARD ALL FROM emp_cur;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 MOVE BACKWARD ALL FROM emp_cur;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 MOVE BACKWARD ALL FROM _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -509,22 +509,22 @@ END
 DECLARE
 BEGIN
 FETCH 1 FROM emp_cur INTO x;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 FETCH 1 FROM emp_cur INTO x;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 FETCH 1 FROM emp_cur INTO x;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 FETCH 1 FROM _ INTO _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -536,22 +536,22 @@ END
 DECLARE
 BEGIN
 FETCH -1 FROM emp_cur INTO x;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 FETCH -1 FROM emp_cur INTO x;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 FETCH -1 FROM emp_cur INTO x;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 FETCH -1 FROM _ INTO _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -563,22 +563,22 @@ END
 DECLARE
 BEGIN
 FETCH FIRST FROM emp_cur INTO x;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 FETCH FIRST FROM emp_cur INTO x;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 FETCH FIRST FROM emp_cur INTO x;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 FETCH FIRST FROM _ INTO _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -590,22 +590,22 @@ END
 DECLARE
 BEGIN
 FETCH LAST FROM emp_cur INTO x;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 FETCH LAST FROM emp_cur INTO x;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 FETCH LAST FROM emp_cur INTO x;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 FETCH LAST FROM _ INTO _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -617,22 +617,22 @@ END
 DECLARE
 BEGIN
 FETCH ABSOLUTE 5 FROM emp_cur INTO x;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 FETCH ABSOLUTE 5 FROM emp_cur INTO x;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 FETCH ABSOLUTE 5 FROM emp_cur INTO x;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 FETCH ABSOLUTE 5 FROM _ INTO _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -644,22 +644,22 @@ END
 DECLARE
 BEGIN
 FETCH FIRST FROM emp_cur INTO x;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 FETCH FIRST FROM emp_cur INTO x;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 FETCH FIRST FROM emp_cur INTO x;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 FETCH FIRST FROM _ INTO _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -671,22 +671,22 @@ END
 DECLARE
 BEGIN
 FETCH RELATIVE 3 FROM emp_cur INTO x;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 FETCH RELATIVE 3 FROM emp_cur INTO x;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 FETCH RELATIVE 3 FROM emp_cur INTO x;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 FETCH RELATIVE 3 FROM _ INTO _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -698,22 +698,22 @@ END
 DECLARE
 BEGIN
 FETCH 3 FROM emp_cur INTO x;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 FETCH 3 FROM emp_cur INTO x;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 FETCH 3 FROM emp_cur INTO x;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 FETCH 3 FROM _ INTO _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -725,22 +725,22 @@ END
 DECLARE
 BEGIN
 FETCH -3 FROM emp_cur INTO x;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 FETCH -3 FROM emp_cur INTO x;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 FETCH -3 FROM emp_cur INTO x;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 FETCH -3 FROM _ INTO _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -752,22 +752,22 @@ END
 DECLARE
 BEGIN
 FETCH ALL FROM emp_cur INTO x;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 FETCH ALL FROM emp_cur INTO x;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 FETCH ALL FROM emp_cur INTO x;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 FETCH ALL FROM _ INTO _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -779,20 +779,20 @@ END
 DECLARE
 BEGIN
 FETCH BACKWARD ALL FROM emp_cur INTO x;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 FETCH BACKWARD ALL FROM emp_cur INTO x;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 FETCH BACKWARD ALL FROM emp_cur INTO x;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 FETCH BACKWARD ALL FROM _ INTO _;
-END
+END;
  -- identifiers removed

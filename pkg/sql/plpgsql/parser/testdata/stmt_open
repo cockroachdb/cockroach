@@ -7,22 +7,22 @@ END
 DECLARE
 BEGIN
 OPEN curs1;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 OPEN curs1;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 OPEN curs1;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 OPEN _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -34,22 +34,22 @@ END
 DECLARE
 BEGIN
 OPEN curs1 FOR SELECT * FROM foo WHERE key = mykey;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 OPEN curs1 FOR SELECT (*) FROM foo WHERE ((key) = (mykey));
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 OPEN curs1 FOR SELECT * FROM foo WHERE key = mykey;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 OPEN _ FOR SELECT * FROM _ WHERE _ = _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -61,22 +61,22 @@ END
 DECLARE
 BEGIN
 OPEN curs1 SCROLL FOR SELECT * FROM foo WHERE key = mykey;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 OPEN curs1 SCROLL FOR SELECT (*) FROM foo WHERE ((key) = (mykey));
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 OPEN curs1 SCROLL FOR SELECT * FROM foo WHERE key = mykey;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 OPEN _ SCROLL FOR SELECT * FROM _ WHERE _ = _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -88,22 +88,22 @@ END
 DECLARE
 BEGIN
 OPEN curs1 NO SCROLL FOR SELECT * FROM foo WHERE key = mykey;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 OPEN curs1 NO SCROLL FOR SELECT (*) FROM foo WHERE ((key) = (mykey));
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 OPEN curs1 NO SCROLL FOR SELECT * FROM foo WHERE key = mykey;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 OPEN _ NO SCROLL FOR SELECT * FROM _ WHERE _ = _;
-END
+END;
  -- identifiers removed
 
 error

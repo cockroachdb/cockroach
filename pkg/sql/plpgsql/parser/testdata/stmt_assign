@@ -9,25 +9,25 @@ DECLARE
 BEGIN
 johnny := NULL;
 gyro := 7 + 7;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 johnny := (NULL);
 gyro := ((7) + (7));
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 johnny := _;
 gyro := _ + _;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 _ := NULL;
 _ := 7 + 7;
-END
+END;
  -- identifiers removed
 
 parse
@@ -39,22 +39,22 @@ END
 DECLARE
 BEGIN
 a := NULL;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 a := (NULL);
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 a := _;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 _ := NULL;
-END
+END;
  -- identifiers removed
 
 error

@@ -9,25 +9,25 @@ DECLARE
 BEGIN
 EXIT some_label;
 EXIT some_label WHEN some_condition;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 EXIT some_label;
 EXIT some_label WHEN (some_condition);
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 EXIT some_label;
 EXIT some_label WHEN some_condition;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 EXIT _;
 EXIT _ WHEN _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -41,23 +41,23 @@ DECLARE
 BEGIN
 CONTINUE some_label;
 CONTINUE some_label WHEN some_condition;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 CONTINUE some_label;
 CONTINUE some_label WHEN (some_condition);
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 CONTINUE some_label;
 CONTINUE some_label WHEN some_condition;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 CONTINUE _;
 CONTINUE _ WHEN _;
-END
+END;
  -- identifiers removed

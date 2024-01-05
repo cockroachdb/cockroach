@@ -15,7 +15,7 @@ LOOP
 EXIT WHEN x = 10;
 x := x + 1;
 END LOOP;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
@@ -24,7 +24,7 @@ LOOP
 EXIT WHEN ((x) = (10));
 x := ((x) + (1));
 END LOOP;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
@@ -33,7 +33,7 @@ LOOP
 EXIT WHEN x = _;
 x := x + _;
 END LOOP;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
@@ -42,7 +42,7 @@ LOOP
 EXIT WHEN _ = 10;
 _ := _ + 1;
 END LOOP;
-END
+END;
  -- identifiers removed
 
 
@@ -65,7 +65,7 @@ LOOP
 EXIT WHEN x = 10;
 x := x + 1;
 END LOOP mathing;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
@@ -75,7 +75,7 @@ LOOP
 EXIT WHEN ((x) = (10));
 x := ((x) + (1));
 END LOOP mathing;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
@@ -85,7 +85,7 @@ LOOP
 EXIT WHEN x = _;
 x := x + _;
 END LOOP mathing;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
@@ -95,7 +95,7 @@ LOOP
 EXIT WHEN _ = 10;
 _ := _ + 1;
 END LOOP _;
-END
+END;
  -- identifiers removed
 
 # The end label can be omitted.
@@ -118,7 +118,7 @@ LOOP
 EXIT WHEN x = 10;
 x := x + 1;
 END LOOP mathing;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
@@ -128,7 +128,7 @@ LOOP
 EXIT WHEN ((x) = (10));
 x := ((x) + (1));
 END LOOP mathing;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
@@ -138,7 +138,7 @@ LOOP
 EXIT WHEN x = _;
 x := x + _;
 END LOOP mathing;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
@@ -148,7 +148,7 @@ LOOP
 EXIT WHEN _ = 10;
 _ := _ + 1;
 END LOOP _;
-END
+END;
  -- identifiers removed
 
 # The start and end labels must be the same.

@@ -459,7 +459,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
         WithGrantOption: 2
     *scop.SetFunctionBody
       Body:
-        Body: |-
+        Body: |
           BEGIN
           SELECT a FROM t;
           SELECT b FROM t@t_idx_b;
@@ -467,8 +467,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
           SELECT a FROM v;
           SELECT b'@':::@100107;
           RETURN nextval(105:::REGCLASS);
-          END
-          ;
+          END;
         FunctionID: 111
         Lang:
           Lang: 2
@@ -608,7 +607,7 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
         WithGrantOption: 2
     *scop.SetFunctionBody
       Body:
-        Body: |-
+        Body: |
           BEGIN
           SELECT a FROM t;
           SELECT b FROM t@t_idx_b;
@@ -616,8 +615,7 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
           SELECT a FROM v;
           SELECT b'@':::@100107;
           RETURN nextval(105:::REGCLASS);
-          END
-          ;
+          END;
         FunctionID: 111
         Lang:
           Lang: 2
