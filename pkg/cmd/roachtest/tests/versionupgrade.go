@@ -168,8 +168,9 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 			}
 
 			l.Printf("running schemachange workload")
+			workloadSeed := rng.Int63()
 			runCmd := roachtestutil.
-				NewCommand("%s run schemachange", workloadPath).
+				NewCommand("COCKROACH_RANDOM_SEED=%d %s run schemachange", workloadSeed, workloadPath).
 				Flag("verbose", 1).
 				Flag("max-ops", 10).
 				Flag("concurrency", 2).
