@@ -230,7 +230,7 @@ source venv/bin/activate && cd /mnt/data1/django/tests &&
 python3 runtests.py %[1]s --settings cockroach_settings -v 2 > %[1]s.stdout
 `
 
-const cockroachDjangoSettings = `
+var cockroachDjangoSettings = fmt.Sprintf(`
 from django.test.runner import DiscoverRunner
 
 
@@ -238,16 +238,16 @@ DATABASES = {
     'default': {
         'ENGINE': 'django_cockroachdb',
         'NAME': 'django_tests',
-        'USER': 'test_admin',
-        'PASSWORD': '',
+        'USER': '%[1]s',
+        'PASSWORD': '%[2]s',
         'HOST': 'localhost',
         'PORT': {pgport:1},
     },
     'other': {
         'ENGINE': 'django_cockroachdb',
         'NAME': 'django_tests2',
-        'USER': 'root',
-        'PASSWORD': '',
+        'USER': '%[1]s',
+        'PASSWORD': '%[2]s',
         'HOST': 'localhost',
         'PORT': {pgport:1},
     },
@@ -269,4 +269,4 @@ class NonDescribingDiscoverRunner(DiscoverRunner):
         }
 
 USE_TZ = False
-`
+`, install.DefaultUser, install.DefaultPassword)

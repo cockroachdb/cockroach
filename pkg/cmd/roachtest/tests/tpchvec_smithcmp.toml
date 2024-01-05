@@ -504,15 +504,17 @@ ORDER BY
 # thus be executing the same query each time. Queries that don't change
 # should be tested in other places; smithcmp is for random testing.
 
+# We use a placeholder for addr so we can easily
+# find and replace it with a valid connection string.
 [databases.vec-off]
-addr = "postgresql://root@localhost:26257/tpch?sslmode=disable"
+addr = "PG_Connection_String"
 allowmutations = true
 initsql = """
 set vectorize=off;
 """
 
 [databases.vec-on]
-addr = "postgresql://root@localhost:26257/tpch?sslmode=disable"
+addr = "PG_Connection_String"
 allowmutations = true
 initsql = """
 set vectorize=on;

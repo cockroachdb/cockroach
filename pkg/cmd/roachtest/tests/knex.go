@@ -12,13 +12,13 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
@@ -36,14 +36,12 @@ func registerKnex(r registry.Registry) {
 		t test.Test,
 		c cluster.Cluster,
 	) {
-		if c.IsLocal() {
-			t.Fatal("cannot be run in local mode")
-		}
+		//if c.IsLocal() {
+		//	t.Fatal("cannot be run in local mode")
+		//}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		startOpts := option.DefaultStartOptsInMemory()
-		startOpts.RoachprodOpts.SQLPort = config.DefaultSQLPort
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		require.NoError(t, err)
@@ -57,7 +55,7 @@ func registerKnex(r registry.Registry) {
 			c,
 			node,
 			"create sql database",
-			`./cockroach sql --insecure -e "CREATE DATABASE test"`,
+			`./cockroach sql --url={pgurl:1} -e "CREATE DATABASE test"`,
 		)
 		require.NoError(t, err)
 
@@ -121,12 +119,19 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 		)
 		require.NoError(t, err)
 
+		// Write the knexfile test config into the test suite to use.
+		// The default test config does not support ssl connections.
+		testConfigFile := "./pkg/cmd/roachtest/tests/knexfile.js"
+		err = c.PutE(ctx, t.L(), testConfigFile, "/mnt/data1/knex/knexfile.js")
+		require.NoError(t, err)
+
 		t.Status("running knex tests")
 		result, err := c.RunWithDetailsSingleNode(
 			ctx,
 			t.L(),
 			option.WithNodes(node),
-			`cd /mnt/data1/knex/ && DB='cockroachdb' npm test`,
+			fmt.Sprintf(`cd /mnt/data1/knex/ && PGUSER=%s PGPASSWORD=%s PGPORT={pgport:1} PGSSLROOTCERT=$HOME/certs/ca.crt \
+							KNEX_TEST='/mnt/data1/knex/knexfile.js' DB='cockroachdb' npm test`, install.DefaultUser, install.DefaultPassword),
 		)
 		rawResultsStr := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResultsStr)

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
@@ -567,17 +568,25 @@ func smithcmpTestRun(
 ) {
 	runConfig := tc.getRunConfig()
 	smithcmpPreTestRunHook(ctx, t, c, conn, runConfig.clusterSetups[0])
-	const (
-		configFile = `tpchvec_smithcmp.toml`
-		configURL  = `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/cmd/roachtest/tests/` + configFile
-	)
+	const configFile = `tpchvec_smithcmp.toml`
+
 	firstNode := c.Node(1)
-	if err := c.RunE(ctx, option.WithNodes(firstNode), fmt.Sprintf("curl %s > %s", configURL, configFile)); err != nil {
+	if err := c.PutE(ctx, t.L(), "./pkg/cmd/roachtest/tests/"+configFile, configFile); err != nil {
 		t.Fatal(err)
 	}
-	// smithcmp cannot access the pgport env variable, so we must edit the config file here
-	// to tell it the port to use.
-	if err := c.RunE(ctx, option.WithNodes(firstNode), fmt.Sprintf(`port=$(echo -n {pgport:1}) && sed -i "s|26257|$port|g" %s`, configFile)); err != nil {
+	// We don't know the pgurl ahead of time, so we must edit it into the config file like this.
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), firstNode, install.AuthRootCert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// smithcmp expects postgresql instead of postgres
+	pgurl = strings.Replace(pgurl, "postgres", "postgresql", 1)
+	// sed treats & as a special character to mean "replace with the matched
+	// string", so we need to escape it.
+	pgurl = strings.Replace(pgurl, "&", `\&`, -1)
+	// The config file wants double quotes, not the single quote returned by the helper.
+	pgurl = strings.Trim(pgurl, "'")
+	if err := c.RunE(ctx, option.WithNodes(firstNode), fmt.Sprintf(`sed -i "s|PG_Connection_String|%s|g" %s`, pgurl, configFile)); err != nil {
 		t.Fatal(err)
 	}
 	cmd := fmt.Sprintf("./%s %s", tpchVecSmithcmp, configFile)
@@ -605,7 +614,7 @@ func runTPCHVec(
 		if _, err := singleTenantConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
 			t.Fatal(err)
 		}
-		conn = createInMemoryTenantWithConn(ctx, t, c, appTenantName, c.All(), false /* secure */)
+		conn = createInMemoryTenantWithConn(ctx, t, c, appTenantName, c.All(), c.IsSecure() /* secure */)
 	} else {
 		conn = c.Conn(ctx, t.L(), 1)
 		disableMergeQueue = true
@@ -613,7 +622,7 @@ func runTPCHVec(
 
 	t.Status("restoring TPCH dataset for Scale Factor 1")
 	if err := loadTPCHDataset(
-		ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), disableMergeQueue, false, /* secure */
+		ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), disableMergeQueue, c.IsSecure(), /* secure */
 	); err != nil {
 		t.Fatal(err)
 	}
