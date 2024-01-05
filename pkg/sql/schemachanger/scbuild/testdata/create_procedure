@@ -66,4 +66,4 @@ $$;
 - [[UserPrivileges:{DescID: 111, Name: root}, PUBLIC], ABSENT]
   {descriptorId: 111, privileges: "2", userName: root, withGrantOption: "2"}
 - [[FunctionBody:{DescID: 111}, PUBLIC], ABSENT]
-  {body: "BEGIN\nSELECT a FROM t;\nSELECT b FROM t@t_idx_b;\nSELECT c FROM t@t_idx_c;\nSELECT a FROM v;\nSELECT b'@':::@100108;\nSELECT nextval(105:::REGCLASS);\nEND\n;", functionId: 111, lang: {lang: PLPGSQL}, usesSequenceIds: [105], usesTables: [{columnIds: [1], tableId: 104}, {columnIds: [2], indexId: 2, tableId: 104}, {columnIds: [3], indexId: 3, tableId: 104}], usesTypeIds: [108, 109], usesViews: [{columnIds: [1], viewId: 107}]}
+  {body: "BEGIN\nSELECT a FROM t;\nSELECT b FROM t@t_idx_b;\nSELECT c FROM t@t_idx_c;\nSELECT a FROM v;\nSELECT b'@':::@100108;\nSELECT nextval(105:::REGCLASS);\nEND;\n", functionId: 111, lang: {lang: PLPGSQL}, usesSequenceIds: [105], usesTables: [{columnIds: [1], tableId: 104}, {columnIds: [2], indexId: 2, tableId: 104}, {columnIds: [3], indexId: 3, tableId: 104}], usesTypeIds: [108, 109], usesViews: [{columnIds: [1], viewId: 107}]}

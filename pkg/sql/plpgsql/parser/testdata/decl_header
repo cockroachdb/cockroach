@@ -7,22 +7,22 @@ END
 DECLARE
 var1 INT8 := 30;
 BEGIN
-END
+END;
  -- normalized!
 DECLARE
 var1 INT8 := (30);
 BEGIN
-END
+END;
  -- fully parenthesized
 DECLARE
 var1 INT8 := _;
 BEGIN
-END
+END;
  -- literals removed
 DECLARE
 var1 INT8 := 30;
 BEGIN
-END
+END;
  -- identifiers removed
 
 parse
@@ -34,22 +34,22 @@ END
 DECLARE
 var1 CONSTANT INT8 COLLATE collation_name NOT NULL := 30;
 BEGIN
-END
+END;
  -- normalized!
 DECLARE
 var1 CONSTANT INT8 COLLATE collation_name NOT NULL := (30);
 BEGIN
-END
+END;
  -- fully parenthesized
 DECLARE
 var1 CONSTANT INT8 COLLATE collation_name NOT NULL := _;
 BEGIN
-END
+END;
  -- literals removed
 DECLARE
 var1 CONSTANT INT8 COLLATE _ NOT NULL := 30;
 BEGIN
-END
+END;
  -- identifiers removed
 
 parse
@@ -61,22 +61,22 @@ END
 DECLARE
 var1 CONSTANT INT8 COLLATE collation_name NOT NULL := 30;
 BEGIN
-END
+END;
  -- normalized!
 DECLARE
 var1 CONSTANT INT8 COLLATE collation_name NOT NULL := (30);
 BEGIN
-END
+END;
  -- fully parenthesized
 DECLARE
 var1 CONSTANT INT8 COLLATE collation_name NOT NULL := _;
 BEGIN
-END
+END;
  -- literals removed
 DECLARE
 var1 CONSTANT INT8 COLLATE _ NOT NULL := 30;
 BEGIN
-END
+END;
  -- identifiers removed
 
 error
@@ -115,22 +115,22 @@ END
 DECLARE
 var1 CURSOR FOR SELECT * FROM t1 WHERE id = arg1;
 BEGIN
-END
+END;
  -- normalized!
 DECLARE
 var1 CURSOR FOR SELECT (*) FROM t1 WHERE ((id) = (arg1));
 BEGIN
-END
+END;
  -- fully parenthesized
 DECLARE
 var1 CURSOR FOR SELECT * FROM t1 WHERE id = arg1;
 BEGIN
-END
+END;
  -- literals removed
 DECLARE
 var1 CURSOR FOR SELECT * FROM _ WHERE _ = _;
 BEGIN
-END
+END;
  -- identifiers removed
 
 error
