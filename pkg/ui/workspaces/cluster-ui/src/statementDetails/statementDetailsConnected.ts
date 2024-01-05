@@ -67,12 +67,12 @@ const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
     timeScale: selectTimeScale(state),
     nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports:
-      selectIsTenant(state) || selectHasViewActivityRedactedRole(state)
+      selectHasViewActivityRedactedRole(state)
         ? []
         : selectDiagnosticsReportsByStatementFingerprint(
-            state,
-            statementFingerprint,
-          ),
+          state,
+          statementFingerprint,
+        ),
     uiConfig: selectStatementDetailsUiConfig(state),
     isTenant: selectIsTenant(state),
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
