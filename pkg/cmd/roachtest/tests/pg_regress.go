@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/errors"
@@ -112,7 +113,7 @@ func initPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 	}
 
-	urls, err := c.InternalPGUrl(ctx, t.L(), node, "" /* tenant */, 0 /* sqlInstance */)
+	urls, err := c.InternalPGUrl(ctx, t.L(), node, roachprod.PGURLOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +150,7 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	initPGRegress(ctx, t, c)
 
 	node := c.Node(1)
-	urls, err := c.InternalPGUrl(ctx, t.L(), node, "" /* tenant */, 0 /* sqlInstance */)
+	urls, err := c.InternalPGUrl(ctx, t.L(), node, roachprod.PGURLOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
