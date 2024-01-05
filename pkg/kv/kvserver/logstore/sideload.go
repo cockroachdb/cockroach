@@ -33,6 +33,9 @@ type SideloadStorage interface {
 	// Writes the given contents to the file specified by the given index and
 	// term. Overwrites the file if it already exists.
 	Put(_ context.Context, index, term uint64, contents []byte) error
+	// Sync syncs the underlying filesystem metadata so that all the preceding
+	// mutations, such as Put and TruncateTo, are durable.
+	Sync() error
 	// Load the file at the given index and term. Return errSideloadedFileNotFound when no
 	// such file is present.
 	Get(_ context.Context, index, term uint64) ([]byte, error)
@@ -139,8 +142,12 @@ func MaybeSideloadEntries(
 		sideloadedEntriesSize += int64(len(dataToSideload))
 	}
 
-	if output == nil {
-		// We never saw a sideloaded command.
+	if output != nil { // there is at least one sideloaded command
+		// Sync the sideloaded storage directory so that the commands are durable.
+		if err := sideloaded.Sync(); err != nil {
+			return nil, 0, 0, 0, err
+		}
+	} else { // we never saw a sideloaded command
 		output = input
 	}
 

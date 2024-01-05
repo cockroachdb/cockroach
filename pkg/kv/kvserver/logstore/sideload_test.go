@@ -579,44 +579,53 @@ func TestSideloadStorageSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Create a sideloaded storage with an in-memory FS. Use strict MemFS to be
-	// able to emulate crash restart by rolling it back to last synced state.
-	ctx := context.Background()
-	fs := vfs.NewStrictMem()
-	eng := storage.InMemFromFS(ctx, fs, "",
-		cluster.MakeTestingClusterSettings(), storage.ForTesting)
-	ss := newTestingSideloadStorage(eng)
+	testutils.RunTrueAndFalse(t, "sync", func(t *testing.T, sync bool) {
+		// Create a sideloaded storage with an in-memory FS. Use strict MemFS to be
+		// able to emulate crash restart by rolling it back to last synced state.
+		ctx := context.Background()
+		fs := vfs.NewStrictMem()
+		eng := storage.InMemFromFS(ctx, fs, "",
+			cluster.MakeTestingClusterSettings(), storage.ForTesting)
+		ss := newTestingSideloadStorage(eng)
 
-	// Put an entry which should trigger the lazy creation of the sideloaded
-	// directories structure, and create a file for this entry.
-	const testEntry = "test-entry"
-	require.NoError(t, ss.Put(ctx, 100 /* index */, 6 /* term */, []byte(testEntry)))
-	// Cut off all syncs from this point, to emulate a crash.
-	fs.SetIgnoreSyncs(true)
-	ss = nil
-	eng.Close()
-	// Reset filesystem to the last synced state.
-	fs.ResetToSyncedState()
-	fs.SetIgnoreSyncs(false)
+		// Put an entry which should trigger the lazy creation of the sideloaded
+		// directories structure, and create a file for this entry.
+		const testEntry = "test-entry"
+		require.NoError(t, ss.Put(ctx, 100 /* index */, 6 /* term */, []byte(testEntry)))
+		if sync {
+			require.NoError(t, ss.Sync())
+		}
+		// Cut off all syncs from this point, to emulate a crash.
+		fs.SetIgnoreSyncs(true)
+		ss = nil
+		eng.Close()
+		// Reset filesystem to the last synced state.
+		fs.ResetToSyncedState()
+		fs.SetIgnoreSyncs(false)
 
-	// Emulate process restart. Load from the last synced state.
-	eng = storage.InMemFromFS(ctx, fs, "",
-		cluster.MakeTestingClusterSettings(), storage.ForTesting)
-	defer eng.Close()
-	ss = newTestingSideloadStorage(eng)
+		// Emulate process restart. Load from the last synced state.
+		eng = storage.InMemFromFS(ctx, fs, "",
+			cluster.MakeTestingClusterSettings(), storage.ForTesting)
+		defer eng.Close()
+		ss = newTestingSideloadStorage(eng)
 
-	// The sideloaded directory must exist because all its parents are synced.
-	_, err := eng.Stat(ss.Dir())
-	require.NoError(t, err)
+		// The sideloaded directory must exist because all its parents are synced.
+		_, err := eng.Stat(ss.Dir())
+		require.NoError(t, err)
 
-	// However, the stored entry is lost because the sideloaded storage did not
-	// sync ss.Dir().
-	// TODO(pavelkalinnikov): make the entries durable.
-	_, err = ss.Get(ctx, 100 /* index */, 6 /* term */)
-	require.ErrorIs(t, err, errSideloadedFileNotFound)
-	// A "control" check that missing entries are unconditionally missing.
-	_, err = ss.Get(ctx, 200 /* index */, 7 /* term */)
-	require.ErrorIs(t, err, errSideloadedFileNotFound)
+		// The stored entry is still durable if we synced the sideloaded storage
+		// before the crash.
+		got, err := ss.Get(ctx, 100 /* index */, 6 /* term */)
+		if sync {
+			require.NoError(t, err)
+			require.Equal(t, testEntry, string(got))
+		} else {
+			require.ErrorIs(t, err, errSideloadedFileNotFound)
+		}
+		// A "control" check that missing entries are unconditionally missing.
+		_, err = ss.Get(ctx, 200 /* index */, 7 /* term */)
+		require.ErrorIs(t, err, errSideloadedFileNotFound)
+	})
 }
 
 func TestMkdirAllAndSyncParents(t *testing.T) {

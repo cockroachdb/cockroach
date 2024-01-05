@@ -100,6 +100,28 @@ func (ss *DiskSideloadStorage) Put(ctx context.Context, index, term uint64, cont
 	}
 }
 
+// Sync implements SideloadStorage.
+func (ss *DiskSideloadStorage) Sync() error {
+	dir, err := ss.eng.OpenDir(ss.dir)
+	// The directory can be missing because we did not Put() any entry to it yet,
+	// or it has been removed by TruncateTo() or Clear().
+	//
+	// TODO(pavelkalinnikov): if ss.dir existed and has been removed, we should
+	// sync the parent of ss.dir, to persist the removal. Otherwise it may come
+	// back after a restart. Alternatively, and more likely, we should cleanup
+	// leftovers upon restart - we have other TODOs for that.
+	if oserror.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if err := dir.Sync(); err != nil {
+		_ = dir.Close()
+		return err
+	}
+	return dir.Close()
+}
+
 // Get implements SideloadStorage.
 func (ss *DiskSideloadStorage) Get(ctx context.Context, index, term uint64) ([]byte, error) {
 	filename := ss.filename(ctx, index, term)
