@@ -33,7 +33,7 @@ func runMultiTenantTPCH(
 	secure := true
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
 	start := func() {
-		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(install.SecureOption(secure)), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.All())
 	}
 	start()
 

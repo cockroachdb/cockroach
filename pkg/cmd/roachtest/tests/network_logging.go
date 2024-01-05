@@ -69,7 +69,7 @@ func registerNetworkLogging(r registry.Registry) {
 		startOpts.RoachprodOpts.ExtraArgs = []string{
 			"--log", logCfg,
 		}
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(true)), crdbNodes)
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), crdbNodes)
 
 		// Construct pgurls for the workload runner. As a roundabout way of detecting deadlocks,
 		// we set a client timeout on the workload pgclient. If the server becomes unavailable

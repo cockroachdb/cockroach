@@ -766,11 +766,9 @@ func setupDMSEndpointsAndTask(
 				PostgreSQLSettings: &dmstypes.PostgreSQLSettings{
 					DatabaseName: proto.String(awsdmsCRDBDatabase),
 					Username:     proto.String(awsdmsCRDBUser),
-					// Password is a required field, but CockroachDB doesn't take passwords in
-					// --insecure mode. As such, put in some garbage.
-					Password:   proto.String("garbage"),
-					Port:       proto.Int32(26257),
-					ServerName: proto.String(externalCRDBAddr[0]),
+					Password:     proto.String(awsdmsPassword),
+					Port:         proto.Int32(26257),
+					ServerName:   proto.String(externalCRDBAddr[0]),
 				},
 			},
 			endpoint: dmsEndpoints.defaultTarget,

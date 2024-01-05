@@ -141,9 +141,7 @@ var (
 	// defaultClusterSettings is the set of cluster settings always
 	// passed to `clusterupgrade.StartWithSettings` when (re)starting
 	// nodes in a cluster.
-	defaultClusterSettings = []install.ClusterSettingOption{
-		install.SecureOption(true),
-	}
+	defaultClusterSettings = []install.ClusterSettingOption{}
 
 	// minSupportedARM64Version is the minimum version for which there
 	// is a published ARM64 build. If we are running a mixedversion test

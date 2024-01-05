@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net"
-	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
@@ -25,13 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -154,9 +153,10 @@ SELECT node_id
 }
 
 type gossipUtil struct {
-	waitTime time.Duration
-	urlMap   map[int]string
-	conn     func(ctx context.Context, l *logger.Logger, i int, opts ...func(*option.ConnOption)) *gosql.DB
+	waitTime   time.Duration
+	urlMap     map[int]string
+	conn       func(ctx context.Context, l *logger.Logger, i int, opts ...func(*option.ConnOption)) *gosql.DB
+	httpClient *roachtestutil.RoachtestHTTPClient
 }
 
 func newGossipUtil(ctx context.Context, t test.Test, c cluster.Cluster) *gossipUtil {
@@ -169,9 +169,10 @@ func newGossipUtil(ctx context.Context, t test.Test, c cluster.Cluster) *gossipU
 		urlMap[i+1] = `http://` + addr
 	}
 	return &gossipUtil{
-		waitTime: 30 * time.Second,
-		urlMap:   urlMap,
-		conn:     c.Conn,
+		waitTime:   30 * time.Second,
+		urlMap:     urlMap,
+		conn:       c.Conn,
+		httpClient: roachtestutil.DefaultHTTPClient(c, t.L()),
 	}
 }
 
@@ -180,12 +181,14 @@ type checkGossipFunc func(map[string]gossip.Info) error
 // checkGossip fetches the gossip infoStore from each node and invokes the
 // given function. The test passes if the function returns 0 for every node,
 // retrying for up to the given duration.
-func (g *gossipUtil) check(ctx context.Context, c cluster.Cluster, f checkGossipFunc) error {
+func (g *gossipUtil) check(
+	ctx context.Context, c cluster.Cluster, f checkGossipFunc, l *logger.Logger,
+) error {
 	return retry.ForDuration(g.waitTime, func() error {
 		var infoStatus gossip.InfoStatus
 		for i := 1; i <= c.Spec().NodeCount; i++ {
 			url := g.urlMap[i] + `/_status/gossip/local`
-			if err := httputil.GetJSON(http.Client{}, url, &infoStatus); err != nil {
+			if err := g.httpClient.GetJSON(ctx, url, &infoStatus); err != nil {
 				return errors.Wrapf(err, "failed to get gossip status from node %d", i)
 			}
 			if err := f(infoStatus.Infos); err != nil {
@@ -234,13 +237,13 @@ func (g *gossipUtil) checkConnectedAndFunctional(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
 	t.L().Printf("waiting for gossip to be connected\n")
-	if err := g.check(ctx, c, g.hasPeers(c.Spec().NodeCount)); err != nil {
+	if err := g.check(ctx, c, g.hasPeers(c.Spec().NodeCount), t.L()); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.check(ctx, c, g.hasClusterID); err != nil {
+	if err := g.check(ctx, c, g.hasClusterID, t.L()); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.check(ctx, c, g.hasSentinel); err != nil {
+	if err := g.check(ctx, c, g.hasSentinel, t.L()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -288,13 +291,13 @@ func runGossipPeerings(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	for i := 1; timeutil.Now().Before(deadline); i++ {
 		WaitForReady(ctx, t, c, c.All())
-		if err := g.check(ctx, c, g.hasPeers(c.Spec().NodeCount)); err != nil {
+		if err := g.check(ctx, c, g.hasPeers(c.Spec().NodeCount), t.L()); err != nil {
 			t.Fatal(err)
 		}
-		if err := g.check(ctx, c, g.hasClusterID); err != nil {
+		if err := g.check(ctx, c, g.hasClusterID, t.L()); err != nil {
 			t.Fatal(err)
 		}
-		if err := g.check(ctx, c, g.hasSentinel); err != nil {
+		if err := g.check(ctx, c, g.hasSentinel, t.L()); err != nil {
 			t.Fatal(err)
 		}
 		t.L().Printf("%d: OK\n", i)
@@ -328,8 +331,9 @@ func runGossipRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 		t.L().Printf("%d: killing all nodes\n", i)
 		c.Stop(ctx, t.L(), option.DefaultStopOpts())
-
 		t.L().Printf("%d: restarting all nodes\n", i)
+		// Tell the httpClient our saved session cookies are no longer valid after a restart.
+		g.httpClient.ResetSession()
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 	}
 }
@@ -435,10 +439,11 @@ SELECT count(replicas)
 	// connections. This will require node 1 to reach out to the other nodes in
 	// the cluster for gossip info.
 	err = c.RunE(ctx, option.WithNodes(c.Node(1)),
-		` ./cockroach start --insecure --background --store={store-dir} `+
+		` ./cockroach start --background --store={store-dir} `+
 			`--log-dir={log-dir} --cache=10% --max-sql-memory=10% `+
 			fmt.Sprintf(`--listen-addr=:$[{pgport:1}+1000] --http-port=%d `, adminPorts[0])+
 			`--join={pghost:1}:{pgport:1} `+
+			`--certs-dir=certs `+
 			`--advertise-addr={pghost:1}:$[{pgport:1}+1000] `+
 			`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`)
 	if err != nil {

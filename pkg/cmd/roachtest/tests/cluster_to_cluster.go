@@ -502,14 +502,14 @@ func (rd *replicationDriver) setupC2C(
 	srcStartOps.RoachprodOpts.InitTarget = 1
 
 	roachtestutil.SetDefaultAdminUIPort(c, &srcStartOps.RoachprodOpts)
-	srcClusterSetting := install.MakeClusterSettings(install.SecureOption(true))
+	srcClusterSetting := install.MakeClusterSettings()
 	c.Start(ctx, t.L(), srcStartOps, srcClusterSetting, srcCluster)
 
 	// TODO(msbutler): allow for backups once this test stabilizes a bit more.
 	dstStartOps := option.DefaultStartOptsNoBackups()
 	dstStartOps.RoachprodOpts.InitTarget = rd.rs.srcNodes + 1
 	roachtestutil.SetDefaultAdminUIPort(c, &dstStartOps.RoachprodOpts)
-	dstClusterSetting := install.MakeClusterSettings(install.SecureOption(true))
+	dstClusterSetting := install.MakeClusterSettings()
 	c.Start(ctx, t.L(), dstStartOps, dstClusterSetting, dstCluster)
 
 	srcNode := srcCluster.SeededRandNode(rd.rng)
@@ -1610,7 +1610,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 					shutdownNode:    rrd.shutdownNode,
 					watcherNode:     destinationWatcherNode,
 					crdbNodes:       rrd.crdbNodes(),
-					restartSettings: []install.ClusterSettingOption{install.SecureOption(true)},
+					restartSettings: []install.ClusterSettingOption{},
 					rng:             rrd.rng,
 				}
 				if err := executeNodeShutdown(ctx, t, c, shutdownCfg, shutdownStarter()); err != nil {

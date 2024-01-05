@@ -68,7 +68,7 @@ func runValidateSystemSchemaAfterVersionUpgrade(
 		t.Fatal(err)
 	}
 	expected = obtainSystemSchema(ctx, t.L(), c, 1)
-	c.Wipe(ctx, false /* preserveCerts */, c.All())
+	c.Wipe(ctx, true /* preserveCerts */, c.All())
 
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(),
 		// Fixtures are generated on a version that's too old for this test.

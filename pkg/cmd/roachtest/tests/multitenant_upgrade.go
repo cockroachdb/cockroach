@@ -94,7 +94,7 @@ func runMultiTenantUpgrade(
 
 	kvNodes := c.Node(1)
 
-	settings := install.MakeClusterSettings(install.BinaryOption(predecessorBinary), install.SecureOption(true))
+	settings := install.MakeClusterSettings(install.BinaryOption(predecessorBinary))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, kvNodes)
 
 	const tenant11aHTTPPort, tenant11aSQLPort = 8011, 20011
