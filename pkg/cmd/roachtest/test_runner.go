@@ -64,6 +64,9 @@ var (
 	// reference error for any failures during post test assertions
 	errDuringPostAssertions = fmt.Errorf("error during post test assertions")
 
+	// reference error for any failures due to VM preemption.
+	errVMPreemption = fmt.Errorf("VMs preempted during the test run")
+
 	prometheusNameSpace = "roachtest"
 	// prometheusScrapeInterval should be consistent with the scrape interval defined in
 	// https://grafana.testeng.crdb.io/prometheus/config
@@ -994,7 +997,10 @@ func (r *testRunner) runTest(
 				failureMsg := t.failureMsg()
 				preemptedVMNames := getPreemptedVMNames(ctx, c, l)
 				if preemptedVMNames != "" {
-					failureMsg = "VMs preempted during the test run :" + preemptedVMNames + "\n" + failureMsg
+					failureMsg = fmt.Sprintf("VMs preempted during the test run : %s\n%s", preemptedVMNames, failureMsg)
+					// Adding this error allows the GitHub issue poster to detect this is an infrastructure flake and
+					// post the issue accordingly.
+					t.addFailure(0, "", errVMPreemption)
 				}
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
 
