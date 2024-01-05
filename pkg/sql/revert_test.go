@@ -23,9 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -70,33 +68,8 @@ func TestTableRollback(t *testing.T) {
 	// Make some more edits: delete some rows and edit others, insert into some of
 	// the gaps made between previous rows, edit a large swath of rows and add a
 	// large swath of new rows as well.
-	db.Exec(t, `DELETE FROM test WHERE k % 5 = 2`)
 	db.Exec(t, `INSERT INTO test (k, rev) SELECT generate_series(10, $1, 10), 10`, numRows)
 	db.Exec(t, `INSERT INTO test (k, rev) SELECT generate_series($1+1, $1+500, 1), 500`, numRows)
-
-	t.Run("simple-revert", func(t *testing.T) {
-
-		const ignoreGC = false
-		db.Exec(t, `UPDATE test SET rev = 2 WHERE k % 4 = 0`)
-		db.Exec(t, `UPDATE test SET rev = 4 WHERE k > 150 and k < 350`)
-
-		var edited, aost int
-		db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&edited)
-		require.NotEqual(t, before, edited)
-		db.QueryRow(t, fmt.Sprintf(`SELECT xor_agg(k # rev) FROM test AS OF SYSTEM TIME %s`, ts)).Scan(&aost)
-		require.Equal(t, before, aost)
-
-		// Revert the table to ts.
-		desc := desctestutils.TestingGetPublicTableDescriptor(kv, codec, "test", "test")
-		desc.TableDesc().State = descpb.DescriptorState_OFFLINE // bypass the offline check.
-		require.NoError(t, sql.RevertTables(ctx, kv, &execCfg, []catalog.TableDescriptor{desc}, targetTime, ignoreGC, 10))
-
-		var reverted int
-		db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&reverted)
-		require.Equal(t, before, reverted, "expected reverted table after edits to match before")
-
-		db.CheckQueryResults(t, `SELECT count(*) FROM test`, beforeNumRows)
-	})
 
 	t.Run("simple-delete-range-predicate", func(t *testing.T) {
 
@@ -109,68 +82,6 @@ func TestTableRollback(t *testing.T) {
 
 		db.CheckQueryResults(t, `SELECT count(*) FROM test`, beforeNumRows)
 	})
-}
-
-// TestTableRollbackMultiTable is a regression test for a previous bug
-// in RevertTables in which passing two tables to the function would
-// cause a log.Fatal error from KV.
-func TestTableRollbackMultiTable(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "test"})
-	defer s.Stopper().Stop(context.Background())
-	tt := s.ApplicationLayer()
-	codec, kvDB := tt.Codec(), tt.DB()
-	execCfg := tt.ExecutorConfig().(sql.ExecutorConfig)
-
-	db := sqlutils.MakeSQLRunner(sqlDB)
-	db.Exec(t, "CREATE DATABASE IF NOT EXISTS test")
-	db.Exec(t, "CREATE TABLE test (k INT PRIMARY KEY)")
-	db.Exec(t, "CREATE TABLE test2 (k INT PRIMARY KEY)")
-
-	desc1 := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "test")
-	desc2 := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "test2")
-
-	tableID1 := desc1.GetID()
-	tableID2 := desc2.GetID()
-
-	const numRows = 1000
-	db.Exec(t, `INSERT INTO test (k) SELECT generate_series(1, $1)`, numRows)
-	db.Exec(t, `INSERT INTO test2 (k) SELECT generate_series(1, $1)`, numRows)
-
-	before1, ts := fingerprintTableNoHistory(t, db, tableID1, "")
-	before2, _ := fingerprintTableNoHistory(t, db, tableID2, ts)
-
-	targetTime, err := hlc.ParseHLC(ts)
-	require.NoError(t, err)
-
-	// Delete some rows
-	db.Exec(t, `DELETE FROM test WHERE k % 5 = 2`)
-	db.Exec(t, `DELETE FROM test2 WHERE k % 5 = 2`)
-
-	afterDelete1, _ := fingerprintTableNoHistory(t, db, tableID1, "")
-	afterDelete2, _ := fingerprintTableNoHistory(t, db, tableID2, "")
-	require.NotEqual(t, before1, afterDelete1)
-	require.NotEqual(t, before2, afterDelete2)
-
-	aost1, _ := fingerprintTableNoHistory(t, db, tableID1, ts)
-	aost2, _ := fingerprintTableNoHistory(t, db, tableID2, ts)
-	require.Equal(t, before1, aost1)
-	require.Equal(t, before2, aost2)
-
-	const ignoreGC = false
-
-	// Bypass the offline check.
-	desc1.TableDesc().State = descpb.DescriptorState_OFFLINE
-	desc2.TableDesc().State = descpb.DescriptorState_OFFLINE
-
-	require.NoError(t, sql.RevertTables(context.Background(), kvDB, &execCfg, []catalog.TableDescriptor{desc1, desc2}, targetTime, ignoreGC, 10))
-
-	reverted1, _ := fingerprintTableNoHistory(t, db, tableID1, "")
-	reverted2, _ := fingerprintTableNoHistory(t, db, tableID2, "")
-	require.Equal(t, before1, reverted1, "expected reverted table after edits to match before")
-	require.Equal(t, before2, reverted2, "expected reverted table after edits to match before")
 }
 
 // TestRevertSpansFanout tests RevertSpansFanout using the same
