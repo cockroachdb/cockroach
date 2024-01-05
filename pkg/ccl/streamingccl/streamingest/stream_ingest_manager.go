@@ -55,7 +55,13 @@ func (r *streamIngestManagerImpl) GetReplicationStatsAndStatus(
 func (r *streamIngestManagerImpl) RevertTenantToTimestamp(
 	ctx context.Context, tenantName roachpb.TenantName, revertTo hlc.Timestamp,
 ) error {
-	execCfg := r.evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
+	return revertTenantToTimestamp(ctx, r.evalCtx, tenantName, revertTo, r.sessionID)
+}
+
+func revertTenantToTimestamp(
+	ctx context.Context, evalCtx *eval.Context, tenantName roachpb.TenantName, revertTo hlc.Timestamp, sessionID clusterunique.ID,
+) error {
+	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 
 	// These vars are set in Txn below. This transaction checks
 	// the service state of the tenant record, moves the tenant's
@@ -71,7 +77,7 @@ func (r *streamIngestManagerImpl) RevertTenantToTimestamp(
 		ptsCleanup        func()
 	)
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		tenantRecord, err := sql.GetTenantRecordByName(ctx, r.evalCtx.Settings, txn, tenantName)
+		tenantRecord, err := sql.GetTenantRecordByName(ctx, execCfg.Settings, txn, tenantName)
 		if err != nil {
 			return err
 		}
@@ -95,7 +101,7 @@ func (r *streamIngestManagerImpl) RevertTenantToTimestamp(
 
 		originalDataState = tenantRecord.DataState
 
-		ptsCleanup, err = protectTenantSpanWithSession(ctx, r.evalCtx, txn, execCfg, tenantID, r.sessionID, revertTo)
+		ptsCleanup, err = protectTenantSpanWithSession(ctx, txn, execCfg, tenantID, sessionID, revertTo)
 		if err != nil {
 			return errors.Wrap(err, "protecting revert timestamp")
 		}
@@ -103,14 +109,14 @@ func (r *streamIngestManagerImpl) RevertTenantToTimestamp(
 		// Set the data state to Add during the destructive operation.
 		tenantRecord.LastRevertTenantTimestamp = revertTo
 		tenantRecord.DataState = mtinfopb.DataStateAdd
-		return sql.UpdateTenantRecord(ctx, r.evalCtx.Settings, txn, tenantRecord)
+		return sql.UpdateTenantRecord(ctx, execCfg.Settings, txn, tenantRecord)
 	}); err != nil {
 		return err
 	}
 	defer ptsCleanup()
 
 	spanToRevert := keys.MakeTenantSpan(tenantID)
-	if err := revertccl.RevertSpansFanout(ctx, r.evalCtx.Txn.DB(), r.evalCtx.JobExecContext.(sql.JobExecContext),
+	if err := revertccl.RevertSpansFanout(ctx, execCfg.DB, evalCtx.JobExecContext.(sql.JobExecContext),
 		[]roachpb.Span{spanToRevert},
 		revertTo,
 		false, /* ignoreGCThreshold */
@@ -120,18 +126,17 @@ func (r *streamIngestManagerImpl) RevertTenantToTimestamp(
 	}
 
 	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		tenantRecord, err := sql.GetTenantRecordByName(ctx, r.evalCtx.Settings, txn, tenantName)
+		tenantRecord, err := sql.GetTenantRecordByName(ctx, execCfg.Settings, txn, tenantName)
 		if err != nil {
 			return err
 		}
 		tenantRecord.DataState = originalDataState
-		return sql.UpdateTenantRecord(ctx, r.evalCtx.Settings, txn, tenantRecord)
+		return sql.UpdateTenantRecord(ctx, execCfg.Settings, txn, tenantRecord)
 	})
 }
 
 func protectTenantSpanWithSession(
 	ctx context.Context,
-	evalCtx *eval.Context,
 	txn isql.Txn,
 	execCfg *sql.ExecutorConfig,
 	tenantID roachpb.TenantID,
