@@ -200,6 +200,14 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	if err != nil {
 		panic(err)
 	}
+	// We disallow creating functions that return UNKNOWN, for consistency with postgres.
+	if funcReturnType.Family() == types.UnknownFamily {
+		if language == tree.RoutineLangSQL {
+			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "SQL functions cannot return type unknown"))
+		} else if language == tree.RoutineLangPLpgSQL {
+			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "PL/pgSQL functions cannot return type unknown"))
+		}
+	}
 	typedesc.GetTypeDescriptorClosure(funcReturnType).ForEach(func(id descpb.ID) {
 		typeDeps.Add(int(id))
 	})

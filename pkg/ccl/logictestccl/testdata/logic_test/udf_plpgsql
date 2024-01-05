@@ -2829,3 +2829,6 @@ SELECT f114678();
 CALL p114678();
 
 subtest end
+
+statement error pgcode 42P13 PL/pgSQL functions cannot return type unknown
+CREATE FUNCTION f() RETURNS UNKNOWN LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;

@@ -133,3 +133,8 @@ build
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL BEGIN ATOMIC SELECT 1; END;
 ----
 error (0A000): unimplemented: CREATE FUNCTION...sql_body unimplemented
+
+build
+CREATE FUNCTION f() RETURNS UNKNOWN LANGUAGE SQL AS $$ SELECT NULL; $$;
+----
+error (42P13): SQL functions cannot return type unknown
