@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -28,12 +29,11 @@ func SystemInterfaceSystemdUnitName() string {
 
 // DefaultPGUrl is a wrapper over ExternalPGUrl that calls it with the arguments
 // that *almost* all roachtests want: single tenant and only a single node.
-// This wrapper will also make fixing #63145 in the future easier as we can
-// add "password authenticated" to the above.
 func DefaultPGUrl(
 	ctx context.Context, c cluster.Cluster, l *logger.Logger, node option.NodeListOption,
 ) (string, error) {
-	pgurl, err := c.ExternalPGUrl(ctx, l, node, "", 0)
+	opts := roachprod.PGURLOptions{}
+	pgurl, err := c.ExternalPGUrl(ctx, l, node, opts)
 	if err != nil {
 		return "", err
 	}
