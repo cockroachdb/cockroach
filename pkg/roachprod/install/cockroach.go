@@ -174,8 +174,6 @@ const (
 	NoSQLTimeout = 0
 
 	defaultInitTarget = Node(1)
-
-	Username = "roach"
 )
 
 func (st StartTarget) String() string {
