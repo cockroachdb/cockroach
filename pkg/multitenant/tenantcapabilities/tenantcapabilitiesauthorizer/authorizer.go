@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -97,10 +97,13 @@ func (a *Authorizer) HasCapabilityForBatch(
 		return nil
 	}
 
-	cp, mode := a.getMode(ctx, tenID)
+	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
-		return a.capCheckForBatch(ctx, tenID, ba, cp)
+		if entry.ServiceMode == mtinfopb.ServiceModeNone {
+			return errors.Newf("operation not allowed when in service mode %q", entry.ServiceMode)
+		}
+		return a.capCheckForBatch(ctx, tenID, ba, entry)
 	case authorizerModeAllowAll:
 		return nil
 	case authorizerModeV222:
@@ -140,7 +143,7 @@ func (a *Authorizer) capCheckForBatch(
 	ctx context.Context,
 	tenID roachpb.TenantID,
 	ba *kvpb.BatchRequest,
-	cp *tenantcapabilitiespb.TenantCapabilities,
+	entry tenantcapabilities.Entry,
 ) error {
 	for _, ru := range ba.Requests {
 		request := ru.GetInner()
@@ -149,7 +152,7 @@ func (a *Authorizer) capCheckForBatch(
 			continue
 		}
 		if !hasCap || requiredCap == onlySystemTenant ||
-			!tenantcapabilities.MustGetBoolByID(cp, requiredCap) {
+			!tenantcapabilities.MustGetBoolByID(entry.TenantCapabilities, requiredCap) {
 			// All allowable request types must be explicitly opted into the
 			// reqMethodToCap map. If a request type is missing from the map
 			// (!hasCap), we must be conservative and assume it is
@@ -243,7 +246,7 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 	errFn := func() error {
 		return errors.New("client tenant does not have capability to query cluster node metadata")
 	}
-	cp, mode := a.getMode(ctx, tenID)
+	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
 		break // fallthrough to the next check.
@@ -258,7 +261,7 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 	}
 
 	if !tenantcapabilities.MustGetBoolByID(
-		cp, tenantcapabilities.CanViewNodeInfo,
+		entry.TenantCapabilities, tenantcapabilities.CanViewNodeInfo,
 	) {
 		return errFn()
 	}
@@ -273,7 +276,7 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 		return errors.Newf("client tenant does not have capability to query timeseries data")
 	}
 
-	cp, mode := a.getMode(ctx, tenID)
+	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
 		break // fallthrough to the next check.
@@ -288,7 +291,7 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 	}
 
 	if !tenantcapabilities.MustGetBoolByID(
-		cp, tenantcapabilities.CanViewTSDBMetrics,
+		entry.TenantCapabilities, tenantcapabilities.CanViewTSDBMetrics,
 	) {
 		return errFn()
 	}
@@ -304,7 +307,7 @@ func (a *Authorizer) HasNodelocalStorageCapability(
 	errFn := func() error {
 		return errors.Newf("client tenant does not have capability to use nodelocal storage")
 	}
-	cp, mode := a.getMode(ctx, tenID)
+	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
 		break // fallthrough to the next check.
@@ -319,7 +322,7 @@ func (a *Authorizer) HasNodelocalStorageCapability(
 	}
 
 	if !tenantcapabilities.MustGetBoolByID(
-		cp, tenantcapabilities.CanUseNodelocalStorage,
+		entry.TenantCapabilities, tenantcapabilities.CanUseNodelocalStorage,
 	) {
 		return errFn()
 	}
@@ -331,7 +334,7 @@ func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb
 	if tenID.IsSystem() {
 		return true
 	}
-	cp, mode := a.getMode(ctx, tenID)
+	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
 		break // fallthrough to the next check.
@@ -345,13 +348,13 @@ func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb
 		return false
 	}
 
-	return tenantcapabilities.MustGetBoolByID(cp, tenantcapabilities.ExemptFromRateLimiting)
+	return tenantcapabilities.MustGetBoolByID(entry.TenantCapabilities, tenantcapabilities.ExemptFromRateLimiting)
 }
 
 // getMode retrieves the authorization mode.
 func (a *Authorizer) getMode(
 	ctx context.Context, tid roachpb.TenantID,
-) (cp *tenantcapabilitiespb.TenantCapabilities, selectedMode authorizerModeType) {
+) (entry tenantcapabilities.Entry, selectedMode authorizerModeType) {
 	// We prioritize what the cluster setting tells us.
 	selectedMode = authorizerModeType(authorizerMode.Get(&a.settings.SV))
 
@@ -369,7 +372,7 @@ func (a *Authorizer) getMode(
 		} else {
 			// We have a reader. Did we get data from the rangefeed yet?
 			var found bool
-			cp, found = reader.GetCapabilities(tid)
+			entry, _, found = reader.GetInfo(tid)
 			if !found {
 				// No data from the rangefeed yet. Assume caps are still
 				// unavailable.
@@ -378,9 +381,10 @@ func (a *Authorizer) getMode(
 					tid)
 				selectedMode = authorizerModeV222
 			}
+
 		}
 	}
-	return cp, selectedMode
+	return entry, selectedMode
 }
 
 func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachpb.TenantID) error {
@@ -390,7 +394,7 @@ func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachp
 	errFn := func() error {
 		return errors.New("client tenant does not have capability to debug the process")
 	}
-	cp, mode := a.getMode(ctx, tenID)
+	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
 		break // fallthrough to the next check.
@@ -405,7 +409,7 @@ func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachp
 	}
 
 	if !tenantcapabilities.MustGetBoolByID(
-		cp, tenantcapabilities.CanDebugProcess,
+		entry.TenantCapabilities, tenantcapabilities.CanDebugProcess,
 	) {
 		return errFn()
 	}
