@@ -140,17 +140,18 @@ func TestCreatePostRequest(t *testing.T) {
 		coverageBuild           bool
 		extraLabels             []string
 		arch                    vm.CPUArch
-		failure                 failure
+		failures                []failure
 		expectedPost            bool
 		expectedLabels          []string
 		expectedReleaseBlocker  bool
 		expectedSkipTestFailure bool
 		expectedParams          map[string]string
+		message                 string
 	}{
 		// 1.
 		{
 			nonReleaseBlocker: true,
-			failure:           createFailure(errors.New("other")),
+			failures:          []failure{createFailure(errors.New("other"))},
 			expectedPost:      true,
 			expectedLabels:    []string{"C-test-failure"},
 			expectedParams: prefixAll(map[string]string{
@@ -170,7 +171,7 @@ func TestCreatePostRequest(t *testing.T) {
 			localSSD:         true,
 			metamorphicBuild: true,
 			arch:             vm.ArchARM64,
-			failure:          createFailure(errClusterProvisioningFailed),
+			failures:         []failure{createFailure(errClusterProvisioningFailed)},
 			expectedPost:     true,
 			expectedLabels:   []string{"T-testeng", "X-infra-flake"},
 			expectedParams: prefixAll(map[string]string{
@@ -191,7 +192,7 @@ func TestCreatePostRequest(t *testing.T) {
 		// `clusterImpl` are not dereferenced
 		{
 			clusterCreationFailed: true,
-			failure:               createFailure(rperrors.ErrSSH255),
+			failures:              []failure{createFailure(rperrors.ErrSSH255)},
 			expectedPost:          true,
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 			expectedParams: prefixAll(map[string]string{
@@ -206,26 +207,26 @@ func TestCreatePostRequest(t *testing.T) {
 		{
 			nonReleaseBlocker: true,
 			loadTeamsFailed:   true,
-			failure:           createFailure(errors.New("other")),
+			failures:          []failure{createFailure(errors.New("other"))},
 			expectedLabels:    []string{"C-test-failure"},
 		},
 		// 5. Error during post test assertions
 		{
 			nonReleaseBlocker: true,
-			failure:           createFailure(errDuringPostAssertions),
+			failures:          []failure{createFailure(errDuringPostAssertions)},
 			expectedLabels:    []string{"C-test-failure"},
 		},
 		// 6. Error during dns operation.
 		{
 			nonReleaseBlocker: true,
-			failure:           createFailure(gce.ErrDNSOperation),
+			failures:          []failure{createFailure(gce.ErrDNSOperation)},
 			expectedPost:      true,
 			expectedLabels:    []string{"T-testeng", "X-infra-flake"},
 		},
 		// 7. Assert that extra labels in the test spec are added to the issue.
 		{
 			extraLabels:    []string{"foo-label"},
-			failure:        createFailure(errors.New("other")),
+			failures:       []failure{createFailure(errors.New("other"))},
 			expectedPost:   true,
 			expectedLabels: []string{"C-test-failure", "release-blocker", "foo-label"},
 			expectedParams: prefixAll(map[string]string{
@@ -244,7 +245,7 @@ func TestCreatePostRequest(t *testing.T) {
 		// (for now).
 		{
 			metamorphicBuild: true,
-			failure:          createFailure(errors.New("other")),
+			failures:         []failure{createFailure(errors.New("other"))},
 			expectedPost:     true,
 			expectedLabels:   []string{"C-test-failure", "B-metamorphic-enabled"},
 			expectedParams: prefixAll(map[string]string{
@@ -264,7 +265,7 @@ func TestCreatePostRequest(t *testing.T) {
 		{
 			extraLabels:    []string{"foo-label"},
 			coverageBuild:  true,
-			failure:        createFailure(errors.New("other")),
+			failures:       []failure{createFailure(errors.New("other"))},
 			expectedPost:   true,
 			expectedLabels: []string{"C-test-failure", "B-coverage-enabled", "foo-label"},
 			expectedParams: prefixAll(map[string]string{
@@ -279,19 +280,43 @@ func TestCreatePostRequest(t *testing.T) {
 				"coverageBuild":    "true",
 			}),
 		},
+		// 10. Verify preemption failure are routed to test-eng and marked as infra-flake,
+		// even if the first failure is another handled error.
+		{
+			nonReleaseBlocker: true,
+			failures:          []failure{createFailure(gce.ErrDNSOperation), createFailure(errVMPreemption)},
+			expectedPost:      true,
+			expectedLabels:    []string{"T-testeng", "X-infra-flake"},
+		},
+		// 11. Verify preemption failure are routed to test-eng and marked as infra-flake, when the
+		// first failure is a non-handled error.
+		{
+			nonReleaseBlocker: true,
+			failures:          []failure{createFailure(errors.New("random")), createFailure(errVMPreemption)},
+			expectedPost:      true,
+			expectedLabels:    []string{"T-testeng", "X-infra-flake"},
+		},
+		// 12. Verify preemption failure are routed to test-eng and marked as infra-flake, when the only error is
+		// preemption failure
+		{
+			nonReleaseBlocker: true,
+			failures:          []failure{{errors: []error{errVMPreemption}}},
+			expectedPost:      true,
+			expectedLabels:    []string{"T-testeng", "X-infra-flake"},
+		},
 	}
 
 	reg := makeTestRegistry()
-	for idx, c := range testCases {
+	for idx, testCase := range testCases {
 		t.Run(fmt.Sprintf("%d", idx+1), func(t *testing.T) {
-			clusterSpec := reg.MakeClusterSpec(1, spec.Arch(c.arch))
+			clusterSpec := reg.MakeClusterSpec(1, spec.Arch(testCase.arch))
 
 			testSpec := &registry.TestSpec{
 				Name:              "github_test",
 				Owner:             OwnerUnitTest,
 				Cluster:           clusterSpec,
-				NonReleaseBlocker: c.nonReleaseBlocker,
-				ExtraLabels:       c.extraLabels,
+				NonReleaseBlocker: testCase.nonReleaseBlocker,
+				ExtraLabels:       testCase.extraLabels,
 			}
 
 			ti := &testImpl{
@@ -305,17 +330,17 @@ func TestCreatePostRequest(t *testing.T) {
 			vo := vm.DefaultCreateOpts()
 			vmOpts := &vo
 
-			if c.clusterCreationFailed {
+			if testCase.clusterCreationFailed {
 				testClusterImpl = nil
 				vmOpts = nil
-			} else if !c.localSSD {
+			} else if !testCase.localSSD {
 				// The default is true set in `vm.DefaultCreateOpts`
 				vmOpts.SSDOpts.UseLocalSSD = false
 			}
 
 			teamLoadFn := validTeamsFn
 
-			if c.loadTeamsFailed {
+			if testCase.loadTeamsFailed {
 				teamLoadFn = invalidTeamsFn
 			}
 
@@ -325,12 +350,12 @@ func TestCreatePostRequest(t *testing.T) {
 				teamLoader:   teamLoadFn,
 			}
 
-			if c.loadTeamsFailed {
+			if testCase.loadTeamsFailed {
 				// Assert that if TEAMS.yaml cannot be loaded then function errors.
-				_, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild, c.coverageBuild)
+				_, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, testCase.failures, testCase.message, testCase.metamorphicBuild, testCase.coverageBuild)
 				assert.Error(t, err, "Expected an error in createPostRequest when loading teams fails, but got nil")
 			} else {
-				req, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild, c.coverageBuild)
+				req, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, testCase.failures, testCase.message, testCase.metamorphicBuild, testCase.coverageBuild)
 				assert.NoError(t, err, "Expected no error in createPostRequest")
 
 				r := &issues.Renderer{}
@@ -338,11 +363,11 @@ func TestCreatePostRequest(t *testing.T) {
 				file := fmt.Sprintf("help_command_createpost_%d.txt", idx+1)
 				echotest.Require(t, r.String(), filepath.Join("testdata", file))
 
-				if c.expectedParams != nil {
-					require.Equal(t, c.expectedParams, req.ExtraParams)
+				if testCase.expectedParams != nil {
+					require.Equal(t, testCase.expectedParams, req.ExtraParams)
 				}
 
-				expLabels := append([]string{"O-roachtest"}, c.expectedLabels...)
+				expLabels := append([]string{"O-roachtest"}, testCase.expectedLabels...)
 				sort.Strings(expLabels)
 				labels := append([]string{}, req.Labels...)
 				sort.Strings(expLabels)
@@ -352,20 +377,23 @@ func TestCreatePostRequest(t *testing.T) {
 				expectedTeam := "@cockroachdb/unowned"
 				expectedName := "github_test"
 				expectedMessagePrefix := ""
-
-				if errors.Is(c.failure.squashedErr, gce.ErrDNSOperation) {
+				if failuresContainsError(testCase.failures, errVMPreemption) {
+					expectedTeam = "@cockroachdb/test-eng"
+					expectedName = "vm_preemption"
+					expectedMessagePrefix = "test github_test failed due to "
+				} else if errors.Is(testCase.failures[0].squashedErr, gce.ErrDNSOperation) {
 					expectedTeam = "@cockroachdb/test-eng"
 					expectedName = "dns_problem"
 					expectedMessagePrefix = "test github_test failed due to "
-				} else if errors.Is(c.failure.squashedErr, errClusterProvisioningFailed) {
+				} else if errors.Is(testCase.failures[0].squashedErr, errClusterProvisioningFailed) {
 					expectedTeam = "@cockroachdb/test-eng"
 					expectedName = "cluster_creation"
 					expectedMessagePrefix = "test github_test was skipped due to "
-				} else if errors.Is(c.failure.squashedErr, rperrors.ErrSSH255) {
+				} else if errors.Is(testCase.failures[0].squashedErr, rperrors.ErrSSH255) {
 					expectedTeam = "@cockroachdb/test-eng"
 					expectedName = "ssh_problem"
 					expectedMessagePrefix = "test github_test failed due to "
-				} else if errors.Is(c.failure.squashedErr, errDuringPostAssertions) {
+				} else if errors.Is(testCase.failures[0].squashedErr, errDuringPostAssertions) {
 					expectedMessagePrefix = "test github_test failed during post test assertions (see test-post-assertions.log) due to "
 				}
 

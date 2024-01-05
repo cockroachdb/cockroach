@@ -139,7 +139,7 @@ func (g *githubIssues) createPostRequest(
 	start time.Time,
 	end time.Time,
 	spec *registry.TestSpec,
-	firstFailure failure,
+	failures []failure,
 	message string,
 	metamorphicBuild bool,
 	coverageBuild bool,
@@ -153,8 +153,14 @@ func (g *githubIssues) createPostRequest(
 
 	messagePrefix := ""
 	var infraFlake bool
+	firstFailure := failures[0]
 	// Overrides to shield eng teams from potential flakes
 	switch {
+	case failuresContainsError(failures, errVMPreemption):
+		issueOwner = registry.OwnerTestEng
+		issueName = "vm_preemption"
+		messagePrefix = fmt.Sprintf("test %s failed due to ", testName)
+		infraFlake = true
 	case failureContainsError(firstFailure, errClusterProvisioningFailed):
 		issueOwner = registry.OwnerTestEng
 		issueName = "cluster_creation"
@@ -300,7 +306,7 @@ func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) 
 	default:
 		metamorphicBuild = tests.UsingRuntimeAssertions(t)
 	}
-	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.firstFailure(), message, metamorphicBuild, t.goCoverEnabled)
+	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.failures(), message, metamorphicBuild, t.goCoverEnabled)
 	if err != nil {
 		return err
 	}

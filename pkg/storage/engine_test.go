@@ -1082,29 +1082,29 @@ func TestCreateCheckpoint_SpanConstrained(t *testing.T) {
 	ctx := context.Background()
 
 	rng, _ := randutil.NewTestRand()
-	dir, cleanup := testutils.TempDir(t)
-	defer cleanup()
-
 	key := func(i int) roachpb.Key {
 		return keys.SystemSQLCodec.TablePrefix(uint32(i))
 	}
 
+	mem := vfs.NewMem()
+	dir := "foo"
 	db, err := Open(
 		ctx,
-		Filesystem(dir),
+		MakeLocation(dir, mem),
 		cluster.MakeTestingClusterSettings(),
-		TargetFileSize(10<<10 /* 10 KB */),
+		TargetFileSize(2<<10 /* 2 KB */),
 	)
 	assert.NoError(t, err)
 	defer db.Close()
 
 	// Write keys /Table/1/../Table/10000.
+	// 10,000 * 100 byte KVs = ~1MB.
 	b := db.NewWriteBatch()
 	const maxTableID = 10000
 	for i := 1; i <= maxTableID; i++ {
 		require.NoError(t, b.PutMVCC(
 			MVCCKey{Key: key(i), Timestamp: hlc.Timestamp{WallTime: int64(i)}},
-			MVCCValue{Value: roachpb.Value{RawBytes: randutil.RandBytes(rng, 500)}},
+			MVCCValue{Value: roachpb.Value{RawBytes: randutil.RandBytes(rng, 100)}},
 		))
 	}
 	require.NoError(t, b.Commit(true /* sync */))
@@ -1118,17 +1118,19 @@ func TestCreateCheckpoint_SpanConstrained(t *testing.T) {
 		}
 	}
 
-	checkpointRootDir := filepath.Join(dir, "checkpoint")
+	checkpointRootDir := mem.PathJoin(dir, "checkpoint")
 	require.NoError(t, db.FS.MkdirAll(checkpointRootDir, os.ModePerm))
 
 	var checkpointNum int
 	checkpointSpan := func(s roachpb.Span) string {
 		checkpointNum++
-		dir := filepath.Join(checkpointRootDir, fmt.Sprintf("%06d", checkpointNum))
+		dir := mem.PathJoin(checkpointRootDir, fmt.Sprintf("%06d", checkpointNum))
 		t.Logf("Writing checkpoint for span %s to %q", s, dir)
 		assert.NoError(t, db.CreateCheckpoint(dir, []roachpb.Span{s}))
-		assert.DirExists(t, dir)
-		m, err := filepath.Glob(dir + "/*")
+		// Check that the dir exists.
+		_, err := mem.Stat(dir)
+		assert.NoError(t, err)
+		m, err := mem.List(dir)
 		assert.NoError(t, err)
 		assert.True(t, len(m) > 0)
 		t.Logf("Checkpoint wrote files: %s", strings.Join(m, ", "))
@@ -1139,7 +1141,7 @@ func TestCreateCheckpoint_SpanConstrained(t *testing.T) {
 		// Verify that we can open the checkpoint.
 		cDB, err := Open(
 			ctx,
-			Filesystem(dir),
+			MakeLocation(dir, mem),
 			cluster.MakeTestingClusterSettings(),
 			MustExist)
 		require.NoError(t, err)
