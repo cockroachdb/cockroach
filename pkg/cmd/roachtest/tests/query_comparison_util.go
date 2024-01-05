@@ -108,7 +108,7 @@ func runQueryComparison(
 			return
 		}
 		c.Stop(clusterCtx, t.L(), option.DefaultStopOpts())
-		c.Wipe(clusterCtx, false /* preserveCerts */)
+		c.Wipe(clusterCtx, true /* preserveCerts */)
 	}
 }
 
