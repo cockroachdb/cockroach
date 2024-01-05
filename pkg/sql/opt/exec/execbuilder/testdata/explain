@@ -122,32 +122,32 @@ distribution: local
         │
         ├── • render
         │   │
-        │   └── • merge join (left outer)
-        │       │ equality: (id) = (job_id)
+        │   └── • merge join (right outer)
+        │       │ equality: (job_id) = (id)
         │       │
-        │       ├── • merge join (right outer)
-        │       │   │ equality: (job_id) = (id)
-        │       │   │ right cols are key
-        │       │   │
-        │       │   ├── • scan
-        │       │   │     missing stats
-        │       │   │     table: job_progress@primary
-        │       │   │     spans: FULL SCAN
-        │       │   │
-        │       │       │
-        │       │       └── • scan
-        │       │             missing stats
-        │       │             table: jobs@primary
-        │       │             spans: FULL SCAN
+        │       ├── • scan
+        │       │     missing stats
+        │       │     table: job_status@primary
+        │       │     spans: FULL SCAN
         │       │
-        │       └── • scan
-        │             missing stats
-        │             table: job_status@primary
-        │             spans: FULL SCAN
+        │       └── • merge join (right outer)
+        │           │ equality: (job_id) = (id)
+        │           │ right cols are key
+        │           │
+        │           ├── • scan
+        │           │     missing stats
+        │           │     table: job_progress@primary
+        │           │     spans: FULL SCAN
+        │           │
+        │               │
+        │               └── • scan
+        │                     missing stats
+        │                     table: jobs@primary
+        │                     spans: FULL SCAN
         │
         └── • render
             │
-                │ estimated row count: 3
+                │ estimated row count: 2
                 │
                 └── • project set
                     │ estimated row count: 10
