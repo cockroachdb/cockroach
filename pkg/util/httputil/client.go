@@ -15,6 +15,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"time"
 )
 
@@ -97,4 +99,18 @@ func (c *Client) Post(
 	}
 	req.Header.Set("Content-Type", contentType)
 	return c.Do(req)
+}
+
+// SetCookies is a helper that checks if a client.CookieJar exists and creates
+// one if it doesn't. It then sets the provided cookies through CookieJar.SetCookies.
+func SetCookies(c *http.Client, u *url.URL, cookies []*http.Cookie) error {
+	if c.Jar == nil {
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			return err
+		}
+		c.Jar = jar
+	}
+	c.Jar.SetCookies(u, cookies)
+	return nil
 }

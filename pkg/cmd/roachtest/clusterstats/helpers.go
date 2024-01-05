@@ -17,6 +17,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
@@ -36,8 +37,12 @@ func SetupCollectorPromClient(
 	if err != nil {
 		return nil, err
 	}
-
+	httpclient, err := roachtestutil.DefaultHttpClientWithSessionCookie(ctx, c, l, c.Node(1), fmt.Sprintf("http://%s:9090/api/v1/query", prometheusNodeIP[0]))
+	if err != nil {
+		return nil, err
+	}
 	client, err := promapi.NewClient(promapi.Config{
+		Client:  &httpclient,
 		Address: fmt.Sprintf("http://%s:9090", prometheusNodeIP[0]),
 	})
 	if err != nil {
