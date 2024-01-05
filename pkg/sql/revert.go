@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -58,41 +57,6 @@ var maxRevertSpanNumWorkers = settings.RegisterIntSetting(
 // reply size to worry about.
 // TODO(dt): tune this via experimentation.
 const RevertTableDefaultBatchSize = 500000
-
-// RevertTables reverts the passed table to the target time, which must be above
-// the GC threshold for every range (unless the flag ignoreGCThreshold is passed
-// which should be done with care -- see RevertRangeRequest.IgnoreGCThreshold).
-func RevertTables(
-	ctx context.Context,
-	db *kv.DB,
-	execCfg *ExecutorConfig,
-	tables []catalog.TableDescriptor,
-	targetTime hlc.Timestamp,
-	ignoreGCThreshold bool,
-	batchSize int64,
-) error {
-	spans := make([]roachpb.Span, 0, len(tables))
-
-	// Check that all the tables are revertable -- i.e. offline.
-	for i := range tables {
-		if tables[i].GetState() != descpb.DescriptorState_OFFLINE {
-			return errors.New("only offline tables can be reverted")
-		}
-
-		if !tables[i].IsPhysicalTable() {
-			return errors.Errorf("cannot revert virtual table %s", tables[i].GetName())
-		}
-		spans = append(spans, tables[i].TableSpan(execCfg.Codec))
-	}
-
-	for i := range tables {
-		// This is a) rare and b) probably relevant if we are looking at logs so it
-		// probably makes sense to log it without a verbosity filter.
-		log.Infof(ctx, "reverting table %s (%d) to time %v", tables[i].GetName(), tables[i].GetID(), targetTime)
-	}
-
-	return RevertSpans(ctx, db, spans, targetTime, ignoreGCThreshold, batchSize, nil)
-}
 
 // RevertSpansContext provides the execution environment for a call to
 // RevertSpansFanout.
