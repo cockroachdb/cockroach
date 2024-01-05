@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -150,7 +151,7 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 			t.Fatal(err)
 		}
 	}
-	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), "" /* tenant */, 0 /* sqlInstance */)
+	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), roachprod.PGURLOptions{})
 	require.NoError(t, err)
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
