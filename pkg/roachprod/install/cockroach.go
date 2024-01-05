@@ -525,7 +525,7 @@ func (c *SyncedCluster) NodeURL(
 		user := DefaultUser
 		// TODO(DarrylWong): Support authentication for multitenant,
 		// since they do not use roach:system.
-		password := SystemInterfaceName
+		password := DefaultPassword
 
 		switch auth {
 		case AuthRootCert:
@@ -1044,7 +1044,7 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 
 	stmts := strings.Join([]string{
 		fmt.Sprintf("CREATE USER IF NOT EXISTS %s WITH LOGIN PASSWORD '%s'", DefaultUser, password),
-		fmt.Sprintf("GRANT ADMIN TO %s", DefaultUser),
+		fmt.Sprintf("GRANT ADMIN TO %s WITH ADMIN OPTION", DefaultUser),
 	}, "; ")
 
 	// We retry a few times here because cockroach process might not be

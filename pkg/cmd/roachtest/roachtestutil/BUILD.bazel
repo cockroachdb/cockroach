@@ -6,6 +6,7 @@ go_library(
         "commandbuilder.go",
         "disk_usage.go",
         "health_checker.go",
+        "httpclient.go",
         "jaeger.go",
         "utils.go",
         "validation_check.go",
@@ -25,9 +26,10 @@ go_library(
         "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_pkg_errors//:errors",
     ],
 )
 

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -95,7 +94,7 @@ func registerKV(r registry.Registry) {
 			startOpts.RoachprodOpts.StoreCount = opts.ssds
 		}
 		// Use a secure cluster so we can test with a non-root user.
-		settings := install.MakeClusterSettings(install.SecureOption(true))
+		settings := install.MakeClusterSettings()
 		if opts.globalMVCCRangeTombstone {
 			settings.Env = append(settings.Env, "COCKROACH_GLOBAL_MVCC_RANGE_TOMBSTONE=true")
 		}
@@ -119,16 +118,7 @@ func registerKV(r registry.Registry) {
 			}
 		}
 		if opts.sharedProcessMT {
-			createInMemoryTenant(ctx, t, c, appTenantName, c.Range(1, nodes), false /* secure */)
-		}
-
-		// Create a user and grant them admin privileges so they can freely
-		// interact with the cluster.
-		if _, err := db.ExecContext(ctx, `CREATE USER testuser WITH PASSWORD 'password'`); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.ExecContext(ctx, `GRANT admin TO testuser`); err != nil {
-			t.Fatal(err)
+			createInMemoryTenant(ctx, t, c, appTenantName, c.Range(1, nodes), true /* secure */)
 		}
 
 		t.Status("running workload")
@@ -181,7 +171,9 @@ func registerKV(r registry.Registry) {
 			if opts.sharedProcessMT {
 				url = fmt.Sprintf(" {pgurl:1-%d:%s}", nodes, appTenantName)
 			}
-			cmd := "./workload run kv --tolerate-errors --init --user=testuser --password=password" +
+			cmd := fmt.Sprintf(
+				"./workload run kv --tolerate-errors --init --user=%s --password=%s", install.DefaultUser, install.DefaultPassword,
+			) +
 				histograms + concurrency + splits + duration + readPercent +
 				batchSize + blockSize + sequential + envFlags + url
 			c.Run(ctx, option.WithNodes(c.Node(nodes+1)), cmd)
@@ -541,12 +533,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			// Initialize the database with a lot of ranges so that there are
 			// definitely a large number of leases on the node that we shut down
 			// before it starts draining.
-			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
-			if err != nil {
-				t.Fatal(err)
-			}
-			c.Run(ctx, option.WithNodes(c.Node(1)),
-				fmt.Sprintf("./cockroach workload init kv --splits 100 '%s'", pgurl))
+			c.Run(ctx, option.WithNodes(c.Node(1)), "./cockroach workload init kv --splits 100 {pgurl:1}")
 
 			m := c.NewMonitor(ctx, c.Nodes(1, nodes))
 			m.ExpectDeath()

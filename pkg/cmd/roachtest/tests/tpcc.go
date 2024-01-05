@@ -195,15 +195,8 @@ func setupTPCC(
 		case usingExistingData:
 			// Do nothing.
 		case usingImport:
-			l.Printf("loading fixture" + estimatedSetupTimeStr)
-			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, l, c.Nodes(1))
-			if err != nil {
-				t.Fatal(err)
-			}
-			c.Run(ctx,
-				option.WithNodes(crdbNodes[:1]),
-				tpccImportCmd(opts.DB, opts.Warehouses, opts.ExtraSetupArgs, pgurl),
-			)
+			t.Status("loading fixture" + estimatedSetupTimeStr)
+			c.Run(ctx, option.WithNodes(crdbNodes[:1]), tpccImportCmd(opts.DB, opts.Warehouses, opts.ExtraSetupArgs, "{pgurl:1}"))
 		case usingInit:
 			l.Printf("initializing tables" + estimatedSetupTimeStr)
 			extraArgs := opts.ExtraSetupArgs
@@ -1391,10 +1384,7 @@ func loadTPCCBench(
 	if b.SharedProcessMT {
 		pgurl = fmt.Sprintf("{pgurl%s:%s}", roachNodes[:1], appTenantName)
 	} else {
-		pgurl, err = roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
-		if err != nil {
-			t.Fatal(err)
-		}
+		pgurl = "{pgurl:1}"
 	}
 	cmd := tpccImportCmd("", loadWarehouses, loadArgs, pgurl)
 	if err = c.RunE(ctx, option.WithNodes(roachNodes[:1]), cmd); err != nil {
@@ -1483,7 +1473,12 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			if err := c.Install(ctx, t.L(), loadNodes, "haproxy"); err != nil {
 				t.Fatal(err)
 			}
-			c.Run(ctx, option.WithNodes(loadNodes), "./cockroach gen haproxy --insecure --url {pgurl:1}")
+			// cockroach gen haproxy does not support specifying a non root user
+			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1), install.AuthRootCert)
+			if err != nil {
+				t.Fatal(err)
+			}
+			c.Run(ctx, option.WithNodes(loadNodes), fmt.Sprintf("./cockroach gen haproxy --url %s", pgurl))
 			// Increase the maximum connection limit to ensure that no TPC-C
 			// load gen workers get stuck during connection initialization.
 			// 10k warehouses requires at least 20,000 connections, so add a

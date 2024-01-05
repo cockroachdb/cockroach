@@ -143,10 +143,10 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Note that this is expected to return an error, since the test suite
 	// will fail. And it is safe to swallow it here.
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
-		`source venv/bin/activate && cd /mnt/data1/sqlalchemy-cockroachdb/ && pytest --maxfail=0 \
-		--dburi='cockroachdb://test_admin@localhost:{pgport:1}/defaultdb?sslmode=disable&disable_cockroachdb_telemetry=true' \
+		fmt.Sprintf(`source venv/bin/activate && cd /mnt/data1/sqlalchemy-cockroachdb/ && pytest --maxfail=0 \
+		--dburi='cockroachdb://%s:%s@localhost:{pgport:1}/defaultdb?sslmode=require&disable_cockroachdb_telemetry=true' \
 		test/test_suite_sqlalchemy.py
-	`)
+	`, install.DefaultUser, install.DefaultPassword))
 
 	// Fatal for a roachprod or SSH error. A roachprod error is when result.Err==nil.
 	// Proceed for any other (command) errors

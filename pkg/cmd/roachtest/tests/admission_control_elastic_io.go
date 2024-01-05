@@ -65,10 +65,6 @@ func registerElasticIO(r registry.Registry) {
 				WithGrafanaDashboardJSON(grafana.ChangefeedAdmissionControlGrafana)
 			err := c.StartGrafana(ctx, t.L(), promCfg)
 			require.NoError(t, err)
-			promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
-			require.NoError(t, err)
-			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
-
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workAndPromNode))
 			startOpts := option.DefaultStartOptsNoBackups()
 			roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)
@@ -76,6 +72,9 @@ func registerElasticIO(r registry.Registry) {
 				"--vmodule=io_load_listener=2")
 			settings := install.MakeClusterSettings()
 			c.Start(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes))
+			promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
+			require.NoError(t, err)
+			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
 			setAdmissionControl(ctx, t, c, true)
 			duration := 30 * time.Minute
 			t.Status("running workload")
@@ -85,7 +84,7 @@ func registerElasticIO(r registry.Registry) {
 				url := fmt.Sprintf(" {pgurl:1-%d}", crdbNodes)
 				cmd := "./workload run kv --init --histograms=perf/stats.json --concurrency=512 " +
 					"--splits=1000 --read-percent=0 --min-block-bytes=65536 --max-block-bytes=65536 " +
-					"--txn-qos=background --tolerate-errors" + dur + url
+					"--txn-qos=background --tolerate-errors --secure" + dur + url
 				c.Run(ctx, option.WithNodes(c.Node(workAndPromNode)), cmd)
 				return nil
 			})

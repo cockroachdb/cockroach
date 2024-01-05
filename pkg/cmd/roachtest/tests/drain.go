@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
@@ -128,10 +127,6 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 
 	m.Go(func(ctx context.Context) error {
 		t.Status(fmt.Sprintf("start draining node %d", nodeToDrain))
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(nodeToDrain))
-		if err != nil {
-			t.Fatal(err)
-		}
 		results, err := c.RunWithDetailsSingleNode(
 			ctx,
 			t.L(),
@@ -141,7 +136,7 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 			// of server.shutdown.initial_wait, server.shutdown.connections.timeout,
 			// server.shutdown.transactions.timeout times two, and
 			// server.shutdown.lease_transfer_iteration.timeout.
-			fmt.Sprintf("./cockroach node drain --self --insecure --drain-wait=10s --url=%s", pgurl),
+			fmt.Sprintf("./cockroach node drain --self --drain-wait=10s --certs-dir=certs --port={pgport:%d}", nodeToDrain),
 		)
 		if err != nil {
 			return err
@@ -172,8 +167,9 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 	require.NoError(t, err)
 	addr, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(nodeToDrain))
 	require.NoError(t, err)
-	url := `http://` + addr[0] + `/health?ready=1`
-	resp, err := httputil.Get(ctx, url)
+	url := `https://` + addr[0] + `/health?ready=1`
+	client := roachtestutil.DefaultHTTPClient(c, t.L())
+	resp, err := client.Get(ctx, url)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 	require.Equalf(t, http.StatusServiceUnavailable, resp.StatusCode, "expected healthcheck to fail during drain")
@@ -261,13 +257,9 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 	m := c.NewMonitor(ctx, c.Node(nodeToDrain))
 	m.Go(func(ctx context.Context) error {
 		t.Status(fmt.Sprintf("draining node %d", nodeToDrain))
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(nodeToDrain))
-		if err != nil {
-			t.Fatal(err)
-		}
 		return c.RunE(ctx,
 			option.WithNodes(c.Node(nodeToDrain)),
-			fmt.Sprintf("./cockroach node drain --self --insecure --drain-wait=600s --url=%s", pgurl),
+			fmt.Sprintf("./cockroach node drain --self --drain-wait=600s --certs-dir=certs --port={pgport:%d}", nodeToDrain),
 		)
 	})
 
@@ -342,15 +334,11 @@ func runClusterNotAtQuorum(ctx context.Context, t test.Test, c cluster.Cluster) 
 	c.Stop(ctx, t.L(), stopOpts, c.Node(2))
 
 	t.Status("start draining node 3")
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(3))
-	if err != nil {
-		t.Fatal(err)
-	}
 	// Ignore the error, since the command is expected to time out.
 	results, _ := c.RunWithDetailsSingleNode(
 		ctx,
 		t.L(),
-		option.WithNodes(c.Node(3)), fmt.Sprintf("./cockroach node drain --self --insecure --drain-wait=10s --url=%s", pgurl))
+		option.WithNodes(c.Node(3)), "./cockroach node drain --self --drain-wait=10s --certs-dir=certs --port={pgport:3}")
 	t.L().Printf("drain output:\n%s\n%s\n", results.Stdout, results.Stderr)
 	require.Regexp(t, "(cluster settings require a value of at least|could not check drain related cluster settings)", results.Stderr)
 }

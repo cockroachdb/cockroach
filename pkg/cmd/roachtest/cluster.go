@@ -1428,7 +1428,7 @@ func (c *clusterImpl) HealthStatus(
 		return nil, errors.WithDetail(err, "Unable to get admin UI address(es)")
 	}
 	getStatus := func(ctx context.Context, node int) *HealthStatusResult {
-		url := fmt.Sprintf(`http://%s/health?ready=1`, adminAddrs[node-1])
+		url := fmt.Sprintf(`https://%s/health?ready=1`, adminAddrs[node-1])
 		resp, err := httputil.Get(ctx, url)
 		if err != nil {
 			return newHealthStatusResult(node, 0, nil, err)
