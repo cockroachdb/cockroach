@@ -75,8 +75,8 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 		--db-driver=pgsql \
 		--pgsql-host=%s \
 		--pgsql-port=%s \
-		--pgsql-user=root \
-		--pgsql-password= \
+		--pgsql-user=%s \
+		--pgsql-password=%s \
 		--pgsql-db=sysbench \
 		--report-interval=1 \
 		--time=%d \
@@ -87,6 +87,8 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 		%s`,
 		pghost,
 		pgport,
+		install.DefaultUser,
+		install.DefaultPassword,
 		int(o.duration.Seconds()),
 		o.concurrency,
 		o.tables,
@@ -109,7 +111,12 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	if err = c.Install(ctx, t.L(), loadNode, "haproxy"); err != nil {
 		t.Fatal(err)
 	}
-	c.Run(ctx, loadNode, "./cockroach gen haproxy --insecure --url {pgurl:1}")
+	// cockroach gen haproxy does not support specifying a non root user
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1), install.AuthRootCert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Run(ctx, loadNode, fmt.Sprintf("./cockroach gen haproxy --url %s", pgurl))
 	c.Run(ctx, loadNode, "haproxy -f haproxy.cfg -D")
 
 	t.Status("installing sysbench")
@@ -120,7 +127,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	m := c.NewMonitor(ctx, roachNodes)
 	m.Go(func(ctx context.Context) error {
 		t.Status("preparing workload")
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1), install.AuthRootCert)
 		if err != nil {
 			t.Fatal(err)
 		}

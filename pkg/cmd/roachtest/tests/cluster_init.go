@@ -13,7 +13,6 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -48,10 +47,14 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// via the join targets.
 	startOpts.RoachprodOpts.JoinTargets = c.All()
 
+	// Start the cluster in insecure mode to allow it to test both
+	// authenticated and unauthenticated code paths.
+	settings := install.MakeClusterSettings(install.SecureOption(false))
+
 	for _, initNode := range []int{2, 1} {
 		c.Wipe(ctx)
 		t.L().Printf("starting test with init node %d", initNode)
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings())
+		c.Start(ctx, t.L(), startOpts, settings)
 
 		urlMap := make(map[int]string)
 		adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.All())
@@ -150,8 +153,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 
 		t.L().Printf("sending init command to node %d", initNode)
-		c.Run(ctx, c.Node(initNode),
-			fmt.Sprintf(`./cockroach init --insecure --port={pgport:%d}`, initNode))
+		c.Run(ctx, c.Node(initNode), `./cockroach init --url={pgurl:1}`)
 
 		// This will only succeed if 3 nodes joined the cluster.
 		err = WaitFor3XReplication(ctx, t, dbs[0])
@@ -160,8 +162,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 		execCLI := func(runNode int, extraArgs ...string) (string, error) {
 			args := []string{"./cockroach"}
 			args = append(args, extraArgs...)
-			args = append(args, "--insecure")
-			args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
+			args = append(args, "--url={pgurl:1}")
 			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(runNode), args...)
 			combinedOutput := result.Stdout + result.Stderr
 			t.L().Printf("%s\n", combinedOutput)

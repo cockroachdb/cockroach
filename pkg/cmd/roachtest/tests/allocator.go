@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -48,17 +47,12 @@ func registerAllocator(r registry.Registry) {
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
-		if err != nil {
-			t.Fatal(err)
-		}
-
 		m := c.NewMonitor(ctx, c.Range(1, start))
 		m.Go(func(ctx context.Context) error {
 			t.Status("loading fixture")
 			if err := c.RunE(
 				ctx, c.Node(1),
-				"./cockroach", "workload", "fixtures", "import", "tpch", "--scale-factor", "10", pgurl,
+				"./cockroach", "workload", "fixtures", "import", "tpch", "--scale-factor", "10", "{pgurl:1}",
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -73,7 +67,7 @@ func registerAllocator(r registry.Registry) {
 			WithCluster(clusNodes.InstallNodes()).
 			WithPrometheusNode(promNode.InstallNodes()[0])
 
-		err = c.StartGrafana(ctx, t.L(), cfg)
+		err := c.StartGrafana(ctx, t.L(), cfg)
 		require.NoError(t, err)
 
 		cleanupFunc := func() {
@@ -91,7 +85,7 @@ func registerAllocator(r registry.Registry) {
 
 		// Start the remaining nodes to kick off upreplication/rebalancing.
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(start+1, nodes))
-		c.Run(ctx, c.Node(1), fmt.Sprintf("./cockroach workload init kv --drop '%s'", pgurl))
+		c.Run(ctx, c.Node(1), "./cockroach workload init kv --drop {pgurl:1}")
 		for node := 1; node <= nodes; node++ {
 			node := node
 			// TODO(dan): Ideally, the test would fail if this queryload failed,
@@ -457,13 +451,9 @@ FROM crdb_internal.kv_store_status
 		t.Fatalf("expected 0 mis-replicated ranges, but found %d", n)
 	}
 
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
-	if err != nil {
-		t.Fatal(err)
-	}
 	decom := func(id int) {
 		c.Run(ctx, c.Node(1),
-			fmt.Sprintf("./cockroach node decommission --insecure --url=%s --wait=none %d", pgurl, id))
+			fmt.Sprintf("./cockroach node decommission --certs-dir=certs --port={pgport%s} --wait=none %d", c.Node(id), id))
 	}
 
 	// Decommission a node. The ranges should down-replicate to 7 replicas.

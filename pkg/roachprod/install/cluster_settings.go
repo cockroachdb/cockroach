@@ -110,7 +110,7 @@ func MakeClusterSettings(opts ...ClusterSettingOption) ClusterSettings {
 		Binary:          config.Binary,
 		Tag:             "",
 		PGUrlCertsDir:   "./certs",
-		Secure:          false,
+		Secure:          true,
 		UseTreeDist:     true,
 		Env:             config.DefaultEnvVars(),
 		NumRacks:        0,

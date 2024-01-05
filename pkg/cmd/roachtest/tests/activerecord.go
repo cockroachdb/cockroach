@@ -48,7 +48,8 @@ func registerActiveRecord(r registry.Registry) {
 		t.Status("setting up cockroach")
 		startOpts := option.DefaultStartOptsInMemory()
 		startOpts.RoachprodOpts.SQLPort = config.DefaultSQLPort
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
+		// Activerecord uses root user with ssl disabled.
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(false)), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {

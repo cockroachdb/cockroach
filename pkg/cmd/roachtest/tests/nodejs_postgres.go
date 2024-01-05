@@ -42,7 +42,7 @@ func registerNodeJSPostgres(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		settings := install.MakeClusterSettings(install.SecureOption(true))
+		settings := install.MakeClusterSettings()
 		err := c.StartE(ctx, t.L(), option.DefaultStartOptsInMemory(), settings)
 		require.NoError(t, err)
 
@@ -148,9 +148,9 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
 			fmt.Sprintf(
 				`cd /mnt/data1/node-postgres/ && sudo \
-PGPORT={pgport:1} PGUSER=%s PGSSLMODE=require PGDATABASE=postgres_node_test \
-PGSSLCERT=$HOME/certs/client.%s.crt PGSSLKEY=$HOME/certs/client.%s.key PGSSLROOTCERT=$HOME/certs/ca.crt yarn test`,
-				user, user, user,
+PGPORT={pgport:1} PGUSER=%[1]s PGSSLMODE=require PGDATABASE=postgres_node_test \
+PGSSLCERT=$HOME/certs/client.%[1]s.crt PGSSLKEY=$HOME/certs/client.%[1]s.key PGSSLROOTCERT=$HOME/certs/ca.crt yarn test`,
+				user,
 			),
 		)
 

@@ -37,7 +37,7 @@ func runConnectionLatencyTest(
 	err := c.PutE(ctx, t.L(), t.DeprecatedWorkload(), "./workload")
 	require.NoError(t, err)
 
-	settings := install.MakeClusterSettings(install.SecureOption(true))
+	settings := install.MakeClusterSettings()
 	// Don't start a backup schedule as this roachtest reports roachperf results.
 	err = c.StartE(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings)
 	require.NoError(t, err)

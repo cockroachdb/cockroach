@@ -173,7 +173,7 @@ func getSessionIDOnSingleNode(
 		"%s auth-session login root --port={pgport%s} --certs-dir ./certs --format raw",
 		test.DefaultCockroachPath, node,
 	)
-	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(node), loginCmd)
+	res, err := c.RunWithDetailsSingleNode(ctx, l, node, loginCmd)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to authenticate")
 	}

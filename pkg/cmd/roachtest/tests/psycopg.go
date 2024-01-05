@@ -108,14 +108,15 @@ func registerPsycopg(r registry.Registry) {
 
 		t.Status("running psycopg test suite")
 
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node, fmt.Sprintf(
 			`cd /mnt/data1/psycopg/ &&
 			export PSYCOPG2_TESTDB=defaultdb &&
-			export PSYCOPG2_TESTDB_USER=root &&
+			export PSYCOPG2_TESTDB_USER=%s &&
+			export PSYCOPG2_TESTDB_PASSWORD=%s &&
 			export PSYCOPG2_TESTDB_PORT={pgport:1} &&
 			export PSYCOPG2_TESTDB_HOST=localhost &&
 			make check PYTHON_VERSION=3`,
-		)
+			install.DefaultUser, install.DefaultPassword))
 
 		// Fatal for a roachprod or SSH error. A roachprod error is when result.Err==nil.
 		// Proceed for any other (command) errors

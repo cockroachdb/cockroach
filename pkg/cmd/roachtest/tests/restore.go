@@ -1022,7 +1022,7 @@ func verifyMetrics(
 	if err != nil {
 		return err
 	}
-	url := "http://" + adminUIAddrs[0] + "/ts/query"
+	url := "https://" + adminUIAddrs[0] + "/ts/query"
 
 	request := tspb.TimeSeriesQueryRequest{
 		// Ask for one minute intervals. We can't just ask for the whole hour

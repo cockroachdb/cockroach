@@ -536,7 +536,7 @@ func (c *SyncedCluster) NodeURL(
 		user := DefaultUser
 		// TODO(DarrylWong): Support authentication for multitenant,
 		// since they do not use roach:system.
-		password := SystemInterfaceName
+		password := DefaultPassword
 
 		switch auth {
 		case AuthRootCert:

@@ -142,7 +142,7 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 	db, err := c.ConnE(ctx, t.L(), 1)
 	require.NoError(t, err)
 	stmts := []string{
-		"CREATE USER importer",
+		"CREATE USER importer WITH PASSWORD '123'",
 		fmt.Sprintf("ALTER ROLE importer SET copy_from_atomic_enabled = %t", atomic),
 	}
 	for _, stmt := range stmts {
@@ -151,7 +151,7 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 			t.Fatal(err)
 		}
 	}
-	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), roachprod.PGURLOptions{})
+	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), roachprod.PGURLOptions{Auth: install.AuthUserPassword})
 	require.NoError(t, err)
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
@@ -159,10 +159,10 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 		urlstr := strings.Replace(urls[0], "?", "/defaultdb?", 1)
 		u, err := url.Parse(urlstr)
 		require.NoError(t, err)
-		u.User = url.User("importer")
+		u.User = url.UserPassword("importer", "123")
 		urlstr = u.String()
-		c.Run(ctx, c.Node(1), fmt.Sprintf("psql %s -c 'SELECT 1'", urlstr))
-		c.Run(ctx, c.Node(1), fmt.Sprintf("psql %s -c '%s'", urlstr, lineitemSchema))
+		c.Run(ctx, c.Node(1), fmt.Sprintf("psql '%s' -c 'SELECT 1'", urlstr))
+		c.Run(ctx, c.Node(1), fmt.Sprintf("psql '%s' -c '%s'", urlstr, lineitemSchema))
 		runTest(ctx, t, c, fmt.Sprintf("psql '%s'", urlstr))
 		return nil
 	})
