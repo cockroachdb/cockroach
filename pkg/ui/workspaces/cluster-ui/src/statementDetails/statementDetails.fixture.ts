@@ -15,8 +15,6 @@ import { noop } from "lodash";
 import { StatementDetailsProps } from "./statementDetails";
 import { StatementDetailsResponse } from "../api";
 
-const history = createMemoryHistory({ initialEntries: ["/statements"] });
-
 const lastUpdated = moment("Nov 28 2022 01:30:00 GMT");
 
 const statementDetailsNoData: StatementDetailsResponse = {
@@ -817,55 +815,67 @@ const statementDetailsData: StatementDetailsResponse = {
 
 export const getStatementDetailsPropsFixture = (
   withData = true,
-): StatementDetailsProps => ({
-  history,
-  location: {
-    pathname: "/statement/true/4705782015019656142",
-    search: "",
-    hash: "",
-    state: null,
-  },
-  match: {
-    path: "/statement/:implicitTxn/:statement",
-    url: "/statement/true/4705782015019656142",
-    isExact: true,
-    params: {
-      implicitTxn: "true",
-      statement: "4705782015019656142",
+): StatementDetailsProps => {
+  const history = createMemoryHistory({ initialEntries: ["/statements"] });
+  return {
+    history,
+    location: {
+      pathname: "/statement/true/4705782015019656142",
+      search: "",
+      hash: "",
+      state: null,
     },
-  },
-  isLoading: false,
-  lastUpdated: lastUpdated,
-  timeScale: {
-    windowSize: moment.duration(5, "day"),
-    sampleSize: moment.duration(5, "minutes"),
-    fixedWindowEnd: moment.utc("2021.12.12"),
-    key: "Custom",
-  },
-  statementFingerprintID: "4705782015019656142",
-  statementDetails: withData ? statementDetailsData : statementDetailsNoData,
-  statementsError: null,
-  nodeRegions: {
-    "1": "gcp-us-east1",
-    "2": "gcp-us-east1",
-    "3": "gcp-us-west1",
-    "4": "gcp-europe-west1",
-  },
-  requestTime: moment.utc("2021.12.12"),
-  refreshStatementDetails: noop,
-  refreshStatementDiagnosticsRequests: noop,
-  refreshNodes: noop,
-  refreshNodesLiveness: noop,
-  refreshUserSQLRoles: noop,
-  refreshStatementFingerprintInsights: noop,
-  diagnosticsReports: [],
-  dismissStatementDiagnosticsAlertMessage: noop,
-  onTimeScaleChange: noop,
-  onRequestTimeChange: noop,
-  createStatementDiagnosticsReport: noop,
-  uiConfig: {
-    showStatementDiagnosticsLink: true,
-  },
-  isTenant: false,
-  hasViewActivityRedactedRole: false,
-});
+    match: {
+      path: "/statement/:implicitTxn/:statement",
+      url: "/statement/true/4705782015019656142",
+      isExact: true,
+      params: {
+        implicitTxn: "true",
+        statement: "4705782015019656142",
+      },
+    },
+    isLoading: false,
+    lastUpdated: lastUpdated,
+    timeScale: {
+      windowSize: moment.duration(5, "day"),
+      sampleSize: moment.duration(5, "minutes"),
+      fixedWindowEnd: moment.utc("2021.12.12"),
+      key: "Custom",
+    },
+    statementFingerprintID: "4705782015019656142",
+    statementDetails: withData ? statementDetailsData : statementDetailsNoData,
+    statementsError: null,
+    nodeRegions: {
+      "1": "gcp-us-east1",
+      "2": "gcp-us-east1",
+      "3": "gcp-us-west1",
+      "4": "gcp-europe-west1",
+    },
+    requestTime: moment.utc("2021.12.12"),
+    refreshStatementDetails: noop,
+    refreshStatementDiagnosticsRequests: noop,
+    refreshNodes: noop,
+    refreshNodesLiveness: noop,
+    refreshUserSQLRoles: noop,
+    refreshStatementFingerprintInsights: noop,
+    diagnosticsReports: [
+      {
+        id: "123",
+        statement_fingerprint: "SELECT x, y FROM xy",
+        completed: true,
+        requested_at: moment("2021-12-08T09:51:27Z"),
+        min_execution_latency: moment.duration("1ms"),
+        expires_at: moment("2021-12-08T10:06:00Z"),
+      },
+    ],
+    dismissStatementDiagnosticsAlertMessage: noop,
+    onTimeScaleChange: noop,
+    onRequestTimeChange: noop,
+    createStatementDiagnosticsReport: noop,
+    uiConfig: {
+      showStatementDiagnosticsLink: true,
+    },
+    isTenant: false,
+    hasViewActivityRedactedRole: false,
+  }
+};

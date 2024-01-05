@@ -355,9 +355,9 @@ export class StatementsPage extends React.Component<
     this.props.refreshUserSQLRoles();
     if (!this.props.isTenant) {
       this.props.refreshNodes();
-      if (!this.props.hasViewActivityRedactedRole) {
-        this.props.refreshStatementDiagnosticsRequests();
-      }
+    }
+    if (!this.props.hasViewActivityRedactedRole) {
+      this.props.refreshStatementDiagnosticsRequests();
     }
   }
 
@@ -397,9 +397,9 @@ export class StatementsPage extends React.Component<
     this.updateQueryParams();
     if (!this.props.isTenant) {
       this.props.refreshNodes();
-      if (!this.props.hasViewActivityRedactedRole) {
-        this.props.refreshStatementDiagnosticsRequests();
-      }
+    }
+    if (!this.props.hasViewActivityRedactedRole) {
+      this.props.refreshStatementDiagnosticsRequests();
     }
   };
 

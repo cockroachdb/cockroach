@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment-timezone";
 import React from "react";
 import { mount } from "enzyme";
 import { assert } from "chai";
@@ -58,53 +59,76 @@ describe("StatementDetails page", () => {
     );
   });
 
-  it("calls onTabChanged prop when selected tab is changed", () => {
-    const onTabChangeSpy = jest.fn();
-    const wrapper = mount(
-      <Router>
-        <StatementDetails
-          {...statementDetailsProps}
-          onTabChanged={onTabChangeSpy}
-        />
-      </Router>,
-    );
-
-    wrapper
-      .find(StatementDetails)
-      .find("div.ant-tabs-tab")
-      .last()
-      .simulate("click");
-
-    expect(onTabChangeSpy).toHaveBeenCalledWith("diagnostics");
-  });
-
-  describe("Diagnostics tab", () => {
+  // Repeat this test for dedicated vs. tenant clusters.
+  describe.each([true, true])("Diagnostics tab, isTenant = %p", (isTenant) => {
     beforeEach(() => {
-      statementDetailsProps.history.location.search = new URLSearchParams([
-        ["tab", "diagnostics"],
-      ]).toString();
+      statementDetailsProps.isTenant = isTenant;
     });
 
-    it("calls createStatementDiagnosticsReport callback on Activate button click", () => {
+    it("switches to the Diagnostics tab and triggers the activation modal", () => {
+      const onTabChangeSpy = jest.fn();
+      const refreshNodesClickSpy = sandbox.spy();
+      const refreshNodesLivenessClickSpy = sandbox.spy();
+      const refreshStatementDiagnosticsRequestsClickSpy = sandbox.spy();
       const onDiagnosticsActivateClickSpy = sandbox.spy();
 
       const wrapper = mount(
         <Router>
           <StatementDetails
             {...statementDetailsProps}
+            onTabChanged={onTabChangeSpy}
             createStatementDiagnosticsReport={onDiagnosticsActivateClickSpy}
+            refreshNodes={refreshNodesClickSpy}
+            refreshNodesLiveness={refreshNodesLivenessClickSpy}
+            refreshStatementDiagnosticsRequests={refreshStatementDiagnosticsRequestsClickSpy}
           />
         </Router>,
       );
 
+      // Click on the Diagnostics tab.
+      wrapper
+        .find(StatementDetails)
+        .find("div.ant-tabs-tab")
+        .last()
+        .simulate("click");
+      expect(onTabChangeSpy).toHaveBeenCalledWith("diagnostics");
+
+      // Click on the "Activate diagnostics" button in the tab.
       wrapper
         .find(DiagnosticsView)
-        .findWhere(n => n.prop("children") === "Activate Diagnostics")
+        .findWhere(n => n.prop("children") === "Activate diagnostics")
         .first()
         .simulate("click");
-
       onDiagnosticsActivateClickSpy.calledOnceWith(
         statementDetailsProps.statementDetails.statement.metadata.query,
+      );
+
+      // Expect calls to refresh page information on load and update events. Node
+      // and liveness refreshes should not happen for tenants.
+      assert.equal(refreshNodesClickSpy.callCount, isTenant ? 0 : 2, "refresh nodes");
+      assert.equal(refreshNodesLivenessClickSpy.callCount, isTenant ? 0 : 2, "refresh liveness");
+      assert.isTrue(refreshStatementDiagnosticsRequestsClickSpy.calledTwice, "refresh diagnostics requests");
+    });
+
+    it("shows completed diagnostics report", () => {
+      // Navigate to correct tab.
+      statementDetailsProps.history.location.search = new URLSearchParams([
+        ["tab", "diagnostics"],
+      ]).toString();
+
+      const wrapper = mount(
+        <Router>
+          <StatementDetails
+            {...statementDetailsProps}
+          />
+        </Router>,
+      );
+
+      assert.isTrue(
+        wrapper
+          .find(DiagnosticsView)
+          .findWhere(n => n.text() === "Dec 08, 2021 at 9:51 UTC")
+          .exists(),
       );
     });
   });
