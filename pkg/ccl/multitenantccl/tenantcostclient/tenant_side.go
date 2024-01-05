@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -342,6 +343,9 @@ type tenantSideCostController struct {
 		// lastReportedConsumption is the set of tenant resource consumption
 		// metrics last sent to the token bucket server.
 		lastReportedConsumption kvpb.TenantConsumption
+		// lastExportedConsumption is the set of tenant resource consumption
+		// metrics last sent to the metrics registry.
+		lastExportedConsumption kvpb.TenantConsumption
 		// lastRate is the token bucket fill rate that was last configured.
 		lastRate float64
 
@@ -486,6 +490,13 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 		})
 		c.run.fallbackRateStart = time.Time{}
 	}
+
+	// Report consumption metrics. Update local data first before sending a
+	// token bucket request to the KV servers.
+	deltaConsumption := c.run.consumption
+	deltaConsumption.Sub(&c.run.lastExportedConsumption)
+	c.run.lastExportedConsumption = c.run.consumption
+	c.metrics.incrementConsumption(deltaConsumption)
 
 	// Should a token bucket request be sent? It might be for a retry or for
 	// periodic consumption reporting.
@@ -908,4 +919,9 @@ func (c *tenantSideCostController) GetCPUMovingAvg() float64 {
 // GetCostConfig is part of the multitenant.TenantSideCostController interface.
 func (c *tenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
 	return c.costCfg.Load()
+}
+
+// Metrics returns a metric.Struct which holds metrics for the controller.
+func (c *tenantSideCostController) Metrics() metric.Struct {
+	return &c.metrics
 }

@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -56,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -274,6 +276,7 @@ var testStateCommands = map[string]func(
 	"enable-external-ru-accounting":  (*testState).enableRUAccounting,
 	"disable-external-ru-accounting": (*testState).disableRUAccounting,
 	"usage":                          (*testState).usage,
+	"metrics":                        (*testState).metrics,
 	"configure":                      (*testState).configure,
 	"token-bucket":                   (*testState).tokenBucket,
 	"unblock-request":                (*testState).unblockRequest,
@@ -581,6 +584,51 @@ func (ts *testState) usage(*testing.T, *datadriven.TestData, cmdArgs) string {
 		c.ExternalIOEgressBytes,
 		c.ExternalIOIngressBytes,
 	)
+}
+
+// metrics prints out cost client related consumption metrics. Callers are
+// responsible for waiting on tick events since that is when metrics will be
+// updated.
+func (ts *testState) metrics(*testing.T, *datadriven.TestData, cmdArgs) string {
+	metricNames := []string{
+		"tenant.sql_usage.request_units",
+		"tenant.sql_usage.kv_request_units",
+		"tenant.sql_usage.read_batches",
+		"tenant.sql_usage.read_requests",
+		"tenant.sql_usage.read_bytes",
+		"tenant.sql_usage.write_batches",
+		"tenant.sql_usage.write_requests",
+		"tenant.sql_usage.write_bytes",
+		"tenant.sql_usage.sql_pods_cpu_seconds",
+		"tenant.sql_usage.pgwire_egress_bytes",
+		"tenant.sql_usage.external_io_ingress_bytes",
+		"tenant.sql_usage.external_io_egress_bytes",
+		"tenant.sql_usage.cross_region_network_ru",
+	}
+	state := make(map[string]interface{})
+	v := reflect.ValueOf(ts.controller.Metrics()).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		switch typ := v.Field(i).Interface().(type) {
+		case metric.Iterable:
+			typ.Inspect(func(v interface{}) {
+				switch it := v.(type) {
+				case *metric.Counter:
+					state[typ.GetName()] = it.Count()
+				case *metric.CounterFloat64:
+					state[typ.GetName()] = fmt.Sprintf("%.2f", it.Count())
+				}
+			})
+		}
+	}
+	var output string
+	for _, name := range metricNames {
+		v, ok := state[name]
+		if !ok {
+			panic(fmt.Sprintf("missing data for metric %q", name))
+		}
+		output += fmt.Sprintf("%s: %v\n", name, v)
+	}
+	return output
 }
 
 type event struct {
