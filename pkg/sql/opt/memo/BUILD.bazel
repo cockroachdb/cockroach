@@ -18,6 +18,7 @@ go_library(
         "logical_props_builder.go",
         "memo.go",
         "multiplicity_builder.go",
+        "scalar_list.go",
         "statistics_builder.go",
         "typing.go",
         ":gen-expr",  # keep
@@ -75,6 +76,7 @@ go_test(
         "logical_props_builder_test.go",
         "memo_test.go",
         "multiplicity_builder_test.go",
+        "scalar_list_test.go",
         "statistics_builder_test.go",
         "typing_test.go",
     ],
