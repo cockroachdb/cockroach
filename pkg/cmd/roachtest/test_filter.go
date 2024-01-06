@@ -12,41 +12,25 @@ package main
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/spf13/cobra"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 )
-
-var (
-	suite            string
-	owner            string
-	onlyBenchmarks   bool
-	forceCloudCompat bool
-)
-
-func addSuiteAndOwnerFlags(cmd *cobra.Command) {
-	cmd.Flags().StringVar(
-		&suite, "suite", "",
-		"Restrict tests to those in the given suite (e.g. nightly)",
-	)
-	cmd.Flags().StringVar(
-		&owner, "owner", "",
-		"Restrict tests to those with the given owner (e.g. kv)",
-	)
-}
 
 // makeTestFilter creates a registry.TestFilter based on the current flags and
 // the given regexps.
 func makeTestFilter(regexps []string) (*registry.TestFilter, error) {
 	var options []registry.TestFilterOption
-	if !forceCloudCompat && cloud != "all" && cloud != "" {
-		options = append(options, registry.WithCloud(cloud))
+	if !roachtestflags.ForceCloudCompat {
+		if cloud := roachtestflags.Cloud; cloud != "all" && cloud != "" {
+			options = append(options, registry.WithCloud(cloud))
+		}
 	}
-	if suite != "" {
-		options = append(options, registry.WithSuite(suite))
+	if roachtestflags.Suite != "" {
+		options = append(options, registry.WithSuite(roachtestflags.Suite))
 	}
-	if owner != "" {
-		options = append(options, registry.WithOwner(registry.Owner(owner)))
+	if roachtestflags.Owner != "" {
+		options = append(options, registry.WithOwner(registry.Owner(roachtestflags.Owner)))
 	}
-	if onlyBenchmarks {
+	if roachtestflags.OnlyBenchmarks {
 		options = append(options, registry.OnlyBenchmarks())
 	}
 	return registry.NewTestFilter(regexps, options...)

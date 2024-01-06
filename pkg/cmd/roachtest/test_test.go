@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -156,10 +157,10 @@ func TestRunnerEncryptionAtRest(t *testing.T) {
 	// Verify that if a test opts into EncryptionMetamorphic, it will
 	// (eventually) get a cluster that has encryption at rest enabled.
 	{
-		prevProb := encryptionProbability
-		encryptionProbability = 0.5 // --metamorphic-encrypt-probability=0.5
+		prevProb := roachtestflags.EncryptionProbability
+		roachtestflags.EncryptionProbability = 0.5 // --metamorphic-encrypt-probability=0.5
 		defer func() {
-			encryptionProbability = prevProb
+			roachtestflags.EncryptionProbability = prevProb
 		}()
 	}
 	r := mkReg(t)
