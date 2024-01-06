@@ -127,9 +127,9 @@ func (p *joinPredicate) IndexedVarResolvedType(idx int) *types.T {
 // IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
 func (p *joinPredicate) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	if idx < p.numLeftCols {
-		return p.leftCols.NodeFormatter(idx)
+		return p.leftCols.Name(idx)
 	}
-	return p.rightCols.NodeFormatter(idx - p.numLeftCols)
+	return p.rightCols.Name(idx - p.numLeftCols)
 }
 
 // eval for joinPredicate runs the on condition across the columns that do
