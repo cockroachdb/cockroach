@@ -983,6 +983,7 @@ func newSessionData(args SessionArgs) *sessiondata.SessionData {
 			sd.CustomOptions[k] = v
 		}
 	}
+	sd.SearchPath = sessiondata.DefaultSearchPathForUser(sd.User())
 	populateMinimalSessionData(sd)
 	return sd
 }
@@ -995,9 +996,6 @@ func populateMinimalSessionData(sd *sessiondata.SessionData) {
 	}
 	if sd.Location == nil {
 		sd.Location = time.UTC
-	}
-	if len(sd.SearchPath.GetPathArray()) == 0 {
-		sd.SearchPath = sessiondata.DefaultSearchPathForUser(sd.User())
 	}
 }
 
