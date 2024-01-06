@@ -84,11 +84,12 @@ func (cb *onDeleteCascadeBuilder) Build(
 	binding opt.WithID,
 	bindingProps *props.Relational,
 	oldValues, newValues opt.ColList,
-) (_ memo.RelExpr, err error) {
-	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
+) (_ memo.RelExpr, selfReferencing bool, err error) {
+	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) (memo.RelExpr, bool) {
 		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
+		selfReferencing = fk.OriginTableID() == fk.ReferencedTableID()
 
 		dep := opt.DepByID(fk.OriginTableID())
 		b.checkPrivilege(dep, cb.childTable, privilege.DELETE)
@@ -110,7 +111,7 @@ func (cb *onDeleteCascadeBuilder) Build(
 		// Set list of columns that will be fetched by the input expression.
 		mb.setFetchColIDs(mb.outScope.cols)
 		mb.buildDelete(nil /* returning */)
-		return mb.outScope.expr
+		return mb.outScope.expr, selfReferencing
 	})
 }
 
@@ -277,11 +278,12 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 	_ opt.WithID,
 	_ *props.Relational,
 	_, _ opt.ColList,
-) (_ memo.RelExpr, err error) {
-	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
+) (_ memo.RelExpr, selfReferencing bool, err error) {
+	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) (memo.RelExpr, bool) {
 		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
+		selfReferencing = fk.OriginTableID() == fk.ReferencedTableID()
 
 		dep := opt.DepByID(fk.OriginTableID())
 		b.checkPrivilege(dep, cb.childTable, privilege.DELETE)
@@ -352,7 +354,7 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 		// Set list of columns that will be fetched by the input expression.
 		mb.setFetchColIDs(mb.outScope.cols)
 		mb.buildDelete(nil /* returning */)
-		return mb.outScope.expr
+		return mb.outScope.expr, selfReferencing
 	})
 }
 
@@ -428,11 +430,12 @@ func (cb *onDeleteSetBuilder) Build(
 	binding opt.WithID,
 	bindingProps *props.Relational,
 	oldValues, newValues opt.ColList,
-) (_ memo.RelExpr, err error) {
-	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
+) (_ memo.RelExpr, selfReferencing bool, err error) {
+	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) (memo.RelExpr, bool) {
 		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
+		selfReferencing = fk.OriginTableID() == fk.ReferencedTableID()
 
 		dep := opt.DepByID(fk.OriginTableID())
 		b.checkPrivilege(dep, cb.childTable, privilege.UPDATE)
@@ -477,7 +480,7 @@ func (cb *onDeleteSetBuilder) Build(
 		// cases this is safe (e.g. other cascades could have messed with the parent
 		// table in the meantime).
 		mb.buildUpdate(nil /* returning */)
-		return mb.outScope.expr
+		return mb.outScope.expr, selfReferencing
 	})
 }
 
@@ -643,11 +646,12 @@ func (cb *onUpdateCascadeBuilder) Build(
 	binding opt.WithID,
 	bindingProps *props.Relational,
 	oldValues, newValues opt.ColList,
-) (_ memo.RelExpr, err error) {
-	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
+) (_ memo.RelExpr, selfReferencing bool, err error) {
+	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) (memo.RelExpr, bool) {
 		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
+		selfReferencing = fk.OriginTableID() == fk.ReferencedTableID()
 
 		dep := opt.DepByID(fk.OriginTableID())
 		b.checkPrivilege(dep, cb.childTable, privilege.UPDATE)
@@ -695,7 +699,7 @@ func (cb *onUpdateCascadeBuilder) Build(
 		mb.addUpdateCols(updateExprs)
 
 		mb.buildUpdate(nil /* returning */)
-		return mb.outScope.expr
+		return mb.outScope.expr, selfReferencing
 	})
 }
 
@@ -896,8 +900,8 @@ func buildCascadeHelper(
 	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factoryI interface{},
-	fn func(b *Builder) memo.RelExpr,
-) (_ memo.RelExpr, err error) {
+	fn func(b *Builder) (memo.RelExpr, bool),
+) (expr memo.RelExpr, selfReferencing bool, err error) {
 	factory := factoryI.(*norm.Factory)
 	b := New(ctx, semaCtx, evalCtx, catalog, factory, nil /* stmt */)
 
@@ -912,5 +916,6 @@ func buildCascadeHelper(
 		}
 	}()
 
-	return fn(b), nil
+	expr, selfReferencing = fn(b)
+	return expr, selfReferencing, nil
 }

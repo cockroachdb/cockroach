@@ -164,7 +164,7 @@ func (cb *cascadeBuilder) setupCascade(cascade *memo.FKCascade) exec.Cascade {
 			bufferRef exec.Node,
 			numBufferedRows int,
 			allowAutoCommit bool,
-		) (exec.Plan, error) {
+		) (_ exec.Plan, selfReferencing bool, _ error) {
 			return cb.planCascade(
 				ctx, semaCtx, evalCtx, execFactory, cascade, bufferRef, numBufferedRows, allowAutoCommit,
 			)
@@ -187,7 +187,7 @@ func (cb *cascadeBuilder) planCascade(
 	bufferRef exec.Node,
 	numBufferedRows int,
 	allowAutoCommit bool,
-) (exec.Plan, error) {
+) (_ exec.Plan, selfReferencing bool, _ error) {
 	// 1. Set up a brand new memo in which to plan the cascading query.
 	var o xform.Optimizer
 	o.Init(ctx, evalCtx, cb.b.catalog)
@@ -202,7 +202,7 @@ func (cb *cascadeBuilder) planCascade(
 	if bufferRef == nil {
 		// No input buffering.
 		var err error
-		relExpr, err = cascade.Builder.Build(
+		relExpr, selfReferencing, err = cascade.Builder.Build(
 			ctx,
 			semaCtx,
 			evalCtx,
@@ -214,7 +214,7 @@ func (cb *cascadeBuilder) planCascade(
 			nil, /* newValues */
 		)
 		if err != nil {
-			return nil, errors.Wrap(err, "while building cascade expression")
+			return nil, false, errors.Wrap(err, "while building cascade expression")
 		}
 	} else {
 		// Set up metadata for the buffer columns.
@@ -249,14 +249,14 @@ func (cb *cascadeBuilder) planCascade(
 		// Remap the cascade columns.
 		oldVals, err := remapColumns(cascade.OldValues, withColRemap)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		newVals, err := remapColumns(cascade.NewValues, withColRemap)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
-		relExpr, err = cascade.Builder.Build(
+		relExpr, selfReferencing, err = cascade.Builder.Build(
 			ctx,
 			semaCtx,
 			evalCtx,
@@ -268,7 +268,7 @@ func (cb *cascadeBuilder) planCascade(
 			newVals,
 		)
 		if err != nil {
-			return nil, errors.Wrap(err, "while building cascade expression")
+			return nil, false, errors.Wrap(err, "while building cascade expression")
 		}
 	}
 
@@ -282,14 +282,14 @@ func (cb *cascadeBuilder) planCascade(
 		preparedMemo := o.DetachMemo(ctx)
 		factory.FoldingControl().AllowStableFolds()
 		if err := factory.AssignPlaceholders(preparedMemo); err != nil {
-			return nil, errors.Wrap(err, "while assigning placeholders in cascade expression")
+			return nil, false, errors.Wrap(err, "while assigning placeholders in cascade expression")
 		}
 	}
 
 	// 4. Optimize the expression.
 	optimizedExpr, err := o.Optimize()
 	if err != nil {
-		return nil, errors.Wrap(err, "while optimizing cascade expression")
+		return nil, false, errors.Wrap(err, "while optimizing cascade expression")
 	}
 
 	// 5. Execbuild the optimized expression.
@@ -301,9 +301,9 @@ func (cb *cascadeBuilder) planCascade(
 	}
 	plan, err := eb.Build()
 	if err != nil {
-		return nil, errors.Wrap(err, "while building cascade plan")
+		return nil, false, errors.Wrap(err, "while building cascade plan")
 	}
-	return plan, nil
+	return plan, selfReferencing, nil
 }
 
 // Remap columns according to a ColMap.

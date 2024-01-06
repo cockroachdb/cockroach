@@ -1363,7 +1363,7 @@ type CascadeBuilder interface {
 		binding opt.WithID,
 		bindingProps *props.Relational,
 		oldValues, newValues opt.ColList,
-	) (RelExpr, error)
+	) (_ RelExpr, selfReferencing bool, _ error)
 }
 
 // GroupingOrderType is the grouping column order type for group by and distinct

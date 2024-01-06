@@ -238,6 +238,8 @@ type Cascade struct {
 	// This method does not mutate any captured state; it is ok to call PlanFn
 	// methods concurrently (provided that they don't use a single non-thread-safe
 	// execFactory).
+	//
+	// selfReferencing indicates whether this cascade is a self-referencing one.
 	PlanFn func(
 		ctx context.Context,
 		semaCtx *tree.SemaContext,
@@ -246,7 +248,7 @@ type Cascade struct {
 		bufferRef Node,
 		numBufferedRows int,
 		allowAutoCommit bool,
-	) (Plan, error)
+	) (_ Plan, selfReferencing bool, _ error)
 }
 
 // InsertFastPathCheck contains information about a foreign key or
