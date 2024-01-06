@@ -95,7 +95,7 @@ func (r ResultColumns) TypesEqual(other ResultColumns) bool {
 // NodeFormatter returns a tree.NodeFormatter that, when formatted,
 // represents the column at the input column index.
 func (r ResultColumns) NodeFormatter(colIdx int) tree.NodeFormatter {
-	return &varFormatter{ColumnName: tree.Name(r[colIdx].Name)}
+	return (*tree.Name)(&r[colIdx].Name)
 }
 
 // String formats result columns to a string.
