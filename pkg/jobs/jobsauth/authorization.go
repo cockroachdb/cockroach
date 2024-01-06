@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
-	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 )
 
 // An AccessLevel is used to indicate how strict an authorization check should
@@ -80,6 +79,24 @@ type AuthorizationAccessor interface {
 	User() username.SQLUsername
 }
 
+// GetHasControlAndViewJob is a helper used to check whether the current user
+// has the global CONTROLJOB and VIEWJOB privileges respectively. It is separate
+// from Authorize so that it can be called once, and its result repeatedly
+// passed to Authorize.
+func GetHasControlAndViewJob(
+	ctx context.Context, a AuthorizationAccessor,
+) (hasControlJob, hasViewJob bool, err error) {
+	hasControlJob, err = a.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CONTROLJOB)
+	if err != nil {
+		return false, false, err
+	}
+	hasViewJob, err = a.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWJOB)
+	if err != nil {
+		return false, false, err
+	}
+	return hasControlJob, hasViewJob, nil
+}
+
 // Authorize returns nil if the user is authorized to access the job.
 // If the user is not authorized, then a pgcode.InsufficientPrivilege
 // error will be returned.
@@ -98,6 +115,7 @@ func Authorize(
 	jobID jobspb.JobID,
 	payload *jobspb.Payload,
 	accessLevel AccessLevel,
+	hasControlJob, hasViewJob bool,
 ) error {
 	userIsAdmin, err := a.HasAdminRole(ctx)
 	if err != nil {
@@ -107,20 +125,11 @@ func Authorize(
 		return nil
 	}
 
-	hasControlJob, err := a.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CONTROLJOB)
-	if err != nil {
-		return err
-	}
-
 	jobOwnerUser := payload.UsernameProto.Decode()
 
 	if accessLevel == ViewAccess {
 		if a.User() == jobOwnerUser || hasControlJob {
 			return nil
-		}
-		hasViewJob, err := a.HasPrivilege(ctx, &syntheticprivilege.GlobalPrivilege{}, privilege.VIEWJOB, a.User())
-		if err != nil {
-			return err
 		}
 		if hasViewJob {
 			return nil

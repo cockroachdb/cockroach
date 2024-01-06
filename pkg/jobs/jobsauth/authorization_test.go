@@ -326,7 +326,11 @@ func TestAuthorization(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			err := jobsauth.Authorize(ctx, testAuth, 0, tc.payload, tc.accessLevel)
+			hasControl, hasView, err := jobsauth.GetHasControlAndViewJob(ctx, testAuth)
+      assert.NoError(t, err)
+			err = jobsauth.Authorize(
+				ctx, testAuth, 0, tc.payload, tc.accessLevel, hasControl, hasView,
+			)
 			assert.Equal(t, pgerror.GetPGCode(tc.userErr), pgerror.GetPGCode(err))
 		})
 	}
