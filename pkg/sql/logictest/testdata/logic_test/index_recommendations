@@ -1,0 +1,107 @@
+# LogicTest: local
+
+# Regression test for #117307.
+
+statement ok
+SET CLUSTER SETTING sql.metrics.statement_details.index_recommendation_collection.enabled = true
+
+statement ok
+SET enable_insert_fast_path = true
+
+statement ok
+CREATE TABLE b (b INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE c (c INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE d (d INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE abcd (
+  a INT NOT NULL PRIMARY KEY,
+  b INT NULL REFERENCES b (b),
+  c INT NULL REFERENCES c (c),
+  d INT NULL REFERENCES d (d),
+  INDEX (b),
+  INDEX (c),
+  INDEX (d)
+)
+
+statement ok
+INSERT INTO b VALUES (0), (1), (2), (3), (4), (5)
+
+statement ok
+INSERT INTO c VALUES (0), (1), (2), (3), (4), (5)
+
+statement ok
+INSERT INTO d VALUES (0), (1), (2), (3), (4)
+
+# We need 5 previous executions to turn on index recommendation collection.
+
+statement ok
+PREPARE p0 AS INSERT INTO abcd VALUES ($1, $2, $3, $4)
+
+statement ok
+EXECUTE p0(0, 0, 0, 0)
+
+statement ok
+DEALLOCATE p0
+
+statement ok
+PREPARE p1 AS INSERT INTO abcd VALUES ($1, $2, $3, $4)
+
+statement ok
+EXECUTE p1(1, 1, 1, 1)
+
+statement ok
+DEALLOCATE p1
+
+statement ok
+PREPARE p2 AS INSERT INTO abcd VALUES ($1, $2, $3, $4)
+
+statement ok
+EXECUTE p2(2, 2, 2, 2)
+
+statement ok
+DEALLOCATE p2
+
+statement ok
+PREPARE p3 AS INSERT INTO abcd VALUES ($1, $2, $3, $4)
+
+statement ok
+EXECUTE p3(3, 3, 3, 3)
+
+statement ok
+DEALLOCATE p3
+
+statement ok
+PREPARE p4 AS INSERT INTO abcd VALUES ($1, $2, $3, $4)
+
+statement ok
+EXECUTE p4(4, 4, 4, 4)
+
+statement ok
+DEALLOCATE p4
+
+# To hit the bug, we need a combination of:
+# - index recommendation collection
+# - prepared statement
+# - insert fast path with multiple FK checks
+# - one FK check can be skipped due to NULL value
+# - last FK check fails
+
+statement ok
+PREPARE p5 AS INSERT INTO abcd VALUES ($1, $2, $3, $4)
+
+statement error pq: insert on table "abcd" violates foreign key constraint "abcd_d_fkey"\nDETAIL: Key \(d\)=\(5\) is not present in table "d"
+EXECUTE p5(5, 5, NULL, 5)
+
+statement ok
+DEALLOCATE p5
+
+statement ok
+RESET CLUSTER SETTING sql.metrics.statement_details.index_recommendation_collection.enabled
+
+statement ok
+RESET enable_insert_fast_path
