@@ -1057,6 +1057,11 @@ func populateSystemJobsTableRows(
 	}
 	defer cleanup(ctx)
 
+	globalPrivileges, err := jobsauth.GetGlobalJobPrivileges(ctx, p)
+	if err != nil {
+		return matched, err
+	}
+
 	for {
 		hasNext, err := it.Next(ctx)
 		if !hasNext || err != nil {
@@ -1074,7 +1079,10 @@ func populateSystemJobsTableRows(
 			return matched, wrapPayloadUnMarshalError(err, currentRow[jobIdIdx])
 		}
 
-		if err := jobsauth.Authorize(ctx, p, jobspb.JobID(jobID), payload, jobsauth.ViewAccess); err != nil {
+		err = jobsauth.Authorize(
+			ctx, p, jobspb.JobID(jobID), payload, jobsauth.ViewAccess, globalPrivileges,
+		)
+		if err != nil {
 			// Filter out jobs which the user is not allowed to see.
 			if IsInsufficientPrivilegeError(err) {
 				continue
