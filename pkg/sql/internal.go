@@ -1553,6 +1553,7 @@ func (ief *InternalDB) newInternalExecutorWithTxn(
 	if sd == nil {
 		sd = NewFakeSessionData(sv, "" /* opName */)
 		sd.UserProto = username.RootUserName().EncodeProto()
+		sd.SearchPath = sessiondata.DefaultSearchPathForUser(sd.User())
 	}
 
 	schemaChangerState := &SchemaChangerState{
