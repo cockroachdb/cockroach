@@ -42,6 +42,8 @@ func registerMultiTenantDistSQL(r registry.Registry) {
 				CompatibleClouds: registry.AllExceptAWS,
 				Suites:           registry.Suites(registry.Nightly),
 				Leases:           registry.MetamorphicLeases,
+				// TODO(#117150): unskip when #117150 is fixed.
+				Skip: "#117150",
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runMultiTenantDistSQL(ctx, t, c, numInstances, b == "on", to)
 				},
