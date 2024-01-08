@@ -2455,6 +2455,12 @@ func (c *clusterImpl) ExternalAdminUIAddr(
 	return c.adminUIAddr(ctx, l, node, true)
 }
 
+func (c *clusterImpl) AdminUIPorts(
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
+) ([]int, error) {
+	return roachprod.AdminPorts(ctx, l, c.MakeNodes(nodes), c.IsSecure())
+}
+
 func (c *clusterImpl) adminUIAddr(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption, external bool,
 ) ([]string, error) {
