@@ -71,6 +71,14 @@ const (
 	// RecreateSourceIndexID is the index ID that we are replacing with
 	// this new index.
 	RecreateSourceIndexID
+	// SeqNum is a number given to different elements of the same conceptual
+	// object. It is used so we can differentiate those elements in the graph.
+	//
+	// E.g. Updating a zone config of some database `db` translates to the
+	// dropping of the existing zone config (if any) element and adding of another
+	// zone config element. Those two DatabaseZoneConfig nodes in the graph will
+	// have different SeqNum attribute.
+	SeqNum
 
 	// TargetStatus is the target status of an element.
 	TargetStatus
@@ -362,6 +370,10 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
+	),
+	rel.EntityMapping(t((*scpb.DatabaseZoneConfig)(nil)),
+		rel.EntityAttr(DescID, "DatabaseID"),
+		rel.EntityAttr(SeqNum, "SeqNum"),
 	),
 	rel.EntityMapping(t((*scpb.TableZoneConfig)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
