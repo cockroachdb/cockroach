@@ -401,7 +401,9 @@ func (p *planner) getOwnerOfPrivilegeObject(
 	return owner, nil
 }
 
-// isOwner returns if the role has ownership on the privilege object.
+// isOwner returns if the role has ownership on the privilege object. The admin
+// and root roles implicitly have ownership of all objects that are not
+// owned by node, and node implicitly owns all objects.
 func isOwner(
 	ctx context.Context, p *planner, privilegeObject privilege.Object, role username.SQLUsername,
 ) (bool, error) {
@@ -409,11 +411,19 @@ func isOwner(
 	if err != nil {
 		return false, err
 	}
+	if role.IsNodeUser() {
+		return true, nil
+	}
+	if !owner.IsNodeUser() {
+		if role.IsAdminRole() || role.IsRootUser() {
+			return true, nil
+		}
+	}
 	return role == owner, nil
 }
 
 // HasOwnership returns if the role or any role the role is a member of
-// has ownership privilege of the desc.
+// has ownership privilege of the desc. Admins have ownership of all objects.
 // TODO(richardjcai): SUPERUSER has implicit ownership.
 // We do not have SUPERUSER privilege yet but should we consider root a superuser?
 func (p *planner) HasOwnership(
