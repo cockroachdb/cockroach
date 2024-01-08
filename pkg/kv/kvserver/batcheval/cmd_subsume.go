@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -158,17 +157,6 @@ func Subsume(
 	// timestamp cache to ensure that no future writes are allowed to invalidate
 	// prior reads performed to this point on the RHS range.
 	priorReadSum := cArgs.EvalCtx.GetCurrentReadSummary(ctx)
-	// For now, forward this summary to the freeze time. This may appear to
-	// undermine the benefit of the read summary, but it doesn't entirely. Until
-	// we ship higher-resolution read summaries, the read summary doesn't
-	// provide much value in avoiding transaction retries, but it is necessary
-	// for correctness if the RHS has served reads at future times above the
-	// freeze time.
-	//
-	// We can remove this in the future when we increase the resolution of read
-	// summaries and have a per-range closed timestamp system that is easier to
-	// think about.
-	priorReadSum.Merge(rspb.FromTimestamp(reply.FreezeStart.ToTimestamp()))
 	reply.ReadSummary = &priorReadSum
 	reply.ClosedTimestamp = cArgs.EvalCtx.GetCurrentClosedTimestamp(ctx)
 
