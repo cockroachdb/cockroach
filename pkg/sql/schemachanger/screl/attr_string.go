@@ -28,7 +28,8 @@ func _() {
 	_ = x[ReferencedFunctionIDs-18]
 	_ = x[ReferencedColumnIDs-19]
 	_ = x[Expr-20]
-	_ = x[AttrMax-20]
+	_ = x[SeqNum-21]
+	_ = x[AttrMax-22]
 }
 
 func (i Attr) String() string {
@@ -55,6 +56,8 @@ func (i Attr) String() string {
 		return "SourceIndexID"
 	case RecreateSourceIndexID:
 		return "RecreateSourceIndexID"
+	case SeqNum:
+		return "SeqNum"
 	case TargetStatus:
 		return "TargetStatus"
 	case CurrentStatus:
