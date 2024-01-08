@@ -15,6 +15,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -44,7 +45,10 @@ func CheckReplicaDivergenceOnDB(ctx context.Context, l *logger.Logger, db *gosql
 	_, err = db.ExecContext(ctx,
 		"SET CLUSTER SETTING kv.consistency_queue.testing_fast_efos_acquisition.enabled = true")
 	if err != nil {
-		return err
+		// Ignore errors for older versions without this setting.
+		if !strings.Contains(err.Error(), "unknown cluster setting") {
+			return err
+		}
 	}
 
 	// NB: we set a statement_timeout since context cancellation won't work here.
