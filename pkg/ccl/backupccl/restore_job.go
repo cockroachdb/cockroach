@@ -2577,8 +2577,8 @@ func (r *restoreResumer) dropDescriptors(
 		// descriptors. To ensure that this happens quickly, we install a zone
 		// configuration for every table that we are going to drop with a small GC TTL.
 		canSetGCTTL := codec.ForSystemTenant() ||
-			(sql.SecondaryTenantZoneConfigsEnabled.Get(&r.execCfg.Settings.SV) &&
-				sql.SecondaryTenantsAllZoneConfigsEnabled.Get(&r.execCfg.Settings.SV))
+			(sqlclustersettings.SecondaryTenantZoneConfigsEnabled.Get(&r.execCfg.Settings.SV) &&
+				sqlclustersettings.SecondaryTenantsAllZoneConfigsEnabled.Get(&r.execCfg.Settings.SV))
 		if canSetGCTTL {
 			if err := setGCTTLForDroppingTable(
 				ctx, txn, descsCol, tableToDrop,

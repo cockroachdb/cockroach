@@ -10,7 +10,12 @@
 
 package sqlclustersettings
 
-import "github.com/cockroachdb/cockroach/pkg/settings"
+import (
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/errors"
+)
 
 // DefaultPrimaryRegionClusterSettingName is the name of the cluster setting
 // that returns the default primary region.
@@ -51,3 +56,40 @@ var RestrictAccessToSystemInterface = settings.RegisterBoolSetting(
 	"sql.restrict_system_interface.enabled",
 	"if enabled, certain statements produce errors or warnings when run from the system interface to encourage use of a virtual cluster",
 	false)
+
+// SecondaryTenantZoneConfigsEnabled controls if secondary tenants are allowed
+// to set zone configurations. It has no effect for the system tenant.
+//
+// This setting has no effect on zone configurations that have already been set.
+var SecondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"sql.zone_configs.allow_for_secondary_tenant.enabled",
+	"enable the use of ALTER CONFIGURE ZONE in virtual clusters",
+	false,
+	settings.WithName("sql.virtual_cluster.feature_access.zone_configs.enabled"),
+)
+
+// SecondaryTenantsAllZoneConfigsEnabled is an extension of
+// SecondaryTenantZoneConfigsEnabled that allows virtual clusters to modify all
+// type of constraints in zone configs (i.e. not only zones and regions).
+var SecondaryTenantsAllZoneConfigsEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled",
+	"enable unrestricted usage of ALTER CONFIGURE ZONE in virtual clusters",
+	false,
+)
+
+// RequireSystemTenantOrClusterSetting returns a setting disabled error if
+// executed from inside a secondary tenant that does not have the specified
+// cluster setting.
+func RequireSystemTenantOrClusterSetting(
+	codec keys.SQLCodec, settings *cluster.Settings, setting *settings.BoolSetting,
+) error {
+	if codec.ForSystemTenant() || setting.Get(&settings.SV) {
+		return nil
+	}
+	return errors.WithDetailf(errors.WithHint(
+		errors.New("operation is disabled within a virtual cluster"),
+		"Feature was disabled by the system operator."),
+		"Feature flag: %s", setting.Name())
+}
