@@ -472,8 +472,8 @@ func DecodeIndexKeyToDatums(
 	}
 	rowPrefix := keyValues[0].Key[:prefixLen]
 
-	// Types that have a composite encoding can their data stored in the value.
-	// See docs/tech-notes/encoding.md#composite-encoding for details.
+	// Types that have a composite encoding can have their data stored in the
+	// value. See docs/tech-notes/encoding.md#composite-encoding for details.
 	for _, keyValue := range keyValues {
 		kvVal := keyValue.Value
 
@@ -498,7 +498,7 @@ func DecodeIndexKeyToDatums(
 
 		var lastColID descpb.ColumnID = 0
 		for len(valueBytes) > 0 {
-			typeOffset, _, colIDDiff, _, err := encoding.DecodeValueTag(valueBytes)
+			typeOffset, dataOffset, colIDDiff, typ, err := encoding.DecodeValueTag(valueBytes)
 			if err != nil {
 				return nil, err
 			}
@@ -508,11 +508,11 @@ func DecodeIndexKeyToDatums(
 			if !ok {
 				// This is for a column that is not in the index. We still need to
 				// consume the data.
-				_, encLen, err := encoding.PeekValueLength(valueBytes[typeOffset:])
+				numBytes, err := encoding.PeekValueLengthWithOffsetsAndType(valueBytes, dataOffset, typ)
 				if err != nil {
 					return nil, err
 				}
-				valueBytes = valueBytes[typeOffset+encLen:]
+				valueBytes = valueBytes[numBytes:]
 				continue
 			}
 			vals[colOrdinal], valueBytes, err = EncDatumFromBuffer(catenumpb.DatumEncoding_VALUE, valueBytes[typeOffset:])
