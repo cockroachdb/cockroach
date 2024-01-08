@@ -4490,6 +4490,7 @@ FROM (
     WHERE c.relname = 'indexes_table'
 ) s2
 GROUP BY indexname, indisunique, indisprimary, amname, exprdef, attoptions
+ORDER BY indexname
 ----
 indexname            array_agg  indisunique  indisprimary  array_agg      amname  exprdef  attoptions
 indexes_include_idx  {a,c,d}    false        false         {ASC,ASC,ASC}  prefix  NULL     NULL
