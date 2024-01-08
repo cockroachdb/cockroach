@@ -929,6 +929,12 @@ func (f *FuncDepSet) AddEquivalency(a, b opt.ColumnID) {
 	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
 
+// AddStrictDependency adds a new strict dependency to the set.
+func (f *FuncDepSet) AddStrictDependency(from, to opt.ColSet) {
+	f.addDependency(from, to, true /* strict */, false /* equiv */)
+	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
+}
+
 // AddConstants adds a strict FD to the set that declares each given column as
 // having the same constant value for all rows. If a column is nullable, then
 // its value may be NULL, but then the column must be NULL for all rows. For

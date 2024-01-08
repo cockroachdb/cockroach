@@ -690,6 +690,67 @@ func (o *addSynthOp) ApplyToFDs(fd FuncDepSet) FuncDepSet {
 	return out
 }
 
+// addStrictDepOp is a test operation corresponding to AddStrictDependency.
+type addStrictDepOp struct {
+	from, to opt.ColSet
+}
+
+func genAddStrictDep(minCols, maxCols int) testOpGenerator {
+	return func(tc *testConfig) testOp {
+		from := tc.randColSet(minCols, maxCols)
+		to := tc.randColSet(minCols, maxCols)
+		from.DifferenceWith(to)
+		return &addStrictDepOp{
+			from: from,
+			to:   to,
+		}
+	}
+}
+
+func (o *addStrictDepOp) String() string {
+	return fmt.Sprintf("AddStrictDependency(%s, %s)", o.from, o.to)
+}
+
+func (o *addStrictDepOp) FilterRelation(tr testRelation) testRelation {
+	// Filter out rows where the from->to FD doesn't hold. The code here parallels
+	// that in testRelation.checkKey.
+	//
+	// We split the rows into groups (keyed on the `from` columns), picking the
+	// first row in each group as the "representative" of that group. All other
+	// rows in the group are checked against the representative row.
+	var out testRelation
+	m := make(map[rowKey]testRow)
+	perm := rand.Perm(len(tr))
+	for _, rowIdx := range perm {
+		r := tr[rowIdx]
+		k, _ := r.key(o.from)
+		if first, ok := m[k]; ok {
+			shouldFilter := false
+			for col, ok := o.to.Next(0); ok; col, ok = o.to.Next(col + 1) {
+				if first.value(col) != r.value(col) {
+					// Filter out row.
+					shouldFilter = true
+					break
+				}
+			}
+			if shouldFilter {
+				continue
+			}
+		} else {
+			m[k] = r
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+func (o *addStrictDepOp) ApplyToFDs(fd FuncDepSet) FuncDepSet {
+	var out FuncDepSet
+	out.CopyFrom(&fd)
+	out.AddStrictDependency(o.from, o.to)
+	return out
+}
+
 // testState corresponds to a chain of applied test operations. The head of a
 // testStates chain has no parent and no op and just corresponds to the initial
 // (empty) FDs and test relation.
@@ -803,6 +864,7 @@ func TestFuncDepOpsRandom(t *testing.T) {
 				genAddConst(1 /* minCols */, 3 /* maxCols */),
 				genAddEquiv(),
 				genAddSynth(0 /* minCols */, 3 /* maxCols */),
+				genAddStrictDep(0 /* minCols */, 3 /* maxCols */),
 			},
 		},
 
@@ -819,6 +881,7 @@ func TestFuncDepOpsRandom(t *testing.T) {
 				genAddConst(1 /* minCols */, 4 /* maxCols */),
 				genAddEquiv(),
 				genAddSynth(0 /* minCols */, 3 /* maxCols */),
+				genAddStrictDep(0 /* minCols */, 3 /* maxCols */),
 			},
 		},
 	}
