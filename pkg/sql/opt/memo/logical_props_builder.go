@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -1343,8 +1344,12 @@ func (b *logicalPropsBuilder) buildWindowProps(window *WindowExpr, rel *props.Re
 	// examples include:
 	// * row_number+the partition is a key.
 	// * rank is determined by the partition and the value being ordered by.
-	// * aggregations/first_value/last_value are determined by the partition.
 	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	determinedCols := getWindowPartitionDeps(window)
+	if !determinedCols.Empty() {
+		// The partition columns determine some of the window function outputs.
+		rel.FuncDeps.AddStrictDependency(window.Partition, determinedCols)
+	}
 
 	// Cardinality
 	// -----------
@@ -2904,4 +2909,35 @@ func CanBeCompositeSensitive(e opt.Expr) bool {
 
 	isCompositeInsensitive, _ := check(e)
 	return !isCompositeInsensitive
+}
+
+// getWindowPartitionDeps returns the set of columns that are functionally
+// determined by the Window operator's partition columns (which may be empty).
+func getWindowPartitionDeps(window *WindowExpr) opt.ColSet {
+	var determinedCols opt.ColSet
+	for i := range window.Windows {
+		// Ensure that the window frame extends to the entire partition. This
+		// ensures that every row in the partition has the exact same frame.
+		item := &window.Windows[i]
+		if item.Frame.FrameExclusion != treewindow.NoExclusion ||
+			item.Frame.StartBoundType != treewindow.UnboundedPreceding ||
+			item.Frame.EndBoundType != treewindow.UnboundedFollowing {
+			continue
+		}
+		// Aggregations and first, last, and nth value functions always produce the
+		// same value for any row given the same frame.
+		if !opt.IsAggregateOp(item.Function) {
+			switch item.Function.Op() {
+			case opt.FirstValueOp, opt.LastValueOp:
+			default:
+				continue
+			}
+		}
+		// Since we determined that this function always produces the same value for
+		// a given window frame, as well as that the frame is the same for all rows
+		// in a given partition, there is a dependency from the partition columns to
+		// the output of this window function.
+		determinedCols.Add(item.Col)
+	}
+	return determinedCols
 }
