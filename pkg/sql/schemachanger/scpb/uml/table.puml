@@ -129,6 +129,12 @@ object DatabaseRoleSetting
 DatabaseRoleSetting :  DatabaseID
 DatabaseRoleSetting :  RoleName
 
+object DatabaseZoneConfig
+
+DatabaseZoneConfig :  DatabaseID
+DatabaseZoneConfig :  ZoneConfig
+DatabaseZoneConfig :  SeqNum
+
 object EnumType
 
 EnumType :  TypeID
@@ -430,6 +436,7 @@ Database <|-- DatabaseComment
 Database <|-- DatabaseData
 Database <|-- DatabaseRegionConfig
 Database <|-- DatabaseRoleSetting
+Database <|-- DatabaseZoneConfig
 EnumType <|-- EnumTypeValue
 Table <|-- ForeignKeyConstraint
 Table <|-- ForeignKeyConstraintUnvalidated
