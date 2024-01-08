@@ -4408,3 +4408,470 @@ scalar-group-by
  └── aggregations
       └── sum [as=sum:6, outer=(1)]
            └── a:1
+
+# --------------------------------------------------
+# FoldGroupByAndWindow
+# --------------------------------------------------
+
+# Case with one partition column and an aggregate that references an input col.
+# NOTE: the "foo" and "bar" grouping columns are simplified to ConstAgg.
+norm expect=FoldGroupByAndWindow
+SELECT sum(v), foo, bar
+FROM (
+  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
+  FROM uvwz
+  WINDOW w AS (
+    PARTITION BY u ORDER BY z
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  )
+)
+GROUP BY u, foo, bar;
+----
+project
+ ├── columns: sum:10!null foo:8!null bar:9!null
+ └── group-by (hash)
+      ├── columns: u:1!null count:8!null array_agg:9!null sum:10!null
+      ├── grouping columns: u:1!null
+      ├── internal-ordering: +4 opt(1)
+      ├── key: (1)
+      ├── fd: (1)-->(8-10)
+      ├── sort
+      │    ├── columns: u:1!null v:2!null z:4!null
+      │    ├── key: (1,2)
+      │    ├── fd: (1,2)-->(4)
+      │    ├── ordering: +4 opt(1) [actual: +4]
+      │    └── scan uvwz
+      │         ├── columns: u:1!null v:2!null z:4!null
+      │         ├── key: (1,2)
+      │         └── fd: (1,2)-->(4)
+      └── aggregations
+           ├── sum [as=sum:10, outer=(2)]
+           │    └── v:2
+           ├── count-rows [as=count:8]
+           └── array-agg [as=array_agg:9, outer=(4)]
+                └── z:4
+
+# Case with a ConstAgg referencing an input column.
+norm expect=FoldGroupByAndWindow
+SELECT sum(v), foo, bar
+FROM (
+  SELECT *, count(w) OVER w AS foo
+  FROM (SELECT *, 100 AS bar FROM uvwz)
+  WINDOW w AS (
+    PARTITION BY u ORDER BY z
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  )
+)
+GROUP BY u, foo, bar;
+----
+project
+ ├── columns: sum:10!null foo:9!null bar:8!null
+ ├── fd: ()-->(8)
+ └── group-by (hash)
+      ├── columns: u:1!null bar:8!null count:9!null sum:10!null
+      ├── grouping columns: u:1!null
+      ├── internal-ordering: +4 opt(1,8)
+      ├── key: (1)
+      ├── fd: ()-->(8), (1)-->(8-10)
+      ├── project
+      │    ├── columns: bar:8!null u:1!null v:2!null z:4!null
+      │    ├── key: (1,2)
+      │    ├── fd: ()-->(8), (1,2)-->(4)
+      │    ├── ordering: +4 opt(1,8) [actual: +4]
+      │    ├── sort
+      │    │    ├── columns: u:1!null v:2!null z:4!null
+      │    │    ├── key: (1,2)
+      │    │    ├── fd: (1,2)-->(4)
+      │    │    ├── ordering: +4 opt(1) [actual: +4]
+      │    │    └── scan uvwz
+      │    │         ├── columns: u:1!null v:2!null z:4!null
+      │    │         ├── key: (1,2)
+      │    │         └── fd: (1,2)-->(4)
+      │    └── projections
+      │         └── 100 [as=bar:8]
+      └── aggregations
+           ├── sum [as=sum:10, outer=(2)]
+           │    └── v:2
+           ├── const-agg [as=bar:8, outer=(8)]
+           │    └── bar:8
+           └── count-rows [as=count:9]
+
+# Case with no partition columns.
+norm expect=FoldGroupByAndWindow
+SELECT sum(v), foo, bar
+FROM (
+  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
+  FROM uvwz
+  WINDOW w AS (
+    ORDER BY z
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  )
+)
+GROUP BY foo, bar;
+----
+group-by (streaming)
+ ├── columns: sum:10!null foo:8!null bar:9!null
+ ├── internal-ordering: +4
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(8-10)
+ ├── sort
+ │    ├── columns: v:2!null z:4!null
+ │    ├── ordering: +4
+ │    └── scan uvwz
+ │         └── columns: v:2!null z:4!null
+ └── aggregations
+      ├── sum [as=sum:10, outer=(2)]
+      │    └── v:2
+      ├── count-rows [as=count:8]
+      └── array-agg [as=array_agg:9, outer=(4)]
+           └── z:4
+
+# Case with multiple partition columns.
+norm expect=FoldGroupByAndWindow
+SELECT sum(v), foo, bar
+FROM (
+  SELECT *, count(v) OVER w AS foo, array_agg(z) OVER w AS bar
+  FROM uvwz
+  WINDOW w AS (
+    PARTITION BY u, w ORDER BY z
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  )
+)
+GROUP BY u, w, foo, bar;
+----
+project
+ ├── columns: sum:10!null foo:8!null bar:9!null
+ └── group-by (hash)
+      ├── columns: u:1!null w:3!null count:8!null array_agg:9!null sum:10!null
+      ├── grouping columns: u:1!null w:3!null
+      ├── internal-ordering: +4 opt(1,3)
+      ├── key: (1,3)
+      ├── fd: (1,3)-->(8-10)
+      ├── sort
+      │    ├── columns: u:1!null v:2!null w:3!null z:4!null
+      │    ├── key: (2,3)
+      │    ├── fd: (1,2)-->(3,4), (2,3)-->(1,4)
+      │    ├── ordering: +4 opt(1,3) [actual: +4]
+      │    └── scan uvwz
+      │         ├── columns: u:1!null v:2!null w:3!null z:4!null
+      │         ├── key: (2,3)
+      │         └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
+      └── aggregations
+           ├── sum [as=sum:10, outer=(2)]
+           │    └── v:2
+           ├── count-rows [as=count:8]
+           └── array-agg [as=array_agg:9, outer=(4)]
+                └── z:4
+
+# Case with grouping/partitioning on key columns.
+norm expect=FoldGroupByAndWindow
+SELECT sum(w), foo, bar
+FROM (
+  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
+  FROM uvwz
+  WINDOW w AS (
+    PARTITION BY u, v ORDER BY z
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  )
+)
+GROUP BY u, v, foo, bar;
+----
+project
+ ├── columns: sum:10!null foo:8!null bar:9!null
+ └── group-by (hash)
+      ├── columns: u:1!null v:2!null count:8!null array_agg:9!null sum:10!null
+      ├── grouping columns: u:1!null v:2!null
+      ├── key: (1,2)
+      ├── fd: (1,2)-->(8-10)
+      ├── scan uvwz
+      │    ├── columns: u:1!null v:2!null w:3!null z:4!null
+      │    ├── key: (2,3)
+      │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
+      └── aggregations
+           ├── sum [as=sum:10, outer=(3)]
+           │    └── w:3
+           ├── count-rows [as=count:8]
+           └── array-agg [as=array_agg:9, outer=(4)]
+                └── z:4
+
+# No-op because of an ordered GroupBy.
+norm expect-not=FoldGroupByAndWindow
+SELECT array_agg(v), foo, bar
+FROM (
+  SELECT * FROM (
+    SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
+    FROM uvwz
+    WINDOW w AS (
+      PARTITION BY u ORDER BY z
+      ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+    )
+  )
+  ORDER BY v DESC
+)
+GROUP BY u, foo, bar;
+----
+project
+ ├── columns: array_agg:10!null foo:8 bar:9
+ └── group-by (hash)
+      ├── columns: u:1!null count:8 array_agg:9 array_agg:10!null
+      ├── grouping columns: u:1!null
+      ├── internal-ordering: -2 opt(1,8,9)
+      ├── key: (1)
+      ├── fd: (1)-->(8-10)
+      ├── sort
+      │    ├── columns: u:1!null v:2!null w:3!null z:4!null count:8 array_agg:9
+      │    ├── key: (2,3)
+      │    ├── fd: (1,2)-->(3,4), (2,3)-->(1,4), (1)-->(8,9)
+      │    ├── ordering: -2 opt(1,8,9) [actual: -2]
+      │    └── window partition=(1) ordering=+4 opt(1)
+      │         ├── columns: u:1!null v:2!null w:3!null z:4!null count:8 array_agg:9
+      │         ├── key: (2,3)
+      │         ├── fd: (1,2)-->(3,4), (2,3)-->(1,4), (1)-->(8,9)
+      │         ├── scan uvwz
+      │         │    ├── columns: u:1!null v:2!null w:3!null z:4!null
+      │         │    ├── key: (2,3)
+      │         │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
+      │         └── windows
+      │              ├── count [as=count:8, frame="rows from unbounded to unbounded", outer=(3)]
+      │              │    └── w:3
+      │              └── array-agg [as=array_agg:9, frame="rows from unbounded to unbounded", outer=(4)]
+      │                   └── z:4
+      └── aggregations
+           ├── array-agg [as=array_agg:10, outer=(2)]
+           │    └── v:2
+           ├── const-agg [as=count:8, outer=(8)]
+           │    └── count:8
+           └── const-agg [as=array_agg:9, outer=(9)]
+                └── array_agg:9
+
+# No-op because the grouping columns reference a window function.
+norm expect-not=FoldGroupByAndWindow
+SELECT sum(v), foo, bar
+FROM (
+  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar, row_number() OVER w AS baz
+  FROM uvwz
+  WINDOW w AS (
+    PARTITION BY u ORDER BY z
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  )
+)
+GROUP BY u, foo, bar, baz;
+----
+project
+ ├── columns: sum:11!null foo:8 bar:9
+ └── group-by (hash)
+      ├── columns: u:1!null count:8 array_agg:9 row_number:10 sum:11!null
+      ├── grouping columns: u:1!null row_number:10
+      ├── key: (1,10)
+      ├── fd: (1)-->(8,9), (1,10)-->(8,9,11)
+      ├── window partition=(1) ordering=+4 opt(1)
+      │    ├── columns: u:1!null v:2!null w:3!null z:4!null count:8 array_agg:9 row_number:10
+      │    ├── key: (2,3)
+      │    ├── fd: (1,2)-->(3,4), (2,3)-->(1,4,10), (1)-->(8,9)
+      │    ├── scan uvwz
+      │    │    ├── columns: u:1!null v:2!null w:3!null z:4!null
+      │    │    ├── key: (2,3)
+      │    │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
+      │    └── windows
+      │         ├── count [as=count:8, frame="rows from unbounded to unbounded", outer=(3)]
+      │         │    └── w:3
+      │         ├── array-agg [as=array_agg:9, frame="rows from unbounded to unbounded", outer=(4)]
+      │         │    └── z:4
+      │         └── row-number [as=row_number:10, frame="rows from unbounded to unbounded"]
+      └── aggregations
+           ├── sum [as=sum:11, outer=(2)]
+           │    └── v:2
+           ├── const-agg [as=count:8, outer=(8)]
+           │    └── count:8
+           └── const-agg [as=array_agg:9, outer=(9)]
+                └── array_agg:9
+
+# No-op because the grouping columns are not the same as the partition columns.
+norm expect-not=FoldGroupByAndWindow
+SELECT sum(u), foo, bar
+FROM (
+  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
+  FROM uvwz
+  WINDOW w AS (
+    PARTITION BY u ORDER BY z
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  )
+)
+GROUP BY v, foo, bar;
+----
+project
+ ├── columns: sum:10!null foo:8 bar:9
+ └── group-by (hash)
+      ├── columns: v:2!null count:8 array_agg:9 sum:10!null
+      ├── grouping columns: v:2!null count:8 array_agg:9
+      ├── key: (2,8,9)
+      ├── fd: (2,8,9)-->(10)
+      ├── window partition=(1) ordering=+4 opt(1)
+      │    ├── columns: u:1!null v:2!null w:3!null z:4!null count:8 array_agg:9
+      │    ├── key: (2,3)
+      │    ├── fd: (1,2)-->(3,4), (2,3)-->(1,4), (1)-->(8,9)
+      │    ├── scan uvwz
+      │    │    ├── columns: u:1!null v:2!null w:3!null z:4!null
+      │    │    ├── key: (2,3)
+      │    │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
+      │    └── windows
+      │         ├── count [as=count:8, frame="rows from unbounded to unbounded", outer=(3)]
+      │         │    └── w:3
+      │         └── array-agg [as=array_agg:9, frame="rows from unbounded to unbounded", outer=(4)]
+      │              └── z:4
+      └── aggregations
+           └── sum [as=sum:10, outer=(1)]
+                └── u:1
+
+# No-op because the grouping columns are not the same as the partition columns.
+norm expect-not=FoldGroupByAndWindow
+SELECT sum(v), foo, bar
+FROM (
+  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
+  FROM uvwz
+  WINDOW w AS (
+    ORDER BY z
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  )
+)
+GROUP BY u, foo, bar;
+----
+project
+ ├── columns: sum:10!null foo:8 bar:9
+ ├── fd: ()-->(8,9)
+ └── group-by (hash)
+      ├── columns: u:1!null count:8 array_agg:9 sum:10!null
+      ├── grouping columns: u:1!null
+      ├── key: (1)
+      ├── fd: ()-->(8,9), (1)-->(8-10)
+      ├── window partition=() ordering=+4
+      │    ├── columns: u:1!null v:2!null w:3!null z:4!null count:8 array_agg:9
+      │    ├── key: (2,3)
+      │    ├── fd: ()-->(8,9), (1,2)-->(3,4), (2,3)-->(1,4)
+      │    ├── scan uvwz
+      │    │    ├── columns: u:1!null v:2!null w:3!null z:4!null
+      │    │    ├── key: (2,3)
+      │    │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
+      │    └── windows
+      │         ├── count [as=count:8, frame="rows from unbounded to unbounded", outer=(3)]
+      │         │    └── w:3
+      │         └── array-agg [as=array_agg:9, frame="rows from unbounded to unbounded", outer=(4)]
+      │              └── z:4
+      └── aggregations
+           ├── sum [as=sum:10, outer=(2)]
+           │    └── v:2
+           ├── const-agg [as=count:8, outer=(8)]
+           │    └── count:8
+           └── const-agg [as=array_agg:9, outer=(9)]
+                └── array_agg:9
+
+# No-op because the window frame is not unbounded.
+norm expect-not=FoldGroupByAndWindow
+SELECT sum(v), foo, bar
+FROM (
+  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
+  FROM uvwz
+  WINDOW w AS (
+    PARTITION BY u ORDER BY z
+  )
+)
+GROUP BY u, foo, bar;
+----
+project
+ ├── columns: sum:10!null foo:8 bar:9
+ └── group-by (hash)
+      ├── columns: u:1!null count:8 array_agg:9 sum:10!null
+      ├── grouping columns: u:1!null count:8 array_agg:9
+      ├── key: (1,8,9)
+      ├── fd: (1,8,9)-->(10)
+      ├── window partition=(1) ordering=+4 opt(1)
+      │    ├── columns: u:1!null v:2!null w:3!null z:4!null count:8 array_agg:9
+      │    ├── key: (2,3)
+      │    ├── fd: (1,2)-->(3,4), (2,3)-->(1,4,8,9)
+      │    ├── scan uvwz
+      │    │    ├── columns: u:1!null v:2!null w:3!null z:4!null
+      │    │    ├── key: (2,3)
+      │    │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
+      │    └── windows
+      │         ├── count [as=count:8, outer=(3)]
+      │         │    └── w:3
+      │         └── array-agg [as=array_agg:9, outer=(4)]
+      │              └── z:4
+      └── aggregations
+           └── sum [as=sum:10, outer=(2)]
+                └── v:2
+
+# No-op because the (non ConstAgg-like) Sum GroupBy aggregate references a
+# Window aggregate.
+norm expect-not=FoldGroupByAndWindow
+SELECT sum(foo), foo, bar
+FROM (
+  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
+  FROM uvwz
+  WINDOW w AS (
+    PARTITION BY u ORDER BY z
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  )
+)
+GROUP BY u, foo, bar;
+----
+project
+ ├── columns: sum:10 foo:8 bar:9
+ └── group-by (hash)
+      ├── columns: u:1!null count:8 array_agg:9 sum:10
+      ├── grouping columns: u:1!null
+      ├── key: (1)
+      ├── fd: (1)-->(8-10)
+      ├── window partition=(1) ordering=+4 opt(1)
+      │    ├── columns: u:1!null w:3!null z:4!null count:8 array_agg:9
+      │    ├── fd: (1)-->(8,9)
+      │    ├── scan uvwz
+      │    │    └── columns: u:1!null w:3!null z:4!null
+      │    └── windows
+      │         ├── count [as=count:8, frame="rows from unbounded to unbounded", outer=(3)]
+      │         │    └── w:3
+      │         └── array-agg [as=array_agg:9, frame="rows from unbounded to unbounded", outer=(4)]
+      │              └── z:4
+      └── aggregations
+           ├── sum [as=sum:10, outer=(8)]
+           │    └── count:8
+           ├── const-agg [as=count:8, outer=(8)]
+           │    └── count:8
+           └── const-agg [as=array_agg:9, outer=(9)]
+                └── array_agg:9
+
+# No-op case with row_number, which can produce a different result for each row
+# in a window frame.
+norm expect-not=FoldGroupByAndWindow
+SELECT sum(v), foo
+FROM (
+  SELECT *, row_number() OVER w AS foo
+  FROM uvwz
+  WINDOW w AS (
+    PARTITION BY u ORDER BY z
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  )
+)
+GROUP BY u, foo;
+----
+project
+ ├── columns: sum:9!null foo:8
+ └── group-by (hash)
+      ├── columns: u:1!null row_number:8 sum:9!null
+      ├── grouping columns: u:1!null row_number:8
+      ├── key: (1,8)
+      ├── fd: (1,8)-->(9)
+      ├── window partition=(1) ordering=+4 opt(1)
+      │    ├── columns: u:1!null v:2!null z:4!null row_number:8
+      │    ├── key: (1,2)
+      │    ├── fd: (1,2)-->(4,8)
+      │    ├── scan uvwz
+      │    │    ├── columns: u:1!null v:2!null z:4!null
+      │    │    ├── key: (1,2)
+      │    │    └── fd: (1,2)-->(4)
+      │    └── windows
+      │         └── row-number [as=row_number:8, frame="rows from unbounded to unbounded"]
+      └── aggregations
+           └── sum [as=sum:9, outer=(2)]
+                └── v:2
