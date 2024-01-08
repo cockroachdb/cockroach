@@ -86,10 +86,11 @@ type Cluster interface {
 	Conn(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) *gosql.DB
 	ConnE(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) (*gosql.DB, error)
 
-	// URLs for the Admin UI.
+	// URLs and Ports for the Admin UI.
 
 	InternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 	ExternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
+	AdminUIPort(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]int, error)
 
 	// Running commands on nodes.
 

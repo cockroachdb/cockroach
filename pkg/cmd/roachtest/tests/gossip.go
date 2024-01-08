@@ -425,13 +425,18 @@ SELECT count(replicas)
 	t.L().Printf("killing all nodes\n")
 	c.Stop(ctx, t.L(), option.DefaultStopOpts())
 
+	adminPorts, err := c.AdminUIPort(ctx, t.L(), c.Node(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Restart node 1, but have it listen on a different port for internal
 	// connections. This will require node 1 to reach out to the other nodes in
 	// the cluster for gossip info.
-	err := c.RunE(ctx, c.Node(1),
+	err = c.RunE(ctx, c.Node(1),
 		` ./cockroach start --insecure --background --store={store-dir} `+
 			`--log-dir={log-dir} --cache=10% --max-sql-memory=10% `+
-			`--listen-addr=:$[{pgport:1}+1000] --http-port=$[{pgport:1}+1] `+
+			fmt.Sprintf(`--listen-addr=:$[{pgport:1}+1000] --http-port=%d `, adminPorts[0])+
 			`--join={pghost:1}:{pgport:1} `+
 			`--advertise-addr={pghost:1}:$[{pgport:1}+1000] `+
 			`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`)

@@ -1074,6 +1074,28 @@ func AdminURL(
 	return urlGenerator(ctx, c, l, c.TargetNodes(), uConfig)
 }
 
+// AdminPort finds the AdminUI ports for a cluster.
+func AdminPort(
+	ctx context.Context, l *logger.Logger, clusterName string, secure bool,
+) ([]int, error) {
+	if err := LoadClusters(); err != nil {
+		return nil, err
+	}
+	c, err := newCluster(l, clusterName, install.SecureOption(secure))
+	if err != nil {
+		return nil, err
+	}
+	var ports []int
+	for _, node := range c.Nodes {
+		port, err := c.NodeUIPort(ctx, node)
+		if err != nil {
+			return nil, err
+		}
+		ports = append(ports, port)
+	}
+	return ports, nil
+}
+
 // PprofOpts specifies the options needed by Pprof().
 type PprofOpts struct {
 	Heap         bool
