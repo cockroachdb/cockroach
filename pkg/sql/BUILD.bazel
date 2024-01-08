@@ -865,6 +865,7 @@ go_test(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sessionphase",
+        "//pkg/sql/sqlclustersettings",
         "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/sqllivenesstestutils",

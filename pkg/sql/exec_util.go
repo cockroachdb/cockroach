@@ -217,18 +217,6 @@ var allowCrossDatabaseSeqReferences = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
-// SecondaryTenantZoneConfigsEnabled controls if secondary tenants are allowed
-// to set zone configurations. It has no effect for the system tenant.
-//
-// This setting has no effect on zone configurations that have already been set.
-var SecondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
-	settings.SystemVisible,
-	"sql.zone_configs.allow_for_secondary_tenant.enabled",
-	"enable the use of ALTER CONFIGURE ZONE in virtual clusters",
-	false,
-	settings.WithName("sql.virtual_cluster.feature_access.zone_configs.enabled"),
-)
-
 // SecondaryTenantSplitAtEnabled controls if secondary tenants are allowed to
 // run ALTER TABLE/INDEX ... SPLIT AT statements. It has no effect for the
 // system tenant.
@@ -3864,21 +3852,6 @@ func (cfg *ExecutorConfig) GetRowMetrics(internal bool) *rowinfra.Metrics {
 		return cfg.InternalRowMetrics
 	}
 	return cfg.RowMetrics
-}
-
-// requireSystemTenantOrClusterSetting returns a setting disabled error if
-// executed from inside a secondary tenant that does not have the specified
-// cluster setting.
-func requireSystemTenantOrClusterSetting(
-	codec keys.SQLCodec, settings *cluster.Settings, setting *settings.BoolSetting,
-) error {
-	if codec.ForSystemTenant() || setting.Get(&settings.SV) {
-		return nil
-	}
-	return errors.WithDetailf(errors.WithHint(
-		errors.New("operation is disabled within a virtual cluster"),
-		"Feature was disabled by the system operator."),
-		"Feature flag: %s", setting.Name())
 }
 
 // MaybeHashAppName returns the provided app name, possibly hashed.

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -150,7 +151,7 @@ func TestValidateZoneAttrsAndLocalitiesForSecondaryTenants(t *testing.T) {
 	}
 
 	for _, anyConstraintAllowed := range []bool{false, true} {
-		SecondaryTenantsAllZoneConfigsEnabled.Override(ctx, &settings.SV, anyConstraintAllowed)
+		sqlclustersettings.SecondaryTenantsAllZoneConfigsEnabled.Override(ctx, &settings.SV, anyConstraintAllowed)
 		for _, tc := range testCases {
 			var zone zonepb.ZoneConfig
 			err := yaml.UnmarshalStrict([]byte(tc.cfg), &zone)
