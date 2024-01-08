@@ -784,6 +784,7 @@ GO_TARGETS = [
     "//pkg/build/bazel/util/tinystringer:tinystringer_lib",
     "//pkg/build/bazel:bazel",
     "//pkg/build/bazel:bazel_test",
+    "//pkg/build/engflow:engflow",
     "//pkg/build/starlarkutil:starlarkutil",
     "//pkg/build/starlarkutil:starlarkutil_test",
     "//pkg/build/util:util",
