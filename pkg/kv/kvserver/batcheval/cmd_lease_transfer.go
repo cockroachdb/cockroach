@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -121,17 +120,6 @@ func TransferLease(
 	// to update its timestamp cache to ensure that no future writes are allowed
 	// to invalidate prior reads.
 	priorReadSum := cArgs.EvalCtx.GetCurrentReadSummary(ctx)
-	// For now, forward this summary to the proposed lease's start time. This
-	// may appear to undermine the benefit of the read summary, but it doesn't
-	// entirely. Until we ship higher-resolution read summaries, the read
-	// summary doesn't provide much value in avoiding transaction retries, but
-	// it is necessary for correctness if the outgoing leaseholder has served
-	// reads at future times above the proposed lease start time.
-	//
-	// We can remove this in the future when we increase the resolution of read
-	// summaries and have a per-range closed timestamp system that is easier to
-	// think about.
-	priorReadSum.Merge(rspb.FromTimestamp(newLease.Start.ToTimestamp()))
 
 	log.VEventf(ctx, 2, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, newLease)
 	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
