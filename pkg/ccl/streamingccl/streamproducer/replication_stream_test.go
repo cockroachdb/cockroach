@@ -562,14 +562,13 @@ func TestCompleteStreamReplication(t *testing.T) {
 	// Make the producer job times out fast and fastly tracks ingestion cutover signal.
 	h.SysSQL.ExecMultiple(t,
 		"SET CLUSTER SETTING stream_replication.job_liveness.timeout = '2s';",
-		"SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '2s';")
+		"SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '2s';",
+		"SET CLUSTER SETTING stream_replication.job_liveness_timeout = '3s'")
 
 	replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
 	timedOutStreamID := replicationProducerSpec.StreamID
 	jobutils.WaitForJobToFail(t, h.SysSQL, jobspb.JobID(timedOutStreamID))
 
-	// Makes the producer job not easily time out.
-	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness.timeout = '10m';")
 	testCompleteStreamReplication := func(t *testing.T, successfulIngestion bool) {
 		// Verify no error when completing a timed out replication stream.
 		h.SysSQL.Exec(t, "SELECT crdb_internal.complete_replication_stream($1, $2)",
