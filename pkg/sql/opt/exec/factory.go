@@ -246,7 +246,7 @@ type Cascade struct {
 		bufferRef Node,
 		numBufferedRows int,
 		allowAutoCommit bool,
-	) (Plan, error)
+	) (Plan, cat.ForeignKeyConstraint, error)
 }
 
 // InsertFastPathCheck contains information about a foreign key or

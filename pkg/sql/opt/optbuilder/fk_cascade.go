@@ -84,8 +84,8 @@ func (cb *onDeleteCascadeBuilder) Build(
 	binding opt.WithID,
 	bindingProps *props.Relational,
 	oldValues, newValues opt.ColList,
-) (_ memo.RelExpr, err error) {
-	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
+) (_ memo.RelExpr, _ cat.ForeignKeyConstraint, err error) {
+	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) (memo.RelExpr, cat.ForeignKeyConstraint) {
 		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
@@ -110,7 +110,7 @@ func (cb *onDeleteCascadeBuilder) Build(
 		// Set list of columns that will be fetched by the input expression.
 		mb.setFetchColIDs(mb.outScope.cols)
 		mb.buildDelete(nil /* returning */)
-		return mb.outScope.expr
+		return mb.outScope.expr, fk
 	})
 }
 
@@ -277,8 +277,8 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 	_ opt.WithID,
 	_ *props.Relational,
 	_, _ opt.ColList,
-) (_ memo.RelExpr, err error) {
-	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
+) (_ memo.RelExpr, fk cat.ForeignKeyConstraint, err error) {
+	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) (memo.RelExpr, cat.ForeignKeyConstraint) {
 		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
@@ -352,7 +352,7 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 		// Set list of columns that will be fetched by the input expression.
 		mb.setFetchColIDs(mb.outScope.cols)
 		mb.buildDelete(nil /* returning */)
-		return mb.outScope.expr
+		return mb.outScope.expr, fk
 	})
 }
 
@@ -428,8 +428,8 @@ func (cb *onDeleteSetBuilder) Build(
 	binding opt.WithID,
 	bindingProps *props.Relational,
 	oldValues, newValues opt.ColList,
-) (_ memo.RelExpr, err error) {
-	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
+) (_ memo.RelExpr, _ cat.ForeignKeyConstraint, err error) {
+	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) (memo.RelExpr, cat.ForeignKeyConstraint) {
 		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
@@ -477,7 +477,7 @@ func (cb *onDeleteSetBuilder) Build(
 		// cases this is safe (e.g. other cascades could have messed with the parent
 		// table in the meantime).
 		mb.buildUpdate(nil /* returning */)
-		return mb.outScope.expr
+		return mb.outScope.expr, fk
 	})
 }
 
@@ -643,8 +643,8 @@ func (cb *onUpdateCascadeBuilder) Build(
 	binding opt.WithID,
 	bindingProps *props.Relational,
 	oldValues, newValues opt.ColList,
-) (_ memo.RelExpr, err error) {
-	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
+) (_ memo.RelExpr, _ cat.ForeignKeyConstraint, err error) {
+	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) (memo.RelExpr, cat.ForeignKeyConstraint) {
 		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
@@ -695,7 +695,7 @@ func (cb *onUpdateCascadeBuilder) Build(
 		mb.addUpdateCols(updateExprs)
 
 		mb.buildUpdate(nil /* returning */)
-		return mb.outScope.expr
+		return mb.outScope.expr, fk
 	})
 }
 
@@ -896,8 +896,8 @@ func buildCascadeHelper(
 	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factoryI interface{},
-	fn func(b *Builder) memo.RelExpr,
-) (_ memo.RelExpr, err error) {
+	fn func(b *Builder) (memo.RelExpr, cat.ForeignKeyConstraint),
+) (_ memo.RelExpr, _ cat.ForeignKeyConstraint, err error) {
 	factory := factoryI.(*norm.Factory)
 	b := New(ctx, semaCtx, evalCtx, catalog, factory, nil /* stmt */)
 
@@ -912,5 +912,6 @@ func buildCascadeHelper(
 		}
 	}()
 
-	return fn(b), nil
+	relExpr, fk := fn(b)
+	return relExpr, fk, nil
 }

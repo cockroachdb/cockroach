@@ -694,7 +694,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 				for _, c := range p.FKCascades {
 					// We use the same memo to build the cascade. This makes the entire
 					// tree easier to read (e.g. the column IDs won't overlap).
-					cascade, err := c.Builder.Build(
+					cascade, _, err := c.Builder.Build(
 						context.Background(),
 						&ot.semaCtx,
 						&ot.evalCtx,
