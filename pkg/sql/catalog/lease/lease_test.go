@@ -3490,7 +3490,8 @@ func TestSessionLeasingTable(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 
-	executor := srv.InternalExecutor().(isql.Executor)
+	idb := srv.InternalDB().(isql.DB)
+	executor := idb.Executor()
 	// Insert using a synthetic descriptor.
 	err := executor.WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable_V24_1()}, func() error {
 		_, err := executor.Exec(ctx, "add-rows-for-test", nil,
