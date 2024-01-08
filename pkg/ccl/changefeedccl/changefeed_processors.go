@@ -598,7 +598,12 @@ func (ca *changeAggregator) close() {
 		_ = ca.sink.Close()
 	}
 
-	ca.closeMetrics()
+	// The sliMetrics registry may hold on to some state for each aggregator
+	// (ex. last known resolved timestamp). De-register the aggregator so this
+	// data is deleted and not included in metrics.
+	if ca.sliMetrics != nil {
+		ca.sliMetrics.closeId(ca.sliMetricsID)
+	}
 
 	ca.memAcc.Close(ca.Ctx())
 
@@ -880,12 +885,6 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 
 	ca.recentKVCount = 0
 	return nil
-}
-
-// closeMetrics de-registers the aggregator from the sliMetrics registry so that
-// it's no longer considered by the aggregator_progress gauge
-func (ca *changeAggregator) closeMetrics() {
-	ca.sliMetrics.closeId(ca.sliMetricsID)
 }
 
 // ConsumerClosed is part of the RowSource interface.
