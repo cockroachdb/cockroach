@@ -553,6 +553,7 @@ var (
 		},
 		types.FloatFamily: {
 			tree.NewDFloat(tree.DFloat(0)),
+			tree.NewDFloat(tree.DFloat(math.Copysign(0, -1))), // -0
 			tree.NewDFloat(tree.DFloat(1)),
 			tree.NewDFloat(tree.DFloat(-1)),
 			tree.NewDFloat(tree.DFloat(math.SmallestNonzeroFloat32)),
@@ -566,9 +567,12 @@ var (
 		types.DecimalFamily: func() []tree.Datum {
 			var res []tree.Datum
 			for _, s := range []string{
+				"-0",
 				"0",
 				"1",
+				"1.0",
 				"-1",
+				"-1.0",
 				"Inf",
 				"-Inf",
 				"NaN",
