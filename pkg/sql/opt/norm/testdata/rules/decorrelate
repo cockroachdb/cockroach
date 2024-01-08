@@ -277,12 +277,12 @@ WHERE i = 3
 ----
 project
  ├── columns: u:1!null v:2 rank:12 i:6!null
- ├── key: (1,12)
- ├── fd: ()-->(6), (1)-->(2)
+ ├── key: (1)
+ ├── fd: ()-->(6), (1)-->(2,12)
  └── window partition=(1)
       ├── columns: u:1!null v:2 k:5!null i:6!null rank:12
       ├── key: (5)
-      ├── fd: ()-->(6), (1)-->(2), (1)==(5), (5)==(1)
+      ├── fd: ()-->(6), (1)-->(2,5,12), (1)==(5), (5)==(1)
       ├── inner-join (hash)
       │    ├── columns: u:1!null v:2 k:5!null i:6!null
       │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
@@ -377,7 +377,7 @@ project
       ├── columns: column1:1!null k:2!null i:3 row_number:9 rownum:10!null
       ├── cardinality: [0 - 3]
       ├── key: (10)
-      ├── fd: (10)-->(1), (2)-->(3), (1)==(2), (2)==(1)
+      ├── fd: (10)-->(1-3,9), (2)-->(3), (1)==(2), (2)==(1)
       ├── inner-join (hash)
       │    ├── columns: column1:1!null k:2!null i:3 rownum:10!null
       │    ├── cardinality: [0 - 3]
@@ -460,7 +460,7 @@ project
       ├── columns: column1:1!null i:3 row_number:9 rownum:11!null
       ├── cardinality: [0 - 3]
       ├── key: (11)
-      ├── fd: (11)-->(1), (1)-->(3)
+      ├── fd: (11)-->(1,3,9), (1)-->(3)
       ├── project
       │    ├── columns: column1:1!null i:3 rownum:11!null
       │    ├── cardinality: [0 - 3]
@@ -507,7 +507,7 @@ project
       ├── columns: column1:1!null column2:2!null i:4 row_number:10 rownum:13!null
       ├── cardinality: [0 - 3]
       ├── key: (13)
-      ├── fd: (13)-->(1,2), (1)-->(4)
+      ├── fd: (13)-->(1,2,4,10), (1)-->(4)
       ├── project
       │    ├── columns: column1:1!null column2:2!null i:4 rownum:13!null
       │    ├── cardinality: [0 - 3]
@@ -549,7 +549,7 @@ FROM
 window partition=(1)
  ├── columns: u:1!null v:2 row_number:12 i:6
  ├── key: (1)
- ├── fd: (1)-->(2,6)
+ ├── fd: (1)-->(2,6,12)
  ├── project
  │    ├── columns: u:1!null v:2 i:6
  │    ├── key: (1)
@@ -581,12 +581,12 @@ FROM
 ----
 project
  ├── columns: u:1!null v:2 row_number:12 i:6
- ├── key: (1,12)
- ├── fd: (1)-->(2,6)
+ ├── key: (1)
+ ├── fd: (1)-->(2,6,12)
  └── window partition=(1)
       ├── columns: u:1!null v:2 k:5!null i:6 row_number:12
       ├── key: (5)
-      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── fd: (1)-->(2,5,6,12), (5)-->(6), (1)==(5), (5)==(1)
       ├── inner-join (hash)
       │    ├── columns: u:1!null v:2 k:5!null i:6
       │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
@@ -3234,11 +3234,11 @@ group-by (hash)
  ├── select
  │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null u:12!null v:13!null row_num:16!null
  │    ├── key: (1,12)
- │    ├── fd: (1)-->(2-5), (12)-->(13), (2)==(13), (13)==(2), (8)==(12), (12)==(8), (1,12)-->(16)
+ │    ├── fd: (1)-->(2-5), (12)-->(13), (2)==(13), (13)==(2), (1,8,12)-->(16), (8)==(12), (12)==(8)
  │    ├── window partition=(1,8)
  │    │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null u:12!null v:13!null row_num:16
  │    │    ├── key: (1,8,12)
- │    │    ├── fd: (1)-->(2-5), (12)-->(13), (2)==(13), (13)==(2)
+ │    │    ├── fd: (1)-->(2-5), (12)-->(13), (2)==(13), (13)==(2), (1,8,12)-->(16)
  │    │    ├── inner-join (cross)
  │    │    │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null u:12!null v:13!null
  │    │    │    ├── key: (1,8,12)
@@ -3299,7 +3299,7 @@ project
  │    ├── left-join-apply
  │    │    ├── columns: x:1!null u:5 uv.v:6 k:9 i:10 f:11 row_num:16
  │    │    ├── key: (1,9)
- │    │    ├── fd: (1,5)-->(6), (1,9)-->(10,11,16), (5)==(9), (9)==(5)
+ │    │    ├── fd: (1,5)-->(6), (1,9)-->(10,11), (1,5,9)-->(16), (5)==(9), (9)==(5)
  │    │    ├── scan xy
  │    │    │    ├── columns: x:1!null
  │    │    │    └── key: (1)
@@ -3308,18 +3308,18 @@ project
  │    │    │    ├── outer: (1)
  │    │    │    ├── cardinality: [0 - 3]
  │    │    │    ├── key: (9)
- │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11,16), (5)==(9), (9)==(5)
+ │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11), (5,9)-->(16), (5)==(9), (9)==(5)
  │    │    │    ├── select
  │    │    │    │    ├── columns: u:5!null uv.v:6 k:9!null i:10!null f:11 row_num:16!null
  │    │    │    │    ├── outer: (1)
  │    │    │    │    ├── key: (9)
- │    │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11,16), (5)==(9), (9)==(5)
+ │    │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11), (5,9)-->(16), (5)==(9), (9)==(5)
  │    │    │    │    ├── limit hint: 3.00
  │    │    │    │    ├── window partition=(5) ordering=+11 opt(5-8,10)
  │    │    │    │    │    ├── columns: u:5!null uv.v:6 k:9!null i:10!null f:11 row_num:16
  │    │    │    │    │    ├── outer: (1)
  │    │    │    │    │    ├── key: (5,9)
- │    │    │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11)
+ │    │    │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11), (5,9)-->(16)
  │    │    │    │    │    ├── limit hint: 8999.57
  │    │    │    │    │    ├── inner-join (cross)
  │    │    │    │    │    │    ├── columns: u:5!null uv.v:6 k:9!null i:10!null f:11
@@ -3479,12 +3479,12 @@ project
       ├── columns: x:1!null y:2 xy.crdb_internal_mvcc_timestamp:3 xy.tableoid:4 u:5!null v:6 foo:9 row_num:10!null
       ├── immutable
       ├── key: (5)
-      ├── fd: (1)-->(2-4), (5)-->(6,10), (2,6)-->(9), (1)==(5), (5)==(1)
+      ├── fd: (1)-->(2-4), (5)-->(6), (2,6)-->(9), (1,5)-->(10), (1)==(5), (5)==(1)
       ├── window partition=(1)
       │    ├── columns: x:1!null y:2 xy.crdb_internal_mvcc_timestamp:3 xy.tableoid:4 u:5!null v:6 foo:9 row_num:10
       │    ├── immutable
       │    ├── key: (1,5)
-      │    ├── fd: (1)-->(2-4), (5)-->(6), (2,6)-->(9)
+      │    ├── fd: (1)-->(2-4), (5)-->(6), (2,6)-->(9), (1,5)-->(10)
       │    ├── project
       │    │    ├── columns: foo:9 x:1!null y:2 xy.crdb_internal_mvcc_timestamp:3 xy.tableoid:4 u:5!null v:6
       │    │    ├── immutable
