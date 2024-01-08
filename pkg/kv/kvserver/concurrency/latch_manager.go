@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/redact"
 )
 
 // latchManagerImpl implements the latchManager interface.
@@ -25,7 +26,7 @@ type latchManagerImpl struct {
 }
 
 func (m *latchManagerImpl) Acquire(ctx context.Context, req Request) (latchGuard, *Error) {
-	lg, err := m.m.Acquire(ctx, req.LatchSpans, req.PoisonPolicy)
+	lg, err := m.m.Acquire(ctx, req.LatchSpans, req.PoisonPolicy, req.BaFmt)
 	if err != nil {
 		return nil, kvpb.NewError(err)
 	}
@@ -33,7 +34,7 @@ func (m *latchManagerImpl) Acquire(ctx context.Context, req Request) (latchGuard
 }
 
 func (m *latchManagerImpl) AcquireOptimistic(req Request) latchGuard {
-	lg := m.m.AcquireOptimistic(req.LatchSpans, req.PoisonPolicy)
+	lg := m.m.AcquireOptimistic(req.LatchSpans, req.PoisonPolicy, req.BaFmt)
 	return lg
 }
 
@@ -52,9 +53,9 @@ func (m *latchManagerImpl) WaitUntilAcquired(
 }
 
 func (m *latchManagerImpl) WaitFor(
-	ctx context.Context, ss *spanset.SpanSet, pp poison.Policy,
+	ctx context.Context, ss *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter,
 ) *Error {
-	err := m.m.WaitFor(ctx, ss, pp)
+	err := m.m.WaitFor(ctx, ss, pp, baFmt)
 	if err != nil {
 		return kvpb.NewError(err)
 	}
