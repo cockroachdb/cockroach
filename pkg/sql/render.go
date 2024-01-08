@@ -74,7 +74,7 @@ func (r *renderNode) IndexedVarResolvedType(idx int) *types.T {
 
 // IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
 func (r *renderNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return r.source.columns.NodeFormatter(idx)
+	return r.source.columns.Name(idx)
 }
 
 func (r *renderNode) startExec(runParams) error {
