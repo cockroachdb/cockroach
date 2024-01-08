@@ -659,6 +659,7 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 func TestStoreLeaseTransferTimestampCacheTxnRecord(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 117486)
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
