@@ -1,31 +1,7 @@
-subtest telemetry_disabled_stmt_mode_on
-# All of these should return false since telemetry logging is disabled.
-
-set-cluster-settings telemetryLoggingEnabled=false samplingMode=statement stmtSampleFreq=10
-----
-
-shouldEmitStatementLog unixSecs=1 isTrackedTxn=false stmtNum=1 force=false
-----
-emit: false, skippedQueries: 0
-
-shouldEmitStatementLog unixSecs=1 isTrackedTxn=false stmtNum=1 force=true
-----
-emit: false, skippedQueries: 0
-
-shouldEmitStatementLog unixSecs=1 isTrackedTxn=true stmtNum=1 force=false
-----
-emit: false, skippedQueries: 0
-
-shouldEmitStatementLog unixSecs=2 isTrackedTxn=false stmtNum=1 force=false
-----
-emit: false, skippedQueries: 0
-
-subtest end
-
-subtest telemetry_enabled_stmt_mode_on_sampling_frequency_0
+subtest telemetry_disabled_stmt_mode_on_sampling_frequency_0
 # All of these should return false since the sampling frequency is 0.
 
-set-cluster-settings telemetryLoggingEnabled=true samplingMode=statement stmtSampleFreq=0
+set-cluster-settings samplingMode=statement stmtSampleFreq=0
 ----
 
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=false stmtNum=1 force=false
@@ -49,7 +25,7 @@ subtest end
 subtest telemetry_enabled_stmt_mode_on_sampling_frequency_10
 # Test statement mode.
 
-set-cluster-settings telemetryLoggingEnabled=true samplingMode=statement stmtSampleFreq=10 stmtsPerTxnMax=10
+set-cluster-settings samplingMode=statement stmtSampleFreq=10 stmtsPerTxnMax=10
 ----
 
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=false stmtNum=1 force=false
@@ -86,7 +62,7 @@ subtest telemetry_enabled_txn_mode_on
 
 # Set the stmtSamplingFreq to a high number, it shouldn't be observed in txn mode.
 # We'll also set txnSamplingFreq to a high number - it shouldn't be used in shouldEmitStatementLog.
-set-cluster-settings telemetryLoggingEnabled=true samplingMode=transaction stmtSampleFreq=1000000 txnSampleFreq=1000000 stmtsPerTxnMax=3
+set-cluster-settings samplingMode=transaction stmtSampleFreq=1000000 txnSampleFreq=1000000 stmtsPerTxnMax=3
 ----
 
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=true stmtNum=1 force=false
@@ -126,7 +102,7 @@ subtest end
 subtest telemetry_enabled_txn_mode_on_frequency_0
 # All calls should return false, since txnSampleFreq is 0.
 
-set-cluster-settings telemetryLoggingEnabled=true samplingMode=transaction stmtSample=10000 txnSampleFreq=0 stmtsPerTxnMax=3
+set-cluster-settings samplingMode=transaction stmtSample=10000 txnSampleFreq=0 stmtsPerTxnMax=3
 ----
 
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=true stmtNum=1 force=false

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -28,8 +29,7 @@ import (
 // Default value used to designate the maximum frequency at which events
 // are logged to the telemetry channel.
 const (
-	internalConsoleAppName   = "$ internal-console"
-	defaultMaxEventFrequency = 8
+	internalConsoleAppName = "$ internal-console"
 )
 
 var TelemetryMaxStatementEventFrequency = settings.RegisterIntSetting(
@@ -39,7 +39,13 @@ var TelemetryMaxStatementEventFrequency = settings.RegisterIntSetting(
 		"note that it is recommended that this value shares a log-line limit of 10 "+
 		"logs per second on the telemetry pipeline with all other telemetry events. "+
 		"If sampling mode is set to 'transaction', this value is ignored.",
-	defaultMaxEventFrequency,
+	// Note: Usage of an env var here makes it possible to set a default without
+	// the execution of a cluster setting SQL query. This is particularly advantageous
+	// when cluster setting queries would be too inefficient or to slow to use. For
+	// example, in multi-tenant setups in CC, it is impractical to enable this
+	// setting directly after tenant creation without significant overhead in terms
+	// of time and code.
+	envutil.EnvOrDefaultInt64("COCKROACH_SQL_TELEMETRY_QUERY_SAMPLING_FREQUENCY", 0),
 	settings.NonNegativeInt,
 	settings.WithPublic,
 )
@@ -51,7 +57,7 @@ var telemetryTransactionSamplingFrequency = settings.RegisterIntSetting(
 		"telemetry. If sampling mode is set to 'statement', this setting is ignored. In "+
 		"practice, this means that we only sample a transaction if 1/max_event_frequency seconds "+
 		"have elapsed since the last transaction was sampled.",
-	defaultMaxEventFrequency,
+	0,
 	settings.NonNegativeInt,
 	settings.WithPublic,
 )
@@ -214,9 +220,6 @@ func (t *telemetryLoggingMetrics) shouldEmitTransactionLog(
 	isTracing, isInternal bool, applicationName string,
 ) (emit bool, skippedTxns uint64) {
 	// We should not increase the skipped transaction count if telemetry logging is disabled.
-	if !telemetryLoggingEnabled.Get(&t.st.SV) {
-		return false, t.skippedTransactionCount.Load()
-	}
 	if telemetrySamplingMode.Get(&t.st.SV) != telemetryModeTransaction {
 		return false, t.skippedTransactionCount.Load()
 	}
@@ -290,9 +293,6 @@ func (t *telemetryLoggingMetrics) shouldEmitStatementLog(
 ) (emit bool, skippedQueryCount uint64) {
 	// For these early exit cases, we don't want to increment the skipped queries count
 	// since telemetry logging for statements is off in these cases.
-	if !telemetryLoggingEnabled.Get(&t.st.SV) {
-		return false, t.skippedQueryCount.Load()
-	}
 	isTxnMode := telemetrySamplingMode.Get(&t.st.SV) == telemetryModeTransaction
 	if isTxnMode && telemetryTransactionSamplingFrequency.Get(&t.st.SV) == 0 {
 		return false, t.skippedQueryCount.Load()
