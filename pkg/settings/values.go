@@ -265,6 +265,11 @@ func (sv *Values) TestingCopyForVirtualCluster(input *Values) {
 		if s.Class() != ApplicationLevel && s.Class() != SystemVisible {
 			continue
 		}
+		// This test-only method is used when creating new virtual clusters which
+		// initialize their own version and thus do not want an existing version.
+		if s.Typ() == VersionSettingValueType {
+			continue
+		}
 
 		// Copy the value.
 		sv.container.intVals[slot] = input.container.intVals[slot]
