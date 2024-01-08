@@ -194,25 +194,33 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				if d.HasArg("max-lock-wait-queue-length") {
 					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
 				}
-
+				ba := &kvpb.BatchRequest{}
 				pp := scanPoisonPolicy(t, d)
 
 				// Each kvpb.Request is provided on an indented line.
 				reqs, reqUnions := scanRequests(t, d, c)
+				ba.Txn = txn
+				ba.Timestamp = ts
+				ba.UserPriority = priority
+				ba.ReadConsistency = readConsistency
+				ba.WaitPolicy = waitPolicy
+				ba.LockTimeout = lockTimeout
+				ba.Requests = reqUnions
 				latchSpans, lockSpans := c.collectSpans(t, txn, ts, waitPolicy, reqs)
 
 				c.requestsByName[reqName] = concurrency.Request{
-					Txn:                    txn,
-					Timestamp:              ts,
-					NonTxnPriority:         priority,
-					ReadConsistency:        readConsistency,
-					WaitPolicy:             waitPolicy,
-					LockTimeout:            lockTimeout,
+					Txn:                    ba.Txn,
+					Timestamp:              ba.Timestamp,
+					NonTxnPriority:         ba.UserPriority,
+					ReadConsistency:        ba.ReadConsistency,
+					WaitPolicy:             ba.WaitPolicy,
+					LockTimeout:            ba.LockTimeout,
+					Requests:               ba.Requests,
 					MaxLockWaitQueueLength: maxLockWaitQueueLength,
-					Requests:               reqUnions,
 					LatchSpans:             latchSpans,
 					LockSpans:              lockSpans,
 					PoisonPolicy:           pp,
+					BaFmt:                  ba,
 				}
 				return ""
 
