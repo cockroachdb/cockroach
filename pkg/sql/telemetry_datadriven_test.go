@@ -256,11 +256,10 @@ func TestTelemetryLoggingDecision(t *testing.T) {
 
 			switch d.Cmd {
 			case "set-cluster-settings":
-				var telemLoggingEnabled, internalStmtsEnabled, consoleQueriesEnabled bool
+				var internalStmtsEnabled, consoleQueriesEnabled bool
 				var samplingMode string
 				var stmtSampleFreq, txnSampleFreq int
 				stmtsPerTxnMax := 10
-				d.ScanArgs(t, "telemetryLoggingEnabled", &telemLoggingEnabled)
 				d.ScanArgs(t, "samplingMode", &samplingMode)
 				d.MaybeScanArgs(t, "stmtSampleFreq", &stmtSampleFreq)
 				d.MaybeScanArgs(t, "txnSampleFreq", &txnSampleFreq)
@@ -276,7 +275,6 @@ func TestTelemetryLoggingDecision(t *testing.T) {
 				telemetryStatementsPerTransactionMax.Override(ctx, &cs.SV, int64(stmtsPerTxnMax))
 				TelemetryMaxStatementEventFrequency.Override(ctx, &cs.SV, int64(stmtSampleFreq))
 				telemetryTransactionSamplingFrequency.Override(ctx, &cs.SV, int64(txnSampleFreq))
-				telemetryLoggingEnabled.Override(ctx, &cs.SV, telemLoggingEnabled)
 				telemetryInternalQueriesEnabled.Override(ctx, &cs.SV, internalStmtsEnabled)
 				telemetryInternalConsoleQueriesEnabled.Override(ctx, &cs.SV, consoleQueriesEnabled)
 

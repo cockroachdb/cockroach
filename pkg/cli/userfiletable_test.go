@@ -589,7 +589,7 @@ func TestUserFileUploadExistingFile(t *testing.T) {
 	defer c.Cleanup()
 	c.omitArgs = true
 
-	_, err := c.RunWithCaptureArgs([]string{"sql", "-e", "SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true"})
+	_, err := c.RunWithCaptureArgs([]string{"sql", "-e", "SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 8"})
 	require.NoError(t, err)
 
 	dir, cleanFn := testutils.TempDir(t)

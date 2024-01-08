@@ -10,10 +10,6 @@ exec-sql
 SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 1;
 ----
 
-exec-sql
-SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;
-----
-
 spy-sql
 BEGIN; SELECT 1; SELECT 2; COMMIT;
 ----
