@@ -13,6 +13,7 @@ jobs:
           # Instead, we want to check out the PR as is.
           ref: ${{ github.event.pull_request.head.sha }}
       - run: ./build/github/get-engflow-keys.sh
+      - run: echo ${{ github.run_number }}
       - run: bazel test //pkg:all_tests --config engflowpublic --config crosslinux --jobs 300 --tls_client_certificate=/home/agent/engflow.crt --tls_client_key=/home/agent/engflow.key --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --config=use_ci_timeouts
       - name: clean up
         if: always()
