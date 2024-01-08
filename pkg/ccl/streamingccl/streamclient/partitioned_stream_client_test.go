@@ -343,9 +343,9 @@ INSERT INTO d.t2 VALUES (2);
 	require.True(t, testutils.IsError(err, "job with ID 999 does not exist"), err)
 
 	// Makes producer job exit quickly.
-	h.SysSQL.Exec(t, `
-SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms';
-`)
+	h.SysSQL.ExecMultiple(t, `
+SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms'`,
+		`SET CLUSTER SETTING stream_replication.job_liveness_timeout = '100ms'`)
 	rps, err = client.Create(ctx, testTenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)
 	streamID = rps.StreamID

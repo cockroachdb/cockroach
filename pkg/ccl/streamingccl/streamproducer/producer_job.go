@@ -118,6 +118,14 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 
 			switch progress.StreamIngestionStatus {
 			case jobspb.StreamReplicationProgress_FINISHED_SUCCESSFULLY:
+				// Retain the pts until the expiration period elapses to allow for fast
+				// fail back.
+				//
+				// TODO (msbutler): allow the user to explicitly set the post cutover
+				// retention time on cutover.
+				if progress.Expiration.After(p.timeSource.Now()) {
+					continue
+				}
 				if err := p.removeJobFromTenantRecord(ctx, execCfg); err != nil {
 					return err
 				}
