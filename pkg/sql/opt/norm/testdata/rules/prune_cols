@@ -1938,7 +1938,7 @@ sort
       ├── window partition=(3) ordering=+4 opt(3)
       │    ├── columns: k:1!null f:3 s:4 avg:7
       │    ├── key: (1)
-      │    ├── fd: (1)-->(3,4)
+      │    ├── fd: (1)-->(3,4,7)
       │    ├── scan a
       │    │    ├── columns: k:1!null f:3 s:4
       │    │    ├── key: (1)

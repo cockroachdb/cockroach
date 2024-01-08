@@ -2493,10 +2493,12 @@ SELECT *, row_number() OVER() FROM abc ORDER BY a
 sort
  ├── columns: a:1!null b:2!null c:3!null row_number:6
  ├── key: (1-3)
+ ├── fd: (1-3)-->(6)
  ├── ordering: +1
  └── window partition=()
       ├── columns: a:1!null b:2!null c:3!null row_number:6
       ├── key: (1-3)
+      ├── fd: (1-3)-->(6)
       ├── scan abc
       │    ├── columns: a:1!null b:2!null c:3!null
       │    └── key: (1-3)
