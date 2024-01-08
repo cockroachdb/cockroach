@@ -930,7 +930,14 @@ func (rd *replicationDriver) main(ctx context.Context) {
 
 	latencyMonitor := rd.newMonitor(ctx)
 	latencyMonitor.Go(func(ctx context.Context) error {
-		return lv.pollLatencyUntilJobSucceeds(ctx, rd.setup.dst.db, ingestionJobID, time.Second, workloadDoneCh)
+		if err := lv.pollLatencyUntilJobSucceeds(ctx, rd.setup.dst.db, ingestionJobID, time.Second, workloadDoneCh); err != nil {
+			// The latency poller may have failed because latency got too high. Grab a
+			// debug zip before the replication jobs spin down.
+			rd.fetchDebugZip(ctx, rd.setup.src.nodes, "latency_source_debug.zip")
+			rd.fetchDebugZip(ctx, rd.setup.dst.nodes, "latency_dest_debug.zip")
+			return err
+		}
+		return nil
 	})
 	defer latencyMonitor.Wait()
 
