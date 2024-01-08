@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -338,7 +339,13 @@ func runGossipRestartNodeOne(ctx context.Context, t test.Test, c cluster.Cluster
 	settings := install.MakeClusterSettings(install.NumRacksOption(c.Spec().NodeCount))
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
+	// TODO(darrylwong): remove SetDefaultSQLPort once #117125 is addressed.
+	// This test relies on assumption `adminUIPort = SQLPort + 1` but adminui is
+	// temporarily hardcoded as 26258 while SQLPort will be dynamically assigned
+	// without the following override.
+	startOpts := option.DefaultStartOpts()
+	roachtestutil.SetDefaultSQLPort(c, &startOpts.RoachprodOpts)
+	c.Start(ctx, t.L(), startOpts, settings)
 
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
