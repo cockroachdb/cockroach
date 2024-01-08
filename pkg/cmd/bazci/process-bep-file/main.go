@@ -13,46 +13,27 @@
 
 // process-bep-file is a binary to parse test results from a "build event
 // protocol" binary file, as constructed by
-// `bazel ... --build_event_binary_file`.
+// `bazel ... --build_event_binary_file`. We use this data to report issues to
+// GitHub.
 
 package main
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/xml"
 	"flag"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	bes "github.com/cockroachdb/cockroach/pkg/build/bazel/bes"
+	"github.com/cockroachdb/cockroach/pkg/build/engflow"
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost"
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
-	//lint:ignore SA1019
-	gproto "github.com/golang/protobuf/proto"
-	"golang.org/x/net/http2"
 )
-
-type testResultWithMetadata struct {
-	run, shard, attempt int32
-	testResult          *bes.TestResult
-}
-
-type testResultWithXml struct {
-	label               string
-	run, shard, attempt int32
-	testResult          *bes.TestResult
-	testXml             string
-	err                 error
-}
 
 var (
 	branch          = flag.String("branch", "", "currently checked out git branch")
@@ -77,7 +58,7 @@ func getSha() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func postOptions(res *testResultWithXml, sha string) *issues.Options {
+func postOptions(res *engflow.TestResultWithXml, sha string) *issues.Options {
 	return &issues.Options{
 		Token:  githubApiToken,
 		Org:    "cockroachdb",
@@ -85,11 +66,11 @@ func postOptions(res *testResultWithXml, sha string) *issues.Options {
 		SHA:    sha,
 		Branch: *branch,
 		EngFlowOptions: &issues.EngFlowOptions{
-			Attempt:      int(res.attempt),
+			Attempt:      int(res.Attempt),
 			InvocationID: *invocationId,
-			Label:        res.label,
-			Run:          int(res.run),
-			Shard:        int(res.shard),
+			Label:        res.Label,
+			Run:          int(res.Run),
+			Shard:        int(res.Shard),
 			ServerURL:    *serverUrl,
 		},
 		GetBinaryVersion: build.BinaryVersion,
@@ -97,7 +78,7 @@ func postOptions(res *testResultWithXml, sha string) *issues.Options {
 
 }
 
-func failurePoster(res *testResultWithXml, sha string) githubpost.FailurePoster {
+func failurePoster(res *engflow.TestResultWithXml, sha string) githubpost.FailurePoster {
 	postOpts := postOptions(res, sha)
 	formatter := func(ctx context.Context, failure githubpost.Failure) (issues.IssueFormatter, issues.PostRequest) {
 		fmter, req := githubpost.DefaultFormatter(ctx, failure)
@@ -106,14 +87,14 @@ func failurePoster(res *testResultWithXml, sha string) githubpost.FailurePoster 
 		if req.ExtraParams == nil {
 			req.ExtraParams = make(map[string]string)
 		}
-		if res.run != 0 {
-			req.ExtraParams["run"] = fmt.Sprintf("%d", res.run)
+		if res.Run != 0 {
+			req.ExtraParams["run"] = fmt.Sprintf("%d", res.Run)
 		}
-		if res.shard != 0 {
-			req.ExtraParams["shard"] = fmt.Sprintf("%d", res.shard)
+		if res.Shard != 0 {
+			req.ExtraParams["shard"] = fmt.Sprintf("%d", res.Shard)
 		}
-		if res.attempt != 0 {
-			req.ExtraParams["attempt"] = fmt.Sprintf("%d", res.attempt)
+		if res.Attempt != 0 {
+			req.ExtraParams["attempt"] = fmt.Sprintf("%d", res.Attempt)
 		}
 		if *extraParams != "" {
 			for _, key := range strings.Split(*extraParams, ",") {
@@ -128,128 +109,29 @@ func failurePoster(res *testResultWithXml, sha string) githubpost.FailurePoster 
 	}
 }
 
-func getHttpClient() (*http.Client, error) {
-	cer, err := tls.LoadX509KeyPair(*tlsClientCert, *tlsClientKey)
-	if err != nil {
-		return nil, err
-	}
-	config := &tls.Config{
-		Certificates: []tls.Certificate{cer},
-	}
-	transport := &http2.Transport{
-		TLSClientConfig: config,
-	}
-	httpClient := &http.Client{
-		Transport: transport,
-	}
-	return httpClient, nil
-}
-
-func downloadTestXml(client *http.Client, uri string) (string, error) {
-	url := strings.ReplaceAll(uri, "bytestream://", "https://")
-	url = strings.ReplaceAll(url, "/blobs/", "/api/v0/blob/")
-	resp, err := client.Get(url)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	xml, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	return string(xml), nil
-}
-
-func fetchTestXml(
-	httpClient *http.Client,
-	label string,
-	testResult testResultWithMetadata,
-	ch chan *testResultWithXml,
-	wg *sync.WaitGroup,
-) {
-	defer wg.Done()
-	for _, output := range testResult.testResult.TestActionOutput {
-		if output.Name == "test.xml" {
-			xml, err := downloadTestXml(httpClient, output.GetUri())
-			ch <- &testResultWithXml{
-				label:      label,
-				run:        testResult.run,
-				shard:      testResult.shard,
-				attempt:    testResult.attempt,
-				testXml:    xml,
-				err:        err,
-				testResult: testResult.testResult,
-			}
-		}
-	}
-}
-
 func process() error {
 	ctx := context.Background()
 	sha, err := getSha()
 	if err != nil {
 		return err
 	}
-	httpClient, err := getHttpClient()
+
+	eventStreamF, err := os.Open(*eventStreamFile)
 	if err != nil {
 		return err
 	}
-	content, err := os.ReadFile(*eventStreamFile)
+	defer func() { _ = eventStreamF.Close() }()
+	invocation, err := engflow.LoadTestResults(eventStreamF, *tlsClientCert, *tlsClientKey)
 	if err != nil {
 		return err
-	}
-	buf := gproto.NewBuffer(content)
-	testResults := make(map[string][]testResultWithMetadata)
-	fullTestResults := make(map[string][]*testResultWithXml)
-	for {
-		var event bes.BuildEvent
-		err := buf.DecodeMessage(&event)
-		if err != nil {
-			// This is probably OK: just no more stuff left in the buffer.
-			break
-		}
-		switch id := event.Id.Id.(type) {
-		case *bes.BuildEventId_TestResult:
-			res := testResultWithMetadata{
-				run:        id.TestResult.Run,
-				shard:      id.TestResult.Shard,
-				attempt:    id.TestResult.Attempt,
-				testResult: event.GetTestResult(),
-			}
-			testResults[id.TestResult.Label] = append(testResults[id.TestResult.Label], res)
-		}
-	}
-	unread := buf.Unread()
-	if len(unread) != 0 {
-		return fmt.Errorf("didn't read entire file: %d bytes remaining", len(unread))
-	}
-
-	// Download test xml's.
-	ch := make(chan *testResultWithXml)
-	var wg sync.WaitGroup
-	for label, results := range testResults {
-		for _, result := range results {
-			wg.Add(1)
-			go fetchTestXml(httpClient, label, result, ch, &wg)
-		}
-	}
-	go func(wg *sync.WaitGroup) {
-		wg.Wait()
-		close(ch)
-	}(&wg)
-
-	// Collect test xml's.
-	for result := range ch {
-		fullTestResults[result.label] = append(fullTestResults[result.label], result)
-		if result.err != nil {
-			fmt.Printf("got error downloading test XML for result %+v; got error %+v", result, result.err)
-		}
 	}
 
 	if githubApiToken == "" {
 		fmt.Printf("no GITHUB_API_TOKEN; skipping reporting to GitHub")
 		return nil
 	}
+
+	fullTestResults := invocation.TestResults
 
 	for _, results := range fullTestResults {
 		// seenFailedTests lists all the failed top-level (parent) tests
@@ -258,12 +140,12 @@ func process() error {
 		seenFailedTests := make(map[string]struct{})
 		for _, res := range results {
 			var seenNew bool
-			if res.testXml == "" {
-				// We already logged the download failure above.
+			if res.Err != nil {
+				fmt.Printf("got error downloading test XML for result %+v; got error %+v", res, res.Err)
 				continue
 			}
 			var testXml bazelutil.TestSuites
-			if err := xml.Unmarshal([]byte(res.testXml), &testXml); err != nil {
+			if err := xml.Unmarshal([]byte(res.TestXml), &testXml); err != nil {
 				fmt.Printf("could not parse test.xml: got error %+v", err)
 				continue
 			}
