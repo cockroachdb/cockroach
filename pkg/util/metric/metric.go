@@ -495,17 +495,26 @@ var _ CumulativeHistogram = (*ManualWindowHistogram)(nil)
 // ManualWindowHistogram.RecordValue and ManualWindowHistogram.Rotate. If
 // NewManualWindowHistogram is called withRotate as true, only the RecordValue
 // and Rotate method may be used; withRotate as false, only Update may be used.
+//
 // TODO(kvoli,aadityasondhi): The two ways to use this histogram is a hack and
 // "temporary", rationalize the interface. Tracked in #98622.
+// TODO(aaditya): A tracking issue to overhaul the histogram interfaces into a
+// more coherent one: #116584.
 func NewManualWindowHistogram(
-	meta Metadata, buckets []float64, withRotate bool,
+	meta Metadata, buckets []float64, manualRotate bool,
 ) *ManualWindowHistogram {
 	opts := prometheus.HistogramOpts{
 		Buckets: buckets,
 	}
 	cum := prometheus.NewHistogram(opts)
+	// We initialize the histogram with the same bucket bounds as the cumulative
+	// histogram.
 	prev := &prometheusgo.Metric{}
 	if err := cum.Write(prev); err != nil {
+		panic(err.Error())
+	}
+	cur := &prometheusgo.Metric{}
+	if err := cum.Write(cur); err != nil {
 		panic(err.Error())
 	}
 
@@ -513,10 +522,30 @@ func NewManualWindowHistogram(
 	h := &ManualWindowHistogram{
 		Metadata: meta,
 	}
-	h.mu.rotating = withRotate
+	h.mu.disableTick = manualRotate
 	h.mu.cum = cum
+	h.mu.cur = cur.GetHistogram()
 	h.mu.prev = prev.GetHistogram()
-
+	// If the caller specifies that it will not manually control rotating the
+	// histogram, it will use the ticker in the same way as metric.Histogram does.
+	if !manualRotate {
+		h.mu.Ticker = tick.NewTicker(
+			now(),
+			// We want to divide the total window duration by the number of windows
+			// because we need to rotate the windows at uniformly distributed
+			// intervals within a histogram's total duration.
+			60*time.Second/WindowedHistogramWrapNum,
+			func() {
+				// This is called while holding a mutex prior to calling Tick().
+				newH := &prometheusgo.Metric{}
+				h.mu.prev = h.mu.cur
+				// Initialize the histogram with the same bucket bounds as original.
+				if err := prometheus.NewHistogram(opts).Write(newH); err != nil {
+					panic(err.Error())
+				}
+				h.mu.cur = newH.GetHistogram()
+			})
+	}
 	return h
 }
 
@@ -535,23 +564,26 @@ type ManualWindowHistogram struct {
 		// RecordValue. When calling Update or Rotate, we require a WLock since we
 		// swap out fields.
 		syncutil.RWMutex
-		rotating  bool
-		cum       prometheus.Histogram
-		prev, cur *prometheusgo.Histogram
+		*tick.Ticker
+		disableTick bool
+		cum         prometheus.Histogram
+		prev, cur   *prometheusgo.Histogram
 	}
 }
 
-// Update replaces the cumulative and current windowed histograms.
+// Update replaces the cumulative histogram and adds the new current values to
+// the previous ones.
 func (mwh *ManualWindowHistogram) Update(cum prometheus.Histogram, cur *prometheusgo.Histogram) {
 	mwh.mu.Lock()
 	defer mwh.mu.Unlock()
 
-	if mwh.mu.rotating {
-		panic("Unexpected call to Update with rotate enabled")
+	if mwh.mu.disableTick {
+		panic("Unexpected call to Update with manual rotate enabled")
 	}
 
 	mwh.mu.cum = cum
-	mwh.mu.cur = cur
+	// Add the new values to the current histogram.
+	MergeWindowedHistogram(mwh.mu.cur, cur)
 }
 
 // RecordValue records a value to the cumulative histogram. The value is only
@@ -560,8 +592,8 @@ func (mwh *ManualWindowHistogram) RecordValue(val float64) {
 	mwh.mu.RLock()
 	defer mwh.mu.RUnlock()
 
-	if !mwh.mu.rotating {
-		panic("Unexpected call to RecordValue with rotate disabled")
+	if !mwh.mu.disableTick {
+		panic("Unexpected call to RecordValue with manual rotate disabled")
 	}
 	mwh.mu.cum.Observe(val)
 }
@@ -591,8 +623,8 @@ func (mwh *ManualWindowHistogram) Rotate() error {
 	mwh.mu.Lock()
 	defer mwh.mu.Unlock()
 
-	if !mwh.mu.rotating {
-		panic("Unexpected call to Rotate with rotate disabled")
+	if !mwh.mu.disableTick {
+		panic("Unexpected call to Rotate with manual rotate disabled")
 	}
 
 	cur := &prometheusgo.Metric{}
@@ -620,6 +652,13 @@ func (mwh *ManualWindowHistogram) GetMetadata() Metadata {
 
 // Inspect calls the closure.
 func (mwh *ManualWindowHistogram) Inspect(f func(interface{})) {
+	if !mwh.mu.disableTick {
+		func() {
+			mwh.mu.Lock()
+			defer mwh.mu.Unlock()
+			tick.MaybeTick(&mwh.mu)
+		}()
+	}
 	f(mwh)
 }
 
@@ -647,14 +686,37 @@ func (mwh *ManualWindowHistogram) CumulativeSnapshot() HistogramSnapshot {
 func (mwh *ManualWindowHistogram) WindowedSnapshot() HistogramSnapshot {
 	mwh.mu.RLock()
 	defer mwh.mu.RUnlock()
-	cur := &prometheusgo.Metric{}
-	if err := mwh.mu.cum.Write(cur); err != nil {
-		panic(err)
-	}
+	// Take a copy of the mwh.mu.cur.
+	cur := deepCopy(*mwh.mu.cur)
 	if mwh.mu.prev != nil {
-		MergeWindowedHistogram(cur.Histogram, mwh.mu.prev)
+		MergeWindowedHistogram(cur, mwh.mu.prev)
 	}
-	return MakeHistogramSnapshot(cur.Histogram)
+	return MakeHistogramSnapshot(cur)
+}
+
+// deepCopy performs a deep copy of the source histogram and returns the newly
+// allocated copy.
+//
+// NB: It only copies sample count, sample sum, and buckets (cumulative count,
+// upper bounds) since those are the only things we care about in this package.
+func deepCopy(source prometheusgo.Histogram) *prometheusgo.Histogram {
+	count := source.GetSampleCount()
+	sum := source.GetSampleSum()
+	bucket := make([]*prometheusgo.Bucket, len(source.Bucket))
+
+	for i := range bucket {
+		cumCount := source.Bucket[i].GetCumulativeCount()
+		upperBound := source.Bucket[i].GetUpperBound()
+		bucket[i] = &prometheusgo.Bucket{
+			CumulativeCount: &cumCount,
+			UpperBound:      &upperBound,
+		}
+	}
+	return &prometheusgo.Histogram{
+		SampleCount: &count,
+		SampleSum:   &sum,
+		Bucket:      bucket,
+	}
 }
 
 // A Counter holds a single mutable atomic value.
