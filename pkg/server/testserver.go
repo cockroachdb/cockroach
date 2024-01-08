@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -742,7 +743,7 @@ func (ts *testServer) grantDefaultTenantCapabilities(
 	for _, setting := range []settings.Setting{
 		sql.SecondaryTenantScatterEnabled,
 		sql.SecondaryTenantSplitAtEnabled,
-		sql.SecondaryTenantZoneConfigsEnabled,
+		sqlclustersettings.SecondaryTenantZoneConfigsEnabled,
 		sql.SecondaryTenantsMultiRegionAbstractionsEnabled,
 	} {
 		// Update the override for this setting. We need to do this
