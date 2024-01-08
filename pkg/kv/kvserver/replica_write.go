@@ -144,7 +144,8 @@ func (r *Replica) executeWriteBatch(
 	// Examine the timestamp cache for preceding commands which require this
 	// command to move its timestamp forward. Or, in the case of a transactional
 	// write, the txn timestamp and possible write-too-old bool.
-	if bumped := r.applyTimestampCache(ctx, ba, minTS); bumped {
+	var bumped bool
+	if ba, bumped = r.applyTimestampCache(ctx, ba, minTS); bumped {
 		// If we bump the transaction's timestamp, we must absolutely
 		// tell the client in a response transaction (for otherwise it
 		// doesn't know about the incremented timestamp). Response
