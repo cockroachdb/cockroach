@@ -181,6 +181,10 @@ func (lv *latencyVerifier) pollLatencyUntilJobSucceeds(
 			lv.logger.Printf("unexpected status: %s, error: %s", status, info.GetError())
 			return errors.Errorf("unexpected status: %s", status)
 		}
+		if lv.targetSteadyLatency != 0 && lv.maxSeenSteadyLatency > lv.targetSteadyLatency {
+			return errors.Errorf("max latency was more than allowed: %s vs %s",
+				lv.maxSeenSteadyLatency, lv.targetSteadyLatency)
+		}
 	}
 }
 
