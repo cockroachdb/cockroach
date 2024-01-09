@@ -74,7 +74,9 @@ func dropRestrictDescriptor(b BuildCtx, id catid.DescID) (hasChanged bool) {
 		return false
 	}
 	undropped.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-		b.CheckPrivilege(e, privilege.DROP)
+		if err := b.CheckPrivilege(e, privilege.DROP); err != nil {
+			panic(err)
+		}
 		b.Drop(e)
 	})
 	return true
@@ -187,7 +189,9 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 		default:
 			return
 		}
-		b.CheckPrivilege(e, privilege.DROP)
+		if err := b.CheckPrivilege(e, privilege.DROP); err != nil {
+			panic(err)
+		}
 	})
 	// Mark element targets as ABSENT.
 	next := b.WithNewSourceElementID()
