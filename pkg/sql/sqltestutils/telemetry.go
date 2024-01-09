@@ -49,19 +49,21 @@ import (
 //     Executes SQL statements against the database. Outputs no results on
 //     success. In case of error, outputs the error message.
 //
-//   - feature-allowlist
+//   - feature-list
 //
-//     The input for this command is not SQL, but a list of regular expressions.
-//     Tests that follow (until the next feature-allowlist command) will only
-//     output counters that match a regexp in this allow list.
+//     The input for this command is not SQL, but a list of regular expressions
+//     that are allowed. Lines starting with the "!" prefix are regexps that are
+//     blocked. Tests that follow (until the next feature-list command) will
+//     only output counters that match at least one allow regexp in this list,
+//     and do not match any block regexps in this list.
 //
 //   - feature-usage, feature-counters
 //
 //     Executes SQL statements and then outputs the feature counters from the
-//     allowlist that have been reported to the diagnostic server. The first
+//     feature-list that have been reported to the diagnostic server. The first
 //     variant outputs only the names of the counters that changed; the second
 //     variant outputs the counts as well. It is necessary to use
-//     feature-allowlist before these commands to avoid test flakes (e.g. because
+//     feature-list before these commands to avoid test flakes (e.g. because
 //     of counters that are changed by looking up descriptors).
 //     TODO(yuzefovich): counters currently don't really work because they are
 //     reset before executing every statement by reporter.ReportDiagnostics.
@@ -126,7 +128,7 @@ type telemetryTest struct {
 	tenant         serverutils.TestTenantInterface
 	tenantDB       *gosql.DB
 	tempDirCleanup func()
-	allowlist      featureAllowlist
+	features       featureList
 	rewrites       []rewrite
 }
 
@@ -215,9 +217,9 @@ func (tt *telemetryTest) RunTest(
 		}
 		return buf.String()
 
-	case "feature-allowlist":
+	case "feature-list":
 		var err error
-		tt.allowlist, err = makeAllowlist(strings.Split(td.Input, "\n"))
+		tt.features, err = makeFeatureList(strings.Split(td.Input, "\n"))
 		if err != nil {
 			td.Fatalf(tt.t, "error parsing feature regex: %s", err)
 		}
@@ -240,8 +242,8 @@ func (tt *telemetryTest) RunTest(
 				// Ignore zero values (shouldn't happen in practice)
 				continue
 			}
-			if !tt.allowlist.Match(k) {
-				// Feature key not in allowlist.
+			if !tt.features.Match(k) {
+				// Feature key not in features.
 				continue
 			}
 			keys = append(keys, k)
@@ -306,31 +308,42 @@ func (tt *telemetryTest) prepareCluster(db *gosql.DB) {
 	runner.Exec(tt.t, "SET CLUSTER SETTING sql.query_cache.enabled = false")
 }
 
-type featureAllowlist []*regexp.Regexp
+type featureList []struct {
+	r     *regexp.Regexp
+	block bool
+}
 
-func makeAllowlist(strings []string) (featureAllowlist, error) {
-	w := make(featureAllowlist, len(strings))
-	for i := range strings {
+func makeFeatureList(strings []string) (featureList, error) {
+	l := make(featureList, len(strings))
+	for i, s := range strings {
 		var err error
-		w[i], err = regexp.Compile("^" + strings[i] + "$")
+		if s[0] == '!' {
+			l[i].block = true
+			s = s[1:]
+		}
+		l[i].r, err = regexp.Compile("^" + s + "$")
 		if err != nil {
 			return nil, err
 		}
 	}
-	return w, nil
+	return l, nil
 }
 
-func (w featureAllowlist) Match(feature string) bool {
-	if w == nil {
-		// Unset allowlist matches all counters.
+func (l featureList) Match(feature string) bool {
+	if l == nil {
+		// An unset features list matches all counters.
 		return true
 	}
-	for _, r := range w {
-		if r.MatchString(feature) {
-			return true
+	matchFound := false
+	for _, f := range l {
+		if f.r.MatchString(feature) {
+			if f.block {
+				return false
+			}
+			matchFound = true
 		}
 	}
-	return false
+	return matchFound
 }
 
 func formatTableDescriptor(desc *descpb.TableDescriptor) string {

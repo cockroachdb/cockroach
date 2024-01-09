@@ -1,7 +1,7 @@
 # This file contains telemetry tests for sql.exec.* counters.
 
 # Tests for vectorization counters.
-feature-allowlist
+feature-list
 sql.exec.vectorized-setting.on
 sql.exec.vectorized-setting.off
 ----
@@ -18,7 +18,7 @@ sql.exec.vectorized-setting.off
 
 # Test for the hash aggregation disk spilling counter. Note that it is
 # incremented only when changing the setting to `false`.
-feature-allowlist
+feature-list
 sql.exec.hash-agg-spilling-disabled
 ----
 

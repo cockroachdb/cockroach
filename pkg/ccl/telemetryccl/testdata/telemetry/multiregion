@@ -1,4 +1,4 @@
-feature-allowlist
+feature-list
 sql.multiregion.*
 ----
 
@@ -401,7 +401,7 @@ exec
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '5ms';
 ----
 
-feature-allowlist
+feature-list
 sql.plan.opt.locality-optimized-search
 ----
 
@@ -426,7 +426,7 @@ USE survive_region;
 CREATE TABLE t9 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
 ----
 
-feature-allowlist
+feature-list
 sql.multiregion.zone_configuration.override.*
 ----
 
