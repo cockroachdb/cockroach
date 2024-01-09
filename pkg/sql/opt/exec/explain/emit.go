@@ -108,7 +108,7 @@ func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
 
 	for i := range plan.Cascades {
 		ob.EnterMetaNode("fk-cascade")
-		ob.Attr("fk", plan.Cascades[i].FKName)
+		ob.Attr("fk", plan.Cascades[i].FKConstraint.Name())
 		if buffer := plan.Cascades[i].Buffer; buffer != nil {
 			ob.Attr("input", buffer.(*Node).args.(*bufferArgs).Label)
 		}
