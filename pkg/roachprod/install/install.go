@@ -185,5 +185,5 @@ func InstallTool(
 	}
 	// Ensure that we early exit if any of the shell statements fail.
 	cmd = "set -exuo pipefail;" + cmd
-	return c.Run(ctx, l, stdout, stderr, OnNodes(nodes), "installing "+softwareName, cmd)
+	return c.Run(ctx, l, stdout, stderr, WithNodes(nodes), "installing "+softwareName, cmd)
 }
