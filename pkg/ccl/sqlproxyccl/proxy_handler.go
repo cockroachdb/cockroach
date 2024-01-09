@@ -175,9 +175,9 @@ const throttledErrorHint string = `Connection throttling is triggered by repeate
 sure the username and password are correct.
 `
 
-var throttledError = errors.WithHint(
+var authThrottledError = errors.WithHint(
 	withCode(errors.New(
-		"connection attempt throttled"), codeProxyRefusedConnection),
+		"too many failed authentication attempts"), codeProxyRefusedConnection),
 	throttledErrorHint)
 
 // newProxyHandler will create a new proxy handler with configuration based on
@@ -432,7 +432,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	throttleTime, err := handler.throttleService.LoginCheck(throttleTags)
 	if err != nil {
 		log.Errorf(ctx, "throttler refused connection: %v", err.Error())
-		err = throttledError
+		err = authThrottledError
 		updateMetricsAndSendErrToClient(err, fe.Conn, handler.metrics)
 		return err
 	}
@@ -467,7 +467,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 				ctx, throttleTags, throttleTime, status,
 			); err != nil {
 				log.Errorf(ctx, "throttler refused connection after authentication: %v", err.Error())
-				return throttledError
+				return authThrottledError
 			}
 			return nil
 		},
