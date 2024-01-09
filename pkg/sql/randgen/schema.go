@@ -491,9 +491,9 @@ func randColumnTableDef(rng *rand.Rand, tableIdx int, colSuffix string) *tree.Co
 // column (either STORED or VIRTUAL). The computed expressions refer to columns
 // in normalColDefs.
 func randComputedColumnTableDef(
-	rng *rand.Rand, normalColDefs []*tree.ColumnTableDef, tableIdx int, colIdx int,
+	rng *rand.Rand, normalColDefs []*tree.ColumnTableDef, tableIdx int, colSuffix string,
 ) *tree.ColumnTableDef {
-	newDef := randColumnTableDef(rng, tableIdx, colIdx)
+	newDef := randColumnTableDef(rng, tableIdx, colSuffix)
 	newDef.Computed.Computed = true
 	newDef.Computed.Virtual = rng.Intn(2) == 0
 

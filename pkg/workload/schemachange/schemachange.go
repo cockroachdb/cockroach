@@ -321,7 +321,8 @@ SELECT max(regexp_extract(name, '[0-9]+$')::INT8)
 						 (SELECT name FROM [SHOW ENUMS]) UNION
 	           (SELECT schema_name FROM [SHOW SCHEMAS]) UNION
 						 (SELECT column_name FROM information_schema.columns) UNION
-						 (SELECT index_name FROM information_schema.statistics)
+						 (SELECT index_name FROM information_schema.statistics) UNION
+						 (SELECT function_name FROM [SHOW FUNCTIONS])
            ) AS obj (name)
        )
  WHERE name ~ '^(table|view|seq|enum|schema|udf)_w%[1]d_[0-9]+$'
