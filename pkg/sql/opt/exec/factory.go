@@ -246,6 +246,13 @@ type Cascade struct {
 		numBufferedRows int,
 		allowAutoCommit bool,
 	) (Plan, error)
+
+	// GetExplainPlan returns the explain plan for the cascade query. It will
+	// always return a cached plan if there is one, and the boolean argument
+	// controls whether this function can create a new plan (which will be
+	// cached going forward). If createPlanIfMissing is false and there is no
+	// cached plan, then nil, nil is returned.
+	GetExplainPlan func(_ context.Context, createPlanIfMissing bool) (Plan, error)
 }
 
 // InsertFastPathCheck contains information about a foreign key or
