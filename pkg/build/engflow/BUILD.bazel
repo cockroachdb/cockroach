@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "engflow",
@@ -7,7 +7,15 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build/bazel/bes",
+        "//pkg/build/util",
         "@com_github_golang_protobuf//proto:go_default_library",
         "@org_golang_x_net//http2",
     ],
+)
+
+go_test(
+    name = "engflow_test",
+    srcs = ["engflow_test.go"],
+    embed = [":engflow"],
+    deps = ["@com_github_stretchr_testify//require"],
 )
