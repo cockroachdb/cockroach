@@ -177,6 +177,9 @@ type RaftTransport struct {
 	// level. When new raftSendQueues are instantiated, or old ones deleted, we
 	// also maintain kvflowControl.mu.connectedTracker. So writing to this field
 	// is done while holding kvflowControl.mu.
+	//
+	// TODO(pav-kv): only SystemClass and "default" raft class slots are used.
+	// Find an efficient way to have only the necessary number of slots.
 	queues [rpc.NumConnectionClasses]syncutil.IntMap
 
 	dialer                  *nodedialer.Dialer

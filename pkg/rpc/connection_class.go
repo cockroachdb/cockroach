@@ -38,6 +38,8 @@ const (
 	SystemClass
 	// RangefeedClass is the ConnectionClass used for rangefeeds.
 	RangefeedClass
+	// RaftClass is the ConnectionClass used for raft traffic.
+	RaftClass
 
 	// NumConnectionClasses is the number of valid ConnectionClass values.
 	NumConnectionClasses int = iota
@@ -48,6 +50,7 @@ var connectionClassName = map[ConnectionClass]string{
 	DefaultClass:   "default",
 	SystemClass:    "system",
 	RangefeedClass: "rangefeed",
+	RaftClass:      "raft",
 }
 
 // String implements the fmt.Stringer interface.
@@ -63,17 +66,32 @@ var systemClassKeyPrefixes = []roachpb.RKey{
 	roachpb.RKey(keys.NodeLivenessPrefix),
 }
 
-// ConnectionClassForKey determines the ConnectionClass which should be used
-// for traffic addressed to the RKey.
-func ConnectionClassForKey(key roachpb.RKey) ConnectionClass {
+// isSystemKey returns true if the given key belongs to a range eligible for
+// SystemClass connection.
+//
+// Generally, not all system ranges are eligible. For example, the timeseries
+// ranges are not, because they can be busy and disrupt other system traffic. We
+// try to make SystemClass responsive by keeping it small.
+func isSystemKey(key roachpb.RKey) bool {
 	// An empty RKey addresses range 1 and warrants SystemClass.
 	if len(key) == 0 {
-		return SystemClass
+		return true
 	}
 	for _, prefix := range systemClassKeyPrefixes {
 		if bytes.HasPrefix(key, prefix) {
-			return SystemClass
+			return true
 		}
 	}
-	return DefaultClass
+	return false
+}
+
+// ConnectionClassForKey determines the ConnectionClass which should be used for
+// traffic addressed to the range starting at the given key. Returns SystemClass
+// for system ranges, or the given "default" class otherwise. Typically, the
+// default depends on the type of traffic, such as RangefeedClass or RaftClass.
+func ConnectionClassForKey(key roachpb.RKey, def ConnectionClass) ConnectionClass {
+	if isSystemKey(key) {
+		return SystemClass
+	}
+	return def
 }

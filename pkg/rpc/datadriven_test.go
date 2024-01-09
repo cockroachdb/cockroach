@@ -327,6 +327,8 @@ func scanClass(t *testing.T, d *datadriven.TestData) ConnectionClass {
 		return SystemClass
 	case "rf":
 		return RangefeedClass
+	case "raft":
+		return RaftClass
 	default:
 		t.Fatalf("no such class: %s", s)
 	}
