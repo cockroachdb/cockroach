@@ -37,7 +37,10 @@ func BenchmarkSequenceIncrement(b *testing.B) {
 		subBenchMark := func(b *testing.B) {
 			defer log.Scope(b).Close(b)
 			cluster := serverutils.StartCluster(b, 3, base.TestClusterArgs{})
-			defer cluster.Stopper().Stop(context.Background())
+			defer func() {
+				b.StopTimer()
+				cluster.Stopper().Stop(context.Background())
+			}()
 
 			sqlDB := cluster.ServerConn(0)
 			if _, err := sqlDB.Exec(fmt.Sprintf(`

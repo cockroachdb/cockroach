@@ -73,7 +73,10 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 		b.Run(tc.testName, func(b *testing.B) {
 			ctx := context.Background()
 			s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
-			defer s.Stopper().Stop(ctx)
+			defer func() {
+				b.StopTimer()
+				s.Stopper().Stop(ctx)
+			}()
 			tDB := sqlutils.MakeSQLRunner(sqlDB)
 			for _, stmt := range tc.setup {
 				tDB.Exec(b, stmt)
@@ -164,7 +167,10 @@ func BenchmarkResolveFunction(b *testing.B) {
 		b.Run(tc.testName, func(b *testing.B) {
 			ctx := context.Background()
 			s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
-			defer s.Stopper().Stop(ctx)
+			defer func() {
+				b.StopTimer()
+				s.Stopper().Stop(ctx)
+			}()
 			tDB := sqlutils.MakeSQLRunner(sqlDB)
 			for _, stmt := range tc.setup {
 				tDB.Exec(b, stmt)

@@ -575,7 +575,10 @@ func BenchmarkQueryCache(b *testing.B) {
 		cacheOn bool,
 	) {
 		h := makeQueryCacheTestHelper(b, numClients)
-		defer h.Stop()
+		defer func() {
+			b.StopTimer()
+			h.Stop()
+		}()
 		r0 := h.runners[0]
 		r0.Exec(b, "CREATE TABLE kv (k INT PRIMARY KEY, v INT)")
 

@@ -91,7 +91,10 @@ func BenchmarkTCPHLineItem(b *testing.B) {
 	ctx := context.Background()
 
 	srv, _, kvdb := serverutils.StartServer(b, base.TestServerArgs{})
-	defer srv.Stopper().Stop(ctx)
+	defer func() {
+		b.StopTimer()
+		srv.Stopper().Stop(ctx)
+	}()
 	s := srv.ApplicationLayer()
 
 	url, cleanup := sqlutils.PGUrl(b, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))

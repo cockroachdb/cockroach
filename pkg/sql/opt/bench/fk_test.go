@@ -40,7 +40,10 @@ func runFKBench(
 	for _, cfg := range configs {
 		b.Run(cfg.name, func(b *testing.B) {
 			s, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
-			defer s.Stopper().Stop(context.Background())
+			defer func() {
+				b.StopTimer()
+				s.Stopper().Stop(context.Background())
+			}()
 			r := sqlutils.MakeSQLRunner(db)
 			// Don't let auto stats interfere with the test. Stock stats are
 			// sufficient to get the right plans (i.e. lookup join).
