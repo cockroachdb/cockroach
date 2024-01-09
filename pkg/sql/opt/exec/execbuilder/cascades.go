@@ -154,8 +154,8 @@ func makeCascadeBuilder(b *Builder, mutationWithID opt.WithID) (*cascadeBuilder,
 // setupCascade fills in an exec.Cascade struct for the given cascade.
 func (cb *cascadeBuilder) setupCascade(cascade *memo.FKCascade) exec.Cascade {
 	return exec.Cascade{
-		FKName: cascade.FKName,
-		Buffer: cb.mutationBuffer,
+		FKConstraint: cascade.FKConstraint,
+		Buffer:       cb.mutationBuffer,
 		PlanFn: func(
 			ctx context.Context,
 			semaCtx *tree.SemaContext,
