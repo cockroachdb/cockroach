@@ -105,6 +105,22 @@ EOF
 chmod +x /tmp/bazelisk
 mv /tmp/bazelisk /usr/bin/bazel
 
+# Install protoc.
+case $ARCH in
+    x86_64) WHICH=x86_64; SHASUM=ed8fca87a11c888fed329d6a59c34c7d436165f662a2c875246ddb1ac2b6dd50 ;;
+    aarch64) WHICH=aarch_64; SHASUM=99975a8c11b83cd65c3e1151ae1714bf959abc0521acb659bf720524276ab0c8 ;;
+esac
+
+curl -fsSL https://github.com/protocolbuffers/protobuf/releases/download/v25.1/protoc-25.1-linux-$WHICH.zip > /tmp/protoc.zip
+sha256sum -c - <<EOF
+$SHASUM /tmp/protoc.zip
+EOF
+unzip /tmp/protoc.zip -d /tmp/protoc
+rm /tmp/protoc.zip
+mv /tmp/protoc/bin/protoc /usr/bin/protoc
+mv /tmp/protoc/include/google /usr/include/google
+rm -rf /tmp/protoc
+
 # Add a user for the TeamCity agent if it doesn't exist already.
 id -u agent &>/dev/null 2>&1 || adduser agent --disabled-password
 
