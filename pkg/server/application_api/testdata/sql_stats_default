@@ -1,0 +1,157 @@
+# Disabled flush so no extra data is inserted to the system table.
+run-sql
+SET CLUSTER SETTING sql.stats.activity.flush.enabled = 'f'
+----
+
+# Give permission to write to system tables.
+run-sql
+INSERT INTO system.users VALUES ('node', NULL, true, 3)
+----
+
+
+run-sql
+GRANT node TO root
+----
+
+
+# Insert Data to system.statement_statistics
+run-sql
+INSERT INTO system.statement_statistics (
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  node_id,
+  agg_interval,
+  metadata,
+  statistics,
+  plan,
+  index_recommendations
+)
+VALUES (
+  '2024-01-01 10:00:00 +0000',
+  '\x0f1c01d65b4b88b9',
+  '\xa07fbc9add4a3f66',
+  '\xbff951ae7cecdd4b',
+  'test_app',
+  1,
+  '01:00:00',
+  '{"db":"test_database","distsql":true,"failed":false,"fullScan":true,"implicitTxn":true,"query":"SELECT * FROM foo","querySummary":"SELECT * FROM foo","stmtType":"TypeDDL","vec":true}',
+  '{"execution_statistics": {"cnt":3,"contentionTime":{"mean":0,"squared_diffs":0},"cpuSQLNanos":{"mean":5,"squared_diffs":0},"maxDiskUsage":{"mean":10,"squared_diffs":0},"maxMemUsage":{"mean":10,"squared_diffs":0},"networkBytes":{"mean":0,"squared_diffs":0},"networkMsgs":{"mean":0,"squared_diffs":0}}, "statistics": {"bytesRead":{"mean":0,"squared_diffs":0},"cnt":1,"firstAttemptCnt":1,"idleLat":{"mean":0,"squared_diffs":0},"indexes":["15@4"],"lastErrorCode":"","lastExecAt":"2024-01-01T10:10:00Z","maxRetries":0,"nodes":[1],"numRows":{"mean":0,"squared_diffs":0},"ovhLat":{"mean":0,"squared_diffs":0},"parseLat":{"mean":0,"squared_diffs":0},"planGists":["AgEeCADnAwIAAAMHEgUUIR4AAA=="],"planLat":{"mean":0,"squared_diffs":0},"regions":["us-east1"],"rowsRead":{"mean":0,"squared_diffs":0},"rowsWritten":{"mean":0,"squared_diffs":0},"runLat":{"mean":0,"squared_diffs":0},"svcLat":{"mean":3,"squared_diffs":0}}, "index_recommendations": []}'::JSONB,
+  '{"Children": [], "Name": ""}',
+  ARRAY[]
+),
+(
+  '2024-01-01 11:00:00 +0000',
+  '\x21a018638734c1fa',
+  '\x8ec3a52f01357625',
+  '\xa3ca652fbc7ba181',
+  'test_app',
+  1,
+  '01:00:00',
+  '{"db":"test_database","distsql":true,"failed":false,"fullScan":true,"implicitTxn":true,"query":"SELECT * FROM bar","querySummary":"SELECT * FROM bar","stmtType":"TypeDDL","vec":true}',
+  '{"execution_statistics": {"cnt":3,"contentionTime":{"mean":0,"squared_diffs":0},"cpuSQLNanos":{"mean":5,"squared_diffs":0},"maxDiskUsage":{"mean":10,"squared_diffs":0},"maxMemUsage":{"mean":10,"squared_diffs":0},"networkBytes":{"mean":0,"squared_diffs":0},"networkMsgs":{"mean":0,"squared_diffs":0}}, "statistics": {"bytesRead":{"mean":0,"squared_diffs":0},"cnt":5,"firstAttemptCnt":5,"idleLat":{"mean":0,"squared_diffs":0},"indexes":["15@4"],"lastErrorCode":"","lastExecAt":"2024-01-01T11:10:00Z","maxRetries":0,"nodes":[1],"numRows":{"mean":0,"squared_diffs":0},"ovhLat":{"mean":0,"squared_diffs":0},"parseLat":{"mean":0,"squared_diffs":0},"planGists":["AgEeCADnAwIAAAMHEgUUIR4AAA=="],"planLat":{"mean":0,"squared_diffs":0},"regions":["us-east1"],"rowsRead":{"mean":0,"squared_diffs":0},"rowsWritten":{"mean":0,"squared_diffs":0},"runLat":{"mean":0,"squared_diffs":0},"svcLat":{"mean":7,"squared_diffs":0}}, "index_recommendations": []}'::JSONB,
+  '{"Children": [], "Name": ""}',
+  ARRAY[]
+),
+(
+  '2024-01-01 12:00:00 +0000',
+  '\x7a4489011193ce55',
+  '\xd527344d9792798a',
+  '\x2324d56cb507f877',
+  'test_app',
+  1,
+  '01:00:00',
+  '{"db":"test_database","distsql":true,"failed":false,"fullScan":true,"implicitTxn":true,"query":"SELECT * FROM abc","querySummary":"SELECT * FROM abc","stmtType":"TypeDDL","vec":true}',
+  '{"execution_statistics": {"cnt":3,"contentionTime":{"mean":0,"squared_diffs":0},"cpuSQLNanos":{"mean":5,"squared_diffs":0},"maxDiskUsage":{"mean":10,"squared_diffs":0},"maxMemUsage":{"mean":10,"squared_diffs":0},"networkBytes":{"mean":0,"squared_diffs":0},"networkMsgs":{"mean":0,"squared_diffs":0}}, "statistics": {"bytesRead":{"mean":0,"squared_diffs":0},"cnt":11,"firstAttemptCnt":11,"idleLat":{"mean":0,"squared_diffs":0},"indexes":["15@4"],"lastErrorCode":"","lastExecAt":"2024-01-01T12:10:00Z","maxRetries":0,"nodes":[1],"numRows":{"mean":0,"squared_diffs":0},"ovhLat":{"mean":0,"squared_diffs":0},"parseLat":{"mean":0,"squared_diffs":0},"planGists":["AgEeCADnAwIAAAMHEgUUIR4AAA=="],"planLat":{"mean":0,"squared_diffs":0},"regions":["us-east1"],"rowsRead":{"mean":0,"squared_diffs":0},"rowsWritten":{"mean":0,"squared_diffs":0},"runLat":{"mean":0,"squared_diffs":0},"svcLat":{"mean":13,"squared_diffs":0}}, "index_recommendations": []}'::JSONB,
+  '{"Children": [], "Name": ""}',
+  ARRAY[]
+),
+(
+  '2024-01-01 13:00:00 +0000',
+  '\x264b1304276b4834',
+  '\x8928ae48a16affeb',
+  '\x0586d2c686ef8add',
+  'test_app',
+  1,
+  '01:00:00',
+  '{"db":"test_database","distsql":true,"failed":false,"fullScan":true,"implicitTxn":true,"query":"SELECT * FROM xyz","querySummary":"SELECT * FROM xyz","stmtType":"TypeDDL","vec":true}',
+  '{"execution_statistics": {"cnt":3,"contentionTime":{"mean":0,"squared_diffs":0},"cpuSQLNanos":{"mean":5,"squared_diffs":0},"maxDiskUsage":{"mean":10,"squared_diffs":0},"maxMemUsage":{"mean":10,"squared_diffs":0},"networkBytes":{"mean":0,"squared_diffs":0},"networkMsgs":{"mean":0,"squared_diffs":0}}, "statistics": {"bytesRead":{"mean":0,"squared_diffs":0},"cnt":17,"firstAttemptCnt":17,"idleLat":{"mean":0,"squared_diffs":0},"indexes":["15@4"],"lastErrorCode":"","lastExecAt":"2024-01-01T13:10:00Z","maxRetries":0,"nodes":[1],"numRows":{"mean":0,"squared_diffs":0},"ovhLat":{"mean":0,"squared_diffs":0},"parseLat":{"mean":0,"squared_diffs":0},"planGists":["AgEeCADnAwIAAAMHEgUUIR4AAA=="],"planLat":{"mean":0,"squared_diffs":0},"regions":["us-east1"],"rowsRead":{"mean":0,"squared_diffs":0},"rowsWritten":{"mean":0,"squared_diffs":0},"runLat":{"mean":0,"squared_diffs":0},"svcLat":{"mean":19,"squared_diffs":0}}, "index_recommendations": []}'::JSONB,
+  '{"Children": [], "Name": ""}',
+  ARRAY[]
+)
+----
+
+
+run-sql
+SELECT count(*) FROM system.statement_statistics
+----
+4
+
+# Insert Data to system.statement_activity
+run-sql
+INSERT INTO system.statement_activity (
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  agg_interval,
+  metadata,
+  statistics,
+  plan,
+  index_recommendations,
+  execution_count,
+	execution_total_seconds,
+	execution_total_cluster_seconds,
+	contention_time_avg_seconds,
+	cpu_sql_avg_nanos,
+	service_latency_avg_seconds,
+	service_latency_p99_seconds
+)
+VALUES (
+  '2024-01-01 12:00:00 +0000',
+  '\x7a4489011193ce55',
+  '\xd527344d9792798a',
+  '\x2324d56cb507f877',
+  'test_app',
+  '01:00:00',
+  '{"appNames":["test_app"],"db":["test_database"],"distSQLCount":1,"failedCount":0,"fullScanCount":1,"implicitTxn":true,"query":"SELECT * FROM abc","querySummary":"SELECT * FROM abc","stmtType":"TypeDDL","vecCount":1}',
+  '{"execution_statistics": {"cnt":3,"contentionTime":{"mean":0,"squared_diffs":0},"cpuSQLNanos":{"mean":5,"squared_diffs":0},"maxDiskUsage":{"mean":10,"squared_diffs":0},"maxMemUsage":{"mean":10,"squared_diffs":0},"networkBytes":{"mean":0,"squared_diffs":0},"networkMsgs":{"mean":0,"squared_diffs":0}}, "statistics": {"bytesRead":{"mean":0,"squared_diffs":0},"cnt":11,"firstAttemptCnt":11,"idleLat":{"mean":0,"squared_diffs":0},"indexes":["15@4"],"lastErrorCode":"","lastExecAt":"2024-01-01T12:10:00Z","maxRetries":0,"nodes":[1],"numRows":{"mean":0,"squared_diffs":0},"ovhLat":{"mean":0,"squared_diffs":0},"parseLat":{"mean":0,"squared_diffs":0},"planGists":["AgEeCADnAwIAAAMHEgUUIR4AAA=="],"planLat":{"mean":0,"squared_diffs":0},"regions":["us-east1"],"rowsRead":{"mean":0,"squared_diffs":0},"rowsWritten":{"mean":0,"squared_diffs":0},"runLat":{"mean":0,"squared_diffs":0},"svcLat":{"mean":13,"squared_diffs":0}}, "index_recommendations": []}'::JSONB,
+  '{"Children": [], "Name": ""}',
+  ARRAY['creation : CREATE INDEX t3_k_i_f ON t3(k, i, f)'],
+	11,
+	143,
+	143,
+	0,
+	5,
+	10,
+	7
+),
+(
+  '2024-01-01 13:00:00 +0000',
+  '\x264b1304276b4834',
+  '\x8928ae48a16affeb',
+  '\x0586d2c686ef8add',
+  'test_app',
+  '01:00:00',
+  '{"appNames":["test_app"],"db":["test_database"],"distSQLCount":1,"failedCount":0,"fullScanCount":1,"implicitTxn":true,"query":"SELECT * FROM xyz","querySummary":"SELECT * FROM xyz","stmtType":"TypeDDL","vecCount":1}',
+  '{"execution_statistics": {"cnt":3,"contentionTime":{"mean":0,"squared_diffs":0},"cpuSQLNanos":{"mean":5,"squared_diffs":0},"maxDiskUsage":{"mean":10,"squared_diffs":0},"maxMemUsage":{"mean":10,"squared_diffs":0},"networkBytes":{"mean":0,"squared_diffs":0},"networkMsgs":{"mean":0,"squared_diffs":0}}, "statistics": {"bytesRead":{"mean":0,"squared_diffs":0},"cnt":17,"firstAttemptCnt":17,"idleLat":{"mean":0,"squared_diffs":0},"indexes":["15@4"],"lastErrorCode":"","lastExecAt":"2024-01-01T13:10:00Z","maxRetries":0,"nodes":[1],"numRows":{"mean":0,"squared_diffs":0},"ovhLat":{"mean":0,"squared_diffs":0},"parseLat":{"mean":0,"squared_diffs":0},"planGists":["AgEeCADnAwIAAAMHEgUUIR4AAA=="],"planLat":{"mean":0,"squared_diffs":0},"regions":["us-east1"],"rowsRead":{"mean":0,"squared_diffs":0},"rowsWritten":{"mean":0,"squared_diffs":0},"runLat":{"mean":0,"squared_diffs":0},"svcLat":{"mean":19,"squared_diffs":0}}, "index_recommendations": []}'::JSONB,
+  '{"Children": [], "Name": ""}',
+  ARRAY['creation : CREATE INDEX t3_k_i_f ON t3(k, i, f)'],
+	17,
+	323,
+	323,
+	0,
+	5,
+	10,
+	7
+)
+----
+
+
+run-sql
+SELECT count(*) FROM system.statement_activity
+----
+2
