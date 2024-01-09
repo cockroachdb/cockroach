@@ -75,6 +75,59 @@ func makeFrontierForwarded(
 		}
 	}
 }
+
+func TestSpanFrontierStrictModeBTree(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer enableStrictMode(true)()
+
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+	keyD, keyE, keyF := roachpb.Key("d"), roachpb.Key("e"), roachpb.Key("f")
+	ts0 := hlc.Timestamp{}
+
+	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
+		defer enableBtreeFrontier(useBtreeFrontier)()
+		for i, tc := range []struct {
+			frontier  []roachpb.Span
+			forward   roachpb.Span
+			error     string
+			remaining string
+		}{
+			{
+				frontier: []roachpb.Span{{Key: keyB, EndKey: keyD}},
+				forward:  roachpb.Span{Key: keyC, EndKey: keyE},
+				error:    "span {c-e} is not a sub-span of this frontier (remaining {d-e}) (frontier [{b-d}@0,0])",
+			},
+			{
+				frontier: []roachpb.Span{{Key: keyB, EndKey: keyD}},
+				forward:  roachpb.Span{Key: keyE, EndKey: keyF},
+				error:    "span {e-f} is not a sub-span of this frontier (remaining {e-f}) (frontier [{b-d}@0,0])",
+			},
+			{
+				frontier: []roachpb.Span{{Key: keyB, EndKey: keyD}},
+				forward:  roachpb.Span{Key: keyA, EndKey: keyB},
+				error:    "span {a-b} is not a sub-span of this frontier (remaining {a-b}) (frontier [{b-d}@0,0])",
+			},
+			{
+				frontier: []roachpb.Span{{Key: keyB, EndKey: keyD}},
+				forward:  roachpb.Span{Key: keyA, EndKey: keyE},
+				error:    "span {a-e} is not a sub-span of this frontier (remaining {a-e}) (frontier [{b-d}@0,0])",
+			},
+			{
+				frontier: []roachpb.Span{{Key: keyA, EndKey: keyB}, {Key: keyC, EndKey: keyD}},
+				forward:  roachpb.Span{Key: keyA, EndKey: keyD},
+				error:    "span {a-d} is not a sub-span of this frontier (remaining {b-d}) (frontier [{a-b}@0,0] [{c-d}@0,0])",
+			},
+		} {
+			t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+				f, err := MakeFrontier(tc.frontier...)
+				require.NoError(t, err)
+				_, err = f.Forward(tc.forward, ts0)
+
+				require.EqualError(t, err, tc.error)
+			})
+		}
+	})
+}
 func TestSpanFrontier(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
