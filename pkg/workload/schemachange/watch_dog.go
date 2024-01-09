@@ -55,16 +55,19 @@ func newSchemaChangeWatchDog(conn *pgxpool.Pool, logger *logger) *schemaChangeWa
 // when progress is detected.
 func (w *schemaChangeWatchDog) isConnectionActive(ctx context.Context) bool {
 	// Scan the session to make sure progress is being made first.
+	var status string
 	sessionInfo := w.conn.QueryRow(ctx,
-		"SELECT active_queries, kv_txn FROM crdb_internal.cluster_sessions WHERE session_id = $1",
+		"SELECT active_queries, kv_txn, status FROM crdb_internal.cluster_sessions WHERE session_id = $1",
 		w.sessionID)
 	lastTxnID := w.txnID
 	lastActiveQuery := w.activeQuery
-	if err := sessionInfo.Scan(&w.activeQuery, &w.txnID); err != nil {
+	if err := sessionInfo.Scan(&w.activeQuery, &w.txnID, &status); err != nil {
 		w.logger.logWatchDog(fmt.Sprintf("failed to get session information: %v\n", err))
 		return false
 	}
-	if w.activeQuery != lastActiveQuery {
+	if w.activeQuery != lastActiveQuery || status == "IDLE" {
+		// If the query has changed or the session is idle, it means the initial
+		// query has made progress.
 		return true
 	}
 	lastNumRetries := w.numRetries
@@ -112,7 +115,7 @@ func (w *schemaChangeWatchDog) watchLoop(ctx context.Context) {
 			}
 			totalTimeWaited += time.Second
 			if totalTimeWaited > maxTimeOutForDump {
-				panic(fmt.Sprintf("connection has timed out %v", w))
+				panic(fmt.Sprintf("connection has timed out; sessionID=%s activeQuery=%+v", w.sessionID, w.activeQuery))
 			}
 		}
 	}
