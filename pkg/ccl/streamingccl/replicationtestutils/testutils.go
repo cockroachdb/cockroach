@@ -243,6 +243,31 @@ func (c *TenantStreamingClusters) WaitUntilStartTimeReached(ingestionJobID jobsp
 	WaitUntilStartTimeReached(c.T, c.DestSysSQL, ingestionJobID)
 }
 
+// WaitForPostCutoverRetentionJob should be called after cutover completes to
+// verify that there exists a new producer job on the newly cutover to tenant. This should be called after the replication job completes.
+func (c *TenantStreamingClusters) WaitForPostCutoverRetentionJob() {
+	c.DestSysSQL.Exec(c.T, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='10ms'`, c.Args.DestTenantName))
+	var retentionJobID jobspb.JobID
+	retentionJobQuery := fmt.Sprintf(`SELECT job_id FROM [SHOW JOBS] 
+WHERE description = 'History Retention for Physical Replication of %s'
+ORDER BY created DESC LIMIT 1`, c.Args.DestTenantName)
+	c.DestSysSQL.QueryRow(c.T, retentionJobQuery).Scan(&retentionJobID)
+	testutils.SucceedsSoon(c.T, func() error {
+		// Grab the latest producer job on the destination cluster.
+		var status string
+		c.DestSysSQL.QueryRow(c.T, "SELECT status FROM system.jobs WHERE id = $1", retentionJobID).Scan(&status)
+		if jobs.Status(status) == jobs.StatusRunning {
+			return nil
+		}
+		if jobs.Status(status) == jobs.StatusFailed {
+			payload := jobutils.GetJobPayload(c.T, c.DestSysSQL, retentionJobID)
+			require.Contains(c.T, payload.Error, "replication stream")
+			require.Contains(c.T, payload.Error, "timed out")
+		}
+		return errors.Newf("Unexpected status %s", status)
+	})
+}
+
 // Cutover sets the cutover timestamp on the replication job causing the job to
 // stop eventually. If the provided cutover time is the zero value, cutover to
 // the latest replicated time.
@@ -263,6 +288,7 @@ func (c *TenantStreamingClusters) Cutover(
 
 	if !async {
 		jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+		c.WaitForPostCutoverRetentionJob()
 	}
 }
 
@@ -557,6 +583,7 @@ var defaultDestClusterSetting = map[string]string{
 	`bulkio.stream_ingestion.cutover_signal_poll_interval`: `'100ms'`,
 	`jobs.registry.interval.adopt`:                         `'1s'`,
 	`spanconfig.reconciliation_job.checkpoint_interval`:    `'100ms'`,
+	`kv.rangefeed.enabled`:                                 `true`,
 }
 
 func ConfigureClusterSettings(setting map[string]string) []string {

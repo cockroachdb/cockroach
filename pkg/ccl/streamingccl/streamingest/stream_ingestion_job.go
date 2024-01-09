@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/revertccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -118,6 +120,10 @@ func completeIngestion(
 		details.StreamID)
 	updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationCuttingOver, msg)
 	completeProducerJob(ctx, ingestionJob, execCtx.ExecCfg().InternalDB, true)
+	evalContext := &execCtx.ExtendedEvalContext().Context
+	if err := startPostCutoverRetentionJob(ctx, execCtx.ExecCfg(), details, evalContext, cutoverTimestamp); err != nil {
+		log.Warningf(ctx, "failed to begin post cutover retention job: %s", err.Error())
+	}
 
 	// Now that we have completed the cutover we can release the protected
 	// timestamp record on the destination tenant's keyspace.
@@ -157,6 +163,30 @@ func completeProducerJob(
 	); err != nil {
 		log.Warningf(ctx, `encountered error when completing the source cluster producer job %d: %s`, streamID, err.Error())
 	}
+}
+
+// startPostCutoverRetentionJob begins a dummy producer job on the newly cutover
+// to tenant. This producer job will lay PTS over the whole tenant, enabling a
+// fast failback to the original source cluster.
+func startPostCutoverRetentionJob(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	details jobspb.StreamIngestionDetails,
+	evalCtx *eval.Context,
+	cutoverTime hlc.Timestamp,
+) error {
+
+	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		info, err := sql.GetTenantRecordByID(ctx, txn, details.DestinationTenantID, execCfg.Settings)
+		if err != nil {
+			return err
+		}
+		req := streampb.ReplicationProducerRequest{
+			ReplicationStartTime: cutoverTime,
+		}
+		_, err = streamproducer.StartReplicationProducerJob(ctx, evalCtx, txn, info.Name, req)
+		return err
+	})
 }
 
 func ingest(

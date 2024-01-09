@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -58,12 +59,12 @@ func jobIsNotRunningError(id jobspb.JobID, status jobs.Status, op string) error 
 	)
 }
 
-// startReplicationProducerJob initializes a replication stream producer job on
+// StartReplicationProducerJob initializes a replication stream producer job on
 // the source cluster that:
 //
 // 1. Tracks the liveness of the replication stream consumption.
 // 2. Updates the protected timestamp for spans being replicated.
-func startReplicationProducerJob(
+func StartReplicationProducerJob(
 	ctx context.Context,
 	evalCtx *eval.Context,
 	txn isql.Txn,
@@ -132,6 +133,9 @@ func startReplicationProducerJob(
 
 	if err := ptp.Protect(ctx, pts); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
+	}
+	if req.TenantID.Equal(roachpb.TenantID{}) && req.ClusterID.Equal(uuid.UUID{}) {
+		log.Infof(ctx, "started post cutover producer job %d", jr.JobID)
 	}
 
 	return streampb.ReplicationProducerSpec{
