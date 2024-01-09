@@ -116,6 +116,14 @@ var useBtreeFrontier = envutil.EnvOrDefaultBool("COCKROACH_BTREE_SPAN_FRONTIER_E
 // span forwarding even if the span is not a subset of this frontier.
 var spanMustBeTracked = envutil.EnvOrDefaultBool("COCKROACH_SPAN_FRONTIER_STRICT_MODE_ENABLED", false)
 
+func enableStrictMode(enabled bool) func() {
+	old := spanMustBeTracked
+	spanMustBeTracked = enabled
+	return func() {
+		spanMustBeTracked = old
+	}
+}
+
 func enableBtreeFrontier(enabled bool) func() {
 	old := useBtreeFrontier
 	useBtreeFrontier = enabled
@@ -478,7 +486,8 @@ func (f *btreeFrontier) forward(span roachpb.Span, insertTS hlc.Timestamp) error
 		it.FirstOverlap(todoEntry)
 		if !it.Valid() {
 			if spanMustBeTracked {
-				return errors.Newf("span %s is not a sub-span of this frontier (remaining %s)", span, todoEntry.span())
+				return errors.Newf("span %s is not a sub-span of this frontier (remaining %s) (frontier %s)",
+					span, todoEntry.span(), f.String())
 			}
 			break
 		}
@@ -490,7 +499,8 @@ func (f *btreeFrontier) forward(span roachpb.Span, insertTS hlc.Timestamp) error
 		// This establishes the invariant that overlap start must be at or before todoEntry start.
 		if todoEntry.Start.Compare(overlap.Start) < 0 {
 			if spanMustBeTracked {
-				return errors.Newf("span %s is not a sub-span of this frontier (remaining %s)", span, todoEntry.span())
+				return errors.Newf("span %s is not a sub-span of this frontier (remaining %s) (frontier %s)",
+					span, todoEntry.span(), f.String())
 			}
 			todoEntry.Start = overlap.Start
 			if todoEntry.isEmptyRange() {
