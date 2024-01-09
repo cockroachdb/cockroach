@@ -32,6 +32,7 @@ go_test(
         "util_test.go",
         "zcfg_test.go",
     ],
+    data = glob(["testdata/**"]),
     shard_count = 8,
     deps = [
         "//pkg/base",
@@ -85,6 +86,7 @@ go_test(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
         "@com_github_kr_pretty//:pretty",
