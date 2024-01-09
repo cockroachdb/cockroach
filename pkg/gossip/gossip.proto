@@ -131,6 +131,7 @@ message InfoStatus {
   ClientStatus client = 2 [(gogoproto.nullable) = false];
   ServerStatus server = 3 [(gogoproto.nullable) = false];
   Connectivity connectivity = 4 [(gogoproto.nullable) = false];
+  map<int32, int64> high_water_stamps = 5 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID", (gogoproto.nullable) = false];
 }
 
 // Info is the basic unit of information traded over the
