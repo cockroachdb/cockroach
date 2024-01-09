@@ -11,6 +11,7 @@
 package explain_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -20,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 )
@@ -48,7 +51,7 @@ func explainGist(gist string, catalog cat.Catalog) string {
 	if err != nil {
 		panic(err)
 	}
-	err = explain.Emit(explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
+	err = explain.Emit(context.Background(), explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
 	if err != nil {
 		panic(err)
 	}
@@ -56,7 +59,7 @@ func explainGist(gist string, catalog cat.Catalog) string {
 }
 
 func plan(ot *opttester.OptTester, t *testing.T) string {
-	f := explain.NewFactory(exec.StubFactory{})
+	f := explain.NewFactory(exec.StubFactory{}, &tree.SemaContext{}, &eval.Context{})
 	expr, err := ot.Optimize()
 	if err != nil {
 		t.Error(err)
@@ -77,7 +80,7 @@ func plan(ot *opttester.OptTester, t *testing.T) string {
 	}
 	flags := explain.Flags{HideValues: true, Deflake: explain.DeflakeAll, OnlyShape: true}
 	ob := explain.NewOutputBuilder(flags)
-	err = explain.Emit(explainPlan.(*explain.Plan), ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
+	err = explain.Emit(context.Background(), explainPlan.(*explain.Plan), ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
 	if err != nil {
 		t.Error(err)
 	}
