@@ -2031,7 +2031,13 @@ func (s *systemStatusServer) NetworkConnectivity(
 				peer.Error = errors.UnwrapAll(err).Error()
 				continue
 			}
-			if err = s.rpcCtx.ConnHealth(node.Address.AddressField, node.NodeID, rpc.SystemClass); err != nil {
+			addr, err := s.gossip.GetNodeIDAddress(targetNodeId)
+			if err != nil {
+				peer.Status = serverpb.NetworkConnectivityResponse_ERROR
+				peer.Error = errors.UnwrapAll(err).Error()
+				continue
+			}
+			if err = s.rpcCtx.ConnHealth(addr.String(), targetNodeId, rpc.SystemClass); err != nil {
 				if errors.Is(rpc.ErrNotHeartbeated, err) {
 					peer.Status = serverpb.NetworkConnectivityResponse_ESTABLISHING
 				} else {
@@ -2041,7 +2047,7 @@ func (s *systemStatusServer) NetworkConnectivity(
 			} else {
 				peer.Status = serverpb.NetworkConnectivityResponse_ESTABLISHED
 			}
-			peer.Address = node.Address.AddressField
+			peer.Address = addr.String()
 			peer.Locality = &node.Locality
 
 			peers[targetNodeId] = peer
