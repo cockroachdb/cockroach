@@ -2068,6 +2068,7 @@ func populateQueryLevelStats(
 	}
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
 		ih.traceMetadata.annotateExplain(
+			ctx,
 			ih.explainPlan,
 			trace,
 			cfg.TestingKnobs.DeterministicExplain,

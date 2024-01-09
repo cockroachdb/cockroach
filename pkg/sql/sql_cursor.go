@@ -92,6 +92,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				&stmt,
 				newExecFactory(ctx, p),
 				memo,
+				p.SemaCtx(),
 				p.EvalContext(),
 				p.autoCommit,
 			); err != nil {

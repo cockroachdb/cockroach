@@ -262,6 +262,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 			&p.stmt,
 			newDistSQLSpecExecFactory(ctx, p, planningMode),
 			execMemo,
+			p.SemaCtx(),
 			p.EvalContext(),
 			p.autoCommit,
 		)
@@ -297,6 +298,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 					&p.stmt,
 					newDistSQLSpecExecFactory(ctx, p, distSQLLocalOnlyPlanning),
 					execMemo,
+					p.SemaCtx(),
 					p.EvalContext(),
 					p.autoCommit,
 				)
@@ -318,6 +320,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		&p.stmt,
 		newExecFactory(ctx, p),
 		execMemo,
+		p.SemaCtx(),
 		p.EvalContext(),
 		p.autoCommit,
 	)
@@ -636,6 +639,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	stmt *Statement,
 	f exec.Factory,
 	mem *memo.Memo,
+	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
 	allowAutoCommit bool,
 ) error {
@@ -647,8 +651,10 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 	var bld *execbuilder.Builder
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
-		bld = execbuilder.New(ctx, f, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
-			evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST))
+		bld = execbuilder.New(
+			ctx, f, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
+			semaCtx, evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST),
+		)
 		plan, err := bld.Build()
 		if err != nil {
 			return err
@@ -656,9 +662,11 @@ func (opc *optPlanningCtx) runExecBuilder(
 		result = plan.(*planComponents)
 	} else {
 		// Create an explain factory and record the explain.Plan.
-		explainFactory := explain.NewFactory(f)
-		bld = execbuilder.New(ctx, explainFactory, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
-			evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST))
+		explainFactory := explain.NewFactory(f, semaCtx, evalCtx)
+		bld = execbuilder.New(
+			ctx, explainFactory, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
+			semaCtx, evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST),
+		)
 		plan, err := bld.Build()
 		if err != nil {
 			return err
@@ -737,12 +745,12 @@ func (opc *optPlanningCtx) runExecBuilder(
 
 // DecodeGist Avoid an import cycle by keeping the cat out of the tree. If
 // external is true gist is from a foreign database and we use nil catalog.
-func (p *planner) DecodeGist(gist string, external bool) ([]string, error) {
+func (p *planner) DecodeGist(ctx context.Context, gist string, external bool) ([]string, error) {
 	var cat cat.Catalog
 	if !external {
 		cat = p.optPlanningCtx.catalog
 	}
-	return explain.DecodePlanGistToRows(gist, cat)
+	return explain.DecodePlanGistToRows(ctx, gist, cat)
 }
 
 // makeQueryIndexRecommendation builds a statement and walks through it to find

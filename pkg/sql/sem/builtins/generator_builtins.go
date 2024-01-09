@@ -725,8 +725,8 @@ func (g *gistPlanGenerator) ResolvedType() *types.T {
 	return types.String
 }
 
-func (g *gistPlanGenerator) Start(_ context.Context, _ *kv.Txn) error {
-	rows, err := g.evalCtx.Planner.DecodeGist(g.gist, g.external)
+func (g *gistPlanGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	rows, err := g.evalCtx.Planner.DecodeGist(ctx, g.gist, g.external)
 	if err != nil {
 		return err
 	}

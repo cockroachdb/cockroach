@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -26,7 +27,7 @@ import (
 // TestFactory is a general API test for Factory. It is not intended as an
 // exhaustive test of all factory Construct methods.
 func TestFactory(t *testing.T) {
-	f := NewFactory(exec.StubFactory{})
+	f := NewFactory(exec.StubFactory{}, &tree.SemaContext{}, &eval.Context{})
 
 	n, err := f.ConstructValues(
 		[][]tree.TypedExpr{

@@ -130,7 +130,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			// For the JSON flag, we only want to emit the diagram JSON.
 			rows = []string{diagramJSON}
 		} else {
-			if err := emitExplain(ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan); err != nil {
+			if err := emitExplain(params.ctx, ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan); err != nil {
 				return err
 			}
 			rows = ob.BuildStringRows()
@@ -176,7 +176,11 @@ func (e *explainPlanNode) startExec(params runParams) error {
 }
 
 func emitExplain(
-	ob *explain.OutputBuilder, evalCtx *eval.Context, codec keys.SQLCodec, explainPlan *explain.Plan,
+	ctx context.Context,
+	ob *explain.OutputBuilder,
+	evalCtx *eval.Context,
+	codec keys.SQLCodec,
+	explainPlan *explain.Plan,
 ) (err error) {
 	// Guard against bugs in the explain code.
 	defer func() {
@@ -226,7 +230,7 @@ func emitExplain(
 		return catalogkeys.PrettySpans(idx, spans, skip)
 	}
 
-	return explain.Emit(explainPlan, ob, spanFormatFn)
+	return explain.Emit(ctx, explainPlan, ob, spanFormatFn)
 }
 
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
