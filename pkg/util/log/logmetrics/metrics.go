@@ -13,9 +13,8 @@ package logmetrics
 import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"github.com/prometheus/client_model/go"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
 var (
@@ -93,59 +92,30 @@ type logMetricsStruct struct {
 	LogMessageCount             *metric.Counter
 }
 
-// LogMetricsRegistry is a log.LogMetrics implementation used in the
+// logMetricsRegistry is a log.LogMetrics implementation used in the
 // logging package to give it access to metrics without introducing a
 // circular dependency.
 //
 // All metrics meant to be available to the logging package must be
 // registered at the time of initialization.
 //
-// LogMetricsRegistry is thread-safe.
-type LogMetricsRegistry struct {
-	// metricsStruct holds the same metrics as the below structures, but
-	// provides an easy way to inject them into metric.Registry's on demand
-	// in NewRegistry().
-	metricsStruct logMetricsStruct
-	mu            struct {
-		syncutil.Mutex
-		counters []*metric.Counter
-	}
+// logMetricsRegistry is thread-safe.
+type logMetricsRegistry struct {
+	counters []*metric.Counter
 }
 
-var _ log.LogMetrics = (*LogMetricsRegistry)(nil)
+var _ log.LogMetrics = (*logMetricsRegistry)(nil)
 
-func newLogMetricsRegistry() *LogMetricsRegistry {
-	registry := &LogMetricsRegistry{}
-	registry.registerCounters()
-	return registry
-}
-
-func (l *LogMetricsRegistry) registerCounters() {
-	l.mu.counters = make([]*metric.Counter, len(log.Metrics))
-	// Create the metrics struct for us to add to registries as they're
-	// requested.
-	l.metricsStruct = logMetricsStruct{
-		FluentSinkConnAttempts:      metric.NewCounter(FluentSinkConnAttempts),
-		FluentSinkConnErrors:        metric.NewCounter(FluentSinkConnErrors),
-		FluentSinkWriteAttempts:     metric.NewCounter(FluentSinkWriteAttempts),
-		FluentSinkWriteErrors:       metric.NewCounter(FluentSinkWriteErrors),
-		BufferedSinkMessagesDropped: metric.NewCounter(BufferedSinkMessagesDropped),
-		LogMessageCount:             metric.NewCounter(LogMessageCount),
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	// Be sure to also add the metrics to our internal store, for
-	// recall in functions such as IncrementCounter.
-	l.mu.counters[log.FluentSinkConnectionAttempt] = l.metricsStruct.FluentSinkConnAttempts
-	l.mu.counters[log.FluentSinkConnectionError] = l.metricsStruct.FluentSinkConnErrors
-	l.mu.counters[log.FluentSinkWriteAttempt] = l.metricsStruct.FluentSinkWriteAttempts
-	l.mu.counters[log.FluentSinkWriteError] = l.metricsStruct.FluentSinkWriteErrors
-	l.mu.counters[log.BufferedSinkMessagesDropped] = l.metricsStruct.BufferedSinkMessagesDropped
-	l.mu.counters[log.LogMessageCount] = l.metricsStruct.LogMessageCount
-	for _, c := range l.mu.counters {
-		if c == nil {
-			panic(errors.AssertionFailedf("Failed to register log metric in LogMetricsRegistry"))
-		}
+func newLogMetricsRegistry() *logMetricsRegistry {
+	return &logMetricsRegistry{
+		counters: []*metric.Counter{
+			log.FluentSinkConnectionAttempt: metric.NewCounter(FluentSinkConnAttempts),
+			log.FluentSinkConnectionError:   metric.NewCounter(FluentSinkConnErrors),
+			log.FluentSinkWriteAttempt:      metric.NewCounter(FluentSinkWriteAttempts),
+			log.FluentSinkWriteError:        metric.NewCounter(FluentSinkWriteErrors),
+			log.BufferedSinkMessagesDropped: metric.NewCounter(BufferedSinkMessagesDropped),
+			log.LogMessageCount:             metric.NewCounter(LogMessageCount),
+		},
 	}
 }
 
@@ -160,15 +130,15 @@ func NewRegistry() *metric.Registry {
 		panic(errors.AssertionFailedf("LogMetricsRegistry was not initialized"))
 	}
 	reg := metric.NewRegistry()
-	reg.AddMetricStruct(logMetricsReg.metricsStruct)
+	for _, c := range logMetricsReg.counters {
+		reg.AddMetric(c)
+	}
 	return reg
 }
 
 // IncrementCounter increments thegi Counter held by the given alias. If a log.MetricName
 // is provided as an argument, but is not registered with the LogMetricsRegistry, this function
 // panics.
-func (l *LogMetricsRegistry) IncrementCounter(metric log.Metric, amount int64) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.mu.counters[metric].Inc(amount)
+func (l *logMetricsRegistry) IncrementCounter(metric log.Metric, amount int64) {
+	l.counters[metric].Inc(amount)
 }

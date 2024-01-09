@@ -49,12 +49,3 @@ const (
 	BufferedSinkMessagesDropped
 	LogMessageCount
 )
-
-var Metrics = []Metric{
-	FluentSinkConnectionAttempt,
-	FluentSinkConnectionError,
-	FluentSinkWriteAttempt,
-	FluentSinkWriteError,
-	BufferedSinkMessagesDropped,
-	LogMessageCount,
-}
