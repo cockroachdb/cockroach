@@ -1,6 +1,6 @@
 # This file contains telemetry tests for the hashed.* counter.
 
-feature-allowlist
+feature-list
 sql.hashed.*
 ----
 

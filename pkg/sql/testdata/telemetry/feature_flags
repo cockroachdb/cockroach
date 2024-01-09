@@ -1,6 +1,6 @@
 # This file contains telemetry tests for the sql.feature_flag.denied counter.
 
-feature-allowlist
+feature-list
 sql.feature_flag_denied.*
 ----
 

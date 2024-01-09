@@ -1,6 +1,6 @@
 # This file contains telemetry tests for the iam.roles counter.
 
-feature-allowlist
+feature-list
 iam.roles.alter.*
 iam.roles.create.*
 ----
