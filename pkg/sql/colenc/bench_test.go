@@ -134,6 +134,7 @@ func BenchmarkTCPHLineItem(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		err = enc.PrepareBatch(ctx, &noopPutter{}, 0, cb.Length())
 	}
+	b.StopTimer()
 	require.NoError(b, err)
 }
 
