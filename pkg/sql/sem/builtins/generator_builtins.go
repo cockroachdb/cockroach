@@ -16,6 +16,7 @@ import (
 	gojson "encoding/json"
 	"math/rand"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -2993,7 +2994,7 @@ func (s *identGenerator) Next(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
-	name := s.gen.GenerateOne(s.idx)
+	name := s.gen.GenerateOne(strconv.Itoa(s.idx))
 	if err := s.acc.Grow(ctx, int64(len(name))); err != nil {
 		return false, err
 	}

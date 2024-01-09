@@ -13,6 +13,7 @@ package randident
 import (
 	"context"
 	"math/rand"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -92,7 +93,7 @@ func TestNameGen(t *testing.T) {
 			t.Run(tname+"/one", func(t *testing.T) {
 				names := make([]string, 100)
 				for i := 0; i < 100; i++ {
-					names[i] = g.GenerateOne(i)
+					names[i] = g.GenerateOne(strconv.Itoa(i))
 				}
 				validate(t, names, ps)
 			})
@@ -104,7 +105,7 @@ func TestNameGen(t *testing.T) {
 		})
 	}
 
-	cfg := NameGeneratorConfig{Number: true}
+	cfg := NameGeneratorConfig{Suffix: true}
 	testNameGen("base", &cfg, "hello",
 		preds{
 			always: []pred{func(n string) bool { return strings.HasPrefix(n, "hello") }},
