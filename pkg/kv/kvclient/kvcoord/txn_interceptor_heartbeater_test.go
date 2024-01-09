@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -268,7 +269,7 @@ func TestTxnHeartbeaterLoopStartsBeforeExpiry(t *testing.T) {
 		},
 		{
 			// First locking request happens at expiration. Heartbeat immediately.
-			lockingRequestDelay: 5 * time.Second,
+			lockingRequestDelay: 5*time.Second + 1*time.Nanosecond,
 			consideredExpired:   true,
 			loopStarts:          StartImmediately,
 		},
@@ -281,11 +282,10 @@ func TestTxnHeartbeaterLoopStartsBeforeExpiry(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("delay=%s", test.lockingRequestDelay), func(t *testing.T) {
 			ctx := context.Background()
-			txn := makeTxnProto()
-
 			manualTime := timeutil.NewManualTime(timeutil.Unix(0, 123))
 			clock := hlc.NewClockForTesting(manualTime)
-			txn.MinTimestamp, txn.WriteTimestamp = clock.Now(), clock.Now()
+			txn := roachpb.MakeTransaction("test", []byte("key"), isolation.Serializable, 0, clock.Now(),
+				0 /* maxOffsetNs */, 0 /* coordinatorNodeID */, 0, false /* omitInRangefeeds */)
 
 			// We attempt to simulate a transaction that heartbeats every 1s, however
 			// it is important to note that a transaction is considered expired when it
