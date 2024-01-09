@@ -2,14 +2,18 @@
 
 # Setup:
 #
-# k1: value   @ ts 11
-# k2: value   @ ts 12
-# k2: intent  @ ts 13
-# k3: intent  @ ts 14
-# k4: value   @ ts 15
-# k4: lock    @ ts 16
-# k5: value   @ ts 17
-#
+# k1: value                 @ ts 11
+# k2: value                 @ ts 12
+# k2: intent                @ ts 13
+# k3: intent                @ ts 14
+# k4: value                 @ ts 15
+# k4: [u] exclusive lock    @ ts 16
+# k5: value                 @ ts 17
+# k6: value                 @ ts 13
+# k6: [u] shared lock       @ ts 15
+# TODO(arul): In the future, we should extend the test to include:
+# k7: [r] exclusive lock    @ ts15
+# k8: [r] shared lock
 
 run ok
 txn_begin t=A ts=12,0
@@ -28,7 +32,9 @@ put k=k2 v=v3 ts=13,0 t=B
 put k=k3 v=v4 ts=14,0 t=C
 put k=k4 v=v5 ts=15,0
 put k=k5 v=v6 ts=17,0
-add_unreplicated_lock k=k4 t=E
+put k=k6 v=v7 ts=13,0
+add_unreplicated_lock k=k4 t=E str=exclusive
+add_unreplicated_lock k=k6 t=D str=shared
 ----
 put: lock acquisition = {k2 id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0 Replicated Intent []}
 put: lock acquisition = {k3 id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0 Replicated Intent []}
@@ -41,11 +47,13 @@ meta: "k3"/0,0 -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=
 data: "k3"/14.000000000,0 -> /BYTES/v4
 data: "k4"/15.000000000,0 -> /BYTES/v5
 data: "k5"/17.000000000,0 -> /BYTES/v6
+data: "k6"/13.000000000,0 -> /BYTES/v7
 lock (Unreplicated): k4/Exclusive -> id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0
+lock (Unreplicated): k6/Shared -> id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0
 
 # Test cases:
 #
-# for failOnMoreRecent in (true, false):
+# for strength in (none, exclusive, shared):
 #   for ts in (10, 11, 12, 13, 14, 15, 16, 17, 18):
 #     for txn in (nil, A, B, C, D, E):
 #       if txn != nil && txn.read_ts != ts: continue
@@ -53,1143 +61,1986 @@ lock (Unreplicated): k4/Exclusive -> id=00000005 key=/Min iso=Serializable pri=0
 #         testCase()
 #
 
+#-------------------------------------------------------------------------------
+# str=none
+#-------------------------------------------------------------------------------
+
 run ok
-get ts=10 k=k1 skipLocked
+get ts=10 k=k1 skipLocked str=none
 ----
 get: "k1" -> <no data>
 
 run ok
-get ts=10 k=k2 skipLocked
+get ts=10 k=k2 skipLocked str=none
 ----
 get: "k2" -> <no data>
 
 run ok
-get ts=10 k=k3 skipLocked
+get ts=10 k=k3 skipLocked str=none
 ----
 get: "k3" -> <no data>
 
 run ok
-get ts=10 k=k4 skipLocked
+get ts=10 k=k4 skipLocked str=none
 ----
 get: "k4" -> <no data>
 
 run ok
-get ts=10 k=k5 skipLocked
+get ts=10 k=k5 skipLocked str=none
 ----
 get: "k5" -> <no data>
 
 run ok
-scan ts=10 k=k1 end=k6 skipLocked
+get ts=10 k=k6 skipLocked str=none
 ----
-scan: "k1"-"k6" -> <no data>
+get: "k6" -> <no data>
 
 run ok
-scan ts=10 k=k1 end=k6 reverse skipLocked
+scan ts=10 k=k1 end=k9 skipLocked str=none
 ----
-scan: "k1"-"k6" -> <no data>
+scan: "k1"-"k9" -> <no data>
 
 run ok
-get ts=11 k=k1 skipLocked
+scan ts=10 k=k1 end=k9 reverse skipLocked str=none
+----
+scan: "k1"-"k9" -> <no data>
+
+run ok
+get ts=11 k=k1 skipLocked str=none
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=11 k=k2 skipLocked
+get ts=11 k=k2 skipLocked str=none
 ----
 get: "k2" -> <no data>
 
 run ok
-get ts=11 k=k3 skipLocked
+get ts=11 k=k3 skipLocked str=none
 ----
 get: "k3" -> <no data>
 
 run ok
-get ts=11 k=k4 skipLocked
+get ts=11 k=k4 skipLocked str=none
 ----
 get: "k4" -> <no data>
 
 run ok
-get ts=11 k=k5 skipLocked
+get ts=11 k=k5 skipLocked str=none
 ----
 get: "k5" -> <no data>
 
 run ok
-scan ts=11 k=k1 end=k6 skipLocked
+get ts=11 k=k6 skipLocked str=none
+----
+get: "k6" -> <no data>
+
+run ok
+scan ts=11 k=k1 end=k9 skipLocked str=none
 ----
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-scan ts=11 k=k1 end=k6 reverse skipLocked
+scan ts=11 k=k1 end=k9 reverse skipLocked str=none
 ----
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=12 k=k1 skipLocked
+get ts=12 k=k1 skipLocked str=none
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=12 k=k2 skipLocked
+get ts=12 k=k2 skipLocked str=none
 ----
 get: "k2" -> /BYTES/v2 @12.000000000,0
 
 run ok
-get ts=12 k=k3 skipLocked
+get ts=12 k=k3 skipLocked str=none
 ----
 get: "k3" -> <no data>
 
 run ok
-get ts=12 k=k4 skipLocked
+get ts=12 k=k4 skipLocked str=none
 ----
 get: "k4" -> <no data>
 
 run ok
-get ts=12 k=k5 skipLocked
+get ts=12 k=k5 skipLocked str=none
 ----
 get: "k5" -> <no data>
 
 run ok
-scan ts=12 k=k1 end=k6 skipLocked
+get ts=12 k=k6 skipLocked str=none
+----
+get: "k6" -> <no data>
+
+run ok
+scan ts=12 k=k1 end=k9 skipLocked str=none
 ----
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k2" -> /BYTES/v2 @12.000000000,0
 
 run ok
-scan ts=12 k=k1 end=k6 reverse skipLocked
+scan ts=12 k=k1 end=k9 reverse skipLocked str=none
 ----
 scan: "k2" -> /BYTES/v2 @12.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=12 t=A k=k1 skipLocked
+get ts=12 t=A k=k1 skipLocked str=none
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=12 t=A k=k2 skipLocked
+get ts=12 t=A k=k2 skipLocked str=none
 ----
 get: "k2" -> /BYTES/v2 @12.000000000,0
 
 run ok
-get ts=12 t=A k=k3 skipLocked
+get ts=12 t=A k=k3 skipLocked str=none
 ----
 get: "k3" -> <no data>
 
 run ok
-get ts=12 t=A k=k4 skipLocked
+get ts=12 t=A k=k4 skipLocked str=none
 ----
 get: "k4" -> <no data>
 
 run ok
-get ts=12 t=A k=k5 skipLocked
+get ts=12 t=A k=k5 skipLocked str=none
 ----
 get: "k5" -> <no data>
 
 run ok
-scan ts=12 t=A k=k1 end=k6 skipLocked
+get ts=12 t=A k=k6 skipLocked str=none
+----
+get: "k6" -> <no data>
+
+run ok
+scan ts=12 t=A k=k1 end=k9 skipLocked str=none
 ----
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k2" -> /BYTES/v2 @12.000000000,0
 
 run ok
-scan ts=12 t=A k=k1 end=k6 reverse skipLocked
+scan ts=12 t=A k=k1 end=k9 reverse skipLocked str=none
 ----
 scan: "k2" -> /BYTES/v2 @12.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=13 k=k1 skipLocked
+get ts=13 k=k1 skipLocked str=none
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=13 k=k2 skipLocked
+get ts=13 k=k2 skipLocked str=none
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=13 k=k3 skipLocked
+get ts=13 k=k3 skipLocked str=none
 ----
 get: "k3" -> <no data>
 
 run ok
-get ts=13 k=k4 skipLocked
+get ts=13 k=k4 skipLocked str=none
 ----
 get: "k4" -> <no data>
 
 run ok
-get ts=13 k=k5 skipLocked
+get ts=13 k=k5 skipLocked str=none
 ----
 get: "k5" -> <no data>
 
 run ok
-scan ts=13 k=k1 end=k6 skipLocked
+get ts=13 k=k6 skipLocked str=none
+----
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run ok
+scan ts=13 k=k1 end=k9 skipLocked str=none
 ----
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 
 run ok
-scan ts=13 k=k1 end=k6 reverse skipLocked
+scan ts=13 k=k1 end=k9 reverse skipLocked str=none
 ----
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=13 t=B k=k1 skipLocked
+get ts=13 t=B k=k1 skipLocked str=none
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=13 t=B k=k2 skipLocked
+get ts=13 t=B k=k2 skipLocked str=none
 ----
 get: "k2" -> /BYTES/v3 @13.000000000,0
 
 run ok
-get ts=13 t=B k=k3 skipLocked
+get ts=13 t=B k=k3 skipLocked str=none
 ----
 get: "k3" -> <no data>
 
 run ok
-get ts=13 t=B k=k4 skipLocked
+get ts=13 t=B k=k4 skipLocked str=none
 ----
 get: "k4" -> <no data>
 
 run ok
-get ts=13 t=B k=k5 skipLocked
+get ts=13 t=B k=k5 skipLocked str=none
 ----
 get: "k5" -> <no data>
 
 run ok
-scan ts=13 t=B k=k1 end=k6 skipLocked
+get ts=13 t=B k=k6 skipLocked str=none
+----
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run ok
+scan ts=13 t=B k=k1 end=k9 skipLocked str=none
 ----
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k2" -> /BYTES/v3 @13.000000000,0
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 
 run ok
-scan ts=13 t=B k=k1 end=k6 reverse skipLocked
+scan ts=13 t=B k=k1 end=k9 reverse skipLocked str=none
 ----
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 scan: "k2" -> /BYTES/v3 @13.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=14 k=k1 skipLocked
+get ts=14 k=k1 skipLocked str=none
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=14 k=k2 skipLocked
+get ts=14 k=k2 skipLocked str=none
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=14 k=k3 skipLocked
+get ts=14 k=k3 skipLocked str=none
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=14 k=k4 skipLocked
+get ts=14 k=k4 skipLocked str=none
 ----
 get: "k4" -> <no data>
 
 run ok
-get ts=14 k=k5 skipLocked
+get ts=14 k=k5 skipLocked str=none
 ----
 get: "k5" -> <no data>
 
 run ok
-scan ts=14 k=k1 end=k6 skipLocked
+get ts=14 k=k6 skipLocked str=none
+----
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run ok
+scan ts=14 k=k1 end=k9 skipLocked str=none
 ----
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 
 run ok
-scan ts=14 k=k1 end=k6 reverse skipLocked
+scan ts=14 k=k1 end=k9 reverse skipLocked str=none
 ----
 scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=14 t=C k=k1 skipLocked
+get ts=14 t=C k=k1 skipLocked str=none
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=14 t=C k=k2 skipLocked
+get ts=14 t=C k=k2 skipLocked str=none
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=14 t=C k=k3 skipLocked
+get ts=14 t=C k=k3 skipLocked str=none
 ----
 get: "k3" -> /BYTES/v4 @14.000000000,0
 
 run ok
-get ts=14 t=C k=k4 skipLocked
+get ts=14 t=C k=k4 skipLocked str=none
 ----
 get: "k4" -> <no data>
 
 run ok
-get ts=14 t=C k=k5 skipLocked
+get ts=14 t=C k=k5 skipLocked str=none
 ----
 get: "k5" -> <no data>
 
 run ok
-scan ts=14 t=C k=k1 end=k6 skipLocked
+get ts=14 t=C k=k6 skipLocked str=none
+----
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run ok
+scan ts=14 t=C k=k1 end=k9 skipLocked str=none
 ----
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k3" -> /BYTES/v4 @14.000000000,0
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 
 run ok
-scan ts=14 t=C k=k1 end=k6 reverse skipLocked
+scan ts=14 t=C k=k1 end=k9 reverse skipLocked str=none
 ----
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 scan: "k3" -> /BYTES/v4 @14.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=15 k=k1 skipLocked
+get ts=15 k=k1 skipLocked str=none
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=15 k=k2 skipLocked
+get ts=15 k=k2 skipLocked str=none
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=15 k=k3 skipLocked
+get ts=15 k=k3 skipLocked str=none
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=15 k=k4 skipLocked
+get ts=15 k=k4 skipLocked str=none
 ----
 get: "k4" -> /BYTES/v5 @15.000000000,0
 
 run ok
-get ts=15 k=k5 skipLocked
+get ts=15 k=k5 skipLocked str=none
 ----
 get: "k5" -> <no data>
 
 run ok
-scan ts=15 k=k1 end=k6 skipLocked
+get ts=15 k=k6 skipLocked str=none
+----
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run ok
+scan ts=15 k=k1 end=k9 skipLocked str=none
 ----
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k4" -> /BYTES/v5 @15.000000000,0
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 
 run ok
-scan ts=15 k=k1 end=k6 reverse skipLocked
+scan ts=15 k=k1 end=k9 reverse skipLocked str=none
 ----
 scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 scan: "k4" -> /BYTES/v5 @15.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=15 t=D k=k1 skipLocked
+get ts=15 t=D k=k1 skipLocked str=none
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=15 t=D k=k2 skipLocked
+get ts=15 t=D k=k2 skipLocked str=none
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=15 t=D k=k3 skipLocked
+get ts=15 t=D k=k3 skipLocked str=none
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=15 t=D k=k4 skipLocked
+get ts=15 t=D k=k4 skipLocked str=none
 ----
 get: "k4" -> /BYTES/v5 @15.000000000,0
 
 run ok
-get ts=15 t=D k=k5 skipLocked
+get ts=15 t=D k=k5 skipLocked str=none
 ----
 get: "k5" -> <no data>
 
 run ok
-scan ts=15 t=D k=k1 end=k6 skipLocked
+get ts=15 t=D k=k6 skipLocked str=none
+----
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run ok
+scan ts=15 t=D k=k1 end=k9 skipLocked str=none
 ----
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k4" -> /BYTES/v5 @15.000000000,0
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 
 run ok
-scan ts=15 t=D k=k1 end=k6 reverse skipLocked
+scan ts=15 t=D k=k1 end=k9 reverse skipLocked str=none
 ----
 scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 scan: "k4" -> /BYTES/v5 @15.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=16 k=k1 skipLocked
+get ts=16 k=k1 skipLocked str=none
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=16 k=k2 skipLocked
+get ts=16 k=k2 skipLocked str=none
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=16 k=k3 skipLocked
+get ts=16 k=k3 skipLocked str=none
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=16 k=k4 skipLocked
+get ts=16 k=k4 skipLocked str=none
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run ok
-get ts=16 k=k5 skipLocked
+get ts=16 k=k5 skipLocked str=none
 ----
 get: "k5" -> <no data>
 
 run ok
-scan ts=16 k=k1 end=k6 skipLocked
+get ts=16 k=k6 skipLocked str=none
+----
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run ok
+scan ts=16 k=k1 end=k9 skipLocked str=none
 ----
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 
 run ok
-scan ts=16 k=k1 end=k6 reverse skipLocked
+scan ts=16 k=k1 end=k9 reverse skipLocked str=none
 ----
 scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=16 t=E k=k1 skipLocked
+get ts=16 t=E k=k1 skipLocked str=none
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=16 t=E k=k2 skipLocked
+get ts=16 t=E k=k2 skipLocked str=none
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=16 t=E k=k3 skipLocked
+get ts=16 t=E k=k3 skipLocked str=none
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=16 t=E k=k4 skipLocked
+get ts=16 t=E k=k4 skipLocked str=none
 ----
 get: "k4" -> /BYTES/v5 @15.000000000,0
 
 run ok
-get ts=16 t=E k=k5 skipLocked
+get ts=16 t=E k=k5 skipLocked str=none
 ----
 get: "k5" -> <no data>
 
 run ok
-scan ts=16 t=E k=k1 end=k6 skipLocked
+get ts=16 t=E k=k6 skipLocked str=none
+----
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run ok
+scan ts=16 t=E k=k1 end=k9 skipLocked str=none
 ----
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k4" -> /BYTES/v5 @15.000000000,0
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 
 run ok
-scan ts=16 t=E k=k1 end=k6 reverse skipLocked
+scan ts=16 t=E k=k1 end=k9 reverse skipLocked str=none
 ----
 scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 scan: "k4" -> /BYTES/v5 @15.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=17 k=k1 skipLocked
+get ts=17 k=k1 skipLocked str=none
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=17 k=k2 skipLocked
+get ts=17 k=k2 skipLocked str=none
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=17 k=k3 skipLocked
+get ts=17 k=k3 skipLocked str=none
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=17 k=k4 skipLocked
+get ts=17 k=k4 skipLocked str=none
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run ok
-get ts=17 k=k5 skipLocked
+get ts=17 k=k5 skipLocked str=none
 ----
 get: "k5" -> /BYTES/v6 @17.000000000,0
 
 run ok
-scan ts=17 k=k1 end=k6 skipLocked
+get ts=17 k=k6 skipLocked str=none
+----
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run ok
+scan ts=17 k=k1 end=k9 skipLocked str=none
 ----
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k5" -> /BYTES/v6 @17.000000000,0
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 
 run ok
-scan ts=17 k=k1 end=k6 reverse skipLocked
+scan ts=17 k=k1 end=k9 reverse skipLocked str=none
 ----
 scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 scan: "k5" -> /BYTES/v6 @17.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=18 k=k1 skipLocked
+get ts=18 k=k1 skipLocked str=none
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=18 k=k2 skipLocked
+get ts=18 k=k2 skipLocked str=none
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=18 k=k3 skipLocked
+get ts=18 k=k3 skipLocked str=none
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=18 k=k4 skipLocked
+get ts=18 k=k4 skipLocked str=none
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run ok
-get ts=18 k=k5 skipLocked
+get ts=18 k=k5 skipLocked str=none
 ----
 get: "k5" -> /BYTES/v6 @17.000000000,0
 
 run ok
-scan ts=18 k=k1 end=k6 skipLocked
+get ts=18 k=k6 skipLocked str=none
 ----
-scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
-scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
-scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
-scan: "k1" -> /BYTES/v1 @11.000000000,0
-scan: "k5" -> /BYTES/v6 @17.000000000,0
+get: "k6" -> /BYTES/v7 @13.000000000,0
 
 run ok
-scan ts=18 k=k1 end=k6 reverse skipLocked
+scan ts=18 k=k1 end=k9 skipLocked str=none
+----
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+scan: "k5" -> /BYTES/v6 @17.000000000,0
+scan: "k6" -> /BYTES/v7 @13.000000000,0
+
+run ok
+scan ts=18 k=k1 end=k9 reverse skipLocked str=none
 ----
 scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 scan: "k5" -> /BYTES/v6 @17.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+#-------------------------------------------------------------------------------
+# str=shared
+#-------------------------------------------------------------------------------
 
 run error
-get ts=10 k=k1 skipLocked failOnMoreRecent
+get ts=10 k=k1 skipLocked failOnMoreRecent str=shared
 ----
 get: "k1" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; must write at or above 11.000000000,1
 
 run ok
-get ts=10 k=k2 skipLocked failOnMoreRecent
+get ts=10 k=k2 skipLocked failOnMoreRecent str=shared
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=10 k=k3 skipLocked failOnMoreRecent
+get ts=10 k=k3 skipLocked failOnMoreRecent str=shared
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=10 k=k4 skipLocked failOnMoreRecent
+get ts=10 k=k4 skipLocked failOnMoreRecent str=shared
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
-get ts=10 k=k5 skipLocked failOnMoreRecent
+get ts=10 k=k5 skipLocked failOnMoreRecent str=shared
 ----
 get: "k5" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 10.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=10 k=k1 end=k6 skipLocked failOnMoreRecent
+get ts=10 k=k6 skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+get: "k6" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 10.000000000,0 too old; must write at or above 13.000000000,1
+
+run error
+scan ts=10 k=k1 end=k9 skipLocked failOnMoreRecent str=shared
+----
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=10 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+scan ts=10 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 10.000000000,0 too old; must write at or above 17.000000000,1
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 10.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-get ts=11 k=k1 skipLocked failOnMoreRecent
+get ts=11 k=k1 skipLocked failOnMoreRecent str=shared
 ----
 get: "k1" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 11.000000000,0 too old; must write at or above 11.000000000,1
 
 run ok
-get ts=11 k=k2 skipLocked failOnMoreRecent
+get ts=11 k=k2 skipLocked failOnMoreRecent str=shared
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=11 k=k3 skipLocked failOnMoreRecent
+get ts=11 k=k3 skipLocked failOnMoreRecent str=shared
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=11 k=k4 skipLocked failOnMoreRecent
+get ts=11 k=k4 skipLocked failOnMoreRecent str=shared
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
-get ts=11 k=k5 skipLocked failOnMoreRecent
+get ts=11 k=k5 skipLocked failOnMoreRecent str=shared
 ----
 get: "k5" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 11.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=11 k=k1 end=k6 skipLocked failOnMoreRecent
+get ts=11 k=k6 skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+get: "k6" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 11.000000000,0 too old; must write at or above 13.000000000,1
+
+run error
+scan ts=11 k=k1 end=k9 skipLocked failOnMoreRecent str=shared
+----
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 11.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=11 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+scan ts=11 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 11.000000000,0 too old; must write at or above 17.000000000,1
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 11.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
-get ts=12 k=k1 skipLocked failOnMoreRecent
+get ts=12 k=k1 skipLocked failOnMoreRecent str=shared
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=12 k=k2 skipLocked failOnMoreRecent
+get ts=12 k=k2 skipLocked failOnMoreRecent str=shared
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=12 k=k3 skipLocked failOnMoreRecent
+get ts=12 k=k3 skipLocked failOnMoreRecent str=shared
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=12 k=k4 skipLocked failOnMoreRecent
+get ts=12 k=k4 skipLocked failOnMoreRecent str=shared
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
-get ts=12 k=k5 skipLocked failOnMoreRecent
+get ts=12 k=k5 skipLocked failOnMoreRecent str=shared
 ----
 get: "k5" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=12 k=k1 end=k6 skipLocked failOnMoreRecent
+get ts=12 k=k6 skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+get: "k6" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 12.000000000,0 too old; must write at or above 13.000000000,1
+
+run error
+scan ts=12 k=k1 end=k9 skipLocked failOnMoreRecent str=shared
+----
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=12 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+scan ts=12 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
-get ts=12 t=A k=k1 skipLocked failOnMoreRecent
+get ts=12 t=A k=k1 skipLocked failOnMoreRecent str=shared
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=12 t=A k=k2 skipLocked failOnMoreRecent
+get ts=12 t=A k=k2 skipLocked failOnMoreRecent str=shared
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=12 t=A k=k3 skipLocked failOnMoreRecent
+get ts=12 t=A k=k3 skipLocked failOnMoreRecent str=shared
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=12 t=A k=k4 skipLocked failOnMoreRecent
+get ts=12 t=A k=k4 skipLocked failOnMoreRecent str=shared
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
-get ts=12 t=A k=k5 skipLocked failOnMoreRecent
+get ts=12 t=A k=k5 skipLocked failOnMoreRecent str=shared
 ----
 get: "k5" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=12 t=A k=k1 end=k6 skipLocked failOnMoreRecent
+get ts=12 t=A k=k6 skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+get: "k6" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 12.000000000,0 too old; must write at or above 13.000000000,1
+
+run error
+scan ts=12 t=A k=k1 end=k9 skipLocked failOnMoreRecent str=shared
+----
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=12 t=A k=k1 end=k6 reverse skipLocked failOnMoreRecent
+scan ts=12 t=A k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
-get ts=13 k=k1 skipLocked failOnMoreRecent
+get ts=13 k=k1 skipLocked failOnMoreRecent str=shared
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=13 k=k2 skipLocked failOnMoreRecent
+get ts=13 k=k2 skipLocked failOnMoreRecent str=shared
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=13 k=k3 skipLocked failOnMoreRecent
+get ts=13 k=k3 skipLocked failOnMoreRecent str=shared
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=13 k=k4 skipLocked failOnMoreRecent
+get ts=13 k=k4 skipLocked failOnMoreRecent str=shared
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
-get ts=13 k=k5 skipLocked failOnMoreRecent
+get ts=13 k=k5 skipLocked failOnMoreRecent str=shared
 ----
 get: "k5" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=13 k=k1 end=k6 skipLocked failOnMoreRecent
+get ts=13 k=k6 skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+get: "k6" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 13.000000000,0 too old; must write at or above 13.000000000,1
+
+run error
+scan ts=13 k=k1 end=k9 skipLocked failOnMoreRecent str=shared
+----
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=13 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+scan ts=13 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
-get ts=13 t=B k=k1 skipLocked failOnMoreRecent
+get ts=13 t=B k=k1 skipLocked failOnMoreRecent str=shared
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=13 t=B k=k2 skipLocked failOnMoreRecent
+get ts=13 t=B k=k2 skipLocked failOnMoreRecent str=shared
 ----
 get: "k2" -> /BYTES/v3 @13.000000000,0
 
 run ok
-get ts=13 t=B k=k3 skipLocked failOnMoreRecent
+get ts=13 t=B k=k3 skipLocked failOnMoreRecent str=shared
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=13 t=B k=k4 skipLocked failOnMoreRecent
+get ts=13 t=B k=k4 skipLocked failOnMoreRecent str=shared
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
-get ts=13 t=B k=k5 skipLocked failOnMoreRecent
+get ts=13 t=B k=k5 skipLocked failOnMoreRecent str=shared
 ----
 get: "k5" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=13 t=B k=k1 end=k6 skipLocked failOnMoreRecent
+get ts=13 t=B k=k6 skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+get: "k6" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 13.000000000,0 too old; must write at or above 13.000000000,1
+
+run error
+scan ts=13 t=B k=k1 end=k9 skipLocked failOnMoreRecent str=shared
+----
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=13 t=B k=k1 end=k6 reverse skipLocked failOnMoreRecent
+scan ts=13 t=B k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
-get ts=14 k=k1 skipLocked failOnMoreRecent
+get ts=14 k=k1 skipLocked failOnMoreRecent str=shared
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=14 k=k2 skipLocked failOnMoreRecent
+get ts=14 k=k2 skipLocked failOnMoreRecent str=shared
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=14 k=k3 skipLocked failOnMoreRecent
+get ts=14 k=k3 skipLocked failOnMoreRecent str=shared
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=14 k=k4 skipLocked failOnMoreRecent
+get ts=14 k=k4 skipLocked failOnMoreRecent str=shared
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
-get ts=14 k=k5 skipLocked failOnMoreRecent
+get ts=14 k=k5 skipLocked failOnMoreRecent str=shared
 ----
 get: "k5" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; must write at or above 17.000000000,1
 
-run error
-scan ts=14 k=k1 end=k6 skipLocked failOnMoreRecent
+run ok
+get ts=14 k=k6 skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run error
+scan ts=14 k=k1 end=k9 skipLocked failOnMoreRecent str=shared
+----
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=14 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+scan ts=14 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
-get ts=14 t=C k=k1 skipLocked failOnMoreRecent
+get ts=14 t=C k=k1 skipLocked failOnMoreRecent str=shared
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=14 t=C k=k2 skipLocked failOnMoreRecent
+get ts=14 t=C k=k2 skipLocked failOnMoreRecent str=shared
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=14 t=C k=k3 skipLocked failOnMoreRecent
+get ts=14 t=C k=k3 skipLocked failOnMoreRecent str=shared
 ----
 get: "k3" -> /BYTES/v4 @14.000000000,0
 
 run ok
-get ts=14 t=C k=k4 skipLocked failOnMoreRecent
+get ts=14 t=C k=k4 skipLocked failOnMoreRecent str=shared
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
-get ts=14 t=C k=k5 skipLocked failOnMoreRecent
+get ts=14 t=C k=k5 skipLocked failOnMoreRecent str=shared
 ----
 get: "k5" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; must write at or above 17.000000000,1
 
-run error
-scan ts=14 t=C k=k1 end=k6 skipLocked failOnMoreRecent
+run ok
+get ts=14 t=C k=k6 skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run error
+scan ts=14 t=C k=k1 end=k9 skipLocked failOnMoreRecent str=shared
+----
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=14 t=C k=k1 end=k6 reverse skipLocked failOnMoreRecent
+scan ts=14 t=C k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
-get ts=15 k=k1 skipLocked failOnMoreRecent
+get ts=15 k=k1 skipLocked failOnMoreRecent str=shared
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=15 k=k2 skipLocked failOnMoreRecent
+get ts=15 k=k2 skipLocked failOnMoreRecent str=shared
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=15 k=k3 skipLocked failOnMoreRecent
+get ts=15 k=k3 skipLocked failOnMoreRecent str=shared
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=15 k=k4 skipLocked failOnMoreRecent
+get ts=15 k=k4 skipLocked failOnMoreRecent str=shared
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
-get ts=15 k=k5 skipLocked failOnMoreRecent
+get ts=15 k=k5 skipLocked failOnMoreRecent str=shared
 ----
 get: "k5" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; must write at or above 17.000000000,1
 
-run error
-scan ts=15 k=k1 end=k6 skipLocked failOnMoreRecent
+run ok
+get ts=15 k=k6 skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run error
+scan ts=15 k=k1 end=k9 skipLocked failOnMoreRecent str=shared
+----
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=15 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+scan ts=15 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
-get ts=15 t=D k=k1 skipLocked failOnMoreRecent
+get ts=15 t=D k=k1 skipLocked failOnMoreRecent str=shared
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=15 t=D k=k2 skipLocked failOnMoreRecent
+get ts=15 t=D k=k2 skipLocked failOnMoreRecent str=shared
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=15 t=D k=k3 skipLocked failOnMoreRecent
+get ts=15 t=D k=k3 skipLocked failOnMoreRecent str=shared
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=15 t=D k=k4 skipLocked failOnMoreRecent
+get ts=15 t=D k=k4 skipLocked failOnMoreRecent str=shared
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
-get ts=15 t=D k=k5 skipLocked failOnMoreRecent
+get ts=15 t=D k=k5 skipLocked failOnMoreRecent str=shared
 ----
 get: "k5" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; must write at or above 17.000000000,1
 
-run error
-scan ts=15 t=D k=k1 end=k6 skipLocked failOnMoreRecent
+run ok
+get ts=15 t=D k=k6 skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run error
+scan ts=15 t=D k=k1 end=k9 skipLocked failOnMoreRecent str=shared
+----
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=15 t=D k=k1 end=k6 reverse skipLocked failOnMoreRecent
+scan ts=15 t=D k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
-get ts=16 k=k1 skipLocked failOnMoreRecent
+get ts=16 k=k1 skipLocked failOnMoreRecent str=shared
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=16 k=k2 skipLocked failOnMoreRecent
+get ts=16 k=k2 skipLocked failOnMoreRecent str=shared
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=16 k=k3 skipLocked failOnMoreRecent
+get ts=16 k=k3 skipLocked failOnMoreRecent str=shared
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=16 k=k4 skipLocked failOnMoreRecent
+get ts=16 k=k4 skipLocked failOnMoreRecent str=shared
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
-get ts=16 k=k5 skipLocked failOnMoreRecent
+get ts=16 k=k5 skipLocked failOnMoreRecent str=shared
 ----
 get: "k5" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; must write at or above 17.000000000,1
 
-run error
-scan ts=16 k=k1 end=k6 skipLocked failOnMoreRecent
+run ok
+get ts=16 k=k6 skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run error
+scan ts=16 k=k1 end=k9 skipLocked failOnMoreRecent str=shared
+----
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=16 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+scan ts=16 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
-get ts=16 t=E k=k1 skipLocked failOnMoreRecent
+get ts=16 t=E k=k1 skipLocked failOnMoreRecent str=shared
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=16 t=E k=k2 skipLocked failOnMoreRecent
+get ts=16 t=E k=k2 skipLocked failOnMoreRecent str=shared
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=16 t=E k=k3 skipLocked failOnMoreRecent
+get ts=16 t=E k=k3 skipLocked failOnMoreRecent str=shared
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=16 t=E k=k4 skipLocked failOnMoreRecent
+get ts=16 t=E k=k4 skipLocked failOnMoreRecent str=shared
 ----
 get: "k4" -> /BYTES/v5 @15.000000000,0
 
 run error
-get ts=16 t=E k=k5 skipLocked failOnMoreRecent
+get ts=16 t=E k=k5 skipLocked failOnMoreRecent str=shared
 ----
 get: "k5" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; must write at or above 17.000000000,1
 
-run error
-scan ts=16 t=E k=k1 end=k6 skipLocked failOnMoreRecent
+run ok
+get ts=16 t=E k=k6 skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run error
+scan ts=16 t=E k=k1 end=k9 skipLocked failOnMoreRecent str=shared
+----
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=16 t=E k=k1 end=k6 reverse skipLocked failOnMoreRecent
+scan ts=16 t=E k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
-get ts=17 k=k1 skipLocked failOnMoreRecent
+get ts=17 k=k1 skipLocked failOnMoreRecent str=shared
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=17 k=k2 skipLocked failOnMoreRecent
+get ts=17 k=k2 skipLocked failOnMoreRecent str=shared
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=17 k=k3 skipLocked failOnMoreRecent
+get ts=17 k=k3 skipLocked failOnMoreRecent str=shared
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=17 k=k4 skipLocked failOnMoreRecent
+get ts=17 k=k4 skipLocked failOnMoreRecent str=shared
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
-get ts=17 k=k5 skipLocked failOnMoreRecent
+get ts=17 k=k5 skipLocked failOnMoreRecent str=shared
 ----
 get: "k5" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 17.000000000,0 too old; must write at or above 17.000000000,1
 
-run error
-scan ts=17 k=k1 end=k6 skipLocked failOnMoreRecent
+run ok
+get ts=17 k=k6 skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run error
+scan ts=17 k=k1 end=k9 skipLocked failOnMoreRecent str=shared
+----
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 17.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
-scan ts=17 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+scan ts=17 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
-scan: "k1"-"k6" -> <no data>
+scan: "k1"-"k9" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 17.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
-get ts=18 k=k1 skipLocked failOnMoreRecent
+get ts=18 k=k1 skipLocked failOnMoreRecent str=shared
 ----
 get: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
-get ts=18 k=k2 skipLocked failOnMoreRecent
+get ts=18 k=k2 skipLocked failOnMoreRecent str=shared
 ----
 get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
-get ts=18 k=k3 skipLocked failOnMoreRecent
+get ts=18 k=k3 skipLocked failOnMoreRecent str=shared
 ----
 get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
-get ts=18 k=k4 skipLocked failOnMoreRecent
+get ts=18 k=k4 skipLocked failOnMoreRecent str=shared
 ----
 get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run ok
-get ts=18 k=k5 skipLocked failOnMoreRecent
+get ts=18 k=k5 skipLocked failOnMoreRecent str=shared
 ----
 get: "k5" -> /BYTES/v6 @17.000000000,0
 
 run ok
-scan ts=18 k=k1 end=k6 skipLocked failOnMoreRecent
+get ts=18 k=k6 skipLocked failOnMoreRecent str=shared
+----
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run ok
+scan ts=18 k=k1 end=k9 skipLocked failOnMoreRecent str=shared
 ----
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k5" -> /BYTES/v6 @17.000000000,0
+scan: "k6" -> /BYTES/v7 @13.000000000,0
 
 run ok
-scan ts=18 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+scan ts=18 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
+scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k6" -> /BYTES/v7 @13.000000000,0
+scan: "k5" -> /BYTES/v6 @17.000000000,0
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+#-------------------------------------------------------------------------------
+# str=exclusive
+#-------------------------------------------------------------------------------
+
+run error
+get ts=10 k=k1 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k1" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; must write at or above 11.000000000,1
+
+run ok
+get ts=10 k=k2 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=10 k=k3 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=10 k=k4 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=10 k=k5 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k5" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 10.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=10 k=k6 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k6" -> intent {id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0}
+get: "k6" -> <no data>
+
+run error
+scan ts=10 k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; must write at or above 17.000000000,1
+
+run error
+scan ts=10 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 10.000000000,0 too old; must write at or above 17.000000000,1
+
+run error
+get ts=11 k=k1 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k1" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 11.000000000,0 too old; must write at or above 11.000000000,1
+
+run ok
+get ts=11 k=k2 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=11 k=k3 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=11 k=k4 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=11 k=k5 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k5" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 11.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=11 k=k6 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k6" -> intent {id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0}
+get: "k6" -> <no data>
+
+run error
+scan ts=11 k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 11.000000000,0 too old; must write at or above 17.000000000,1
+
+run error
+scan ts=11 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 11.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=12 k=k1 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=12 k=k2 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=12 k=k3 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=12 k=k4 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=12 k=k5 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k5" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=12 k=k6 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k6" -> intent {id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0}
+get: "k6" -> <no data>
+
+run error
+scan ts=12 k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
+
+run error
+scan ts=12 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=12 t=A k=k1 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=12 t=A k=k2 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=12 t=A k=k3 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=12 t=A k=k4 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=12 t=A k=k5 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k5" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=12 t=A k=k6 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k6" -> intent {id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0}
+get: "k6" -> <no data>
+
+run error
+scan ts=12 t=A k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
+
+run error
+scan ts=12 t=A k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=13 k=k1 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=13 k=k2 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=13 k=k3 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=13 k=k4 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=13 k=k5 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k5" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=13 k=k6 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k6" -> intent {id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0}
+get: "k6" -> <no data>
+
+run error
+scan ts=13 k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
+
+run error
+scan ts=13 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=13 t=B k=k1 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=13 t=B k=k2 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k2" -> /BYTES/v3 @13.000000000,0
+
+run ok
+get ts=13 t=B k=k3 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=13 t=B k=k4 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=13 t=B k=k5 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k5" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=13 t=B k=k6 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k6" -> intent {id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0}
+get: "k6" -> <no data>
+
+run error
+scan ts=13 t=B k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
+
+run error
+scan ts=13 t=B k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=14 k=k1 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=14 k=k2 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=14 k=k3 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=14 k=k4 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=14 k=k5 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k5" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=14 k=k6 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k6" -> intent {id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0}
+get: "k6" -> <no data>
+
+run error
+scan ts=14 k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; must write at or above 17.000000000,1
+
+run error
+scan ts=14 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=14 t=C k=k1 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=14 t=C k=k2 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=14 t=C k=k3 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k3" -> /BYTES/v4 @14.000000000,0
+
+run ok
+get ts=14 t=C k=k4 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=14 t=C k=k5 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k5" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=14 t=C k=k6 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k6" -> intent {id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0}
+get: "k6" -> <no data>
+
+run error
+scan ts=14 t=C k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; must write at or above 17.000000000,1
+
+run error
+scan ts=14 t=C k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=15 k=k1 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=15 k=k2 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=15 k=k3 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=15 k=k4 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=15 k=k5 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k5" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=15 k=k6 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k6" -> intent {id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0}
+get: "k6" -> <no data>
+
+run error
+scan ts=15 k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; must write at or above 17.000000000,1
+
+run error
+scan ts=15 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=15 t=D k=k1 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=15 t=D k=k2 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=15 t=D k=k3 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=15 t=D k=k4 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=15 t=D k=k5 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k5" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=15 t=D k=k6 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k6" -> /BYTES/v7 @13.000000000,0
+
+run error
+scan ts=15 t=D k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; must write at or above 17.000000000,1
+
+run error
+scan ts=15 t=D k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=16 k=k1 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=16 k=k2 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=16 k=k3 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=16 k=k4 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=16 k=k5 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k5" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=16 k=k6 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k6" -> intent {id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0}
+get: "k6" -> <no data>
+
+run error
+scan ts=16 k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; must write at or above 17.000000000,1
+
+run error
+scan ts=16 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=16 t=E k=k1 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=16 t=E k=k2 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=16 t=E k=k3 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=16 t=E k=k4 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k4" -> /BYTES/v5 @15.000000000,0
+
+run error
+get ts=16 t=E k=k5 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k5" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=16 t=E k=k6 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k6" -> intent {id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0}
+get: "k6" -> <no data>
+
+run error
+scan ts=16 t=E k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; must write at or above 17.000000000,1
+
+run error
+scan ts=16 t=E k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=17 k=k1 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=17 k=k2 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=17 k=k3 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=17 k=k4 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=17 k=k5 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k5" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 17.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=17 k=k6 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k6" -> intent {id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0}
+get: "k6" -> <no data>
+
+run error
+scan ts=17 k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 17.000000000,0 too old; must write at or above 17.000000000,1
+
+run error
+scan ts=17 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive
+----
+scan: "k1"-"k9" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 17.000000000,0 too old; must write at or above 17.000000000,1
+
+run ok
+get ts=18 k=k1 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=18 k=k2 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=18 k=k3 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=18 k=k4 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run ok
+get ts=18 k=k5 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k5" -> /BYTES/v6 @17.000000000,0
+
+run ok
+get ts=18 k=k6 skipLocked failOnMoreRecent str=exclusive
+----
+get: "k6" -> intent {id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0}
+get: "k6" -> <no data>
+
+run ok
+scan ts=18 k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
+----
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: intent "k6" {id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0}
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+scan: "k5" -> /BYTES/v6 @17.000000000,0
+
+run ok
+scan ts=18 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive
+----
+scan: intent "k6" {id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0}
 scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
