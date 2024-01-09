@@ -27,7 +27,8 @@ type joinerBase struct {
 	execinfra.ProcessorBase
 
 	joinType    descpb.JoinType
-	onCond      execinfrapb.ExprHelper
+	eh          execinfrapb.ExprHelper
+	onCond      tree.TypedExpr
 	emptyLeft   rowenc.EncDatumRow
 	emptyRight  rowenc.EncDatumRow
 	combinedRow rowenc.EncDatumRow
@@ -89,7 +90,12 @@ func (jb *joinerBase) init(
 		return err
 	}
 	semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
-	return jb.onCond.Init(ctx, onExpr, onCondTypes, semaCtx, jb.EvalCtx)
+	var err error
+	if err = jb.eh.Init(ctx, onCondTypes, semaCtx, jb.EvalCtx); err != nil {
+		return err
+	}
+	jb.onCond, err = jb.eh.PrepareExpr(ctx, onExpr)
+	return err
 }
 
 // joinSide is the utility type to distinguish between two sides of the join.
@@ -157,7 +163,7 @@ func shouldEmitUnmatchedRow(side joinSide, joinType descpb.JoinType) bool {
 func (jb *joinerBase) render(lrow, rrow rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
 	outputRow := jb.renderForOutput(lrow, rrow)
 
-	if jb.onCond.Expr != nil {
+	if jb.onCond != nil {
 		// We need to evaluate the ON condition which can refer to the columns
 		// from both sides of the join regardless of the join type, so we need
 		// to have the combined row.
@@ -169,7 +175,7 @@ func (jb *joinerBase) render(lrow, rrow rowenc.EncDatumRow) (rowenc.EncDatumRow,
 		} else {
 			combinedRow = jb.combine(lrow, rrow)
 		}
-		res, err := jb.onCond.EvalFilter(jb.Ctx(), combinedRow)
+		res, err := jb.eh.EvalFilter(jb.Ctx(), jb.onCond, combinedRow)
 		if !res || err != nil {
 			return nil, err
 		}

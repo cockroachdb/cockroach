@@ -73,9 +73,11 @@ type DoesNotUseTxn interface {
 // ProcOutputHelper is a helper type that performs filtering and projection on
 // the output of a processor.
 type ProcOutputHelper struct {
-	// renderExprs has length > 0 if we have a rendering. Only one of renderExprs
-	// and outputCols can be set.
-	renderExprs []execinfrapb.ExprHelper
+	eh execinfrapb.ExprHelper
+
+	// renderExprs has length > 0 if we have a rendering. Only one of
+	// renderExprs and outputCols can be set.
+	renderExprs tree.TypedExprs
 	// outputCols is non-nil if we have a projection. Only one of renderExprs and
 	// outputCols can be set. Note that 0-length projections are possible, in
 	// which case outputCols will be 0-length but non-nil.
@@ -107,8 +109,9 @@ func (h *ProcOutputHelper) Reset() {
 	// Deeply reset the render expressions and the output row. Note that we
 	// don't bother deeply resetting the types slice since the types are small
 	// objects.
+	h.eh = execinfrapb.ExprHelper{}
 	for i := range h.renderExprs {
-		h.renderExprs[i] = execinfrapb.ExprHelper{}
+		h.renderExprs[i] = nil
 	}
 	for i := range h.outputRow {
 		h.outputRow[i] = rowenc.EncDatum{}
@@ -159,21 +162,26 @@ func (h *ProcOutputHelper) Init(
 			h.OutputTypes[i] = coreOutputTypes[c]
 		}
 	} else if nRenders := len(post.RenderExprs); nRenders > 0 {
+		h.eh.Init(ctx, coreOutputTypes, semaCtx, evalCtx)
 		if cap(h.renderExprs) >= nRenders {
 			h.renderExprs = h.renderExprs[:nRenders]
 		} else {
-			h.renderExprs = make([]execinfrapb.ExprHelper, nRenders)
+			h.renderExprs = make(tree.TypedExprs, nRenders)
 		}
 		if cap(h.OutputTypes) >= nRenders {
 			h.OutputTypes = h.OutputTypes[:nRenders]
 		} else {
 			h.OutputTypes = make([]*types.T, nRenders)
 		}
+		if err := h.eh.Init(ctx, coreOutputTypes, semaCtx, evalCtx); err != nil {
+			return err
+		}
 		for i, expr := range post.RenderExprs {
-			if err := h.renderExprs[i].Init(ctx, expr, coreOutputTypes, semaCtx, evalCtx); err != nil {
+			var err error
+			if h.renderExprs[i], err = h.eh.PrepareExpr(ctx, expr); err != nil {
 				return err
 			}
-			h.OutputTypes[i] = h.renderExprs[i].Expr.ResolvedType()
+			h.OutputTypes[i] = h.renderExprs[i].ResolvedType()
 		}
 	} else {
 		// No rendering or projection.
@@ -281,7 +289,7 @@ func (h *ProcOutputHelper) ProcessRow(
 	if len(h.renderExprs) > 0 {
 		// Rendering.
 		for i := range h.renderExprs {
-			datum, err := h.renderExprs[i].Eval(ctx, row)
+			datum, err := h.eh.Eval(ctx, h.renderExprs[i], row)
 			if err != nil {
 				return nil, false, err
 			}

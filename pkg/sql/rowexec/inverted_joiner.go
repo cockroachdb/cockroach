@@ -84,8 +84,9 @@ type invertedJoiner struct {
 	// fetched columns (same length with prefixEqualityCols).
 	prefixFetchedColOrdinals []int
 
-	onExprHelper execinfrapb.ExprHelper
-	combinedRow  rowenc.EncDatumRow
+	eh          execinfrapb.ExprHelper
+	onExpr      tree.TypedExpr
+	combinedRow rowenc.EncDatumRow
 
 	joinType descpb.JoinType
 
@@ -263,7 +264,10 @@ func newInvertedJoiner(
 	// execbuilder.Builder.buildInvertedJoin.
 	onExprColTypes[len(ij.inputTypes)+ij.invertedFetchedColOrdinal] = spec.InvertedColumnOriginalType
 
-	if err := ij.onExprHelper.Init(ctx, spec.OnExpr, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
+	if err = ij.eh.Init(ctx, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
+		return nil, err
+	}
+	if ij.onExpr, err = ij.eh.PrepareExpr(ctx, spec.OnExpr); err != nil {
 		return nil, err
 	}
 	combinedRowLen := len(onExprColTypes)
@@ -274,11 +278,15 @@ func newInvertedJoiner(
 
 	if ij.datumsToInvertedExpr == nil {
 		var invertedExprHelper execinfrapb.ExprHelper
-		if err := invertedExprHelper.Init(ctx, spec.InvertedExpr, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
+		if err = invertedExprHelper.Init(ctx, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
+			return nil, err
+		}
+		var expr tree.TypedExpr
+		if expr, err = invertedExprHelper.PrepareExpr(ctx, spec.InvertedExpr); err != nil {
 			return nil, err
 		}
 		ij.datumsToInvertedExpr, err = invertedidx.NewDatumsToInvertedExpr(
-			ctx, ij.EvalCtx, onExprColTypes, invertedExprHelper.Expr, ij.fetchSpec.GeoConfig,
+			ctx, ij.EvalCtx, onExprColTypes, expr, ij.fetchSpec.GeoConfig,
 		)
 		if err != nil {
 			return nil, err
@@ -690,8 +698,8 @@ func (ij *invertedJoiner) emitRow() (
 func (ij *invertedJoiner) render(lrow, rrow rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
 	ij.combinedRow = append(ij.combinedRow[:0], lrow...)
 	ij.combinedRow = append(ij.combinedRow, rrow...)
-	if ij.onExprHelper.Expr != nil {
-		res, err := ij.onExprHelper.EvalFilter(ij.Ctx(), ij.combinedRow)
+	if ij.onExpr != nil {
+		res, err := ij.eh.EvalFilter(ij.Ctx(), ij.onExpr, ij.combinedRow)
 		if !res || err != nil {
 			return nil, err
 		}

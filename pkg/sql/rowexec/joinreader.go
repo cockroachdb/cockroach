@@ -176,8 +176,9 @@ type joinReader struct {
 	// remoteLookupExpr contains the lookup join conditions targeting remote
 	// nodes. See comments in the spec for more details.
 	lookupCols       []uint32
-	lookupExpr       execinfrapb.ExprHelper
-	remoteLookupExpr execinfrapb.ExprHelper
+	eh               execinfrapb.ExprHelper
+	lookupExpr       tree.TypedExpr
+	remoteLookupExpr tree.TypedExpr
 
 	// spansCanOverlap indicates whether the spans generated for a given input
 	// batch can overlap. It is used in the fetcher when deciding whether a newly
@@ -435,13 +436,14 @@ func newJoinReader(
 		lookupExprTypes = append(lookupExprTypes, rightTypes...)
 
 		semaCtx := flowCtx.NewSemaContext(jr.txn)
-		if err := jr.lookupExpr.Init(ctx, spec.LookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx); err != nil {
+		if err = jr.eh.Init(ctx, lookupExprTypes, semaCtx, jr.EvalCtx); err != nil {
+			return nil, err
+		}
+		if jr.lookupExpr, err = jr.eh.PrepareExpr(ctx, spec.LookupExpr); err != nil {
 			return nil, err
 		}
 		if !spec.RemoteLookupExpr.Empty() {
-			if err := jr.remoteLookupExpr.Init(
-				ctx, spec.RemoteLookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx,
-			); err != nil {
+			if jr.remoteLookupExpr, err = jr.eh.PrepareExpr(ctx, spec.RemoteLookupExpr); err != nil {
 				return nil, err
 			}
 		}
@@ -617,7 +619,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 	strategyMemAcc := jr.MemMonitor.MakeBoundAccount()
 	spanGeneratorMemAcc := jr.MemMonitor.MakeBoundAccount()
 	var generator joinReaderSpanGenerator
-	if jr.lookupExpr.Expr == nil {
+	if jr.lookupExpr == nil {
 		defGen := &defaultSpanGenerator{}
 		if err := defGen.init(
 			flowCtx.EvalCtx,
@@ -652,7 +654,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		// If jr.remoteLookupExpr is set, this is a locality optimized lookup join
 		// and we need to use localityOptimizedSpanGenerator.
 		var err error
-		if jr.remoteLookupExpr.Expr == nil {
+		if jr.remoteLookupExpr == nil {
 			multiSpanGen := &multiSpanGenerator{}
 			if jr.spansCanOverlap, err = multiSpanGen.init(
 				flowCtx.EvalCtx,
@@ -660,7 +662,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 				&jr.fetchSpec,
 				jr.splitFamilyIDs,
 				len(jr.input.OutputTypes()),
-				jr.lookupExpr.Expr,
+				jr.lookupExpr,
 				fetchedOrdToIndexKeyOrd,
 				&spanGeneratorMemAcc,
 			); err != nil {
@@ -676,8 +678,8 @@ func (jr *joinReader) initJoinReaderStrategy(
 				&jr.fetchSpec,
 				jr.splitFamilyIDs,
 				len(jr.input.OutputTypes()),
-				jr.lookupExpr.Expr,
-				jr.remoteLookupExpr.Expr,
+				jr.lookupExpr,
+				jr.remoteLookupExpr,
 				fetchedOrdToIndexKeyOrd,
 				&spanGeneratorMemAcc,
 				&remoteSpanGenMemAcc,
@@ -1104,7 +1106,7 @@ func (jr *joinReader) fetchLookupRow() (joinReaderState, *execinfrapb.ProducerMe
 	// remote spans, check whether all input rows in the batch had local matches.
 	// If not all rows matched, generate remote spans and start a scan to search
 	// the remote nodes for the current batch.
-	if jr.remoteLookupExpr.Expr != nil && !jr.strategy.generatedRemoteSpans() &&
+	if jr.remoteLookupExpr != nil && !jr.strategy.generatedRemoteSpans() &&
 		jr.curBatchRowsRead != jr.curBatchInputRowCount {
 		spans, spanIDs, err := jr.strategy.generateRemoteSpans()
 		if err != nil {

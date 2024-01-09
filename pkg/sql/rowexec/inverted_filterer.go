@@ -128,12 +128,18 @@ func newInvertedFilterer(
 	if spec.PreFiltererSpec != nil {
 		semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
 		var exprHelper execinfrapb.ExprHelper
+		var err error
 		colTypes := []*types.T{spec.PreFiltererSpec.Type}
-		if err := exprHelper.Init(ctx, spec.PreFiltererSpec.Expression, colTypes, semaCtx, ifr.EvalCtx); err != nil {
+		if err = exprHelper.Init(ctx, colTypes, semaCtx, ifr.EvalCtx); err != nil {
+			return nil, err
+		}
+		var expr tree.TypedExpr
+		expr, err = exprHelper.PrepareExpr(ctx, spec.PreFiltererSpec.Expression)
+		if err != nil {
 			return nil, err
 		}
 		preFilterer, preFiltererState, err := invertedidx.NewBoundPreFilterer(
-			spec.PreFiltererSpec.Type, exprHelper.Expr)
+			spec.PreFiltererSpec.Type, expr)
 		if err != nil {
 			return nil, err
 		}

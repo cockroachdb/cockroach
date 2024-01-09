@@ -91,14 +91,20 @@ func GetAggregateConstructor(
 	}
 	arguments = make(tree.Datums, len(aggInfo.Arguments))
 	var d tree.Datum
+	var h execinfrapb.ExprHelper
+	// Pass nil types and row - there are no variables in these expressions.
+	if err = h.Init(ctx, nil /* types */, semaCtx, evalCtx); err != nil {
+		err = errors.Wrapf(err, "could not initialize ExprHelper")
+		return
+	}
 	for j, argument := range aggInfo.Arguments {
-		h := execinfrapb.ExprHelper{}
-		// Pass nil types and row - there are no variables in these expressions.
-		if err = h.Init(ctx, argument, nil /* types */, semaCtx, evalCtx); err != nil {
+		var expr tree.TypedExpr
+		expr, err = h.PrepareExpr(ctx, argument)
+		if err != nil {
 			err = errors.Wrapf(err, "%s", argument)
 			return
 		}
-		d, err = h.Eval(ctx, nil /* row */)
+		d, err = h.Eval(ctx, expr, nil /* row */)
 		if err != nil {
 			err = errors.Wrapf(err, "%s", argument)
 			return

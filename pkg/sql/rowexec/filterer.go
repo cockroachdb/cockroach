@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -25,8 +26,9 @@ import (
 // boolean expression.
 type filtererProcessor struct {
 	execinfra.ProcessorBase
-	input  execinfra.RowSource
-	filter *execinfrapb.ExprHelper
+	input      execinfra.RowSource
+	eh         *execinfrapb.ExprHelper
+	filterExpr tree.TypedExpr
 }
 
 var _ execinfra.Processor = &filtererProcessor{}
@@ -58,8 +60,12 @@ func newFiltererProcessor(
 		return nil, err
 	}
 
-	f.filter = &execinfrapb.ExprHelper{}
-	if err := f.filter.Init(ctx, spec.Filter, types, &f.SemaCtx, f.EvalCtx); err != nil {
+	f.eh = &execinfrapb.ExprHelper{}
+	var err error
+	if err = f.eh.Init(ctx, types, &f.SemaCtx, f.EvalCtx); err != nil {
+		return nil, err
+	}
+	if f.filterExpr, err = f.eh.PrepareExpr(ctx, spec.Filter); err != nil {
 		return nil, err
 	}
 
@@ -93,7 +99,7 @@ func (f *filtererProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 		}
 
 		// Perform the actual filtering.
-		passes, err := f.filter.EvalFilter(f.Ctx(), row)
+		passes, err := f.eh.EvalFilter(f.Ctx(), f.filterExpr, row)
 		if err != nil {
 			f.MoveToDraining(err)
 			break

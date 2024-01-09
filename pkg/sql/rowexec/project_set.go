@@ -33,15 +33,16 @@ type projectSetProcessor struct {
 	input execinfra.RowSource
 	spec  *execinfrapb.ProjectSetSpec
 
-	// exprHelpers are the constant-folded, type checked expressions specified
+	eh *execinfrapb.ExprHelper
+	// exprs are the constant-folded, type checked expressions specified
 	// in the ROWS FROM syntax. This can contain many kinds of expressions
 	// (anything that is "function-like" including COALESCE, NULLIF) not just
 	// SRFs.
-	exprHelpers []*execinfrapb.ExprHelper
+	exprs []tree.TypedExpr
 
-	// funcs contains a valid pointer to a SRF FuncExpr for every entry
-	// in `exprHelpers` that is actually a SRF function application.
-	// The size of the slice is the same as `exprHelpers` though.
+	// funcs contains a valid pointer to a SRF FuncExpr for every entry in exprs
+	// that is actually a SRF function application. The size of the slice is the
+	// same as exprs though.
 	funcs []tree.TypedExpr
 
 	// mustBeStreaming indicates whether at least one function in funcs is of
@@ -83,13 +84,13 @@ func newProjectSetProcessor(
 ) (*projectSetProcessor, error) {
 	outputTypes := append(input.OutputTypes(), spec.GeneratedColumns...)
 	ps := &projectSetProcessor{
-		input:       input,
-		spec:        spec,
-		exprHelpers: make([]*execinfrapb.ExprHelper, len(spec.Exprs)),
-		funcs:       make([]tree.TypedExpr, len(spec.Exprs)),
-		rowBuffer:   make(rowenc.EncDatumRow, len(outputTypes)),
-		gens:        make([]eval.ValueGenerator, len(spec.Exprs)),
-		done:        make([]bool, len(spec.Exprs)),
+		input:     input,
+		spec:      spec,
+		exprs:     make([]tree.TypedExpr, len(spec.Exprs)),
+		funcs:     make([]tree.TypedExpr, len(spec.Exprs)),
+		rowBuffer: make(rowenc.EncDatumRow, len(outputTypes)),
+		gens:      make([]eval.ValueGenerator, len(spec.Exprs)),
+		done:      make([]bool, len(spec.Exprs)),
 	}
 	if err := ps.Init(
 		ctx,
@@ -110,25 +111,27 @@ func newProjectSetProcessor(
 		return nil, err
 	}
 
-	// Initialize exprHelpers.
+	// Initialize exprs.
 	semaCtx := ps.FlowCtx.NewSemaContext(ps.FlowCtx.Txn)
+	if err := ps.eh.Init(ctx, ps.input.OutputTypes(), semaCtx, ps.EvalCtx); err != nil {
+		return nil, err
+	}
 	for i, expr := range ps.spec.Exprs {
-		var helper execinfrapb.ExprHelper
-		err := helper.Init(ctx, expr, ps.input.OutputTypes(), semaCtx, ps.EvalCtx)
+		texpr, err := ps.eh.PrepareExpr(ctx, expr)
 		if err != nil {
 			return nil, err
 		}
-		if tFunc, ok := helper.Expr.(*tree.FuncExpr); ok && tFunc.IsGeneratorClass() {
+		if tFunc, ok := texpr.(*tree.FuncExpr); ok && tFunc.IsGeneratorClass() {
 			// Expr is a set-generating function.
 			ps.funcs[i] = tFunc
 			ps.mustBeStreaming = ps.mustBeStreaming || tFunc.IsVectorizeStreaming()
 		}
-		if tRoutine, ok := helper.Expr.(*tree.RoutineExpr); ok {
+		if tRoutine, ok := texpr.(*tree.RoutineExpr); ok {
 			// A routine in the context of a project-set is a set-returning
 			// routine.
 			ps.funcs[i] = tRoutine
 		}
-		ps.exprHelpers[i] = &helper
+		ps.exprs[i] = texpr
 	}
 	return ps, nil
 }
@@ -156,9 +159,12 @@ func (ps *projectSetProcessor) nextInputRow() (
 	if row == nil {
 		return nil, meta, nil
 	}
+	// Set ExprHelper.Row so that we can use it as an IndexedVarContainer.
+	ps.eh.Row = row
+	ps.EvalCtx.IVarContainer = ps.eh
 
 	// Initialize a round of SRF generators or scalar values.
-	for i := range ps.exprHelpers {
+	for i := range ps.exprs {
 		if fn := ps.funcs[i]; fn != nil {
 			// A set-generating function. Prepare its ValueGenerator.
 
@@ -168,11 +174,6 @@ func (ps *projectSetProcessor) nextInputRow() (
 				ps.gens[i].Close(ps.Ctx())
 				ps.gens[i] = nil
 			}
-
-			// Set ExprHelper.row so that we can use it as an IndexedVarContainer.
-			ps.exprHelpers[i].Row = row
-
-			ps.EvalCtx.IVarContainer = ps.exprHelpers[i]
 
 			var gen eval.ValueGenerator
 			var err error
@@ -220,7 +221,7 @@ func (ps *projectSetProcessor) nextInputRow() (
 // values. It returns true if any of the generators produce new values.
 func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err error) {
 	colIdx := len(ps.input.OutputTypes())
-	for i := range ps.exprHelpers {
+	for i := range ps.exprs {
 		// Do we have a SRF?
 		if gen := ps.gens[i]; gen != nil {
 			// Yes. Is there still work to do for the current row?
@@ -259,7 +260,7 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 			// Do we still need to produce the scalar value? (first row)
 			if !ps.done[i] {
 				// Yes. Produce it once, then indicate it's "done".
-				value, err := ps.exprHelpers[i].Eval(ps.Ctx(), ps.rowBuffer)
+				value, err := ps.eh.Eval(ps.Ctx(), ps.exprs[i], ps.rowBuffer)
 				if err != nil {
 					return false, err
 				}

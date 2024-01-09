@@ -107,12 +107,12 @@ func processExpression(
 type ExprHelper struct {
 	_ util.NoCopy
 
-	Expr tree.TypedExpr
 	// Vars is used to generate IndexedVars that are "backed" by the values in
 	// `Row`.
 	Vars tree.IndexedVarHelper
 
 	evalCtx *eval.Context
+	semaCtx *tree.SemaContext
 
 	Types      []*types.T
 	Row        rowenc.EncDatumRow
@@ -138,7 +138,7 @@ func (eh *ExprHelper) IndexedVarEval(
 	return eh.Row[idx].Datum.Eval(ctx, e)
 }
 
-// IndexedVarNodeFormatter is part of the parser.IndexedVarContainer interface.
+// IndexedVarNodeFormatter is part of the tree.IndexedVarContainer interface.
 func (eh *ExprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	n := tree.Name(fmt.Sprintf("$%d", idx))
 	return &n
@@ -172,25 +172,12 @@ func DeserializeExpr(
 
 // Init initializes the ExprHelper.
 func (eh *ExprHelper) Init(
-	ctx context.Context,
-	expr Expression,
-	types []*types.T,
-	semaCtx *tree.SemaContext,
-	evalCtx *eval.Context,
+	ctx context.Context, types []*types.T, semaCtx *tree.SemaContext, evalCtx *eval.Context,
 ) error {
-	if expr.Empty() {
-		return nil
-	}
 	eh.evalCtx = evalCtx
+	eh.semaCtx = semaCtx
 	eh.Types = types
 	eh.Vars = tree.MakeIndexedVarHelper(eh, len(types))
-
-	if expr.LocalExpr != nil {
-		eh.Expr = expr.LocalExpr
-		// Bind IndexedVars to our eh.Vars.
-		eh.Vars.Rebind(eh.Expr)
-		return nil
-	}
 	if semaCtx.TypeResolver != nil {
 		for _, t := range types {
 			if err := typedesc.EnsureTypeIsHydrated(ctx, t, semaCtx.TypeResolver.(catalog.TypeDescriptorResolver)); err != nil {
@@ -198,17 +185,29 @@ func (eh *ExprHelper) Init(
 			}
 		}
 	}
-	var err error
-	eh.Expr, err = DeserializeExpr(ctx, expr.Expr, semaCtx, evalCtx, &eh.Vars)
-	return err
+	return nil
+}
+
+// PrepareExpr returns converts the given Expression into a tree.TypedExpr.
+func (eh *ExprHelper) PrepareExpr(ctx context.Context, expr Expression) (tree.TypedExpr, error) {
+	if expr.Empty() {
+		return nil, nil
+	}
+	if expr.LocalExpr != nil {
+		eh.Vars.Rebind(expr.LocalExpr)
+		return expr.LocalExpr, nil
+	}
+	return DeserializeExpr(ctx, expr.Expr, eh.semaCtx, eh.evalCtx, &eh.Vars)
 }
 
 // EvalFilter is used for filter expressions; it evaluates the expression and
 // returns whether the filter passes.
-func (eh *ExprHelper) EvalFilter(ctx context.Context, row rowenc.EncDatumRow) (bool, error) {
+func (eh *ExprHelper) EvalFilter(
+	ctx context.Context, expr tree.TypedExpr, row rowenc.EncDatumRow,
+) (bool, error) {
 	eh.Row = row
 	eh.evalCtx.PushIVarContainer(eh)
-	pass, err := RunFilter(ctx, eh.Expr, eh.evalCtx)
+	pass, err := RunFilter(ctx, expr, eh.evalCtx)
 	eh.evalCtx.PopIVarContainer()
 	return pass, err
 }
@@ -227,18 +226,20 @@ func RunFilter(ctx context.Context, filter tree.TypedExpr, evalCtx *eval.Context
 	return d == tree.DBoolTrue, nil
 }
 
-// Eval - given a row - evaluates the wrapped expression and returns the
-// resulting datum. For example, given a row (1, 2, 3, 4, 5):
+// Eval - given an expression and a row - evaluates the wrapped expression and
+// returns the resulting datum. For example, given a row (1, 2, 3, 4, 5):
 //
 //	'@2' would return '2'
 //	'@2 + @5' would return '7'
 //	'@1' would return '1'
 //	'@2 + 10' would return '12'
-func (eh *ExprHelper) Eval(ctx context.Context, row rowenc.EncDatumRow) (tree.Datum, error) {
+func (eh *ExprHelper) Eval(
+	ctx context.Context, expr tree.TypedExpr, row rowenc.EncDatumRow,
+) (tree.Datum, error) {
 	eh.Row = row
 
 	eh.evalCtx.PushIVarContainer(eh)
-	d, err := eval.Expr(ctx, eh.evalCtx, eh.Expr)
+	d, err := eval.Expr(ctx, eh.evalCtx, expr)
 	eh.evalCtx.PopIVarContainer()
 	return d, err
 }
