@@ -36,7 +36,7 @@ table:_
       ├── _: _
       └── _: _
 
-feature-allowlist
+feature-list
 sql.schema.*
 ----
 

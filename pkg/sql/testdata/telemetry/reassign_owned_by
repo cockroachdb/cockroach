@@ -1,6 +1,6 @@
 # This file contains telemetry tests for the sql.reassign_owned_by counter.
 
-feature-allowlist
+feature-list
 sql.reassign_owned_by.*
 ----
 

@@ -1,7 +1,7 @@
 # This file contains telemetry tests for sql.schema partial index creation
 # counters.
 
-feature-allowlist
+feature-list
 sql.schema.hash_sharded_index
 sql.schema.inverted_index
 sql.schema.multi_column_inverted_index
