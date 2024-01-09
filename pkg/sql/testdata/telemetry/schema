@@ -38,6 +38,7 @@ table:_
 
 feature-list
 sql.schema.*
+!sql.schema.create_stats
 ----
 
 feature-usage
