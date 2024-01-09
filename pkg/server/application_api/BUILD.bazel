@@ -37,6 +37,7 @@ go_test(
         "//build/toolchains:is_heavy": {"Pool": "heavy"},
         "//conditions:default": {"Pool": "default"},
     }),
+    data = glob(["testdata/**"]),
     shard_count = 8,
     deps = [
         "//pkg/base",

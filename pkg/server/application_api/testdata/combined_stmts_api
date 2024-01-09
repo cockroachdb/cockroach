@@ -1,0 +1,34 @@
+# Period with one statement on statement_statistics and none on statement_activity
+# Start January 1, 2024 10:00:00
+# End January 1, 2024 10:20:00
+check-total-latency start=1704103200 end=1704104400
+----
+Error: , Source table: crdb_internal.statement_statistics_persisted, Statements count: 1, Total latency: 3
+
+# Period with 2 statements on statement_statistics and none on statement_activity
+# Start January 1, 2024 10:00:00
+# End January 1, 2024 11:40:00
+check-total-latency start=1704103200 end=1704109200
+----
+Error: , Source table: crdb_internal.statement_statistics_persisted, Statements count: 2, Total latency: 38
+
+# Period with one statement on statement_activity
+# Start January 1, 2024 12:00:00
+# End January 1, 2024 12:40:00
+check-total-latency start=1704110400 end=1704112800
+----
+Error: , Source table: crdb_internal.statement_activity, Statements count: 1, Total latency: 143
+
+# Period with 2 statements on statement_activity
+# Start January 1, 2024 12:00:00
+# End January 1, 2024 13:40:00
+check-total-latency start=1704110400 end=1704116400
+----
+Error: , Source table: crdb_internal.statement_activity, Statements count: 2, Total latency: 466
+
+# Period with 2 statements on statement_activity and 4 statements on statement_statistics
+# Start January 1, 2024 10:00:00
+# End January 1, 2024 13:40:00
+check-total-latency start=1704103200 end=1704116400
+----
+Error: , Source table: crdb_internal.statement_statistics_persisted, Statements count: 4, Total latency: 504
