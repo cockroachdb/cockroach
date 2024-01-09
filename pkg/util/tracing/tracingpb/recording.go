@@ -307,7 +307,7 @@ func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 	// the Logs above. We conservatively serialize the structured events again
 	// here, for the case when the span had not been verbose at the time.
 	sp.Structured(func(sr *types.Any, t time.Time) {
-		str, err := MessageToJSONString(sr, true /* emitDefaults */)
+		str, err := MessageToJSONString(sr, false /* emitDefaults */)
 		if err != nil {
 			return
 		}
@@ -497,7 +497,7 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 		if !(sp.Verbose || sp.RecordingMode == RecordingMode_VERBOSE) {
 			sp.Structured(func(sr *types.Any, t time.Time) {
 				jl := jaegerjson.Log{Timestamp: uint64(t.UnixNano() / 1000)}
-				jsonStr, err := MessageToJSONString(sr, true /* emitDefaults */)
+				jsonStr, err := MessageToJSONString(sr, false /* emitDefaults */)
 				if err != nil {
 					return
 				}
