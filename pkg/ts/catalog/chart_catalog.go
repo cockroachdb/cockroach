@@ -155,6 +155,20 @@ var charts = []sectionDescription{
 					"sys.host.net.send.bytes",
 				},
 			},
+			{
+				Title: "Error",
+				Metrics: []string{
+					"sys.host.net.recv.err",
+					"sys.host.net.send.err",
+				},
+			},
+			{
+				Title: "Drop",
+				Metrics: []string{
+					"sys.host.net.recv.drop",
+					"sys.host.net.send.drop",
+				},
+			},
 		},
 	},
 	{

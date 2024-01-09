@@ -175,6 +175,45 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
+    <LineGraph title="Network Packets Received" sources={nodeSources}>
+      <Axis units={AxisUnits.Count} label="packets">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.sys.host.net.recv.packets"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Network Packet Errors on Receive" sources={nodeSources}>
+      <Axis units={AxisUnits.Count} label="packets">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.sys.host.net.recv.err"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Network Packet Drops on Receive" sources={nodeSources}>
+      <Axis units={AxisUnits.Count} label="packets">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.sys.host.net.recv.drop"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
     <LineGraph title="Network Bytes Sent" sources={nodeSources}>
       <Axis units={AxisUnits.Bytes} label="bytes">
         {nodeIDs.map(nid => (
@@ -182,6 +221,45 @@ export default function (props: GraphDashboardProps) {
             name="cr.node.sys.host.net.send.bytes"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={[nid]}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Network Packets Sent" sources={nodeSources}>
+      <Axis units={AxisUnits.Count} label="packets">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.sys.host.net.send.packets"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Network Packet Errors on Send" sources={nodeSources}>
+      <Axis units={AxisUnits.Count} label="packets">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.sys.host.net.send.err"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Network Packet Drops on Send" sources={nodeSources}>
+      <Axis units={AxisUnits.Count} label="packets">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.sys.host.net.send.drop"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
             nonNegativeRate
           />
         ))}
