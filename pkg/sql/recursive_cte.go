@@ -149,7 +149,8 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 	ctx, sp := tracing.ChildSpan(params.ctx, opName)
 	defer sp.Finish()
 	if err := runPlanInsidePlan(
-		ctx, params, newPlan.(*planComponents), rowResultWriter(n), nil, /* deferredRoutineSender */
+		ctx, params, newPlan.(*planComponents), rowResultWriter(n),
+		nil /* deferredRoutineSender */, nil, /* stmtForDistSQLDiagramGetter */
 	); err != nil {
 		return false, err
 	}

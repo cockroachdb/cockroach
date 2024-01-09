@@ -862,7 +862,7 @@ func (b *Builder) buildSubquery(
 			if err != nil {
 				return err
 			}
-			err = fn(plan, true /* isFinalPlan */)
+			err = fn(plan, nil /* stmtForDistSQLDiagramGetter */, true /* isFinalPlan */)
 			if err != nil {
 				return err
 			}
@@ -1216,7 +1216,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 				return expectedLazyRoutineError("subquery")
 			}
 			isFinalPlan := i == len(stmts)-1
-			err = fn(plan, isFinalPlan)
+			err = fn(plan, stmt.String /* stmtForDistSQLDiagramGetter */, isFinalPlan)
 			if err != nil {
 				return err
 			}

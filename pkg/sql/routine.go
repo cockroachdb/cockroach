@@ -236,7 +236,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 	ef := newExecFactory(ctx, g.p)
 	rrw := NewRowResultWriter(&g.rch)
 	var cursorHelper *plpgsqlCursorHelper
-	err = g.expr.ForEachPlan(ctx, ef, g.args, func(plan tree.RoutinePlan, isFinalPlan bool) error {
+	err = g.expr.ForEachPlan(ctx, ef, g.args, func(plan tree.RoutinePlan, stmtForDistSQLDiagramGetter func() string, isFinalPlan bool) error {
 		stmtIdx++
 		opName := "udf-stmt-" + g.expr.Name + "-" + strconv.Itoa(stmtIdx)
 		ctx, sp := tracing.ChildSpan(ctx, opName)
@@ -273,7 +273,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 		}
 
 		// Run the plan.
-		err = runPlanInsidePlan(ctx, g.p.RunParams(ctx), plan.(*planComponents), w, g)
+		err = runPlanInsidePlan(ctx, g.p.RunParams(ctx), plan.(*planComponents), w, g, stmtForDistSQLDiagramGetter)
 		if err != nil {
 			return err
 		}

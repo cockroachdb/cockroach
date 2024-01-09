@@ -255,7 +255,8 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 	plan := p.(*planComponents)
 	rowResultWriter := NewRowResultWriter(&a.run.rightRows)
 	if err := runPlanInsidePlan(
-		ctx, params, plan, rowResultWriter, nil, /* deferredRoutineSender */
+		ctx, params, plan, rowResultWriter,
+		nil /* deferredRoutineSender */, nil, /* stmtForDistSQLDiagramGetter */
 	); err != nil {
 		return err
 	}
@@ -271,6 +272,7 @@ func runPlanInsidePlan(
 	plan *planComponents,
 	resultWriter rowResultWriter,
 	deferredRoutineSender eval.DeferredRoutineSender,
+	stmtForDistSQLDiagramGetter func() string,
 ) error {
 	defer plan.close(ctx)
 	execCfg := params.ExecCfg()
@@ -350,6 +352,7 @@ func runPlanInsidePlan(
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, &plannerCopy, plannerCopy.txn, distributeType)
 	planCtx.stmtType = recv.stmtType
 	planCtx.mustUseLeafTxn = params.p.mustUseLeafTxn()
+	planCtx.stmtForDistSQLDiagramGetter = stmtForDistSQLDiagramGetter
 
 	// Wrap PlanAndRun in a function call so that we clean up immediately.
 	func() {
