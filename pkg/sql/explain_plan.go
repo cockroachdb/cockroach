@@ -236,25 +236,40 @@ func emitExplain(
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
 func (e *explainPlanNode) Values() tree.Datums                 { return e.run.results.Values() }
 
-func (e *explainPlanNode) Close(ctx context.Context) {
-	closeNode := func(n exec.Node) {
-		switch n := n.(type) {
-		case planNode:
-			n.Close(ctx)
-		case planMaybePhysical:
-			n.Close(ctx)
-		default:
-			panic(errors.AssertionFailedf("unknown plan node type %T", n))
+// closeExplainNode closes the given node which can either be planNode or
+// planMaybePhysical.
+func closeExplainNode(ctx context.Context, n exec.Node) {
+	switch n := n.(type) {
+	case planNode:
+		n.Close(ctx)
+	case planMaybePhysical:
+		n.Close(ctx)
+	default:
+		panic(errors.AssertionFailedf("unknown plan node type %T", n))
+	}
+}
+
+// closeExplainPlan closes the provided explain plan.
+func closeExplainPlan(ctx context.Context, ep *explain.Plan) {
+	closeExplainNode(ctx, ep.Root.WrappedNode())
+	for i := range ep.Subqueries {
+		closeExplainNode(ctx, ep.Subqueries[i].Root.(*explain.Node).WrappedNode())
+	}
+	for _, cascade := range ep.Cascades {
+		// We don't want to create new plans if they haven't been cached - all
+		// necessary plans must have been created already in explain.Emit call.
+		const createPlanIfMissing = false
+		if cp, _ := cascade.GetExplainPlan(ctx, createPlanIfMissing); cp != nil {
+			closeExplainPlan(ctx, cp.(*explain.Plan))
 		}
 	}
-	// The wrapped node can be planNode or planMaybePhysical.
-	closeNode(e.plan.Root.WrappedNode())
-	for i := range e.plan.Subqueries {
-		closeNode(e.plan.Subqueries[i].Root.(*explain.Node).WrappedNode())
+	for i := range ep.Checks {
+		closeExplainNode(ctx, ep.Checks[i].WrappedNode())
 	}
-	for i := range e.plan.Checks {
-		closeNode(e.plan.Checks[i].WrappedNode())
-	}
+}
+
+func (e *explainPlanNode) Close(ctx context.Context) {
+	closeExplainPlan(ctx, e.plan)
 	if e.run.results != nil {
 		e.run.results.Close(ctx)
 	}
