@@ -246,6 +246,9 @@ type Cascade struct {
 		numBufferedRows int,
 		allowAutoCommit bool,
 	) (Plan, error)
+
+	// GetExplainPlan returns the explain plan for the cascade query.
+	GetExplainPlan func(context.Context) (Plan, error)
 }
 
 // InsertFastPathCheck contains information about a foreign key or
