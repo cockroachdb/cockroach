@@ -873,6 +873,10 @@ type PlanningCtx struct {
 	// other ways to get the diagram.
 	skipDistSQLDiagramGeneration bool
 
+	// stmtForDistSQLDiagram, if set, will be used when generating the DistSQL
+	// diagram to specify the SQL stmt that this plan corresponds to.
+	stmtForDistSQLDiagram string
+
 	// If set, the flows for the physical plan will be passed to this function.
 	// The flows are not safe for use past the lifetime of the saveFlows function.
 	saveFlows func(_ map[base.SQLInstanceID]*execinfrapb.FlowSpec, _ execopnode.OpChains, _ []execinfra.LocalProcessor, vectorized bool) error

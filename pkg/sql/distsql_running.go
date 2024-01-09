@@ -802,7 +802,9 @@ func (dsp *DistSQLPlanner) Run(
 
 	if !planCtx.skipDistSQLDiagramGeneration && log.ExpensiveLogEnabled(ctx, 2) {
 		var stmtStr string
-		if planCtx.planner != nil && planCtx.planner.stmt.AST != nil {
+		if planCtx.stmtForDistSQLDiagram != "" {
+			stmtStr = planCtx.stmtForDistSQLDiagram
+		} else if planCtx.planner != nil && planCtx.planner.stmt.AST != nil {
 			stmtStr = planCtx.planner.stmt.String()
 		}
 		_, url, err := execinfrapb.GeneratePlanDiagramURL(stmtStr, flows, execinfrapb.DiagramFlags{})
