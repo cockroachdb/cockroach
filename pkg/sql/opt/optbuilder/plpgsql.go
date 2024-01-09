@@ -337,6 +337,15 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 	b.ensureScopeHasExpr(s)
 	for i, stmt := range stmts {
 		switch t := stmt.(type) {
+		case *ast.Block:
+			// For a nested block, push a continuation with the remaining statements
+			// before calling recursively into buildBlock. The continuation will be
+			// called when the control flow within the nested block terminates.
+			blockCon := b.makeContinuation("nested_block")
+			b.appendPlpgSQLStmts(&blockCon, stmts[i+1:])
+			b.pushContinuation(blockCon)
+			return b.buildBlock(t, s)
+
 		case *ast.Return:
 			// RETURN is handled by projecting a single column with the expression
 			// that is being returned.
