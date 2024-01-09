@@ -65,6 +65,7 @@ func BenchmarkSequenceIncrement(b *testing.B) {
 					b.Fatal(err)
 				}
 			})
+			b.StopTimer()
 		}
 		b.Run(fmt.Sprintf("Cache-%d-P-%d", cacheSize, parallelism), subBenchMark)
 	}
