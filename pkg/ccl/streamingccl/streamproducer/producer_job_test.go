@@ -191,7 +191,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			ti := &mtinfopb.TenantInfo{
 				SQLInfo: mtinfopb.SQLInfo{ID: 10},
 			}
-			jr := makeProducerJobRecord(registry, ti, timeout, usr, ptsID)
+			jr := makeProducerJobRecord(registry, ti, timeout, usr, ptsID, false)
 			defer jobs.ResetConstructors()()
 
 			mt, timeGiven, waitForTimeRequest, waitJobFinishReverting := registerConstructor()
@@ -227,7 +227,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			ts := hlc.Timestamp{WallTime: ptsTime.UnixNano()}
 			ptsID := uuid.MakeV4()
 
-			jr := makeProducerJobRecord(registry, ti, timeout, usr, ptsID)
+			jr := makeProducerJobRecord(registry, ti, timeout, usr, ptsID, false)
 			defer jobs.ResetConstructors()()
 			mt, timeGiven, waitForTimeRequest, waitJobFinishReverting :=
 				registerConstructor()

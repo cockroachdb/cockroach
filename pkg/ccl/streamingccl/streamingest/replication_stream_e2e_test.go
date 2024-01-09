@@ -926,13 +926,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 
 			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
-
-			if !pauseBeforeTerminal {
-				// Only set a short job liveness timeout if the job will not get paused.
-				// Else, the producer job may inadvertently timeout while the job is
-				// paused.
-				c.DestSysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '100ms'")
-			}
+			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '100ms'")
 
 			producerJobID, replicationJobID := c.StartStreamReplication(ctx)
 
@@ -983,11 +977,8 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			}
 
 			// Check if the producer job has released protected timestamp if the job
-			// completed with a low stream_replication.job_liveness_timeout, or if the
-			// replication stream didn't complete.
-			if !pauseBeforeTerminal || !completeReplication {
-				requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
-			}
+			// completed with a low stream_replication.job_liveness_timeout.
+			requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
 
 			// Check if the replication job has released protected timestamp.
 			checkNoDestinationProtection(c, replicationJobID)
