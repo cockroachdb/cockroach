@@ -4646,7 +4646,13 @@ func mvccResolveWriteIntent(
 	var rolledBackVal *MVCCValue
 	buf.newMeta = *meta
 	newMeta := &buf.newMeta
-	if len(update.IgnoredSeqNums) > 0 {
+	// Update the MVCC history only if:
+	// 1. There are IgnoredSeqNums present.
+	// 2. The update is not going to abort the intent; otherwise, the entire
+	//    history will be removed anyway.
+	// 3. The epochs of the intent and the update match; otherwise the epochs may
+	//    have different seq nums (and ignored seq nums).
+	if len(update.IgnoredSeqNums) > 0 && (commit || inProgress) && epochsMatch {
 		// NOTE: mvccMaybeRewriteIntentHistory mutates its meta argument.
 		// TODO(nvanbenschoten): this is an awkward interface. We shouldn't
 		// be mutating meta and we shouldn't be restoring the previous value
@@ -4810,6 +4816,7 @@ func mvccResolveWriteIntent(
 
 		// Update or remove the metadata key.
 		var metaKeySize, metaValSize int64
+		var logicalOp MVCCLogicalOpType
 		if !commit {
 			// Keep existing intent if we're updating it. We update the existing
 			// metadata's timestamp instead of using the supplied intent meta to avoid
@@ -4818,9 +4825,11 @@ func mvccResolveWriteIntent(
 			// even if it can.
 			metaKeySize, metaValSize, err = buf.putIntentMeta(
 				ctx, rw, metaKey, newMeta, true /* alreadyExists */)
+			logicalOp = MVCCUpdateIntentOpType
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
 			err = rw.ClearIntent(metaKey.Key, canSingleDelHelper.onCommitIntent(), meta.Txn.ID)
+			logicalOp = MVCCCommitIntentOpType
 		}
 		if err != nil {
 			return false, err
@@ -4833,10 +4842,6 @@ func mvccResolveWriteIntent(
 		}
 
 		// Log the logical MVCC operation.
-		logicalOp := MVCCCommitIntentOpType
-		if pushed {
-			logicalOp = MVCCUpdateIntentOpType
-		}
 		rw.LogLogicalOp(logicalOp, MVCCLogicalOpDetails{
 			Txn:       update.Txn,
 			Key:       update.Key,
