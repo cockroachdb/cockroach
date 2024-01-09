@@ -16,13 +16,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -167,5 +170,108 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 				require.Equal(t, c.expNonPrefixIters, nonPrefixIters)
 			})
 		})
+	}
+}
+
+func TestRequestBoundLockTableView(t *testing.T) {
+	lockHolderTxnID := uuid.MakeV4()
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	keyC := roachpb.Key("c")
+
+	m := newMockTxnBoundLockTableView(lockHolderTxnID)
+	m.addLock(keyA, lock.Shared)
+	m.addLock(keyB, lock.Exclusive)
+
+	// Non-locking request.
+	ltView := newRequestBoundLockTableView(m, lock.None)
+	locked, _, err := ltView.IsKeyLockedByConflictingTxn(keyA)
+	require.NoError(t, err)
+	require.False(t, locked)
+
+	locked, _, err = ltView.IsKeyLockedByConflictingTxn(keyB)
+	require.NoError(t, err)
+	require.False(t, locked)
+
+	locked, _, err = ltView.IsKeyLockedByConflictingTxn(keyC)
+	require.NoError(t, err)
+	require.False(t, locked)
+
+	// Shared locking request.
+	ltView = newRequestBoundLockTableView(m, lock.Shared)
+	locked, _, err = ltView.IsKeyLockedByConflictingTxn(keyA)
+	require.NoError(t, err)
+	require.False(t, locked)
+
+	locked, txn, err := ltView.IsKeyLockedByConflictingTxn(keyB)
+	require.NoError(t, err)
+	require.True(t, locked)
+	require.Equal(t, txn.ID, lockHolderTxnID)
+
+	locked, _, err = ltView.IsKeyLockedByConflictingTxn(keyC)
+	require.NoError(t, err)
+	require.False(t, locked)
+
+	// Exclusive locking request.
+	ltView = newRequestBoundLockTableView(m, lock.Exclusive)
+	locked, txn, err = ltView.IsKeyLockedByConflictingTxn(keyA)
+	require.NoError(t, err)
+	require.True(t, locked)
+	require.Equal(t, txn.ID, lockHolderTxnID)
+
+	locked, txn, err = ltView.IsKeyLockedByConflictingTxn(keyB)
+	require.NoError(t, err)
+	require.True(t, locked)
+	require.Equal(t, txn.ID, lockHolderTxnID)
+
+	locked, _, err = ltView.IsKeyLockedByConflictingTxn(keyC)
+	require.NoError(t, err)
+	require.False(t, locked)
+}
+
+// mockTxnBoundLockTableView is a mocked version of the txnBoundLockTableView
+// interface.
+type mockTxnBoundLockTableView struct {
+	locks           map[string]lock.Strength
+	lockHolderTxnID uuid.UUID // txnID of all held locks
+}
+
+var _ txnBoundLockTableView = &mockTxnBoundLockTableView{}
+
+// newMockTxnBoundLockTableView constructs and returns a
+// mockTxnBoundLockTableView.
+func newMockTxnBoundLockTableView(lockHolderTxnID uuid.UUID) *mockTxnBoundLockTableView {
+	return &mockTxnBoundLockTableView{
+		locks:           make(map[string]lock.Strength),
+		lockHolderTxnID: lockHolderTxnID,
+	}
+}
+
+// addLock adds a lock on the supplied key with the given lock strength. The
+// lock is held by m.TxnID.
+func (m mockTxnBoundLockTableView) addLock(key roachpb.Key, str lock.Strength) {
+	m.locks[key.String()] = str
+}
+
+// IsKeyLockedByConflictingTxn implements the txnBoundLockTableView interface.
+func (m mockTxnBoundLockTableView) IsKeyLockedByConflictingTxn(
+	key roachpb.Key, str lock.Strength,
+) (bool, *enginepb.TxnMeta, error) {
+	lockStr, locked := m.locks[key.String()]
+	if !locked {
+		return false, nil, nil
+	}
+	switch str {
+	case lock.None:
+		return false, nil, nil
+	case lock.Shared:
+		if lockStr == lock.Shared {
+			return false, nil, nil
+		}
+		return true, &enginepb.TxnMeta{ID: m.lockHolderTxnID}, nil
+	case lock.Exclusive:
+		return true, &enginepb.TxnMeta{ID: m.lockHolderTxnID}, nil
+	default:
+		panic("unknown lock strength")
 	}
 }
