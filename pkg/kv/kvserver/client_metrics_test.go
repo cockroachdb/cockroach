@@ -263,8 +263,8 @@ func TestStoreMetrics(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
+	defer stickyVFSRegistry.CloseAllEngines()
 	const numServers int = 3
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
@@ -272,8 +272,8 @@ func TestStoreMetrics(t *testing.T) {
 			CacheSize: 1 << 20, /* 1 MiB */
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 					// Specify a size to trigger the BlockCache in Pebble.
 					Size: base.SizeSpec{
 						InBytes: 512 << 20, /* 512 MiB */
@@ -282,7 +282,7 @@ func TestStoreMetrics(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
+					StickyVFSRegistry: stickyVFSRegistry,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					DisableRaftLogQueue: true,

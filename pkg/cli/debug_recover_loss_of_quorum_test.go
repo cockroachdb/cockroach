@@ -334,20 +334,18 @@ func TestStageVersionCheck(t *testing.T) {
 
 	listenerReg := listenerutil.NewListenerRegistry()
 	defer listenerReg.Close()
-
-	storeReg := server.NewStickyInMemEnginesRegistry()
-	defer storeReg.CloseAllStickyInMemEngines()
+	storeReg := server.NewStickyVFSRegistry()
 	tc := testcluster.NewTestCluster(t, 4, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyEngineRegistry: storeReg,
+						StickyVFSRegistry: storeReg,
 					},
 				},
 				StoreSpecs: []base.StoreSpec{
-					{InMemory: true, StickyInMemoryEngineID: "1"},
+					{InMemory: true, StickyVFSID: "1"},
 				},
 			},
 		},
@@ -389,7 +387,7 @@ func TestStageVersionCheck(t *testing.T) {
 	})
 	require.NoError(t, err, "force local must fix incorrect version")
 	// Check that stored plan has version matching cluster version.
-	fs, err := storeReg.GetUnderlyingFS(base.StoreSpec{InMemory: true, StickyInMemoryEngineID: "1"})
+	fs, err := storeReg.Get(base.StoreSpec{InMemory: true, StickyVFSID: "1"})
 	require.NoError(t, err, "failed to get shared store fs")
 	ps := loqrecovery.NewPlanStore("", fs)
 	p, ok, err := ps.LoadPlan()
@@ -445,9 +443,6 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	listenerReg := listenerutil.NewListenerRegistry()
 	defer listenerReg.Close()
 
-	storeReg := server.NewStickyInMemEnginesRegistry()
-	defer storeReg.CloseAllStickyInMemEngines()
-
 	// Test cluster contains 3 nodes that we would turn into a single node
 	// cluster using loss of quorum recovery. To do that, we will terminate
 	// two nodes and run recovery on remaining one. Restarting node should
@@ -463,7 +458,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		sa[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: storeReg,
+					StickyVFSRegistry: server.NewStickyVFSRegistry(),
 				},
 			},
 			StoreSpecs: []base.StoreSpec{
