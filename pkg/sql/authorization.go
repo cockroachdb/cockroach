@@ -140,6 +140,13 @@ func (p *planner) HasPrivilege(
 	privilegeKind privilege.Kind,
 	user username.SQLUsername,
 ) (bool, error) {
+	// Skip privilege checking if `privilegeKind == 0`. This exists to enable a
+	// more cohesive coding style in the caller where CheckPrivilege(priv=0)
+	// means "do not perform any privilege check".
+	if privilegeKind == 0 {
+		return true, nil
+	}
+
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
 	// with an invalid API usage.
