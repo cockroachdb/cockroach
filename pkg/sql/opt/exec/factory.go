@@ -215,8 +215,7 @@ type ApplyJoinPlanRightSideFn func(ctx context.Context, ef Factory, leftRow tree
 // ConstructBuffer as an input; it should only be triggered if this buffer is
 // not empty.
 type Cascade struct {
-	// FKName is the name of the foreign key constraint.
-	FKName string
+	FKConstraint cat.ForeignKeyConstraint
 
 	// Buffer is the Node returned by ConstructBuffer which stores the input to
 	// the mutation. It is nil if the cascade does not require a buffer.
