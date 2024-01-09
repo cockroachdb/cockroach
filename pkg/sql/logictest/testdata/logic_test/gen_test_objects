@@ -49,15 +49,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name LIKE '%z%z%'
 ORDER BY database_name, schema_name, name
 ----
-"""z z1"  b1      c1
-"""z z1"  b1      c2
-"""z z1"  b̷2     c1
-"""z z1"  b̷2     c2
-"zz%q2"   "b%p2"  "%c'2"
-"zz%q2"   "b%p2"  "c""
-1"
-"zz%q2"  b1  c1
-"zz%q2"  b1  c̕2
+"""z z_1"  b_1      c_1
+"""z z_1"  b_1      c_2
+"""z z_1"  b̷_2     c_1
+"""z z_1"  b̷_2     c_2
+"zz%q_2"   "b%p_2"  "%c'_2"
+"zz%q_2"   "b%p_2"  "c""
+_1"
+"zz%q_2"  b_1  c_1
+"zz%q_2"  b_1  c̕_2
 
 # Show number placement inside the output identifier, without added noise.
 query T
@@ -69,14 +69,14 @@ query TTT rowsort
 SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name LIKE '%z%y%'
 ----
-z1y  b1  c1
-z1y  b1  c2
-z1y  b2  c1
-z1y  b2  c2
-z2y  b1  c1
-z2y  b1  c2
-z2y  b2  c1
-z2y  b2  c2
+z1y  b_1  c_1
+z1y  b_1  c_2
+z1y  b_2  c_1
+z1y  b_2  c_2
+z2y  b_1  c_1
+z2y  b_1  c_2
+z2y  b_2  c_1
+z2y  b_2  c_2
 
 subtest randomize_columns
 
@@ -90,15 +90,15 @@ SELECT quote_ident(descriptor_name), quote_ident(column_name) FROM crdb_internal
 WHERE descriptor_name ILIKE '%t%e%s%t%'
 ORDER BY descriptor_name, column_name
 ----
-"test(3"  address
-"test(3"  name
-"test(3"  rowid
-test1     "ad""dress%"
-test1     name😤
-test1     rowid
-test2     address
-test2     "name%80"
-test2     rowid
+"test(_3"  address
+"test(_3"  name
+"test(_3"  rowid
+test_1     "ad""dress%"
+test_1     name😤
+test_1     rowid
+test_2     address
+test_2     "name%80"
+test_2     rowid
 
 subtest templates/more_tables_generated_than_templates
 
@@ -119,26 +119,26 @@ SELECT quote_ident(table_name), quote_ident(column_name), data_type FROM "".info
 WHERE table_catalog = 'newdb' AND table_schema = 'public'
 ORDER BY table_name, column_name
 ----
-"                u3"      rowid    bigint
-"                u3"      y        text
-"*t""1"          "%56x"   numeric
-"*t""1"          rowid    bigint
-"\\U00051024u4"  rowid    bigint
-"\\U00051024u4"  "y "     text
-"t%q3"           rowid    bigint
-"t%q3"           x        numeric
-t2               rowid    bigint
-t2               "x""%q"  numeric
-t4               """%vx"  numeric
-t4               rowid    bigint
-t̷5              "%vx"    numeric
-t̷5              rowid    bigint
-u1               rowid    bigint
-u1               y        text
-u2               rowid    bigint
-u2               "|y"     text
-u5               rowid    bigint
-u5               y        text
+"                 u_3"     rowid    bigint
+"                 u_3"     y        text
+"*t""_1"          "%56x"   numeric
+"*t""_1"          rowid    bigint
+"\\U00051024u_4"  rowid    bigint
+"\\U00051024u_4"  "y "     text
+"t%q_3"           rowid    bigint
+"t%q_3"           x        numeric
+t_2               rowid    bigint
+t_2               "x""%q"  numeric
+t_4               """%vx"  numeric
+t_4               rowid    bigint
+t̷_5              "%vx"    numeric
+t̷_5              rowid    bigint
+u_1               rowid    bigint
+u_1               y        text
+u_2               rowid    bigint
+u_2               "|y"     text
+u_5               rowid    bigint
+u_5               y        text
 
 # As well as index names.
 query TT
@@ -146,16 +146,16 @@ SELECT quote_ident(table_name), quote_ident(constraint_name) FROM "".information
 WHERE table_catalog = 'newdb' AND table_schema = 'public' AND constraint_type = 'PRIMARY KEY'
 ORDER BY table_name, constraint_name
 ----
-"                u3"          pr̫imary
-"*t""1"          "PrimaRy̧"
-"\\U00051024u4"  "primary"
-"t%q3"           "primary"
-t2               "primary"
-t4               "primar'y"
-t̷5              primary̕
-u1               "primary"
-u2               "primary"
-u5               "primar%vy"
+"                 u_3"         pr̫imary
+"*t""_1"          "PrimaRy̧"
+"\\U00051024u_4"  "primary"
+"t%q_3"           "primary"
+t_2               "primary"
+t_4               "primar'y"
+t̷_5              primary̕
+u_1               "primary"
+u_2               "primary"
+u_5               "primar%vy"
 
 subtest templates/fewer_tables_generated_than_templates
 
@@ -236,15 +236,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt1"  public  span_stats_samples
-"d%qbt1"  public  "t abLe_statistics"
-"d%qbt1"  public  "transaction_execut%ion_insights"
-"d%qbt2"  public  "r\\x0fegion_liveness"
-"d%qbt2"  public  span_stats_buckets
-"d%qbt2"  public  "transaction_statisTics"
-dbt3      public  "extern'al_connections"
-dbt3      public  "te\\x64nant_i""d_se q"
-dbt3      public  "tenant_setting%vs"
+"d%qbt_1"  public  span_stats_samples
+"d%qbt_1"  public  "t abLe_statistics"
+"d%qbt_1"  public  "transaction_execut%ion_insights"
+"d%qbt_2"  public  "r\\x0fegion_liveness"
+"d%qbt_2"  public  span_stats_buckets
+"d%qbt_2"  public  "transaction_statisTics"
+dbt_3      public  "extern'al_connections"
+dbt_3      public  "te\\x64nant_i""d_se q"
+dbt_3      public  "tenant_setting%vs"
 
 
 statement ok
@@ -320,12 +320,12 @@ SELECT crdb_internal.generate_test_objects('{"names":"dba.bar.baz", "counts":[2,
 {"databases": 2, "schemas": 2, "tables": 0}
 
 query I
-SELECT count(*) FROM [SHOW TABLES FROM dba1]
+SELECT count(*) FROM [SHOW TABLES FROM dba_1]
 ----
 0
 
 query I
-SELECT count(*) FROM [SHOW TABLES FROM dba2]
+SELECT count(*) FROM [SHOW TABLES FROM dba_2]
 ----
 0
 
@@ -341,9 +341,9 @@ SELECT crdb_internal.generate_test_objects('{"names":"dbb.bar.baz", "counts":[1,
 {"databases": 1, "schemas": 2, "tables": 0}
 
 query T rowsort
-SELECT schema_name FROM [SHOW SCHEMAS FROM dbb1]
+SELECT schema_name FROM [SHOW SCHEMAS FROM dbb_1]
 ----
-bar1
+bar_1
 public
 crdb_internal
 information_schema
@@ -351,7 +351,7 @@ pg_catalog
 pg_extension
 
 query I
-SELECT count(*) FROM [SHOW TABLES FROM dbb1.bar1]
+SELECT count(*) FROM [SHOW TABLES FROM dbb_1.bar_1]
 ----
 0
 
@@ -371,8 +371,8 @@ SELECT crdb_internal.generate_test_objects('{"names":"myschema.foo", "counts":[2
 query TT rowsort
 SELECT schema_name, table_name FROM [SHOW TABLES FROM test.myschema]
 ----
-myschema  foo1
-myschema  foo2
+myschema  foo_1
+myschema  foo_2
 
 subtest implicit_db/zero_schemas
 
@@ -398,16 +398,16 @@ SELECT crdb_internal.generate_test_objects('{"names":"scgen.foo", "counts":[2,0]
 query T rowsort
 SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'scgen%'
 ----
-scgen1
-scgen2
+scgen_1
+scgen_2
 
 query I
-SELECT count(*) FROM [SHOW TABLES FROM scgen1]
+SELECT count(*) FROM [SHOW TABLES FROM scgen_1]
 ----
 0
 
 query I
-SELECT count(*) FROM [SHOW TABLES FROM scgen2]
+SELECT count(*) FROM [SHOW TABLES FROM scgen_2]
 ----
 0
 
@@ -428,8 +428,8 @@ SELECT crdb_internal.generate_test_objects('{"names":"foo", "counts":[2], "name_
 query TT rowsort
 SELECT schema_name, table_name FROM [SHOW TABLES FROM test.otherschema]
 ----
-otherschema  foo2
-otherschema  foo1
+otherschema  foo_1
+otherschema  foo_2
 
 statement ok
 RESET search_path
@@ -446,10 +446,10 @@ SELECT crdb_internal.generate_test_objects('{"names":"dbfoo.baz", "counts":[1,0,
 {"databases": 1, "schemas": 1, "tables": 2}
 
 query TT rowsort
-SELECT schema_name, table_name FROM [SHOW TABLES FROM dbfoo1]
+SELECT schema_name, table_name FROM [SHOW TABLES FROM dbfoo_1]
 ----
-public  baz1
-public  baz2
+public  baz_1
+public  baz_2
 
 subtest missing_pattern
 
@@ -600,7 +600,7 @@ SELECT crdb_internal.generate_test_objects('{"names":"pg_temp.foo", "counts":[3]
 query T rowsort
 SELECT table_name FROM [SHOW TABLES FROM pg_temp]
 ----
-foo1
-foo2
-foo3
 test
+foo_1
+foo_2
+foo_3
