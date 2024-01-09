@@ -119,13 +119,6 @@ type ExprHelper struct {
 	datumAlloc tree.DatumAlloc
 }
 
-func (eh *ExprHelper) String() string {
-	if eh.Expr == nil {
-		return "none"
-	}
-	return eh.Expr.String()
-}
-
 // ExprHelper implements tree.IndexedVarContainer.
 var _ eval.IndexedVarContainer = &ExprHelper{}
 
