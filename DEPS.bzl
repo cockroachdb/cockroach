@@ -7875,6 +7875,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_shopify_sarama",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/Shopify/sarama",
+        sha256 = "ca251ac94fc78893afd2c2debf9ae061223ff4cb174daa508e2b0146f66de40e",
+        strip_prefix = "github.com/Shopify/sarama@v1.22.2-0.20190604114437-cd910a683f9f",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/Shopify/sarama/com_github_shopify_sarama-v1.22.2-0.20190604114437-cd910a683f9f.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_shopify_toxiproxy",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/Shopify/toxiproxy",
