@@ -241,6 +241,7 @@ func (b *Builder) buildRoutine(
 	// Build an expression for each statement in the function body.
 	var body []memo.RelExpr
 	var bodyProps []*physical.Required
+	var bodyStmts []string
 	switch o.Language {
 	case tree.RoutineLangSQL:
 		// Parse the function body.
@@ -279,6 +280,13 @@ func (b *Builder) buildRoutine(
 			body[i] = expr
 			bodyProps[i] = physProps
 		}
+
+		if b.verboseTracing {
+			bodyStmts = make([]string, len(stmts))
+			for i := range stmts {
+				bodyStmts[i] = stmts[i].AST.String()
+			}
+		}
 	case tree.RoutineLangPLpgSQL:
 		// Parse the function body.
 		stmt, err := plpgsql.Parse(o.Body)
@@ -305,6 +313,9 @@ func (b *Builder) buildRoutine(
 			b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
 		body = []memo.RelExpr{expr}
 		bodyProps = []*physical.Required{physProps}
+		if b.verboseTracing {
+			bodyStmts = []string{stmt.String()}
+		}
 	default:
 		panic(errors.AssertionFailedf("unexpected language: %v", o.Language))
 	}
@@ -324,6 +335,7 @@ func (b *Builder) buildRoutine(
 				RoutineType:        o.Type,
 				Body:               body,
 				BodyProps:          bodyProps,
+				BodyStmts:          bodyStmts,
 				Params:             params,
 			},
 		},

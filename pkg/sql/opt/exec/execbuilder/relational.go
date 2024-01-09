@@ -3190,6 +3190,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (execPlan, error) {
 		udf.Def.Params,
 		udf.Def.Body,
 		udf.Def.BodyProps,
+		udf.Def.BodyStmts,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 	)
