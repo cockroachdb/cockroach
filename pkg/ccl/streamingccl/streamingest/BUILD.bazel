@@ -63,7 +63,6 @@ go_library(
         "//pkg/sql/sem/asof",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sessionprotectedts",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
