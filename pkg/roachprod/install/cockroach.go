@@ -272,7 +272,7 @@ func (c *SyncedCluster) servicesWithOpenPortSelection(
 ) (ServiceDescriptors, error) {
 	var mu syncutil.Mutex
 	var servicesToRegister ServiceDescriptors
-	err := c.Parallel(ctx, l, OnNodes(c.Nodes), func(ctx context.Context, node Node) (*RunResultDetails, error) {
+	err := c.Parallel(ctx, l, WithNodes(c.Nodes), func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		services := make(ServiceDescriptors, 0)
 		res := &RunResultDetails{Node: node}
 		if _, ok := serviceMap[node][ServiceTypeSQL]; !ok {
@@ -572,7 +572,7 @@ func (c *SyncedCluster) ExecSQL(
 	args []string,
 ) ([]*RunResultDetails, error) {
 	display := fmt.Sprintf("%s: executing sql", c.Name)
-	results, _, err := c.ParallelE(ctx, l, OnNodes(nodes).WithDisplay(display).WithFailSlow(),
+	results, _, err := c.ParallelE(ctx, l, WithNodes(nodes).WithDisplay(display).WithFailSlow(),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
 			desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
 			if err != nil {

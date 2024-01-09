@@ -815,7 +815,7 @@ func Reformat(ctx context.Context, l *logger.Logger, clusterName string, fs stri
 		return fmt.Errorf("unknown filesystem %q", fs)
 	}
 
-	err = c.Run(ctx, l, os.Stdout, os.Stderr, install.OnNodes(c.Nodes), "reformatting", fmt.Sprintf(`
+	err = c.Run(ctx, l, os.Stdout, os.Stderr, install.WithNodes(c.Nodes), "reformatting", fmt.Sprintf(`
 set -euo pipefail
 if sudo zpool list -Ho name 2>/dev/null | grep ^data1$; then
 sudo zpool destroy -f data1
@@ -1136,7 +1136,7 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 
 	httpClient := httputil.NewClientWithTimeout(timeout)
 	startTime := timeutil.Now().Unix()
-	err = c.Parallel(ctx, l, install.OnNodes(c.TargetNodes()).WithDisplay(description),
+	err = c.Parallel(ctx, l, install.WithNodes(c.TargetNodes()).WithDisplay(description),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 			host := c.Host(node)
@@ -1766,7 +1766,7 @@ func CreateSnapshot(
 		syncutil.Mutex
 		snapshots []vm.VolumeSnapshot
 	}{}
-	if err := c.Parallel(ctx, l, install.OnNodes(nodes),
+	if err := c.Parallel(ctx, l, install.WithNodes(nodes),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 
@@ -1886,7 +1886,7 @@ func ApplySnapshots(
 	}
 
 	// Detach and delete existing volumes. This is destructive.
-	if err := c.Parallel(ctx, l, install.OnNodes(c.TargetNodes()),
+	if err := c.Parallel(ctx, l, install.WithNodes(c.TargetNodes()),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 
@@ -1911,7 +1911,7 @@ func ApplySnapshots(
 		return err
 	}
 
-	return c.Parallel(ctx, l, install.OnNodes(c.TargetNodes()),
+	return c.Parallel(ctx, l, install.WithNodes(c.TargetNodes()),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 
@@ -1966,7 +1966,7 @@ func ApplySnapshots(
 				}
 
 				var buf bytes.Buffer
-				if err := c.Run(ctx, l, &buf, &buf, install.OnNodes([]install.Node{node}),
+				if err := c.Run(ctx, l, &buf, &buf, install.WithNodes([]install.Node{node}),
 					"mounting volume", genMountCommands(device, "/mnt/data1")); err != nil {
 					l.Printf(buf.String())
 					return err
@@ -2036,7 +2036,7 @@ func StartJaeger(
 		otelCollectorPort,
 		jaegerUIPort,
 		jaegerImageName)
-	err = c.Run(ctx, l, l.Stdout, l.Stderr, install.OnNodes(jaegerNode), "start jaegertracing/all-in-one using docker", startCmd)
+	err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(jaegerNode), "start jaegertracing/all-in-one using docker", startCmd)
 	if err != nil {
 		return err
 	}
@@ -2080,12 +2080,12 @@ func StopJaeger(ctx context.Context, l *logger.Logger, clusterName string) error
 	}
 	jaegerNode := c.TargetNodes()[len(c.TargetNodes())-1:]
 	stopCmd := fmt.Sprintf("docker stop %s", jaegerContainerName)
-	err = c.Run(ctx, l, l.Stdout, l.Stderr, install.OnNodes(jaegerNode), stopCmd, stopCmd)
+	err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(jaegerNode), stopCmd, stopCmd)
 	if err != nil {
 		return err
 	}
 	rmCmd := fmt.Sprintf("docker rm %s", jaegerContainerName)
-	return c.Run(ctx, l, l.Stdout, l.Stderr, install.OnNodes(jaegerNode), rmCmd, rmCmd)
+	return c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(jaegerNode), rmCmd, rmCmd)
 }
 
 // JaegerURL returns a url to the jaeger UI, assuming it was installed
@@ -2194,7 +2194,7 @@ func sendCaptureCommand(
 ) error {
 	nodes := c.TargetNodes()
 	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
-	_, _, err := c.ParallelE(ctx, l, install.OnNodes(nodes).WithDisplay(fmt.Sprintf("Performing workload capture %s", action)),
+	_, _, err := c.ParallelE(ctx, l, install.WithNodes(nodes).WithDisplay(fmt.Sprintf("Performing workload capture %s", action)),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			port, err := c.NodeUIPort(ctx, node)
 			if err != nil {
@@ -2303,7 +2303,7 @@ func createAttachMountVolumes(
 				return err
 			}
 			l.Printf("Attached Volume %s to %s", volume.ProviderResourceID, cVM.ProviderID)
-			err = c.Run(ctx, l, l.Stdout, l.Stderr, install.OnNodes(curNode),
+			err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(curNode),
 				"Mounting volume", genMountCommands(device, mountDir))
 			return err
 		})
