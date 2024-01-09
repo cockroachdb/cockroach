@@ -1023,6 +1023,15 @@ func (m execNodeTraceMetadata) annotateExplain(
 	for i := range plan.Subqueries {
 		walk(plan.Subqueries[i].Root.(*explain.Node))
 	}
+	for _, cascade := range plan.Cascades {
+		// We don't want to create new plans if they haven't been cached - all
+		// necessary plans must have been created during the actual execution of
+		// the query.
+		const createPlanIfMissing = false
+		if cp, _ := cascade.GetExplainPlan(ctx, createPlanIfMissing); cp != nil {
+			m.annotateExplain(ctx, cp.(*explain.Plan), spans, makeDeterministic, p)
+		}
+	}
 	for i := range plan.Checks {
 		walk(plan.Checks[i])
 	}

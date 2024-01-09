@@ -837,10 +837,27 @@ vectorized: true
 │     spans: [/1 - /1]
 │
 ├── • fk-cascade
-│     fk: delrng2_p_fkey
+│   │ fk: delrng2_p_fkey
+│   │
+│   └── • root
+│       │
+│       ├── • delete range
+│       │     from: delrng2
+│       │     spans: [/1 - /1]
+│       │
+│       └── • fk-cascade
+│           │ fk: delrng3_p_q_fkey
+│           │
+│           └── • delete range
+│                 from: delrng3
+│                 spans: [/1 - /1]
 │
 └── • fk-cascade
-      fk: delrng2a_p_fkey
+    │ fk: delrng2a_p_fkey
+    │
+    └── • delete range
+          from: delrng2a
+          spans: [/1 - /1]
 
 query T kvtrace(Del,DelRange)
 DELETE FROM delrng1 WHERE p = 1
@@ -857,3 +874,318 @@ DelRange /Table/165/1/10 - /Table/165/1/21
 DelRange /Table/166/1/10 - /Table/166/1/21
 DelRange /Table/167/1/10 - /Table/167/1/21
 DelRange /Table/168/1/10 - /Table/168/1/21
+
+statement ok
+CREATE TABLE self (a INT PRIMARY KEY, b INT REFERENCES self(a) ON DELETE CASCADE, FAMILY (a, b))
+
+statement ok
+INSERT INTO self VALUES (1, NULL);
+INSERT INTO self SELECT x, x-1 FROM generate_series(2, 100) AS g(x)
+
+query T
+EXPLAIN DELETE FROM self WHERE a = 4
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • delete
+│   │ from: self
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: self@self_pkey
+│             spans: [/4 - /4]
+│
+└── • fk-cascade
+    │ fk: self_b_fkey
+    │
+    └── • root
+        │
+        ├── • delete
+        │   │ from: self
+        │   │
+        │   └── • buffer
+        │       │ label: buffer 1
+        │       │
+        │       └── • hash join
+        │           │ equality: (b) = (a)
+        │           │ right cols are key
+        │           │
+        │           ├── • scan
+        │           │     missing stats
+        │           │     table: self@self_pkey
+        │           │     spans: FULL SCAN
+        │           │
+        │           └── • distinct
+        │               │ estimated row count: 10
+        │               │ distinct on: a
+        │               │
+        │               └── • scan buffer
+        │                     estimated row count: 100
+        │                     label: buffer 1000000
+        │
+        └── • fk-cascade
+              fk: self_b_fkey
+              input: buffer 1
+
+### Delete cascade loop between two tables
+# loop_a <- loop_b
+# loop_b <- loop_a
+
+statement ok
+CREATE TABLE loop_a (
+  id STRING PRIMARY KEY
+ ,cascade_delete STRING
+ ,INDEX(cascade_delete)
+);
+
+statement ok
+CREATE TABLE loop_b (
+  id STRING PRIMARY KEY
+ ,cascade_delete STRING REFERENCES loop_a ON DELETE CASCADE
+);
+
+statement ok
+ALTER TABLE loop_a ADD CONSTRAINT cascade_delete_constraint
+  FOREIGN KEY (cascade_delete) REFERENCES loop_b (id)
+  ON DELETE CASCADE;
+
+statement ok
+INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk1', NULL);
+INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk1', 'loop_a-pk1');
+INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk2', 'loop_b-pk1');
+INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk2', 'loop_a-pk2');
+INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk3', 'loop_b-pk2');
+INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk3', 'loop_a-pk3');
+
+statement ok
+UPDATE loop_a SET cascade_delete = 'loop_b-pk3' WHERE id = 'loop_a-pk1';
+
+query T
+EXPLAIN DELETE FROM loop_a WHERE id = 'loop_a-pk1';
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • delete
+│   │ from: loop_a
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: loop_a@loop_a_pkey
+│             spans: [/'loop_a-pk1' - /'loop_a-pk1']
+│
+└── • fk-cascade
+    │ fk: loop_b_cascade_delete_fkey
+    │
+    └── • root
+        │
+        ├── • delete
+        │   │ from: loop_b
+        │   │
+        │   └── • buffer
+        │       │ label: buffer 1
+        │       │
+        │       └── • hash join
+        │           │ equality: (cascade_delete) = (id)
+        │           │ right cols are key
+        │           │
+        │           ├── • scan
+        │           │     missing stats
+        │           │     table: loop_b@loop_b_pkey
+        │           │     spans: FULL SCAN
+        │           │
+        │           └── • distinct
+        │               │ estimated row count: 10
+        │               │ distinct on: id
+        │               │
+        │               └── • scan buffer
+        │                     estimated row count: 100
+        │                     label: buffer 1000000
+        │
+        └── • fk-cascade
+            │ fk: cascade_delete_constraint
+            │
+            └── • root
+                │
+                ├── • delete
+                │   │ from: loop_a
+                │   │
+                │   └── • buffer
+                │       │ label: buffer 1
+                │       │
+                │       └── • lookup join
+                │           │ table: loop_a@loop_a_cascade_delete_idx
+                │           │ equality: (id) = (cascade_delete)
+                │           │
+                │           └── • distinct
+                │               │ estimated row count: 10
+                │               │ distinct on: id
+                │               │
+                │               └── • scan buffer
+                │                     estimated row count: 100
+                │                     label: buffer 1000000
+                │
+                └── • fk-cascade
+                      fk: loop_b_cascade_delete_fkey
+                      input: buffer 1
+
+query T
+EXPLAIN ANALYZE DELETE FROM loop_a WHERE id = 'loop_a-pk1';
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows decoded from KV: 9 (72 B, 18 KVs, 9 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• root
+│
+├── • delete
+│   │ nodes: <hidden>
+│   │ regions: <hidden>
+│   │ actual row count: 1
+│   │ from: loop_a
+│   │
+│   └── • buffer
+│       │ nodes: <hidden>
+│       │ regions: <hidden>
+│       │ actual row count: 1
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             nodes: <hidden>
+│             regions: <hidden>
+│             actual row count: 1
+│             KV time: 0µs
+│             KV contention time: 0µs
+│             KV rows decoded: 1
+│             KV pairs read: 2
+│             KV bytes read: 8 B
+│             KV gRPC calls: 1
+│             estimated max memory allocated: 0 B
+│             missing stats
+│             table: loop_a@loop_a_pkey
+│             spans: [/'loop_a-pk1' - /'loop_a-pk1']
+│
+└── • fk-cascade
+    │ fk: loop_b_cascade_delete_fkey
+    │
+    └── • root
+        │
+        ├── • delete
+        │   │ nodes: <hidden>
+        │   │ regions: <hidden>
+        │   │ actual row count: 0
+        │   │ from: loop_b
+        │   │
+        │   └── • buffer
+        │       │ nodes: <hidden>
+        │       │ regions: <hidden>
+        │       │ actual row count: 1
+        │       │ label: buffer 1
+        │       │
+        │       └── • hash join (semi)
+        │           │ nodes: <hidden>
+        │           │ regions: <hidden>
+        │           │ actual row count: 1
+        │           │ estimated max memory allocated: 0 B
+        │           │ estimated max sql temp disk usage: 0 B
+        │           │ equality: (cascade_delete) = (id)
+        │           │
+        │           ├── • scan
+        │           │     nodes: <hidden>
+        │           │     regions: <hidden>
+        │           │     actual row count: 3
+        │           │     KV time: 0µs
+        │           │     KV contention time: 0µs
+        │           │     KV rows decoded: 3
+        │           │     KV pairs read: 6
+        │           │     KV bytes read: 24 B
+        │           │     KV gRPC calls: 3
+        │           │     estimated max memory allocated: 0 B
+        │           │     missing stats
+        │           │     table: loop_b@loop_b_pkey
+        │           │     spans: FULL SCAN
+        │           │
+        │           └── • scan buffer
+        │                 nodes: <hidden>
+        │                 regions: <hidden>
+        │                 actual row count: 1
+        │                 estimated row count: 1
+        │                 label: buffer 1000000
+        │
+        └── • fk-cascade
+            │ fk: cascade_delete_constraint
+            │
+            └── • root
+                │
+                ├── • delete
+                │   │ nodes: <hidden>
+                │   │ regions: <hidden>
+                │   │ actual row count: 0
+                │   │ from: loop_a
+                │   │
+                │   └── • buffer
+                │       │ nodes: <hidden>
+                │       │ regions: <hidden>
+                │       │ actual row count: 1
+                │       │ label: buffer 1
+                │       │
+                │       └── • lookup join
+                │           │ nodes: <hidden>
+                │           │ regions: <hidden>
+                │           │ actual row count: 1
+                │           │ KV time: 0µs
+                │           │ KV contention time: 0µs
+                │           │ KV rows decoded: 1
+                │           │ KV pairs read: 2
+                │           │ KV bytes read: 8 B
+                │           │ KV gRPC calls: 1
+                │           │ estimated max memory allocated: 0 B
+                │           │ table: loop_a@loop_a_cascade_delete_idx
+                │           │ equality: (id) = (cascade_delete)
+                │           │
+                │           └── • distinct
+                │               │ nodes: <hidden>
+                │               │ regions: <hidden>
+                │               │ actual row count: 1
+                │               │ estimated max memory allocated: 0 B
+                │               │ estimated max sql temp disk usage: 0 B
+                │               │ estimated row count: 1
+                │               │ distinct on: id
+                │               │
+                │               └── • scan buffer
+                │                     nodes: <hidden>
+                │                     regions: <hidden>
+                │                     actual row count: 1
+                │                     estimated row count: 1
+                │                     label: buffer 1000000
+                │
+                └── • fk-cascade
+                      fk: loop_b_cascade_delete_fkey
+                      input: buffer 1
+
+query II
+SELECT
+  (SELECT count(*) FROM loop_a)
+ ,(SELECT count(*) FROM loop_b)
+;
+----
+0 0
