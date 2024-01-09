@@ -1,6 +1,6 @@
 # This file contains telemetry tests for CCL-related index creation counters.
 
-feature-allowlist
+feature-list
 sql.schema.partitioned_inverted_index
 ----
 

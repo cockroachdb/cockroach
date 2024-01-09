@@ -1,4 +1,4 @@
-feature-allowlist
+feature-list
 sql.schema.alter_table\..*
 sql.schema.table_storage_parameter.*
 sql.row_level_ttl.created

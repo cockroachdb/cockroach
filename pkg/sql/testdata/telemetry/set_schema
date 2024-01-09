@@ -1,6 +1,6 @@
 # This file contains telemetry tests for sql.schema.alter_*.set_schema counters.
 
-feature-allowlist
+feature-list
 sql.schema.alter_table.set_schema
 sql.schema.alter_sequence.set_schema
 sql.schema.alter_view.set_schema
