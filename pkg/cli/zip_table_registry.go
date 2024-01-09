@@ -1236,7 +1236,11 @@ var zipSystemTables = DebugZipTableRegistry{
 	"system.span_configurations": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"config",
+			// Boundary keys for ranges and span configs are deemed essential for debugging, and therefore
+			// can remain unredacted.
 			"start_key",
+			// Boundary keys for ranges and span configs are deemed essential for debugging, and therefore
+			// can remain unredacted.
 			"end_key",
 		},
 	},
