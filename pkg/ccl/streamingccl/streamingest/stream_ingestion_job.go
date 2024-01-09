@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/revertccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -461,11 +462,11 @@ func maybeRevertToCutoverTimestamp(
 		return cutoverTimestamp, false, err
 	}
 
-	batchSize := int64(sql.RevertTableDefaultBatchSize)
+	batchSize := int64(revertccl.RevertDefaultBatchSize)
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize != 0 {
 		batchSize = p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize
 	}
-	if err := sql.RevertSpansFanout(ctx,
+	if err := revertccl.RevertSpansFanout(ctx,
 		p.ExecCfg().DB,
 		p,
 		remainingSpansToRevert,
