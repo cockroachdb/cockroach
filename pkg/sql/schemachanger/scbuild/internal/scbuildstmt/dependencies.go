@@ -219,7 +219,7 @@ type PrivilegeChecker interface {
 	// to descriptors. However, privileges can also live in the
 	// `system.privileges` table (i.e. system-level privileges) and checking those
 	// global privileges are done by the CheckGlobalPrivilege method below.
-	CheckPrivilege(e scpb.Element, privilege privilege.Kind)
+	CheckPrivilege(e scpb.Element, privilege privilege.Kind) error
 
 	// CheckGlobalPrivilege panics if the current user does not have the specified
 	// global privilege.
@@ -334,6 +334,7 @@ type ResolveParams struct {
 
 	// RequiredPrivilege defines the privilege required for the resolved
 	// descriptor.
+	// If 0, no privilege checking is performed.
 	RequiredPrivilege privilege.Kind
 
 	// RequireOwnership if set to true, requires current user be the owner of the
