@@ -263,7 +263,6 @@ func (c *TenantStreamingClusters) Cutover(
 
 	if !async {
 		jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-		jobutils.WaitForJobToSucceed(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	}
 }
 

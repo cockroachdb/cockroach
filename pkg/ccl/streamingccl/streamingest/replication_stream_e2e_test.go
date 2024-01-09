@@ -343,15 +343,20 @@ func requireReleasedProducerPTSRecord(
 	producerJobID jobspb.JobID,
 ) {
 	t.Helper()
-	job, err := srv.JobRegistry().(*jobs.Registry).LoadJob(ctx, producerJobID)
-	require.NoError(t, err)
-	ptsRecordID := job.Payload().Details.(*jobspb.Payload_StreamReplication).StreamReplication.ProtectedTimestampRecordID
-	ptsProvider := srv.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-	err = srv.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		_, err := ptsProvider.WithTxn(txn).GetRecord(ctx, ptsRecordID)
-		return err
+	testutils.SucceedsSoon(t, func() error {
+		job, err := srv.JobRegistry().(*jobs.Registry).LoadJob(ctx, producerJobID)
+		require.NoError(t, err)
+		ptsRecordID := job.Payload().Details.(*jobspb.Payload_StreamReplication).StreamReplication.ProtectedTimestampRecordID
+		ptsProvider := srv.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+		err = srv.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			_, err := ptsProvider.WithTxn(txn).GetRecord(ctx, ptsRecordID)
+			return err
+		})
+		if !errors.Is(err, protectedts.ErrNotExists) {
+			return errors.Wrapf(err, "unexpected error")
+		}
+		return nil
 	})
-	require.ErrorIs(t, err, protectedts.ErrNotExists)
 }
 
 func TestTenantStreamingCancelIngestion(t *testing.T) {
@@ -922,6 +927,13 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
 
+			if !pauseBeforeTerminal {
+				// Only set a short job liveness timeout if the job will not get paused.
+				// Else, the producer job may inadvertently timeout while the job is
+				// paused.
+				c.DestSysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '100ms'")
+			}
+
 			producerJobID, replicationJobID := c.StartStreamReplication(ctx)
 
 			jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
@@ -970,8 +982,12 @@ func TestProtectedTimestampManagement(t *testing.T) {
 				jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 			}
 
-			// Check if the producer job has released protected timestamp.
-			requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
+			// Check if the producer job has released protected timestamp if the job
+			// completed with a low stream_replication.job_liveness_timeout, or if the
+			// replication stream didn't complete.
+			if !pauseBeforeTerminal || !completeReplication {
+				requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
+			}
 
 			// Check if the replication job has released protected timestamp.
 			checkNoDestinationProtection(c, replicationJobID)
