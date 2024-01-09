@@ -140,10 +140,13 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			group.GoCtx(func(ctx context.Context) error {
 
 				handleError := func(err error) error {
+					if err == nil {
+						return nil
+					}
 					if knobs.ReturnStatsError {
 						return err
 					}
-					log.Warningf(ctx, "failed to get statistics for table id %d: %s", details.TableID, err)
+					log.Warningf(ctx, "failed to get statistics for table id %d: %v", details.TableID, err)
 					return nil
 				}
 
