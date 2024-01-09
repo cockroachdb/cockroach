@@ -55,6 +55,9 @@ type ServerIterator interface {
 	dialNode(
 		ctx context.Context, serverID serverID,
 	) (*grpc.ClientConn, error)
+	// connHealth reports the connection health of an existing gRPC connection to
+	// the node. It will not dial a connection if one does not already exist.
+	connHealth(ctx context.Context, serverID serverID) error
 	// getAllNodes returns a map of all nodes in the cluster
 	// or instances in the tenant with their liveness status.
 	getAllNodes(
@@ -148,6 +151,17 @@ func (t *tenantFanoutClient) dialNode(
 	return t.rpcCtx.GRPCDialPod(instance.InstanceRPCAddr, id, rpc.DefaultClass).Connect(ctx)
 }
 
+func (t *tenantFanoutClient) connHealth(ctx context.Context, serverID serverID) error {
+	id := base.SQLInstanceID(serverID)
+	instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, id)
+	if err != nil {
+		return err
+	}
+	// TODO(baptist): This is a little janky but works. The address is based on
+	// the SQLInstance, but we manually convert the id to a NodeID for reading.
+	return t.rpcCtx.ConnHealth(instance.InstanceRPCAddr, roachpb.NodeID(id), rpc.DefaultClass)
+}
+
 func (t *tenantFanoutClient) getAllNodes(
 	ctx context.Context,
 ) (map[serverID]livenesspb.NodeLivenessStatus, error) {
@@ -227,6 +241,15 @@ func (k kvFanoutClient) dialNode(ctx context.Context, serverID serverID) (*grpc.
 		return nil, err
 	}
 	return k.rpcCtx.GRPCDialNode(addr.String(), id, rpc.DefaultClass).Connect(ctx)
+}
+
+func (k kvFanoutClient) connHealth(_ context.Context, serverID serverID) error {
+	id := roachpb.NodeID(serverID)
+	addr, err := k.gossip.GetNodeIDAddress(id)
+	if err != nil {
+		return err
+	}
+	return k.rpcCtx.ConnHealth(addr.String(), id, rpc.DefaultClass)
 }
 
 func (k kvFanoutClient) listNodes(ctx context.Context) (*serverpb.NodesResponse, error) {

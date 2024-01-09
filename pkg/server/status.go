@@ -2031,7 +2031,7 @@ func (s *systemStatusServer) NetworkConnectivity(
 				peer.Error = errors.UnwrapAll(err).Error()
 				continue
 			}
-			if err = s.rpcCtx.ConnHealth(node.Address.AddressField, node.NodeID, rpc.SystemClass); err != nil {
+			if err = s.serverIterator.connHealth(ctx, serverID(targetNodeId)); err != nil {
 				if errors.Is(rpc.ErrNotHeartbeated, err) {
 					peer.Status = serverpb.NetworkConnectivityResponse_ESTABLISHING
 				} else {
