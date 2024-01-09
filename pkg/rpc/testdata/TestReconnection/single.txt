@@ -1,7 +1,7 @@
 # This basic test operates against a single server. It establishes a healthy
 # DefaultClass connection, then interrupts the heartbeat, lets the peer reconnect,
-# then adds a SystemClass and RangeFeedClass connection, and interrupts heartbeats
-# again. At each step, metrics are verified via `soon`.
+# then adds SystemClass, RangefeedClass, and RaftClass connection, and
+# interrupts heartbeats again. At each step, metrics are verified via `soon`.
 dial n1 class=def
 ----
 ok
@@ -62,10 +62,18 @@ soon healthy=3
 ----
 ok
 
+connect n1 class=raft
+----
+ok
+
+soon healthy=4
+----
+ok
+
 set-hb-err n1
 ----
 ok
 
-soon n1 unhealthy=3
+soon n1 unhealthy=4
 ----
 ok
