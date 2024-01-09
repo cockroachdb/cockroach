@@ -1,0 +1,31 @@
+# Abort an intent whose history includes ignored seq nums.
+# The test exposes a bug where even though the transaction is aborted, its
+# intent is updated instead of aborted.
+
+# The test exposes a bug where even though the transaction is aborted, its
+# intent is updated instead of aborted.
+# Moreover, it logs MVCCCommitIntentOp instead of MVCCUpdateIntentOp.
+
+run ok log-ops
+with t=A k=k
+  txn_begin ts=11
+  txn_step  seq=10
+  put       v=a
+  txn_step  seq=20
+  put       v=b
+  txn_step  seq=30
+  txn_ignore_seqs seqs=(15-25)
+  resolve_intent status=ABORTED
+  get
+----
+put: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
+put: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
+resolve_intent: "k" -> resolved key = true
+get: "k" -> /BYTES/a @11.000000000,0
+>> at end:
+txn: "A" meta={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+meta: "k"/0,0 -> txn={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k"/11.000000000,0 -> /BYTES/a
+logical op: *enginepb.MVCCWriteIntentOp
+logical op: *enginepb.MVCCUpdateIntentOp
+logical op: *enginepb.MVCCCommitIntentOp
