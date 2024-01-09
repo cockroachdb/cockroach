@@ -184,7 +184,7 @@ func (g *testSchemaGenerator) genOneTable(
 		nameGenCfg.Number = false
 		for i, cPat := range tmpl.baseColumnNames {
 			ng := randident.NewNameGenerator(&nameGenCfg, g.rand, cPat)
-			colName := ng.GenerateOne(0)
+			colName := ng.GenerateOne("0")
 			tmpl.desc.Columns[i+1].Name = colName
 			tmpl.desc.Families[0].ColumnNames[i+1] = colName
 			for j := range tmpl.desc.PrimaryIndex.KeyColumnNames {
@@ -199,7 +199,7 @@ func (g *testSchemaGenerator) genOneTable(
 			}
 		}
 		ng := randident.NewNameGenerator(&nameGenCfg, g.rand, "primary")
-		idxName := ng.GenerateOne(0)
+		idxName := ng.GenerateOne("0")
 		tmpl.desc.PrimaryIndex.Name = idxName
 	}
 

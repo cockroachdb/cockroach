@@ -26,7 +26,7 @@ type NameGenerator interface {
 	//
 	// The specified number is included in the name if Number is true
 	// in the attached NameGeneratorConfig.
-	GenerateOne(number int) string
+	GenerateOne(numberSuffix string) string
 
 	// GenerateMultiple generates count names, guaranteed to not be
 	// present in the conflictNames map.
