@@ -1087,7 +1087,7 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:             "cdc/tpcc-1000",
+		Name:             "cdc/tpcc-1000/sink=kafka",
 		Owner:            registry.OwnerCDC,
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
