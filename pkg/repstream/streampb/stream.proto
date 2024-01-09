@@ -75,6 +75,7 @@ message ReplicationProducerRequest {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "TenantID"
   ];
+  bool cutover_retention = 4;
 }
 
 // StreamPartitionSpec is the stream partition specification.

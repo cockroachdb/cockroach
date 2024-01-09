@@ -44,12 +44,17 @@ func makeProducerJobRecord(
 	timeout time.Duration,
 	user username.SQLUsername,
 	ptsID uuid.UUID,
+	postCutoverRetention bool,
 ) jobs.Record {
 	tenantID := tenantInfo.ID
 	tenantName := tenantInfo.Name
+	description := fmt.Sprintf("Physical replication stream producer for %q (%d)", tenantName, tenantID)
+	if postCutoverRetention {
+		description = "dummy producer job to protect data for fast failover"
+	}
 	return jobs.Record{
 		JobID:       registry.MakeJobID(),
-		Description: fmt.Sprintf("Physical replication stream producer for %q (%d)", tenantName, tenantID),
+		Description: description,
 		Username:    user,
 		Details: jobspb.StreamReplicationDetails{
 			ProtectedTimestampRecordID: ptsID,

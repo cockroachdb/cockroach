@@ -837,7 +837,10 @@ func TestProtectedTimestampManagement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "slow test") // takes >1mn under race.
+	// We skip under duress temporarily because the low
+	// stream_replication.job_liveness_timeout can cause the stream ingestion job
+	// to fail from a slow checkpoint.
+	skip.UnderDuressWithIssue(t, 117616, "Only skip under race once issue merges") // takes >1mn under race.
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
@@ -847,6 +850,14 @@ func TestProtectedTimestampManagement(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "pause-before-terminal", func(t *testing.T, pauseBeforeTerminal bool) {
 		testutils.RunTrueAndFalse(t, "complete-replication", func(t *testing.T, completeReplication bool) {
+
+			if pauseBeforeTerminal {
+				// For the test to run quickly stream_replication.job_liveness_timeout
+				// must be set to a low number, but that may cause the producer job to
+				// timeout and fail while the destination job is paused, which would
+				// also cause the test to fail.
+				skip.WithIssue(t, 117616, "skip until user can manually set destination side retention job timeout")
+			}
 
 			// waitForProducerProtection asserts that there is a PTS record protecting
 			// the source tenant. We ensure the PTS record is protecting a timestamp
@@ -926,13 +937,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 
 			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
-
-			if !pauseBeforeTerminal {
-				// Only set a short job liveness timeout if the job will not get paused.
-				// Else, the producer job may inadvertently timeout while the job is
-				// paused.
-				c.DestSysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '100ms'")
-			}
+			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '2s'")
 
 			producerJobID, replicationJobID := c.StartStreamReplication(ctx)
 
@@ -982,12 +987,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 				jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 			}
 
-			// Check if the producer job has released protected timestamp if the job
-			// completed with a low stream_replication.job_liveness_timeout, or if the
-			// replication stream didn't complete.
-			if !pauseBeforeTerminal || !completeReplication {
-				requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
-			}
+			requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
 
 			// Check if the replication job has released protected timestamp.
 			checkNoDestinationProtection(c, replicationJobID)
