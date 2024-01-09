@@ -1,4 +1,4 @@
-feature-allowlist
+feature-list
 sql.multiregion.*
 ----
 
@@ -45,7 +45,7 @@ exec
 SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms';
 ----
 
-feature-allowlist
+feature-list
 sql.plan.opt.locality-optimized-search
 ----
 
@@ -70,7 +70,7 @@ USE survive_region;
 CREATE TABLE t9 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
 ----
 
-feature-allowlist
+feature-list
 sql.multiregion.zone_configuration.override.*
 ----
 
