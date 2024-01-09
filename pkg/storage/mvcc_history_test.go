@@ -820,6 +820,11 @@ func cmdTxnRestart(e *evalCtx) error {
 	up := roachpb.NormalUserPriority
 	tp := enginepb.MinTxnPriority
 	txn.Restart(up, tp, ts)
+	if e.hasArg("epoch") {
+		var epoch int
+		e.scanArg("epoch", &epoch)
+		txn.Epoch = enginepb.TxnEpoch(epoch)
+	}
 	e.results.txn = txn
 	return nil
 }
