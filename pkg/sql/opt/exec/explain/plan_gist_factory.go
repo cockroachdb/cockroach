@@ -159,7 +159,9 @@ func (f *PlanGistFactory) PlanGist() PlanGist {
 }
 
 // DecodePlanGistToRows converts a gist to a logical plan and returns the rows.
-func DecodePlanGistToRows(gist string, catalog cat.Catalog) (_ []string, retErr error) {
+func DecodePlanGistToRows(
+	ctx context.Context, gist string, catalog cat.Catalog,
+) (_ []string, retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate internal errors without having
@@ -182,7 +184,7 @@ func DecodePlanGistToRows(gist string, catalog cat.Catalog) (_ []string, retErr 
 	if err != nil {
 		return nil, err
 	}
-	err = Emit(explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
+	err = Emit(ctx, explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
 	if err != nil {
 		return nil, err
 	}
