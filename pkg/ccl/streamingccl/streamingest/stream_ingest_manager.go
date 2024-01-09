@@ -11,6 +11,7 @@ package streamingest
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/revertccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -109,7 +110,7 @@ func (r *streamIngestManagerImpl) RevertTenantToTimestamp(
 	defer ptsCleanup()
 
 	spanToRevert := keys.MakeTenantSpan(tenantID)
-	if err := sql.RevertSpansFanout(ctx, r.evalCtx.Txn.DB(), r.evalCtx.JobExecContext.(sql.RevertSpansContext),
+	if err := revertccl.RevertSpansFanout(ctx, r.evalCtx.Txn.DB(), r.evalCtx.JobExecContext.(sql.JobExecContext),
 		[]roachpb.Span{spanToRevert},
 		revertTo,
 		false, /* ignoreGCThreshold */

@@ -346,7 +346,7 @@ func init() {
 // adjust the batch's timestamp.
 func (r *Replica) applyTimestampCache(
 	ctx context.Context, ba *kvpb.BatchRequest, minReadTS hlc.Timestamp,
-) bool {
+) (*kvpb.BatchRequest, bool) {
 	// bumpedDueToMinReadTS is set to true if the highest timestamp bump encountered
 	// below is due to the minReadTS.
 	var bumpedDueToMinReadTS bool
@@ -371,12 +371,18 @@ func (r *Replica) applyTimestampCache(
 				if ba.Txn.ID != rTxnID {
 					if ba.Txn.WriteTimestamp.Less(nextRTS) {
 						txn := ba.Txn.Clone()
-						bumpedCurReq = txn.WriteTimestamp.Forward(nextRTS)
+						txn.WriteTimestamp = nextRTS
+						ba = ba.ShallowCopy()
 						ba.Txn = txn
+						bumpedCurReq = true
 					}
 				}
 			} else {
-				bumpedCurReq = ba.Timestamp.Forward(nextRTS)
+				if ba.Timestamp.Less(nextRTS) {
+					ba = ba.ShallowCopy()
+					ba.Timestamp = nextRTS
+					bumpedCurReq = true
+				}
 			}
 			if bumpedCurReq && (rTxnID != uuid.Nil) {
 				conflictingTxn = rTxnID
@@ -384,7 +390,7 @@ func (r *Replica) applyTimestampCache(
 			// Preserve bumpedDueToMinReadTS if we did not just bump or set it
 			// appropriately if we did.
 			bumpedDueToMinReadTS = (!bumpedCurReq && bumpedDueToMinReadTS) || (bumpedCurReq && forwardedToMinReadTS)
-			bumped, bumpedCurReq = bumped || bumpedCurReq, false
+			bumped = bumped || bumpedCurReq
 		}
 	}
 	if bumped {
@@ -404,7 +410,7 @@ func (r *Replica) applyTimestampCache(
 			log.VEventf(ctx, 2, "bumped write timestamp to %s; %s", bumpedTS, redact.Safe(conflictMsg))
 		}
 	}
-	return bumped
+	return ba, bumped
 }
 
 // CanCreateTxnRecord determines whether a transaction record can be created for
