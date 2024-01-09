@@ -298,16 +298,16 @@ func (b *builderState) mustOwn(id catid.DescID) {
 }
 
 // CheckPrivilege implements the scbuildstmt.PrivilegeChecker interface.
-func (b *builderState) CheckPrivilege(e scpb.Element, privilege privilege.Kind) {
-	b.checkPrivilege(screl.GetDescID(e), privilege)
+func (b *builderState) CheckPrivilege(e scpb.Element, privilege privilege.Kind) error {
+	return b.checkPrivilege(screl.GetDescID(e), privilege)
 }
 
 // checkPrivilege checks if current user has privilege `priv` on descriptor with `id`.
-func (b *builderState) checkPrivilege(id catid.DescID, priv privilege.Kind) {
+func (b *builderState) checkPrivilege(id catid.DescID, priv privilege.Kind) error {
 	b.ensureDescriptor(id)
 	c := b.descCache[id]
 	if c.hasOwnership {
-		return
+		return nil
 	}
 	err, found := c.privileges[priv]
 	if !found {
@@ -318,7 +318,10 @@ func (b *builderState) checkPrivilege(id catid.DescID, priv privilege.Kind) {
 				b.QueryByID(id),
 				func(current scpb.Status, _ scpb.TargetStatus, e *scpb.SchemaParent) {
 					if current == scpb.Status_PUBLIC {
-						b.checkPrivilege(e.SchemaID, privilege.USAGE)
+						if err := b.checkPrivilege(e.SchemaID, privilege.USAGE); err != nil {
+							panic(errors.Wrapf(err, "current user does not have %s privilege on current schema %v",
+								privilege.USAGE.DisplayName(), e.SchemaID))
+						}
 					}
 				},
 			)
@@ -326,9 +329,7 @@ func (b *builderState) checkPrivilege(id catid.DescID, priv privilege.Kind) {
 		err = b.auth.CheckPrivilege(b.ctx, c.desc, priv)
 		c.privileges[priv] = err
 	}
-	if err != nil {
-		panic(err)
-	}
+	return err
 }
 
 // CheckGlobalPrivilege implements the scbuildstmt.PrivilegeChecker interface.
@@ -876,7 +877,11 @@ func (b *builderState) ResolveDatabase(
 		panic(sqlerrors.NewUndefinedDatabaseError(name.String()))
 	}
 	b.ensureDescriptor(db.GetID())
-	b.checkPrivilege(db.GetID(), p.RequiredPrivilege)
+	if p.RequiredPrivilege != 0 {
+		if err := b.checkPrivilege(db.GetID(), p.RequiredPrivilege); err != nil {
+			panic(err)
+		}
+	}
 	return b.QueryByID(db.GetID())
 }
 
@@ -942,8 +947,10 @@ func (b *builderState) checkOwnershipOrPrivilegesOnSchemaDesc(
 		b.ensureDescriptor(sc.GetID())
 		if p.RequireOwnership {
 			b.mustOwn(sc.GetID())
-		} else {
-			b.checkPrivilege(sc.GetID(), p.RequiredPrivilege)
+		} else if p.RequiredPrivilege != 0 {
+			if err := b.checkPrivilege(sc.GetID(), p.RequiredPrivilege); err != nil {
+				panic(err)
+			}
 		}
 	default:
 		panic(errors.AssertionFailedf("unknown schema kind %d", sc.SchemaKind()))
@@ -1020,7 +1027,9 @@ func (b *builderState) resolveRelation(
 	if rel.IsTemporary() {
 		panic(scerrors.NotImplementedErrorf(nil /* n */, "dropping a temporary table"))
 	}
-	// If we own the schema then we can manipulate the underlying relation.
+
+	// If we own the schema then we can manipulate the underlying relation,
+	// regardless what privilege is required on relation.
 	b.ensureDescriptor(rel.GetID())
 	c := b.descCache[rel.GetID()]
 	b.ensureDescriptor(rel.GetParentSchemaID())
@@ -1028,10 +1037,18 @@ func (b *builderState) resolveRelation(
 		c.hasOwnership = true
 		return c
 	}
+
+	// Otherwise, ensure the current user has required privilege on the relation.
+	// If required privilege is not specified, skip any of the privilege checking.
+	if p.RequiredPrivilege == 0 {
+		return c
+	}
 	err, found := c.privileges[p.RequiredPrivilege]
 	if !found {
 		// Validate if this descriptor can be resolved under the current schema.
-		b.checkPrivilege(rel.GetParentSchemaID(), privilege.USAGE)
+		if err := b.checkPrivilege(rel.GetParentSchemaID(), privilege.USAGE); err != nil {
+			panic(err)
+		}
 		err = b.auth.CheckPrivilege(b.ctx, rel, p.RequiredPrivilege)
 		c.privileges[p.RequiredPrivilege] = err
 	}
@@ -1108,7 +1125,11 @@ func (b *builderState) ResolveIndex(
 		panic(pgerror.Newf(pgcode.WrongObjectType,
 			"%q is not an indexable table or a materialized view", rel.GetName()))
 	}
-	b.checkPrivilege(rel.GetID(), p.RequiredPrivilege)
+	if p.RequiredPrivilege != 0 {
+		if err := b.checkPrivilege(rel.GetID(), p.RequiredPrivilege); err != nil {
+			panic(err)
+		}
+	}
 	elts := b.QueryByID(rel.GetID())
 	var indexID catid.IndexID
 	scpb.ForEachIndexName(elts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
@@ -1170,7 +1191,11 @@ func (b *builderState) ResolveColumn(
 	b.ensureDescriptor(relationID)
 	rel := b.descCache[relationID].desc.(catalog.TableDescriptor)
 	elts := b.QueryByID(rel.GetID())
-	b.checkPrivilege(rel.GetID(), p.RequiredPrivilege)
+	if p.RequiredPrivilege != 0 {
+		if err := b.checkPrivilege(rel.GetID(), p.RequiredPrivilege); err != nil {
+			panic(err)
+		}
+	}
 	var columnID catid.ColumnID
 	scpb.ForEachColumnName(elts, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnName) {
 		if tree.Name(e.Name) == columnName {
