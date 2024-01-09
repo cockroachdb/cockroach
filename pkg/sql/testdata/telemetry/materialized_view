@@ -1,6 +1,6 @@
 # This file contains telemetry tests for sql.schema.*_materialized_view.* counters.
 
-feature-allowlist
+feature-list
 sql.schema.create_materialized_view
 sql.schema.alter_materialized_view.owner_to
 sql.schema.alter_materialized_view.set_schema
