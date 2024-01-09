@@ -2064,7 +2064,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 			}
 		}
 
-		log.VEventf(ctx, 2, "executing cascade for constraint %s", plan.cascades[i].FKName)
+		log.VEventf(ctx, 2, "executing cascade for constraint %s", plan.cascades[i].FKConstraint.Name())
 
 		// We place a sequence point before every cascade, so that each subsequent
 		// cascade can observe the writes by the previous step. However, The
