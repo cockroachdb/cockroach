@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -236,25 +237,51 @@ func emitExplain(
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
 func (e *explainPlanNode) Values() tree.Datums                 { return e.run.results.Values() }
 
-func (e *explainPlanNode) Close(ctx context.Context) {
-	closeNode := func(n exec.Node) {
-		switch n := n.(type) {
-		case planNode:
-			n.Close(ctx)
-		case planMaybePhysical:
-			n.Close(ctx)
-		default:
-			panic(errors.AssertionFailedf("unknown plan node type %T", n))
+// closeExplainNode closes the given node which can either be planNode or
+// planMaybePhysical.
+func closeExplainNode(ctx context.Context, n exec.Node) {
+	switch n := n.(type) {
+	case planNode:
+		n.Close(ctx)
+	case planMaybePhysical:
+		n.Close(ctx)
+	default:
+		panic(errors.AssertionFailedf("unknown plan node type %T", n))
+	}
+}
+
+// closeExplainPlan closes the provided explain plan.
+// - visitedTablesByCascades is updated on recursive calls for each cascade
+// plan. Can be nil if the plan doesn't have any cascades.
+func closeExplainPlan(
+	ctx context.Context, ep *explain.Plan, visitedTablesByCascades *intsets.Fast,
+) {
+	closeExplainNode(ctx, ep.Root.WrappedNode())
+	for i := range ep.Subqueries {
+		closeExplainNode(ctx, ep.Subqueries[i].Root.(*explain.Node).WrappedNode())
+	}
+	for _, cascade := range ep.Cascades {
+		if cp, err := cascade.GetExplainPlan(ctx); err == nil {
+			if fk := cascade.FKConstraint; !visitedTablesByCascades.Contains(int(fk.OriginTableID())) {
+				// If the origin table for this FK has already been visited, we
+				// don't recurse into it again to prevent infinite recursion.
+				visitedTablesByCascades.Add(int(fk.OriginTableID()))
+				defer visitedTablesByCascades.Remove(int(fk.OriginTableID()))
+				closeExplainPlan(ctx, cp.(*explain.Plan), visitedTablesByCascades)
+			}
 		}
 	}
-	// The wrapped node can be planNode or planMaybePhysical.
-	closeNode(e.plan.Root.WrappedNode())
-	for i := range e.plan.Subqueries {
-		closeNode(e.plan.Subqueries[i].Root.(*explain.Node).WrappedNode())
+	for i := range ep.Checks {
+		closeExplainNode(ctx, ep.Checks[i].WrappedNode())
 	}
-	for i := range e.plan.Checks {
-		closeNode(e.plan.Checks[i].WrappedNode())
+}
+
+func (e *explainPlanNode) Close(ctx context.Context) {
+	var visitedTablesByCascades *intsets.Fast
+	if len(e.plan.Cascades) > 0 {
+		visitedTablesByCascades = &intsets.Fast{}
 	}
+	closeExplainPlan(ctx, e.plan, visitedTablesByCascades)
 	if e.run.results != nil {
 		e.run.results.Close(ctx)
 	}
