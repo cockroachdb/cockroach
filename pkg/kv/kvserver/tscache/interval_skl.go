@@ -325,8 +325,12 @@ func (s *intervalSkl) addRange(
 			err = fp.addNode(&it, to, val, 0, true /* mustInit */)
 		}
 
-		if errors.Is(err, arenaskl.ErrArenaFull) {
-			return fp
+		if err != nil {
+			if errors.Is(err, arenaskl.ErrArenaFull) {
+				return fp
+			} else {
+				panic(fmt.Sprintf("unexpected error: %v", err))
+			}
 		}
 	}
 
@@ -343,8 +347,12 @@ func (s *intervalSkl) addRange(
 		err = fp.addNode(&it, from, val, hasGap, false /* mustInit */)
 	}
 
-	if errors.Is(err, arenaskl.ErrArenaFull) {
-		return fp
+	if err != nil {
+		if errors.Is(err, arenaskl.ErrArenaFull) {
+			return fp
+		} else {
+			panic(fmt.Sprintf("unexpected error: %v", err))
+		}
 	}
 
 	// Seek to the node immediately after the "from" node.
@@ -1072,12 +1080,16 @@ func (p *sklPage) scanTo(
 
 		// Decode the current node's value set.
 		keyVal, gapVal := decodeValueSet(it.Value(), it.Meta())
-		if errors.Is(ratchetErr, arenaskl.ErrArenaFull) {
-			// If we failed to ratchet an uninitialized node above, the desired
-			// ratcheting won't be reflected in the decoded values. Perform the
-			// ratcheting manually.
-			keyVal, _ = ratchetValue(keyVal, prevGapVal)
-			gapVal, _ = ratchetValue(gapVal, prevGapVal)
+		if ratchetErr != nil {
+			if errors.Is(ratchetErr, arenaskl.ErrArenaFull) {
+				// If we failed to ratchet an uninitialized node above, the desired
+				// ratcheting won't be reflected in the decoded values. Perform the
+				// ratcheting manually.
+				keyVal, _ = ratchetValue(keyVal, prevGapVal)
+				gapVal, _ = ratchetValue(gapVal, prevGapVal)
+			} else {
+				panic(fmt.Sprintf("unexpected error: %v", ratchetErr))
+			}
 		}
 
 		if !(first && (opt&excludeFrom) != 0) {
