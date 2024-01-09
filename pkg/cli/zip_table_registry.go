@@ -1236,7 +1236,13 @@ var zipSystemTables = DebugZipTableRegistry{
 	"system.span_configurations": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"config",
+			// Boundary keys for span configs, which are derived from zone configs, are typically on
+			// metadata object boundaries (database, table, or index), and not arbitrary range boundaries
+			// and therefore do not contain sensitive information. Therefore they can remain unredacted.
 			"start_key",
+			// Boundary keys for span configs, which are derived from zone configs, are typically on
+			// metadata object boundaries (database, table, or index), and not arbitrary range boundaries
+			// and therefore do not contain sensitive information. Therefore they can remain unredacted.
 			"end_key",
 		},
 	},
