@@ -394,9 +394,6 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 					"actual lease info: %s",
 					expStoreID, desc, curLease)
 			}
-			if curLease.Speculative() {
-				return errors.Errorf("only had speculative lease for %s", desc)
-			}
 			if !kvserver.ExpirationLeasesOnly.Get(&tc.Server(0).ClusterSettings().SV) &&
 				curLease.Type() != roachpb.LeaseEpoch {
 				return errors.Errorf("awaiting upgrade to epoch-based lease for %s", desc)

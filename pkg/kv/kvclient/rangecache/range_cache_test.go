@@ -1914,33 +1914,6 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				require.Equal(t, l, entries[0].lease)
 			},
 		},
-		{
-			name: "speculative lease coming from a replica with a non-stale view",
-			testFn: func(t *testing.T, cache *RangeCache) {
-				// Check that trying to update the cache with a speculative lease coming
-				// from a replica that has a non-stale view of the world is persisted.
-				cache.Insert(ctx, roachpb.RangeInfo{
-					Desc: desc2,
-					Lease: roachpb.Lease{
-						Replica:  rep3,
-						Sequence: 2,
-					},
-					ClosedTimestampPolicy: lead,
-				})
-				tok, err := cache.LookupWithEvictionToken(
-					ctx, startKey, EvictionToken{}, false, /* useReverseScan */
-				)
-				require.NoError(t, err)
-
-				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCacheWithSpeculativeLease(
-					ctx, rep2, &desc2,
-				)
-				require.True(t, updatedLeaseholder)
-				require.Equal(t, &desc2, tok.Desc())
-				require.Equal(t, &rep2, tok.Leaseholder())
-				require.Equal(t, roachpb.LeaseSequence(0), tok.Lease().Sequence)
-			},
-		},
 	}
 
 	for _, tc := range testCases {

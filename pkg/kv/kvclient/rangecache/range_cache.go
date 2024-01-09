@@ -306,7 +306,7 @@ func (rc *RangeCache) makeEvictionToken(
 	return EvictionToken{
 		rdc:             rc,
 		desc:            entry.Desc(),
-		lease:           entry.leaseEvenIfSpeculative(),
+		lease:           entry.Lease(),
 		closedts:        entry.closedts,
 		speculativeDesc: speculativeDesc,
 	}
@@ -369,8 +369,7 @@ func (et EvictionToken) Lease() *roachpb.Lease {
 	return et.lease
 }
 
-// LeaseSeq returns the sequence of the cached lease. If no lease is cached, or
-// the cached lease is speculative, 0 is returned.
+// LeaseSeq returns the sequence of the cached lease or 0 if no cached lease.
 func (et EvictionToken) LeaseSeq() roachpb.LeaseSequence {
 	if !et.Valid() {
 		panic("invalid LeaseSeq() call on empty EvictionToken")
@@ -409,7 +408,7 @@ func (et *EvictionToken) syncRLocked(
 		return false, nil, nil
 	}
 	et.desc = cachedEntry.Desc()
-	et.lease = cachedEntry.leaseEvenIfSpeculative()
+	et.lease = cachedEntry.Lease()
 	return true, cachedEntry, rawEntry
 }
 
@@ -430,10 +429,6 @@ func (et *EvictionToken) syncRLocked(
 // will be invalidated. The caller should take an invalidated token to mean that
 // the information it was working with is too stale to be useful, and it should
 // use a range iterator again to get an updated cache entry.
-//
-// It's legal to pass in a lease with a zero Sequence; it will be treated as a
-// speculative lease and considered newer[1] than any existing lease (and then
-// in-turn will be overwritten by any subsequent update).
 //
 // [1]: As long as the associated range descriptor is not older than what's
 // cached.
@@ -484,28 +479,8 @@ func (et *EvictionToken) SyncTokenAndMaybeUpdateCache(
 	// Finish syncing the eviction token by updating its fields using the freshest
 	// range descriptor/lease information available in the RangeCache.
 	et.desc = newEntry.Desc()
-	et.lease = newEntry.leaseEvenIfSpeculative()
+	et.lease = newEntry.Lease()
 	return updatedLeaseholder
-}
-
-// SyncTokenAndMaybeUpdateCacheWithSpeculativeLease is like
-// SyncTokenAndMaybeUpdateCache(), but it only takes a leaseholder,
-// not a full lease. This is called when the likely leaseholder is known, but a
-// full lease isn't.
-//
-// This method takes into account whether the speculative lease is worth paying
-// attention to -- specifically, we disregard speculative leases from replicas
-// that have an older view of the world (i.e, their range descriptor is older
-// than what was already in the cache). Otherwise, the likely leaseholder is
-// presumed to be newer than anything already in the cache. The boolean retval
-// indicates if the speculative lease was indeed inserted into the cache.
-func (et *EvictionToken) SyncTokenAndMaybeUpdateCacheWithSpeculativeLease(
-	ctx context.Context, lh roachpb.ReplicaDescriptor, rangeDesc *roachpb.RangeDescriptor,
-) bool {
-	// Notice that we don't initialize Lease.Sequence, which will make
-	// entry.LeaseSpeculative() return true.
-	l := &roachpb.Lease{Replica: lh}
-	return et.SyncTokenAndMaybeUpdateCache(ctx, l, rangeDesc)
 }
 
 // EvictLease evicts information about the current lease from the cache, if the
@@ -543,7 +518,7 @@ func (et *EvictionToken) EvictLease(ctx context.Context) {
 		return
 	}
 	et.desc = newEntry.Desc()
-	et.lease = newEntry.leaseEvenIfSpeculative()
+	et.lease = newEntry.Lease()
 	et.rdc.swapEntryLocked(ctx, rawEntry, newEntry)
 }
 
@@ -1326,7 +1301,7 @@ type CacheEntry struct {
 	closedts roachpb.RangeClosedTimestampPolicy
 }
 
-func (e CacheEntry) String() string {
+func (e *CacheEntry) String() string {
 	return fmt.Sprintf("desc:%s, lease:%s", e.Desc(), e.lease)
 }
 
@@ -1353,19 +1328,6 @@ func (e *CacheEntry) Lease() *roachpb.Lease {
 	if e.lease.Empty() {
 		return nil
 	}
-	if e.LeaseSpeculative() {
-		return nil
-	}
-	return &e.lease
-}
-
-// leaseEvenIfSpeculative is like Lease, except it returns a Lease object even
-// if that lease is speculative. Returns nil if no speculative or non-speculative
-// lease is known.
-func (e *CacheEntry) leaseEvenIfSpeculative() *roachpb.Lease {
-	if e.lease.Empty() {
-		return nil
-	}
 	return &e.lease
 }
 
@@ -1384,16 +1346,6 @@ func (e *CacheEntry) DescSpeculative() bool {
 	return e.desc.Generation == 0
 }
 
-// LeaseSpeculative returns true if the lease in the entry is "speculative"
-// - i.e. it doesn't correspond to a committed lease. Such leases have been
-// inserted in the cache with Sequence=0.
-func (e *CacheEntry) LeaseSpeculative() bool {
-	if e.lease.Empty() {
-		panic(fmt.Sprintf("LeaseSpeculative called on entry with empty lease: %s", e))
-	}
-	return e.lease.Speculative()
-}
-
 // overrides returns true if o should replace e in the cache. It is assumed that
 // e's and o'd descriptors overlap (and so they can't co-exist in the cache). A
 // newer entry overrides an older entry. What entry is newer is decided based
@@ -1405,8 +1357,7 @@ func (e *CacheEntry) LeaseSpeculative() bool {
 // have some reason to believe e should get in the cache instead (generally
 // because a server gave us this information recently). Situations where it
 // can't be determined what information is newer is when at least one of the
-// descriptors is "speculative" (generation=0), or when the lease information is
-// "speculative" (sequence=0).
+// descriptors is "speculative" (generation=0).
 func (e *CacheEntry) overrides(o *CacheEntry) bool {
 	if util.RaceEnabled {
 		if _, err := e.Desc().RSpan().Intersect(o.Desc().RSpan()); err != nil {
@@ -1475,9 +1426,7 @@ func compareEntryDescs(a, b *CacheEntry) int {
 // considered older, equal to, or newer than b's. The descriptors in a and b are
 // assumed to be the same.
 //
-// An empty lease is considered older than any other. In case at least one of
-// the leases is "speculative", a is considered older; this matches the
-// semantics of b.overrides(a).
+// An empty lease is considered older than any other.
 func compareEntryLeases(a, b *CacheEntry) int {
 	if aEmpty, bEmpty := a.lease.Empty(), b.lease.Empty(); aEmpty || bEmpty {
 		if aEmpty && !bEmpty {
@@ -1487,12 +1436,6 @@ func compareEntryLeases(a, b *CacheEntry) int {
 			return 1
 		}
 		return 0
-	}
-
-	// A speculative lease always loses; we don't know the sequence number of a
-	// speculative lease.
-	if a.LeaseSpeculative() || b.LeaseSpeculative() {
-		return -1
 	}
 
 	if a.Lease().Sequence < b.Lease().Sequence {
@@ -1547,15 +1490,7 @@ func (e *CacheEntry) maybeUpdate(
 	// First, we handle the lease. If l is older than what the entry has (or the
 	// same), there's nothing to update.
 	//
-	// This method handles speculative leases: a new lease with a sequence of 0 is
-	// presumed to be newer than anything if the replica it's coming from doesn't
-	// have an outdated view of the world (i.e does not have an older range
-	// descriptor than the one cached on the client); an existing lease with a
-	// sequence number of 0 is presumed to be older than anything and will be
-	// replaced by the supplied lease if the associated range descriptor is
-	// non-stale.
-	//
-	// Lastly, if the cached lease is empty, it will be updated with the supplied
+	// If the cached lease is empty, it will be updated with the supplied
 	// lease regardless of the associated range descriptor's generation.
 	if (l.Sequence != 0 && e.lease.Sequence != 0 && l.Sequence > e.lease.Sequence) ||
 		((l.Sequence == 0 || e.lease.Sequence == 0) && rangeDesc.Generation >= e.desc.Generation) ||
