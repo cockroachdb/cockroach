@@ -214,7 +214,16 @@ type PrivilegeChecker interface {
 
 	// CheckPrivilege panics if the current user does not have the specified
 	// privilege for the element.
+	//
+	// Note: This function is written on the assumption that privileges are tied
+	// to descriptors. However, privileges can also live in the
+	// `system.privileges` table (i.e. system-level privileges) and checking those
+	// global privileges are done by the CheckGlobalPrivilege method below.
 	CheckPrivilege(e scpb.Element, privilege privilege.Kind)
+
+	// CheckGlobalPrivilege panics if the current user does not have the specified
+	// global privilege.
+	CheckGlobalPrivilege(privilege privilege.Kind) error
 
 	// HasGlobalPrivilegeOrRoleOption returns a bool representing whether the current user
 	// has a global privilege or the corresponding legacy role option.

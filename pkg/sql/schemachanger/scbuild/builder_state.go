@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -328,6 +329,11 @@ func (b *builderState) checkPrivilege(id catid.DescID, priv privilege.Kind) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// CheckGlobalPrivilege implements the scbuildstmt.PrivilegeChecker interface.
+func (b *builderState) CheckGlobalPrivilege(privilege privilege.Kind) error {
+	return b.auth.CheckPrivilege(b.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege)
 }
 
 // HasGlobalPrivilegeOrRoleOption implements the scbuildstmt.PrivilegeChecker interface.
