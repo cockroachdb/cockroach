@@ -162,11 +162,11 @@ func (b *Builder) buildExplain(explainExpr *memo.ExplainExpr) (execPlan, error) 
 			// exec.ExplainFactory so it must be the outer factory and the gist
 			// factory must be the inner factory.
 			gf := explain.NewPlanGistFactory(f)
-			ef := explain.NewFactory(gf)
+			ef := explain.NewFactory(gf, b.semaCtx, b.evalCtx)
 
 			explainBld := New(
-				b.ctx, ef, b.optimizer, b.mem, b.catalog, explainExpr.Input, b.evalCtx, b.initialAllowAutoCommit,
-				b.IsANSIDML,
+				b.ctx, ef, b.optimizer, b.mem, b.catalog, explainExpr.Input,
+				b.semaCtx, b.evalCtx, b.initialAllowAutoCommit, b.IsANSIDML,
 			)
 			explainBld.disableTelemetry = true
 			plan, err := explainBld.Build()

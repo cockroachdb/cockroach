@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // Factory implements exec.ExplainFactory. It wraps another factory and forwards
@@ -25,6 +27,8 @@ import (
 // produce EXPLAIN information.
 type Factory struct {
 	wrappedFactory exec.Factory
+	semaCtx        *tree.SemaContext
+	evalCtx        *eval.Context
 }
 
 var _ exec.ExplainFactory = &Factory{}
@@ -128,9 +132,13 @@ type Plan struct {
 var _ exec.Plan = &Plan{}
 
 // NewFactory creates a new explain factory.
-func NewFactory(wrappedFactory exec.Factory) *Factory {
+func NewFactory(
+	wrappedFactory exec.Factory, semaCtx *tree.SemaContext, evalCtx *eval.Context,
+) *Factory {
 	return &Factory{
 		wrappedFactory: wrappedFactory,
+		semaCtx:        semaCtx,
+		evalCtx:        evalCtx,
 	}
 }
 

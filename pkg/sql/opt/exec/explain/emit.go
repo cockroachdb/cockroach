@@ -12,6 +12,7 @@ package explain
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -32,7 +33,7 @@ import (
 
 // Emit produces the EXPLAIN output against the given OutputBuilder. The
 // OutputBuilder flags are taken into account.
-func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
+func Emit(ctx context.Context, plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
 	e := makeEmitter(ob, spanFormatFn)
 	var walk func(n *Node) error
 	walk = func(n *Node) error {
