@@ -1785,12 +1785,10 @@ func (rpcCtx *Context) dialOptsCommon(
 	dialOpts = append(dialOpts, grpc.WithDisableRetry())
 
 	// Configure the window sizes with optional env var overrides.
-	dialOpts = append(dialOpts, grpc.WithInitialConnWindowSize(rpcCtx.initialConnWindowSize(ctx)))
-	if class == RangefeedClass {
-		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(rpcCtx.rangefeedInitialWindowSize(ctx)))
-	} else {
-		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(rpcCtx.initialWindowSize(ctx)))
-	}
+	dialOpts = append(dialOpts,
+		grpc.WithInitialConnWindowSize(rpcCtx.initialConnWindowSize(ctx)),
+		grpc.WithInitialWindowSize(rpcCtx.initialWindowSize(ctx)),
+	)
 	unaryInterceptors := rpcCtx.clientUnaryInterceptors
 	unaryInterceptors = unaryInterceptors[:len(unaryInterceptors):len(unaryInterceptors)]
 	if rpcCtx.Knobs.UnaryClientInterceptor != nil {
