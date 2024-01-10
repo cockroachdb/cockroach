@@ -133,7 +133,7 @@ func newInvertedFilterer(
 			return nil, err
 		}
 		preFilterer, preFiltererState, err := invertedidx.NewBoundPreFilterer(
-			spec.PreFiltererSpec.Type, exprHelper.Expr)
+			spec.PreFiltererSpec.Type, exprHelper.Expr())
 		if err != nil {
 			return nil, err
 		}
