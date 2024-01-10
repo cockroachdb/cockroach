@@ -253,7 +253,7 @@ func Init(
 		// NB: when upgrading here, make sure to target a version that picks up this PR:
 		// https://github.com/prometheus/node_exporter/pull/2311
 		// At time of writing, there hasn't been a release in over half a year.
-		if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(cfg.NodeExporter).WithRetryFn(install.AlwaysRetry),
+		if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(cfg.NodeExporter).WithShouldRetryFn(install.AlwaysRetry),
 			"download node exporter",
 			fmt.Sprintf(`
 (sudo systemctl stop node_exporter || true) &&
@@ -279,7 +279,7 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		l,
 		l.Stdout,
 		l.Stderr,
-		install.WithNodes(cfg.PrometheusNode).WithRetryFn(install.AlwaysRetry),
+		install.WithNodes(cfg.PrometheusNode).WithShouldRetryFn(install.AlwaysRetry),
 		"reset prometheus",
 		"sudo systemctl stop prometheus || echo 'no prometheus is running'",
 	); err != nil {
@@ -291,7 +291,7 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		l,
 		l.Stdout,
 		l.Stderr,
-		install.WithNodes(cfg.PrometheusNode).WithRetryFn(install.AlwaysRetry),
+		install.WithNodes(cfg.PrometheusNode).WithShouldRetryFn(install.AlwaysRetry),
 		"download prometheus",
 		fmt.Sprintf(`sudo rm -rf /tmp/prometheus && mkdir /tmp/prometheus && cd /tmp/prometheus &&
 			curl -fsSL https://storage.googleapis.com/cockroach-test-artifacts/prometheus/prometheus-2.27.1.linux-%s.tar.gz | tar zxv --strip-components=1`,
@@ -338,7 +338,7 @@ sudo systemd-run --unit prometheus --same-dir \
 		// Install Grafana.
 		if err := c.Run(ctx, l,
 			l.Stdout,
-			l.Stderr, install.WithNodes(cfg.PrometheusNode).WithRetryFn(install.AlwaysRetry), "install grafana",
+			l.Stderr, install.WithNodes(cfg.PrometheusNode).WithShouldRetryFn(install.AlwaysRetry), "install grafana",
 			fmt.Sprintf(`
 sudo apt-get install -qqy apt-transport-https &&
 sudo apt-get install -qqy software-properties-common &&
@@ -354,7 +354,7 @@ sudo mkdir -p /var/lib/grafana/dashboards`,
 		// Provision local prometheus instance as data source.
 		if err := c.Run(ctx, l,
 			l.Stdout,
-			l.Stderr, install.WithNodes(cfg.PrometheusNode).WithRetryFn(install.AlwaysRetry), "permissions",
+			l.Stderr, install.WithNodes(cfg.PrometheusNode).WithShouldRetryFn(install.AlwaysRetry), "permissions",
 			`sudo chmod -R 777 /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards /var/lib/grafana/dashboards /etc/grafana/grafana.ini`,
 		); err != nil {
 			return nil, err
@@ -521,7 +521,7 @@ func Shutdown(
 		l,
 		l.Stdout,
 		l.Stderr,
-		install.WithNodes(promNode).WithRetryFn(install.AlwaysRetry),
+		install.WithNodes(promNode).WithShouldRetryFn(install.AlwaysRetry),
 		"stop prometheus",
 		"sudo systemctl stop prometheus || echo 'Stopped prometheus'",
 	); err != nil {
