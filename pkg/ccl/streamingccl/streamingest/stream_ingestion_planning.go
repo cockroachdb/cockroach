@@ -35,7 +35,7 @@ import (
 
 // defaultRetentionTTLSeconds is the default value for how long
 // replicated data will be retained.
-const defaultRetentionTTLSeconds = int32(25 * 60 * 60)
+const defaultRetentionTTLSeconds = int32(4 * 60 * 60)
 
 func streamIngestionJobDescription(
 	p sql.PlanHookState, sourceAddr string, streamIngestion *tree.CreateTenantFromReplication,
