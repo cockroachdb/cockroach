@@ -6165,6 +6165,11 @@ show_virtual_cluster_options:
     /* SKIP DOC */
     $$.val = tree.ShowTenantOptions{WithCapabilities: true}
   }
+| PRIOR REPLICATION DETAILS
+  {
+    /* SKIP DOC */
+    $$.val = tree.ShowTenantOptions{WithPriorReplication: true}
+  }
 | show_virtual_cluster_options ',' REPLICATION STATUS
   {
     /* SKIP DOC */
@@ -6177,6 +6182,13 @@ show_virtual_cluster_options:
     /* SKIP DOC */
     o := $1.showTenantOpts()
     o.WithCapabilities = true
+    $$.val = o
+  }
+| show_virtual_cluster_options ',' PRIOR REPLICATION DETAILS
+  {
+    /* SKIP DOC */
+    o := $1.showTenantOpts()
+    o.WithPriorReplication = true
     $$.val = o
   }
 
