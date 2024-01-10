@@ -1146,16 +1146,37 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, l *logger.Logger) error {
 	c.status("fetching logs")
 
 	// Don't hang forever if we can't fetch the logs.
-	return timeutil.RunWithTimeout(ctx, "fetch logs", 2*time.Minute, func(ctx context.Context) error {
-		path := filepath.Join(c.t.ArtifactsDir(), "logs", "unredacted")
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	return timeutil.RunWithTimeout(ctx, "fetch logs", 5*time.Minute, func(ctx context.Context) error {
+		// Find all log directories, which might include logs for
+		// external-process virtual clusters.
+		listLogDirsCmd := "find logs* -maxdepth 0 -type d"
+		results, err := c.RunWithDetails(ctx, l, c.All(), listLogDirsCmd)
+		if err != nil {
 			return err
 		}
 
-		if err := c.Get(ctx, c.l, "logs" /* src */, path /* dest */); err != nil {
-			l.Printf("failed to fetch logs: %v", err)
-			if ctx.Err() != nil {
-				return errors.Wrap(err, "cluster.FetchLogs")
+		logDirs := make(map[string]struct{})
+		for _, r := range results {
+			if r.Err != nil {
+				l.Printf("will not fetch logs for n%d due to error: %v", r.Node, r.Err)
+			}
+
+			for _, logDir := range strings.Fields(r.Stdout) {
+				logDirs[logDir] = struct{}{}
+			}
+		}
+
+		for logDir := range logDirs {
+			path := filepath.Join(c.t.ArtifactsDir(), logDir, "unredacted")
+			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+				return err
+			}
+
+			if err := c.Get(ctx, c.l, logDir /* src */, path /* dest */); err != nil {
+				l.Printf("failed to fetch log directory %s: %v", logDir, err)
+				if ctx.Err() != nil {
+					return errors.Wrap(err, "cluster.FetchLogs")
+				}
 			}
 		}
 
