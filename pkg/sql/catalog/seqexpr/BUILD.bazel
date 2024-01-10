@@ -22,6 +22,10 @@ go_library(
 go_test(
     name = "seqexpr_test",
     srcs = ["sequence_test.go"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":seqexpr",
         "//pkg/sql/catalog/descpb",

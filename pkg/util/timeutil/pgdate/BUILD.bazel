@@ -40,6 +40,10 @@ go_test(
         "pgdate_test.go",
     ],
     embed = [":pgdate"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

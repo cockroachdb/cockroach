@@ -16,7 +16,6 @@ go_test(
         "//pkg/compose:compare/docker-compose.yml",
     ],
     embed = [":compose"],
-    exec_properties = {"Pool": "large"},
     gotags = ["compose"],
     tags = [
         "integration",

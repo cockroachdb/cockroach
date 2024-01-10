@@ -23,6 +23,10 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":ingest"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/obs",

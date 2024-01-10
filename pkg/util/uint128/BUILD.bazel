@@ -13,4 +13,8 @@ go_test(
     size = "small",
     srcs = ["uint128_test.go"],
     embed = [":uint128"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
 )

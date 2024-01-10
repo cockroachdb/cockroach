@@ -59,6 +59,10 @@ go_test(
         "table_garbage_collection_test.go",
     ],
     embed = [":gcjob"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/jobs",

@@ -15,5 +15,9 @@ go_test(
         "@com_github_cockroachdb_sqllogictest//:testfiles",
     ],
     embed = [":sqlitelogictestccl"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     tags = ["ccl_test"],
 )

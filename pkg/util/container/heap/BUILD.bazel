@@ -15,4 +15,8 @@ go_test(
         "heap_test.go",
     ],
     embed = [":heap"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
 )

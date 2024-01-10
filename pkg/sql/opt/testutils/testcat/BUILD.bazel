@@ -68,6 +68,10 @@ go_test(
     size = "small",
     srcs = ["test_catalog_test.go"],
     data = glob(["testdata/**"]),
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":testcat",
         "//pkg/sql/opt/testutils/opttester",

@@ -44,6 +44,10 @@ go_test(
         "watcher_test.go",
     ],
     data = glob(["testdata/**"]),
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":tenantcapabilitieswatcher",
         "//pkg/base",

@@ -28,6 +28,10 @@ go_library(
 go_test(
     name = "bulk_test",
     srcs = ["tracing_aggregator_test.go"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":bulk",
         "//pkg/ccl/backupccl/backuppb",

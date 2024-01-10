@@ -47,6 +47,10 @@ go_test(
         "watcher_test.go",
     ],
     embed = [":tenantsettingswatcher"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",

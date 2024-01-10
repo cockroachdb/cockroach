@@ -627,3 +627,16 @@ config_setting(
         "@platforms//cpu:arm64",
     ],
 )
+
+bool_flag(
+    name = "heavy_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "is_heavy",
+    flag_values = {
+        ":heavy_flag": "true",
+    },
+)

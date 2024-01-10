@@ -23,6 +23,10 @@ go_test(
     srcs = ["pgurl_test.go"],
     data = glob(["testdata/**"]),
     embed = [":pgurl"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",

@@ -53,6 +53,10 @@ go_test(
         "reporter_test.go",
     ],
     embed = [":reports"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/config",

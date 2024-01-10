@@ -19,6 +19,10 @@ go_test(
     size = "small",
     srcs = ["faker_test.go"],
     embed = [":faker"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "@com_github_stretchr_testify//assert",
         "@org_golang_x_exp//rand",

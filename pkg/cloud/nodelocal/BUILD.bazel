@@ -33,6 +33,10 @@ go_test(
     name = "nodelocal_test",
     srcs = ["nodelocal_storage_test.go"],
     embed = [":nodelocal"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/cloud/cloudtestutils",
         "//pkg/security/username",

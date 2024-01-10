@@ -41,7 +41,10 @@ go_test(
     ],
     embed = [":encoding"],
     # A test in this package allocates a 2GB array so we need the extra memory.
-    exec_properties = {"Pool": "large"},
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "large"},
+    }),
     deps = [
         "//pkg/geo",
         "//pkg/geo/geographiclib",

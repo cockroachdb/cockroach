@@ -16,6 +16,10 @@ go_test(
     name = "service_test",
     srcs = ["service_test.go"],
     embed = [":service"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/tracing",

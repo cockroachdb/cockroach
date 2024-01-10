@@ -13,4 +13,8 @@ go_test(
     size = "small",
     srcs = ["arena_test.go"],
     embed = [":stringarena"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
 )

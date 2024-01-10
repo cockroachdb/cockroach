@@ -40,6 +40,10 @@ go_test(
         "zone_test.go",
     ],
     embed = [":partitionccl"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",

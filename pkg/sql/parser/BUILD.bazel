@@ -57,6 +57,10 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":parser"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgerror",

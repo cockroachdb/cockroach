@@ -56,6 +56,10 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":rel"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/sql/schemachanger/rel/internal/comparetest",
         "//pkg/sql/schemachanger/rel/internal/cyclegraphtest",

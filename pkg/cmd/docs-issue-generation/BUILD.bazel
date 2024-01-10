@@ -32,6 +32,10 @@ go_test(
     srcs = ["docs_issue_generation_test.go"],
     data = glob(["testdata/**"]),
     embed = [":docs-issue-generation_lib"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/testutils",
         "@com_github_stretchr_testify//assert",

@@ -75,6 +75,10 @@ go_test(
         "flow_diagram_test.go",
     ],
     embed = [":execinfrapb"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/keys",

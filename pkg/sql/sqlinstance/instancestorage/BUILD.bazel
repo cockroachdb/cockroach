@@ -59,6 +59,10 @@ go_test(
         "row_codec_test.go",
     ],
     embed = [":instancestorage"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/keys",

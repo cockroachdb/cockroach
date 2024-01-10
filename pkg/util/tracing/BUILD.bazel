@@ -65,6 +65,10 @@ go_test(
         "tracer_test.go",
     ],
     embed = [":tracing"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/ccl",

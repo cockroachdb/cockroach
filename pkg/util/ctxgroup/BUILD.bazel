@@ -13,6 +13,10 @@ go_test(
     size = "small",
     srcs = ["ctxgroup_test.go"],
     embed = [":ctxgroup"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/testutils",
         "//pkg/util/leaktest",

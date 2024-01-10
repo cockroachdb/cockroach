@@ -27,6 +27,10 @@ go_test(
     size = "small",
     srcs = ["compare_test.go"],
     embed = [":cmpconn"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_jackc_pgtype//:pgtype",

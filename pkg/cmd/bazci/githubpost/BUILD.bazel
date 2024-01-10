@@ -23,6 +23,10 @@ go_test(
         "//.github:CODEOWNERS",
     ],
     embed = [":githubpost"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/build/util",
         "//pkg/cmd/internal/issues",

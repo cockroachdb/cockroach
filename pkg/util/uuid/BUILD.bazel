@@ -31,6 +31,10 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":uuid"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/testutils/skip",
         "//pkg/util/timeutil",

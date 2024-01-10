@@ -135,6 +135,10 @@ go_test(
         "values_test.go",
     ],
     embed = [":colexec"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     shard_count = 16,
     deps = [
         "//pkg/col/coldata",

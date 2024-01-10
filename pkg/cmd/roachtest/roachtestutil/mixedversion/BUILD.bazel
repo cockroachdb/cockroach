@@ -42,6 +42,10 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":mixedversion"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",

@@ -19,6 +19,10 @@ go_test(
     name = "decodeusername_test",
     srcs = ["role_spec_test.go"],
     embed = [":decodeusername"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/security/username",
         "//pkg/sql/pgwire/pgcode",

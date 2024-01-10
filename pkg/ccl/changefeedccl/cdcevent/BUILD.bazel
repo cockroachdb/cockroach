@@ -54,6 +54,10 @@ go_test(
         "rowfetcher_test.go",
     ],
     embed = [":cdcevent"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",

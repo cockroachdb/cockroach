@@ -65,6 +65,10 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":admission"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/roachpb",
         "//pkg/settings/cluster",

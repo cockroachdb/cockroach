@@ -17,6 +17,10 @@ go_test(
         "disabled_test.go",
         "enabled_test.go",
     ],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = select({
         "@io_bazel_rules_go//go/platform:aix_ppc64": [
             ":grunning",

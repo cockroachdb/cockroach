@@ -22,4 +22,8 @@ go_test(
     size = "small",
     srcs = ["error_test.go"],
     embed = [":errorutil"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
 )

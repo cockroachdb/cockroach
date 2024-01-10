@@ -307,6 +307,10 @@ go_test(
         ":mocks_drt",  # keep
     ],
     embed = [":tests"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/registry",
