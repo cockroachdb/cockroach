@@ -60,7 +60,81 @@ const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
 // _TYPE_WIDTH is the template variable.
 const _TYPE_WIDTH = 0
 
+// _CUSTOM_TYPE_WIDTH is the template variable.
+const _CUSTOM_TYPE_WIDTH = 0
+
+// _LEN_WIDTH_OVERLOADS is the template variable.
+const _LEN_WIDTH_OVERLOADS = 0
+
 // */}}
+
+// {{if eq "_AGGKIND" "Ordered"}}
+
+// {{/*
+//     Perform some sanity checks around sharing aggregateFuncAlloc structs for
+//     different columns. We only need to do this in one place, and "ordered"
+//     file was chosen arbitrarily.
+// */}}
+
+func init() {
+	// Sanity check the maximum number of type overloads a single aggregate can
+	// have. any_not_null is one of those that uses the maximum, so we include
+	// this check here.
+	var numOverloads int
+	// {{range .}}
+	// {{range .WidthOverloads}}
+	numOverloads++
+	// {{end}}
+	// {{end}}
+	if numOverloads != maxNumOverloads {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"maxNumOverloads should be updated: expected %d, found %d", numOverloads, maxNumOverloads,
+		))
+	}
+
+	// Sanity check the hard-coded getOverloadIndex function. Whenever the
+	// native support for a new type is added, this generated function will
+	// allow us to catch the forgotten update.
+	getOverloadIndexCheck := func(t *types.T) overloadIndex {
+		var index overloadIndex
+		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family())
+		// {{range .}}
+		if canonicalTypeFamily == _CANONICAL_TYPE_FAMILY {
+			// {{range .WidthOverloads}}
+			// {{if eq .Width -1}}
+			return index
+			// {{else}}
+			if t.Width() == _CUSTOM_TYPE_WIDTH {
+				return index
+			}
+			index++
+			// {{end}}
+			// {{end}}
+		}
+		index += _LEN_WIDTH_OVERLOADS
+		// {{end}}
+		colexecerror.InternalError(errors.AssertionFailedf("didn't find overload index for %s", t.SQLStringForError()))
+		return 0
+	}
+	// Double-check datum-backed type too.
+	datumBackedType := types.INet
+	if typeconv.TypeFamilyToCanonicalTypeFamily(datumBackedType.Family()) != typeconv.DatumVecCanonicalTypeFamily {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"pick a different type that is still datum-backed other than %s", datumBackedType.SQLStringForError(),
+		))
+	}
+	typesToCheck := append([]*types.T{datumBackedType}, typeconv.TypesSupportedNatively...)
+	for _, t := range typesToCheck {
+		if getOverloadIndex(t) != getOverloadIndexCheck(t) {
+			colexecerror.InternalError(errors.AssertionFailedf(
+				"getOverloadIndex should be updated for %s: expected %d, actual %d",
+				t.SQLStringForError(), getOverloadIndexCheck(t), getOverloadIndex(t),
+			))
+		}
+	}
+}
+
+// {{end}}
 
 func newAnyNotNull_AGGKINDAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,

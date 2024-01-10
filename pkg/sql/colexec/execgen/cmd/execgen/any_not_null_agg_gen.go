@@ -23,6 +23,8 @@ const anyNotNullAggTmpl = "pkg/sql/colexec/colexecagg/any_not_null_agg_tmpl.go"
 func genAnyNotNullAgg(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
+		"_CUSTOM_TYPE_WIDTH", "{{.Width}}",
+		"_LEN_WIDTH_OVERLOADS", "{{len .WidthOverloads}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
 		"_GOTYPE", "{{.GoType}}",

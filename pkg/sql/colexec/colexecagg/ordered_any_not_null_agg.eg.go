@@ -37,6 +37,99 @@ var (
 	_ colexecerror.StorageError
 )
 
+func init() {
+	// Sanity check the maximum number of type overloads a single aggregate can
+	// have. any_not_null is one of those that uses the maximum, so we include
+	// this check here.
+	var numOverloads int
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	if numOverloads != maxNumOverloads {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"maxNumOverloads should be updated: expected %d, found %d", numOverloads, maxNumOverloads,
+		))
+	}
+
+	// Sanity check the hard-coded getOverloadIndex function. Whenever the
+	// native support for a new type is added, this generated function will
+	// allow us to catch the forgotten update.
+	getOverloadIndexCheck := func(t *types.T) overloadIndex {
+		var index overloadIndex
+		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family())
+		if canonicalTypeFamily == types.BoolFamily {
+			return index
+		}
+		index += 1
+		if canonicalTypeFamily == types.BytesFamily {
+			return index
+		}
+		index += 1
+		if canonicalTypeFamily == types.DecimalFamily {
+			return index
+		}
+		index += 1
+		if canonicalTypeFamily == types.IntFamily {
+			if t.Width() == 16 {
+				return index
+			}
+			index++
+			if t.Width() == 32 {
+				return index
+			}
+			index++
+			return index
+		}
+		index += 3
+		if canonicalTypeFamily == types.FloatFamily {
+			return index
+		}
+		index += 1
+		if canonicalTypeFamily == types.TimestampTZFamily {
+			return index
+		}
+		index += 1
+		if canonicalTypeFamily == types.IntervalFamily {
+			return index
+		}
+		index += 1
+		if canonicalTypeFamily == types.JsonFamily {
+			return index
+		}
+		index += 1
+		if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
+			return index
+		}
+		index += 1
+		colexecerror.InternalError(errors.AssertionFailedf("didn't find overload index for %s", t.SQLStringForError()))
+		return 0
+	}
+	// Double-check datum-backed type too.
+	datumBackedType := types.INet
+	if typeconv.TypeFamilyToCanonicalTypeFamily(datumBackedType.Family()) != typeconv.DatumVecCanonicalTypeFamily {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"pick a different type that is still datum-backed other than %s", datumBackedType.SQLStringForError(),
+		))
+	}
+	typesToCheck := append([]*types.T{datumBackedType}, typeconv.TypesSupportedNatively...)
+	for _, t := range typesToCheck {
+		if getOverloadIndex(t) != getOverloadIndexCheck(t) {
+			colexecerror.InternalError(errors.AssertionFailedf(
+				"getOverloadIndex should be updated for %s: expected %d, actual %d",
+				t.SQLStringForError(), getOverloadIndexCheck(t), getOverloadIndex(t),
+			))
+		}
+	}
+}
+
 func newAnyNotNullOrderedAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,
 ) (aggregateFuncAlloc, error) {
