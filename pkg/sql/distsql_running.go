@@ -995,6 +995,10 @@ type DistSQLReceiver struct {
 	// a query with EXPLAIN ANALYZE.
 	isTenantExplainAnalyze bool
 
+	// If set, client time will be measured (result will be stored in
+	// stats.clientTime).
+	measureClientTime bool
+
 	egressCounter TenantNetworkEgressCounter
 
 	expectedRowsRead int64
@@ -1508,6 +1512,12 @@ func (r *DistSQLReceiver) Push(
 		}
 	}
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
+	if r.measureClientTime {
+		start := timeutil.Now()
+		defer func() {
+			r.stats.clientTime += timeutil.Now().Sub(start)
+		}()
+	}
 	if commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
 		r.handleCommErr(commErr)
 	}
@@ -1564,6 +1574,12 @@ func (r *DistSQLReceiver) PushBatch(
 		panic("unsupported exists mode for PushBatch")
 	}
 	r.tracing.TraceExecBatchResult(r.ctx, batch)
+	if r.measureClientTime {
+		start := timeutil.Now()
+		defer func() {
+			r.stats.clientTime += timeutil.Now().Sub(start)
+		}()
+	}
 	if commErr := r.batchWriter.AddBatch(r.ctx, batch); commErr != nil {
 		r.handleCommErr(commErr)
 	}

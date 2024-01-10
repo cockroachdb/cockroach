@@ -162,6 +162,7 @@ type QueryLevelStats struct {
 	CPUTime                            time.Duration
 	SqlInstanceIds                     map[base.SQLInstanceID]struct{}
 	Regions                            []string
+	ClientTime                         time.Duration
 }
 
 // QueryLevelStatsWithErr is the same as QueryLevelStats, but also tracks
@@ -219,8 +220,8 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 			s.SqlInstanceIds[id] = struct{}{}
 		}
 	}
-
 	s.Regions = util.CombineUnique(s.Regions, other.Regions)
+	s.ClientTime += other.ClientTime
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a

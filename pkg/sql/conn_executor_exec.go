@@ -2065,6 +2065,7 @@ func populateQueryLevelStats(
 				}
 			}
 		}
+		ih.queryLevelStatsWithErr.Stats.ClientTime = topLevelStats.clientTime
 	}
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
 		ih.traceMetadata.annotateExplain(
@@ -2324,6 +2325,10 @@ type topLevelQueryStats struct {
 	// networkEgressEstimate is an estimate for the number of bytes sent to the
 	// client. It is used for estimating the number of RUs consumed by a query.
 	networkEgressEstimate int64
+	// clientTime is the amount of time query execution was blocked on the
+	// client receiving the PGWire protocol messages (as well as construcing
+	// those messages).
+	clientTime time.Duration
 }
 
 func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
@@ -2331,6 +2336,7 @@ func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
 	s.rowsRead += other.rowsRead
 	s.rowsWritten += other.rowsWritten
 	s.networkEgressEstimate += other.networkEgressEstimate
+	s.clientTime += other.clientTime
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
@@ -2355,6 +2361,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		ex.server.cfg.Clock,
 		&ex.sessionTracing,
 	)
+	recv.measureClientTime = planner.instrumentation.ShouldCollectExecStats()
 	recv.progressAtomic = progressAtomic
 	if ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory != nil {
 		recv.testingKnobs.pushCallback = ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory(planner.stmt.SQL)
