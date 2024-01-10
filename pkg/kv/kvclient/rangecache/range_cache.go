@@ -266,8 +266,15 @@ type EvictionToken struct {
 	// methods re-synchronize with the cache. However, if it changes, the
 	// descriptor only changes to other "compatible" descriptors (same range id
 	// and key bounds).
-	desc     *roachpb.RangeDescriptor
-	lease    *roachpb.Lease
+	desc *roachpb.RangeDescriptor
+
+	// The lease can be speculative, in which case it will have an unset sequence
+	// number. This happens when a follower replica knows Raft leader was, but did
+	// not have a valid lease record and did not try to become the Leaseholder.
+	// The leader is the most likely replica to be the next Leaseholder for this
+	// range.
+	lease *roachpb.Lease
+
 	closedts roachpb.RangeClosedTimestampPolicy
 
 	// speculativeDesc, if not nil, is the descriptor that should replace desc if
@@ -486,26 +493,6 @@ func (et *EvictionToken) SyncTokenAndMaybeUpdateCache(
 	et.desc = newEntry.Desc()
 	et.lease = newEntry.leaseEvenIfSpeculative()
 	return updatedLeaseholder
-}
-
-// SyncTokenAndMaybeUpdateCacheWithSpeculativeLease is like
-// SyncTokenAndMaybeUpdateCache(), but it only takes a leaseholder,
-// not a full lease. This is called when the likely leaseholder is known, but a
-// full lease isn't.
-//
-// This method takes into account whether the speculative lease is worth paying
-// attention to -- specifically, we disregard speculative leases from replicas
-// that have an older view of the world (i.e, their range descriptor is older
-// than what was already in the cache). Otherwise, the likely leaseholder is
-// presumed to be newer than anything already in the cache. The boolean retval
-// indicates if the speculative lease was indeed inserted into the cache.
-func (et *EvictionToken) SyncTokenAndMaybeUpdateCacheWithSpeculativeLease(
-	ctx context.Context, lh roachpb.ReplicaDescriptor, rangeDesc *roachpb.RangeDescriptor,
-) bool {
-	// Notice that we don't initialize Lease.Sequence, which will make
-	// entry.LeaseSpeculative() return true.
-	l := &roachpb.Lease{Replica: lh}
-	return et.SyncTokenAndMaybeUpdateCache(ctx, l, rangeDesc)
 }
 
 // EvictLease evicts information about the current lease from the cache, if the
