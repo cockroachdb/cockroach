@@ -1,2 +1,2 @@
 call_stmt ::=
-	'CALL' func_application
+	'CALL' proc_name '(' param_values ')'
