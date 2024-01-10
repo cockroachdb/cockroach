@@ -216,7 +216,7 @@ SET intervalstyle = 'iso_8601'
 statement ok
 SET intervalstyle = 'sql_standard'
 
-statement error invalid value for parameter "IntervalStyle": "other"
+statement error invalid value for parameter "IntervalStyle": "other"\nHINT: Available values: iso_8601,postgres,sql_standard
 SET intervalstyle = 'other'
 
 statement ok

@@ -1032,6 +1032,7 @@ var varGen = map[string]sessionVar{
 				for k := range duration.IntervalStyle_value {
 					validIntervalStyles = append(validIntervalStyles, strings.ToLower(k))
 				}
+				sort.Strings(validIntervalStyles)
 				return newVarValueError(`IntervalStyle`, s, validIntervalStyles...)
 			}
 			style := duration.IntervalStyle(styleVal)
