@@ -809,9 +809,10 @@ func TestInvertedJoinerDrain(t *testing.T) {
 			&flowCtx,
 			0, /* processorID */
 			&execinfrapb.InvertedJoinerSpec{
-				FetchSpec:    fetchSpec,
-				InvertedExpr: execinfrapb.Expression{},
-				Type:         descpb.InnerJoin,
+				FetchSpec:                  fetchSpec,
+				InvertedExpr:               execinfrapb.Expression{},
+				Type:                       descpb.InnerJoin,
+				InvertedColumnOriginalType: types.Json,
 			},
 			arrayIntersectionExpr{t: t},
 			distsqlutils.NewRowBuffer(types.TwoIntCols, nil /* rows */, distsqlutils.RowBufferArgs{}),
