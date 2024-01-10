@@ -84,7 +84,7 @@ func registerProcessLock(r registry.Registry) {
 					// grepping for `./cockroach start` in ps's output, and
 					// grabbing the first field after stripping leading
 					// whitespace. Then, use this pid cat /proc/<pid>/cmdline.
-					result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(n),
+					result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(n)),
 						"cat /proc/`ps -eo pid,args | grep -E '([0-9]+) ./cockroach start' |  sed 's/^ *//' | cut -d ' ' -f 1`/cmdline")
 					if err != nil {
 						return err

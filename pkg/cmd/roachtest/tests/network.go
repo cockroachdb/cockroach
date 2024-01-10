@@ -207,7 +207,7 @@ SELECT $1::INT = ALL (
 				// Attempt a client connection to that server.
 				t.L().Printf("server %d, attempt %d; url: %s\n", server, attempt, url)
 
-				b, err := c.RunWithDetailsSingleNode(ctx, t.L(), clientNode, "time", "-p", "./cockroach", "sql",
+				b, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(clientNode), "time", "-p", "./cockroach", "sql",
 					"--url", url, "--certs-dir", certsDir, "-e", "'SELECT 1'")
 
 				// Report the results of execution.
@@ -323,7 +323,7 @@ func runClientNetworkConnectionTimeout(ctx context.Context, t test.Test, c clust
 		}
 		commandThatWillDisconnect := fmt.Sprintf(`./cockroach sql --certs-dir %s --url "postgres://root@%s:26257" -e "SELECT pg_sleep(600)"`, certsDir, ips[0])
 		t.L().Printf("Executing long running query: %s", commandThatWillDisconnect)
-		output, err := c.RunWithDetails(ctx, t.L(), clientNode, commandThatWillDisconnect)
+		output, err := c.RunWithDetails(ctx, t.L(), option.WithNodes(clientNode), commandThatWillDisconnect)
 		runOutput = output[0]
 		return err
 	})

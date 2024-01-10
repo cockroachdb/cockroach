@@ -256,7 +256,7 @@ func getProcessExitMonotonic(
 func getProcessMonotonicTimestamp(
 	ctx context.Context, t test.Test, c cluster.Cluster, nodeID int, prop string,
 ) (time.Duration, bool) {
-	details, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID), fmt.Sprintf(
+	details, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(nodeID)), fmt.Sprintf(
 		"systemctl show %s --property=%s", roachtestutil.SystemInterfaceSystemdUnitName(), prop))
 	require.NoError(t, err)
 	require.NoError(t, details.Err)

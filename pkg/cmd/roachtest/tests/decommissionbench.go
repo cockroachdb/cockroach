@@ -1107,7 +1107,7 @@ func logLSMHealth(ctx context.Context, l *logger.Logger, c cluster.Cluster, targ
 	if err != nil {
 		return err
 	}
-	result, err := c.RunWithDetailsSingleNode(ctx, l, c.Node(target),
+	result, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(c.Node(target)),
 		"curl", "-s", fmt.Sprintf("http://%s/debug/lsm",
 			adminAddrs[0]))
 	if err == nil {
