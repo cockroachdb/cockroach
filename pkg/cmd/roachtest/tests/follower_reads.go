@@ -113,7 +113,6 @@ func registerFollowerReads(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:            "follower-reads/mixed-version/survival=region/locality=global/reads=strong",
-		Skip:            "#117302",
 		Owner:           registry.OwnerKV,
 		RequiresLicense: true,
 		Cluster: r.MakeClusterSpec(

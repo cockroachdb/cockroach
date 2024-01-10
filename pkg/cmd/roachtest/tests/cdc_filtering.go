@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 )
 
 func registerCDCFiltering(r registry.Registry) {
@@ -258,11 +258,11 @@ func checkCDCEvents[S any](
 	}
 
 	// Sort the events by (updated, id) to yield a total ordering.
-	sort.Slice(events, func(i, j int) bool {
-		idA, idB := events[i].Key[0], events[j].Key[0]
-		tsA, err := hlc.ParseHLC(events[i].Updated)
+	slices.SortFunc(events, func(a, b changefeedSinkEvent[S]) bool {
+		idA, idB := a.Key[0], b.Key[0]
+		tsA, err := hlc.ParseHLC(a.Updated)
 		require.NoError(t, err)
-		tsB, err := hlc.ParseHLC(events[j].Updated)
+		tsB, err := hlc.ParseHLC(b.Updated)
 		require.NoError(t, err)
 		if tsA.Equal(tsB) {
 			return idA < idB
@@ -275,6 +275,9 @@ func checkCDCEvents[S any](
 	for _, e := range events {
 		actualEvents = append(actualEvents, eventToString(e.Before, e.After))
 	}
+	// We remove duplicates since the at-least-once delivery guarantee permits
+	// the same event to be emitted multiple times.
+	actualEvents = slices.Compact(actualEvents)
 	require.Equal(t, expectedEvents, actualEvents)
 
 	return nil

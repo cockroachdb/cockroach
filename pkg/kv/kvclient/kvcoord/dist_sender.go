@@ -2552,7 +2552,7 @@ func (ds *DistSender) sendToReplicas(
 				ds.metrics.NotLeaseHolderErrCount.Inc(1)
 				// If we got some lease information, we use it. If not, we loop around
 				// and try the next replica.
-				if tErr.Lease != nil || tErr.DeprecatedLeaseHolder != nil {
+				if tErr.Lease != nil {
 					// Update the leaseholder in the range cache. Naively this would also
 					// happen when the next RPC comes back, but we don't want to wait out
 					// the additional RPC latency.
@@ -2560,10 +2560,6 @@ func (ds *DistSender) sendToReplicas(
 					var updatedLeaseholder bool
 					if tErr.Lease != nil {
 						updatedLeaseholder = routing.SyncTokenAndMaybeUpdateCache(ctx, tErr.Lease, &tErr.RangeDesc)
-					} else if tErr.DeprecatedLeaseHolder != nil {
-						updatedLeaseholder = routing.SyncTokenAndMaybeUpdateCacheWithSpeculativeLease(
-							ctx, *tErr.DeprecatedLeaseHolder, &tErr.RangeDesc,
-						)
 					}
 					// Move the new leaseholder to the head of the queue for the next
 					// retry. Note that the leaseholder might not be the one indicated by
