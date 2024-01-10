@@ -2538,6 +2538,7 @@ var builtinOidsArray = []string{
 	2570: `array_position(array: refcursor[], elem: refcursor, start: int) -> int`,
 	2571: `bit_count(val: bytes) -> int`,
 	2572: `bit_count(val: varbit) -> int`,
+	2573: `metaphone(source: string, max_output_length: int) -> string`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
