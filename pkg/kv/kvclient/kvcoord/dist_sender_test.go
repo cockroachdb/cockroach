@@ -656,18 +656,6 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 			expLease:       true,
 		},
 		{
-			// TODO(arul): This is only possible in 22.{1,2} mixed version clusters;
-			// remove once we get rid of the LeaseHolder field in 23.1.
-			name: "leaseholder in desc, no lease",
-			nlhe: kvpb.NotLeaseHolderError{
-				RangeID:               testUserRangeDescriptor3Replicas.RangeID,
-				DeprecatedLeaseHolder: &recognizedLeaseHolder,
-				RangeDesc:             testUserRangeDescriptor3Replicas,
-			},
-			expLeaseholder: &recognizedLeaseHolder,
-			expLease:       false,
-		},
-		{
 			name: "leaseholder not in desc",
 			nlhe: kvpb.NotLeaseHolderError{
 				RangeID:   testUserRangeDescriptor3Replicas.RangeID,
@@ -5779,123 +5767,108 @@ func TestDistSenderNLHEFromUninitializedReplicaDoesNotCauseUnboundedBackoff(t *t
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	testutils.RunTrueAndFalse(t, "uninitialized-replica-returns-speculative-lease",
-		func(t *testing.T, returnSpeculativeLease bool) {
+	// We'll set things up such that the first replica on the range descriptor of
+	// the client has an uninitialized replica. We'll mimic this by returning an
+	// empty range descriptor as part of the NotLeaseHolderError it returns.
+	// We expect the client to simply reroute to the next replica.
 
-			// We'll set things up such that the first replica on the range descriptor of
-			// the client has an uninitialized replica. We'll mimic this by returning an
-			// empty range descriptor as part of the NotLeaseHolderError it returns.
-			// We expect the client to simply reroute to the next replica.
-			//
-			// For the returnsSpeculativeLease=true version of the test the NLHE error
-			// will include a speculative lease that points to a replica that isn't
-			// part of the client's range descriptor. This is only possible in
-			// versions <= 22.1 as NLHE errors from uninitialized replicas no longer
-			// return speculative leases by populating the (Deprecated)LeaseHolder
-			// field. Effectively, this acts as a mixed (22.1, 22.2) version test.
-			// TODO(arul): remove the speculative lease version of this test in 23.1.
+	clock := hlc.NewClockForTesting(nil)
+	ns := &mockNodeStore{nodes: []roachpb.NodeDescriptor{
+		{NodeID: 1, Address: util.UnresolvedAddr{}},
+		{NodeID: 2, Address: util.UnresolvedAddr{}},
+		{NodeID: 3, Address: util.UnresolvedAddr{}},
+		{NodeID: 4, Address: util.UnresolvedAddr{}},
+	}}
 
-			clock := hlc.NewClockForTesting(nil)
-			ns := &mockNodeStore{nodes: []roachpb.NodeDescriptor{
-				{NodeID: 1, Address: util.UnresolvedAddr{}},
-				{NodeID: 2, Address: util.UnresolvedAddr{}},
-				{NodeID: 3, Address: util.UnresolvedAddr{}},
-				{NodeID: 4, Address: util.UnresolvedAddr{}},
-			}}
+	// Actual view of the range (descriptor + lease). The client doesn't have
+	// any knowledge about the lease, so it routes its request to the first
+	// replica on the range descriptor.
+	var desc = roachpb.RangeDescriptor{
+		RangeID:    roachpb.RangeID(1),
+		Generation: 1,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			{NodeID: 2, StoreID: 2, ReplicaID: 2},
+			{NodeID: 3, StoreID: 3, ReplicaID: 3},
+			{NodeID: 4, StoreID: 4, ReplicaID: 4},
+		},
+	}
+	leaseResp := roachpb.Lease{
+		Replica: roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4, ReplicaID: 4},
+	}
 
-			// Actual view of the range (descriptor + lease). The client doesn't have
-			// any knowledge about the lease, so it routes its request to the first
-			// replica on the range descriptor.
-			var desc = roachpb.RangeDescriptor{
-				RangeID:    roachpb.RangeID(1),
-				Generation: 1,
-				StartKey:   roachpb.RKeyMin,
-				EndKey:     roachpb.RKeyMax,
-				InternalReplicas: []roachpb.ReplicaDescriptor{
-					{NodeID: 1, StoreID: 1, ReplicaID: 1},
-					{NodeID: 2, StoreID: 2, ReplicaID: 2},
-					{NodeID: 3, StoreID: 3, ReplicaID: 3},
-					{NodeID: 4, StoreID: 4, ReplicaID: 4},
-				},
+	call := 0
+	var transportFn = func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+		br := &kvpb.BatchResponse{}
+		switch call {
+		case 0:
+			// We return an empty range descriptor in the NLHE like an
+			// uninitialized replica would.
+			expRepl := desc.Replicas().Descriptors()[0]
+			require.Equal(t, expRepl, ba.Replica)
+			nlhe := &kvpb.NotLeaseHolderError{
+				RangeDesc: roachpb.RangeDescriptor{},
 			}
-			leaseResp := roachpb.Lease{
-				Replica: roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4, ReplicaID: 4},
+			br.Error = kvpb.NewError(nlhe)
+		case 1:
+			// We expect the client to discard information from the NLHE above and
+			// instead just try the next replica.
+			expRepl := desc.Replicas().Descriptors()[1]
+			require.Equal(t, expRepl, ba.Replica)
+			br.Error = kvpb.NewError(&kvpb.NotLeaseHolderError{
+				RangeDesc: desc,
+				Lease:     &leaseResp,
+			})
+		case 2:
+			// We expect the client to route to the leaseholder given it's now
+			// known.
+			expRepl := desc.Replicas().Descriptors()[3]
+			require.Equal(t, expRepl, ba.Replica)
+			br = ba.CreateReply()
+		default:
+			t.Fatal("unexpected")
+		}
+		call++
+		return br, nil
+	}
+
+	rangeLookups := 0
+	cfg := DistSenderConfig{
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:      clock,
+		NodeDescs:  ns,
+		Stopper:    stopper,
+		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
+			[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
+		) {
+			switch rangeLookups {
+			case 0:
+				rangeLookups++
+				return []roachpb.RangeDescriptor{desc}, nil, nil
+			default:
+				// This doesn't run on the test's goroutine.
+				panic("unexpected")
 			}
+		}),
+		TransportFactory: adaptSimpleTransport(transportFn),
+		TestingKnobs: ClientTestingKnobs{
+			DontReorderReplicas: true,
+		},
+		Settings: cluster.MakeTestingClusterSettings(),
+	}
 
-			call := 0
-			var transportFn = func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
-				br := &kvpb.BatchResponse{}
-				switch call {
-				case 0:
-					// We return an empty range descriptor in the NLHE like an
-					// uninitialized replica would.
-					expRepl := desc.Replicas().Descriptors()[0]
-					require.Equal(t, expRepl, ba.Replica)
-					nlhe := &kvpb.NotLeaseHolderError{
-						RangeDesc: roachpb.RangeDescriptor{},
-					}
-					if returnSpeculativeLease {
-						nlhe.DeprecatedLeaseHolder = &roachpb.ReplicaDescriptor{NodeID: 5, StoreID: 5, ReplicaID: 5}
-					}
-					br.Error = kvpb.NewError(nlhe)
-				case 1:
-					// We expect the client to discard information from the NLHE above and
-					// instead just try the next replica.
-					expRepl := desc.Replicas().Descriptors()[1]
-					require.Equal(t, expRepl, ba.Replica)
-					br.Error = kvpb.NewError(&kvpb.NotLeaseHolderError{
-						RangeDesc: desc,
-						Lease:     &leaseResp,
-					})
-				case 2:
-					// We expect the client to route to the leaseholder given it's now
-					// known.
-					expRepl := desc.Replicas().Descriptors()[3]
-					require.Equal(t, expRepl, ba.Replica)
-					br = ba.CreateReply()
-				default:
-					t.Fatal("unexpected")
-				}
-				call++
-				return br, nil
-			}
+	ds := NewDistSender(cfg)
+	ba := &kvpb.BatchRequest{}
+	get := &kvpb.GetRequest{}
+	get.Key = roachpb.Key("a")
+	ba.Add(get)
 
-			rangeLookups := 0
-			cfg := DistSenderConfig{
-				AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
-				Clock:      clock,
-				NodeDescs:  ns,
-				Stopper:    stopper,
-				RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
-					[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
-				) {
-					switch rangeLookups {
-					case 0:
-						rangeLookups++
-						return []roachpb.RangeDescriptor{desc}, nil, nil
-					default:
-						// This doesn't run on the test's goroutine.
-						panic("unexpected")
-					}
-				}),
-				TransportFactory: adaptSimpleTransport(transportFn),
-				TestingKnobs: ClientTestingKnobs{
-					DontReorderReplicas: true,
-				},
-				Settings: cluster.MakeTestingClusterSettings(),
-			}
-
-			ds := NewDistSender(cfg)
-			ba := &kvpb.BatchRequest{}
-			get := &kvpb.GetRequest{}
-			get.Key = roachpb.Key("a")
-			ba.Add(get)
-
-			_, err := ds.Send(ctx, ba)
-			require.NoError(t, err.GoError())
-			require.Equal(t, 3, call)
-			require.Equal(t, 1, rangeLookups)
-		})
+	_, err := ds.Send(ctx, ba)
+	require.NoError(t, err.GoError())
+	require.Equal(t, 3, call)
+	require.Equal(t, 1, rangeLookups)
 }
 
 // TestOptimisticRangeDescriptorLookups tests the integration of optimistic
