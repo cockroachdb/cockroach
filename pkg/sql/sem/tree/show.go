@@ -1195,8 +1195,9 @@ func (node *ShowTableStats) Format(ctx *FmtCtx) {
 
 // ShowTenantOptions represents the WITH clause in SHOW VIRTUAL CLUSTER.
 type ShowTenantOptions struct {
-	WithReplication  bool
-	WithCapabilities bool
+	WithReplication      bool
+	WithPriorReplication bool
+	WithCapabilities     bool
 }
 
 // ShowTenant represents a SHOW VIRTUAL CLUSTER statement.
@@ -1213,6 +1214,9 @@ func (node *ShowTenant) Format(ctx *FmtCtx) {
 	withs := []string{}
 	if node.WithReplication {
 		withs = append(withs, "REPLICATION STATUS")
+	}
+	if node.WithPriorReplication {
+		withs = append(withs, "PRIOR REPLICATION DETAILS")
 	}
 	if node.WithCapabilities {
 		withs = append(withs, "CAPABILITIES")
