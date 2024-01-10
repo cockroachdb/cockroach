@@ -89,7 +89,7 @@ func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
 	succeeded := false
 	for r.Next() {
 		start = timeutil.Now()
-		det, err = c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), fmt.Sprintf(`cat /tmp/lineitem-table.csv | %s -c "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';"`, pg))
+		det, err = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(1)), fmt.Sprintf(`cat /tmp/lineitem-table.csv | %s -c "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';"`, pg))
 		if err == nil {
 			succeeded = true
 			break
@@ -112,7 +112,7 @@ func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
 	require.NoError(t, err)
 	rate := int(float64(rows) / dur.Seconds())
 
-	det, err = c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), "wc -c /tmp/lineitem-table.csv")
+	det, err = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(1)), "wc -c /tmp/lineitem-table.csv")
 	require.NoError(t, err)
 	var bytes float64
 	_, err = fmt.Sscan(det.Stdout, &bytes)

@@ -158,7 +158,7 @@ func registerRubyPG(r registry.Registry) {
 		t.Status("running ruby-pg test suite")
 		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
 			`cd /mnt/data1/ruby-pg/ && bundle exec rake compile test`,
 		)
 

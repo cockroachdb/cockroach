@@ -278,7 +278,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 			for setupIdx, setup := range runConfig.clusterSetups {
 				performClusterSetup(t, conn, setup)
 				result, err := c.RunWithDetailsSingleNode(
-					ctx, t.L(), c.Node(1),
+					ctx, t.L(), option.WithNodes(c.Node(1)),
 					getTPCHVecWorkloadCmd(runConfig.numRunsPerQuery, queryNum, p.sharedProcess),
 				)
 				workloadOutput := result.Stdout + result.Stderr
@@ -515,7 +515,7 @@ func baseTestRun(
 		for setupIdx, setup := range runConfig.clusterSetups {
 			tc.preQueryRunHook(t, conn, setup)
 			result, err := c.RunWithDetailsSingleNode(
-				ctx, t.L(), c.Node(1),
+				ctx, t.L(), option.WithNodes(c.Node(1)),
 				getTPCHVecWorkloadCmd(runConfig.numRunsPerQuery, queryNum, tc.sharedProcessMT()),
 			)
 			workloadOutput := result.Stdout + result.Stderr

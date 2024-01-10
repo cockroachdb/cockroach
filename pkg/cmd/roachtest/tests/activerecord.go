@@ -177,7 +177,7 @@ func registerActiveRecord(r registry.Registry) {
 
 		t.Status("running activerecord test suite")
 
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
 			fmt.Sprintf(
 				`cd /mnt/data1/activerecord-cockroachdb-adapter/ && `+
 					`sudo RAILS_VERSION=%s RUBYOPT="-W0" TESTOPTS="-v" bundle exec rake test`, supportedRailsVersion),

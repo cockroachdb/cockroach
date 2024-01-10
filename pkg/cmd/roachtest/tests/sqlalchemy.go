@@ -144,7 +144,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.Status("running sqlalchemy test suite")
 	// Note that this is expected to return an error, since the test suite
 	// will fail. And it is safe to swallow it here.
-	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
+	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
 		`source venv/bin/activate && cd /mnt/data1/sqlalchemy-cockroachdb/ && pytest --maxfail=0 \
 		--dburi='cockroachdb://root@localhost:{pgport:1}/defaultdb?sslmode=disable&disable_cockroachdb_telemetry=true' \
 		test/test_suite_sqlalchemy.py

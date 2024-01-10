@@ -177,7 +177,7 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 		}
 
 		t.Status("running TypeORM test suite - approx 12 mins")
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
 			`cd /mnt/data1/typeorm/ && npm test`,
 		)
 		rawResults := result.Stdout + result.Stderr

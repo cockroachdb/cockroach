@@ -1150,7 +1150,7 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, l *logger.Logger) error {
 		// Find all log directories, which might include logs for
 		// external-process virtual clusters.
 		listLogDirsCmd := "find logs* -maxdepth 0 -type d"
-		results, err := c.RunWithDetails(ctx, l, c.All(), listLogDirsCmd)
+		results, err := c.RunWithDetails(ctx, l, option.WithNodes(c.All()), listLogDirsCmd)
 		if err != nil {
 			return err
 		}
@@ -1500,7 +1500,7 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, l *logger.Logger) error {
 		cmd := []string{"/bin/bash", "-c", "'sudo dmesg -T > " + name + "'"}
 		var results []install.RunResultDetails
 		var combinedDmesgError error
-		if results, combinedDmesgError = c.RunWithDetails(ctx, nil, c.All(), cmd...); combinedDmesgError != nil {
+		if results, combinedDmesgError = c.RunWithDetails(ctx, nil, option.WithNodes(c.All()), cmd...); combinedDmesgError != nil {
 			return errors.Wrap(combinedDmesgError, "cluster.FetchDmesg")
 		}
 
@@ -1551,7 +1551,7 @@ func (c *clusterImpl) FetchJournalctl(ctx context.Context, l *logger.Logger) err
 		cmd := []string{"/bin/bash", "-c", "'sudo journalctl > " + name + "'"}
 		var results []install.RunResultDetails
 		var combinedJournalctlError error
-		if results, combinedJournalctlError = c.RunWithDetails(ctx, nil, c.All(), cmd...); combinedJournalctlError != nil {
+		if results, combinedJournalctlError = c.RunWithDetails(ctx, nil, option.WithNodes(c.All()), cmd...); combinedJournalctlError != nil {
 			return errors.Wrap(combinedJournalctlError, "cluster.FetchJournalctl")
 		}
 
@@ -1625,7 +1625,7 @@ func (c *clusterImpl) FetchPebbleCheckpoints(ctx context.Context, l *logger.Logg
 			// Find any checkpoints.
 			checkpointsPath := fmt.Sprintf("{store-dir:%d}/auxiliary/checkpoints", storeIdx)
 			var checkpointNodes option.NodeListOption
-			results, err := c.RunWithDetails(ctx, l, c.All(), fmt.Sprintf("test -d %s", checkpointsPath))
+			results, err := c.RunWithDetails(ctx, l, option.WithNodes(c.All()), fmt.Sprintf("test -d %s", checkpointsPath))
 			if err != nil {
 				return err
 			}
@@ -2342,24 +2342,36 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 // you treat an error from the command. This makes error checking easier / friendlier
 // and helps us avoid code replication.
 func (c *clusterImpl) RunWithDetailsSingleNode(
-	ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string,
+	ctx context.Context, testLogger *logger.Logger, options install.RunOptions, args ...string,
 ) (install.RunResultDetails, error) {
+
+	nodes := option.NodeListOption{}
+	for _, n := range options.Nodes {
+		nodes = append(nodes, int(n))
+	}
+
 	if len(nodes) != 1 {
 		return install.RunResultDetails{}, errors.Newf("RunWithDetailsSingleNode received %d nodes. Use RunWithDetails if you need to run on multiple nodes.", len(nodes))
 	}
-	results, err := c.RunWithDetails(ctx, testLogger, nodes, args...)
+	results, err := c.RunWithDetails(ctx, testLogger, options, args...)
 	return results[0], errors.CombineErrors(err, results[0].Err)
 }
 
-// RunWithDetails runs a command on the specified nodes, returning the results
-// details and a `roachprod` error. The output will be redirected to a file which is logged
-// via the cluster-wide logger in case of an error. Failing invocations will have
-// an additional marker file with a `.failed` extension instead of `.log`.
+// RunWithDetails runs a command on the specified nodes (option.WithNodes),
+// returning the results details and a `roachprod` error. The output will be
+// redirected to a file which is logged via the cluster-wide logger in case of
+// an error. Failing invocations will have an additional marker file with a
+// `.failed` extension instead of `.log`.
+// See install.RunOptions for more details on available options.
 func (c *clusterImpl) RunWithDetails(
-	ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string,
+	ctx context.Context, testLogger *logger.Logger, options install.RunOptions, args ...string,
 ) ([]install.RunResultDetails, error) {
 	if len(args) == 0 {
 		return nil, errors.New("No command passed")
+	}
+	nodes := option.NodeListOption{}
+	for _, n := range options.Nodes {
+		nodes = append(nodes, int(n))
 	}
 	l, logFile, err := c.loggerForCmd(nodes, args...)
 	if err != nil {
@@ -2377,7 +2389,7 @@ func (c *clusterImpl) RunWithDetails(
 	l.Printf("> %s", cmd)
 	results, err := roachprod.RunWithDetails(
 		ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "", /* processTag */
-		c.IsSecure(), args, install.WithNodes(nodes.InstallNodes()),
+		c.IsSecure(), args, options,
 	)
 
 	var logFileFull string

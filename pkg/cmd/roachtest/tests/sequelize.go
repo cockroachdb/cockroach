@@ -153,7 +153,7 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 
 		// Version telemetry is already disabled in the sequelize-cockroachdb test suite.
 		t.Status("running Sequelize test suite")
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
 			fmt.Sprintf(`cd /mnt/data1/sequelize/ && npm test --crdb_version=%s`, version),
 		)
 		rawResultsStr := result.Stdout + result.Stderr

@@ -1326,7 +1326,7 @@ func loadTPCCBench(
 	cmd = fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --workers=%d --max-rate=%d "+
 		"--wait=false --ramp=%s --duration=%s --scatter --tolerate-errors {pgurl%s%s}",
 		b.LoadWarehouses(c.Cloud()), b.LoadWarehouses(c.Cloud()), maxRate, rampTime, loadTime, roachNodes, tenantSuffix)
-	if _, err := c.RunWithDetailsSingleNode(ctx, t.L(), loadNode, cmd); err != nil {
+	if _, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(loadNode), cmd); err != nil {
 		return err
 	}
 

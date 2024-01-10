@@ -108,7 +108,7 @@ func registerPsycopg(r registry.Registry) {
 
 		t.Status("running psycopg test suite")
 
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
 			`cd /mnt/data1/psycopg/ &&
 			export PSYCOPG2_TESTDB=defaultdb &&
 			export PSYCOPG2_TESTDB_USER=root &&
