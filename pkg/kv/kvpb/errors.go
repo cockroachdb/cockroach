@@ -1139,7 +1139,7 @@ func (e *ReadWithinUncertaintyIntervalError) RetryTimestamp() hlc.Timestamp {
 	// advance the txn's timestamp up to the local uncertainty limit on the node
 	// which hit the error. This ensures that no future read after the retry on
 	// this node (ignoring lease complications in ComputeLocalUncertaintyLimit
-	// and values with synthetic timestamps) will throw an uncertainty error,
+	// and values with future-time timestamps) will throw an uncertainty error,
 	// even when reading other keys.
 	//
 	// Note that if the request was not able to establish a local uncertainty
@@ -1153,9 +1153,9 @@ func (e *ReadWithinUncertaintyIntervalError) RetryTimestamp() hlc.Timestamp {
 	// In general, we expect the local uncertainty limit, if set, to be above
 	// the uncertainty value's timestamp. So we expect this Forward to advance
 	// ts. However, this is not always the case. The one exception is if the
-	// uncertain value had a synthetic timestamp, so it was compared against the
-	// global uncertainty limit to determine uncertainty (see IsUncertain). In
-	// such cases, we're ok advancing just past the value's timestamp. Either
+	// uncertain value had a future-time timestamp, so it was compared against
+	// the global uncertainty limit to determine uncertainty (see IsUncertain).
+	// In such cases, we're ok advancing just past the value's timestamp. Either
 	// way, we won't see the same value in our uncertainty interval on a retry.
 	ts.Forward(e.LocalUncertaintyLimit.ToTimestamp())
 	return ts

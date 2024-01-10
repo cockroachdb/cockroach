@@ -680,8 +680,6 @@ func CalcReplicaDigest(
 	result.PersistedMS = rangeAppliedState.RangeStats.ToStats()
 
 	if statsOnly {
-		// Unset the synthetic flag, to ease the migration of deleting this field.
-		rangeAppliedState.RaftClosedTimestamp.Synthetic = false
 		b, err := protoutil.Marshal(rangeAppliedState)
 		if err != nil {
 			return nil, err
