@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
@@ -167,7 +168,7 @@ func writeOutRoachPerf(
 ) error {
 	l := t.L()
 	dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-	if err := c.RunE(ctx, c.Node(1), "mkdir -p "+filepath.Dir(dest)); err != nil {
+	if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
 		l.ErrorfCtx(ctx, "failed to create perf dir: %+v", err)
 		return err
 	}

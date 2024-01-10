@@ -78,7 +78,7 @@ func registerAutoUpgrade(r registry.Registry) {
 			if err != nil {
 				return err
 			}
-			if err := c.RunE(ctx, c.Node(node),
+			if err := c.RunE(ctx, option.WithNodes(c.Node(node)),
 				fmt.Sprintf("./cockroach node decommission %d --insecure --url=%s", node, pgurl)); err != nil {
 				return err
 			}

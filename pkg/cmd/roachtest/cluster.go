@@ -1159,7 +1159,7 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, l *logger.Logger) error {
 			}
 		}
 
-		if err := c.RunE(ctx, c.All(), fmt.Sprintf("mkdir -p logs/redacted && %s debug merge-logs --redact logs/*.log > logs/redacted/combined.log", test.DefaultCockroachPath)); err != nil {
+		if err := c.RunE(ctx, option.WithNodes(c.All()), fmt.Sprintf("mkdir -p logs/redacted && %s debug merge-logs --redact logs/*.log > logs/redacted/combined.log", test.DefaultCockroachPath)); err != nil {
 			l.Printf("failed to redact logs: %v", err)
 			if ctx.Err() != nil {
 				return err
@@ -1182,7 +1182,7 @@ func saveDiskUsageToLogsDir(ctx context.Context, c cluster.Cluster) error {
 
 	// Don't hang forever.
 	return timeutil.RunWithTimeout(ctx, "disk usage", 20*time.Second, func(ctx context.Context) error {
-		return c.RunE(ctx, c.All(),
+		return c.RunE(ctx, option.WithNodes(c.All()),
 			"du -c /mnt/data1 --exclude lost+found >> logs/diskusage.txt")
 	})
 }
@@ -1240,7 +1240,7 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, l *logger.Logger)
 			sec = fmt.Sprintf("--certs-dir=%s", certs)
 		}
 		if err := c.RunE(
-			ctx, c.Node(node), fmt.Sprintf("%s debug tsdump %s --port={pgport%s} --format=raw > tsdump.gob", test.DefaultCockroachPath, sec, c.Node(node)),
+			ctx, option.WithNodes(c.Node(node)), fmt.Sprintf("%s debug tsdump %s --port={pgport%s} --format=raw > tsdump.gob", test.DefaultCockroachPath, sec, c.Node(node)),
 		); err != nil {
 			return err
 		}
@@ -1335,7 +1335,7 @@ func (c *clusterImpl) FetchDebugZip(
 				MaybeFlag(c.IsSecure(), "certs-dir", "certs").
 				Arg(zipName).
 				String()
-			if err := c.RunE(ctx, c.Node(node), cmd); err != nil {
+			if err := c.RunE(ctx, option.WithNodes(c.Node(node)), cmd); err != nil {
 				l.Printf("%s debug zip failed on node %d: %v", test.DefaultCockroachPath, node, err)
 				continue
 			}
@@ -1825,7 +1825,7 @@ func (c *clusterImpl) PutLibraries(
 	c.status("uploading library files")
 	defer c.status("")
 
-	if err := c.RunE(ctx, c.All(), "mkdir", "-p", libraryDir); err != nil {
+	if err := c.RunE(ctx, option.WithNodes(c.All()), "mkdir", "-p", libraryDir); err != nil {
 		return err
 	}
 
@@ -1925,7 +1925,7 @@ func (c *clusterImpl) GitClone(
   		fi
   		'`, dest, branch, src),
 	}
-	return errors.Wrap(c.RunE(ctx, nodes, cmd...), "cluster.GitClone")
+	return errors.Wrap(c.RunE(ctx, option.WithNodes(nodes), cmd...), "cluster.GitClone")
 }
 
 func (c *clusterImpl) setStatusForClusterOpt(
@@ -2266,8 +2266,8 @@ func (c *clusterImpl) Wipe(ctx context.Context, preserveCerts bool, nodes ...opt
 }
 
 // Run a command on the specified nodes and call test.Fatal if there is an error.
-func (c *clusterImpl) Run(ctx context.Context, nodes option.NodeListOption, args ...string) {
-	err := c.RunE(ctx, nodes, args...)
+func (c *clusterImpl) Run(ctx context.Context, options install.RunOptions, args ...string) {
+	err := c.RunE(ctx, options, args...)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -2277,9 +2277,13 @@ func (c *clusterImpl) Run(ctx context.Context, nodes option.NodeListOption, args
 // will be redirected to a file which is logged via the cluster-wide logger in
 // case of an error. Logs will sort chronologically. Failing invocations will
 // have an additional marker file with a `.failed` extension instead of `.log`.
-func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, args ...string) error {
+func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("No command passed")
+	}
+	nodes := option.NodeListOption{}
+	for _, n := range options.Nodes {
+		nodes = append(nodes, int(n))
 	}
 
 	l, logFile, err := c.loggerForCmd(nodes, args...)
@@ -2293,7 +2297,7 @@ func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, arg
 	l.Printf("> %s", cmd)
 	if err := roachprod.Run(
 		ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(),
-		l.Stdout, l.Stderr, args, install.OnNodes(nodes.InstallNodes()),
+		l.Stdout, l.Stderr, args, options,
 	); err != nil {
 		if err := ctx.Err(); err != nil {
 			l.Printf("(note: incoming context was canceled: %s)", err)
@@ -2352,7 +2356,7 @@ func (c *clusterImpl) RunWithDetails(
 	l.Printf("> %s", cmd)
 	results, err := roachprod.RunWithDetails(
 		ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "", /* processTag */
-		c.IsSecure(), args, install.OnNodes(nodes.InstallNodes()),
+		c.IsSecure(), args, install.WithNodes(nodes.InstallNodes()),
 	)
 
 	var logFileFull string
@@ -2783,7 +2787,7 @@ func (c *clusterImpl) WipeForReuse(
 	// reusing files from previous tests, i.e. cockroach binaries, perf artifacts.
 	// N.B. we don't remove the entire home directory to safeguard against this ever
 	// running locally and deleting someone's local directory.
-	if err := c.RunE(ctx, c.All(), fmt.Sprintf("rm -rf /home/%s/*", config.SharedUser)); err != nil {
+	if err := c.RunE(ctx, option.WithNodes(c.All()), fmt.Sprintf("rm -rf /home/%s/*", config.SharedUser)); err != nil {
 		return errors.Wrapf(err, "failed to remove home directory")
 	}
 	if c.localCertsDir != "" {

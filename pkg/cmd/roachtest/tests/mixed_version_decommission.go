@@ -139,7 +139,7 @@ func preloadDataStep(target int) versionStep {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.Run(ctx, c.Node(target),
+		c.Run(ctx, option.WithNodes(c.Node(target)),
 			`./cockroach workload fixtures import tpcc --warehouses=100`, pgurl)
 		db := c.Conn(ctx, t.L(), target)
 		defer db.Close()
@@ -155,7 +155,7 @@ func preloadDataStep(target int) versionStep {
 func partialDecommissionStep(target, from int, binaryVersion *clusterupgrade.Version) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
-		c.Run(ctx, c.Node(from), clusterupgrade.CockroachPathForVersion(t, binaryVersion), "node", "decommission",
+		c.Run(ctx, option.WithNodes(c.Node(from)), clusterupgrade.CockroachPathForVersion(t, binaryVersion), "node", "decommission",
 			"--wait=none", "--insecure", strconv.Itoa(target), "--port", fmt.Sprintf("{pgport:%d}", from))
 	}
 }
@@ -166,7 +166,7 @@ func partialDecommissionStep(target, from int, binaryVersion *clusterupgrade.Ver
 func recommissionAllStep(from int, binaryVersion *clusterupgrade.Version) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
-		c.Run(ctx, c.Node(from), clusterupgrade.CockroachPathForVersion(t, binaryVersion), "node", "recommission",
+		c.Run(ctx, option.WithNodes(c.Node(from)), clusterupgrade.CockroachPathForVersion(t, binaryVersion), "node", "recommission",
 			"--insecure", c.All().NodeIDsString(), "--port", fmt.Sprintf("{pgport:%d}", from))
 	}
 }
@@ -180,7 +180,7 @@ func fullyDecommissionStep(target, from int, binaryVersion *clusterupgrade.Versi
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.Run(ctx, c.Node(from), clusterupgrade.CockroachPathForVersion(t, binaryVersion), "node", "decommission",
+		c.Run(ctx, option.WithNodes(c.Node(from)), clusterupgrade.CockroachPathForVersion(t, binaryVersion), "node", "decommission",
 			"--wait=all", "--insecure", strconv.Itoa(target), fmt.Sprintf("--url=%s", pgurl))
 
 		// If we are decommissioning a target node from the same node, the drain

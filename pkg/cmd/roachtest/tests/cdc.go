@@ -211,7 +211,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		serverExecCmd := fmt.Sprintf(`go run webhook-server-%d.go`, webhookPort)
 		m := ct.cluster.NewMonitor(ct.ctx, ct.workloadNode)
 		m.Go(func(ctx context.Context) error {
-			return ct.cluster.RunE(ct.ctx, webhookNode, serverExecCmd, rootFolder)
+			return ct.cluster.RunE(ct.ctx, option.WithNodes(webhookNode), serverExecCmd, rootFolder)
 		})
 
 		sinkDestHost, err := url.Parse(fmt.Sprintf(`https://%s:%d`, nodeIPs[0], webhookPort))
@@ -707,7 +707,7 @@ type latencyTargets struct {
 func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Make the logs dir on every node to work around the `roachprod get logs`
 	// spam.
-	c.Run(ctx, c.All(), `mkdir -p logs`)
+	c.Run(ctx, option.WithNodes(c.All()), `mkdir -p logs`)
 
 	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
@@ -725,7 +725,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
-	c.Run(ctx, workloadNode, `./workload init bank {pgurl:1}`)
+	c.Run(ctx, option.WithNodes(workloadNode), `./workload init bank {pgurl:1}`)
 	db := c.Conn(ctx, t.L(), 1)
 	defer stopFeeds(db)
 
@@ -767,7 +767,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	const requestedResolved = 100
 
 	m.Go(func(ctx context.Context) error {
-		err := c.RunE(ctx, workloadNode, `./workload run bank {pgurl:1} --max-rate=10`)
+		err := c.RunE(ctx, option.WithNodes(workloadNode), `./workload run bank {pgurl:1} --max-rate=10`)
 		if atomic.LoadInt64(&doneAtomic) > 0 {
 			return nil
 		}
@@ -2089,7 +2089,7 @@ func (k kafkaManager) install(ctx context.Context) {
 	k.t.Status("installing kafka")
 	folder := k.basePath()
 
-	k.c.Run(ctx, k.nodes, `mkdir -p `+folder)
+	k.c.Run(ctx, option.WithNodes(k.nodes), `mkdir -p `+folder)
 
 	downloadScriptPath := filepath.Join(folder, "install.sh")
 	downloadScript := k.confluentDownloadScript()
@@ -2097,9 +2097,9 @@ func (k kafkaManager) install(ctx context.Context) {
 	if err != nil {
 		k.t.Fatal(err)
 	}
-	k.c.Run(ctx, k.nodes, downloadScriptPath, folder)
+	k.c.Run(ctx, option.WithNodes(k.nodes), downloadScriptPath, folder)
 	if !k.c.IsLocal() {
-		k.c.Run(ctx, k.nodes, `mkdir -p logs`)
+		k.c.Run(ctx, option.WithNodes(k.nodes), `mkdir -p logs`)
 		if err := k.installJRE(ctx); err != nil {
 			k.t.Fatal(err)
 		}
@@ -2112,11 +2112,11 @@ func (k kafkaManager) installJRE(ctx context.Context) error {
 		MaxBackoff:     5 * time.Minute,
 	}
 	return retry.WithMaxAttempts(ctx, retryOpts, 3, func() error {
-		err := k.c.RunE(ctx, k.nodes, `sudo apt-get -q update 2>&1 > logs/apt-get-update.log`)
+		err := k.c.RunE(ctx, option.WithNodes(k.nodes), `sudo apt-get -q update 2>&1 > logs/apt-get-update.log`)
 		if err != nil {
 			return err
 		}
-		return k.c.RunE(ctx, k.nodes, `sudo DEBIAN_FRONTEND=noninteractive apt-get -yq --no-install-recommends install openssl default-jre maven 2>&1 > logs/apt-get-install.log`)
+		return k.c.RunE(ctx, option.WithNodes(k.nodes), `sudo DEBIAN_FRONTEND=noninteractive apt-get -yq --no-install-recommends install openssl default-jre maven 2>&1 > logs/apt-get-install.log`)
 	})
 }
 
@@ -2126,7 +2126,7 @@ func (k kafkaManager) runWithRetry(ctx context.Context, cmd string) {
 		MaxBackoff:     5 * time.Minute,
 	}
 	err := retry.WithMaxAttempts(ctx, retryOpts, 3, func() error {
-		return k.c.RunE(ctx, k.nodes, cmd)
+		return k.c.RunE(ctx, option.WithNodes(k.nodes), cmd)
 	})
 	if err != nil {
 		k.t.Fatal(err)
@@ -2134,7 +2134,7 @@ func (k kafkaManager) runWithRetry(ctx context.Context, cmd string) {
 }
 
 func (k kafkaManager) configureHydraOauth(ctx context.Context) (string, string) {
-	k.c.Run(ctx, k.nodes, `rm -rf /home/ubuntu/hydra`)
+	k.c.Run(ctx, option.WithNodes(k.nodes), `rm -rf /home/ubuntu/hydra`)
 	k.runWithRetry(ctx, `bash <(curl https://raw.githubusercontent.com/ory/meta/master/install.sh) -d -b . hydra v2.0.3`)
 
 	err := k.c.PutString(ctx, hydraServerStartScript, "/home/ubuntu/hydra-serve.sh", 0700, k.nodes)
@@ -2143,7 +2143,7 @@ func (k kafkaManager) configureHydraOauth(ctx context.Context) (string, string) 
 	}
 	mon := k.c.NewMonitor(ctx, k.nodes)
 	mon.Go(func(ctx context.Context) error {
-		err := k.c.RunE(ctx, k.nodes, `/home/ubuntu/hydra-serve.sh`)
+		err := k.c.RunE(ctx, option.WithNodes(k.nodes), `/home/ubuntu/hydra-serve.sh`)
 		return errors.Wrap(err, "hydra failed")
 	})
 	result, err := k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, "/home/ubuntu/hydra create oauth2-client",
@@ -2184,9 +2184,9 @@ func (k kafkaManager) configureOauth(ctx context.Context) (clientcredentials.Con
 
 	// In order to run Kafka with OAuth a custom implementation of certain Java
 	// classes has to be provided.
-	k.c.Run(ctx, k.nodes, `rm -rf /home/ubuntu/kafka-oauth`)
+	k.c.Run(ctx, option.WithNodes(k.nodes), `rm -rf /home/ubuntu/kafka-oauth`)
 	k.runWithRetry(ctx, `git clone https://github.com/jairsjunior/kafka-oauth.git /home/ubuntu/kafka-oauth`)
-	k.c.Run(ctx, k.nodes, `(cd /home/ubuntu/kafka-oauth; git checkout c2b307548ef944d3fbe899b453d24e1fc8380add; mvn package)`)
+	k.c.Run(ctx, option.WithNodes(k.nodes), `(cd /home/ubuntu/kafka-oauth; git checkout c2b307548ef944d3fbe899b453d24e1fc8380add; mvn package)`)
 
 	// CLASSPATH allows Kafka to load in the custom implementation
 	kafkaEnv := "CLASSPATH='/home/ubuntu/kafka-oauth/target/*'"
@@ -2271,28 +2271,28 @@ func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
 
 	k.t.Status("constructing java keystores")
 	// Convert PEM cert and key into pkcs12 bundle so that it can be imported into a java keystore.
-	k.c.Run(ctx, k.nodes,
+	k.c.Run(ctx, option.WithNodes(k.nodes),
 		fmt.Sprintf("openssl pkcs12 -export -in %s -inkey %s -name kafka -out %s -password pass:%s",
 			kafkaCertPath,
 			kafkaKeyPath,
 			kafkaBundlePath,
 			keystorePassword))
 
-	k.c.Run(ctx, k.nodes, fmt.Sprintf("rm -f %s", keystorePath))
-	k.c.Run(ctx, k.nodes, fmt.Sprintf("rm -f %s", truststorePath))
+	k.c.Run(ctx, option.WithNodes(k.nodes), fmt.Sprintf("rm -f %s", keystorePath))
+	k.c.Run(ctx, option.WithNodes(k.nodes), fmt.Sprintf("rm -f %s", truststorePath))
 
-	k.c.Run(ctx, k.nodes,
+	k.c.Run(ctx, option.WithNodes(k.nodes),
 		fmt.Sprintf("keytool -importkeystore -deststorepass %s -destkeystore %s -srckeystore %s -srcstoretype PKCS12 -srcstorepass %s -alias kafka",
 			keystorePassword,
 			keystorePath,
 			kafkaBundlePath,
 			keystorePassword))
-	k.c.Run(ctx, k.nodes,
+	k.c.Run(ctx, option.WithNodes(k.nodes),
 		fmt.Sprintf("keytool -keystore %s -alias CAroot -importcert -file %s -no-prompt -storepass %s",
 			truststorePath,
 			caCertPath,
 			keystorePassword))
-	k.c.Run(ctx, k.nodes,
+	k.c.Run(ctx, option.WithNodes(k.nodes),
 		fmt.Sprintf("keytool -keystore %s -alias CAroot -importcert -file %s -no-prompt -storepass %s",
 			keystorePath,
 			caCertPath,
@@ -2310,14 +2310,14 @@ func (k kafkaManager) PutConfigContent(ctx context.Context, data string, path st
 
 func (k kafkaManager) addSCRAMUsers(ctx context.Context) {
 	k.t.Status("adding entries for SASL/SCRAM users")
-	k.c.Run(ctx, k.nodes, filepath.Join(k.binDir(), "kafka-configs"),
+	k.c.Run(ctx, option.WithNodes(k.nodes), filepath.Join(k.binDir(), "kafka-configs"),
 		"--zookeeper", "localhost:2181",
 		"--alter",
 		"--add-config", "SCRAM-SHA-512=[password=scram512-secret]",
 		"--entity-type", "users",
 		"--entity-name", "scram512")
 
-	k.c.Run(ctx, k.nodes, filepath.Join(k.binDir(), "kafka-configs"),
+	k.c.Run(ctx, option.WithNodes(k.nodes), filepath.Join(k.binDir(), "kafka-configs"),
 		"--zookeeper", "localhost:2181",
 		"--alter",
 		"--add-config", "SCRAM-SHA-256=[password=scram256-secret]",
@@ -2327,7 +2327,7 @@ func (k kafkaManager) addSCRAMUsers(ctx context.Context) {
 
 func (k kafkaManager) start(ctx context.Context, service string, envVars ...string) {
 	// This isn't necessary for the nightly tests, but it's nice for iteration.
-	k.c.Run(ctx, k.nodes, k.makeCommand("confluent", "local destroy || true"))
+	k.c.Run(ctx, option.WithNodes(k.nodes), k.makeCommand("confluent", "local destroy || true"))
 	k.restart(ctx, service, envVars...)
 }
 
@@ -2340,7 +2340,7 @@ var kafkaServices = map[string][]string{
 func (k kafkaManager) restart(ctx context.Context, targetService string, envVars ...string) {
 	services := kafkaServices[targetService]
 
-	k.c.Run(ctx, k.nodes, "touch", k.serverJAASConfig())
+	k.c.Run(ctx, option.WithNodes(k.nodes), "touch", k.serverJAASConfig())
 	for _, svcName := range services {
 		// The confluent tool applies the KAFKA_OPTS to all
 		// services. Also, the kafka.logs.dir is used by each
@@ -2358,7 +2358,7 @@ func (k kafkaManager) restart(ctx context.Context, targetService string, envVars
 		)
 		startCmd += fmt.Sprintf(" %s local services %s start", k.confluentBin(), svcName)
 
-		k.c.Run(ctx, k.nodes, startCmd)
+		k.c.Run(ctx, option.WithNodes(k.nodes), startCmd)
 	}
 }
 
@@ -2371,8 +2371,8 @@ func (k kafkaManager) makeCommand(exe string, args ...string) string {
 }
 
 func (k kafkaManager) stop(ctx context.Context) {
-	k.c.Run(ctx, k.nodes, fmt.Sprintf("rm -f %s", k.serverJAASConfig()))
-	k.c.Run(ctx, k.nodes, k.makeCommand("confluent", "local services stop"))
+	k.c.Run(ctx, option.WithNodes(k.nodes), fmt.Sprintf("rm -f %s", k.serverJAASConfig()))
+	k.c.Run(ctx, option.WithNodes(k.nodes), k.makeCommand("confluent", "local services stop"))
 }
 
 func (k kafkaManager) chaosLoop(
@@ -2528,7 +2528,7 @@ type tpccWorkload struct {
 func (tw *tpccWorkload) install(ctx context.Context, c cluster.Cluster) {
 	// For fixtures import, use the version built into the cockroach binary so
 	// the tpcc workload-versions match on release branches.
-	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
+	c.Run(ctx, option.WithNodes(tw.workloadNodes), fmt.Sprintf(
 		`./cockroach workload fixtures import tpcc --warehouses=%d --checks=false {pgurl%s}`,
 		tw.tpccWarehouseCount,
 		tw.sqlNodes.RandNode(),
@@ -2549,7 +2549,7 @@ func (tw *tpccWorkload) run(ctx context.Context, c cluster.Cluster, workloadDura
 	}
 	fmt.Fprintf(&cmd, "{pgurl%s}", tw.sqlNodes)
 
-	c.Run(ctx, tw.workloadNodes, cmd.String())
+	c.Run(ctx, option.WithNodes(tw.workloadNodes), cmd.String())
 }
 
 type ledgerWorkload struct {
@@ -2559,7 +2559,7 @@ type ledgerWorkload struct {
 
 func (lw *ledgerWorkload) install(ctx context.Context, c cluster.Cluster) {
 	// TODO(#94136): remove --data-loader=INSERT
-	c.Run(ctx, lw.workloadNodes.RandNode(), fmt.Sprintf(
+	c.Run(ctx, option.WithNodes(lw.workloadNodes.RandNode()), fmt.Sprintf(
 		`./workload init ledger --data-loader=INSERT {pgurl%s}`,
 		lw.sqlNodes.RandNode(),
 	))
@@ -2567,7 +2567,7 @@ func (lw *ledgerWorkload) install(ctx context.Context, c cluster.Cluster) {
 
 func (lw *ledgerWorkload) run(ctx context.Context, c cluster.Cluster, workloadDuration string) {
 	// TODO(#94136): remove --data-loader=INSERT
-	c.Run(ctx, lw.workloadNodes, fmt.Sprintf(
+	c.Run(ctx, option.WithNodes(lw.workloadNodes), fmt.Sprintf(
 		`./workload run ledger --data-loader=INSERT --mix=balance=0,withdrawal=50,deposit=50,reversal=0 {pgurl%s} --duration=%s`,
 		lw.sqlNodes,
 		workloadDuration,
@@ -2752,7 +2752,7 @@ func setupKafka(
 		// TODO(dan): This test currently connects to kafka from the test
 		// runner, so kafka needs to advertise the external address. Better
 		// would be a binary we could run on one of the roachprod machines.
-		c.Run(ctx, kafka.nodes, `echo "advertised.listeners=PLAINTEXT://`+kafka.consumerURL(ctx)+`" >> `+
+		c.Run(ctx, option.WithNodes(kafka.nodes), `echo "advertised.listeners=PLAINTEXT://`+kafka.consumerURL(ctx)+`" >> `+
 			filepath.Join(kafka.configDir(), "server.properties"))
 	}
 

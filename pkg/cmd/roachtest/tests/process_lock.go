@@ -57,7 +57,7 @@ func registerProcessLock(r registry.Registry) {
 			require.NoError(t, conn.PingContext(ctx))
 			require.NoError(t, WaitFor3XReplication(ctx, t, conn))
 
-			c.Run(ctx, c.Node(4), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+			c.Run(ctx, option.WithNodes(c.Node(4)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 			seed := int64(1666467482296309000)
 			rng := randutil.NewTestRandWithSeed(seed)
@@ -65,7 +65,7 @@ func registerProcessLock(r registry.Registry) {
 			t.Status("starting workload")
 			m := c.NewMonitor(ctx, c.Range(1, 3))
 			m.Go(func(ctx context.Context) error {
-				c.Run(ctx, c.Node(4), fmt.Sprintf(`./cockroach workload run kv --read-percent 0 `+
+				c.Run(ctx, option.WithNodes(c.Node(4)), fmt.Sprintf(`./cockroach workload run kv --read-percent 0 `+
 					`--duration %s --concurrency 512 --max-rate 4096 --tolerate-errors `+
 					` --min-block-bytes=1024 --max-block-bytes=1024 `+
 					`{pgurl:1-3}`, runDuration.String()))
@@ -131,12 +131,12 @@ func registerProcessLock(r registry.Registry) {
 						ops := []func(){
 							func() {
 								// Try to start the node again.
-								err := c.RunE(ctx, c.Node(n), startCommands[n-1])
+								err := c.RunE(ctx, option.WithNodes(c.Node(n)), startCommands[n-1])
 								t.L().PrintfCtx(ctx, "Attempt to start cockroach process on n%d while another cockroach process is still running; error expected: %v", n, err)
 							},
 							func() {
 								// Try to perform a manual compaction.
-								err := c.RunE(ctx, c.Node(n), fmt.Sprintf("./cockroach debug compact /mnt/data1/cockroach %s", enterpriseEncryption[n-1]))
+								err := c.RunE(ctx, option.WithNodes(c.Node(n)), fmt.Sprintf("./cockroach debug compact /mnt/data1/cockroach %s", enterpriseEncryption[n-1]))
 								t.L().PrintfCtx(ctx, "Attempt to manual compact store on n%d while another cockroach process is still running; error expected: %v", n, err)
 							},
 							func() {

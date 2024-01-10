@@ -245,7 +245,7 @@ func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSp
 				initCmd.WriteString(` --secondary-index`)
 			}
 			fmt.Fprintf(&initCmd, ` {pgurl%s}`, roachNodes)
-			if err := c.RunE(ctx, loadNodes, initCmd.String()); err != nil {
+			if err := c.RunE(ctx, option.WithNodes(loadNodes), initCmd.String()); err != nil {
 				return err
 			}
 
@@ -300,7 +300,7 @@ func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSp
 				panic(`unexpected`)
 			}
 
-			err := c.RunE(ctx, loadNodes, workloadCmd.String())
+			err := c.RunE(ctx, option.WithNodes(loadNodes), workloadCmd.String())
 			if err != nil {
 				return errors.Wrapf(err, `error running workload`)
 			}

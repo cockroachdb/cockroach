@@ -86,7 +86,7 @@ func runReplicaGCChangedPeers(
 	}()
 
 	// Fill in a bunch of data.
-	c.Run(ctx, c.Node(1), "./cockroach workload init kv {pgurl:1} --splits 100")
+	c.Run(ctx, option.WithNodes(c.Node(1)), "./cockroach workload init kv {pgurl:1} --splits 100")
 
 	// Kill the third node so it won't know that all of its replicas are moved
 	// elsewhere (we don't use the first because that's what roachprod will

@@ -94,7 +94,7 @@ func registerGopg(r registry.Registry) {
 		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 			version, "gopgBlockList", "gopgIgnoreList")
 
-		if err := c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDirPath)); err != nil {
+		if err := c.RunE(ctx, option.WithNodes(node), fmt.Sprintf("mkdir -p %s", resultsDirPath)); err != nil {
 			t.Fatal(err)
 		}
 		t.Status("running gopg test suite")
@@ -143,7 +143,7 @@ func registerGopg(r registry.Registry) {
 		// It's safer to clean up dependencies this way than it is to give the cluster
 		// wipe root access.
 		defer func() {
-			c.Run(ctx, c.All(), "go clean -modcache")
+			c.Run(ctx, option.WithNodes(c.All()), "go clean -modcache")
 		}()
 
 		// Fatal for a roachprod or SSH error. A roachprod error is when result.Err==nil.

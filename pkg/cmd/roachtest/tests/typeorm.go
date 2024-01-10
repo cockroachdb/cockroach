@@ -92,7 +92,7 @@ func registerTypeORM(r registry.Registry) {
 		// can use npm to reduce the potential of trying to add another nodesource key
 		// (preventing gpg: dearmoring failed: File exists) errors.
 		if err := c.RunE(
-			ctx, node, `sudo npm i -g npm`,
+			ctx, option.WithNodes(node), `sudo npm i -g npm`,
 		); err != nil {
 			if err := repeatRunE(
 				ctx,

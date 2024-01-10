@@ -102,7 +102,7 @@ func runSchemaChangeRandomLoad(
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Run(ctx, loadNode, fmt.Sprintf("./workload init schemachange '%s'", pgurl))
+	c.Run(ctx, option.WithNodes(loadNode), fmt.Sprintf("./workload init schemachange '%s'", pgurl))
 
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), "echo", "-n", "{store-dir}")
 	if err != nil {
@@ -121,7 +121,7 @@ func runSchemaChangeRandomLoad(
 		fmt.Sprintf("{pgurl%s}", loadNode),
 	}
 	t.Status("running schemachange workload")
-	err = c.RunE(ctx, loadNode, runCmd...)
+	err = c.RunE(ctx, option.WithNodes(loadNode), runCmd...)
 	if err != nil {
 		saveArtifacts(ctx, t, c, storeDirectory)
 		t.Fatal(err)
