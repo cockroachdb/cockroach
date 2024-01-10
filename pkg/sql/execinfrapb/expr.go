@@ -77,6 +77,24 @@ func DeserializeExpr(
 	return deserializedExpr, nil
 }
 
+// DeserializeExprWithTypes is similar to Deserialize. It can be used when the
+// types of indexed vars are available, but a tree.IndexedVarHelper is not.
+func DeserializeExprWithTypes(
+	ctx context.Context,
+	expr string,
+	typs []*types.T,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+) (tree.TypedExpr, error) {
+	if expr == "" {
+		return nil, nil
+	}
+	var eh exprHelper
+	eh.types = typs
+	tempVars := tree.MakeIndexedVarHelper(&eh, len(typs))
+	return DeserializeExpr(ctx, expr, semaCtx, evalCtx, &tempVars)
+}
+
 // RunFilter runs a filter expression and returns whether the filter passes.
 func RunFilter(ctx context.Context, filter tree.TypedExpr, evalCtx *eval.Context) (bool, error) {
 	if filter == nil {
@@ -244,7 +262,7 @@ func (eh *MultiExprHelper) AddExpr(ctx context.Context, expr Expression, i int) 
 // TODO(mgartner): This is only used in projectSetProcessor and ideally it could
 // be removed.
 func (eh *MultiExprHelper) SetRow(row rowenc.EncDatumRow) {
-	eh.h.Row = row
+	eh.h.row = row
 }
 
 // EvalExpr evaluates the i-th expression with the given row and returns the
@@ -277,15 +295,15 @@ func (eh *MultiExprHelper) Reset() {
 type exprHelper struct {
 	_ util.NoCopy
 
-	// Vars is used to generate IndexedVars that are "backed" by the values in
-	// `Row`.
-	Vars tree.IndexedVarHelper
+	// vars is used to generate IndexedVars that are "backed" by the values in
+	// row.
+	vars tree.IndexedVarHelper
 
 	evalCtx *eval.Context
 	semaCtx *tree.SemaContext
 
-	Types      []*types.T
-	Row        rowenc.EncDatumRow
+	types      []*types.T
+	row        rowenc.EncDatumRow
 	datumAlloc tree.DatumAlloc
 }
 
@@ -294,18 +312,18 @@ var _ eval.IndexedVarContainer = &exprHelper{}
 
 // IndexedVarResolvedType is part of the tree.IndexedVarContainer interface.
 func (eh *exprHelper) IndexedVarResolvedType(idx int) *types.T {
-	return eh.Types[idx]
+	return eh.types[idx]
 }
 
 // IndexedVarEval is part of the eval.IndexedVarContainer interface.
 func (eh *exprHelper) IndexedVarEval(
 	ctx context.Context, idx int, e tree.ExprEvaluator,
 ) (tree.Datum, error) {
-	err := eh.Row[idx].EnsureDecoded(eh.Types[idx], &eh.datumAlloc)
+	err := eh.row[idx].EnsureDecoded(eh.types[idx], &eh.datumAlloc)
 	if err != nil {
 		return nil, err
 	}
-	return eh.Row[idx].Datum.Eval(ctx, e)
+	return eh.row[idx].Datum.Eval(ctx, e)
 }
 
 // IndexedVarNodeFormatter is part of the tree.IndexedVarContainer interface.
@@ -320,8 +338,8 @@ func (eh *exprHelper) init(
 ) error {
 	eh.evalCtx = evalCtx
 	eh.semaCtx = semaCtx
-	eh.Types = types
-	eh.Vars = tree.MakeIndexedVarHelper(eh, len(types))
+	eh.types = types
+	eh.vars = tree.MakeIndexedVarHelper(eh, len(types))
 	if semaCtx.TypeResolver != nil {
 		for _, t := range types {
 			if err := typedesc.EnsureTypeIsHydrated(ctx, t, semaCtx.TypeResolver.(catalog.TypeDescriptorResolver)); err != nil {
@@ -339,10 +357,10 @@ func (eh *exprHelper) prepareExpr(ctx context.Context, expr Expression) (tree.Ty
 		return nil, nil
 	}
 	if expr.LocalExpr != nil {
-		eh.Vars.Rebind(expr.LocalExpr)
+		eh.vars.Rebind(expr.LocalExpr)
 		return expr.LocalExpr, nil
 	}
-	return DeserializeExpr(ctx, expr.Expr, eh.semaCtx, eh.evalCtx, &eh.Vars)
+	return DeserializeExpr(ctx, expr.Expr, eh.semaCtx, eh.evalCtx, &eh.vars)
 }
 
 // evalFilter is used for filter expressions; it evaluates the expression and
@@ -350,7 +368,7 @@ func (eh *exprHelper) prepareExpr(ctx context.Context, expr Expression) (tree.Ty
 func (eh *exprHelper) evalFilter(
 	ctx context.Context, expr tree.TypedExpr, row rowenc.EncDatumRow,
 ) (bool, error) {
-	eh.Row = row
+	eh.row = row
 	eh.evalCtx.PushIVarContainer(eh)
 	pass, err := RunFilter(ctx, expr, eh.evalCtx)
 	eh.evalCtx.PopIVarContainer()
@@ -367,8 +385,7 @@ func (eh *exprHelper) evalFilter(
 func (eh *exprHelper) eval(
 	ctx context.Context, expr tree.TypedExpr, row rowenc.EncDatumRow,
 ) (tree.Datum, error) {
-	eh.Row = row
-
+	eh.row = row
 	eh.evalCtx.PushIVarContainer(eh)
 	d, err := eval.Expr(ctx, eh.evalCtx, expr)
 	eh.evalCtx.PopIVarContainer()

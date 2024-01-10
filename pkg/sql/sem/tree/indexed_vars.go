@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// IndexedVarContainer provides the implementation of TypeCheck, Eval, and
-// String for IndexedVars.
+// IndexedVarContainer provides the implementation of TypeCheck and formatting
+// for IndexedVars.
 type IndexedVarContainer interface {
 	IndexedVarResolvedType(idx int) *types.T
 	// IndexedVarNodeFormatter returns a NodeFormatter; if an object that

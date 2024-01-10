@@ -35,7 +35,6 @@ func NewExprHelper() *ExprHelper {
 // vectorized engine.
 type ExprHelper struct {
 	SemaCtx *tree.SemaContext
-	helper  execinfrapb.ExprHelper
 }
 
 // ProcessExpr processes the given expression and returns a well-typed
@@ -48,7 +47,5 @@ func (h *ExprHelper) ProcessExpr(
 	if expr.LocalExpr != nil {
 		return expr.LocalExpr, nil
 	}
-	h.helper.Types = typs
-	tempVars := tree.MakeIndexedVarHelper(&h.helper, len(typs))
-	return execinfrapb.DeserializeExpr(ctx, expr.Expr, h.SemaCtx, evalCtx, &tempVars)
+	return execinfrapb.DeserializeExprWithTypes(ctx, expr.Expr, typs, h.SemaCtx, evalCtx)
 }
