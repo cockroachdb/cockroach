@@ -78,7 +78,7 @@ func registerLibPQ(r registry.Registry) {
 		// It's safer to clean up dependencies this way than it is to give the cluster
 		// wipe root access.
 		defer func() {
-			c.Run(ctx, c.All(), "go clean -modcache")
+			c.Run(ctx, option.WithNodes(c.All()), "go clean -modcache")
 		}()
 
 		err = repeatGitCloneE(
@@ -91,7 +91,7 @@ func registerLibPQ(r registry.Registry) {
 			node,
 		)
 		require.NoError(t, err)
-		if err := c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDir)); err != nil {
+		if err := c.RunE(ctx, option.WithNodes(node), fmt.Sprintf("mkdir -p %s", resultsDir)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -130,7 +130,7 @@ func registerLibPQ(r registry.Registry) {
 		// Ignore the error as there will be failing tests.
 		_ = c.RunE(
 			ctx,
-			node,
+			option.WithNodes(node),
 			fmt.Sprintf("cd %s && PGPORT={pgport:1} PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -run %s -v 2>&1 | %s/bin/go-junit-report > %s",
 				libPQPath, allowedTestsRegExp, goPath, resultsPath),
 		)

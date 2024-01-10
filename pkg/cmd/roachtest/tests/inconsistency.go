@@ -86,7 +86,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	//     t.Error(fmt.Sprintf("hex:%x", data))
 	//   }
 	// }
-	c.Run(ctx, c.Node(1), "./cockroach debug pebble db set {store-dir} "+
+	c.Run(ctx, option.WithNodes(c.Node(1)), "./cockroach debug pebble db set {store-dir} "+
 		"hex:016b1202000174786e2d0000000000000000000000000000000000 "+
 		"hex:120408001000180020002800322a0a10000000000000000000000000000000001a1266616b65207472616e73616374696f6e20302a004a00")
 
@@ -134,21 +134,21 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	require.Len(t, ids, 1, "expected one dead NodeID")
 
 	const expr = "This.node.is.terminating.because.a.replica.inconsistency.was.detected"
-	c.Run(ctx, c.Node(1), "grep "+expr+" {log-dir}/cockroach.log")
+	c.Run(ctx, option.WithNodes(c.Node(1)), "grep "+expr+" {log-dir}/cockroach.log")
 
 	// Make sure that every node creates a checkpoint.
 	for n := 1; n <= 3; n++ {
 		// Notes it in the log.
 		const expr = "creating.checkpoint.*with.spans"
-		c.Run(ctx, c.Node(n), "grep "+expr+" {log-dir}/cockroach.log")
+		c.Run(ctx, option.WithNodes(c.Node(n)), "grep "+expr+" {log-dir}/cockroach.log")
 		// Creates at least one checkpoint directory (in rare cases it can be
 		// multiple if multiple consistency checks fail in close succession), and
 		// puts spans information into the checkpoint.txt file in it.
-		c.Run(ctx, c.Node(n), "find {store-dir}/auxiliary/checkpoints -name checkpoint.txt")
+		c.Run(ctx, option.WithNodes(c.Node(n)), "find {store-dir}/auxiliary/checkpoints -name checkpoint.txt")
 		// The checkpoint can be inspected by the tooling.
-		c.Run(ctx, c.Node(n), "./cockroach debug range-descriptors "+
+		c.Run(ctx, option.WithNodes(c.Node(n)), "./cockroach debug range-descriptors "+
 			"$(find {store-dir}/auxiliary/checkpoints/* -maxdepth 0 -type d | head -n1)")
-		c.Run(ctx, c.Node(n), "./cockroach debug range-data --limit 10 "+
+		c.Run(ctx, option.WithNodes(c.Node(n)), "./cockroach debug range-data --limit 10 "+
 			"$(find {store-dir}/auxiliary/checkpoints/* -maxdepth 0 -type d | head -n1) 1")
 	}
 

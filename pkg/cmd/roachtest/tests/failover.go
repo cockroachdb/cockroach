@@ -246,7 +246,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	t.L().Printf("creating workload database")
 	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
-	c.Run(ctx, c.Node(10), fmt.Sprintf(
+	c.Run(ctx, option.WithNodes(c.Node(10)), fmt.Sprintf(
 		`./cockroach workload init kv --splits 1000 --insert-count %d {pgurl:1}`, insertCount))
 
 	// Scatter the ranges, then relocate them off of the SQL gateways n1-n2.
@@ -267,7 +267,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 		if readOnly {
 			readPercent = 100
 		}
-		err := c.RunE(ctx, c.Node(10), fmt.Sprintf(
+		err := c.RunE(ctx, option.WithNodes(c.Node(10)), fmt.Sprintf(
 			`./cockroach workload run kv --read-percent %d --write-seq R%d `+
 				`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 				`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-2}`,
@@ -415,7 +415,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{
 		replicas: 5, onlyNodes: []int{2, 3, 4, 5, 6}, leaseNode: 4})
 
-	c.Run(ctx, c.Node(6), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+	c.Run(ctx, option.WithNodes(c.Node(6)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 	// Wait for the KV table to upreplicate.
 	waitForUpreplication(t, ctx, conn, `database_name = 'kv'`, 5)
@@ -431,7 +431,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	// Run workload on n8 via n6-n7 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
-		err := c.RunE(ctx, c.Node(8), `./cockroach workload run kv --read-percent 50 `+
+		err := c.RunE(ctx, option.WithNodes(c.Node(8)), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:6-7}`)
 		if ctx.Err() != nil {
@@ -554,7 +554,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	require.NoError(t, err)
 	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{4, 5, 6}})
 
-	c.Run(ctx, c.Node(6), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+	c.Run(ctx, option.WithNodes(c.Node(6)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 	// Move ranges to the appropriate nodes. Precreating the database/range and
 	// moving it to the correct nodes first is not sufficient, since workload will
@@ -581,7 +581,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	// Run workload on n7 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
-		err := c.RunE(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
+		err := c.RunE(ctx, option.WithNodes(c.Node(7)), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
 		if ctx.Err() != nil {
@@ -683,7 +683,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	require.NoError(t, err)
 	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{5, 6, 7}})
 
-	c.Run(ctx, c.Node(6), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+	c.Run(ctx, option.WithNodes(c.Node(6)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 	// The replicate queue takes forever to move the ranges, so we do it
 	// ourselves. Precreating the database/range and moving it to the correct
@@ -697,7 +697,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	// ends (context cancels).
 	t.L().Printf("running workload")
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
-		err := c.RunE(ctx, c.Node(8), `./cockroach workload run kv --read-percent 50 `+
+		err := c.RunE(ctx, option.WithNodes(c.Node(8)), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
 		if ctx.Err() != nil {
@@ -799,7 +799,7 @@ func runFailoverNonSystem(
 	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
 	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{4, 5, 6}})
-	c.Run(ctx, c.Node(7), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+	c.Run(ctx, option.WithNodes(c.Node(7)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 	// The replicate queue takes forever to move the kv ranges from n1-n3 to
 	// n4-n6, so we do it ourselves. Precreating the database/range and moving it
@@ -810,7 +810,7 @@ func runFailoverNonSystem(
 	// Run workload on n7 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
-		err := c.RunE(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
+		err := c.RunE(ctx, option.WithNodes(c.Node(7)), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
 		if ctx.Err() != nil {
@@ -911,7 +911,7 @@ func runFailoverLiveness(
 	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
 	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
-	c.Run(ctx, c.Node(5), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+	c.Run(ctx, option.WithNodes(c.Node(5)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 	// The replicate queue takes forever to move the other ranges off of n4 so we
 	// do it ourselves. Precreating the database/range and moving it to the
@@ -925,7 +925,7 @@ func runFailoverLiveness(
 	// Run workload on n5 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
-		err := c.RunE(ctx, c.Node(5), `./cockroach workload run kv --read-percent 50 `+
+		err := c.RunE(ctx, option.WithNodes(c.Node(5)), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
 		if ctx.Err() != nil {
@@ -1025,7 +1025,7 @@ func runFailoverSystemNonLiveness(
 	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
 	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
-	c.Run(ctx, c.Node(7), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+	c.Run(ctx, option.WithNodes(c.Node(7)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 	// The replicate queue takes forever to move the kv ranges from n4-n6 to
 	// n1-n3, so we do it ourselves. Precreating the database/range and moving it
@@ -1039,7 +1039,7 @@ func runFailoverSystemNonLiveness(
 	// Run workload on n7 via n1-n3 as gateways until test ends (context cancels).
 	t.L().Printf("running workload")
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
-		err := c.RunE(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
+		err := c.RunE(ctx, option.WithNodes(c.Node(7)), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
 		if ctx.Err() != nil {
@@ -1285,7 +1285,7 @@ func (f *blackholeFailer) Setup(context.Context)       {}
 func (f *blackholeFailer) Ready(context.Context, int)  {}
 
 func (f *blackholeFailer) Cleanup(ctx context.Context) {
-	f.c.Run(ctx, f.c.All(), `sudo iptables -F`)
+	f.c.Run(ctx, option.WithNodes(f.c.All()), `sudo iptables -F`)
 }
 
 func (f *blackholeFailer) Fail(ctx context.Context, nodeID int) {
@@ -1302,15 +1302,15 @@ func (f *blackholeFailer) Fail(ctx context.Context, nodeID int) {
 	// outages in the wild.
 	if f.input && f.output {
 		// Inbound TCP connections, both received and sent packets.
-		f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(`sudo iptables -A INPUT -p tcp --dport %s -j DROP`, pgport))
-		f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --sport %s -j DROP`, pgport))
+		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT -p tcp --dport %s -j DROP`, pgport))
+		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --sport %s -j DROP`, pgport))
 		// Outbound TCP connections, both sent and received packets.
-		f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --dport %s -j DROP`, pgport))
-		f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(`sudo iptables -A INPUT -p tcp --sport %s -j DROP`, pgport))
+		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --dport %s -j DROP`, pgport))
+		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT -p tcp --sport %s -j DROP`, pgport))
 	} else if f.input {
-		f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(`sudo iptables -A INPUT -p tcp --dport %s -j DROP`, pgport))
+		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT -p tcp --dport %s -j DROP`, pgport))
 	} else if f.output {
-		f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --dport %s -j DROP`, pgport))
+		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --dport %s -j DROP`, pgport))
 	}
 }
 
@@ -1334,27 +1334,27 @@ func (f *blackholeFailer) FailPartial(ctx context.Context, nodeID int, peerIDs [
 		// outages in the wild.
 		if f.input && f.output {
 			// Inbound TCP connections, both received and sent packets.
-			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
+			f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(
 				`sudo iptables -A INPUT -p tcp -s %s --dport %s -j DROP`, peerIP, pgport))
-			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
+			f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(
 				`sudo iptables -A OUTPUT -p tcp -d %s --sport %s -j DROP`, peerIP, pgport))
 			// Outbound TCP connections, both sent and received packets.
-			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
+			f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(
 				`sudo iptables -A OUTPUT -p tcp -d %s --dport %s -j DROP`, peerIP, pgport))
-			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
+			f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(
 				`sudo iptables -A INPUT -p tcp -s %s --sport %s -j DROP`, peerIP, pgport))
 		} else if f.input {
-			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
+			f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(
 				`sudo iptables -A INPUT -p tcp -s %s --dport %s -j DROP`, peerIP, pgport))
 		} else if f.output {
-			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
+			f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(
 				`sudo iptables -A OUTPUT -p tcp -d %s --dport %s -j DROP`, peerIP, pgport))
 		}
 	}
 }
 
 func (f *blackholeFailer) Recover(ctx context.Context, nodeID int) {
-	f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -F`)
+	f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), `sudo iptables -F`)
 }
 
 // crashFailer is a process crash where the TCP/IP stack remains responsive

@@ -265,7 +265,7 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 			t.Fatal(err)
 		}
 		return c.RunE(ctx,
-			c.Node(nodeToDrain),
+			option.WithNodes(c.Node(nodeToDrain)),
 			fmt.Sprintf("./cockroach node drain --self --insecure --drain-wait=600s --url=%s", pgurl),
 		)
 	})
@@ -319,7 +319,7 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 	require.NoError(t, err, "error waiting for the draining to finish")
 
 	logFile := filepath.Join("logs", "*.log")
-	err = c.RunE(ctx, c.Node(nodeToDrain),
+	err = c.RunE(ctx, option.WithNodes(c.Node(nodeToDrain)),
 		"grep", "-q", "'proceeding to drain SQL connections'", logFile)
 	require.NoError(t, err, "warning is not logged in the log file")
 }

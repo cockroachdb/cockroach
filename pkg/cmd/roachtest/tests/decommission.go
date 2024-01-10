@@ -155,7 +155,7 @@ func runDrainAndDecommission(
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Run(ctx, c.Node(pinnedNode),
+	c.Run(ctx, option.WithNodes(c.Node(pinnedNode)),
 		fmt.Sprintf(`./cockroach workload init kv --drop --splits 1000 '%s'`, pgurl))
 
 	run := func(stmt string) {
@@ -189,7 +189,7 @@ func runDrainAndDecommission(
 	m, ctx = errgroup.WithContext(ctx)
 	m.Go(
 		func() error {
-			return c.RunE(ctx, c.Node(pinnedNode),
+			return c.RunE(ctx, option.WithNodes(c.Node(pinnedNode)),
 				fmt.Sprintf("./cockroach workload run kv --max-rate 500 --tolerate-errors --duration=%s {pgurl:1-%d}",
 					duration.String(), nodes-4,
 				),
@@ -210,7 +210,7 @@ func runDrainAndDecommission(
 				if err != nil {
 					t.Fatal(err)
 				}
-				return c.RunE(ctx, c.Node(id), fmt.Sprintf("./cockroach node drain --insecure --url=%s", pgurl))
+				return c.RunE(ctx, option.WithNodes(c.Node(id)), fmt.Sprintf("./cockroach node drain --insecure --url=%s", pgurl))
 			}
 			return drain(id)
 		})
@@ -228,7 +228,7 @@ func runDrainAndDecommission(
 			if err != nil {
 				t.Fatal(err)
 			}
-			return c.RunE(ctx, c.Node(id), fmt.Sprintf("./cockroach node decommission --self --insecure --url=%s", pgurl))
+			return c.RunE(ctx, option.WithNodes(c.Node(id)), fmt.Sprintf("./cockroach node decommission --self --insecure --url=%s", pgurl))
 		}
 		return decom(id)
 	})
@@ -274,7 +274,7 @@ func runDecommission(
 
 		c.Start(ctx, t.L(), withDecommissionVMod(startOpts), install.MakeClusterSettings(), c.Node(i))
 	}
-	c.Run(ctx, c.Node(pinnedNode),
+	c.Run(ctx, option.WithNodes(c.Node(pinnedNode)),
 		fmt.Sprintf(`./workload init kv --drop {pgurl:%d}`, pinnedNode))
 
 	h := newDecommTestHelper(t, c)
@@ -307,7 +307,7 @@ func runDecommission(
 	for _, cmd := range workloads {
 		cmd := cmd // copy is important for goroutine
 		m.Go(func() error {
-			return c.RunE(ctx, c.Node(pinnedNode), cmd)
+			return c.RunE(ctx, option.WithNodes(c.Node(pinnedNode)), cmd)
 		})
 	}
 
@@ -367,7 +367,7 @@ func runDecommission(
 			}
 
 			// Wipe the node and re-add to cluster with a new node ID.
-			if err := c.RunE(ctx, c.Node(node), "rm -rf {store-dir}"); err != nil {
+			if err := c.RunE(ctx, option.WithNodes(c.Node(node)), "rm -rf {store-dir}"); err != nil {
 				return err
 			}
 
@@ -1141,7 +1141,7 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 					t.Fatal(err)
 				}
 				return c.RunE(ctx,
-					c.Node(id),
+					option.WithNodes(c.Node(id)),
 					fmt.Sprintf("./cockroach node decommission %d --insecure --checks=skip --url=%s", id, pgurl),
 				)
 			}
@@ -1154,7 +1154,7 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 	testutils.SucceedsWithin(t, func() error {
 		for nodeID := 1; nodeID <= numNodes; nodeID++ {
 			if err := c.RunE(ctx,
-				c.Node(nodeID),
+				option.WithNodes(c.Node(nodeID)),
 				fmt.Sprintf("grep -q '%s' logs/cockroach.log", verboseStoreLogRe),
 			); err == nil {
 				return nil

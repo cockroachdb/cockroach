@@ -89,10 +89,10 @@ func registerPsycopg(r registry.Registry) {
 		// ); err != nil {
 		//	t.Fatal(err)
 		// }
-		if err = c.RunE(ctx, node, "git clone https://github.com/psycopg/psycopg2.git /mnt/data1/psycopg"); err != nil {
+		if err = c.RunE(ctx, option.WithNodes(node), "git clone https://github.com/psycopg/psycopg2.git /mnt/data1/psycopg"); err != nil {
 			t.Fatal(err)
 		}
-		if err = c.RunE(ctx, node, fmt.Sprintf("cd /mnt/data1/psycopg/ && git checkout %s", supportedPsycopgTag)); err != nil {
+		if err = c.RunE(ctx, option.WithNodes(node), fmt.Sprintf("cd /mnt/data1/psycopg/ && git checkout %s", supportedPsycopgTag)); err != nil {
 			t.Fatal(err)
 		}
 

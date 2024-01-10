@@ -226,7 +226,7 @@ func runMultiTenantFairness(
 
 		// Init kv on each tenant.
 		cmd := fmt.Sprintf("./cockroach workload init kv '%s'", tenant.secureURL())
-		require.NoError(t, c.RunE(ctx, tenantNode, cmd))
+		require.NoError(t, c.RunE(ctx, option.WithNodes(tenantNode), cmd))
 
 		promCfg.WithTenantPod(tenantNode.InstallNodes()[0], tenantID(i))
 		promCfg.WithScrapeConfigs(
@@ -272,7 +272,7 @@ func runMultiTenantFairness(
 				"./cockroach workload run kv '%s' --secure --min-block-bytes %d --max-block-bytes %d "+
 					"--batch %d --max-ops %d --concurrency=25",
 				pgurl, s.blockSize, s.blockSize, s.batch, s.maxOps)
-			err := c.RunE(ctx, c.Node(tenantNodeID(i)), cmd)
+			err := c.RunE(ctx, option.WithNodes(c.Node(tenantNodeID(i))), cmd)
 			t.L().Printf("loaded data for tenant %d", tenantID(i))
 			return err
 		})
@@ -296,7 +296,7 @@ func runMultiTenantFairness(
 				pgurl, fmt.Sprintf("R%d", s.maxOps*s.batch), s.blockSize, s.blockSize, s.batch,
 				s.duration, s.readPercent, s.concurrency(tenantNodeID(i)-1))
 
-			err := c.RunE(ctx, c.Node(tenantNodeID(i)), cmd)
+			err := c.RunE(ctx, option.WithNodes(c.Node(tenantNodeID(i))), cmd)
 			t.L().Printf("ran workload for tenant %d", tenantID(i))
 			return err
 		})
@@ -366,10 +366,10 @@ func runMultiTenantFairness(
 		t.L().Printf("latency not within expectations: %f > %f %v", maxLatencyDelta, failThreshold, meanLatencies)
 	}
 
-	c.Run(ctx, crdbNode, "mkdir", "-p", t.PerfArtifactsDir())
+	c.Run(ctx, option.WithNodes(crdbNode), "mkdir", "-p", t.PerfArtifactsDir())
 	results := fmt.Sprintf(`{ "max_tput_delta": %f, "max_tput": %f, "min_tput": %f, "max_latency": %f, "min_latency": %f}`,
 		maxThroughputDelta, maxFloat(throughput), minFloat(throughput), maxFloat(meanLatencies), minFloat(meanLatencies))
-	c.Run(ctx, crdbNode, fmt.Sprintf(`echo '%s' > %s/stats.json`, results, t.PerfArtifactsDir()))
+	c.Run(ctx, option.WithNodes(crdbNode), fmt.Sprintf(`echo '%s' > %s/stats.json`, results, t.PerfArtifactsDir()))
 }
 
 func averageFloat(values []float64) float64 {

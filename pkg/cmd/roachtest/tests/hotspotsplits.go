@@ -37,7 +37,7 @@ func registerHotSpotSplits(r registry.Registry) {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", appNode)
-		c.Run(ctx, appNode, `./workload init kv --drop {pgurl:1}`)
+		c.Run(ctx, option.WithNodes(appNode), `./workload init kv --drop {pgurl:1}`)
 
 		var m *errgroup.Group // see comment in version.go
 		m, ctx = errgroup.WithContext(ctx)
@@ -46,7 +46,7 @@ func registerHotSpotSplits(r registry.Registry) {
 			t.L().Printf("starting load generator\n")
 
 			const blockSize = 1 << 18 // 256 KB
-			return c.RunE(ctx, appNode, fmt.Sprintf(
+			return c.RunE(ctx, option.WithNodes(appNode), fmt.Sprintf(
 				"./workload run kv --read-percent=0 --tolerate-errors --concurrency=%d "+
 					"--min-block-bytes=%d --max-block-bytes=%d --duration=%s {pgurl:1-3}",
 				concurrency, blockSize, blockSize, duration.String()))

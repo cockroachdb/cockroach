@@ -83,8 +83,8 @@ func RunBuildAnalyze(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// we can use, choose `scanelf` for being the simplest to use (empty
 	// output indicates everything's fine, non-empty means something
 	// bad).
-	c.Run(ctx, c.Node(1), "sudo apt-get update")
-	c.Run(ctx, c.Node(1), "sudo apt-get -qqy install pax-utils")
+	c.Run(ctx, option.WithNodes(c.Node(1)), "sudo apt-get update")
+	c.Run(ctx, option.WithNodes(c.Node(1)), "sudo apt-get -qqy install pax-utils")
 
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), "scanelf -qe cockroach")
 	if err != nil {
