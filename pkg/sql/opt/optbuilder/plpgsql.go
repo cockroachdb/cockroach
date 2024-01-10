@@ -205,12 +205,15 @@ func (b *plpgsqlBuilder) init(
 			b.cursors[dec.Name] = *dec
 		}
 	}
+	for _, param := range b.params {
+		b.addVariableType(tree.Name(param.Name), param.Typ)
+	}
 	for _, dec := range b.decls {
 		typ, err := tree.ResolveType(b.ob.ctx, dec.Typ, b.ob.semaCtx.TypeResolver)
 		if err != nil {
 			panic(err)
 		}
-		b.varTypes[dec.Var] = typ
+		b.addVariableType(dec.Var, typ)
 		if dec.NotNull {
 			panic(unimplemented.NewWithIssueDetail(105243,
 				"not null variable",
@@ -1513,6 +1516,16 @@ func (b *plpgsqlBuilder) getLoopContinuation() *continuation {
 		}
 	}
 	return nil
+}
+
+func (b *plpgsqlBuilder) addVariableType(name tree.Name, typ *types.T) {
+	if _, ok := b.varTypes[name]; ok {
+		panic(errors.WithHintf(
+			unimplemented.NewWithIssue(117508, "variable shadowing is not yet implemented"),
+			"variable \"%s\" shadows a previously defined variable", name,
+		))
+	}
+	b.varTypes[name] = typ
 }
 
 // recordTypeVisitor is used to infer the concrete return type for a
