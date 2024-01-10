@@ -2828,7 +2828,76 @@ statement ok
 SELECT f114678();
 CALL p114678();
 
-subtest end
+subtest return_unknown
 
 statement error pgcode 42P13 PL/pgSQL functions cannot return type unknown
 CREATE FUNCTION f() RETURNS UNKNOWN LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+# Regression test for #117503 - PLpgSQL routine parameters can be assigned just
+# like declared variables.
+subtest param_assign
+
+# Assign statement case.
+statement ok
+DROP FUNCTION IF EXISTS f(INT);
+CREATE OR REPLACE FUNCTION f(x INT) RETURNS INT AS $$
+  DECLARE
+    y INT := x + 1;
+  BEGIN
+    x := x + y;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query III
+SElECT f(0), f(100), f(-100);
+----
+1  201  -199
+
+# SELECT INTO case.
+statement ok
+DROP FUNCTION IF EXISTS f(INT);
+CREATE OR REPLACE FUNCTION f(x INT) RETURNS INT AS $$
+  BEGIN
+    SELECT x INTO x FROM xy ORDER BY x DESC;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query III
+SElECT f(0), f(100), f(-100);
+----
+3  3  3
+
+# FETCH INTO case.
+statement ok
+DROP FUNCTION IF EXISTS f(INT);
+CREATE OR REPLACE FUNCTION f(x INT) RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 1000;
+  BEGIN
+    OPEN curs;
+    FETCH curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query III
+SElECT f(0), f(100), f(-100);
+----
+1000  1000  1000
+
+# Variable shadowing is disallowed, tracked in #117508.
+statement ok
+DROP FUNCTION IF EXISTS f(INT);
+
+statement error pgcode 0A000 pq: unimplemented: variable shadowing is not yet implemented
+CREATE OR REPLACE FUNCTION f(x INT) RETURNS INT AS $$
+  DECLARE
+    x INT := 1000;
+  BEGIN
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+subtest end
