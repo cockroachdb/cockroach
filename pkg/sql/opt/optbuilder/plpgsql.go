@@ -1508,7 +1508,7 @@ func newRecordTypeVisitor(
 
 var _ ast.StatementVisitor = &recordTypeVisitor{}
 
-func (r *recordTypeVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, changed bool) {
+func (r *recordTypeVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, recurse bool) {
 	if retStmt, ok := stmt.(*ast.Return); ok {
 		desired := types.Any
 		if r.typ != types.Unknown {
@@ -1534,7 +1534,7 @@ func (r *recordTypeVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, ch
 			panic(recordReturnErr)
 		}
 	}
-	return stmt, false
+	return stmt, true
 }
 
 var (
