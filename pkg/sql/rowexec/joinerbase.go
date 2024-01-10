@@ -157,7 +157,7 @@ func shouldEmitUnmatchedRow(side joinSide, joinType descpb.JoinType) bool {
 func (jb *joinerBase) render(lrow, rrow rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
 	outputRow := jb.renderForOutput(lrow, rrow)
 
-	if jb.onCond.Expr != nil {
+	if jb.onCond.Expr() != nil {
 		// We need to evaluate the ON condition which can refer to the columns
 		// from both sides of the join regardless of the join type, so we need
 		// to have the combined row.
