@@ -139,19 +139,20 @@ COALESCE(last_run::timestamptz, created::timestamptz) + least(
 	args.max_delay
 )::INTERVAL`
 	canRunClause = `args.ts >= ` + NextRunClause
-	// processQueryBase and processQueryWhereBase select IDs of the jobs that
-	// can be processed among the claimed jobs.
-	processQueryBase      = `SELECT id FROM system.jobs`
-	processQueryWhereBase = ` status IN ` + processQueryStatusTupleString + ` AND (claim_session_id = $1 AND claim_instance_id = $2)`
 
-	processQueryWithBackoff = processQueryBase + ", " + canRunArgs +
-		" WHERE " + processQueryWhereBase + " AND " + canRunClause
+	// processQueryWithBackoff select IDs of the jobs that can be
+	// processed among the claimed jobs.
+	processQueryWithBackoff = `SELECT id FROM system.jobs, ` + canRunArgs +
+		` WHERE status IN ` + processQueryStatusTupleString +
+		` AND (claim_session_id = $1 AND claim_instance_id = $2)` +
+		` AND ` + canRunClause
 
-	resumeQueryBaseCols    = "status, crdb_internal.sql_liveness_is_alive(claim_session_id)"
-	resumeQueryWithBackoff = `SELECT ` + resumeQueryBaseCols + `, ` + canRunClause + ` AS can_run,` +
-		` created_by_type, created_by_id  FROM system.jobs, ` + canRunArgs + " WHERE " + resumeQueryWhereBase
-
-	resumeQueryWhereBase = `id = $1 AND claim_session_id = $2`
+	// resumeQueryWithBackoff retrieves the job record for a job
+	// we intend to resume.
+	resumeQueryWithBackoff = `SELECT status, crdb_internal.sql_liveness_is_alive(claim_session_id), created_by_type, created_by_id, ` +
+		canRunClause + " AS can_run" +
+		" FROM system.jobs, " + canRunArgs +
+		" WHERE id = $1 AND claim_session_id = $2"
 )
 
 // getProcessQuery returns the query that selects the jobs that are claimed
@@ -250,31 +251,83 @@ func (r *Registry) resumeJob(
 ) (retErr error) {
 	log.Infof(ctx, "job %d: resuming execution", jobID)
 
-	args := []interface{}{jobID, s.ID().UnsafeBytes(),
-		r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay()}
+	job, err := r.loadJobForResume(ctx, jobID, s)
+	if err != nil {
+		return err
+	}
+
+	// A nil job return means we loaded the job but it isn't time
+	// to resume it.
+	if job == nil {
+		return nil
+	}
+
+	resumer, err := r.createResumer(job, r.settings)
+	if err != nil {
+		return err
+	}
+	resumeCtx, cancel := r.makeCtx()
+
+	// If the job's type was registered to disable tenant cost control, then
+	// exclude the job's costs from tenant accounting.
+	payload := job.Payload()
+	if opts, ok := getRegisterOptions(payload.Type()); ok && opts.disableTenantCostControl {
+		resumeCtx = multitenant.WithTenantCostControlExemption(resumeCtx)
+	}
+	if alreadyAdopted := r.addAdoptedJob(jobID, s, cancel, resumer); alreadyAdopted {
+		// Not needing the context after all. Avoid leaking resources.
+		cancel()
+		return nil
+	}
+
+	r.metrics.ResumedJobs.Inc(1)
+	if err := r.stopper.RunAsyncTask(resumeCtx, job.taskName(), func(ctx context.Context) {
+		// Wait for the job to finish. No need to print the error because if there
+		// was one it's been set in the job status already.
+		var cleanup func()
+		ctx, cleanup = r.stopper.WithCancelOnQuiesce(ctx)
+		defer cleanup()
+		_ = r.runJob(ctx, resumer, job, job.Status(), job.taskName())
+	}); err != nil {
+		r.unregister(jobID)
+		// Also avoid leaking a goroutine in this case.
+		cancel()
+		return err
+	}
+	return nil
+}
+
+func (r *Registry) loadJobForResume(
+	ctx context.Context, jobID jobspb.JobID, s sqlliveness.Session,
+) (*Job, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "load-job-for-resume")
+	defer sp.Finish()
+
 	row, err := r.db.Executor().QueryRowEx(
 		ctx, "get-job-row", nil,
-		sessiondata.NodeUserSessionDataOverride, resumeQueryWithBackoff, args...,
+		sessiondata.NodeUserSessionDataOverride, resumeQueryWithBackoff,
+		jobID, s.ID().UnsafeBytes(),
+		r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay(),
 	)
 	if err != nil {
-		return errors.Wrapf(err, "job %d: could not query job table row", jobID)
+		return nil, errors.Wrapf(err, "job %d: could not query job table row", jobID)
 	}
 	if row == nil {
-		return errors.Errorf("job %d: claim with session id %s does not exist", jobID, s.ID())
+		return nil, errors.Errorf("job %d: claim with session id %s does not exist", jobID, s.ID())
 	}
 
 	status := Status(*row[0].(*tree.DString))
 	if status == StatusSucceeded {
 		// A concurrent registry could have already executed the job.
-		return nil
+		return nil, nil
 	}
 	if status != StatusRunning && status != StatusReverting {
 		// A concurrent registry could have requested the job to be paused or canceled.
-		return errors.Errorf("job %d: status changed to %s which is not resumable`", jobID, status)
+		return nil, errors.Errorf("job %d: status changed to %s which is not resumable", jobID, status)
 	}
 
 	if isAlive := *row[1].(*tree.DBool); !isAlive {
-		return errors.Errorf("job %d: claim with session id %s has expired", jobID, s.ID())
+		return nil, errors.Errorf("job %d: claim with session id %s has expired", jobID, s.ID())
 	}
 
 	// It's too soon to run the job.
@@ -291,13 +344,13 @@ func (r *Registry) resumeJob(
 	//  - Ur(j): Remove jobID of j from adoptedJobs, enabling further resumers
 	//  - Up(n1->2): Update number of runs from 1 to 2
 	//  - Fl(j): Job j fails
-	if !(*row[2].(*tree.DBool)) {
-		return nil
+	if canRun := *row[4].(*tree.DBool); !canRun {
+		return nil, nil
 	}
 
-	createdBy, err := unmarshalCreatedBy(row[3], row[4])
+	createdBy, err := unmarshalCreatedBy(row[2], row[3])
 	if err != nil {
-		return err
+		return nil, err
 	}
 	job := &Job{id: jobID, registry: r, createdBy: createdBy}
 
@@ -325,45 +378,14 @@ func (r *Registry) resumeJob(
 		}
 		return protoutil.Unmarshal(progressBytes, progress)
 	}); err != nil {
-		return err
+		return nil, err
 	}
 
 	job.mu.payload = *payload
 	job.mu.progress = *progress
+	job.mu.status = status
 	job.session = s
-
-	resumer, err := r.createResumer(job, r.settings)
-	if err != nil {
-		return err
-	}
-	resumeCtx, cancel := r.makeCtx()
-
-	// If the job's type was registered to disable tenant cost control, then
-	// exclude the job's costs from tenant accounting.
-	if opts, ok := getRegisterOptions(payload.Type()); ok && opts.disableTenantCostControl {
-		resumeCtx = multitenant.WithTenantCostControlExemption(resumeCtx)
-	}
-	if alreadyAdopted := r.addAdoptedJob(jobID, s, cancel, resumer); alreadyAdopted {
-		// Not needing the context after all. Avoid leaking resources.
-		cancel()
-		return nil
-	}
-
-	r.metrics.ResumedJobs.Inc(1)
-	if err := r.stopper.RunAsyncTask(resumeCtx, job.taskName(), func(ctx context.Context) {
-		// Wait for the job to finish. No need to print the error because if there
-		// was one it's been set in the job status already.
-		var cleanup func()
-		ctx, cleanup = r.stopper.WithCancelOnQuiesce(ctx)
-		defer cleanup()
-		_ = r.runJob(ctx, resumer, job, status, job.taskName())
-	}); err != nil {
-		r.unregister(jobID)
-		// Also avoid leaking a goroutine in this case.
-		cancel()
-		return err
-	}
-	return nil
+	return job, nil
 }
 
 // addAdoptedJob adds the job to the set of currently running jobs. This set is
