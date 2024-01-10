@@ -265,7 +265,7 @@ func makeTypeIOBuiltin(paramTypes tree.TypeList, returnType *types.T) builtinDef
 				return nil, errUnimplemented
 			},
 			Info:       notUsableInfo,
-			Volatility: volatility.Volatile,
+			Volatility: volatility.Stable,
 			// Ignore validity checks for typeio builtins. We don't
 			// implement these anyway, and they are very hard to special
 			// case.
