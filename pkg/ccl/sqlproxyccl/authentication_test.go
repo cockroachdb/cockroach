@@ -121,7 +121,7 @@ func TestAuthenticateThrottled(t *testing.T) {
 		require.Equal(t, msg, &pgproto3.ErrorResponse{
 			Severity: "FATAL",
 			Code:     "08C00",
-			Message:  "codeProxyRefusedConnection: connection attempt throttled",
+			Message:  "codeProxyRefusedConnection: too many failed authentication attempts",
 			Hint:     throttledErrorHint,
 		})
 
@@ -142,10 +142,10 @@ func TestAuthenticateThrottled(t *testing.T) {
 	_, err := authenticate(proxyToClient, proxyToServer, nil, /* proxyBackendKeyData */
 		func(status throttler.AttemptStatus) error {
 			require.Equal(t, throttler.AttemptInvalidCredentials, status)
-			return throttledError
+			return authThrottledError
 		})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "connection attempt throttled")
+	require.Contains(t, err.Error(), "too many failed authentication attempts")
 
 	proxyToServer.Close()
 	proxyToClient.Close()
