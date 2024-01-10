@@ -81,9 +81,9 @@ var envVars = []string{
 	// NB: This is crucial for chaos tests as we expect changefeeds to see
 	// many retries.
 	"COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true",
-
 	// Enable "strict mode" for span frontier.
 	"COCKROACH_SPAN_FRONTIER_STRICT_MODE_ENABLED=true",
+	"COCKROACH_CHANGEFEED_TESTING_REBALANCING_CHECKS=true",
 }
 
 type cdcTester struct {

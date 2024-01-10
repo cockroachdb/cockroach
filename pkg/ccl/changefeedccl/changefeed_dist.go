@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sort"
 
@@ -37,7 +38,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -566,6 +569,12 @@ type partitionWithBuilder struct {
 	pIdx int
 }
 
+// Setting expensiveReblanceChecksEnabled = true will cause re-balancing to
+// panic if the output list of partitions does not cover the same keys as the
+// input list of partitions.
+var expensiveReblanceChecksEnabled = buildutil.CrdbTestBuild || envutil.EnvOrDefaultBool(
+	"COCKROACH_CHANGEFEED_TESTING_REBALANCING_CHECKS", false)
+
 func rebalanceSpanPartitions(
 	ctx context.Context, ri rangeIterator, sensitivity float64, partitions []sql.SpanPartition,
 ) ([]sql.SpanPartition, error) {
@@ -670,5 +679,35 @@ func rebalanceSpanPartitions(
 		partitions[b.pIdx] = sql.MakeSpanPartition(
 			b.p.SQLInstanceID, b.g.Slice(), true, b.numRanges)
 	}
+
+	verifyPartitionsIfExpensiveChecksEnabled(builders, partitions)
+
 	return partitions, nil
+}
+
+// verifyPartitionsIfExpensiveChecksEnabled panics if the output partitions
+// cover a different set of keys than the input partitions.
+func verifyPartitionsIfExpensiveChecksEnabled(
+	builderWithInputSpans []partitionWithBuilder, outputPartitions []sql.SpanPartition,
+) {
+	if expensiveReblanceChecksEnabled {
+		var originalSpansG roachpb.SpanGroup
+		var originalSpansArr []roachpb.Span
+		var newSpansG roachpb.SpanGroup
+		var newSpansArr []roachpb.Span
+		for _, b := range builderWithInputSpans {
+			originalSpansG.Add(b.p.Spans...)
+			originalSpansArr = append(originalSpansArr, b.p.Spans...)
+		}
+		for _, p := range outputPartitions {
+			newSpansG.Add(p.Spans...)
+			newSpansArr = append(newSpansArr, p.Spans...)
+		}
+		// If the original spans enclose the new spans and the new spans enclose the original spans,
+		// then the two groups must cover exactly the same keys.
+		if !originalSpansG.Encloses(newSpansArr...) || !newSpansG.Encloses(originalSpansArr...) {
+			panic(fmt.Sprintf("incorrect rebalance. input spans: %v, output spans: %v",
+				originalSpansArr, newSpansArr))
+		}
+	}
 }
