@@ -48,7 +48,7 @@ func (s *llrbFrontierEntry) Range() interval.Range {
 }
 
 func (s *llrbFrontierEntry) String() string {
-	return fmt.Sprintf("[%s @ %s]", s.span, s.ts)
+	return fmt.Sprintf("[%s@%s]", s.span, s.ts)
 }
 
 // llrbFrontierHeap implements heap.Interface and holds `llrbFrontierEntry`s. Entries
@@ -358,7 +358,8 @@ func (f *llrbFrontier) insert(span roachpb.Span, insertTS hlc.Timestamp) error {
 
 	if spanMustBeTracked {
 		if todoRange.Start.Compare(todoRange.End) < 0 {
-			return errors.Newf("span %s is not a sub-span of this frontier (remaining %s)", span, todoRange)
+			return errors.Newf("span %s is not a sub-span of this frontier (remaining {%s-%s}) (frontier %s)",
+				span, todoRange.Start, todoRange.End, f.String())
 		}
 	}
 

@@ -2,6 +2,27 @@ module github.com/cockroachdb/cockroach
 
 go 1.21
 
+// golang.org/x/* packages are maintained and curated by the go project, just
+// without the backwards compatibility promises the standard library, and thus
+// should be treated like part of the go standard library. Accordingly upgrades
+// to golang.org/x packages are treated similarly to go upgrades: they’re
+// considered sweeping changes, are avoided in backports, and following the
+// merge of any upgrades we should communicate to all teams to be on the lookout
+// for behavior changes, just like we would after a go upgrade.
+require (
+	golang.org/x/crypto v0.16.0
+	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df
+	golang.org/x/exp/typeparams v0.0.0-20221208152030-732eee02a75a // indirect
+	golang.org/x/mod v0.14.0 // indirect
+	golang.org/x/net v0.19.0
+	golang.org/x/oauth2 v0.5.0
+	golang.org/x/sync v0.5.0
+	golang.org/x/sys v0.15.0
+	golang.org/x/text v0.14.0
+	golang.org/x/time v0.3.0
+	golang.org/x/tools v0.16.0
+)
+
 // The following dependencies are key infrastructure dependencies and
 // should be updated as their own commit (i.e. not bundled with a dep
 // upgrade to something else), and reviewed by a broader community of
@@ -16,17 +37,6 @@ require (
 	github.com/google/btree v1.0.1
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
 	github.com/google/uuid v1.3.0
-	golang.org/x/crypto v0.16.0
-	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df
-	golang.org/x/exp/typeparams v0.0.0-20221208152030-732eee02a75a // indirect
-	golang.org/x/mod v0.14.0 // indirect
-	golang.org/x/net v0.19.0
-	golang.org/x/oauth2 v0.5.0
-	golang.org/x/sync v0.5.0
-	golang.org/x/sys v0.15.0
-	golang.org/x/text v0.14.0
-	golang.org/x/time v0.3.0
-	golang.org/x/tools v0.16.0
 	google.golang.org/api v0.110.0
 	google.golang.org/genproto v0.0.0-20230227214838-9b19f0bdc514
 	google.golang.org/grpc v1.53.0
