@@ -1932,8 +1932,8 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				)
 				require.NoError(t, err)
 
-				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCacheWithSpeculativeLease(
-					ctx, rep2, &desc2,
+				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(
+					ctx, &roachpb.Lease{Replica: rep2}, &desc2,
 				)
 				require.True(t, updatedLeaseholder)
 				require.Equal(t, &desc2, tok.Desc())

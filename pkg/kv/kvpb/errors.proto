@@ -45,15 +45,6 @@ message NotLeaseHolderError {
   // The replica the error originated from. Used in the error's string
   // representation, if known.
   optional roachpb.ReplicaDescriptor replica = 1 [(gogoproto.nullable) = false];
-  // The lease holder, if known.
-  //
-  // This field was only ever meaningful if the full lease was not known, but
-  // when constructing this error there was a guess about who the leaseholder
-  // may be. The same idea applied to speculative leases (which have unset
-  // sequence numbers). In a bid to unify these two cases, from v22.2, we stop
-  // making use of this field.
-  // TODO(arul): remove this field in 23.1.
-  optional roachpb.ReplicaDescriptor deprecated_lease_holder = 2;
   // The current lease, if known.
   //
   // It's possible for leases returned here to represent speculative leases, not
@@ -73,6 +64,8 @@ message NotLeaseHolderError {
   // because the lease under which its application was attempted is different
   // than the lease under which it had been proposed.
   optional string custom_msg = 5 [(gogoproto.nullable) = false];
+
+  reserved 2;
 }
 
 // A NodeUnavailableError indicates that the sending gateway can
