@@ -42,11 +42,27 @@ type Progress struct {
 	// before and stops sending any replication message.
 	State StateType
 
-	// PendingSnapshot is used in StateSnapshot.
-	// If there is a pending snapshot, the pendingSnapshot will be set to the
-	// index of the snapshot. If pendingSnapshot is set, the replication process of
-	// this Progress will be paused. raft will not resend snapshot until the pending one
-	// is reported to be failed.
+	// PendingSnapshot is used in StateSnapshot and tracks the last index of the
+	// leader at the time at which it realized a snapshot was necessary. This
+	// matches the index in the MsgSnap message emitted from raft.
+	//
+	// While there is a pending snapshot, replication to the follower is paused.
+	// The follower will transition back to StateReplicate if the leader
+	// receives an MsgAppResp from it that reconnects the follower to the
+	// leader's log (such an MsgAppResp is emitted when the follower applies a
+	// snapshot). It may be surprising that PendingSnapshot is not taken into
+	// account here, but consider that complex systems may delegate the sending
+	// of snapshots to alternative datasources (i.e. not the leader). In such
+	// setups, it is difficult to manufacture a snapshot at a particular index
+	// requested by raft and the actual index may be ahead or behind. This
+	// should be okay, as long as the snapshot allows replication to resume.
+	//
+	// The follower will transition to StateProbe if ReportSnapshot is called on
+	// the leader; if SnapshotFinish is passed then PendingSnapshot becomes the
+	// basis for the next attempt to append. In practice, the first mechanism is
+	// the one that is relevant in most cases. However, if this MsgAppResp is
+	// lost (fallible network) then the second mechanism ensures that in this
+	// case the follower does not erroneously remain in StateSnapshot.
 	PendingSnapshot uint64
 
 	// RecentActive is true if the progress is recently active. Receiving any messages
