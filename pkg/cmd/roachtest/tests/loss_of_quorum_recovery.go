@@ -481,7 +481,7 @@ func runHalfOnlineRecoverLossOfQuorum(
 		if err = timeutil.RunWithTimeout(ctx, "wait-for-restart", 2*time.Minute,
 			func(ctx context.Context) error {
 				for {
-					res, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(controller), verifyCommand)
+					res, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(controller)), verifyCommand)
 					if res.RemoteExitStatus == 0 {
 						if ctx.Err() != nil {
 							return &recoveryImpossibleError{testOutcome: restartFailed}

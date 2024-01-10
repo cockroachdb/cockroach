@@ -938,7 +938,7 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 	pageSize := 7
 
 	for len(updatedMap) < 10 && pagesFetched < 5 {
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), kafkaNode,
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(kafkaNode),
 			kafka.makeCommand("kafka-avro-console-consumer",
 				fmt.Sprintf("--offset=%d", pagesFetched*pageSize),
 				"--partition=0",
@@ -1570,7 +1570,7 @@ func registerCDC(r registry.Registry) {
 			// topics but fetch metadata only for a minimal set of necessary topics.
 			// client/metadata fetching metadata for all topics from broker
 			results, err := ct.cluster.RunWithDetails(ct.ctx, t.L(),
-				ct.cluster.Range(1, c.Spec().NodeCount-1),
+				option.WithNodes(ct.cluster.Range(1, c.Spec().NodeCount-1)),
 				"grep \"client/metadata fetching metadata for\" logs/cockroach.log")
 			if err != nil {
 				t.Fatal(err)
@@ -2146,7 +2146,7 @@ func (k kafkaManager) configureHydraOauth(ctx context.Context) (string, string) 
 		err := k.c.RunE(ctx, option.WithNodes(k.nodes), `/home/ubuntu/hydra-serve.sh`)
 		return errors.Wrap(err, "hydra failed")
 	})
-	result, err := k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, "/home/ubuntu/hydra create oauth2-client",
+	result, err := k.c.RunWithDetailsSingleNode(ctx, k.t.L(), option.WithNodes(k.nodes), "/home/ubuntu/hydra create oauth2-client",
 		"-e", "http://localhost:4445",
 		"--grant-type", "client_credentials",
 		"--token-endpoint-auth-method", "client_secret_basic",

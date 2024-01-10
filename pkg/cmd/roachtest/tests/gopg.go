@@ -104,7 +104,7 @@ func registerGopg(r registry.Registry) {
 		// code escape sequences.
 		const removeColorCodes = `sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g"`
 
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
 			fmt.Sprintf(
 				`cd %s && PGPORT={pgport:1} PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -v ./... 2>&1 | %s | tee %s`,
 				destPath, removeColorCodes, resultsFilePath),
@@ -132,7 +132,7 @@ func registerGopg(r registry.Registry) {
 
 		// Now we parse the output of top-level tests.
 
-		result, err = c.RunWithDetailsSingleNode(ctx, t.L(), node,
+		result, err = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
 			// We pipe the test output into go-junit-report tool which will output
 			// it in XML format.
 			fmt.Sprintf(`cd %s &&

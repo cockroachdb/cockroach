@@ -125,7 +125,7 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 		result, err := c.RunWithDetailsSingleNode(
 			ctx,
 			t.L(),
-			node,
+			option.WithNodes(node),
 			`cd /mnt/data1/knex/ && DB='cockroachdb' npm test`,
 		)
 		rawResultsStr := result.Stdout + result.Stderr
