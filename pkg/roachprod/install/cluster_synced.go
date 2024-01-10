@@ -2836,6 +2836,10 @@ func (c *SyncedCluster) ParallelE(
 	if config.MaxConcurrency > 0 && options.Concurrency > config.MaxConcurrency {
 		options.Concurrency = config.MaxConcurrency
 	}
+	retryOptions := options.RetryOptions
+	if options.DisableRetries {
+		retryOptions = nil
+	}
 
 	completed := make(chan ParallelResult, count)
 	errorChannel := make(chan error)
@@ -2856,7 +2860,7 @@ func (c *SyncedCluster) ParallelE(
 			// This is rarely expected to return an error, but we fail fast in case.
 			// Command errors, which are far more common, will be contained within the result.
 			res, err := runWithMaybeRetry(
-				groupCtx, l, options.RetryOptions, options.ShouldRetryFn,
+				groupCtx, l, retryOptions, options.ShouldRetryFn,
 				func(ctx context.Context) (*RunResultDetails, error) { return fn(ctx, options.Nodes[i]) },
 			)
 			if err != nil {

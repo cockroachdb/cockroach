@@ -13,8 +13,11 @@ package install
 import "github.com/cockroachdb/cockroach/pkg/util/retry"
 
 type RunOptions struct {
-	// RetryOptions are the retry options
+	// RetryOptions are the retry options. The default roachprod retry
+	// options (DefaultRetryOpt) will be used, if left nil.
 	RetryOptions *retry.Options
+	// DisableRetries will disable retries. The default behaviour is to retry.
+	DisableRetries bool
 	// ShouldRetryFn is only applicable when RetryOptions is not nil
 	// and specifies a function to be called in the case that a retry
 	// is about to be performed. A user can provide a function which, for
@@ -59,7 +62,7 @@ func (r RunOptions) WithRetryOpts(retryOpts retry.Options) RunOptions {
 }
 
 func (r RunOptions) WithRetryDisabled() RunOptions {
-	r.RetryOptions = nil
+	r.DisableRetries = true
 	return r
 }
 
