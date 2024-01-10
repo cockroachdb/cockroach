@@ -43,6 +43,82 @@ var (
 // Remove unused warning.
 var _ = colexecerror.InternalError
 
+const minMaxNumOverloads = 11
+
+func init() {
+	// Sanity check the hard-coded number of overloads.
+	var numOverloads int
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	if numOverloads != minMaxNumOverloads {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"minMaxNumOverloads should be updated: expected %d, found %d", numOverloads, minMaxNumOverloads,
+		))
+	}
+}
+
+// minMaxOverloadOffset returns the offset for this particular type overload
+// within contiguous slice of allocators for this aggregate function.
+func minMaxOverloadOffset(t *types.T) int {
+	var offset int
+	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family())
+	if canonicalTypeFamily == types.BoolFamily {
+		return offset
+	}
+	offset += 1
+	if canonicalTypeFamily == types.BytesFamily {
+		return offset
+	}
+	offset += 1
+	if canonicalTypeFamily == types.DecimalFamily {
+		return offset
+	}
+	offset += 1
+	if canonicalTypeFamily == types.IntFamily {
+		if t.Width() == 16 {
+			return offset
+		}
+		offset++
+		if t.Width() == 32 {
+			return offset
+		}
+		offset++
+		return offset
+	}
+	offset += 3
+	if canonicalTypeFamily == types.FloatFamily {
+		return offset
+	}
+	offset += 1
+	if canonicalTypeFamily == types.TimestampTZFamily {
+		return offset
+	}
+	offset += 1
+	if canonicalTypeFamily == types.IntervalFamily {
+		return offset
+	}
+	offset += 1
+	if canonicalTypeFamily == types.JsonFamily {
+		return offset
+	}
+	offset += 1
+	if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
+		return offset
+	}
+	offset += 1
+	colexecerror.InternalError(errors.AssertionFailedf("didn't find overload offset for %s", t.SQLStringForError()))
+	return 0
+}
+
 func newMinOrderedAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,
 ) aggregateFuncAlloc {

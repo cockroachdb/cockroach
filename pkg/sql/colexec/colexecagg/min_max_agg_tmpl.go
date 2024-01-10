@@ -61,7 +61,33 @@ func _ASSIGN_CMP(_, _, _, _, _, _ string) bool {
 	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
+// _ALLOC_CODE is the template variable that is replaced in agg_gen_util.go by
+// the template code for sharing allocator objects.
+const _ALLOC_CODE = 0
+
 // */}}
+
+// {{if eq "_AGGKIND" "Ordered"}}
+
+const minMaxNumOverloads = 11
+
+// {{end}}
+
+// {{range .}}
+// {{with .Overloads}}
+
+var _ = _ALLOC_CODE
+
+// {{/*
+//      The range loop is over an array of two items corresponding to min
+//      and max functions, but we want to generate the code for sharing
+//      allocators only once, so we break out of the loop.
+// */}}
+
+// {{break}}
+
+// {{end}}
+// {{end}}
 
 // {{range .}}
 // {{$agg := .Agg}}
