@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -30,6 +31,7 @@ var (
 	_ tree.AggType
 	_ apd.Context
 	_ duration.Duration
+	_ = typeconv.TypeFamilyToCanonicalTypeFamily
 )
 
 func newSumIntWindowAggAlloc(
