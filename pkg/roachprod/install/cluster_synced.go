@@ -2398,6 +2398,16 @@ func (c *SyncedCluster) Get(
 				dest = filepath.Join(filepath.Dir(dest), base)
 			}
 
+			// Expand the source to allow, for example, getting from {store-dir}.
+			e := expander{
+				node: nodes[i],
+			}
+			src, err := e.expand(ctx, l, c, src)
+			if err != nil {
+				results <- result{i, err}
+				return
+			}
+
 			progress := func(p float64) {
 				linesMu.Lock()
 				defer linesMu.Unlock()
