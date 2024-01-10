@@ -145,12 +145,6 @@ var (
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaDistSenderInLeaseTransferBackoffsCount = metric.Metadata{
-		Name:        "distsender.errors.inleasetransferbackoffs",
-		Help:        "Number of times backed off due to NotLeaseHolderErrors during lease transfer",
-		Measurement: "Errors",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaDistSenderRangeLookups = metric.Metadata{
 		Name:        "distsender.rangelookups",
 		Help:        "Number of range lookups",
@@ -246,9 +240,6 @@ const (
 	// RangeLookupPrefetchCount is the maximum number of range descriptors to prefetch
 	// during range lookups.
 	RangeLookupPrefetchCount = 8
-	// The maximum number of times a replica is retried when it repeatedly returns
-	// stale lease info.
-	sameReplicaRetryLimit = 10
 )
 
 var rangeDescriptorCacheSize = settings.RegisterIntSetting(
@@ -307,7 +298,6 @@ type DistSenderMetrics struct {
 	LocalSentCount                     *metric.Counter
 	NextReplicaErrCount                *metric.Counter
 	NotLeaseHolderErrCount             *metric.Counter
-	InLeaseTransferBackoffs            *metric.Counter
 	RangeLookups                       *metric.Counter
 	SlowRPCs                           *metric.Gauge
 	MethodCounts                       [kvpb.NumMethods]*metric.Counter
@@ -339,7 +329,6 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		CrossZoneBatchResponseBytes:        metric.NewCounter(metaDistSenderCrossZoneBatchResponseBytes),
 		NextReplicaErrCount:                metric.NewCounter(metaTransportSenderNextReplicaErrCount),
 		NotLeaseHolderErrCount:             metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
-		InLeaseTransferBackoffs:            metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
 		RangeLookups:                       metric.NewCounter(metaDistSenderRangeLookups),
 		SlowRPCs:                           metric.NewGauge(metaDistSenderSlowRPCs),
 		DistSenderRangeFeedMetrics:         makeDistSenderRangeFeedMetrics(),
@@ -2256,7 +2245,6 @@ func (ds *DistSender) sendToReplicas(
 
 	// Rearrange the replicas so that they're ordered according to the routing
 	// policy.
-	var leaseholderFirst bool
 	switch ba.RoutingPolicy {
 	case kvpb.RoutingPolicy_LEASEHOLDER:
 		// First order by latency, then move the leaseholder to the front of the
@@ -2271,7 +2259,6 @@ func (ds *DistSender) sendToReplicas(
 		}
 		if idx != -1 {
 			replicas.MoveToFront(idx)
-			leaseholderFirst = true
 		} else {
 			// The leaseholder node's info must have been missing from gossip when we
 			// created replicas.
@@ -2298,13 +2285,6 @@ func (ds *DistSender) sendToReplicas(
 	}
 	defer transport.Release()
 
-	// inTransferRetry is used to slow down retries in cases where an ongoing
-	// lease transfer is suspected.
-	// TODO(andrei): now that requests wait on lease transfers to complete on
-	// outgoing leaseholders instead of immediately redirecting, we should
-	// rethink this backoff policy.
-	inTransferRetry := retry.StartWithCtx(ctx, ds.rpcRetryOptions)
-	inTransferRetry.Next() // The first call to Next does not block.
 	var sameReplicaRetries int
 	var prevReplica roachpb.ReplicaDescriptor
 
@@ -2576,57 +2556,10 @@ func (ds *DistSender) sendToReplicas(
 						// (possibly because it hasn't applied its lease yet). Perhaps that
 						// lease expires and someone else gets a new one, so by moving on we
 						// get out of possibly infinite loops.
-						if !lh.IsSame(curReplica) || sameReplicaRetries < sameReplicaRetryLimit {
-							moved := transport.MoveToFront(*lh)
-							if !moved {
-								// The transport always includes the client's view of the
-								// leaseholder when it's constructed. If the leaseholder can't
-								// be found on the transport then it must be the case that the
-								// routing was updated with lease information that is not
-								// compatible with the range descriptor that was used to
-								// construct the transport. A client may have an arbitrarily
-								// stale view of the leaseholder, but it is never expected to
-								// regress. As such, advancing through each replica on the
-								// transport until it's exhausted is unlikely to achieve much.
-								//
-								// We bail early by returning a SendError. The expectation is
-								// for the client to retry with a fresher eviction token.
-								log.VEventf(
-									ctx, 2, "transport incompatible with updated routing; bailing early",
-								)
-								return nil, newSendError(errors.Wrap(tErr, "leaseholder not found in transport; last error"))
-							}
+						if updatedLeaseholder {
+							return nil, newSendError(errors.Wrap(tErr, "leaseholder changed, retry with updated cache"))
 						}
 					}
-					// Check whether the request was intentionally sent to a follower
-					// replica to perform a follower read. In such cases, the follower
-					// may reject the request with a NotLeaseHolderError if it does not
-					// have a sufficient closed timestamp. In response, we should
-					// immediately redirect to the leaseholder, without a backoff
-					// period.
-					intentionallySentToFollower := first && !leaseholderFirst
-					// See if we want to backoff a little before the next attempt. If
-					// the lease info we got is stale and we were intending to send to
-					// the leaseholder, we backoff because it might be the case that
-					// there's a lease transfer in progress and the would-be leaseholder
-					// has not yet applied the new lease.
-					//
-					// TODO(arul): The idea here is for the client to not keep sending
-					// the would-be leaseholder multiple requests and backoff a bit to let
-					// it apply the its lease. Instead of deriving this information like
-					// we do above, we could instead check if we're retrying the same
-					// leaseholder (i.e, if the leaseholder on the routing is the same as
-					// the replica we just tried), in which case we should backoff. With
-					// this scheme we'd no longer have to track "updatedLeaseholder" state
-					// when syncing the NLHE with the range cache.
-					shouldBackoff := !updatedLeaseholder && !intentionallySentToFollower
-					if shouldBackoff {
-						ds.metrics.InLeaseTransferBackoffs.Inc(1)
-						log.VErrEventf(ctx, 2, "backing off due to NotLeaseHolderErr with stale info")
-					} else {
-						inTransferRetry.Reset() // The following Next() call will not block.
-					}
-					inTransferRetry.Next()
 				}
 			default:
 				if ambiguousError != nil {
