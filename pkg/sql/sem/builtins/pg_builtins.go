@@ -1992,15 +1992,58 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	// pg_blocking_pids produces an array of the PIDs blocking the given PID.
+	//
+	// The reported PIDs are those that hold a lock conflicting with the given
+	// blocked_pid's current request (hard block), or are requesting such a
+	// lock and are ahead of blocked_pid in the lock's wait queue (soft
+	// block).
 	"pg_blocking_pids": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{},
+			Types: tree.ParamTypes{
+				{Name: "blocked_pid", Typ: types.Int4},
+			},
 			ReturnType: tree.FixedReturnType(types.IntArray),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// TODO(nvanbenschoten): implement this using a query on
+				// crdb_internal.cluster_locks.
 				return tree.NewDArray(types.Int), nil
 			},
 			Info:       notUsableInfo,
-			Volatility: volatility.Stable,
+			Volatility: volatility.Volatile,
+		},
+	),
+
+	// pg_isolation_test_session_is_blocked is a support function for
+	// Postgres' isolationtester.
+	//
+	// The function checks if the specified PID is blocked by any of the PIDs
+	// listed in the second argument. Currently, this only looks for blocking
+	// caused by waiting for locks.
+	//
+	// This is an undocumented function intended for use by the isolation
+	// tester, and may change in future releases as required for testing
+	// purposes.
+	"pg_isolation_test_session_is_blocked": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "blocked_pid", Typ: types.Int4},
+				{Name: "interesting_pids", Typ: types.IntArray},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Body: `WITH blocked_txn AS (
+						 		SELECT kv_txn::UUID FROM crdb_internal.cluster_sessions WHERE kv_txn IS NOT NULL AND pg_backend_pid = $1
+						 ), blocking_txns AS (
+						 		SELECT kv_txn::UUID FROM crdb_internal.cluster_sessions WHERE kv_txn IS NOT NULL AND pg_backend_pid = ANY ($2)
+						 ), blocked_keys AS (
+						 		SELECT lock_key FROM crdb_internal.cluster_locks WHERE txn_id = (SELECT kv_txn FROM blocked_txn) AND contended AND NOT granted
+						 ), blocking_keys AS (
+						 		SELECT lock_key FROM crdb_internal.cluster_locks WHERE txn_id = ANY (SELECT kv_txn FROM blocking_txns) AND contended AND granted
+						 )
+						 SELECT count(*) > 0 FROM blocked_keys JOIN blocking_keys USING (lock_key)`,
+			Info:       notUsableInfo,
+			Volatility: volatility.Volatile,
+			Language:   tree.RoutineLangSQL,
 		},
 	),
 
