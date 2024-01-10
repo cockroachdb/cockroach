@@ -19,20 +19,25 @@ import (
 	"math/rand"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExplainAnalyzeDebugWithTxnRetries(t *testing.T) {
@@ -448,6 +453,34 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 	})
 }
 
+func getBundleDownloadURL(t *testing.T, text string) string {
+	reg := regexp.MustCompile("http://[a-zA-Z0-9.:]*/_admin/v1/stmtbundle/[0-9]*")
+	url := reg.FindString(text)
+	if url == "" {
+		t.Fatalf("couldn't find URL in response '%s'", text)
+	}
+	return url
+}
+
+func downloadAndUnzipBundle(t *testing.T, url string) *zip.Reader {
+	httpClient := httputil.NewClientWithTimeout(30 * time.Second)
+	// Download the zip to a BytesBuffer.
+	resp, err := httpClient.Get(context.Background(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, resp.Body)
+
+	unzip, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Errorf("%q\n", buf.String())
+		t.Fatal(err)
+	}
+	return unzip
+}
+
 // checkBundle searches text strings for a bundle URL and then verifies that the
 // bundle contains the expected files. The expected files are passed as an
 // arbitrary number of strings; each string contains one or more filenames
@@ -464,28 +497,9 @@ func checkBundle(
 	expectErrors bool,
 	expectedFiles ...string,
 ) {
-	httpClient := httputil.NewClientWithTimeout(30 * time.Second)
-
 	t.Helper()
-	reg := regexp.MustCompile("http://[a-zA-Z0-9.:]*/_admin/v1/stmtbundle/[0-9]*")
-	url := reg.FindString(text)
-	if url == "" {
-		t.Fatalf("couldn't find URL in response '%s'", text)
-	}
-	// Download the zip to a BytesBuffer.
-	resp, err := httpClient.Get(context.Background(), url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, resp.Body)
-
-	unzip, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
-	if err != nil {
-		t.Errorf("%q\n", buf.String())
-		t.Fatal(err)
-	}
+	url := getBundleDownloadURL(t, text)
+	unzip := downloadAndUnzipBundle(t, url)
 
 	// Make sure the bundle contains the expected list of files.
 	var files []string
@@ -544,4 +558,124 @@ func checkBundle(
 	if fmt.Sprint(files) != fmt.Sprint(expList) {
 		t.Errorf("unexpected list of files:\n  %v\nexpected:\n  %v", files, expList)
 	}
+}
+
+// TestExplainClientTime verifies that "client time" execution statistic is
+// collected correctly. In particular, it executes a query that fetches two rows
+// via the limited portal model and adds a sleep between reading two rows. As a
+// result, it introduces a client time that should show up in the stmt bundle
+// for this query execution.
+func TestExplainClientTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: true,
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create a table with two rows and insert the diagnostics request for our
+	// target query.
+	testQuery := `SELECT * FROM t`
+	runner.Exec(t, `CREATE TABLE t (k PRIMARY KEY) AS SELECT generate_series(1, 2)`)
+	runner.Exec(t, fmt.Sprintf(`SELECT crdb_internal.request_statement_bundle('%s', '', 0.0::FLOAT, 0::INTERVAL, 0::INTERVAL)`, testQuery))
+
+	// Connect to the cluster via the PGWire client.
+	p, err := pgtest.NewPGTest(ctx, s.AdvSQLAddr(), username.RootUser)
+	require.NoError(t, err)
+
+	// Disable multiple active portals execution model since for some reason we
+	// don't have the plan then. This feature is in preview mode and currently
+	// disabled.
+	// TODO(#118159): investigate this.
+	require.NoError(t, p.SendOneLine(`Query {"String": "SET multiple_active_portals_enabled = false"}`))
+	until := pgtest.ParseMessages("ReadyForQuery")
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	// Execute the target query within the txn but only read one row.
+	require.NoError(t, p.SendOneLine(`Query {"String": "BEGIN"}`))
+	require.NoError(t, p.SendOneLine(fmt.Sprintf(`Parse {"Query": "%s"}`, testQuery)))
+	require.NoError(t, p.SendOneLine(`Bind`))
+	require.NoError(t, p.SendOneLine(`Execute {"MaxRows": 1}`))
+	require.NoError(t, p.SendOneLine(`Sync`))
+
+	// We need to receive until two 'ReadyForQuery' messages are returned (the
+	// first one is for "COMMIT" query and the second one is for the limited
+	// portal execution).
+	until = pgtest.ParseMessages("ReadyForQuery\nReadyForQuery")
+	msgs1, err := p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	// Now inject some client time.
+	time.Sleep(time.Second)
+
+	// Now read the remaining row and commit the txn.
+	require.NoError(t, p.SendOneLine(`Execute`))
+	require.NoError(t, p.SendOneLine(`Sync`))
+	require.NoError(t, p.SendOneLine(`Query {"String": "COMMIT"}`))
+
+	// We need to receive until two 'ReadyForQuery' messages are returned (the
+	// first one is for completing the target query and the second one is for
+	// "COMMIT" query).
+	until = pgtest.ParseMessages("ReadyForQuery\nReadyForQuery")
+	msgs2, err := p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	received := pgtest.MsgsToJSONWithIgnore(append(msgs1, msgs2...), &datadriven.TestData{})
+	t.Log(received)
+
+	// We should have collected the stmt bundle for the target query execution
+	// (and there should only be one stmt bundle in the test server).
+	r := runner.QueryRow(t, "SELECT id, statement_fingerprint from system.statement_diagnostics LIMIT 1")
+	var id int
+	var stmtFingerprint string
+	r.Scan(&id, &stmtFingerprint)
+	// Sanity check that we got the ID for our bundle.
+	require.Equal(t, testQuery, stmtFingerprint)
+
+	// We need to come up with the url to download the bundle from. To do that,
+	// we collect another stmt bundle, and in the output we'll have the url to
+	// this other stmt bundle of the form:
+	//   Direct link: http://127.0.0.1:65031/_admin/v1/stmtbundle/936793560822546433
+	// We'll need to replace the last part with the ID of our bundle to get our
+	// url.
+	rows := runner.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 1")
+	urlTemplate := getBundleDownloadURL(t, sqlutils.MatrixToStr(rows))
+	prefixLength := strings.LastIndex(urlTemplate, "/")
+	url := urlTemplate[:prefixLength] + "/" + strconv.Itoa(id)
+
+	// Now download the stmt bundle, unzip it and find plan.txt file.
+	unzip := downloadAndUnzipBundle(t, url)
+	var contents string
+	for _, f := range unzip.File {
+		if f.Name == "plan.txt" {
+			r, err := f.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			bytes, err := io.ReadAll(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			contents = string(bytes)
+			t.Logf("contents of plan.txt\n%s", contents)
+		}
+	}
+
+	// Finally, the meat of the test - ensure that "client time" execution
+	// statistic is at least 1s.
+	clientTimeRegEx := regexp.MustCompile(`client time: ([\d\.]+)s`)
+	matches := clientTimeRegEx.FindStringSubmatch(contents)
+	if len(matches) == 0 {
+		t.Fatal("didn't find the client time in the contents")
+	}
+	clientTime, err := strconv.ParseFloat(matches[1], 64)
+	require.NoError(t, err)
+	require.LessOrEqual(t, 1.0, clientTime)
 }

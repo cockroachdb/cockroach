@@ -832,6 +832,9 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 			// vectorized plans.
 			ob.AddRUEstimate(queryStats.RUEstimate)
 		}
+		if queryStats.ClientTime != 0 {
+			ob.AddClientTime(queryStats.ClientTime)
+		}
 	}
 
 	qos := sessiondatapb.Normal
