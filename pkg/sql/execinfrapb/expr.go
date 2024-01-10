@@ -51,6 +51,46 @@ func (v *ivarBinder) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) 
 
 func (*ivarBinder) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
+// DeserializeExpr deserializes expr, binds the indexed variables to the
+// provided IndexedVarHelper, and evaluates any constants in the expression.
+//
+// evalCtx will not be mutated.
+func DeserializeExpr(
+	ctx context.Context,
+	expr string,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	vars *tree.IndexedVarHelper,
+) (tree.TypedExpr, error) {
+	if expr == "" {
+		return nil, nil
+	}
+
+	deserializedExpr, err := processExpression(ctx, Expression{Expr: expr}, evalCtx, semaCtx, vars)
+	if err != nil {
+		return deserializedExpr, err
+	}
+	var t transform.ExprTransformContext
+	if t.AggregateInExpr(ctx, deserializedExpr, evalCtx.SessionData().SearchPath) {
+		return nil, errors.Errorf("expression '%s' has aggregate", deserializedExpr)
+	}
+	return deserializedExpr, nil
+}
+
+// RunFilter runs a filter expression and returns whether the filter passes.
+func RunFilter(ctx context.Context, filter tree.TypedExpr, evalCtx *eval.Context) (bool, error) {
+	if filter == nil {
+		return true, nil
+	}
+
+	d, err := eval.Expr(ctx, evalCtx, filter)
+	if err != nil {
+		return false, err
+	}
+
+	return d == tree.DBoolTrue, nil
+}
+
 // processExpression parses the string expression inside an Expression,
 // and associates ordinal references (@1, @2, etc) with the given helper.
 //
@@ -274,32 +314,6 @@ func (eh *exprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return &n
 }
 
-// DeserializeExpr deserializes expr, binds the indexed variables to the
-// provided IndexedVarHelper, and evaluates any constants in the expression.
-//
-// evalCtx will not be mutated.
-func DeserializeExpr(
-	ctx context.Context,
-	expr string,
-	semaCtx *tree.SemaContext,
-	evalCtx *eval.Context,
-	vars *tree.IndexedVarHelper,
-) (tree.TypedExpr, error) {
-	if expr == "" {
-		return nil, nil
-	}
-
-	deserializedExpr, err := processExpression(ctx, Expression{Expr: expr}, evalCtx, semaCtx, vars)
-	if err != nil {
-		return deserializedExpr, err
-	}
-	var t transform.ExprTransformContext
-	if t.AggregateInExpr(ctx, deserializedExpr, evalCtx.SessionData().SearchPath) {
-		return nil, errors.Errorf("expression '%s' has aggregate", deserializedExpr)
-	}
-	return deserializedExpr, nil
-}
-
 // init initializes the exprHelper.
 func (eh *exprHelper) init(
 	ctx context.Context, types []*types.T, semaCtx *tree.SemaContext, evalCtx *eval.Context,
@@ -341,20 +355,6 @@ func (eh *exprHelper) evalFilter(
 	pass, err := RunFilter(ctx, expr, eh.evalCtx)
 	eh.evalCtx.PopIVarContainer()
 	return pass, err
-}
-
-// RunFilter runs a filter expression and returns whether the filter passes.
-func RunFilter(ctx context.Context, filter tree.TypedExpr, evalCtx *eval.Context) (bool, error) {
-	if filter == nil {
-		return true, nil
-	}
-
-	d, err := eval.Expr(ctx, evalCtx, filter)
-	if err != nil {
-		return false, err
-	}
-
-	return d == tree.DBoolTrue, nil
 }
 
 // eval - given an expression and a row - evaluates the wrapped expression and
