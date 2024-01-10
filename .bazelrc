@@ -13,12 +13,13 @@ build --enable_platform_specific_config
 
 # Define a set up flag aliases, so people can use `--cross` instead of the
 # longer `//build/toolchains:cross_flag`.
+build --flag_alias=bazel_code_coverage=//build/toolchains:bazel_code_coverage_flag
 build --flag_alias=crdb_test=//build/toolchains:crdb_test_flag
 build --flag_alias=crdb_test_off=//build/toolchains:crdb_test_off_flag
 build --flag_alias=cross=//build/toolchains:cross_flag
 build --flag_alias=dev=//build/toolchains:dev_flag
-build --flag_alias=bazel_code_coverage=//build/toolchains:bazel_code_coverage_flag
 build --flag_alias=force_build_cdeps=//build/toolchains:force_build_cdeps_flag
+build --flag_alias=heavy=//build/toolchains:heavy_flag
 build --flag_alias=lintonbuild=//build/toolchains:nogo_flag
 build --flag_alias=nolintonbuild=//build/toolchains:nonogo_explicit_flag
 
@@ -26,6 +27,7 @@ build:crdb_test_off --crdb_test_off
 build:cross --cross
 build:dev --dev
 build:force_build_cdeps --force_build_cdeps
+build:heavy --heavy
 build:lintonbuild --lintonbuild
 build:nolintonbuild --nolintonbuild
 # Note: nonogo is classically the name of the nolintonbuild configuration.
@@ -50,6 +52,7 @@ test:test --test_env=TZ=
 # Note: these timeout values are used indirectly in `build/teamcity/cockroach/ci/tests/testrace_impl.sh`.
 # If those values are updated, the script should be updated accordingly.
 test:race --test_timeout=1200,6000,18000,72000
+test:race --heavy
 
 # CI uses a custom timeout for enormous targets.
 test:use_ci_timeouts --test_timeout=60,300,900,900

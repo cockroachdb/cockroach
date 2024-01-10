@@ -82,6 +82,10 @@ go_test(
         "stats_cache_test.go",
     ],
     embed = [":stats"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     shard_count = 8,
     deps = [
         "//pkg/base",

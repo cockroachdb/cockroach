@@ -24,6 +24,10 @@ go_test(
     size = "small",
     srcs = ["result_test.go"],
     embed = [":result"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/util/leaktest",

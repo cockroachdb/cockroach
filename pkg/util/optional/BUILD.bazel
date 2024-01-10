@@ -20,6 +20,10 @@ go_test(
         "duration_test.go",
         "uint_test.go",
     ],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":optional",
         "@com_github_stretchr_testify//require",

@@ -45,6 +45,10 @@ go_test(
         "writer_test.go",
     ],
     embed = [":parquet"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/geo",
         "//pkg/sql/randgen",

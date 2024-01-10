@@ -17,6 +17,10 @@ go_test(
     name = "router_test",
     srcs = ["event_router_test.go"],
     embed = [":router"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/obsservice/obslib",
         "//pkg/obsservice/obslib/obsutil",

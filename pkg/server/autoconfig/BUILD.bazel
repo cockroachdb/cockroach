@@ -37,6 +37,10 @@ go_test(
         "main_test.go",
         "task_markers_test.go",
     ],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":autoconfig",
         "//pkg/base",

@@ -20,6 +20,10 @@ go_library(
 go_test(
     name = "lex_test",
     srcs = ["encode_test.go"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [":lex"],
 )
 

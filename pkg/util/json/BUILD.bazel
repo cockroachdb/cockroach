@@ -45,6 +45,10 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":json"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgerror",

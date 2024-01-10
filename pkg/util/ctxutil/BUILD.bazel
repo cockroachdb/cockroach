@@ -21,6 +21,10 @@ go_test(
     name = "ctxutil_test",
     srcs = ["context_test.go"],
     embed = [":ctxutil"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",

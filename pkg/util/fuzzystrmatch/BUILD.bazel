@@ -20,4 +20,8 @@ go_test(
         "soundex_test.go",
     ],
     embed = [":fuzzystrmatch"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
 )

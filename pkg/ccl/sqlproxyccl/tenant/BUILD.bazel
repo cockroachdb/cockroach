@@ -52,6 +52,10 @@ go_test(
         "main_test.go",
     ],
     embed = [":tenant"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",

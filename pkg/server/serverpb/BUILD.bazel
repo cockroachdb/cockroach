@@ -116,5 +116,9 @@ go_test(
     size = "medium",
     srcs = ["admin_test.go"],
     embed = [":serverpb"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = ["@com_github_stretchr_testify//assert"],
 )

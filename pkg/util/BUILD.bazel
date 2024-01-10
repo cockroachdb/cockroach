@@ -56,6 +56,10 @@ go_test(
         "unresolved_addr_test.go",
     ],
     embed = [":util"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util/randutil",
         "//pkg/util/timeutil",

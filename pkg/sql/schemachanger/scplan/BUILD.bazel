@@ -43,6 +43,10 @@ go_test(
         "plan_test.go",
     ],
     data = glob(["testdata/**"]),
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":scplan",
         "//pkg/base",

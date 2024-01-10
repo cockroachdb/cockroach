@@ -744,7 +744,10 @@ go_test(
         "//pkg/sql/vtable:pg_catalog.go",
     ],
     embed = [":sql"],
-    exec_properties = {"Pool": "large"},
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "large"},
+    }),
     shard_count = 16,
     deps = [
         "//pkg/base",

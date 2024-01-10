@@ -54,6 +54,10 @@ go_test(
         "volatility_test.go",
     ],
     embed = [":props"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/settings/cluster",
         "//pkg/sql/opt",

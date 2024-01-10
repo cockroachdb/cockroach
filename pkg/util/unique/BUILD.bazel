@@ -12,4 +12,8 @@ go_test(
     size = "small",
     srcs = ["unique_test.go"],
     embed = [":unique"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
 )

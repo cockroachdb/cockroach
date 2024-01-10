@@ -26,6 +26,10 @@ go_test(
         "padding_test.go",
     ],
     embed = [":pgcryptocipherccl"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/util/leaktest",

@@ -28,6 +28,10 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":rangelog"],
     embedsrcs = ["testdata/rangelog.bin"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/kv",

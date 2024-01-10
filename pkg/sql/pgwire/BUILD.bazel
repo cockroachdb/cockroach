@@ -110,6 +110,10 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":pgwire"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     shard_count = 16,
     deps = [
         "//pkg/base",

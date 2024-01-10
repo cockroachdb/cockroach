@@ -30,6 +30,10 @@ go_test(
         "stateloader_test.go",
     ],
     embed = [":stateloader"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverpb",

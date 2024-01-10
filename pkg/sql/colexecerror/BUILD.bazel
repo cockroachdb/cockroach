@@ -16,6 +16,10 @@ go_library(
 go_test(
     name = "colexecerror_test",
     srcs = ["error_test.go"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":colexecerror",
         "//pkg/util/leaktest",

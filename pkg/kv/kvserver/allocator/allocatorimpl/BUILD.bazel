@@ -43,6 +43,10 @@ go_test(
         "allocator_test.go",
     ],
     embed = [":allocatorimpl"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/gossip",
         "//pkg/keys",

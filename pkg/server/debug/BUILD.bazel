@@ -55,6 +55,10 @@ go_test(
         "main_test.go",
     ],
     embed = [":debug"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/kv/kvclient/kvtenant",

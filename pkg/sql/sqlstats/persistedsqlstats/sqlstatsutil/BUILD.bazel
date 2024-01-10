@@ -29,6 +29,10 @@ go_test(
     name = "sqlstatsutil_test",
     srcs = ["json_encoding_test.go"],
     embed = [":sqlstatsutil"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/sql/appstatspb",
         "//pkg/util/json",

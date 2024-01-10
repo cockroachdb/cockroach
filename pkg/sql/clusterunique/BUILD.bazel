@@ -19,6 +19,10 @@ go_test(
     name = "clusterunique_test",
     srcs = ["id_test.go"],
     embed = [":clusterunique"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util/uint128",
         "@com_github_stretchr_testify//require",

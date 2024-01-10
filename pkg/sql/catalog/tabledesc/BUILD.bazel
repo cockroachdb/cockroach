@@ -85,6 +85,10 @@ go_test(
         "validate_version_gating_test.go",
     ],
     embed = [":tabledesc"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",

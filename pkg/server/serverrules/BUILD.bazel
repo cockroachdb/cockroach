@@ -16,6 +16,10 @@ go_test(
     name = "serverrules_test",
     srcs = ["metric_rules_test.go"],
     embed = [":serverrules"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/log",

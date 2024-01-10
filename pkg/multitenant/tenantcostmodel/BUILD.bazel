@@ -20,6 +20,10 @@ go_test(
     name = "tenantcostmodel_test",
     srcs = ["settings_test.go"],
     embed = [":tenantcostmodel"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",
