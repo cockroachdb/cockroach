@@ -87,6 +87,9 @@ var envVars = []string{
 	"COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true",
 	"COCKROACH_CHANGEFEED_TESTING_INCLUDE_PARQUET_TEST_METADATA=true",
 	"COCKROACH_CHANGEFEED_TESTING_INCLUDE_PARQUET_READER_METADATA=true",
+	// Enable strict re-balancing checks to ensure that rebalancing doesn't create an
+	// incorrect set of spans for the changefeed.
+	"COCKROACH_CHANGEFEED_TESTING_REBALANCING_CHECKS=true",
 }
 
 type cdcTester struct {
