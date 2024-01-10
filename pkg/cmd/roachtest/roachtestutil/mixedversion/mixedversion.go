@@ -115,7 +115,7 @@ const (
 
 	// rollbackFinalUpgradeProbability is the probability that we will
 	// attempt to rollback the upgrade to the "current" version. We
-	// should be apply extra scrutiny to this upgrade which is why we
+	// should apply extra scrutiny to this upgrade which is why we
 	// perform the rollback on most test runs.
 	rollbackFinalUpgradeProbability = 0.9
 
@@ -421,7 +421,7 @@ func (t *Test) RNG() *rand.Rand {
 // InMixedVersion hooks are passed, they will be executed
 // concurrently.
 func (t *Test) InMixedVersion(desc string, fn userFunc) {
-	var lastFromVersion *clusterupgrade.Version
+	var prevUpgradeStage UpgradeStage
 	var numUpgradedNodes int
 	predicate := func(testContext Context) bool {
 		// If the cluster is finalizing an upgrade, run this hook
@@ -434,8 +434,8 @@ func (t *Test) InMixedVersion(desc string, fn userFunc) {
 		// once while upgrading from one version to another. The number of
 		// nodes we wait to be running the new version is determined when
 		// the version changes for the first time.
-		if testContext.FromVersion != lastFromVersion {
-			lastFromVersion = testContext.FromVersion
+		if testContext.Stage != prevUpgradeStage {
+			prevUpgradeStage = testContext.Stage
 			numUpgradedNodes = t.prng.Intn(len(t.crdbNodes)) + 1
 		}
 
@@ -989,6 +989,7 @@ func (th *testHooks) StartupSteps(idGen func() int, testContext *Context) []test
 func (th *testHooks) BackgroundSteps(
 	idGen func() int, testContext *Context, stopChans []shouldStop,
 ) []testStep {
+	testContext.Stage = BackgroundStage
 	return th.background.AsSteps(backgroundLabel, idGen, th.prng, testContext, stopChans)
 }
 
