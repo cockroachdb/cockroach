@@ -857,6 +857,7 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 type proposalResult struct {
 	Reply              *kvpb.BatchResponse
 	Err                *kvpb.Error
+	LeaseAppliedIndex  kvpb.LeaseAppliedIndex
 	EncounteredIntents []roachpb.Intent
 	EndTxns            []result.EndTxnIntents
 }

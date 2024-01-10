@@ -263,6 +263,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	// words, the line below this comment should be conditional on `pErr == nil`.
 	cmd.response.EndTxns = cmd.proposal.Local.DetachEndTxns(pErr != nil)
 	if pErr == nil {
+		cmd.response.LeaseAppliedIndex = cmd.Cmd.MaxLeaseIndex
 		cmd.localResult = cmd.proposal.Local
 	} else if cmd.localResult != nil {
 		log.Fatalf(ctx, "shouldn't have a local result if command processing failed. pErr: %s", pErr)
