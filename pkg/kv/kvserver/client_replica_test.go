@@ -76,12 +76,12 @@ import (
 
 // TestReplicaClockUpdates verifies that the leaseholder updates its clocks
 // when executing a command to the command's timestamp, as long as the
-// request timestamp is from a clock (i.e. is not synthetic).
+// request timestamp is from a clock (i.e. is not in the future).
 func TestReplicaClockUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	run := func(t *testing.T, write bool, synthetic bool) {
+	run := func(t *testing.T, write bool, futureTime bool) {
 		const numNodes = 3
 		var manuals []*hlc.HybridManualClock
 		var clocks []*hlc.Clock
@@ -123,7 +123,7 @@ func TestReplicaClockUpdates(t *testing.T) {
 		// MaxOffset.
 		reqTS := clocks[0].Now().Add(clocks[0].MaxOffset().Nanoseconds()/2, 0)
 		h := kvpb.Header{Timestamp: reqTS}
-		if !synthetic {
+		if !futureTime {
 			h.Now = hlc.ClockTimestamp(reqTS)
 		}
 
@@ -144,13 +144,13 @@ func TestReplicaClockUpdates(t *testing.T) {
 		// practice an assertion against followers' clocks being updated is very
 		// difficult to make without being flaky because it's difficult to prevent
 		// other channels (background work, etc.) from carrying the clock update.
-		expUpdated := !synthetic
+		expUpdated := !futureTime
 		require.Equal(t, expUpdated, reqTS.Less(clocks[0].Now()))
 	}
 
 	testutils.RunTrueAndFalse(t, "write", func(t *testing.T, write bool) {
-		testutils.RunTrueAndFalse(t, "synthetic", func(t *testing.T, synthetic bool) {
-			run(t, write, synthetic)
+		testutils.RunTrueAndFalse(t, "future-time", func(t *testing.T, futureTime bool) {
+			run(t, write, futureTime)
 		})
 	})
 }

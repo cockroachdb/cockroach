@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -271,6 +272,26 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 				return false, err
 			}
 			return math.Abs(expFloat-actualFloat) < floatPrecision, nil
+		case types.DecimalFamily:
+			// Decimals might have a different number of trailing zeroes, so
+			// they too require special handling.
+
+			// We first try direct string matching. If that succeeds, then
+			// great!
+			if expected == actual {
+				return true, nil
+			}
+			// Now parse both strings as decimals and use decimal-specific
+			// comparison.
+			expDecimal, err := tree.ParseDDecimal(expected)
+			if err != nil {
+				return false, err
+			}
+			actualDecimal, err := tree.ParseDDecimal(actual)
+			if err != nil {
+				return false, err
+			}
+			return tree.CompareDecimals(&expDecimal.Decimal, &actualDecimal.Decimal) == 0, nil
 		default:
 			return expected == actual, nil
 		}

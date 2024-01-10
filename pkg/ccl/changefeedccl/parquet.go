@@ -172,10 +172,10 @@ func (w *parquetWriter) populateDatums(
 	datums = append(datums, getEventTypeDatum(updatedRow, prevRow).DString())
 
 	if w.encodingOpts.UpdatedTimestamps {
-		datums = append(datums, tree.NewDString(timestampToString(updated)))
+		datums = append(datums, tree.NewDString(updated.AsOfSystemTime()))
 	}
 	if w.encodingOpts.MVCCTimestamps {
-		datums = append(datums, tree.NewDString(timestampToString(mvcc)))
+		datums = append(datums, tree.NewDString(mvcc.AsOfSystemTime()))
 	}
 	if w.encodingOpts.Diff {
 		if prevRow.IsDeleted() {

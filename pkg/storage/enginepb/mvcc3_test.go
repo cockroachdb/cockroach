@@ -29,7 +29,7 @@ func TestTxnMetaSizeOf(t *testing.T) {
 
 func populatedMVCCValueHeader() MVCCValueHeader {
 	allFieldsSet := MVCCValueHeader{
-		LocalTimestamp:   hlc.ClockTimestamp{WallTime: 1, Logical: 1, Synthetic: true},
+		LocalTimestamp:   hlc.ClockTimestamp{WallTime: 1, Logical: 1},
 		OmitInRangefeeds: true,
 	}
 	allFieldsSet.KVNemesisSeq.Set(123)
