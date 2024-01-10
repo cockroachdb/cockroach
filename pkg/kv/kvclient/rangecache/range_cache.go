@@ -570,7 +570,7 @@ func (et *EvictionToken) evictAndReplaceLocked(ctx context.Context, newDescs ...
 
 	// Evict unless the cache has something newer. Regardless of what the cache
 	// has, we'll still attempt to insert newDescs (if any).
-	evicted := et.rdc.evictDescLocked(ctx, et.Desc())
+	evicted := et.rdc.evictLocked(ctx, et.Desc(), et.Lease())
 
 	if len(newDescs) > 0 {
 		log.Eventf(ctx, "evicting cached range descriptor with %d replacements", len(newDescs))
@@ -1035,19 +1035,30 @@ func (rc *RangeCache) EvictByKey(ctx context.Context, descKey roachpb.RKey) bool
 	return true
 }
 
-// evictDescLocked evicts a cache entry unless it's newer than the provided
-// descriptor.
-func (rc *RangeCache) evictDescLocked(ctx context.Context, desc *roachpb.RangeDescriptor) bool {
+// evictLocked evicts a cache entry unless its newer than the passed in
+// descriptor and lease.
+func (rc *RangeCache) evictLocked(
+	ctx context.Context, desc *roachpb.RangeDescriptor, lease *roachpb.Lease,
+) bool {
 	cachedEntry, rawEntry := rc.getCachedRLocked(ctx, desc.StartKey, false /* inverted */)
 	if cachedEntry == nil {
 		// Cache is empty; nothing to do.
 		return false
 	}
-	cachedDesc := cachedEntry.Desc()
-	cachedNewer := cachedDesc.Generation > desc.Generation
-	if cachedNewer {
+	// The cached descriptor is newer, so we don't want to evict.
+	if cachedEntry.desc.Generation > desc.Generation {
 		return false
 	}
+	var etSequence roachpb.LeaseSequence
+	if lease != nil {
+		etSequence = lease.Sequence
+	}
+	// The cached lease is newer and the descriptors are the same, so don't evict.
+	if cachedEntry.lease.Sequence > etSequence {
+		// if the cached entry has the same descriptor but the cached lease is newer, don't evict.
+		return false
+	}
+
 	// The cache has a descriptor that's older or equal to desc (it should be
 	// equal because the desc that the caller supplied also came from the cache
 	// and the cache is not expected to go backwards). Evict it.

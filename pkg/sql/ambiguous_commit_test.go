@@ -154,7 +154,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		// Avoid distSQL so we can reliably hydrate the intended dist
 		// sender's cache below.
 		for _, server := range tc.Servers {
-			st := server.ClusterSettings()
+			st := server.ApplicationLayer().ClusterSettings()
 			st.Manual.Store(true)
 			sql.DistSQLClusterExecMode.Override(ctx, &st.SV, int64(sessiondatapb.DistSQLOff))
 		}
