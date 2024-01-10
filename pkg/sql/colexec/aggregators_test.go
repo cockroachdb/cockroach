@@ -915,8 +915,8 @@ func TestAggregatorRandom(t *testing.T) {
 							expNulls[curGroup] = false
 							expCounts[curGroup]++
 							expSums[curGroup] += aggCol[i]
-							expMins[curGroup] = min64(aggCol[i], expMins[curGroup])
-							expMaxs[curGroup] = max64(aggCol[i], expMaxs[curGroup])
+							expMins[curGroup] = min(aggCol[i], expMins[curGroup])
+							expMaxs[curGroup] = max(aggCol[i], expMaxs[curGroup])
 						}
 						groups[i] = int64(curGroup)
 					}
@@ -1272,18 +1272,4 @@ func BenchmarkDistinctAggregation(b *testing.B) {
 			}
 		}
 	}
-}
-
-func min64(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max64(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
 }
