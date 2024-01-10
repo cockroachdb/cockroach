@@ -2437,6 +2437,11 @@ message BarrierResponse {
   // Timestamp at which this Barrier was evaluated. Can be used to guarantee
   // future operations happen on the same or newer leaseholders.
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+
+  // LeaseAppliedIndex at which this Barrier was applied. Can be used to
+  // guarantee that a replica has applied the barrier (and thus all preceding
+  // writes).
+  uint64 lease_applied_index = 3 [(gogoproto.casttype) = "LeaseAppliedIndex"];
 }
 
 // A RequestUnion contains exactly one of the requests.

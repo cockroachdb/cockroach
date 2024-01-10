@@ -54,6 +54,7 @@ func Barrier(
 ) (result.Result, error) {
 	resp := response.(*kvpb.BarrierResponse)
 	resp.Timestamp = cArgs.EvalCtx.Clock().Now()
+	resp.LeaseAppliedIndex = 0 // for visibility, populated in executeWriteBatch()
 
 	return result.Result{}, nil
 }

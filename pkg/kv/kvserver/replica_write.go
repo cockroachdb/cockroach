@@ -295,6 +295,10 @@ func (r *Replica) executeWriteBatch(
 				// this error here, it means that the noop write succeeded.
 				propResult.Reply, propResult.Err = ba.CreateReply(), nil
 			}
+			// Populate LeaseAppliedIndex for Barrier responses.
+			if ba.IsSingleBarrierRequest() && propResult.Err == nil {
+				propResult.Reply.Responses[0].GetBarrier().LeaseAppliedIndex = propResult.LeaseAppliedIndex
+			}
 
 			return propResult.Reply, nil, writeBytes, propResult.Err
 
