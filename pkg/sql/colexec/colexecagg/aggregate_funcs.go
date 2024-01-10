@@ -34,15 +34,15 @@ func IsAggOptimized(aggFn execinfrapb.AggregatorSpec_Func) bool {
 	switch aggFn {
 	case execinfrapb.AnyNotNull,
 		execinfrapb.Avg,
+		execinfrapb.BoolAnd,
+		execinfrapb.BoolOr,
+		execinfrapb.ConcatAgg,
+		execinfrapb.Count,
+		execinfrapb.Max,
+		execinfrapb.Min,
 		execinfrapb.Sum,
 		execinfrapb.SumInt,
-		execinfrapb.ConcatAgg,
-		execinfrapb.CountRows,
-		execinfrapb.Count,
-		execinfrapb.Min,
-		execinfrapb.Max,
-		execinfrapb.BoolAnd,
-		execinfrapb.BoolOr:
+		execinfrapb.CountRows:
 		return true
 	default:
 		return false
@@ -276,6 +276,72 @@ func NewAggregateFuncsAlloc(
 			default:
 				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 			}
+		case execinfrapb.BoolAnd:
+			switch aggKind {
+			case HashAggKind:
+				funcAllocs[i] = newBoolAndHashAggAlloc(args.Allocator, allocSize)
+			case OrderedAggKind:
+				funcAllocs[i] = newBoolAndOrderedAggAlloc(args.Allocator, allocSize)
+			case WindowAggKind:
+				funcAllocs[i] = newBoolAndWindowAggAlloc(args.Allocator, allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
+			}
+		case execinfrapb.BoolOr:
+			switch aggKind {
+			case HashAggKind:
+				funcAllocs[i] = newBoolOrHashAggAlloc(args.Allocator, allocSize)
+			case OrderedAggKind:
+				funcAllocs[i] = newBoolOrOrderedAggAlloc(args.Allocator, allocSize)
+			case WindowAggKind:
+				funcAllocs[i] = newBoolOrWindowAggAlloc(args.Allocator, allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
+			}
+		case execinfrapb.ConcatAgg:
+			switch aggKind {
+			case HashAggKind:
+				funcAllocs[i] = newConcatHashAggAlloc(args.Allocator, allocSize)
+			case OrderedAggKind:
+				funcAllocs[i] = newConcatOrderedAggAlloc(args.Allocator, allocSize)
+			case WindowAggKind:
+				funcAllocs[i] = newConcatWindowAggAlloc(args.Allocator, allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
+			}
+		case execinfrapb.Count:
+			switch aggKind {
+			case HashAggKind:
+				funcAllocs[i] = newCountHashAggAlloc(args.Allocator, allocSize)
+			case OrderedAggKind:
+				funcAllocs[i] = newCountOrderedAggAlloc(args.Allocator, allocSize)
+			case WindowAggKind:
+				funcAllocs[i] = newCountWindowAggAlloc(args.Allocator, allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
+			}
+		case execinfrapb.Max:
+			switch aggKind {
+			case HashAggKind:
+				funcAllocs[i] = newMaxHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			case OrderedAggKind:
+				funcAllocs[i] = newMaxOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			case WindowAggKind:
+				funcAllocs[i] = newMaxWindowAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
+			}
+		case execinfrapb.Min:
+			switch aggKind {
+			case HashAggKind:
+				funcAllocs[i] = newMinHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			case OrderedAggKind:
+				funcAllocs[i] = newMinOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			case WindowAggKind:
+				funcAllocs[i] = newMinWindowAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
+			}
 		case execinfrapb.Sum:
 			switch aggKind {
 			case HashAggKind:
@@ -298,17 +364,6 @@ func NewAggregateFuncsAlloc(
 			default:
 				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 			}
-		case execinfrapb.ConcatAgg:
-			switch aggKind {
-			case HashAggKind:
-				funcAllocs[i] = newConcatHashAggAlloc(args.Allocator, allocSize)
-			case OrderedAggKind:
-				funcAllocs[i] = newConcatOrderedAggAlloc(args.Allocator, allocSize)
-			case WindowAggKind:
-				funcAllocs[i] = newConcatWindowAggAlloc(args.Allocator, allocSize)
-			default:
-				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
-			}
 		case execinfrapb.CountRows:
 			switch aggKind {
 			case HashAggKind:
@@ -317,61 +372,6 @@ func NewAggregateFuncsAlloc(
 				funcAllocs[i] = newCountRowsOrderedAggAlloc(args.Allocator, allocSize)
 			case WindowAggKind:
 				funcAllocs[i] = newCountRowsWindowAggAlloc(args.Allocator, allocSize)
-			default:
-				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
-			}
-		case execinfrapb.Count:
-			switch aggKind {
-			case HashAggKind:
-				funcAllocs[i] = newCountHashAggAlloc(args.Allocator, allocSize)
-			case OrderedAggKind:
-				funcAllocs[i] = newCountOrderedAggAlloc(args.Allocator, allocSize)
-			case WindowAggKind:
-				funcAllocs[i] = newCountWindowAggAlloc(args.Allocator, allocSize)
-			default:
-				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
-			}
-		case execinfrapb.Min:
-			switch aggKind {
-			case HashAggKind:
-				funcAllocs[i] = newMinHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
-			case OrderedAggKind:
-				funcAllocs[i] = newMinOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
-			case WindowAggKind:
-				funcAllocs[i] = newMinWindowAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
-			default:
-				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
-			}
-		case execinfrapb.Max:
-			switch aggKind {
-			case HashAggKind:
-				funcAllocs[i] = newMaxHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
-			case OrderedAggKind:
-				funcAllocs[i] = newMaxOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
-			case WindowAggKind:
-				funcAllocs[i] = newMaxWindowAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
-			default:
-				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
-			}
-		case execinfrapb.BoolAnd:
-			switch aggKind {
-			case HashAggKind:
-				funcAllocs[i] = newBoolAndHashAggAlloc(args.Allocator, allocSize)
-			case OrderedAggKind:
-				funcAllocs[i] = newBoolAndOrderedAggAlloc(args.Allocator, allocSize)
-			case WindowAggKind:
-				funcAllocs[i] = newBoolAndWindowAggAlloc(args.Allocator, allocSize)
-			default:
-				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
-			}
-		case execinfrapb.BoolOr:
-			switch aggKind {
-			case HashAggKind:
-				funcAllocs[i] = newBoolOrHashAggAlloc(args.Allocator, allocSize)
-			case OrderedAggKind:
-				funcAllocs[i] = newBoolOrOrderedAggAlloc(args.Allocator, allocSize)
-			case WindowAggKind:
-				funcAllocs[i] = newBoolOrWindowAggAlloc(args.Allocator, allocSize)
 			default:
 				colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 			}
