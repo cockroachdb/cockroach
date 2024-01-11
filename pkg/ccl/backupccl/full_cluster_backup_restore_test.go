@@ -692,30 +692,19 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP data.bank INTO 'nodelocal://1/throwawayjob'`)
 	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 
-	// In a single node test cluster when a restore to nodelocal encounters an
-	// error the behaviour is slightly different for a system and application
-	// tenant. In the system tenant we take the local fast-path and so a failure
-	// results in the job failing. In an application tenant there is always an RPC
-	// call involved resulting in the exhausting its retries and pausing.
-	waitForJobCompletion := func(db *sqlutils.SQLRunner, isSystemTenant bool, jobID jobspb.JobID) {
-		if isSystemTenant {
-			db.Exec(t, `USE system;`)
-			jobutils.WaitForJobToFail(t, db, jobID)
-		} else {
-			db.Exec(t, `USE system;`)
-			jobutils.WaitForJobToPause(t, db, jobID)
-			db.Exec(t, `CANCEL JOB $1`, jobID)
-			jobutils.WaitForJobToCancel(t, db, jobID)
-		}
+	waitForJobPauseCancel := func(db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+		db.Exec(t, `USE system;`)
+		jobutils.WaitForJobToPause(t, db, jobID)
+		db.Exec(t, `CANCEL JOB $1`, jobID)
+		jobutils.WaitForJobToCancel(t, db, jobID)
 	}
 
 	t.Run("during restoration of data", func(t *testing.T) {
-		tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
-		isRestoreSystemTenant := tcRestore.ApplicationLayer(0).Codec().ForSystemTenant()
+		_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 		defer cleanupEmptyCluster()
 		var jobID jobspb.JobID
 		sqlDBRestore.QueryRow(t, `RESTORE FROM LATEST IN 'nodelocal://1/missing-ssts' WITH detached`).Scan(&jobID)
-		waitForJobCompletion(sqlDBRestore, isRestoreSystemTenant, jobID)
+		waitForJobPauseCancel(sqlDBRestore, jobID)
 		// Verify the failed RESTORE added some DROP tables.
 		// Note that the system tables here correspond to the temporary tables
 		// imported, not the system tables themselves.
@@ -1053,7 +1042,7 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	knobs := base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
-				RunAfterProcessingRestoreSpanEntry: func(_ context.Context, _ *execinfrapb.RestoreSpanEntry) {
+				RunAfterProcessingRestoreSpanEntry: func(_ context.Context, _ *execinfrapb.RestoreSpanEntry) error {
 					mu.Lock()
 					defer mu.Unlock()
 					if entriesCount == 0 {
@@ -1064,6 +1053,7 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 					}
 
 					entriesCount++
+					return nil
 				},
 			}},
 	}

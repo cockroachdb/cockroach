@@ -193,11 +193,11 @@ func restoreWithRetry(
 			break
 		}
 
-		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
+		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) || errors.Is(err, restoreProcError) {
 			return roachpb.RowCount{}, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
 		}
 
-		if joberror.IsPermanentBulkJobError(err) {
+		if joberror.IsPermanentBulkJobError(err) && !errors.Is(err, retryableRestoreProcError) {
 			return roachpb.RowCount{}, err
 		}
 
