@@ -18,10 +18,15 @@ type ReplicationCutoverTime struct {
 
 // AlterTenantReplication represents an ALTER VIRTUAL CLUSTER REPLICATION statement.
 type AlterTenantReplication struct {
-	TenantSpec *TenantSpec
-	Command    JobCommand
-	Cutover    *ReplicationCutoverTime
-	Options    TenantReplicationOptions
+	TenantSpec                  *TenantSpec
+	Command                     JobCommand
+	Cutover                     *ReplicationCutoverTime
+	ReplicationSourceTenantName *TenantSpec
+	// ReplicationSourceAddress is the address of the source cluster that we are
+	// replicating data from.
+	ReplicationSourceAddress Expr
+
+	Options TenantReplicationOptions
 }
 
 var _ Statement = &AlterTenantReplication{}
@@ -45,6 +50,23 @@ func (n *AlterTenantReplication) Format(ctx *FmtCtx) {
 	} else if n.Command == PauseJob || n.Command == ResumeJob {
 		ctx.WriteString(JobCommandToStatement[n.Command])
 		ctx.WriteString(" REPLICATION")
+	} else if n.ReplicationSourceTenantName != nil {
+		ctx.WriteString("START REPLICATION OF ")
+		ctx.FormatNode(n.ReplicationSourceTenantName)
+		ctx.WriteString(" ON ")
+		_, canOmitParentheses := n.ReplicationSourceAddress.(alreadyDelimitedAsSyntacticDExpr)
+		if !canOmitParentheses {
+			ctx.WriteByte('(')
+		}
+		ctx.FormatNode(n.ReplicationSourceAddress)
+		if !canOmitParentheses {
+			ctx.WriteByte(')')
+		}
+
+		if !n.Options.IsDefault() {
+			ctx.WriteString(" WITH ")
+			ctx.FormatNode(&n.Options)
+		}
 	}
 }
 
