@@ -1,0 +1,121 @@
+/* setup */
+----
+
+
+/* test */
+CREATE SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+DROP SEQUENCE sq1;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CREATE SEQUENCE
+write *eventpb.CreateSequence to event log:
+  sequenceName: defaultdb.public.sq1
+  sql:
+    descriptorId: 104
+    statement: CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32
+    tag: CREATE SEQUENCE
+    user: root
+## StatementPhase stage 1 of 1 with 24 MutationType ops
+initializing sequence 104 with starting value of 31
+add object namespace entry {100 101 sq1} -> 104
+upsert descriptor #104
+  -
+  +table:
+  +  checks: []
+  +  columns:
+  +  - id: 1
+  +    name: value
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  - defaultExpr: unique_rowid()
+  +    hidden: true
+  +    id: 2
+  +    name: rowid
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  createAsOfTime: {}
+  +  formatVersion: 3
+  +  id: 104
+  +  modificationTime: {}
+  +  mutations: []
+  +  name: sq1
+  +  nextColumnId: 3
+  +  nextConstraintId: 1
+  +  nextIndexId: 2
+  +  parentId: 100
+  +  primaryIndex:
+  +    createdExplicitly: true
+  +    encodingType: 1
+  +    foreignKey: {}
+  +    geoConfig: {}
+  +    id: 1
+  +    interleave: {}
+  +    keyColumnDirections:
+  +    - ASC
+  +    keyColumnIds:
+  +    - 1
+  +    keyColumnNames:
+  +    - value
+  +    name: primary
+  +    partitioning: {}
+  +    sharded: {}
+  +    storeColumnNames: []
+  +    unique: true
+  +    version: 4
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 3
+  +  replacementOf:
+  +    time: {}
+  +  sequenceOpts:
+  +    cacheSize: "1"
+  +    increment: "1"
+  +    maxValue: "9223372036854775807"
+  +    minValue: "1"
+  +    sequenceOwner: {}
+  +    start: "32"
+  +  unexposedParentSchemaId: 101
+  +  version: "1"
+upsert descriptor #101
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  version: "2"
+checking for feature: DROP SEQUENCE
+increment telemetry for sql.schema.drop_sequence
+write *eventpb.DropSequence to event log:
+  sequenceName: defaultdb.public.sq1
+  sql:
+    descriptorId: 104
+    statement: DROP SEQUENCE ‹defaultdb›.‹public›.‹sq1›
+    tag: DROP SEQUENCE
+    user: root
+## StatementPhase stage 1 of 1 with 18 MutationType ops
+delete object namespace entry {100 101 sq1} -> 104
+upsert descriptor #104
+  ...
+       sequenceOwner: {}
+       start: "32"
+  +  state: DROP
+     unexposedParentSchemaId: 101
+     version: "1"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1
