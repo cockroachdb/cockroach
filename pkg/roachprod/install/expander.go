@@ -26,7 +26,7 @@ var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+)?}`)
 var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)}`)
-var storeDirRe = regexp.MustCompile(`{store-dir}`)
+var storeDirRe = regexp.MustCompile(`{store-dir(:[0-9]+)?}`)
 var logDirRe = regexp.MustCompile(`{log-dir(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var certsDirRe = regexp.MustCompile(`{certs-dir}`)
 
@@ -237,14 +237,25 @@ func (e *expander) maybeExpandUIPort(
 	return s, err == nil, err
 }
 
-// maybeExpandStoreDir is an expanderFunc for "{store-dir}"
+// maybeExpandStoreDir is an expanderFunc for "{store-dir[:<storeIndex>])}",
+// where storeIndex is optional and defaults to 1. Note that storeIndex is the
+// store's index on multi-store nodes, not the store ID.
 func (e *expander) maybeExpandStoreDir(
 	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
 ) (string, bool, error) {
-	if !storeDirRe.MatchString(s) {
+	m := storeDirRe.FindStringSubmatch(s)
+	if m == nil {
 		return s, false, nil
 	}
-	return c.NodeDir(e.node, 1 /* storeIndex */), true, nil
+	storeIndex := 1
+	if len(m) > 1 && m[1] != "" { // the optional submatch is always included
+		var err error
+		storeIndex, err = strconv.Atoi(m[1][1:]) // skip the :
+		if err != nil {
+			return "", false, errors.Wrapf(err, "invalid store index %q in %q", m[1], s)
+		}
+	}
+	return c.NodeDir(e.node, storeIndex), true, nil
 }
 
 // maybeExpandLogDir is an expanderFunc for "{log-dir}"
