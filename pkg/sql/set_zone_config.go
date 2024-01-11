@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -33,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
@@ -261,7 +261,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		return nil, err
 	}
 
-	if err := requireSystemTenantOrClusterSetting(execCfg.Codec, execCfg.Settings, SecondaryTenantZoneConfigsEnabled); err != nil {
+	if err := sqlclustersettings.RequireSystemTenantOrClusterSetting(execCfg.Codec, execCfg.Settings, sqlclustersettings.SecondaryTenantZoneConfigsEnabled); err != nil {
 		return nil, err
 	}
 
@@ -1102,16 +1102,6 @@ func validateZoneAttrsAndLocalitiesForSystemTenant(
 	return nil
 }
 
-// SecondaryTenantsAllZoneConfigsEnabled is an extension of
-// SecondaryTenantZoneConfigsEnabled that allows virtual clusters to modify all
-// type of constraints in zone configs (i.e. not only zones and regions).
-var SecondaryTenantsAllZoneConfigsEnabled = settings.RegisterBoolSetting(
-	settings.SystemVisible,
-	"sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled",
-	"enable unrestricted usage of ALTER CONFIGURE ZONE in virtual clusters",
-	false,
-)
-
 // validateZoneLocalitiesForSecondaryTenants performs constraint/lease
 // preferences validation for secondary tenants. Only newly added constraints
 // are validated. Unless SecondaryTenantsAllZoneConfigsEnabled is set to 'true',
@@ -1183,8 +1173,8 @@ func validateZoneLocalitiesForSecondaryTenants(
 				)
 			}
 		default:
-			if err := requireSystemTenantOrClusterSetting(
-				codec, settings, SecondaryTenantsAllZoneConfigsEnabled,
+			if err := sqlclustersettings.RequireSystemTenantOrClusterSetting(
+				codec, settings, sqlclustersettings.SecondaryTenantsAllZoneConfigsEnabled,
 			); err != nil {
 				return err
 			}

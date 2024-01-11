@@ -832,36 +832,6 @@ certificate can only be used if an identity map has been configured server-side.
 		Description: `Prompt for the new user's password.`,
 	}
 
-	InitToken = FlagInfo{
-		Name: "init-token",
-		Description: `Shared token for initialization of node TLS certificates.
-
-This flag is optional for the 'start' command. When omitted, the 'start'
-command expects the operator to prepare TLS certificates beforehand using
-the 'cert' command.
-
-This flag must be combined with --num-expected-initial-nodes.`,
-	}
-
-	NumExpectedInitialNodes = FlagInfo{
-		Name: "num-expected-initial-nodes",
-		Description: `Number of expected nodes during TLS certificate creation,
-including the node where the connect command is run.
-
-This flag must be combined with --init-token.`,
-	}
-
-	SingleNode = FlagInfo{
-		Name: "single-node",
-		Description: `Prepare the certificates for a subsequent 'start-single-node'
-command. The 'connect' command only runs cursory checks on the network
-configuration and does not wait for peers to auto-negotiate a common
-set of credentials.
-
-The --single-node flag is exclusive with the --init-num-peers and --init-token
-flags.`,
-	}
-
 	CertsDir = FlagInfo{
 		Name:        "certs-dir",
 		EnvVar:      "COCKROACH_CERTS_DIR",

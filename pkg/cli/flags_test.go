@@ -918,57 +918,6 @@ func TestServerJoinSettings(t *testing.T) {
 	}
 }
 
-func TestConnectJoinSettings(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// Avoid leaking configuration changes after the tests end.
-	defer initCLIDefaults()
-
-	f := connectInitCmd.Flags()
-	testData := []struct {
-		args         []string
-		expectedJoin []string
-	}{
-		{[]string{"connect", "init", "--join=a"},
-			[]string{"a:" + base.DefaultPort}},
-		{[]string{"connect", "init", "--join=a,b,c"},
-			[]string{"a:" + base.DefaultPort, "b:" + base.DefaultPort, "c:" + base.DefaultPort}},
-		{[]string{"connect", "init", "--join=a", "--join=b"},
-			[]string{"a:" + base.DefaultPort, "b:" + base.DefaultPort}},
-		{[]string{"connect", "init", "--join=127.0.0.1"},
-			[]string{"127.0.0.1:" + base.DefaultPort}},
-		{[]string{"connect", "init", "--join=127.0.0.1:"},
-			[]string{"127.0.0.1:" + base.DefaultPort}},
-		{[]string{"connect", "init", "--join=127.0.0.1,abc"},
-			[]string{"127.0.0.1:" + base.DefaultPort, "abc:" + base.DefaultPort}},
-		{[]string{"connect", "init", "--join=[::1],[::2]"},
-			[]string{"[::1]:" + base.DefaultPort, "[::2]:" + base.DefaultPort}},
-		{[]string{"connect", "init", "--join=[::1]:123,[::2]"},
-			[]string{"[::1]:123", "[::2]:" + base.DefaultPort}},
-		{[]string{"connect", "init", "--join=[::1],127.0.0.1"},
-			[]string{"[::1]:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort}},
-		{[]string{"connect", "init", "--join=[::1]:123", "--join=[::2]"},
-			[]string{"[::1]:123", "[::2]:" + base.DefaultPort}},
-	}
-
-	for i, td := range testData {
-		initCLIDefaults()
-		if err := f.Parse(td.args); err != nil {
-			t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
-		}
-
-		if err := extraClientFlagInit(); err != nil {
-			t.Fatal(err)
-		}
-
-		if !reflect.DeepEqual(td.expectedJoin, []string(serverCfg.JoinList)) {
-			t.Errorf("%d. serverCfg.JoinList expected %#v, but got %#v. td.args was '%#v'.",
-				i, td.expectedJoin, serverCfg.JoinList, td.args)
-		}
-	}
-}
-
 func TestClientConnSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

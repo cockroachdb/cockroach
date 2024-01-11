@@ -530,9 +530,6 @@ func setStartContextDefaults() {
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
 	startCtx.serverCertPrincipalMap = nil
 	startCtx.serverListenAddr = ""
-	startCtx.initToken = ""
-	startCtx.numExpectedNodes = 0
-	startCtx.genCertsForSingleNode = false
 	startCtx.unencryptedLocalhostHTTP = false
 	startCtx.tempDir = ""
 	startCtx.externalIODir = ""

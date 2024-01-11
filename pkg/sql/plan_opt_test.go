@@ -629,6 +629,7 @@ func BenchmarkQueryCache(b *testing.B) {
 				b.Fatal(err)
 			}
 		}
+		b.StopTimer()
 	}
 
 	for workload, workloadName := range workloads {

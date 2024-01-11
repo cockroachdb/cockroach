@@ -5,5 +5,10 @@ go_library(
     srcs = ["clustersettings.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/settings"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
 )

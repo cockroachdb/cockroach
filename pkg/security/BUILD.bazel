@@ -4,7 +4,6 @@ go_library(
     name = "security",
     srcs = [
         "auth.go",
-        "auto_tls_init.go",
         "cert_expiry_cache.go",
         "certificate_loader.go",
         "certificate_manager.go",
@@ -49,7 +48,6 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
-        "@com_github_cockroachdb_redact//:redact",
         "@org_golang_x_crypto//bcrypt",
         "@org_golang_x_crypto//ocsp",
         "@org_golang_x_sync//errgroup",
@@ -61,7 +59,6 @@ go_test(
     size = "medium",
     srcs = [
         "auth_test.go",
-        "auto_tls_init_test.go",
         "cert_expiry_cache_test.go",
         "certificate_loader_test.go",
         "certificate_manager_test.go",
