@@ -75,6 +75,7 @@ func (s *Container) RecordStatement(
 	// recorded we don't need to create an entry in the stmts map for it. We do
 	// still need stmtFingerprintID for transaction level metrics tracking.
 	t := sqlstats.StatsCollectionLatencyThreshold.Get(&s.st.SV)
+	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !sqlstats.StmtStatsEnable.Get(&s.st.SV) || (t > 0 && t.Seconds() >= value.ServiceLatencySec) {
 		createIfNonExistent = false
 	}
@@ -212,32 +213,37 @@ func (s *Container) RecordStatement(
 		errorMsg = redact.Sprint(value.StatementError)
 	}
 
-	insight := insights.Statement{
-		ID:                   value.StatementID,
-		FingerprintID:        stmtFingerprintID,
-		LatencyInSeconds:     value.ServiceLatencySec,
-		Query:                value.Query,
-		Status:               getStatus(value.StatementError),
-		StartTime:            value.StartTime,
-		EndTime:              value.EndTime,
-		FullScan:             value.FullScan,
-		PlanGist:             value.PlanGist,
-		Retries:              int64(value.AutoRetryCount),
-		AutoRetryReason:      autoRetryReason,
-		RowsRead:             value.RowsRead,
-		RowsWritten:          value.RowsWritten,
-		Nodes:                value.Nodes,
-		Contention:           contention,
-		IndexRecommendations: value.IndexRecommendations,
-		Database:             value.Database,
-		CPUSQLNanos:          cpuSQLNanos,
-		ErrorCode:            errorCode,
-		ErrorMsg:             errorMsg,
-	}
-	if s.knobs != nil && s.knobs.InsightsWriterStmtInterceptor != nil {
-		s.knobs.InsightsWriterStmtInterceptor(value.SessionID, &insight)
-	} else {
-		s.insights.ObserveStatement(value.SessionID, &insight)
+	// Without TxnStatsEnable enabled, sending statements to the insights
+	// system creates a memory leak. Avoid doing so if disabled.
+	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
+	if sqlstats.TxnStatsEnable.Get(&s.st.SV) {
+		insight := insights.Statement{
+			ID:                   value.StatementID,
+			FingerprintID:        stmtFingerprintID,
+			LatencyInSeconds:     value.ServiceLatencySec,
+			Query:                value.Query,
+			Status:               getStatus(value.StatementError),
+			StartTime:            value.StartTime,
+			EndTime:              value.EndTime,
+			FullScan:             value.FullScan,
+			PlanGist:             value.PlanGist,
+			Retries:              int64(value.AutoRetryCount),
+			AutoRetryReason:      autoRetryReason,
+			RowsRead:             value.RowsRead,
+			RowsWritten:          value.RowsWritten,
+			Nodes:                value.Nodes,
+			Contention:           contention,
+			IndexRecommendations: value.IndexRecommendations,
+			Database:             value.Database,
+			CPUSQLNanos:          cpuSQLNanos,
+			ErrorCode:            errorCode,
+			ErrorMsg:             errorMsg,
+		}
+		if s.knobs != nil && s.knobs.InsightsWriterStmtInterceptor != nil {
+			s.knobs.InsightsWriterStmtInterceptor(value.SessionID, &insight)
+		} else {
+			s.insights.ObserveStatement(value.SessionID, &insight)
+		}
 	}
 
 	return stats.ID, nil
@@ -284,6 +290,7 @@ func (s *Container) RecordTransaction(
 ) error {
 	s.recordTransactionHighLevelStats(value.TransactionTimeSec, value.Committed, value.ImplicitTxn)
 
+	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !sqlstats.TxnStatsEnable.Get(&s.st.SV) {
 		return nil
 	}
@@ -421,6 +428,7 @@ func (s *Container) RecordTransaction(
 func (s *Container) recordTransactionHighLevelStats(
 	transactionTimeSec float64, committed bool, implicit bool,
 ) {
+	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !sqlstats.TxnStatsEnable.Get(&s.st.SV) {
 		return
 	}
