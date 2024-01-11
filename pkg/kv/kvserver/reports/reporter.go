@@ -456,7 +456,7 @@ func visitAncestors(
 	if descVal == nil {
 		// Couldn't find a descriptor. This is not expected to happen.
 		// Let's just look at the default zone config.
-		return visitDefaultZone(ctx, cfg, visitor), nil
+		return visitDefaultZone(ctx, cfg, visitor)
 	}
 
 	// TODO(ajwerner): Reconsider how this zone config picking apart happens. This
@@ -467,7 +467,7 @@ func visitAncestors(
 	}
 	// If it's a database, the parent is the default zone.
 	if b == nil || b.DescriptorType() != catalog.Table {
-		return visitDefaultZone(ctx, cfg, visitor), nil
+		return visitDefaultZone(ctx, cfg, visitor)
 	}
 	tableDesc := b.BuildImmutable()
 	// If it's a table, the parent is a database.
@@ -481,22 +481,22 @@ func visitAncestors(
 		}
 	}
 	// The parent database did not have constraints. Its parent is the default zone.
-	return visitDefaultZone(ctx, cfg, visitor), nil
+	return visitDefaultZone(ctx, cfg, visitor)
 }
 
 func visitDefaultZone(
 	ctx context.Context,
 	cfg *config.SystemConfig,
 	visitor func(context.Context, *zonepb.ZoneConfig, ZoneKey) bool,
-) bool {
+) (bool, error) {
 	zone, err := getZoneByID(keys.RootNamespaceID, cfg)
 	if err != nil {
-		log.Fatalf(ctx, "failed to get default zone config: %s", err)
+		return false, errors.Wrapf(err, "failed to get default zone config from: %v", cfg)
 	}
 	if zone == nil {
-		log.Fatal(ctx, "default zone config missing unexpectedly")
+		return false, errors.AssertionFailedf("default zone config missing unexpectedly from: %v", cfg)
 	}
-	return visitor(ctx, zone, MakeZoneKey(keys.RootNamespaceID, NoSubzone))
+	return visitor(ctx, zone, MakeZoneKey(keys.RootNamespaceID, NoSubzone)), nil
 }
 
 // getZoneByID returns a zone given its id. Inheritance does not apply.
