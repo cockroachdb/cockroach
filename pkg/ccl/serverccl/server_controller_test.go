@@ -48,6 +48,8 @@ func TestSharedProcessTenantNodeLocalAccess(t *testing.T) {
 	ctx := context.Background()
 	nodeCount := 3
 
+	skip.UnderDuress(t, "slow test")
+
 	dirs := make([]string, nodeCount)
 	dirCleanups := make([]func(), nodeCount)
 	for i := 0; i < nodeCount; i++ {
@@ -85,8 +87,8 @@ func TestSharedProcessTenantNodeLocalAccess(t *testing.T) {
 
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	db.Exec(t, `CREATE TENANT application;
-ALTER TENANT application GRANT CAPABILITY can_use_nodelocal_storage;
-ALTER TENANT application START SERVICE SHARED`)
+ALTER TENANT application GRANT CAPABILITY can_use_nodelocal_storage`)
+	db.Exec(t, `ALTER TENANT application START SERVICE SHARED`)
 
 	var tenantID uint64
 	db.QueryRow(t, "SELECT id FROM [SHOW TENANT application]").Scan(&tenantID)
@@ -388,7 +390,7 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	skip.UnderDeadlock(t, "slow under deadlock")
+	skip.UnderDuress(t, "slow test")
 	t.Logf("starting test cluster")
 	numNodes := 3
 	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
@@ -405,7 +407,9 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 
 	t.Logf("starting tenant servers")
 	db := tc.ServerConn(0)
-	_, err := db.Exec("CREATE TENANT hello; ALTER TENANT hello START SERVICE SHARED")
+	_, err := db.Exec("CREATE TENANT hello")
+	require.NoError(t, err)
+	_, err = db.Exec("ALTER TENANT hello START SERVICE SHARED")
 	require.NoError(t, err)
 
 	// Pick a random node, try to run some SQL inside that tenant.
