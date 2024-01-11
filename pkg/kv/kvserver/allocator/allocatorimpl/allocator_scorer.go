@@ -85,7 +85,7 @@ const (
 	// DefaultLeaseIOOverloadShedThreshold is used to shed leases from stores
 	// with an IO overload score greater than the this threshold. This is
 	// typically used in conjunction with IOOverloadMeanThreshold below.
-	DefaultLeaseIOOverloadShedThreshold = 0.9
+	DefaultLeaseIOOverloadShedThreshold = 0.5
 
 	// IOOverloadMeanThreshold is the percentage above the mean after which a
 	// store could be conisdered IO overload if also exceeding the absolute IO
@@ -196,7 +196,7 @@ var LeaseIOOverloadShedThreshold = settings.RegisterFloatSetting(
 	"kv.allocator.lease_shed_io_overload_threshold",
 	"a store will shed its leases and receive no new leases when its "+
 		"IO overload score is above this value and "+
-		"`kv.allocator.io_overload_threshold_enforcement_leases` is `shed`",
+		"`kv.allocator.lease_io_overload_threshold_enforcement` is `shed`",
 	DefaultLeaseIOOverloadShedThreshold,
 )
 
