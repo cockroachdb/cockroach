@@ -191,6 +191,10 @@ message StreamIngestionProgress {
   // the source tenant.
   bool initial_split_complete = 9;
 
+  // InitialRevertRequiredd is true if the stream requires an initial revert to
+  // the start time before it can continue (e.g. when reusing a tenant's data).
+  bool initial_revert_required = 10;
+
   // Next Id: 10
 }
 
