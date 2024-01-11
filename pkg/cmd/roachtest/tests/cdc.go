@@ -84,6 +84,7 @@ var envVars = []string{
 	// NB: This is crucial for chaos tests as we expect changefeeds to see
 	// many retries.
 	"COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true",
+	"COCKROACH_CHANGEFEED_TESTING_SARAMA_METRICS_PANIC_HANDLING_ENABLED=true",
 }
 
 type cdcTester struct {
