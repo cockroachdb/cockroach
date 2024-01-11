@@ -162,6 +162,7 @@ go_library(
         "@com_github_klauspost_compress//zstd",
         "@com_github_klauspost_pgzip//:pgzip",
         "@com_github_linkedin_goavro_v2//:goavro",
+        "@com_github_rcrowley_go_metrics//:go-metrics",
         "@com_github_xdg_go_scram//:scram",
         "@com_google_cloud_go_pubsub//:pubsub",
         "@com_google_cloud_go_pubsub//apiv1",

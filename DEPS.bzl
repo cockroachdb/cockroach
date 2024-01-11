@@ -4527,11 +4527,9 @@ def go_deps():
         name = "com_github_ibm_sarama",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/IBM/sarama",
-        sha256 = "8d4bc76db8c94cd58f8ccb962892bab41d373623296cf18e5df7117bf3ec0546",
-        strip_prefix = "github.com/IBM/sarama@v1.42.1",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/IBM/sarama/com_github_ibm_sarama-v1.42.1.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:wugyWa15TDEHh2kvq2gAy1IHLjEjuYOYgXz/ruC/OSQ=",
+        version = "v1.42.1",
     )
     go_repository(
         name = "com_github_icrowley_fake",
