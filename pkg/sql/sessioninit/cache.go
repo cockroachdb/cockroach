@@ -290,6 +290,8 @@ func (a *Cache) GetDefaultSettings(
 			// not cause a login-preventing error.
 			if dbDesc != nil {
 				databaseID = dbDesc.GetID()
+			} else {
+				log.Sessions.Infof(ctx, "cannot connect to %s; database does not exist", databaseName)
 			}
 		}
 		return nil
