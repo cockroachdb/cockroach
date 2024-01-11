@@ -176,7 +176,7 @@ var PubsubV2Enabled = settings.RegisterBoolSetting(
 	"if enabled, this setting enables a new implementation of the pubsub sink"+
 		" that allows for a higher throughput",
 	// TODO: delete the original pubsub sink code
-	util.ConstantWithMetamorphicTestBool("changefeed.new_pubsub_sink.enabled", true),
+	true,
 	settings.WithName("changefeed.new_pubsub_sink.enabled"),
 )
 

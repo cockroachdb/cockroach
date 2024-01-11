@@ -2013,6 +2013,31 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	}
 }
 
+func TestChangefeedInitialScan2(t *testing.T) {
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `
+	  		CREATE TABLE foo (key INT PRIMARY KEY);
+	  		INSERT INTO foo (key) SELECT * FROM generate_series(1, 5000);
+	  	`)
+
+		foo, err := f.Feed("CREATE CHANGEFEED FOR foo WITH initial_scan='only'")
+		require.NoError(t, err)
+
+		jf := foo.(cdctest.EnterpriseTestFeed)
+		err = jf.WaitForStatus(func(s jobs.Status) bool {
+			rs, err := jf.FetchRunningStatus()
+			t.Logf("%s %s", rs, err)
+			return s == jobs.StatusSucceeded
+		})
+		require.NoError(t, err)
+		require.NoError(t, foo.Close())
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("pubsub"))
+
+}
+
 // Test checkpointing when the highwater does not move due to some issues with
 // specific spans lagging behind
 func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
