@@ -97,6 +97,7 @@ go_library(
         "ledger.go",
         "libpq.go",
         "libpq_blocklist.go",
+        "limit_capacity.go",
         "liquibase.go",
         "liquibase_blocklist.go",
         "loss_of_quorum_recovery.go",
