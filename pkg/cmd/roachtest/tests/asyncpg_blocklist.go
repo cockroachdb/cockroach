@@ -73,7 +73,6 @@ var asyncpgBlocklist = blocklist{
 	`test_prepare.TestPrepare.test_prepare_14_explain`:                                                    "unknown",
 	`test_prepare.TestPrepare.test_prepare_16_command_result`:                                             "unknown",
 	`test_prepare.TestPrepare.test_prepare_19_concurrent_calls`:                                           "unknown",
-	`test_prepare.TestPrepare.test_prepare_22_empty`:                                                      "unknown",
 	`test_prepare.TestPrepare.test_prepare_28_max_args`:                                                   "unknown",
 	`test_prepare.TestPrepare.test_prepare_31_pgbouncer_note`:                                             "unsupported feature - https://github.com/cockroachdb/cockroach/issues/17511",
 	`test_prepare.TestPrepare.test_prepare_statement_invalid`:                                             "experimental feature - https://github.com/cockroachdb/cockroach/issues/49329",
