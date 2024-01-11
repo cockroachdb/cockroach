@@ -30,5 +30,6 @@ jobs:
         days-before-pr-stale: 99999
         days-before-issue-stale: 30
         days-before-close: 5
-        only-labels: 'T-kv,C-test-failure'
+        any-of-labels: 'T-kv,T-sql-foundations'
+        only-labels: 'C-test-failure'
         exempt-issue-labels: 'release-blocker,skipped-test,X-nostale'
