@@ -6922,6 +6922,16 @@ alter_virtual_cluster_replication_stmt:
       Options: *$6.tenantReplicationOptions(),
     }
   }
+| ALTER virtual_cluster virtual_cluster_spec START REPLICATION OF d_expr ON d_expr opt_with_replication_options
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantReplication{
+      TenantSpec: $3.tenantSpec(),
+      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $7.expr()},
+      ReplicationSourceAddress: $9.expr(),
+      Options: *$10.tenantReplicationOptions(),
+    }
+  }
 
 
 // %Help: ALTER VIRTUAL CLUSTER SETTING - alter cluster setting overrides for virtual clusters
