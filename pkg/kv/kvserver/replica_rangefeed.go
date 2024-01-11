@@ -133,7 +133,7 @@ type rangefeedTxnPusher struct {
 // transactions.
 func (tp *rangefeedTxnPusher) PushTxns(
 	ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
-) ([]*roachpb.Transaction, error) {
+) ([]*roachpb.Transaction, bool, error) {
 	pushTxnMap := make(map[uuid.UUID]*enginepb.TxnMeta, len(txns))
 	for i := range txns {
 		txn := &txns[i]
@@ -149,18 +149,18 @@ func (tp *rangefeedTxnPusher) PushTxns(
 		},
 	}
 
-	pushedTxnMap, pErr := tp.ir.MaybePushTransactions(
+	pushedTxnMap, ambiguousAbort, pErr := tp.ir.MaybePushTransactions(
 		ctx, pushTxnMap, h, kvpb.PUSH_TIMESTAMP, false, /* skipIfInFlight */
 	)
 	if pErr != nil {
-		return nil, pErr.GoError()
+		return nil, false, pErr.GoError()
 	}
 
 	pushedTxns := make([]*roachpb.Transaction, 0, len(pushedTxnMap))
 	for _, txn := range pushedTxnMap {
 		pushedTxns = append(pushedTxns, txn)
 	}
-	return pushedTxns, nil
+	return pushedTxns, ambiguousAbort, nil
 }
 
 // ResolveIntents is part of the rangefeed.TxnPusher interface.

@@ -366,8 +366,9 @@ type testTxnPusher struct {
 
 func (tp *testTxnPusher) PushTxns(
 	ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
-) ([]*roachpb.Transaction, error) {
-	return tp.pushTxnsFn(txns, ts)
+) ([]*roachpb.Transaction, bool, error) {
+	pushedTxns, err := tp.pushTxnsFn(txns, ts)
+	return pushedTxns, false, err
 }
 
 func (tp *testTxnPusher) ResolveIntents(ctx context.Context, intents []roachpb.LockUpdate) error {

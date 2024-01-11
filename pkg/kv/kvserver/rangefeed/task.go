@@ -186,7 +186,7 @@ func (s *SeparatedIntentScanner) Close() { s.iter.Close() }
 type TxnPusher interface {
 	// PushTxns attempts to push the specified transactions to a new
 	// timestamp. It returns the resulting transaction protos.
-	PushTxns(context.Context, []enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error)
+	PushTxns(context.Context, []enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, bool, error)
 	// ResolveIntents resolves the specified intents.
 	ResolveIntents(ctx context.Context, intents []roachpb.LockUpdate) error
 	// Barrier waits for all past and ongoing write commands in the range to
@@ -250,7 +250,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	// This may cause transaction restarts, but span refreshing should
 	// prevent a restart for any transaction that has not been written
 	// over at a larger timestamp.
-	pushedTxns, err := a.pusher.PushTxns(ctx, a.txns, a.ts)
+	pushedTxns, ambiguousAbort, err := a.pusher.PushTxns(ctx, a.txns, a.ts)
 	if err != nil {
 		return err
 	}
@@ -264,7 +264,6 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	// Inform the Processor of the results of the push for each transaction.
 	ops := make([]enginepb.MVCCLogicalOp, len(pushedTxns))
 	var intentsToCleanup []roachpb.LockUpdate
-	var sawAborted bool
 	for i, txn := range pushedTxns {
 		switch txn.Status {
 		case roachpb.PENDING, roachpb.STAGING:
@@ -321,8 +320,6 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 			// collection, then LockSpans will be populated.
 			txnIntents := intentsInBound(txn, a.span.AsRawSpanWithNoLocals())
 			intentsToCleanup = append(intentsToCleanup, txnIntents...)
-
-			sawAborted = true
 		}
 	}
 
@@ -354,7 +351,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	// TODO(erikgrinaker): consider a timeout here, or track the barrier LAI until
 	// the next retry. This isn't currently needed, since the txn pusher runs on
 	// its own goroutine, but would be needed if we moved it into the scheduler.
-	if sawAborted {
+	if ambiguousAbort {
 		if err := a.pusher.Barrier(ctx); err != nil {
 			return err
 		}
