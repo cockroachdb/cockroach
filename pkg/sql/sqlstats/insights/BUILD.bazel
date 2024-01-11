@@ -63,6 +63,7 @@ go_test(
         "//pkg/sql/appstatspb",
         "//pkg/sql/clusterunique",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/uint128",
         "//pkg/util/uuid",

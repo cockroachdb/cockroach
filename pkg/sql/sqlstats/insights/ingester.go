@@ -31,12 +31,26 @@ type concurrentBufferIngester struct {
 		eventBuffer *eventBuffer
 	}
 
+	testKnobs struct {
+		// noFlush prevents signals on eventBufferCh, which prevents flushing of
+		// the eventBuffer, unless Clear() is called.
+		noFlush bool
+	}
+
 	eventBufferCh chan *eventBuffer
 	registry      *lockingRegistry
 	running       uint64
 }
 
-var _ Writer = &concurrentBufferIngester{}
+// Clear flushes the underlying buffer, and signals the underlying registry
+// to clear any remaining cached data afterwards. This is a synchronous operation.
+func (i *concurrentBufferIngester) Clear(ctx context.Context) {
+	i.ingest(ctx, i.guard.eventBuffer)
+	i.registry.Clear(ctx)
+}
+
+var _ Writer = (*concurrentBufferIngester)(nil)
+var _ CacheClearer = (*concurrentBufferIngester)(nil)
 
 // concurrentBufferIngester buffers the "events" it sees (via ObserveStatement
 // and ObserveTransaction) and passes them along to the underlying registry
@@ -69,7 +83,7 @@ func (i *concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stop
 		for {
 			select {
 			case events := <-i.eventBufferCh:
-				i.ingest(ctx, events) // note that injest clears the buffer
+				i.ingest(ctx, events) // note that ingest clears the buffer
 				eventBufferPool.Put(events)
 			case <-stopper.ShouldQuiesce():
 				atomic.StoreUint64(&i.running, 0)
@@ -157,6 +171,9 @@ func newConcurrentBufferIngester(registry *lockingRegistry) *concurrentBufferIng
 			return bufferSize
 		},
 		func(currentWriterIndex int64) {
+			if i.testKnobs.noFlush {
+				return
+			}
 			if atomic.LoadUint64(&i.running) == 1 {
 				i.eventBufferCh <- i.guard.eventBuffer
 			}

@@ -156,6 +156,15 @@ type Writer interface {
 	ObserveTransaction(ctx context.Context, sessionID clusterunique.ID, transaction *Transaction)
 }
 
+// CacheClearer provides methods to erase data from a cache. It provides no guarantees
+// when it comes to flushing the contents of the cache - they may be simply erased if
+// the underlying implementation chooses to do so.
+type CacheClearer interface {
+	// Clear clears the cache of its contents, with no guarantees around flush behavior.
+	// Data may simply be erased depending on the implementation.
+	Clear(ctx context.Context)
+}
+
 // WriterProvider offers a Writer.
 // Pass true for internal when called by the internal executor.
 type WriterProvider func(internal bool) Writer
@@ -191,6 +200,10 @@ type Provider interface {
 	// LatencyInformation returns an object that offers read access to latency information,
 	// such as percentiles.
 	LatencyInformation() LatencyInformation
+
+	// CacheClearer clears all cached insights data that has yet to be written to the data store
+	// provided by Reader().
+	CacheClearer() CacheClearer
 }
 
 // New builds a new Provider.

@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -116,6 +118,54 @@ func TestIngester(t *testing.T) {
 			require.ElementsMatch(t, tc.insights, actual)
 		})
 	}
+}
+
+func TestIngester_Clear(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+
+	t.Run("clears buffer", func(t *testing.T) {
+		// Initialize ingester, prevent flushes while we fill the buffer using testKnobs.
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		store := newStore(settings, obs.NoopEventsExporter{})
+		ingester := newConcurrentBufferIngester(
+			newRegistry(settings, &fakeDetector{
+				stubEnabled: true,
+				stubIsSlow:  true,
+			}, store))
+		ingester.testKnobs.noFlush = true
+		ingester.Start(ctx, stopper)
+		// Fill the ingester's buffer with some data, preventing auto flushes while we do so.
+		// Make sure we have statements without associated txns, as txns trigger flushes of
+		// statements within the lockingRegistry. We want there to be some leftover data within
+		// the lockingRegistry so we can assert that it was cleared as well.
+		observations := []testEvent{
+			{sessionID: 1, statementID: 10},
+			{sessionID: 2, statementID: 20},
+			{sessionID: 1, statementID: 11},
+			{sessionID: 2, statementID: 21},
+			{sessionID: 3, statementID: 31}, // No associated txn.
+			{sessionID: 4, statementID: 41}, // No associated txn.
+			{sessionID: 1, transactionID: 100},
+			{sessionID: 2, transactionID: 200},
+		}
+		for _, o := range observations {
+			if o.statementID != 0 {
+				ingester.ObserveStatement(o.SessionID(), &Statement{ID: o.StatementID()})
+			} else {
+				ingester.ObserveTransaction(ctx, o.SessionID(), &Transaction{ID: o.TransactionID()})
+			}
+		}
+		// Verify buffer isn't empty.
+		require.NotEqual(t, event{}, ingester.guard.eventBuffer[0])
+		// Now call Clear() to verify it clears the buffer and the underlying registry.
+		ingester.Clear(ctx)
+		require.Equal(t, event{}, ingester.guard.eventBuffer[0])
+		require.Empty(t, ingester.registry.statements)
+	})
 }
 
 func TestIngester_Disabled(t *testing.T) {

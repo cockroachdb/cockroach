@@ -32,7 +32,12 @@ type lockingRegistry struct {
 	sink       sink
 }
 
-var _ Writer = &lockingRegistry{}
+var _ Writer = (*lockingRegistry)(nil)
+var _ CacheClearer = (*lockingRegistry)(nil)
+
+func (r *lockingRegistry) Clear(_ context.Context) {
+	r.statements = make(map[clusterunique.ID]*statementBuf)
+}
 
 func (r *lockingRegistry) ObserveStatement(sessionID clusterunique.ID, statement *Statement) {
 	if !r.enabled() {
