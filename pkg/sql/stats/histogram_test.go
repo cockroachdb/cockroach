@@ -11,6 +11,7 @@
 package stats
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 type expBucket struct {
@@ -227,7 +229,9 @@ func TestEquiDepthHistogram(t *testing.T) {
 		},
 	}
 
-	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.NewTestingEvalContext(st)
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
@@ -241,7 +245,7 @@ func TestEquiDepthHistogram(t *testing.T) {
 			}
 
 			h, _, err := EquiDepthHistogram(
-				evalCtx, types.Int, samples, tc.numRows, tc.distinctCount, tc.maxBuckets,
+				ctx, evalCtx, types.Int, samples, tc.numRows, tc.distinctCount, tc.maxBuckets, st,
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -253,7 +257,8 @@ func TestEquiDepthHistogram(t *testing.T) {
 	t.Run("invalid-numRows", func(t *testing.T) {
 		samples := tree.Datums{tree.NewDInt(1), tree.NewDInt(2), tree.NewDInt(3)}
 		_, _, err := EquiDepthHistogram(
-			evalCtx, types.Int, samples, 2 /* numRows */, 2 /* distinctCount */, 10, /* maxBuckets */
+			ctx, evalCtx, types.Int, samples, 2, /* numRows */
+			2 /* distinctCount */, 10 /* maxBuckets */, st,
 		)
 		if err == nil {
 			t.Fatal("expected error")
@@ -263,7 +268,8 @@ func TestEquiDepthHistogram(t *testing.T) {
 	t.Run("nulls", func(t *testing.T) {
 		samples := tree.Datums{tree.NewDInt(1), tree.NewDInt(2), tree.DNull}
 		_, _, err := EquiDepthHistogram(
-			evalCtx, types.Int, samples, 100 /* numRows */, 3 /* distinctCount */, 10, /* maxBuckets */
+			ctx, evalCtx, types.Int, samples, 100, /* numRows */
+			3 /* distinctCount */, 10 /* maxBuckets */, st,
 		)
 		if err == nil {
 			t.Fatal("expected error")
@@ -349,7 +355,9 @@ func TestConstructExtremesHistogram(t *testing.T) {
 		},
 	}
 
-	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.NewTestingEvalContext(st)
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			samples := make(tree.Datums, len(tc.values))
@@ -360,7 +368,10 @@ func TestConstructExtremesHistogram(t *testing.T) {
 
 				samples[i] = tree.NewDInt(tree.DInt(val))
 			}
-			h, _, err := ConstructExtremesHistogram(evalCtx, types.Int, samples, tc.numRows, tc.distinctCount, tc.maxBuckets, tree.NewDInt(tree.DInt(tc.lowerBound)))
+			h, _, err := ConstructExtremesHistogram(
+				ctx, evalCtx, types.Int, samples, tc.numRows, tc.distinctCount,
+				tc.maxBuckets, tree.NewDInt(tree.DInt(tc.lowerBound)), st,
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -989,8 +1000,8 @@ func roundHistogram(h *histogram) {
 }
 
 func validateHistogramBuckets(t *testing.T, expected []expBucket, h HistogramData) {
-	if h.Version != histVersion {
-		t.Errorf("Invalid histogram version %d expected %d", h.Version, histVersion)
+	if h.Version != HistVersion {
+		t.Errorf("Invalid histogram version %d expected %d", h.Version, HistVersion)
 	}
 	if (h.Buckets == nil) != (expected == nil) {
 		t.Fatalf("Invalid bucket == nil: %v, expected %v", h.Buckets == nil, expected == nil)
@@ -1017,6 +1028,44 @@ func validateHistogramBuckets(t *testing.T, expected []expBucket, h HistogramDat
 		distinctRange := math.Round(b.DistinctRange*100.0) / 100.0
 		if distinctRange != exp.distinctLess {
 			t.Errorf("bucket %d: incorrect DistinctRows %f, expected %f", i, distinctRange, exp.distinctLess)
+		}
+	}
+}
+
+// TestUpperBoundsRoundTrip sanity checks that upper bound datums of any type
+// can be encoded and decoded correctly.
+func TestUpperBoundsRoundTrip(t *testing.T) {
+	const numBuckets = 200
+	rng, _ := randutil.NewTestRand()
+	st := cluster.MakeTestingClusterSettings()
+	// Pick a random type and some random datums of that type.
+	typ := RandType(rng)
+	upperBounds := make([]tree.Datum, numBuckets)
+	for i := range upperBounds {
+		upperBounds[i] = RandDatum(rng, typ, false /* nullOk */)
+	}
+	// Create an incomplete histogram that uses those datums as the upper bounds
+	// of the buckets.
+	var h histogram
+	h.buckets = make([]cat.HistogramBucket, numBuckets)
+	for i := 0; i < numBuckets; i++ {
+		h.buckets[i].UpperBound = upperBounds[i]
+	}
+	hd, err := h.toHistogramData(context.Background(), typ, st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Now decode the histogram buckets and ensure that decoded datums match the
+	// original ones.
+	var stat TableStatistic
+	stat.HistogramData = &hd
+	if err = DecodeHistogramBuckets(&stat); err != nil {
+		t.Fatal(err)
+	}
+	evalCtx := eval.MakeTestingEvalContext(st)
+	for i, expected := range upperBounds {
+		if decoded := stat.Histogram[i].UpperBound; expected.Compare(&evalCtx, decoded) != 0 {
+			t.Errorf("type %s: expected %s, decoded %s", typ.SQLString(), expected, decoded)
 		}
 	}
 }

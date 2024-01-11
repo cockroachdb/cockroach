@@ -17,11 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -79,7 +77,7 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 		if b.UpperBound == nil {
 			return fmt.Errorf("histogram bucket upper bound is unset")
 		}
-		datum, _, err := keyside.Decode(&a, typ, b.UpperBound, encoding.Ascending)
+		datum, err := DecodeUpperBound(h.Version, typ, &a, b.UpperBound)
 		if err != nil {
 			return err
 		}
@@ -157,7 +155,7 @@ func (js *JSONStatistic) GetHistogram(
 		h.Buckets[i].NumEq = hb.NumEq
 		h.Buckets[i].NumRange = hb.NumRange
 		h.Buckets[i].DistinctRange = hb.DistinctRange
-		h.Buckets[i].UpperBound, err = keyside.Encode(nil, upperVal, encoding.Ascending)
+		h.Buckets[i].UpperBound, err = encodeUpperBound(h.Version, upperVal)
 		if err != nil {
 			return nil, err
 		}

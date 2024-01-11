@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -300,6 +301,7 @@ func randHistogram(rng *rand.Rand, colType *types.T) stats.HistogramData {
 	}
 	h := stats.HistogramData{
 		ColumnType: histogramColType,
+		Version:    stats.HistVersion,
 	}
 
 	// Generate random values for histogram bucket upper bounds.
@@ -310,7 +312,13 @@ func randHistogram(rng *rand.Rand, colType *types.T) stats.HistogramData {
 			encs := encodeInvertedIndexHistogramUpperBounds(colType, upper)
 			encodedUpperBounds = append(encodedUpperBounds, encs...)
 		} else {
-			enc, err := keyside.Encode(nil, upper, encoding.Ascending)
+			var enc []byte
+			var err error
+			if colType.Family() == types.CollatedStringFamily {
+				enc, err = valueside.Encode(nil /* appendTo */, valueside.NoColumnID, upper, nil /* scratch */)
+			} else {
+				enc, err = keyside.Encode(nil, upper, encoding.Ascending)
+			}
 			if err != nil {
 				panic(err)
 			}

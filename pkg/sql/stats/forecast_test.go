@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -605,6 +606,7 @@ func TestForecastColumnStatistics(t *testing.T) {
 		},
 	}
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	var fullStatID, partialStatID uint64
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
@@ -612,12 +614,16 @@ func TestForecastColumnStatistics(t *testing.T) {
 			// Set up observed TableStatistics in CreatedAt desc order.
 			observed := make([]*TableStatistic, len(tc.observed))
 			for j := range tc.observed {
-				observed[len(observed)-j-1] = tc.observed[j].toTableStatistic("testStat", i, descpb.ColumnIDs{1}, fullStatID, partialStatID)
+				observed[len(observed)-j-1] = tc.observed[j].toTableStatistic(
+					ctx, "testStat", i, descpb.ColumnIDs{1}, fullStatID, partialStatID, st,
+				)
 			}
-			expected := tc.forecast.toTableStatistic(jobspb.ForecastStatsName, i, descpb.ColumnIDs{1}, fullStatID, partialStatID)
+			expected := tc.forecast.toTableStatistic(
+				ctx, jobspb.ForecastStatsName, i, descpb.ColumnIDs{1}, fullStatID, partialStatID, st,
+			)
 			at := testStatTime(tc.at)
 
-			forecast, err := forecastColumnStatistics(ctx, nil /* sv */, observed, at, 1)
+			forecast, err := forecastColumnStatistics(ctx, st, observed, at, 1)
 			if err != nil {
 				if !tc.err {
 					t.Errorf("test case %d unexpected forecastColumnStatistics err: %v", i, err)
@@ -642,7 +648,13 @@ type testStat struct {
 }
 
 func (ts *testStat) toTableStatistic(
-	name string, tableID int, columnIDs descpb.ColumnIDs, statID uint64, fullStatID uint64,
+	ctx context.Context,
+	name string,
+	tableID int,
+	columnIDs descpb.ColumnIDs,
+	statID uint64,
+	fullStatID uint64,
+	st *cluster.Settings,
 ) *TableStatistic {
 	if ts == nil {
 		return nil
@@ -663,7 +675,7 @@ func (ts *testStat) toTableStatistic(
 	}
 	if ts.hist != nil {
 		hist := ts.hist.toHistogram()
-		histData, err := hist.toHistogramData(types.Float)
+		histData, err := hist.toHistogramData(ctx, types.Float, st)
 		if err != nil {
 			panic(err)
 		}
