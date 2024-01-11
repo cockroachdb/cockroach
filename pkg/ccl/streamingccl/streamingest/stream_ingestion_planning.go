@@ -301,8 +301,7 @@ func ingestionPlanHook(
 			Span:                  keys.MakeTenantSpan(destinationTenantID),
 			ReplicationTTLSeconds: retentionTTLSeconds,
 
-			DestinationTenantID:   destinationTenantID,
-			DestinationTenantName: roachpb.TenantName(dstTenantName),
+			DestinationTenantID: destinationTenantID,
 
 			SourceTenantName:     roachpb.TenantName(sourceTenant),
 			SourceTenantID:       replicationProducerSpec.SourceTenantID,
