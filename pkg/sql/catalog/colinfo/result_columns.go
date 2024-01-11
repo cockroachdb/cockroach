@@ -313,6 +313,13 @@ var TenantColumnsWithReplication = ResultColumns{
 	{Name: "cutover_time", Typ: types.Decimal},
 }
 
+// TenantColumnsWithPriorReplication is appended to TenantColumns for
+// SHOW VIRTUAL CLUSTER ... WITH PRIOR REPLICATION DETAILS queries.
+var TenantColumnsWithPriorReplication = ResultColumns{
+	{Name: "source_id", Typ: types.String},
+	{Name: "activation_time", Typ: types.Decimal},
+}
+
 // TenantColumnsWithCapabilities is appended to TenantColumns for
 // SHOW VIRTUAL CLUSTER ... WITH CAPABILITIES queries.
 var TenantColumnsWithCapabilities = ResultColumns{
