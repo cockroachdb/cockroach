@@ -376,19 +376,26 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		// Emitting needs to also handle any incoming results to avoid a deadlock
 		// with trying to emit while the emitter is blocked on returning a result.
 		for {
+			done, err := ioEmitter.requestQ.tryPush(ctx, batchBuffer)
+			if err != nil {
+				return err
+			}
+			if done {
+				return nil
+			}
+
+			// Process results to unblock the emitter above. If we could not push, it is because the queue is full,
+			// meaning that it is guaranteed that there are some requests being processed which will have results
+			// to handle below.
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case ioEmitter.requestCh <- batchBuffer:
+			case <-s.doneCh:
+				return nil
 			case result := <-ioEmitter.resultCh:
 				handleResult(result)
-				continue
-			case <-s.doneCh:
 			}
-			break
 		}
-
-		return nil
 	}
 
 	flushAll := func() error {

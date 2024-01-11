@@ -15,8 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/ring"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // parallelIO allows performing blocking "IOHandler" calls on in parallel.
@@ -36,8 +40,8 @@ type parallelIO struct {
 
 	ioHandler IOHandler
 
-	requestCh chan IORequest
-	resultCh  chan *ioResult // readers should freeIOResult after handling result events
+	requestQ *requestQueue
+	resultCh chan *ioResult // readers should freeIOResult after handling result events
 }
 
 // IORequest represents an abstract unit of IO that has a set of keys upon which
@@ -95,7 +99,7 @@ func newParallelIO(
 		wg:        wg,
 		metrics:   metrics,
 		ioHandler: handler,
-		requestCh: make(chan IORequest, numWorkers),
+		requestQ:  newRequestQueue(numWorkers),
 		resultCh:  make(chan *ioResult, numWorkers),
 		doneCh:    make(chan struct{}),
 	}
@@ -122,6 +126,81 @@ var testingEnableQueuingDelay = func() func() {
 		testQueuingDelay = 0 * time.Second
 	}
 }
+
+// requestQueue is a single consumer multi-producer queue.
+type requestQueue struct {
+	mu struct {
+		syncutil.Mutex
+		q                ring.Buffer[requestWithAlloc]
+		waitBecauseEmpty chan struct{}
+	}
+	p *quotapool.IntPool
+}
+
+type requestWithAlloc struct {
+	req IORequest
+	a   *quotapool.IntAlloc
+}
+
+func newRequestQueue(sz int) *requestQueue {
+	rq := &requestQueue{}
+	rq.mu.q = ring.MakeBuffer([]requestWithAlloc{})
+	rq.p = quotapool.NewIntPool("changefeed-parallel-io", uint64(sz))
+	return rq
+}
+
+// tryPush pushes the request to the queue if it is not full. If the request was
+// added to the queue, this method returns true.
+func (rq *requestQueue) tryPush(ctx context.Context, req IORequest) (bool, error) {
+	// Check if the queue is full.
+	a, err := rq.p.TryAcquire(ctx, 1)
+	if errors.Is(err, quotapool.ErrNotEnoughQuota) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+
+	// Add the request to the queue.
+	rq.mu.q.AddLast(requestWithAlloc{req: req, a: a})
+
+	// Unblock any waiters.
+	if rq.mu.waitBecauseEmpty != nil {
+		close(rq.mu.waitBecauseEmpty)
+		rq.mu.waitBecauseEmpty = nil
+	}
+
+	return true, nil
+}
+
+// maybePop pops a request from the queue if the queue is non-empty.
+// If the queue is empty, a channel is returned which will be closed
+// when requests are available to read.
+func (rq *requestQueue) maybePop() (IORequest, bool, chan struct{}) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+
+	if rq.mu.q.Len() > 0 {
+		reqWithAlloc := rq.mu.q.GetFirst()
+		rq.mu.q.RemoveFirst()
+		reqWithAlloc.a.Release()
+		return reqWithAlloc.req, true, nil
+	}
+
+	wait := rq.mu.waitBecauseEmpty
+	if wait == nil {
+		rq.mu.waitBecauseEmpty = make(chan struct{})
+		wait = rq.mu.waitBecauseEmpty
+	}
+	return nil, false, wait
+}
+
+// This is the maximum number of requests which can be queued/pending due to
+// conflicting in-flight keys.
+var maxPendingSize = 128
 
 // processIO starts numEmitWorkers worker threads to run the IOHandler on
 // non-conflicting IORequests each retrying according to the retryOpts, then:
@@ -286,21 +365,35 @@ func (p *parallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 			}
 		}
 
-		select {
-		case req := <-p.requestCh:
-			if hasConflictingKeys(req.Keys()) {
-				// If a request conflicts with any currently unhandled requests, add it
-				// to the pending queue to be rechecked for validity later.
-				pending = append(pending, queuedRequest{req: req, admitTime: timeutil.Now()})
-				metricsRec.recordPendingQueuePush(int64(req.NumMessages()))
-			} else {
-				newInFlightKeys := req.Keys()
-				inflight.UnionWith(newInFlightKeys)
-				metricsRec.setInFlightKeys(int64(inflight.Len()))
-				if err := submitIO(req); err != nil {
-					return err
+		// Check for incoming requests and ush back on the producer if we have too many pending requests.
+		waitForRequest := make(chan struct{})
+		close(waitForRequest)
+		if len(pending) < maxPendingSize {
+			req, ok, maybeWaitForRequest := p.requestQ.maybePop()
+			if ok {
+				if hasConflictingKeys(req.Keys()) {
+					// If a request conflicts with any currently unhandled requests, add it
+					// to the pending queue to be rechecked for validity later.
+					pending = append(pending, queuedRequest{req: req, admitTime: timeutil.Now()})
+					metricsRec.recordPendingQueuePush(int64(req.NumMessages()))
+				} else {
+					// Otherwise, put the request in flight.
+					newInFlightKeys := req.Keys()
+					inflight.UnionWith(newInFlightKeys)
+					metricsRec.setInFlightKeys(int64(inflight.Len()))
+					if err := submitIO(req); err != nil {
+						return err
+					}
 				}
+			} else {
+				// If there is nothing to read, we should wait until there is
+				// something to read.
+				waitForRequest = maybeWaitForRequest
 			}
+		}
+
+		select {
+		case <-waitForRequest:
 		case res := <-workerResultCh:
 			if err := handleResult(res); err != nil {
 				return err
