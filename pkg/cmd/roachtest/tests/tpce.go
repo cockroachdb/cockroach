@@ -80,7 +80,7 @@ func initTPCESpec(
 }
 
 func (ts *tpceSpec) newCmd(o tpceCmdOptions) *roachtestutil.Command {
-	cmd := roachtestutil.NewCommand(`sudo docker run cockroachdb/tpc-e:latest`)
+	cmd := roachtestutil.NewCommand(`sudo docker run us-east1-docker.pkg.dev/crl-ci-images/cockroach/tpc-e:latest`)
 	o.AddCommandOptions(cmd)
 	return cmd
 }
