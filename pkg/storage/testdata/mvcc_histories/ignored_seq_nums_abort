@@ -1,0 +1,26 @@
+# Abort an intent whose history includes ignored seq nums.
+# The test exposes a bug where even though the transaction is aborted, its
+# intent is updated instead of aborted.
+
+run ok log-ops
+with t=A k=k
+  txn_begin ts=11
+  txn_step  seq=10
+  put       v=a
+  txn_step  seq=20
+  put       v=b
+  txn_step  seq=30
+  txn_ignore_seqs seqs=(15-25)
+  resolve_intent status=ABORTED
+  get
+----
+put: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
+put: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
+resolve_intent: "k" -> resolved key = true
+get: "k" -> <no data>
+>> at end:
+txn: "A" meta={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+<no data>
+logical op: *enginepb.MVCCWriteIntentOp
+logical op: *enginepb.MVCCUpdateIntentOp
+logical op: *enginepb.MVCCAbortIntentOp
