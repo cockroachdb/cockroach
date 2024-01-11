@@ -175,7 +175,7 @@ if [ $ARCH = x86_64 ]; then
     do
         git checkout "$branch"
         # TODO(benesch): store the acceptanceversion somewhere more accessible.
-        docker pull $(git grep cockroachdb/acceptance -- '*.go' | sed -E 's/.*"([^"]*).*"/\1/') || true
+        docker pull $(git grep us-east1-docker.pkg.dev/crl-ci-images/cockroach/acceptance -- '*.go' | sed -E 's/.*"([^"]*).*"/\1/') || true
     done
     cd -
 fi
