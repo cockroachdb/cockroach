@@ -1,0 +1,50 @@
+/* setup */
+
+/* test */
+CREATE SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+EXPLAIN (DDL) DROP SEQUENCE sq1;
+----
+Schema change plan for DROP SEQUENCE ‹defaultdb›.‹public›.‹sq1›; following CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 14 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (sq1-), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104 (sq1-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (sq1-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (sq1-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED Sequence:{DescID: 104 (sq1-)}
+ │         │    ├── PUBLIC → ABSENT  SequenceOption:{DescID: 104 (sq1-), Name: "START"}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 104 (sq1-), ReferencedDescID: 101 (public)}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 104 (sq1-), ColumnID: 1 (value-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 104 (sq1-), ColumnFamilyID: 0, ColumnID: 1 (value-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 104 (sq1-), ColumnID: 1 (value-), IndexID: 0}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 104 (sq1-), Name: "value", ColumnID: 1 (value-)}
+ │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 104 (sq1-), IndexID: 1 (primary-)}
+ │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 104 (sq1-), Name: "primary", IndexID: 1 (primary-)}
+ │         │    └── PUBLIC → ABSENT  IndexColumn:{DescID: 104 (sq1-), ColumnID: 1 (value-), IndexID: 1 (primary-)}
+ │         └── 18 Mutation operations
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.SequenceOpt..."}
+ │              ├── RemoveObjectParent {"ObjectID":104,"ParentSchemaID":101}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":104}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
+ │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sq1","SchemaID":101}}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"root"}
+ │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":104}
+ │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
+ │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"TableID":104}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":104}
+ │              └── MakeIndexAbsent {"IndexID":1,"TableID":104}
+ └── PreCommitPhase
+      └── Stage 1 of 1 in PreCommitPhase
+           ├── 2 elements transitioning toward ABSENT
+           │    ├── DROPPED → ABSENT Sequence:{DescID: 104 (sq1-)}
+           │    └── PUBLIC  → ABSENT TableData:{DescID: 104 (sq1-), ReferencedDescID: 100 (defaultdb)}
+           └── 1 Mutation operation
+                └── UndoAllInTxnImmediateMutationOpSideEffects
