@@ -216,6 +216,10 @@ func (r *telemetryMetricsRecorder) newParallelIOMetricsRecorder() parallelIOMetr
 	return r.inner.newParallelIOMetricsRecorder()
 }
 
+func (r *telemetryMetricsRecorder) newKafkaMetricsGetter() KafkaMetricsGetter {
+	return r.inner.newKafkaMetricsGetter()
+}
+
 // continuousTelemetryInterval determines the interval at which each node emits telemetry events
 // during the lifespan of each enterprise changefeed.
 var continuousTelemetryInterval = settings.RegisterDurationSetting(
