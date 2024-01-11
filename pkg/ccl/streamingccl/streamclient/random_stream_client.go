@@ -548,6 +548,14 @@ func (m *RandomStreamClient) Complete(_ context.Context, _ streampb.StreamID, _ 
 	return nil
 }
 
+// PriorReplicationDetails implements the streamclient.Client interface.
+func (p *RandomStreamClient) PriorReplicationDetails(
+	ctx context.Context, tenant roachpb.TenantName,
+) (string, hlc.Timestamp, error) {
+	return "", hlc.Timestamp{}, nil
+
+}
+
 type randomStreamSubscription struct {
 	receiveFn func(ctx context.Context) error
 	eventCh   chan streamingccl.Event

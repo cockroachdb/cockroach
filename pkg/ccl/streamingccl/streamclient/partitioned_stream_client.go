@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/url"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -252,6 +253,31 @@ func (p *partitionedStreamClient) Complete(
 		return errors.Wrapf(err, "error completing replication stream %d", streamID)
 	}
 	return nil
+}
+
+// PriorReplicationDetails implements the streamclient.Client interface.
+func (p *partitionedStreamClient) PriorReplicationDetails(
+	ctx context.Context, tenant roachpb.TenantName,
+) (string, hlc.Timestamp, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.PriorReplicationDetails")
+	defer sp.Finish()
+
+	var srcID string
+	var activated string
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	row := p.mu.srcConn.QueryRow(ctx,
+		`SELECT source_id, activation_time FROM [SHOW VIRTUAL CLUSTER $1 WITH PRIOR REPLICATION DETAILS]`, tenant)
+	if err := row.Scan(&srcID, &activated); err != nil {
+		return "", hlc.Timestamp{}, errors.Wrapf(err, "error querying prior replication details for %s", tenant)
+	}
+
+	d, _, err := apd.NewFromString(activated)
+	if err != nil {
+		return "", hlc.Timestamp{}, err
+	}
+	ts, err := hlc.DecimalToHLC(d)
+	return srcID, ts, err
 }
 
 type partitionedStreamSubscription struct {
