@@ -9,7 +9,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONS
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 2 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b+)}
+ │         │    ├── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b+), ReferencedColumnIDs: [2]}
  │         │    └── ABSENT → PUBLIC     ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_b", ConstraintID: 2 (check_b+)}
  │         └── 3 Mutation operations
  │              ├── AddCheckConstraint {"CheckExpr":"[FUNCTION 100105...","ConstraintID":2,"TableID":104,"Validity":2}
@@ -18,13 +18,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONS
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 2 elements transitioning toward PUBLIC
- │    │    │    ├── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b+)}
+ │    │    │    ├── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b+), ReferencedColumnIDs: [2]}
  │    │    │    └── PUBLIC     → ABSENT ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_b", ConstraintID: 2 (check_b+)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 2 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b+)}
+ │         │    ├── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b+), ReferencedColumnIDs: [2]}
  │         │    └── ABSENT → PUBLIC     ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_b", ConstraintID: 2 (check_b+)}
  │         └── 6 Mutation operations
  │              ├── AddCheckConstraint {"CheckExpr":"[FUNCTION 100105...","ConstraintID":2,"TableID":104,"Validity":2}
@@ -36,12 +36,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONS
  └── PostCommitPhase
       ├── Stage 1 of 2 in PostCommitPhase
       │    ├── 1 element transitioning toward PUBLIC
-      │    │    └── WRITE_ONLY → VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b+)}
+      │    │    └── WRITE_ONLY → VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b+), ReferencedColumnIDs: [2]}
       │    └── 1 Validation operation
       │         └── ValidateConstraint {"ConstraintID":2,"TableID":104}
       └── Stage 2 of 2 in PostCommitPhase
            ├── 1 element transitioning toward PUBLIC
-           │    └── VALIDATED → PUBLIC CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b+)}
+           │    └── VALIDATED → PUBLIC CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b+), ReferencedColumnIDs: [2]}
            └── 4 Mutation operations
                 ├── MakeValidatedCheckConstraintPublic {"ConstraintID":2,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}

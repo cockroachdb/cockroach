@@ -9,7 +9,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› DROP CO
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 2 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → VALIDATED ForeignKeyConstraint:{DescID: 105 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedDescID: 104 (t2)}
+ │         │    ├── PUBLIC → VALIDATED ForeignKeyConstraint:{DescID: 105 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedColumnIDs: [1], ReferencedDescID: 104 (t2)}
  │         │    └── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 105 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey-)}
  │         └── 2 Mutation operations
  │              ├── MakePublicForeignKeyConstraintValidated {"ConstraintID":2,"TableID":105}
@@ -17,13 +17,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› DROP CO
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 2 elements transitioning toward ABSENT
- │    │    │    ├── VALIDATED → PUBLIC ForeignKeyConstraint:{DescID: 105 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedDescID: 104 (t2)}
+ │    │    │    ├── VALIDATED → PUBLIC ForeignKeyConstraint:{DescID: 105 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedColumnIDs: [1], ReferencedDescID: 104 (t2)}
  │    │    │    └── ABSENT    → PUBLIC ConstraintWithoutIndexName:{DescID: 105 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 2 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → VALIDATED ForeignKeyConstraint:{DescID: 105 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedDescID: 104 (t2)}
+ │         │    ├── PUBLIC → VALIDATED ForeignKeyConstraint:{DescID: 105 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedColumnIDs: [1], ReferencedDescID: 104 (t2)}
  │         │    └── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 105 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey-)}
  │         └── 5 Mutation operations
  │              ├── MakePublicForeignKeyConstraintValidated {"ConstraintID":2,"TableID":105}
@@ -34,7 +34,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› DROP CO
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward ABSENT
-           │    └── VALIDATED → ABSENT ForeignKeyConstraint:{DescID: 105 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedDescID: 104 (t2)}
+           │    └── VALIDATED → ABSENT ForeignKeyConstraint:{DescID: 105 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedColumnIDs: [1], ReferencedDescID: 104 (t2)}
            └── 5 Mutation operations
                 ├── RemoveForeignKeyBackReference {"OriginConstraintID":2,"OriginTableID":105,"ReferencedTableID":104}
                 ├── RemoveForeignKeyConstraint {"ConstraintID":2,"TableID":105}
