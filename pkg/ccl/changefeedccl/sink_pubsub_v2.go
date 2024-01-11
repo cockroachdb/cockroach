@@ -19,6 +19,7 @@ import (
 	pb "cloud.google.com/go/pubsub/apiv1/pubsubpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -420,6 +421,7 @@ func makePubsubSink(
 	pacerFactory func() *admission.Pacer,
 	source timeutil.TimeSource,
 	mb metricsRecorderBuilder,
+	settings *cluster.Settings,
 	knobs *TestingKnobs,
 ) (Sink, error) {
 	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonConfig, sinkJSONConfig{
@@ -463,5 +465,6 @@ func makePubsubSink(
 		pacerFactory,
 		source,
 		mb(requiresResourceAccounting),
+		settings,
 	), nil
 }
