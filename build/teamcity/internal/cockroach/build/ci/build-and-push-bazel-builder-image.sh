@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 set -xeuo pipefail
 
+dir="$(dirname $(dirname $(dirname $(dirname $(dirname $(dirname "${0}"))))))"
+source "$dir/release/teamcity-support.sh"
+
+gar_repository="us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel"
+docker_login_gcr "$gar_repository" "$GOOGLE_CREDENTIALS"
+
 TAG=$(date +%Y%m%d-%H%M%S)
 docker buildx create --name "builder-$TAG" --use
-docker buildx build --push --platform linux/amd64,linux/arm64 -t "cockroachdb/bazel:$TAG" -t "cockroachdb/bazel:latest-do-not-use" build/bazelbuilder
+docker buildx build --push --platform linux/amd64,linux/arm64 -t "$gar_repository:$TAG" -t "$gar_repository:latest-do-not-use" build/bazelbuilder
 
 if [[ "$open_pr_on_success" == "true" ]]; then
     # Trigger "Open New Bazel Builder Image PR".
@@ -16,7 +22,7 @@ if [[ "$open_pr_on_success" == "true" ]]; then
       <buildType id="Internal_Cockroach_Build_Ci_OpenNewBazelBuilderImagePr"/>
        <properties>
             <property name="env.BRANCH" value="'"bazel-builder-update-$TAG"'"/>
-            <property name="env.VERSION" value="'"cockroachdb/bazel:$TAG"'"/>
+            <property name="env.VERSION" value="'"$gar_repository:$TAG"'"/>
         </properties>
     </build>'
 else
