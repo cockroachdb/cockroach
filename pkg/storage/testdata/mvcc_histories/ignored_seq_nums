@@ -629,3 +629,125 @@ data: "m"/30.000000000,0 -> /BYTES/a
 data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
 meta: "o"/0,0 -> txn={id=00000000 key="o" pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=10} ts=50.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "o"/50.000000000,0 -> /BYTES/a
+
+run ok
+clear_range k=k end=p
+----
+>> at end:
+<no data>
+
+# Try to update a pending intent with a lower epoch than the resolution.
+# The intent should be aborted because the new epoch may not write it again.
+
+run ok
+with t=G k=p
+  txn_begin    ts=50
+  txn_step     seq=10
+  put          v=a
+  txn_step     seq=20
+  put          v=b
+  check_intent
+  get
+----
+meta: "p" -> txn={id=00000000 key="p" pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+get: "p" -> /BYTES/b @50.000000000,0
+>> at end:
+txn: "G" meta={id=00000000 key="p" pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
+meta: "p"/0,0 -> txn={id=00000000 key="p" pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "p"/50.000000000,0 -> /BYTES/b
+
+run ok
+with t=G k=p
+  txn_restart
+  txn_ignore_seqs seqs=(15-25)
+  resolve_intent status=PENDING
+  get
+----
+get: "p" -> <no data>
+>> at end:
+txn: "G" meta={id=00000000 key="p" pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+<no data>
+
+
+run ok
+clear_range k=p end=-p
+----
+>> at end:
+<no data>
+
+# Try to update a pending intent with a higher epoch than the resolution's epoch.
+# The intent is not pushed, so it is not updated because the intent history
+# should be updated only when the epochs match.
+
+run ok
+with t=H k=q
+  txn_begin    ts=50
+  txn_restart  epoch=1
+  txn_step     seq=10
+  put          v=a
+  txn_step     seq=20
+  put          v=b
+  check_intent
+  get
+----
+meta: "q" -> txn={id=00000000 key="q" pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+get: "q" -> /BYTES/b @50.000000000,0
+>> at end:
+txn: "H" meta={id=00000000 key="q" pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
+meta: "q"/0,0 -> txn={id=00000000 key="q" pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "q"/50.000000000,0 -> /BYTES/b
+
+run ok
+with t=H k=q
+  txn_restart epoch=0
+  txn_ignore_seqs seqs=(15-25)
+  resolve_intent status=PENDING
+  check_intent
+----
+meta: "q" -> txn={id=00000000 key="q" pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+>> at end:
+txn: "H" meta={id=00000000 key="q" pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+meta: "q"/0,0 -> txn={id=00000000 key="q" pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "q"/50.000000000,0 -> /BYTES/b
+
+run ok
+clear_range k=q end=-q
+----
+>> at end:
+<no data>
+
+# Update a pending intent with a higher epoch than the resolution's epoch.
+# The intent is pushed, so its timestamp is updated to help the pusher make progress.
+# The intent history is not updated because the epochs don't match.
+
+run ok
+with t=I k=r
+  txn_begin    ts=50
+  txn_restart  epoch=1
+  txn_step     seq=10
+  put          v=a
+  txn_step     seq=20
+  put          v=b
+  check_intent
+  get
+----
+meta: "r" -> txn={id=00000000 key="r" pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+get: "r" -> /BYTES/b @50.000000000,0
+>> at end:
+txn: "I" meta={id=00000000 key="r" pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
+meta: "r"/0,0 -> txn={id=00000000 key="r" pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "r"/50.000000000,0 -> /BYTES/b
+
+run ok
+with t=I k=r
+  txn_restart epoch=0
+  txn_advance ts=60
+  txn_ignore_seqs seqs=(15-25)
+  resolve_intent status=PENDING
+  check_intent
+----
+meta: "r" -> txn={id=00000000 key="r" pri=0.00000000 epo=1 ts=60.000000000,0 min=0,0 seq=20} ts=60.000000000,0 del=false klen=12 vlen=20 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+>> at end:
+txn: "I" meta={id=00000000 key="r" pri=0.00000000 epo=0 ts=60.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+meta: "r"/0,0 -> txn={id=00000000 key="r" pri=0.00000000 epo=1 ts=60.000000000,0 min=0,0 seq=20} ts=60.000000000,0 del=false klen=12 vlen=20 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "r"/60.000000000,0 -> {localTs=50.000000000,0}/BYTES/b
