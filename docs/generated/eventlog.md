@@ -1009,30 +1009,6 @@ An event of type `comment_on_table` is recorded when a table is commented.
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
-### `convert_to_schema`
-
-An event of type `convert_to_schema` is recorded when a database is converted to a schema.
-
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `DatabaseName` | The name of the database being converted to a schema. | yes |
-| `NewDatabaseParent` | The name of the parent database for the new schema. | yes |
-
-
-#### Common fields
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
-| `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
-| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
-| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
-| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-
 ### `create_database`
 
 An event of type `create_database` is recorded when a database is created.
