@@ -410,6 +410,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 			}
 		}
 	}
+	l.Printf("%s: nodes started", c.Name)
 
 	if !startOpts.SkipInit {
 		storageCluster := c

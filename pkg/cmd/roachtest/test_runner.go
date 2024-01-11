@@ -672,11 +672,18 @@ func (r *testRunner) runWorker(
 			c, vmCreateOpts, clusterCreateErr = r.allocateCluster(
 				ctx, clusterFactory, clustersOpt, lopt,
 				testToRun.spec, arch, wStatus)
+
 			if clusterCreateErr != nil {
 				atomic.AddInt32(&r.numClusterErrs, 1)
 				shout(ctx, l, stdout, "Unable to create (or reuse) cluster for test %s due to: %s.",
 					testToRun.spec.Name, clusterCreateErr)
 			} else {
+				if c.arch != arch {
+					// N.B. this can happen if requested machine type is not feasible/available.
+					l.PrintfCtx(ctx, "WARN: cluster arch for test differs %s: %s (cluster arch=%q, specified arch=%q)",
+						testToRun.spec.Name, c.Name(), c.arch, arch)
+					arch = c.arch
+				}
 				l.PrintfCtx(ctx, "Created new cluster for test %s: %s (arch=%q)", testToRun.spec.Name, c.Name(), arch)
 			}
 		}
@@ -837,7 +844,9 @@ func (r *testRunner) runWorker(
 			}
 		} else {
 			// Upon success fetch the perf artifacts from the remote hosts.
-			if t.spec.Benchmark {
+			//if t.spec.Benchmark {
+			// TODO(srosenberg): enable arm after https://github.com/cockroachdb/cockroach/issues/104213 is fixed
+			if t.spec.Benchmark && c.arch != vm.ArchARM64 {
 				getPerfArtifacts(ctx, c, t)
 			}
 			if clustersOpt.debugMode == DebugKeepAlways {
