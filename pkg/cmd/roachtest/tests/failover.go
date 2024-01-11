@@ -413,7 +413,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
 	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{
-		replicas: 5, onlyNodes: []int{2, 3, 4, 5, 6}, leaseNode: 4})
+		replicas: 5, onlyNodes: []int{2, 3, 4, 5, 6}, leasePreference: "[+node4]"})
 
 	c.Run(ctx, c.Node(6), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
@@ -672,7 +672,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	// Place all ranges on n1-n3, and an extra liveness leaseholder replica on n4.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 	configureZone(t, ctx, conn, `RANGE liveness`, zoneConfig{
-		replicas: 4, onlyNodes: []int{1, 2, 3, 4}, leaseNode: 4})
+		replicas: 4, onlyNodes: []int{1, 2, 3, 4}, leasePreference: "[+node4]"})
 
 	// Wait for upreplication.
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
@@ -900,7 +900,7 @@ func runFailoverLiveness(
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 
 	// Constrain the liveness range to n1-n4, with leaseholder preference on n4.
-	configureZone(t, ctx, conn, `RANGE liveness`, zoneConfig{replicas: 4, leaseNode: 4})
+	configureZone(t, ctx, conn, `RANGE liveness`, zoneConfig{replicas: 4, leasePreference: "[+node4]"})
 
 	// Wait for upreplication.
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
@@ -1699,9 +1699,9 @@ func relocateLeases(t test.Test, ctx context.Context, conn *gosql.DB, predicate 
 }
 
 type zoneConfig struct {
-	replicas  int
-	onlyNodes []int
-	leaseNode int
+	replicas        int
+	onlyNodes       []int
+	leasePreference string
 }
 
 // configureZone sets the zone config for the given target.
@@ -1734,14 +1734,9 @@ func configureZone(
 		}
 	}
 
-	var leaseString string
-	if cfg.leaseNode > 0 {
-		leaseString += fmt.Sprintf("[+node%d]", cfg.leaseNode)
-	}
-
 	_, err := conn.ExecContext(ctx, fmt.Sprintf(
 		`ALTER %s CONFIGURE ZONE USING num_replicas = %d, constraints = '[%s]', lease_preferences = '[%s]'`,
-		target, cfg.replicas, constraintsString, leaseString))
+		target, cfg.replicas, constraintsString, cfg.leasePreference))
 	require.NoError(t, err)
 }
 
