@@ -16,7 +16,7 @@ There are development and deploy images available.
 
 ### `bazel`/`bazelbuilder`
 
-`cockroachdb/bazel` is a Docker image containing basic requirements for
+`us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel` is a Docker image containing basic requirements for
 building the Cockroach binary using Bazel. It can be run using `./dev builder`.
 
 Note that if you use this image, you should ensure that your Docker installation
@@ -100,9 +100,9 @@ published both for `amd64` and `arm64` platforms. To update the image, perform
 the following steps:
 
 - Edit `build/bazelbuilder/Dockerfile` as desired.
-- Build the image by triggering the `Build and Push Bazel Builder Image` build in TeamCity. The generated image will be published to https://hub.docker.com/r/cockroachdb/bazel.
+- Build the image by triggering the `Build and Push Bazel Builder Image` build in TeamCity. The generated image will be published to `us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel`.
 - Update `build/.bazelbuilderversion` with the new tag and commit all your changes.
-- Build the FIPS image by triggering the `Build and Push FIPS Bazel Builder Image` build in TeamCity. The generated image will be published to https://hub.docker.com/r/cockroachdb/bazel-fips.
+- Build the FIPS image by triggering the `Build and Push FIPS Bazel Builder Image` build in TeamCity. The generated image will be published to `us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel-fips`.
 - Update `build/.bazelbuilderversion-fips` with the new tag and commit all your changes.
 - Ensure the "Bazel CI" job passes on your PR before merging.
 
