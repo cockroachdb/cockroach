@@ -176,7 +176,7 @@ var PubsubV2Enabled = settings.RegisterBoolSetting(
 	"if enabled, this setting enables a new implementation of the pubsub sink"+
 		" that allows for a higher throughput",
 	// TODO: delete the original pubsub sink code
-	util.ConstantWithMetamorphicTestBool("changefeed.new_pubsub_sink.enabled", true),
+	true,
 	settings.WithName("changefeed.new_pubsub_sink.enabled"),
 )
 
@@ -244,7 +244,8 @@ func getSink(
 			if WebhookV2Enabled.Get(&serverCfg.Settings.SV) {
 				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
 					return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
-						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder)
+						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
+						metricsBuilder, serverCfg.Settings)
 				})
 			} else {
 				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
@@ -258,8 +259,10 @@ func getSink(
 				testingKnobs = knobs
 			}
 			if PubsubV2Enabled.Get(&serverCfg.Settings.SV) {
-				return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered),
-					numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder, testingKnobs)
+				return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), AllTargets(feedCfg),
+					opts.IsSet(changefeedbase.OptUnordered), numSinkIOWorkers(serverCfg),
+					newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
+					metricsBuilder, serverCfg.Settings, testingKnobs)
 			} else {
 				return makeDeprecatedPubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered), metricsBuilder, testingKnobs)
 			}

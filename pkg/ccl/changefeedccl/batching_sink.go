@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -66,9 +67,10 @@ type batchingSink struct {
 	minFlushFrequency time.Duration
 	retryOpts         retry.Options
 
-	ts      timeutil.TimeSource
-	metrics metricsRecorder
-	knobs   batchingSinkKnobs
+	ts       timeutil.TimeSource
+	metrics  metricsRecorder
+	settings *cluster.Settings
+	knobs    batchingSinkKnobs
 
 	// eventCh is the channel used to send requests from the Sink caller routines
 	// to the batching routine.  Messages can either be a flushReq or a rowEvent.
@@ -331,7 +333,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		s.metrics.recordSinkIOInflightChange(int64(batch.numMessages))
 		return s.client.Flush(ctx, batch.payload)
 	}
-	ioEmitter := newParallelIO(ctx, s.retryOpts, s.ioWorkers, ioHandler, s.metrics)
+	ioEmitter := newParallelIO(ctx, s.retryOpts, s.ioWorkers, ioHandler, s.metrics, s.settings)
 	defer ioEmitter.Close()
 
 	// Flushing requires tracking the number of inflight messages and confirming
@@ -375,20 +377,9 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 
 		// Emitting needs to also handle any incoming results to avoid a deadlock
 		// with trying to emit while the emitter is blocked on returning a result.
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case ioEmitter.requestCh <- batchBuffer:
-			case result := <-ioEmitter.resultCh:
-				handleResult(result)
-				continue
-			case <-s.doneCh:
-			}
-			break
-		}
-
-		return nil
+		//for {
+		err := ioEmitter.SubmitRequest(ctx, batchBuffer, s.doneCh)
+		return err
 	}
 
 	flushAll := func() error {
@@ -505,6 +496,7 @@ func makeBatchingSink(
 	pacerFactory func() *admission.Pacer,
 	timeSource timeutil.TimeSource,
 	metrics metricsRecorder,
+	settings *cluster.Settings,
 ) Sink {
 	sink := &batchingSink{
 		client:            client,
@@ -515,6 +507,7 @@ func makeBatchingSink(
 		retryOpts:         retryOpts,
 		ts:                timeSource,
 		metrics:           metrics,
+		settings:          settings,
 		eventCh:           make(chan interface{}, flushQueueDepth),
 		wg:                ctxgroup.WithContext(ctx),
 		hasher:            makeHasher(),

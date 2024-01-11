@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -349,6 +350,7 @@ func makeWebhookSink(
 	pacerFactory func() *admission.Pacer,
 	source timeutil.TimeSource,
 	mb metricsRecorderBuilder,
+	settings *cluster.Settings,
 ) (Sink, error) {
 	batchCfg, retryOpts, err := getSinkConfigFromJson(opts.JSONConfig, sinkJSONConfig{})
 	if err != nil {
@@ -371,5 +373,6 @@ func makeWebhookSink(
 		pacerFactory,
 		source,
 		mb(requiresResourceAccounting),
+		settings,
 	), nil
 }
