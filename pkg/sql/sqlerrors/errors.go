@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -361,6 +362,22 @@ func NewInvalidVolatilityError(err error) error {
 func NewCannotModifyVirtualSchemaError(schema string) error {
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"%s is a virtual schema and cannot be modified", tree.ErrNameString(schema))
+}
+
+// NewInsufficientPrivilegeOnDescriptorError creates an InsufficientPrivilege
+// error saying the `user` does not have any of the privilege in `orPrivs` on
+// the descriptor.
+func NewInsufficientPrivilegeOnDescriptorError(
+	user string, orPrivs []privilege.Kind, descType string, descName string,
+) error {
+	orPrivsInStr := make([]string, 0, len(orPrivs))
+	for _, priv := range orPrivs {
+		orPrivsInStr = append(orPrivsInStr, string(priv.DisplayName()))
+	}
+	privsStr := strings.Join(orPrivsInStr, " or ")
+	return pgerror.Newf(pgcode.InsufficientPrivilege,
+		"user %s does not have %s privilege on %s %s",
+		user, privsStr, descType, descName)
 }
 
 // QueryTimeoutError is an error representing a query timeout.

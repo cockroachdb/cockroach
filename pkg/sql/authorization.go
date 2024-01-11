@@ -1103,10 +1103,7 @@ func insufficientPrivilegeError(
 			"user %s does not have %s system privilege",
 			user, kind)
 	}
-
-	return pgerror.Newf(pgcode.InsufficientPrivilege,
-		"user %s does not have %s privilege on %s %s",
-		user, kind, objTypeStr, object.GetName())
+	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(user.Normalized(), []privilege.Kind{kind}, objTypeStr, object.GetName())
 }
 
 // IsInsufficientPrivilegeError returns true if the error is a pgerror
