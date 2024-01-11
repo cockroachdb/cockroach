@@ -11,7 +11,6 @@
 package sql
 
 import (
-	"context"
 	"sync/atomic"
 	"time"
 
@@ -30,12 +29,33 @@ const defaultMaxEventFrequency = 8
 var TelemetryMaxStatementEventFrequency = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.telemetry.query_sampling.max_event_frequency",
-	"the max event frequency at which we sample executions for telemetry, "+
+	"the max event frequency (events per second) at which we sample executions for telemetry, "+
 		"note that it is recommended that this value shares a log-line limit of 10 "+
-		" logs per second on the telemetry pipeline with all other telemetry events. "+
-		"If sampling mode is set to 'transaction', all statements associated with a single "+
-		"transaction are counted as 1 unit.",
+		"logs per second on the telemetry pipeline with all other telemetry events. "+
+		"If sampling mode is set to 'transaction', this value is ignored.",
 	defaultMaxEventFrequency,
+	settings.NonNegativeInt,
+	settings.WithPublic,
+)
+
+var telemetryTransactionSamplingFrequency = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.telemetry.transaction_sampling.max_event_frequency",
+	"the max event frequency (events per second) at which we sample transactions for "+
+		"telemetry. If sampling mode is set to 'statement', this setting is ignored. In "+
+		"practice, this means that we only sample a transaction if 1/max_event_frequency seconds "+
+		"have elapsed since the last transaction was sampled.",
+	defaultMaxEventFrequency,
+	settings.NonNegativeInt,
+	settings.WithPublic,
+)
+
+var telemetryStatementsPerTransactionMax = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.telemetry.transaction_sampling.statement_events_per_transaction.max",
+	"the maximum number of statement events to log for every sampled transaction. "+
+		"Note that statements that are logged by force do not adhere to this limit.",
+	50,
 	settings.NonNegativeInt,
 	settings.WithPublic,
 )
@@ -65,9 +85,9 @@ var telemetrySamplingMode = settings.RegisterEnumSetting(
 	"sql.telemetry.query_sampling.mode",
 	"the execution level used for telemetry sampling. If set to 'statement', events "+
 		"are sampled at the statement execution level. If set to 'transaction', events are "+
-		"sampled at the txn execution level, i.e. all statements for a txn will be logged "+
-		"and are counted together as one sampled event (events are still emitted one per "+
-		"statement)",
+		"sampled at the transaction execution level, i.e. all statements for a transaction "+
+		"will be logged and are counted together as one sampled event (events are still emitted one "+
+		"per statement).",
 	"statement",
 	map[int64]string{
 		telemetryModeStatement:   "statement",
@@ -76,32 +96,29 @@ var telemetrySamplingMode = settings.RegisterEnumSetting(
 	settings.WithPublic,
 )
 
-var telemetryTrackedTxnsLimit = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"sql.telemetry.txn_mode.tracking_limit",
-	"the maximum number of transactions tracked at one time for which we will send "+
-		"all statements to telemetry",
-	10000,
-	settings.NonNegativeInt,
-	settings.WithPublic,
-)
-
 // TelemetryLoggingMetrics keeps track of the last time at which an event
-// was logged to the telemetry channel, and the number of skipped queries
-// since the last logged event.
-type TelemetryLoggingMetrics struct {
+// was sampled to the telemetry channel, and the number of skipped events
+// since the last sampled event.
+//
+// There are two modes for telemetry logging, set via the setting telemetrySamplingMode:
+//
+//  1. Statement mode: Events are sampled at the statement level. In this mode,
+//     the sampling frequency for SampledQuery events is defined by the setting
+//     TelemetryMaxStatementEventFrequency. No transaction execution events are
+//     emitted in this mode.
+//
+//  2. Transaction mode: Events are sampled at the transaction level. In this mode,
+//     the sampling frequency for SampledQuery events is defined by the setting
+//     telemetryTransactionSamplingFrequency. In this mode, all of a transaction's
+//     statement execution events are logged up to a maximum set by
+//     telemetryStatementsPerTransactionMax.
+type telemetryLoggingMetrics struct {
 	st *cluster.Settings
 
 	mu struct {
 		syncutil.RWMutex
-		// The timestamp of the last emitted telemetry event.
-		lastEmittedTime time.Time
-
-		// observedTxnExecutions is used to track txn executions that are currently
-		// being logged. When the sampling mode is set to txns, we must ensure we
-		// log all stmts for a txn. Txns are removed upon completing execution when
-		// all events have been captured.
-		observedTxnExecutions map[string]interface{}
+		// The last time at which an event was sampled to the telemetry channel.
+		lastSampledTime time.Time
 	}
 
 	Knobs *TelemetryLoggingTestingKnobs
@@ -112,9 +129,8 @@ type TelemetryLoggingMetrics struct {
 
 func newTelemetryLoggingMetrics(
 	knobs *TelemetryLoggingTestingKnobs, st *cluster.Settings,
-) *TelemetryLoggingMetrics {
-	t := TelemetryLoggingMetrics{Knobs: knobs, st: st}
-	t.mu.observedTxnExecutions = make(map[string]interface{})
+) *telemetryLoggingMetrics {
+	t := telemetryLoggingMetrics{Knobs: knobs, st: st}
 	return &t
 }
 
@@ -142,125 +158,161 @@ func NewTelemetryLoggingTestingKnobs(
 	}
 }
 
-// registerOnTelemetrySamplingModeChange sets up the callback for when the
-// telemetry sampling mode is changed. When switching from txn to stmt, we
-// clear the txns we are currently tracking for logging.
-func (t *TelemetryLoggingMetrics) registerOnTelemetrySamplingModeChange(
-	settings *cluster.Settings,
-) {
-	telemetrySamplingMode.SetOnChange(&settings.SV, func(ctx context.Context) {
-		mode := telemetrySamplingMode.Get(&settings.SV)
+// shouldEmitTransactionLog returns true if the transaction should be tracked for telemetry.
+// A transaction is tracked if telemetry logging is enabled , the telemetry mode is set to "transaction"
+// and at least one of the following conditions is true:
+//   - the transaction is not internal OR internal queries are enabled
+//   - the required amount of time has elapsed since the last transaction began sampling
+//   - the force parameter is true and the transaction is not internal or sampling for internal statements
+//     is enabled
+//
+// If the conditions are met, the last sampled time is updated.
+func (t *telemetryLoggingMetrics) shouldEmitTransactionLog(forceSampling, isInternal bool) bool {
+	if !telemetryLoggingEnabled.Get(&t.st.SV) {
+		return false
+	}
+	if telemetrySamplingMode.Get(&t.st.SV) != telemetryModeTransaction {
+		return false
+	}
+	if isInternal && !telemetryInternalQueriesEnabled.Get(&t.st.SV) {
+		return false
+	}
+	maxEventFrequency := telemetryTransactionSamplingFrequency.Get(&t.st.SV)
+	if maxEventFrequency == 0 {
+		return false
+	}
+
+	txnSampleTime := t.timeNow()
+
+	if forceSampling {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		if mode == telemetryModeStatement {
-			// Clear currently observed txns.
-			t.mu.observedTxnExecutions = make(map[string]interface{})
-		}
-	})
-}
-
-func (t *TelemetryLoggingMetrics) onTxnFinish(txnExecutionID string) {
-	if telemetrySamplingMode.Get(&t.st.SV) != telemetryModeTransaction {
-		return
+		t.mu.lastSampledTime = txnSampleTime
+		return true
 	}
-	//
-	// Check if txn exec id exists in the map.
-	exists := false
+
+	requiredTimeElapsed := time.Second / time.Duration(maxEventFrequency)
+	var enoughTimeElapsed bool
 	func() {
+		// Avoid taking the full lock if we don't have to.
 		t.mu.RLock()
 		defer t.mu.RUnlock()
-		_, exists = t.mu.observedTxnExecutions[txnExecutionID]
+		enoughTimeElapsed = txnSampleTime.Sub(t.mu.lastSampledTime) >= requiredTimeElapsed
 	}()
 
-	if !exists {
-		return
+	if !enoughTimeElapsed {
+		return false
 	}
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	delete(t.mu.observedTxnExecutions, txnExecutionID)
-}
 
-func (t *TelemetryLoggingMetrics) getTrackedTxnsCount() int {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	return len(t.mu.observedTxnExecutions)
+	if txnSampleTime.Sub(t.mu.lastSampledTime) < requiredTimeElapsed {
+		return false
+	}
+
+	t.mu.lastSampledTime = txnSampleTime
+
+	return true
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
 func (*TelemetryLoggingTestingKnobs) ModuleTestingKnobs() {}
 
-func (t *TelemetryLoggingMetrics) timeNow() time.Time {
+func (t *telemetryLoggingMetrics) timeNow() time.Time {
 	if t.Knobs != nil && t.Knobs.getTimeNow != nil {
 		return t.Knobs.getTimeNow()
 	}
 	return timeutil.Now()
 }
 
-// shouldEmitStatementLog returns true if the stmt should be logged to telemetry. The last emitted time
-// tracked by telemetry logging metrics will be updated to the given time if any of the following
-// are met:
-//   - The telemetry mode is set to "transaction" AND the stmt is the first in
-//     the txn AND the txn is not already being tracked AND the required amount
-//     of time has elapsed.
+// shouldEmitStatementLog returns true if the stmt should be logged to telemetry.
+// One of the following must be true for a statement to be logged:
+//   - The telemetry mode is set to "transaction" and the statement's transaction is being tracked
+//     AND the transaction has not reached its limit for the number of statements logged.
 //   - The telemetry mode is set to "statement" AND the required amount of time has elapsed
-//   - The txn is not being tracked and the stmt is being forced to log.
-func (t *TelemetryLoggingMetrics) shouldEmitStatementLog(
-	newTime time.Time, txnExecutionID string, force bool, stmtPosInTxn int,
-) (shouldEmit bool) {
-	maxEventFrequency := TelemetryMaxStatementEventFrequency.Get(&t.st.SV)
-	requiredTimeElapsed := time.Second / time.Duration(maxEventFrequency)
+//   - The stmt is being forced to log.
+//
+// In addition, the lastSampledTime tracked by TelemetryLoggingMetrics is updated if the statement
+// is logged and we are in "statement" mode.
+func (t *telemetryLoggingMetrics) shouldEmitStatementLog(
+	txnIsTracked bool, stmtNum int, forceSampling bool,
+) (emit bool, skippedQueryCount uint64) {
+	// For these early exit cases, we don't want to increment the skipped queries count
+	// since telemetry logging for statements is off in these cases.
+	if !telemetryLoggingEnabled.Get(&t.st.SV) {
+		return false, t.skippedQueryCount.Load()
+	}
 	isTxnMode := telemetrySamplingMode.Get(&t.st.SV) == telemetryModeTransaction
-	txnsLimit := int(telemetryTrackedTxnsLimit.Get(&t.st.SV))
-
-	if isTxnMode && txnExecutionID == "" {
-		// If we are in transaction mode, skip logging statements without txn ids
-		// since we won't be able to track the stmt's txn through its execution.
-		// This will skip statements like BEGIN which don't have an associated
-		// transaction id.
-		return false
+	if isTxnMode && telemetryTransactionSamplingFrequency.Get(&t.st.SV) == 0 {
+		return false, t.skippedQueryCount.Load()
+	}
+	maxEventFrequency := TelemetryMaxStatementEventFrequency.Get(&t.st.SV)
+	if !isTxnMode && maxEventFrequency == 0 {
+		return false, t.skippedQueryCount.Load()
 	}
 
-	var enoughTimeElapsed, txnIsTracked, startTrackingTxn bool
-	// Avoid taking the full lock if we don't have to.
+	newTime := t.timeNow()
+
+	if forceSampling {
+		// We should hold the lock while resetting the skipped queries.
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		if !isTxnMode {
+			t.mu.lastSampledTime = newTime
+		}
+		return true, t.skippedQueryCount.Swap(0)
+	}
+
+	if isTxnMode {
+		if stmtNum == 0 {
+			// We skip BEGIN statements for transaction telemetry mode. This is because BEGIN statements
+			// don't have associated transaction execution ids since the transaction doesn't actually
+			// officially start execution until its first statement.
+			return false, t.skippedQueryCount.Add(1)
+		}
+
+		if txnIsTracked {
+			// Log if we are not at the limit for the number of statements logged
+			// for this transaction.
+			// We don't need to update the last sampled time in this case.
+			if int64(stmtNum) <= telemetryStatementsPerTransactionMax.Get(&t.st.SV) {
+				return true, t.skippedQueryCount.Swap(0)
+			}
+			return false, t.skippedQueryCount.Add(1)
+		}
+
+		// If the transaction is not being tracked then we are done.
+		return false, t.skippedQueryCount.Add(1)
+	}
+
+	// We are in statement mode. Check if enough time has elapsed since the last sampled time.
+	requiredTimeElapsed := time.Second / time.Duration(maxEventFrequency)
+
+	var enoughTimeElapsed bool
 	func() {
+		// Avoid taking the full lock if we don't have to.
 		t.mu.RLock()
 		defer t.mu.RUnlock()
-
-		enoughTimeElapsed = newTime.Sub(t.mu.lastEmittedTime) >= requiredTimeElapsed
-		startTrackingTxn = isTxnMode && txnExecutionID != "" &&
-			stmtPosInTxn == 1 && len(t.mu.observedTxnExecutions) < txnsLimit
-		_, txnIsTracked = t.mu.observedTxnExecutions[txnExecutionID]
+		enoughTimeElapsed = newTime.Sub(t.mu.lastSampledTime) >= requiredTimeElapsed
 	}()
 
-	if txnIsTracked || (!force && (!enoughTimeElapsed || (isTxnMode && !startTrackingTxn))) {
-		// We don't want to update the last emitted time if the transaction is already tracked.
-		// We can also early exit here if we aren't forcing the log and we don't meed the required
-		// elapsed time or can't start tracking the txn due to not having received the first stmt.
-		return txnIsTracked
+	if !enoughTimeElapsed {
+		return false, t.skippedQueryCount.Add(1)
 	}
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// The lastEmittedTime and tracked txns may have changed since releasing the Rlock.
-	// The tracked transaction count could have changed as well so we recheck these values.
-	txnLimitReached := len(t.mu.observedTxnExecutions) >= txnsLimit
-	if !force &&
-		(newTime.Sub(t.mu.lastEmittedTime) < requiredTimeElapsed || (startTrackingTxn && txnLimitReached)) {
-		return false
+	if newTime.Sub(t.mu.lastSampledTime) < requiredTimeElapsed {
+		return false, t.skippedQueryCount.Add(1)
 	}
 
-	// We could be forcing the log so we should only track its txn if it meets the criteria.
-	if startTrackingTxn && !txnLimitReached {
-		t.mu.observedTxnExecutions[txnExecutionID] = struct{}{}
-	}
-
-	t.mu.lastEmittedTime = newTime
-	return true
+	t.mu.lastSampledTime = newTime
+	return true, t.skippedQueryCount.Swap(0)
 }
 
-func (t *TelemetryLoggingMetrics) getQueryLevelStats(
+func (t *telemetryLoggingMetrics) getQueryLevelStats(
 	queryLevelStats execstats.QueryLevelStats,
 ) execstats.QueryLevelStats {
 	if t.Knobs != nil && t.Knobs.getQueryLevelStats != nil {
@@ -269,17 +321,15 @@ func (t *TelemetryLoggingMetrics) getQueryLevelStats(
 	return queryLevelStats
 }
 
-func (t *TelemetryLoggingMetrics) isTracing(_ *tracing.Span, tracingEnabled bool) bool {
+func (t *telemetryLoggingMetrics) isTracing(_ *tracing.Span, tracingEnabled bool) bool {
 	if t.Knobs != nil && t.Knobs.getTracingStatus != nil {
 		return t.Knobs.getTracingStatus()
 	}
 	return tracingEnabled
 }
 
-func (t *TelemetryLoggingMetrics) resetSkippedQueryCount() (res uint64) {
-	return t.skippedQueryCount.Swap(0)
-}
-
-func (t *TelemetryLoggingMetrics) incSkippedQueryCount() {
-	t.skippedQueryCount.Add(1)
+func (t *telemetryLoggingMetrics) resetLastSampledTime() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.lastSampledTime = time.Time{}
 }
