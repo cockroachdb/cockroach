@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -xeuo pipefail
 
+dir="$(dirname $(dirname $(dirname $(dirname $(dirname $(dirname "${0}"))))))"
+source "$dir/release/teamcity-support.sh"
+
+gar_repository="us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel-fips"
+docker_login_gcr "$gar_repository" "$IMAGE_BUILDER_GOOGLE_CREDENTIALS"
+
+BASE_IMAGE="us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel"
 PKGDIR=build/bazelbuilder/packages
 mkdir $PKGDIR
 cd $PKGDIR
@@ -11,10 +18,10 @@ done
 cd -
 
 TAG=$(cut -d: -f2 build/.bazelbuilderversion)
-DOCKER_BUILDKIT=1 docker build -t "cockroachdb/bazel-fips:$TAG" \
-    --build-arg FROM_IMAGE="cockroachdb/bazel:$TAG" \
+DOCKER_BUILDKIT=1 docker build -t "$gar_repository:$TAG" \
+    --build-arg FROM_IMAGE="$BASE_IMAGE:$TAG" \
     -f build/bazelbuilder/Dockerfile.fips build/bazelbuilder
-docker push "cockroachdb/bazel-fips:$TAG"
+docker push "$gar_repository:$TAG"
 rm -rf $PKGDIR
 
 if [[ "$open_pr_on_success" == "true" ]]; then
@@ -28,7 +35,7 @@ if [[ "$open_pr_on_success" == "true" ]]; then
       <buildType id="Internal_Cockroach_Build_Ci_OpenNewBazelBuilderImagePr"/>
        <properties>
             <property name="env.BRANCH" value="'"bazel-builder-update-$TAG"'"/>
-            <property name="env.VERSION" value="'"cockroachdb/bazel-fips:$TAG"'"/>
+            <property name="env.VERSION" value="'"$gar_repository:$TAG"'"/>
         </properties>
     </build>'
 else
