@@ -379,7 +379,7 @@ func (t tickDuration) ticksInAdjustmentInterval() int64 {
 }
 
 const unloadedDuration = tickDuration(250 * time.Millisecond)
-const loadedDuration = tickDuration(1 * time.Millisecond)
+const loadedDuration = tickDuration(250 * time.Millisecond)
 
 // tokenAllocationTicker wraps a time.Ticker, and also computes the remaining
 // ticks in the adjustment interval, given an expected tick rate. If every tick
