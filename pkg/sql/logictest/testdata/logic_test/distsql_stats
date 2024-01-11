@@ -1495,7 +1495,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
             }
         ],
         "histo_col_type": "INT8",
-        "histo_version": 2,
+        "histo_version": 3,
         "name": "s",
         "null_count": 0,
         "row_count": 1
@@ -1507,7 +1507,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
         ],
         "distinct_count": 1,
         "histo_col_type": "INT8",
-        "histo_version": 2,
+        "histo_version": 3,
         "name": "s",
         "null_count": 1,
         "row_count": 1
@@ -1553,7 +1553,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
             }
         ],
         "histo_col_type": "test.public.greeting",
-        "histo_version": 2,
+        "histo_version": 3,
         "name": "s",
         "null_count": 0,
         "row_count": 1
@@ -1707,7 +1707,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "distinct_count": 0,
         "histo_col_type": "INT8",
-        "histo_version": 2,
+        "histo_version": 3,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1719,7 +1719,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "distinct_count": 0,
         "histo_col_type": "INT8",
-        "histo_version": 2,
+        "histo_version": 3,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1743,7 +1743,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "distinct_count": 0,
         "histo_col_type": "INT8",
-        "histo_version": 2,
+        "histo_version": 3,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1810,7 +1810,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
             }
         ],
         "histo_col_type": "INT8",
-        "histo_version": 2,
+        "histo_version": 3,
         "name": "locke",
         "null_count": 0,
         "row_count": 1
@@ -1829,7 +1829,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
             }
         ],
         "histo_col_type": "INT8",
-        "histo_version": 2,
+        "histo_version": 3,
         "name": "locke",
         "null_count": 0,
         "row_count": 1
@@ -1851,7 +1851,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "distinct_count": 1,
         "histo_col_type": "INT8",
-        "histo_version": 2,
+        "histo_version": 3,
         "name": "locke",
         "null_count": 1,
         "row_count": 1
@@ -1913,7 +1913,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         ],
         "distinct_count": 0,
         "histo_col_type": "INT8",
-        "histo_version": 2,
+        "histo_version": 3,
         "null_count": 0,
         "row_count": 0
     },
@@ -1924,7 +1924,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         ],
         "distinct_count": 0,
         "histo_col_type": "INT8",
-        "histo_version": 2,
+        "histo_version": 3,
         "null_count": 0,
         "row_count": 0
     },
@@ -1935,7 +1935,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         ],
         "distinct_count": 0,
         "histo_col_type": "INT8",
-        "histo_version": 2,
+        "histo_version": 3,
         "null_count": 0,
         "row_count": 0
     },

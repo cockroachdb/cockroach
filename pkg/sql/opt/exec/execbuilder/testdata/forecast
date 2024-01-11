@@ -396,7 +396,7 @@ WHERE stat->>'name' = '__forecast__'
     "created_at": "1988-08-08 00:00:00",
     "distinct_count": 0,
     "histo_col_type": "INT8",
-    "histo_version": 2,
+    "histo_version": 3,
     "name": "__forecast__",
     "null_count": 0,
     "row_count": 0
@@ -1475,7 +1475,7 @@ WHERE stat->>'name' = '__forecast__'
         }
     ],
     "histo_col_type": "INT8",
-    "histo_version": 2,
+    "histo_version": 3,
     "name": "__forecast__",
     "null_count": 0,
     "row_count": 100
@@ -1509,7 +1509,7 @@ WHERE stat->>'name' = '__forecast__'
         }
     ],
     "histo_col_type": "INT8",
-    "histo_version": 2,
+    "histo_version": 3,
     "name": "__forecast__",
     "null_count": 0,
     "row_count": 100

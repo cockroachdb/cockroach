@@ -42,7 +42,7 @@ func TestRandomQuantileRoundTrip(t *testing.T) {
 	colTypes = append(colTypes, types.Scalar...)
 	rng, seed := randutil.NewTestRand()
 	for _, colType := range colTypes {
-		if canMakeQuantile(histVersion, colType) {
+		if canMakeQuantile(HistVersion, colType) {
 			for i := 0; i < 5; i++ {
 				t.Run(fmt.Sprintf("%v/%v", colType.Name(), i), func(t *testing.T) {
 					hist, rowCount := randHist(colType, rng)
