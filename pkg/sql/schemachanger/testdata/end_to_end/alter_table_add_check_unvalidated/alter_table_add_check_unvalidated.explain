@@ -9,7 +9,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHEC
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 2 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → PUBLIC CheckConstraintUnvalidated:{DescID: 104 (t), ConstraintID: 2 (check_i+)}
+ │         │    ├── ABSENT → PUBLIC CheckConstraintUnvalidated:{DescID: 104 (t), ConstraintID: 2 (check_i+), ReferencedColumnIDs: [1]}
  │         │    └── ABSENT → PUBLIC ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_i", ConstraintID: 2 (check_i+)}
  │         └── 2 Mutation operations
  │              ├── AddCheckConstraint {"CheckExpr":"i \u003e 0:::INT8","ConstraintID":2,"TableID":104,"Validity":1}
@@ -17,13 +17,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHEC
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
       │    ├── 2 elements transitioning toward PUBLIC
-      │    │    ├── PUBLIC → ABSENT CheckConstraintUnvalidated:{DescID: 104 (t), ConstraintID: 2 (check_i+)}
+      │    │    ├── PUBLIC → ABSENT CheckConstraintUnvalidated:{DescID: 104 (t), ConstraintID: 2 (check_i+), ReferencedColumnIDs: [1]}
       │    │    └── PUBLIC → ABSENT ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_i", ConstraintID: 2 (check_i+)}
       │    └── 1 Mutation operation
       │         └── UndoAllInTxnImmediateMutationOpSideEffects
       └── Stage 2 of 2 in PreCommitPhase
            ├── 2 elements transitioning toward PUBLIC
-           │    ├── ABSENT → PUBLIC CheckConstraintUnvalidated:{DescID: 104 (t), ConstraintID: 2 (check_i+)}
+           │    ├── ABSENT → PUBLIC CheckConstraintUnvalidated:{DescID: 104 (t), ConstraintID: 2 (check_i+), ReferencedColumnIDs: [1]}
            │    └── ABSENT → PUBLIC ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_i", ConstraintID: 2 (check_i+)}
            └── 2 Mutation operations
                 ├── AddCheckConstraint {"CheckExpr":"i \u003e 0:::INT8","ConstraintID":2,"TableID":104,"Validity":1}

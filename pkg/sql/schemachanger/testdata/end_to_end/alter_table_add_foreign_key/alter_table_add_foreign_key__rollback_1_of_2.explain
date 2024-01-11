@@ -12,7 +12,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t1› 
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 2 elements transitioning toward ABSENT
-           │    ├── WRITE_ONLY → ABSENT ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedDescID: 105 (t2)}
+           │    ├── WRITE_ONLY → ABSENT ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedColumnIDs: [1], ReferencedDescID: 105 (t2)}
            │    └── PUBLIC     → ABSENT ConstraintWithoutIndexName:{DescID: 104 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey-)}
            └── 6 Mutation operations
                 ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
