@@ -946,14 +946,6 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 }
 
-func skipLocalUnderArm64(cloud string) string {
-	if cloud == spec.Local && runtime.GOARCH == "arm64" {
-		// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-		return "Skip under ARM64."
-	}
-	return ""
-}
-
 func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "cdc/initial-scan-only",
@@ -1349,13 +1341,18 @@ func registerCDC(r registry.Registry) {
 		Owner:     `cdc`,
 		Benchmark: true,
 		// Only Kafka 3 supports Arm64, but the broker setup for Oauth used only works with Kafka 2
-		Skip:             skipLocalUnderArm64(r.Cloud()),
 		Cluster:          r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			if c.Cloud() == spec.Local && runtime.GOARCH == "arm64" {
+				// N.B. We have to skip locally since amd64 emulation may not be available everywhere.
+				t.L().PrintfCtx(ctx, "Skipping test under ARM64")
+				return
+			}
+
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 

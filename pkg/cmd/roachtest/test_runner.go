@@ -943,7 +943,7 @@ func (r *testRunner) runTest(
 
 	s := t.Spec().(*registry.TestSpec)
 
-	grafanaAvailable := s.Cluster.Cloud == spec.GCE
+	grafanaAvailable := roachtestflags.Cloud == spec.GCE
 	if err := c.addLabels(map[string]string{VmLabelTestName: testRunID}); err != nil {
 		shout(ctx, l, stdout, "failed to add label to cluster [%s] - %s", c.Name(), err)
 		grafanaAvailable = false
