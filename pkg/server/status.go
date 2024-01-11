@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -3620,6 +3621,81 @@ func (s *systemStatusServer) SpanStats(
 
 	batchSize := int(builtins.SpanStatsBatchLimit.Get(&s.st.SV))
 	return batchedSpanStats(ctx, req, s.getSpanStatsInternal, batchSize)
+}
+
+func (s *systemStatusServer) TenantServiceStatus(
+	ctx context.Context, req *serverpb.TenantServiceStatusRequest,
+) (*serverpb.TenantServiceStatusResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	resp := &serverpb.TenantServiceStatusResponse{
+		StatusByNodeID: make(map[roachpb.NodeID]mtinfopb.SQLInfo),
+		ErrorsByNodeID: make(map[roachpb.NodeID]string),
+	}
+	if len(req.NodeID) > 0 {
+		reqNodeID, local, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		}
+
+		if local {
+			info, err := s.localTenantServiceStatus(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			resp.StatusByNodeID[reqNodeID] = info
+			return resp, nil
+		}
+		return nil, errors.AssertionFailedf("requesting service status on a specific node is not supported yet")
+	}
+
+	// Send TenantStatusService request to all stores on all nodes.
+	remoteRequest := serverpb.TenantServiceStatusRequest{NodeID: "local", TenantID: req.TenantID}
+	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.TenantServiceStatusResponse, error) {
+		return status.TenantServiceStatus(ctx, &remoteRequest)
+	}
+	responseFn := func(nodeID roachpb.NodeID, remoteResp *serverpb.TenantServiceStatusResponse) {
+		resp.StatusByNodeID[nodeID] = remoteResp.StatusByNodeID[nodeID]
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		resp.ErrorsByNodeID[nodeID] = err.Error()
+	}
+
+	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "tenant service status",
+		noTimeout,
+		s.dialNode,
+		nodeFn,
+		responseFn,
+		errorFn,
+	); err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+
+	return resp, nil
+}
+
+func (s *systemStatusServer) localTenantServiceStatus(
+	ctx context.Context, req *serverpb.TenantServiceStatusRequest,
+) (mtinfopb.SQLInfo, error) {
+	ret := mtinfopb.SQLInfo{}
+	r, err := s.sqlServer.execCfg.TenantCapabilitiesReader.Get("tenant service status")
+	if err != nil {
+		return ret, err
+	}
+	tid, err := roachpb.MakeTenantID(req.TenantID)
+	if err != nil {
+		return ret, err
+	}
+	entry, _, found := r.GetInfo(tid)
+	if !found {
+		return ret, nil
+	}
+	ret.ID = entry.TenantID.ToUint64()
+	ret.Name = entry.Name
+	ret.DataState = entry.DataState
+	ret.ServiceMode = entry.ServiceMode
+	return ret, nil
 }
 
 // Diagnostics returns an anonymized diagnostics report.

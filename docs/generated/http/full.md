@@ -1629,6 +1629,82 @@ Tier represents one level of the locality hierarchy.
 
 
 
+## TenantServiceStatus
+
+`GET /_status/tenant_service_status`
+
+TenantServiceStatus returns the current service and data state of
+the given tenant as known to the server orchestrator, which may
+differ from the database state.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.TenantServiceStatusRequest-string) |  |  | [reserved](#support-status) |
+| tenant_id | [uint64](#cockroach.server.serverpb.TenantServiceStatusRequest-uint64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| status_by_node_id | [TenantServiceStatusResponse.StatusByNodeIdEntry](#cockroach.server.serverpb.TenantServiceStatusResponse-cockroach.server.serverpb.TenantServiceStatusResponse.StatusByNodeIdEntry) | repeated |  | [reserved](#support-status) |
+| errors_by_node_id | [TenantServiceStatusResponse.ErrorsByNodeIdEntry](#cockroach.server.serverpb.TenantServiceStatusResponse-cockroach.server.serverpb.TenantServiceStatusResponse.ErrorsByNodeIdEntry) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.TenantServiceStatusResponse-cockroach.server.serverpb.TenantServiceStatusResponse.StatusByNodeIdEntry"></a>
+#### TenantServiceStatusResponse.StatusByNodeIdEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.TenantServiceStatusResponse-int32) |  |  |  |
+| value | [cockroach.multitenant.SQLInfo](#cockroach.server.serverpb.TenantServiceStatusResponse-cockroach.multitenant.SQLInfo) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.TenantServiceStatusResponse-cockroach.server.serverpb.TenantServiceStatusResponse.ErrorsByNodeIdEntry"></a>
+#### TenantServiceStatusResponse.ErrorsByNodeIdEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.TenantServiceStatusResponse-int32) |  |  |  |
+| value | [string](#cockroach.server.serverpb.TenantServiceStatusResponse-string) |  |  |  |
+
+
+
+
+
+
 ## TenantRanges
 
 `GET /_status/tenant_ranges`
