@@ -8,11 +8,13 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"hash"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -20,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // SinkClient is an interface to an external sink, where messages are written
@@ -69,9 +72,10 @@ type batchingSink struct {
 	minFlushFrequency time.Duration
 	retryOpts         retry.Options
 
-	ts      timeutil.TimeSource
-	metrics metricsRecorder
-	knobs   batchingSinkKnobs
+	ts       timeutil.TimeSource
+	metrics  metricsRecorder
+	settings *cluster.Settings
+	knobs    batchingSinkKnobs
 
 	// eventCh is the channel used to send requests from the Sink caller routines
 	// to the batching routine.  Messages can either be a flushReq or a rowEvent.
@@ -171,7 +175,7 @@ func freeRowEvent(e *rowEvent) {
 	eventPool.Put(e)
 }
 
-var batchPool sync.Pool = sync.Pool{
+var batchPool = sync.Pool{
 	New: func() interface{} {
 		return new(sinkBatch)
 	},
@@ -346,7 +350,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		s.metrics.recordSinkIOInflightChange(int64(batch.numMessages))
 		return s.client.Flush(ctx, batch.payload)
 	}
-	ioEmitter := newParallelIO(ctx, s.retryOpts, s.ioWorkers, ioHandler, s.metrics)
+	ioEmitter := NewParallelIO(ctx, s.retryOpts, s.ioWorkers, ioHandler, s.metrics, s.settings)
 	defer ioEmitter.Close()
 
 	// Flushing requires tracking the number of inflight messages and confirming
@@ -354,11 +358,12 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 	inflight := 0
 	var sinkFlushWaiter chan struct{}
 
-	handleResult := func(result *ioResult) {
-		batch, _ := result.request.(*sinkBatch)
+	handleResult := func(result IOResult) {
+		req, err := result.Consume()
+		batch, _ := req.(*sinkBatch)
 
-		if result.err != nil {
-			s.handleError(result.err)
+		if err != nil {
+			s.handleError(err)
 		} else {
 			s.metrics.recordEmittedBatch(
 				batch.bufferTime, batch.numMessages, batch.mvcc, batch.numKVBytes, sinkDoesNotCompress,
@@ -367,12 +372,11 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 
 		inflight -= batch.numMessages
 
-		if (result.err != nil || inflight == 0) && sinkFlushWaiter != nil {
+		if (err != nil || inflight == 0) && sinkFlushWaiter != nil {
 			close(sinkFlushWaiter)
 			sinkFlushWaiter = nil
 		}
 
-		freeIOResult(result)
 		batch.alloc.Release(ctx)
 		freeSinkBatchEvent(batch)
 	}
@@ -388,22 +392,41 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 			return err
 		}
 
-		// Emitting needs to also handle any incoming results to avoid a deadlock
-		// with trying to emit while the emitter is blocked on returning a result.
-		for {
+		req, send, err := ioEmitter.AdmitRequest(ctx, batchBuffer)
+		if errors.Is(err, ErrNotEnoughQuota) {
+			// Quota can only be freed by consuming a result.
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case ioEmitter.requestCh <- batchBuffer:
-			case result := <-ioEmitter.resultCh:
-				handleResult(result)
-				continue
 			case <-s.doneCh:
+				return nil
+			case result := <-ioEmitter.GetResult():
+				handleResult(result)
 			}
-			break
+
+			// The request should be emitted after freeing quota since this is
+			// a single producer scenario.
+			req, send, err = ioEmitter.AdmitRequest(ctx, batchBuffer)
+			if errors.Is(err, ErrNotEnoughQuota) {
+				logcrash.ReportOrPanic(ctx, &s.settings.SV, "expected request to be emitted after waiting for quota")
+				return errors.AssertionFailedf("expected request to be emitted after waiting for quota")
+			} else if err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
 		}
 
-		return nil
+		// The request was admitted, it must be sent. There are no concurrent requests being sent which
+		// would use up the quota.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-s.doneCh:
+			return nil
+		case send <- req:
+			return nil
+		}
 	}
 
 	flushAll := func() error {
@@ -492,7 +515,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 			default:
 				s.handleError(fmt.Errorf("received unknown request of unknown type: %v", r))
 			}
-		case result := <-ioEmitter.resultCh:
+		case result := <-ioEmitter.GetResult():
 			handleResult(result)
 		case <-flushTimer.Ch():
 			flushTimer.MarkRead()
@@ -519,6 +542,7 @@ func makeBatchingSink(
 	pacerFactory func() *admission.Pacer,
 	timeSource timeutil.TimeSource,
 	metrics metricsRecorder,
+	settings *cluster.Settings,
 ) Sink {
 	sink := &batchingSink{
 		client:            client,
@@ -529,6 +553,7 @@ func makeBatchingSink(
 		retryOpts:         retryOpts,
 		ts:                timeSource,
 		metrics:           metrics,
+		settings:          settings,
 		eventCh:           make(chan interface{}, flushQueueDepth),
 		wg:                ctxgroup.WithContext(ctx),
 		hasher:            makeHasher(),
