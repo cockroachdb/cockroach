@@ -123,7 +123,6 @@
 /pkg/cli/clisqlclient/       @cockroachdb/sql-foundations @cockroachdb/cli-prs
 /pkg/cli/clisqlexec/         @cockroachdb/sql-foundations @cockroachdb/cli-prs
 /pkg/cli/clisqlshell/        @cockroachdb/sql-foundations @cockroachdb/cli-prs
-/pkg/cli/connect*.go         @cockroachdb/prodsec        @cockroachdb/cli-prs
 /pkg/cli/context.go          @cockroachdb/cli-prs
 /pkg/cli/convert_url*        @cockroachdb/sql-foundations   @cockroachdb/cli-prs
 /pkg/cli/debug*.go           @cockroachdb/kv-prs         @cockroachdb/cli-prs
@@ -163,12 +162,10 @@
 # respective teams.
 #
 #!/pkg/server/                           @cockroachdb/unowned
-/pkg/server/addjoin*.go                  @cockroachdb/prodsec @cockroachdb/server-prs
 /pkg/server/admin*.go                    @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/api_v2*.go                   @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/api_v2_auth*.go              @cockroachdb/obs-inf-prs @cockroachdb/server-prs @cockroachdb/prodsec
 /pkg/server/authentication*.go           @cockroachdb/prodsec     @cockroachdb/server-prs
-/pkg/server/auto_tls_init*go             @cockroachdb/prodsec     @cockroachdb/server-prs
 /pkg/server/autoconfig/                  @cockroachdb/jobs-prs    @cockroachdb/multi-tenant
 /pkg/server/clock_monotonicity.go        @cockroachdb/kv-prs
 /pkg/server/combined_statement_stats*.go @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
@@ -186,7 +183,6 @@
 /pkg/server/import_ts*.go                @cockroachdb/obs-inf-prs @cockroachdb/server-prs  @cockroachdb/kv-prs
 /pkg/server/index_usage*.go              @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
 /pkg/server/init*.go                     @cockroachdb/kv-prs      @cockroachdb/server-prs
-/pkg/server/init_handshake*.go           @cockroachdb/prodsec     @cockroachdb/server-prs
 /pkg/server/intent_*.go                  @cockroachdb/kv-prs      @cockroachdb/server-prs
 /pkg/server/key_vis*                     @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
 /pkg/server/load_endpoint*               @cockroachdb/obs-inf-prs @cockroachdb/server-prs

@@ -1,4 +1,4 @@
-feature-allowlist
+feature-list
 sql.udts.*
 sql.schema.alter_type.*
 ----

@@ -117,6 +117,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 				require.NoError(b, err)
 				require.NotNil(b, desc)
 			}
+			b.StopTimer()
 		})
 	}
 }
@@ -208,6 +209,7 @@ func BenchmarkResolveFunction(b *testing.B) {
 				require.NoError(b, err)
 				require.NotNil(b, fd)
 			}
+			b.StopTimer()
 		})
 	}
 }

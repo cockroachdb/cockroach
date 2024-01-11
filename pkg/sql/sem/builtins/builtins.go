@@ -5236,23 +5236,6 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 		},
 	),
 
-	"crdb_internal.create_join_token": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
-		tree.Overload{
-			Types:      tree.ParamTypes{},
-			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				token, err := evalCtx.JoinTokenCreator.CreateJoinToken(ctx)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDString(token), nil
-			},
-			Info:       "Creates a join token for use when adding a new node to a secure cluster.",
-			Volatility: volatility.Volatile,
-		},
-	),
-
 	// destroy_tenant is preserved for compatibility with CockroachCloud
 	// intrusion for v22.2 and previous versions.
 	"crdb_internal.destroy_tenant": makeBuiltin(
