@@ -16,7 +16,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_16", ColumnID: 3 (crdb_internal_j_shard_16-)}
  │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-), IndexID: 0}
  │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
- │         │    ├── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_j_shard_16-)}
+ │         │    ├── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_j_shard_16-), ReferencedColumnIDs: [3]}
  │         │    └── PUBLIC → ABSENT     ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_j_shard_16", ConstraintID: 2 (check_crdb_internal_j_shard_16-)}
  │         └── 6 Mutation operations
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":3,"TableID":104}
@@ -32,7 +32,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_16", ColumnID: 3 (crdb_internal_j_shard_16-)}
  │    │    │    ├── VALIDATED  → PUBLIC ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-), IndexID: 0}
  │    │    │    ├── VALIDATED  → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
- │    │    │    ├── VALIDATED  → PUBLIC CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_j_shard_16-)}
+ │    │    │    ├── VALIDATED  → PUBLIC CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_j_shard_16-), ReferencedColumnIDs: [3]}
  │    │    │    └── ABSENT     → PUBLIC ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_j_shard_16", ConstraintID: 2 (check_crdb_internal_j_shard_16-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
@@ -42,7 +42,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_16", ColumnID: 3 (crdb_internal_j_shard_16-)}
  │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-), IndexID: 0}
  │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
- │         │    ├── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_j_shard_16-)}
+ │         │    ├── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_j_shard_16-), ReferencedColumnIDs: [3]}
  │         │    └── PUBLIC → ABSENT     ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_j_shard_16", ConstraintID: 2 (check_crdb_internal_j_shard_16-)}
  │         └── 8 Mutation operations
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":3,"TableID":104}
@@ -63,7 +63,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (idx-)}
       │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC     → ABSENT      IndexName:{DescID: 104 (t), Name: "idx", IndexID: 2 (idx-)}
-      │    │    └── VALIDATED  → ABSENT      CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_j_shard_16-)}
+      │    │    └── VALIDATED  → ABSENT      CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_j_shard_16-), ReferencedColumnIDs: [3]}
       │    └── 10 Mutation operations
       │         ├── RemoveColumnNotNull {"ColumnID":3,"TableID":104}
       │         ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}

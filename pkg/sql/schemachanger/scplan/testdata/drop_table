@@ -91,12 +91,12 @@ StatementPhase stage 1 of 1 with 117 MutationType ops
     [[IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[CheckConstraintUnvalidated:{DescID: 109, ConstraintID: 5, ReferencedSequenceIDs: [106]}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 109, Name: check, ConstraintID: 5}, ABSENT], PUBLIC] -> ABSENT
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is not god}, ABSENT], PUBLIC] -> ABSENT
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [2], ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
@@ -586,12 +586,12 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[CheckConstraintUnvalidated:{DescID: 109, ConstraintID: 5, ReferencedSequenceIDs: [106]}, ABSENT], ABSENT] -> PUBLIC
     [[ConstraintWithoutIndexName:{DescID: 109, Name: check, ConstraintID: 5}, ABSENT], ABSENT] -> PUBLIC
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is not god}, ABSENT], ABSENT] -> PUBLIC
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [2], ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT], ABSENT] -> PUBLIC
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 110}, ABSENT], ABSENT] -> PUBLIC
@@ -676,12 +676,12 @@ PreCommitPhase stage 2 of 2 with 127 MutationType ops
     [[IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[CheckConstraintUnvalidated:{DescID: 109, ConstraintID: 5, ReferencedSequenceIDs: [106]}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 109, Name: check, ConstraintID: 5}, ABSENT], PUBLIC] -> ABSENT
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is not god}, ABSENT], PUBLIC] -> ABSENT
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [2], ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
@@ -1732,7 +1732,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: non-data dependents removed before descriptor
 - from: [ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is not god}, ABSENT]
-  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT]
+  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT]
   kind: Precedence
   rule: dependents removed before constraint
 - from: [ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is not god}, ABSENT]
@@ -1748,7 +1748,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: non-data dependents removed before descriptor
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT]
-  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT]
+  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT]
   kind: Precedence
   rule: Constraint should be hidden before name
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT]
@@ -1756,7 +1756,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: non-data dependents removed before descriptor
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT]
-  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT]
+  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT]
   kind: Precedence
   rule: Constraint should be hidden before name
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT]
@@ -1764,50 +1764,50 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: non-data dependents removed before descriptor
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT]
-  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT]
+  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [2], ReferencedDescID: 105}, ABSENT]
   kind: Precedence
   rule: Constraint should be hidden before name
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT]
   to:   [Table:{DescID: 109}, DROPPED]
   kind: Precedence
   rule: cross-descriptor constraint is absent before referencing descriptor is dropped
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, VALIDATED]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, VALIDATED]
   to:   [ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is not god}, ABSENT]
   kind: Precedence
   rule: constraint no longer public before dependents
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, VALIDATED]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, VALIDATED]
   to:   [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT]
   kind: Precedence
   rule: Constraint should be hidden before name
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [2], ReferencedDescID: 105}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [2], ReferencedDescID: 105}, ABSENT]
   to:   [Table:{DescID: 109}, DROPPED]
   kind: Precedence
   rule: cross-descriptor constraint is absent before referencing descriptor is dropped
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, VALIDATED]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [2], ReferencedDescID: 105}, VALIDATED]
   to:   [ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT]
   kind: Precedence
   rule: Constraint should be hidden before name
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT]
   to:   [Table:{DescID: 109}, DROPPED]
   kind: Precedence
   rule: cross-descriptor constraint is absent before referencing descriptor is dropped
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, VALIDATED]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, VALIDATED]
   to:   [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT]
   kind: Precedence
   rule: Constraint should be hidden before name
@@ -2425,9 +2425,9 @@ DROP TABLE defaultdb.customers CASCADE;
 ----
 StatementPhase stage 1 of 1 with 3 MutationType ops
   transitions:
-    [[ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
+    [[ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
   ops:
     *scop.MakePublicForeignKeyConstraintValidated
       ConstraintID: 3
@@ -2440,17 +2440,17 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
       TableID: 109
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, ABSENT], VALIDATED] -> PUBLIC
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], VALIDATED] -> PUBLIC
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], VALIDATED] -> PUBLIC
+    [[ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], VALIDATED] -> PUBLIC
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], VALIDATED] -> PUBLIC
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], VALIDATED] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 7 MutationType ops
   transitions:
-    [[ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
+    [[ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
   ops:
     *scop.MakePublicForeignKeyConstraintValidated
       ConstraintID: 3
@@ -2515,9 +2515,9 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 47 MutationType ops
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 104, Name: customers_email_key, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, ABSENT], VALIDATED] -> ABSENT
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], VALIDATED] -> ABSENT
-    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], VALIDATED] -> ABSENT
+    [[ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], VALIDATED] -> ABSENT
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], VALIDATED] -> ABSENT
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], VALIDATED] -> ABSENT
   ops:
     *scop.RemoveForeignKeyBackReference
       OriginConstraintID: 3
@@ -2879,40 +2879,40 @@ DROP TABLE defaultdb.customers CASCADE;
   to:   [Table:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, ABSENT]
+- from: [ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT]
   to:   [Table:{DescID: 104}, DROPPED]
   kind: Precedence
   rule: cross-descriptor constraint is absent before referenced descriptor is dropped
-- from: [ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, PUBLIC]
-  to:   [ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, VALIDATED]
+- from: [ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [1], ReferencedDescID: 104}, PUBLIC]
+  to:   [ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [1], ReferencedDescID: 104}, VALIDATED]
   kind: PreviousTransactionPrecedence
   rule: ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
-- from: [ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, VALIDATED]
-  to:   [ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, ABSENT]
+- from: [ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [1], ReferencedDescID: 104}, VALIDATED]
+  to:   [ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT]
   to:   [Table:{DescID: 104}, DROPPED]
   kind: Precedence
   rule: cross-descriptor constraint is absent before referenced descriptor is dropped
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, PUBLIC]
-  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, VALIDATED]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, PUBLIC]
+  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, VALIDATED]
   kind: PreviousTransactionPrecedence
   rule: ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, VALIDATED]
-  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, VALIDATED]
+  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT]
   to:   [Table:{DescID: 104}, DROPPED]
   kind: Precedence
   rule: cross-descriptor constraint is absent before referenced descriptor is dropped
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, PUBLIC]
-  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, VALIDATED]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, PUBLIC]
+  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, VALIDATED]
   kind: PreviousTransactionPrecedence
   rule: ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
-- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, VALIDATED]
-  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT]
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, VALIDATED]
+  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT]
