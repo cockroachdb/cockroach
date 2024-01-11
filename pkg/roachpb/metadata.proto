@@ -368,6 +368,8 @@ message NodeDescriptor {
   option (gogoproto.equal) = true;
   optional int32 node_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
+  // Address can not be used directly for dialing a node. It doesn't take into
+  // account the locality addresses. Use gossip.GetNodeIDAddress instead.
   optional util.UnresolvedAddr address = 2 [(gogoproto.nullable) = false];
   optional Attributes attrs = 3 [(gogoproto.nullable) = false];
   optional Locality locality = 4 [(gogoproto.nullable) = false];
