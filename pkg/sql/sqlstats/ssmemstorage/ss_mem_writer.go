@@ -212,7 +212,7 @@ func (s *Container) RecordStatement(
 		errorMsg = redact.Sprint(value.StatementError)
 	}
 
-	s.insights.ObserveStatement(value.SessionID, &insights.Statement{
+	insight := insights.Statement{
 		ID:                   value.StatementID,
 		FingerprintID:        stmtFingerprintID,
 		LatencyInSeconds:     value.ServiceLatencySec,
@@ -233,7 +233,12 @@ func (s *Container) RecordStatement(
 		CPUSQLNanos:          cpuSQLNanos,
 		ErrorCode:            errorCode,
 		ErrorMsg:             errorMsg,
-	})
+	}
+	if s.knobs != nil && s.knobs.InsightsWriterStmtInterceptor != nil {
+		s.knobs.InsightsWriterStmtInterceptor(value.SessionID, &insight)
+	} else {
+		s.insights.ObserveStatement(value.SessionID, &insight)
+	}
 
 	return stats.ID, nil
 }
@@ -386,7 +391,7 @@ func (s *Container) RecordTransaction(
 		status = insights.Transaction_Completed
 	}
 
-	s.insights.ObserveTransaction(ctx, value.SessionID, &insights.Transaction{
+	insight := insights.Transaction{
 		ID:              value.TransactionID,
 		FingerprintID:   key,
 		UserPriority:    value.Priority.String(),
@@ -404,7 +409,12 @@ func (s *Container) RecordTransaction(
 		LastErrorCode:   errorCode,
 		LastErrorMsg:    errorMsg,
 		Status:          status,
-	})
+	}
+	if s.knobs != nil && s.knobs.InsightsWriterTxnInterceptor != nil {
+		s.knobs.InsightsWriterTxnInterceptor(ctx, value.SessionID, &insight)
+	} else {
+		s.insights.ObserveTransaction(ctx, value.SessionID, &insight)
+	}
 	return nil
 }
 
