@@ -417,6 +417,12 @@ func NewServer(
 	metrics := makeMetrics(false /* internal */)
 	serverMetrics := makeServerMetrics(cfg)
 	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics, eventsExporter)
+	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
+	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
+			insightsProvider.Writer(false /*internal*/).Clear(ctx)
+		}
+	})
 	reportedSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemReportedSQLStatsStmtFingerprints,
