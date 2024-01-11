@@ -73,11 +73,20 @@ SELECT id, name, data_state, service_mode, source_tenant_name, cutover_time FROM
 2 destination replicating none source <nil>
 
 let $ts as=source-system
-SELECT clock_timestamp()::timestamp::string
+SELECT clock_timestamp()::timestamptz::string
+----
+
+let $src as=source-system
+SELECT crdb_internal.cluster_id()::string || ':10'
 ----
 
 cutover ts=$ts
 ----
+
+query-sql as=destination-system
+SELECT id, source_id = '$src', hlc_to_timestamp(activation_time)::string = '$ts' FROM [SHOW VIRTUAL CLUSTER destination WITH PRIOR REPLICATION DETAILS]
+----
+2 true true
 
 start-replicated-tenant
 ----

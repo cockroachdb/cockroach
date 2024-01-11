@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
@@ -42,16 +43,17 @@ type showTenantNodeCapability struct {
 }
 
 type showTenantNode struct {
-	tenantSpec       tenantSpec
-	withReplication  bool
-	withCapabilities bool
-	columns          colinfo.ResultColumns
-	tenantIDIndex    int
-	tenantIds        []roachpb.TenantID
-	initTenantValues bool
-	values           *tenantValues
-	capabilityIndex  int
-	capability       showTenantNodeCapability
+	tenantSpec           tenantSpec
+	withReplication      bool
+	withPriorReplication bool
+	withCapabilities     bool
+	columns              colinfo.ResultColumns
+	tenantIDIndex        int
+	tenantIds            []roachpb.TenantID
+	initTenantValues     bool
+	values               *tenantValues
+	capabilityIndex      int
+	capability           showTenantNodeCapability
 }
 
 // ShowTenant constructs a showTenantNode.
@@ -70,15 +72,19 @@ func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode,
 	}
 
 	node := &showTenantNode{
-		tenantSpec:       tspec,
-		withReplication:  n.WithReplication,
-		withCapabilities: n.WithCapabilities,
-		initTenantValues: true,
+		tenantSpec:           tspec,
+		withReplication:      n.WithReplication,
+		withPriorReplication: n.WithPriorReplication,
+		withCapabilities:     n.WithCapabilities,
+		initTenantValues:     true,
 	}
 
 	node.columns = colinfo.TenantColumns
 	if n.WithReplication {
 		node.columns = append(node.columns, colinfo.TenantColumnsWithReplication...)
+	}
+	if n.WithPriorReplication {
+		node.columns = append(node.columns, colinfo.TenantColumnsWithPriorReplication...)
 	}
 	if n.WithCapabilities {
 		node.columns = append(node.columns, colinfo.TenantColumnsWithCapabilities...)
@@ -266,6 +272,15 @@ func (n *showTenantNode) Values() tree.Datums {
 			retainedTimestamp,
 			cutoverTimestamp,
 		)
+	}
+	if n.withPriorReplication {
+		sourceID := tree.DNull
+		activationTimestamp := tree.DNull
+		if prior := v.tenantInfo.PreviousSourceTenant; prior != nil {
+			sourceID = tree.NewDString(fmt.Sprintf("%s:%s", prior.ClusterID, prior.TenantID.String()))
+			activationTimestamp = eval.TimestampToDecimalDatum(prior.CutoverTimestamp)
+		}
+		result = append(result, sourceID, activationTimestamp)
 	}
 
 	if n.withCapabilities {
