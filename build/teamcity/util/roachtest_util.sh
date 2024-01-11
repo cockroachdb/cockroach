@@ -32,6 +32,7 @@ function upload_stats {
         # the location.
         remote_artifacts_dir="artifacts"
       fi
+      # TODO: FIPS_ENABLED is deprecated, use roachtest --metamorphic-fips-probability, instead.
       # In FIPS-mode, keep artifacts separate by using the 'fips' suffix.
       if [[ ${FIPS_ENABLED:-0} == 1 ]]; then
         remote_artifacts_dir="${remote_artifacts_dir}-fips"
@@ -48,7 +49,14 @@ function upload_stats {
       (cd "${artifacts}" && \
         while IFS= read -r f; do
           if [[ -n "${f}" ]]; then
-            gsutil cp "${f}" "gs://${bucket}/${remote_artifacts_dir}/${stats_dir}/${f}"
+            artifacts_dir="${remote_artifacts_dir}"
+            # If 'cpu_arch=xxx' is encoded in the path, use it as suffix to separate artifacts by cpu_arch.
+            if [[ "${f}" == *"/cpu_arch=arm64/"* ]]; then
+              artifacts_dir="${artifacts_dir}-arm64"
+            elif [[ "${f}" == *"/cpu_arch=fips/"* ]]; then
+              artifacts_dir="${artifacts_dir}-fips"
+            fi
+            gsutil cp "${f}" "gs://${bucket}/${artifacts_dir}/${stats_dir}/${f}"
           fi
         done <<< "$(find . -name stats.json | sed 's/^\.\///')")
   fi
