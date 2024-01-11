@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randident"
@@ -76,6 +77,14 @@ var SpanStatsBatchLimit = settings.RegisterIntSetting(
 	DefaultSpanStatsSpanLimit,
 	settings.PositiveInt,
 )
+
+// CheckConsistencyFatal will make crdb_internal.check_consistency() take
+// storage checkpoints and terminate nodes on any inconsistencies when run with
+// stats_only: false. This is the same as the background consistency checker,
+// and is done by changing the mode CHECK_FULL to CHECK_VIA_QUEUE. This is for
+// use in roachtest post-test assertions, to collect checkpoints on failures.
+var CheckConsistencyFatal = envutil.EnvOrDefaultBool(
+	"COCKROACH_INTERNAL_CHECK_CONSISTENCY_FATAL", false)
 
 func genProps() tree.FunctionProperties {
 	return tree.FunctionProperties{
@@ -2140,6 +2149,8 @@ func makeCheckConsistencyGenerator(
 	mode := kvpb.ChecksumMode_CHECK_FULL
 	if statsOnly := bool(*args[0].(*tree.DBool)); statsOnly {
 		mode = kvpb.ChecksumMode_CHECK_STATS
+	} else if CheckConsistencyFatal {
+		mode = kvpb.ChecksumMode_CHECK_VIA_QUEUE
 	}
 
 	if evalCtx.ConsistencyChecker == nil {
