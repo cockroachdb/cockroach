@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/rcrowley/go-metrics"
 )
 
 const (
@@ -47,6 +48,7 @@ const defaultSLIScope = "default"
 // AggMetrics are aggregated metrics keeping track of aggregated changefeed performance
 // indicators, combined with a limited number of per-changefeed indicators.
 type AggMetrics struct {
+	ThrottlingTimeMs            *aggmetric.AggHistogram
 	EmittedMessages             *aggmetric.AggCounter
 	EmittedBatchSizes           *aggmetric.AggHistogram
 	FilteredMessages            *aggmetric.AggCounter
@@ -106,6 +108,7 @@ type metricsRecorder interface {
 	newParallelIOMetricsRecorder() parallelIOMetricsRecorder
 	recordSinkIOInflightChange(int64)
 	makeCloudstorageFileAllocCallback() func(delta int64)
+	newKafkaMetricsGetter() KafkaMetricsGetter
 }
 
 var _ metricsRecorder = (*sliMetrics)(nil)
@@ -116,6 +119,7 @@ func (a *AggMetrics) MetricStruct() {}
 
 // sliMetrics holds all SLI related metrics aggregated into AggMetrics.
 type sliMetrics struct {
+	ThrottlingTimeMs            *aggmetric.Histogram
 	EmittedMessages             *aggmetric.Counter
 	EmittedBatchSizes           *aggmetric.Histogram
 	FilteredMessages            *aggmetric.Counter
@@ -325,6 +329,81 @@ func (m *sliMetrics) recordSizeBasedFlush() {
 	m.SizeBasedFlushes.Inc(1)
 }
 
+type kafkaHistogramAdapter struct {
+	wrapped *aggmetric.Histogram
+}
+
+func (k *kafkaHistogramAdapter) Clear() {
+	panic("clear is not expected to be called on kafkaHistogramAdapter")
+}
+
+func (k *kafkaHistogramAdapter) Count() int64 {
+	panic("count is not expected to be called on kafkaHistogramAdapter")
+}
+
+func (k *kafkaHistogramAdapter) Max() int64 {
+	panic("max is not expected to be called on kafkaHistogramAdapter")
+}
+
+func (k *kafkaHistogramAdapter) Mean() float64 {
+	panic("mean is not expected to be called on kafkaHistogramAdapter")
+}
+
+func (k *kafkaHistogramAdapter) Min() int64 {
+	panic("min is not expected to be called on kafkaHistogramAdapter")
+}
+
+func (k *kafkaHistogramAdapter) Percentile(float64) float64 {
+	panic("percentile is not expected to be called on kafkaHistogramAdapter")
+}
+
+func (k *kafkaHistogramAdapter) Percentiles([]float64) []float64 {
+	panic("percentiles is not expected to be called on kafkaHistogramAdapter")
+}
+
+func (k *kafkaHistogramAdapter) Sample() metrics.Sample {
+	panic("sample is not expected to be called on kafkaHistogramAdapter")
+}
+
+func (k *kafkaHistogramAdapter) Snapshot() metrics.Histogram {
+	panic("snapshot is not expected to be called on kafkaHistogramAdapter")
+}
+
+func (k *kafkaHistogramAdapter) StdDev() float64 {
+	panic("stdDev is not expected to be called on kafkaHistogramAdapter")
+}
+
+func (k *kafkaHistogramAdapter) Sum() int64 {
+	panic("sum is not expected to be called on kafkaHistogramAdapter")
+}
+
+func (k *kafkaHistogramAdapter) Variance() float64 {
+	panic("variance is not expected to be called on kafkaHistogramAdapter")
+}
+
+var _ metrics.Histogram = (*kafkaHistogramAdapter)(nil)
+
+func (k *kafkaHistogramAdapter) Update(v int64) {
+	if k != nil {
+		k.wrapped.RecordValue(v)
+	}
+}
+
+type KafkaMetricsGetter interface {
+	GetThrottlingTimeInMs() *kafkaHistogramAdapter
+}
+
+type kafkaMetricsGetterImpl struct {
+	throttlingTimeInMs *kafkaHistogramAdapter
+}
+
+func (kg *kafkaMetricsGetterImpl) GetThrottlingTimeInMs() *kafkaHistogramAdapter {
+	if kg == nil {
+		return (*kafkaHistogramAdapter)(nil)
+	}
+	return kg.throttlingTimeInMs
+}
+
 type parallelIOMetricsRecorder interface {
 	recordPendingQueuePush(numKeys int64)
 	recordPendingQueuePop(numKeys int64, latency time.Duration)
@@ -377,6 +456,17 @@ func (m *sliMetrics) newParallelIOMetricsRecorder() parallelIOMetricsRecorder {
 		pendingRows:       m.ParallelIOPendingRows,
 		resultQueueNanos:  m.ParallelIOResultQueueNanos,
 		inFlight:          m.ParallelIOInFlightKeys,
+	}
+}
+
+func (m *sliMetrics) newKafkaMetricsGetter() KafkaMetricsGetter {
+	if m == nil {
+		return (*kafkaMetricsGetterImpl)(nil)
+	}
+	return &kafkaMetricsGetterImpl{
+		throttlingTimeInMs: &kafkaHistogramAdapter{
+			wrapped: m.ThrottlingTimeMs,
+		},
 	}
 }
 
@@ -470,6 +560,10 @@ func (w *wrappingCostController) newParallelIOMetricsRecorder() parallelIOMetric
 	return w.inner.newParallelIOMetricsRecorder()
 }
 
+func (w *wrappingCostController) newKafkaMetricsGetter() KafkaMetricsGetter {
+	return w.inner.newKafkaMetricsGetter()
+}
+
 var (
 	metaChangefeedForwardedResolvedMessages = metric.Metadata{
 		Name:        "changefeed.forwarded_resolved_messages",
@@ -547,6 +641,13 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Help:        "Messages emitted by all feeds",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
+	}
+	metaThrottleTimeInMs := metric.Metadata{
+		// TODO(wenyihu): add ms to ns conversion
+		Name:        "changefeed.throttle_time_in_ms",
+		Help:        "Throttling tims spent in ms due to kafka quota",
+		Measurement: "Milliseconds",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaChangefeedEmittedBatchSizes := metric.Metadata{
 		Name:        "changefeed.emitted_batch_sizes",
@@ -736,6 +837,13 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 	// retain significant figures of 2.
 	b := aggmetric.MakeBuilder("scope")
 	a := &AggMetrics{
+		ThrottlingTimeMs: b.Histogram(metric.HistogramOptions{
+			Metadata:     metaThrottleTimeInMs,
+			Duration:     histogramWindow,
+			MaxVal:       16e6, // TODO(wenyihu): check the options here
+			SigFigs:      1,
+			BucketConfig: metric.DataCount16MBuckets,
+		}),
 		ErrorRetries:    b.Counter(metaChangefeedErrorRetries),
 		EmittedMessages: b.Counter(metaChangefeedEmittedMessages),
 		EmittedBatchSizes: b.Histogram(metric.HistogramOptions{
@@ -851,6 +959,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	}
 
 	sm := &sliMetrics{
+		ThrottlingTimeMs:            a.ThrottlingTimeMs.AddChild(scope),
 		EmittedMessages:             a.EmittedMessages.AddChild(scope),
 		EmittedBatchSizes:           a.EmittedBatchSizes.AddChild(scope),
 		FilteredMessages:            a.FilteredMessages.AddChild(scope),
