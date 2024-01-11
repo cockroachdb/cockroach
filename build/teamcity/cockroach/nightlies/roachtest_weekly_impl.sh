@@ -15,6 +15,7 @@ if [[ ${FIPS_ENABLED:-0} == 1 ]]; then
   arch=amd64-fips
 fi
 $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh $arch
+$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh arm64
 
 artifacts=/artifacts
 source $root/build/teamcity/util/roachtest_util.sh
@@ -25,18 +26,14 @@ source $root/build/teamcity/util/roachtest_util.sh
 # kill with SIGINT which will allow roachtest to fail tests and
 # cleanup.
 #
-# NB(2): We specify --zones below so that nodes are created in us-central1-b
-# by default. This reserves us-east1-b (the roachprod default zone) for use
-# by manually created clusters.
-#
-# NB(3): If you make changes here, you should probably make the same change in
-# build/teamcity-weekly-roachtest.sh
 timeout -s INT $((7800*60)) build/teamcity-roachtest-invoke.sh \
   --suite weekly \
+  --cloud="${CLOUD}" \
   --cluster-id "${TC_BUILD_ID}" \
-  --zones "us-central1-b,us-west1-b,europe-west2-b" \
   --artifacts=/artifacts \
   --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
-  --parallelism 5 \
+  --parallelism="${PARALLELISM}" \
+  --cpu-quota="${CPUQUOTA}" \
   --metamorphic-encryption-probability=0.5 \
+  --metamorphic-arm64-probability="${ARM_PROBABILITY:-0.5}" \
   --slack-token="${SLACK_TOKEN}"
