@@ -9,7 +9,7 @@ ALTER TABLE t ADD CHECK (i > 0)
   {indexId: 1, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC], ABSENT]
+- [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1]}, PUBLIC], ABSENT]
   {columnIds: [1], constraintId: 2, expr: 'i > 0:::INT8', referencedColumnIds: [1], tableId: 104}
 - [[ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}, PUBLIC], ABSENT]
   {constraintId: 2, name: check_i, tableId: 104}

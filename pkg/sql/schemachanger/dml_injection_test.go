@@ -297,7 +297,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 				"ALTER TABLE tbl ADD PRIMARY KEY (id)",
 			},
 			schemaChange: "ALTER TABLE tbl ALTER PRIMARY KEY USING COLUMNS (insert_phase_ordinal, operation_phase_ordinal, operation) USING HASH",
-			skipIssue:    111570,
 		},
 		{
 			desc:         "create index",
@@ -319,7 +318,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 		{
 			desc:         "create index using hash",
 			schemaChange: "CREATE INDEX idx ON tbl (val) USING HASH",
-			skipIssue:    111621,
 		},
 		{
 			desc:         "drop index using hash",
