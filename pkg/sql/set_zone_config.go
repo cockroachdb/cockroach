@@ -319,9 +319,8 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 			return nil
 		}
 
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"user %s does not have %s or %s privilege on %s %s",
-			p.SessionData().User(), privilege.ZONECONFIG, privilege.CREATE, dbDesc.DescriptorType(), dbDesc.GetName())
+		return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(p.SessionData().User(),
+			[]privilege.Kind{privilege.ZONECONFIG, privilege.CREATE}, string(dbDesc.DescriptorType()), dbDesc.GetName())
 	}
 	tableDesc, err := p.resolveTableForZone(ctx, &zs)
 	if err != nil {
@@ -342,9 +341,8 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 		return nil
 	}
 
-	return pgerror.Newf(pgcode.InsufficientPrivilege,
-		"user %s does not have %s or %s privilege on %s %s",
-		p.SessionData().User(), privilege.ZONECONFIG, privilege.CREATE, tableDesc.DescriptorType(), tableDesc.GetName())
+	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(p.SessionData().User(),
+		[]privilege.Kind{privilege.ZONECONFIG, privilege.CREATE}, string(tableDesc.DescriptorType()), tableDesc.GetName())
 }
 
 // setZoneConfigRun contains the run-time state of setZoneConfigNode during local execution.
