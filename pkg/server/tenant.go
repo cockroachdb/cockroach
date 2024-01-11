@@ -1171,6 +1171,7 @@ func makeTenantSQLServerArgs(
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
+	// TODO(baptist): This call does not take into account locality addresses.
 	resolver := kvtenant.AddressResolver(tenantConnect)
 	kvNodeDialer := nodedialer.New(rpcContext, resolver)
 

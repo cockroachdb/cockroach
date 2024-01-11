@@ -1028,9 +1028,10 @@ var varGen = map[string]sessionVar{
 		Set: func(ctx context.Context, m sessionDataMutator, s string) error {
 			styleVal, ok := duration.IntervalStyle_value[strings.ToUpper(s)]
 			if !ok {
-				validIntervalStyles := make([]string, 0, len(duration.IntervalStyle_value))
-				for k := range duration.IntervalStyle_value {
-					validIntervalStyles = append(validIntervalStyles, strings.ToLower(k))
+				validIntervalStyles := make([]string, 0, len(duration.IntervalStyle_name))
+				for k := 0; k < len(duration.IntervalStyle_name); k++ {
+					name := duration.IntervalStyle_name[int32(k)]
+					validIntervalStyles = append(validIntervalStyles, strings.ToLower(name))
 				}
 				return newVarValueError(`IntervalStyle`, s, validIntervalStyles...)
 			}

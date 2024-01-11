@@ -294,7 +294,7 @@ func TestSpanRecordStructured(t *testing.T) {
 		`))
 	checkRecording(t, rec, `
 		=== operation:root
-structured:‹{"@type":"type.googleapis.com/cockroach.util.tracing.tracingpb.OperationMetadata","duration":"3s","count":"0","containsUnfinished":false}›
+structured:‹{"@type":"type.googleapis.com/cockroach.util.tracing.tracingpb.OperationMetadata","duration":"3s"}›
 structured:‹{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}›`)
 }
 
