@@ -9,9 +9,9 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› VALIDATE
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 1 element transitioning toward PUBLIC
- │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+ │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [1]}
  │         ├── 2 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT     CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}
+ │         │    ├── PUBLIC → ABSENT     CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2, ReferencedColumnIDs: [1]}
  │         │    └── PUBLIC → ABSENT     ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
  │         └── 3 Mutation operations
  │              ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
@@ -20,17 +20,17 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› VALIDATE
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+ │    │    │    └── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [1]}
  │    │    ├── 2 elements transitioning toward ABSENT
- │    │    │    ├── ABSENT     → PUBLIC CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}
+ │    │    │    ├── ABSENT     → PUBLIC CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2, ReferencedColumnIDs: [1]}
  │    │    │    └── ABSENT     → PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 1 element transitioning toward PUBLIC
- │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+ │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [1]}
  │         ├── 2 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT     CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}
+ │         │    ├── PUBLIC → ABSENT     CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2, ReferencedColumnIDs: [1]}
  │         │    └── PUBLIC → ABSENT     ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
  │         └── 5 Mutation operations
  │              ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
@@ -41,12 +41,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› VALIDATE
  └── PostCommitPhase
       ├── Stage 1 of 2 in PostCommitPhase
       │    ├── 1 element transitioning toward PUBLIC
-      │    │    └── WRITE_ONLY → VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+      │    │    └── WRITE_ONLY → VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [1]}
       │    └── 1 Validation operation
       │         └── ValidateConstraint {"ConstraintID":3,"TableID":104}
       └── Stage 2 of 2 in PostCommitPhase
            ├── 2 elements transitioning toward PUBLIC
-           │    ├── VALIDATED → PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+           │    ├── VALIDATED → PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [1]}
            │    └── ABSENT    → PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 3}
            └── 4 Mutation operations
                 ├── SetConstraintName {"ConstraintID":3,"Name":"check_i","TableID":104}

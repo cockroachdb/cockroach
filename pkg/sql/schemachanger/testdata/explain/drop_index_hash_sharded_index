@@ -13,7 +13,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 104, Name: crdb_internal_j_shard_16, ColumnID: 3}
  │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}
  │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
- │         │    ├── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+ │         │    ├── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [3]}
  │         │    └── PUBLIC → ABSENT     ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 2}
  │         └── 6 Mutation operations
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":3,"TableID":104}
@@ -29,7 +29,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 104, Name: crdb_internal_j_shard_16, ColumnID: 3}
  │    │    │    ├── VALIDATED  → PUBLIC ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}
  │    │    │    ├── VALIDATED  → PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
- │    │    │    ├── VALIDATED  → PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+ │    │    │    ├── VALIDATED  → PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [3]}
  │    │    │    └── ABSENT     → PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 2}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
@@ -39,7 +39,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 104, Name: crdb_internal_j_shard_16, ColumnID: 3}
  │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}
  │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
- │         │    ├── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+ │         │    ├── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [3]}
  │         │    └── PUBLIC → ABSENT     ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 2}
  │         └── 8 Mutation operations
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":3,"TableID":104}
@@ -60,7 +60,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
       │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC     → ABSENT      IndexName:{DescID: 104, Name: idx, IndexID: 2}
-      │    │    └── VALIDATED  → ABSENT      CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+      │    │    └── VALIDATED  → ABSENT      CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [3]}
       │    └── 10 Mutation operations
       │         ├── RemoveColumnNotNull {"ColumnID":3,"TableID":104}
       │         ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}

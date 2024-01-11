@@ -13,7 +13,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0) NOT VALID;
 │       │
 │       ├── • 2 elements transitioning toward PUBLIC
 │       │   │
-│       │   ├── • CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}
+│       │   ├── • CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2, ReferencedColumnIDs: [1]}
 │       │   │     ABSENT → PUBLIC
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
@@ -40,7 +40,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0) NOT VALID;
     │   │
     │   ├── • 2 elements transitioning toward PUBLIC
     │   │   │
-    │   │   ├── • CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}
+    │   │   ├── • CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2, ReferencedColumnIDs: [1]}
     │   │   │     PUBLIC → ABSENT
     │   │   │
     │   │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
@@ -55,7 +55,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0) NOT VALID;
         │
         ├── • 2 elements transitioning toward PUBLIC
         │   │
-        │   ├── • CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}
+        │   ├── • CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2, ReferencedColumnIDs: [1]}
         │   │     ABSENT → PUBLIC
         │   │
         │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}

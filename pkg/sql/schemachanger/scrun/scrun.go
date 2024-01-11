@@ -268,6 +268,7 @@ func makePostCommitPlan(
 		ExecutionPhase:             scop.PostCommitPhase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return jobID },
 		SkipPlannerSanityChecks:    true,
+		InRollback:                 state.InRollback,
 	})
 }
 

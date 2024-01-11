@@ -13,16 +13,16 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
 │       │
 │       ├── • 2 elements transitioning toward ABSENT
 │       │   │
-│       │   ├── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │   ├── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
-│       │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}
 │       │   │         rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 105, Name: t1_i_fkey, ConstraintID: 2}
 │       │       │ PUBLIC → ABSENT
 │       │       │
-│       │       └── • Precedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │       └── • Precedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}
 │       │             rule: "constraint no longer public before dependents"
 │       │
 │       └── • 2 Mutation operations
@@ -42,7 +42,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
 │   │   │
 │   │   ├── • 2 elements transitioning toward ABSENT
 │   │   │   │
-│   │   │   ├── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│   │   │   ├── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}
 │   │   │   │     VALIDATED → PUBLIC
 │   │   │   │
 │   │   │   └── • ConstraintWithoutIndexName:{DescID: 105, Name: t1_i_fkey, ConstraintID: 2}
@@ -57,16 +57,16 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
 │       │
 │       ├── • 2 elements transitioning toward ABSENT
 │       │   │
-│       │   ├── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │   ├── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
-│       │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}
 │       │   │         rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 105, Name: t1_i_fkey, ConstraintID: 2}
 │       │       │ PUBLIC → ABSENT
 │       │       │
-│       │       └── • Precedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │       └── • Precedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}
 │       │             rule: "constraint no longer public before dependents"
 │       │
 │       └── • 5 Mutation operations
@@ -108,10 +108,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
         │
         ├── • 1 element transitioning toward ABSENT
         │   │
-        │   └── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+        │   └── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}
         │       │ VALIDATED → ABSENT
         │       │
-        │       ├── • PreviousTransactionPrecedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+        │       ├── • PreviousTransactionPrecedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}
         │       │     rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT"
         │       │
         │       └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 105, Name: t1_i_fkey, ConstraintID: 2}
