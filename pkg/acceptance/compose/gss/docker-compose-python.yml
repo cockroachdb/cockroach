@@ -1,7 +1,7 @@
 version: '3'
 services:
   kdc:
-    image: cockroachdb/acceptance-gss-kdc:20221214-131000
+    image: us-east1-docker.pkg.dev/crl-ci-images/cockroach/acceptance-gss-kdc:20221214-131000
     volumes:
       - ./kdc/start.sh:/start.sh
       - keytab:/keytab
@@ -17,7 +17,7 @@ services:
       - keytab:/keytab
       - ${COCKROACH_BINARY:-../../../../cockroach-linux-2.6.32-gnu-amd64}:/cockroach/cockroach
   python:
-    image: cockroachdb/acceptance-gss-python:20221214-141947
+    image: us-east1-docker.pkg.dev/crl-ci-images/cockroach/acceptance-gss-python:20221214-141947
     user: "${UID}:${GID}"
     depends_on:
       - cockroach
