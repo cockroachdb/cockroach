@@ -33,12 +33,8 @@ type LogMetrics interface {
 }
 
 // Metric is the enum representation of each metric supported within the log package.
-// NB: When adding a metric here, be sure to add to log.Metrics below.
 // NB: The metric also needs to be added to pkg/util/log/logmetrics, where we
 // need to register the metric and define its metadata.
-//
-// We use an enum representation as an optimization within LogMetrics implementations
-// when doing lookups for underlying metric counters.
 type Metric int
 
 const (
@@ -49,12 +45,3 @@ const (
 	BufferedSinkMessagesDropped
 	LogMessageCount
 )
-
-var Metrics = []Metric{
-	FluentSinkConnectionAttempt,
-	FluentSinkConnectionError,
-	FluentSinkWriteAttempt,
-	FluentSinkWriteError,
-	BufferedSinkMessagesDropped,
-	LogMessageCount,
-}
