@@ -96,9 +96,7 @@ message StreamIngestionDetails {
     (gogoproto.nullable) = false,
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
 
-  string destination_tenant_name = 9 [
-    (gogoproto.nullable) = false,
-    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+  reserved 9;
 
   // ID of the protected timestamp record that protects the destination tenant's
   // keyspan from GC while it is being replicated into.
