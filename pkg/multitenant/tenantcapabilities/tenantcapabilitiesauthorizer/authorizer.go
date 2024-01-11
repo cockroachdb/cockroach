@@ -100,7 +100,7 @@ func (a *Authorizer) HasCapabilityForBatch(
 	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
-		if entry.ServiceMode == mtinfopb.ServiceModeNone {
+		if entry.ServiceMode == mtinfopb.ServiceModeNone || entry.ServiceMode == mtinfopb.ServiceModeStopping {
 			return errors.Newf("operation not allowed when in service mode %q", entry.ServiceMode)
 		}
 		return a.capCheckForBatch(ctx, tenID, ba, entry)

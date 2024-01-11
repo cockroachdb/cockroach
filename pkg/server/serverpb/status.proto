@@ -16,6 +16,7 @@ import "build/info.proto";
 import "errorspb/errors.proto";
 import "gossip/gossip.proto";
 import "jobs/jobspb/jobs.proto";
+import "multitenant/mtinfopb/info.proto";
 import "roachpb/data.proto";
 import "roachpb/index_usage_stats.proto";
 import "roachpb/span_config.proto";
@@ -607,6 +608,25 @@ message DownloadSpanRequest {
 message DownloadSpanResponse {
   // ErrorsByNodeID contains any errors that occurred during fan-out calls to other nodes.
   map<int32, string> errors_by_node_id = 1 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+    (gogoproto.customname) = "ErrorsByNodeID",
+    (gogoproto.nullable) = false
+  ];
+}
+
+message TenantServiceStatusRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  uint64 tenant_id = 2 [(gogoproto.customname) = "TenantID"];
+}
+
+message TenantServiceStatusResponse {
+  map<int32, cockroach.multitenant.SQLInfo> status_by_node_id = 1 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+    (gogoproto.customname) = "StatusByNodeID",
+    (gogoproto.nullable) = false
+  ];
+
+  map<int32, string> errors_by_node_id = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
     (gogoproto.customname) = "ErrorsByNodeID",
     (gogoproto.nullable) = false
@@ -1272,7 +1292,7 @@ message ProblemRangesResponse {
     ];
     repeated int64 circuit_breaker_error_range_ids = 10 [
       (gogoproto.customname) = "CircuitBreakerErrorRangeIDs",
-      (gogoproto.casttype) = 
+      (gogoproto.casttype) =
           "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];
     repeated int64 paused_replica_ids = 11 [
@@ -2189,6 +2209,15 @@ service Status {
   rpc Ranges(RangesRequest) returns (RangesResponse) {
     option (google.api.http) = {
       get : "/_status/ranges/{node_id}"
+    };
+  }
+
+  // TenantServiceStatus returns the current service and data state of
+  // the given tenant as known to the server orchestrator, which may
+  // differ from the database state.
+  rpc TenantServiceStatus(TenantServiceStatusRequest) returns (TenantServiceStatusResponse) {
+    option (google.api.http) = {
+      get : "/_status/tenant_service_status"
     };
   }
 
