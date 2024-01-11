@@ -11,6 +11,7 @@
 package stats
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -227,7 +228,9 @@ func TestEquiDepthHistogram(t *testing.T) {
 		},
 	}
 
-	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.NewTestingEvalContext(st)
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
@@ -241,7 +244,7 @@ func TestEquiDepthHistogram(t *testing.T) {
 			}
 
 			h, _, err := EquiDepthHistogram(
-				evalCtx, types.Int, samples, tc.numRows, tc.distinctCount, tc.maxBuckets,
+				ctx, evalCtx, types.Int, samples, tc.numRows, tc.distinctCount, tc.maxBuckets, st,
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -253,7 +256,8 @@ func TestEquiDepthHistogram(t *testing.T) {
 	t.Run("invalid-numRows", func(t *testing.T) {
 		samples := tree.Datums{tree.NewDInt(1), tree.NewDInt(2), tree.NewDInt(3)}
 		_, _, err := EquiDepthHistogram(
-			evalCtx, types.Int, samples, 2 /* numRows */, 2 /* distinctCount */, 10, /* maxBuckets */
+			ctx, evalCtx, types.Int, samples, 2, /* numRows */
+			2 /* distinctCount */, 10 /* maxBuckets */, st,
 		)
 		if err == nil {
 			t.Fatal("expected error")
@@ -263,7 +267,8 @@ func TestEquiDepthHistogram(t *testing.T) {
 	t.Run("nulls", func(t *testing.T) {
 		samples := tree.Datums{tree.NewDInt(1), tree.NewDInt(2), tree.DNull}
 		_, _, err := EquiDepthHistogram(
-			evalCtx, types.Int, samples, 100 /* numRows */, 3 /* distinctCount */, 10, /* maxBuckets */
+			ctx, evalCtx, types.Int, samples, 100, /* numRows */
+			3 /* distinctCount */, 10 /* maxBuckets */, st,
 		)
 		if err == nil {
 			t.Fatal("expected error")
@@ -349,7 +354,9 @@ func TestConstructExtremesHistogram(t *testing.T) {
 		},
 	}
 
-	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.NewTestingEvalContext(st)
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			samples := make(tree.Datums, len(tc.values))
@@ -360,7 +367,10 @@ func TestConstructExtremesHistogram(t *testing.T) {
 
 				samples[i] = tree.NewDInt(tree.DInt(val))
 			}
-			h, _, err := ConstructExtremesHistogram(evalCtx, types.Int, samples, tc.numRows, tc.distinctCount, tc.maxBuckets, tree.NewDInt(tree.DInt(tc.lowerBound)))
+			h, _, err := ConstructExtremesHistogram(
+				ctx, evalCtx, types.Int, samples, tc.numRows, tc.distinctCount,
+				tc.maxBuckets, tree.NewDInt(tree.DInt(tc.lowerBound)), st,
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -989,8 +999,8 @@ func roundHistogram(h *histogram) {
 }
 
 func validateHistogramBuckets(t *testing.T, expected []expBucket, h HistogramData) {
-	if h.Version != histVersion {
-		t.Errorf("Invalid histogram version %d expected %d", h.Version, histVersion)
+	if h.Version != HistVersion {
+		t.Errorf("Invalid histogram version %d expected %d", h.Version, HistVersion)
 	}
 	if (h.Buckets == nil) != (expected == nil) {
 		t.Fatalf("Invalid bucket == nil: %v, expected %v", h.Buckets == nil, expected == nil)

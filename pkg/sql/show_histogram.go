@@ -14,11 +14,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -80,16 +78,15 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 			if err := typedesc.EnsureTypeIsHydrated(ctx, histogram.ColumnType, &resolver); err != nil {
 				return nil, err
 			}
+			var a tree.DatumAlloc
 			for _, b := range histogram.Buckets {
-				ed, _, err := rowenc.EncDatumFromBuffer(
-					catenumpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
-				)
+				datum, err := stats.DecodeUpperBound(histogram.Version, histogram.ColumnType, &a, b.UpperBound)
 				if err != nil {
 					v.Close(ctx)
 					return nil, err
 				}
 				row := tree.Datums{
-					tree.NewDString(ed.String(histogram.ColumnType)),
+					tree.NewDString(datum.String()),
 					tree.NewDInt(tree.DInt(b.NumRange)),
 					tree.NewDFloat(tree.DFloat(b.DistinctRange)),
 					tree.NewDInt(tree.DInt(b.NumEq)),

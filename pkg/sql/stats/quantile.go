@@ -105,14 +105,14 @@ var zeroQuantile = quantile{{p: 0, v: 0}, {p: 1, v: 0}}
 // If you are introducing a new histogram version, please check whether
 // makeQuantile and quantile.toHistogram need to change, and then increase the
 // hard-coded number here.
-const _ = 2 - uint(histVersion)
+const _ = 3 - uint(HistVersion)
 
 // canMakeQuantile returns true if a quantile function can be created for a
 // histogram of the given type. Note that by not supporting BYTES we rule out
 // creating quantile functions for histograms of inverted columns.
 // TODO(michae2): Add support for DECIMAL, TIME, TIMETZ, and INTERVAL.
 func canMakeQuantile(version HistogramVersion, colType *types.T) bool {
-	if version > 2 {
+	if version > 3 {
 		return false
 	}
 

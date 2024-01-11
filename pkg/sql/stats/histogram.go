@@ -11,15 +11,19 @@
 package stats
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -48,17 +52,22 @@ var HistogramClusterMode = settings.RegisterBoolSetting(
 // HistogramVersion identifies histogram versions.
 type HistogramVersion uint32
 
-// histVersion is the current histogram version.
+// HistVersion is the current histogram version.
 //
 // ATTENTION: When updating this field, add a brief description of what
 // changed to the version history below.
-const histVersion HistogramVersion = 2
+const HistVersion HistogramVersion = 3
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 3
+- Introduced in 24.1.
+- Collated string datums now correctly use the value-encoding for UpperBounds in
+  the histograms.
 
 - Version: 2
 - Introduced in 22.2.
@@ -76,6 +85,33 @@ Please add new entries at the top.
   omitted on Version 0 histograms.
 
 */
+
+// collatedStringsValueEncodedVersion is the HistogramVersion from which we
+// started using value-encoding for collated strings.
+const collatedStringsValueEncodedVersion = HistogramVersion(3)
+
+func encodeUpperBound(
+	version HistogramVersion, typ *types.T, upperBound tree.Datum,
+) ([]byte, error) {
+	if version >= collatedStringsValueEncodedVersion && typ.Family() == types.CollatedStringFamily {
+		return valueside.Encode(nil /* appendTo */, valueside.NoColumnID, upperBound, nil /* scratch */)
+	}
+	return keyside.Encode(nil /* b */, upperBound, encoding.Ascending)
+}
+
+// DecodeUpperBound decodes the upper-bound of a histogram bucket into a datum.
+func DecodeUpperBound(
+	version HistogramVersion, typ *types.T, a *tree.DatumAlloc, upperBound []byte,
+) (tree.Datum, error) {
+	var datum tree.Datum
+	var err error
+	if version >= collatedStringsValueEncodedVersion && typ.Family() == types.CollatedStringFamily {
+		datum, _, err = valueside.Decode(a, typ, upperBound)
+	} else {
+		datum, _, err = keyside.Decode(a, typ, upperBound, encoding.Ascending)
+	}
+	return datum, err
+}
 
 // GetDefaultHistogramBuckets gets the default number of histogram buckets to
 // create for the given table.
@@ -103,16 +139,18 @@ func GetDefaultHistogramBuckets(sv *settings.Values, desc catalog.TableDescripto
 // HistogramData.HistogramData_Bucket is non-nil, otherwise a nil
 // []cat.HistogramBucket.
 func EquiDepthHistogram(
+	ctx context.Context,
 	compareCtx tree.CompareContext,
 	colType *types.T,
 	samples tree.Datums,
 	numRows, distinctCount int64,
 	maxBuckets int,
+	st *cluster.Settings,
 ) (HistogramData, []cat.HistogramBucket, error) {
 
 	if len(samples) == 0 {
 		return HistogramData{
-			ColumnType: colType, Buckets: make([]HistogramData_Bucket, 0), Version: histVersion,
+			ColumnType: colType, Buckets: make([]HistogramData_Bucket, 0), Version: HistVersion,
 		}, nil, nil
 	}
 
@@ -126,7 +164,7 @@ func EquiDepthHistogram(
 	}
 
 	h.adjustCounts(compareCtx, colType, float64(numRows), float64(distinctCount))
-	histogramData, err := h.toHistogramData(colType)
+	histogramData, err := h.toHistogramData(ctx, colType, st)
 	return histogramData, h.buckets, err
 }
 
@@ -138,12 +176,14 @@ func EquiDepthHistogram(
 // function assumes that the sample only includes values from the extremes of
 // the column.
 func ConstructExtremesHistogram(
+	ctx context.Context,
 	compareCtx tree.CompareContext,
 	colType *types.T,
 	values tree.Datums,
 	numRows, distinctCount int64,
 	maxBuckets int,
 	lowerBound tree.Datum,
+	st *cluster.Settings,
 ) (HistogramData, []cat.HistogramBucket, error) {
 
 	// If there are no new values at the extremes,
@@ -151,7 +191,7 @@ func ConstructExtremesHistogram(
 	numTotalSamples := int64(values.Len())
 	if numTotalSamples == 0 {
 		return HistogramData{
-			ColumnType: colType, Buckets: make([]HistogramData_Bucket, 0), Version: histVersion,
+			ColumnType: colType, Buckets: make([]HistogramData_Bucket, 0), Version: HistVersion,
 		}, nil, nil
 	}
 
@@ -196,7 +236,7 @@ func ConstructExtremesHistogram(
 	}
 	h := histogram{buckets: append(lowerHist.buckets, upperHist.buckets...)}
 	h.adjustCounts(compareCtx, colType, float64(numRows), float64(distinctCount))
-	histogramData, err := h.toHistogramData(colType)
+	histogramData, err := h.toHistogramData(ctx, colType, st)
 	return histogramData, h.buckets, err
 }
 
@@ -633,15 +673,24 @@ func (h *histogram) addOuterBuckets(
 
 // toHistogramData converts a histogram to a HistogramData protobuf with the
 // given type.
-func (h histogram) toHistogramData(colType *types.T) (HistogramData, error) {
+func (h histogram) toHistogramData(
+	ctx context.Context, colType *types.T, st *cluster.Settings,
+) (HistogramData, error) {
+	version := HistVersion
+	if !st.Version.IsActive(ctx, clusterversion.V24_1) {
+		// If the cluster hasn't been upgraded to 24.1 version yet, then we
+		// cannot yet use the newest histogram version to preserve
+		// backwards-compatibility.
+		version = HistVersion - 1
+	}
 	histogramData := HistogramData{
 		Buckets:    make([]HistogramData_Bucket, len(h.buckets)),
 		ColumnType: colType,
-		Version:    histVersion,
+		Version:    version,
 	}
 
 	for i := range h.buckets {
-		encoded, err := keyside.Encode(nil, h.buckets[i].UpperBound, encoding.Ascending)
+		encoded, err := encodeUpperBound(version, colType, h.buckets[i].UpperBound)
 		if err != nil {
 			return HistogramData{}, err
 		}
