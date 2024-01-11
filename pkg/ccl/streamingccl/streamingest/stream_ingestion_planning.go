@@ -265,71 +265,95 @@ func ingestionPlanHook(
 			}
 		}
 
-		// Create a new stream with stream client.
-		client, err := streamclient.NewStreamClient(ctx, streamAddress, p.ExecCfg().InternalDB)
-		if err != nil {
-			return err
-		}
-
-		// Create the producer job first for the purpose of observability, user is
-		// able to know the producer job id immediately after executing
-		// CREATE VIRTUAL CLUSTER ... FROM REPLICATION.
-		req := streampb.ReplicationProducerRequest{}
-		if !options.resumeTimestamp.IsEmpty() {
-			req = streampb.ReplicationProducerRequest{
-				ReplicationStartTime: options.resumeTimestamp,
-
-				// NB: These are checked against any
-				// PreviousSourceTenant on the source's tenant
-				// record.
-				TenantID:  destinationTenantID,
-				ClusterID: p.ExtendedEvalContext().ClusterID,
-			}
-		}
-
-		replicationProducerSpec, err := client.Create(ctx, roachpb.TenantName(sourceTenant), req)
-		if err != nil {
-			return err
-		}
-		if err := client.Close(ctx); err != nil {
-			return err
-		}
-
-		streamIngestionDetails := jobspb.StreamIngestionDetails{
-			StreamAddress:         string(streamAddress),
-			StreamID:              uint64(replicationProducerSpec.StreamID),
-			Span:                  keys.MakeTenantSpan(destinationTenantID),
-			ReplicationTTLSeconds: retentionTTLSeconds,
-
-			DestinationTenantID: destinationTenantID,
-
-			SourceTenantName:     roachpb.TenantName(sourceTenant),
-			SourceTenantID:       replicationProducerSpec.SourceTenantID,
-			SourceClusterID:      replicationProducerSpec.SourceClusterID,
-			ReplicationStartTime: replicationProducerSpec.ReplicationStartTime,
-		}
-
-		jobDescription, err := streamIngestionJobDescription(p, from, ingestionStmt)
-		if err != nil {
-			return err
-		}
-
-		jr := jobs.Record{
-			Description: jobDescription,
-			Username:    p.User(),
-			Progress: jobspb.StreamIngestionProgress{
-				ReplicatedTime: options.resumeTimestamp,
-			},
-			Details: streamIngestionDetails,
-		}
-
-		_, err = p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-			ctx, jr, jobID, p.InternalSQLTxn(),
+		return createReplicationJob(
+			ctx,
+			p,
+			streamAddress,
+			sourceTenant,
+			destinationTenantID,
+			retentionTTLSeconds,
+			options.resumeTimestamp,
+			jobID,
+			ingestionStmt,
 		)
-		return err
 	}
 
 	return fn, nil, nil, false, nil
+}
+
+func createReplicationJob(
+	ctx context.Context,
+	p sql.PlanHookState,
+	streamAddress streamingccl.StreamAddress,
+	sourceTenant string,
+	destinationTenantID roachpb.TenantID,
+	retentionTTLSeconds int32,
+	resumeTimestamp hlc.Timestamp,
+	jobID jobspb.JobID,
+	stmt *tree.CreateTenantFromReplication,
+) error {
+
+	// Create a new stream with stream client.
+	client, err := streamclient.NewStreamClient(ctx, streamAddress, p.ExecCfg().InternalDB)
+	if err != nil {
+		return err
+	}
+
+	// Create the producer job first for the purpose of observability, user is
+	// able to know the producer job id immediately after executing
+	// CREATE VIRTUAL CLUSTER ... FROM REPLICATION.
+	req := streampb.ReplicationProducerRequest{}
+	if !resumeTimestamp.IsEmpty() {
+		req = streampb.ReplicationProducerRequest{
+			ReplicationStartTime: resumeTimestamp,
+
+			// NB: These are checked against any
+			// PreviousSourceTenant on the source's tenant
+			// record.
+			TenantID:  destinationTenantID,
+			ClusterID: p.ExtendedEvalContext().ClusterID,
+		}
+	}
+
+	replicationProducerSpec, err := client.Create(ctx, roachpb.TenantName(sourceTenant), req)
+	if err != nil {
+		return err
+	}
+	if err := client.Close(ctx); err != nil {
+		return err
+	}
+
+	streamIngestionDetails := jobspb.StreamIngestionDetails{
+		StreamAddress:         string(streamAddress),
+		StreamID:              uint64(replicationProducerSpec.StreamID),
+		Span:                  keys.MakeTenantSpan(destinationTenantID),
+		ReplicationTTLSeconds: retentionTTLSeconds,
+
+		DestinationTenantID:  destinationTenantID,
+		SourceTenantName:     roachpb.TenantName(sourceTenant),
+		SourceTenantID:       replicationProducerSpec.SourceTenantID,
+		SourceClusterID:      replicationProducerSpec.SourceClusterID,
+		ReplicationStartTime: replicationProducerSpec.ReplicationStartTime,
+	}
+
+	jobDescription, err := streamIngestionJobDescription(p, string(streamAddress), stmt)
+	if err != nil {
+		return err
+	}
+
+	jr := jobs.Record{
+		Description: jobDescription,
+		Username:    p.User(),
+		Progress: jobspb.StreamIngestionProgress{
+			ReplicatedTime: resumeTimestamp,
+		},
+		Details: streamIngestionDetails,
+	}
+
+	_, err = p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+		ctx, jr, jobID, p.InternalSQLTxn(),
+	)
+	return err
 }
 
 func init() {
