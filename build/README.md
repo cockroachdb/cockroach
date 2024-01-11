@@ -137,9 +137,9 @@ Please follow the instructions above on updating the golang version, omitting th
 The `bazelbuilder` image is used exclusively for performing builds using Bazel. Only add dependencies to the image that are necessary for performing Bazel builds. (Since the Bazel build downloads most dependencies as needed, updates to the Bazel builder image should be very infrequent.) The `bazelbuilder` image is published both for `amd64` and `arm64` platforms. You can go through the process of publishing a new Bazel build
 
 - Edit `build/bazelbuilder/Dockerfile` as desired.
-- Build the image by triggering the `Build and Push Bazel Builder Image` build in TeamCity. The generated image will be published to https://hub.docker.com/r/cockroachdb/bazel.
+- Build the image by triggering the `Build and Push Bazel Builder Image` build in TeamCity. The generated image will be published to `us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel`.
 - Update `build/.bazelbuilderversion` with the new tag and commit all your changes.
-- Build the FIPS image by triggering the `Build and Push FIPS Bazel Builder Image` build in TeamCity. The generated image will be published to https://hub.docker.com/r/cockroachdb/bazel-fips.
+- Build the FIPS image by triggering the `Build and Push FIPS Bazel Builder Image` build in TeamCity. The generated image will be published to `us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel-fips`.
 - Update `build/.bazelbuilderversion-fips` with the new tag and commit all your changes.
 - Ensure the "Bazel CI" job passes on your PR before merging.
 

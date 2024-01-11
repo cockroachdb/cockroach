@@ -22,7 +22,8 @@ BAZEL_IMAGE=$(cat $root/build/.bazelbuilderversion)
 DOCKER_EXPORT_COCKROACH_VARS=$(env | grep '^COCKROACH_' | cut -d= -f1 | sed -e 's/\(.*\)/-e \1/' | tr '\n' ' ') || true
 
 # Call `run_bazel $NAME_OF_SCRIPT` to start an appropriately-configured Docker
-# container with the `cockroachdb/bazel` image running the given script.
+# container with the `us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel`
+# image running the given script.
 # BAZEL_SUPPORT_EXTRA_DOCKER_ARGS will be passed on to `docker run` unchanged.
 run_bazel() {
     # Set up volumes.
