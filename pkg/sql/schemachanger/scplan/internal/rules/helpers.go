@@ -105,6 +105,11 @@ func JoinReferencedDescID(a, b NodeVars, descriptorIDVar rel.Var) rel.Clause {
 	return joinReferencedDescIDUntyped(a.El, b.El, descriptorIDVar)
 }
 
+// JoinReferencedColID joins elements on referenced column ID.
+func JoinReferencedColID(a, b NodeVars, colIDVar rel.Var) rel.Clause {
+	return joinReferencedColIDUntyped(a.El, b.El, colIDVar)
+}
+
 // JoinOnColumnID joins elements on column ID.
 func JoinOnColumnID(a, b NodeVars, relationIDVar, columnIDVar rel.Var) rel.Clause {
 	return joinOnColumnIDUntyped(a.El, b.El, relationIDVar, columnIDVar)
@@ -205,6 +210,17 @@ var (
 				referenced.AttrEqVar(screl.DescID, id),
 			}
 		})
+
+	joinReferencedColIDUntyped = screl.Schema.Def3(
+		"joinReferencedColID", "referrer", "referenced", "id", func(
+			referrer, referenced, id rel.Var,
+		) rel.Clauses {
+			return rel.Clauses{
+				referrer.AttrContainsVar(screl.ReferencedColumnIDs, id),
+				referenced.AttrEqVar(screl.ColumnID, id),
+			}
+		})
+
 	// JoinOnDescIDUntyped joins on descriptor ID, in an unsafe non-type safe
 	// manner.
 	JoinOnDescIDUntyped = screl.Schema.Def3(

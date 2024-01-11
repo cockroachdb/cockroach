@@ -319,7 +319,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 		{
 			desc:         "create index using hash",
 			schemaChange: "CREATE INDEX idx ON tbl (val) USING HASH",
-			skipIssue:    111621,
 		},
 		{
 			desc:         "drop index using hash",

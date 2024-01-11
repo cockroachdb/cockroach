@@ -218,6 +218,16 @@ func isConstraint(e scpb.Element) bool {
 	return isIndex(e) || isNonIndexBackedConstraint(e)
 }
 
+func isCheckConstraint(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.CheckConstraint:
+		return true
+	case *scpb.CheckConstraintUnvalidated:
+		return true
+	}
+	return false
+}
+
 // isNonIndexBackedConstraint returns true if `e` is a non-index-backed constraint.
 func isNonIndexBackedConstraint(e scpb.Element) bool {
 	switch e.(type) {

@@ -63,4 +63,18 @@ func init() {
 			}
 		},
 	)
+
+	registerDepRule(
+		"hash-sharded column public before hash-sharded constraint",
+		scgraph.Precedence,
+		"sharded-column", "sharded-constraint",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.Column)(nil)),
+				to.TypeFilter(rulesVersionKey, isCheckConstraint),
+				JoinReferencedColID(to, from, "col-id"),
+				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
+			}
+		},
+	)
 }

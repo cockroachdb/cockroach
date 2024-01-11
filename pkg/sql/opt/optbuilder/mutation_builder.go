@@ -803,6 +803,10 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 
 		for i, n := 0, mb.tab.CheckCount(); i < n; i++ {
 			check := mb.tab.Check(i)
+			// Only enforce the check constraint if it has been validated.
+			if !check.Validated() {
+				continue
+			}
 			expr, err := parser.ParseExpr(check.Constraint())
 			if err != nil {
 				panic(err)
