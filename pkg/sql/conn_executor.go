@@ -363,7 +363,7 @@ type Server struct {
 	ServerMetrics ServerMetrics
 
 	// TelemetryLoggingMetrics is used to track metrics for logging to the telemetry channel.
-	TelemetryLoggingMetrics *TelemetryLoggingMetrics
+	TelemetryLoggingMetrics *telemetryLoggingMetrics
 
 	idxRecommendationsCache *idxrecommendations.IndexRecCache
 

@@ -86,10 +86,10 @@ var telemetryTrackedTxnsLimit = settings.RegisterIntSetting(
 	settings.WithPublic,
 )
 
-// TelemetryLoggingMetrics keeps track of the last time at which an event
+// telemetryLoggingMetrics keeps track of the last time at which an event
 // was logged to the telemetry channel, and the number of skipped queries
 // since the last logged event.
-type TelemetryLoggingMetrics struct {
+type telemetryLoggingMetrics struct {
 	st *cluster.Settings
 
 	mu struct {
@@ -112,8 +112,8 @@ type TelemetryLoggingMetrics struct {
 
 func newTelemetryLoggingMetrics(
 	knobs *TelemetryLoggingTestingKnobs, st *cluster.Settings,
-) *TelemetryLoggingMetrics {
-	t := TelemetryLoggingMetrics{Knobs: knobs, st: st}
+) *telemetryLoggingMetrics {
+	t := telemetryLoggingMetrics{Knobs: knobs, st: st}
 	t.mu.observedTxnExecutions = make(map[string]interface{})
 	return &t
 }
@@ -145,7 +145,7 @@ func NewTelemetryLoggingTestingKnobs(
 // registerOnTelemetrySamplingModeChange sets up the callback for when the
 // telemetry sampling mode is changed. When switching from txn to stmt, we
 // clear the txns we are currently tracking for logging.
-func (t *TelemetryLoggingMetrics) registerOnTelemetrySamplingModeChange(
+func (t *telemetryLoggingMetrics) registerOnTelemetrySamplingModeChange(
 	settings *cluster.Settings,
 ) {
 	telemetrySamplingMode.SetOnChange(&settings.SV, func(ctx context.Context) {
@@ -159,7 +159,7 @@ func (t *TelemetryLoggingMetrics) registerOnTelemetrySamplingModeChange(
 	})
 }
 
-func (t *TelemetryLoggingMetrics) onTxnFinish(txnExecutionID string) {
+func (t *telemetryLoggingMetrics) onTxnFinish(txnExecutionID string) {
 	if telemetrySamplingMode.Get(&t.st.SV) != telemetryModeTransaction {
 		return
 	}
@@ -181,7 +181,7 @@ func (t *TelemetryLoggingMetrics) onTxnFinish(txnExecutionID string) {
 	delete(t.mu.observedTxnExecutions, txnExecutionID)
 }
 
-func (t *TelemetryLoggingMetrics) getTrackedTxnsCount() int {
+func (t *telemetryLoggingMetrics) getTrackedTxnsCount() int {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return len(t.mu.observedTxnExecutions)
@@ -190,7 +190,7 @@ func (t *TelemetryLoggingMetrics) getTrackedTxnsCount() int {
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
 func (*TelemetryLoggingTestingKnobs) ModuleTestingKnobs() {}
 
-func (t *TelemetryLoggingMetrics) timeNow() time.Time {
+func (t *telemetryLoggingMetrics) timeNow() time.Time {
 	if t.Knobs != nil && t.Knobs.getTimeNow != nil {
 		return t.Knobs.getTimeNow()
 	}
@@ -205,7 +205,7 @@ func (t *TelemetryLoggingMetrics) timeNow() time.Time {
 //     of time has elapsed.
 //   - The telemetry mode is set to "statement" AND the required amount of time has elapsed
 //   - The txn is not being tracked and the stmt is being forced to log.
-func (t *TelemetryLoggingMetrics) shouldEmitStatementLog(
+func (t *telemetryLoggingMetrics) shouldEmitStatementLog(
 	newTime time.Time, txnExecutionID string, force bool, stmtPosInTxn int,
 ) (shouldEmit bool) {
 	maxEventFrequency := TelemetryMaxStatementEventFrequency.Get(&t.st.SV)
@@ -260,7 +260,7 @@ func (t *TelemetryLoggingMetrics) shouldEmitStatementLog(
 	return true
 }
 
-func (t *TelemetryLoggingMetrics) getQueryLevelStats(
+func (t *telemetryLoggingMetrics) getQueryLevelStats(
 	queryLevelStats execstats.QueryLevelStats,
 ) execstats.QueryLevelStats {
 	if t.Knobs != nil && t.Knobs.getQueryLevelStats != nil {
@@ -269,17 +269,17 @@ func (t *TelemetryLoggingMetrics) getQueryLevelStats(
 	return queryLevelStats
 }
 
-func (t *TelemetryLoggingMetrics) isTracing(_ *tracing.Span, tracingEnabled bool) bool {
+func (t *telemetryLoggingMetrics) isTracing(_ *tracing.Span, tracingEnabled bool) bool {
 	if t.Knobs != nil && t.Knobs.getTracingStatus != nil {
 		return t.Knobs.getTracingStatus()
 	}
 	return tracingEnabled
 }
 
-func (t *TelemetryLoggingMetrics) resetSkippedQueryCount() (res uint64) {
+func (t *telemetryLoggingMetrics) resetSkippedQueryCount() (res uint64) {
 	return t.skippedQueryCount.Swap(0)
 }
 
-func (t *TelemetryLoggingMetrics) incSkippedQueryCount() {
+func (t *telemetryLoggingMetrics) incSkippedQueryCount() {
 	t.skippedQueryCount.Add(1)
 }
