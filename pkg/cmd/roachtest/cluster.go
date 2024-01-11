@@ -161,7 +161,9 @@ func findLibrary(libraryName string, os string, arch vm.CPUArch) (string, error)
 // binOrLib is either 'bin' or 'lib'; nameSuffix is either empty, '.so', '.dll', or '.dylib'.
 // Both osName and arch are used to derive a fully qualified binary or library name by inserting the
 // corresponding arch suffix (see install.ArchInfoForOS), e.g. '.linux-arm64' or '.darwin-amd64'.
-// That is, each hardcoded path is searched for a file named 'name' or 'name.nameSuffix.archSuffix', respectively.
+//
+// Each resulting path is searched for a file named 'name', 'name.nameSuffix.archSuffix', or 'name.nameSuffix', in
+// the specified order.
 //
 // If no binary or library is found, an error is returned.
 // Otherwise, if multiple binaries or libraries are located at the above paths, the first one found is returned.
@@ -207,13 +209,13 @@ func findBinaryOrLibrary(
 	for _, dir := range dirs {
 		var path string
 
-		if path, err = exec.LookPath(filepath.Join(dir, name+nameSuffix)); err == nil {
-			return validateBinaryFormat(path, arch, checkEA)
-		}
 		for _, archSuffix := range archSuffixes {
 			if path, err = exec.LookPath(filepath.Join(dir, name+archSuffix+nameSuffix)); err == nil {
 				return validateBinaryFormat(path, arch, checkEA)
 			}
+		}
+		if path, err = exec.LookPath(filepath.Join(dir, name+nameSuffix)); err == nil {
+			return validateBinaryFormat(path, arch, checkEA)
 		}
 	}
 	return "", errBinaryOrLibraryNotFound{name}
@@ -893,7 +895,8 @@ func (f *clusterFactory) newCluster(
 
 	// The ClusterName is set below in the retry loop to ensure
 	// that each create attempt gets a unique cluster name.
-	createVMOpts, providerOpts, err := cfg.spec.RoachprodOpts(params)
+	// N.B. selectedArch may not be the same as PreferredArch, depending on (spec.CPU, spec.Mem)
+	createVMOpts, providerOpts, selectedArch, err := cfg.spec.RoachprodOpts(params)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -911,7 +914,7 @@ func (f *clusterFactory) newCluster(
 	maxAttempts := 3
 	if cfg.nameOverride != "" {
 		// Usually when retrying we pick a new name (to avoid repeat failures due to
-		// partially created resources), but we were were asked to use a specific
+		// partially created resources), but we were asked to use a specific
 		// name. To keep things simple, disable retries in that case.
 		maxAttempts = 1
 	}
@@ -939,7 +942,7 @@ func (f *clusterFactory) newCluster(
 			spec:       cfg.spec,
 			expiration: cfg.spec.Expiration(),
 			r:          f.r,
-			arch:       cfg.arch,
+			arch:       selectedArch,
 			os:         cfg.os,
 			destroyState: destroyState{
 				owned: true,
@@ -2957,13 +2960,6 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 	if testSpec.Cluster.Arch != "" {
 		l.PrintfCtx(ctx, "Using specified arch=%q, %s", testSpec.Cluster.Arch, testSpec.Name)
 		return testSpec.Cluster.Arch
-	}
-
-	if testSpec.Benchmark && roachtestflags.Cloud != spec.Local {
-		// TODO(srosenberg): enable after https://github.com/cockroachdb/cockroach/issues/104213
-		arch := vm.ArchAMD64
-		l.PrintfCtx(ctx, "Disabling arch randomization for benchmark; arch=%q, %s", arch, testSpec.Name)
-		return arch
 	}
 
 	// CPU architecture is unspecified, choose one according to the
