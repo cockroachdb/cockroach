@@ -90,7 +90,9 @@ type Client interface {
 	// Complete completes a replication stream consumption.
 	Complete(ctx context.Context, streamID streampb.StreamID, successfulIngestion bool) error
 
-	PriorReplicationDetails(ctx context.Context, tenant roachpb.TenantName) (string, hlc.Timestamp, error)
+	PriorReplicationDetails(
+		ctx context.Context, tenant roachpb.TenantName,
+	) (currentSrc, priorSrc string, activated hlc.Timestamp, _ error)
 }
 
 // Topology is a configuration of stream partitions. These are particular to a

@@ -353,7 +353,8 @@ func alterTenantRestartReplication(
 	if err != nil {
 		return errors.Wrap(err, "creating client")
 	}
-	srcID, resumeTS, err := client.PriorReplicationDetails(ctx, roachpb.TenantName(srcTenant))
+
+	srcID, srcReplicatedFrom, srcActivatedAt, err := client.PriorReplicationDetails(ctx, roachpb.TenantName(srcTenant))
 	if err != nil {
 		return errors.CombineErrors(errors.Wrap(err, "fetching prior replication details"), client.Close(ctx))
 	}
@@ -361,11 +362,10 @@ func alterTenantRestartReplication(
 		return err
 	}
 
-	if expected := fmt.Sprintf("%s:%s", p.ExtendedEvalContext().ClusterID, dstTenantID); srcID != expected {
-		return errors.Newf(
-			"tenant %q on specified cluster reports it was replicated from %q; %q cannot be rewound to start replication",
-			srcTenant, srcID, expected,
-		)
+	dstID := fmt.Sprintf("%s:%s", p.ExtendedEvalContext().ClusterID, dstTenantID)
+	resumeTS, err := pickReplicationResume(ctx, srcID, srcReplicatedFrom, srcActivatedAt, dstID, tenInfo.PreviousSourceTenant)
+	if err != nil {
+		return err
 	}
 
 	const revertFirst = true
@@ -397,6 +397,48 @@ func alterTenantRestartReplication(
 			Options:                     alterTenantStmt.Options,
 		},
 	), "creating replication job")
+}
+
+func pickReplicationResume(
+	ctx context.Context,
+	srcID string,
+	srcReplicatedFrom string,
+	srcActivatedAt hlc.Timestamp,
+	dstID string,
+	dstPreviousSrc *mtinfopb.PreviousSourceTenant,
+) (hlc.Timestamp, error) {
+
+	var resumeTS hlc.Timestamp
+	var wasReplicatingFrom string
+
+	if dstPreviousSrc != nil {
+		// We were previously replicating but have since cutover; if the srcID
+		// we were replicating from matches the the src ID, maybe we can just
+		// restart replicating from when we cutover.
+
+		wasReplicatingFrom = fmt.Sprintf("%s:%s", dstPreviousSrc.ClusterID, dstPreviousSrc.TenantID)
+		if wasReplicatingFrom == srcID {
+			resumeTS = dstPreviousSrc.CutoverTimestamp
+		}
+	}
+
+	if srcReplicatedFrom == dstID && !srcActivatedAt.IsEmpty() {
+		// The src was previously a replica; if it was a replica of us before it
+		// cutover, we can rewind to when we diverged.
+
+		if resumeTS.Less(srcActivatedAt) {
+			resumeTS = srcActivatedAt
+		}
+	}
+
+	if resumeTS.IsEmpty() {
+		return hlc.Timestamp{}, errors.Newf(
+			`cannot reconfigure existing tenant to replicate from specified source: it was neither previously replicating from this source (prior replication source was %q), nor was the source previously replicating from it (%q)`,
+			wasReplicatingFrom,
+			srcReplicatedFrom,
+		)
+	}
+	return resumeTS, nil
 }
 
 // alterTenantJobCutover returns the cutover timestamp that was used to initiate

@@ -10,6 +10,7 @@ package streamclient
 
 import (
 	"context"
+	gosql "database/sql"
 	"net"
 	"net/url"
 
@@ -258,26 +259,29 @@ func (p *partitionedStreamClient) Complete(
 // PriorReplicationDetails implements the streamclient.Client interface.
 func (p *partitionedStreamClient) PriorReplicationDetails(
 	ctx context.Context, tenant roachpb.TenantName,
-) (string, hlc.Timestamp, error) {
+) (string, string, hlc.Timestamp, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.PriorReplicationDetails")
 	defer sp.Finish()
 
-	var srcID string
-	var activated string
+	var curID string
+	var srcID, activated gosql.NullString
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	row := p.mu.srcConn.QueryRow(ctx,
-		`SELECT source_id, activation_time FROM [SHOW VIRTUAL CLUSTER $1 WITH PRIOR REPLICATION DETAILS]`, tenant)
-	if err := row.Scan(&srcID, &activated); err != nil {
-		return "", hlc.Timestamp{}, errors.Wrapf(err, "error querying prior replication details for %s", tenant)
+		`SELECT crdb_internal.cluster_id()::string||':'||id::string, source_id, activation_time FROM [SHOW VIRTUAL CLUSTER $1 WITH PRIOR REPLICATION DETAILS]`, tenant)
+	if err := row.Scan(&curID, &srcID, &activated); err != nil {
+		return "", "", hlc.Timestamp{}, errors.Wrapf(err, "error querying prior replication details for %s", tenant)
 	}
 
-	d, _, err := apd.NewFromString(activated)
-	if err != nil {
-		return "", hlc.Timestamp{}, err
+	if activated.Valid {
+		d, _, err := apd.NewFromString(activated.String)
+		if err != nil {
+			return "", "", hlc.Timestamp{}, err
+		}
+		ts, err := hlc.DecimalToHLC(d)
+		return curID, srcID.String, ts, err
 	}
-	ts, err := hlc.DecimalToHLC(d)
-	return srcID, ts, err
+	return curID, "", hlc.Timestamp{}, nil
 }
 
 type partitionedStreamSubscription struct {

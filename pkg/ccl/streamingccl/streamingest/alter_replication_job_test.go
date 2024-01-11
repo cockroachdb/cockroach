@@ -68,16 +68,47 @@ func TestAlterTenantCompleteToLatest(t *testing.T) {
 	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
+	c.SrcTenantSQL.Exec(t, `INSERT INTO d.t2 VALUES (3)`)
+
 	targetReplicatedTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(targetReplicatedTime, jobspb.JobID(ingestionJobID))
 
 	var cutoverStr string
 	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`,
 		args.DestTenantName).Scan(&cutoverStr)
+
 	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
 	require.GreaterOrEqual(t, cutoverOutput.GoTime(), targetReplicatedTime.GoTime())
 	require.LessOrEqual(t, cutoverOutput.GoTime(), c.SrcCluster.Server(0).Clock().Now().GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	// Start the replicated tenant and compare the results.
+	defer c.StartDestTenant(ctx, nil, 0)()
+	c.CompareResult(`SELECT * FROM d.t2`)
+
+	// Diverge content of the src and dest tenants via some writes.
+	c.SrcTenantSQL.Exec(t, `INSERT INTO d.t2 VALUES (4)`)
+	c.DestTenantSQL.Exec(t, `INSERT INTO d.t2 VALUES (404)`)
+
+	// Stop the destination tenant's service and re-enable replication into it.
+	c.DestSysSQL.Exec(t, `ALTER TENANT $1 STOP SERVICE`, args.DestTenantName)
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 START REPLICATION OF $2 ON $3`,
+		args.DestTenantName, args.SrcTenantName, c.SrcURL.String())
+
+	// Wait for the resumed replication to advance.
+	_, ingestionJobID = replicationtestutils.GetStreamJobIds(t, ctx, c.DestSysSQL, args.DestTenantName)
+	targetReplicatedTime = c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(targetReplicatedTime, jobspb.JobID(ingestionJobID))
+
+	// Complete replication again.
+	c.DestSysSQL.Exec(t, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`,
+		args.DestTenantName)
+	jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	// Restart the destination tenant and observe that it once again matches the
+	// now updated src tenant.
+	defer c.StartDestTenant(ctx, nil, 0)()
+	c.CompareResult(`SELECT * FROM d.t2`)
 }
 
 func TestAlterTenantPauseResume(t *testing.T) {
