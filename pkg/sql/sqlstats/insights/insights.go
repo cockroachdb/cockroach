@@ -154,6 +154,10 @@ type Writer interface {
 
 	// ObserveTransaction notifies the registry of the end of a transaction.
 	ObserveTransaction(ctx context.Context, sessionID clusterunique.ID, transaction *Transaction)
+
+	// Clear clears the underlying cache of its contents, with no guarantees around flush behavior.
+	// Data may simply be erased depending on the implementation.
+	Clear(ctx context.Context)
 }
 
 // WriterProvider offers a Writer.

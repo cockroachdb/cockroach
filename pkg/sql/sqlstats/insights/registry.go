@@ -32,7 +32,11 @@ type lockingRegistry struct {
 	sink       sink
 }
 
-var _ Writer = &lockingRegistry{}
+var _ Writer = (*lockingRegistry)(nil)
+
+func (r *lockingRegistry) Clear(_ context.Context) {
+	r.statements = make(map[clusterunique.ID]*statementBuf)
+}
 
 func (r *lockingRegistry) ObserveStatement(sessionID clusterunique.ID, statement *Statement) {
 	if !r.enabled() {
@@ -99,11 +103,17 @@ func (r *lockingRegistry) ObserveTransaction(
 	if transaction.ID.String() == "00000000-0000-0000-0000-000000000000" {
 		return
 	}
-	statements, ok := r.statements[sessionID]
+	statements, ok := func() (*statementBuf, bool) {
+		statements, ok := r.statements[sessionID]
+		if !ok {
+			return nil, false
+		}
+		delete(r.statements, sessionID)
+		return statements, true
+	}()
 	if !ok {
 		return
 	}
-	delete(r.statements, sessionID)
 	defer statements.release()
 
 	// Mark statements which are detected as slow or have a failed status.
