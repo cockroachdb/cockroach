@@ -13,9 +13,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/ring"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -36,8 +41,9 @@ type parallelIO struct {
 
 	ioHandler IOHandler
 
-	requestCh chan IORequest
-	resultCh  chan *ioResult // readers should freeIOResult after handling result events
+	requestQuota *quotapool.IntPool
+	requestCh    chan requestWithAlloc
+	resultCh     chan *ioResult // readers should freeIOResult after handling result events
 }
 
 // IORequest represents an abstract unit of IO that has a set of keys upon which
@@ -75,7 +81,7 @@ func freeIOResult(e *ioResult) {
 }
 
 type queuedRequest struct {
-	req       IORequest
+	req       requestWithAlloc
 	admitTime time.Time
 }
 
@@ -88,16 +94,18 @@ func newParallelIO(
 	numWorkers int,
 	handler IOHandler,
 	metrics metricsRecorder,
+	settings *cluster.Settings,
 ) *parallelIO {
 	wg := ctxgroup.WithContext(ctx)
 	io := &parallelIO{
-		retryOpts: retryOpts,
-		wg:        wg,
-		metrics:   metrics,
-		ioHandler: handler,
-		requestCh: make(chan IORequest, numWorkers),
-		resultCh:  make(chan *ioResult, numWorkers),
-		doneCh:    make(chan struct{}),
+		retryOpts:    retryOpts,
+		wg:           wg,
+		metrics:      metrics,
+		ioHandler:    handler,
+		requestQuota: quotapool.NewIntPool("changefeed-parallel-io", uint64(requestQuota.Get(&settings.SV))),
+		requestCh:    make(chan requestWithAlloc, numWorkers),
+		resultCh:     make(chan *ioResult, numWorkers),
+		doneCh:       make(chan struct{}),
 	}
 
 	wg.GoCtx(func(ctx context.Context) error {
@@ -121,6 +129,55 @@ var testingEnableQueuingDelay = func() func() {
 	return func() {
 		testQueuingDelay = 0 * time.Second
 	}
+}
+
+// requestQueue is a single consumer multi-producer queue.
+type requestQueue struct {
+	mu struct {
+		syncutil.Mutex
+		q                ring.Buffer[requestWithAlloc]
+		waitBecauseEmpty chan struct{}
+	}
+	p *quotapool.IntPool
+}
+
+type requestWithAlloc struct {
+	req IORequest
+	a   *quotapool.IntAlloc
+}
+
+// This is the maximum number of requests which can be queued/pending due to
+// conflicting in-flight keys.
+var maxPendingSize = 128
+
+// requestQuota is the number of requests which can be admitted into the
+// parallelio system before blocking the producer.
+var requestQuota = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"changefeed.parallel_io.request_quota",
+	"the number of requests which can be admitted into the parallelio"+
+		" system before blocking the producer",
+	128,
+	settings.PositiveInt,
+	settings.WithVisibility(settings.Reserved),
+)
+
+func (p *parallelIO) SubmitRequest(ctx context.Context, r IORequest, done chan struct{}) error {
+	a, err := p.requestQuota.Acquire(ctx, 1)
+	if err != nil {
+		return err
+	}
+
+	ra := requestWithAlloc{req: r, a: a}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-done:
+		return nil
+	case p.requestCh <- ra:
+	}
+	return nil
 }
 
 // processIO starts numEmitWorkers worker threads to run the IOHandler on
@@ -230,12 +287,13 @@ func (p *parallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 			// conflicting with any inflight requests or any requests that arrived
 			// earlier than itself in the pending queue.
 			pendingKeys := intsets.Fast{}
-			for i, pendingReq := range pending {
+			for i, queuedReq := range pending {
+				pendingReq := queuedReq.req
 				if !inflight.Intersects(pendingReq.req.Keys()) && !pendingKeys.Intersects(pendingReq.req.Keys()) {
 					inflight.UnionWith(pendingReq.req.Keys())
 					metricsRec.setInFlightKeys(int64(inflight.Len()))
 					pending = append(pending[:i], pending[i+1:]...)
-					metricsRec.recordPendingQueuePop(int64(pendingReq.req.NumMessages()), timeutil.Since(pendingReq.admitTime))
+					metricsRec.recordPendingQueuePop(int64(pendingReq.req.NumMessages()), timeutil.Since(queuedReq.admitTime))
 					if err := submitIO(pendingReq.req); err != nil {
 						return err
 					}
@@ -269,7 +327,7 @@ func (p *parallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 			return true
 		}
 		for _, pendingReq := range pending {
-			if pendingReq.req.Keys().Intersects(keys) {
+			if pendingReq.req.req.Keys().Intersects(keys) {
 				return true
 			}
 		}
@@ -287,13 +345,17 @@ func (p *parallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 		}
 
 		select {
-		case req := <-p.requestCh:
+		case reqWithAlloc := <-p.requestCh:
+			req := reqWithAlloc.req
 			if hasConflictingKeys(req.Keys()) {
 				// If a request conflicts with any currently unhandled requests, add it
 				// to the pending queue to be rechecked for validity later.
-				pending = append(pending, queuedRequest{req: req, admitTime: timeutil.Now()})
+				pending = append(pending, queuedRequest{req: reqWithAlloc, admitTime: timeutil.Now()})
 				metricsRec.recordPendingQueuePush(int64(req.NumMessages()))
 			} else {
+				// Since the request does not need to go into the pending queue, we can release the alloc.
+				reqWithAlloc.a.Release()
+
 				newInFlightKeys := req.Keys()
 				inflight.UnionWith(newInFlightKeys)
 				metricsRec.setInFlightKeys(int64(inflight.Len()))

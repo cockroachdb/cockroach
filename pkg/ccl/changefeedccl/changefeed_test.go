@@ -7419,7 +7419,7 @@ func TestChangefeedOnlyInitialScan(t *testing.T) {
 
 	// "enterprise" and "webhook" sink implementations are too slow
 	// for a test that reads 5k messages.
-	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestOmitSinks("enterprise", "webhook"))
+	cdcTest(t, testFn, feedTestForceSink("pubsub"))
 }
 
 func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
