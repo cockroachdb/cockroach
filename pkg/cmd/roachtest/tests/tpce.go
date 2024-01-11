@@ -68,7 +68,7 @@ func registerTPCE(r registry.Registry) {
 
 		m := c.NewMonitor(ctx, roachNodes)
 		m.Go(func(ctx context.Context) error {
-			const dockerRun = `sudo docker run cockroachdb/tpc-e:latest`
+			const dockerRun = `sudo docker run us-east1-docker.pkg.dev/crl-ci-images/cockroach/tpc-e:latest`
 
 			roachNodeIPs, err := c.InternalIP(ctx, t.L(), roachNodes)
 			if err != nil {
