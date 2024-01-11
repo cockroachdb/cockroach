@@ -251,8 +251,7 @@ func TestTenantStreamingFailback(t *testing.T) {
 	sqlA.Exec(t, "ALTER VIRTUAL CLUSTER f STOP SERVICE")
 	waitUntilTenantServerStopped(t, serverA.SystemLayer(), "f")
 	t.Logf("starting replication g->f")
-	sqlA.Exec(t, "ALTER VIRTUAL CLUSTER f RESET DATA TO SYSTEM TIME $1::decimal", ts1)
-	sqlA.Exec(t, fmt.Sprintf("CREATE VIRTUAL CLUSTER f FROM REPLICATION OF g ON $1 WITH RESUME TIMESTAMP = '%s'", ts1), serverBURL.String())
+	sqlA.Exec(t, "ALTER VIRTUAL CLUSTER f START REPLICATION OF g ON $1", serverBURL.String())
 	_, consumerFJobID := replicationtestutils.GetStreamJobIds(t, ctx, sqlA, roachpb.TenantName("f"))
 	t.Logf("waiting for f@%s", ts2)
 	replicationtestutils.WaitUntilReplicatedTime(t,
@@ -281,8 +280,7 @@ func TestTenantStreamingFailback(t *testing.T) {
 	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g STOP SERVICE")
 	waitUntilTenantServerStopped(t, serverB.SystemLayer(), "g")
 	t.Logf("starting replication f->g")
-	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g RESET DATA TO SYSTEM TIME $1::decimal", ts3)
-	sqlB.Exec(t, fmt.Sprintf("CREATE VIRTUAL CLUSTER g FROM REPLICATION OF f ON $1 WITH RESUME TIMESTAMP = '%s'", ts3), serverAURL.String())
+	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g START REPLICATION OF f ON $1", serverAURL.String())
 	_, consumerGJobID = replicationtestutils.GetStreamJobIds(t, ctx, sqlB, roachpb.TenantName("g"))
 	t.Logf("waiting for g@%s", ts3)
 	replicationtestutils.WaitUntilReplicatedTime(t,

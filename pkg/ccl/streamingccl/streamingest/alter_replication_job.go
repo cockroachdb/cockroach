@@ -10,10 +10,12 @@ package streamingest
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -104,7 +106,8 @@ func alterReplicationJobTypeCheck(
 	if err := exprutil.TypeCheck(
 		ctx, alterReplicationJobOp, p.SemaCtx(),
 		exprutil.TenantSpec{TenantSpec: alterStmt.TenantSpec},
-		exprutil.Strings{alterStmt.Options.Retention},
+		exprutil.TenantSpec{TenantSpec: alterStmt.ReplicationSourceTenantName},
+		exprutil.Strings{alterStmt.Options.Retention, alterStmt.ReplicationSourceAddress},
 	); err != nil {
 		return false, nil, err
 	}
@@ -182,6 +185,24 @@ func alterReplicationJobHook(
 		return nil, nil, nil, false, err
 	}
 
+	var srcAddr, srcTenant string
+	if alterTenantStmt.ReplicationSourceAddress != nil {
+		srcAddr, err = exprEval.String(ctx, alterTenantStmt.ReplicationSourceAddress)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+
+		_, _, srcTenant, err = exprEval.TenantSpec(ctx, alterTenantStmt.ReplicationSourceTenantName)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+	}
+
+	retentionTTLSeconds := defaultRetentionTTLSeconds
+	if ret, ok := options.GetRetention(); ok {
+		retentionTTLSeconds = ret
+	}
+
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		if err := utilccl.CheckEnterpriseEnabled(
 			p.ExecCfg().Settings,
@@ -198,6 +219,24 @@ func alterReplicationJobHook(
 		if err != nil {
 			return err
 		}
+
+		// If a source address is being provided, we're enabling replication into an
+		// existing virtual cluster. It must be inactive, and we'll verify that it
+		// was the cluster from which the one it will replicate was replicated, i.e.
+		// that we're reversing the direction of replication. We will then revert it
+		// to the time they diverged and pick up from there.
+		if alterTenantStmt.ReplicationSourceAddress != nil {
+			return alterTenantRestartReplication(
+				ctx,
+				p,
+				tenInfo,
+				srcAddr,
+				srcTenant,
+				retentionTTLSeconds,
+				alterTenantStmt,
+			)
+		}
+
 		if tenInfo.PhysicalReplicationConsumerJobID == 0 {
 			return errors.Newf("tenant %q (%d) does not have an active replication job",
 				tenInfo.Name, tenInfo.ID)
@@ -236,6 +275,90 @@ func alterReplicationJobHook(
 		return fn, alterReplicationCutoverHeader, nil, false, nil
 	}
 	return fn, nil, nil, false, nil
+}
+
+func alterTenantRestartReplication(
+	ctx context.Context,
+	p sql.PlanHookState,
+	tenInfo *mtinfopb.TenantInfo,
+	srcAddr string,
+	srcTenant string,
+	retentionTTLSeconds int32,
+	alterTenantStmt *tree.AlterTenantReplication,
+) error {
+	dstTenantID, err := roachpb.MakeTenantID(tenInfo.ID)
+	if err != nil {
+		return err
+	}
+
+	// Here, we try to prevent the user from making a few
+	// mistakes. Starting a replication stream into an
+	// existing tenant requires both that it is offline and
+	// that it is consistent as of the provided timestamp.
+	if tenInfo.ServiceMode != mtinfopb.ServiceModeNone {
+		return errors.Newf("cannot start replication for tenant %q (%s) in service mode %s; service mode must be %s",
+			tenInfo.Name,
+			dstTenantID,
+			tenInfo.ServiceMode,
+			mtinfopb.ServiceModeNone,
+		)
+	}
+
+	streamAddress := streamingccl.StreamAddress(srcAddr)
+	streamURL, err := streamAddress.URL()
+	if err != nil {
+		return errors.Wrap(err, "url")
+	}
+	streamAddress = streamingccl.StreamAddress(streamURL.String())
+
+	client, err := streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(srcAddr), p.ExecCfg().InternalDB)
+	if err != nil {
+		return errors.Wrap(err, "creating client")
+	}
+	srcID, resumeTS, err := client.PriorReplicationDetails(ctx, roachpb.TenantName(srcTenant))
+	if err != nil {
+		return errors.CombineErrors(errors.Wrap(err, "fetching prior replication details"), client.Close(ctx))
+	}
+	if err := client.Close(ctx); err != nil {
+		return err
+	}
+
+	if expected := fmt.Sprintf("%s:%s", p.ExtendedEvalContext().ClusterID, dstTenantID); srcID != expected {
+		return errors.Newf(
+			"tenant %q on specified cluster reports it was replicated from %q; %q cannot be rewound to start replication",
+			srcTenant, srcID, expected,
+		)
+	}
+
+	const revertFirst = true
+
+	jobID := p.ExecCfg().JobRegistry.MakeJobID()
+	// Reset the last revert timestamp.
+	tenInfo.LastRevertTenantTimestamp = hlc.Timestamp{}
+	tenInfo.PhysicalReplicationConsumerJobID = jobID
+	tenInfo.DataState = mtinfopb.DataStateAdd
+	if err := sql.UpdateTenantRecord(ctx, p.ExecCfg().Settings,
+		p.InternalSQLTxn(), tenInfo); err != nil {
+		return err
+	}
+
+	return errors.Wrap(createReplicationJob(
+		ctx,
+		p,
+		streamAddress,
+		srcTenant,
+		dstTenantID,
+		retentionTTLSeconds,
+		resumeTS,
+		revertFirst,
+		jobID,
+		&tree.CreateTenantFromReplication{
+			TenantSpec:                  alterTenantStmt.TenantSpec,
+			ReplicationSourceTenantName: alterTenantStmt.ReplicationSourceTenantName,
+			ReplicationSourceAddress:    alterTenantStmt.ReplicationSourceAddress,
+			Options:                     alterTenantStmt.Options,
+		},
+	), "creating replication job")
 }
 
 // alterTenantJobCutover returns the cutover timestamp that was used to initiate

@@ -177,6 +177,7 @@ func ingestionPlanHook(
 				sourceTenant, dstTenantName, dstTenantID)
 		}
 
+		var revertFirst bool
 		// If we don't have a resume timestamp, make a new tenant
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		var destinationTenantID roachpb.TenantID
@@ -214,6 +215,8 @@ func ingestionPlanHook(
 				// clause and the tenant already existed. Nothing else to do.
 				return nil
 			}
+			// No revert required since this is a new tenant.
+			revertFirst = false
 		} else {
 			tenantRecord, err := sql.GetTenantRecordByName(
 				ctx, p.ExecCfg().Settings,
@@ -250,6 +253,8 @@ func ingestionPlanHook(
 					tenantRecord.LastRevertTenantTimestamp,
 				)
 			}
+			// No revert required, since we verified that we were already reverted.
+			revertFirst = false
 
 			// Reset the last revert timestamp.
 			tenantRecord.LastRevertTenantTimestamp = hlc.Timestamp{}
@@ -273,6 +278,7 @@ func ingestionPlanHook(
 			destinationTenantID,
 			retentionTTLSeconds,
 			options.resumeTimestamp,
+			revertFirst,
 			jobID,
 			ingestionStmt,
 		)
@@ -289,6 +295,7 @@ func createReplicationJob(
 	destinationTenantID roachpb.TenantID,
 	retentionTTLSeconds int32,
 	resumeTimestamp hlc.Timestamp,
+	revertFirst bool,
 	jobID jobspb.JobID,
 	stmt *tree.CreateTenantFromReplication,
 ) error {
@@ -345,7 +352,8 @@ func createReplicationJob(
 		Description: jobDescription,
 		Username:    p.User(),
 		Progress: jobspb.StreamIngestionProgress{
-			ReplicatedTime: resumeTimestamp,
+			ReplicatedTime:        resumeTimestamp,
+			InitialRevertRequired: revertFirst,
 		},
 		Details: streamIngestionDetails,
 	}
