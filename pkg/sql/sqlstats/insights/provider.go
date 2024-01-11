@@ -45,6 +45,10 @@ func (p *defaultProvider) LatencyInformation() LatencyInformation {
 	return p.anomalyDetector
 }
 
+func (p *defaultProvider) CacheClearer() CacheClearer {
+	return p.ingester
+}
+
 type nullWriter struct{}
 
 func (n *nullWriter) ObserveStatement(_ clusterunique.ID, _ *Statement) {

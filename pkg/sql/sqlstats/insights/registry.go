@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
 )
 
@@ -26,22 +27,34 @@ import (
 // statement execution to determine which statements are outliers and
 // writes insights into the provided sink.
 type lockingRegistry struct {
-	statements map[clusterunique.ID]*statementBuf
-	detector   detector
-	causes     *causes
-	sink       sink
+	mu struct {
+		syncutil.Mutex
+		statements map[clusterunique.ID]*statementBuf
+	}
+	detector detector
+	causes   *causes
+	sink     sink
 }
 
-var _ Writer = &lockingRegistry{}
+var _ Writer = (*lockingRegistry)(nil)
+var _ CacheClearer = (*lockingRegistry)(nil)
+
+func (r *lockingRegistry) Clear(_ context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.statements = make(map[clusterunique.ID]*statementBuf)
+}
 
 func (r *lockingRegistry) ObserveStatement(sessionID clusterunique.ID, statement *Statement) {
 	if !r.enabled() {
 		return
 	}
-	b, ok := r.statements[sessionID]
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	b, ok := r.mu.statements[sessionID]
 	if !ok {
 		b = statementsBufPool.Get().(*statementBuf)
-		r.statements[sessionID] = b
+		r.mu.statements[sessionID] = b
 	}
 	b.append(statement)
 }
@@ -99,11 +112,19 @@ func (r *lockingRegistry) ObserveTransaction(
 	if transaction.ID.String() == "00000000-0000-0000-0000-000000000000" {
 		return
 	}
-	statements, ok := r.statements[sessionID]
+	statements, ok := func() (*statementBuf, bool) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		statements, ok := r.mu.statements[sessionID]
+		if !ok {
+			return nil, false
+		}
+		delete(r.mu.statements, sessionID)
+		return statements, true
+	}()
 	if !ok {
 		return
 	}
-	delete(r.statements, sessionID)
 	defer statements.release()
 
 	// Mark statements which are detected as slow or have a failed status.
@@ -200,12 +221,13 @@ func (r *lockingRegistry) enabled() bool {
 }
 
 func newRegistry(st *cluster.Settings, detector detector, sink sink) *lockingRegistry {
-	return &lockingRegistry{
-		statements: make(map[clusterunique.ID]*statementBuf),
-		detector:   detector,
-		causes:     &causes{st: st},
-		sink:       sink,
+	lr := &lockingRegistry{
+		detector: detector,
+		causes:   &causes{st: st},
+		sink:     sink,
 	}
+	lr.mu.statements = make(map[clusterunique.ID]*statementBuf)
+	return lr
 }
 
 func (s *Statement) CopyTo(

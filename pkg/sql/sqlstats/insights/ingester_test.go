@@ -12,15 +12,20 @@ package insights
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -116,6 +121,86 @@ func TestIngester(t *testing.T) {
 			require.ElementsMatch(t, tc.insights, actual)
 		})
 	}
+}
+
+func TestIngester_Clear(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	settings := cluster.MakeTestingClusterSettings()
+
+	t.Run("clears buffer", func(t *testing.T) {
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		store := newStore(settings, obs.NoopEventsExporter{})
+		ingester := newConcurrentBufferIngester(
+			newRegistry(settings, &fakeDetector{
+				stubEnabled: true,
+				stubIsSlow:  true,
+			}, store))
+		// Start the ingester and wait for its async tasks to start.
+		ingester.Start(ctx, stopper)
+		testutils.SucceedsSoon(t, func() error {
+			if !(atomic.LoadUint64(&ingester.running) == 1) {
+				return errors.New("ingester not yet started")
+			}
+			return nil
+		})
+		// Disable timed flushes and fill the ingester's buffer and underlying registry
+		// with some data. This sets us up to call Clear() with guaranteed data
+		// in both, so we can assert afterward that both have been cleared.
+		ingester.testKnobs.noTimedFlush = true
+		observe := func(sink Writer, observations []testEvent) {
+			for _, o := range observations {
+				if o.statementID != 0 {
+					sink.ObserveStatement(o.SessionID(), &Statement{ID: o.StatementID()})
+				} else {
+					sink.ObserveTransaction(ctx, o.SessionID(), &Transaction{ID: o.TransactionID()})
+				}
+			}
+		}
+		ingesterObservations := []testEvent{
+			{sessionID: 1, statementID: 10},
+			{sessionID: 2, statementID: 20},
+			{sessionID: 1, statementID: 11},
+			{sessionID: 2, statementID: 21},
+			{sessionID: 1, transactionID: 100},
+			{sessionID: 2, transactionID: 200},
+		}
+		// Statements are cleared from the registry when a txn with the same
+		// sessionID is observed. Make sure the data we add to the registry
+		// can't be cleared by any of the ingester's flushed txns. This way,
+		// the only way the data can be cleared is via ingester.Clear().
+		registryObservations := []testEvent{
+			{sessionID: 3, statementID: 31}, // No associated txn.
+			{sessionID: 4, statementID: 41}, // No associated txn.
+		}
+		observe(ingester, ingesterObservations)
+		observe(ingester.registry, registryObservations)
+		empty := event{}
+		require.NotEqual(t, empty, ingester.guard.eventBuffer[0])
+		func() {
+			ingester.registry.mu.Lock()
+			defer ingester.registry.mu.Unlock()
+			require.NotEmpty(t, ingester.registry.mu.statements)
+		}()
+		// Now, call Clear() to verify it clears the buffer and the
+		// underlying registry. Use SucceedsSoon for assertions, since
+		// the operation is async.
+		ingester.Clear(ctx)
+		testutils.SucceedsSoon(t, func() error {
+			if ingester.guard.eventBuffer[0] != empty {
+				return errors.New("eventBuffer not empty")
+			}
+
+			ingester.registry.mu.Lock()
+			defer ingester.registry.mu.Unlock()
+			if len(ingester.registry.mu.statements) > 0 {
+				return errors.Newf("registry not empty, size: %v", len(ingester.registry.mu.statements))
+			}
+			return nil
+		})
+	})
 }
 
 func TestIngester_Disabled(t *testing.T) {

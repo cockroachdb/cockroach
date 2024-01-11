@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
@@ -381,6 +382,45 @@ func TestRegistry(t *testing.T) {
 
 		require.Equal(t, expected, actual)
 		require.Equal(t, transaction.Status, Transaction_Status(statementNotIgnored.Status))
+	})
+}
+
+func TestInsightsRegistry_Clear(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	t.Run("clears cache", func(t *testing.T) {
+		// Initialize the registry.
+		st := cluster.MakeTestingClusterSettings()
+		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
+		store := newStore(st, obs.NoopEventsExporter{})
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
+		// Create some test data.
+		sessionA := Session{ID: clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))}
+		sessionB := Session{ID: clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))}
+		statement := &Statement{
+			Status:           Statement_Completed,
+			ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
+			FingerprintID:    appstatspb.StmtFingerprintID(100),
+			LatencyInSeconds: 2,
+		}
+		// Record the test data, assert it's cached.
+		registry.ObserveStatement(sessionA.ID, statement)
+		registry.ObserveStatement(sessionB.ID, statement)
+		expLenStmts := 2
+		func() {
+			registry.mu.Lock()
+			defer registry.mu.Unlock()
+			require.Len(t, registry.mu.statements, expLenStmts)
+		}()
+		// Now clear the cache, assert it's cleared.
+		registry.Clear(ctx)
+		func() {
+			registry.mu.Lock()
+			defer registry.mu.Unlock()
+			require.Empty(t, registry.mu.statements)
+		}()
 	})
 }
 
