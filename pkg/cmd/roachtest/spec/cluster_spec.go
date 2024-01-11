@@ -297,11 +297,12 @@ type RoachprodClusterConfig struct {
 
 // RoachprodOpts returns the opts to use when calling `roachprod.Create()`
 // in order to create the cluster described in the spec.
+// If
 func (s *ClusterSpec) RoachprodOpts(
 	params RoachprodClusterConfig,
-) (vm.CreateOpts, vm.ProviderOpts, error) {
+) (vm.CreateOpts, vm.ProviderOpts, vm.CPUArch, error) {
 	useIOBarrier := params.UseIOBarrierOnLocalSSD
-	arch := params.PreferredArch
+	requestedArch := params.PreferredArch
 
 	preferLocalSSD := params.Defaults.PreferLocalSSD
 	switch s.LocalSSD {
@@ -323,21 +324,20 @@ func (s *ClusterSpec) RoachprodOpts(
 	case Local:
 		createVMOpts.VMProviders = []string{cloud}
 		// remaining opts are not applicable to local clusters
-		return createVMOpts, nil, nil
+		return createVMOpts, nil, requestedArch, nil
 	case AWS, GCE, Azure:
 		createVMOpts.VMProviders = []string{cloud}
 	default:
-		return vm.CreateOpts{}, nil, errors.Errorf("unsupported cloud %v", cloud)
+		return vm.CreateOpts{}, nil, "", errors.Errorf("unsupported cloud %v", cloud)
 	}
-
 	if cloud != GCE {
 		if s.SSDs != 0 {
-			return vm.CreateOpts{}, nil, errors.Errorf("specifying SSD count is not yet supported on %s", cloud)
+			return vm.CreateOpts{}, nil, "", errors.Errorf("specifying SSD count is not yet supported on %s", cloud)
 		}
 	}
 
 	createVMOpts.GeoDistributed = s.Geo
-	createVMOpts.Arch = string(arch)
+	createVMOpts.Arch = string(requestedArch)
 	ssdCount := s.SSDs
 
 	machineType := params.Defaults.MachineType
@@ -351,11 +351,12 @@ func (s *ClusterSpec) RoachprodOpts(
 			machineType = s.GCE.MachineType
 		}
 	}
+	// Assume selected machine type has the same arch as requested unless SelectXXXMachineType says otherwise.
+	selectedArch := requestedArch
 
 	if s.CPUs != 0 {
 		// Default to the user-supplied machine type, if any.
 		// Otherwise, pick based on requested CPU count.
-		var selectedArch vm.CPUArch
 
 		if machineType == "" {
 			// If no machine type was specified, choose one
@@ -363,20 +364,20 @@ func (s *ClusterSpec) RoachprodOpts(
 			var err error
 			switch cloud {
 			case AWS:
-				machineType, selectedArch, err = SelectAWSMachineType(s.CPUs, s.Mem, preferLocalSSD && s.VolumeSize == 0, arch)
+				machineType, selectedArch, err = SelectAWSMachineType(s.CPUs, s.Mem, preferLocalSSD && s.VolumeSize == 0, requestedArch)
 			case GCE:
-				machineType, selectedArch = SelectGCEMachineType(s.CPUs, s.Mem, arch)
+				machineType, selectedArch = SelectGCEMachineType(s.CPUs, s.Mem, requestedArch)
 			case Azure:
-				machineType, selectedArch, err = SelectAzureMachineType(s.CPUs, s.Mem, arch)
+				machineType, selectedArch, err = SelectAzureMachineType(s.CPUs, s.Mem, requestedArch)
 			}
 
 			if err != nil {
-				return vm.CreateOpts{}, nil, err
+				return vm.CreateOpts{}, nil, "", err
 			}
-			if selectedArch != "" && selectedArch != arch {
+			if requestedArch != "" && selectedArch != requestedArch {
 				// TODO(srosenberg): we need a better way to monitor the rate of this mismatch, i.e.,
 				// other than grepping cluster creation logs.
-				fmt.Printf("WARN: requested arch %s for machineType %s, but selected %s\n", arch, machineType, selectedArch)
+				fmt.Printf("WARN: requested arch %s for machineType %s, but selected %s\n", requestedArch, machineType, selectedArch)
 				createVMOpts.Arch = string(selectedArch)
 			}
 		}
@@ -401,7 +402,7 @@ func (s *ClusterSpec) RoachprodOpts(
 
 	if s.FileSystem == Zfs {
 		if cloud != GCE {
-			return vm.CreateOpts{}, nil, errors.Errorf(
+			return vm.CreateOpts{}, nil, "", errors.Errorf(
 				"node creation with zfs file system not yet supported on %s", cloud,
 			)
 		}
@@ -433,7 +434,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	}
 
 	if createVMOpts.Arch == string(vm.ArchFIPS) && !(cloud == GCE || cloud == AWS) {
-		return vm.CreateOpts{}, nil, errors.Errorf(
+		return vm.CreateOpts{}, nil, "", errors.Errorf(
 			"FIPS not yet supported on %s", cloud,
 		)
 	}
@@ -451,7 +452,7 @@ func (s *ClusterSpec) RoachprodOpts(
 		providerOpts = getAzureOpts(machineType, zones, s.VolumeSize)
 	}
 
-	return createVMOpts, providerOpts, nil
+	return createVMOpts, providerOpts, selectedArch, nil
 }
 
 // Expiration is the lifetime of the cluster. It may be destroyed after
