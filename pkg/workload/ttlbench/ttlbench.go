@@ -43,6 +43,7 @@ type ttlBench struct {
 	connFlags *workload.ConnFlags
 
 	seed                 int64
+	amtSecondaryIdxs     int
 	initialRowCount      int
 	rowMessageLength     int
 	expiredRowPercentage int
@@ -78,6 +79,7 @@ Note: Ops is a no-op and no histograms are used. Benchmarking is done inside Hoo
 		flags.IntVar(&g.ttlBatchSize, `ttl-batch-size`, 500, `Size of TTL SELECT and DELETE batches.`)
 		flags.IntVar(&g.rangeMinBytes, `range-min-bytes`, 134217728, `Minimum number of bytes in range before merging.`)
 		flags.IntVar(&g.rangeMaxBytes, `range-max-bytes`, 536870912, `Maximum number of bytes in range before splitting.`)
+		flags.IntVar(&g.amtSecondaryIdxs, `amt-secondary-idxs`, 0, `Amount of secondary indexes our table should have.`)
 		g.connFlags = workload.NewConnFlags(flags)
 		return g
 	},
@@ -378,16 +380,34 @@ func (t *ttlBench) Tables() []workload.Table {
 	if ttlBatchSize < 0 {
 		panic(fmt.Sprintf("invalid ttl-batch-size %d", ttlBatchSize))
 	}
+	generateSchema := func() string {
+		b := strings.Builder{}
+		schema := `(	
+    id STRING NOT NULL PRIMARY KEY,
+	  message TEXT NOT NULL,
+    expire_at TIMESTAMPTZ NOT NULL
+    )`
+		b.WriteString(schema)
+		if t.amtSecondaryIdxs == 0 {
+			return b.String()
+		}
+		for i := 0; i < t.amtSecondaryIdxs; i += 1 {
+			idx := fmt.Sprintf("idx%d", i)
+			// TODO(annie): can do something better - randomize index based off of amt columns
+			b.WriteString(fmt.Sprintf("INDEX %s (id ASC)", idx))
+			if i != t.amtSecondaryIdxs-1 {
+				b.WriteString(",")
+			}
+			b.WriteString("\n")
+		}
+		return b.String()
+	}
 	var rowCount atomic.Int64
 	return []workload.Table{
 		{
 			Name: ttlTableName,
 			// Start with ttl disabled to prevent job from starting while records are being inserted.
-			Schema: `(
-	id STRING NOT NULL PRIMARY KEY,
-	message TEXT NOT NULL,
-  expire_at TIMESTAMPTZ NOT NULL
-			)`,
+			Schema: generateSchema(),
 			InitialRows: workload.Tuples(
 				initialRowCount,
 				func(i int) []interface{} {
