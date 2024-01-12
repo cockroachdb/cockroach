@@ -57,7 +57,7 @@ y TEXT := 'bar';
 BEGIN
 SELECT k FROM kv WHERE v != 'foo';
 RETURN x + 3;
-END
+END;
 $$`)
 
 	t.Run("view", func(t *testing.T) {
@@ -95,7 +95,7 @@ y STRING := '_';
 BEGIN
 SELECT k FROM defaultdb.public.kv WHERE v != '_';
 RETURN x + _;
-END
+END;
 `, mut.FunctionBody)
 	})
 }

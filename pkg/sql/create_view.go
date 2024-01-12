@@ -668,7 +668,6 @@ func serializeUserDefinedTypesLang(
 		v2 := utils.TypeRefVisitor{Fn: replaceTypeFunc}
 		newStmt = plpgsqltree.Walk(&v2, newStmt)
 		fmtCtx.FormatNode(newStmt)
-		fmtCtx.WriteString(";")
 	}
 
 	return fmtCtx.CloseAndGetString(), nil

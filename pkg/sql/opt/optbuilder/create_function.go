@@ -244,7 +244,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			checkStmtVolatility(targetVolatility, stmtScope, stmt.AST)
 
 			// Format the statements with qualified datasource names.
-			formatFuncBodyStmt(fmtCtx, stmt.AST, i > 0 /* newLine */)
+			formatFuncBodyStmt(fmtCtx, stmt.AST, language, i > 0 /* newLine */)
 			afterBuildStmt()
 		}
 	case tree.RoutineLangPLpgSQL:
@@ -272,7 +272,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		checkStmtVolatility(targetVolatility, stmtScope, stmt)
 
 		// Format the statements with qualified datasource names.
-		formatFuncBodyStmt(fmtCtx, stmt.AST, false /* newLine */)
+		formatFuncBodyStmt(fmtCtx, stmt.AST, language, false /* newLine */)
 		afterBuildStmt()
 	default:
 		panic(errors.AssertionFailedf("unexpected language: %v", language))
@@ -319,12 +319,17 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	return outScope
 }
 
-func formatFuncBodyStmt(fmtCtx *tree.FmtCtx, ast tree.NodeFormatter, newLine bool) {
+func formatFuncBodyStmt(
+	fmtCtx *tree.FmtCtx, ast tree.NodeFormatter, lang tree.RoutineLanguage, newLine bool,
+) {
 	if newLine {
 		fmtCtx.WriteString("\n")
 	}
 	fmtCtx.FormatNode(ast)
-	fmtCtx.WriteString(";")
+	if lang != tree.RoutineLangPLpgSQL {
+		// PL/pgSQL body statements handle semicolons.
+		fmtCtx.WriteString(";")
+	}
 }
 
 func validateReturnType(

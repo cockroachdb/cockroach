@@ -35,7 +35,7 @@ IF i >= n THEN
 END IF;
 END LOOP;
 RETURN res;
-END
+END;
  -- normalized!
 DECLARE
 i INT8;
@@ -55,7 +55,7 @@ IF ((i) >= (n)) THEN
 END IF;
 END LOOP;
 RETURN (res);
-END
+END;
  -- fully parenthesized
 DECLARE
 i INT8;
@@ -75,7 +75,7 @@ IF i >= n THEN
 END IF;
 END LOOP;
 RETURN res;
-END
+END;
  -- literals removed
 DECLARE
 i INT8;
@@ -95,5 +95,5 @@ IF _ >= _ THEN
 END IF;
 END LOOP;
 RETURN _;
-END
+END;
  -- identifiers removed

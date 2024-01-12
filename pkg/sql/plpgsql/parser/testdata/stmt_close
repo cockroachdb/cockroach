@@ -7,20 +7,20 @@ END
 DECLARE
 BEGIN
 CLOSE some_cursor;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 CLOSE some_cursor;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 CLOSE some_cursor;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 CLOSE _;
-END
+END;
  -- identifiers removed

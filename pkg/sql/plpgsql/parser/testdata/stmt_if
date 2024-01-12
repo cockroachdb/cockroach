@@ -21,7 +21,7 @@ ELSIF hihotpants THEN
 ELSE
 	diego := 0;
 END IF;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
@@ -33,7 +33,7 @@ ELSIF (hihotpants) THEN
 ELSE
 	diego := (0);
 END IF;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
@@ -45,7 +45,7 @@ ELSIF hihotpants THEN
 ELSE
 	diego := _;
 END IF;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
@@ -57,7 +57,7 @@ ELSIF _ THEN
 ELSE
 	_ := 0;
 END IF;
-END
+END;
  -- identifiers removed
 
 
@@ -72,25 +72,25 @@ DECLARE
 BEGIN
 IF johnnygyro THEN
 END IF;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 IF (johnnygyro) THEN
 END IF;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 IF johnnygyro THEN
 END IF;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 IF _ THEN
 END IF;
-END
+END;
  -- identifiers removed
 
 feature-count
