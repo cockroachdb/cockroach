@@ -2,7 +2,7 @@
 set -xeuo pipefail
 
 BASE_IMAGE="ubuntu:focal"
-BAZEL_IMAGE="cockroachdb/bazel:latest-do-not-use"
+BAZEL_IMAGE="us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel:latest-do-not-use"
 
 docker pull $BASE_IMAGE && docker pull $BAZEL_IMAGE
 LATEST_BASE_IMAGE_CREATE_DT="$(docker inspect $BASE_IMAGE -f '{{.Created}}')"
