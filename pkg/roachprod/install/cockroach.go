@@ -13,7 +13,7 @@ package install
 import (
 	"context"
 	_ "embed" // required for go:embed
-	"encoding/json"
+	"encoding/csv"
 	"fmt"
 	"net/url"
 	"os"
@@ -1266,7 +1266,7 @@ func (c *SyncedCluster) upsertVirtualClusterMetadata(
 ) (int, error) {
 	runSQL := func(stmt string) (string, error) {
 		results, err := startOpts.KVCluster.ExecSQL(ctx, l, startOpts.KVCluster.Nodes[:1], "", 0, []string{
-			"--format", "json", "-e", stmt,
+			"--format", "csv", "-e", stmt,
 		})
 		if err != nil {
 			return "", err
@@ -1279,10 +1279,6 @@ func (c *SyncedCluster) upsertVirtualClusterMetadata(
 	}
 
 	virtualClusterIDByName := func(name string) (int, error) {
-		type tenantRow struct {
-			ID string `json:"id"`
-		}
-
 		query := fmt.Sprintf(
 			"SELECT id FROM system.tenants WHERE name = '%s'", startOpts.VirtualClusterName,
 		)
@@ -1292,16 +1288,17 @@ func (c *SyncedCluster) upsertVirtualClusterMetadata(
 			return -1, err
 		}
 
-		var tenants []tenantRow
-		if err := json.Unmarshal([]byte(existsOut), &tenants); err != nil {
-			return -1, fmt.Errorf("failed to unmarshal system.tenants output: %w\n%s", err, existsOut)
+		rows, err := csv.NewReader(strings.NewReader(existsOut)).ReadAll()
+		if err != nil {
+			return -1, fmt.Errorf("failed to parse system.tenants output: %w\n%s", err, existsOut)
 		}
 
-		if len(tenants) == 0 {
+		records := rows[1:] // skip header
+		if len(records) == 0 {
 			return -1, nil
 		}
 
-		n, err := strconv.Atoi(tenants[0].ID)
+		n, err := strconv.Atoi(records[0][0])
 		if err != nil {
 			return -1, fmt.Errorf("failed to parse virtual cluster ID: %w", err)
 		}
