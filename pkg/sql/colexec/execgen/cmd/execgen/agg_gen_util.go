@@ -23,15 +23,63 @@ const (
 	// of aggregator using an aggregate function. It is replaced with "Hash",
 	// "Ordered", or "Window" before executing the template.
 	aggKindTmplVar = "_AGGKIND"
+	aggNameTmplVar = "_AGGNAME"
 	hashAggKind    = "Hash"
 	orderedAggKind = "Ordered"
 	windowAggKind  = "Window"
 )
 
-func registerAggGenerator(aggGen generator, filenameSuffix, dep string, genWindowVariant bool) {
+func registerAggGenerator(
+	aggGen generator, filenameSuffix, dep, aggName string, genWindowVariant bool,
+) {
 	aggGeneratorAdapter := func(aggKind string) generator {
 		return func(inputFileContents string, wr io.Writer) error {
+			inputFileContents = strings.ReplaceAll(inputFileContents, "var _ = _ALLOC_CODE", `
+// {{if eq "_AGGKIND" "Ordered"}}
+
+func init() {
+	// Sanity check the hard-coded number of overloads.
+	var numOverloads int
+	// {{range .}}
+	// {{range .WidthOverloads}}
+	numOverloads++
+	// {{end}}
+	// {{end}}
+	if numOverloads != _AGGNAMENumOverloads {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"_AGGNAMENumOverloads should be updated: expected %d, found %d", numOverloads, _AGGNAMENumOverloads,
+		))
+	}
+}
+
+// _AGGNAMEOverloadOffset returns the offset for this particular type overload
+// within contiguous slice of allocators for this aggregate function. 
+func _AGGNAMEOverloadOffset(t *types.T) int {
+	var offset int
+	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family())
+	// {{range .}}
+	if canonicalTypeFamily == _CANONICAL_TYPE_FAMILY {
+		// {{range .WidthOverloads}}
+		// {{if eq .Width -1}}
+		return offset
+		// {{else}}
+		if t.Width() == {{.Width}} {
+			return offset
+		}
+		offset++
+		// {{end}}
+		// {{end}}
+	}
+	offset += {{len .WidthOverloads}}
+	// {{end}}
+	colexecerror.InternalError(errors.AssertionFailedf("didn't find overload offset for %s", t.SQLStringForError()))
+	return 0
+}
+
+// {{end}}
+`)
 			inputFileContents = strings.ReplaceAll(inputFileContents, aggKindTmplVar, aggKind)
+			inputFileContents = strings.ReplaceAll(inputFileContents, aggNameTmplVar, aggName)
 			return aggGen(inputFileContents, wr)
 		}
 	}
