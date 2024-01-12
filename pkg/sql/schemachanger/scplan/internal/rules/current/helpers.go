@@ -44,6 +44,29 @@ var descriptorIsNotBeingDropped = screl.Schema.DefNotJoin1(
 	},
 )
 
+// descriptorDataIsBeingAdded indicates that descriptor data is being
+// added and was not public earlier. This is mainly used to detect if an
+// object is newly created and skip the two version invariant.
+var descriptorDataIsNotBeingAdded = screl.Schema.DefNotJoin1(
+	"descriptorIsDataNotBeingAdded"+rulesVersion, "descID", func(
+		descID rel.Var,
+	) rel.Clauses {
+		descriptorData := rules.MkNodeVars("descriptor-data")
+		prevDescriptorData := rules.MkNodeVars("prev-descriptor-data")
+		return rel.Clauses{
+			descriptorData.Type((*scpb.TableData)(nil)),
+			descriptorData.JoinTargetNode(),
+			descriptorData.CurrentStatus(scpb.Status_PUBLIC),
+			descriptorData.DescIDEq(descID),
+			prevDescriptorData.Type((*scpb.TableData)(nil)),
+			prevDescriptorData.JoinTargetNode(),
+			prevDescriptorData.CurrentStatus(scpb.Status_ABSENT),
+			prevDescriptorData.DescIDEq(descID),
+			prevDescriptorData.El.AttrEqVar(rel.Self, descriptorData.El),
+		}
+	},
+)
+
 // isDescriptor returns true for a descriptor-element, i.e. an element which
 // owns its corresponding descriptor.
 func isDescriptor(e scpb.Element) bool {

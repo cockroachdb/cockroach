@@ -6,9 +6,11 @@ EXPLAIN (DDL) CREATE SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREM
 Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 13 elements transitioning toward PUBLIC
+ │         ├── 15 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC Sequence:{DescID: 104 (sq1+)}
  │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 104 (sq1+), ReferencedDescID: 101 (public)}
+ │         │    ├── ABSENT → PUBLIC TableData:{DescID: 104 (sq1+), ReferencedDescID: 100 (defaultdb)}
  │         │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "START"}
  │         │    ├── ABSENT → PUBLIC Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
  │         │    ├── ABSENT → PUBLIC ColumnType:{DescID: 104 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
@@ -20,10 +22,11 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
  │         │    ├── ABSENT → PUBLIC Owner:{DescID: 104 (sq1+)}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "admin"}
  │         │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "root"}
- │         └── 23 Mutation operations
+ │         └── 24 Mutation operations
  │              ├── CreateSequenceDescriptor {"SequenceID":104}
  │              ├── SetNameInDescriptor {"DescriptorID":104,"Name":"sq1"}
  │              ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sq1","SchemaID":101}}
+ │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":104,"SchemaID":101}}
  │              ├── SetSequenceOptions {"Key":"START","SequenceID":104,"Value":"32"}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":104}}
  │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":1,"TableID":104}}
@@ -46,9 +49,11 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
  │              └── MarkDescriptorAsPublic {"DescriptorID":104}
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
-      │    ├── 13 elements transitioning toward PUBLIC
+      │    ├── 15 elements transitioning toward PUBLIC
       │    │    ├── PUBLIC → ABSENT Sequence:{DescID: 104 (sq1+)}
       │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+      │    │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 104 (sq1+), ReferencedDescID: 101 (public)}
+      │    │    ├── PUBLIC → ABSENT TableData:{DescID: 104 (sq1+), ReferencedDescID: 100 (defaultdb)}
       │    │    ├── PUBLIC → ABSENT SequenceOption:{DescID: 104 (sq1+), Name: "START"}
       │    │    ├── PUBLIC → ABSENT Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
       │    │    ├── PUBLIC → ABSENT ColumnType:{DescID: 104 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
@@ -63,9 +68,11 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
       │    └── 1 Mutation operation
       │         └── UndoAllInTxnImmediateMutationOpSideEffects
       └── Stage 2 of 2 in PreCommitPhase
-           ├── 13 elements transitioning toward PUBLIC
+           ├── 15 elements transitioning toward PUBLIC
            │    ├── ABSENT → PUBLIC Sequence:{DescID: 104 (sq1+)}
            │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+           │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 104 (sq1+), ReferencedDescID: 101 (public)}
+           │    ├── ABSENT → PUBLIC TableData:{DescID: 104 (sq1+), ReferencedDescID: 100 (defaultdb)}
            │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "START"}
            │    ├── ABSENT → PUBLIC Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
            │    ├── ABSENT → PUBLIC ColumnType:{DescID: 104 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
@@ -81,6 +88,7 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
                 ├── CreateSequenceDescriptor {"SequenceID":104}
                 ├── SetNameInDescriptor {"DescriptorID":104,"Name":"sq1"}
                 ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sq1","SchemaID":101}}
+                ├── SetObjectParentID {"ObjParent":{"ChildObjectID":104,"SchemaID":101}}
                 ├── SetSequenceOptions {"Key":"START","SequenceID":104,"Value":"32"}
                 ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":104}}
                 ├── SetAddedColumnType {"ColumnType":{"ColumnID":1,"TableID":104}}
@@ -96,7 +104,6 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
                 ├── MakeValidatedColumnNotNullPublic {"ColumnID":1,"TableID":104}
                 ├── MakeBackfilledIndexMerging {"IndexID":1,"TableID":104}
                 ├── MakeWriteOnlyColumnPublic {"ColumnID":1,"TableID":104}
-                ├── RefreshStats {"TableID":104}
                 ├── MakeMergedIndexWriteOnly {"IndexID":1,"TableID":104}
                 ├── SetIndexName {"IndexID":1,"Name":"primary","TableID":104}
                 ├── MakeValidatedPrimaryIndexPublic {"IndexID":1,"TableID":104}
