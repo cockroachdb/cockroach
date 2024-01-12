@@ -38,6 +38,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// defaultExpirationWindowSeconds the default producer job expiration without a heartbeat is 3 days
+//
+// TODO(msbutler): for the post cutover dummy producer job, the default
+// expiration window will be 24 hours.
+const defaultExpirationWindowSeconds = 60 * 60 * 24
+
 // notAReplicationJobError returns an error that is returned anytime
 // the user passes a job ID not related to a replication stream job.
 func notAReplicationJobError(id jobspb.JobID) error {
@@ -106,10 +112,9 @@ func startReplicationProducerJob(
 	}
 
 	registry := execConfig.JobRegistry
-	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
 	ptsID := uuid.MakeV4()
 
-	jr := makeProducerJobRecord(registry, tenantRecord, timeout, evalCtx.SessionData().User(), ptsID)
+	jr := makeProducerJobRecord(registry, tenantRecord, defaultExpirationWindowSeconds, evalCtx.SessionData().User(), ptsID)
 	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
@@ -160,7 +165,7 @@ func convertProducerJobStatusToStreamStatus(
 // stream specified by 'streamID'.
 func updateReplicationStreamProgress(
 	ctx context.Context,
-	expiration time.Time,
+	updateBegin time.Time,
 	ptsProvider protectedts.Manager,
 	registry *jobs.Registry,
 	streamID streampb.StreamID,
@@ -172,9 +177,12 @@ func updateReplicationStreamProgress(
 		if err != nil {
 			return status, err
 		}
-		if _, ok := j.Details().(jobspb.StreamReplicationDetails); !ok {
+		details, ok := j.Details().(jobspb.StreamReplicationDetails)
+		if !ok {
 			return status, notAReplicationJobError(jobspb.JobID(streamID))
 		}
+		expirationWindow := time.Duration(int64(details.ExpirationWindowSeconds) * int64(time.Second))
+		expiration := updateBegin.Add(expirationWindow)
 		if err := j.WithTxn(txn).Update(ctx, func(
 			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
@@ -240,16 +248,13 @@ func heartbeatReplicationStream(
 	frontier hlc.Timestamp,
 ) (streampb.StreamReplicationStatus, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
-	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
-	expirationTime := timeutil.Now().Add(timeout)
 	if frontier == hlc.MaxTimestamp {
 		// NB: We used to allow this as a no-op update to get
 		// the status. That code was removed.
 		return streampb.StreamReplicationStatus{}, pgerror.Newf(pgcode.InvalidParameterValue, "MaxTimestamp no longer accepted as frontier")
 	}
-
-	return updateReplicationStreamProgress(ctx,
-		expirationTime, execConfig.ProtectedTimestampProvider, execConfig.JobRegistry,
+	updateBegin := timeutil.Now()
+	return updateReplicationStreamProgress(ctx, updateBegin, execConfig.ProtectedTimestampProvider, execConfig.JobRegistry,
 		streamID, frontier, txn)
 }
 

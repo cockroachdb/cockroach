@@ -147,6 +147,12 @@ func ingestionPlanHook(
 	if ret, ok := options.GetRetention(); ok {
 		retentionTTLSeconds = ret
 	}
+	if _, ok := options.GetExpirationWindow(); ok {
+		// We don't allow the user to specify the producer job expirationWindow during
+		// replication creation from the destination cluster, as this job setting
+		// should only be set from the producer cluster.
+		return nil, nil, nil, false, errors.New("cannot specify expirationWindow option while starting a physical replication stream")
+	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())

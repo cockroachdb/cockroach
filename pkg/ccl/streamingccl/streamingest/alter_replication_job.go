@@ -11,6 +11,7 @@ package streamingest
 import (
 	"context"
 	"math"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
@@ -45,10 +46,11 @@ var alterReplicationCutoverHeader = colinfo.ResultColumns{
 }
 
 // ResolvedTenantReplicationOptions represents options from an
-// evaluated CREATE VIRTUAL CLUSTER FROM REPLICATION command.
+// evaluated CREATE/ALTER VIRTUAL CLUSTER FROM REPLICATION command.
 type resolvedTenantReplicationOptions struct {
-	resumeTimestamp hlc.Timestamp
-	retention       *int32
+	resumeTimestamp  hlc.Timestamp
+	retention        *int32
+	expirationWindow *time.Duration
 }
 
 func evalTenantReplicationOptions(
@@ -83,8 +85,34 @@ func evalTenantReplicationOptions(
 		}
 		r.resumeTimestamp = ts
 	}
+	if options.Expiration != nil {
+		dur, err := eval.Duration(ctx, options.Retention)
+		if err != nil {
+			return nil, err
+		}
+		r.expirationWindow = &time.Duration(dur.Nanos())
 
+	}
 	return r, nil
+}
+
+// evalDurationOption converts a duration expression to seconds.
+func evalDurationOption(
+	ctx context.Context, eval exprutil.Evaluator, option tree.Expr,
+) (int32, error) {
+	dur, err := eval.Duration(ctx, option)
+	if err != nil {
+		return 0, err
+	}
+	retSeconds64, ok := dur.AsInt64()
+	if !ok {
+		return 0, errors.Newf("interval conversion error: %v", dur)
+	}
+	if retSeconds64 > math.MaxInt32 || retSeconds64 < 0 {
+		return 0, errors.Newf("retention should result in a number of seconds between 0 and %d",
+			math.MaxInt32)
+	}
+	return int32(retSeconds64), nil
 }
 
 func (r *resolvedTenantReplicationOptions) GetRetention() (int32, bool) {
@@ -92,6 +120,17 @@ func (r *resolvedTenantReplicationOptions) GetRetention() (int32, bool) {
 		return 0, false
 	}
 	return *r.retention, true
+}
+
+func (r *resolvedTenantReplicationOptions) GetExpirationWindow() (time.Duration, bool) {
+	if r == nil || r.expirationWindow == nil {
+		return 0, false
+	}
+	return *r.expirationWindow, true
+}
+
+func (r *resolvedTenantReplicationOptions) DestinationOptionsSet() bool {
+	return r != nil && (r.retention != nil || r.resumeTimestamp.IsSet())
 }
 
 func alterReplicationJobTypeCheck(
@@ -198,11 +237,16 @@ func alterReplicationJobHook(
 		if err != nil {
 			return err
 		}
-		if tenInfo.PhysicalReplicationConsumerJobID == 0 {
-			return errors.Newf("tenant %q (%d) does not have an active replication job",
-				tenInfo.Name, tenInfo.ID)
-		}
+
 		jobRegistry := p.ExecCfg().JobRegistry
+
+		if !alterTenantStmt.Options.IsDefault() {
+			return alterTenantSetReplication(ctx, p.InternalSQLTxn(), jobRegistry, options, tenInfo)
+		}
+
+		if err := checkForActiveIngestionJob(tenInfo); err != nil {
+			return err
+		}
 		if alterTenantStmt.Cutover != nil {
 			pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
 			actualCutoverTime, err := alterTenantJobCutover(
@@ -211,10 +255,6 @@ func alterReplicationJobHook(
 				return err
 			}
 			resultsCh <- tree.Datums{eval.TimestampToDecimalDatum(actualCutoverTime)}
-		} else if !alterTenantStmt.Options.IsDefault() {
-			if err := alterTenantOptions(ctx, p.InternalSQLTxn(), jobRegistry, options, tenInfo); err != nil {
-				return err
-			}
 		} else {
 			switch alterTenantStmt.Command {
 			case tree.ResumeJob:
@@ -236,6 +276,38 @@ func alterReplicationJobHook(
 		return fn, alterReplicationCutoverHeader, nil, false, nil
 	}
 	return fn, nil, nil, false, nil
+}
+
+func alterTenantSetReplication(
+	ctx context.Context,
+	txn isql.Txn,
+	jobRegistry *jobs.Registry,
+	options *resolvedTenantReplicationOptions,
+	tenInfo *mtinfopb.TenantInfo,
+) error {
+
+	if expirationWindow, ok := options.GetExpirationWindow(); ok {
+		if err := alterTenantExpirationWindow(ctx, txn, jobRegistry, expirationWindow, tenInfo); err != nil {
+			return err
+		}
+	}
+	if options.DestinationOptionsSet() {
+		if err := checkForActiveIngestionJob(tenInfo); err != nil {
+			return err
+		}
+		if err := alterTenantDestinationOptions(ctx, txn, jobRegistry, options, tenInfo); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkForActiveIngestionJob(tenInfo *mtinfopb.TenantInfo) error {
+	if tenInfo.PhysicalReplicationConsumerJobID == 0 {
+		return errors.Newf("tenant %q (%d) does not have an active replication job",
+			tenInfo.Name, tenInfo.ID)
+	}
+	return nil
 }
 
 // alterTenantJobCutover returns the cutover timestamp that was used to initiate
@@ -330,7 +402,39 @@ func applyCutoverTime(
 	return job.WithTxn(txn).Unpaused(ctx)
 }
 
-func alterTenantOptions(
+func alterTenantExpirationWindow(
+	ctx context.Context,
+	txn isql.Txn,
+	jobRegistry *jobs.Registry,
+	expirationWindow time.Duration,
+	tenInfo *mtinfopb.TenantInfo,
+) error {
+	for _, producerJobID := range tenInfo.PhysicalReplicationProducerJobIDs {
+		if err := jobRegistry.UpdateJobWithTxn(ctx, producerJobID, txn,
+			func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+
+				streamProducerDetails := md.Payload.GetStreamReplication()
+				previousExpirationWindow := streamProducerDetails.ExpirationWindowSeconds
+				streamProducerDetails.ExpirationWindowSeconds = expirationWindow
+				ju.UpdatePayload(md.Payload)
+
+				differenceSeconds := expirationWindow - previousExpirationWindow
+				differenceDuration := time.Duration(int64(time.Second) * int64(differenceSeconds))
+				currentExpiration := md.Progress.GetStreamReplication().Expiration
+				newExpiration := currentExpiration.Add(differenceDuration)
+				md.Progress.GetStreamReplication().Expiration = newExpiration
+				ju.UpdateProgress(md.Progress)
+				//fmt.Printf("Current Expiration %s, Changed Expiration %s\n", currentExpiration, md.Progress.GetStreamReplication().Expiration)
+
+				return nil
+			}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func alterTenantDestinationOptions(
 	ctx context.Context,
 	txn isql.Txn,
 	jobRegistry *jobs.Registry,

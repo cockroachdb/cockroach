@@ -120,7 +120,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		}
 		ts := hlc.Timestamp{WallTime: ptsTime.UnixNano()}
 		ptsID := uuid.MakeV4()
-		expirationWindow := time.Minute
+		expirationWindow := int32(60)
 		jr := makeProducerJobRecord(registry, ti, expirationWindow, usr, ptsID)
 
 		require.NoError(t, runJobWithProtectedTimestamp(ptsID, ts, jr))
@@ -135,7 +135,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		// Push the expiration to a new time in the future by passing a begin timestamp in the future.
 		var streamStatus streampb.StreamReplicationStatus
 		var err error
-		newExpiration := timeutil.Now().Add(expirationWindow)
+		newExpiration := timeutil.Now().Add(time.Duration(expirationWindow) * time.Second)
 		require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			streamStatus, err = updateReplicationStreamProgress(
 				ctx, newExpiration, ptp, registry, streampb.StreamID(jr.JobID), updatedFrontier, txn)

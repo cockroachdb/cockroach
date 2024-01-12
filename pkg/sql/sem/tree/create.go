@@ -2233,10 +2233,11 @@ type CreateTenantFromReplication struct {
 	Like *LikeTenantSpec
 }
 
-// TenantReplicationOptions  options for the CREATE VIRTUAL CLUSTER FROM REPLICATION command.
+// TenantReplicationOptions  options for the CREATE/ALTER VIRTUAL CLUSTER FROM REPLICATION command.
 type TenantReplicationOptions struct {
 	Retention       Expr
 	ResumeTimestamp Expr
+	Expiration      Expr
 }
 
 var _ NodeFormatter = &TenantReplicationOptions{}
@@ -2305,6 +2306,18 @@ func (o *TenantReplicationOptions) Format(ctx *FmtCtx) {
 			ctx.WriteByte(')')
 		}
 	}
+	if o.Expiration != nil {
+		maybeAddSep()
+		ctx.WriteString("EXPIRATION = ")
+		_, canOmitParentheses := o.Expiration.(alreadyDelimitedAsSyntacticDExpr)
+		if !canOmitParentheses {
+			ctx.WriteByte('(')
+		}
+		ctx.FormatNode(o.Expiration)
+		if !canOmitParentheses {
+			ctx.WriteByte(')')
+		}
+	}
 }
 
 // CombineWith merges other TenantReplicationOptions into this struct.
@@ -2326,11 +2339,26 @@ func (o *TenantReplicationOptions) CombineWith(other *TenantReplicationOptions) 
 		o.ResumeTimestamp = other.ResumeTimestamp
 	}
 
+	if o.Expiration != nil {
+		if other.Expiration != nil {
+			return errors.New("EXPIRATION option specified multiple times")
+		}
+	} else {
+		o.Expiration = other.Expiration
+	}
+
 	return nil
 }
 
 // IsDefault returns true if this backup options struct has default value.
 func (o TenantReplicationOptions) IsDefault() bool {
+	options := TenantReplicationOptions{}
+	return o.Retention == options.Retention &&
+		o.ResumeTimestamp == options.ResumeTimestamp &&
+		o.Expiration == options.Expiration
+}
+
+func (o TenantReplicationOptions) DestinationOptionsSet() bool {
 	options := TenantReplicationOptions{}
 	return o.Retention == options.Retention &&
 		o.ResumeTimestamp == options.ResumeTimestamp

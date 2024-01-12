@@ -277,7 +277,7 @@ func (sc *spanConfigIngestor) flushEvents(ctx context.Context) error {
 		}
 		if err != nil {
 			if spanconfig.IsCommitTimestampOutOfBoundsError(err) {
-				// We expect the underlying sqlliveness session's expiration to be
+				// We expect the underlying sqlliveness session's expirationWindow to be
 				// extended automatically, which makes this retry loop effective in the
 				// face of these retryable lease expired errors from the RPC.
 				log.Infof(ctx, "lease expired while updating span config records, retrying..")
