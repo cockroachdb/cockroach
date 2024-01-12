@@ -90,8 +90,8 @@ func evalTenantReplicationOptions(
 		if err != nil {
 			return nil, err
 		}
-		r.expirationWindow = &time.Duration(dur.Nanos())
-
+		expirationWindow := time.Duration(dur.Nanos())
+		r.expirationWindow = &expirationWindow
 	}
 	return r, nil
 }
@@ -414,18 +414,15 @@ func alterTenantExpirationWindow(
 			func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 
 				streamProducerDetails := md.Payload.GetStreamReplication()
-				previousExpirationWindow := streamProducerDetails.ExpirationWindowSeconds
-				streamProducerDetails.ExpirationWindowSeconds = expirationWindow
+				previousExpirationWindow := streamProducerDetails.ExpirationWindow
+				streamProducerDetails.ExpirationWindow = expirationWindow
 				ju.UpdatePayload(md.Payload)
 
-				differenceSeconds := expirationWindow - previousExpirationWindow
-				differenceDuration := time.Duration(int64(time.Second) * int64(differenceSeconds))
+				difference := expirationWindow - previousExpirationWindow
 				currentExpiration := md.Progress.GetStreamReplication().Expiration
-				newExpiration := currentExpiration.Add(differenceDuration)
+				newExpiration := currentExpiration.Add(difference)
 				md.Progress.GetStreamReplication().Expiration = newExpiration
 				ju.UpdateProgress(md.Progress)
-				//fmt.Printf("Current Expiration %s, Changed Expiration %s\n", currentExpiration, md.Progress.GetStreamReplication().Expiration)
-
 				return nil
 			}); err != nil {
 			return err

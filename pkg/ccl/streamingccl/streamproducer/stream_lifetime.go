@@ -38,11 +38,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// defaultExpirationWindowSeconds the default producer job expiration without a heartbeat is 3 days
+// defaultExpirationWindowSeconds the default producer job expiration without a heartbeat is 1 day
 //
 // TODO(msbutler): for the post cutover dummy producer job, the default
 // expiration window will be 24 hours.
-const defaultExpirationWindowSeconds = 60 * 60 * 24
+const defaultExpirationWindow = time.Hour * 24
 
 // notAReplicationJobError returns an error that is returned anytime
 // the user passes a job ID not related to a replication stream job.
@@ -114,7 +114,7 @@ func startReplicationProducerJob(
 	registry := execConfig.JobRegistry
 	ptsID := uuid.MakeV4()
 
-	jr := makeProducerJobRecord(registry, tenantRecord, defaultExpirationWindowSeconds, evalCtx.SessionData().User(), ptsID)
+	jr := makeProducerJobRecord(registry, tenantRecord, defaultExpirationWindow, evalCtx.SessionData().User(), ptsID)
 	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
@@ -181,8 +181,7 @@ func updateReplicationStreamProgress(
 		if !ok {
 			return status, notAReplicationJobError(jobspb.JobID(streamID))
 		}
-		expirationWindow := time.Duration(int64(details.ExpirationWindowSeconds) * int64(time.Second))
-		expiration := updateBegin.Add(expirationWindow)
+		expiration := updateBegin.Add(details.ExpirationWindow)
 		if err := j.WithTxn(txn).Update(ctx, func(
 			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
