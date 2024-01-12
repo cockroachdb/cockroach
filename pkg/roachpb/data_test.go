@@ -1032,11 +1032,15 @@ func TestLeaseEquivalence(t *testing.T) {
 	ts3 := makeClockTS(3, 1)
 
 	epoch1 := Lease{Replica: r1, Start: ts1, Epoch: 1}
+	epoch1R2 := Lease{Replica: r2, Start: ts1, Epoch: 1}
+	epoch1TS2 := Lease{Replica: r1, Start: ts2, Epoch: 1}
 	epoch2 := Lease{Replica: r1, Start: ts1, Epoch: 2}
+	epoch2R2TS2 := Lease{Replica: r2, Start: ts2, Epoch: 2}
 	expire1 := Lease{Replica: r1, Start: ts1, Expiration: ts2.ToTimestamp().Clone()}
+	expire1R2 := Lease{Replica: r2, Start: ts1, Expiration: ts2.ToTimestamp().Clone()}
+	expire1TS2 := Lease{Replica: r1, Start: ts2, Expiration: ts2.ToTimestamp().Clone()}
 	expire2 := Lease{Replica: r1, Start: ts1, Expiration: ts3.ToTimestamp().Clone()}
-	epoch2TS2 := Lease{Replica: r2, Start: ts2, Epoch: 2}
-	expire2TS2 := Lease{Replica: r2, Start: ts2, Expiration: ts3.ToTimestamp().Clone()}
+	expire2R2TS2 := Lease{Replica: r2, Start: ts2, Expiration: ts3.ToTimestamp().Clone()}
 
 	proposed1 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: &ts1}
 	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: 2, ProposedTS: &ts1}
@@ -1057,9 +1061,13 @@ func TestLeaseEquivalence(t *testing.T) {
 	}{
 		{epoch1, epoch1, true},             // same epoch lease
 		{expire1, expire1, true},           // same expiration lease
+		{epoch1, epoch1R2, false},          // different epoch leases
+		{epoch1, epoch1TS2, false},         // different epoch leases
 		{epoch1, epoch2, false},            // different epoch leases
-		{epoch1, epoch2TS2, false},         // different epoch leases
-		{expire1, expire2TS2, false},       // different expiration leases
+		{epoch1, epoch2R2TS2, false},       // different epoch leases
+		{expire1, expire1R2, false},        // different expiration leases
+		{expire1, expire1TS2, false},       // different expiration leases
+		{expire1, expire2R2TS2, false},     // different expiration leases
 		{expire1, expire2, true},           // same expiration lease, extended
 		{expire2, expire1, false},          // same expiration lease, extended but backwards
 		{epoch1, expire1, false},           // epoch and expiration leases
