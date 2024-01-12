@@ -69,23 +69,6 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 		sysSQL.ExpectErr(t, "pq: tenant with name \"foo\" already exists",
 			"CREATE TENANT foo FROM REPLICATION OF source ON $1", srcPgURL.String())
 	})
-	t.Run("destination tenant cannot be online", func(t *testing.T) {
-		sysSQL.Exec(t, "CREATE TENANT bar")
-		sysSQL.Exec(t, "ALTER VIRTUAL CLUSTER bar START SERVICE SHARED")
-		sysSQL.ExpectErr(t, "service mode must be none",
-			"CREATE TENANT bar FROM REPLICATION OF source ON $1 WITH RESUME TIMESTAMP = now()", srcPgURL.String())
-	})
-	t.Run("destination tenant must have known revert timestamp", func(t *testing.T) {
-		sysSQL.Exec(t, "CREATE TENANT baz")
-		sysSQL.ExpectErr(t, "no last revert timestamp found",
-			"CREATE TENANT baz FROM REPLICATION OF source ON $1 WITH RESUME TIMESTAMP = now()", srcPgURL.String())
-	})
-	t.Run("destination tenant revert timestamp must match resume timestamp", func(t *testing.T) {
-		sysSQL.Exec(t, "CREATE TENANT bat")
-		sysSQL.Exec(t, "ALTER VIRTUAL CLUSTER bat RESET DATA TO SYSTEM TIME cluster_logical_timestamp()")
-		sysSQL.ExpectErr(t, "doesn't match last revert timestamp",
-			"CREATE TENANT bat FROM REPLICATION OF source ON $1 WITH RESUME TIMESTAMP = cluster_logical_timestamp()", srcPgURL.String())
-	})
 	t.Run("external connection must be reachable", func(t *testing.T) {
 		badPgURL := srcPgURL
 		badPgURL.Host = "nonexistent_test_endpoint"
@@ -276,6 +259,8 @@ func TestTenantStreamingFailback(t *testing.T) {
 	sqlA.Exec(t, fmt.Sprintf("ALTER VIRTUAL CLUSTER f COMPLETE REPLICATION TO SYSTEM TIME '%s'", ts3))
 	jobutils.WaitForJobToSucceed(t, sqlA, jobspb.JobID(consumerFJobID))
 	sqlA.Exec(t, "ALTER VIRTUAL CLUSTER f START SERVICE SHARED")
+
+	sqlB.ExpectErr(t, "service mode must be none", "ALTER VIRTUAL CLUSTER g START REPLICATION OF f ON $1", serverAURL.String())
 
 	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g STOP SERVICE")
 	waitUntilTenantServerStopped(t, serverB.SystemLayer(), "g")
