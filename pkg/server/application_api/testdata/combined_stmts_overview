@@ -1,0 +1,161 @@
+# Test that non-admin without VIEWACTIVITY privileges cannot access.
+check-permission start=(2024-01-01 10:00:00) end=(2024-01-01 10:20:00) isAdmin=false
+----
+Error: status: 403 Forbidden, content-type: application/json, body: {
+  "error": "this operation requires the VIEWACTIVITY or VIEWACTIVITYREDACTED system privileges",
+  "code": 7,
+  "message": "this operation requires the VIEWACTIVITY or VIEWACTIVITYREDACTED system privileges",
+  "details": [
+  ]
+}, error: <nil>
+Statements count: 0
+
+# Tests with VIEWACTIVITY
+run-sql
+ALTER USER authentic_user_noadmin VIEWACTIVITY
+----
+
+
+# Test that non-admin with VIEWACTIVITY privileges can access.
+check-permission start=(2024-01-01 10:00:00) end=(2024-01-01 13:40:00) isAdmin=false
+----
+Error: 
+Statements count: 4
+
+# Test with no query params. Should return all results.
+check-api-results isAdmin=false
+----
+Error: 
+Has Internal: false
+Statements count: 4
+Transactions count: 4
+Statements: [{SELECT * FROM foo 1088747230083123385 0 2024-01-01 10:00:00 +0000 UTC} {SELECT * FROM bar 2422963415274537466 0 2024-01-01 11:00:00 +0000 UTC} {SELECT * FROM xyz 2759320105256699956 0 2024-01-01 13:00:00 +0000 UTC} {SELECT * FROM abc 8810317408726404693 0 2024-01-01 12:00:00 +0000 UTC}]
+Transactions: [{10287247595146671653 2024-01-01 11:00:00 +0000 UTC [2422963415274537466]} {11565169741434339174 2024-01-01 10:00:00 +0000 UTC [1088747230083123385]} {15359302562030451082 2024-01-01 12:00:00 +0000 UTC [8810317408726404693]} {9883341009233575915 2024-01-01 13:00:00 +0000 UTC [2759320105256699956]}]
+
+# Test with end = 1 min after last aggregatedTs. Should give the same results as get all.
+check-api-results end=(2024-01-01 14:01:00) isAdmin=false
+----
+Error: 
+Has Internal: false
+Statements count: 4
+Transactions count: 4
+Statements: [{SELECT * FROM foo 1088747230083123385 0 2024-01-01 10:00:00 +0000 UTC} {SELECT * FROM bar 2422963415274537466 0 2024-01-01 11:00:00 +0000 UTC} {SELECT * FROM xyz 2759320105256699956 0 2024-01-01 13:00:00 +0000 UTC} {SELECT * FROM abc 8810317408726404693 0 2024-01-01 12:00:00 +0000 UTC}]
+Transactions: [{10287247595146671653 2024-01-01 11:00:00 +0000 UTC [2422963415274537466]} {11565169741434339174 2024-01-01 10:00:00 +0000 UTC [1088747230083123385]} {15359302562030451082 2024-01-01 12:00:00 +0000 UTC [8810317408726404693]} {9883341009233575915 2024-01-01 13:00:00 +0000 UTC [2759320105256699956]}]
+
+# Test with start = 1 hour before first aggregatedTs and end = 1 min after aggregatedTs. Should give same results as get all.
+check-api-results start=(2024-01-01 9:00:00) end=(2024-01-01 14:01:00) isAdmin=false
+----
+Error: 
+Has Internal: false
+Statements count: 4
+Transactions count: 4
+Statements: [{SELECT * FROM foo 1088747230083123385 0 2024-01-01 10:00:00 +0000 UTC} {SELECT * FROM bar 2422963415274537466 0 2024-01-01 11:00:00 +0000 UTC} {SELECT * FROM xyz 2759320105256699956 0 2024-01-01 13:00:00 +0000 UTC} {SELECT * FROM abc 8810317408726404693 0 2024-01-01 12:00:00 +0000 UTC}]
+Transactions: [{10287247595146671653 2024-01-01 11:00:00 +0000 UTC [2422963415274537466]} {11565169741434339174 2024-01-01 10:00:00 +0000 UTC [1088747230083123385]} {15359302562030451082 2024-01-01 12:00:00 +0000 UTC [8810317408726404693]} {9883341009233575915 2024-01-01 13:00:00 +0000 UTC [2759320105256699956]}]
+
+
+# Test with end = 1 hour before first aggregatedTs. Should give no results.
+check-api-results end=(2024-01-01 9:00:00) isAdmin=false
+----
+Error: 
+Has Internal: false
+Statements count: 0
+Transactions count: 0
+Statements: []
+Transactions: []
+
+# Remove VIEWACTIVITY so we can test with just the VIEWACTIVITYREDACTED role.
+run-sql
+ALTER USER authentic_user_noadmin NOVIEWACTIVITY
+----
+
+
+# Grant VIEWACTIVITYREDACTED.
+run-sql
+ALTER USER authentic_user_noadmin VIEWACTIVITYREDACTED
+----
+
+
+# Test that non-admin with VIEWACTIVITYREDACTED privileges can access.
+check-permission start=(2024-01-01 10:00:00) end=(2024-01-01 13:40:00) isAdmin=false
+----
+Error: 
+Statements count: 4
+
+# Test with no query params. Should return all results.
+check-api-results isAdmin=false
+----
+Error: 
+Has Internal: false
+Statements count: 4
+Transactions count: 4
+Statements: [{SELECT * FROM foo 1088747230083123385 0 2024-01-01 10:00:00 +0000 UTC} {SELECT * FROM bar 2422963415274537466 0 2024-01-01 11:00:00 +0000 UTC} {SELECT * FROM xyz 2759320105256699956 0 2024-01-01 13:00:00 +0000 UTC} {SELECT * FROM abc 8810317408726404693 0 2024-01-01 12:00:00 +0000 UTC}]
+Transactions: [{10287247595146671653 2024-01-01 11:00:00 +0000 UTC [2422963415274537466]} {11565169741434339174 2024-01-01 10:00:00 +0000 UTC [1088747230083123385]} {15359302562030451082 2024-01-01 12:00:00 +0000 UTC [8810317408726404693]} {9883341009233575915 2024-01-01 13:00:00 +0000 UTC [2759320105256699956]}]
+
+# Test with end = 1 min after last aggregatedTs. Should give the same results as get all.
+check-api-results end=(2024-01-01 14:01:00) isAdmin=false
+----
+Error: 
+Has Internal: false
+Statements count: 4
+Transactions count: 4
+Statements: [{SELECT * FROM foo 1088747230083123385 0 2024-01-01 10:00:00 +0000 UTC} {SELECT * FROM bar 2422963415274537466 0 2024-01-01 11:00:00 +0000 UTC} {SELECT * FROM xyz 2759320105256699956 0 2024-01-01 13:00:00 +0000 UTC} {SELECT * FROM abc 8810317408726404693 0 2024-01-01 12:00:00 +0000 UTC}]
+Transactions: [{10287247595146671653 2024-01-01 11:00:00 +0000 UTC [2422963415274537466]} {11565169741434339174 2024-01-01 10:00:00 +0000 UTC [1088747230083123385]} {15359302562030451082 2024-01-01 12:00:00 +0000 UTC [8810317408726404693]} {9883341009233575915 2024-01-01 13:00:00 +0000 UTC [2759320105256699956]}]
+
+# Test with start = 1 hour before first aggregatedTs and end = 1 min after aggregatedTs. Should give same results as get all.
+check-api-results start=(2024-01-01 9:00:00) end=(2024-01-01 14:01:00) isAdmin=false
+----
+Error: 
+Has Internal: false
+Statements count: 4
+Transactions count: 4
+Statements: [{SELECT * FROM foo 1088747230083123385 0 2024-01-01 10:00:00 +0000 UTC} {SELECT * FROM bar 2422963415274537466 0 2024-01-01 11:00:00 +0000 UTC} {SELECT * FROM xyz 2759320105256699956 0 2024-01-01 13:00:00 +0000 UTC} {SELECT * FROM abc 8810317408726404693 0 2024-01-01 12:00:00 +0000 UTC}]
+Transactions: [{10287247595146671653 2024-01-01 11:00:00 +0000 UTC [2422963415274537466]} {11565169741434339174 2024-01-01 10:00:00 +0000 UTC [1088747230083123385]} {15359302562030451082 2024-01-01 12:00:00 +0000 UTC [8810317408726404693]} {9883341009233575915 2024-01-01 13:00:00 +0000 UTC [2759320105256699956]}]
+
+
+# Test with end = 1 hour before first aggregatedTs. Should give no results.
+check-api-results end=(2024-01-01 9:00:00) isAdmin=false
+----
+Error: 
+Has Internal: false
+Statements count: 0
+Transactions count: 0
+Statements: []
+Transactions: []
+
+# Test fetch mode StmtsOnly
+check-api-results start=(2024-01-01 9:00:00) end=(2024-01-01 14:01:00) isAdmin=false fetchMode=0
+----
+Error: 
+Has Internal: false
+Statements count: 4
+Transactions count: 0
+Statements: [{SELECT * FROM foo 1088747230083123385 0 2024-01-01 10:00:00 +0000 UTC} {SELECT * FROM bar 2422963415274537466 0 2024-01-01 11:00:00 +0000 UTC} {SELECT * FROM xyz 2759320105256699956 0 2024-01-01 13:00:00 +0000 UTC} {SELECT * FROM abc 8810317408726404693 0 2024-01-01 12:00:00 +0000 UTC}]
+Transactions: []
+
+
+# Test fetch mode TxnsOnly
+# Add limit to help check the behaviour
+check-api-results start=(2024-01-01 9:00:00) end=(2024-01-01 13:01:00) isAdmin=false fetchMode=1 limit=2
+----
+Error: 
+Has Internal: false
+Statements count: 2
+Transactions count: 2
+Statements: [{SELECT * FROM xyz 2759320105256699956 9883341009233575915 0001-01-01 00:00:00 +0000 UTC} {SELECT * FROM abc 8810317408726404693 15359302562030451082 0001-01-01 00:00:00 +0000 UTC}]
+Transactions: [{15359302562030451082 2024-01-01 12:00:00 +0000 UTC [8810317408726404693]} {9883341009233575915 2024-01-01 13:00:00 +0000 UTC [2759320105256699956]}]
+
+# Change cluster setting to return internal stats.
+run-sql
+SET CLUSTER SETTING sql.stats.response.show_internal.enabled = 't'
+----
+
+# Test with start = 1 hour before first aggregatedTs and end = 1 min after aggregatedTs.
+# Should give same results as get all, including internal.
+check-api-results start=(2024-01-01 9:00:00) end=(2024-01-01 14:01:00) isAdmin=false
+----
+Error: 
+Has Internal: true
+Statements count: 5
+Transactions count: 5
+Statements: [{SELECT * FROM foo 1088747230083123385 0 2024-01-01 10:00:00 +0000 UTC} {SELECT * FROM bar 2422963415274537466 0 2024-01-01 11:00:00 +0000 UTC} {SELECT * FROM xyz 2759320105256699956 0 2024-01-01 13:00:00 +0000 UTC} {SELECT * FROM xyz 2759320105256699956 0 2024-01-01 14:00:00 +0000 UTC} {SELECT * FROM abc 8810317408726404693 0 2024-01-01 12:00:00 +0000 UTC}]
+Transactions: [{10287247595146671653 2024-01-01 11:00:00 +0000 UTC [2422963415274537466]} {11565169741434339174 2024-01-01 10:00:00 +0000 UTC [1088747230083123385]} {15359302562030451082 2024-01-01 12:00:00 +0000 UTC [8810317408726404693]} {9883341009233575915 2024-01-01 13:00:00 +0000 UTC [2759320105256699956]} {9883341009233575915 2024-01-01 14:00:00 +0000 UTC [2759320105256699956]}]

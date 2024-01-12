@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -45,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/kr/pretty"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -751,177 +751,146 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	verifyCombinedStmtStats()
 }
 
+type StatementInfo struct {
+	query                    string
+	fingerprintID            string
+	transactionFingerprintID string
+	aggregatedTs             string
+}
+
+type TransactionInfo struct {
+	fingerprintID       string
+	aggregatedTs        string
+	stmtsFingerprintIDs []string
+}
+
 func TestStatusAPICombinedStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "test is too slow to run under race")
+	// Increase the timeout for the http client if under stress.
+	additionalTimeout := 0 * time.Second
+	if skip.Stress() {
+		additionalTimeout = additionalTimeoutUnderStress
+	}
 
-	// Resource-intensive test, times out under stress.
-	skip.UnderStressRace(t, "expensive tests")
-
-	// Aug 30 2021 19:50:00 GMT+0000
-	aggregatedTs := int64(1630353000)
-	statsKnobs := sqlstats.CreateTestingKnobs()
-	statsKnobs.StubTimeNow = func() time.Time { return timeutil.Unix(aggregatedTs, 0) }
+	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
+	// Start the cluster.
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				SQLStatsKnobs: statsKnobs,
-				SpanConfig: &spanconfig.TestingKnobs{
-					ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
-				},
+				SQLStatsKnobs: sqlStatsKnobs,
 			},
 		},
 	})
+
 	defer testCluster.Stopper().Stop(context.Background())
+	sqlDB := testCluster.ServerConn(0)
+	defer sqlDB.Close()
+	ts := testCluster.Server(0).ApplicationLayer()
+	db := sqlutils.MakeSQLRunner(sqlDB)
 
-	firstServerProto := testCluster.Server(0).ApplicationLayer()
-	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+	loadStatsFixtures(t, db, []string{"sql_stats_default"})
+	datadriven.RunTest(t, "testdata/combined_stmts_overview", func(t *testing.T, d *datadriven.TestData) string {
+		var buf bytes.Buffer
+		timeLayout := "2006-01-02 15:04:05"
+		var err error
+		start := ""
+		end := ""
+		fetchMode := ""
+		limit := ""
+		isAdmin := true
 
-	statements := []struct {
-		stmt          string
-		fingerprinted string
-	}{
-		{stmt: `CREATE DATABASE roachblog`},
-		{stmt: `SET database = roachblog`},
-		{stmt: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`},
-		{
-			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
-			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
-		},
-		{stmt: `SELECT * FROM posts`},
-	}
-
-	for _, stmt := range statements {
-		thirdServerSQL.Exec(t, stmt.stmt)
-	}
-
-	var resp serverpb.StatementsResponse
-	// Test that non-admin without VIEWACTIVITY privileges cannot access.
-	err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, "combinedstmts", &resp, false)
-	if !testutils.IsError(err, "status: 403") {
-		t.Fatalf("expected privilege error, got %v", err)
-	}
-
-	verifyStmts := func(path string, expectedStmts []string, hasTxns bool, t *testing.T) {
-		// Hit query endpoint.
-		if err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false); err != nil {
-			t.Fatal(err)
-		}
-
-		// See if the statements returned are what we executed.
-		var statementsInResponse []string
-		expectedTxnFingerprints := map[appstatspb.TransactionFingerprintID]struct{}{}
-		for _, respStatement := range resp.Statements {
-			if respStatement.Key.KeyData.Failed {
-				// We ignore failed statements here as the INSERT statement can fail and
-				// be automatically retried, confusing the test success check.
-				continue
-			}
-			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
-				// CombinedStatementStats should filter out internal queries.
-				t.Fatalf("unexpected internal query: %s", respStatement.Key.KeyData.Query)
-			}
-			if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
-				// Ignore the ALTER USER ... VIEWACTIVITY statement.
-				continue
-			}
-
-			statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
-			for _, txnFingerprintID := range respStatement.TxnFingerprintIDs {
-				expectedTxnFingerprints[txnFingerprintID] = struct{}{}
+		for _, arg := range d.CmdArgs {
+			switch arg.Key {
+			case "start":
+				time, err := time.Parse(timeLayout, arg.Vals[0])
+				require.NoError(t, err)
+				start = fmt.Sprintf("start=%v", time.Unix())
+			case "end":
+				time, err := time.Parse(timeLayout, arg.Vals[0])
+				require.NoError(t, err)
+				end = fmt.Sprintf("end=%v", time.Unix())
+			case "isAdmin":
+				isAdmin, err = strconv.ParseBool(arg.Vals[0])
+				require.NoError(t, err)
+			case "fetchMode":
+				fetchMode = fmt.Sprintf("fetchMode.stats_type=%s", arg.Vals[0])
+			case "limit":
+				limit = fmt.Sprintf("limit=%s", arg.Vals[0])
 			}
 		}
+		var resp serverpb.StatementsResponse
 
-		for _, respTxn := range resp.Transactions {
-			delete(expectedTxnFingerprints, respTxn.StatsData.TransactionFingerprintID)
-		}
-		// We set the default value of Transaction Fingerprint as 0 for some cases,
-		// so this also needs to be removed from the list.
-		delete(expectedTxnFingerprints, 0)
-
-		sort.Strings(expectedStmts)
-		sort.Strings(statementsInResponse)
-
-		if !reflect.DeepEqual(expectedStmts, statementsInResponse) {
-			t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v\n%s\n path: %s",
-				expectedStmts, statementsInResponse, pretty.Sprint(resp), path)
-		}
-		if hasTxns {
-			// We expect that expectedTxnFingerprints is now empty since
-			// we should have removed them all.
-			assert.Empty(t, expectedTxnFingerprints)
-		} else {
-			assert.Empty(t, resp.Transactions)
-		}
-	}
-
-	var expectedStatements []string
-	for _, stmt := range statements {
-		var expectedStmt = stmt.stmt
-		if stmt.fingerprinted != "" {
-			expectedStmt = stmt.fingerprinted
-		}
-		expectedStatements = append(expectedStatements, expectedStmt)
-	}
-
-	oneMinAfterAggregatedTs := aggregatedTs + 60
-
-	t.Run("fetch_mode=combined, VIEWACTIVITY", func(t *testing.T) {
-		// Grant VIEWACTIVITY.
-		thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", apiconstants.TestingUserNameNoAdmin().Normalized()))
-
-		// Test with no query params.
-		verifyStmts("combinedstmts", expectedStatements, true, t)
-		// Test with end = 1 min after aggregatedTs; should give the same results as get all.
-		verifyStmts(fmt.Sprintf("combinedstmts?end=%d", oneMinAfterAggregatedTs), expectedStatements, true, t)
-		// Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
-		verifyStmts(fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs),
-			expectedStatements, true, t)
-		// Test with start = 1 min after aggregatedTs; should give no results
-		verifyStmts(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil, true, t)
-	})
-
-	t.Run("fetch_mode=combined, VIEWACTIVITYREDACTED", func(t *testing.T) {
-		// Remove VIEWACTIVITY so we can test with just the VIEWACTIVITYREDACTED role.
-		thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", apiconstants.TestingUserNameNoAdmin().Normalized()))
-		// Grant VIEWACTIVITYREDACTED.
-		thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", apiconstants.TestingUserNameNoAdmin().Normalized()))
-
-		// Test with no query params.
-		verifyStmts("combinedstmts", expectedStatements, true, t)
-		// Test with end = 1 min after aggregatedTs; should give the same results as get all.
-		verifyStmts(fmt.Sprintf("combinedstmts?end=%d", oneMinAfterAggregatedTs), expectedStatements, true, t)
-		// Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
-		verifyStmts(fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs), expectedStatements, true, t)
-		// Test with start = 1 min after aggregatedTs; should give no results
-		verifyStmts(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil, true, t)
-	})
-
-	t.Run("fetch_mode=StmtsOnly", func(t *testing.T) {
-		verifyStmts("combinedstmts?fetch_mode.stats_type=0", expectedStatements, false, t)
-	})
-
-	t.Run("fetch_mode=TxnsOnly with limit", func(t *testing.T) {
-		// Verify that we only return stmts for the txns in the response.
-		// We'll add a limit in a later commit to help verify this behaviour.
-		if err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, "combinedstmts?fetch_mode.stats_type=1&limit=2",
-			&resp, false); err != nil {
-			t.Fatal(err)
-		}
-
-		assert.Equal(t, 2, len(resp.Transactions))
-		stmtFingerprintIDs := map[appstatspb.StmtFingerprintID]struct{}{}
-		for _, txn := range resp.Transactions {
-			for _, stmtFingerprint := range txn.StatsData.StatementFingerprintIDs {
-				stmtFingerprintIDs[stmtFingerprint] = struct{}{}
+		switch d.Cmd {
+		case "run-sql":
+			db.Exec(t, strings.ReplaceAll(d.Input, "\n", ""))
+		case "check-permission":
+			endpoint := fmt.Sprintf("combinedstmts?%s&%s", start, end)
+			err := srvtestutils.GetStatusJSONProtoWithAdminAndTimeoutOption(ts, endpoint, &resp, isAdmin, additionalTimeout)
+			errorMsg := ""
+			if err != nil {
+				errorMsg = err.Error()
 			}
-		}
-
-		for _, stmt := range resp.Statements {
-			if _, ok := stmtFingerprintIDs[stmt.ID]; !ok {
-				t.Fatalf("unexpected stmt; stmt unrelated to a txn int he response: %s", stmt.Key.KeyData.Query)
+			fmt.Fprintf(&buf, "Error: %s\n", errorMsg)
+			fmt.Fprintf(&buf, "Statements count: %d", len(resp.Statements))
+		case "check-api-results":
+			endpoint := fmt.Sprintf("combinedstmts?%s&%s&%s&%s", start, end, fetchMode, limit)
+			err := srvtestutils.GetStatusJSONProtoWithAdminAndTimeoutOption(ts, endpoint, &resp, isAdmin, additionalTimeout)
+			errorMsg := ""
+			if err != nil {
+				errorMsg = err.Error()
 			}
+
+			hasInternal := false
+			var stmtResult []StatementInfo
+			for _, respStatement := range resp.Statements {
+				if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
+					hasInternal = true
+				}
+				stmt := StatementInfo{
+					query:                    respStatement.Key.KeyData.Query,
+					fingerprintID:            fmt.Sprint(respStatement.ID),
+					transactionFingerprintID: fmt.Sprint(respStatement.Key.KeyData.TransactionFingerprintID),
+					aggregatedTs:             respStatement.Key.AggregatedTs.String(),
+				}
+				stmtResult = append(stmtResult, stmt)
+			}
+			sort.Slice(stmtResult, func(i, j int) bool {
+				return fmt.Sprintf("%s-%s", stmtResult[i].fingerprintID, stmtResult[i].aggregatedTs) <
+					fmt.Sprintf("%s-%s", stmtResult[j].fingerprintID, stmtResult[j].aggregatedTs)
+			})
+
+			var txnResult []TransactionInfo
+			for _, respTransaction := range resp.Transactions {
+				if strings.HasPrefix(respTransaction.StatsData.App, catconstants.InternalAppNamePrefix) {
+					hasInternal = true
+				}
+				var stmtsIDs []string
+				for _, stmtID := range respTransaction.StatsData.StatementFingerprintIDs {
+					stmtsIDs = append(stmtsIDs, fmt.Sprint(stmtID))
+				}
+				sort.Strings(stmtsIDs)
+				txn := TransactionInfo{
+					fingerprintID:       fmt.Sprint(respTransaction.StatsData.TransactionFingerprintID),
+					aggregatedTs:        respTransaction.StatsData.AggregatedTs.String(),
+					stmtsFingerprintIDs: stmtsIDs,
+				}
+				txnResult = append(txnResult, txn)
+			}
+			sort.Slice(txnResult, func(i, j int) bool {
+				return fmt.Sprintf("%s-%s", txnResult[i].fingerprintID, txnResult[i].aggregatedTs) <
+					fmt.Sprintf("%s-%s", txnResult[j].fingerprintID, txnResult[j].aggregatedTs)
+			})
+
+			fmt.Fprintf(&buf, "Error: %s\n", errorMsg)
+			fmt.Fprintf(&buf, "Has Internal: %v\n", hasInternal)
+			fmt.Fprintf(&buf, "Statements count: %d\n", len(resp.Statements))
+			fmt.Fprintf(&buf, "Transactions count: %d\n", len(resp.Transactions))
+			fmt.Fprintf(&buf, "Statements: %v\n", stmtResult)
+			fmt.Fprintf(&buf, "Transactions: %v\n", txnResult)
 		}
+		return buf.String()
 	})
 }
 
