@@ -146,7 +146,7 @@ func (r kvAllocBenchEventRunner) run(ctx context.Context, c cluster.Cluster, t t
 		}
 	}
 	setupCmd += " {pgurl:1}"
-	err := c.RunE(ctx, c.Node(workloadNode), setupCmd)
+	err := c.RunE(ctx, option.WithNodes(c.Node(workloadNode)), setupCmd)
 	if err != nil {
 		return err
 	}
@@ -173,7 +173,7 @@ func (r kvAllocBenchEventRunner) run(ctx context.Context, c cluster.Cluster, t t
 		runCmd, defaultAllocBenchConcurrency, defaultAllocBenchDuration.String(), workloadNode-1)
 
 	t.Status("running kv workload", runCmd)
-	return c.RunE(ctx, c.Node(workloadNode), runCmd)
+	return c.RunE(ctx, option.WithNodes(c.Node(workloadNode)), runCmd)
 }
 func registerAllocationBench(r registry.Registry) {
 	for _, spec := range []allocationBenchSpec{

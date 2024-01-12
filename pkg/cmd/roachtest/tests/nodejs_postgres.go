@@ -69,7 +69,7 @@ func registerNodeJSPostgres(r registry.Registry) {
 		// can use npm to reduce the potential of trying to add another nodesource key
 		// (preventing gpg: dearmoring failed: File exists) errors.
 		err = c.RunE(
-			ctx, node, `sudo npm i -g npm`,
+			ctx, option.WithNodes(node), `sudo npm i -g npm`,
 		)
 
 		if err != nil {

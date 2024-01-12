@@ -60,7 +60,7 @@ func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 	const queryFileName = "queries.sql"
 	// querybench expects the entire query to be on a single line.
 	queryLine := `"` + strings.Replace(tpccOlapQuery, "\n", " ", -1) + `"`
-	c.Run(ctx, workloadNode, "echo", queryLine, "> "+queryFileName)
+	c.Run(ctx, option.WithNodes(workloadNode), "echo", queryLine, "> "+queryFileName)
 	t.Status("waiting")
 	m := c.NewMonitor(ctx, crdbNodes)
 	rampDuration := 2 * time.Minute
@@ -75,7 +75,7 @@ func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 				" --histograms="+t.PerfArtifactsDir()+"/stats.json "+
 				" --ramp=%s --duration=%s {pgurl:1-%d}",
 			s.Concurrency, queryFileName, rampDuration, duration, c.Spec().NodeCount-1)
-		c.Run(ctx, workloadNode, cmd)
+		c.Run(ctx, option.WithNodes(workloadNode), cmd)
 		return nil
 	})
 	m.Wait()
@@ -200,7 +200,7 @@ func registerTPCCSevereOverload(r registry.Registry) {
 			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), roachNodes)
 
 			t.Status("initializing (~1h)")
-			c.Run(ctx, c.Node(workloadNode), "./cockroach workload fixtures import tpcc --checks=false --warehouses=10000 {pgurl:1}")
+			c.Run(ctx, option.WithNodes(c.Node(workloadNode)), "./cockroach workload fixtures import tpcc --checks=false --warehouses=10000 {pgurl:1}")
 
 			// This run passes through 4 "phases"
 			// 1) No admission control, low latencies (up to ~1500 warehouses).
@@ -208,7 +208,7 @@ func registerTPCCSevereOverload(r registry.Registry) {
 			// 3) High latencies (100s+), queues building (up to ~4500 warehouse).
 			// 4) Memory and goroutine unbounded growth with eventual node crashes (up to ~6000 warehouse).
 			t.Status("running workload (fails in ~3-4 hours)")
-			c.Run(ctx, c.Node(workloadNode), "./cockroach workload run tpcc --ramp=6h --tolerate-errors --warehouses=10000 '{pgurl:1-6}'")
+			c.Run(ctx, option.WithNodes(c.Node(workloadNode)), "./cockroach workload run tpcc --ramp=6h --tolerate-errors --warehouses=10000 '{pgurl:1-6}'")
 		},
 	})
 }

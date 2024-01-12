@@ -76,7 +76,7 @@ func registerCopy(r registry.Registry) {
 			}
 
 			t.Status("importing Bank fixture")
-			c.Run(ctx, c.Node(1), fmt.Sprintf(
+			c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf(
 				"./workload fixtures load bank --rows=%d --payload-bytes=%d --seed %d {pgurl:1}",
 				rows, payload, fixturesRandomSeed))
 			if _, err := db.Exec("ALTER TABLE bank.bank RENAME TO bank.bank_orig"); err != nil {
@@ -84,7 +84,7 @@ func registerCopy(r registry.Registry) {
 			}
 
 			t.Status("create copy of Bank schema")
-			c.Run(ctx, c.Node(1), "./workload init bank --rows=0 --ranges=0 {pgurl:1}")
+			c.Run(ctx, option.WithNodes(c.Node(1)), "./workload init bank --rows=0 --ranges=0 {pgurl:1}")
 
 			rangeCount := func() int {
 				var count int

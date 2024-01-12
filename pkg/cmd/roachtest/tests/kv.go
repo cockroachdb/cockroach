@@ -184,7 +184,7 @@ func registerKV(r registry.Registry) {
 			cmd := "./workload run kv --tolerate-errors --init --user=testuser --password=password" +
 				histograms + concurrency + splits + duration + readPercent +
 				batchSize + blockSize + sequential + envFlags + url
-			c.Run(ctx, c.Node(nodes+1), cmd)
+			c.Run(ctx, option.WithNodes(c.Node(nodes+1)), cmd)
 			return nil
 		})
 		m.Wait()
@@ -415,7 +415,7 @@ func registerKVContention(r registry.Registry) {
 					"--cycle-length=%d --concurrency=%d --batch=%d --splits=%d {pgurl:1-%d}",
 					duration, cycleLength, concurrency, batchSize, splits, nodes)
 				start := timeutil.Now()
-				c.Run(ctx, c.Node(nodes+1), cmd)
+				c.Run(ctx, option.WithNodes(c.Node(nodes+1)), cmd)
 				end := timeutil.Now()
 
 				// Assert that the average throughput stayed above a certain
@@ -477,11 +477,11 @@ func registerKVQuiescenceDead(r registry.Registry) {
 
 			// Initialize the database with ~10k ranges so that the absence of
 			// quiescence hits hard once a node goes down.
-			c.Run(ctx, c.Node(nodes+1), "./workload run kv --init --max-ops=1 --splits 10000 --concurrency 100 {pgurl:1}")
-			c.Run(ctx, c.Node(nodes+1), kv+" --seed 0 {pgurl:1}")
+			c.Run(ctx, option.WithNodes(c.Node(nodes+1)), "./workload run kv --init --max-ops=1 --splits 10000 --concurrency 100 {pgurl:1}")
+			c.Run(ctx, option.WithNodes(c.Node(nodes+1)), kv+" --seed 0 {pgurl:1}")
 			// Measure qps with all nodes up (i.e. with quiescence).
 			qpsAllUp := qps(func() {
-				c.Run(ctx, c.Node(nodes+1), kv+" --seed 1 {pgurl:1}")
+				c.Run(ctx, option.WithNodes(c.Node(nodes+1)), kv+" --seed 1 {pgurl:1}")
 			})
 			// Graceful shut down third node.
 			m.ExpectDeath()
@@ -496,7 +496,7 @@ func registerKVQuiescenceDead(r registry.Registry) {
 			qpsOneDown := qps(func() {
 				// Use a different seed to make sure it's not just stepping into the
 				// other earlier kv invocation's footsteps.
-				c.Run(ctx, c.Node(nodes+1), kv+" --seed 2 {pgurl:1}")
+				c.Run(ctx, option.WithNodes(c.Node(nodes+1)), kv+" --seed 2 {pgurl:1}")
 			})
 
 			if minFrac, actFrac := 0.8, qpsOneDown/qpsAllUp; actFrac < minFrac {
@@ -545,7 +545,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			c.Run(ctx, c.Node(1),
+			c.Run(ctx, option.WithNodes(c.Node(1)),
 				fmt.Sprintf("./cockroach workload init kv --splits 100 '%s'", pgurl))
 
 			m := c.NewMonitor(ctx, c.Nodes(1, nodes))
@@ -574,7 +574,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 					t.WorkerStatus("workload command completed")
 					t.WorkerStatus()
 				}()
-				return c.RunE(ctx, c.Node(nodes+1), cmd)
+				return c.RunE(ctx, option.WithNodes(c.Node(nodes+1)), cmd)
 			})
 
 			verifyQPS := func(ctx context.Context) error {
@@ -709,7 +709,7 @@ func registerKVSplits(r registry.Registry) {
 							concurrency+splits+
 							" {pgurl:1-%d}",
 						nodes)
-					c.Run(ctx, c.Node(nodes+1), cmd)
+					c.Run(ctx, option.WithNodes(c.Node(nodes+1)), cmd)
 					return nil
 				})
 				m.Wait()
@@ -738,7 +738,7 @@ func registerKVScalability(r registry.Registry) {
 					" {pgurl:1-%d}",
 					percent, nodes)
 
-				return c.RunE(ctx, c.Node(nodes+1), cmd)
+				return c.RunE(ctx, option.WithNodes(c.Node(nodes+1)), cmd)
 			})
 			m.Wait()
 		}
@@ -801,7 +801,7 @@ func registerKVRangeLookups(r registry.Registry) {
 			defer close(doneWorkload)
 			defer close(doneInit)
 			cmd := "./workload init kv --splits=1000 {pgurl:1}"
-			if err = c.RunE(ctx, c.Node(nodes+1), cmd); err != nil {
+			if err = c.RunE(ctx, option.WithNodes(c.Node(nodes+1)), cmd); err != nil {
 				return err
 			}
 			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*64))
@@ -813,7 +813,7 @@ func registerKVRangeLookups(r registry.Registry) {
 				concurrency+duration+readPercent+
 				" {pgurl:1-%d}", nodes)
 			start := timeutil.Now()
-			if err = c.RunE(ctx, c.Node(nodes+1), cmd); err != nil {
+			if err = c.RunE(ctx, option.WithNodes(c.Node(nodes+1)), cmd); err != nil {
 				return err
 			}
 			end := timeutil.Now()
@@ -977,7 +977,7 @@ func registerKVRestartImpact(r registry.Registry) {
 			t.Status(fmt.Sprintf("initializing kv dataset <%s", 3*time.Minute))
 			// We need a lot of ranges so that the individual ranges don't get truncated by Raft.
 			splits := ifLocal(c, " --splits=3", " --splits=20000")
-			c.Run(ctx, c.Node(workloadNode), "./cockroach workload init kv "+splits+" {pgurl:1}")
+			c.Run(ctx, option.WithNodes(c.Node(workloadNode)), "./cockroach workload init kv "+splits+" {pgurl:1}")
 
 			t.Status(fmt.Sprintf("starting kv workload thread to run for %s", testDuration))
 			m := c.NewMonitor(ctx, c.Range(1, nodes))
@@ -988,7 +988,7 @@ func registerKVRestartImpact(r registry.Registry) {
 				// stop in the middle, even with tolerate-errors set, it is still better
 				// not to use. Write enough data per value to make sure we create a
 				// large raft backlog.
-				c.Run(ctx, c.Node(workloadNode),
+				c.Run(ctx, option.WithNodes(c.Node(workloadNode)),
 					"./cockroach workload run kv --min-block-bytes=8192 --max-block-bytes=8192 --tolerate-errors --read-percent=50 "+
 						testDurationStr+concurrency+fmt.Sprintf(" {pgurl:1-%d}", nodes-1),
 				)

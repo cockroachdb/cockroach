@@ -110,7 +110,7 @@ func registerSnapshotOverload(r registry.Registry) {
 			t.Status(fmt.Sprintf("initializing kv dataset (<%s)", time.Minute))
 			if !t.SkipInit() {
 				splits := ifLocal(c, " --splits=10", " --splits=100")
-				c.Run(ctx, c.Node(workloadNode), "./cockroach workload init kv "+splits+" {pgurl:1}")
+				c.Run(ctx, option.WithNodes(c.Node(workloadNode)), "./cockroach workload init kv "+splits+" {pgurl:1}")
 
 				if _, err := db.ExecContext(ctx, fmt.Sprintf(
 					"ALTER DATABASE kv CONFIGURE ZONE USING num_replicas = %d, constraints = '{%s}', lease_preferences = '[[+n1]]'",
@@ -123,7 +123,7 @@ func registerSnapshotOverload(r registry.Registry) {
 			t.Status(fmt.Sprintf("initializing tpcc dataset (<%s)", 20*time.Minute))
 			if !t.SkipInit() {
 				warehouses := ifLocal(c, " --warehouses=10", " --warehouses=2000")
-				c.Run(ctx, c.Node(workloadNode), "./cockroach workload fixtures import tpcc --checks=false"+warehouses+" {pgurl:1}")
+				c.Run(ctx, option.WithNodes(c.Node(workloadNode)), "./cockroach workload fixtures import tpcc --checks=false"+warehouses+" {pgurl:1}")
 			}
 
 			const iters = 4
@@ -152,7 +152,7 @@ func registerSnapshotOverload(r registry.Registry) {
 				concurrency := ifLocal(c, "  --concurrency=8", " --concurrency=256")
 				maxRate := ifLocal(c, "  --max-rate=100", " --max-rate=12000")
 				splits := ifLocal(c, "  --splits=10", " --splits=100")
-				c.Run(ctx, c.Node(crdbNodes+1),
+				c.Run(ctx, option.WithNodes(c.Node(crdbNodes+1)),
 					"./cockroach workload run kv --max-block-bytes=1 --read-percent=95 "+
 						histograms+duration+concurrency+maxRate+splits+fmt.Sprintf(" {pgurl:1-%d}", crdbNodes),
 				)

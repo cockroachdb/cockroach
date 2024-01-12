@@ -125,7 +125,7 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster, j jepsenCon
 	j.prepareBinary(ctx, t, c, controller)
 
 	// Check to see if the cluster has already been initialized.
-	if err := c.RunE(ctx, c.Node(1), "test -e jepsen_initialized"); err == nil {
+	if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "test -e jepsen_initialized"); err == nil {
 		t.L().Printf("cluster already initialized\n")
 		return
 	}
@@ -136,7 +136,7 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster, j jepsenCon
 	// this is the only log collection that is done. Otherwise, we
 	// perform a second log collection in this test that varies
 	// depending on whether the test passed or not.
-	c.Run(ctx, c.All(), "mkdir", "-p", "logs")
+	c.Run(ctx, option.WithNodes(c.All()), "mkdir", "-p", "logs")
 
 	// `apt-get update` is slow but necessary: the base image has
 	// outdated information and refers to package versions that are no
@@ -144,8 +144,8 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster, j jepsenCon
 	//
 	// TODO(bdarnell): Create a new base image with the packages we need
 	// instead of installing them on every run.
-	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y update > logs/apt-upgrade.log 2>&1"`)
-	c.Run(ctx, c.All(), "sh", "-c", `"sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade -o Dpkg::Options::='--force-confold' -o DPkg::options::='--force-confdef' > logs/apt-upgrade.log 2>&1"`)
+	c.Run(ctx, option.WithNodes(c.All()), "sh", "-c", `"sudo apt-get -y update > logs/apt-upgrade.log 2>&1"`)
+	c.Run(ctx, option.WithNodes(c.All()), "sh", "-c", `"sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade -o Dpkg::Options::='--force-confold' -o DPkg::options::='--force-confdef' > logs/apt-upgrade.log 2>&1"`)
 
 	// TODO(bdarnell): copying the raw binary and compressing it on the
 	// other side is silly, but this lets us avoid platform-specific
@@ -153,7 +153,7 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster, j jepsenCon
 	// tar. To be able to run from a macOS host with BSD tar we'd need
 	// Jepsen expects a tarball that expands to cockroach/cockroach
 	// (which is not how our official builds are laid out).
-	c.Run(ctx, c.All(), "tar --transform s,^,cockroach/, -c -z -f cockroach.tgz cockroach")
+	c.Run(ctx, option.WithNodes(c.All()), "tar --transform s,^,cockroach/, -c -z -f cockroach.tgz cockroach")
 
 	// Install Jepsen's prereqs on the controller.
 	if result, err := c.RunWithDetailsSingleNode(
@@ -171,11 +171,11 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster, j jepsenCon
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Run(ctx, controller, "sh", "-c",
+	c.Run(ctx, option.WithNodes(controller), "sh", "-c",
 		`"test -f .ssh/id_rsa || ssh-keygen -f .ssh/id_rsa -t rsa -m pem -N ''"`)
 	// Convert OpenSSH private key to old format that jsch used by jepsen understands.
 	// This is needed if key already existed or inherited so that we can continue.
-	c.Run(ctx, controller, "sh", "-c", `"ssh-keygen -p -f .ssh/id_rsa -m pem -P '' -N ''"`)
+	c.Run(ctx, option.WithNodes(controller), "sh", "-c", `"ssh-keygen -p -f .ssh/id_rsa -m pem -P '' -N ''"`)
 
 	pubSSHKey := filepath.Join(tempDir, "id_rsa.pub")
 	if err := c.Get(ctx, t.L(), ".ssh/id_rsa.pub", pubSSHKey, controller); err != nil {
@@ -183,7 +183,7 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster, j jepsenCon
 	}
 	// TODO(bdarnell): make this idempotent instead of filling up .ssh configs.
 	c.Put(ctx, pubSSHKey, "controller_id_rsa.pub", workers)
-	c.Run(ctx, workers, "sh", "-c", `"cat controller_id_rsa.pub >> .ssh/authorized_keys"`)
+	c.Run(ctx, option.WithNodes(workers), "sh", "-c", `"cat controller_id_rsa.pub >> .ssh/authorized_keys"`)
 	// Prime the known hosts file, and use the unhashed format to
 	// work around JSCH auth error: https://github.com/jepsen-io/jepsen/blob/master/README.md
 	ips, err := c.InternalIP(ctx, t.L(), workers)
@@ -191,11 +191,11 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster, j jepsenCon
 		t.Fatal(err)
 	}
 	for _, ip := range ips {
-		c.Run(ctx, controller, "sh", "-c", fmt.Sprintf(`"ssh-keyscan -t rsa %s >> .ssh/known_hosts"`, ip))
+		c.Run(ctx, option.WithNodes(controller), "sh", "-c", fmt.Sprintf(`"ssh-keyscan -t rsa %s >> .ssh/known_hosts"`, ip))
 	}
 
 	t.L().Printf("cluster initialization complete\n")
-	c.Run(ctx, c.Node(1), "touch jepsen_initialized")
+	c.Run(ctx, option.WithNodes(c.Node(1)), "touch jepsen_initialized")
 }
 
 type jepsenConfig struct {
@@ -235,7 +235,7 @@ func (j jepsenConfig) prepareBinary(
 		if err := c.GitClone(ctx, t.L(), j.repoURL, "/mnt/data1/jepsen", j.branch, ctr); err != nil {
 			t.Fatal(err)
 		}
-		c.Run(ctx, ctr,
+		c.Run(ctx, option.WithNodes(ctr),
 			"test -x lein || (curl -o lein https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein && chmod +x lein)")
 	} else {
 		var err error
@@ -243,7 +243,7 @@ func (j jepsenConfig) prepareBinary(
 			if ctx.Err() != nil {
 				t.Fatal()
 			}
-			err = c.RunE(ctx, ctr, "bash", "-e", "-c",
+			err = c.RunE(ctx, option.WithNodes(ctr), "bash", "-e", "-c",
 				fmt.Sprintf(`"mkdir -p '/mnt/data1/jepsen/cockroachdb' && curl -fsSL '%s/%s' -o '/mnt/data1/jepsen/cockroachdb/%s'"`,
 					j.binaryURL, j.binaryName(), j.binaryName()))
 			if err == nil {
@@ -323,7 +323,7 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
 			t.L().Printf("> %s\n", strings.Join(args, " "))
 			return nil
 		}
-		return c.RunE(ctx, node, args...)
+		return c.RunE(ctx, option.WithNodes(node), args...)
 	}
 
 	run := func(c cluster.Cluster, ctx context.Context, node option.NodeListOption, args ...string) {

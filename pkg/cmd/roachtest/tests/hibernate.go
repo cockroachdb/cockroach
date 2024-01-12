@@ -193,7 +193,7 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 		// Note that this will take upwards of 3 hours.
 		// Also note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
-		_ = c.RunE(ctx, node, opt.testCmd)
+		_ = c.RunE(ctx, option.WithNodes(node), opt.testCmd)
 
 		t.Status("collecting the test results")
 		// Copy all of the test results to the cockroach logs directory to be

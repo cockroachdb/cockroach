@@ -63,7 +63,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			c.Run(ctx, c.Node(1), `./workload init kv --drop --db=test`, pgurl)
+			c.Run(ctx, option.WithNodes(c.Node(1)), `./workload init kv --drop --db=test`, pgurl)
 			for node := 1; node <= c.Spec().NodeCount; node++ {
 				node := node
 				// TODO(dan): Ideally, the test would fail if this queryload failed,
@@ -75,7 +75,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 						t.Fatal(err)
 					}
 					defer l.Close()
-					_ = c.RunE(ctx, c.Node(node), fmt.Sprintf(cmd, c.Nodes(node)))
+					_ = c.RunE(ctx, option.WithNodes(c.Node(node)), fmt.Sprintf(cmd, c.Nodes(node)))
 				}()
 			}
 
@@ -389,7 +389,7 @@ func makeSchemaChangeBulkIngestTest(
 				aNum, bNum, cNum, payloadBytes,
 			)
 
-			c.Run(ctx, workloadNode, cmdWrite)
+			c.Run(ctx, option.WithNodes(workloadNode), cmdWrite)
 
 			m := c.NewMonitor(ctx, crdbNodes)
 
@@ -402,7 +402,7 @@ func makeSchemaChangeBulkIngestTest(
 				indexDuration.String(), c.Spec().NodeCount-1, aNum, bNum, cNum, payloadBytes,
 			)
 			m.Go(func(ctx context.Context) error {
-				c.Run(ctx, workloadNode, cmdWriteAndRead)
+				c.Run(ctx, option.WithNodes(workloadNode), cmdWriteAndRead)
 				return nil
 			})
 

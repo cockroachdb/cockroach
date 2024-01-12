@@ -68,7 +68,7 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 					" {pgurl:1-%d}",
 				dbNodeCount,
 			)
-			c.Run(ctx, c.Node(workloadNode), cmd)
+			c.Run(ctx, option.WithNodes(c.Node(workloadNode)), cmd)
 			return nil
 		})
 		m.Wait()

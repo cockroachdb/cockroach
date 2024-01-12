@@ -41,7 +41,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Run(ctx, workloadNode,
+	c.Run(ctx, option.WithNodes(workloadNode),
 		"./cockroach workload fixtures import tpcc --warehouses=100 --fks=false --checks=false",
 		pgurl,
 	)
@@ -68,7 +68,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	// traffic to one of the nodes that are not down. This used to cause lots of
 	// raft log truncation, which caused node 3 to need lots of snapshots when it
 	// came back up.
-	c.Run(ctx, workloadNode, "./cockroach workload run tpcc --warehouses=100 "+
+	c.Run(ctx, option.WithNodes(workloadNode), "./cockroach workload run tpcc --warehouses=100 "+
 		fmt.Sprintf("--tolerate-errors --wait=false --duration=%s {pgurl:1-2}", downDuration))
 
 	// Bring it back up and make sure it can serve a query within a reasonable
@@ -94,7 +94,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Run(ctx, restartNode, fmt.Sprintf(`./cockroach sql --insecure --url=%s -e "%s"`, pgurl, tracedQ))
+	c.Run(ctx, option.WithNodes(restartNode), fmt.Sprintf(`./cockroach sql --insecure --url=%s -e "%s"`, pgurl, tracedQ))
 	if took := timeutil.Since(start); took > downDuration {
 		t.Fatalf(`expected to recover within %s took %s`, downDuration, took)
 	} else {

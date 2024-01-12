@@ -229,16 +229,16 @@ func startBackgroundWorkloads(
 		return nil, err
 	}
 
-	err := c.RunE(ctx, workloadNode, bankInit.String())
+	err := c.RunE(ctx, option.WithNodes(workloadNode), bankInit.String())
 	if err != nil {
 		return nil, err
 	}
 
-	err = c.RunE(ctx, workloadNode, tpccInit.String())
+	err = c.RunE(ctx, option.WithNodes(workloadNode), tpccInit.String())
 	if err != nil {
 		return nil, err
 	}
-	err = c.RunE(ctx, workloadNode, scInit.String())
+	err = c.RunE(ctx, option.WithNodes(workloadNode), scInit.String())
 	if err != nil {
 		return nil, err
 	}
@@ -250,14 +250,14 @@ func startBackgroundWorkloads(
 		}
 
 		stopBank := workloadWithCancel(m, func(ctx context.Context) error {
-			return c.RunE(ctx, workloadNode, bankRun.String())
+			return c.RunE(ctx, option.WithNodes(workloadNode), bankRun.String())
 		})
 
 		stopTPCC := workloadWithCancel(m, func(ctx context.Context) error {
-			return c.RunE(ctx, workloadNode, tpccRun.String())
+			return c.RunE(ctx, option.WithNodes(workloadNode), tpccRun.String())
 		})
 		stopSC := workloadWithCancel(m, func(ctx context.Context) error {
-			return c.RunE(ctx, workloadNode, scRun.String())
+			return c.RunE(ctx, option.WithNodes(workloadNode), scRun.String())
 		})
 
 		stopSystemWriter := workloadWithCancel(m, func(ctx context.Context) error {
