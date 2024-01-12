@@ -3882,6 +3882,7 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	var possibleBodyReferences []string
 	var possibleParamReferences []string
 	var possibleReturnReferences []string
+	var fnDuplicate bool
 
 	for i, enum := range enums {
 		if enum["dropping"].(bool) {
@@ -3898,21 +3899,7 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 		possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf(`((SELECT count(*) FROM %s LIMIT 0) = 0)`, table))
 	}
 
-	// TODO(chrisseto): There's no randomization across STRICT, VOLATILE,
-	// IMMUTABLE, STABLE, STRICT, and [NOT] LEAKPROOF. That's likely not relevant
-	// to the schema workload but may become a nice to have.
-	stmt, expectedCode, err := Generate[*tree.CreateRoutine](og.params.rng, og.produceError(), []GenerationCase{
-		// 1. Nothing special, fully self contained function.
-		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
-		// 2. 1 or more table or type references spread across parameters, return types, or the function body.
-		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { UniqueName } ({ ParamRefs }) RETURNS { ReturnRefs } LANGUAGE SQL AS $$ SELECT NULL WHERE { BodyRefs } $$`},
-		// 3. Reference a table that does not exist.
-		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT * FROM "ThisTableDoesNotExist" $$`},
-		// 4. Reference a UDT that does not exist.
-		{pgcode.UndefinedObject, `CREATE FUNCTION { UniqueName } (IN p1 "ThisTypeDoesNotExist") RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
-		// 5. Reference an Enum that's in the process of being dropped
-		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } (IN p1 { DroppingEnum }) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
-	}, template.FuncMap{
+	placeholderMap := template.FuncMap{
 		"UniqueName": func() *tree.Name {
 			name := tree.Name(fmt.Sprintf("udf_%d", og.newUniqueSeqNum()))
 			return &name
@@ -3941,13 +3928,47 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 			}
 			return "TRUE", nil //nolint:returnerrcheck
 		},
-	})
+	}
 
+	// TODO(chrisseto): There's no randomization across STRICT, VOLATILE,
+	// IMMUTABLE, STABLE, STRICT, and [NOT] LEAKPROOF. That's likely not relevant
+	// to the schema workload but may become a nice to have.
+	stmt, expectedCode, err := Generate[*tree.CreateRoutine](og.params.rng, og.produceError(), []GenerationCase{
+		// 1. Nothing special, fully self contained function.
+		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { UniqueName } (i int, j int) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
+		// 2. 1 or more table or type references spread across parameters, return types, or the function body.
+		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { UniqueName } ({ ParamRefs }) RETURNS { ReturnRefs } LANGUAGE SQL AS $$ SELECT NULL WHERE { BodyRefs } $$`},
+		// 3. Reference a table that does not exist.
+		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT * FROM "ThisTableDoesNotExist" $$`},
+		// 4. Reference a UDT that does not exist.
+		{pgcode.UndefinedObject, `CREATE FUNCTION { UniqueName } (IN p1 "ThisTypeDoesNotExist") RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
+		// 5. Reference an Enum that's in the process of being dropped
+		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } (IN p1 { DroppingEnum }) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
+	}, placeholderMap)
 	if err != nil {
 		return nil, err
 	}
+
+	// We don't necessarily generate unique function names all the time.
+	// Upon a successful completion, let's check to make sure that our
+	// function doesn't exist already (overloads are fine).
+	if expectedCode == pgcode.SuccessfulCompletion {
+		params := util.Map(stmt.Params, func(t tree.RoutineParam) string {
+			return t.Type.SQLString()
+		})
+
+		name := stmt.Name.ObjectName.String()
+		formattedParams := strings.Join(params, ", ")
+
+		fnDuplicate, err = og.fnExists(ctx, tx, name, formattedParams)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return newOpStmt(stmt, codesWithConditions{
 		{expectedCode, true},
+		{pgcode.DuplicateFunction, fnDuplicate},
 	}), nil
 }
 
