@@ -56,7 +56,6 @@ func evalNewLease(
 	ms *enginepb.MVCCStats,
 	lease roachpb.Lease,
 	prevLease roachpb.Lease,
-	priorReadSum *rspb.ReadSummary,
 	isExtension bool,
 	isTransfer bool,
 ) (result.Result, error) {
@@ -102,6 +101,7 @@ func evalNewLease(
 				Message:   "sequence number should not be set",
 			}
 	}
+	var priorReadSum *rspb.ReadSummary
 	if prevLease.Equivalent(lease) {
 		// If the proposed lease is equivalent to the previous lease, it is
 		// given the same sequence number. This is subtle, but is important
@@ -121,6 +121,30 @@ func evalNewLease(
 		// retry with a different sequence number. This is actually exactly what
 		// the sequence number is used to enforce!
 		lease.Sequence = prevLease.Sequence + 1
+
+		// If the new lease is not equivalent to the old lease, construct a read
+		// summary to instruct the new leaseholder on how to update its timestamp
+		// cache to respect prior reads served on the range.
+		if isTransfer {
+			// Collect a read summary from the outgoing leaseholder to ship to the
+			// incoming leaseholder. This is used to instruct the new leaseholder on
+			// how to update its timestamp cache to ensure that no future writes are
+			// allowed to invalidate prior reads.
+			localReadSum := rec.GetCurrentReadSummary(ctx)
+			priorReadSum = &localReadSum
+		} else {
+			// If the new lease is not equivalent to the old lease (i.e. either the
+			// lease is changing hands or the leaseholder restarted), construct a
+			// read summary to instruct the new leaseholder on how to update its
+			// timestamp cache. Since we are not the leaseholder ourselves, we must
+			// pessimistically assume that prior leaseholders served reads all the
+			// way up to the start of the new lease.
+			//
+			// NB: this is equivalent to the leaseChangingHands condition in
+			// leasePostApplyLocked.
+			worstCaseSum := rspb.FromTimestamp(lease.Start.ToTimestamp())
+			priorReadSum = &worstCaseSum
+		}
 	}
 
 	// Record information about the type of event that resulted in this new lease.
