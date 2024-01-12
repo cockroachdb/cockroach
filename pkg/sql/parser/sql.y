@@ -4601,6 +4601,11 @@ replication_options:
   {
     $$.val = &tree.TenantReplicationOptions{ResumeTimestamp: $4.expr()}
   }
+|
+  EXPIRATION WINDOW '=' d_expr
+  {
+      $$.val = &tree.TenantReplicationOptions{ExpirationWindow: $4.expr()}
+  }
 
 // %Help: CREATE SCHEDULE
 // %Category: Group

@@ -79,6 +79,7 @@ go_test(
         "//pkg/sql/isql",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/testutils",
+        "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

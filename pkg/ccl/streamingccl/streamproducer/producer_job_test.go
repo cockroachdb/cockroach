@@ -10,7 +10,6 @@ package streamproducer
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"testing"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -93,7 +93,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		ti := &mtinfopb.TenantInfo{
 			SQLInfo: mtinfopb.SQLInfo{ID: 10},
 		}
-		jr := makeProducerJobRecord(registry, ti, 1, usr, ptsID)
+		jr := makeProducerJobRecord(registry, ti, time.Millisecond, usr, ptsID)
 
 		require.NoError(t, runJobWithProtectedTimestamp(ptsID, ts, jr))
 
@@ -120,7 +120,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		}
 		ts := hlc.Timestamp{WallTime: ptsTime.UnixNano()}
 		ptsID := uuid.MakeV4()
-		expirationWindow := time.Minute
+		expirationWindow := time.Hour
 		jr := makeProducerJobRecord(registry, ti, expirationWindow, usr, ptsID)
 
 		require.NoError(t, runJobWithProtectedTimestamp(ptsID, ts, jr))

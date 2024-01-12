@@ -157,7 +157,7 @@ func (c *TenantStreamingClusters) init(ctx context.Context) {
 	if c.Args.DestInitFunc != nil {
 		c.Args.DestInitFunc(c.T, c.DestSysSQL)
 	}
-	// Enable stream replication on dest by default.
+	c.SrcSysSQL.Exec(c.T, `SET CLUSTER SETTING physical_replication.enabled = true;`)
 	c.DestSysSQL.Exec(c.T, `SET CLUSTER SETTING physical_replication.enabled = true;`)
 }
 
@@ -541,7 +541,6 @@ var defaultSrcClusterSetting = map[string]string{
 	`kv.rangefeed.closed_timestamp_refresh_interval`: `'200ms'`,
 	`kv.closed_timestamp.side_transport_interval`:    `'50ms'`,
 	// Large timeout makes test to not fail with unexpected timeout failures.
-	`stream_replication.job_liveness.timeout`:            `'3m'`,
 	`stream_replication.stream_liveness_track_frequency`: `'2s'`,
 	`stream_replication.min_checkpoint_frequency`:        `'1s'`,
 	// Make all AddSSTable operation to trigger AddSSTable events.
