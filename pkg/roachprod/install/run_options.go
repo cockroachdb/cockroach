@@ -47,6 +47,11 @@ const (
 	FailSlow
 )
 
+// AlwaysTrue is a should retry predicate function that always returns true to
+// indicate that the operation is always retryable no matter what the previous
+// result was.
+var AlwaysTrue = func(res *RunResultDetails) bool { return true }
+
 func WithNodes(nodes Nodes) RunOptions {
 	return RunOptions{
 		Nodes: nodes,
@@ -63,7 +68,7 @@ func (r RunOptions) WithRetryDisabled() RunOptions {
 	return r
 }
 
-func (r RunOptions) WithRetryFn(fn func(*RunResultDetails) bool) RunOptions {
+func (r RunOptions) WithShouldRetryFn(fn func(*RunResultDetails) bool) RunOptions {
 	r.ShouldRetryFn = fn
 	return r
 }
