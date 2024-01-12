@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -146,22 +145,7 @@ func RequestLease(
 	}
 	newLease.Start = effectiveStart
 
-	var priorReadSum *rspb.ReadSummary
-	if !prevLease.Equivalent(newLease) {
-		// If the new lease is not equivalent to the old lease (i.e. either the
-		// lease is changing hands or the leaseholder restarted), construct a
-		// read summary to instruct the new leaseholder on how to update its
-		// timestamp cache. Since we are not the leaseholder ourselves, we must
-		// pessimistically assume that prior leaseholders served reads all the
-		// way up to the start of the new lease.
-		//
-		// NB: this is equivalent to the leaseChangingHands condition in
-		// leasePostApplyLocked.
-		worstCaseSum := rspb.FromTimestamp(newLease.Start.ToTimestamp())
-		priorReadSum = &worstCaseSum
-	}
-
 	log.VEventf(ctx, 2, "lease request: prev lease: %+v, new lease: %+v", prevLease, newLease)
 	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
-		newLease, prevLease, priorReadSum, isExtension, false /* isTransfer */)
+		newLease, prevLease, isExtension, false /* isTransfer */)
 }
