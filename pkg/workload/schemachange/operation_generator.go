@@ -3882,6 +3882,7 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	var possibleBodyReferences []string
 	var possibleParamReferences []string
 	var possibleReturnReferences []string
+	var fnDuplicate bool
 
 	for i, enum := range enums {
 		if enum["dropping"].(bool) {
@@ -3913,9 +3914,14 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 		// 5. Reference an Enum that's in the process of being dropped
 		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } (IN p1 { DroppingEnum }) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
 	}, template.FuncMap{
-		"UniqueName": func() *tree.Name {
+		"UniqueName": func() (*tree.Name, error) {
 			name := tree.Name(fmt.Sprintf("udf_%d", og.newUniqueSeqNum()))
-			return &name
+			isDupe, err := og.fnExists(ctx, tx, name.String())
+			if err != nil {
+				return nil, err
+			}
+			fnDuplicate = fnDuplicate && isDupe
+			return &name, nil
 		},
 		"DroppingEnum": func() (string, error) {
 			return PickOne(og.params.rng, droppingEnums)
@@ -3948,6 +3954,7 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	}
 	return newOpStmt(stmt, codesWithConditions{
 		{expectedCode, true},
+		{code: pgcode.DuplicateFunction, condition: fnDuplicate},
 	}), nil
 }
 

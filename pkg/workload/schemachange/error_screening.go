@@ -98,6 +98,18 @@ func (og *operationGenerator) schemaExists(
 	)`, schemaName)
 }
 
+func (og *operationGenerator) fnExists(
+	ctx context.Context, tx pgx.Tx, fnName string,
+) (bool, error) {
+	// TODO(before merge): we want to use specfic_name
+	// here to differentiate between overloaded fns
+	return og.scanBool(ctx, tx, `SELECT EXISTS (
+	SELECT specific_name
+		FROM information_schema.routines
+   WHERE specific_name = $1
+	)`, fnName)
+}
+
 func (og *operationGenerator) tableHasDependencies(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
 ) (bool, error) {
