@@ -1,55 +1,65 @@
 parse
+<<foo>>
 DECLARE
   var1 integer := 30;
 BEGIN
 END
 ----
+<<foo>>
 DECLARE
 var1 INT8 := 30;
 BEGIN
-END
+END foo;
  -- normalized!
+<<foo>>
 DECLARE
 var1 INT8 := (30);
 BEGIN
-END
+END foo;
  -- fully parenthesized
+<<foo>>
 DECLARE
 var1 INT8 := _;
 BEGIN
-END
+END foo;
  -- literals removed
+<<_>>
 DECLARE
 var1 INT8 := 30;
 BEGIN
-END
+END _;
  -- identifiers removed
 
 parse
+<<foo>>
 DECLARE
   var1 CONSTANT INTEGER COLLATE collation_name NOT NULL := 30;
 BEGIN
-END
+END foo
 ----
+<<foo>>
 DECLARE
 var1 CONSTANT INT8 COLLATE collation_name NOT NULL := 30;
 BEGIN
-END
+END foo;
  -- normalized!
+<<foo>>
 DECLARE
 var1 CONSTANT INT8 COLLATE collation_name NOT NULL := (30);
 BEGIN
-END
+END foo;
  -- fully parenthesized
+<<foo>>
 DECLARE
 var1 CONSTANT INT8 COLLATE collation_name NOT NULL := _;
 BEGIN
-END
+END foo;
  -- literals removed
+<<_>>
 DECLARE
 var1 CONSTANT INT8 COLLATE _ NOT NULL := 30;
 BEGIN
-END
+END _;
  -- identifiers removed
 
 parse
@@ -61,22 +71,22 @@ END
 DECLARE
 var1 CONSTANT INT8 COLLATE collation_name NOT NULL := 30;
 BEGIN
-END
+END;
  -- normalized!
 DECLARE
 var1 CONSTANT INT8 COLLATE collation_name NOT NULL := (30);
 BEGIN
-END
+END;
  -- fully parenthesized
 DECLARE
 var1 CONSTANT INT8 COLLATE collation_name NOT NULL := _;
 BEGIN
-END
+END;
  -- literals removed
 DECLARE
 var1 CONSTANT INT8 COLLATE _ NOT NULL := 30;
 BEGIN
-END
+END;
  -- identifiers removed
 
 error
@@ -115,22 +125,22 @@ END
 DECLARE
 var1 CURSOR FOR SELECT * FROM t1 WHERE id = arg1;
 BEGIN
-END
+END;
  -- normalized!
 DECLARE
 var1 CURSOR FOR SELECT (*) FROM t1 WHERE ((id) = (arg1));
 BEGIN
-END
+END;
  -- fully parenthesized
 DECLARE
 var1 CURSOR FOR SELECT * FROM t1 WHERE id = arg1;
 BEGIN
-END
+END;
  -- literals removed
 DECLARE
 var1 CURSOR FOR SELECT * FROM _ WHERE _ = _;
 BEGIN
-END
+END;
  -- identifiers removed
 
 error
@@ -192,3 +202,29 @@ DECLARE
   var1 one.two.three.four := 0;
                      ^
 HINT: try \h SET SESSION
+
+error
+<<foo>>
+BEGIN
+  SELECT 1;
+END bar
+----
+at or near "bar": syntax error: end label "bar" differs from block's label "foo"
+DETAIL: source SQL:
+<<foo>>
+BEGIN
+  SELECT 1;
+END bar
+    ^
+
+error
+BEGIN
+  SELECT 1;
+END foo
+----
+at or near "foo": syntax error: end label "foo" specified for unlabeled block
+DETAIL: source SQL:
+BEGIN
+  SELECT 1;
+END foo
+    ^

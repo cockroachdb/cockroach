@@ -9,22 +9,22 @@ END
 DECLARE
 BEGIN
 IMPORT TABLE foo FROM PGDUMP 'userfile://defaultdb.public.userfiles_root/db.sql' WITH OPTIONS (max_row_size = '524288');
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 IMPORT TABLE foo FROM PGDUMP ('userfile://defaultdb.public.userfiles_root/db.sql') WITH OPTIONS (max_row_size = ('524288'));
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 IMPORT TABLE foo FROM PGDUMP '_' WITH OPTIONS (max_row_size = '_');
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 IMPORT TABLE _ FROM PGDUMP 'userfile://defaultdb.public.userfiles_root/db.sql' WITH OPTIONS (_ = '524288');
-END
+END;
  -- identifiers removed
 
 parse
@@ -36,22 +36,22 @@ END
 DECLARE
 BEGIN
 INSERT INTO t1 VALUES (1, 2);
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 INSERT INTO t1 VALUES ((1), (2));
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 INSERT INTO t1 VALUES (_, _);
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 INSERT INTO _ VALUES (1, 2);
-END
+END;
  -- identifiers removed
 
 parse
@@ -63,22 +63,22 @@ END
 DECLARE
 BEGIN
 INSERT INTO t1 VALUES (1, 2) RETURNING x INTO y;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 INSERT INTO t1 VALUES ((1), (2)) RETURNING (x) INTO y;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 INSERT INTO t1 VALUES (_, _) RETURNING x INTO y;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 INSERT INTO _ VALUES (1, 2) RETURNING _ INTO _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -90,22 +90,22 @@ END
 DECLARE
 BEGIN
 INSERT INTO t1 VALUES (1, 2) RETURNING x INTO STRICT y;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 INSERT INTO t1 VALUES ((1), (2)) RETURNING (x) INTO STRICT y;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 INSERT INTO t1 VALUES (_, _) RETURNING x INTO STRICT y;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 INSERT INTO _ VALUES (1, 2) RETURNING _ INTO STRICT _;
-END
+END;
  -- identifiers removed
 
 error
@@ -130,22 +130,22 @@ END
 DECLARE
 BEGIN
 IMPORT INTO foo(k, v) CSV DATA ($1, $2);
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 IMPORT INTO foo(k, v) CSV DATA (($1), ($2));
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 IMPORT INTO foo(k, v) CSV DATA ($1, $1);
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 IMPORT INTO _(_, _) CSV DATA ($1, $2);
-END
+END;
  -- identifiers removed
 
 parse
@@ -157,22 +157,22 @@ END
 DECLARE
 BEGIN
 SELECT x, y FROM xy;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 SELECT (x), (y) FROM xy;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 SELECT x, y FROM xy;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 SELECT _, _ FROM _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -184,22 +184,22 @@ END
 DECLARE
 BEGIN
 SELECT x, y FROM xy INTO a, b;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 SELECT (x), (y) FROM xy INTO a, b;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 SELECT x, y FROM xy INTO a, b;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 SELECT _, _ FROM _ INTO _, _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -211,22 +211,22 @@ END
 DECLARE
 BEGIN
 SELECT x, y FROM xy INTO a, b;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 SELECT (x), (y) FROM xy INTO a, b;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 SELECT x, y FROM xy INTO a, b;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 SELECT _, _ FROM _ INTO _, _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -238,22 +238,22 @@ END
 DECLARE
 BEGIN
 SET testing_optimizer_disable_rule_probability = 0;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 SET testing_optimizer_disable_rule_probability = (0);
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 SET testing_optimizer_disable_rule_probability = _;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 SET testing_optimizer_disable_rule_probability = 0;
-END
+END;
  -- identifiers removed
 
 parse
@@ -279,7 +279,7 @@ SELECT 100 INTO i;
 SELECT max(x) FROM xy INTO i;
 INSERT INTO xy VALUES (10, 10) RETURNING x INTO i;
 RETURN i;
-END
+END;
  -- normalized!
 DECLARE
 i INT8;
@@ -291,7 +291,7 @@ SELECT (100) INTO i;
 SELECT (max((x))) FROM xy INTO i;
 INSERT INTO xy VALUES ((10), (10)) RETURNING (x) INTO i;
 RETURN (i);
-END
+END;
  -- fully parenthesized
 DECLARE
 i INT8;
@@ -303,7 +303,7 @@ SELECT _ INTO i;
 SELECT max(x) FROM xy INTO i;
 INSERT INTO xy VALUES (_, _) RETURNING x INTO i;
 RETURN i;
-END
+END;
  -- literals removed
 DECLARE
 i INT8;
@@ -315,7 +315,7 @@ SELECT 100 INTO _;
 SELECT _(_) FROM _ INTO _;
 INSERT INTO _ VALUES (10, 10) RETURNING _ INTO _;
 RETURN _;
-END
+END;
  -- identifiers removed
 
 error
@@ -369,22 +369,22 @@ END
 DECLARE
 BEGIN
 UPSERT INTO t1 VALUES (1, 2) RETURNING x INTO y;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 UPSERT INTO t1 VALUES ((1), (2)) RETURNING (x) INTO y;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 UPSERT INTO t1 VALUES (_, _) RETURNING x INTO y;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 UPSERT INTO _ VALUES (1, 2) RETURNING _ INTO _;
-END
+END;
  -- identifiers removed
 
 parse
@@ -396,22 +396,22 @@ END
 DECLARE
 BEGIN
 UPSERT INTO t1 VALUES (1, 2) RETURNING x INTO STRICT y;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
 UPSERT INTO t1 VALUES ((1), (2)) RETURNING (x) INTO STRICT y;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
 UPSERT INTO t1 VALUES (_, _) RETURNING x INTO STRICT y;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
 UPSERT INTO _ VALUES (1, 2) RETURNING _ INTO STRICT _;
-END
+END;
  -- identifiers removed
 
 error

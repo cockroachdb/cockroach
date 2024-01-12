@@ -13,7 +13,7 @@ x := 10;
 WHILE x > 0 LOOP
 x := x - 1;
 END LOOP;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
@@ -21,7 +21,7 @@ x := (10);
 WHILE ((x) > (0)) LOOP
 x := ((x) - (1));
 END LOOP;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
@@ -29,7 +29,7 @@ x := _;
 WHILE x > _ LOOP
 x := x - _;
 END LOOP;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
@@ -37,7 +37,7 @@ _ := 10;
 WHILE _ > 0 LOOP
 _ := _ - 1;
 END LOOP;
-END
+END;
  -- identifiers removed
 
 parse
@@ -57,7 +57,7 @@ WHILE (x > 0) AND (x < 100) LOOP
 x := x - 1;
 x := x - 2;
 END LOOP;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
@@ -66,7 +66,7 @@ WHILE ((((x) > (0))) AND (((x) < (100)))) LOOP
 x := ((x) - (1));
 x := ((x) - (2));
 END LOOP;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
@@ -75,7 +75,7 @@ WHILE (x > _) AND (x < _) LOOP
 x := x - _;
 x := x - _;
 END LOOP;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
@@ -84,7 +84,7 @@ WHILE (_ > 0) AND (_ < 100) LOOP
 _ := _ - 1;
 _ := _ - 2;
 END LOOP;
-END
+END;
  -- identifiers removed
 
 parse
@@ -104,7 +104,7 @@ x := 10;
 WHILE x > 0 LOOP
 x := x - 1;
 END LOOP labeled;
-END
+END;
  -- normalized!
 DECLARE
 BEGIN
@@ -113,7 +113,7 @@ x := (10);
 WHILE ((x) > (0)) LOOP
 x := ((x) - (1));
 END LOOP labeled;
-END
+END;
  -- fully parenthesized
 DECLARE
 BEGIN
@@ -122,7 +122,7 @@ x := _;
 WHILE x > _ LOOP
 x := x - _;
 END LOOP labeled;
-END
+END;
  -- literals removed
 DECLARE
 BEGIN
@@ -131,5 +131,5 @@ _ := 10;
 WHILE _ > 0 LOOP
 _ := _ - 1;
 END LOOP _;
-END
+END;
  -- identifiers removed

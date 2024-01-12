@@ -65,7 +65,6 @@ db1 sc2 p2 function false
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-----
 CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
 	LANGUAGE plpgsql
 	AS $$
@@ -75,11 +74,8 @@ CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
 	SELECT a FROM db1.sc1.tbl1;
 	SELECT 'Good':::db1.sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
-	END
-
+	END;
 $$
-----
-----
 
 exec-sql
 CALL sc1.p1('Good'::sc1.enum1)
@@ -109,7 +105,6 @@ USE db1_new
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-----
 CREATE PROCEDURE sc1.p1(IN a db1_new.sc1.enum1)
 	LANGUAGE plpgsql
 	AS $$
@@ -119,11 +114,8 @@ CREATE PROCEDURE sc1.p1(IN a db1_new.sc1.enum1)
 	SELECT a FROM db1_new.sc1.tbl1;
 	SELECT 'Good':::db1_new.sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
-	END
-
+	END;
 $$
-----
-----
 
 # Make sure procedure signature is rewritten in schema descriptor so that
 # procedure can be resolved and executed.
@@ -252,7 +244,6 @@ db1 sc2 p2 function true
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-----
 CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
 	LANGUAGE plpgsql
 	AS $$
@@ -262,11 +253,8 @@ CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
 	SELECT a FROM db1.sc1.tbl1;
 	SELECT 'Good':::db1.sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
-	END
-
+	END;
 $$
-----
-----
 
 query-sql
 CALL sc1.p1('Good'::sc1.enum1)
@@ -297,7 +285,6 @@ USE db1
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-----
 CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
 	LANGUAGE plpgsql
 	AS $$
@@ -307,11 +294,8 @@ CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
 	SELECT a FROM db1.sc1.tbl1;
 	SELECT 'Good':::db1.sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
-	END
-
+	END;
 $$
-----
-----
 
 # Make sure procedure signature is rewritten in schema descriptor so that
 # procedure can be resolved and executed.
