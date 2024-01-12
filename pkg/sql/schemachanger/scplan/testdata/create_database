@@ -220,10 +220,10 @@ CREATE DATABASE db;
   to:   [UserPrivileges:{DescID: 106, Name: root}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
-- from: [DatabaseData:{DescID: 106}, PUBLIC]
-  to:   [Database:{DescID: 106}, PUBLIC]
+- from: [Database:{DescID: 106}, PUBLIC]
+  to:   [DatabaseData:{DescID: 106}, PUBLIC]
   kind: Precedence
-  rule: dependents exist before descriptor becomes public
+  rule: table added right before data element
 - from: [Namespace:{DescID: 106, Name: db, ReferencedDescID: 0}, PUBLIC]
   to:   [Database:{DescID: 106}, PUBLIC]
   kind: Precedence
