@@ -53,6 +53,8 @@ func DefaultStartVirtualClusterOpts(tenantName string, sqlInstance int) StartOpt
 	startOpts.RoachprodOpts.Target = install.StartServiceForVirtualCluster
 	startOpts.RoachprodOpts.VirtualClusterName = tenantName
 	startOpts.RoachprodOpts.SQLInstance = sqlInstance
+	startOpts.RoachprodOpts.SQLPort = 0
+	startOpts.RoachprodOpts.AdminUIPort = 0
 	return startOpts
 }
 
