@@ -211,6 +211,8 @@ message StreamReplicationDetails {
 
   // TenantID is the ID of the source tenant being streamed.
   roachpb.TenantID tenant_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
+
+  int64 expiration_window = 4 [(gogoproto.casttype) = "time.Duration"];
 }
 
 message StreamReplicationProgress {
