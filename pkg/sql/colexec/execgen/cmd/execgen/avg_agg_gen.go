@@ -107,7 +107,7 @@ const avgAggTmpl = "pkg/sql/colexec/colexecagg/avg_agg_tmpl.go"
 
 func genAvgAgg(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
-		"_TYPE_FAMILY", "{{.TypeFamily}}",
+		"_CANONICAL_TYPE_FAMILY", "{{.TypeFamily}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_RET_GOTYPESLICE", `{{.RetGoTypeSlice}}`,
 		"_RET_GOTYPE", `{{.RetGoType}}`,
@@ -174,5 +174,8 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 }
 
 func init() {
-	registerAggGenerator(genAvgAgg, "avg_agg.eg.go", avgAggTmpl, true /* genWindowVariant */)
+	registerAggGenerator(
+		genAvgAgg, "avg_agg.eg.go", /* filenameSuffix */
+		avgAggTmpl, "avg" /* aggName */, true, /* genWindowVariant */
+	)
 }

@@ -37,10 +37,10 @@ var (
 	_ colexecerror.StorageError
 )
 
+const anyNotNullNumOverloads = 11
+
 func init() {
-	// Sanity check the maximum number of type overloads a single aggregate can
-	// have. any_not_null is one of those that uses the maximum, so we include
-	// this check here.
+	// Sanity check the hard-coded number of overloads.
 	var numOverloads int
 	numOverloads++
 	numOverloads++
@@ -53,81 +53,64 @@ func init() {
 	numOverloads++
 	numOverloads++
 	numOverloads++
-	if numOverloads != maxNumOverloads {
+	if numOverloads != anyNotNullNumOverloads {
 		colexecerror.InternalError(errors.AssertionFailedf(
-			"maxNumOverloads should be updated: expected %d, found %d", numOverloads, maxNumOverloads,
+			"anyNotNullNumOverloads should be updated: expected %d, found %d", numOverloads, anyNotNullNumOverloads,
 		))
 	}
+}
 
-	// Sanity check the hard-coded getOverloadIndex function. Whenever the
-	// native support for a new type is added, this generated function will
-	// allow us to catch the forgotten update.
-	getOverloadIndexCheck := func(t *types.T) overloadIndex {
-		var index overloadIndex
-		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family())
-		if canonicalTypeFamily == types.BoolFamily {
-			return index
-		}
-		index += 1
-		if canonicalTypeFamily == types.BytesFamily {
-			return index
-		}
-		index += 1
-		if canonicalTypeFamily == types.DecimalFamily {
-			return index
-		}
-		index += 1
-		if canonicalTypeFamily == types.IntFamily {
-			if t.Width() == 16 {
-				return index
-			}
-			index++
-			if t.Width() == 32 {
-				return index
-			}
-			index++
-			return index
-		}
-		index += 3
-		if canonicalTypeFamily == types.FloatFamily {
-			return index
-		}
-		index += 1
-		if canonicalTypeFamily == types.TimestampTZFamily {
-			return index
-		}
-		index += 1
-		if canonicalTypeFamily == types.IntervalFamily {
-			return index
-		}
-		index += 1
-		if canonicalTypeFamily == types.JsonFamily {
-			return index
-		}
-		index += 1
-		if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
-			return index
-		}
-		index += 1
-		colexecerror.InternalError(errors.AssertionFailedf("didn't find overload index for %s", t.SQLStringForError()))
-		return 0
+// anyNotNullOverloadOffset returns the offset for this particular type overload
+// within contiguous slice of allocators for this aggregate function.
+func anyNotNullOverloadOffset(t *types.T) int {
+	var offset int
+	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family())
+	if canonicalTypeFamily == types.BoolFamily {
+		return offset
 	}
-	// Double-check datum-backed type too.
-	datumBackedType := types.INet
-	if typeconv.TypeFamilyToCanonicalTypeFamily(datumBackedType.Family()) != typeconv.DatumVecCanonicalTypeFamily {
-		colexecerror.InternalError(errors.AssertionFailedf(
-			"pick a different type that is still datum-backed other than %s", datumBackedType.SQLStringForError(),
-		))
+	offset += 1
+	if canonicalTypeFamily == types.BytesFamily {
+		return offset
 	}
-	typesToCheck := append([]*types.T{datumBackedType}, typeconv.TypesSupportedNatively...)
-	for _, t := range typesToCheck {
-		if getOverloadIndex(t) != getOverloadIndexCheck(t) {
-			colexecerror.InternalError(errors.AssertionFailedf(
-				"getOverloadIndex should be updated for %s: expected %d, actual %d",
-				t.SQLStringForError(), getOverloadIndexCheck(t), getOverloadIndex(t),
-			))
+	offset += 1
+	if canonicalTypeFamily == types.DecimalFamily {
+		return offset
+	}
+	offset += 1
+	if canonicalTypeFamily == types.IntFamily {
+		if t.Width() == 16 {
+			return offset
 		}
+		offset++
+		if t.Width() == 32 {
+			return offset
+		}
+		offset++
+		return offset
 	}
+	offset += 3
+	if canonicalTypeFamily == types.FloatFamily {
+		return offset
+	}
+	offset += 1
+	if canonicalTypeFamily == types.TimestampTZFamily {
+		return offset
+	}
+	offset += 1
+	if canonicalTypeFamily == types.IntervalFamily {
+		return offset
+	}
+	offset += 1
+	if canonicalTypeFamily == types.JsonFamily {
+		return offset
+	}
+	offset += 1
+	if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
+		return offset
+	}
+	offset += 1
+	colexecerror.InternalError(errors.AssertionFailedf("didn't find overload offset for %s", t.SQLStringForError()))
+	return 0
 }
 
 func newAnyNotNullOrderedAggAlloc(

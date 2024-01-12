@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -51,74 +50,28 @@ func IsAggOptimized(aggFn execinfrapb.AggregatorSpec_Func) bool {
 	}
 }
 
-// optimizedAggOrdinal uniquely identifies all optimized aggregate functions.
-type optimizedAggOrdinal int
-
-// overloadIndex determines the index among all overloads for a particular
-// aggregate function (for those that take in input arguments of different
-// types).
-type overloadIndex int
-
+// We will be sharing aggregateFuncAllocs between different columns, and in
+// order to quickly determine whether a particular aggregate overload has
+// already been created, we'll operate on a stack-allocated array of
+// numOverloadsTotal pointers, in which all overloads for a single aggregate
+// type will be contiguous. In other words, our allocs array will have
+//   - [0:anyNotNullNumOverloads] corresponding to all anyNotNull aggregates,
+//   - [anyNotNullNumOverloads:anyNotNullNumOverloads+avgNumOverloads] to all avg
+//     aggregates, and so on.
 const (
-	anyNotNullOrdinal optimizedAggOrdinal = iota
-	avgOrdinal
-	boolAndOrdinal
-	boolOrOrdinal
-	concatAggOrdinal
-	countOrdinal
-	maxOrdinal
-	minOrdinal
-	sumOrdinal
-	sumIntOrdinal
-	countRowsOrdinal
-	numOptimizedAggFns
+	anyNotNullFirstOverload = 0
+	avgFirstOverload        = anyNotNullFirstOverload + anyNotNullNumOverloads
+	boolAndFirstOverload    = avgFirstOverload + avgNumOverloads
+	boolOrFirstOverload     = boolAndFirstOverload + 1
+	concatFirstOverload     = boolOrFirstOverload + 1
+	countFirstOverload      = concatFirstOverload + 1
+	maxFirstOverload        = countFirstOverload + 1
+	minFirstOverload        = maxFirstOverload + minMaxNumOverloads
+	sumFirstOverload        = minFirstOverload + minMaxNumOverloads
+	sumIntFirstOverload     = sumFirstOverload + sumNumOverloads
+	countRowsFirstOverload  = sumIntFirstOverload + sumIntNumOverloads
+	numOverloadsTotal       = countRowsFirstOverload + 1
 )
-
-// maxNumOverloads determines the maximum number of type overloads that any
-// aggregate function can have. The maximum is achieved by functions like
-// any_not_null, max, min.
-const maxNumOverloads = 11
-
-// getOverloadIndex returns the overload index for a particular type. This
-// function is written manually since that seems to be more efficient, yet
-// getOverloadIndexCheck function is generated and double checks this one during
-// init time.
-//
-// Note that the main goal of this function is to uniquely identify a type
-// overload by a number. The numbers here are chosen in such a way as to match
-// the order of generated overloads, but this isn't strictly necessary (as long
-// as all numbers used are in [0, maxNumOverloads) range).
-func getOverloadIndex(t *types.T) overloadIndex {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-	case types.BoolFamily:
-		return 0
-	case types.BytesFamily:
-		return 1
-	case types.DecimalFamily:
-		return 2
-	case types.IntFamily:
-		switch t.Width() {
-		case 16:
-			return 3
-		case 32:
-			return 4
-		default:
-			return 5
-		}
-	case types.FloatFamily:
-		return 6
-	case types.TimestampTZFamily:
-		return 7
-	case types.IntervalFamily:
-		return 8
-	case types.JsonFamily:
-		return 9
-	case typeconv.DatumVecCanonicalTypeFamily:
-		return 10
-	}
-	colexecerror.InternalError(errors.AssertionFailedf("unexpected type %s", t.SQLStringForError()))
-	return 0
-}
 
 // AggregateFunc is an aggregate function that performs computation on a batch
 // when Compute(batch) is called and writes the output to the Vec passed in
@@ -330,36 +283,30 @@ func NewAggregateFuncsAlloc(
 	// aggregates with the same input types, then those can share the alloc
 	// struct.
 	//
-	// allocs is a two-dimensional array in which
-	// - the first dimension identifies the aggregate function, an "ordinal"
-	// - the second dimension identifies the aggregate function type overload
-	//   (if the aggregate function doesn't take any input arguments or only
-	//   takes arguments of a single type, then only 0th position is used), an
-	//   "index".
-	var allocs [numOptimizedAggFns][maxNumOverloads]aggregateFuncAlloc
+	// See comment above anyNotNullFirstOverload constant for how this single
+	// slice is divided between all optimized aggregate functions.
+	var allocs [numOverloadsTotal]aggregateFuncAlloc
 	for i, aggFn := range aggregations {
-		// ordinal will remain numOptimizedAggFns if non-optimized aggregate
-		// function is created.
-		ordinal := numOptimizedAggFns
-		// index will remain zero if the aggregate function doesn't have any
-		// type overloads.
-		var index overloadIndex
+		// firstOverloadIndex will remain numOverloadsTotal if non-optimized
+		// aggregate function is created.
+		firstOverloadIndex := numOverloadsTotal
+		var offset int
 		// freshAllocator will be set to true whenever a new allocator is
 		// created.
 		var freshAllocator bool
 		var err error
 		switch aggFn.Func {
 		case execinfrapb.AnyNotNull:
-			ordinal = anyNotNullOrdinal
+			firstOverloadIndex = anyNotNullFirstOverload
 			inputType := args.InputTypes[aggFn.ColIdx[0]]
-			index = getOverloadIndex(inputType)
-			if allocs[ordinal][index] == nil {
+			offset = anyNotNullOverloadOffset(inputType)
+			if allocs[firstOverloadIndex+offset] == nil {
 				freshAllocator = true
 				switch aggKind {
 				case HashAggKind:
-					allocs[ordinal][index], err = newAnyNotNullHashAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset], err = newAnyNotNullHashAggAlloc(args.Allocator, inputType, allocSize)
 				case OrderedAggKind:
-					allocs[ordinal][index], err = newAnyNotNullOrderedAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset], err = newAnyNotNullOrderedAggAlloc(args.Allocator, inputType, allocSize)
 				case WindowAggKind:
 					colexecerror.InternalError(errors.AssertionFailedf("anyNotNull window aggregate not supported"))
 				default:
@@ -367,161 +314,161 @@ func NewAggregateFuncsAlloc(
 				}
 			}
 		case execinfrapb.Avg:
-			ordinal = avgOrdinal
+			firstOverloadIndex = avgFirstOverload
 			inputType := args.InputTypes[aggFn.ColIdx[0]]
-			index = getOverloadIndex(inputType)
-			if allocs[ordinal][index] == nil {
+			offset = avgOverloadOffset(inputType)
+			if allocs[firstOverloadIndex+offset] == nil {
 				freshAllocator = true
 				switch aggKind {
 				case HashAggKind:
-					allocs[ordinal][index], err = newAvgHashAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset], err = newAvgHashAggAlloc(args.Allocator, inputType, allocSize)
 				case OrderedAggKind:
-					allocs[ordinal][index], err = newAvgOrderedAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset], err = newAvgOrderedAggAlloc(args.Allocator, inputType, allocSize)
 				case WindowAggKind:
-					allocs[ordinal][index], err = newAvgWindowAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset], err = newAvgWindowAggAlloc(args.Allocator, inputType, allocSize)
 				default:
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 				}
 			}
 		case execinfrapb.BoolAnd:
-			ordinal = boolAndOrdinal
-			if allocs[ordinal][index] == nil {
+			firstOverloadIndex = boolAndFirstOverload
+			if allocs[firstOverloadIndex+offset] == nil {
 				freshAllocator = true
 				switch aggKind {
 				case HashAggKind:
-					allocs[ordinal][index] = newBoolAndHashAggAlloc(args.Allocator, allocSize)
+					allocs[firstOverloadIndex+offset] = newBoolAndHashAggAlloc(args.Allocator, allocSize)
 				case OrderedAggKind:
-					allocs[ordinal][index] = newBoolAndOrderedAggAlloc(args.Allocator, allocSize)
+					allocs[firstOverloadIndex+offset] = newBoolAndOrderedAggAlloc(args.Allocator, allocSize)
 				case WindowAggKind:
-					allocs[ordinal][index] = newBoolAndWindowAggAlloc(args.Allocator, allocSize)
+					allocs[firstOverloadIndex+offset] = newBoolAndWindowAggAlloc(args.Allocator, allocSize)
 				default:
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 				}
 			}
 		case execinfrapb.BoolOr:
-			ordinal = boolOrOrdinal
-			if allocs[ordinal][index] == nil {
+			firstOverloadIndex = boolOrFirstOverload
+			if allocs[firstOverloadIndex+offset] == nil {
 				freshAllocator = true
 				switch aggKind {
 				case HashAggKind:
-					allocs[ordinal][index] = newBoolOrHashAggAlloc(args.Allocator, allocSize)
+					allocs[firstOverloadIndex+offset] = newBoolOrHashAggAlloc(args.Allocator, allocSize)
 				case OrderedAggKind:
-					allocs[ordinal][index] = newBoolOrOrderedAggAlloc(args.Allocator, allocSize)
+					allocs[firstOverloadIndex+offset] = newBoolOrOrderedAggAlloc(args.Allocator, allocSize)
 				case WindowAggKind:
-					allocs[ordinal][index] = newBoolOrWindowAggAlloc(args.Allocator, allocSize)
+					allocs[firstOverloadIndex+offset] = newBoolOrWindowAggAlloc(args.Allocator, allocSize)
 				default:
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 				}
 			}
 		case execinfrapb.ConcatAgg:
-			ordinal = concatAggOrdinal
-			if allocs[ordinal][index] == nil {
+			firstOverloadIndex = concatFirstOverload
+			if allocs[firstOverloadIndex+offset] == nil {
 				freshAllocator = true
 				switch aggKind {
 				case HashAggKind:
-					allocs[ordinal][index] = newConcatHashAggAlloc(args.Allocator, allocSize)
+					allocs[firstOverloadIndex+offset] = newConcatHashAggAlloc(args.Allocator, allocSize)
 				case OrderedAggKind:
-					allocs[ordinal][index] = newConcatOrderedAggAlloc(args.Allocator, allocSize)
+					allocs[firstOverloadIndex+offset] = newConcatOrderedAggAlloc(args.Allocator, allocSize)
 				case WindowAggKind:
-					allocs[ordinal][index] = newConcatWindowAggAlloc(args.Allocator, allocSize)
+					allocs[firstOverloadIndex+offset] = newConcatWindowAggAlloc(args.Allocator, allocSize)
 				default:
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 				}
 			}
 		case execinfrapb.Count:
-			ordinal = countOrdinal
-			if allocs[ordinal][index] == nil {
+			firstOverloadIndex = countFirstOverload
+			if allocs[firstOverloadIndex+offset] == nil {
 				freshAllocator = true
 				switch aggKind {
 				case HashAggKind:
-					allocs[ordinal][index] = newCountHashAggAlloc(args.Allocator, allocSize)
+					allocs[firstOverloadIndex+offset] = newCountHashAggAlloc(args.Allocator, allocSize)
 				case OrderedAggKind:
-					allocs[ordinal][index] = newCountOrderedAggAlloc(args.Allocator, allocSize)
+					allocs[firstOverloadIndex+offset] = newCountOrderedAggAlloc(args.Allocator, allocSize)
 				case WindowAggKind:
-					allocs[ordinal][index] = newCountWindowAggAlloc(args.Allocator, allocSize)
+					allocs[firstOverloadIndex+offset] = newCountWindowAggAlloc(args.Allocator, allocSize)
 				default:
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 				}
 			}
 		case execinfrapb.Max:
-			ordinal = maxOrdinal
+			firstOverloadIndex = maxFirstOverload
 			inputType := args.InputTypes[aggFn.ColIdx[0]]
-			index = getOverloadIndex(inputType)
-			if allocs[ordinal][index] == nil {
+			offset = minMaxOverloadOffset(inputType)
+			if allocs[firstOverloadIndex+offset] == nil {
 				freshAllocator = true
 				switch aggKind {
 				case HashAggKind:
-					allocs[ordinal][index] = newMaxHashAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset] = newMaxHashAggAlloc(args.Allocator, inputType, allocSize)
 				case OrderedAggKind:
-					allocs[ordinal][index] = newMaxOrderedAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset] = newMaxOrderedAggAlloc(args.Allocator, inputType, allocSize)
 				case WindowAggKind:
-					allocs[ordinal][index] = newMaxWindowAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset] = newMaxWindowAggAlloc(args.Allocator, inputType, allocSize)
 				default:
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 				}
 			}
 		case execinfrapb.Min:
-			ordinal = minOrdinal
+			firstOverloadIndex = minFirstOverload
 			inputType := args.InputTypes[aggFn.ColIdx[0]]
-			index = getOverloadIndex(inputType)
-			if allocs[ordinal][index] == nil {
+			offset = minMaxOverloadOffset(inputType)
+			if allocs[firstOverloadIndex+offset] == nil {
 				freshAllocator = true
 				switch aggKind {
 				case HashAggKind:
-					allocs[ordinal][index] = newMinHashAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset] = newMinHashAggAlloc(args.Allocator, inputType, allocSize)
 				case OrderedAggKind:
-					allocs[ordinal][index] = newMinOrderedAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset] = newMinOrderedAggAlloc(args.Allocator, inputType, allocSize)
 				case WindowAggKind:
-					allocs[ordinal][index] = newMinWindowAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset] = newMinWindowAggAlloc(args.Allocator, inputType, allocSize)
 				default:
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 				}
 			}
 		case execinfrapb.Sum:
-			ordinal = sumOrdinal
+			firstOverloadIndex = sumFirstOverload
 			inputType := args.InputTypes[aggFn.ColIdx[0]]
-			index = getOverloadIndex(inputType)
-			if allocs[ordinal][index] == nil {
+			offset = sumOverloadOffset(inputType)
+			if allocs[firstOverloadIndex+offset] == nil {
 				freshAllocator = true
 				switch aggKind {
 				case HashAggKind:
-					allocs[ordinal][index], err = newSumHashAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset], err = newSumHashAggAlloc(args.Allocator, inputType, allocSize)
 				case OrderedAggKind:
-					allocs[ordinal][index], err = newSumOrderedAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset], err = newSumOrderedAggAlloc(args.Allocator, inputType, allocSize)
 				case WindowAggKind:
-					allocs[ordinal][index], err = newSumWindowAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset], err = newSumWindowAggAlloc(args.Allocator, inputType, allocSize)
 				default:
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 				}
 			}
 		case execinfrapb.SumInt:
-			ordinal = sumIntOrdinal
+			firstOverloadIndex = sumIntFirstOverload
 			inputType := args.InputTypes[aggFn.ColIdx[0]]
-			index = getOverloadIndex(inputType)
-			if allocs[ordinal][index] == nil {
+			offset = sumIntOverloadOffset(inputType)
+			if allocs[firstOverloadIndex+offset] == nil {
 				freshAllocator = true
 				switch aggKind {
 				case HashAggKind:
-					allocs[ordinal][index], err = newSumIntHashAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset], err = newSumIntHashAggAlloc(args.Allocator, inputType, allocSize)
 				case OrderedAggKind:
-					allocs[ordinal][index], err = newSumIntOrderedAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset], err = newSumIntOrderedAggAlloc(args.Allocator, inputType, allocSize)
 				case WindowAggKind:
-					allocs[ordinal][index], err = newSumIntWindowAggAlloc(args.Allocator, inputType, allocSize)
+					allocs[firstOverloadIndex+offset], err = newSumIntWindowAggAlloc(args.Allocator, inputType, allocSize)
 				default:
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 				}
 			}
 		case execinfrapb.CountRows:
-			ordinal = countRowsOrdinal
-			if allocs[ordinal][index] == nil {
+			firstOverloadIndex = countRowsFirstOverload
+			if allocs[firstOverloadIndex+offset] == nil {
 				freshAllocator = true
 				switch aggKind {
 				case HashAggKind:
-					allocs[ordinal][index] = newCountRowsHashAggAlloc(args.Allocator, allocSize)
+					allocs[firstOverloadIndex+offset] = newCountRowsHashAggAlloc(args.Allocator, allocSize)
 				case OrderedAggKind:
-					allocs[ordinal][index] = newCountRowsOrderedAggAlloc(args.Allocator, allocSize)
+					allocs[firstOverloadIndex+offset] = newCountRowsOrderedAggAlloc(args.Allocator, allocSize)
 				case WindowAggKind:
-					allocs[ordinal][index] = newCountRowsWindowAggAlloc(args.Allocator, allocSize)
+					allocs[firstOverloadIndex+offset] = newCountRowsWindowAggAlloc(args.Allocator, allocSize)
 				default:
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 				}
@@ -554,8 +501,8 @@ func NewAggregateFuncsAlloc(
 		}
 		// All optimized aggregate functions have updated the ordinal variable
 		// and have stored their alloc struct in the allocs array.
-		if ordinal != numOptimizedAggFns {
-			funcAllocs[i] = allocs[ordinal][index]
+		if firstOverloadIndex != numOverloadsTotal {
+			funcAllocs[i] = allocs[firstOverloadIndex+offset]
 			if !freshAllocator {
 				// If we're reusing the same allocator as for one of the
 				// previous aggregate functions, we want to increment the alloc
