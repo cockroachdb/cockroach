@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -504,30 +503,4 @@ func ExtractStatsFromSpans(
 		})
 	}
 	return statsMap
-}
-
-// ExtractNodesFromSpans extracts a list of node ids from a set of tracing
-// spans.
-func ExtractNodesFromSpans(spans []tracingpb.RecordedSpan) intsets.Fast {
-	var nodes intsets.Fast
-	// componentStats is only used to check whether a structured payload item is
-	// of ComponentStats type.
-	var componentStats ComponentStats
-	for i := range spans {
-		span := &spans[i]
-		span.Structured(func(item *types.Any, _ time.Time) {
-			if !types.Is(item, &componentStats) {
-				return
-			}
-			var stats ComponentStats
-			if err := protoutil.Unmarshal(item.Value, &stats); err != nil {
-				return
-			}
-			if stats.Component == (ComponentID{}) {
-				return
-			}
-			nodes.Add(int(stats.Component.SQLInstanceID))
-		})
-	}
-	return nodes
 }

@@ -1045,8 +1045,15 @@ vectorized: true
 │             spans: [/2 - /2]
 │
 ├── • fk-cascade
-│     fk: child_delete_p_fkey
-│     input: buffer 1
+│   │ fk: child_delete_p_fkey
+│   │
+│   └── • delete
+│       │ from: child_delete
+│       │
+│       └── • scan
+│             missing stats
+│             table: child_delete@c_delete_idx_invisible
+│             spans: [/2 - /2]
 │
 └── • constraint-check
     │
@@ -1085,8 +1092,22 @@ vectorized: true
 │                 spans: FULL SCAN
 │
 ├── • fk-cascade
-│     fk: child_delete_p_fkey
-│     input: buffer 1
+│   │ fk: child_delete_p_fkey
+│   │
+│   └── • delete
+│       │ from: child_delete
+│       │
+│       └── • lookup join
+│           │ table: child_delete@c_delete_idx_invisible
+│           │ equality: (p) = (p)
+│           │
+│           └── • distinct
+│               │ estimated row count: 10
+│               │ distinct on: p
+│               │
+│               └── • scan buffer
+│                     estimated row count: 100
+│                     label: buffer 1000000
 │
 └── • constraint-check
     │
@@ -1135,8 +1156,48 @@ vectorized: true
 │                 locking strength: for update
 │
 ├── • fk-cascade
-│     fk: child_update_p_fkey
-│     input: buffer 1
+│   │ fk: child_update_p_fkey
+│   │
+│   └── • root
+│       │
+│       ├── • update
+│       │   │ table: child_update
+│       │   │ set: p
+│       │   │
+│       │   └── • buffer
+│       │       │ label: buffer 1
+│       │       │
+│       │       └── • hash join
+│       │           │ equality: (p) = (p)
+│       │           │
+│       │           ├── • scan
+│       │           │     missing stats
+│       │           │     table: child_update@child_update_pkey
+│       │           │     spans: FULL SCAN
+│       │           │
+│       │           └── • filter
+│       │               │ estimated row count: 33
+│       │               │ filter: p IS DISTINCT FROM p_new
+│       │               │
+│       │               └── • scan buffer
+│       │                     estimated row count: 100
+│       │                     label: buffer 1000000
+│       │
+│       └── • constraint-check
+│           │
+│           └── • error if rows
+│               │
+│               └── • hash join (right anti)
+│                   │ equality: (p) = (p_new)
+│                   │ left cols are key
+│                   │
+│                   ├── • scan
+│                   │     missing stats
+│                   │     table: parent@parent_pkey
+│                   │     spans: FULL SCAN
+│                   │
+│                   └── • scan buffer
+│                         label: buffer 1
 │
 └── • constraint-check
     │

@@ -12,6 +12,7 @@ package explain
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	humanize "github.com/dustin/go-humanize"
@@ -32,7 +34,23 @@ import (
 
 // Emit produces the EXPLAIN output against the given OutputBuilder. The
 // OutputBuilder flags are taken into account.
-func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
+func Emit(ctx context.Context, plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
+	var visitedTablesByCascades *intsets.Fast
+	if len(plan.Cascades) > 0 {
+		visitedTablesByCascades = &intsets.Fast{}
+	}
+	return emitInternal(ctx, plan, ob, spanFormatFn, visitedTablesByCascades)
+}
+
+// - visitedTablesByCascades is updated on recursive calls for each cascade
+// plan. Can be nil if the plan doesn't have any cascades.
+func emitInternal(
+	ctx context.Context,
+	plan *Plan,
+	ob *OutputBuilder,
+	spanFormatFn SpanFormatFn,
+	visitedTablesByCascades *intsets.Fast,
+) error {
 	e := makeEmitter(ob, spanFormatFn)
 	var walk func(n *Node) error
 	walk = func(n *Node) error {
@@ -106,11 +124,26 @@ func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
 		ob.LeaveNode()
 	}
 
-	for i := range plan.Cascades {
+	for _, cascade := range plan.Cascades {
 		ob.EnterMetaNode("fk-cascade")
-		ob.Attr("fk", plan.Cascades[i].FKName)
-		if buffer := plan.Cascades[i].Buffer; buffer != nil {
-			ob.Attr("input", buffer.(*Node).args.(*bufferArgs).Label)
+		ob.Attr("fk", cascade.FKConstraint.Name())
+		// Here we do want to allow creation of the plans for the cascades to be
+		// able to include them into the EXPLAIN output.
+		const createPlanIfMissing = true
+		if cascadePlan, err := cascade.GetExplainPlan(ctx, createPlanIfMissing); err != nil {
+			return err
+		} else if fk := cascade.FKConstraint; visitedTablesByCascades.Contains(int(fk.OriginTableID())) {
+			// If the origin table for this FK has already been visited, we
+			// don't recurse into it again to prevent infinite recursion.
+			if buffer := cascade.Buffer; buffer != nil {
+				ob.Attr("input", buffer.(*Node).args.(*bufferArgs).Label)
+			}
+		} else {
+			visitedTablesByCascades.Add(int(fk.OriginTableID()))
+			defer visitedTablesByCascades.Remove(int(fk.OriginTableID()))
+			if err = emitInternal(ctx, cascadePlan.(*Plan), ob, spanFormatFn, visitedTablesByCascades); err != nil {
+				return err
+			}
 		}
 		ob.LeaveNode()
 	}

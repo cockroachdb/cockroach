@@ -1684,7 +1684,26 @@ vectorized: true
 │     spans: /2-
 │
 └── • fk-cascade
-      fk: cascadechild_p_fkey
+    │ fk: cascadechild_p_fkey
+    │
+    └── • delete
+        │ columns: ()
+        │ estimated row count: 0 (missing stats)
+        │ from: cascadechild
+        │
+        └── • project
+            │ columns: (c)
+            │
+            └── • filter
+                │ columns: (c, p)
+                │ estimated row count: 333 (missing stats)
+                │ filter: p > 1
+                │
+                └── • scan
+                      columns: (c, p)
+                      estimated row count: 1,000 (missing stats)
+                      table: cascadechild@cascadechild_pkey
+                      spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE) DELETE FROM cascadeparent WHERE p > 1 AND data > 0
@@ -1716,8 +1735,43 @@ vectorized: true
 │                 spans: /2-
 │
 └── • fk-cascade
-      fk: cascadechild_p_fkey
-      input: buffer 1
+    │ fk: cascadechild_p_fkey
+    │
+    └── • delete
+        │ columns: ()
+        │ estimated row count: 0 (missing stats)
+        │ from: cascadechild
+        │
+        └── • project
+            │ columns: (c)
+            │
+            └── • project
+                │ columns: (c, p)
+                │
+                └── • hash join (inner)
+                    │ columns: (c, p, p)
+                    │ estimated row count: 90 (missing stats)
+                    │ equality: (p) = (p)
+                    │ right cols are key
+                    │
+                    ├── • scan
+                    │     columns: (c, p)
+                    │     estimated row count: 1,000 (missing stats)
+                    │     table: cascadechild@cascadechild_pkey
+                    │     spans: FULL SCAN
+                    │
+                    └── • distinct
+                        │ columns: (p)
+                        │ estimated row count: 10
+                        │ distinct on: p
+                        │
+                        └── • project
+                            │ columns: (p)
+                            │
+                            └── • scan buffer
+                                  columns: (p, data)
+                                  estimated row count: 100
+                                  label: buffer 1000000
 
 statement ok
 CREATE TABLE a (

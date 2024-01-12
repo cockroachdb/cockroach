@@ -1207,7 +1207,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 			return nil, err
 		}
 
-		eb := New(ctx, ef, &o, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
+		eb := New(ctx, ef, &o, f.Memo(), b.catalog, newRightSide, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 		eb.disableTelemetry = true
 		eb.withExprs = withExprs
 		plan, err := eb.Build()
@@ -3027,6 +3027,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 		ctx:     b.ctx,
 		mem:     b.mem,
 		catalog: b.catalog,
+		semaCtx: b.semaCtx,
 		evalCtx: b.evalCtx,
 		// If the recursive query itself contains CTEs, building it in the function
 		// below will add to withExprs. Cap the slice to force reallocation on any

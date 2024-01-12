@@ -169,18 +169,18 @@ func TestLookupConstraints(t *testing.T) {
 						b.WriteString("  ")
 						b.WriteString(md.ColumnMeta(col).Alias)
 						b.WriteString(" = ")
-						b.WriteString(formatScalar(lookupConstraint.InputProjections[i].Element, &f, &evalCtx))
+						b.WriteString(formatScalar(lookupConstraint.InputProjections[i].Element, &f, &semaCtx, &evalCtx))
 						b.WriteString("\n")
 					}
 				}
 				if len(lookupConstraint.LookupExpr) > 0 {
 					b.WriteString("lookup expression:\n  ")
-					b.WriteString(formatScalar(&lookupConstraint.LookupExpr, &f, &evalCtx))
+					b.WriteString(formatScalar(&lookupConstraint.LookupExpr, &f, &semaCtx, &evalCtx))
 					b.WriteString("\n")
 				}
 				if len(lookupConstraint.RemainingFilters) > 0 {
 					b.WriteString("remaining filters:\n  ")
-					b.WriteString(formatScalar(&lookupConstraint.RemainingFilters, &f, &evalCtx))
+					b.WriteString(formatScalar(&lookupConstraint.RemainingFilters, &f, &semaCtx, &evalCtx))
 					b.WriteString("\n")
 				}
 				return b.String()
@@ -320,11 +320,13 @@ func makeFiltersExpr(
 	return memo.FiltersExpr{f.ConstructFiltersItem(root)}, nil
 }
 
-func formatScalar(e opt.Expr, f *norm.Factory, evalCtx *eval.Context) string {
+func formatScalar(
+	e opt.Expr, f *norm.Factory, semaCtx *tree.SemaContext, evalCtx *eval.Context,
+) string {
 	execBld := execbuilder.New(
-		context.Background(), nil /* execFactory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
-		e, evalCtx, false, /* allowAutoCommit */
-		false, /* isANSIDML */
+		context.Background(), nil /* execFactory */, nil, /* optimizer */
+		f.Memo(), nil /* catalog */, e, semaCtx, evalCtx,
+		false /* allowAutoCommit */, false, /* isANSIDML */
 	)
 	expr, err := execBld.BuildScalar()
 	if err != nil {

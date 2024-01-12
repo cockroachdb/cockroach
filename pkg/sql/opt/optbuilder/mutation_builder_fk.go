@@ -168,11 +168,11 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 				cols[i] = mb.fetchColIDs[tabOrd]
 			}
 			mb.cascades = append(mb.cascades, memo.FKCascade{
-				FKName:    h.fk.Name(),
-				Builder:   builder,
-				WithID:    mb.withID,
-				OldValues: cols,
-				NewValues: nil,
+				FKConstraint: h.fk,
+				Builder:      builder,
+				WithID:       mb.withID,
+				OldValues:    cols,
+				NewValues:    nil,
 			})
 			continue
 		}
@@ -315,11 +315,11 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 				newCols[i] = updateColID
 			}
 			mb.cascades = append(mb.cascades, memo.FKCascade{
-				FKName:    h.fk.Name(),
-				Builder:   builder,
-				WithID:    mb.withID,
-				OldValues: oldCols,
-				NewValues: newCols,
+				FKConstraint: h.fk,
+				Builder:      builder,
+				WithID:       mb.withID,
+				OldValues:    oldCols,
+				NewValues:    newCols,
 			})
 			continue
 		}
@@ -436,11 +436,11 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 				newCols[i] = updateColID
 			}
 			mb.cascades = append(mb.cascades, memo.FKCascade{
-				FKName:    h.fk.Name(),
-				Builder:   builder,
-				WithID:    mb.withID,
-				OldValues: oldCols,
-				NewValues: newCols,
+				FKConstraint: h.fk,
+				Builder:      builder,
+				WithID:       mb.withID,
+				OldValues:    oldCols,
+				NewValues:    newCols,
 			})
 			continue
 		}

@@ -1500,7 +1500,7 @@ func (f *ExprFmtCtx) formatMutationCommon(tp treeprinter.Node, p *MutationPrivat
 	if len(p.FKCascades) > 0 {
 		c := tp.Childf("cascades")
 		for i := range p.FKCascades {
-			c.Child(p.FKCascades[i].FKName)
+			c.Child(p.FKCascades[i].FKConstraint.Name())
 		}
 	}
 }
