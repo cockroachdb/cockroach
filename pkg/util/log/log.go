@@ -13,8 +13,8 @@ package log
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/logbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -22,9 +22,11 @@ import (
 func init() {
 	// Inject logging functions into the errors package.
 	errors.SetWarningFn(Warningf)
-	// Inject logging functions into the syncutil package.
-	syncutil.LogExpensiveLogEnabled = untypedExpensiveLogEnabled
-	syncutil.LogVEventfDepth = untypedVEventfDepth
+	// Inject logging functions into the logbase package.
+	logbase.VEventfDepth = untypedVEventfDepth
+	logbase.ExpensiveLogEnabled = untypedExpensiveLogEnabled
+	logbase.Fatalf = Fatalf
+	logbase.Warningf = Warningf
 }
 
 // Severity aliases a type.
