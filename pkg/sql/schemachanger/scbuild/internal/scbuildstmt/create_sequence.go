@@ -109,6 +109,18 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 		Name:         string(n.Name.ObjectName),
 	}
 	b.Add(sequenceNamespace)
+	// Set up a schema child entry. This will be a no-op for relations.
+	sequenceSchemaChild := &scpb.SchemaChild{
+		ChildObjectID: sequenceID,
+		SchemaID:      schemaElem.SchemaID,
+	}
+	b.Add(sequenceSchemaChild)
+	// Add a table data element, this go public with the descriptor.
+	tableData := &scpb.TableData{
+		TableID:    sequenceID,
+		DatabaseID: dbElem.DatabaseID,
+	}
+	b.Add(tableData)
 	// Add any sequence options.
 	options := scdecomp.GetSequenceOptions(sequenceElem.SequenceID, &tempSequenceOpts)
 	for _, opt := range options {
