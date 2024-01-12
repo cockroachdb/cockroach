@@ -17,6 +17,10 @@ go_test(
     srcs = ["dump_test.go"],
     data = ["@go_sdk//:files"],
     embed = [":goroutineui"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/build/bazel",
         "//pkg/util/leaktest",

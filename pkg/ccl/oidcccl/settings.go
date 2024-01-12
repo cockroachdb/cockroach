@@ -57,7 +57,8 @@ var OIDCClientID = settings.RegisterStringSetting(
 	"sets OIDC client id",
 	"",
 	settings.WithPublic,
-	settings.WithReportable(true),
+	settings.WithReportable(false),
+	settings.Sensitive,
 )
 
 // OIDCClientSecret is the OIDC client secret.
@@ -68,6 +69,7 @@ var OIDCClientSecret = settings.RegisterStringSetting(
 	"",
 	settings.WithPublic,
 	settings.WithReportable(false),
+	settings.Sensitive,
 )
 
 type redirectURLConf struct {

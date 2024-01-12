@@ -53,6 +53,10 @@ go_test(
         "ordinality_test.go",
         "simple_project_test.go",
     ],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":colexecbase",
         "//pkg/col/coldata",

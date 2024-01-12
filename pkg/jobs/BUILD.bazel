@@ -109,6 +109,10 @@ go_test(
         "update_test.go",
     ],
     embed = [":jobs"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     shard_count = 16,
     deps = [
         "//pkg/base",

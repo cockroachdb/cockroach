@@ -32,6 +32,10 @@ go_test(
     name = "tpch_test",
     srcs = ["random_test.go"],
     embed = [":tpch"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util/bufalloc",
         "//pkg/util/timeutil",

@@ -20,6 +20,10 @@ go_library(
 go_test(
     name = "corpus_test",
     srcs = ["corpus_test.go"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":corpus",
         "//pkg/clusterversion",

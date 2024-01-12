@@ -69,6 +69,10 @@ go_test(
     srcs = ["geos_test.go"],
     data = ["//c-deps:libgeos"],
     embed = [":geos"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

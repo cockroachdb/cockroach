@@ -35,6 +35,10 @@ go_test(
         "fixture_test.go",
         "main_test.go",
     ],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     tags = ["ccl_test"],
     deps = [
         ":workloadccl",

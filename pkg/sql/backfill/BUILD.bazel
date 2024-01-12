@@ -53,6 +53,10 @@ go_test(
     name = "backfill_test",
     srcs = ["index_backfiller_cols_test.go"],
     embed = [":backfill"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catenumpb",

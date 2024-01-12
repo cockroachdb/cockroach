@@ -70,6 +70,10 @@ go_test(
         "scheduled_sql_stats_compaction_test.go",
     ],
     data = glob(["testdata/**"]),
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     shard_count = 16,
     deps = [
         ":persistedsqlstats",

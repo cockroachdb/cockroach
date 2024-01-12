@@ -49,6 +49,10 @@ go_test(
         "utils_test.go",
     ],
     embed = [":colexectestutils"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

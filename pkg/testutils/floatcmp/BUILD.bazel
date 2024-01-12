@@ -18,5 +18,9 @@ go_test(
     size = "small",
     srcs = ["floatcmp_test.go"],
     embed = [":floatcmp"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = ["//pkg/util/leaktest"],
 )

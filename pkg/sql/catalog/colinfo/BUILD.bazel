@@ -43,6 +43,10 @@ go_test(
         "result_columns_test.go",
     ],
     embed = [":colinfo"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/sql/catalog/colinfo/colinfotestutils",
         "//pkg/sql/sem/tree",

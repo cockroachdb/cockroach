@@ -14,6 +14,10 @@ go_library(
 go_test(
     name = "addr_test",
     srcs = ["addr_test.go"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":addr",
         "//pkg/testutils",

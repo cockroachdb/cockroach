@@ -45,6 +45,10 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":tenantcostserver"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",

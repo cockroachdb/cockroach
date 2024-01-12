@@ -358,7 +358,10 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":kvserver"],
-    exec_properties = {"Pool": "large"},
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "large"},
+    }),
     shard_count = 48,
     tags = ["cpu:2"],
     deps = [

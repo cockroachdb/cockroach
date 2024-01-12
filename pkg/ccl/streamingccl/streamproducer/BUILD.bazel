@@ -76,6 +76,10 @@ go_test(
         "stream_event_batcher_test.go",
     ],
     embed = [":streamproducer"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",

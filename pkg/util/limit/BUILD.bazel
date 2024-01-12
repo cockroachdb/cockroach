@@ -18,6 +18,10 @@ go_test(
     size = "small",
     srcs = ["limiter_test.go"],
     embed = [":limit"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_errors//:errors",

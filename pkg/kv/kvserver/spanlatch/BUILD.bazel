@@ -38,6 +38,10 @@ go_test(
         ":latch_interval_btree_test.go",  # keep
     ],
     embed = [":spanlatch"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     shard_count = 16,
     deps = [
         "//pkg/keys",

@@ -50,6 +50,10 @@ go_test(
         "span_resolver_test.go",
     ],
     embed = [":physicalplan"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     shard_count = 16,
     deps = [
         "//pkg/base",

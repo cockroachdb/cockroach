@@ -47,6 +47,10 @@ go_test(
         "string_to_duration_test.go",
     ],
     embed = [":clisqlclient"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/build",
         "//pkg/cli",

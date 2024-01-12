@@ -19,6 +19,10 @@ go_test(
     name = "roachtestflags_test",
     srcs = ["manager_test.go"],
     embed = [":roachtestflags"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "@com_github_spf13_cobra//:cobra",
         "@com_github_stretchr_testify//require",

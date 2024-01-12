@@ -59,6 +59,10 @@ go_test(
         "//pkg/sql/opt/testutils/opttester:testfixtures",
     ],
     embed = [":explain"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/multitenant/tenantcapabilities",

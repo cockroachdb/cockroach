@@ -2587,6 +2587,13 @@ func TestTenantLogicCCL_new_schema_changer(
 	runCCLLogicTest(t, "new_schema_changer")
 }
 
+func TestTenantLogicCCL_oidc(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "oidc")
+}
+
 func TestTenantLogicCCL_partitioning_enum(
 	t *testing.T,
 ) {

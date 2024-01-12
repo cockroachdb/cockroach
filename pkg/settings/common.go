@@ -28,6 +28,7 @@ type common struct {
 	slot          slotIdx
 	nonReportable bool
 	retired       bool
+	sensitive     bool
 }
 
 // slotIdx is an integer in the range [0, MaxSetting) which is uniquely
@@ -79,6 +80,10 @@ func (c *common) isRetired() bool {
 	return c.retired
 }
 
+func (c *common) isSensitive() bool {
+	return c.sensitive
+}
+
 func (c *common) ErrorHint() (bool, string) {
 	return false, ""
 }
@@ -109,6 +114,13 @@ func (c *common) setVisibility(v Visibility) {
 func (c *common) setRetired() {
 	c.description = "do not use - " + c.description
 	c.retired = true
+}
+
+// setSensitive marks the setting as sensitive, which means that it will always
+// be redacted in any output. It also makes the setting non-reportable.
+func (c *common) setSensitive() {
+	c.sensitive = true
+	c.nonReportable = true
 }
 
 // setName is used to override the name of the setting.
@@ -143,6 +155,7 @@ type internalSetting interface {
 
 	init(class Class, key InternalKey, description string, slot slotIdx)
 	isRetired() bool
+	isSensitive() bool
 	setToDefault(ctx context.Context, sv *Values)
 
 	getSlot() slotIdx

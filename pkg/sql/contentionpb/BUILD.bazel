@@ -50,6 +50,10 @@ go_test(
     name = "contentionpb_test",
     srcs = ["contention_test.go"],
     embed = [":contentionpb"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/sql/clusterunique",
         "//pkg/util",

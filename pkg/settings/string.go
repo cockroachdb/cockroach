@@ -56,6 +56,11 @@ func (s *StringSetting) Default() string {
 	return s.defaultValue
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (s *StringSetting) DefaultString() (string, error) {
+	return s.DecodeToString(s.EncodedDefault())
+}
+
 // Defeat the linter.
 var _ = (*StringSetting).Default
 

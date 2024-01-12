@@ -12,6 +12,10 @@ go_test(
     size = "small",
     srcs = ["enum_test.go"],
     embed = [":enum"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/randutil",

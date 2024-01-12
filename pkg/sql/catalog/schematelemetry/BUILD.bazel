@@ -45,6 +45,10 @@ go_test(
         "main_test.go",
         "schema_telemetry_test.go",
     ],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":schematelemetry",
         "//pkg/base",

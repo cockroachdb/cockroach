@@ -24,6 +24,10 @@ go_test(
         "tracedumper_test.go",
     ],
     embed = [":tracedumper"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/security/securityassets",

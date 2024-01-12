@@ -56,6 +56,10 @@ go_test(
         "state_test.go",
     ],
     embed = [":state"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/asim/config",

@@ -63,7 +63,10 @@ go_test(
         "ttljob_query_builder_test.go",
         "ttljob_test.go",
     ],
-    exec_properties = {"Pool": "large"},
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "large"},
+    }),
     shard_count = 4,
     deps = [
         ":ttljob",

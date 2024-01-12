@@ -22,6 +22,10 @@ go_test(
     size = "small",
     srcs = ["main_test.go"],
     embed = [":publish-artifacts_lib"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/release",
         "//pkg/testutils",

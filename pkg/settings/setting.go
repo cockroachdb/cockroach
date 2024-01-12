@@ -69,6 +69,9 @@ type Setting interface {
 	// reporting (see LookupForReportingByKey), String hides the actual value.
 	String(sv *Values) string
 
+	// DefaultString returns the default value for the setting as a string.
+	DefaultString() (string, error)
+
 	// Description contains a helpful text explaining what the specific cluster
 	// setting is for.
 	Description() string
@@ -81,6 +84,9 @@ type Setting interface {
 	// IsUnsafe returns whether the setting is unsafe, and thus requires
 	// a special interlock to set.
 	IsUnsafe() bool
+
+	// ValueOrigin returns the origin of the current value.
+	ValueOrigin(ctx context.Context, sv *Values) ValueOrigin
 }
 
 // NonMaskedSetting is the exported interface of non-masked settings. A
@@ -116,9 +122,6 @@ type NonMaskedSetting interface {
 	// ErrorHint returns a hint message to be displayed to the user when there's
 	// an error.
 	ErrorHint() (bool, string)
-
-	// ValueOrigin returns the origin of the current value.
-	ValueOrigin(ctx context.Context, sv *Values) ValueOrigin
 }
 
 // Class describes the scope of a setting under cluster

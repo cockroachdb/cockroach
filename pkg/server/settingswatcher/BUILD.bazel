@@ -50,6 +50,10 @@ go_test(
         "settings_watcher_external_test.go",
         "version_guard_test.go",
     ],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":settingswatcher",
         "//pkg/base",

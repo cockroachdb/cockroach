@@ -73,6 +73,10 @@ go_test(
         "//c-deps:libgeos",
     ],
     embed = [":execbuilder"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

@@ -43,6 +43,10 @@ go_test(
         "soon_test.go",
     ],
     embed = [":testutils"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util",
         "//pkg/util/grpcutil",

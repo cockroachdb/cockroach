@@ -29,4 +29,8 @@ go_test(
     size = "small",
     srcs = ["protectedts_test.go"],
     embed = [":protectedts"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
 )

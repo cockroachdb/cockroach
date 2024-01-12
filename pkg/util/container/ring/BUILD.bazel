@@ -14,4 +14,8 @@ go_test(
         "ring_test.go",
     ],
     embed = [":ring"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
 )

@@ -29,6 +29,10 @@ go_test(
     size = "small",
     srcs = ["gcloud_test.go"],
     embed = [":gce"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/roachprod/vm",
         "//pkg/util/timeutil",

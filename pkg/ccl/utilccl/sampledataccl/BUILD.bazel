@@ -18,6 +18,10 @@ go_test(
     size = "small",
     srcs = ["main_test.go"],
     embed = [":sampledataccl"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/ccl",

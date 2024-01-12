@@ -14,5 +14,9 @@ go_test(
     name = "slidingwindow_test",
     srcs = ["sliding_window_test.go"],
     embed = [":slidingwindow"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = ["@com_github_stretchr_testify//require"],
 )

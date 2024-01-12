@@ -29,6 +29,10 @@ go_test(
         "local_index_usage_stats_test.go",
     ],
     embed = [":idxusage"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/roachpb",
         "//pkg/server/serverpb",

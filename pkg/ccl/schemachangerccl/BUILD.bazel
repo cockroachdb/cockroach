@@ -27,7 +27,10 @@ go_test(
         "//pkg/sql/schemachanger:end_to_end_testdata",
     ],
     embed = [":schemachangerccl"],
-    exec_properties = {"Pool": "large"},
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "large"},
+    }),
     shard_count = 48,
     tags = [
         "ccl_test",

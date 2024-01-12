@@ -30,6 +30,10 @@ go_test(
         "pg_conn_test.go",
     ],
     embed = [":interceptor"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/sql/pgwire/pgwirebase",

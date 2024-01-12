@@ -84,6 +84,11 @@ func (d *DurationSetting) Default() time.Duration {
 	return d.defaultValue
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (d *DurationSetting) DefaultString() (string, error) {
+	return d.DecodeToString(d.EncodedDefault())
+}
+
 // Defeat the linter.
 var _ = (*DurationSetting).Default
 

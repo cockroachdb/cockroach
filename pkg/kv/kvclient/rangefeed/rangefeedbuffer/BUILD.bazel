@@ -25,6 +25,10 @@ go_test(
         "kvs_test.go",
     ],
     embed = [":rangefeedbuffer"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvpb",

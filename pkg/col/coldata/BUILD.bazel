@@ -41,6 +41,10 @@ go_test(
         "vec_test.go",
     ],
     embed = [":coldata"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/col/coldatatestutils",
         "//pkg/sql/colconv",
