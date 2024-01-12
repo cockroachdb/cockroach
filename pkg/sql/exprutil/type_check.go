@@ -110,7 +110,7 @@ func (b Bools) typeCheck(ctx context.Context, op string, semaCtx *tree.SemaConte
 }
 
 func (ts TenantSpec) typeCheck(ctx context.Context, op string, semaCtx *tree.SemaContext) error {
-	if ts.All {
+	if ts.TenantSpec == nil || ts.All {
 		return nil
 	}
 	if ts.IsName {

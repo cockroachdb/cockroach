@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/revertccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -67,9 +68,35 @@ func startDistIngestion(
 	} else {
 		heartbeatTimestamp = initialScanTimestamp
 	}
-
 	msg := redact.Sprintf("resuming stream (producer job %d) from %s", streamID, heartbeatTimestamp)
-	updateRunningStatus(ctx, ingestionJob, jobspb.InitializingReplication, msg)
+
+	if streamProgress.InitialRevertRequired {
+		updateRunningStatus(ctx, ingestionJob, jobspb.InitializingReplication, "reverting existing data to prepare for replication")
+
+		log.Infof(ctx, "reverting tenant %s to time %s before starting replication", details.DestinationTenantID, replicatedTime)
+
+		spanToRevert := keys.MakeTenantSpan(details.DestinationTenantID)
+		if err := revertccl.RevertSpansFanout(ctx, execCtx.ExecCfg().DB, execCtx,
+			[]roachpb.Span{spanToRevert},
+			replicatedTime,
+			false, /* ignoreGCThreshold */
+			revertccl.RevertDefaultBatchSize,
+			nil, /* onCompletedCallback */
+		); err != nil {
+			return err
+		}
+
+		if err := ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			md.Progress.GetStreamIngest().InitialRevertRequired = false
+			ju.UpdateProgress(md.Progress)
+			updateRunningStatusInternal(md, ju, jobspb.InitializingReplication, string(msg))
+			return nil
+		}); err != nil {
+			return errors.Wrap(err, "failed to update job progress")
+		}
+	} else {
+		updateRunningStatus(ctx, ingestionJob, jobspb.InitializingReplication, msg)
+	}
 
 	client, err := connectToActiveClient(ctx, ingestionJob, execCtx.ExecCfg().InternalDB,
 		streamclient.WithStreamID(streamID))
