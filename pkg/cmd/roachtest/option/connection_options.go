@@ -35,12 +35,6 @@ func TenantName(tenantName string) func(*ConnOption) {
 	}
 }
 
-func SQLInstance(sqlInstance int) func(*ConnOption) {
-	return func(option *ConnOption) {
-		option.SQLInstance = sqlInstance
-	}
-}
-
 func ConnectionOption(key, value string) func(*ConnOption) {
 	return func(option *ConnOption) {
 		if len(option.Options) == 0 {
