@@ -78,13 +78,6 @@ func evalTenantReplicationOptions(
 		retSeconds := int32(retSeconds64)
 		r.retention = &retSeconds
 	}
-	if options.ResumeTimestamp != nil {
-		ts, err := asof.EvalSystemTimeExpr(ctx, evalCtx, semaCtx, options.ResumeTimestamp, op, asof.ReplicationCutover)
-		if err != nil {
-			return nil, err
-		}
-		r.resumeTimestamp = ts
-	}
 
 	return r, nil
 }
@@ -110,12 +103,6 @@ func alterReplicationJobTypeCheck(
 		exprutil.Strings{alterStmt.Options.Retention, alterStmt.ReplicationSourceAddress},
 	); err != nil {
 		return false, nil, err
-	}
-	if alterStmt.Options.ResumeTimestamp != nil {
-		if _, err := asof.TypeCheckSystemTimeExpr(ctx, p.SemaCtx(),
-			alterStmt.Options.ResumeTimestamp, alterReplicationJobOp); err != nil {
-			return false, nil, err
-		}
 	}
 
 	if cutoverTime := alterStmt.Cutover; cutoverTime != nil {
@@ -156,10 +143,6 @@ func alterReplicationJobHook(
 	if !p.ExecCfg().Codec.ForSystemTenant() {
 		return nil, nil, nil, false, pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only the system tenant can alter tenant")
-	}
-
-	if alterTenantStmt.Options.ResumeTimestamp != nil {
-		return nil, nil, nil, false, pgerror.New(pgcode.InvalidParameterValue, "resume timestamp cannot be altered")
 	}
 
 	evalCtx := &p.ExtendedEvalContext().Context

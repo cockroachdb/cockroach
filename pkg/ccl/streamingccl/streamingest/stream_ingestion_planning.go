@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -73,14 +72,6 @@ func ingestionTypeCheck(
 		exprutil.Strings{
 			ingestionStmt.ReplicationSourceAddress,
 			ingestionStmt.Options.Retention},
-	}
-	if ingestionStmt.Options.ResumeTimestamp != nil {
-		if _, err := asof.TypeCheckSystemTimeExpr(ctx,
-			p.SemaCtx(),
-			ingestionStmt.Options.ResumeTimestamp,
-			createReplicationOp); err != nil {
-			return false, nil, err
-		}
 	}
 	if ingestionStmt.Like.OtherTenant != nil {
 		toTypeCheck = append(toTypeCheck,
@@ -177,98 +168,45 @@ func ingestionPlanHook(
 				sourceTenant, dstTenantName, dstTenantID)
 		}
 
-		var revertFirst bool
 		// If we don't have a resume timestamp, make a new tenant
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		var destinationTenantID roachpb.TenantID
-		if options.resumeTimestamp.IsEmpty() {
-			// Determine which template will be used as config template to
-			// create the new tenant below.
-			tenantInfo, err := sql.GetTenantTemplate(ctx, p.ExecCfg().Settings, p.InternalSQLTxn(), nil, likeTenantID, likeTenantName)
-			if err != nil {
-				return err
-			}
-
-			// Create a new tenant for the replication stream.
-			tenantInfo.PhysicalReplicationConsumerJobID = jobID
-			// dstTenantID may be zero which will cause auto-allocation.
-			tenantInfo.ID = dstTenantID
-			tenantInfo.DataState = mtinfopb.DataStateAdd
-			tenantInfo.Name = roachpb.TenantName(dstTenantName)
-
-			initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.ExtendedEvalContext().Descs)
-			if err != nil {
-				return err
-			}
-			destinationTenantID, err = sql.CreateTenantRecord(
-				ctx, p.ExecCfg().Codec, p.ExecCfg().Settings,
-				p.InternalSQLTxn(),
-				p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, p.Txn()),
-				tenantInfo, initialTenantZoneConfig,
-				ingestionStmt.IfNotExists,
-				p.ExecCfg().TenantTestingKnobs,
-			)
-			if err != nil {
-				return err
-			} else if !destinationTenantID.IsSet() {
-				// No error but no valid tenant ID: there was an IF NOT EXISTS
-				// clause and the tenant already existed. Nothing else to do.
-				return nil
-			}
-			// No revert required since this is a new tenant.
-			revertFirst = false
-		} else {
-			tenantRecord, err := sql.GetTenantRecordByName(
-				ctx, p.ExecCfg().Settings,
-				p.InternalSQLTxn(),
-				roachpb.TenantName(dstTenantName),
-			)
-			if err != nil {
-				return err
-			}
-
-			// Here, we try to prevent the user from making a few
-			// mistakes. Starting a replication stream into an
-			// existing tenant requires both that it is offline and
-			// that it is consistent as of the provided timestamp.
-			if tenantRecord.ServiceMode != mtinfopb.ServiceModeNone {
-				return errors.Newf("cannot start replication for tenant %q (%d) in service mode %s; service mode must be %s",
-					tenantRecord.Name,
-					tenantRecord.ID,
-					tenantRecord.ServiceMode,
-					mtinfopb.ServiceModeNone,
-				)
-			}
-			if tenantRecord.LastRevertTenantTimestamp.IsEmpty() {
-				return errors.Newf("cannot start replication for tenant %q (%d) with no last revert timestamp found; likely that this tenant cannot be safely streamed into",
-					tenantRecord.Name,
-					tenantRecord.ID,
-				)
-			}
-			if !tenantRecord.LastRevertTenantTimestamp.Equal(options.resumeTimestamp) {
-				return errors.Newf("cannot start replication for tenant %q (%d) with resume timestamp %s that doesn't match last revert timestamp %s",
-					tenantRecord.Name,
-					tenantRecord.ID,
-					options.resumeTimestamp,
-					tenantRecord.LastRevertTenantTimestamp,
-				)
-			}
-			// No revert required, since we verified that we were already reverted.
-			revertFirst = false
-
-			// Reset the last revert timestamp.
-			tenantRecord.LastRevertTenantTimestamp = hlc.Timestamp{}
-			tenantRecord.PhysicalReplicationConsumerJobID = jobID
-			tenantRecord.DataState = mtinfopb.DataStateAdd
-			if err := sql.UpdateTenantRecord(ctx, p.ExecCfg().Settings,
-				p.InternalSQLTxn(), tenantRecord); err != nil {
-				return err
-			}
-			destinationTenantID, err = roachpb.MakeTenantID(tenantRecord.ID)
-			if err != nil {
-				return err
-			}
+		// Determine which template will be used as config template to
+		// create the new tenant below.
+		tenantInfo, err := sql.GetTenantTemplate(ctx, p.ExecCfg().Settings, p.InternalSQLTxn(), nil, likeTenantID, likeTenantName)
+		if err != nil {
+			return err
 		}
+
+		// Create a new tenant for the replication stream.
+		tenantInfo.PhysicalReplicationConsumerJobID = jobID
+		// dstTenantID may be zero which will cause auto-allocation.
+		tenantInfo.ID = dstTenantID
+		tenantInfo.DataState = mtinfopb.DataStateAdd
+		tenantInfo.Name = roachpb.TenantName(dstTenantName)
+
+		initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.ExtendedEvalContext().Descs)
+		if err != nil {
+			return err
+		}
+		destinationTenantID, err = sql.CreateTenantRecord(
+			ctx, p.ExecCfg().Codec, p.ExecCfg().Settings,
+			p.InternalSQLTxn(),
+			p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, p.Txn()),
+			tenantInfo, initialTenantZoneConfig,
+			ingestionStmt.IfNotExists,
+			p.ExecCfg().TenantTestingKnobs,
+		)
+		if err != nil {
+			return err
+		} else if !destinationTenantID.IsSet() {
+			// No error but no valid tenant ID: there was an IF NOT EXISTS
+			// clause and the tenant already existed. Nothing else to do.
+			return nil
+		}
+
+		// No revert required since this is a new tenant.
+		const noRevertFirst = false
 
 		return createReplicationJob(
 			ctx,
@@ -278,7 +216,7 @@ func ingestionPlanHook(
 			destinationTenantID,
 			retentionTTLSeconds,
 			options.resumeTimestamp,
-			revertFirst,
+			noRevertFirst,
 			jobID,
 			ingestionStmt,
 		)
