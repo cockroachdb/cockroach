@@ -154,8 +154,8 @@ func makeCascadeBuilder(b *Builder, mutationWithID opt.WithID) (*cascadeBuilder,
 // setupCascade fills in an exec.Cascade struct for the given cascade.
 func (cb *cascadeBuilder) setupCascade(cascade *memo.FKCascade) exec.Cascade {
 	return exec.Cascade{
-		FKName: cascade.FKName,
-		Buffer: cb.mutationBuffer,
+		FKConstraint: cascade.FKConstraint,
+		Buffer:       cb.mutationBuffer,
 		PlanFn: func(
 			ctx context.Context,
 			semaCtx *tree.SemaContext,
@@ -293,8 +293,10 @@ func (cb *cascadeBuilder) planCascade(
 	}
 
 	// 5. Execbuild the optimized expression.
-	eb := New(ctx, execFactory, &o, factory.Memo(), cb.b.catalog, optimizedExpr, evalCtx, allowAutoCommit,
-		evalCtx.Planner.IsANSIDML())
+	eb := New(
+		ctx, execFactory, &o, factory.Memo(), cb.b.catalog, optimizedExpr,
+		semaCtx, evalCtx, allowAutoCommit, evalCtx.Planner.IsANSIDML(),
+	)
 	if bufferRef != nil {
 		// Set up the With binding.
 		eb.addBuiltWithExpr(cascadeInputWithID, bufferColMap, bufferRef)
