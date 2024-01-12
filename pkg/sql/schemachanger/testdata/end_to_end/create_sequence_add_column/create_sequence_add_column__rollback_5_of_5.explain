@@ -1,0 +1,80 @@
+/* setup */
+CREATE TABLE t (k INT PRIMARY KEY);
+
+/* test */
+CREATE SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+ALTER TABLE t ADD COLUMN j INT DEFAULT nextval('sq1');
+EXPLAIN (DDL) rollback at post-commit stage 5 of 5;
+----
+Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ADD COLUMN ‹j› INT8 DEFAULT nextval(‹'sq1'›); following CREATE SEQUENCE ‹defaultdb›.public.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 26 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC                → ABSENT  Namespace:{DescID: 105 (sq1-), Name: "sq1", ReferencedDescID: 100 (#100)}
+      │    │    ├── PUBLIC                → ABSENT  Owner:{DescID: 105 (sq1-)}
+      │    │    ├── PUBLIC                → ABSENT  UserPrivileges:{DescID: 105 (sq1-), Name: "admin"}
+      │    │    ├── PUBLIC                → ABSENT  UserPrivileges:{DescID: 105 (sq1-), Name: "root"}
+      │    │    ├── DESCRIPTOR_ADDED      → DROPPED Sequence:{DescID: 105 (sq1-)}
+      │    │    ├── PUBLIC                → ABSENT  SequenceOption:{DescID: 105 (sq1-), Name: "START"}
+      │    │    ├── PUBLIC                → ABSENT  SchemaChild:{DescID: 105 (sq1-), ReferencedDescID: 101 (#101)}
+      │    │    ├── WRITE_ONLY            → ABSENT  Column:{DescID: 105 (sq1-), ColumnID: 1 (value-)}
+      │    │    ├── PUBLIC                → ABSENT  ColumnType:{DescID: 105 (sq1-), ColumnFamilyID: 0, ColumnID: 1 (value-)}
+      │    │    ├── PUBLIC                → ABSENT  ColumnNotNull:{DescID: 105 (sq1-), ColumnID: 1 (value-), IndexID: 0}
+      │    │    ├── PUBLIC                → ABSENT  ColumnName:{DescID: 105 (sq1-), Name: "value", ColumnID: 1 (value-)}
+      │    │    ├── PUBLIC                → ABSENT  PrimaryIndex:{DescID: 105 (sq1-), IndexID: 1 (primary-)}
+      │    │    ├── PUBLIC                → ABSENT  IndexName:{DescID: 105 (sq1-), Name: "primary", IndexID: 1 (primary-)}
+      │    │    ├── PUBLIC                → ABSENT  IndexColumn:{DescID: 105 (sq1-), ColumnID: 1 (value-), IndexID: 1 (primary-)}
+      │    │    ├── WRITE_ONLY            → ABSENT  Column:{DescID: 104 (t), ColumnID: 2 (j-)}
+      │    │    ├── PUBLIC                → ABSENT  ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j-)}
+      │    │    ├── PUBLIC                → ABSENT  ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j-)}
+      │    │    ├── PUBLIC                → ABSENT  ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j-), ReferencedSequenceIDs: [105 (sq1-)]}
+      │    │    ├── WRITE_ONLY            → ABSENT  PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
+      │    │    ├── PUBLIC                → ABSENT  IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 2 (t_pkey-)}
+      │    │    ├── PUBLIC                → ABSENT  IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey-)}
+      │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT  TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+      │    │    ├── PUBLIC                → ABSENT  IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 3}
+      │    │    ├── PUBLIC                → ABSENT  IndexData:{DescID: 104 (t), IndexID: 3}
+      │    │    ├── PUBLIC                → ABSENT  IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-), IndexID: 2 (t_pkey-)}
+      │    │    └── PUBLIC                → ABSENT  IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-), IndexID: 3}
+      │    └── 34 Mutation operations
+      │         ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":105}
+      │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":105}
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
+      │         ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":104}
+      │         ├── MarkDescriptorAsDropped {"DescriptorID":105}
+      │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.SequenceOpt..."}
+      │         ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
+      │         ├── RemoveColumnNotNull {"ColumnID":1,"TableID":105}
+      │         ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":105}
+      │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":105}
+      │         ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":104}
+      │         ├── UpdateTableBackReferencesInSequences {"BackReferencedColumnID":2,"BackReferencedTableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
+      │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"sq1","SchemaID":101}}
+      │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+      │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
+      │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":105}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":105}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"TableID":105}
+      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":105}
+      │         ├── MakeIndexAbsent {"IndexID":1,"TableID":105}
+      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward ABSENT
+           │    └── DROPPED → ABSENT Sequence:{DescID: 105 (sq1-)}
+           └── 3 Mutation operations
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
