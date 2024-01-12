@@ -80,7 +80,11 @@ func hasImage(ctx context.Context, l *DockerCluster, ref string) error {
 	if err != nil {
 		return err
 	}
-	path := reference.Path(distributionRef)
+	path := distributionRef.Name()
+	// Images hosted on docker.io have local name without the domain name
+	if strings.HasPrefix(path, "docker.io") {
+		path = reference.Path(distributionRef)
+	}
 	// Correct for random docker stupidity:
 	//
 	// https://github.com/moby/moby/blob/7248742/registry/service.go#L207:L215
@@ -113,7 +117,7 @@ func hasImage(ctx context.Context, l *DockerCluster, ref string) error {
 	var imageList []string
 	for _, image := range images {
 		for _, tag := range image.RepoTags {
-			imageList = append(imageList, "%s %s", tag, image.ID)
+			imageList = append(imageList, fmt.Sprintf("%s %s", tag, image.ID))
 		}
 	}
 	return errors.Errorf("%s not found in:\n%s", wanted, strings.Join(imageList, "\n"))

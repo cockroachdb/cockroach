@@ -9,7 +9,7 @@ id
 cat crdb-checkout/build/.bazelbuilderversion
 ----
 ----
-cockroachdb/bazel:20220328-163955
+us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel:20220328-163955
 ----
 ----
 
@@ -30,7 +30,7 @@ docker volume inspect bzlhome
 mkdir crdb-checkout/artifacts
 ----
 
-docker run --rm -it -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/build/bazelutil/empty.bazelrc:/cockroach/.bazelrc.user -v crdb-checkout/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 502:502 cockroachdb/bazel:20220328-163955
+docker run --rm -it -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/build/bazelutil/empty.bazelrc:/cockroach/.bazelrc.user -v crdb-checkout/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 502:502 us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel:20220328-163955
 ----
 
 which docker
@@ -44,7 +44,7 @@ id
 cat crdb-checkout/build/.bazelbuilderversion
 ----
 ----
-cockroachdb/bazel:20220328-163955
+us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel:20220328-163955
 ----
 ----
 
@@ -65,6 +65,6 @@ docker volume inspect bzlhome
 mkdir crdb-checkout/artifacts
 ----
 
-docker run --rm -i -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/build/bazelutil/empty.bazelrc:/cockroach/.bazelrc.user -v crdb-checkout/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 502:502 cockroachdb/bazel:20220328-163955 echo hi
+docker run --rm -i -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/build/bazelutil/empty.bazelrc:/cockroach/.bazelrc.user -v crdb-checkout/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 502:502 us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel:20220328-163955 echo hi
 ----
 
