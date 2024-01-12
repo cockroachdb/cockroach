@@ -34,17 +34,6 @@ var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSet
 	settings.WithName("physical_replication.producer.stream_liveness_track_frequency"),
 )
 
-// StreamReplicationJobLivenessTimeout controls how long we wait for to kill
-// an inactive producer job.
-var StreamReplicationJobLivenessTimeout = settings.RegisterDurationSetting(
-	settings.SystemOnly,
-	"stream_replication.job_liveness_timeout",
-	"controls how long we wait for to kill an inactive producer job",
-	3*24*time.Hour,
-	settings.WithRetiredName("stream_replication.job_liveness.timeout"),
-	settings.WithName("physical_replication.producer.job_liveness.timeout"),
-)
-
 // StreamReplicationMinCheckpointFrequency controls the minimum frequency the stream replication
 // source cluster sends checkpoints to destination cluster.
 var StreamReplicationMinCheckpointFrequency = settings.RegisterDurationSetting(
