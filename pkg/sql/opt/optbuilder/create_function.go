@@ -248,7 +248,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			afterBuildStmt()
 		}
 	case tree.RoutineLangPLpgSQL:
-		if cf.ReturnType.SetOf {
+		if cf.ReturnType != nil && cf.ReturnType.SetOf {
 			panic(unimplemented.NewWithIssueDetail(105240,
 				"set-returning PL/pgSQL functions",
 				"set-returning PL/pgSQL functions are not yet supported",
