@@ -11,6 +11,10 @@ go_test(
     name = "bitmap_test",
     srcs = ["bitmap_test.go"],
     embed = [":bitmap"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//require",

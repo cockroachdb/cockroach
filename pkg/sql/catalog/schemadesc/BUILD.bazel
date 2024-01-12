@@ -41,6 +41,10 @@ go_test(
     name = "schemadesc_test",
     size = "small",
     srcs = ["schema_desc_test.go"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":schemadesc",
         "//pkg/clusterversion",

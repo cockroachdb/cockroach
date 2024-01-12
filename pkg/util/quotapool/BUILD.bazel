@@ -33,6 +33,10 @@ go_test(
         "notify_queue_test.go",
     ],
     embed = [":quotapool"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/testutils",
         "//pkg/util/ctxgroup",

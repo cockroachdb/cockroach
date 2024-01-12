@@ -30,6 +30,10 @@ go_test(
     srcs = ["audit_log_test.go"],
     data = glob(["testdata/**"]),
     embed = [":auditlogging"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/settings/rulebasedscanner",
         "//pkg/testutils/datapathutils",

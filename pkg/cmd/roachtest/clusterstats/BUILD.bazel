@@ -34,6 +34,10 @@ go_test(
         ":clusterstats_mock",  # keep
     ],
     embed = [":clusterstats"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",

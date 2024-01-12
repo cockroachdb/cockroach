@@ -40,6 +40,10 @@ go_test(
         "types_text_marshal_test.go",
     ],
     embed = [":types"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/geo/geopb",
         "//pkg/sql/catalog/descpb",

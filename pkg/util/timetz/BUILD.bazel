@@ -20,6 +20,10 @@ go_test(
     size = "small",
     srcs = ["timetz_test.go"],
     embed = [":timetz"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util/timeofday",
         "//pkg/util/timeutil",

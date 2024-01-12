@@ -50,5 +50,9 @@ go_test(
     name = "build_test",
     srcs = ["info_test.go"],
     embed = [":build"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = ["@com_github_stretchr_testify//require"],
 )

@@ -30,6 +30,10 @@ go_test(
         "fix_test.go",
     ],
     embed = [":catprivilege"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/keys",
         "//pkg/security/username",

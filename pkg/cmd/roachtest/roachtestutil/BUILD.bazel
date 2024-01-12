@@ -32,5 +32,9 @@ go_test(
     name = "roachtestutil_test",
     srcs = ["commandbuilder_test.go"],
     embed = [":roachtestutil"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = ["@com_github_stretchr_testify//require"],
 )

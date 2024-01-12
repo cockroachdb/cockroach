@@ -72,6 +72,11 @@ func (f *FloatSetting) Default() float64 {
 	return f.defaultValue
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (f *FloatSetting) DefaultString() (string, error) {
+	return f.DecodeToString(f.EncodedDefault())
+}
+
 // Defeat the linter.
 var _ = (*FloatSetting).Default
 

@@ -25,6 +25,10 @@ go_test(
         "temp_dir_test.go",
     ],
     embed = [":fs"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/log",

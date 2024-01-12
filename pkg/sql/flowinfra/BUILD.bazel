@@ -66,6 +66,10 @@ go_test(
         "utils_test.go",
     ],
     embed = [":flowinfra"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",

@@ -25,6 +25,10 @@ go_test(
         "humanize_test.go",
     ],
     embed = [":humanizeutil"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_redact//:redact",

@@ -58,6 +58,10 @@ go_library(
 go_test(
     name = "catpb_test",
     srcs = ["privilege_test.go"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":catpb",
         "//pkg/keys",

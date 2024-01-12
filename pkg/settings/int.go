@@ -71,6 +71,11 @@ func (i *IntSetting) Default() int64 {
 	return i.defaultValue
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (i *IntSetting) DefaultString() (string, error) {
+	return i.DecodeToString(i.EncodedDefault())
+}
+
 // Defeat the linter.
 var _ = (*IntSetting).Default
 

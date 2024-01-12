@@ -18,6 +18,10 @@ go_test(
     data = glob(["testdata/**"]) + [
         "@go_sdk//:files",
     ],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":nilness",
         "//pkg/build/bazel",

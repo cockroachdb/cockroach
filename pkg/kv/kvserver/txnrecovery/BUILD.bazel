@@ -26,6 +26,10 @@ go_test(
     size = "small",
     srcs = ["manager_test.go"],
     embed = [":txnrecovery"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvpb",

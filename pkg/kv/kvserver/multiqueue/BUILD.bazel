@@ -17,6 +17,10 @@ go_test(
     size = "small",
     srcs = ["multi_queue_test.go"],
     embed = [":multiqueue"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/testutils",
         "//pkg/util/leaktest",

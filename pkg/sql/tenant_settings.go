@@ -19,11 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -164,19 +162,22 @@ func (n *alterTenantSetClusterSettingNode) Values() tree.Datums            { ret
 func (n *alterTenantSetClusterSettingNode) Close(_ context.Context)        {}
 
 // ShowTenantClusterSetting shows the value of a cluster setting for a tenant.
-// Privileges: super user.
+// Privileges: MANAGEVIRTUALCLUSTER
 func (p *planner) ShowTenantClusterSetting(
 	ctx context.Context, n *tree.ShowTenantClusterSetting,
 ) (planNode, error) {
-	// Viewing cluster settings for other tenants is a more
-	// privileged operation than viewing local cluster settings. So we
-	// shouldn't be allowing with just the role option
-	// VIEWCLUSTERSETTINGS.
-	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
+	// Viewing cluster settings for other tenants is a more privileged operation
+	// than viewing local cluster settings. So we shouldn't be allowing with just
+	// the role option VIEWCLUSTERSETTING. We use MANAGEVIRTUALCLUSTER instead.
+	// That privilege implicitly gives the ability to view non-redacted values for
+	// sensitive cluster settings.
+	if err := CanManageTenant(ctx, p); err != nil {
 		return nil, err
 	}
 
 	name := settings.SettingName(strings.ToLower(n.Name))
+	// NB: We use LookupForLocalAccess since the displayed value is computed in
+	// the crdb_internal.decode_cluster_setting builtin function.
 	setting, ok, nameStatus := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
@@ -226,12 +227,13 @@ WITH
   setting AS (
    SELECT $1 AS variable
   )
-SELECT COALESCE(
-   tenantspecific.value,
-   overrideall.value,
-   -- NB: we can't compute the actual value here, see discussion on issue #77935.
-   NULL
-   )
+SELECT crdb_internal.decode_cluster_setting(setting.variable,
+     COALESCE(tenantspecific.value,
+              overrideall.value,
+              -- NB: we can't compute the actual value here, which is the entry in the tenant's settings table.
+              -- See discussion on issue #77935.
+              NULL)
+  ) AS value
 FROM
   setting
   LEFT JOIN tenantspecific
@@ -241,9 +243,9 @@ FROM
 
 			datums, err := p.InternalSQLTxn().QueryRowEx(
 				ctx, "get-tenant-setting-value", p.txn,
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NoSessionDataOverride,
 				lookupEncodedTenantSetting,
-				setting.InternalKey(), rec.ID)
+				setting.Name(), rec.ID)
 			if err != nil {
 				return false, "", err
 			}

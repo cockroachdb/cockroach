@@ -28,5 +28,9 @@ go_test(
     name = "syntheticprivilege_test",
     srcs = ["synthetic_privilege_registry_test.go"],
     embed = [":syntheticprivilege"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = ["@com_github_stretchr_testify//require"],
 )

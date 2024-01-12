@@ -22,6 +22,10 @@ go_test(
     name = "spanstatsconsumer_test",
     srcs = ["span_stats_consumer_test.go"],
     embed = [":spanstatsconsumer"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/roachpb",
         "@com_github_stretchr_testify//require",

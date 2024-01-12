@@ -53,6 +53,10 @@ go_test(
     ],
     data = ["//c-deps:libgeos"],
     embed = [":sqlsmith"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/ccl",

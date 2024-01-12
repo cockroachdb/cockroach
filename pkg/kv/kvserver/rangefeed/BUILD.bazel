@@ -62,6 +62,10 @@ go_test(
         "task_test.go",
     ],
     embed = [":rangefeed"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",

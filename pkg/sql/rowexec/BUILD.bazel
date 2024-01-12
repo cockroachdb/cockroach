@@ -146,6 +146,10 @@ go_test(
         "zigzagjoiner_test.go",
     ],
     embed = [":rowexec"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/gossip",

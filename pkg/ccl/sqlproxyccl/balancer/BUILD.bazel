@@ -36,6 +36,10 @@ go_test(
         "pod_test.go",
     ],
     embed = [":balancer"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",

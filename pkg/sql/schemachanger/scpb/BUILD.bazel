@@ -118,5 +118,9 @@ go_test(
     name = "scpb_test",
     srcs = ["element_collection_test.go"],
     embed = [":scpb"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = ["@com_github_stretchr_testify//require"],
 )

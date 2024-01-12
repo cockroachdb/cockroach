@@ -23,6 +23,10 @@ go_test(
     size = "small",
     srcs = ["index_test.go"],
     embed = [":catformat"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",

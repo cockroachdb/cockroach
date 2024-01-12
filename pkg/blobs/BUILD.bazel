@@ -38,6 +38,10 @@ go_test(
         "service_test.go",
     ],
     embed = [":blobs"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/blobs/blobspb",

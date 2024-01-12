@@ -53,7 +53,10 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":rttanalysis"],
-    exec_properties = {"Pool": "large"},
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "large"},
+    }),
     shard_count = 16,
     deps = [
         "//pkg/base",

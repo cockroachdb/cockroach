@@ -76,6 +76,10 @@ go_proto_library(
 go_test(
     name = "jobspb_test",
     srcs = ["wrap_test.go"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         ":jobspb",
         "@com_github_stretchr_testify//assert",

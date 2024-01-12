@@ -18,6 +18,10 @@ go_test(
     size = "small",
     srcs = ["cgroups_test.go"],
     embed = [":cgroups"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/testutils",
         "@com_github_stretchr_testify//require",

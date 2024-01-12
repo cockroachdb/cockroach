@@ -16,6 +16,10 @@ go_test(
     name = "listenerutil_test",
     srcs = ["listener_test.go"],
     embed = [":listenerutil"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/util/ctxgroup",
         "//pkg/util/leaktest",

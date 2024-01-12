@@ -36,6 +36,10 @@ go_test(
         "pgbench_test.go",
     ],
     embed = [":bench"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/security/securityassets",

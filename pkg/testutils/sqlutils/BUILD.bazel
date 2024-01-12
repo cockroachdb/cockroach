@@ -52,6 +52,10 @@ go_test(
         "table_gen_test.go",
     ],
     embed = [":sqlutils"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/security/securityassets",

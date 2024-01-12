@@ -27,6 +27,10 @@ go_test(
         "utils_test.go",
     ],
     embed = [":protoreflect"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"Pool": "heavy"},
+        "//conditions:default": {"Pool": "default"},
+    }),
     deps = [
         "//pkg/geo/geopb",
         "//pkg/security/securityassets",
