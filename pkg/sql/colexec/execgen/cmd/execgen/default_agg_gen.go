@@ -35,5 +35,7 @@ func genDefaultAgg(inputFileContents string, wr io.Writer) error {
 
 func init() {
 	registerAggGenerator(
-		genDefaultAgg, "default_agg.eg.go", defaultAggTmpl, false /* genWindowVariant */)
+		genDefaultAgg, "default_agg.eg.go", /* filenameSuffix */
+		defaultAggTmpl, "defaultAgg" /* aggName */, false, /* genWindowVariant */
+	)
 }

@@ -112,7 +112,7 @@ const sumAggTmpl = "pkg/sql/colexec/colexecagg/sum_agg_tmpl.go"
 
 func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 	r := strings.NewReplacer(
-		"_TYPE_FAMILY", "{{.TypeFamily}}",
+		"_CANONICAL_TYPE_FAMILY", "{{.TypeFamily}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_SUMKIND", "{{.SumKind}}",
 		"_RET_GOTYPESLICE", `{{.RetGoTypeSlice}}`,
@@ -207,9 +207,11 @@ func init() {
 		}
 	}
 	registerAggGenerator(
-		sumAggGenerator(false /* isSumInt */), "sum_agg.eg.go",
-		sumAggTmpl, true /* genWindowVariant */)
+		sumAggGenerator(false /* isSumInt */), "sum_agg.eg.go", /* filenameSuffix */
+		sumAggTmpl, "sum" /* aggName */, true, /* genWindowVariant */
+	)
 	registerAggGenerator(
-		sumAggGenerator(true /* isSumInt */), "sum_int_agg.eg.go",
-		sumAggTmpl, true /* genWindowVariant */)
+		sumAggGenerator(true /* isSumInt */), "sum_int_agg.eg.go", /* filenameSuffix */
+		sumAggTmpl, "sumInt" /* aggName */, true, /* genWindowVariant */
+	)
 }

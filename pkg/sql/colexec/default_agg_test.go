@@ -174,7 +174,8 @@ func BenchmarkDefaultAggregateFunction(b *testing.B) {
 					b, agg, aggFn, []*types.T{types.String, types.String},
 					1 /* numGroupCol */, groupSize,
 					0 /* distinctProb */, numInputRows,
-					0 /* chunkSize */, 0 /* limit */)
+					0 /* chunkSize */, 0 /* limit */, 0, /* numSameAggs */
+				)
 			}
 		}
 	}

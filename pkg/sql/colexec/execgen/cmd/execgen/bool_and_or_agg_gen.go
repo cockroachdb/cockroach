@@ -96,5 +96,7 @@ func genBooleanAgg(inputFileContents string, wr io.Writer) error {
 
 func init() {
 	registerAggGenerator(
-		genBooleanAgg, "bool_and_or_agg.eg.go", boolAggTmpl, true /* genWindowVariant */)
+		genBooleanAgg, "bool_and_or_agg.eg.go", /* filenameSuffix */
+		boolAggTmpl, "boolAndOr", true, /* genWindowVariant */
+	)
 }

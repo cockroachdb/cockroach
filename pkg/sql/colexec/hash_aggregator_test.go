@@ -528,7 +528,9 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 			} {
 				benchmarkAggregateFunction(
 					b, agg, aggFn, []*types.T{types.Int}, 1 /* numGroupCol */, groupSize,
-					0 /* distinctProb */, numInputRows, 0 /* chunkSize */, 0 /* limit */)
+					0 /* distinctProb */, numInputRows, 0, /* chunkSize */
+					0 /* limit */, 0, /* numSameAggs */
+				)
 			}
 		}
 	}
@@ -617,7 +619,10 @@ func BenchmarkHashAggregatorPartialOrder(b *testing.B) {
 							// so we can skip all but one case.
 							continue
 						}
-						benchmarkAggregateFunction(b, agg, aggFn, []*types.T{types.Int}, 2, groupSize, 0, numInputRows, chunkSize, limit)
+						benchmarkAggregateFunction(
+							b, agg, aggFn, []*types.T{types.Int}, 2 /* numGroupCol */, groupSize,
+							0 /* distinctProb */, numInputRows, chunkSize, limit, 0, /* numSameAggs */
+						)
 					}
 				}
 			}

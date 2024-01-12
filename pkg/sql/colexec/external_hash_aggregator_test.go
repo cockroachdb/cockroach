@@ -218,7 +218,9 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 						order: unordered,
 					},
 					aggFn, []*types.T{types.Int}, 1 /* numGroupCol */, groupSize,
-					0 /* distinctProb */, numInputRows, 0 /* chunkSize */, 0 /* limit */)
+					0 /* distinctProb */, numInputRows, 0, /* chunkSize */
+					0 /* limit */, 0, /* numSameAggs */
+				)
 			}
 		}
 	}

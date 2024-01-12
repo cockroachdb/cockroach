@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -30,7 +31,44 @@ var (
 	_ tree.AggType
 	_ apd.Context
 	_ duration.Duration
+	_ = typeconv.TypeFamilyToCanonicalTypeFamily
 )
+
+const sumIntNumOverloads = 3
+
+func init() {
+	// Sanity check the hard-coded number of overloads.
+	var numOverloads int
+	numOverloads++
+	numOverloads++
+	numOverloads++
+	if numOverloads != sumIntNumOverloads {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"sumIntNumOverloads should be updated: expected %d, found %d", numOverloads, sumIntNumOverloads,
+		))
+	}
+}
+
+// sumIntOverloadOffset returns the offset for this particular type overload
+// within contiguous slice of allocators for this aggregate function.
+func sumIntOverloadOffset(t *types.T) int {
+	var offset int
+	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family())
+	if canonicalTypeFamily == types.IntFamily {
+		if t.Width() == 16 {
+			return offset
+		}
+		offset++
+		if t.Width() == 32 {
+			return offset
+		}
+		offset++
+		return offset
+	}
+	offset += 3
+	colexecerror.InternalError(errors.AssertionFailedf("didn't find overload offset for %s", t.SQLStringForError()))
+	return 0
+}
 
 func newSumIntOrderedAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,
