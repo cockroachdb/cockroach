@@ -13,15 +13,20 @@ package execinfra
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Test the behavior of Run in the presence of errors that switch to the drain
@@ -128,5 +133,51 @@ func BenchmarkMultiplexedRowChannel(b *testing.B) {
 				wg.Wait()
 			}
 		})
+	}
+}
+
+// BenchmarkRenderPlanning is similar to BenchmarkRenderPlanning, but
+// varies the number of columns available in the input to the render
+// expressions.
+func BenchmarkRenderPlanning(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{SQLMemoryPoolSize: 10 << 30})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(b, "SET CLUSTER SETTING sql.defaults.vectorize = off")
+	for _, numCols := range []int{1 << 4, 1 << 6, 1 << 9} {
+		sqlDB.Exec(b, "DROP TABLE IF EXISTS bench")
+		var sb strings.Builder
+		sb.WriteString("CREATE TABLE bench (id INT PRIMARY KEY")
+		for i := 0; i < numCols; i++ {
+			sb.WriteString(", ")
+			sb.WriteString(fmt.Sprintf("col%d STRING DEFAULT 'foobarbaz'", i))
+		}
+		sb.WriteString(")")
+		createTable := sb.String()
+		sqlDB.Exec(b, createTable)
+		sqlDB.Exec(b, fmt.Sprintf(`INSERT INTO bench(id) SELECT i FROM generate_series(1, 256) AS g(i)`))
+		sqlDB.Exec(b, "ANALYZE bench")
+		for _, numRenders := range []int{1, 2 << 8, 1 << 12} {
+			var sb strings.Builder
+			sb.WriteString("SELECT ")
+			for i := 0; i < numRenders; i++ {
+				if i > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(fmt.Sprintf("col0 || 'x' AS test%d", i+1))
+			}
+			sb.WriteString(" FROM bench")
+			query := sb.String()
+			b.Run(fmt.Sprintf("col=%d/renders=%d", numCols, numRenders), func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					sqlDB.Exec(b, query)
+				}
+			})
+		}
 	}
 }
