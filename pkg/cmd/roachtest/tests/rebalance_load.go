@@ -239,7 +239,7 @@ func rebalanceByLoad(
 	// Note that we only assert on the CPU of each store w.r.t the mean, not
 	// the lease count.
 	splits := (numStores * storeToRangeFactor) - 1
-	c.Run(ctx, appNode, fmt.Sprintf("./cockroach workload init kv --drop --splits=%d {pgurl:1}", splits))
+	c.Run(ctx, option.WithNodes(appNode), fmt.Sprintf("./cockroach workload init kv --drop --splits=%d {pgurl:1}", splits))
 
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
@@ -256,7 +256,7 @@ func rebalanceByLoad(
 
 	m.Go(func() error {
 		t.L().Printf("starting load generator\n")
-		err := c.RunE(ctx, appNode, fmt.Sprintf(
+		err := c.RunE(ctx, option.WithNodes(appNode), fmt.Sprintf(
 			"./cockroach workload run kv --read-percent=95 --tolerate-errors --concurrency=%d "+
 				"--duration=%v {pgurl:1-%d}",
 			concurrency, maxDuration, numNodes))

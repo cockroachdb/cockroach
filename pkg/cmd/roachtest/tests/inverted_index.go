@@ -47,7 +47,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t test.Test, c cluster.Cl
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
 	cmdInit := "./workload init json {pgurl:1}"
-	c.Run(ctx, workloadNode, cmdInit)
+	c.Run(ctx, option.WithNodes(workloadNode), cmdInit)
 
 	// On a 4-node GCE cluster with the standard configuration, this generates ~10 million rows
 	initialDataDuration := time.Minute * 20
@@ -66,7 +66,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t test.Test, c cluster.Cl
 		initialDataDuration.String(), c.Spec().NodeCount-1,
 	)
 	m.Go(func(ctx context.Context) error {
-		c.Run(ctx, workloadNode, cmdWrite)
+		c.Run(ctx, option.WithNodes(workloadNode), cmdWrite)
 
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
@@ -90,7 +90,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t test.Test, c cluster.Cl
 		indexDuration.String(), c.Spec().NodeCount-1,
 	)
 	m.Go(func(ctx context.Context) error {
-		c.Run(ctx, workloadNode, cmdWriteAndRead)
+		c.Run(ctx, option.WithNodes(workloadNode), cmdWriteAndRead)
 		return nil
 	})
 

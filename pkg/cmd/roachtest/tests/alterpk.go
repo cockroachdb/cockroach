@@ -54,19 +54,19 @@ func registerAlterPK(r registry.Registry) {
 
 			// Init the workload.
 			cmd := fmt.Sprintf("./workload init bank --drop --rows %d {pgurl%s}", numRows, roachNodes)
-			if err := c.RunE(ctx, loadNode, cmd); err != nil {
+			if err := c.RunE(ctx, option.WithNodes(loadNode), cmd); err != nil {
 				t.Fatal(err)
 			}
 			initDone <- struct{}{}
 
 			// Run the workload while the primary key change is happening.
 			cmd = fmt.Sprintf("./workload run bank --duration=%s {pgurl%s}", duration, roachNodes)
-			c.Run(ctx, loadNode, cmd)
+			c.Run(ctx, option.WithNodes(loadNode), cmd)
 			// Wait for the primary key change to finish.
 			<-pkChangeDone
 			t.Status("starting second run of the workload after primary key change")
 			// Run the workload after the primary key change occurs.
-			c.Run(ctx, loadNode, cmd)
+			c.Run(ctx, option.WithNodes(loadNode), cmd)
 			return nil
 		})
 		m.Go(func(ctx context.Context) error {
@@ -114,7 +114,7 @@ func registerAlterPK(r registry.Registry) {
 			warehouses,
 			pgurl,
 		)
-		if err := c.RunE(ctx, c.Node(roachNodes[0]), cmd); err != nil {
+		if err := c.RunE(ctx, option.WithNodes(c.Node(roachNodes[0])), cmd); err != nil {
 			t.Fatal(err)
 		}
 
@@ -128,7 +128,7 @@ func registerAlterPK(r registry.Registry) {
 				roachNodes,
 			)
 			t.Status("beginning workload")
-			c.Run(ctx, loadNode, runCmd)
+			c.Run(ctx, option.WithNodes(loadNode), runCmd)
 			t.Status("finished running workload")
 			return nil
 		})
@@ -178,7 +178,7 @@ func registerAlterPK(r registry.Registry) {
 			c.Node(roachNodes[0]),
 		)
 		t.Status("beginning database verification")
-		c.Run(ctx, loadNode, checkCmd)
+		c.Run(ctx, option.WithNodes(loadNode), checkCmd)
 		t.Status("finished database verification")
 	}
 	r.Add(registry.TestSpec{

@@ -82,7 +82,7 @@ func registerGORM(r registry.Registry) {
 		// It's safer to clean up dependencies this way than it is to give the cluster
 		// wipe root access.
 		defer func() {
-			c.Run(ctx, c.All(), "go clean -modcache")
+			c.Run(ctx, option.WithNodes(c.All()), "go clean -modcache")
 		}()
 
 		if err := repeatGitCloneE(
@@ -97,7 +97,7 @@ func registerGORM(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDir)); err != nil {
+		if err := c.RunE(ctx, option.WithNodes(node), fmt.Sprintf("mkdir -p %s", resultsDir)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -109,13 +109,13 @@ func registerGORM(r registry.Registry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = c.RunE(ctx, node, fmt.Sprintf(`./cockroach sql -e "CREATE DATABASE gorm" --insecure --url=%s`, pgurl))
+		err = c.RunE(ctx, option.WithNodes(node), fmt.Sprintf(`./cockroach sql -e "CREATE DATABASE gorm" --insecure --url=%s`, pgurl))
 		require.NoError(t, err)
 
 		t.Status("downloading go dependencies for tests")
 		err = c.RunE(
 			ctx,
-			node,
+			option.WithNodes(node),
 			fmt.Sprintf(`cd %s && go mod tidy && go mod download`, gormTestPath),
 		)
 		require.NoError(t, err)
@@ -128,7 +128,7 @@ func registerGORM(r registry.Registry) {
 		// the test runner.
 		err = c.RunE(
 			ctx,
-			node,
+			option.WithNodes(node),
 			fmt.Sprintf(`cd %s && rm migrate_test.go &&
 				GORM_DIALECT="postgres" GORM_DSN="user=root password= dbname=gorm host=localhost port={pgport:1} sslmode=disable"
 				go test -v ./... 2>&1 | %s/bin/go-junit-report > %s`,

@@ -358,7 +358,7 @@ func (c *SyncedCluster) validateHost(ctx context.Context, l *logger.Logger, node
 		return nil
 	}
 	cmd := c.validateHostnameCmd("", node)
-	return c.Run(ctx, l, l.Stdout, l.Stderr, OnNodes(Nodes{node}), "validate-ssh-host", cmd)
+	return c.Run(ctx, l, l.Stdout, l.Stderr, WithNodes(Nodes{node}), "validate-ssh-host", cmd)
 }
 
 // cmdDebugName is the suffix of the generated ssh debug file
@@ -483,7 +483,7 @@ func (c *SyncedCluster) kill(
 		// `kill -9` without wait is never what a caller wants. See #77334.
 		wait = true
 	}
-	return c.Parallel(ctx, l, OnNodes(c.Nodes).WithDisplay(display).WithRetryDisabled(),
+	return c.Parallel(ctx, l, WithNodes(c.Nodes).WithDisplay(display).WithRetryDisabled(),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
 			var waitCmd string
 			if wait {
@@ -550,7 +550,7 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 	if err := c.Stop(ctx, l, 9, true /* wait */, 0 /* maxWait */, ""); err != nil {
 		return err
 	}
-	return c.Parallel(ctx, l, OnNodes(c.Nodes).WithDisplay(display), func(ctx context.Context, node Node) (*RunResultDetails, error) {
+	return c.Parallel(ctx, l, WithNodes(c.Nodes).WithDisplay(display), func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		var cmd string
 		if c.IsLocal() {
 			// Not all shells like brace expansion, so we'll do it here
@@ -590,7 +590,7 @@ type NodeStatus struct {
 // Status TODO(peter): document
 func (c *SyncedCluster) Status(ctx context.Context, l *logger.Logger) ([]NodeStatus, error) {
 	display := fmt.Sprintf("%s: status", c.Name)
-	res, _, err := c.ParallelE(ctx, l, OnNodes(c.Nodes).WithDisplay(display), func(ctx context.Context, node Node) (*RunResultDetails, error) {
+	res, _, err := c.ParallelE(ctx, l, WithNodes(c.Nodes).WithDisplay(display), func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		binary := cockroachNodeBinary(c, node)
 		cmd := fmt.Sprintf(`out=$(ps axeww -o pid -o ucomm -o command | \
   sed 's/export ROACHPROD=//g' | \
@@ -1370,7 +1370,7 @@ func (c *SyncedCluster) RepeatRun(
 		}
 		attempt++
 		l.Printf("attempt %d - %s", attempt, title)
-		lastError = c.Run(ctx, l, stdout, stderr, OnNodes(nodes), title, cmd)
+		lastError = c.Run(ctx, l, stdout, stderr, WithNodes(nodes), title, cmd)
 		if lastError != nil {
 			l.Printf("error - retrying: %s", lastError)
 			continue
@@ -1383,7 +1383,7 @@ func (c *SyncedCluster) RepeatRun(
 // Wait TODO(peter): document
 func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 	display := fmt.Sprintf("%s: waiting for nodes to start", c.Name)
-	_, hasError, err := c.ParallelE(ctx, l, OnNodes(c.Nodes).WithDisplay(display).WithRetryDisabled(),
+	_, hasError, err := c.ParallelE(ctx, l, WithNodes(c.Nodes).WithDisplay(display).WithRetryDisabled(),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
 			res := &RunResultDetails{Node: node}
 			var err error
@@ -1443,7 +1443,7 @@ func (c *SyncedCluster) SetupSSH(ctx context.Context, l *logger.Logger) error {
 
 	// Generate an ssh key that we'll distribute to all the nodes in the
 	// cluster in order to allow inter-node ssh.
-	results, _, err := c.ParallelE(ctx, l, OnNodes(c.Nodes[0:1]).WithDisplay("generating ssh key"),
+	results, _, err := c.ParallelE(ctx, l, WithNodes(c.Nodes[0:1]).WithDisplay("generating ssh key"),
 		func(ctx context.Context, n Node) (*RunResultDetails, error) {
 			// Create the ssh key and then tar up the public, private and
 			// authorized_keys files and output them to stdout. We'll take this output
@@ -1466,7 +1466,7 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 	sshTar := []byte(results[0].Stdout)
 	// Skip the first node which is where we generated the key.
 	nodes := c.Nodes[1:]
-	if err := c.Parallel(ctx, l, OnNodes(nodes).WithDisplay("distributing ssh key"),
+	if err := c.Parallel(ctx, l, WithNodes(nodes).WithDisplay("distributing ssh key"),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
 			runOpts := defaultCmdOpts("ssh-dist-key")
 			runOpts.stdin = bytes.NewReader(sshTar)
@@ -1504,7 +1504,7 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 	for i, provider := range providers {
 		firstNodes[i] = providerPrivateIPs[provider][0].node
 	}
-	if err := c.Parallel(ctx, l, OnNodes(firstNodes).WithDisplay("scanning hosts"),
+	if err := c.Parallel(ctx, l, WithNodes(firstNodes).WithDisplay("scanning hosts"),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
 			// Scan a combination of all remote IPs and local IPs pertaining to this
 			// node's cloud provider.
@@ -1554,7 +1554,7 @@ exit 1
 		return err
 	}
 
-	if err := c.Parallel(ctx, l, OnNodes(c.Nodes).WithDisplay("distributing known_hosts"),
+	if err := c.Parallel(ctx, l, WithNodes(c.Nodes).WithDisplay("distributing known_hosts"),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
 			provider := c.VMs[node-1].Provider
 			const cmd = `
@@ -1597,7 +1597,7 @@ fi
 		// additional authorized_keys to both the current user (your username on
 		// gce and the shared user on aws) as well as to the shared user on both
 		// platforms.
-		if err := c.Parallel(ctx, l, OnNodes(c.Nodes).WithDisplay("adding additional authorized keys"),
+		if err := c.Parallel(ctx, l, WithNodes(c.Nodes).WithDisplay("adding additional authorized keys"),
 			func(ctx context.Context, node Node) (*RunResultDetails, error) {
 				const cmd = `
 keys_data="$(cat)"
@@ -1652,7 +1652,7 @@ func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) e
 
 	// Generate the ca, client and node certificates on the first node.
 	display := fmt.Sprintf("%s: initializing certs", c.Name)
-	if err := c.Parallel(ctx, l, OnNodes(c.Nodes[0:1]).WithDisplay(display),
+	if err := c.Parallel(ctx, l, WithNodes(c.Nodes[0:1]).WithDisplay(display),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
 			var cmd string
 			if c.IsLocal() {
@@ -1736,7 +1736,7 @@ func (c *SyncedCluster) createTenantCertBundle(
 	nodeNames []string,
 ) error {
 	display := fmt.Sprintf("%s: initializing tenant certs", c.Name)
-	return c.Parallel(ctx, l, OnNodes(c.Nodes[0:1]).WithDisplay(display),
+	return c.Parallel(ctx, l, WithNodes(c.Nodes[0:1]).WithDisplay(display),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
 			cmd := "set -e;"
 			if c.IsLocal() {
@@ -1879,7 +1879,7 @@ func (c *SyncedCluster) distributeLocalCertsTar(
 	}
 
 	display := c.Name + ": distributing certs"
-	return c.Parallel(ctx, l, OnNodes(nodes).WithDisplay(display),
+	return c.Parallel(ctx, l, WithNodes(nodes).WithDisplay(display),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
 			var cmd string
 			if c.IsLocal() {

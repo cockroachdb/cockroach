@@ -47,7 +47,7 @@ const (
 	FailSlow
 )
 
-func OnNodes(nodes Nodes) RunOptions {
+func WithNodes(nodes Nodes) RunOptions {
 	return RunOptions{
 		Nodes: nodes,
 	}

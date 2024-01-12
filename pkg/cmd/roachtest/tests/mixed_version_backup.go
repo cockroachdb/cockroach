@@ -2015,7 +2015,7 @@ func (u *CommonTestUtils) disableJobAdoption(
 			if err != nil {
 				return err
 			}
-			if err := u.cluster.RunE(ctx, u.cluster.Node(node), "touch", sentinelFilePath); err != nil {
+			if err := u.cluster.RunE(ctx, option.WithNodes(u.cluster.Node(node)), "touch", sentinelFilePath); err != nil {
 				return fmt.Errorf("node %d: failed to touch sentinel file %q: %w", node, sentinelFilePath, err)
 			}
 
@@ -2066,7 +2066,7 @@ func (u *CommonTestUtils) enableJobAdoption(
 				return err
 			}
 
-			if err := u.cluster.RunE(ctx, u.cluster.Node(node), "rm -f", sentinelFilePath); err != nil {
+			if err := u.cluster.RunE(ctx, option.WithNodes(u.cluster.Node(node)), "rm -f", sentinelFilePath); err != nil {
 				return fmt.Errorf("node %d: failed to remove sentinel file %q: %w", node, sentinelFilePath, err)
 			}
 

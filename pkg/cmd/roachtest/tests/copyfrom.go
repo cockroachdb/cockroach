@@ -73,8 +73,8 @@ func initTest(ctx context.Context, t test.Test, c cluster.Cluster, sf int) {
 		t.L().Printf("when running locally, ensure that psql is installed")
 	}
 	csv := fmt.Sprintf(tpchLineitemFmt, sf)
-	c.Run(ctx, c.Node(1), "rm -f /tmp/lineitem-table.csv")
-	c.Run(ctx, c.Node(1), fmt.Sprintf("curl '%s' -o /tmp/lineitem-table.csv", csv))
+	c.Run(ctx, option.WithNodes(c.Node(1)), "rm -f /tmp/lineitem-table.csv")
+	c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("curl '%s' -o /tmp/lineitem-table.csv", csv))
 }
 
 func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
@@ -120,18 +120,18 @@ func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
 	dataRate := bytes / 1024 / 1024 / dur.Seconds()
 	t.L().Printf("results: %d rows/s, %f mb/s", rate, dataRate)
 	// Write the copy rate into the stats.json file to be used by roachperf.
-	c.Run(ctx, c.Node(1), "mkdir", t.PerfArtifactsDir())
+	c.Run(ctx, option.WithNodes(c.Node(1)), "mkdir", t.PerfArtifactsDir())
 	cmd := fmt.Sprintf(
 		`echo '{ "copy_row_rate": %d, "copy_data_rate": %f}' > %s/stats.json`,
 		rate, dataRate, t.PerfArtifactsDir(),
 	)
-	c.Run(ctx, c.Node(1), cmd)
+	c.Run(ctx, option.WithNodes(c.Node(1)), cmd)
 }
 
 func runCopyFromPG(ctx context.Context, t test.Test, c cluster.Cluster, sf int) {
 	initTest(ctx, t, c, sf)
-	c.Run(ctx, c.Node(1), "sudo -i -u postgres psql -c 'DROP TABLE IF EXISTS lineitem'")
-	c.Run(ctx, c.Node(1), fmt.Sprintf("sudo -i -u postgres psql -c '%s'", lineitemSchema))
+	c.Run(ctx, option.WithNodes(c.Node(1)), "sudo -i -u postgres psql -c 'DROP TABLE IF EXISTS lineitem'")
+	c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("sudo -i -u postgres psql -c '%s'", lineitemSchema))
 	runTest(ctx, t, c, "sudo -i -u postgres psql")
 }
 
@@ -164,8 +164,8 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 		require.NoError(t, err)
 		u.User = url.User("importer")
 		urlstr = u.String()
-		c.Run(ctx, c.Node(1), fmt.Sprintf("psql %s -c 'SELECT 1'", urlstr))
-		c.Run(ctx, c.Node(1), fmt.Sprintf("psql %s -c '%s'", urlstr, lineitemSchema))
+		c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("psql %s -c 'SELECT 1'", urlstr))
+		c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("psql %s -c '%s'", urlstr, lineitemSchema))
 		runTest(ctx, t, c, fmt.Sprintf("psql '%s'", urlstr))
 		return nil
 	})

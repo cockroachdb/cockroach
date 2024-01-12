@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
@@ -46,13 +47,13 @@ func InstallLaunchAndConfigureJaegerAllInOne(
 	}
 	// Don't install under `m.Go`, we want this method to return only when the collector is
 	// almost (and ideally fully, but that's harder) ready.
-	if err := c.RunE(ctx, c.Node(1), `[ -f jaeger-all-in-one ] ||
+	if err := c.RunE(ctx, option.WithNodes(c.Node(1)), `[ -f jaeger-all-in-one ] ||
 curl -sSL https://github.com/jaegertracing/jaeger/releases/download/v1.22.0/jaeger-1.22.0-linux-amd64.tar.gz |
 tar --strip-components=1 -xvzf -`); err != nil {
 		return err
 	}
 	m.Go(func(ctx context.Context) error {
-		err := c.RunE(ctx, c.Node(1), `SPAN_STORAGE_TYPE=badger BADGER_EPHEMERAL=false \
+		err := c.RunE(ctx, option.WithNodes(c.Node(1)), `SPAN_STORAGE_TYPE=badger BADGER_EPHEMERAL=false \
 BADGER_DIRECTORY_VALUE=/mnt/data1/jaeger.badger/data BADGER_DIRECTORY_KEY=/mnt/data1/jaeger.badger/key \
 ./jaeger-all-in-one --collector.zipkin.host-port=:9411`)
 		if ctx.Err() != nil {
@@ -72,7 +73,7 @@ BADGER_DIRECTORY_VALUE=/mnt/data1/jaeger.badger/data BADGER_DIRECTORY_KEY=/mnt/d
 	if err != nil {
 		return err
 	}
-	c.Run(ctx, c.Node(1), "ln -s /mnt/data1/jaeger.badger logs/jaeger.badger")
+	c.Run(ctx, option.WithNodes(c.Node(1)), "ln -s /mnt/data1/jaeger.badger logs/jaeger.badger")
 	l.Printf("jaeger UI should now be running at http://%s:16686", hps[0])
 	return nil
 }

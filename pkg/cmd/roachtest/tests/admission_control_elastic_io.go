@@ -86,7 +86,7 @@ func registerElasticIO(r registry.Registry) {
 				cmd := "./workload run kv --init --histograms=perf/stats.json --concurrency=512 " +
 					"--splits=1000 --read-percent=0 --min-block-bytes=65536 --max-block-bytes=65536 " +
 					"--txn-qos=background --tolerate-errors" + dur + url
-				c.Run(ctx, c.Node(workAndPromNode), cmd)
+				c.Run(ctx, option.WithNodes(c.Node(workAndPromNode)), cmd)
 				return nil
 			})
 			m.Go(func(ctx context.Context) error {

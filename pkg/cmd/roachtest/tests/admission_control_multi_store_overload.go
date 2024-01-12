@@ -69,7 +69,7 @@ func registerMultiStoreOverload(r registry.Registry) {
 			cmdRegular := fmt.Sprintf("./workload run kv --init"+
 				dbRegular+histograms+concurrencyRegular+duration+readPercentRegular+
 				" {pgurl:1-%d}", nodes)
-			c.Run(ctx, c.Node(nodes+1), cmdRegular)
+			c.Run(ctx, option.WithNodes(c.Node(nodes+1)), cmdRegular)
 			return nil
 		})
 		m2 := c.NewMonitor(ctx, c.Range(1, nodes))
@@ -83,7 +83,7 @@ func registerMultiStoreOverload(r registry.Registry) {
 			cmdOverload := fmt.Sprintf("./workload run kv --init"+
 				dbOverload+histograms+concurrencyOverload+duration+readPercentOverload+blockSizeOverload+
 				" {pgurl:1-%d}", nodes)
-			c.Run(ctx, c.Node(nodes+1), cmdOverload)
+			c.Run(ctx, option.WithNodes(c.Node(nodes+1)), cmdOverload)
 			return nil
 		})
 		m1.Wait()

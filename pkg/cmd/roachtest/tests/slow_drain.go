@@ -124,7 +124,7 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 					t.Fatal(err)
 				}
 				return c.RunE(ctx,
-					c.Node(id),
+					option.WithNodes(c.Node(id)),
 					fmt.Sprintf("./cockroach node drain %d --insecure --drain-wait=%s --url=%s", id, duration.String(), pgurl),
 				)
 			}
@@ -141,7 +141,7 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 	t.Status("checking for stalling drain logging...")
 	testutils.SucceedsWithin(t, func() error {
 		for nodeID := 2; nodeID <= numNodes; nodeID++ {
-			if err := c.RunE(ctx, c.Node(nodeID),
+			if err := c.RunE(ctx, option.WithNodes(c.Node(nodeID)),
 				fmt.Sprintf("grep -q '%s' logs/cockroach.log", verboseStoreLogRe),
 			); err == nil {
 				return nil

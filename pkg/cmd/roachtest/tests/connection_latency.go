@@ -54,17 +54,17 @@ func runConnectionLatencyTest(
 	// Only create the user once.
 	t.L().Printf("creating testuser")
 	if password {
-		err = c.RunE(ctx, c.Node(1), `./cockroach sql --certs-dir certs --port={pgport:1} -e "CREATE USER testuser WITH PASSWORD '123' CREATEDB"`)
+		err = c.RunE(ctx, option.WithNodes(c.Node(1)), `./cockroach sql --certs-dir certs --port={pgport:1} -e "CREATE USER testuser WITH PASSWORD '123' CREATEDB"`)
 		require.NoError(t, err)
-		err = c.RunE(ctx, c.Node(1), fmt.Sprintf("./workload init connectionlatency --user testuser --password '123' --secure '%s'", urlTemplate("localhost")))
+		err = c.RunE(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("./workload init connectionlatency --user testuser --password '123' --secure '%s'", urlTemplate("localhost")))
 		require.NoError(t, err)
 		passwordFlag = "--password 123 "
 	} else {
 		// NB: certs for `testuser` are created by `roachprod start --secure`.
-		err = c.RunE(ctx, c.Node(1), `./cockroach sql --certs-dir certs --port={pgport:1} -e "CREATE USER testuser CREATEDB"`)
+		err = c.RunE(ctx, option.WithNodes(c.Node(1)), `./cockroach sql --certs-dir certs --port={pgport:1} -e "CREATE USER testuser CREATEDB"`)
 		require.NoError(t, err)
 		require.NoError(t, err)
-		err = c.RunE(ctx, c.Node(1), fmt.Sprintf("./workload init connectionlatency --user testuser --secure '%s'", urlTemplate("localhost")))
+		err = c.RunE(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("./workload init connectionlatency --user testuser --secure '%s'", urlTemplate("localhost")))
 		require.NoError(t, err)
 	}
 
@@ -89,7 +89,7 @@ func runConnectionLatencyTest(
 			t.PerfArtifactsDir(),
 			locality,
 		)
-		err = c.RunE(ctx, loadNode, workloadCmd)
+		err = c.RunE(ctx, option.WithNodes(loadNode), workloadCmd)
 		require.NoError(t, err)
 	}
 

@@ -91,3 +91,8 @@ type StopOpts struct {
 func DefaultStopOpts() StopOpts {
 	return StopOpts{RoachprodOpts: roachprod.DefaultStopOpts()}
 }
+
+// WithNodes returns a RunOptions that will run on the given nodes.
+func WithNodes(nodes NodeListOption) install.RunOptions {
+	return install.WithNodes(nodes.InstallNodes())
+}

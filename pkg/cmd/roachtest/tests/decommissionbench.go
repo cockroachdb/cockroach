@@ -406,7 +406,7 @@ func setupDecommissionBench(
 			t.Fatal(err)
 		}
 		importCmd = fmt.Sprintf("%s '%s'", importCmd, pgurl)
-		c.Run(ctx, c.Node(pinnedNode), importCmd)
+		c.Run(ctx, option.WithNodes(c.Node(pinnedNode)), importCmd)
 
 		if benchSpec.snapshotRate != 0 {
 			for _, stmt := range []string{
@@ -495,7 +495,7 @@ func uploadPerfArtifacts(
 	// Store the perf artifacts on the pinned node so that the test
 	// runner copies it into an appropriate directory path.
 	dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-	if err := c.RunE(ctx, c.Node(pinnedNode), "mkdir -p "+filepath.Dir(dest)); err != nil {
+	if err := c.RunE(ctx, option.WithNodes(c.Node(pinnedNode)), "mkdir -p "+filepath.Dir(dest)); err != nil {
 		t.L().Errorf("failed to create perf dir: %+v", err)
 	}
 	if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(pinnedNode)); err != nil {
@@ -521,14 +521,14 @@ func uploadPerfArtifacts(
 			t.L().Errorf("failed to upload workload perf artifacts to node: %s", err.Error())
 		}
 
-		if err := c.RunE(ctx, c.Node(pinnedNode),
+		if err := c.RunE(ctx, option.WithNodes(c.Node(pinnedNode)),
 			fmt.Sprintf("cat %s >> %s", workloadStatsDest, dest)); err != nil {
 			t.L().Errorf("failed to concatenate workload perf artifacts with "+
 				"decommission perf artifacts: %s", err.Error())
 		}
 
 		if err := c.RunE(
-			ctx, c.Node(pinnedNode), fmt.Sprintf("rm %s", workloadStatsDest),
+			ctx, option.WithNodes(c.Node(pinnedNode)), fmt.Sprintf("rm %s", workloadStatsDest),
 		); err != nil {
 			t.L().Errorf("failed to cleanup workload perf artifacts: %s", err.Error())
 		}
@@ -636,7 +636,7 @@ func runDecommissionBench(
 
 				// Run workload effectively indefinitely, to be later killed by context
 				// cancellation once decommission has completed.
-				err := c.RunE(ctx, c.Node(workloadNode), workloadCmd)
+				err := c.RunE(ctx, option.WithNodes(c.Node(workloadNode)), workloadCmd)
 				if errors.Is(ctx.Err(), context.Canceled) {
 					// Workload intentionally cancelled via context, so don't return error.
 					return nil
@@ -771,7 +771,7 @@ func runDecommissionBenchLong(
 
 				// Run workload indefinitely, to be later killed by context
 				// cancellation once decommission has completed.
-				err := c.RunE(ctx, c.Node(workloadNode), workloadCmd)
+				err := c.RunE(ctx, option.WithNodes(c.Node(workloadNode)), workloadCmd)
 				if errors.Is(ctx.Err(), context.Canceled) {
 					// Workload intentionally cancelled via context, so don't return error.
 					return nil
@@ -934,7 +934,7 @@ func runSingleDecommission(
 			t.Fatal(err)
 		}
 		cmd := fmt.Sprintf("./cockroach node drain --url=%s --self --insecure", pgurl)
-		if err := h.c.RunE(ctx, h.c.Node(target), cmd); err != nil {
+		if err := h.c.RunE(ctx, option.WithNodes(h.c.Node(target)), cmd); err != nil {
 			return err
 		}
 	}
@@ -953,7 +953,7 @@ func runSingleDecommission(
 		h.t.Status(fmt.Sprintf("limiting write bandwith to 100MiBps and awaiting "+
 			"increased read amplification on node%d", target))
 		if err := h.c.RunE(
-			ctx, h.c.Node(target),
+			ctx, option.WithNodes(h.c.Node(target)),
 			fmt.Sprintf("sudo bash -c 'echo \"259:0  %d\" > "+
 				"/sys/fs/cgroup/blkio/system.slice/%s.service/blkio.throttle.write_bps_device'",
 				100*(1<<20), roachtestutil.SystemInterfaceSystemdUnitName())); err != nil {
@@ -1005,7 +1005,7 @@ func runSingleDecommission(
 		}
 
 		// Wipe the node and re-add to cluster with a new node ID.
-		if err := h.c.RunE(ctx, h.c.Node(target), "rm -rf {store-dir}"); err != nil {
+		if err := h.c.RunE(ctx, option.WithNodes(h.c.Node(target)), "rm -rf {store-dir}"); err != nil {
 			return err
 		}
 

@@ -139,7 +139,7 @@ func (tn *tenantNode) createTenantCert(
 	cmd := fmt.Sprintf(
 		"./cockroach cert create-tenant-client --certs-dir=certs --ca-key=certs/ca.key %d %s --overwrite",
 		tn.tenantID, strings.Join(names, " "))
-	c.Run(ctx, c.Node(tn.node), cmd)
+	c.Run(ctx, option.WithNodes(c.Node(tn.node)), cmd)
 }
 
 func (tn *tenantNode) stop(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -148,7 +148,7 @@ func (tn *tenantNode) stop(ctx context.Context, t test.Test, c cluster.Cluster) 
 	}
 	// Must use pkill because the context cancellation doesn't wait for the
 	// process to exit.
-	c.Run(ctx, c.Node(tn.node),
+	c.Run(ctx, option.WithNodes(c.Node(tn.node)),
 		fmt.Sprintf("pkill -o -f '^%s mt start.*tenant-id=%d.*%d'", tn.binary, tn.tenantID, tn.sqlPort))
 	t.L().Printf("mt cluster exited: %v", <-tn.errCh)
 	tn.errCh = nil
@@ -266,7 +266,7 @@ func startTenantServer(
 		// runs that use a build with runtime assertions enabled, and
 		// ignored otherwise.
 		envVars = append(envVars, fmt.Sprintf("COCKROACH_RANDOM_SEED=%d", randomSeed))
-		errCh <- c.RunE(tenantCtx, node,
+		errCh <- c.RunE(tenantCtx, option.WithNodes(node),
 			append(append(append([]string{}, envVars...), binary, "mt", "start-sql"), args...)...,
 		)
 		close(errCh)

@@ -183,7 +183,7 @@ func setupTPCC(
 			if err != nil {
 				t.Fatal(err)
 			}
-			c.Run(ctx, crdbNodes[:1], tpccImportCmd(opts.Warehouses, opts.ExtraSetupArgs, pgurl))
+			c.Run(ctx, option.WithNodes(crdbNodes[:1]), tpccImportCmd(opts.Warehouses, opts.ExtraSetupArgs, pgurl))
 		case usingInit:
 			t.Status("initializing tables" + estimatedSetupTimeStr)
 			extraArgs := opts.ExtraSetupArgs
@@ -194,7 +194,7 @@ func setupTPCC(
 				"./cockroach workload init tpcc --warehouses=%d %s {pgurl:1}",
 				opts.Warehouses, extraArgs,
 			)
-			c.Run(ctx, workloadNode, cmd)
+			c.Run(ctx, option.WithNodes(workloadNode), cmd)
 		default:
 			t.Fatal("unknown tpcc setup type")
 		}
@@ -278,7 +278,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 				workloadInstances[i].extraRunArgs,
 				pgURLs[i],
 			)
-			return c.RunE(ctx, workloadNode, cmd)
+			return c.RunE(ctx, option.WithNodes(workloadNode), cmd)
 		})
 	}
 	if opts.Chaos != nil {
@@ -291,7 +291,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	m.Wait()
 
 	if !opts.SkipPostRunCheck {
-		c.Run(ctx, workloadNode, fmt.Sprintf(
+		c.Run(ctx, option.WithNodes(workloadNode), fmt.Sprintf(
 			"./cockroach workload check tpcc --warehouses=%d --expensive-checks=%t {pgurl:1}",
 			opts.Warehouses, opts.ExpensiveChecks))
 	}
@@ -387,7 +387,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 	importTPCC := func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 		randomNode := c.Node(h.RandomNode(rng, crdbNodes))
 		cmd := tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, headroomWarehouses, fmt.Sprintf("{pgurl%s}", randomNode))
-		return c.RunE(ctx, randomNode, cmd)
+		return c.RunE(ctx, option.WithNodes(randomNode), cmd)
 	}
 
 	// Add a lot of cold data to this cluster. This further stresses the version
@@ -402,7 +402,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 			Flag("seed", 4).
 			Flag("db", "bigbank").
 			String()
-		return c.RunE(ctx, randomNode, cmd)
+		return c.RunE(ctx, option.WithNodes(randomNode), cmd)
 	}
 
 	// We don't run this in the background using the Workload() wrapper. We want
@@ -433,7 +433,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 			Flag("prometheus-port", 2112).
 			Flag("pprofport", workloadPProfStartPort).
 			String()
-		return c.RunE(ctx, workloadNode, cmd)
+		return c.RunE(ctx, option.WithNodes(workloadNode), cmd)
 	}
 
 	checkTPCCWorkload := func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
@@ -441,7 +441,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 			Arg("{pgurl:1}").
 			Flag("warehouses", headroomWarehouses).
 			String()
-		return c.RunE(ctx, workloadNode, cmd)
+		return c.RunE(ctx, option.WithNodes(workloadNode), cmd)
 	}
 
 	uploadCockroach(ctx, t, c, workloadNode, clusterupgrade.CurrentVersion())
@@ -1299,7 +1299,7 @@ func loadTPCCBench(
 		}
 	}
 	cmd := tpccImportCmd(loadWarehouses, loadArgs, pgurl)
-	if err = c.RunE(ctx, roachNodes[:1], cmd); err != nil {
+	if err = c.RunE(ctx, option.WithNodes(roachNodes[:1]), cmd); err != nil {
 		return err
 	}
 	if rebalanceWait == 0 || len(roachNodes) <= 3 {
@@ -1385,16 +1385,16 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			if err := c.Install(ctx, t.L(), loadNodes, "haproxy"); err != nil {
 				t.Fatal(err)
 			}
-			c.Run(ctx, loadNodes, "./cockroach gen haproxy --insecure --url {pgurl:1}")
+			c.Run(ctx, option.WithNodes(loadNodes), "./cockroach gen haproxy --insecure --url {pgurl:1}")
 			// Increase the maximum connection limit to ensure that no TPC-C
 			// load gen workers get stuck during connection initialization.
 			// 10k warehouses requires at least 20,000 connections, so add a
 			// bit of breathing room and check the warehouse count.
-			c.Run(ctx, loadNodes, "sed -i 's/maxconn [0-9]\\+/maxconn 21000/' haproxy.cfg")
+			c.Run(ctx, option.WithNodes(loadNodes), "sed -i 's/maxconn [0-9]\\+/maxconn 21000/' haproxy.cfg")
 			if b.LoadWarehouses(c.Cloud()) > 1e4 {
 				t.Fatal("HAProxy config supports up to 10k warehouses")
 			}
-			c.Run(ctx, loadNodes, "haproxy -f haproxy.cfg -D")
+			c.Run(ctx, option.WithNodes(loadNodes), "haproxy -f haproxy.cfg -D")
 		}
 
 		m := c.NewMonitor(ctx, roachNodes)
@@ -1504,7 +1504,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 					"--tolerate-errors --ramp=%s --duration=%s%s --histograms=%s {pgurl%s%s}",
 					b.LoadWarehouses(c.Cloud()), warehouses, rampDur,
 					loadDur, extraFlags, histogramsPath, sqlGateways, tenantSuffix)
-				err := c.RunE(ctx, group.loadNodes, cmd)
+				err := c.RunE(ctx, option.WithNodes(group.loadNodes), cmd)
 				loadDone <- timeutil.Now()
 				if err != nil {
 					// NB: this will let the line search continue at a lower warehouse

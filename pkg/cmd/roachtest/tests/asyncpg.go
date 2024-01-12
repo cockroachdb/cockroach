@@ -140,7 +140,7 @@ func registerAsyncpg(r registry.Registry) {
 		t.L().Printf("Test results for asyncpg: %s", result.Stdout+result.Stderr)
 		t.L().Printf("Test stdout for asyncpg")
 		if err := c.RunE(
-			ctx, node, "cd /mnt/data1/asyncpg && cat asyncpg.stdout",
+			ctx, option.WithNodes(node), "cd /mnt/data1/asyncpg && cat asyncpg.stdout",
 		); err != nil {
 			t.Fatal(err)
 		}
