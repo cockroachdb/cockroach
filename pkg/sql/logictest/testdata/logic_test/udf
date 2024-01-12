@@ -788,3 +788,27 @@ FROM purchase
 10.00  GBP
 
 subtest end
+
+
+subtest param_types
+
+statement ok
+CREATE FUNCTION f_param_types(IN p1 INT, INOUT p2 INT, IN OUT p3 INT, OUT p4 INT) AS $$
+SELECT p2, p3, p1;
+$$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_param_types];
+----
+CREATE FUNCTION public.f_param_types(IN p1 INT8, INOUT p2 INT8, INOUT p3 INT8, OUT p4 INT8)
+  RETURNS VOID
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT p2, p3, p1;
+$$
+
+
+subtest end

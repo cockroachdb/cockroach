@@ -85,7 +85,7 @@ type CreateRoutine struct {
 	Replace     bool
 	Name        RoutineName
 	Params      RoutineParams
-	ReturnType  RoutineReturnType
+	ReturnType  *RoutineReturnType
 	Options     RoutineOptions
 	RoutineBody *RoutineBody
 	// BodyStatements is not assigned during initial parsing of user input. It's
@@ -114,7 +114,7 @@ func (node *CreateRoutine) Format(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(node.Params)
 	ctx.WriteString(")\n\t")
-	if !node.IsProcedure {
+	if !node.IsProcedure && node.ReturnType != nil {
 		ctx.WriteString("RETURNS ")
 		if node.ReturnType.SetOf {
 			ctx.WriteString("SETOF ")

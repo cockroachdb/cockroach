@@ -4656,7 +4656,7 @@ create_func_stmt:
       Replace: $2.bool(),
       Name: name,
       Params: $6.routineParams(),
-      ReturnType: tree.RoutineReturnType{
+      ReturnType: &tree.RoutineReturnType{
         Type: $11.typeReference(),
         SetOf: $10.bool(),
       },
@@ -4664,6 +4664,20 @@ create_func_stmt:
       RoutineBody: $13.routineBody(),
     }
   }
+| CREATE opt_or_replace FUNCTION routine_create_name '(' opt_routine_param_with_default_list ')'
+    opt_create_routine_opt_list opt_routine_body
+    {
+        name := $4.unresolvedObjectName().ToRoutineName()
+        $$.val = &tree.CreateRoutine{
+          IsProcedure: false,
+          Replace: $2.bool(),
+          Name: name,
+          Params: $6.routineParams(),
+          ReturnType: (*tree.RoutineReturnType)(nil),
+          Options: $8.routineOptions(),
+          RoutineBody: $9.routineBody(),
+        }
+    }
 | CREATE opt_or_replace FUNCTION error // SHOW HELP: CREATE FUNCTION
 
 // %Help: CREATE PROCEDURE - define a new procedure
@@ -4687,9 +4701,7 @@ create_proc_stmt:
       Params: $6.routineParams(),
       Options: $8.routineOptions(),
       RoutineBody: $9.routineBody(),
-      ReturnType: tree.RoutineReturnType{
-        Type: types.Void,
-      },
+      ReturnType: (*tree.RoutineReturnType)(nil),
     }
   }
 | CREATE opt_or_replace PROCEDURE error // SHOW HELP: CREATE PROCEDURE
@@ -4777,9 +4789,9 @@ routine_param:
 
 routine_param_class:
   IN { $$.val = tree.RoutineParamIn }
-| OUT { return unimplementedWithIssueDetail(sqllex, 100405, "create function with 'OUT' argument class") }
-| INOUT { return unimplementedWithIssueDetail(sqllex, 100405, "create function with 'INOUT' argument class") }
-| IN OUT { return unimplementedWithIssueDetail(sqllex, 100405, "create function with 'IN OUT' argument class") }
+| OUT { $$.val = tree.RoutineParamOut }
+| INOUT { $$.val = tree.RoutineParamInOut }
+| IN OUT { $$.val = tree.RoutineParamInOut }
 | VARIADIC { return unimplementedWithIssueDetail(sqllex, 88947, "variadic user-defined functions") }
 
 routine_param_type:

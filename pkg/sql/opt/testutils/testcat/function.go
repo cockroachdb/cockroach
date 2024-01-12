@@ -13,6 +13,7 @@ package testcat
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -92,9 +93,13 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	}
 
 	// Resolve the return type.
-	retType, err := tree.ResolveType(context.Background(), c.ReturnType.Type, tc)
-	if err != nil {
-		panic(err)
+	var retType *types.T
+	var err error
+	if c.ReturnType != nil {
+		retType, err = tree.ResolveType(context.Background(), c.ReturnType.Type, tc)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	// Retrieve the function body, volatility, and calledOnNullInput.
@@ -119,7 +124,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		Language:          language,
 		Type:              routineType,
 	}
-	if c.ReturnType.SetOf {
+	if c.ReturnType != nil && c.ReturnType.SetOf {
 		overload.Class = tree.GeneratorClass
 	}
 	prefixedOverload := tree.MakeQualifiedOverload("public", overload)
