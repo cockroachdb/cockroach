@@ -120,7 +120,7 @@ func newTimeSeriesMaintenanceQueue(
 			storeFailures:        store.metrics.StoreFailures,
 			pending:              store.metrics.TimeSeriesMaintenanceQueuePending,
 			processingNanos:      store.metrics.TimeSeriesMaintenanceQueueProcessingNanos,
-			disabledConfig:       kvserverbase.TimeSeriesMaintenanceQueueEnabled,
+			enabledConfig:        kvserverbase.TimeSeriesMaintenanceQueueEnabled,
 		},
 	)
 

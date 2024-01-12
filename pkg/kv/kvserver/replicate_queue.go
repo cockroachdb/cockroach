@@ -590,7 +590,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 			pending:            store.metrics.ReplicateQueuePending,
 			processingNanos:    store.metrics.ReplicateQueueProcessingNanos,
 			purgatory:          store.metrics.ReplicateQueuePurgatory,
-			disabledConfig:     kvserverbase.ReplicateQueueEnabled,
+			enabledConfig:      kvserverbase.ReplicateQueueEnabled,
 		},
 	)
 	updateFn := func() {

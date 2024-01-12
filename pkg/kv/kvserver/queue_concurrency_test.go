@@ -68,7 +68,6 @@ func TestBaseQueueConcurrent(t *testing.T) {
 		pending:         metric.NewGauge(metric.Metadata{Name: "pending"}),
 		processingNanos: metric.NewCounter(metric.Metadata{Name: "processingnanos"}),
 		purgatory:       metric.NewGauge(metric.Metadata{Name: "purgatory"}),
-		disabledConfig:  &settings.BoolSetting{},
 	}
 
 	// Set up a fake store with just exactly what the code calls into. Ideally
@@ -97,6 +96,13 @@ func TestBaseQueueConcurrent(t *testing.T) {
 			return false, &testPurgatoryError{}
 		},
 	}
+	// N.B. Each ClusterSetting has a unique slot index into the _global_ registry.
+	// Thus, to avoid aliasing another cluster settings registered during init(),
+	// we must create a _fresh_ cluster setting.
+	cfg.enabledConfig = settings.RegisterBoolSetting(settings.SystemOnly,
+		"TestBaseQueueConcurrent.enabledConfig", "", true)
+	cfg.enabledConfig.Override(context.Background(), &store.cfg.Settings.SV, true)
+
 	bq := newBaseQueue("test", impl, store, cfg)
 	bq.getReplica = func(id roachpb.RangeID) (replicaInQueue, error) {
 		return &fakeReplica{rangeID: id}, nil

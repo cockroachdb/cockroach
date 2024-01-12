@@ -209,7 +209,7 @@ func newMVCCGCQueue(store *Store) *mvccGCQueue {
 			storeFailures:   store.metrics.StoreFailures,
 			pending:         store.metrics.MVCCGCQueuePending,
 			processingNanos: store.metrics.MVCCGCQueueProcessingNanos,
-			disabledConfig:  kvserverbase.MVCCGCQueueEnabled,
+			enabledConfig:   kvserverbase.MVCCGCQueueEnabled,
 		},
 	)
 	return mgcq

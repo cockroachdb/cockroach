@@ -345,9 +345,9 @@ type queueConfig struct {
 	processingNanos *metric.Counter
 	// purgatory is a gauge measuring current replica count in purgatory.
 	purgatory *metric.Gauge
-	// disabledConfig is a reference to the cluster setting that controls enabling
+	// enabledConfig is a reference to the cluster setting that controls enabling
 	// and disabling queues.
-	disabledConfig *settings.BoolSetting
+	enabledConfig *settings.BoolSetting
 }
 
 // baseQueue is the base implementation of the replicaQueue interface. Queue
@@ -494,9 +494,9 @@ func newBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *b
 		},
 	}
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
-	bq.SetDisabled(!cfg.disabledConfig.Get(&store.cfg.Settings.SV))
-	cfg.disabledConfig.SetOnChange(&store.cfg.Settings.SV, func(ctx context.Context) {
-		bq.SetDisabled(!cfg.disabledConfig.Get(&store.cfg.Settings.SV))
+	bq.SetDisabled(!cfg.enabledConfig.Get(&store.cfg.Settings.SV))
+	cfg.enabledConfig.SetOnChange(&store.cfg.Settings.SV, func(ctx context.Context) {
+		bq.SetDisabled(!cfg.enabledConfig.Get(&store.cfg.Settings.SV))
 	})
 
 	return &bq
