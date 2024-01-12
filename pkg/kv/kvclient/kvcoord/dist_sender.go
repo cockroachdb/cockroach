@@ -2161,12 +2161,7 @@ func maybeSetResumeSpan(
 // ambiguousErr, if not nil, is the error we got from the first attempt when the
 // success of the request cannot be ruled out by the error. lastAttemptErr is
 // the error that the last attempt to execute the request returned.
-func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
-	if ambiguousErr != nil {
-		return kvpb.NewAmbiguousResultErrorf("error=%v [exhausted] (last error: %v)",
-			ambiguousErr, lastAttemptErr)
-	}
-
+func noMoreReplicasErr(lastAttemptErr error) error {
 	// TODO(bdarnell): The error from the last attempt is not necessarily the best
 	// one to return; we may want to remember the "best" error we've seen (for
 	// example, a NotLeaseHolderError conveys more information than a
@@ -2296,7 +2291,6 @@ func (ds *DistSender) sendToReplicas(
 
 	// This loop will retry operations that fail with errors that reflect
 	// per-replica state and may succeed on other replicas.
-	var ambiguousError error
 	var br *kvpb.BatchResponse
 	for first := true; ; first = false {
 		if !first {
@@ -2311,7 +2305,7 @@ func (ds *DistSender) sendToReplicas(
 		if lastErr == nil && br != nil {
 			lastErr = br.Error.GoError()
 		}
-		err = skipStaleReplicas(transport, routing, ambiguousError, lastErr)
+		err = skipStaleReplicas(transport, routing, lastErr)
 		if err != nil {
 			return nil, err
 		}
@@ -2333,27 +2327,6 @@ func (ds *DistSender) sendToReplicas(
 		ba = ba.ShallowCopy()
 		ba.Replica = curReplica
 		ba.RangeID = desc.RangeID
-
-		// When a sub-batch from a batch containing a commit experiences an
-		// ambiguous error, it is critical to ensure subsequent replay attempts
-		// do not permit changing the write timestamp, as the transaction may
-		// already have been considered implicitly committed.
-		ba.AmbiguousReplayProtection = ambiguousError != nil
-
-		// In the case that the batch has already seen an ambiguous error, in
-		// addition to enabling ambiguous replay protection, we also need to
-		// disable the ability for the server to forward the read timestamp, as
-		// the transaction may have been implicitly committed. If the intents for
-		// the implicitly committed transaction were already resolved, on a replay
-		// attempt encountering committed values above the read timestamp the
-		// server will attempt to handle what seems to be a write-write conflict by
-		// throwing a WriteTooOld, which could be refreshed away on the server if
-		// the read timestamp can be moved. Disabling this ability protects against
-		// refreshing away the error when retrying the ambiguous operation, instead
-		// returning to the DistSender so the ambiguous error can be propagated.
-		if ambiguousError != nil && ba.CanForwardReadTimestamp {
-			ba.CanForwardReadTimestamp = false
-		}
 
 		// Communicate to the server the information our cache has about the
 		// range. If it's stale, the server will return an update.
@@ -2392,11 +2365,6 @@ func (ds *DistSender) sendToReplicas(
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
 
 			if grpcutil.IsAuthError(err) {
-				// Authentication or authorization error. Propagate.
-				if ambiguousError != nil {
-					return nil, kvpb.NewAmbiguousResultErrorf("error=%v [propagate] (last error: %v)",
-						ambiguousError, err)
-				}
 				return nil, err
 			}
 
@@ -2452,8 +2420,30 @@ func (ds *DistSender) sendToReplicas(
 			// NB: If this partial batch does not contain the EndTxn request but the
 			// batch contains a commit, the ambiguous error should be caught on
 			// retrying the writes, should it need to be propagated.
+			var ambiguousError error
 			if withCommit && !grpcutil.RequestDidNotStart(err) {
 				ambiguousError = err
+				// When a sub-batch from a batch containing a commit experiences an
+				// ambiguous error, it is critical to ensure subsequent replay attempts
+				// do not permit changing the write timestamp, as the transaction may
+				// already have been considered implicitly committed.
+				ba.AmbiguousReplayProtection = true
+
+				// In the case that the batch has already seen an ambiguous error, in
+				// addition to enabling ambiguous replay protection, we also need to
+				// disable the ability for the server to forward the read timestamp, as
+				// the transaction may have been implicitly committed. If the intents for
+				// the implicitly committed transaction were already resolved, on a replay
+				// attempt encountering committed values above the read timestamp the
+				// server will attempt to handle what seems to be a write-write conflict by
+				// throwing a WriteTooOld, which could be refreshed away on the server if
+				// the read timestamp can be moved. Disabling this ability protects against
+				// refreshing away the error when retrying the ambiguous operation, instead
+				// returning to the DistSender so the ambiguous error can be propagated.
+				ba.CanForwardReadTimestamp = false
+
+				return nil, kvpb.NewAmbiguousResultErrorf("error=%v [propagate] (last error: %v)",
+					ambiguousError, err)
 			}
 
 			// If the error wasn't just a context cancellation and the down replica
@@ -2543,19 +2533,10 @@ func (ds *DistSender) sendToReplicas(
 						// We updated our cache with newer information. Exit from this
 						// method to allow a retry at a higher level with a new replica
 						// list.
-						if ambiguousError != nil {
-							return nil, kvpb.NewAmbiguousResultErrorf("error=%v [propagate] (last error: %v)",
-								ambiguousError, br.Error.GoError())
-						}
 						return nil, newSendError(errors.Wrap(tErr, "routing changed, retry with updated cache"))
 					}
 				}
 			default:
-				if ambiguousError != nil {
-					return nil, kvpb.NewAmbiguousResultErrorf("error=%v [propagate] (last error: %v)",
-						ambiguousError, br.Error.GoError())
-				}
-
 				// The error received is likely not specific to this
 				// replica, so we should return it instead of trying other
 				// replicas.
@@ -2572,11 +2553,7 @@ func (ds *DistSender) sendToReplicas(
 			// cause range cache evictions. Context cancellations just mean the
 			// sender changed its mind or the request timed out.
 
-			if ambiguousError != nil {
-				err = kvpb.NewAmbiguousResultError(errors.Wrapf(ambiguousError, "context done during DistSender.Send"))
-			} else {
-				err = errors.Wrap(ctx.Err(), "aborted during DistSender.Send")
-			}
+			err = errors.Wrap(ctx.Err(), "aborted during DistSender.Send")
 			log.Eventf(ctx, "%v", err)
 			return nil, err
 		}
@@ -2771,7 +2748,7 @@ func (ds *DistSender) AllRangeSpans(
 //
 // Returns an error if the transport is exhausted.
 func skipStaleReplicas(
-	transport Transport, routing rangecache.EvictionToken, ambiguousError error, lastErr error,
+	transport Transport, routing rangecache.EvictionToken, lastErr error,
 ) error {
 	// Check whether the range cache told us that the routing info we had is
 	// very out-of-date. If so, there's not much point in trying the other
@@ -2779,14 +2756,12 @@ func skipStaleReplicas(
 	// RangeKeyMismatchError if there's even a replica. We'll bubble up an
 	// error and try with a new descriptor.
 	if !routing.Valid() {
-		return noMoreReplicasErr(
-			ambiguousError,
-			errors.Wrap(lastErr, "routing information detected to be stale"))
+		return noMoreReplicasErr(errors.Wrap(lastErr, "routing information detected to be stale"))
 	}
 
 	for {
 		if transport.IsExhausted() {
-			return noMoreReplicasErr(ambiguousError, lastErr)
+			return noMoreReplicasErr(lastErr)
 		}
 
 		if _, ok := routing.Desc().GetReplicaDescriptorByID(transport.NextReplica().ReplicaID); ok {
