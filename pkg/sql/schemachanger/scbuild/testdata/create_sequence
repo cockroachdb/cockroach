@@ -10,6 +10,10 @@ CREATE SEQUENCE db.public.sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 
   {sequenceId: 107}
 - [[Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 104}, PUBLIC], ABSENT]
   {databaseId: 104, descriptorId: 107, name: sq1, schemaId: 105}
+- [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, PUBLIC], ABSENT]
+  {childObjectId: 107, schemaId: 105}
+- [[TableData:{DescID: 107, ReferencedDescID: 104}, PUBLIC], ABSENT]
+  {databaseId: 104, tableId: 107}
 - [[SequenceOption:{DescID: 107, Name: START}, PUBLIC], ABSENT]
   {key: START, sequenceId: 107, value: "32"}
 - [[IndexData:{DescID: 106, IndexID: 1}, PUBLIC], PUBLIC]

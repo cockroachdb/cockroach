@@ -61,8 +61,8 @@ upsert descriptor #101
   ...
          withGrantOption: "2"
        version: 3
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #104
   ...
        - 1
@@ -92,8 +92,8 @@ upsert descriptor #105
   -  dependedOnBy:
   -  - byId: true
   -    id: 109
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 105
   ...
        start: "1"
      unexposedParentSchemaId: 101
@@ -165,8 +165,8 @@ upsert descriptor #101
   ...
          withGrantOption: "2"
        version: 3
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -226,8 +226,8 @@ upsert descriptor #105
   +    nameMapping:
   +      id: 105
   +      name: sq1
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 105
   ...
        start: "1"
      unexposedParentSchemaId: 101
@@ -377,8 +377,8 @@ upsert descriptor #105
   -    nameMapping:
   -      id: 105
   -      name: sq1
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 105
   ...
        start: "1"
      unexposedParentSchemaId: 101

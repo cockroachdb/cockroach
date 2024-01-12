@@ -43,7 +43,11 @@ func init() {
 						ColumnID: this.ColumnID,
 					}
 				}),
-				emit(func(this *scpb.Column) *scop.RefreshStats {
+				emit(func(this *scpb.Column, md *opGenContext) *scop.RefreshStats {
+					// No need to generate stats for empty descriptors.
+					if checkIfDescriptorIsWithoutData(this.TableID, md) {
+						return nil
+					}
 					return &scop.RefreshStats{
 						TableID: this.TableID,
 					}
