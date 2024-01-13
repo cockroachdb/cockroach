@@ -2235,8 +2235,7 @@ type CreateTenantFromReplication struct {
 
 // TenantReplicationOptions  options for the CREATE VIRTUAL CLUSTER FROM REPLICATION command.
 type TenantReplicationOptions struct {
-	Retention       Expr
-	ResumeTimestamp Expr
+	Retention Expr
 }
 
 var _ NodeFormatter = &TenantReplicationOptions{}
@@ -2295,18 +2294,6 @@ func (o *TenantReplicationOptions) Format(ctx *FmtCtx) {
 			ctx.WriteByte(')')
 		}
 	}
-	if o.ResumeTimestamp != nil {
-		maybeAddSep()
-		ctx.WriteString("RESUME TIMESTAMP = ")
-		_, canOmitParentheses := o.ResumeTimestamp.(alreadyDelimitedAsSyntacticDExpr)
-		if !canOmitParentheses {
-			ctx.WriteByte('(')
-		}
-		ctx.FormatNode(o.ResumeTimestamp)
-		if !canOmitParentheses {
-			ctx.WriteByte(')')
-		}
-	}
 }
 
 // CombineWith merges other TenantReplicationOptions into this struct.
@@ -2320,22 +2307,13 @@ func (o *TenantReplicationOptions) CombineWith(other *TenantReplicationOptions) 
 		o.Retention = other.Retention
 	}
 
-	if o.ResumeTimestamp != nil {
-		if other.ResumeTimestamp != nil {
-			return errors.New("RESUME TIMESTAMP option specified multiple times")
-		}
-	} else {
-		o.ResumeTimestamp = other.ResumeTimestamp
-	}
-
 	return nil
 }
 
 // IsDefault returns true if this backup options struct has default value.
 func (o TenantReplicationOptions) IsDefault() bool {
 	options := TenantReplicationOptions{}
-	return o.Retention == options.Retention &&
-		o.ResumeTimestamp == options.ResumeTimestamp
+	return o.Retention == options.Retention
 }
 
 type SuperRegion struct {

@@ -1059,15 +1059,6 @@ func (n *AlterTenantReplication) walkStmt(v Visitor) Statement {
 			ret.Options.Retention = e
 		}
 	}
-	if n.Options.ResumeTimestamp != nil {
-		e, changed := WalkExpr(v, n.Options.ResumeTimestamp)
-		if changed {
-			if ret == n {
-				ret = n.copyNode()
-			}
-			ret.Options.ResumeTimestamp = e
-		}
-	}
 
 	return ret
 }
@@ -1130,15 +1121,6 @@ func (n *CreateTenantFromReplication) walkStmt(v Visitor) Statement {
 				ret = n.copyNode()
 			}
 			ret.Options.Retention = e
-		}
-	}
-	if n.Options.ResumeTimestamp != nil {
-		e, changed := WalkExpr(v, n.Options.ResumeTimestamp)
-		if changed {
-			if ret == n {
-				ret = n.copyNode()
-			}
-			ret.Options.ResumeTimestamp = e
 		}
 	}
 
