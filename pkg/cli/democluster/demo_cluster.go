@@ -2038,6 +2038,17 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 	}
 }
 
+func (c *transientCluster) ExpandShortDemoURLs(s string) string {
+	if !strings.Contains(s, "demo://") {
+		return s
+	}
+	u, err := c.getNetworkURLForServer(context.Background(), 0, false, forSystemTenant)
+	if err != nil {
+		return s
+	}
+	return regexp.MustCompile(`demo://([[:alnum:]]+)`).ReplaceAllString(s, strings.ReplaceAll(u.String(), "-ccluster%3Dsystem", "-ccluster%3D$1"))
+}
+
 func (c *transientCluster) printURLs(
 	w, ew io.Writer,
 	sqlURL *pgurl.URL,
