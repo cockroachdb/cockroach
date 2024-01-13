@@ -1307,10 +1307,7 @@ func TestStreamingMismatchedMRDatabase(t *testing.T) {
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.Cutover(producerJobID, ingestionJobID, srcTime.GoTime(), false)
 
-	cleanupTenant := c.StartDestTenant(ctx, nil, 0)
-	defer func() {
-		require.NoError(t, cleanupTenant())
-	}()
+	defer c.StartDestTenant(ctx, nil, 0)()
 
 	// Check how MR primitives have replicated to non-mr stand by cluster
 	t.Run("mr db only with primary region", func(t *testing.T) {
@@ -1385,10 +1382,7 @@ func TestStreamingZoneConfigsMismatchedRegions(t *testing.T) {
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.Cutover(producerJobID, ingestionJobID, srcTime.GoTime(), false)
 
-	cleanupTenant := c.StartDestTenant(ctx, nil, 0)
-	defer func() {
-		require.NoError(t, cleanupTenant())
-	}()
+	defer c.StartDestTenant(ctx, nil, 0)()
 
 	// Note that the unsatisfiable zone config does not appear in the create statement.
 	var res string

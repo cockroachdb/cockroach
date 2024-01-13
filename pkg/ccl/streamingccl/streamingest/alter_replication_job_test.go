@@ -114,10 +114,7 @@ func TestAlterTenantPauseResume(t *testing.T) {
 	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
 	require.Equal(t, cutoverTime, cutoverOutput.GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	cleanupTenant := c.StartDestTenant(ctx, nil, 0)
-	defer func() {
-		require.NoError(t, cleanupTenant())
-	}()
+	defer c.StartDestTenant(ctx, nil, 0)()
 
 	t.Run("pause-nonexistant-tenant", func(t *testing.T) {
 		c.DestSysSQL.ExpectErr(t, "tenant \"nonexistent\" does not exist", `ALTER TENANT $1 PAUSE REPLICATION`, "nonexistent")
