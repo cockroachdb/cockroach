@@ -2213,6 +2213,14 @@ The requested number of points must be not larger than 65336.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_geomcollfromwkb"></a><code>st_geomcollfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not GeometryCollection, NULL is returned.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="st_geometricmedian"></a><code>st_geometricmedian(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the geometric median of a geometry.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_geometricmedian"></a><code>st_geometricmedian(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the geometric median of a geometry.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_geometricmedian"></a><code>st_geometricmedian(geometry: geometry, tolerance: <a href="float.html">float</a>, max_iter: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the geometric median of a geometry.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_geometricmedian"></a><code>st_geometricmedian(geometry: geometry, tolerance: <a href="float.html">float</a>, max_iter: <a href="int.html">int</a>, fail_if_not_converged: <a href="bool.html">bool</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the geometric median of a geometry.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="st_geometryfromtext"></a><code>st_geometryfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_geometryfromtext"></a><code>st_geometryfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation.</p>

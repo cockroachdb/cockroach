@@ -18,7 +18,54 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+
+	"github.com/twpayne/go-geom"
 )
+
+const (
+	// EPSILON is the smallest value that can be represented by a float32.
+	EPSILON = math.SmallestNonzeroFloat32
+)
+
+func GeometricMedian(g geo.Geometry, tolerance float32, max_iter int, fail_if_not_converged bool) (geo.Geometry, error) {
+	// 
+	if tolerance < 0 {
+		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "tolerance must be positive")
+	} else if max_iter < 0 {
+		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "max iterations must be positive")
+	}
+
+	t, err := g.AsGeomT()
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+
+	switch typ := t.(type) {
+	case *geom.Point:
+		return geo.MakeGeometryFromGeomT(t)
+	case *geom.MultiPoint:
+		mp, _ := t.(*geom.MultiPoint)
+		if mp.NumPoints() == 0 {
+			return geo.MakeGeometryFromLayoutAndPointCoords(geom.XYZ, []float64{})
+		}
+		
+		points, err := transformPoints4D(mp)
+		if err != nil {
+			return geo.Geometry{}, err
+		}
+
+		median := initialPoint3D(points)
+		iter := updatePoint(median, points, max_iter, tolerance)
+		if fail_if_not_converged && iter >= max_iter {
+			return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "failed to converge within %.1E after %d iterations", tolerance, max_iter)
+		}
+
+		return geo.MakeGeometryFromLayoutAndPointCoords(median.Layout(), median.FlatCoords())
+	default:
+		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "unsupported geometry type: %T", typ)
+	}
+
+}
 
 // Boundary returns the boundary of a given Geometry.
 func Boundary(g geo.Geometry) (geo.Geometry, error) {
@@ -246,4 +293,120 @@ func BoundingBoxHasNaNCoordinates(g geo.Geometry) bool {
 		return true
 	}
 	return false
+}
+
+func initialPoint3D(points []*geom.Point) *geom.Point {
+	mass := 0.0
+	guess := geom.NewPointFlat(geom.XYZ, []float64{0, 0, 0})
+	for _, p := range points {
+		x := p.X() * p.M()
+		y := p.Y() * p.M()
+		z := p.Z() * p.M()
+		_ = guess.MustSetCoords(geom.Coord([]float64{x, y, z}))
+		mass += p.M()
+	}
+
+	return geom.NewPointFlat(geom.XYZ, []float64{guess.X() / mass, guess.Y() / mass, guess.Z() / mass})
+}
+
+func updatePoint(median *geom.Point, points []*geom.Point, max_iter int, tolerance float32) int {
+	iter := 0
+	hit := false
+	distances := make([]float64, len(points))
+	wdCurr := weightedDistances3D(median, points, distances)
+	
+	for ; iter < max_iter; iter++ {
+		next := geom.NewPointFlat(geom.XYZ, []float64{0, 0, 0})
+		denom := 0.0
+		for i, point := range points {
+			if distances[i] > EPSILON {
+				x := point.X() * point.M()
+				y := point.Y() * point.M()
+				z := point.Z() * point.M()
+				_ = next.MustSetCoords(geom.Coord([]float64{x, y, z}))
+				denom += 1.0 / distances[i]
+			} else {
+				hit = true
+			}
+
+			if denom > EPSILON {
+				x := next.X() / denom
+				y := next.Y() / denom
+				z := next.Z() / denom
+				_ = next.MustSetCoords(geom.Coord([]float64{x, y, z}))
+
+				if hit {
+					dx := 0.0
+					dy := 0.0
+					dz := 0.0
+					hit = false
+					for j, p := range points {
+						if distances[j] > EPSILON {
+							dx += (p.X() - median.X()) * p.M()
+							dy += (p.Y() - median.Y()) * p.M()
+							dz += (p.Z() - median.Z()) * p.M()
+						}
+					}
+
+					dsqrt := math.Sqrt(dx*dx + dy*dy + dz*dz)
+					if dsqrt > EPSILON {
+						rInv := math.Max(0, 1.0 / dsqrt)
+						x := (1.0 - rInv) * next.X() + rInv*median.X()
+						y := (1.0 - rInv) * next.Y() + rInv*median.Y()
+						z := (1.0 - rInv) * next.Z() + rInv*median.Z()
+						_ = next.MustSetCoords(geom.Coord([]float64{x, y, z}))
+					}
+				}
+
+				wdNext := weightedDistances3D(next, points, distances)
+				delta := wdCurr - wdNext
+				if delta < float64(tolerance) {
+					break
+				}
+				_ = median.MustSetCoords(geom.Coord([]float64{next.X(), next.Y(), next.Z()}))
+				wdCurr = wdNext
+			}
+		}
+	}	
+
+	return iter
+}
+
+func weightedDistances3D(p *geom.Point, points []*geom.Point, distances []float64) float64 {
+	weight := 0.0
+	for i, point := range points {
+		dist := euclideanDistance3D(p, point)
+		distances[i] = dist / point.M()
+		weight += dist * point.M()
+	}
+	return weight
+}
+
+func euclideanDistance3D(p1 *geom.Point, p2 *geom.Point) float64 {
+	dx := p1.X() - p2.X()
+	dy := p1.Y() - p2.Y()
+	dz := p1.Z() - p2.Z()
+	return math.Sqrt(dx*dx + dy*dy + dz*dz)
+}
+
+func transformPoints4D(mp *geom.MultiPoint) ([]*geom.Point, error) {
+	points := make([]*geom.Point, mp.NumPoints())
+	n := 0
+	for i := 0; i < mp.NumPoints(); i++ {
+		p := mp.Point(i)
+		if p.Layout() == geom.XYM || p.Layout() == geom.XYZM {
+			if p.M() < 0 {
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue, "Geometric median input contains points with negative weights (POINT(%g %g %g %g))." + 
+					"Implementation can't guarantee global minimum convergence.", p.X(), p.Y(), p.Z(), p.M())
+			} else if p.M() <= EPSILON {
+				continue
+			}
+			points[n] = geom.NewPointFlat(geom.XYZM, []float64{p.X(), p.Y(), p.Z(), p.M()})
+		} else {
+			points[n] = geom.NewPointFlat(geom.XYZM, []float64{p.X(), p.Y(), p.Z(), 1.0})
+		}
+		n++
+	}
+
+	return points[:n], nil
 }
