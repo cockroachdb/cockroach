@@ -168,7 +168,7 @@ func (c *TenantStreamingClusters) init(ctx context.Context) {
 // destination tenant starts up via a testServer.StartSharedProcessTenant().
 func (c *TenantStreamingClusters) StartDestTenant(
 	ctx context.Context, withTestingKnobs *base.TestingKnobs, server int,
-) func() error {
+) func() {
 	if withTestingKnobs != nil {
 		var err error
 		_, c.DestTenantConn, err = c.DestCluster.Server(server).TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
@@ -193,8 +193,8 @@ func (c *TenantStreamingClusters) StartDestTenant(
 	require.NoError(c.T, c.DestCluster.Server(server).TenantController().WaitForTenantCapabilities(ctx, c.Args.DestTenantID, map[tenantcapabilities.ID]string{
 		tenantcapabilities.CanUseNodelocalStorage: "true",
 	}, ""))
-	return func() error {
-		return c.DestTenantConn.Close()
+	return func() {
+		require.NoError(c.T, c.DestTenantConn.Close())
 	}
 }
 
