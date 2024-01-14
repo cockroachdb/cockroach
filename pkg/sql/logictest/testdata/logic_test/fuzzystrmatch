@@ -12,7 +12,9 @@ INSERT INTO fuzzystrmatch_table VALUES
   (3, '😄', '🐯'),
   (4, null, 'a'),
   (5, 'a', null),
-  (6, null, null)
+  (6, null, null),
+  (7, 'apple', 'apple'),
+  (8, 'a', 'abcd')
 
 statement error levenshtein argument exceeds maximum length of 255 characters
 SELECT levenshtein(lpad('', 256, 'x'), '')
@@ -29,6 +31,27 @@ apple  banana  5     18
 NULL   a       NULL  NULL
 a      NULL    NULL  NULL
 NULL   NULL    NULL  NULL
+apple  apple   0     0
+a      abcd    3     6
+
+statement error levenshtein_less_equal argument exceeds maximum length of 255 characters
+SELECT levenshtein_less_equal(lpad('', 256, 'x'), '', 4)
+
+statement error levenshtein_less_equal argument exceeds maximum length of 255 characters
+SELECT levenshtein_less_equal(lpad('', 256, 'x'), '', 4, 2, 3, 4)
+
+query TTII
+SELECT a, b, levenshtein_less_equal(a, b, 3), levenshtein_less_equal(a, b, 2, 3, 4, 12) FROM fuzzystrmatch_table ORDER BY id
+----
+apple  banana  4     13
+·      pear    4     8
+😄      🐯       1     4
+NULL   a       NULL  NULL
+a      NULL    NULL  NULL
+NULL   NULL    NULL  NULL
+apple  apple   0     0
+a      abcd    3     6
+
 
 query T
 SELECT soundex('hello world!')
