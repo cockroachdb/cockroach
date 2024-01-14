@@ -4014,7 +4014,6 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Immutable,
 		},
 	),
-	"levenshtein_less_equal": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
 	"metaphone": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
 		tree.Overload{
@@ -4044,6 +4043,62 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 	"dmetaphone":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
+	"levenshtein_less_equal": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "source", Typ: types.String},
+				{Name: "target", Typ: types.String},
+				{Name: "max_d", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s, t := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
+				d := int(tree.MustBeDInt(args[2]))
+
+				// Same limit as Postgres. Ref: https://github.com/postgres/postgres/blob/53ea2b7ad050ce4ad95c89bb55197209b65886a1/src/backend/utils/adt/levenshtein.c#L26
+				const maxLen = 255
+				if len(s) > maxLen || len(t) > maxLen {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"levenshtein_less_equal argument exceeds maximum length of %d characters", maxLen)
+				}
+				ld := fuzzystrmatch.LevenshteinLessEqualDistance(s, t, d)
+				return tree.NewDInt(tree.DInt(ld)), nil
+			},
+			Info: "Calculates the Levenshtein distance between two strings. If actual distance is less or equal then max_d, " +
+				"then returns accurate value of it. Otherwise this function returns value which is greater than max_d. " +
+				"Maximum input length is 255 characters.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "source", Typ: types.String},
+				{Name: "target", Typ: types.String},
+				{Name: "ins_cost", Typ: types.Int},
+				{Name: "del_cost", Typ: types.Int},
+				{Name: "sub_cost", Typ: types.Int},
+				{Name: "max_d", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s, t := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
+				ins, del, sub := int(tree.MustBeDInt(args[2])), int(tree.MustBeDInt(args[3])), int(tree.MustBeDInt(args[4]))
+				d := int(tree.MustBeDInt(args[5]))
+				const maxLen = 255
+				if len(s) > maxLen || len(t) > maxLen {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"levenshtein_less_equal argument exceeds maximum length of %d characters", maxLen)
+				}
+				ld := fuzzystrmatch.LevenshteinLessEqualDistanceWithCost(s, t, ins, del, sub, d)
+				return tree.NewDInt(tree.DInt(ld)), nil
+			},
+			Info: "Calculates the Levenshtein distance between two strings. The cost parameters specify how much to " +
+				"charge for each edit operation. If actual distance is less or equal then max_d, " +
+				"then returns accurate value of it. Otherwise this function returns value which is greater than max_d. " +
+				"Maximum input length is 255 characters.",
+			Volatility: volatility.Immutable,
+		}
+	),
 	"dmetaphone_alt": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
 
 	// JSON functions.
