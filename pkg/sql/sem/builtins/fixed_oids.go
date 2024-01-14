@@ -2857,6 +2857,8 @@ var builtinOidsArray = []string{
 	2902: `ltree2text(ltree: ltree) -> string`,
 	2903: `lca(ltree, ltree, ltree...) -> ltree`,
 	2904: `lca(ltree[]: ltree[]) -> ltree`,
+	2905: `levenshtein_less_equal(source: string, target: string, max_d: int) -> int`,
+	2906: `levenshtein_less_equal(source: string, target: string, ins_cost: int, del_cost: int, sub_cost: int, max_d: int) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
