@@ -216,6 +216,12 @@ func (ba *BatchRequest) isSingleRequestWithMethod(m Method) bool {
 	return ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == m
 }
 
+// IsSingleBarrierRequest returns true iff the batch contains a single request,
+// and that request is a Barrier.
+func (ba *BatchRequest) IsSingleBarrierRequest() bool {
+	return ba.isSingleRequestWithMethod(Barrier)
+}
+
 // IsSingleRequestLeaseRequest returns true iff the batch contains a single
 // request, and that request is a RequestLease. Note that TransferLease requests
 // return false.
@@ -334,7 +340,7 @@ func (ba *BatchRequest) IsSingleExportRequest() bool {
 // a no-op. The Barrier request requires consensus even though its evaluation
 // is a no-op.
 func (ba *BatchRequest) RequiresConsensus() bool {
-	return ba.isSingleRequestWithMethod(Barrier) || ba.isSingleRequestWithMethod(Probe)
+	return ba.IsSingleBarrierRequest() || ba.IsSingleProbeRequest()
 }
 
 // IsCompleteTransaction determines whether a batch contains every write in a
