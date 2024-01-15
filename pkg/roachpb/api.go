@@ -519,6 +519,12 @@ func (r *BarrierResponse) combine(c combinable) error {
 			return err
 		}
 		r.Timestamp.Forward(otherR.Timestamp)
+		if r.LeaseAppliedIndex != 0 || otherR.LeaseAppliedIndex != 0 {
+			return errors.AssertionFailedf("can't combine BarrierResponses with LeaseAppliedIndex")
+		}
+		if r.RangeDesc.NextReplicaID != 0 || otherR.RangeDesc.NextReplicaID != 0 {
+			return errors.AssertionFailedf("can't combine BarrierResponses with RangeDesc")
+		}
 	}
 	return nil
 }
@@ -1534,8 +1540,14 @@ func (*QueryResolvedTimestampRequest) flags() flag {
 	return isRead | isRange | requiresClosedTSOlderThanStorageSnapshot
 }
 func (*ScanInterleavedIntentsRequest) flags() flag { return isRead | isRange }
-func (*BarrierRequest) flags() flag                { return isWrite | isRange | isAlone }
-func (*IsSpanEmptyRequest) flags() flag            { return isRead | isRange }
+func (r *BarrierRequest) flags() flag {
+	flags := isWrite | isRange | isAlone
+	if r.WithLeaseAppliedIndex {
+		flags |= isUnsplittable // the LAI is only valid for a single range
+	}
+	return flags
+}
+func (*IsSpanEmptyRequest) flags() flag { return isRead | isRange }
 
 // IsParallelCommit returns whether the EndTxn request is attempting to perform
 // a parallel commit. See txn_interceptor_committer.go for a discussion about
