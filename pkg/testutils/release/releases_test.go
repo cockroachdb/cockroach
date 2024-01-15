@@ -38,6 +38,13 @@ var (
 			Withdrawn:   []string{"23.1.0"},
 			Predecessor: "22.2",
 		},
+		"23.2": {
+			Latest:      "23.2.0-beta.1", // test pre-release latest versions
+			Predecessor: "23.1",
+		},
+		"24.1": {
+			Predecessor: "23.2",
+		},
 	}
 
 	// Results rely on this constant seed.
@@ -61,8 +68,8 @@ func TestLatestAndRandomPredecessor(t *testing.T) {
 	}{
 		{
 			name:        "non-existent release",
-			v:           "v23.2.3",
-			expectedErr: `no release information for "v23.2.3" ("23.2" series)`,
+			v:           "v50.8.3",
+			expectedErr: `no release information for "v50.8.3" ("50.8" series)`,
 		},
 		{
 			name:        "no known predecessor",
@@ -80,6 +87,12 @@ func TestLatestAndRandomPredecessor(t *testing.T) {
 			v:              "v22.2.3",
 			expectedLatest: "22.1.12",
 			expectedRandom: "22.1.10",
+		},
+		{
+			name:           "latest is pre-release",
+			v:              "v24.1.0",
+			expectedLatest: "23.2.0-beta.1",
+			expectedRandom: "23.2.0-beta.1",
 		},
 	}
 
@@ -135,6 +148,13 @@ func TestLatestPredecessorHistory(t *testing.T) {
 			k:              2,
 			expectedLatest: []string{"22.1.12", "22.2.8"},
 			expectedRandom: []string{"22.1.8", "22.2.8"},
+		},
+		{
+			name:           "latest is pre-release",
+			v:              "v24.1.0",
+			k:              2,
+			expectedLatest: []string{"23.1.1", "23.2.0-beta.1"},
+			expectedRandom: []string{"23.1.1", "23.2.0-beta.1"},
 		},
 	}
 
