@@ -170,15 +170,15 @@ func TestDeterministicHookSeeds(t *testing.T) {
 
 		// We can hardcode these paths since we are using a fixed seed in
 		// these tests.
-		firstRun := upgradeStep.steps[1].(sequentialRunStep).steps[3].(singleStep).impl.(runHookStep)
+		firstRun := upgradeStep.steps[1].(sequentialRunStep).steps[3].(*singleStep).impl.(runHookStep)
 		require.Equal(t, "do something", firstRun.hook.name)
 		require.NoError(t, firstRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		secondRun := upgradeStep.steps[2].(sequentialRunStep).steps[2].(singleStep).impl.(runHookStep)
+		secondRun := upgradeStep.steps[2].(sequentialRunStep).steps[2].(*singleStep).impl.(runHookStep)
 		require.Equal(t, "do something", secondRun.hook.name)
 		require.NoError(t, secondRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		thirdRun := upgradeStep.steps[3].(sequentialRunStep).steps[2].(singleStep).impl.(runHookStep)
+		thirdRun := upgradeStep.steps[3].(sequentialRunStep).steps[2].(*singleStep).impl.(runHookStep)
 		require.Equal(t, "do something", thirdRun.hook.name)
 		require.NoError(t, thirdRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
@@ -208,9 +208,9 @@ func Test_startClusterID(t *testing.T) {
 	plan, err := mvt.plan()
 	require.NoError(t, err)
 
-	step, isStartStep := plan.Steps()[0].(singleStep).impl.(startStep)
-	require.True(t, isStartStep)
-	require.Equal(t, 1, step.ID())
+	ss := plan.Steps()[0].(*singleStep)
+	require.IsType(t, startStep{}, ss.impl)
+	require.Equal(t, 1, ss.ID)
 	require.Equal(t, 1, plan.startClusterID)
 
 	// Overwrite probability to 1 so that our test plan will always
@@ -224,9 +224,9 @@ func Test_startClusterID(t *testing.T) {
 	mvt = newTest()
 	plan, err = mvt.plan()
 	require.NoError(t, err)
-	step, isStartStep = plan.Steps()[1].(singleStep).impl.(startStep)
-	require.True(t, isStartStep)
-	require.Equal(t, 2, step.ID())
+	ss = plan.Steps()[1].(*singleStep)
+	require.IsType(t, startStep{}, ss.impl)
+	require.Equal(t, 2, ss.ID)
 	require.Equal(t, 2, plan.startClusterID)
 }
 
@@ -238,7 +238,7 @@ func Test_upgradeTimeout(t *testing.T) {
 	findUpgradeWaitSteps := func(plan *TestPlan) []waitForStableClusterVersionStep {
 		var steps []waitForStableClusterVersionStep
 		for _, s := range plan.Steps() {
-			if ss, isSingle := s.(singleStep); isSingle {
+			if ss, isSingle := s.(*singleStep); isSingle {
 				if step, isUpgrade := ss.impl.(waitForStableClusterVersionStep); isUpgrade {
 					steps = append(steps, step)
 				}
@@ -368,7 +368,7 @@ NEXT_STEP:
 			stepNames := map[string]struct{}{}
 			for _, concurrentStep := range crs.delayedSteps {
 				ds := concurrentStep.(delayedStep)
-				ss, ok := ds.step.(singleStep)
+				ss, ok := ds.step.(*singleStep)
 				if !ok {
 					continue NEXT_STEP
 				}
