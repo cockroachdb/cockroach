@@ -85,8 +85,7 @@ import (
 // kv.raft_log.enable_loosely_coupled_truncation. When not doing loose
 // coupling (legacy), the proposal causes immediate truncation -- this is
 // correct because other externally maintained invariants ensure that the
-// state machine is durable (though we have some concerns in
-// https://github.com/cockroachdb/cockroach/issues/38566).
+// state machine is durable.
 //
 // NB: Loosely coupled truncation loses the pending truncations that were
 // queued in-memory when a node restarts. This is considered ok for now since

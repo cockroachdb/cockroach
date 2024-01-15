@@ -974,6 +974,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				Metrics: logstore.Metrics{
 					RaftLogCommitLatency: r.store.metrics.RaftLogCommitLatency,
 				},
+				DisableSyncLogWriteToss: buildutil.CrdbTestBuild &&
+					r.store.TestingKnobs().DisableSyncLogWriteToss,
 			}
 			m := logstore.MakeMsgStorageAppend(msgStorageAppend)
 			cb := (*replicaSyncCallback)(r)
@@ -1527,6 +1529,10 @@ func (r *replicaSyncCallback) OnLogSync(
 	ctx context.Context, msgs []raftpb.Message, commitStats storage.BatchCommitStats,
 ) {
 	repl := (*Replica)(r)
+	// Block sending the responses back to raft, if a test needs to.
+	if fn := repl.store.TestingKnobs().TestingAfterRaftLogSync; fn != nil {
+		fn(repl.ID())
+	}
 	// Send MsgStorageAppend's responses.
 	repl.sendRaftMessages(ctx, msgs, nil /* blocked */, false /* willDeliverLocal */)
 	if commitStats.TotalDuration > defaultReplicaRaftMuWarnThreshold {

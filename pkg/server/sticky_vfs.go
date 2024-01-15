@@ -36,10 +36,17 @@ var ReuseEnginesDeprecated StickyVFSOption = func(cfg *stickyConfig) {
 }
 
 type stickyConfig struct {
+	newFS func() *vfs.MemFS // by default vfs.NewMem
 	// reuseEngines is true if a sticky engine registry should return an existing
 	// engine instead of reopening it from the underlying in-memory FS.
 	reuseEngines bool
 }
+
+// UseStrictMemFS option instructs StickyVFSRegistry to produce strict in-memory
+// filesystems, i.e. to use vfs.NewStrictMem instead of vfs.NewMem.
+var UseStrictMemFS = StickyVFSOption(func(cfg *stickyConfig) {
+	cfg.newFS = vfs.NewStrictMem
+})
 
 // StickyVFSRegistry manages the lifecycle of sticky in-memory filesystems. It
 // is intended for use in demos and/or tests, where we want in-memory storage
@@ -62,7 +69,7 @@ type StickyVFSRegistry interface {
 	// engines.
 	Open(ctx context.Context, cfg *Config, spec base.StoreSpec) (storage.Engine, error)
 	// Get returns the named in-memory FS.
-	Get(spec base.StoreSpec) (vfs.FS, error)
+	Get(spec base.StoreSpec) (*vfs.MemFS, error)
 	// CloseAllEngines closes all open sticky in-memory engines that were
 	// created by this registry. Calling this method is required when using the
 	// ReuseEnginesDeprecated option.
@@ -86,6 +93,10 @@ func NewStickyVFSRegistry(opts ...StickyVFSOption) StickyVFSRegistry {
 	}
 	for _, opt := range opts {
 		opt(&registry.cfg)
+	}
+	// Use the regular in-memory filesystem, unless specified otherwise.
+	if registry.cfg.newFS == nil {
+		registry.cfg.newFS = vfs.NewMem
 	}
 	return registry
 }
@@ -117,7 +128,7 @@ func (registry *stickyVFSRegistryImpl) Open(
 	// If the VFS doesn't yet exist, construct a new one and save the
 	// association.
 	if !ok {
-		fs = vfs.NewMem()
+		fs = registry.cfg.newFS()
 		registry.entries[spec.StickyVFSID] = fs
 	}
 
@@ -159,14 +170,14 @@ func (registry *stickyVFSRegistryImpl) Open(
 	return engine, nil
 }
 
-func (registry *stickyVFSRegistryImpl) Get(spec base.StoreSpec) (vfs.FS, error) {
+func (registry *stickyVFSRegistryImpl) Get(spec base.StoreSpec) (*vfs.MemFS, error) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
 	if fs, ok := registry.entries[spec.StickyVFSID]; ok {
 		return fs, nil
 	} else {
-		fs = vfs.NewMem()
+		fs = registry.cfg.newFS()
 		registry.entries[spec.StickyVFSID] = fs
 		return fs, nil
 	}

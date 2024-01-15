@@ -48,6 +48,8 @@ type SideloadStorage interface {
 	Purge(_ context.Context, index, term uint64) (int64, error)
 	// Clear files that may have been written by this SideloadStorage.
 	Clear(context.Context) error
+	// HasAnyEntry returns whether there is any entry in [from, to).
+	HasAnyEntry(_ context.Context, from, to uint64) (bool, error)
 	// TruncateTo removes all files belonging to an index strictly smaller than
 	// the given one. Returns the number of bytes freed, the number of bytes in
 	// files that remain, or an error.
