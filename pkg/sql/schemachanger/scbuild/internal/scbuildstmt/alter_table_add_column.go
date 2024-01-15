@@ -49,7 +49,6 @@ func alterTableAddColumn(
 	// throw an unsupported error.
 	fallBackIfSubZoneConfigExists(b, t, tbl.TableID)
 	fallBackIfRegionalByRowTable(b, t, tbl.TableID)
-	fallBackIfVirtualColumnWithNotNullConstraint(t)
 	// Version gates functionally that is implemented after the statement is
 	// publicly published.
 	fallbackIfAddColDropColAlterPKInOneAlterTableStmtBeforeV232(b, tbl.TableID, t)
