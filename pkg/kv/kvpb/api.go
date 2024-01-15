@@ -1767,7 +1767,7 @@ func (*RangeStatsRequest) flags() flag { return isRead }
 func (*QueryResolvedTimestampRequest) flags() flag {
 	return isRead | isRange | requiresClosedTSOlderThanStorageSnapshot
 }
-func (*BarrierRequest) flags() flag     { return isWrite | isRange }
+func (*BarrierRequest) flags() flag     { return isWrite | isRange | isAlone }
 func (*IsSpanEmptyRequest) flags() flag { return isRead | isRange }
 
 // IsParallelCommit returns whether the EndTxn request is attempting to perform
