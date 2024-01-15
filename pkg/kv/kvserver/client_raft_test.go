@@ -6051,7 +6051,7 @@ func TestRaftForceCampaignPreVoteCheckQuorum(t *testing.T) {
 
 	repl1, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
 	require.NoError(t, err)
-	repl2, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
+	repl2, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
 	require.NoError(t, err)
 	repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
 	require.NoError(t, err)
