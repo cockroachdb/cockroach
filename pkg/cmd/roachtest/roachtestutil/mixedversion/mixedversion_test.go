@@ -58,7 +58,7 @@ func Test_assertValidTest(t *testing.T) {
 	mvt := newTest(MinUpgrades(10))
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
-	require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (3) must be greater than minUpgrades (10)")
+	require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (4) must be greater than minUpgrades (10)")
 
 	mvt = newTest(MaxUpgrades(0))
 	assertValidTest(mvt, fatalFunc())
