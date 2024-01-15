@@ -173,8 +173,8 @@ func (tr *testRunner) run() (retErr error) {
 // runStep contains the logic of running a single test step, called
 // recursively in the case of sequentialRunStep and concurrentRunStep.
 func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
-	if ss, ok := step.(singleStep); ok {
-		if ss.impl.ID() > tr.plan.startClusterID {
+	if ss, ok := step.(*singleStep); ok {
+		if ss.ID > tr.plan.startClusterID {
 			// update the runner's view of the cluster's binary and cluster
 			// versions before every non-initialization `singleStep` is
 			// executed
@@ -215,7 +215,7 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 		return tr.runStep(ctx, s.step)
 
 	default:
-		ss := s.(singleStep)
+		ss := s.(*singleStep)
 		stepLogger, err := tr.loggerFor(ss)
 		if err != nil {
 			return err
@@ -235,7 +235,7 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 // any) with useful information, and renaming the log file to indicate
 // failure. This logic is the same whether running a step in the
 // background or not.
-func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logger.Logger) error {
+func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logger.Logger) error {
 	tr.logStep("STARTING", ss, l)
 	tr.logVersions(l, ss.context)
 	start := timeutil.Now()
@@ -264,7 +264,7 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logge
 	return nil
 }
 
-func (tr *testRunner) startBackgroundStep(ss singleStep, l *logger.Logger, stopChan shouldStop) {
+func (tr *testRunner) startBackgroundStep(ss *singleStep, l *logger.Logger, stopChan shouldStop) {
 	stop := tr.background.Start(ss.impl.Description(), func(ctx context.Context) error {
 		return tr.runSingleStep(ctx, ss, l)
 	})
@@ -289,9 +289,9 @@ func (tr *testRunner) startBackgroundStep(ss singleStep, l *logger.Logger, stopC
 // binary version on each node when the error occurred, and the
 // cluster version before and after the step (in case the failure
 // happened *while* the cluster version was updating).
-func (tr *testRunner) stepError(err error, step singleStep, l *logger.Logger) error {
+func (tr *testRunner) stepError(err error, step *singleStep, l *logger.Logger) error {
 	desc := fmt.Sprintf("mixed-version test failure while running step %d (%s): %s",
-		step.impl.ID(), step.impl.Description(), err,
+		step.ID, step.impl.Description(), err,
 	)
 
 	return tr.testFailure(desc, l, &step.context)
@@ -367,9 +367,9 @@ func (tr *testRunner) teardown(stepsChan chan error, testFailed bool) {
 	tr.closeConnections()
 }
 
-func (tr *testRunner) logStep(prefix string, step singleStep, l *logger.Logger) {
+func (tr *testRunner) logStep(prefix string, step *singleStep, l *logger.Logger) {
 	dashes := strings.Repeat("-", 10)
-	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.impl.ID(), step.impl.Description())
+	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.ID, step.impl.Description())
 }
 
 // logVersions writes the current cached versions of the binary and
@@ -399,9 +399,9 @@ func (tr *testRunner) logVersions(l *logger.Logger, testContext Context) {
 // will be available under `mixed-version-test/{ID}.log`, making it
 // easy to go from the IDs displayed in the test plan to the
 // corresponding output of that step.
-func (tr *testRunner) loggerFor(step singleStep) (*logger.Logger, error) {
+func (tr *testRunner) loggerFor(step *singleStep) (*logger.Logger, error) {
 	name := invalidChars.ReplaceAllString(strings.ToLower(step.impl.Description()), "")
-	name = fmt.Sprintf("%d_%s", step.impl.ID(), name)
+	name = fmt.Sprintf("%d_%s", step.ID, name)
 
 	prefix := path.Join(logPrefix, name)
 	return prefixedLogger(tr.logger, prefix)
