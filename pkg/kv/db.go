@@ -889,21 +889,41 @@ func (db *DB) QueryResolvedTimestamp(
 // writes on the specified key range to finish.
 func (db *DB) Barrier(ctx context.Context, begin, end interface{}) (hlc.Timestamp, error) {
 	b := &Batch{}
-	b.barrier(begin, end)
-	err := getOneErr(db.Run(ctx, b), b)
-	if err != nil {
+	b.barrier(begin, end, false /* withLAI */)
+	if err := getOneErr(db.Run(ctx, b), b); err != nil {
 		return hlc.Timestamp{}, err
 	}
-	responses := b.response.Responses
-	if len(responses) == 0 {
-		return hlc.Timestamp{}, errors.Errorf("unexpected empty response for Barrier")
+	if l := len(b.response.Responses); l != 0 {
+		return hlc.Timestamp{}, errors.Errorf("got %d responses for Barrier", l)
 	}
-	resp, ok := responses[0].GetInner().(*kvpb.BarrierResponse)
-	if !ok {
-		return hlc.Timestamp{}, errors.Errorf("unexpected response of type %T for Barrier",
-			responses[0].GetInner())
+	resp := b.response.Responses[0].GetBarrier()
+	if resp == nil {
+		return hlc.Timestamp{}, errors.Errorf("unexpected response %T for Barrier",
+			b.response.Responses[0].GetInner())
 	}
 	return resp.Timestamp, nil
+}
+
+// BarrierWithLAI is like Barrier, but also returns the lease applied index and
+// range descriptor at which the barrier was applied. In this case, the barrier
+// can't span multiple ranges, otherwise a RangeKeyMismatchError is returned.
+func (db *DB) BarrierWithLAI(
+	ctx context.Context, begin, end interface{},
+) (kvpb.LeaseAppliedIndex, roachpb.RangeDescriptor, error) {
+	b := &Batch{}
+	b.barrier(begin, end, true /* withLAI */)
+	if err := getOneErr(db.Run(ctx, b), b); err != nil {
+		return 0, roachpb.RangeDescriptor{}, err
+	}
+	if l := len(b.response.Responses); l != 0 {
+		return 0, roachpb.RangeDescriptor{}, errors.Errorf("got %d responses for Barrier", l)
+	}
+	resp := b.response.Responses[0].GetBarrier()
+	if resp == nil {
+		return 0, roachpb.RangeDescriptor{}, errors.Errorf("unexpected response %T for Barrier",
+			b.response.Responses[0].GetInner())
+	}
+	return resp.LeaseAppliedIndex, resp.RangeDesc, nil
 }
 
 // sendAndFill is a helper which sends the given batch and fills its results,

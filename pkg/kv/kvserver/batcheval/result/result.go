@@ -52,6 +52,9 @@ type LocalResult struct {
 	// commit fails, or we may accidentally make uncommitted values
 	// live.
 	EndTxns []EndTxnIntents
+	// PopulateBarrierResponse will populate a BarrierResponse with the lease
+	// applied index and range descriptor when applied.
+	PopulateBarrierResponse bool
 
 	// When set (in which case we better be the first range), call
 	// GossipFirstRange if the Replica holds the lease.
@@ -79,6 +82,7 @@ func (lResult *LocalResult) IsZero() bool {
 		lResult.ResolvedLocks == nil &&
 		lResult.UpdatedTxns == nil &&
 		lResult.EndTxns == nil &&
+		lResult.PopulateBarrierResponse == false &&
 		!lResult.GossipFirstRange &&
 		!lResult.MaybeGossipSystemConfig &&
 		!lResult.MaybeGossipSystemConfigIfHaveFailure &&
@@ -95,13 +99,13 @@ func (lResult *LocalResult) String() string {
 		"#updated txns: %d #end txns: %d, "+
 		"GossipFirstRange:%t MaybeGossipSystemConfig:%t "+
 		"MaybeGossipSystemConfigIfHaveFailure:%t MaybeAddToSplitQueue:%t "+
-		"MaybeGossipNodeLiveness:%s ",
+		"MaybeGossipNodeLiveness:%s PopulateBarrierResponse:%t",
 		lResult.Reply,
 		len(lResult.EncounteredIntents), len(lResult.AcquiredLocks), len(lResult.ResolvedLocks),
 		len(lResult.UpdatedTxns), len(lResult.EndTxns),
 		lResult.GossipFirstRange, lResult.MaybeGossipSystemConfig,
 		lResult.MaybeGossipSystemConfigIfHaveFailure, lResult.MaybeAddToSplitQueue,
-		lResult.MaybeGossipNodeLiveness)
+		lResult.MaybeGossipNodeLiveness, lResult.PopulateBarrierResponse)
 }
 
 // RequiresRaft returns true if the local result needs to go via Raft, e.g. in
