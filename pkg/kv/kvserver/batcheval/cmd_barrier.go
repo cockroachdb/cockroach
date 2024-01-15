@@ -47,13 +47,19 @@ func declareKeysBarrier(
 	return nil
 }
 
-// Barrier evaluation is a no-op, as all the latch waiting happens in
-// the latch manager.
+// Barrier evaluation is a no-op, but it still goes through Raft because of
+// BatchRequest.RequiresConsensus(). The latch waiting happens in the latch
+// manager, and the WithLeaseAppliedIndex info is populated during application.
 func Barrier(
 	_ context.Context, _ storage.ReadWriter, cArgs CommandArgs, response kvpb.Response,
 ) (result.Result, error) {
+	args := cArgs.Args.(*kvpb.BarrierRequest)
 	resp := response.(*kvpb.BarrierResponse)
 	resp.Timestamp = cArgs.EvalCtx.Clock().Now()
 
-	return result.Result{}, nil
+	return result.Result{
+		Local: result.LocalResult{
+			PopulateBarrierResponse: args.WithLeaseAppliedIndex,
+		},
+	}, nil
 }
