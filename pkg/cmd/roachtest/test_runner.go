@@ -1372,6 +1372,9 @@ func (r *testRunner) collectArtifacts(
 		if err := c.CopyRoachprodState(ctx); err != nil {
 			t.L().Printf("failed to copy roachprod state: %s", err)
 		}
+		if err := c.FetchPebbleCheckpoints(ctx, t.L()); err != nil {
+			t.L().Printf("failed to fetch Pebble checkpoints: %s", err)
+		}
 		if err := c.FetchTimeseriesData(ctx, t.L()); err != nil {
 			t.L().Printf("failed to fetch timeseries data: %s", err)
 		}
