@@ -1,0 +1,30 @@
+setup
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
+----
+
+stage-exec phase=PostCommitPhase stage=1  schemaChangeExecErrorForRollback=(.*validation of column \"j\" NOT NULL failed on row.*)
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+----
+
+stage-exec phase=PostCommitPhase stage=2:7
+INSERT INTO db.public.tbl VALUES($stageKey);
+----
+pq: failed to satisfy CHECK constraint \(j IS NOT NULL\)
+
+stage-exec phase=PostCommitPhase stage=8:
+INSERT INTO db.public.tbl VALUES($stageKey);
+----
+.*duplicate key value violates unique constraint \"tbl_j_key\".*
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=1
+INSERT INTO db.public.tbl VALUES($stageKey);
+----
+.*duplicate key value violates unique constraint \"tbl_j_key\".*
+
+# Add a column which will have a unique index and a not null constraint at
+# the same time.
+test
+ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE NOT NULL;
+----

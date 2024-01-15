@@ -186,6 +186,11 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			skipIssue:    87699,
 		},
 		{
+			desc:         "add column unique not null",
+			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col TEXT NOT NULL UNIQUE",
+			expectedErr:  "null value in column \"new_col\" violates not-null constraint",
+		},
+		{
 			desc:         "add column default unique",
 			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col TEXT NOT NULL UNIQUE DEFAULT insert_phase_ordinal || operation_phase_ordinal || operation",
 			expectedErr:  "variable sub-expressions are not allowed in DEFAULT",
