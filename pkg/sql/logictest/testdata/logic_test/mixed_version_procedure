@@ -1,5 +1,7 @@
 # LogicTest: cockroach-go-testserver-upgrade-to-master
 
+skip 117645 # needs to be updated now that master's predecessor is 23.2
+
 # Verify that all nodes are running the previous version.
 
 query T nodeidx=0
