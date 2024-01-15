@@ -151,7 +151,7 @@ var (
 		useFixturesProbability:  0.7,
 		upgradeTimeout:          clusterupgrade.DefaultUpgradeTimeout,
 		minUpgrades:             1,
-		maxUpgrades:             3,
+		maxUpgrades:             4,
 		minimumSupportedVersion: OldestSupportedVersion,
 		predecessorFunc:         randomPredecessorHistory,
 	}
