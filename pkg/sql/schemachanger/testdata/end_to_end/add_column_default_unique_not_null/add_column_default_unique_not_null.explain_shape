@@ -1,0 +1,18 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE NOT NULL;
+----
+Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL UNIQUE;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index tbl_pkey in relation tbl
+ │    └── into tbl_j_key+ (j+: i)
+ ├── validate NOT NULL constraint on column j+ in index tbl_pkey in relation tbl
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation tbl
+ │    └── from tbl@[3] into tbl_j_key+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index tbl_j_key+ in relation tbl
+ └── execute 1 system table mutations transaction
