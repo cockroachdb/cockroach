@@ -197,6 +197,9 @@ var AllExceptLocal = AllClouds.NoLocal()
 // AllExceptAWS contains all clouds except AWS.
 var AllExceptAWS = AllClouds.NoAWS()
 
+// OnlyAWS contains only the AWS cloud.
+var OnlyAWS = Clouds(spec.AWS)
+
 // OnlyGCE contains only the GCE cloud.
 var OnlyGCE = Clouds(spec.GCE)
 
@@ -321,13 +324,17 @@ func (t *TestSpec) CrossCheckTags() {
 	expected.nightlyAWS = matchesAll(t.Tags, []string{"aws"})
 	expected.weeklyAWS = matchesAll(t.Tags, []string{"aws-weekly"})
 
-	actual.nightlyGCE = t.Suites.Contains(Nightly) && t.CompatibleClouds.Contains(spec.GCE)
+	// Unfortunately lots of tests that are are aws only hae tag AWS but use the
+	// AllClouds filter and then skip themselves, so they so they are technically
+	// considered "nightly GCE" even though they will internally skip.
+	// This goes away when we get rid of tags entirely so for now ignore them.
+	actual.nightlyGCE = t.Suites.Contains(Nightly) && (t.CompatibleClouds.Contains(spec.GCE) || t.CompatibleClouds.Contains(spec.AWS))
 	actual.weeklyGCE = t.Suites.Contains(Weekly) && t.CompatibleClouds.Contains(spec.GCE)
 	actual.nightlyAWS = t.Suites.Contains(Nightly) && t.CompatibleClouds.Contains(spec.AWS)
 	actual.weeklyAWS = t.Suites.Contains(Weekly) && t.CompatibleClouds.Contains(spec.AWS)
 
 	if actual != expected {
-		panic(fmt.Sprintf("CompatibleClouds/Suites inconsistent with Tags\nexpected: %#v\nactual:   %#v\nclouds: %s  suites:%s  tags:%v\n", expected, actual, t.CompatibleClouds, t.Suites, t.Tags))
+		panic(fmt.Sprintf("%q CompatibleClouds/Suites inconsistent with Tags\nexpected: %#v\nactual:   %#v\nclouds: %s  suites:%s  tags:%v\n", t.Name, expected, actual, t.CompatibleClouds, t.Suites, t.Tags))
 	}
 
 	otherSuiteTags := fmt.Sprintf("%v", removeFromSet(t.Tags, "default", "weekly", "aws-weekly", "aws", "owner-"+string(t.Owner)))
