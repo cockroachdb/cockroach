@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -167,6 +168,9 @@ func TestRaftLogQueue(t *testing.T) {
 func TestCrashWhileTruncatingSideloadedEntries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// Skip under stress until we fix the circuit breaker behaviour in #117785.
+	skip.UnderStressWithIssue(t, 117785)
 
 	// Use sticky engine registry to "survive" a node restart. Use the strict
 	// in-memory engine to be able to stop flushes and emulate data loss.
