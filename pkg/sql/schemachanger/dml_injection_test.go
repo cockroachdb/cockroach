@@ -209,6 +209,11 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			schemaChange: "ALTER TABLE tbl DROP COLUMN new_col",
 		},
 		{
+			desc:         "add column virtual NOT NULL",
+			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col TEXT NOT NULL AS (NULL::TEXT) VIRTUAL",
+			expectedErr:  "validation of column \"new_col\" NOT NULL failed on row: insert_phase_ordinal='pre-schema-change', operation_phase_ordinal='n/a', operation='n/a', val=1, new_col=NULL",
+		},
+		{
 			desc:         "add column virtual",
 			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col TEXT NOT NULL AS (insert_phase_ordinal) VIRTUAL",
 		},

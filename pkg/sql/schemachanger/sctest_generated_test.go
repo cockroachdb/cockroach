@@ -48,6 +48,13 @@ func TestEndToEndSideEffects_add_column_no_default(t *testing.T) {
 	sctest.EndToEndSideEffects(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
+func TestEndToEndSideEffects_add_column_virtual_not_null(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/add_column_virtual_not_null"
+	sctest.EndToEndSideEffects(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
 func TestEndToEndSideEffects_add_column_with_stored(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -409,6 +416,13 @@ func TestExecuteWithDMLInjection_add_column_no_default(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/sql/schemachanger/testdata/end_to_end/add_column_no_default"
+	sctest.ExecuteWithDMLInjection(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
+func TestExecuteWithDMLInjection_add_column_virtual_not_null(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/add_column_virtual_not_null"
 	sctest.ExecuteWithDMLInjection(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
@@ -776,6 +790,13 @@ func TestGenerateSchemaChangeCorpus_add_column_no_default(t *testing.T) {
 	sctest.GenerateSchemaChangeCorpus(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
+func TestGenerateSchemaChangeCorpus_add_column_virtual_not_null(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/add_column_virtual_not_null"
+	sctest.GenerateSchemaChangeCorpus(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
 func TestGenerateSchemaChangeCorpus_add_column_with_stored(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1137,6 +1158,13 @@ func TestPause_add_column_no_default(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/sql/schemachanger/testdata/end_to_end/add_column_no_default"
+	sctest.Pause(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
+func TestPause_add_column_virtual_not_null(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/add_column_virtual_not_null"
 	sctest.Pause(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
@@ -1504,6 +1532,13 @@ func TestPauseMixedVersion_add_column_no_default(t *testing.T) {
 	sctest.PauseMixedVersion(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
+func TestPauseMixedVersion_add_column_virtual_not_null(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/add_column_virtual_not_null"
+	sctest.PauseMixedVersion(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
 func TestPauseMixedVersion_add_column_with_stored(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1865,6 +1900,13 @@ func TestRollback_add_column_no_default(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/sql/schemachanger/testdata/end_to_end/add_column_no_default"
+	sctest.Rollback(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
+func TestRollback_add_column_virtual_not_null(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/add_column_virtual_not_null"
 	sctest.Rollback(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
