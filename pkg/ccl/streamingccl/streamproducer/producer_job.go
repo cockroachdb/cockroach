@@ -41,12 +41,14 @@ func makeTenantSpan(tenantID uint64) roachpb.Span {
 func makeProducerJobRecord(
 	registry *jobs.Registry,
 	tenantInfo *mtinfopb.TenantInfo,
-	timeout time.Duration,
+	expirationWindow time.Duration,
 	user username.SQLUsername,
 	ptsID uuid.UUID,
 ) jobs.Record {
 	tenantID := tenantInfo.ID
 	tenantName := tenantInfo.Name
+	currentTime := timeutil.Now()
+	expiration := currentTime.Add(expirationWindow)
 	return jobs.Record{
 		JobID:       registry.MakeJobID(),
 		Description: fmt.Sprintf("Physical replication stream producer for %q (%d)", tenantName, tenantID),
@@ -55,9 +57,10 @@ func makeProducerJobRecord(
 			ProtectedTimestampRecordID: ptsID,
 			Spans:                      []roachpb.Span{makeTenantSpan(tenantID)},
 			TenantID:                   roachpb.MustMakeTenantID(tenantID),
+			ExpirationWindow:           expirationWindow,
 		},
 		Progress: jobspb.StreamReplicationProgress{
-			Expiration: timeutil.Now().Add(timeout),
+			Expiration: expiration,
 		},
 	}
 }
@@ -120,9 +123,6 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 			case jobspb.StreamReplicationProgress_FINISHED_SUCCESSFULLY:
 				// Retain the pts until the expiration period elapses to allow for fast
 				// fail back.
-				//
-				// TODO (msbutler): allow the user to explicitly set the post cutover
-				// retention time on cutover.
 				if progress.Expiration.After(p.timeSource.Now()) {
 					continue
 				}
