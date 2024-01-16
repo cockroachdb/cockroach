@@ -112,16 +112,6 @@ message RenameDatabase {
   string new_database_name = 4  [(gogoproto.jsontag) = ",omitempty"];
 }
 
-// ConvertToSchema is recorded when a database is converted to a schema.
-message ConvertToSchema {
-  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-  // The name of the database being converted to a schema.
-  string database_name = 3  [(gogoproto.jsontag) = ",omitempty"];
-  // The name of the parent database for the new schema.
-  string new_database_parent = 4  [(gogoproto.jsontag) = ",omitempty"];
-}
-
 // CreateSchema is recorded when a schema is created.
 message CreateSchema {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];

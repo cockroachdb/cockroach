@@ -251,26 +251,24 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	defer cleanupTenant()
 
 	// Makes the stream time out really soon
-	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness.timeout = '10ms'")
 	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '1ms'")
 	t.Run("failed-after-timeout", func(t *testing.T) {
 		replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
 		streamID := replicationProducerSpec.StreamID
-
-		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
-			[][]string{{"failed"}})
+		jobutils.WaitForJobToRun(t, h.SysSQL, jobspb.JobID(streamID))
+		h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='1ms'`, testTenantName))
+		jobutils.WaitForJobToFail(t, h.SysSQL, jobspb.JobID(streamID))
 		testStreamReplicationStatus(t, h.SysSQL, streamID, streampb.StreamReplicationStatus_STREAM_INACTIVE)
 	})
 
 	// Make sure the stream does not time out within the test timeout
-	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness.timeout = '500s'")
 	t.Run("continuously-running-within-timeout", func(t *testing.T) {
 		replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
 		streamID := replicationProducerSpec.StreamID
 
 		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
 			[][]string{{"running"}})
-
+		h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='1hr'`, testTenantName))
 		// Ensures the job is continuously running for 3 seconds.
 		testDuration, now := 3*time.Second, timeutil.Now()
 		for start, end := now, now.Add(testDuration); start.Before(end); start = start.Add(300 * time.Millisecond) {
@@ -559,14 +557,13 @@ func TestCompleteStreamReplication(t *testing.T) {
 	_, cleanupTenant := h.CreateTenant(t, srcTenantID, testTenantName)
 	defer cleanupTenant()
 
-	// Make the producer job times out fast and fastly tracks ingestion cutover signal.
 	h.SysSQL.ExecMultiple(t,
-		"SET CLUSTER SETTING stream_replication.job_liveness.timeout = '2s';",
-		"SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '2s';",
-		"SET CLUSTER SETTING stream_replication.job_liveness_timeout = '3s'")
+		"SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '2s';")
 
 	replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
 	timedOutStreamID := replicationProducerSpec.StreamID
+	jobutils.WaitForJobToRun(t, h.SysSQL, jobspb.JobID(timedOutStreamID))
+	h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='1ms'`, testTenantName))
 	jobutils.WaitForJobToFail(t, h.SysSQL, jobspb.JobID(timedOutStreamID))
 
 	testCompleteStreamReplication := func(t *testing.T, successfulIngestion bool) {
@@ -580,6 +577,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 		jobutils.WaitForJobToRun(t, h.SysSQL, jobspb.JobID(streamID))
 		h.SysSQL.Exec(t, "SELECT crdb_internal.complete_replication_stream($1, $2)",
 			streamID, successfulIngestion)
+		h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='100ms'`, testTenantName))
 
 		if successfulIngestion {
 			jobutils.WaitForJobToSucceed(t, h.SysSQL, jobspb.JobID(streamID))

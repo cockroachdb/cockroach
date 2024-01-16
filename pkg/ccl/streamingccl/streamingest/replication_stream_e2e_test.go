@@ -52,7 +52,6 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	args.SrcClusterSettings[`stream_replication.job_liveness.timeout`] = `'1m'`
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
@@ -60,6 +59,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+	c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='1m'`, c.Args.SrcTenantName))
 
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
@@ -70,9 +70,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	require.True(t, srcTime.LessEq(stats.ReplicationLagInfo.MinIngestedTimestamp))
 
 	// Make producer job easily times out
-	c.SrcSysSQL.ExecMultiple(t, replicationtestutils.ConfigureClusterSettings(map[string]string{
-		`stream_replication.job_liveness.timeout`: `'100ms'`,
-	})...)
+	c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='100ms'`, c.Args.SrcTenantName))
 
 	jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	// The ingestion job will stop retrying as this is a permanent job error.
@@ -927,13 +925,6 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
 
-			if !pauseBeforeTerminal {
-				// Only set a short job liveness timeout if the job will not get paused.
-				// Else, the producer job may inadvertently timeout while the job is
-				// paused.
-				c.DestSysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '100ms'")
-			}
-
 			producerJobID, replicationJobID := c.StartStreamReplication(ctx)
 
 			jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
@@ -971,6 +962,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 				jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
 				var emptyCutoverTime time.Time
 				c.Cutover(producerJobID, replicationJobID, emptyCutoverTime, false)
+				c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='100ms'`, c.Args.SrcTenantName))
 			}
 
 			// Set GC TTL low, so that the GC job completes quickly in the test.
@@ -978,16 +970,12 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			c.DestSysSQL.Exec(t, fmt.Sprintf("DROP TENANT %s", c.Args.DestTenantName))
 
 			if !completeReplication {
+				c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='1ms'`, c.Args.SrcTenantName))
 				jobutils.WaitForJobToCancel(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
 				jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 			}
 
-			// Check if the producer job has released protected timestamp if the job
-			// completed with a low stream_replication.job_liveness_timeout, or if the
-			// replication stream didn't complete.
-			if !pauseBeforeTerminal || !completeReplication {
-				requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
-			}
+			requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
 
 			// Check if the replication job has released protected timestamp.
 			checkNoDestinationProtection(c, replicationJobID)

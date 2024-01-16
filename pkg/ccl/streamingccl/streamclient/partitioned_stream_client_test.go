@@ -21,12 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -225,9 +227,7 @@ func TestPartitionedStreamReplicationClient(t *testing.T) {
 
 	ctx := context.Background()
 	// Makes sure source cluster producer job does not time out within test timeout
-	h.SysSQL.Exec(t, `
-SET CLUSTER SETTING stream_replication.job_liveness.timeout = '500s';
-`)
+
 	tenant.SQL.Exec(t, `
 CREATE DATABASE d;
 CREATE TABLE d.t1(i int primary key, a string, b string);
@@ -253,7 +253,6 @@ INSERT INTO d.t2 VALUES (2);
 	// We can create multiple replication streams for the same tenant.
 	_, err = client.Create(ctx, testTenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)
-
 	expectStreamState(streamID, jobs.StatusRunning)
 
 	top, err := client.Plan(ctx, streamID)
@@ -343,15 +342,15 @@ INSERT INTO d.t2 VALUES (2);
 	require.True(t, testutils.IsError(err, "job with ID 999 does not exist"), err)
 
 	// Makes producer job exit quickly.
-	h.SysSQL.ExecMultiple(t, `
-SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms'`,
-		`SET CLUSTER SETTING stream_replication.job_liveness_timeout = '1s'`)
+	h.SysSQL.Exec(t, `
+SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms'`)
 	rps, err = client.Create(ctx, testTenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)
 	streamID = rps.StreamID
+	jobutils.WaitForJobToRun(t, h.SysSQL, jobspb.JobID(streamID))
 	require.NoError(t, client.Complete(ctx, streamID, true))
-	h.SysSQL.CheckQueryResultsRetry(t,
-		fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %d", streamID), [][]string{{"succeeded"}})
+	h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='100ms'`, testTenantName))
+	jobutils.WaitForJobToSucceed(t, h.SysSQL, jobspb.JobID(streamID))
 }
 
 // isQueryCanceledError returns true if the error appears to be a query cancelled error.
