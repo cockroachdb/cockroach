@@ -1230,6 +1230,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		}
 	})
 
+	b.StopTimer()
 }
 
 // This test makes sure leases get renewed automatically in the
