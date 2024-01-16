@@ -14,6 +14,7 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -61,6 +62,15 @@ func (c ConnectionClass) String() string {
 
 // SafeValue implements the redact.SafeValue interface.
 func (ConnectionClass) SafeValue() {}
+
+// ConnectionClassFromProto converts the BatchRequest connection class
+// preference into an RPC ConnectionClass.
+func ConnectionClassFromProto(from kvpb.ConnectionClass) ConnectionClass {
+	if from == kvpb.ConnectionClass_BULK_DATA {
+		return BulkDataClass
+	}
+	return DefaultClass
+}
 
 var systemClassKeyPrefixes = []roachpb.RKey{
 	roachpb.RKey(keys.Meta1Prefix),
