@@ -234,6 +234,7 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 		s.flushedFiles[l].StartTime.EqOrdering(resp.metadata.StartTime) {
 		s.flushedFiles[l].Span.EndKey = span.EndKey
 		s.flushedFiles[l].EntryCounts.Add(resp.metadata.EntryCounts)
+		s.flushedFiles[l].ApproximatePhysicalSize += resp.metadata.ApproximatePhysicalSize
 		s.stats.spanGrows++
 	} else {
 		f := resp.metadata
