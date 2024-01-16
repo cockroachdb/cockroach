@@ -1882,7 +1882,11 @@ func (l Lease) Speculative() bool {
 //
 // NB: Lease.Equivalent is NOT symmetric. For expiration-based
 // leases, a lease is equivalent to another with an equal or
-// later expiration, but not an earlier expiration.
+// later expiration, but not an earlier expiration. Similarly,
+// an expiration-based lease is equivalent to an epoch-based
+// lease with the same replica and start time (representing a
+// promotion from expiration-based to epoch-based), but the
+// reverse is not true.
 func (l Lease) Equivalent(newL Lease, expToEpochEquiv bool) bool {
 	// Ignore proposed timestamp & deprecated start stasis.
 	l.ProposedTS, newL.ProposedTS = nil, nil
@@ -1921,7 +1925,9 @@ func (l Lease) Equivalent(newL Lease, expToEpochEquiv bool) bool {
 			// Expiration-based leases carry a local expiration timestamp. Epoch-based
 			// leases store their expiration indirectly in NodeLiveness. We assume that
 			// this promotion is only proposed if the liveness expiration is later than
-			// previous expiration carried by the expiration-based lease.
+			// previous expiration carried by the expiration-based lease. This is a
+			// case where Equivalent is not commutative, as the reverse transition
+			// (from epoch-based to expiration-based) requires a sequence increment.
 			//
 			// Ignore epoch and expiration. The remaining fields which are compared
 			// are Replica and Start.
