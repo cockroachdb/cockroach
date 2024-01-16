@@ -361,7 +361,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 				Insecure: true,
 				Knobs: base.TestingKnobs{
 					KVClient: &kvcoord.ClientTestingKnobs{
-						TransportFactory: getInterceptingTransportFactory(roachpb.NodeID(1)),
+						TransportFactory: getInterceptingTransportFactory(1),
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
@@ -517,7 +517,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 	execLeaseMover := func(t *testing.T, name string) error {
 		desc, err := tc.LookupRange(keyB)
 		assert.NoError(t, err)
-		t.Logf("Transferring r%d lease to n%d", desc.RangeID, tc.Target(0).NodeID)
+		t.Logf("Transferring r%d lease to n%d", desc.RangeID, 1)
 		assert.NoError(t, tc.TransferRangeLease(desc, tc.Target(0)))
 		return nil
 	}
@@ -585,7 +585,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			// 3. txn1->n1: Put(a), EndTxn(parallel commit) -- Puts txn1 in STAGING.
 			// 4. txn1->n2: Put(b) -- Send the request, but pause before returning
 			// the response so we can inject network failure.
-			if req.txnName == "txn1" && hasPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
+			if req.txnName == "txn1" && hasPut && req.toNodeID == 2 && cp == AfterSending {
 				// Once we have seen the write on txn1 to n2 that we will fail, txn2
 				// can start.
 				close(txn2Ready)
@@ -607,7 +607,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			// <transfer b's lease to n1>
 			// <inject a network failure and finally allow (4) txn1->n2: Put(b) to
 			// return with error>
-			if req.txnName == "txn1" && hasPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
+			if req.txnName == "txn1" && hasPut && req.toNodeID == 2 && cp == AfterSending {
 				// Hold the operation open until we are ready to retry on the new
 				// replica, after which we will return the injected failure.
 				req.pauseUntil(t, leaseMoveComplete, cp)
@@ -774,7 +774,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			// 3. txn1->n1: Put(a), EndTxn(parallel commit) -- Puts txn1 in STAGING.
 			// 4. txn1->n2: Put(b) -- Send the request, but pause before returning
 			// the response so we can inject network failure.
-			if req.txnName == "txn1" && hasPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
+			if req.txnName == "txn1" && hasPut && req.toNodeID == 2 && cp == AfterSending {
 				// Once we have seen the write on txn1 to n2 that we will fail, txn2
 				// can start.
 				close(txn2Ready)
@@ -796,7 +796,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			// <transfer b's lease to n1>
 			// <inject a network failure and finally allow (4) txn1->n2: Put(b) to
 			// return with error>
-			if req.txnName == "txn1" && hasPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
+			if req.txnName == "txn1" && hasPut && req.toNodeID == 2 && cp == AfterSending {
 				// Hold the operation open until we are ready to retry on the new
 				// replica, after which we will return the injected failure.
 				req.pauseUntil(t, leaseMoveComplete, cp)
@@ -937,7 +937,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			// 3. txn1->n1: Put(a), EndTxn(parallel commit) -- Puts txn1 in STAGING.
 			// 4. txn1->n2: Put(b) -- Send the request, but pause before returning
 			// the response so we can inject network failure.
-			if req.txnName == "txn1" && hasPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
+			if req.txnName == "txn1" && hasPut && req.toNodeID == 2 && cp == AfterSending {
 				// Once we have seen the write on txn1 to n2 that we will fail, we can
 				// move the lease.
 				close(txn2Ready)
@@ -958,7 +958,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			// <transfer b's lease to n1>
 			// <inject a network failure and finally allow (4) txn1->n2: Put(b) to
 			// return with error>
-			if req.txnName == "txn1" && hasPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
+			if req.txnName == "txn1" && hasPut && req.toNodeID == 2 && cp == AfterSending {
 				// Hold the operation open until we are ready to retry on the new
 				// replica, after which we will return the injected failure.
 				req.pauseUntil(t, leaseMoveComplete, cp)
@@ -1073,7 +1073,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			// 3. txn1->n1: Put(a), EndTxn(parallel commit) -- Puts txn1 in STAGING.
 			// 4. txn1->n2: Put(b) -- Send the request, but pause before returning the
 			// response so we can inject network failure.
-			if req.txnName == "txn1" && hasPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
+			if req.txnName == "txn1" && hasPut && req.toNodeID == 2 && cp == AfterSending {
 				// Once we have seen the write on txn1 to n2 that we will fail, txn2/txn3 can start.
 				close(otherTxnsReady)
 			}
@@ -1095,7 +1095,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			// <transfer b's lease to n1>
 			// <inject a network failure and finally allow (4) txn1->n2: Put(b) to
 			// return with error>
-			if req.txnName == "txn1" && hasPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
+			if req.txnName == "txn1" && hasPut && req.toNodeID == 2 && cp == AfterSending {
 				// Hold the operation open until we are ready to retry on the new
 				// replica, after which we will return the injected failure.
 				req.pauseUntil(t, leaseMoveComplete, cp)
@@ -1192,7 +1192,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			// 4. txn1->n2: Put(b) -- Send the request, but pause before returning the
 			// response so we can inject network failure.
 			// <transfer b's lease to n1>
-			if req.txnName == "txn1" && hasPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
+			if req.txnName == "txn1" && hasPut && req.toNodeID == 2 && cp == AfterSending {
 				close(leaseMoveReady)
 				req.pauseUntil(t, leaseMoveComplete, cp)
 				close(txn2Ready)
@@ -1210,7 +1210,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 
 			// <inject a network failure and finally allow (4) txn1->n2: Put(b) to
 			// return with error>
-			if req.txnName == "txn1" && hasPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
+			if req.txnName == "txn1" && hasPut && req.toNodeID == 2 && cp == AfterSending {
 				// Hold the operation open until we are ready to retry on the new
 				// replica, after which we will return the injected failure.
 				req.pauseUntil(t, recoverComplete, cp)
@@ -1295,7 +1295,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			// 4. txn1->n2: Put(b) -- Send the request, but pause before returning the
 			// response so we can inject network failure.
 			// <transfer b's lease to n1>
-			if req.txnName == "txn1" && hasPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
+			if req.txnName == "txn1" && hasPut && req.toNodeID == 2 && cp == AfterSending {
 				close(leaseMoveReady)
 				req.pauseUntil(t, leaseMoveComplete, cp)
 				close(txn2Ready)
@@ -1317,7 +1317,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 
 			// <inject a network failure and finally allow (4) txn1->n2: Put(b) to
 			// return with error>
-			if req.txnName == "txn1" && hasPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
+			if req.txnName == "txn1" && hasPut && req.toNodeID == 2 && cp == AfterSending {
 				// Hold the operation open until we are ready to retry on the new
 				// replica, after which we will return the injected failure.
 				req.pauseUntil(t, txn2ETReady, cp)
