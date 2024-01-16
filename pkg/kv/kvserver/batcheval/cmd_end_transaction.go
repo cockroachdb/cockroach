@@ -1016,28 +1016,6 @@ func splitTrigger(
 			split.RightDesc.StartKey, split.RightDesc.EndKey, desc)
 	}
 
-	// Determine which side to scan first when computing the post-split stats. We
-	// scan the left-hand side first unless the right side's global keyspace is
-	// entirely empty. In cases where the range's stats do not already contain
-	// estimates, only one side needs to be scanned.
-	// TODO(nvanbenschoten): this is a simple heuristic. If we had a cheap way to
-	// determine the relative sizes of the LHS and RHS, we could be more
-	// sophisticated here and always choose to scan the cheaper side.
-	emptyRHS, err := storage.MVCCIsSpanEmpty(ctx, batch, storage.MVCCIsSpanEmptyOptions{
-		StartKey: split.RightDesc.StartKey.AsRawKey(),
-		EndKey:   split.RightDesc.EndKey.AsRawKey(),
-	})
-	if err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrapf(err,
-			"unable to determine whether right hand side of split is empty")
-	}
-
-	rangeKeyDeltaMS, err := computeSplitRangeKeyStatsDelta(ctx, batch, split.LeftDesc, split.RightDesc)
-	if err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
-			"unable to compute range key stats delta for RHS")
-	}
-
 	// Retrieve MVCC Stats from the current batch instead of using stats from
 	// execution context. Stats in the context could diverge from storage snapshot
 	// of current request when lease extensions are applied. Lease expiration is
@@ -1057,10 +1035,10 @@ func splitTrigger(
 	h := splitStatsHelperInput{
 		AbsPreSplitBothStored: currentStats,
 		DeltaBatchEstimated:   bothDeltaMS,
-		DeltaRangeKey:         rangeKeyDeltaMS,
+		DeltaRangeKey:         enginepb.MVCCStats{},
 		PostSplitScanLeftFn:   makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
 		PostSplitScanRightFn:  makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
-		ScanRightFirst:        splitScansRightForStatsFirst || emptyRHS,
+		ScanRightFirst:        splitScansRightForStatsFirst,
 	}
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
 }
@@ -1128,7 +1106,8 @@ func splitTriggerHelper(
 	// modifications to the left hand side are allowed after this line and any
 	// modifications to the right hand side are accounted for by updating the
 	// helper's AbsPostSplitRight() reference.
-	h, err := makeSplitStatsHelper(statsInput)
+	h, err := makeApproxSplitStatsHelper(statsInput)
+	//h, err := makeSplitStatsHelper(statsInput)
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}

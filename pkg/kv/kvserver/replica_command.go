@@ -240,6 +240,22 @@ func splitTxnAttempt(
 		},
 	})
 
+	recomputeStatsFn := func(ctx context.Context) {
+		reqLeft := kvpb.RecomputeStatsRequest{
+			RequestHeader: kvpb.RequestHeader{Key: leftDesc.StartKey.AsRawKey()},
+		}
+		reqRight := kvpb.RecomputeStatsRequest{
+			RequestHeader: kvpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
+		}
+		var ba kv.Batch
+		ba.AddRawRequest(&reqLeft)
+		ba.AddRawRequest(&reqRight)
+		if err = txn.DB().Run(ctx, &ba); err != nil {
+			log.Event(ctx, "failed to re-compute MVCCStats post split")
+		}
+	}
+	txn.AddCommitTrigger(recomputeStatsFn)
+
 	// Commit txn with final batch (RHS descriptor and meta).
 	log.Event(ctx, "commit txn with batch containing RHS descriptor and meta records")
 	return txn.Run(ctx, b)

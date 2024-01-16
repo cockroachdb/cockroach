@@ -135,6 +135,23 @@ type splitStatsHelperInput struct {
 	ScanRightFirst bool
 }
 
+func makeApproxSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error) {
+	h := splitStatsHelper{in: input}
+
+	rightStats := h.in.AbsPreSplitBothStored
+	rightStats.Scale(0.5)
+	h.absPostSplitRight = &rightStats
+	h.absPostSplitRight.ContainsEstimates += 1
+
+	leftStats := h.in.AbsPreSplitBothStored
+	leftStats.Subtract(rightStats)
+	leftStats.Add(h.in.DeltaBatchEstimated)
+	h.absPostSplitLeft = &leftStats
+	h.absPostSplitLeft.ContainsEstimates += 1
+
+	return h, nil
+}
+
 // makeSplitStatsHelper initializes a splitStatsHelper. The values in the input
 // are assumed to not change outside of the helper and must no longer be used.
 // The provided PostSplitScanLeftFn and PostSplitScanRightFn recompute the left
