@@ -220,7 +220,7 @@ func performCastWithoutPrecisionTruncation(
 			if math.IsNaN(f) || f <= float64(math.MinInt64) || f >= float64(math.MaxInt64) {
 				return nil, tree.ErrIntOutOfRange
 			}
-			res = tree.NewDInt(tree.DInt(f))
+			res = tree.NewDInt(tree.DInt(math.RoundToEven(f)))
 		case *tree.DDecimal:
 			i, err := roundDecimalToInt(&v.Decimal)
 			if err != nil {
