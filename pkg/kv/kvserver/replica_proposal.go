@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -348,7 +349,13 @@ func (r *Replica) leasePostApplyLocked(
 			// the same lease. This can happen when callers are using
 			// leasePostApply for some of its side effects, like with
 			// splitPostApply. It can also happen during lease extensions.
-			if !prevLease.Equivalent(*newLease) {
+			//
+			// NOTE: we pass true for expToEpochEquiv because we may be in a cluster
+			// where some node has detected the version upgrade and is considering
+			// this lease type promotion to be valid, even if our local node has not
+			// yet detected the upgrade. Passing true broadens the definition of
+			// equivalence and weakens the assertion.
+			if !prevLease.Equivalent(*newLease, true /* expToEpochEquiv */) {
 				log.Fatalf(ctx, "sequence identical for different leases, prevLease=%s, newLease=%s",
 					redact.Safe(prevLease), redact.Safe(newLease))
 			}
@@ -977,6 +984,15 @@ func (r *Replica) evaluateProposal(
 		// Set the proposal's replicated result, which contains metadata and
 		// side-effects that are to be replicated to all replicas.
 		res.Replicated.IsLeaseRequest = ba.IsSingleRequestLeaseRequest()
+		if res.Replicated.IsLeaseRequest {
+			// NOTE: this cluster version check may return true even after the
+			// corresponding check in evalNewLease has returned false. That's ok, as
+			// this check is used to inform raft about whether an expiration-based
+			// lease **can** be promoted to an epoch-based lease without a sequence
+			// change, not that it **is** being promoted without a sequence change.
+			isV24_1 := r.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1Start)
+			res.Replicated.IsLeaseRequestWithExpirationToEpochEquivalent = isV24_1
+		}
 		if ba.AppliesTimestampCache() {
 			res.Replicated.WriteTimestamp = ba.WriteTimestamp()
 		}

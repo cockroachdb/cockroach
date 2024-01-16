@@ -1639,7 +1639,7 @@ func TestLeaseExpirationBasedRangeTransfer(t *testing.T) {
 			t.Fatal(err)
 		}
 		newLease, _ := l.replica0.GetLease()
-		if !origLease.Equivalent(newLease) {
+		if !origLease.Equivalent(newLease, true /* expToEpochEquiv */) {
 			t.Fatalf("original lease %v and new lease %v not equivalent", origLease, newLease)
 		}
 	}
