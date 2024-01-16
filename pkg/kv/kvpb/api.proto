@@ -71,6 +71,29 @@ enum RoutingPolicy {
   NEAREST = 1;
 }
 
+// ConnectionClass specifies the preferred RPC connection class to use for
+// sending or retransmitting the BatchRequest.
+//
+// This enum is similar and related to rpc.ConnectionClass, but the semantics
+// differ. This enum only defines classes used for BatchRequest traffic, and
+// only defines preferences. There are more classes in rpc package that are not
+// relevant here, such as RaftClass.
+enum ConnectionClass {
+  // DEFAULT declares no preference.
+  //
+  // Note that this does not necessarily correspond to rpc.DefaultClass. The
+  // actual connection class is chosen based on various factors. For example,
+  // for some critical system ranges, requests use rpc.SystemClass instead.
+  DEFAULT = 0;
+  // RANGEFEED declares a preference for RangefeedClass.
+  //
+  // As an example, at the time of writing this is used by changefeed initial
+  // scan requests. The rangefeed traffic is potentially bulky, so it has its
+  // dedicated connection class. Changefeed is a major consumer of rangefeed,
+  // and has similar properties, so we place them together.
+  RANGEFEED = 2;
+}
+
 // ResumeReason specifies why a ResumeSpan was generated instead of a
 // complete result.
 enum ResumeReason {
@@ -2883,9 +2906,17 @@ message Header {
   // and/or been explicitly committed by a RecoverTxn request. See #103817.
   bool ambiguous_replay_protection = 32;
 
+  // ConnectionClass specifies the preferred RPC connection class to use for
+  // sending or retransmitting this BatchRequest.
+  //
+  // If the value of this type is unknown (for instance, it may happen when the
+  // cluster is in a mixed-version state after a new enum value got added), the
+  // reader assumes DEFAULT.
+  ConnectionClass connection_class = 33;
+
   reserved 7, 10, 12, 14, 20;
 
-  // Next ID: 33
+  // Next ID: 34
 }
 
 // BoundedStalenessHeader contains configuration values pertaining to bounded

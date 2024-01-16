@@ -105,6 +105,7 @@ go_test(
         "auth_test.go",
         "clock_offset_test.go",
         "codec_test.go",
+        "connection_class_test.go",
         "context_test.go",
         "datadriven_test.go",
         "down_node_test.go",
