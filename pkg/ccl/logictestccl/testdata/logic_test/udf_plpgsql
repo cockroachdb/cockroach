@@ -2405,7 +2405,6 @@ subtest plpgsql_types
 # If an assignment cast is available, the cast is performed automatically.
 #
 # float -> int
-# TODO(112515): the float value is incorrectly truncated instead of rounded.
 statement ok
 DROP FUNCTION F();
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
@@ -2417,7 +2416,7 @@ $$ LANGUAGE PLpgSQL;
 query I
 SELECT f();
 ----
-105
+106
 
 # decimal -> int
 statement ok
