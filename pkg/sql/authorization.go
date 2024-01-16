@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -567,6 +568,15 @@ func MemberOfWithAdminOption(
 		return userMapping, nil
 	}
 
+	// If `txn` is high priority and in a retry, do not launch the singleflight to
+	// populate the cache because it can potentially cause a deadlock (see
+	// TestConcurrentGrants/concurrent-GRANTs-high-priority for a repro) and
+	// instead just issue a read using `txn` to `system.role_members` table and
+	// return the result.
+	if txn.KV().UserPriority() == roachpb.MaxUserPriority && txn.KV().Epoch() > 0 {
+		return resolveMemberOfWithAdminOption(ctx, member, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
+	}
+
 	// Lookup memberships outside the lock. There will be at most one request
 	// in-flight for each user. The role_memberships table version is also part
 	// of the request key so that we don't read data from an old version of the
@@ -587,6 +597,15 @@ func MemberOfWithAdminOption(
 		func(ctx context.Context) (interface{}, error) {
 			var m map[username.SQLUsername]bool
 			err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, newTxn isql.Txn) error {
+				// Run the membership read as high-priority, thereby pushing any intents
+				// out of its way. This prevents deadlocks in cases where a GRANT/REVOKE
+				// txn, which has already laid a write intent on the
+				// `system.role_members` table, waits for `newTxn` and `newTxn`, which
+				// attempts to read the same system table, is blocked by the
+				// GRANT/REVOKE txn.
+				if err := newTxn.KV().SetUserPriority(roachpb.MaxUserPriority); err != nil {
+					return err
+				}
 				err := newTxn.KV().SetFixedTimestamp(ctx, newTxnTimestamp)
 				if err != nil {
 					return err
