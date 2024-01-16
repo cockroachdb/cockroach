@@ -171,6 +171,10 @@ func PushTxn(
 		// then we know we're in either the second or the third case.
 		reply.PusheeTxn = SynthesizeTxnFromMeta(ctx, cArgs.EvalCtx, args.PusheeTxn)
 		if reply.PusheeTxn.Status == roachpb.ABORTED {
+			// The transaction may actually have committed and already removed its
+			// intents and txn record, or it may have aborted and done the same. We
+			// can't know, so mark the abort as ambiguous.
+			reply.AmbiguousAbort = true
 			// If the transaction is uncommittable, we don't even need to
 			// persist an ABORTED transaction record, we can just consider it
 			// aborted. This is good because it allows us to obey the invariant
