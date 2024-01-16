@@ -322,6 +322,9 @@ message RestoreFileSpec {
   optional roachpb.Span backup_file_entry_span = 5 [(gogoproto.nullable) = false];
   optional roachpb.RowCount backup_file_entry_counts = 6 [(gogoproto.nullable) = false];
   optional uint64 backing_file_size = 7 [(gogoproto.nullable) = false];
+  optional uint64 approximate_physical_size = 8 [(gogoproto.nullable) = false];
+  
+  // NEXT ID: 9.
 }
 
 message TableRekey {

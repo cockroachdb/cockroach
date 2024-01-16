@@ -2118,6 +2118,7 @@ message AddSSTableRequest {
     string locator = 1;
     string path = 2;
     uint64 backing_file_size = 3;
+    uint64 approximate_physical_size = 4;
   }
   RemoteFile remote_file = 10 [(gogoproto.nullable) = false];
 
