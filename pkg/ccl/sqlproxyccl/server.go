@@ -213,22 +213,45 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 	return nil
 }
 
-// Serve serves a listener according to the Options given in NewServer().
+// Serve serves up to two listeners according to the Options given in
+// NewServer().
+//
+// If ln is not nil, a listener is served which does not require
+// proxy protocol headers, unless RequireProxyProtocol is true.
+//
+// If proxyProtocolLn is not nil, a listener is served which requires proxy
+// protocol headers.
+//
 // Incoming client connections are taken through the Postgres handshake and
 // relayed to the configured backend server.
-func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
-	if s.handler.RequireProxyProtocol {
-		ln = &proxyproto.Listener{
-			Listener: ln,
-			Policy: func(upstream net.Addr) (proxyproto.Policy, error) {
-				// REQUIRE enforces the connection to send a PROXY header.
-				// The connection will be rejected if one was not present.
-				return proxyproto.REQUIRE, nil
-			},
-			ValidateHeader: s.handler.testingKnobs.validateProxyHeader,
+func (s *Server) ServeSQL(
+	ctx context.Context, ln net.Listener, proxyProtocolLn net.Listener,
+) error {
+	if ln != nil {
+		if s.handler.RequireProxyProtocol {
+			ln = s.requireProxyProtocolOnListener(ln)
+		}
+		log.Infof(ctx, "proxy server listening at %s", ln.Addr())
+		if err := s.Stopper.RunAsyncTask(ctx, "listener-serve", func(ctx context.Context) {
+			_ = s.serve(ctx, ln)
+		}); err != nil {
+			return err
 		}
 	}
+	if proxyProtocolLn != nil {
+		proxyProtocolLn = s.requireProxyProtocolOnListener(proxyProtocolLn)
+		log.Infof(ctx, "proxy with required proxy headers server listening at %s", proxyProtocolLn.Addr())
+		if err := s.Stopper.RunAsyncTask(ctx, "proxy-protocol-listener-serve", func(ctx context.Context) {
+			_ = s.serve(ctx, proxyProtocolLn)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
+// serve is called by ServeSQL to serve a single listener.
+func (s *Server) serve(ctx context.Context, ln net.Listener) error {
 	err := s.Stopper.RunAsyncTask(ctx, "listen-quiesce", func(ctx context.Context) {
 		<-s.Stopper.ShouldQuiesce()
 		if err := ln.Close(); err != nil && !grpcutil.IsClosedConnection(err) {
@@ -259,6 +282,18 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 		if err != nil {
 			return err
 		}
+	}
+}
+
+func (s *Server) requireProxyProtocolOnListener(ln net.Listener) net.Listener {
+	return &proxyproto.Listener{
+		Listener: ln,
+		Policy: func(upstream net.Addr) (proxyproto.Policy, error) {
+			// REQUIRE enforces the connection to send a PROXY header.
+			// The connection will be rejected if one was not present.
+			return proxyproto.REQUIRE, nil
+		},
+		ValidateHeader: s.handler.testingKnobs.validateProxyHeader,
 	}
 }
 
