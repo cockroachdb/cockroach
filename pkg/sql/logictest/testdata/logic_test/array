@@ -118,20 +118,23 @@ SELECT ARRAY(VALUES (1),(2),(1))
 ----
 {1,2,1}
 
-statement error arrays cannot have arrays as element type
+# This query works in local config but can fail in distributed config since the
+# support for nested arrays is incomplete.
+onlyif config local
+query T
 SELECT ARRAY(VALUES (ARRAY[1]))
+----
+{"{1}"}
 
 query T
 SELECT ARRAY(VALUES ('a'),('b'),('c'))
 ----
 {a,b,c}
 
-
-# TODO(justin): uncomment when #32715 is fixed.
-# query T
-# SELECT ARRAY(SELECT (1,2))
-# ----
-# {"(1,2)"}
+query T
+SELECT ARRAY(SELECT (1,2))
+----
+{"(1,2)"}
 
 query error subquery must return only one column, found 2
 SELECT ARRAY(SELECT 1, 2)
@@ -443,10 +446,13 @@ DROP TABLE boundedtable
 statement error .*unimplemented.*\nHINT.*\n.*32552
 CREATE TABLE badtable (b INT[][])
 
-# Nested arrays should be disallowed
-
-query error unimplemented: arrays cannot have arrays as element type.*\nHINT.*\n.*32552
+# This query works in local config but can fail in distributed config since the
+# support for nested arrays is incomplete.
+onlyif config local
+query T
 SELECT ARRAY[ARRAY[1,2,3]]
+----
+{"{1,2,3}"}
 
 # The postgres-compat aliases should be disallowed.
 # INT2VECTOR is deprecated in Postgres.

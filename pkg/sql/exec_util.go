@@ -109,7 +109,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -2024,15 +2023,10 @@ func checkResultType(typ *types.T) error {
 	case types.EnumFamily:
 	case types.VoidFamily:
 	case types.ArrayFamily:
-		if typ.ArrayContents().Family() == types.ArrayFamily {
-			// Technically we could probably return arrays of arrays to a
-			// client (the encoding exists) but we don't want to give
-			// mixed signals -- that nested arrays appear to be supported
-			// in this case, and not in other cases (eg. CREATE). So we
-			// reject them in every case instead.
-			return unimplemented.NewWithIssueDetail(32552,
-				"result", "arrays cannot have arrays as element type")
-		}
+		// Note that we support multidimensional arrays in some cases (e.g.
+		// array_agg with arrays as inputs) but not in others (e.g. CREATE).
+		// Here we allow them in all cases and rely on each unsupported place to
+		// have the check.
 	case types.AnyFamily:
 		// Placeholder case.
 		return errors.Errorf("could not determine data type of %s", typ)

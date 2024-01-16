@@ -109,19 +109,6 @@ func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType *types.T) bool {
 // functions without importing the builtins package.
 var GetBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload)
 
-// AggregateOverloadExists returns whether or not the given operator has a
-// unary overload which takes the given type as input.
-func AggregateOverloadExists(agg opt.Operator, typ *types.T) bool {
-	name := opt.AggregateOpReverseMap[agg]
-	_, overloads := GetBuiltinProperties(name)
-	for _, o := range overloads {
-		if o.Types.MatchAt(typ, 0) {
-			return true
-		}
-	}
-	return false
-}
-
 // FindFunction returns the function properties and overload of the function
 // with the given name and argument types matching the children of the given
 // input.
