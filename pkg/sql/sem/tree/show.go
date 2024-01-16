@@ -969,6 +969,28 @@ func (node *ShowUsers) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW USERS")
 }
 
+// ShowDefaultSessionVariablesForRole represents a SHOW DEFAULT SESSION VARIABLES FOR ROLE <name> statement.
+type ShowDefaultSessionVariablesForRole struct {
+	Name   RoleSpec
+	IsRole bool
+	All    bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowDefaultSessionVariablesForRole) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW DEFAULT SESSION VARIABLES FOR")
+	if node.IsRole {
+		ctx.WriteString(" ROLE ")
+	} else {
+		ctx.WriteString(" USER ")
+	}
+	if node.All {
+		ctx.WriteString("ALL")
+	} else {
+		ctx.FormatNode(&node.Name)
+	}
+}
+
 // ShowRoles represents a SHOW ROLES statement.
 type ShowRoles struct {
 }

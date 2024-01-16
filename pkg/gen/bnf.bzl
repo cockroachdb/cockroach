@@ -231,6 +231,7 @@ BNF_SRCS = [
     "//docs/generated/sql/bnf:show_create_stmt.bnf",
     "//docs/generated/sql/bnf:show_databases_stmt.bnf",
     "//docs/generated/sql/bnf:show_default_privileges_stmt.bnf",
+    "//docs/generated/sql/bnf:show_default_session_variables_for_role_stmt.bnf",
     "//docs/generated/sql/bnf:show_enums.bnf",
     "//docs/generated/sql/bnf:show_full_scans.bnf",
     "//docs/generated/sql/bnf:show_functions_stmt.bnf",

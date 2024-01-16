@@ -1012,7 +1012,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED UNSAFE_RESTORE_INCOMPATIBLE_VERSION UNSPLIT
 %token <str> UPDATE UPDATES_CLUSTER_MONITORING_METRICS UPSERT UNSET UNTIL USE USER USERS USING UUID
 
-%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VERIFY_BACKUP_TABLE_DATA VIEW VARYING VIEWACTIVITY VIEWACTIVITYREDACTED VIEWDEBUG
+%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VERIFY_BACKUP_TABLE_DATA VIEW VARIABLES VARYING VIEWACTIVITY VIEWACTIVITYREDACTED VIEWDEBUG
 %token <str> VIEWCLUSTERMETADATA VIEWCLUSTERSETTING VIRTUAL VISIBLE INVISIBLE VISIBILITY VOLATILE VOTERS
 %token <str> VIRTUAL_CLUSTER_NAME VIRTUAL_CLUSTER
 
@@ -1035,7 +1035,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 // columns along with our family related extensions (CREATE FAMILY/CREATE FAMILY
 // family_name).
 // - RESET_ALL is used to differentiate `RESET var` from `RESET ALL`.
-// - ROLE_ALL and USER_ALL are used in ALTER ROLE statements that affect all
+// - ROLE_ALL and USER_ALL are used in ALTER ROLE and SHOW DEFAULT SESSION VARIABLES FOR ROLE statements that affect all
 // roles.
 // - ON_LA is needed for ON UPDATE and ON DELETE expressions for foreign key
 // references.
@@ -1321,6 +1321,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %type <tree.Statement> show_transfer_stmt
 %type <tree.Statement> show_types_stmt
 %type <tree.Statement> show_users_stmt
+%type <tree.Statement> show_default_session_variables_for_role_stmt
 %type <tree.Statement> show_zone_stmt
 %type <tree.Statement> show_schedules_stmt
 %type <tree.Statement> show_full_scans_stmt
@@ -7368,6 +7369,7 @@ show_stmt:
 | show_transactions_stmt     // EXTEND WITH HELP: SHOW TRANSACTIONS
 | show_transfer_stmt         // EXTEND WITH HELP: SHOW TRANSFER
 | show_users_stmt            // EXTEND WITH HELP: SHOW USERS
+| show_default_session_variables_for_role_stmt // EXTEND WITH HELP: SHOW DEFAULT SESSION VARIABLES FOR ROLE
 | show_zone_stmt             // EXTEND WITH HELP: SHOW ZONE CONFIGURATION
 | SHOW error                 // SHOW HELP: SHOW
 | show_last_query_stats_stmt
@@ -8807,6 +8809,24 @@ show_users_stmt:
     $$.val = &tree.ShowUsers{}
   }
 | SHOW USERS error // SHOW HELP: SHOW USERS
+
+// %Help: SHOW DEFAULT SESSION VARIABLES FOR ROLE - list default session variables for role
+// %Category: Priv
+// %Text: SHOW DEFAULT SESSION VARIABLES FOR ROLE <name>
+show_default_session_variables_for_role_stmt:
+ SHOW DEFAULT SESSION VARIABLES FOR role_or_group_or_user role_spec
+    {
+      $$.val = &tree.ShowDefaultSessionVariablesForRole{Name: $7.roleSpec(), IsRole: $6.bool()}
+    }
+| SHOW DEFAULT SESSION VARIABLES FOR ROLE_ALL ALL
+     {
+       $$.val = &tree.ShowDefaultSessionVariablesForRole{All: true, IsRole: true}
+     }
+| SHOW DEFAULT SESSION VARIABLES FOR USER_ALL ALL
+     {
+       $$.val = &tree.ShowDefaultSessionVariablesForRole{All: true, IsRole: false}
+     }
+| SHOW DEFAULT SESSION VARIABLES FOR role_or_group_or_user error // SHOW HELP: SHOW DEFAULT SESSION VARIABLES FOR ROLE
 
 // %Help: SHOW ROLES - list defined roles
 // %Category: Priv
@@ -17311,6 +17331,7 @@ unreserved_keyword:
 | VALID
 | VALIDATE
 | VALUE
+| VARIABLES
 | VARYING
 | VERIFY_BACKUP_TABLE_DATA
 | VIEW
@@ -17894,6 +17915,7 @@ bare_label_keywords:
 | VALUES
 | VARBIT
 | VARCHAR
+| VARIABLES
 | VARIADIC
 | VERIFY_BACKUP_TABLE_DATA
 | VIEW
