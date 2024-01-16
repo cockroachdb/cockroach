@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -33,8 +32,6 @@ import (
 func TestTenantGRPCServices(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "probable OOM")
 
 	ctx := context.Background()
 

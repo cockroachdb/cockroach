@@ -1367,9 +1367,6 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "probable OOM")
-
 	ctx := context.Background()
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()

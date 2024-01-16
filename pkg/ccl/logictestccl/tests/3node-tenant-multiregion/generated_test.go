@@ -85,7 +85,6 @@ func runLogicTest(t *testing.T, file string) {
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(logicTestDir, file))
 }
 func runCCLLogicTest(t *testing.T, file string) {
-	skip.UnderRace(t, "large engflow executor is overloaded by this config")
 	skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(cclLogicTestDir, file))
 }

@@ -60,9 +60,6 @@ func TestMain(m *testing.M) {
 }
 
 func runLogicTest(t *testing.T, file string) {
-	if file == "lookup_join_local" {
-		skip.UnderRace(t, "this file is too slow under race")
-	}
 	skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(logicTestDir, file))
 }
