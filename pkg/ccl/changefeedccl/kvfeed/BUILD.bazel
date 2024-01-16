@@ -20,6 +20,7 @@ go_library(
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
+        "//pkg/rpc",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/covering",
