@@ -3896,6 +3896,8 @@ func benchUserUpload(b *testing.B, uploadBaseURI string) {
 			`IMPORT INTO t CSV DATA ('%s%s')`,
 			uploadBaseURI, testFileBase,
 		))
+
+	b.StopTimer()
 }
 
 // goos: darwin
