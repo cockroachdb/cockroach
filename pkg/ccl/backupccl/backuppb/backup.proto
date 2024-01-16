@@ -48,7 +48,13 @@ message BackupManifest {
     util.hlc.Timestamp start_time = 7 [(gogoproto.nullable) = false];
     util.hlc.Timestamp end_time = 8 [(gogoproto.nullable) = false];
     string locality_kv = 9 [(gogoproto.customname) = "LocalityKV"];
+    // BackingFileSize is the actual size of the backing file, if known. This
+    // can be zero if unknown, in which case opening the file will need to find
+    // it via an additional stat/size call.
     uint64 backing_file_size = 10;
+    // ApproximatePhysicalSize is the approximate size of the physical bytes in
+    // compressed SST form.
+    uint64 approximate_physical_size = 11;
   }
 
   message DescriptorRevision {
