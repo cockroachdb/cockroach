@@ -291,21 +291,26 @@ func updateIntentTxnStatus(
 
 // PushTransaction takes a transaction and pushes its record using the specified
 // push type and request header. It returns the transaction proto corresponding
-// to the pushed transaction.
+// to the pushed transaction, and in the case of an ABORTED transaction, a bool
+// indicating whether the abort was ambiguous (see
+// PushTxnResponse.AmbiguousAbort).
+//
+// NB: ambiguousAbort may be false with nodes <24.1.
 func (ir *IntentResolver) PushTransaction(
 	ctx context.Context, pushTxn *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
-) (*roachpb.Transaction, *roachpb.Error) {
+) (_ *roachpb.Transaction, ambiguousAbort bool, _ *roachpb.Error) {
 	pushTxns := make(map[uuid.UUID]*enginepb.TxnMeta, 1)
 	pushTxns[pushTxn.ID] = pushTxn
-	pushedTxns, pErr := ir.MaybePushTransactions(ctx, pushTxns, h, pushType, false /* skipIfInFlight */)
+	pushedTxns, ambiguousAbort, pErr := ir.MaybePushTransactions(
+		ctx, pushTxns, h, pushType, false /* skipIfInFlight */)
 	if pErr != nil {
-		return nil, pErr
+		return nil, false, pErr
 	}
 	pushedTxn, ok := pushedTxns[pushTxn.ID]
 	if !ok {
 		log.Fatalf(ctx, "missing PushTxn responses for %s", pushTxn)
 	}
-	return pushedTxn, nil
+	return pushedTxn, ambiguousAbort, nil
 }
 
 // MaybePushTransactions tries to push the conflicting transaction(s):
@@ -313,8 +318,12 @@ func (ir *IntentResolver) PushTransaction(
 // it on a write/write conflict, or doing nothing if the transaction is no
 // longer pending.
 //
-// Returns a set of transaction protos who correspond to the pushed
-// transactions and whose intents can now be resolved, and an error.
+// Returns a set of transaction protos who correspond to the pushed transactions
+// and whose intents can now be resolved, along with a bool indicating whether
+// any of the responses were an ambiguous abort (see
+// PushTxnResponse.AmbiguousAbort), and an error.
+//
+// NB: anyAmbiguousAbort may be false with nodes <24.1.
 //
 // If skipIfInFlight is true, then no PushTxns will be sent and no intents
 // will be returned for any transaction for which there is another push in
@@ -339,7 +348,7 @@ func (ir *IntentResolver) MaybePushTransactions(
 	h roachpb.Header,
 	pushType roachpb.PushTxnType,
 	skipIfInFlight bool,
-) (map[uuid.UUID]*roachpb.Transaction, *roachpb.Error) {
+) (_ map[uuid.UUID]*roachpb.Transaction, anyAmbiguousAbort bool, _ *roachpb.Error) {
 	// Decide which transactions to push and which to ignore because
 	// of other in-flight requests. For those transactions that we
 	// will be pushing, increment their ref count in the in-flight
@@ -370,7 +379,7 @@ func (ir *IntentResolver) MaybePushTransactions(
 	}
 	ir.mu.Unlock()
 	if len(pushTxns) == 0 {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	pusherTxn := getPusherTxn(h)
@@ -395,7 +404,7 @@ func (ir *IntentResolver) MaybePushTransactions(
 	err := ir.db.Run(ctx, b)
 	cleanupInFlightPushes()
 	if err != nil {
-		return nil, b.MustPErr()
+		return nil, false, b.MustPErr()
 	}
 
 	// TODO(nvanbenschoten): if we succeed because the transaction has already
@@ -405,14 +414,16 @@ func (ir *IntentResolver) MaybePushTransactions(
 	br := b.RawResponse()
 	pushedTxns := make(map[uuid.UUID]*roachpb.Transaction, len(br.Responses))
 	for _, resp := range br.Responses {
-		txn := &resp.GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+		resp := resp.GetInner().(*roachpb.PushTxnResponse)
+		txn := &resp.PusheeTxn
+		anyAmbiguousAbort = anyAmbiguousAbort || resp.AmbiguousAbort
 		if _, ok := pushedTxns[txn.ID]; ok {
 			log.Fatalf(ctx, "have two PushTxn responses for %s", txn.ID)
 		}
 		pushedTxns[txn.ID] = txn
 		log.Eventf(ctx, "%s is now %s", txn.ID, txn.Status)
 	}
-	return pushedTxns, nil
+	return pushedTxns, anyAmbiguousAbort, nil
 }
 
 // runAsyncTask semi-synchronously runs a generic task function. If
@@ -516,7 +527,7 @@ func (ir *IntentResolver) CleanupIntents(
 			}
 		}
 
-		pushedTxns, pErr := ir.MaybePushTransactions(ctx, pushTxns, h, pushType, skipIfInFlight)
+		pushedTxns, _, pErr := ir.MaybePushTransactions(ctx, pushTxns, h, pushType, skipIfInFlight)
 		if pErr != nil {
 			return 0, errors.Wrapf(pErr.GoError(), "failed to push during intent resolution")
 		}

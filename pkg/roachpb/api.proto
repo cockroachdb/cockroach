@@ -1095,6 +1095,15 @@ message PushTxnResponse {
   // TODO(tschottdorf): Maybe this can be a TxnMeta instead; probably requires
   // factoring out the new Priority.
   Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
+  // ambiguous_abort is true if pushee_txn has status ABORTED, but the
+  // transaction may in fact have been committed and GCed already. Concretely,
+  // this means that the transaction record does not exist, but it may have
+  // existed in the past (according to the timestamp cache), and we can't know
+  // whether it committed or aborted so we pessimistically assume it aborted.
+  //
+  // NB: this field was added in a patch release, and is not guaranteed to be
+  // populated prior to 24.1.
+  bool ambiguous_abort = 3;
 }
 
 // A RecoverTxnRequest is arguments to the RecoverTxn() method. It is sent
