@@ -478,8 +478,6 @@ func TestRetrieveRangeStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "probable OOM")
-
 	ctx := context.Background()
 
 	tc, _, _ := prepTestCluster(t, 5)
@@ -534,8 +532,6 @@ func TestRetrieveRangeStatus(t *testing.T) {
 func TestRetrieveApplyStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "probable OOM")
 
 	ctx := context.Background()
 
