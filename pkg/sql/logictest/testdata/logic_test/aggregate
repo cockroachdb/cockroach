@@ -3982,3 +3982,21 @@ SELECT array_cat_agg(
 )
 ----
 {(4.166442344843677e+17),(),(-0.12116245180368423)}
+
+statement ok
+CREATE TABLE __test_array_agg(a TEXT PRIMARY KEY, b TEXT, c TEXT);
+INSERT INTO __test_array_agg VALUES ('a', 'b', 'c'), ('aa', 'bb', 'cc'), ('aaa', 'bbb', 'ccc');
+
+query T
+SELECT array_agg(array[a, b, c]) FROM __test_array_agg;
+----
+{"{a,b,c}","{aa,bb,cc}","{aaa,bbb,ccc}"}
+
+# array_agg with multi-dimensional arrays as inputs is unsupported (although
+# postgres supports them).
+query error unknown signature: array_agg\(int\[\]\[\]\)
+WITH
+    foo(f) AS (SELECT array_agg(x) FROM generate_series(1, 3) g(x)),
+    bar(b) AS (SELECT array_agg(f) FROM foo, generate_series(1, 3)),
+    baz(z) AS (SELECT array_agg(b) FROM bar, generate_series(1, 3))
+SELECT z FROM baz;

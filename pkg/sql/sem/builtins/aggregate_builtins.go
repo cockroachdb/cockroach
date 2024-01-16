@@ -108,7 +108,7 @@ var aggregates = map[string]builtinDefinition{
 				volatility.Immutable,
 				true, /* calledOnNullInput */
 			)
-		}),
+		}, true /* supportsArrayInput */),
 	),
 
 	"array_cat_agg": setProps(tree.FunctionProperties{},
@@ -130,7 +130,7 @@ var aggregates = map[string]builtinDefinition{
 				volatility.Immutable,
 				true, /* calledOnNullInput */
 			)
-		}),
+		}, false /* supportsArrayInput */),
 	),
 
 	"avg": makeBuiltin(tree.FunctionProperties{},
