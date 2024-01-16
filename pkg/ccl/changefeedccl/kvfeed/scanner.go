@@ -191,6 +191,7 @@ func (p *scanRequestScanner) exportSpan(
 		r := kvpb.NewScan(remaining.Key, remaining.EndKey).(*kvpb.ScanRequest)
 		r.ScanFormat = kvpb.BATCH_RESPONSE
 		b.Header.TargetBytes = targetBytesPerScan
+		b.Header.ConnectionClass = kvpb.ConnectionClass_RANGEFEED
 		b.AdmissionHeader = kvpb.AdmissionHeader{
 			// TODO(irfansharif): Make this configurable if we want system table
 			// scanners or support "high priority" changefeeds to run at higher

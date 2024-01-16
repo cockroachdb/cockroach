@@ -2287,8 +2287,9 @@ func (ds *DistSender) sendToReplicas(
 		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
 	}
 
+	defConnClass := rpc.ConnectionClassFromProto(ba.ConnectionClass)
 	opts := SendOptions{
-		class:                  rpc.ConnectionClassForKey(desc.RSpan().Key, rpc.DefaultClass),
+		class:                  rpc.ConnectionClassForKey(desc.RSpan().Key, defConnClass),
 		metrics:                &ds.metrics,
 		dontConsiderConnHealth: ds.dontConsiderConnHealth,
 	}
