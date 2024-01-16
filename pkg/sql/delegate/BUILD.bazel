@@ -10,6 +10,7 @@ go_library(
         "show_database_indexes.go",
         "show_databases.go",
         "show_default_privileges.go",
+        "show_default_session_variables_for_role.go",
         "show_enums.go",
         "show_full_table_scans.go",
         "show_function.go",
