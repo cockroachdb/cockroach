@@ -2998,6 +2998,10 @@ message BatchRequest {
   Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RequestUnion requests = 2 [(gogoproto.nullable) = false];
   AdmissionHeader admission_header = 3 [(gogoproto.nullable) = false];
+
+  // IsBulkFeed specifies whether the request is a bulk scan request initiated
+  // by a changefeed initial scan.
+  bool is_bulk_feed = 4;
 }
 
 // A BatchResponse contains one or more responses, one per request

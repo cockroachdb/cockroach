@@ -188,6 +188,7 @@ func (p *scanRequestScanner) exportSpan(
 	for remaining := &span; remaining != nil; {
 		start := timeutil.Now()
 		b := txn.NewBatch()
+		b.IsBulkFeed = true
 		r := kvpb.NewScan(remaining.Key, remaining.EndKey).(*kvpb.ScanRequest)
 		r.ScanFormat = kvpb.BATCH_RESPONSE
 		b.Header.TargetBytes = targetBytesPerScan

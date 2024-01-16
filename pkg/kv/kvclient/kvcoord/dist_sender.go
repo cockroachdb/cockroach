@@ -2287,8 +2287,15 @@ func (ds *DistSender) sendToReplicas(
 		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
 	}
 
+	// Use RangefeedClass for batch requests coming from changefeeds, or
+	// DefaultClass otherwise. Upgrade either of these to SystemClass if the
+	// request is for a critical system range.
+	defConnClass := rpc.DefaultClass
+	if ba.IsBulkFeed {
+		defConnClass = rpc.RangefeedClass
+	}
 	opts := SendOptions{
-		class:                  rpc.ConnectionClassForKey(desc.RSpan().Key, rpc.DefaultClass),
+		class:                  rpc.ConnectionClassForKey(desc.RSpan().Key, defConnClass),
 		metrics:                &ds.metrics,
 		dontConsiderConnHealth: ds.dontConsiderConnHealth,
 	}

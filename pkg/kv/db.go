@@ -919,6 +919,7 @@ func sendAndFill(ctx context.Context, send SenderFunc, b *Batch) error {
 	ba.Requests = b.reqs
 	ba.Header = b.Header
 	ba.AdmissionHeader = b.AdmissionHeader
+	ba.IsBulkFeed = b.IsBulkFeed
 	b.response, b.pErr = send(ctx, ba)
 	b.fillResults(ctx)
 	if b.pErr == nil {

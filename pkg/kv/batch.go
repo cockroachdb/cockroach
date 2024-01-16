@@ -53,6 +53,9 @@ type Batch struct {
 	// BatchRequest. To be modified directly.
 	AdmissionHeader kvpb.AdmissionHeader
 	reqs            []kvpb.RequestUnion
+	// IsBulkFeed specifies whether this batch is a bulk scan request initiated by
+	// a changefeed initial scan.
+	IsBulkFeed bool
 
 	// approxMutationReqBytes tracks the approximate size of keys and values in
 	// mutations added to this batch via Put, CPut, InitPut, Del, etc.
