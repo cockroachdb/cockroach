@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/errors"
@@ -237,6 +238,8 @@ func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 		return encoding.JSON, nil
 	case types.TupleFamily:
 		return encoding.Tuple, nil
+	case types.ArrayFamily:
+		return 0, unimplemented.NewWithIssueDetail(32552, "", "nested arrays are not fully supported")
 	default:
 		return 0, errors.AssertionFailedf("no known encoding type for %s", t.Family().Name())
 	}
