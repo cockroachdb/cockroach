@@ -407,13 +407,14 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		// The tracker wants us to forward the request timestamp, but we can't
 		// do that without re-evaluating, so give up. The error returned here
 		// will go to back to DistSender, so send something it can digest.
-		err := kvpb.NewNotLeaseHolderError(
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		return kvpb.NewNotLeaseHolderError(
 			*r.mu.state.Lease,
 			r.store.StoreID(),
 			r.mu.state.Desc,
 			"reproposal failed due to closed timestamp",
 		)
-		return err
 	}
 	// Some tests check for this log message in the trace.
 	log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
