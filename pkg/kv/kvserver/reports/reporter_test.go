@@ -125,9 +125,6 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "likely to timeout")
-
 	ctx := context.Background()
 	// 2 regions, 3 dcs per region.
 	tc := serverutils.StartCluster(t, 6, base.TestClusterArgs{

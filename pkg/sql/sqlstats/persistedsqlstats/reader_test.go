@@ -185,6 +185,8 @@ func TestSQLStatsWithMultipleIdxRec(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderStressRace(t, "expensive tests")
+
 	fakeTime := stubTime{
 		aggInterval: time.Hour,
 	}

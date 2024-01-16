@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -81,9 +80,6 @@ import (
 //     Releases the protected timestamp record with id.
 func TestDataDriven(t *testing.T) {
 	t.Cleanup(leaktest.AfterTest(t))
-
-	skip.UnderRace(t, "likely to time out")
-
 	scope := log.Scope(t)
 	t.Cleanup(func() {
 		scope.Close(t)

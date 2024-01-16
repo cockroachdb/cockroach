@@ -69,7 +69,6 @@ func TestDataDriven_{{.TestName}}(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes ~3mins to run")
-	skip.UnderDeadlock(t, "takes a very long time to run")
 
 	runTestDataDriven(t, "{{.TestFilePath}}")
 }
