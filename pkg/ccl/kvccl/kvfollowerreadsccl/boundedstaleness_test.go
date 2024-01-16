@@ -263,7 +263,6 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderStress(t, "1μs staleness reads may actually succeed due to the slow environment")
-	skip.UnderRace(t, "probable OOM")
 	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()

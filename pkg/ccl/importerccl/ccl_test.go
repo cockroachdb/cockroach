@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -57,8 +56,6 @@ func sharedTestdata(t *testing.T) string {
 func TestImportMultiRegion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRaceWithIssue(t, 116049, "probable OOM")
 
 	baseDir := sharedTestdata(t)
 	tc, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -305,8 +302,6 @@ CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s typ, b bytea) LOCALITY RE
 func TestMultiRegionExportImportRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "probable OOM")
 
 	validateNumRows := func(sqlDB *gosql.DB, tableName string, expected int) {
 		res := sqlDB.QueryRow(fmt.Sprintf(`SELECT count(*) FROM %s`, tableName))

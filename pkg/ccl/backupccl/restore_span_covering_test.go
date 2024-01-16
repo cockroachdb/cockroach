@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -723,8 +722,6 @@ func sanityCheckFileIterator(
 
 //lint:ignore U1000 unused
 func runTestRestoreEntryCover(t *testing.T, numBackups int) {
-	skip.UnderRace(t, "probable OOM")
-
 	r, _ := randutil.NewTestRand()
 	ctx := context.Background()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
