@@ -624,3 +624,233 @@ finish req=req18
 
 reset
 ----
+
+# -----------------------------------------------------------------------------
+# Basic test to ensure joint claims work correctly -- ensure all shared locking
+# requests waiting at the head of the lock wait queue are allowed to proceed,
+# thereby establishing a joint claim, when a conflicting lock is released.
+# -----------------------------------------------------------------------------
+
+new-request name=req19 txn=txn1 ts=10,1
+  get key=a str=exclusive
+----
+
+sequence req=req19
+----
+[1] sequence req19: sequencing request
+[1] sequence req19: acquiring latches
+[1] sequence req19: scanning lock table for conflicting locks
+[1] sequence req19: sequencing complete, returned guard
+
+on-lock-acquired req=req19 key=a dur=u str=exclusive
+----
+[-] acquire lock: txn 00000001 @ ‹a›
+
+finish req=req19
+----
+[-] finish req19: finishing request
+
+new-request name=req20 txn=txn2 ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req20
+----
+[2] sequence req20: sequencing request
+[2] sequence req20: acquiring latches
+[2] sequence req20: scanning lock table for conflicting locks
+[2] sequence req20: waiting in lock wait-queues
+[2] sequence req20: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[2] sequence req20: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[2] sequence req20: pushing txn 00000001 to abort
+[2] sequence req20: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+new-request name=req21 txn=txn3 ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req21
+----
+[3] sequence req21: sequencing request
+[3] sequence req21: acquiring latches
+[3] sequence req21: scanning lock table for conflicting locks
+[3] sequence req21: waiting in lock wait-queues
+[3] sequence req21: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 2, queuedReaders: 0)
+[3] sequence req21: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[3] sequence req21: pushing txn 00000001 to abort
+[3] sequence req21: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+new-request name=req22 txn=none ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req22
+----
+[4] sequence req22: sequencing request
+[4] sequence req22: acquiring latches
+[4] sequence req22: scanning lock table for conflicting locks
+[4] sequence req22: waiting in lock wait-queues
+[4] sequence req22: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
+[4] sequence req22: not pushing
+[4] sequence req22: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+new-request name=req23 txn=txn4 ts=10,1
+  put key=a value=val
+----
+
+sequence req=req23
+----
+[5] sequence req23: sequencing request
+[5] sequence req23: acquiring latches
+[5] sequence req23: scanning lock table for conflicting locks
+[5] sequence req23: waiting in lock wait-queues
+[5] sequence req23: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 4, queuedReaders: 0)
+[5] sequence req23: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[5] sequence req23: pushing txn 00000001 to abort
+[5] sequence req23: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+new-request name=req24 txn=txn5 ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req24
+----
+[6] sequence req24: sequencing request
+[6] sequence req24: acquiring latches
+[6] sequence req24: scanning lock table for conflicting locks
+[6] sequence req24: waiting in lock wait-queues
+[6] sequence req24: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 5, queuedReaders: 0)
+[6] sequence req24: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[6] sequence req24: pushing txn 00000001 to abort
+[6] sequence req24: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+num=1
+ lock: "a"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 20, strength: Shared, txn: 00000002-0000-0000-0000-000000000000
+    active: true req: 21, strength: Shared, txn: 00000003-0000-0000-0000-000000000000
+    active: true req: 22, strength: Shared, txn: none
+    active: true req: 23, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 24, strength: Shared, txn: 00000005-0000-0000-0000-000000000000
+   distinguished req: 20
+
+on-txn-updated txn=txn1 status=committed
+----
+[-] update txn: committing txn1
+[2] sequence req20: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
+[2] sequence req20: lock wait-queue event: done waiting
+[2] sequence req20: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[2] sequence req20: acquiring latches
+[2] sequence req20: scanning lock table for conflicting locks
+[2] sequence req20: sequencing complete, returned guard
+[3] sequence req21: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
+[3] sequence req21: lock wait-queue event: done waiting
+[3] sequence req21: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[3] sequence req21: acquiring latches
+[3] sequence req21: scanning lock table for conflicting locks
+[3] sequence req21: sequencing complete, returned guard
+[4] sequence req22: lock wait-queue event: done waiting
+[4] sequence req22: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[4] sequence req22: acquiring latches
+[4] sequence req22: scanning lock table for conflicting locks
+[4] sequence req22: sequencing complete, returned guard
+[5] sequence req23: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
+[5] sequence req23: lock wait-queue event: wait for (distinguished) txn 00000002 running request @ key ‹"a"› (queuedLockingRequests: 5, queuedReaders: 0)
+[5] sequence req23: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[5] sequence req23: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[5] sequence req23: pushing txn 00000002 to detect request deadlock
+[5] sequence req23: blocked on select in concurrency_test.(*cluster).PushTransaction
+[6] sequence req24: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
+[6] sequence req24: lock wait-queue event: wait for txn 00000002 running request @ key ‹"a"› (queuedLockingRequests: 5, queuedReaders: 0)
+[6] sequence req24: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[6] sequence req24: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[6] sequence req24: pushing txn 00000002 to detect request deadlock
+[6] sequence req24: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+# Ensure both req20, req21, req22 are able to proceed as they are compatible
+# with each other. Moreover, req20 and req21 should be able to establish a joint
+# claim on the lock as they're transactional requests. However, req24 must
+# continue to actively wait as there is an incompatible locking request waiting
+# in front of it.
+debug-lock-table
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 20, strength: Shared, txn: 00000002-0000-0000-0000-000000000000
+    active: false req: 21, strength: Shared, txn: 00000003-0000-0000-0000-000000000000
+    active: true req: 23, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 24, strength: Shared, txn: 00000005-0000-0000-0000-000000000000
+   distinguished req: 23
+
+finish req=req20
+----
+[-] finish req20: finishing request
+[5] sequence req23: lock wait-queue event: wait for (distinguished) txn 00000003 running request @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
+[5] sequence req23: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[5] sequence req23: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[5] sequence req23: pushing txn 00000003 to detect request deadlock
+[5] sequence req23: blocked on select in concurrency_test.(*cluster).PushTransaction
+[6] sequence req24: lock wait-queue event: wait for txn 00000003 running request @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
+[6] sequence req24: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[6] sequence req24: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[6] sequence req24: pushing txn 00000003 to detect request deadlock
+[6] sequence req24: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+finish req=req22
+----
+[-] finish req22: finishing request
+
+# Sanity check that req23 continues to be an active waiter until req21 is
+# finished.
+debug-lock-table
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 21, strength: Shared, txn: 00000003-0000-0000-0000-000000000000
+    active: true req: 23, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 24, strength: Shared, txn: 00000005-0000-0000-0000-000000000000
+   distinguished req: 23
+
+finish req=req21
+----
+[-] finish req21: finishing request
+[5] sequence req23: lock wait-queue event: done waiting
+[5] sequence req23: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[5] sequence req23: acquiring latches
+[5] sequence req23: scanning lock table for conflicting locks
+[5] sequence req23: sequencing complete, returned guard
+[6] sequence req24: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key ‹"a"› (queuedLockingRequests: 2, queuedReaders: 0)
+[6] sequence req24: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[6] sequence req24: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[6] sequence req24: pushing txn 00000004 to detect request deadlock
+[6] sequence req24: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 23, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 24, strength: Shared, txn: 00000005-0000-0000-0000-000000000000
+   distinguished req: 24
+
+finish req=req23
+----
+[-] finish req23: finishing request
+[6] sequence req24: lock wait-queue event: done waiting
+[6] sequence req24: conflicted with ‹00000004-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[6] sequence req24: acquiring latches
+[6] sequence req24: scanning lock table for conflicting locks
+[6] sequence req24: sequencing complete, returned guard
+
+finish req=req24
+----
+[-] finish req24: finishing request
+
+reset
+----
