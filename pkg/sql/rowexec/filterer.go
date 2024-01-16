@@ -26,7 +26,7 @@ import (
 type filtererProcessor struct {
 	execinfra.ProcessorBase
 	input  execinfra.RowSource
-	filter *execinfrapb.ExprHelper
+	filter execinfrapb.ExprHelper
 }
 
 var _ execinfra.Processor = &filtererProcessor{}
@@ -58,7 +58,6 @@ func newFiltererProcessor(
 		return nil, err
 	}
 
-	f.filter = &execinfrapb.ExprHelper{}
 	if err := f.filter.Init(ctx, spec.Filter, types, &f.SemaCtx, f.EvalCtx); err != nil {
 		return nil, err
 	}

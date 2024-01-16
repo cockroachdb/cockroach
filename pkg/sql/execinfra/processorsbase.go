@@ -75,7 +75,7 @@ type DoesNotUseTxn interface {
 type ProcOutputHelper struct {
 	// eh only contains expressions if we have at least one rendering. It will
 	// not be used if outputCols is set.
-	eh *execinfrapb.MultiExprHelper
+	eh execinfrapb.MultiExprHelper
 	// outputCols is non-nil if we have a projection. Only one of renderExprs and
 	// outputCols can be set. Note that 0-length projections are possible, in
 	// which case outputCols will be 0-length but non-nil.
@@ -161,9 +161,6 @@ func (h *ProcOutputHelper) Init(
 			h.OutputTypes = h.OutputTypes[:nRenders]
 		} else {
 			h.OutputTypes = make([]*types.T, nRenders)
-		}
-		if h.eh == nil {
-			h.eh = &execinfrapb.MultiExprHelper{}
 		}
 		if err := h.eh.Init(ctx, nRenders, coreOutputTypes, semaCtx, evalCtx); err != nil {
 			return err
