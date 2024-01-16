@@ -693,22 +693,22 @@ func (c *cluster) makeConfig() concurrency.Config {
 // PushTransaction implements the concurrency.IntentResolver interface.
 func (c *cluster) PushTransaction(
 	ctx context.Context, pushee *enginepb.TxnMeta, h kvpb.Header, pushType kvpb.PushTxnType,
-) (*roachpb.Transaction, *kvpb.Error) {
+) (*roachpb.Transaction, bool, *kvpb.Error) {
 	pusheeRecord, err := c.getTxnRecord(pushee.ID)
 	if err != nil {
-		return nil, kvpb.NewError(err)
+		return nil, false, kvpb.NewError(err)
 	}
 	var pusherRecord *txnRecord
 	if h.Txn != nil {
 		pusherID := h.Txn.ID
 		pusherRecord, err = c.getTxnRecord(pusherID)
 		if err != nil {
-			return nil, kvpb.NewError(err)
+			return nil, false, kvpb.NewError(err)
 		}
 
 		push, err := c.registerPush(ctx, pusherID, pushee.ID)
 		if err != nil {
-			return nil, kvpb.NewError(err)
+			return nil, false, kvpb.NewError(err)
 		}
 		defer c.unregisterPush(push)
 	}
@@ -727,10 +727,10 @@ func (c *cluster) PushTransaction(
 		switch {
 		case pusheeTxn.Status.IsFinalized():
 			// Already finalized.
-			return pusheeTxn, nil
+			return pusheeTxn, false, nil
 		case pushType == kvpb.PUSH_TIMESTAMP && pushTo.LessEq(pusheeTxn.WriteTimestamp):
 			// Already pushed.
-			return pusheeTxn, nil
+			return pusheeTxn, false, nil
 		case pushType == kvpb.PUSH_TOUCH:
 			pusherWins = false
 		case txnwait.CanPushWithPriority(pusherPriority, pusheeTxn.Priority):
@@ -750,16 +750,16 @@ func (c *cluster) PushTransaction(
 				err = errors.Errorf("unexpected push type: %s", pushType)
 			}
 			if err != nil {
-				return nil, kvpb.NewError(err)
+				return nil, false, kvpb.NewError(err)
 			}
 			pusheeTxn, _ = pusheeRecord.asTxn()
-			return pusheeTxn, nil
+			return pusheeTxn, false, nil
 		}
 		// If PUSH_TOUCH, return error instead of waiting.
 		if pushType == kvpb.PUSH_TOUCH {
 			log.Eventf(ctx, "pushee not abandoned")
 			err := kvpb.NewTransactionPushError(*pusheeTxn)
-			return nil, kvpb.NewError(err)
+			return nil, false, kvpb.NewError(err)
 		}
 		// Or the pusher aborted?
 		var pusherRecordSig chan struct{}
@@ -769,7 +769,7 @@ func (c *cluster) PushTransaction(
 			if pusherTxn.Status == roachpb.ABORTED {
 				log.Eventf(ctx, "detected pusher aborted")
 				err := kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_PUSHER_ABORTED)
-				return nil, kvpb.NewError(err)
+				return nil, false, kvpb.NewError(err)
 			}
 		}
 		// Wait until either record is updated.
@@ -777,7 +777,7 @@ func (c *cluster) PushTransaction(
 		case <-pusheeRecordSig:
 		case <-pusherRecordSig:
 		case <-ctx.Done():
-			return nil, kvpb.NewError(ctx.Err())
+			return nil, false, kvpb.NewError(ctx.Err())
 		}
 	}
 }
