@@ -122,7 +122,7 @@ type IntentResolver interface {
 	// pushed successfully.
 	PushTransaction(
 		context.Context, *enginepb.TxnMeta, roachpb.Header, roachpb.PushTxnType,
-	) (*roachpb.Transaction, *Error)
+	) (*roachpb.Transaction, bool, *Error)
 
 	// ResolveIntent synchronously resolves the provided intent.
 	ResolveIntent(context.Context, roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
@@ -516,7 +516,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		log.Fatalf(ctx, "unexpected WaitPolicy: %v", req.WaitPolicy)
 	}
 
-	pusheeTxn, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
+	pusheeTxn, _, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
 	if err != nil {
 		// If pushing with an Error WaitPolicy and the push fails, then the lock
 		// holder is still active. Transform the error into a WriteIntentError.
@@ -697,7 +697,7 @@ func (w *lockTableWaiterImpl) pushRequestTxn(
 	pushType := roachpb.PUSH_ABORT
 	log.VEventf(ctx, 3, "pushing txn %s to detect request deadlock", ws.txn.ID.Short())
 
-	_, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
+	_, _, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
 	if err != nil {
 		return err
 	}
