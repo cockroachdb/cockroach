@@ -969,6 +969,28 @@ func (node *ShowUsers) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW USERS")
 }
 
+// ShowVariablesForRole represents a SHOW VARIABLES FOR ROLE <name> statement.
+type ShowVariablesForRole struct {
+	Name   RoleSpec
+	IsRole bool
+	All    bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowVariablesForRole) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW VARIABLES FOR")
+	if node.IsRole {
+		ctx.WriteString(" ROLE ")
+	} else {
+		ctx.WriteString(" USER ")
+	}
+	if node.All {
+		ctx.WriteString("ALL")
+	} else {
+		ctx.FormatNode(&node.Name)
+	}
+}
+
 // ShowRoles represents a SHOW ROLES statement.
 type ShowRoles struct {
 }

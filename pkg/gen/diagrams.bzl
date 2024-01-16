@@ -260,6 +260,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:show_types.html",
     "//docs/generated/sql/bnf:show_users.html",
     "//docs/generated/sql/bnf:show_var.html",
+    "//docs/generated/sql/bnf:show_variables_for_role.html",
     "//docs/generated/sql/bnf:show_zone.html",
     "//docs/generated/sql/bnf:simple_select_clause.html",
     "//docs/generated/sql/bnf:sort_clause.html",

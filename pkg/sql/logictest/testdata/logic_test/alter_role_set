@@ -161,7 +161,7 @@ user root
 statement ok
 GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
 
-user testuser
+user testuser_g
 
 statement ok
 ALTER ROLE testuser RESET application_name
@@ -296,3 +296,31 @@ query B
 SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->>'version' = $database_role_setttings_version::STRING FROM system.descriptor WHERE id = 'system.public.database_role_settings'::REGCLASS
 ----
 true
+
+# Test that show variables for role works for global default session variables
+statement ok
+ALTER ROLE ALL SET application_name = 'c';
+
+query TT
+SELECT * FROM [SHOW VARIABLES FOR ROLE roach] ORDER BY 1, 2
+----
+application_name                c
+statement_timeout               10s
+timezone                        America/New_York
+use_declarative_schema_changer  off
+
+# Test that show variables for role works when role is specified
+query TT
+SELECT * FROM [SHOW VARIABLES FOR ROLE ALL]
+----
+application_name   c
+
+# We shouldn't be able to leave the role unspecified
+statement error pq: at or near "]": syntax error
+SELECT * FROM [SHOW VARIABLES FOR ROLE]
+
+
+
+
+
+

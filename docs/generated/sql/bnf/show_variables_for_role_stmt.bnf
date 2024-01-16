@@ -1,0 +1,4 @@
+show_variables_for_role_stmt ::=
+	'SHOW' 'VARIABLES' 'FOR' role_or_group_or_user role_spec
+	| 'SHOW' 'VARIABLES' 'FOR' 'ROLE_ALL' 'ALL'
+	| 'SHOW' 'VARIABLES' 'FOR' 'USER_ALL' 'ALL'

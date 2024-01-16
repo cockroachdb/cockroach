@@ -35,6 +35,7 @@ go_library(
         "show_transactions.go",
         "show_types.go",
         "show_var.go",
+        "show_variables_for_role.go",
         "show_zone_config.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/delegate",

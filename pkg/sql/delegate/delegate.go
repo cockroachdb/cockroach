@@ -152,6 +152,9 @@ func TryDelegate(
 	case *tree.ShowUsers:
 		return d.delegateShowRoles()
 
+	case *tree.ShowVariablesForRole:
+		return d.delegateShowVariablesForRole(t)
+
 	case *tree.ShowVar:
 		return d.delegateShowVar(t)
 

@@ -262,6 +262,7 @@ BNF_SRCS = [
     "//docs/generated/sql/bnf:show_types_stmt.bnf",
     "//docs/generated/sql/bnf:show_users_stmt.bnf",
     "//docs/generated/sql/bnf:show_var.bnf",
+    "//docs/generated/sql/bnf:show_variables_for_role_stmt.bnf",
     "//docs/generated/sql/bnf:show_zone_stmt.bnf",
     "//docs/generated/sql/bnf:simple_select_clause.bnf",
     "//docs/generated/sql/bnf:sort_clause.bnf",

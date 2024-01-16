@@ -1862,6 +1862,15 @@ func (*ShowUsers) StatementType() StatementType { return TypeDML }
 func (*ShowUsers) StatementTag() string { return "SHOW USERS" }
 
 // StatementReturnType implements the Statement interface.
+func (*ShowVariablesForRole) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowVariablesForRole) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowVariablesForRole) StatementTag() string { return "SHOW VARIABLES FOR ROLE" }
+
+// StatementReturnType implements the Statement interface.
 func (*ShowFullTableScans) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -2417,6 +2426,7 @@ func (n *ShowTransactionStatus) String() string               { return AsString(
 func (n *ShowTransactions) String() string                    { return AsString(n) }
 func (n *ShowTransferState) String() string                   { return AsString(n) }
 func (n *ShowUsers) String() string                           { return AsString(n) }
+func (n *ShowVariablesForRole) String() string                { return AsString(n) }
 func (n *ShowVar) String() string                             { return AsString(n) }
 func (n *ShowZoneConfig) String() string                      { return AsString(n) }
 func (n *ShowFingerprints) String() string                    { return AsString(n) }
