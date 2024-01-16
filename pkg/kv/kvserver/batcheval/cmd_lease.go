@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -101,8 +102,9 @@ func evalNewLease(
 				Message:   "sequence number should not be set",
 			}
 	}
+	isV24_1 := rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1Start)
 	var priorReadSum *rspb.ReadSummary
-	if prevLease.Equivalent(lease) {
+	if prevLease.Equivalent(lease, isV24_1 /* expToEpochEquiv */) {
 		// If the proposed lease is equivalent to the previous lease, it is
 		// given the same sequence number. This is subtle, but is important
 		// to ensure that leases which are meant to be considered the same

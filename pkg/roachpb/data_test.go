@@ -1070,8 +1070,12 @@ func TestLeaseEquivalence(t *testing.T) {
 		{expire1, expire2R2TS2, false},     // different expiration leases
 		{expire1, expire2, true},           // same expiration lease, extended
 		{expire2, expire1, false},          // same expiration lease, extended but backwards
-		{epoch1, expire1, false},           // epoch and expiration leases
-		{expire1, epoch1, false},           // expiration and epoch leases
+		{epoch1, expire1, false},           // epoch and expiration leases, same replica and start time
+		{epoch1, expire1R2, false},         // epoch and expiration leases, different replica
+		{epoch1, expire1TS2, false},        // epoch and expiration leases, different start time
+		{expire1, epoch1, true},            // expiration and epoch leases, same replica and start time
+		{expire1, epoch1R2, false},         // expiration and epoch leases, different replica
+		{expire1, epoch1TS2, false},        // expiration and epoch leases, different start time
 		{proposed1, proposed1, true},       // exact leases with identical timestamps
 		{proposed1, proposed2, false},      // same proposed timestamps, but diff epochs
 		{proposed1, proposed3, true},       // different proposed timestamps, same lease
@@ -1082,8 +1086,13 @@ func TestLeaseEquivalence(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		if ok := tc.l.Equivalent(tc.ol); tc.expSuccess != ok {
-			t.Errorf("%d: expected success? %t; got %t", i, tc.expSuccess, ok)
+		// Test expToEpochEquiv = true.
+		require.Equal(t, tc.expSuccess, tc.l.Equivalent(tc.ol, true /* expToEpochEquiv */), "%d", i)
+		if tc.l == expire1 && tc.ol == epoch1 {
+			// The one case where expToEpochEquiv = false makes a difference.
+			require.Equal(t, !tc.expSuccess, tc.l.Equivalent(tc.ol, false /* expToEpochEquiv */), "%d", i)
+		} else {
+			require.Equal(t, tc.expSuccess, tc.l.Equivalent(tc.ol, false /* expToEpochEquiv */), "%d", i)
 		}
 	}
 
@@ -1105,7 +1114,7 @@ func TestLeaseEquivalence(t *testing.T) {
 	postPRLease.DeprecatedStartStasis = nil
 	postPRLease.Expiration = nil
 
-	if !postPRLease.Equivalent(prePRLease) || !prePRLease.Equivalent(postPRLease) {
+	if !postPRLease.Equivalent(prePRLease, true) || !prePRLease.Equivalent(postPRLease, true) {
 		t.Fatalf("leases not equivalent but should be despite diff(pre,post) = %s", pretty.Diff(prePRLease, postPRLease))
 	}
 }
