@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -293,18 +292,16 @@ func (eh *MultiExprHelper) Reset() {
 // exprHelper is a base implementation of an expressoin helper used by both
 // ExprHelper and MultiExprHelper.
 type exprHelper struct {
-	_ util.NoCopy
+	evalCtx    *eval.Context
+	semaCtx    *tree.SemaContext
+	datumAlloc *tree.DatumAlloc
 
 	// vars is used to generate IndexedVars that are "backed" by the values in
 	// row.
 	vars tree.IndexedVarHelper
 
-	evalCtx *eval.Context
-	semaCtx *tree.SemaContext
-
-	types      []*types.T
-	row        rowenc.EncDatumRow
-	datumAlloc tree.DatumAlloc
+	types []*types.T
+	row   rowenc.EncDatumRow
 }
 
 // exprHelper implements tree.IndexedVarContainer.
@@ -319,7 +316,7 @@ func (eh *exprHelper) IndexedVarResolvedType(idx int) *types.T {
 func (eh *exprHelper) IndexedVarEval(
 	ctx context.Context, idx int, e tree.ExprEvaluator,
 ) (tree.Datum, error) {
-	err := eh.row[idx].EnsureDecoded(eh.types[idx], &eh.datumAlloc)
+	err := eh.row[idx].EnsureDecoded(eh.types[idx], eh.datumAlloc)
 	if err != nil {
 		return nil, err
 	}
@@ -340,6 +337,7 @@ func (eh *exprHelper) init(
 	eh.semaCtx = semaCtx
 	eh.types = types
 	eh.vars = tree.MakeIndexedVarHelper(eh, len(types))
+	eh.datumAlloc = &tree.DatumAlloc{}
 	if semaCtx.TypeResolver != nil {
 		for _, t := range types {
 			if err := typedesc.EnsureTypeIsHydrated(ctx, t, semaCtx.TypeResolver.(catalog.TypeDescriptorResolver)); err != nil {
