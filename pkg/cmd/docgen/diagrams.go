@@ -822,11 +822,13 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_func_stmt",
-		inline: []string{"opt_or_replace", "opt_routine_param_with_default_list", "opt_return_set", "opt_create_routine_opt_list", "common_routine_opt_item", "create_routine_opt_item", "routine_return_stmt", "routine_param_with_default_list", "routine_param_with_default", "routine_as", "opt_link_sym"},
+		inline: []string{"opt_or_replace", "opt_routine_param_with_default_list", "opt_return_set", "opt_create_routine_opt_list", "common_routine_opt_item", "create_routine_opt_item", "routine_return_stmt", "routine_param_with_default_list", "routine_param_with_default", "routine_as", "opt_link_sym", "create_routine_opt_list"},
 		unlink: []string{"opt_or_replace", "opt_routine_param_with_default_list", "opt_return_set", "opt_create_routine_opt_list", "create_routine_opt_list", "create_routine_opt_item", "common_routine_opt_item", "routine_return_stmt", "non_reserved_word_or_sconst", "routine_param_with_default_list", "routine_param_with_default", "a_expr", "routine_as"},
 		replace: map[string]string{
 			"func_as":                     "'SCONST'",
-			"create_routine_opt_list": "'AS'", 
+			"'AS'": "'AS' routine_body_str", 
+			"opt_routine_body": "",
+			"non_reserved_word_or_sconst |": "( 'SQL' | 'PLPGSQL' )",
 			"( 'SCONST' ) ( ',' 'SCONST' |  )": "",
 			"'DEFAULT'":                   "",
 			"'='":                         "",
@@ -836,11 +838,13 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_proc_stmt",
-		inline: []string{"opt_or_replace", "opt_routine_param_with_default_list", "routine_param_with_default_list", "routine_param_with_default", "routine_as", "opt_link_sym", "create_routine_opt_item", "routine_return_stmt"},
+		inline: []string{"opt_or_replace", "opt_routine_param_with_default_list", "routine_param_with_default_list", "routine_param_with_default", "opt_create_routine_opt_list", "create_routine_opt_list", "create_routine_opt_item", "routine_as", "opt_link_sym", "create_routine_opt_item", "routine_return_stmt"},
 		replace: map[string]string{
 			"'DEFAULT'": "",
 			"common_routine_opt_item" : "",
-			"opt_create_routine_opt_list": "'AS'", 
+			"'AS'": "'AS' routine_body_str", 
+			// "opt_create_routine_opt_list": "'AS'", 
+			"opt_routine_body": "",
 			"non_reserved_word_or_sconst |": "( 'SQL' | 'PLPGSQL' )",
 			"'RETURN'": "",
 			"( 'SCONST' ) ( ',' 'SCONST' |  )": "",
