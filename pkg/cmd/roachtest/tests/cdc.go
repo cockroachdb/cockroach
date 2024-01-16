@@ -1629,7 +1629,7 @@ func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "cdc/kafka-azure",
 		Owner:            `cdc`,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.OnlyAzure,
 		Cluster:          r.MakeClusterSpec(2, spec.GCEZones("us-east1-b")),
 		Leases:           registry.MetamorphicLeases,
 		Suites:           registry.Suites(registry.Nightly),
