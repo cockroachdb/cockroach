@@ -261,10 +261,8 @@ func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
 		// N.B. we set minCPUPlatform to "Intel Ice Lake" by default because it's readily available in the majority of GCE
 		// regions. Furthermore, it gets us closer to AWS instances like m6i which exclusively run Ice Lake.
-		MachineType: "n2-standard-4",
-		// TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
-		//MinCPUPlatform:       "Intel Ice Lake",
-		MinCPUPlatform:       "",
+		MachineType:          "n2-standard-4",
+		MinCPUPlatform:       "Intel Ice Lake",
 		Zones:                nil,
 		Image:                DefaultImage,
 		SSDCount:             1,

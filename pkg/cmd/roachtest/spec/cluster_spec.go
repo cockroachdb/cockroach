@@ -351,7 +351,7 @@ func (s *ClusterSpec) RoachprodOpts(
 			case GCE:
 				machineType, selectedArch = SelectGCEMachineType(s.CPUs, s.Mem, arch)
 			case Azure:
-				machineType, err = SelectAzureMachineType(s.CPUs, s.Mem, preferLocalSSD)
+				machineType, selectedArch, err = SelectAzureMachineType(s.CPUs, s.Mem, arch)
 			}
 
 			if err != nil {
