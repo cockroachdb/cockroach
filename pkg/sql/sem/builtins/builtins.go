@@ -9780,6 +9780,8 @@ func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
 		}
 	}
 	// Prevent usage in DistSQL because it cannot handle arrays of untyped tuples.
+	// TODO(yuzefovich): this restriction might be unnecessary (at least for
+	// aggregate builtins), re-evaluate it.
 	tupleOverload := impl(types.AnyTuple)
 	tupleOverload.DistsqlBlocklist = true
 	overloads = append(overloads, tupleOverload)

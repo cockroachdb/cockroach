@@ -524,6 +524,7 @@ func (ef *execFactory) ConstructGroupBy(
 			[]int{col},
 			nil,   /* arguments */
 			false, /* isDistinct */
+			false, /* distsqlBlocklist */
 		)
 		n.funcs = append(n.funcs, f)
 	}
@@ -543,6 +544,7 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 			renderIdxs,
 			agg.ConstArgs,
 			agg.Distinct,
+			agg.DistsqlBlocklist,
 		)
 		f.filterRenderIdx = int(agg.Filter)
 
