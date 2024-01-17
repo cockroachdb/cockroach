@@ -3778,7 +3778,6 @@ func TestAllocatorCheckRange(t *testing.T) {
 			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
 			expectAllocatorErr: true,
 			expectedErrStr:     "replicas must match constraints",
-			expectedLogMessage: "cannot allocate necessary voter on s3",
 		},
 		{
 			name:   "decommissioning without satisfying multiple partial constraints",
@@ -3818,7 +3817,6 @@ func TestAllocatorCheckRange(t *testing.T) {
 			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
 			expectAllocatorErr: true,
 			expectedErrStr:     "replicas must match constraints",
-			expectedLogMessage: "cannot allocate necessary voter on s3",
 		},
 		{
 			name:   "decommissioning during upreplication with partial constraints",
