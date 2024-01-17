@@ -86,8 +86,8 @@ func maybeApplyDevOffset(key Key, v roachpb.Version) roachpb.Version {
 	return v
 }
 
-// removeDevOffset removes DevOffset from the given version, if it was applied.
-func removeDevOffset(v roachpb.Version) roachpb.Version {
+// RemoveDevOffset removes DevOffset from the given version, if it was applied.
+func RemoveDevOffset(v roachpb.Version) roachpb.Version {
 	if v.Major > DevOffset {
 		v.Major -= DevOffset
 	}

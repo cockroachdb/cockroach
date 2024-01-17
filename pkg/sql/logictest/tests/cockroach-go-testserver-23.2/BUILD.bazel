@@ -1,7 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
-    name = "cockroach-go-testserver-upgrade-to-master_test",
+    name = "cockroach-go-testserver-23_2_test",
     size = "enormous",
     srcs = ["generated_test.go"],
     data = [
@@ -14,7 +14,7 @@ go_test(
         "//build/toolchains:is_heavy": {"Pool": "heavy"},
         "//conditions:default": {"Pool": "large"},
     }),
-    shard_count = 12,
+    shard_count = 3,
     tags = [
         "cpu:2",
     ],

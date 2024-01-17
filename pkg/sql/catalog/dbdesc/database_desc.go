@@ -273,10 +273,11 @@ func (desc *immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulato
 func (desc *immutable) maybeValidateSystemDatabaseSchemaVersion(
 	vea catalog.ValidationErrorAccumulator,
 ) {
-	sv := desc.GetSystemDatabaseSchemaVersion()
-	if sv == nil {
+	maybeSV := desc.GetSystemDatabaseSchemaVersion()
+	if maybeSV == nil {
 		return
 	}
+	sv := clusterversion.RemoveDevOffset(*maybeSV)
 
 	if id := desc.GetID(); id != keys.SystemDatabaseID {
 		vea.Report(errors.AssertionFailedf(
@@ -285,21 +286,21 @@ func (desc *immutable) maybeValidateSystemDatabaseSchemaVersion(
 		))
 	}
 
-	binaryMinSupportedVersion := clusterversion.MinSupported.Version()
-	if !binaryMinSupportedVersion.LessEq(*sv) {
+	binaryMinSupportedVersion := clusterversion.RemoveDevOffset(clusterversion.MinSupported.Version())
+	if !binaryMinSupportedVersion.LessEq(sv) {
 		vea.Report(errors.AssertionFailedf(
 			`attempting to set system database schema version to version lower than binary min supported version (%#v): %#v`,
 			binaryMinSupportedVersion,
-			*sv,
+			sv,
 		))
 	}
 
-	binaryVersion := clusterversion.Latest.Version()
+	binaryVersion := clusterversion.RemoveDevOffset(clusterversion.Latest.Version())
 	if !sv.LessEq(binaryVersion) {
 		vea.Report(errors.AssertionFailedf(
 			`attempting to set system database schema version to version higher than binary version (%#v): %#v`,
 			binaryVersion,
-			*sv,
+			sv,
 		))
 	}
 }

@@ -1053,11 +1053,6 @@ func TestSchemaChangeComparator_mixed_version_schedule_details(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_schedule_details"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
-func TestSchemaChangeComparator_mixed_version_system_privileges_user_id(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_system_privileges_user_id"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
 func TestSchemaChangeComparator_mixed_version_udf_execute_privileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_udf_execute_privileges"
