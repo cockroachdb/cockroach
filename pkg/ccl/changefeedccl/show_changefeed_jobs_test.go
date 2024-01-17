@@ -170,10 +170,9 @@ func TestShowChangefeedJobsRedacted(t *testing.T) {
 			sqlDB.QueryRow(t, createStmt).Scan(&jobID)
 			var sinkURI, description string
 			sqlDB.QueryRow(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOB $1]", jobID).Scan(&sinkURI, &description)
-			expectedSinkURI := strings.Replace(tc.uri, apiSecret, "redacted", 1)
-			expectedSinkURI = strings.Replace(expectedSinkURI, certSecret, "redacted", 1)
-			expectedDescription := strings.Replace(createStmt, apiSecret, "redacted", 1)
-			expectedDescription = strings.Replace(expectedDescription, certSecret, "redacted", 1)
+			replacer := strings.NewReplacer(apiSecret, "redacted", certSecret, "redacted")
+			expectedSinkURI := replacer.Replace(tc.uri)
+			expectedDescription := replacer.Replace(createStmt)
 			require.Equal(t, expectedSinkURI, sinkURI)
 			require.Equal(t, expectedDescription, description)
 		})
