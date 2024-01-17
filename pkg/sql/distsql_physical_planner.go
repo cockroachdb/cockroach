@@ -545,6 +545,11 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		if err != nil {
 			return cannotDistribute, err
 		}
+		for _, agg := range n.funcs {
+			if agg.distsqlBlocklist {
+				return cannotDistribute, newQueryNotSupportedErrorf("aggregate %q cannot be executed with distsql", agg.funcName)
+			}
+		}
 		// Distribute aggregations if possible.
 		return rec.compose(shouldDistribute), nil
 
