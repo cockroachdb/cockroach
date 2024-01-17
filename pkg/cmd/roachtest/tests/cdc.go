@@ -154,7 +154,8 @@ func (ct *cdcTester) startStatsCollection() func() {
 }
 
 type AuthorizationRuleKeys struct {
-	PrimaryConnectionString string `json:"primaryConnectionString"`
+	KeyName    string `json:"keyName"`
+	PrimaryKey string `json:"primaryKey"`
 }
 
 func (ct *cdcTester) startCRDBChaos() {
@@ -265,13 +266,13 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		if err := kafka.installAzureCli(ct.ctx); err != nil {
 			kafka.t.Fatal(err)
 		}
-		connectionString, err := kafka.getConnectionString(ct.ctx)
+		accessKeyName, accessKey, err := kafka.getAzureEventHubAccess(ct.ctx)
 		if err != nil {
 			kafka.t.Fatal(err)
 		}
 		sinkURI = fmt.Sprintf(
-			`kafka://cdc-roachtest.servicebus.windows.net:9093?tls_enabled=true&sasl_enabled=true&sasl_user=$ConnectionString&sasl_password=%s&sasl_mechanism=PLAIN&topic_name=testing`,
-			url.QueryEscape(connectionString),
+			`azure-event-hub://cdc-roachtest.servicebus.windows.net:9093?shared_access_key_name=%s&shared_access_key=%s&topic_name=testing`,
+			url.QueryEscape(accessKeyName), url.QueryEscape(accessKey),
 		)
 	default:
 		ct.t.Fatalf("unknown sink provided: %s", args.sinkType)
@@ -2295,10 +2296,10 @@ func (k kafkaManager) installAzureCli(ctx context.Context) error {
 	})
 }
 
-// getConnectionString retrieves the Azure Event Hub connection string for the
-// cdc-roachtest event hub set up in the CRL Azure account for roachtest
+// getAzureEventHubAccess retrieves the Azure Event Hub access key name and key
+// for the cdc-roachtest event hub set up in the CRL Azure account for roachtest
 // testing.
-func (k kafkaManager) getConnectionString(ctx context.Context) (string, error) {
+func (k kafkaManager) getAzureEventHubAccess(ctx context.Context) (string, string, error) {
 	// The necessary credential env vars have been added to TeamCity agents by
 	// dev-inf. Note that running this test on roachprod would not work due to
 	// lacking the required credentials env vars set up.
@@ -2312,29 +2313,29 @@ func (k kafkaManager) getConnectionString(ctx context.Context) (string, error) {
 	cmdStr := fmt.Sprintf("az login --service-principal -t %s -u %s -p=%s", azureTenantID, azureClientID, azureClientSecret)
 	_, err := k.c.RunWithDetailsSingleNode(ctx, k.t.L(), option.WithNodes(k.kafkaSinkNode), cmdStr)
 	if err != nil {
-		return "", errors.Wrap(err, "error running `az login`")
+		return "", "", errors.Wrap(err, "error running `az login`")
 	}
 
 	cmdStr = fmt.Sprintf("az account set --subscription %s", azureSubscriptionID)
 	_, err = k.c.RunWithDetailsSingleNode(ctx, k.t.L(), option.WithNodes(k.kafkaSinkNode), cmdStr)
 	if err != nil {
-		return "", errors.Wrap(err, "error running `az account set` command")
+		return "", "", errors.Wrap(err, "error running `az account set` command")
 	}
 
 	cmdStr = "az eventhubs namespace authorization-rule keys list --name cdc-roachtest-auth-rule " +
 		"--namespace-name cdc-roachtest --resource-group e2e-infra-event-hub-rg"
 	results, err := k.c.RunWithDetailsSingleNode(ctx, k.t.L(), option.WithNodes(k.kafkaSinkNode), cmdStr)
 	if err != nil {
-		return "", errors.Wrap(err, "error running `az eventhubs` command")
+		return "", "", errors.Wrap(err, "error running `az eventhubs` command")
 	}
 
 	var keys AuthorizationRuleKeys
 	err = json.Unmarshal([]byte(results.Stdout), &keys)
 	if err != nil {
-		return "", errors.Wrap(err, "error unmarshalling az eventhubs keys")
+		return "", "", errors.Wrap(err, "error unmarshalling az eventhubs keys")
 	}
 
-	return keys.PrimaryConnectionString, nil
+	return keys.KeyName, keys.PrimaryKey, nil
 }
 
 func (k kafkaManager) runWithRetry(ctx context.Context, cmd string) {
