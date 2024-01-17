@@ -146,12 +146,6 @@ var (
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaDistSenderInLeaseTransferBackoffsCount = metric.Metadata{
-		Name:        "distsender.errors.inleasetransferbackoffs",
-		Help:        "Number of times backed off due to NotLeaseHolderErrors during lease transfer",
-		Measurement: "Errors",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaDistSenderRangeLookups = metric.Metadata{
 		Name:        "distsender.rangelookups",
 		Help:        "Number of range lookups",
@@ -319,7 +313,6 @@ type DistSenderMetrics struct {
 	LocalSentCount                     *metric.Counter
 	NextReplicaErrCount                *metric.Counter
 	NotLeaseHolderErrCount             *metric.Counter
-	InLeaseTransferBackoffs            *metric.Counter
 	RangeLookups                       *metric.Counter
 	SlowRPCs                           *metric.Gauge
 	SlowReplicaRPCs                    *metric.Counter
@@ -352,7 +345,6 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		CrossZoneBatchResponseBytes:        metric.NewCounter(metaDistSenderCrossZoneBatchResponseBytes),
 		NextReplicaErrCount:                metric.NewCounter(metaTransportSenderNextReplicaErrCount),
 		NotLeaseHolderErrCount:             metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
-		InLeaseTransferBackoffs:            metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
 		RangeLookups:                       metric.NewCounter(metaDistSenderRangeLookups),
 		SlowRPCs:                           metric.NewGauge(metaDistSenderSlowRPCs),
 		SlowReplicaRPCs:                    metric.NewCounter(metaDistSenderSlowReplicaRPCs),
@@ -2676,7 +2668,6 @@ func (ds *DistSender) sendToReplicas(
 					// when syncing the NLHE with the range cache.
 					shouldBackoff := !updatedLeaseholder && !intentionallySentToFollower
 					if shouldBackoff {
-						ds.metrics.InLeaseTransferBackoffs.Inc(1)
 						log.VErrEventf(ctx, 2, "backing off due to NotLeaseHolderErr with stale info")
 					} else {
 						inTransferRetry.Reset() // The following Next() call will not block.
