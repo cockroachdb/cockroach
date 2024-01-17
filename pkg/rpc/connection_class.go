@@ -12,9 +12,11 @@ package rpc
 
 import (
 	"bytes"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
 // ConnectionClass is the identifier of a group of RPC client sessions that are
@@ -45,12 +47,48 @@ const (
 	NumConnectionClasses int = iota
 )
 
+// classOverrides contains a mapping from ConnectionClass to ConnectionClass.
+var classOverrides = parseClassOverrides(
+	envutil.EnvOrDefaultString("COCKROACH_USE_DEFAULT_CONNECTION_CLASS", ""))
+
+// parseClassOverride parses the list of connection class overrides. See
+// classOverrides variable comment for syntax.
+func parseClassOverrides(str string) map[ConnectionClass]ConnectionClass {
+	overrides := make(map[ConnectionClass]ConnectionClass)
+	for str += ","; len(str) != 0; {
+		pos := strings.IndexByte(str, ',') // always finds a position
+		name := str[:pos]
+		if class, ok := connectionClassFromName[name]; ok {
+			overrides[class] = DefaultClass
+		}
+		// NB: unknown classes are skipped for extensibility.
+		str = str[pos+1:]
+	}
+	return overrides
+}
+
+// ConnectionClassOverride returns the RPC connection class that the passed in
+// class overrides to.
+func ConnectionClassOverride(c ConnectionClass) ConnectionClass {
+	if override, ok := classOverrides[c]; ok {
+		return override
+	}
+	return c
+}
+
 // connectionClassName maps classes to their name.
 var connectionClassName = map[ConnectionClass]string{
 	DefaultClass:   "default",
 	SystemClass:    "system",
 	RangefeedClass: "rangefeed",
 	RaftClass:      "raft",
+}
+
+var connectionClassFromName = map[string]ConnectionClass{
+	"def":  DefaultClass,
+	"sys":  SystemClass,
+	"rf":   RangefeedClass,
+	"raft": RaftClass,
 }
 
 // String implements the fmt.Stringer interface.
