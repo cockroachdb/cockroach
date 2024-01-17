@@ -292,7 +292,7 @@ func doLookup(
 func evict(ctx context.Context, rc *RangeCache, desc *roachpb.RangeDescriptor) bool {
 	rc.rangeCache.Lock()
 	defer rc.rangeCache.Unlock()
-	return rc.evictDescLocked(ctx, desc)
+	return rc.evictLocked(ctx, desc, nil)
 }
 
 func clearOlderOverlapping(
