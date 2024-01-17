@@ -56,13 +56,13 @@ type singleRangeInfo struct {
 }
 
 // defRangefeedConnClass is the default rpc.ConnectionClass used for rangefeed
-// traffic. Normally it is RangefeedClass, but can be flipped to DefaultClass if
+// traffic. Normally it is BulkDataClass, but can be flipped to DefaultClass if
 // the corresponding env variable is true.
 var defRangefeedConnClass = func() rpc.ConnectionClass {
 	if envutil.EnvOrDefaultBool("COCKROACH_RANGEFEED_USE_DEFAULT_CONNECTION_CLASS", false) {
 		return rpc.DefaultClass
 	}
-	return rpc.RangefeedClass
+	return rpc.BulkDataClass
 }()
 
 var catchupStartupRate = settings.RegisterIntSetting(

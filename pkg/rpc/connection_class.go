@@ -36,8 +36,9 @@ const (
 	DefaultClass ConnectionClass = iota
 	// SystemClass is the ConnectionClass used for system traffic.
 	SystemClass
-	// RangefeedClass is the ConnectionClass used for rangefeeds.
-	RangefeedClass
+	// BulkDataClass is the ConnectionClass used for bulky data transfer, such as
+	// rangefeeds or changefeed initial scan requests.
+	BulkDataClass
 	// RaftClass is the ConnectionClass used for raft traffic.
 	RaftClass
 
@@ -47,10 +48,10 @@ const (
 
 // connectionClassName maps classes to their name.
 var connectionClassName = map[ConnectionClass]string{
-	DefaultClass:   "default",
-	SystemClass:    "system",
-	RangefeedClass: "rangefeed",
-	RaftClass:      "raft",
+	DefaultClass:  "default",
+	SystemClass:   "system",
+	BulkDataClass: "bulk",
+	RaftClass:     "raft",
 }
 
 // String implements the fmt.Stringer interface.
@@ -88,7 +89,7 @@ func isSystemKey(key roachpb.RKey) bool {
 // ConnectionClassForKey determines the ConnectionClass which should be used for
 // traffic addressed to the range starting at the given key. Returns SystemClass
 // for system ranges, or the given "default" class otherwise. Typically, the
-// default depends on the type of traffic, such as RangefeedClass or RaftClass.
+// default depends on the type of traffic, such as BulkDataClass or RaftClass.
 func ConnectionClassForKey(key roachpb.RKey, def ConnectionClass) ConnectionClass {
 	if isSystemKey(key) {
 		return SystemClass

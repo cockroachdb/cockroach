@@ -54,7 +54,7 @@ soon n1 healthy=2
 ----
 ok
 
-connect n1 class=rf
+connect n1 class=bulk
 ----
 ok
 

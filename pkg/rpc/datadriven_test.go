@@ -45,8 +45,8 @@ import (
 /*
 TestReconnection supports the following input data:
   - tick <duration>
-  - dial <node> class=(def|sys|rf)
-  - connect <node> class=(def|sys|rf)
+  - dial <node> class=(def|sys|bulk|raft)
+  - connect <node> class=(def|sys|bulk|raft)
   - set-hb-err <node> <decommissioned=(false|true)>
   - reset-hb-err <node>
   - soon [healthy=<n>] [unhealthy=<n>] [inactive=<n>]
@@ -325,8 +325,8 @@ func scanClass(t *testing.T, d *datadriven.TestData) ConnectionClass {
 		return DefaultClass
 	case "sys":
 		return SystemClass
-	case "rf":
-		return RangefeedClass
+	case "bulk":
+		return BulkDataClass
 	case "raft":
 		return RaftClass
 	default:
