@@ -249,10 +249,8 @@ func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
 		// N.B. we set minCPUPlatform to "Intel Ice Lake" by default because it's readily available in the majority of GCE
 		// regions. Furthermore, it gets us closer to AWS instances like m6i which exclusively run Ice Lake.
-		MachineType: "n2-standard-4",
-		// TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
-		//MinCPUPlatform:       "Intel Ice Lake",
-		MinCPUPlatform:       "",
+		MachineType:          "n2-standard-4",
+		MinCPUPlatform:       "Intel Ice Lake",
 		Zones:                nil,
 		Image:                DefaultImage,
 		SSDCount:             1,
@@ -903,6 +901,10 @@ func (p *Provider) Create(
 
 	args = append(args, "--machine-type", providerOpts.MachineType)
 	if providerOpts.MinCPUPlatform != "" {
+		if strings.HasPrefix(providerOpts.MachineType, "n2d-") && strings.HasPrefix(providerOpts.MinCPUPlatform, "Intel") {
+			l.Printf("WARNING: MinCPUPlatform=%q is not supported for MachineType=%q, falling back to AMD Milan", providerOpts.MinCPUPlatform, providerOpts.MachineType)
+			providerOpts.MinCPUPlatform = "AMD Milan"
+		}
 		args = append(args, "--min-cpu-platform", providerOpts.MinCPUPlatform)
 	}
 
@@ -967,11 +969,11 @@ func (p *Provider) Create(
 }
 
 // Given a machine type, return the allowed number (> 0) of local SSDs, sorted in ascending order.
-// N.B. Only n1, n2 and c2 instances are supported since we don't typically use other instance types.
+// N.B. Only n1, n2, n2d and c2 instances are supported since we don't typically use other instance types.
 // Consult https://cloud.google.com/compute/docs/disks/#local_ssd_machine_type_restrictions for other types of instances.
 func AllowedLocalSSDCount(machineType string) ([]int, error) {
 	// E.g., n2-standard-4, n2-custom-8-16384.
-	machineTypes := regexp.MustCompile(`^([cn])(\d+)-[a-z]+-(\d+)(?:-\d+)?$`)
+	machineTypes := regexp.MustCompile(`^([cn])(\d+)(?:d)?-[a-z]+-(\d+)(?:-\d+)?$`)
 	matches := machineTypes.FindStringSubmatch(machineType)
 
 	if len(matches) >= 3 {

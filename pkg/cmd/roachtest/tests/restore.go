@@ -479,7 +479,7 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry, backupCloud string
 		// https://github.com/cockroachdb/cockroach/issues/98783.
 		//
 		// TODO(srosenberg): Remove this workaround when 98783 is addressed.
-		s.AWS.MachineType, _ = spec.SelectAWSMachineType(s.CPUs, s.Mem, false /* shouldSupportLocalSSD */, vm.ArchAMD64)
+		s.AWS.MachineType, _, _ = spec.SelectAWSMachineType(s.CPUs, s.Mem, false /* shouldSupportLocalSSD */, vm.ArchAMD64)
 		s.AWS.MachineType = strings.Replace(s.AWS.MachineType, "d.", ".", 1)
 		s.Arch = vm.ArchAMD64
 	}

@@ -59,6 +59,22 @@ func (m MemPerCPU) String() string {
 	return "unknown"
 }
 
+// ParseMemCPU parses a string into a MemPerCPU value. Returns -1 if no match is found.
+func ParseMemCPU(s string) MemPerCPU {
+	s = strings.ToLower(s)
+	switch s {
+	case "auto":
+		return Auto
+	case "standard":
+		return Standard
+	case "high":
+		return High
+	case "low":
+		return Low
+	}
+	return -1
+}
+
 // LocalSSDSetting controls whether test cluster nodes use an instance-local SSD
 // as storage.
 type LocalSSDSetting int
@@ -223,11 +239,14 @@ func getGCEOpts(
 	return opts
 }
 
-func getAzureOpts(machineType string, zones []string) vm.ProviderOpts {
+func getAzureOpts(machineType string, zones []string, volumeSize int) vm.ProviderOpts {
 	opts := azure.DefaultProviderOpts()
 	opts.MachineType = machineType
 	if len(zones) != 0 {
 		opts.Locations = zones
+	}
+	if volumeSize != 0 {
+		opts.NetworkDiskSize = int32(volumeSize)
 	}
 	return opts
 }
@@ -302,11 +321,6 @@ func (s *ClusterSpec) RoachprodOpts(
 		return vm.CreateOpts{}, nil, errors.Errorf("unsupported cloud %v", cloud)
 	}
 
-	if cloud != GCE && cloud != AWS {
-		if s.VolumeSize != 0 {
-			return vm.CreateOpts{}, nil, errors.Errorf("specifying volume size is not yet supported on %s", cloud)
-		}
-	}
 	if cloud != GCE {
 		if s.SSDs != 0 {
 			return vm.CreateOpts{}, nil, errors.Errorf("specifying SSD count is not yet supported on %s", cloud)
@@ -337,13 +351,18 @@ func (s *ClusterSpec) RoachprodOpts(
 		if machineType == "" {
 			// If no machine type was specified, choose one
 			// based on the cloud and CPU count.
+			var err error
 			switch cloud {
 			case AWS:
-				machineType, selectedArch = SelectAWSMachineType(s.CPUs, s.Mem, preferLocalSSD && s.VolumeSize == 0, arch)
+				machineType, selectedArch, err = SelectAWSMachineType(s.CPUs, s.Mem, preferLocalSSD && s.VolumeSize == 0, arch)
 			case GCE:
 				machineType, selectedArch = SelectGCEMachineType(s.CPUs, s.Mem, arch)
 			case Azure:
-				machineType = SelectAzureMachineType(s.CPUs, s.Mem)
+				machineType, selectedArch, err = SelectAzureMachineType(s.CPUs, s.Mem, arch)
+			}
+
+			if err != nil {
+				return vm.CreateOpts{}, nil, err
 			}
 			if selectedArch != "" && selectedArch != arch {
 				// TODO(srosenberg): we need a better way to monitor the rate of this mismatch, i.e.,
@@ -420,7 +439,7 @@ func (s *ClusterSpec) RoachprodOpts(
 			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch),
 		)
 	case Azure:
-		providerOpts = getAzureOpts(machineType, zones)
+		providerOpts = getAzureOpts(machineType, zones, s.VolumeSize)
 	}
 
 	return createVMOpts, providerOpts, nil

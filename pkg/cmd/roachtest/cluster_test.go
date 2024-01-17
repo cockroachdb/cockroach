@@ -12,6 +12,8 @@ package main
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,7 +22,10 @@ import (
 	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -137,10 +142,11 @@ func (t testWrapper) L() *logger.Logger {
 func (t testWrapper) Status(args ...interface{}) {}
 
 func TestClusterMachineType(t *testing.T) {
-	testCases := []struct {
+	type machineTypeTestCase struct {
 		machineType      string
 		expectedCPUCount int
-	}{
+	}
+	testCases := []machineTypeTestCase{
 		// AWS machine types
 		{"m6i.large", 2},
 		{"m6i.xlarge", 4},
@@ -184,6 +190,16 @@ func TestClusterMachineType(t *testing.T) {
 		{"t2a-standard-32", 32},
 		{"t2a-standard-48", 48},
 	}
+	// Azure machine types
+	for i := 2; i <= 96; i *= 2 {
+		testCases = append(testCases, machineTypeTestCase{fmt.Sprintf("Standard_D%dds_v5", i), i})
+		testCases = append(testCases, machineTypeTestCase{fmt.Sprintf("Standard_D%dpds_v5", i), i})
+		testCases = append(testCases, machineTypeTestCase{fmt.Sprintf("Standard_D%dlds_v5", i), i})
+		testCases = append(testCases, machineTypeTestCase{fmt.Sprintf("Standard_D%dplds_v5", i), i})
+		testCases = append(testCases, machineTypeTestCase{fmt.Sprintf("Standard_E%dds_v5", i), i})
+		testCases = append(testCases, machineTypeTestCase{fmt.Sprintf("Standard_E%dpds_v5", i), i})
+	}
+
 	for _, tc := range testCases {
 		t.Run(tc.machineType, func(t *testing.T) {
 			cpuCount := MachineTypeToCPUs(tc.machineType)
@@ -203,8 +219,7 @@ type machineTypeTestCase struct {
 	expectedArch        vm.CPUArch
 }
 
-// TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
-func TestAWSMachineTypeNew(t *testing.T) {
+func TestAWSMachineType(t *testing.T) {
 	testCases := []machineTypeTestCase{}
 
 	xlarge := func(cpus int) string {
@@ -254,7 +269,12 @@ func TestAWSMachineTypeNew(t *testing.T) {
 				fmt.Sprintf("%sd.%s", family, xlarge(1)), arch})
 			for i := 2; i <= 128; i += 2 {
 				if i > 16 && mem == spec.Auto {
-					family = "c6i"
+					if i > 80 {
+						// N.B. to keep parity with GCE, we use AMD Milan instead of Intel Ice Lake, keeping same 2GB RAM per CPU ratio.
+						family = "c6a"
+					} else {
+						family = "c6i"
+					}
 				}
 				testCases = append(testCases, machineTypeTestCase{i, mem, false, arch,
 					fmt.Sprintf("%s.%s", family, xlarge(i)), arch})
@@ -296,7 +316,12 @@ func TestAWSMachineTypeNew(t *testing.T) {
 
 			if fallback {
 				if mem == spec.Auto {
-					family = "c6i"
+					if i > 80 {
+						// N.B. to keep parity with GCE, we use AMD Milan instead of Intel Ice Lake, keeping same 2GB RAM per CPU ratio.
+						family = "c6a"
+					} else {
+						family = "c6i"
+					}
 				} else if mem == spec.Standard {
 					family = "m6i"
 				}
@@ -320,19 +345,22 @@ func TestAWSMachineTypeNew(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%d/%s/%t/%s", tc.cpus, tc.mem, tc.localSSD, tc.arch), func(t *testing.T) {
-			machineType, selectedArch := spec.SelectAWSMachineTypeNew(tc.cpus, tc.mem, tc.localSSD, tc.arch)
+			machineType, selectedArch, err := spec.SelectAWSMachineType(tc.cpus, tc.mem, tc.localSSD, tc.arch)
 
 			require.Equal(t, tc.expectedMachineType, machineType)
 			require.Equal(t, tc.expectedArch, selectedArch)
+			require.NoError(t, err)
 		})
 	}
 	// spec.Low is not supported.
-	require.Panics(t, func() { spec.SelectAWSMachineTypeNew(4, spec.Low, false, vm.ArchAMD64) })
-	require.Panics(t, func() { spec.SelectAWSMachineTypeNew(16, spec.Low, false, vm.ArchARM64) })
+	_, _, err := spec.SelectAWSMachineType(4, spec.Low, false, vm.ArchAMD64)
+	require.Error(t, err)
+
+	_, _, err2 := spec.SelectAWSMachineType(16, spec.Low, false, vm.ArchAMD64)
+	require.Error(t, err2)
 }
 
-// TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
-func TestGCEMachineTypeNew(t *testing.T) {
+func TestGCEMachineType(t *testing.T) {
 	testCases := []machineTypeTestCase{}
 
 	addAMD := func(mem spec.MemPerCPU) {
@@ -357,9 +385,15 @@ func TestGCEMachineTypeNew(t *testing.T) {
 				fmt.Sprintf("n2-%s-%d", series, 2), arch})
 			for i := 2; i <= 128; i += 2 {
 				if i > 16 && mem == spec.Auto {
-					// n2-custom with 2GB per CPU.
+					var expectedMachineType string
+					if i > 80 {
+						// N.B. n2 doesn't support custom instances with > 80 vCPUs. So, the best we can do is to go with n2d.
+						expectedMachineType = fmt.Sprintf("n2d-custom-%d-%d", i, i*2048)
+					} else {
+						expectedMachineType = fmt.Sprintf("n2-custom-%d-%d", i, i*2048)
+					}
 					testCases = append(testCases, machineTypeTestCase{i, mem, false, arch,
-						fmt.Sprintf("n2-custom-%d-%d", i, i*2048), arch})
+						expectedMachineType, arch})
 				} else {
 					testCases = append(testCases, machineTypeTestCase{i, mem, false, arch,
 						fmt.Sprintf("n2-%s-%d", series, i), arch})
@@ -397,7 +431,12 @@ func TestGCEMachineTypeNew(t *testing.T) {
 			if fallback {
 				expectedMachineType := fmt.Sprintf("n2-%s-%d", series, i)
 				if i > 16 && mem == spec.Auto {
-					expectedMachineType = fmt.Sprintf("n2-custom-%d-%d", i, i*2048)
+					if i > 80 {
+						// N.B. n2 doesn't support custom instances with > 80 vCPUs. So, the best we can do is to go with n2d.
+						expectedMachineType = fmt.Sprintf("n2d-custom-%d-%d", i, i*2048)
+					} else {
+						expectedMachineType = fmt.Sprintf("n2-custom-%d-%d", i, i*2048)
+					}
 				}
 				// Expect fallback to AMD64.
 				testCases = append(testCases, machineTypeTestCase{i, mem, false, vm.ArchARM64,
@@ -415,12 +454,180 @@ func TestGCEMachineTypeNew(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%d/%s/%s", tc.cpus, tc.mem, tc.arch), func(t *testing.T) {
-			machineType, selectedArch := spec.SelectGCEMachineTypeNew(tc.cpus, tc.mem, tc.arch)
+			machineType, selectedArch := spec.SelectGCEMachineType(tc.cpus, tc.mem, tc.arch)
 
 			require.Equal(t, tc.expectedMachineType, machineType)
 			require.Equal(t, tc.expectedArch, selectedArch)
 		})
 	}
+}
+
+func TestAzureMachineType(t *testing.T) {
+	testCases := []machineTypeTestCase{}
+
+	addAMD := func(mem spec.MemPerCPU) {
+		var series string
+		switch mem {
+		case spec.Auto:
+			series = "D?ds_v5"
+		case spec.Standard:
+			series = "D?ds_v5"
+		case spec.High:
+			series = "E?ds_v5"
+		}
+
+		for _, arch := range []vm.CPUArch{vm.ArchAMD64, vm.ArchFIPS} {
+			testCases = append(testCases, machineTypeTestCase{1, mem, false, arch,
+				fmt.Sprintf("Standard_%s", strings.Replace(series, "?", strconv.Itoa(2), 1)), arch})
+			for _, i := range []int{2, 4, 8, 16, 32, 64, 96, 128} {
+				if i > 16 && mem == spec.Auto {
+					// Dlds_v5 with 2GB per CPU.
+					testCases = append(testCases, machineTypeTestCase{i, mem, false, arch,
+						fmt.Sprintf("Standard_D%dlds_v5", i), arch})
+				} else {
+					testCases = append(testCases, machineTypeTestCase{i, mem, false, arch,
+						fmt.Sprintf("Standard_%s", strings.Replace(series, "?", strconv.Itoa(i), 1)), arch})
+				}
+			}
+		}
+	}
+	addARM := func(mem spec.MemPerCPU) {
+		var series string
+		switch mem {
+		case spec.Auto:
+			series = "D?pds_v5"
+		case spec.Standard:
+			series = "D?pds_v5"
+		case spec.High:
+			series = "E?pds_v5"
+		}
+
+		testCases = append(testCases, machineTypeTestCase{1, mem, false, vm.ArchARM64,
+			fmt.Sprintf("Standard_%s", strings.Replace(series, "?", strconv.Itoa(2), 1)), vm.ArchARM64})
+
+		for i := 2; i <= 96; i *= 2 {
+			fallback := (series == "D?pds_v5" && i > 64) || (series == "D?plds_v5" && i > 64) || (series == "E?pds_v5" && i > 32)
+
+			if fallback {
+				var expectedMachineType string
+				if series == "D?pds_v5" {
+					expectedMachineType = fmt.Sprintf("Standard_D%dds_v5", i)
+				} else if series == "D?plds_v5" {
+					expectedMachineType = fmt.Sprintf("Standard_D%dlds_v5", i)
+				} else if series == "E?pds_v5" {
+					expectedMachineType = fmt.Sprintf("Standard_E%dds_v5", i)
+				}
+				// Expect fallback to AMD64.
+				testCases = append(testCases, machineTypeTestCase{i, mem, false, vm.ArchARM64,
+					expectedMachineType, vm.ArchAMD64})
+			} else {
+				if i > 16 && mem == spec.Auto {
+					// Dplds_v5 with 2GB per CPU.
+					testCases = append(testCases, machineTypeTestCase{i, mem, false, vm.ArchARM64,
+						fmt.Sprintf("Standard_D%dplds_v5", i), vm.ArchARM64})
+				} else {
+					testCases = append(testCases, machineTypeTestCase{i, mem, false, vm.ArchARM64,
+						fmt.Sprintf("Standard_%s", strings.Replace(series, "?", strconv.Itoa(i), 1)), vm.ArchARM64})
+				}
+			}
+		}
+	}
+	for _, mem := range []spec.MemPerCPU{spec.Auto, spec.Standard, spec.High} {
+		addAMD(mem)
+		addARM(mem)
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%d/%s/%s", tc.cpus, tc.mem, tc.arch), func(t *testing.T) {
+			machineType, selectedArch, err := spec.SelectAzureMachineType(tc.cpus, tc.mem, tc.arch)
+
+			require.Equal(t, tc.expectedMachineType, machineType)
+			require.Equal(t, tc.expectedArch, selectedArch)
+			require.NoError(t, err)
+
+			if tc.expectedArch != vm.ArchFIPS {
+				// Check that we can derive the right cpu architecture from the machine type.
+				require.Equal(t, tc.expectedArch, azure.CpuArchFromAzureMachineType(machineType))
+			}
+		})
+	}
+	// spec.Low is not supported.
+	_, _, err := spec.SelectAzureMachineType(4, spec.Low, vm.ArchAMD64)
+	require.Error(t, err)
+
+	_, _, err2 := spec.SelectAzureMachineType(16, spec.Low, vm.ArchAMD64)
+	require.Error(t, err2)
+}
+
+func TestMachineTypes(t *testing.T) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "cluster_test"), func(t *testing.T, path string) {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			if d.Cmd != "select-machine-type" {
+				t.Fatalf("unknown directive: %q", d.Cmd)
+			}
+			var mem spec.MemPerCPU
+			var cpuArch vm.CPUArch
+
+			for _, arg := range d.CmdArgs {
+				switch arg.Key {
+				case "mem-per-cpu":
+					mem = spec.ParseMemCPU(arg.Vals[0])
+					if mem.String() == "unknown" {
+						t.Fatalf("illegal value for 'mem-per-cpu': %s", arg.Vals[0])
+					}
+				case "cpu-arch":
+					cpuArch = vm.ParseArch(arg.Vals[0])
+					if cpuArch == vm.ArchUnknown {
+						t.Fatalf("illegal value for 'cpu-arch': %s", arg.Vals[0])
+					}
+				default:
+					t.Fatalf("unknown machine-type spec: %q", arg.Key)
+				}
+			}
+			if cpuArch == "" {
+				t.Fatalf("missing 'cpu-arch' spec")
+			}
+			var out strings.Builder
+			var err error
+			var gceMachineType, awsMachineType, azureMachineType []string
+
+			cpu := []int{1, 2, 4, 8, 16, 32, 64, 96, 128}
+			out.WriteString("cpus | 1,2,4,8,16 | 32,64 | 96,128\n")
+			out.WriteString("----\n")
+
+			for _, i := range cpu {
+				machineType, selectedArch := spec.SelectGCEMachineType(i, mem, cpuArch)
+				if selectedArch != cpuArch {
+					machineType += fmt.Sprintf(" (%s)", selectedArch)
+				}
+				gceMachineType = append(gceMachineType, machineType)
+
+				machineType, selectedArch, err = spec.SelectAWSMachineType(i, mem, false, cpuArch)
+				if err != nil {
+					machineType = "unsupported"
+				} else if selectedArch != cpuArch {
+					machineType += fmt.Sprintf(" (%s)", selectedArch)
+				}
+				awsMachineType = append(awsMachineType, machineType)
+
+				machineType, selectedArch, err = spec.SelectAzureMachineType(i, mem, cpuArch)
+				if err != nil {
+					machineType = "unsupported"
+				} else if selectedArch != cpuArch {
+					machineType += fmt.Sprintf(" (%s)", selectedArch)
+				}
+				azureMachineType = append(azureMachineType, machineType)
+			}
+			out.WriteString("GCE | ")
+			out.WriteString(fmt.Sprintf("%s | %s | %s\n", strings.Join(gceMachineType[:5], ", "), strings.Join(gceMachineType[5:7], ", "), strings.Join(gceMachineType[7:], ", ")))
+			out.WriteString("AWS | ")
+			out.WriteString(fmt.Sprintf("%s | %s | %s\n", strings.Join(awsMachineType[:5], ", "), strings.Join(awsMachineType[5:7], ", "), strings.Join(awsMachineType[7:], ", ")))
+			out.WriteString("Azure | ")
+			out.WriteString(fmt.Sprintf("%s | %s | %s\n", strings.Join(azureMachineType[:5], ", "), strings.Join(azureMachineType[5:7], ","), strings.Join(azureMachineType[7:], ", ")))
+
+			return out.String()
+		})
+	})
 }
 
 func TestCmdLogFileName(t *testing.T) {
