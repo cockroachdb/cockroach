@@ -272,7 +272,7 @@ func (sv *Values) TestingCopyForVirtualCluster(input *Values) {
 		}
 
 		// Copy the value.
-		sv.container.intVals[slot] = input.container.intVals[slot]
+		sv.container.intVals[slot] = atomic.LoadInt64(&input.container.intVals[slot])
 		if v := input.container.genericVals[slot].Load(); v != nil {
 			sv.container.genericVals[slot].Store(v)
 		}
@@ -295,7 +295,7 @@ func (sv *Values) TestingCopyForServer(input *Values, newOpaque interface{}) {
 	sv.opaque = newOpaque
 	for slot := slotIdx(0); slot < slotIdx(len(registry)); slot++ {
 		// Copy the value.
-		sv.container.intVals[slot] = input.container.intVals[slot]
+		sv.container.intVals[slot] = atomic.LoadInt64(&input.container.intVals[slot])
 		if v := input.container.genericVals[slot].Load(); v != nil {
 			sv.container.genericVals[slot].Store(v)
 		}
