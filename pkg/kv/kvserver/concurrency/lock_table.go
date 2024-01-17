@@ -746,7 +746,7 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 			// queuedLockingRequests is sorted in increasing order of sequence number.
 			break
 		}
-		if g.isSameTxn(qqg.guard.txnMeta()) {
+		if qqg.guard.txnMeta() != nil && g.isSameTxn(qqg.guard.txnMeta()) {
 			// A SKIP LOCKED request should not find another waiting request from its
 			// own transaction, at least not in the way that SQL uses KV. The only way
 			// we can end up finding another request in the lock's wait queue from our
