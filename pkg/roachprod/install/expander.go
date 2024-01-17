@@ -229,7 +229,7 @@ func (e *expander) maybeExpandUIPort(
 		e.uiPorts = make(map[Node]string, len(c.VMs))
 		for _, node := range allNodes(len(c.VMs)) {
 			// TODO(herko): Add support for separate-process services.
-			e.uiPorts[node] = fmt.Sprint(c.NodeUIPort(ctx, node))
+			e.uiPorts[node] = fmt.Sprint(c.NodeUIPort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */))
 		}
 	}
 
