@@ -11,12 +11,14 @@
 package sql
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -95,6 +97,23 @@ var telemetrySamplingMode = settings.RegisterEnumSetting(
 	},
 	settings.WithPublic,
 )
+
+// SampledQuery objects are short-lived but can be
+// allocated frequently if logging frequency is high.
+var sampledQueryPool = sync.Pool{
+	New: func() interface{} {
+		return new(eventpb.SampledQuery)
+	},
+}
+
+func getSampledQuery() *eventpb.SampledQuery {
+	return sampledQueryPool.Get().(*eventpb.SampledQuery)
+}
+
+func releaseSampledQuery(sq *eventpb.SampledQuery) {
+	*sq = eventpb.SampledQuery{}
+	sampledQueryPool.Put(sq)
+}
 
 // TelemetryLoggingMetrics keeps track of the last time at which an event
 // was sampled to the telemetry channel, and the number of skipped events
