@@ -538,8 +538,8 @@ func makeClusterName(name string) string {
 	return makeGCEClusterName(name)
 }
 
-// MachineTypeToCPUs returns a CPU count for either a GCE or AWS
-// machine type.
+// MachineTypeToCPUs returns a CPU count for GCE, AWS, and Azure machine types.
+// -1 is returned for unknown machine types.
 func MachineTypeToCPUs(s string) int {
 	{
 		// GCE machine types.
@@ -588,28 +588,36 @@ func MachineTypeToCPUs(s string) int {
 
 	// Azure doesn't have a standard way to size machines.
 	// This method is implemented for the default machine type.
-	// Not all of Azure machine types contain the number of vCPUs int he size and
+	// Not all of Azure machine types contain the number of vCPUs in the size and
 	// the sizing naming scheme is dependent on the machine type family.
 	switch s {
-	case "Standard_D2_v3":
+	case "Standard_D2ds_v5", "Standard_D2pds_v5", "Standard_D2lds_v5",
+		"Standard_D2plds_v5", "Standard_E2ds_v5", "Standard_E2pds_v5":
 		return 2
-	case "Standard_D4_v3":
+	case "Standard_D4ds_v5", "Standard_D4pds_v5", "Standard_D4lds_v5",
+		"Standard_D4plds_v5", "Standard_E4ds_v5", "Standard_E4pds_v5":
 		return 4
-	case "Standard_D8_v3":
+	case "Standard_D8ds_v5", "Standard_D8pds_v5", "Standard_D8lds_v5",
+		"Standard_D8plds_v5", "Standard_E8ds_v5", "Standard_E8pds_v5":
 		return 8
-	case "Standard_D16_v3":
+	case "Standard_D16ds_v5", "Standard_D16pds_v5", "Standard_D16lds_v5",
+		"Standard_D16plds_v5", "Standard_E16ds_v5", "Standard_E16pds_v5":
 		return 16
-	case "Standard_D32_v3":
+	case "Standard_D32ds_v5", "Standard_D32pds_v5", "Standard_D32lds_v5",
+		"Standard_D32plds_v5", "Standard_E32ds_v5", "Standard_E32pds_v5":
 		return 32
-	case "Standard_D48_v3":
+	case "Standard_D48ds_v5", "Standard_D48pds_v5", "Standard_D48lds_v5",
+		"Standard_D48plds_v5", "Standard_E48ds_v5", "Standard_E48pds_v5":
 		return 48
-	case "Standard_D64_v3":
+	case "Standard_D64ds_v5", "Standard_D64pds_v5", "Standard_D64lds_v5",
+		"Standard_D64plds_v5", "Standard_E64ds_v5", "Standard_E64pds_v5":
 		return 64
+	case "Standard_D96ds_v5", "Standard_D96pds_v5", "Standard_D96lds_v5",
+		"Standard_D96plds_v5", "Standard_E96ds_v5", "Standard_E96pds_v5":
+		return 96
 	}
-
-	// TODO(pbardea): Non-default Azure machine types are not supported
-	// and will return unknown machine type error.
-	panic(fmt.Sprintf("unknown machine type: %s\n", s))
+	// Unknown or unsupported machine type.
+	return -1
 }
 
 type nodeSelector interface {
