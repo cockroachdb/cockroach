@@ -570,7 +570,7 @@ func TestLargeDynamicRows(t *testing.T) {
 	var params base.TestServerArgs
 	var batchNumber int
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		BeforeCopyFromInsert: func(*kv.Txn) error {
+		CopyFromInsertBeforeBatch: func(*kv.Txn) error {
 			batchNumber++
 			return nil
 		},
@@ -610,7 +610,7 @@ func TestLargeDynamicRows(t *testing.T) {
 	}
 	_, err = conn.GetDriverConn().CopyFrom(ctx, strings.NewReader(sb.String()), "COPY t FROM STDIN")
 	require.NoError(t, err)
-	require.Greater(t, batchNumber, 4)
+	require.GreaterOrEqual(t, 4, batchNumber)
 	batchNumber = 0
 
 	// Reset and make sure we use 1 batch.

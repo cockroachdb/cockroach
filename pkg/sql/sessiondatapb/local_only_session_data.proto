@@ -476,6 +476,9 @@ message LocalOnlySessionData {
   // query plans with merge joins. When false, the optimizer does not attempt
   // to plan merge joins.
   bool optimizer_merge_joins_enabled = 119;
+  // CopyNumRetriesPerBatch determines the number of times a single batch of
+  // rows can be retried for non-atomic COPY.
+  int32 copy_num_retries_per_batch = 120;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
