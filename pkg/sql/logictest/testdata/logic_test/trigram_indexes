@@ -335,3 +335,26 @@ CREATE TABLE public.t_112713 (
 )
 
 subtest end
+
+# Regression test for hitting an internal error on string-like datums (e.g NAME).
+statement ok
+CREATE TABLE t117758 (
+  col1 VARCHAR NOT NULL,
+  col2 NAME NOT NULL,
+  INVERTED INDEX (col2 gin_trgm_ops)
+);
+SELECT
+	tab.col1_1
+FROM
+	t117758 AS tab2
+	JOIN (
+			SELECT
+				'foo'::NAME, 'bar'::NAME
+			FROM
+				t117758 AS tab3
+				JOIN t117758 AS tab4 ON
+						(tab3.col2) = (tab4.col2)
+		)
+			AS tab (col1_1, col1_2) ON
+			(tab2.col1) = (tab.col1_1)
+			AND (tab2.col2) = (tab.col1_2);
