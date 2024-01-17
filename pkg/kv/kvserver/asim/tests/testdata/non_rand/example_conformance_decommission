@@ -1,0 +1,84 @@
+gen_cluster nodes=6
+----
+
+# TODO(kvoli): Update gen_cluster to take in localities for this purpose.
+set_locality node=1 locality=region=a
+----
+
+set_locality node=2 locality=region=a
+----
+
+set_locality node=3 locality=region=b
+----
+
+set_locality node=4 locality=region=b
+----
+
+set_locality node=5 locality=region=c
+----
+
+set_locality node=6 locality=region=c
+----
+
+# Generate 10 ranges, one replica will be placed on each node initially.
+gen_ranges ranges=20 repl_factor=3
+----
+
+set_span_config 
+[0,10000): num_replicas=3 constraints={'+region=a':1,'+region=c':2}
+----
+
+set_span_config delay=5m
+[0,10000): num_replicas=3 constraints={'+region=a':1,'+region=b':1,'+region=c':1}
+----
+
+set_liveness node=1 liveness=decommissioning delay=5m
+----
+
+set_liveness node=3 liveness=decommissioning delay=5m
+----
+
+set_liveness node=5 liveness=decommissioning delay=5m
+----
+
+
+assertion type=conformance under=0 over=0 unavailable=0 violating=0
+----
+
+eval duration=20m
+----
+failed assertion sample 1
+  conformance unavailable=0 under=0 over=0 violating=0 
+  actual unavailable=0 under=0, over=0 violating=20 lease-violating=0 lease-less-preferred=0
+violating constraints:
+  r1:0000000{000-500} [(n2,s2):6, (n5,s5):5, (n6,s6):4] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r2:000000{0500-1000} [(n2,s2):5, (n5,s5):2, (n6,s6):3] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r3:0000001{000-500} [(n2,s2):4, (n5,s5):2, (n6,s6):3] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r4:000000{1500-2000} [(n2,s2):6, (n6,s6):5, (n5,s5):4] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r5:0000002{000-500} [(n5,s5):5, (n1,s1):6, (n6,s6):4] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r6:000000{2500-3000} [(n2,s2):6, (n5,s5):2, (n6,s6):3] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r7:0000003{000-500} [(n2,s2):5, (n5,s5):2, (n6,s6):3] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r8:000000{3500-4000} [(n5,s5):5, (n2,s2):2, (n6,s6):4] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r9:0000004{000-500} [(n5,s5):5, (n1,s1):6, (n6,s6):4] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r10:000000{4500-5000} [(n2,s2):5, (n5,s5):2, (n6,s6):3] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r11:0000005{000-500} [(n2,s2):6, (n5,s5):2, (n6,s6):3] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r12:000000{5500-6000} [(n2,s2):6, (n6,s6):5, (n5,s5):4] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r13:0000006{000-500} [(n5,s5):5, (n2,s2):2, (n6,s6):4] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r14:000000{6500-7000} [(n2,s2):6, (n5,s5):2, (n6,s6):3] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r15:0000007{000-500} [(n2,s2):5, (n5,s5):2, (n6,s6):3] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r16:000000{7500-8000} [(n6,s6):5, (n2,s2):2, (n5,s5):4] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r17:0000008{000-500} [(n2,s2):6, (n6,s6):5, (n5,s5):4] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r18:000000{8500-9000} [(n2,s2):6, (n5,s5):2, (n6,s6):3] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r19:0000009{000-500} [(n2,s2):5, (n5,s5):2, (n6,s6):3] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+  r20:00000{09500-10000} [(n6,s6):5, (n2,s2):2, (n5,s5):4] applying constraints=[+region=a:1 +region=b:1 +region=c:1]
+
+topology
+----
+a
+  └── [1 2]
+b
+  └── [3 4]
+c
+  └── [5 6]
+
+# vim:ft=sh
