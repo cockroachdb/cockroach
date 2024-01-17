@@ -893,6 +893,32 @@ func waitForReplicasInit(
 	})
 }
 
+// WaitForLeaseAppliedIndex waits for the replica to reach the given lease
+// applied index, or until the context is cancelled or the replica is destroyed.
+// Note that the lease applied index may regress across restarts, since we don't
+// sync state machine application to disk.
+//
+// TODO(erikgrinaker): it would be nice if we could be notified about LAI
+// updates instead, but polling will do for now.
+func (r *Replica) WaitForLeaseAppliedIndex(
+	ctx context.Context, lai kvpb.LeaseAppliedIndex,
+) (kvpb.LeaseAppliedIndex, error) {
+	retryOpts := retry.Options{
+		InitialBackoff: 10 * time.Millisecond,
+		Multiplier:     2,
+		MaxBackoff:     time.Second,
+	}
+	for retry := retry.StartWithCtx(ctx, retryOpts); retry.Next(); {
+		if currentLAI := r.GetLeaseAppliedIndex(); currentLAI >= lai {
+			return currentLAI, nil
+		}
+		if _, err := r.IsDestroyed(); err != nil {
+			return 0, err
+		}
+	}
+	return 0, ctx.Err()
+}
+
 // ChangeReplicas atomically changes the replicas that are members of a range.
 // The change is performed in a distributed transaction and takes effect when
 // that transaction is committed. This transaction confirms that the supplied
