@@ -472,7 +472,7 @@ func (h *queryComparisonHelper) runQuery(stmt string) ([][]string, error) {
 
 	// First use EXPLAIN (DISTSQL) to try to get the query plan. This is
 	// best-effort, and only for the purpose of debugging, so ignore any errors.
-	explainStmt := "EXPLAIN (DISTSQL)" + stmt
+	explainStmt := "EXPLAIN (DISTSQL) " + stmt
 	explainRows, err := runQueryImpl(explainStmt)
 	if err == nil {
 		h.statementsAndExplains = append(
