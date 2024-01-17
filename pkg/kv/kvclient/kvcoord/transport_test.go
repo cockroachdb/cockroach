@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -26,85 +25,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
-
-func TestTransportMoveToFront(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	rd1 := roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
-	rd2 := roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2}
-	rd3 := roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3}
-	rd3Incoming := roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3,
-		Type: roachpb.VOTER_INCOMING}
-	gt := grpcTransport{replicas: []roachpb.ReplicaDescriptor{rd1, rd2, rd3}}
-
-	verifyOrder := func(replicas []roachpb.ReplicaDescriptor) {
-		file, line, _ := caller.Lookup(1)
-		for i, r := range gt.replicas {
-			if r != replicas[i] {
-				t.Fatalf("%s:%d: expected order %+v; got mismatch at index %d: %+v",
-					file, line, replicas, i, r)
-			}
-		}
-	}
-
-	verifyOrder([]roachpb.ReplicaDescriptor{rd1, rd2, rd3})
-
-	// Move replica 2 to the front.
-	gt.MoveToFront(rd2)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd2, rd1, rd3})
-
-	// Now replica 3.
-	gt.MoveToFront(rd3)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd1, rd2})
-
-	// Advance the client index and move replica 3 back to front.
-	gt.nextReplicaIdx++
-	gt.MoveToFront(rd3)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd1, rd2})
-	if gt.nextReplicaIdx != 0 {
-		t.Fatalf("expected client index 0; got %d", gt.nextReplicaIdx)
-	}
-
-	// Advance the client index again and verify replica 3 can
-	// be moved to front for a second retry.
-	gt.nextReplicaIdx++
-	gt.MoveToFront(rd3)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd1, rd2})
-	if gt.nextReplicaIdx != 0 {
-		t.Fatalf("expected client index 0; got %d", gt.nextReplicaIdx)
-	}
-
-	// Move replica 2 to the front.
-	gt.MoveToFront(rd2)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd2, rd1, rd3})
-
-	// Advance client index and move rd1 front; should be no change.
-	gt.nextReplicaIdx++
-	gt.MoveToFront(rd1)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd2, rd1, rd3})
-
-	// Advance client index and and move rd1 to front. Should move
-	// client index back for a retry.
-	gt.nextReplicaIdx++
-	gt.MoveToFront(rd1)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd2, rd1, rd3})
-	if gt.nextReplicaIdx != 1 {
-		t.Fatalf("expected client index 1; got %d", gt.nextReplicaIdx)
-	}
-
-	// Advance client index once more; verify second retry.
-	gt.nextReplicaIdx++
-	gt.MoveToFront(rd2)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd1, rd2, rd3})
-	if gt.nextReplicaIdx != 1 {
-		t.Fatalf("expected client index 1; got %d", gt.nextReplicaIdx)
-	}
-
-	// Move rd3 to front, even if the replica type differs.
-	gt.MoveToFront(rd3Incoming)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd1, rd3, rd2})
-	require.Equal(t, 1, gt.nextReplicaIdx)
-}
 
 // TestSpanImport tests that the gRPC transport ingests trace information that
 // came from gRPC responses (via tracingpb.RecordedSpan on the batch responses).

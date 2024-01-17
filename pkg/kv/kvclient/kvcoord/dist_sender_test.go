@@ -198,22 +198,6 @@ func (l *simpleTransportAdapter) SkipReplica() {
 	l.nextReplicaIdx++
 }
 
-func (l *simpleTransportAdapter) MoveToFront(replica roachpb.ReplicaDescriptor) bool {
-	for i := range l.replicas {
-		if l.replicas[i].IsSame(replica) {
-			// If we've already processed the replica, decrement the current
-			// index before we swap.
-			if i < l.nextReplicaIdx {
-				l.nextReplicaIdx--
-			}
-			// Swap the client representing this replica to the front.
-			l.replicas[i], l.replicas[l.nextReplicaIdx] = l.replicas[l.nextReplicaIdx], l.replicas[i]
-			return true
-		}
-	}
-	return false
-}
-
 func (l *simpleTransportAdapter) Release() {}
 
 func makeGossip(t *testing.T, stopper *stop.Stopper, rpcContext *rpc.Context) *gossip.Gossip {
