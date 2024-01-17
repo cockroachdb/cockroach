@@ -259,13 +259,10 @@ func (sr *SampleReservoir) copyRow(
 		dst[i] = rowenc.DatumToEncDatum(sr.colTypes[i], src[i].Datum)
 		afterSize := dst[i].Size()
 
-		// If the datum is too large, truncate it (this also performs a copy).
-		// Otherwise, just perform a copy.
+		// If the datum is too large, truncate it.
 		if afterSize > uintptr(maxBytesPerSample) {
 			dst[i].Datum = truncateDatum(evalCtx, dst[i].Datum, maxBytesPerSample)
 			afterSize = dst[i].Size()
-		} else {
-			dst[i].Datum = deepCopyDatum(dst[i].Datum)
 		}
 
 		// Perform memory accounting.
@@ -342,43 +339,6 @@ func truncateString(s string, maxBytes int) string {
 	// Copy the truncated string so that the memory from the longer string can
 	// be garbage collected.
 	b := make([]byte, last)
-	copy(b, s)
-	return string(b)
-}
-
-// deepCopyDatum performs a deep copy for datums such as DString to remove any
-// references to the kv batch and allow the batch to be garbage collected.
-// Note: this function is currently only called for key-encoded datums. Update
-// the calling function if there is a need to call this for value-encoded
-// datums as well.
-func deepCopyDatum(d tree.Datum) tree.Datum {
-	switch t := d.(type) {
-	case *tree.DString:
-		return tree.NewDString(deepCopyString(string(*t)))
-
-	case *tree.DCollatedString:
-		return &tree.DCollatedString{
-			Contents: deepCopyString(t.Contents),
-			Locale:   t.Locale,
-			Key:      t.Key,
-		}
-
-	case *tree.DOidWrapper:
-		return &tree.DOidWrapper{
-			Wrapped: deepCopyDatum(t.Wrapped),
-			Oid:     t.Oid,
-		}
-
-	default:
-		// We do not collect stats on JSON, and other types do not require a deep
-		// copy (or they are already copied during decoding).
-		return d
-	}
-}
-
-// deepCopyString performs a deep copy of a string.
-func deepCopyString(s string) string {
-	b := make([]byte, len(s))
 	copy(b, s)
 	return string(b)
 }
