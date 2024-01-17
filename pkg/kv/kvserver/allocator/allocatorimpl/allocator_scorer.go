@@ -1103,20 +1103,9 @@ func rankedCandidateListForAllocation(
 			continue
 		}
 
-		constraintsOK, necessary := constraintsCheck(s)
-		if !constraintsOK {
-			if necessary {
-				log.KvDistribution.VEventf(
-					ctx,
-					3,
-					"cannot allocate necessary %s on s%d",
-					targetType,
-					s.StoreID,
-				)
-			}
-			continue
+		if constraintsOK, _ := constraintsCheck(s); constraintsOK {
+			validCandidateStores = append(validCandidateStores, s)
 		}
-		validCandidateStores = append(validCandidateStores, s)
 	}
 
 	// Create a new store list, which will update the average for each stat to
@@ -2061,7 +2050,8 @@ func allocateConstraintsCheck(
 // that is not already overly satisfied by existing replicas (other than the
 // replacement), then it's necessary. If there are any necessary constraints
 // that are not satisfied by the candidate when the existing store did satisfy
-// that constraint, then the candidate is considered invalid entirely.
+// that constraint, then the candidate is considered invalid and unnecessary
+// entirely.
 func replaceConstraintsCheck(
 	store, existingStore roachpb.StoreDescriptor, analyzed constraint.AnalyzedConstraints,
 ) (valid bool, necessary bool) {
@@ -2076,23 +2066,22 @@ func replaceConstraintsCheck(
 		satisfiedByCandidateStore := constraint.CheckStoreConjunction(store, constraints.Constraints)
 		if satisfiedByCandidateStore {
 			valid = true
-		}
-
-		// If the constraint is not already satisfied, it's necessary.
-		// Additionally, if the constraint is only just satisfied by the existing
-		// store being replaced, since that store is going away, the constraint is
-		// also marked as necessary.
-		if len(matchingStores) < int(constraints.NumReplicas) ||
-			(len(matchingStores) == int(constraints.NumReplicas) &&
-				satisfiedByExistingStore) {
-			necessary = true
-		}
-
-		// Check if existing store matches a constraint that isn't overly satisfied.
-		// If so, then only replacing it with a satisfying store is valid to ensure
-		// that the constraint stays fully satisfied.
-		if necessary && satisfiedByExistingStore && !satisfiedByCandidateStore {
-			return false, necessary
+			// If the constraint is not already satisfied, it's necessary.
+			// Additionally, if the constraint is only just satisfied by the existing
+			// store being replaced, since that store is going away, the constraint is
+			// also marked as necessary.
+			if len(matchingStores) < int(constraints.NumReplicas) ||
+				(len(matchingStores) == int(constraints.NumReplicas) &&
+					satisfiedByExistingStore) {
+				necessary = true
+			}
+		} else if satisfiedByExistingStore {
+			// Check if existing store matches a constraint that isn't overly satisfied.
+			// If so, then only replacing it with a satisfying store is valid to ensure
+			// that the constraint stays fully satisfied.
+			if len(matchingStores) <= int(constraints.NumReplicas) {
+				return false, false
+			}
 		}
 	}
 
