@@ -435,7 +435,7 @@ func (k Key) IsFinal() bool {
 // version has it.
 func (k Key) ReleaseSeries() roachpb.ReleaseSeries {
 	// Note: TestReleaseSeries ensures that this works for all valid Keys.
-	s, _ := removeDevOffset(k.Version()).ReleaseSeries()
+	s, _ := RemoveDevOffset(k.Version()).ReleaseSeries()
 	return s
 }
 

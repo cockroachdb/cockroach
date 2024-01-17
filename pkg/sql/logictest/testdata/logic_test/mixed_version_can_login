@@ -1,11 +1,9 @@
-# LogicTest: cockroach-go-testserver-upgrade-to-master
-
-skip 117645 # needs to be updated now that master's predecessor is 23.2
+# LogicTest: cockroach-go-testserver-23.2
 
 query T
 SELECT crdb_internal.node_executable_version()
 ----
-23.1
+23.2
 
 upgrade 0
 
@@ -19,7 +17,7 @@ SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 query T nodeidx=2
 SELECT crdb_internal.node_executable_version()
 ----
-23.1
+23.2
 
 # Verify that a non-root user can login on the upgraded node.
 user testuser nodeidx=0
@@ -43,7 +41,7 @@ user testuser nodeidx=2
 query T
 SELECT crdb_internal.node_executable_version()
 ----
-23.1
+23.2
 
 # Verify that a root user can login on the non-upgraded node.
 user root nodeidx=2
@@ -51,7 +49,7 @@ user root nodeidx=2
 query T
 SELECT crdb_internal.node_executable_version()
 ----
-23.1
+23.2
 
 upgrade 2
 
