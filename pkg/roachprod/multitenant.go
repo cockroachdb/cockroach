@@ -40,7 +40,7 @@ func StartServiceForVirtualCluster(
 
 	var kvAddrs []string
 	for _, node := range sc.Nodes {
-		port, err := sc.NodePort(ctx, node)
+		port, err := sc.NodePort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
 		if err != nil {
 			return err
 		}

@@ -749,8 +749,10 @@ func (tpce tpceRestore) init(
 ) {
 	spec := tpce.getSpec(ctx, t, c, sp)
 	spec.init(ctx, t, c, tpceCmdOptions{
-		customers: tpce.customers,
-		racks:     sp.nodes})
+		customers:      tpce.customers,
+		racks:          sp.nodes,
+		connectionOpts: defaultTPCEConnectionOpts(),
+	})
 }
 
 func (tpce tpceRestore) run(
@@ -759,10 +761,12 @@ func (tpce tpceRestore) run(
 	spec := tpce.getSpec(ctx, t, c, sp)
 	_, err := spec.run(ctx, t, c, tpceCmdOptions{
 		// Set the duration to be a week to ensure the workload never exits early.
-		duration:  time.Hour * 7 * 24,
-		customers: tpce.customers,
-		racks:     sp.nodes,
-		threads:   sp.cpus * sp.nodes})
+		duration:       time.Hour * 7 * 24,
+		customers:      tpce.customers,
+		racks:          sp.nodes,
+		threads:        sp.cpus * sp.nodes,
+		connectionOpts: defaultTPCEConnectionOpts(),
+	})
 	return err
 }
 
