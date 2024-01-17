@@ -492,7 +492,6 @@ func (f *enumFeatureFlag) enabled(r enthropy, choose func(enthropy) string) (str
 // cdcFeatureFlags describes various cdc feature flags.
 // zero value cdcFeatureFlags uses metamorphic settings for features.
 type cdcFeatureFlags struct {
-	RangeFeedScheduler   featureFlag
 	SchemaLockTables     featureFlag
 	DistributionStrategy enumFeatureFlag
 }
