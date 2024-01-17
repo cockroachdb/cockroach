@@ -51,7 +51,7 @@ func makeProducerJobRecord(
 	expiration := currentTime.Add(expirationWindow)
 	return jobs.Record{
 		JobID:       registry.MakeJobID(),
-		Description: fmt.Sprintf("Physical replication stream producer for %q (%d)", tenantName, tenantID),
+		Description: fmt.Sprintf("History Retention for Physical Replication of %s", tenantName),
 		Username:    user,
 		Details: jobspb.StreamReplicationDetails{
 			ProtectedTimestampRecordID: ptsID,
