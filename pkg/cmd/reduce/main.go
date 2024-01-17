@@ -51,6 +51,7 @@ var (
 	flags             = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	binary            = flags.String("binary", "./cockroach", "path to cockroach binary")
 	file              = flags.String("file", "", "the path to a file containing SQL queries to reduce; required")
+	outFlag           = flags.String("out", "", "if set, the path to a new file where reduced result will be written to")
 	verbose           = flags.Bool("v", false, "print progress to standard output and the original test case output if it is not interesting")
 	contains          = flags.String("contains", "", "error regex to search for")
 	unknown           = flags.Bool("unknown", false, "print unknown types during walk")
@@ -125,7 +126,16 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(out)
+	if *outFlag != "" {
+		file, err := os.Create(*outFlag)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+		fmt.Fprint(file, out)
+	} else {
+		fmt.Println(out)
+	}
 }
 
 func reduceSQL(
