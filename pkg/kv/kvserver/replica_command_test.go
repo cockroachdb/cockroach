@@ -13,7 +13,9 @@ package kvserver
 import (
 	"context"
 	"encoding/binary"
+	math "math"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -23,6 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -607,4 +612,81 @@ func TestSynthesizeTargetsByChangeType(t *testing.T) {
 			require.Equal(t, result.NonVoterRemovals, mkTargetList(test.expNonVoterRemovals))
 		})
 	}
+}
+
+func TestWaitForLeaseAppliedIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const maxLAI = math.MaxUint64
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	tc := testContext{}
+	tc.Start(ctx, t, stopper)
+	db := tc.store.DB()
+
+	// Submit a write and read it back to bump the initial LAI.
+	write := func(key, value string) {
+		require.NoError(t, db.Put(ctx, key, value))
+		_, err := db.Get(ctx, key)
+		require.NoError(t, err)
+	}
+	write("foo", "bar")
+
+	// Should return immediately when already at or past the LAI.
+	currentLAI := tc.repl.GetLeaseAppliedIndex()
+	require.NotZero(t, currentLAI)
+	resultLAI, err := tc.repl.WaitForLeaseAppliedIndex(ctx, currentLAI)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, resultLAI, currentLAI)
+
+	// Should wait for a future LAI to be reached.
+	const numWrites = 10
+	waitLAI := tc.repl.GetLeaseAppliedIndex() + numWrites
+	laiC := make(chan kvpb.LeaseAppliedIndex, 1)
+	go func() {
+		lai, err := tc.repl.WaitForLeaseAppliedIndex(ctx, waitLAI)
+		assert.NoError(t, err) // can't use require in goroutine
+		laiC <- lai
+	}()
+
+	select {
+	case lai := <-laiC:
+		t.Fatalf("unexpected early LAI %d", lai)
+	case <-time.After(time.Second):
+	}
+
+	for i := 0; i < numWrites; i++ {
+		write("foo", "bar")
+	}
+
+	select {
+	case lai := <-laiC:
+		require.GreaterOrEqual(t, lai, waitLAI)
+		require.GreaterOrEqual(t, tc.repl.GetLeaseAppliedIndex(), lai)
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for LAI %d", waitLAI)
+	}
+
+	// Should error on context cancellation.
+	cancelCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err = tc.repl.WaitForLeaseAppliedIndex(cancelCtx, maxLAI)
+	require.Error(t, err)
+	require.Equal(t, cancelCtx.Err(), err)
+
+	// Should error on destroyed replicas.
+	stopper.Stop(ctx)
+
+	destroyErr := errors.New("destroyed")
+	tc.repl.mu.Lock()
+	tc.repl.mu.destroyStatus.Set(destroyErr, destroyReasonRemoved)
+	tc.repl.mu.Unlock()
+
+	_, err = tc.repl.WaitForLeaseAppliedIndex(ctx, maxLAI)
+	require.Error(t, err)
+	require.Equal(t, destroyErr, err)
 }
