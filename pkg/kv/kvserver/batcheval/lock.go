@@ -224,3 +224,33 @@ func copyKey(k roachpb.Key) roachpb.Key {
 	copy(k2, k)
 	return k2
 }
+
+// txnBoundLockTableView is a transaction-bound view into an in-memory
+// collections of key-level locks.
+type txnBoundLockTableView interface {
+	IsKeyLockedByConflictingTxn(
+		roachpb.Key, lock.Strength,
+	) (bool, *enginepb.TxnMeta, error)
+}
+
+// requestBoundLockTableView combines a txnBoundLockTableView with the lock
+// strength that an individual request is attempting to acquire.
+type requestBoundLockTableView struct {
+	ltv txnBoundLockTableView
+	str lock.Strength
+}
+
+// newRequestBoundLockTableView creates a new requestBoundLockTableView.
+func newRequestBoundLockTableView(
+	ltv txnBoundLockTableView, str lock.Strength,
+) *requestBoundLockTableView {
+	return &requestBoundLockTableView{ltv: ltv, str: str}
+}
+
+// IsKeyLockedByConflictingTxn implements the storage.LockTableView interface.
+func (ltv *requestBoundLockTableView) IsKeyLockedByConflictingTxn(
+	key roachpb.Key,
+) (bool, *enginepb.TxnMeta, error) {
+	// TODO(arul): look for replicated lock conflicts.
+	return ltv.ltv.IsKeyLockedByConflictingTxn(key, ltv.str)
+}

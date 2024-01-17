@@ -1167,7 +1167,7 @@ func MVCCBlindPutInlineWithPrev(
 	return err
 }
 
-// LockTableView is a transaction-bound view into an in-memory collections of
+// LockTableView is a request-bound snapshot into an in-memory collections of
 // key-level locks. The set of per-key locks stored in the in-memory lock table
 // structure overlaps with those stored in the persistent lock table keyspace
 // (i.e. intents produced by an MVCCKeyAndIntentsIterKind iterator), but one is
@@ -1176,20 +1176,13 @@ func MVCCBlindPutInlineWithPrev(
 // table keyspace (i.e. replicated locks that have yet to be "discovered").
 type LockTableView interface {
 	// IsKeyLockedByConflictingTxn returns whether the specified key is locked by
-	// a conflicting transaction in the lockTableGuard's snapshot of the lock
-	// table, given the caller's own desired locking strength. If so, true is
-	// returned and so is the lock holder. If the lock is held by the transaction
-	// itself, there's no conflict to speak of, so false is returned.
+	// a conflicting transaction in the request's snapshot of the lock table,
+	// given the request's own desired locking strength. If so, true is returned
+	// and so is the lock holder. Otherwise, false is returned.
 	//
 	// This method is used by requests in conjunction with the SkipLocked wait
 	// policy to determine which keys they should skip over during evaluation.
-	//
-	// If the supplied lock strength is locking (!= lock.None), then any queued
-	// locking requests that came before the lockTableGuard will also be checked
-	// for conflicts. This helps prevent a stream of locking SKIP LOCKED requests
-	// from starving out regular locking requests. In such cases, true is
-	// returned, but so is nil.
-	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta, error)
+	IsKeyLockedByConflictingTxn(roachpb.Key) (bool, *enginepb.TxnMeta, error)
 }
 
 // MVCCGetOptions bundles options for the MVCCGet family of functions.
