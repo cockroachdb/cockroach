@@ -289,12 +289,6 @@ func doLookup(
 	return doLookupWithToken(ctx, rc, key, EvictionToken{}, false)
 }
 
-func evict(ctx context.Context, rc *RangeCache, desc *roachpb.RangeDescriptor) bool {
-	rc.rangeCache.Lock()
-	defer rc.rangeCache.Unlock()
-	return rc.evictDescLocked(ctx, desc)
-}
-
 func clearOlderOverlapping(
 	ctx context.Context, rc *RangeCache, desc *roachpb.RangeDescriptor,
 ) bool {
@@ -455,7 +449,7 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCountEq(t, 1, "vu")
 
 	// Evicts [d,e).
-	require.True(t, evict(ctx, db.cache, deTok.Desc()))
+	require.True(t, db.cache.EvictByKey(ctx, deTok.Desc().StartKey))
 	// Evicts [meta(min),meta(g)).
 	require.True(t, db.cache.EvictByKey(ctx, keys.RangeMetaKey(roachpb.RKey("da"))))
 	doLookup(ctx, db.cache, "fa")
@@ -471,12 +465,15 @@ func TestRangeCache(t *testing.T) {
 	doLookup(ctx, db.cache, "a")
 	db.assertLookupCountEq(t, 0, "a")
 
-	// Attempt to compare-and-evict with a cache entry that is not equal to the
+	// Attempt to compare-and-evict with a descriptor that is older than the
 	// cached one; it should not alter the cache.
 	desc, _ := doLookup(ctx, db.cache, "cz")
 	descCopy := *desc
 	descCopy.Generation--
-	require.False(t, evict(ctx, db.cache, &descCopy))
+	db.cache.insertLocked(ctx, roachpb.RangeInfo{Desc: descCopy})
+	// Verify that it didn't change what is in the cache.
+	newDesc, _ := doLookup(ctx, db.cache, "cz")
+	require.Equal(t, desc, newDesc)
 
 	_, evictToken := doLookup(ctx, db.cache, "cz")
 	db.assertLookupCountEq(t, 0, "cz")
@@ -543,7 +540,7 @@ func TestRangeCacheCoalescedRequests(t *testing.T) {
 		for i := 0; i < 3; i++ {
 			wg.Add(1)
 			go func() {
-				doLookupWithToken(ctx, db.cache, key, EvictionToken{}, false)
+				doLookup(ctx, db.cache, key)
 				wg.Done()
 			}()
 		}
@@ -1551,14 +1548,14 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 	require.Equal(t, roachpb.LeaseSequence(1), tok.LeaseSeq())
 	require.Equal(t, lead, tok.ClosedTimestampPolicy(lag))
 
-	// EvictAndReplace() with a speculative descriptor. Should update decriptor,
-	// remove lease, and retain closed timestamp policy.
+	// EvictAndReplace() with a speculative descriptor. Should update descriptor,
+	// keep lease, and retain closed timestamp policy.
 	tok.entry.speculativeDesc = &desc3
 	tok.EvictAndReplace(ctx)
 	tok, err = cache.LookupWithEvictionToken(ctx, startKey, tok, false /* useReverseScan */)
 	require.NoError(t, err)
 	require.Equal(t, desc3, *tok.Desc())
-	require.Nil(t, tok.Leaseholder())
+	require.Equal(t, rep1, *tok.Leaseholder())
 	require.Equal(t, lead, tok.ClosedTimestampPolicy(lag))
 }
 
@@ -2144,7 +2141,7 @@ func TestRangeCacheEntryMaybeUpdate(t *testing.T) {
 	// makes the (freshest) lease incompatible clears out the lease on the
 	// returned cache entry.
 	l = roachpb.Lease{
-		Replica:  rep1,
+		Replica:  rep2,
 		Sequence: 1,
 	}
 	require.Equal(t, roachpb.LeaseSequence(2), e.lease.Sequence)
