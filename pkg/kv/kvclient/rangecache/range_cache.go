@@ -488,16 +488,18 @@ func descsCompatible(a, b *roachpb.RangeDescriptor) bool {
 	return (a.RangeID == b.RangeID) && (a.RSpan().Equal(b.RSpan()))
 }
 
-// Evict instructs the EvictionToken to evict the RangeDescriptor it was created
-// with from the RangeCache. The token is invalidated.
+// Evict instructs the EvictionToken to unconditionally evict the
+// RangeDescriptor it was created with from the RangeCache.
+//
+// The token is invalidated.
 func (et *EvictionToken) Evict(ctx context.Context) {
 	et.EvictAndReplace(ctx)
 }
 
-// EvictAndReplace instructs the EvictionToken to evict the RangeDescriptor it was
-// created with from the RangeCache. It also allows the user to provide
-// new RangeDescriptors to insert into the cache, all atomically. When called without
-// arguments, EvictAndReplace will behave the same as Evict.
+// EvictAndReplace instructs the EvictionToken to evict the RangeDescriptor it
+// was created with from the RangeCache. It also allows the user to provide new
+// RangeDescriptors to insert into the cache, all atomically. When called
+// without arguments, EvictAndReplace will behave the same as Evict.
 //
 // The token is invalidated.
 func (et *EvictionToken) EvictAndReplace(ctx context.Context, newDescs ...roachpb.RangeInfo) {
@@ -513,30 +515,33 @@ func (et *EvictionToken) EvictAndReplace(ctx context.Context, newDescs ...roachp
 
 // evictAndReplaceLocked is like EvictAndReplace except it assumes that the
 // caller holds a write lock on rdc.rangeCache.
-func (et *EvictionToken) evictAndReplaceLocked(ctx context.Context, newDescs ...roachpb.RangeInfo) {
+func (et *EvictionToken) evictAndReplaceLocked(ctx context.Context, newInfos ...roachpb.RangeInfo) {
 	if !et.Valid() {
 		panic("trying to evict an invalid token")
 	}
 
-	// Evict unless the cache has something newer. Regardless of what the cache
-	// has, we'll still attempt to insert newDescs (if any).
-	evicted := et.rdc.evictDescLocked(ctx, et.Desc())
+	// Evict unless the cache has been updated. Regardless of what the cache has,
+	// we'll still attempt to insert any newInfos.
+	et.evictIfCacheUnchangedLocked(ctx)
 
-	if len(newDescs) > 0 {
-		log.Eventf(ctx, "evicting cached range descriptor with %d replacements", len(newDescs))
-		et.rdc.insertLocked(ctx, newDescs...)
-	} else if et.entry.speculativeDesc != nil {
-		log.Eventf(ctx, "evicting cached range descriptor with replacement from token")
+	// Upgrade the speculativeDesc if there was one. This might be overwritten
+	// immediately if we also have newer infos.
+	if et.entry.speculativeDesc != nil {
+		log.Eventf(ctx, "evicting cached range descriptor with speculative replacement")
+		// Promote the speculativeDesc to the desc, keep everything else the same.
+		newDesc := *et.entry.speculativeDesc
 		et.rdc.insertLocked(ctx, roachpb.RangeInfo{
-			Desc: *et.entry.speculativeDesc,
-			// We don't know anything about the new lease.
-			Lease: roachpb.Lease{},
+			Desc:  newDesc,
+			Lease: et.entry.lease,
 			// The closed timestamp policy likely hasn't changed.
 			ClosedTimestampPolicy: et.entry.closedts,
 		})
-	} else if evicted {
-		log.Eventf(ctx, "evicting cached range descriptor")
 	}
+
+	log.Eventf(ctx, "evicting cached range entry with %d replacements", len(newInfos))
+	et.rdc.insertLocked(ctx, newInfos...)
+
+	// Clear the eviction token(remove?)
 	et.clear()
 }
 
@@ -995,25 +1000,25 @@ func (rc *RangeCache) EvictByKey(ctx context.Context, descKey roachpb.RKey) bool
 	return true
 }
 
-// evictDescLocked evicts a cache entry unless it's newer than the provided
-// descriptor.
-func (rc *RangeCache) evictDescLocked(ctx context.Context, desc *roachpb.RangeDescriptor) bool {
-	cachedEntry, rawEntry := rc.getCachedRLocked(ctx, desc.StartKey, false /* inverted */)
+// evictIfCacheUnchangedLocked evicts a cache entry unless the decision was made
+// using a stale eviction token.
+func (et *EvictionToken) evictIfCacheUnchangedLocked(ctx context.Context) {
+	cachedEntry, rawEntry := et.rdc.getCachedRLocked(ctx, et.Desc().StartKey, false /* inverted */)
 	if cachedEntry == nil {
-		// Cache is empty; nothing to do.
-		return false
+		// No existing cache entry.
+		return
 	}
-	cachedDesc := cachedEntry.desc
-	cachedNewer := cachedDesc.Generation > desc.Generation
-	if cachedNewer {
-		return false
+
+	// the cachedEntry is newer than the et entry, don't evict.
+	if cachedEntry.overrides(et.entry) {
+		log.VEventf(ctx, 2, "not evicting as the cached entry is newer: cache=%s, et=%s", cachedEntry, et.entry)
+		return
 	}
 	// The cache has a descriptor that's older or equal to desc (it should be
 	// equal because the desc that the caller supplied also came from the cache
 	// and the cache is not expected to go backwards). Evict it.
-	log.VEventf(ctx, 2, "evict cached descriptor: desc=%s", cachedEntry)
-	rc.delEntryLocked(rawEntry)
-	return true
+	log.VEventf(ctx, 2, "evict cache entry: desc=%s", cachedEntry)
+	et.rdc.delEntryLocked(rawEntry)
 }
 
 // TestingGetCached retrieves the descriptor of the range which contains
@@ -1115,8 +1120,27 @@ func (rc *RangeCache) insertLocked(ctx context.Context, rs ...roachpb.RangeInfo)
 			lease:    r.Lease,
 			closedts: r.ClosedTimestampPolicy,
 		}
+		entries[i].clearInvalidLeaseBeforeInsert(ctx)
 	}
 	return rc.insertLockedInner(ctx, entries)
+}
+
+// clearInvalidLeaseBeforeInsert will clear the lease if it is not a replica (in
+// some form) on the descriptor. The range cache doesn't support incompatible
+// leaseholder / range descriptor pair. Given we only ever insert incrementally
+// fresher range descriptors in the cache, we choose to empty out the lease
+// field and insert the range descriptor. Going through each of the replicas on
+// the range descriptor further up the stack should provide us with a compatible
+// and actionable state of the world.
+func (e *cacheEntry) clearInvalidLeaseBeforeInsert(ctx context.Context) bool {
+	if !e.lease.Empty() {
+		if _, ok := e.desc.GetReplicaDescriptorByID(e.lease.Replica.ReplicaID); !ok {
+			log.VEventf(ctx, 1, "leaseholder not part of descriptor: %s", e)
+			e.lease = roachpb.Lease{}
+			return true
+		}
+	}
+	return false
 }
 
 func (rc *RangeCache) insertLockedInner(ctx context.Context, rs []*cacheEntry) []*cacheEntry {
@@ -1127,14 +1151,10 @@ func (rc *RangeCache) insertLockedInner(ctx context.Context, rs []*cacheEntry) [
 		if !ent.desc.IsInitialized() {
 			log.Fatalf(ctx, "inserting uninitialized desc: %s", ent)
 		}
-		if !ent.lease.Empty() {
-			replID := ent.lease.Replica.ReplicaID
-			_, ok := ent.desc.GetReplicaDescriptorByID(replID)
-			if !ok {
-				log.Fatalf(ctx, "leaseholder replicaID: %d not part of descriptor: %s. lease: %s",
-					replID, ent.desc, ent.lease)
-			}
+		if ent.clearInvalidLeaseBeforeInsert(ctx) {
+			log.Fatalf(ctx, "leaseholder not part of descriptor: %s", ent)
 		}
+
 		// Note: we append the end key of each range to meta records
 		// so that calls to rdc.rangeCache.cache.Ceil() for a key will return
 		// the correct range.
@@ -1225,6 +1245,7 @@ func (rc *RangeCache) swapEntryLocked(
 				old, newEntry)
 		}
 	}
+	newEntry.clearInvalidLeaseBeforeInsert(ctx)
 
 	rc.delEntryLocked(oldEntry)
 	if newEntry != nil {
@@ -1497,31 +1518,9 @@ func (e *cacheEntry) maybeUpdate(
 		newEntry.desc = *rangeDesc
 		updatedDesc = true
 	}
-
-	// Lastly, we want to check if the leaseholder is indeed a replica
-	// (in some form) on the descriptor. The range cache doesn't like when this
-	// isn't the case and doesn't allow us to insert an incompatible
-	// leaseholder/range descriptor pair. Given we only ever insert incrementally
-	// fresher range descriptors in the cache, we choose to empty out the lease
-	// field and insert the range descriptor. Going through each of the replicas
-	// on the range descriptor further up the stack should provide us with a
-	// compatible and actionable state of the world.
-	//
-	// TODO(arul): While having this safeguard, logging, and not fatal-ing further
-	// down seems like the right thing to do, do we expect this to happen in the
-	// wild?
-	_, ok := newEntry.desc.GetReplicaDescriptorByID(newEntry.lease.Replica.ReplicaID)
-	if !ok {
-		log.VEventf(
-			ctx,
-			2,
-			"incompatible leaseholder id: %d/descriptor %v pair; eliding lease update to the cache",
-			newEntry.lease.Replica.ReplicaID,
-			newEntry.desc,
-		)
-		newEntry.lease = roachpb.Lease{}
-		updatedLease = false
-	}
+	// TODO(baptist): We don't need to clear the entry here. It will be cleared
+	// before it is actually inserted into the cache in swapEntryLocked.
+	newEntry.clearInvalidLeaseBeforeInsert(ctx)
 
 	return updatedLease || updatedDesc, updatedLease, newEntry
 }
