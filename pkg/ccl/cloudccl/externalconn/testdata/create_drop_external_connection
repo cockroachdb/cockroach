@@ -25,6 +25,18 @@ CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo';
 ----
 pq: failed to create external connection: external connection with connection name 'foo' already exists
 
+# Trying to create another External Connection with the same name using
+# IF NOT EXISTS should not fail and should leave the existing
+# connection unmodified.
+exec-sql
+CREATE EXTERNAL CONNECTION IF NOT EXISTS foo AS 'nodelocal://1/nope';
+----
+
+inspect-system-table
+----
+foo STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo/bar"}} root 1
+
+
 # Create another External Connection with a unique name.
 exec-sql
 CREATE EXTERNAL CONNECTION bar123 AS 'nodelocal://1/baz';
