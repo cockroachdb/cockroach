@@ -6532,9 +6532,9 @@ func TestRaftLeaderRemovesItself(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Timing-sensitive, so skip under deadlock detector and stressrace.
+	// Timing-sensitive, so skip under deadlock detector and race.
 	skip.UnderDeadlock(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
