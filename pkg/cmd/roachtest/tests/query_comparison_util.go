@@ -470,9 +470,9 @@ func (h *queryComparisonHelper) runQuery(stmt string) ([][]string, error) {
 		return sqlutils.RowsToStrMatrix(rows)
 	}
 
-	// First use EXPLAIN to try to get the query plan. This is best-effort, and
-	// only for the purpose of debugging, so ignore any errors.
-	explainStmt := "EXPLAIN " + stmt
+	// First use EXPLAIN (DISTSQL) to try to get the query plan. This is
+	// best-effort, and only for the purpose of debugging, so ignore any errors.
+	explainStmt := "EXPLAIN (DISTSQL)" + stmt
 	explainRows, err := runQueryImpl(explainStmt)
 	if err == nil {
 		h.statementsAndExplains = append(
