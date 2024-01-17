@@ -3981,7 +3981,7 @@ func RunLogicTest(
 	// with less concurrency in the nightly stress runs. If you see problems
 	// please make adjustments there.
 	// As of 6/4/2019, the logic tests never complete under race.
-	skip.UnderStressRace(t, "logic tests and race detector don't mix: #37993")
+	skip.UnderRace(t, "logic tests and race detector don't mix: #37993")
 
 	if skipLogicTests {
 		skip.IgnoreLint(t, "COCKROACH_LOGIC_TESTS_SKIP")

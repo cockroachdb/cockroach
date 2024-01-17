@@ -262,6 +262,8 @@ func TestStoreMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "does not complete under race")
+
 	ctx := context.Background()
 	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
 	defer stickyVFSRegistry.CloseAllEngines()

@@ -751,7 +751,7 @@ type circuitBreakerTest struct {
 }
 
 func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 	manualClock := hlc.NewHybridManualClock()
 	var rangeID int64             // atomic
 	slowThresh := &atomic.Value{} // supports .SetSlowThreshold(x)
