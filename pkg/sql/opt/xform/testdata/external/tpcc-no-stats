@@ -116,10 +116,12 @@ SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_05
 FROM stock
 WHERE (s_i_id, s_w_id) IN ((1000, 4), (900, 4), (1100, 4), (1500, 4), (1400, 4))
 ORDER BY s_i_id
+FOR UPDATE
 ----
 project
  ├── columns: s_quantity:3 s_ytd:14 s_order_cnt:15 s_remote_cnt:16 s_data:17 s_dist_05:8  [hidden: s_i_id:1!null]
  ├── cardinality: [0 - 5]
+ ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(3,8,14-17)
  ├── ordering: +1
@@ -131,7 +133,9 @@ project
       │    ├── [/4/1100 - /4/1100]
       │    ├── [/4/1400 - /4/1400]
       │    └── [/4/1500 - /4/1500]
+      ├── locking: for-update
       ├── cardinality: [0 - 5]
+      ├── volatile
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3,8,14-17)
       └── ordering: +1 opt(2) [actual: +1]
@@ -802,16 +806,20 @@ FROM new_order
 WHERE no_w_id = 10 AND no_d_id = 100
 ORDER BY no_o_id ASC
 LIMIT 1
+FOR UPDATE
 ----
 project
  ├── columns: no_o_id:1!null
  ├── cardinality: [0 - 1]
+ ├── volatile
  ├── key: ()
  ├── fd: ()-->(1)
  └── scan new_order
       ├── columns: no_o_id:1!null no_d_id:2!null no_w_id:3!null
       ├── constraint: /3/2/1: [/10/100 - /10/100]
       ├── limit: 1
+      ├── locking: for-update
+      ├── volatile
       ├── key: ()
       └── fd: ()-->(1-3)
 

@@ -804,16 +804,20 @@ FROM new_order
 WHERE no_w_id = 10 AND no_d_id = 100
 ORDER BY no_o_id ASC
 LIMIT 1
+FOR UPDATE
 ----
 project
  ├── columns: no_o_id:1!null
  ├── cardinality: [0 - 1]
+ ├── volatile
  ├── key: ()
  ├── fd: ()-->(1)
  └── scan new_order
       ├── columns: no_o_id:1!null no_d_id:2!null no_w_id:3!null
       ├── constraint: /3/2/1: [/10/100 - /10/100]
       ├── limit: 1
+      ├── locking: for-update
+      ├── volatile
       ├── key: ()
       └── fd: ()-->(1-3)
 

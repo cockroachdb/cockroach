@@ -134,7 +134,7 @@ func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
 	}
 
 	if err := crdbpgx.ExecuteTx(
-		ctx, o.mcp.Get(), o.config.txOpts,
+		ctx, o.mcp.Get(), pgx.TxOptions{},
 		func(tx pgx.Tx) error {
 			// 2.6.2.2 explains this entire transaction.
 
