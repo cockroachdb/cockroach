@@ -191,25 +191,26 @@ func (h *processorTestHelper) syncEventAndRegistrationsSpan(span roachpb.Span) {
 	h.sendSpanSync(&span)
 }
 
-func (h *processorTestHelper) triggerTxnPushUntilPushed(
-	t *testing.T, ackC chan struct{}, timeout time.Duration,
-) {
-	if h.scheduler != nil {
-		deadline := time.After(timeout)
-		for {
+// triggerTxnPushUntilPushed will schedule PushTxnQueued events until pushedC
+// indicates that a transaction push attempt has started by posting an event.
+// If a push does not happen in 10 seconds, the attempt fails.
+func (h *processorTestHelper) triggerTxnPushUntilPushed(t *testing.T, pushedC <-chan struct{}) {
+	timeoutC := time.After(10 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if h.scheduler != nil {
 			h.scheduler.Enqueue(PushTxnQueued)
-			select {
-			case <-deadline:
-				t.Fatal("failed to get txn push notification")
-			case ackC <- struct{}{}:
-				return
-			case <-time.After(100 * time.Millisecond):
-				// We keep sending events to avoid the situation where event arrives
-				// but flag indicating that push is still running is not reset.
-			}
 		}
-	} else {
-		ackC <- struct{}{}
+		select {
+		case <-pushedC:
+			return
+		case <-ticker.C:
+			// We keep sending events to avoid the situation where event arrives
+			// but flag indicating that push is still running is not reset.
+		case <-timeoutC:
+			t.Fatal("failed to get txn push notification")
+		}
 	}
 }
 
@@ -1134,7 +1135,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 				return nil
 			}
 
-			<-pausePushAttemptsC
+			pausePushAttemptsC <- struct{}{}
 			<-resumePushAttemptsC
 			return nil
 		})
@@ -1155,7 +1156,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 		require.Equal(t, hlc.Timestamp{WallTime: 9}, h.rts.Get())
 
 		// Wait for the first txn push attempt to complete.
-		h.triggerTxnPushUntilPushed(t, pausePushAttemptsC, 30*time.Second)
+		h.triggerTxnPushUntilPushed(t, pausePushAttemptsC)
 
 		// The resolved timestamp hasn't moved.
 		h.syncEventC()
@@ -1169,7 +1170,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 
 		// Unblock the second txn push attempt and wait for it to complete.
 		resumePushAttemptsC <- struct{}{}
-		h.triggerTxnPushUntilPushed(t, pausePushAttemptsC, 30*time.Second)
+		h.triggerTxnPushUntilPushed(t, pausePushAttemptsC)
 
 		// The resolved timestamp should have moved forwards to the closed
 		// timestamp.
@@ -1193,7 +1194,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 
 		// Unblock the third txn push attempt and wait for it to complete.
 		resumePushAttemptsC <- struct{}{}
-		h.triggerTxnPushUntilPushed(t, pausePushAttemptsC, 30*time.Second)
+		h.triggerTxnPushUntilPushed(t, pausePushAttemptsC)
 
 		// The resolved timestamp should have moved forwards to the closed
 		// timestamp.
