@@ -107,12 +107,65 @@ COMMIT
 statement ok
 SET enable_shared_locking_for_serializable = true
 
-statement error usage of shared locks in conjunction with skip locked wait policy is currently unsupported
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t WHERE a = 2 FOR SHARE
+----
+2
+
+user testuser2
+
+statement ok
+SET enable_shared_locking_for_serializable = true
+
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/2/0  Shared         Unreplicated  SERIALIZABLE     true     false
+
+statement ok
+BEGIN
+
+query I
 SELECT * FROM t FOR SHARE SKIP LOCKED
+----
+2
+
+user root
+
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/2/0  Shared         Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/2/0  Shared         Unreplicated  SERIALIZABLE     true     false
+
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t FOR UPDATE SKIP LOCKED
+----
+
+statement ok
+COMMIT
+
+# Complete the open transactions.
+user testuser
+
+statement ok
+COMMIT
+
+user testuser2
+
+statement ok
+COMMIT
+
 
 # TODO(arul): Add a test to show that the session setting doesn't apply to read
 # committed transactions. We currently can't issue SELECT FOR SHARE statements
 # in read committed transactions because durable locking hasn't been fully
 # hooked up.
-
-
