@@ -99,6 +99,13 @@ func (tq *testQueueImpl) updateChan() <-chan time.Time {
 	return nil
 }
 
+var testQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"testing.queue.enabled",
+	"testing setting for enabling the queue",
+	true,
+)
+
 func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *baseQueue {
 	if !cfg.acceptsUnsplitRanges {
 		// Needed in order to pass the validation in newBaseQueue.
@@ -110,7 +117,7 @@ func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfi
 	cfg.pending = metric.NewGauge(metric.Metadata{Name: "pending"})
 	cfg.processingNanos = metric.NewCounter(metric.Metadata{Name: "processingnanos"})
 	cfg.purgatory = metric.NewGauge(metric.Metadata{Name: "purgatory"})
-	cfg.disabledConfig = &settings.BoolSetting{}
+	cfg.disabledConfig = testQueueEnabled
 	return newBaseQueue(name, impl, store, cfg)
 }
 
