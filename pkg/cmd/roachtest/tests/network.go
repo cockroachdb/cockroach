@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -305,7 +307,9 @@ func runClientNetworkConnectionTimeout(ctx context.Context, t test.Test, c clust
 	n := c.Spec().NodeCount
 	serverNodes, clientNode := c.Range(1, n-1), c.Nodes(n)
 	settings := install.MakeClusterSettings(install.SecureOption(true))
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, serverNodes)
+	defaultOptions := option.DefaultStartOpts()
+	defaultOptions.RoachprodOpts.SQLPort = config.DefaultSQLPort
+	c.Start(ctx, t.L(), defaultOptions, settings, serverNodes)
 	certsDir := "/home/ubuntu/certs"
 	t.L().Printf("connecting to cluster from roachtest...")
 	db, err := c.ConnE(ctx, t.L(), 1)
@@ -317,11 +321,14 @@ func runClientNetworkConnectionTimeout(ctx context.Context, t test.Test, c clust
 	// long transaction (i.e. just the sleep builtin).
 	var runOutput install.RunResultDetails
 	grp.GoCtx(func(ctx context.Context) error {
-		ips, err := c.ExternalIP(ctx, t.L(), c.Node(1))
+		urls, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(1)), certsDir, roachprod.PGURLOptions{
+			External: true,
+			Secure:   true,
+		})
 		if err != nil {
 			return err
 		}
-		commandThatWillDisconnect := fmt.Sprintf(`./cockroach sql --certs-dir %s --url "postgres://root@%s:26257" -e "SELECT pg_sleep(600)"`, certsDir, ips[0])
+		commandThatWillDisconnect := fmt.Sprintf(`./cockroach sql --certs-dir %s --url %s -e "SELECT pg_sleep(600)"`, certsDir, urls[0])
 		t.L().Printf("Executing long running query: %s", commandThatWillDisconnect)
 		output, err := c.RunWithDetails(ctx, t.L(), clientNode, commandThatWillDisconnect)
 		runOutput = output[0]
@@ -341,7 +348,7 @@ func runClientNetworkConnectionTimeout(ctx context.Context, t test.Test, c clust
 		return nil
 	})
 
-	const netConfigCmd = `
+	netConfigCmd := fmt.Sprintf(`
 # ensure any failure fails the entire script.
 set -e;
 
@@ -350,9 +357,10 @@ sudo iptables -P INPUT ACCEPT;
 sudo iptables -P OUTPUT ACCEPT;
 
 # Drop any client traffic to CRDB.
-sudo iptables -A INPUT -p tcp --sport 26257 -j DROP;
-sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP;
-`
+sudo iptables -A INPUT -p tcp --sport {pgport%s} -j DROP;
+sudo iptables -A OUTPUT -p tcp --dport {pgport%s} -j DROP;
+`,
+		clientNode, clientNode)
 	t.L().Printf("blocking networking on client; config cmd:\n%s", netConfigCmd)
 	blockStartTime := timeutil.Now()
 	require.NoError(t, c.RunE(ctx, option.WithNodes(clientNode), netConfigCmd))
