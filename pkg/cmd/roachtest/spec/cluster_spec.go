@@ -36,6 +36,63 @@ const (
 	Zfs fileSystemType = 1
 )
 
+type MemPerCPU int
+
+const (
+	Auto MemPerCPU = iota
+	Standard
+	High
+	Low
+)
+
+func (m MemPerCPU) String() string {
+	switch m {
+	case Auto:
+		return "auto"
+	case Standard:
+		return "standard"
+	case High:
+		return "high"
+	case Low:
+		return "low"
+	}
+	return "unknown"
+}
+
+// ParseMemCPU parses a string into a MemPerCPU value. Returns -1 if no match is found.
+func ParseMemCPU(s string) MemPerCPU {
+	s = strings.ToLower(s)
+	switch s {
+	case "auto":
+		return Auto
+	case "standard":
+		return Standard
+	case "high":
+		return High
+	case "low":
+		return Low
+	}
+	return -1
+}
+
+// LocalSSDSetting controls whether test cluster nodes use an instance-local SSD
+// as storage.
+type LocalSSDSetting int
+
+const (
+	// LocalSSDDefault is the default mode, when the test does not have any
+	// preference. A local SSD may or may not be used, depending on --local-ssd
+	// flag and machine type.
+	LocalSSDDefault LocalSSDSetting = iota
+
+	// LocalSSDDisable means that we will never use a local SSD.
+	LocalSSDDisable
+
+	// LocalSSDPreferOn means that we prefer to use a local SSD. It is not a
+	// guarantee (depending on other constraints on machine type).
+	LocalSSDPreferOn
+)
+
 // ClusterSpec represents a test's description of what its cluster needs to
 // look like. It becomes part of a clusterConfig when the cluster is created.
 type ClusterSpec struct {
@@ -145,11 +202,14 @@ func getGCEOpts(
 	return opts
 }
 
-func getAzureOpts(machineType string, zones []string) vm.ProviderOpts {
+func getAzureOpts(machineType string, zones []string, volumeSize int) vm.ProviderOpts {
 	opts := azure.DefaultProviderOpts()
 	opts.MachineType = machineType
 	if len(zones) != 0 {
 		opts.Locations = zones
+	}
+	if volumeSize != 0 {
+		opts.NetworkDiskSize = int32(volumeSize)
 	}
 	return opts
 }
@@ -178,15 +238,6 @@ func (s *ClusterSpec) RoachprodOpts(
 		return vm.CreateOpts{}, nil, errors.Errorf("unsupported cloud %v", s.Cloud)
 	}
 
-	if s.Cloud != GCE {
-		if s.VolumeSize != 0 {
-			return vm.CreateOpts{}, nil, errors.Errorf("specifying volume size is not yet supported on %s", s.Cloud)
-		}
-		if s.SSDs != 0 {
-			return vm.CreateOpts{}, nil, errors.Errorf("specifying SSD count is not yet supported on %s", s.Cloud)
-		}
-	}
-
 	createVMOpts.GeoDistributed = s.Geo
 	createVMOpts.Arch = string(arch)
 	machineType := s.InstanceType
@@ -198,15 +249,30 @@ func (s *ClusterSpec) RoachprodOpts(
 		var selectedArch vm.CPUArch
 
 		if len(machineType) == 0 {
+			var err error
+			mem := Auto
+			if s.HighMem {
+				mem = High
+			}
 			// If no machine type was specified, choose one
 			// based on the cloud and CPU count.
 			switch s.Cloud {
 			case AWS:
-				machineType, selectedArch = AWSMachineType(s.CPUs, s.HighMem, arch)
+				machineType, selectedArch, err = SelectAWSMachineType(s.CPUs, mem, s.PreferLocalSSD && s.VolumeSize == 0, arch)
 			case GCE:
-				machineType, selectedArch = GCEMachineType(s.CPUs, s.HighMem, arch)
+				machineType, selectedArch = SelectGCEMachineType(s.CPUs, mem, arch)
 			case Azure:
-				machineType = AzureMachineType(s.CPUs, s.HighMem)
+				machineType, selectedArch, err = SelectAzureMachineType(s.CPUs, mem, arch)
+			}
+
+			if err != nil {
+				return vm.CreateOpts{}, nil, err
+			}
+			if selectedArch != "" && selectedArch != arch {
+				// TODO(srosenberg): we need a better way to monitor the rate of this mismatch, i.e.,
+				// other than grepping cluster creation logs.
+				fmt.Printf("WARN: requested arch %s for machineType %s, but selected %s\n", arch, machineType, selectedArch)
+				createVMOpts.Arch = string(selectedArch)
 			}
 		}
 		if selectedArch != "" && selectedArch != arch {
@@ -269,7 +335,7 @@ func (s *ClusterSpec) RoachprodOpts(
 		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration)
 	case Azure:
-		providerOpts = getAzureOpts(machineType, zones)
+		providerOpts = getAzureOpts(machineType, zones, s.VolumeSize)
 	}
 
 	return createVMOpts, providerOpts, nil
