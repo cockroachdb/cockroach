@@ -1075,6 +1075,28 @@ func AdminURL(
 	return urlGenerator(ctx, c, l, c.TargetNodes(), uConfig)
 }
 
+// SQLPorts finds the SQL ports for a cluster.
+func SQLPorts(
+	ctx context.Context, l *logger.Logger, clusterName string, secure bool,
+) ([]int, error) {
+	if err := LoadClusters(); err != nil {
+		return nil, err
+	}
+	c, err := newCluster(l, clusterName, install.SecureOption(secure))
+	if err != nil {
+		return nil, err
+	}
+	var ports []int
+	for _, node := range c.Nodes {
+		port, err := c.NodePort(ctx, node)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Error discovering SQL Port for node %d", node)
+		}
+		ports = append(ports, port)
+	}
+	return ports, nil
+}
+
 // AdminPorts finds the AdminUI ports for a cluster.
 func AdminPorts(
 	ctx context.Context, l *logger.Logger, clusterName string, secure bool,

@@ -1421,12 +1421,12 @@ func newHealthStatusResult(node int, status int, body []byte, err error) *Health
 
 // HealthStatus returns the result of the /health?ready=1 endpoint for each node.
 func (c *clusterImpl) HealthStatus(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
 ) ([]*HealthStatusResult, error) {
-	if len(node) < 1 {
+	if len(nodes) < 1 {
 		return nil, nil // unit tests
 	}
-	adminAddrs, err := c.ExternalAdminUIAddr(ctx, l, node)
+	adminAddrs, err := c.ExternalAdminUIAddr(ctx, l, nodes)
 	if err != nil {
 		return nil, errors.WithDetail(err, "Unable to get admin UI address(es)")
 	}
@@ -2466,13 +2466,13 @@ func (c *clusterImpl) loggerForCmd(
 	return l, logFile, nil
 }
 
-// pgURLErr returns the Postgres endpoint for the specified node. It accepts a
+// pgURLErr returns the Postgres endpoint for the specified nodes. It accepts a
 // flag specifying whether the URL should include the node's internal or
 // external IP address. In general, inter-cluster communication and should use
 // internal IPs and communication from a test driver to nodes in a cluster
 // should use external IPs.
 func (c *clusterImpl) pgURLErr(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption, opts roachprod.PGURLOptions,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts roachprod.PGURLOptions,
 ) ([]string, error) {
 	opts.Secure = c.localCertsDir != ""
 	certsDir := "certs"
@@ -2481,7 +2481,7 @@ func (c *clusterImpl) pgURLErr(
 	if opts.Auth == install.AuthRootCert {
 		certsDir = c.localCertsDir
 	}
-	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(node), certsDir, opts)
+	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(nodes), certsDir, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -2493,9 +2493,9 @@ func (c *clusterImpl) pgURLErr(
 
 // InternalPGUrl returns the internal Postgres endpoint for the specified nodes.
 func (c *clusterImpl) InternalPGUrl(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption, opts roachprod.PGURLOptions,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts roachprod.PGURLOptions,
 ) ([]string, error) {
-	return c.pgURLErr(ctx, l, node, opts)
+	return c.pgURLErr(ctx, l, nodes, opts)
 }
 
 // Silence unused warning.
@@ -2503,10 +2503,10 @@ var _ = (&clusterImpl{}).InternalPGUrl
 
 // ExternalPGUrl returns the external Postgres endpoint for the specified nodes.
 func (c *clusterImpl) ExternalPGUrl(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption, opts roachprod.PGURLOptions,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts roachprod.PGURLOptions,
 ) ([]string, error) {
 	opts.External = true
-	return c.pgURLErr(ctx, l, node, opts)
+	return c.pgURLErr(ctx, l, nodes, opts)
 }
 
 func addrToAdminUIAddr(addr string) (string, error) {
@@ -2550,19 +2550,25 @@ func addrToHostPort(addr string) (string, int, error) {
 }
 
 // InternalAdminUIAddr returns the internal Admin UI address in the form host:port
-// for the specified node.
+// for the specified nodes.
 func (c *clusterImpl) InternalAdminUIAddr(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
 ) ([]string, error) {
-	return c.adminUIAddr(ctx, l, node, false)
+	return c.adminUIAddr(ctx, l, nodes, false)
 }
 
 // ExternalAdminUIAddr returns the external Admin UI address in the form host:port
-// for the specified node.
+// for the specified nodes.
 func (c *clusterImpl) ExternalAdminUIAddr(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
 ) ([]string, error) {
-	return c.adminUIAddr(ctx, l, node, true)
+	return c.adminUIAddr(ctx, l, nodes, true)
+}
+
+func (c *clusterImpl) SQLPorts(
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
+) ([]int, error) {
+	return roachprod.SQLPorts(ctx, l, c.MakeNodes(nodes), c.IsSecure())
 }
 
 func (c *clusterImpl) AdminUIPorts(
@@ -2572,10 +2578,10 @@ func (c *clusterImpl) AdminUIPorts(
 }
 
 func (c *clusterImpl) adminUIAddr(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption, external bool,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, external bool,
 ) ([]string, error) {
 	var addrs []string
-	adminURLs, err := roachprod.AdminURL(ctx, l, c.MakeNodes(node), "", 0, "",
+	adminURLs, err := roachprod.AdminURL(ctx, l, c.MakeNodes(nodes), "", 0, "",
 		external, false, false)
 	if err != nil {
 		return nil, err
@@ -2596,32 +2602,32 @@ func (c *clusterImpl) adminUIAddr(
 
 // InternalIP returns the internal IP addresses for the specified nodes.
 func (c *clusterImpl) InternalIP(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
 ) ([]string, error) {
-	return roachprod.IP(l, c.MakeNodes(node), false)
+	return roachprod.IP(l, c.MakeNodes(nodes), false)
 }
 
 // InternalAddr returns the internal address in the form host:port for the
 // specified nodes.
 func (c *clusterImpl) InternalAddr(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
 ) ([]string, error) {
-	return c.addr(ctx, l, node, false)
+	return c.addr(ctx, l, nodes, false)
 }
 
 // ExternalAddr returns the external address in the form host:port for the
-// specified node.
+// specified nodes.
 func (c *clusterImpl) ExternalAddr(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
 ) ([]string, error) {
-	return c.addr(ctx, l, node, true)
+	return c.addr(ctx, l, nodes, true)
 }
 
 func (c *clusterImpl) addr(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption, external bool,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, external bool,
 ) ([]string, error) {
 	var addrs []string
-	urls, err := c.pgURLErr(ctx, l, node, roachprod.PGURLOptions{External: external})
+	urls, err := c.pgURLErr(ctx, l, nodes, roachprod.PGURLOptions{External: external})
 	if err != nil {
 		return nil, err
 	}
@@ -2635,12 +2641,12 @@ func (c *clusterImpl) addr(
 	return addrs, nil
 }
 
-// ExternalIP returns the external IP addresses for the specified node.
+// ExternalIP returns the external IP addresses for the specified nodes.
 func (c *clusterImpl) ExternalIP(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
 ) ([]string, error) {
 	var ips []string
-	addrs, err := c.ExternalAddr(ctx, l, node)
+	addrs, err := c.ExternalAddr(ctx, l, nodes)
 	if err != nil {
 		return nil, err
 	}
