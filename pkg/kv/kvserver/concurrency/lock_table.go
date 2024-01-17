@@ -11,6 +11,7 @@
 package concurrency
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -687,7 +688,7 @@ func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(
 }
 
 func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
-	key roachpb.Key, str lock.Strength,
+	_ context.Context, key roachpb.Key, str lock.Strength,
 ) (bool, *enginepb.TxnMeta, error) {
 	iter := g.tableSnapshot.MakeIter()
 	iter.SeekGE(&keyLocks{key: key})
