@@ -46,10 +46,6 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-const (
-	tenantCreationMinSupportedVersionKey = clusterversion.MinSupported
-)
-
 // CreateTenant implements the tree.TenantOperator interface.
 func (p *planner) CreateTenant(
 	ctx context.Context, parameters string,
@@ -168,11 +164,17 @@ func (p *planner) createTenantInternal(
 		bootstrapVersionOverride = p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride
 	} else if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.Latest) {
 		// The cluster is not running the latest version.
-		// Use the previous major version to create the tenant and bootstrap it
-		// just like the previous major version binary would, using hardcoded
-		// initial values.
-		tenantVersion.Version = tenantCreationMinSupportedVersionKey.Version()
-		bootstrapVersionOverride = tenantCreationMinSupportedVersionKey
+		// If the previous major version is active, use that version to create the
+		// tenant and bootstrap it just like the previous major version binary
+		// would, using hardcoded initial values.
+		// Otherwise, use the min supported version.
+		if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.PreviousRelease) {
+			tenantVersion.Version = clusterversion.PreviousRelease.Version()
+			bootstrapVersionOverride = clusterversion.PreviousRelease
+		} else {
+			tenantVersion.Version = clusterversion.MinSupported.Version()
+			bootstrapVersionOverride = clusterversion.MinSupported
+		}
 	} else {
 		// The cluster is running the latest version.
 		// Use this version to create the tenant and bootstrap it using the host

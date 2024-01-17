@@ -1,7 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
-    name = "cockroach-go-testserver-upgrade-to-master_test",
+    name = "cockroach-go-testserver-23_1_test",
     size = "enormous",
     srcs = ["generated_test.go"],
     data = [
