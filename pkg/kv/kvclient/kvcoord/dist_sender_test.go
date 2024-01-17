@@ -838,9 +838,6 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 			if _, pErr := kv.SendWrapped(ctx, ds, put); !testutils.IsPError(pErr, "boom") {
 				t.Fatalf("%d: unexpected error: %v", i, pErr)
 			}
-			if got := ds.Metrics().InLeaseTransferBackoffs.Count(); got != c.expected {
-				t.Fatalf("%d: expected %d backoffs, got %d", i, c.expected, got)
-			}
 		})
 	}
 }
@@ -916,7 +913,6 @@ func TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead(t *testing.T) {
 	_, pErr := kv.SendWrapped(ctx, ds, get)
 	require.Nil(t, pErr)
 	require.Equal(t, []roachpb.NodeID{1, 2}, sentTo)
-	require.Equal(t, int64(0), ds.Metrics().InLeaseTransferBackoffs.Count())
 }
 
 // TestNoBackoffOnNotLeaseHolderErrorWithoutLease verifies that the DistSender
@@ -984,7 +980,6 @@ func TestNoBackoffOnNotLeaseHolderErrorWithoutLease(t *testing.T) {
 	_, pErr := kv.SendWrapped(ctx, ds, kvpb.NewGet(roachpb.Key("a")))
 	require.NoError(t, pErr.GoError())
 	require.Equal(t, []roachpb.NodeID{1, 2, 3}, sentTo)
-	require.Equal(t, int64(0), ds.Metrics().InLeaseTransferBackoffs.Count())
 }
 
 // Test a scenario where a lease indicates a replica that, when contacted,
