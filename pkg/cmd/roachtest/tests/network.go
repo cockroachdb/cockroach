@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -305,7 +306,9 @@ func runClientNetworkConnectionTimeout(ctx context.Context, t test.Test, c clust
 	n := c.Spec().NodeCount
 	serverNodes, clientNode := c.Range(1, n-1), c.Nodes(n)
 	settings := install.MakeClusterSettings(install.SecureOption(true))
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, serverNodes)
+	defaultOptions := option.DefaultStartOpts()
+	defaultOptions.RoachprodOpts.SQLPort = config.DefaultSQLPort
+	c.Start(ctx, t.L(), defaultOptions, settings, serverNodes)
 	certsDir := "/home/ubuntu/certs"
 	t.L().Printf("connecting to cluster from roachtest...")
 	db, err := c.ConnE(ctx, t.L(), 1)
