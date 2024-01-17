@@ -1,14 +1,12 @@
 # LogicTest: cockroach-go-testserver-upgrade-to-master
 
-skip 117645 # needs to be updated now that master's predecessor is 23.2
-
 # This test verifies that when a cluster is upgraded, it preserves the TTL
 # job configuration on a table.
 
 query T
 SELECT version FROM [SHOW CLUSTER SETTING version]
 ----
-23.1
+23.2
 
 statement ok
 CREATE TABLE tbl (

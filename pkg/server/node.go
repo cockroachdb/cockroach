@@ -506,12 +506,12 @@ func bootstrapCluster(
 				}
 			}
 			if initialValuesOpts.OverrideKey == 0 {
-				if initCfg.latestVersion.Less(clusterversion.MinSupported.Version()) {
+				if initCfg.latestVersion.Less(clusterversion.PreviousRelease.Version()) {
 					// As an exception, we tolerate tests creating older versions; we just
-					// use the minimum supported version.
+					// use the previous release version.
 					// TODO(radu): should we make sure there are no upgrades for versions
 					// earlier than this still registered?
-					initialValuesOpts.OverrideKey = clusterversion.MinSupported
+					initialValuesOpts.OverrideKey = clusterversion.PreviousRelease
 				} else {
 					return nil, errors.AssertionFailedf("cannot bootstrap at version %s", initCfg.latestVersion)
 				}
