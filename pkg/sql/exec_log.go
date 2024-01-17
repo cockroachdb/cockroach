@@ -355,7 +355,10 @@ func (p *planner) maybeLogStatementInternal(
 			})
 		}
 
-		sampledQuery := eventpb.SampledQuery{
+		sampledQuery := getSampledQuery()
+		defer releaseSampledQuery(sampledQuery)
+
+		*sampledQuery = eventpb.SampledQuery{
 			CommonSQLExecDetails:                  execDetails,
 			SkippedQueries:                        skippedQueries,
 			CostEstimate:                          p.curPlan.instrumentation.costEstimate,
@@ -431,7 +434,7 @@ func (p *planner) maybeLogStatementInternal(
 			SchemaChangerMode:                     p.curPlan.instrumentation.schemaChangerMode.String(),
 		}
 
-		p.logOperationalEventsOnlyExternally(ctx, &sampledQuery)
+		p.logOperationalEventsOnlyExternally(ctx, sampledQuery)
 	}
 }
 
