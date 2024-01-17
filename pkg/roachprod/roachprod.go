@@ -1075,9 +1075,14 @@ func AdminURL(
 	return urlGenerator(ctx, c, l, c.TargetNodes(), uConfig)
 }
 
-// AdminPorts finds the AdminUI ports for a cluster.
-func AdminPorts(
-	ctx context.Context, l *logger.Logger, clusterName string, secure bool,
+// SQLPorts finds the SQL ports for a cluster.
+func SQLPorts(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	secure bool,
+	virtualClusterName string,
+	sqlInstance int,
 ) ([]int, error) {
 	if err := LoadClusters(); err != nil {
 		return nil, err
@@ -1088,7 +1093,34 @@ func AdminPorts(
 	}
 	var ports []int
 	for _, node := range c.Nodes {
-		port, err := c.NodeUIPort(ctx, node)
+		port, err := c.NodePort(ctx, node, virtualClusterName, sqlInstance)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Error discovering SQL Port for node %d", node)
+		}
+		ports = append(ports, port)
+	}
+	return ports, nil
+}
+
+// AdminPorts finds the AdminUI ports for a cluster.
+func AdminPorts(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	secure bool,
+	virtualClusterName string,
+	sqlInstance int,
+) ([]int, error) {
+	if err := LoadClusters(); err != nil {
+		return nil, err
+	}
+	c, err := newCluster(l, clusterName, install.SecureOption(secure))
+	if err != nil {
+		return nil, err
+	}
+	var ports []int
+	for _, node := range c.Nodes {
+		port, err := c.NodeUIPort(ctx, node, virtualClusterName, sqlInstance)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Error discovering UI Port for node %d", node)
 		}
@@ -1141,7 +1173,7 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 			host := c.Host(node)
-			port, err := c.NodeUIPort(ctx, node)
+			port, err := c.NodeUIPort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
 			if err != nil {
 				return nil, err
 			}
@@ -2198,7 +2230,7 @@ func sendCaptureCommand(
 	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
 	_, _, err := c.ParallelE(ctx, l, install.OnNodes(nodes).WithDisplay(fmt.Sprintf("Performing workload capture %s", action)),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
-			port, err := c.NodeUIPort(ctx, node)
+			port, err := c.NodeUIPort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
 			if err != nil {
 				return nil, err
 			}

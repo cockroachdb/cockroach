@@ -516,8 +516,10 @@ func (c *SyncedCluster) NodeURL(
 }
 
 // NodePort returns the system tenant's SQL port for the given node.
-func (c *SyncedCluster) NodePort(ctx context.Context, node Node) (int, error) {
-	desc, err := c.DiscoverService(ctx, node, SystemInterfaceName, ServiceTypeSQL, 0)
+func (c *SyncedCluster) NodePort(
+	ctx context.Context, node Node, virtualClusterName string, sqlInstance int,
+) (int, error) {
+	desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
 	if err != nil {
 		return 0, err
 	}
@@ -525,8 +527,10 @@ func (c *SyncedCluster) NodePort(ctx context.Context, node Node) (int, error) {
 }
 
 // NodeUIPort returns the system tenant's AdminUI port for the given node.
-func (c *SyncedCluster) NodeUIPort(ctx context.Context, node Node) (int, error) {
-	desc, err := c.DiscoverService(ctx, node, SystemInterfaceName, ServiceTypeUI, 0)
+func (c *SyncedCluster) NodeUIPort(
+	ctx context.Context, node Node, virtualClusterName string, sqlInstance int,
+) (int, error) {
+	desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeUI, sqlInstance)
 	if err != nil {
 		return 0, err
 	}
@@ -1159,7 +1163,7 @@ func (c *SyncedCluster) generateClusterSettingCmd(
 		pathPrefix = fmt.Sprintf("%s_", virtualCluster)
 	}
 	path := fmt.Sprintf("%s/%ssettings-initialized", c.NodeDir(node, 1 /* storeIndex */), pathPrefix)
-	port, err := c.NodePort(ctx, node)
+	port, err := c.NodePort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
 	if err != nil {
 		return "", err
 	}
@@ -1181,7 +1185,7 @@ func (c *SyncedCluster) generateInitCmd(ctx context.Context, node Node) (string,
 	}
 
 	path := fmt.Sprintf("%s/%s", c.NodeDir(node, 1 /* storeIndex */), "cluster-bootstrapped")
-	port, err := c.NodePort(ctx, node)
+	port, err := c.NodePort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
 	if err != nil {
 		return "", err
 	}
@@ -1388,7 +1392,7 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 
 	node := c.Nodes[0]
 	binary := cockroachNodeBinary(c, node)
-	port, err := c.NodePort(ctx, node)
+	port, err := c.NodePort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
 	if err != nil {
 		return err
 	}
