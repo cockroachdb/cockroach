@@ -69,9 +69,6 @@ const (
 	// By definition, the lock cannot be held at this point -- if it were, another
 	// request from the same transaction would not be in the lock's wait-queues,
 	// obviating the need for this state.
-	//
-	// TODO(arul): this waitSelf state + claimantTxn stuff won't extend well to
-	// multiple lock holders. See TODO in informActiveWaiters.
 	waitSelf
 
 	// waitQueueMaxLengthExceeded indicates that the request attempted to enter a
@@ -2000,13 +1997,6 @@ func (kl *keyLocks) informActiveWaiters() {
 		queuedLockingRequests: kl.queuedLockingRequests.Len(),
 		queuedReaders:         kl.waitingReaders.Len(),
 	}
-	// TODO(arul): This is entirely busted once we have multiple lock holders.
-	// In such cases, there may be a request waiting not on the head of the
-	// queue, but because there is a waiter with a lower sequence number that it
-	// is incompatible with. In such cases, its this guy it should be pushing.
-	// However, if we naively plugged things into the current structure, it would
-	// either sit tight (because its waiting for itself) or, worse yet, push a
-	// transaction it's actually compatible with!
 	waitForState.txn, waitForState.held = kl.claimantTxn()
 	findDistinguished := false
 	// We need to find a (possibly new) distinguished waiter if either:
@@ -2997,8 +2987,6 @@ func (kl *keyLocks) acquireLock(
 		panic("lockTable bug")
 	}
 
-	// TODO(arul): add a test for unreplicated locks as well where this assertion
-	// is triggered.
 	if buildutil.CrdbTestBuild && kl.isLocked() {
 		// If lock(s) are already held on this key by other transactions, sanity
 		// check that the lock acquisition is compatible.
