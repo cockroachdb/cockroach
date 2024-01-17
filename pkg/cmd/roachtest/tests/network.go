@@ -254,7 +254,7 @@ SELECT $1::INT = ALL (
 		})
 
 		t.L().Printf("blocking networking on node 1...")
-		const netConfigCmd = `
+		netConfigCmd := fmt.Sprintf(`
 # ensure any failure fails the entire script.
 set -e;
 
@@ -263,23 +263,23 @@ sudo iptables -P INPUT ACCEPT;
 sudo iptables -P OUTPUT ACCEPT;
 
 # Drop any node-to-node crdb traffic.
-sudo iptables -A INPUT -p tcp --dport 26257 -j DROP;
-sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP;
+sudo iptables -A INPUT -p tcp --dport {pgport%[1]s} -j DROP;
+sudo iptables -A OUTPUT -p tcp --dport {pgport%[1]s} -j DROP;
 
 sudo iptables-save
-`
+`, c.Node(expectedLeaseholder))
 		t.L().Printf("partitioning using iptables; config cmd:\n%s", netConfigCmd)
 		require.NoError(t, c.RunE(ctx, option.WithNodes(c.Node(expectedLeaseholder)), netConfigCmd))
 
 		// (attempt to) restore iptables when test end, so that cluster
 		// can be investigated afterwards.
 		defer func() {
-			const restoreNet = `
+			restoreNet := fmt.Sprintf(`
 set -e;
-sudo iptables -D INPUT -p tcp --dport 26257 -j DROP;
-sudo iptables -D OUTPUT -p tcp --dport 26257 -j DROP;
+sudo iptables -D INPUT -p tcp --dport {pgport%[1]s} -j DROP;
+sudo iptables -D OUTPUT -p tcp --dport {pgport%[1]s} -j DROP;
 sudo iptables-save
-`
+`, c.Node(expectedLeaseholder))
 			t.L().Printf("restoring iptables; config cmd:\n%s", restoreNet)
 			require.NoError(t, c.RunE(ctx, option.WithNodes(c.Node(expectedLeaseholder)), restoreNet))
 		}()
