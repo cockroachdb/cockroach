@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -44,15 +43,11 @@ const (
 
 // defRaftConnClass is the default rpc.ConnectionClass used for non-system raft
 // traffic. Normally it is RaftClass, but can be flipped to DefaultClass if the
-// corresponding env variable is true.
+// env variable behind rpc.ConnectionClassOverride call contains the
+// corresponding override.
 //
 // NB: for a subset of system ranges, SystemClass is used instead of this.
-var defRaftConnClass = func() rpc.ConnectionClass {
-	if envutil.EnvOrDefaultBool("COCKROACH_RAFT_USE_DEFAULT_CONNECTION_CLASS", false) {
-		return rpc.DefaultClass
-	}
-	return rpc.RaftClass
-}()
+var defRaftConnClass = rpc.ConnectionClassOverride(rpc.RaftClass)
 
 // loadInitializedReplicaForTesting loads and constructs an initialized Replica,
 // after checking its invariants.
