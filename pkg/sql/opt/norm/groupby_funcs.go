@@ -444,3 +444,37 @@ func canEliminateGroupByJoin(
 	// All aggregates ignore duplicates.
 	return true
 }
+
+// AreAggsAnyNotNull returns true if all the given aggregate functions have
+// "any not null" semantics, meaning they select the first encountered non-null
+// input value. This is true of ConstAgg, ConstNotNullAgg, and AnyNotNullAgg.
+// See also opt.AggregateOpReverseMap.
+func (c *CustomFuncs) AreAggsAnyNotNull(aggs memo.AggregationsExpr) bool {
+	for i := range aggs {
+		switch aggs[i].Agg.Op() {
+		case opt.ConstAggOp, opt.ConstNotNullAggOp, opt.AnyNotNullAggOp:
+			if _, ok := aggs[i].Agg.Child(0).(*memo.VariableExpr); !ok {
+				// ConstAgg-like functions should always have a Variable as input.
+				panic(errors.AssertionFailedf("expected variable as input to aggregate"))
+			}
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// ConvertAggsToProjections builds a projection for each ConstAgg,
+// ConstNotNullAgg, or AnyNotNullAgg which returns a different output column ID
+// than its input column ID.
+func (c *CustomFuncs) ConvertAggsToProjections(aggs memo.AggregationsExpr) memo.ProjectionsExpr {
+	var projections memo.ProjectionsExpr
+	for i := range aggs {
+		// ConstAgg-like aggregates always have a variable as input.
+		inputCol := aggs[i].Agg.Child(0).(*memo.VariableExpr).Col
+		if inputCol != aggs[i].Col {
+			projections = append(projections, c.f.ConstructProjectionsItem(aggs[i].Agg, aggs[i].Col))
+		}
+	}
+	return projections
+}

@@ -163,6 +163,23 @@
 =>
 (Project $input [] (GroupingOutputCols $groupingPrivate $aggs))
 
+[EliminateGroupBy, Normalize]
+(GroupBy
+    $input:*
+    $aggs:* & (AreAggsAnyNotNull $aggs)
+    $groupingPrivate:* &
+        (ColsAreStrictKey (GroupingCols $groupingPrivate) $input)
+)
+=>
+(Project
+    $input
+    (ConvertAggsToProjections $aggs)
+    (IntersectionCols
+        (GroupingOutputCols $groupingPrivate $aggs)
+        (OutputCols $input)
+    )
+)
+
 # ReduceGroupingCols eliminates redundant grouping columns from the GroupBy
 # operator and replaces them by ConstAgg aggregate functions. A grouping
 # column is redundant if it is functionally determined by the other grouping
