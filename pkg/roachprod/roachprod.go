@@ -1405,7 +1405,7 @@ func Create(
 		}
 	}
 
-	l.Printf("Creating cluster %s with %d nodes", clusterName, numNodes)
+	l.Printf("Creating cluster %s with %d nodes...", clusterName, numNodes)
 	if createErr := cloud.CreateCluster(l, numNodes, createVMOpts, providerOptsContainer); createErr != nil {
 		return createErr
 	}
@@ -1414,6 +1414,7 @@ func Create(
 		// No need for ssh for local clusters.
 		return LoadClusters()
 	}
+	l.Printf("Created cluster %s; setting up SSH...", clusterName)
 	return SetupSSH(ctx, l, clusterName)
 }
 

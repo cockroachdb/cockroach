@@ -168,7 +168,7 @@ func postStatus(
 		}
 	}
 
-	makeStatusFields := func(clusters []*Cluster) []slack.AttachmentField {
+	makeStatusFields := func(clusters []*Cluster, elideExpiration bool) []slack.AttachmentField {
 		var names []string
 		var expirations []string
 		for _, c := range clusters {
@@ -178,18 +178,21 @@ func postStatus(
 					c.GCAt().Unix(),
 					c.LifetimeRemaining().Round(time.Second)))
 		}
-		return []slack.AttachmentField{
+		fields := []slack.AttachmentField{
 			{
 				Title: "name",
 				Value: strings.Join(names, "\n"),
 				Short: true,
 			},
-			{
+		}
+		if !elideExpiration {
+			fields = append(fields, slack.AttachmentField{
 				Title: "expiration",
 				Value: strings.Join(expirations, "\n"),
 				Short: true,
-			},
+			})
 		}
+		return fields
 	}
 
 	var attachments []slack.Attachment
@@ -201,7 +204,7 @@ func postStatus(
 				Color:    "good",
 				Title:    "Live Clusters",
 				Fallback: fallback,
-				Fields:   makeStatusFields(s.good),
+				Fields:   makeStatusFields(s.good, false),
 			})
 	}
 	if len(s.warn) > 0 {
@@ -210,17 +213,38 @@ func postStatus(
 				Color:    "warning",
 				Title:    "Expiring Clusters",
 				Fallback: fallback,
-				Fields:   makeStatusFields(s.warn),
+				Fields:   makeStatusFields(s.warn, false),
 			})
 	}
 	if len(s.destroy) > 0 {
-		attachments = append(attachments,
-			slack.Attachment{
-				Color:    "danger",
-				Title:    "Destroyed Clusters",
-				Fallback: fallback,
-				Fields:   makeStatusFields(s.destroy),
-			})
+		// N.B. split into empty and non-empty clusters; use a different Title for empty cluster, and elide expiration.
+		var emptyClusters []*Cluster
+		var nonEmptyClusters []*Cluster
+		for _, c := range s.destroy {
+			if c.IsEmptyCluster() {
+				emptyClusters = append(emptyClusters, c)
+			} else {
+				nonEmptyClusters = append(nonEmptyClusters, c)
+			}
+		}
+		if len(nonEmptyClusters) > 0 {
+			attachments = append(attachments,
+				slack.Attachment{
+					Color:    "danger",
+					Title:    "Destroyed Clusters",
+					Fallback: fallback,
+					Fields:   makeStatusFields(nonEmptyClusters, false),
+				})
+		}
+		if len(emptyClusters) > 0 {
+			attachments = append(attachments,
+				slack.Attachment{
+					Color:    "danger",
+					Title:    "Destroyed Empty Clusters/Dangling Resources",
+					Fallback: fallback,
+					Fields:   makeStatusFields(emptyClusters, true),
+				})
+		}
 	}
 	if len(badVMs) > 0 {
 		var names []string
@@ -345,12 +369,65 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 				postError(l, client, channel, err)
 			}
 		}
+		reportDeletedResources(l, client, channel, "bad VMs", deletedVMs)
+	}
 
-		// Destroy expired clusters.
-		for _, c := range s.destroy {
-			if err := DestroyCluster(l, c); err != nil {
-				postError(l, client, channel, err)
+	var destroyedClusters []resourceDescription
+	for _, c := range s.destroy {
+		if err := destroyResource(dryrun, func() error {
+			return DestroyCluster(l, c)
+		}); err == nil {
+			clouds := c.Clouds()
+			formatPreamble := func(s string, isSlack bool) string {
+				if isSlack {
+					return fmt.Sprintf("*%s*", s)
+				}
+				return s
 			}
+			formatClouds := func(isSlack bool) string {
+				var b strings.Builder
+				// preamble
+				if len(clouds) > 1 {
+					b.WriteString(formatPreamble("clouds", isSlack))
+				} else {
+					b.WriteString(formatPreamble("cloud", isSlack))
+				}
+				b.WriteString(": ")
+				// join clouds
+				var sep string
+				if isSlack {
+					sep = "`,`"
+					// header
+					b.WriteString("`")
+				} else {
+					sep = ","
+				}
+				b.WriteString(clouds[0])
+				for _, s := range clouds[1:] {
+					b.WriteString(sep)
+					b.WriteString(s)
+				}
+				if isSlack {
+					// trailer
+					b.WriteString("`")
+				}
+				return b.String()
+			}
+
+			if !c.IsEmptyCluster() {
+				destroyedClusters = append(destroyedClusters, resourceDescription{
+					Description:      fmt.Sprintf("%s (%s, expiration: %s)", c.Name, formatClouds(false), c.GCAt().String()),
+					SlackDescription: fmt.Sprintf("`%s` (%s, *expiration*: %s)", c.Name, formatClouds(true), slackClusterExpirationDate(c)),
+				})
+			} else {
+				// N.B. elide expiration for dangling resources since it's irrelevant.
+				destroyedClusters = append(destroyedClusters, resourceDescription{
+					Description:      fmt.Sprintf("%s (%s [empty cluster/dangling resource])", c.Name, formatClouds(false)),
+					SlackDescription: fmt.Sprintf("`%s` (%s [empty cluster/dangling resource])", c.Name, formatClouds(true)),
+				})
+			}
+		} else {
+			postError(l, client, channel, err)
 		}
 	}
 	return nil
