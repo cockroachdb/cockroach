@@ -358,14 +358,14 @@ func TestInitResolvedTSScan(t *testing.T) {
 }
 
 type testTxnPusher struct {
-	pushTxnsFn       func([]enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error)
+	pushTxnsFn       func(context.Context, []enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error)
 	resolveIntentsFn func(ctx context.Context, intents []roachpb.LockUpdate) error
 }
 
 func (tp *testTxnPusher) PushTxns(
 	ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
 ) ([]*roachpb.Transaction, error) {
-	return tp.pushTxnsFn(txns, ts)
+	return tp.pushTxnsFn(ctx, txns, ts)
 }
 
 func (tp *testTxnPusher) ResolveIntents(ctx context.Context, intents []roachpb.LockUpdate) error {
@@ -373,7 +373,7 @@ func (tp *testTxnPusher) ResolveIntents(ctx context.Context, intents []roachpb.L
 }
 
 func (tp *testTxnPusher) mockPushTxns(
-	fn func([]enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error),
+	fn func(context.Context, []enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error),
 ) {
 	tp.pushTxnsFn = fn
 }
@@ -430,7 +430,9 @@ func TestTxnPushAttempt(t *testing.T) {
 
 	// Run a txnPushAttempt.
 	var tp testTxnPusher
-	tp.mockPushTxns(func(txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]*roachpb.Transaction, error) {
+	tp.mockPushTxns(func(
+		ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
+	) ([]*roachpb.Transaction, error) {
 		require.Equal(t, 4, len(txns))
 		require.Equal(t, txn1Meta, txns[0])
 		require.Equal(t, txn2Meta, txns[1])
