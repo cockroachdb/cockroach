@@ -35,8 +35,8 @@ import (
 
 func TestTenantUpgradeInterlock_{{$variantValue}}_{{$testName}}(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Times out under stress race.
-	skip.UnderStressRace(t)
+	// Times out under race.
+	skip.UnderRace(t)
 	// Test target takes 100s+ to run.
 	skip.UnderShort(t)
 	defer log.Scope(t).Close(t)

@@ -681,7 +681,7 @@ func TestStreamingAutoReplan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "multi cluster/node config exhausts hardware")
+	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
@@ -1209,7 +1209,7 @@ func TestLoadProducerAndIngestionProgress(t *testing.T) {
 func TestStreamingRegionalConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t, "takes too long under stress race")
+	skip.UnderRace(t, "takes too long under race")
 
 	ctx := context.Background()
 	regions := []string{"mars", "venus", "mercury"}
