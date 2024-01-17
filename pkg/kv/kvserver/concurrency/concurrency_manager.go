@@ -804,9 +804,9 @@ func (g *Guard) CheckOptimisticNoLatchConflicts() (ok bool) {
 // from starving out regular locking requests. In such cases, true is
 // returned, but so is nil.
 func (g *Guard) IsKeyLockedByConflictingTxn(
-	key roachpb.Key, strength lock.Strength,
+	ctx context.Context, key roachpb.Key, strength lock.Strength,
 ) (bool, *enginepb.TxnMeta, error) {
-	return g.ltg.IsKeyLockedByConflictingTxn(key, strength)
+	return g.ltg.IsKeyLockedByConflictingTxn(ctx, key, strength)
 }
 
 func (g *Guard) moveLatchGuard() latchGuard {

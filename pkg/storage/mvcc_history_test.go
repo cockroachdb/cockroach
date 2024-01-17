@@ -2807,7 +2807,7 @@ type mockLockTableView struct {
 }
 
 func (lt *mockLockTableView) IsKeyLockedByConflictingTxn(
-	k roachpb.Key,
+	_ context.Context, k roachpb.Key,
 ) (bool, *enginepb.TxnMeta, error) {
 	info, ok := lt.unreplLocks[string(k)]
 	if !ok {
