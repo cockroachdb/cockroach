@@ -229,28 +229,65 @@ func copyKey(k roachpb.Key) roachpb.Key {
 // collections of key-level locks.
 type txnBoundLockTableView interface {
 	IsKeyLockedByConflictingTxn(
-		roachpb.Key, lock.Strength,
+		context.Context, roachpb.Key, lock.Strength,
 	) (bool, *enginepb.TxnMeta, error)
 }
 
 // requestBoundLockTableView combines a txnBoundLockTableView with the lock
 // strength that an individual request is attempting to acquire.
 type requestBoundLockTableView struct {
-	ltv txnBoundLockTableView
-	str lock.Strength
+	inMemoryLockTableView   txnBoundLockTableView
+	replicatedLockTableView txnBoundLockTableView
+	str                     lock.Strength
 }
+
+var _ storage.LockTableView = &requestBoundLockTableView{}
 
 // newRequestBoundLockTableView creates a new requestBoundLockTableView.
 func newRequestBoundLockTableView(
-	ltv txnBoundLockTableView, str lock.Strength,
+	inMemoryLTV txnBoundLockTableView, replicatedLTV txnBoundLockTableView, str lock.Strength,
 ) *requestBoundLockTableView {
-	return &requestBoundLockTableView{ltv: ltv, str: str}
+	return &requestBoundLockTableView{
+		inMemoryLockTableView:   inMemoryLTV,
+		replicatedLockTableView: replicatedLTV,
+		str:                     str,
+	}
 }
 
 // IsKeyLockedByConflictingTxn implements the storage.LockTableView interface.
 func (ltv *requestBoundLockTableView) IsKeyLockedByConflictingTxn(
-	key roachpb.Key,
+	ctx context.Context, key roachpb.Key,
 ) (bool, *enginepb.TxnMeta, error) {
-	// TODO(arul): look for replicated lock conflicts.
-	return ltv.ltv.IsKeyLockedByConflictingTxn(key, ltv.str)
+	conflicts, txn, err := ltv.inMemoryLockTableView.IsKeyLockedByConflictingTxn(ctx, key, ltv.str)
+	if conflicts || err != nil {
+		return conflicts, txn, err
+	}
+	return ltv.replicatedLockTableView.IsKeyLockedByConflictingTxn(ctx, key, ltv.str)
+}
+
+// txnBoundReplicatedLockTableView provides a transaction bound view into the
+// replicated lock table.
+type txnBoundReplicatedLockTableView struct {
+	reader storage.Reader
+	txn    *roachpb.Transaction
+}
+
+var _ txnBoundLockTableView = &txnBoundReplicatedLockTableView{}
+
+// newTransactionBoundReplicatedLTV creates a new
+// txnBoundReplicatedLockTableView.
+func newTransactionBoundReplicatedLockTableView(
+	reader storage.Reader, txn *roachpb.Transaction,
+) *txnBoundReplicatedLockTableView {
+	return &txnBoundReplicatedLockTableView{
+		reader: reader,
+		txn:    txn,
+	}
+}
+
+// IsKeyLockedByConflictingTxn implements the txnBoundLockTableView interface.
+func (ltv *txnBoundReplicatedLockTableView) IsKeyLockedByConflictingTxn(
+	ctx context.Context, key roachpb.Key, str lock.Strength,
+) (bool, *enginepb.TxnMeta, error) {
+	return storage.MVCCCheckLockConflict(ctx, ltv.reader, ltv.txn, str, key)
 }

@@ -516,7 +516,7 @@ func TestLockTableBasic(t *testing.T) {
 				var key string
 				d.ScanArgs(t, "k", &key)
 				strength := ScanLockStrength(t, d)
-				ok, txn, err := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), strength)
+				ok, txn, err := g.IsKeyLockedByConflictingTxn(context.Background(), roachpb.Key(key), strength)
 				if err != nil {
 					return err.Error()
 				}

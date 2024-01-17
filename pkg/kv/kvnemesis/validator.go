@@ -784,7 +784,6 @@ func (v *validator) processOp(op Operation) {
 		v.failIfError(
 			op, t.Result,
 			exceptRollback, exceptAmbiguous, exceptSharedLockPromotionError, exceptSkipLockedReplayError,
-			exceptSkipLockedUnsupportedError,
 		)
 
 		ops := t.Ops
@@ -1367,7 +1366,6 @@ func (v *validator) checkError(
 		exceptDelRangeUsingTombstoneStraddlesRangeBoundary,
 		exceptSharedLockPromotionError,
 		exceptSkipLockedReplayError,
-		exceptSkipLockedUnsupportedError,
 	}
 	sl = append(sl, extraExceptions...)
 	return v.failIfError(op, r, sl...)

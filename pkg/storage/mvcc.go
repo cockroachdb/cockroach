@@ -1182,7 +1182,7 @@ type LockTableView interface {
 	//
 	// This method is used by requests in conjunction with the SkipLocked wait
 	// policy to determine which keys they should skip over during evaluation.
-	IsKeyLockedByConflictingTxn(roachpb.Key) (bool, *enginepb.TxnMeta, error)
+	IsKeyLockedByConflictingTxn(context.Context, roachpb.Key) (bool, *enginepb.TxnMeta, error)
 }
 
 // MVCCGetOptions bundles options for the MVCCGet family of functions.
@@ -5841,6 +5841,35 @@ func MVCCCheckForAcquireLock(
 	}
 	defer ltScanner.close()
 	return ltScanner.scan(key)
+}
+
+// MVCCCheckLockConflict scans the replicated lock table to determine whether
+// there exists a conflicting lock at the specified key. The supplied txn and
+// lock strength are used to determine conflicts.
+//
+// If a conflicting lock does exist, the holder's transaction is also returned.
+func MVCCCheckLockConflict(
+	ctx context.Context, reader Reader, txn *roachpb.Transaction, str lock.Strength, key roachpb.Key,
+) (bool, *enginepb.TxnMeta, error) {
+	if str == lock.None {
+		// Non-locking reads do not conflict with replicated locks, so no need to
+		// check the replicated lock table.
+		return false, nil, nil
+	}
+	ltScanner, err := newLockTableKeyScanner(
+		ctx, reader, txn, str, 1 /* maxConflicts */, BatchEvalReadCategory)
+	if err != nil {
+		return false, nil, err
+	}
+	defer ltScanner.close()
+	err = ltScanner.scan(key)
+	if err != nil {
+		if lcErr := (*kvpb.LockConflictError)(nil); errors.As(err, &lcErr) {
+			return true, &lcErr.Locks[0].Txn, nil
+		}
+		return false, nil, err
+	}
+	return false, nil, nil
 }
 
 // MVCCAcquireLock attempts to acquire a lock at the specified key and strength

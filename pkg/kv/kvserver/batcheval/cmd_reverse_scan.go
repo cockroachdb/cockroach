@@ -37,7 +37,10 @@ func ReverseScan(
 
 	var lockTableForSkipLocked storage.LockTableView
 	if h.WaitPolicy == lock.WaitPolicy_SkipLocked {
-		lockTableForSkipLocked = newRequestBoundLockTableView(cArgs.Concurrency, args.KeyLockingStrength)
+		txnBoundReplicatedLTV := newTransactionBoundReplicatedLockTableView(readWriter, h.Txn)
+		lockTableForSkipLocked = newRequestBoundLockTableView(
+			cArgs.Concurrency, txnBoundReplicatedLTV, args.KeyLockingStrength,
+		)
 	}
 
 	var res result.Result
@@ -121,7 +124,7 @@ func ReverseScan(
 			ctx, readWriter, h.Txn, args.KeyLockingStrength, args.KeyLockingDurability,
 			args.ScanFormat, &scanRes, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
 		if err != nil {
-			return result.Result{}, maybeInterceptDisallowedSkipLockedUsage(h, err)
+			return result.Result{}, err
 		}
 		res.Local.AcquiredLocks = acquiredLocks
 	}
