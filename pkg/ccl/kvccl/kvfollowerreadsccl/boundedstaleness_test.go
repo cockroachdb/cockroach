@@ -262,7 +262,9 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStress(t, "1μs staleness reads may actually succeed due to the slow environment")
+	const msg = "1μs staleness reads may actually succeed due to the slow environment"
+	skip.UnderStress(t, msg)
+	skip.UnderRace(t, msg)
 	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
