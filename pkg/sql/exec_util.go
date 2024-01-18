@@ -272,18 +272,6 @@ var TraceStmtThreshold = settings.RegisterDurationSetting(
 	0,
 	settings.WithPublic)
 
-// traceSessionEventLogEnabled can be used to enable the event log
-// that is normally kept for every SQL connection. The event log has a
-// non-trivial performance impact and also reveals SQL statements
-// which may be a privacy concern.
-var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.trace.session_eventlog.enabled",
-	"set to true to enable session tracing; "+
-		"note that enabling this may have a negative performance impact",
-	false,
-	settings.WithPublic)
-
 // ReorderJoinsLimitClusterSettingName is the name of the cluster setting for
 // the maximum number of joins to reorder.
 const ReorderJoinsLimitClusterSettingName = "sql.defaults.reorder_joins_limit"
