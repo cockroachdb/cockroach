@@ -107,6 +107,32 @@ type singleRangeBatch struct {
 
 var _ sort.Interface = &singleRangeBatch{}
 
+// deepCopyRequests updates the singleRangeBatch to have deep-copies of all KV
+// requests (Gets and Scans).
+func (r *singleRangeBatch) deepCopyRequests(s *Streamer) {
+	gets := make([]kvpb.GetRequest, r.numGetsInReqs)
+	scans := make([]kvpb.ScanRequest, len(r.reqs)-int(r.numGetsInReqs))
+	for i := range r.reqs {
+		switch req := r.reqs[i].GetInner().(type) {
+		case *kvpb.GetRequest:
+			newGet := gets[0]
+			gets = gets[1:]
+			newGet.SetSpan(req.Span())
+			newGet.KeyLockingStrength = s.lockStrength
+			newGet.KeyLockingDurability = s.lockDurability
+			r.reqs[i].Value.(*kvpb.RequestUnion_Get).Get = &newGet
+		case *kvpb.ScanRequest:
+			newScan := scans[0]
+			scans = scans[1:]
+			newScan.SetSpan(req.Span())
+			newScan.ScanFormat = kvpb.BATCH_RESPONSE
+			newScan.KeyLockingStrength = s.lockStrength
+			newScan.KeyLockingDurability = s.lockDurability
+			r.reqs[i].Value.(*kvpb.RequestUnion_Scan).Scan = &newScan
+		}
+	}
+}
+
 func (r *singleRangeBatch) Len() int {
 	return len(r.reqs)
 }

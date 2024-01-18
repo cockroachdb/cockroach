@@ -1447,6 +1447,11 @@ func (w *workerCoordinator) performRequestAsync(
 						// TODO(yuzefovich): consider updating the
 						// avgResponseSize and/or storing the information about
 						// the returned bytes size in req.
+
+						// The KV layer doesn't allow evaluation of the same
+						// Gets and Scans multiple times, so we need to make
+						// fresh copies of them.
+						req.deepCopyRequests(w.s)
 						w.s.requestsToServe.add(req)
 						return
 					}
