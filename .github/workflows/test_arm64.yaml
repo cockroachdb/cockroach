@@ -1,0 +1,39 @@
+name: Test ARM64
+on: [push, pull_request]
+jobs:
+  run:
+    runs-on: actuated-arm64-8cpu-32gb
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - linux-arm64-unit-test-1-cpu
+          - linux-arm64-unit-test-2-cpu
+          - linux-arm64-unit-test-4-cpu
+          - linux-arm64-unit-test-4-cpu-race
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21.5"
+      - env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          case "${TARGET}" in
+            linux-arm64-unit-test-1-cpu)
+              GOARCH=arm64 PASSES='unit' RACE='false' CPU='1' ./scripts/test.sh -p=4
+              ;;
+            linux-arm64-unit-test-2-cpu)
+              GOARCH=arm64 PASSES='unit' RACE='false' CPU='2' ./scripts/test.sh -p=2
+              ;;
+            linux-arm64-unit-test-4-cpu)
+              GOARCH=arm64 PASSES='unit' RACE='false' CPU='4' ./scripts/test.sh -p=2
+              ;;
+            linux-arm64-unit-test-4-cpu-race)
+              GOARCH=arm64 PASSES='unit' RACE='true' CPU='4' ./scripts/test.sh -p=2
+              ;;
+            *)
+              echo "Failed to find target"
+              exit 1
+              ;;
+          esac
