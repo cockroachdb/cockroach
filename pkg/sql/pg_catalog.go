@@ -4193,12 +4193,12 @@ https://www.postgresql.org/docs/14/view-pg-cursors.html`,
 				return err
 			}
 			if err := addRow(
-				tree.NewDString(string(name)), /* name */
-				tree.NewDString(c.statement),  /* statement */
-				tree.DBoolFalse,               /* is_holdable */
-				tree.DBoolFalse,               /* is_binary */
-				tree.DBoolFalse,               /* is_scrollable */
-				tz,                            /* creation_date */
+				tree.NewDString(string(name)),          /* name */
+				tree.NewDString(c.statement),           /* statement */
+				tree.MakeDBool(tree.DBool(c.withHold)), /* is_holdable */
+				tree.DBoolFalse,                        /* is_binary */
+				tree.DBoolFalse,                        /* is_scrollable */
+				tz,                                     /* creation_date */
 			); err != nil {
 				return err
 			}
