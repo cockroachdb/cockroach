@@ -16,12 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
-	"golang.org/x/net/trace"
 )
 
-// AmbientContext is a helper type used to "annotate" context.Contexts with log
-// tags and a Tracer or EventLog. It is intended to be embedded into various
-// server components.
+// AmbientContext is a helper type used to "annotate" context.Contexts with
+// log tags and a Tracer. It is intended to be embedded into various server
+// components.
 //
 // Example:
 //
@@ -60,10 +59,6 @@ type AmbientContext struct {
 	// one.
 	ServerIDs serverident.ServerIdentificationPayload
 
-	// eventLog will be embedded into contexts that don't already have an event
-	// log or an open span (if not nil).
-	eventLog *ctxEventLog
-
 	// The buffer.
 	//
 	// NB: this should not be returned to the caller, to avoid other mutations
@@ -82,26 +77,11 @@ func (ac *AmbientContext) AddLogTag(name string, value interface{}) {
 	ac.refreshCache()
 }
 
-// SetEventLog sets up an event log. Annotated contexts log into this event log
-// (unless there's an open Span).
-func (ac *AmbientContext) SetEventLog(family, title string) {
-	ac.eventLog = &ctxEventLog{eventLog: trace.NewEventLog(family, title)}
-	ac.refreshCache()
-}
-
-// FinishEventLog closes the event log. Concurrent and subsequent calls to
-// record events from contexts that use this event log embedded are allowed.
-func (ac *AmbientContext) FinishEventLog() {
-	ac.eventLog.finish()
-}
-
 func (ac *AmbientContext) refreshCache() {
 	ac.backgroundCtx = ac.annotateCtxInternal(context.Background())
 }
 
 // AnnotateCtx annotates a given context with the information in AmbientContext:
-//   - the EventLog is embedded in the context if the context doesn't already
-//     have an event log or an open trace.
 //   - the log tags in AmbientContext are added (if ctx doesn't already have
 //     them). If the tags already exist, the values from the AmbientContext
 //     overwrite the existing values, but the order of the tags might change.
@@ -136,9 +116,6 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 		}
 		return ctx
 	default:
-		if ac.eventLog != nil && tracing.SpanFromContext(ctx) == nil && eventLogFromCtx(ctx) == nil {
-			ctx = embedCtxEventLog(ctx, ac.eventLog)
-		}
 		ctx = logtags.WithTags(ctx, ac.tags)
 		if ac.ServerIDs != nil {
 			ctx = serverident.ContextWithServerIdentification(ctx, ac.ServerIDs)
@@ -148,9 +125,6 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 }
 
 func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Context {
-	if ac.eventLog != nil && tracing.SpanFromContext(ctx) == nil && eventLogFromCtx(ctx) == nil {
-		ctx = embedCtxEventLog(ctx, ac.eventLog)
-	}
 	if ac.tags != nil {
 		ctx = logtags.AddTags(ctx, ac.tags)
 	}
