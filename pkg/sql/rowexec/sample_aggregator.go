@@ -653,14 +653,14 @@ func (s *sampleAggregator) generateHistogram(
 	}
 
 	if lowerBound != nil {
-		h, buckets, err := stats.ConstructExtremesHistogram(evalCtx, colType, values, numRows, distinctCount, maxBuckets, lowerBound)
+		h, buckets, err := stats.ConstructExtremesHistogram(ctx, evalCtx, colType, values, numRows, distinctCount, maxBuckets, lowerBound, evalCtx.Settings)
 		_ = buckets
 		return h, err
 	}
 
 	// TODO(michae2): Instead of using the flowCtx's evalCtx, investigate
 	// whether this can use a nil *eval.Context.
-	h, _, err := stats.EquiDepthHistogram(evalCtx, colType, values, numRows, distinctCount, maxBuckets)
+	h, _, err := stats.EquiDepthHistogram(ctx, evalCtx, colType, values, numRows, distinctCount, maxBuckets, evalCtx.Settings)
 	return h, err
 }
 

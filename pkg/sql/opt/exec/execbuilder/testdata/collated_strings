@@ -1,0 +1,41 @@
+# LogicTest: local
+
+# Regression test for incorrectly using the key-encoding for collated strings
+# as upper bounds of histogram buckets (#98400).
+statement ok
+CREATE TABLE t98400 (k INT PRIMARY KEY, s STRING COLLATE en_US_u_ks_level2);
+INSERT INTO t98400 SELECT i, 'hello' FROM generate_series(1, 10) g(i);
+INSERT INTO t98400 SELECT i, 'world' FROM generate_series(11, 12) g(i);
+INSERT INTO t98400 SELECT 13, 'foo';
+
+statement ok
+ANALYZE t98400;
+
+# We expect that the filter is estimated to match 10 rows.
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM t98400 WHERE s = 'hello' COLLATE en_US_u_ks_level2;
+----
+select
+ ├── columns: k:1 s:2
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
+ │   histogram(2)=  0                 10
+ │                <--- 'hello' COLLATE en_US_u_ks_level2
+ ├── cost: 43.02
+ ├── key: (1)
+ ├── fd: ()-->(2)
+ ├── distribution: test
+ ├── prune: (1)
+ ├── scan t98400
+ │    ├── columns: k:1 s:2
+ │    ├── stats: [rows=13, distinct(1)=13, null(1)=0, distinct(2)=3, null(2)=0]
+ │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1
+ │    │                <--- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13
+ │    │   histogram(2)=  0                 1                 10                  2
+ │    │                <--- 'foo' COLLATE en_US_u_ks_level2 ---- 'world' COLLATE en_US_u_ks_level2
+ │    ├── cost: 42.86
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── distribution: test
+ │    └── prune: (1,2)
+ └── filters
+      └── s:2 = 'hello' COLLATE en_US_u_ks_level2 [outer=(2), constraints=(/2: [/'hello' COLLATE en_US_u_ks_level2 - /'hello' COLLATE en_US_u_ks_level2]; tight), fd=()-->(2)]

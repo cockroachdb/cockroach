@@ -4825,12 +4825,15 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 				// Each single-column prefix value from the Spans is a sample value.
 				// Give each sample value its own bucket, up to a maximum of 200
 				// buckets, with even distribution.
-				_, unencodedBuckets, err := stats.EquiDepthHistogram(sb.evalCtx,
+				_, unencodedBuckets, err := stats.EquiDepthHistogram(
+					sb.ctx,
+					sb.evalCtx,
 					dataType,
 					values, /* samples */
 					numRows,
 					int64(numValues), /* distinctCount */
 					int(stats.DefaultHistogramBuckets.Get(&sb.evalCtx.Settings.SV)), /* maxBuckets */
+					sb.evalCtx.Settings,
 				)
 				// This shouldn't error out, but if it does, let's not punish the user.
 				// Just build stats without the histogram in that case.

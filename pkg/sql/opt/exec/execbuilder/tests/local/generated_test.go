@@ -139,6 +139,13 @@ func TestExecBuild_check_constraints(
 	runExecBuildLogicTest(t, "check_constraints")
 }
 
+func TestExecBuild_collated_strings(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "collated_strings")
+}
+
 func TestExecBuild_ddl(
 	t *testing.T,
 ) {
