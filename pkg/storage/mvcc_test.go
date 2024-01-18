@@ -4885,15 +4885,15 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		}
 	}
 	if err := MVCCDeleteRangeUsingTombstone(ctx, engine, ms, roachpb.Key("r"),
-		roachpb.Key("r-del").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, false, 0, nil); err != nil {
+		roachpb.Key("r-del").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := MVCCDeleteRangeUsingTombstone(ctx, engine, ms, roachpb.Key("t"),
-		roachpb.Key("u").Next(), ts2, hlc.ClockTimestamp{}, nil, nil, false, 0, nil); err != nil {
+		roachpb.Key("u").Next(), ts2, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := MVCCDeleteRangeUsingTombstone(ctx, engine, ms, roachpb.Key("t"),
-		roachpb.Key("u").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, false, 0, nil); err != nil {
+		roachpb.Key("u").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if log.V(1) {
@@ -5306,7 +5306,7 @@ func (d rangeTestData) populateEngine(
 			ts = v.point.Key.Timestamp
 		} else {
 			require.NoError(t, MVCCDeleteRangeUsingTombstone(ctx, engine, ms, v.rangeTombstone.StartKey,
-				v.rangeTombstone.EndKey, v.rangeTombstone.Timestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, nil),
+				v.rangeTombstone.EndKey, v.rangeTombstone.Timestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil),
 				"failed to insert range tombstone into engine (%s)", v.rangeTombstone.String())
 			ts = v.rangeTombstone.Timestamp
 		}
@@ -6708,7 +6708,7 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 
 	// Test function uses a fixed time and key range to produce SST.
 	// Use varying inserted keys for values and intents to putting them in and out of ranges.
-	checkReportedErrors := func(data []testValue, expectedIntentIndices []int) func(*testing.T) {
+	checkReportedErrors := func(data []testValue, expectedIntentIndices []int, targetBytes uint64) func(*testing.T) {
 		return func(t *testing.T) {
 			ctx := context.Background()
 			st := cluster.MakeTestingClusterSettings()
@@ -6719,16 +6719,17 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 			require.NoError(t, fillInData(ctx, engine, data))
 			ss := kvpb.ScanStats{}
 			_, _, err := MVCCExportToSST(ctx, st, engine, MVCCExportOptions{
-				StartKey:           MVCCKey{Key: key(10)},
-				EndKey:             key(20000),
-				StartTS:            ts(999),
-				EndTS:              ts(2000),
-				ExportAllRevisions: true,
-				TargetSize:         0,
-				MaxSize:            0,
-				MaxLockConflicts:   uint64(MaxConflictsPerLockConflictError.Default()),
-				StopMidKey:         false,
-				ScanStats:          &ss,
+				StartKey:                   MVCCKey{Key: key(10)},
+				EndKey:                     key(20000),
+				StartTS:                    ts(999),
+				EndTS:                      ts(2000),
+				ExportAllRevisions:         true,
+				TargetSize:                 0,
+				MaxSize:                    0,
+				MaxLockConflicts:           uint64(MaxConflictsPerLockConflictError.Default()),
+				TargetBytesPerLockConflict: targetBytes,
+				StopMidKey:                 false,
+				ScanStats:                  &ss,
 			}, &bytes.Buffer{})
 			if len(expectedIntentIndices) == 0 {
 				require.NoError(t, err)
@@ -6758,7 +6759,8 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 		testData[i*2+1] = intent(key(i*2+12), "intent", ts(1001))
 		expectedErrors[i] = i*2 + 1
 	}
-	t.Run("Receive no more than limit intents", checkReportedErrors(testData, expectedErrors[:MaxConflictsPerLockConflictError.Default()]))
+	t.Run("Receive no more than limit intents", checkReportedErrors(testData, expectedErrors[:MaxConflictsPerLockConflictError.Default()], 0))
+	t.Run("Byte target checking", checkReportedErrors(testData, expectedErrors[:4999], uint64(TargetBytesPerLockConflictError.Default())))
 }
 
 // TestMVCCExportToSSTSplitMidKey verifies that split mid key in exports will

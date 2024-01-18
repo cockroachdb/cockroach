@@ -423,6 +423,6 @@ func (m *metamorphicMVCCIncrementalIterator) NextKeyIgnoringTime() {
 	m.moveAround()
 }
 
-func (m *metamorphicMVCCIncrementalIterator) TryGetIntentError() error {
-	return m.it.(*storage.MVCCIncrementalIterator).TryGetIntentError()
+func (m *metamorphicMVCCIncrementalIterator) TryGetIntentError(TargetSize uint64) error {
+	return m.it.(*storage.MVCCIncrementalIterator).TryGetIntentError(TargetSize)
 }
