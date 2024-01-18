@@ -1,0 +1,142 @@
+# shouldEmitTransaction unit tests
+
+subtest telemetry_disabled
+
+set-cluster-settings telemetryLoggingEnabled=false samplingMode=transaction stmtSampleFreq=10 txnSampleFreq=10
+----
+
+shouldEmitTransactionLog unixSecs=1 force=false
+----
+false
+
+shouldEmitTransactionLog unixSecs=2 force=true
+----
+false
+
+shouldEmitTransactionLog unixSecs=3 force=false
+----
+false
+
+shouldEmitTransactionLog unixSecs=4 force=true
+----
+false
+
+subtest end
+
+subtest telemetry_enabled_txn_freq_0
+
+set-cluster-settings telemetryLoggingEnabled=true samplingMode=transaction txnSampleFreq=0
+----
+
+shouldEmitTransactionLog unixSecs=1 force=false
+----
+false
+
+shouldEmitTransactionLog unixSecs=2 force=true
+----
+false
+
+shouldEmitTransactionLog unixSecs=3 force=false
+----
+false
+
+shouldEmitTransactionLog unixSecs=4 force=true
+----
+false
+
+subtest end
+
+subtest telemetry_enabled_txn_mode_off
+
+set-cluster-settings telemetryLoggingEnabled=true samplingMode=statement txnSampleFreq=10
+----
+
+shouldEmitTransactionLog unixSecs=1 force=false
+----
+false
+
+shouldEmitTransactionLog unixSecs=2 force=true
+----
+false
+
+shouldEmitTransactionLog unixSecs=3 force=false
+----
+false
+
+shouldEmitTransactionLog unixSecs=4 force=true
+----
+false
+
+subtest end
+
+subtest telemetry_enabled_txn_mode_on
+
+set-cluster-settings telemetryLoggingEnabled=true samplingMode=transaction txnSampleFreq=1
+----
+
+shouldEmitTransactionLog unixSecs=1 force=false
+----
+true
+
+# Not enough time elapsed.
+shouldEmitTransactionLog unixSecs=1.5 force=false
+----
+false
+
+# Enough time elapsed.
+shouldEmitTransactionLog unixSecs=2 force=false
+----
+true
+
+# Force should override the sampling frequency.
+shouldEmitTransactionLog unixSecs=2.5 force=true
+----
+true
+
+
+# Sampling internal queries is off.
+shouldEmitTransactionLog unixSecs=4 force=false isInternal=true
+----
+false
+
+shouldEmitTransactionLog unixSecs=4 force=true isInternal=true
+----
+false
+
+subtest end
+
+subtest telemetry_enabled_txn_mode_on_internal_queries_on
+# Test that internal queries are sampled when internalStmtsOn is true.
+
+set-cluster-settings telemetryLoggingEnabled=true samplingMode=transaction txnSampleFreq=1 internalStmtsOn=true
+----
+
+shouldEmitTransactionLog unixSecs=1 force=false isInternal=true
+----
+true
+
+shouldEmitTransactionLog unixSecs=1.5 force=false isInternal=true
+----
+false
+
+shouldEmitTransactionLog unixSecs=2 force=false isInternal=true
+----
+true
+
+shouldEmitTransactionLog unixSecs=2.5 force=true isInternal=true
+----
+true
+
+shouldEmitTransactionLog unixSecs=2.5 force=true isInternal=true
+----
+true
+
+shouldEmitTransactionLog unixSecs=4 force=false isInternal=false
+----
+true
+
+shouldEmitTransactionLog unixSecs=5 force=true isInternal=false
+----
+true
+
+subtest end

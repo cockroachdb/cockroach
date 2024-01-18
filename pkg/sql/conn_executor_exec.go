@@ -820,7 +820,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			stmtFingerprintID,
 			&topLevelQueryStats{},
 			ex.statsCollector,
-		)
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	switch s := ast.(type) {
@@ -1797,7 +1797,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 						ppInfo.dispatchToExecutionEngine.stmtFingerprintID,
 						ppInfo.dispatchToExecutionEngine.queryStats,
 						ex.statsCollector,
-					)
+						ex.extraTxnState.shouldLogToTelemetry)
 				},
 			})
 		} else {
@@ -1824,7 +1824,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				stmtFingerprintID,
 				&stats,
 				ex.statsCollector,
-			)
+				ex.extraTxnState.shouldLogToTelemetry)
 		}
 	}()
 
@@ -2504,7 +2504,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			stmtFingerprintID,
 			&topLevelQueryStats{},
 			ex.statsCollector,
-		)
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	// We're in the NoTxn state, so no statements were executed earlier. Bump the
@@ -3139,11 +3139,9 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 			}
 			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
 		}
+
 		// If we have a commitTimestamp, we should use it.
 		ex.previousTransactionCommitTimestamp.Forward(ev.commitTimestamp)
-		if telemetryLoggingEnabled.Get(&ex.server.cfg.Settings.SV) {
-			ex.server.TelemetryLoggingMetrics.onTxnFinish(ev.txnID.String())
-		}
 	}
 }
 
@@ -3164,6 +3162,7 @@ func (ex *connExecutor) onTxnRestart(ctx context.Context) {
 		if ex.server.cfg.TestingKnobs.BeforeRestart != nil {
 			ex.server.cfg.TestingKnobs.BeforeRestart(ctx, ex.state.mu.autoRetryReason)
 		}
+
 	}
 }
 
@@ -3175,6 +3174,10 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 		TxnID:            txnID,
 		TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 	})
+
+	tracingEnabled := ex.planner.ExtendedEvalContext().Tracing.Enabled()
+	ex.extraTxnState.shouldLogToTelemetry =
+		ex.server.TelemetryLoggingMetrics.shouldEmitTransactionLog(tracingEnabled, ex.executorType == executorTypeInternal)
 
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
