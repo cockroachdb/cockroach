@@ -3197,6 +3197,23 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(2, 10)
 		},
 	},
+
+	// CockroachDB extension.
+	`close_cursors_at_commit`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`close_cursors_at_commit`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`close_cursors_at_commit`, s)
+			if err != nil {
+				return err
+			}
+			m.SetCloseCursorsAtCommit(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().CloseCursorsAtCommit), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

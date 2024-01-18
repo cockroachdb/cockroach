@@ -1217,7 +1217,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
 		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
-	if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
+	if err := ex.extraTxnState.sqlCursors.closeAll(cursorCloseForExplicitClose); err != nil {
 		log.Warningf(ctx, "error closing cursors: %v", err)
 	}
 
@@ -1471,10 +1471,12 @@ type connExecutor struct {
 		// connExecutor's closure.
 		prepStmtsNamespaceMemAcc mon.BoundAccount
 
-		// sqlCursors contains the list of SQL CURSORs the session currently has
+		// sqlCursors contains the list of SQL cursors the session currently has
 		// access to.
-		// Cursors are bound to an explicit transaction and they're all destroyed
-		// once the transaction finishes.
+		//
+		// Cursors declared WITH HOLD belong to the session, and can outlive their
+		// parent transaction. Otherwise, cursors are bound to their transaction,
+		// and are destroyed when the transaction finishes.
 		sqlCursors cursorMap
 
 		// shouldExecuteOnTxnFinish indicates that ex.onTxnFinish will be called
@@ -2003,8 +2005,14 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
 
-	// Close all cursors.
-	if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
+	// Close all (non HOLD) cursors.
+	var closeReason cursorCloseReason
+	if ev.eventType == txnCommit {
+		closeReason = cursorCloseForTxnCommit
+	} else {
+		closeReason = cursorCloseForTxnRollback
+	}
+	if err := ex.extraTxnState.sqlCursors.closeAll(closeReason); err != nil {
 		log.Warningf(ctx, "error closing cursors: %v", err)
 	}
 
@@ -2476,7 +2484,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 			// txnState.finishSQLTxn() is being called, as the underlying resources of
 			// pausable portals hasn't been cleared yet.
 			ex.extraTxnState.prepStmtsNamespace.closeAllPausablePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
-			if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
+			if err := ex.extraTxnState.sqlCursors.closeAll(cursorCloseForTxnRollback); err != nil {
 				log.Warningf(ctx, "error closing cursors: %v", err)
 			}
 		}
@@ -3720,7 +3728,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 func (ex *connExecutor) resetPlanner(
 	ctx context.Context, p *planner, txn *kv.Txn, stmtTS time.Time,
 ) {
-	p.resetPlanner(ctx, txn, stmtTS, ex.sessionData(), ex.state.mon)
+	p.resetPlanner(ctx, txn, stmtTS, ex.sessionData(), ex.state.mon, ex.sessionMon)
 	autoRetryReason := ex.state.mu.autoRetryReason
 	// If we are retrying due to an unsatisfiable timestamp bound which is
 	// retriable, it means we were unable to serve the previous minimum timestamp

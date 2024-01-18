@@ -2799,6 +2799,7 @@ bytea_output                                               hex                 N
 check_function_bodies                                      on                  NULL      NULL        NULL        string
 client_encoding                                            UTF8                NULL      NULL        NULL        string
 client_min_messages                                        notice              NULL      NULL        NULL        string
+close_cursors_at_commit                                    on                  NULL      NULL        NULL        string
 copy_from_atomic_enabled                                   on                  NULL      NULL        NULL        string
 copy_from_retries_enabled                                  on                  NULL      NULL        NULL        string
 copy_num_retries_per_batch                                 5                   NULL      NULL        NULL        string
@@ -2973,6 +2974,7 @@ bytea_output                                               hex                 N
 check_function_bodies                                      on                  NULL  user     NULL      on                  on
 client_encoding                                            UTF8                NULL  user     NULL      UTF8                UTF8
 client_min_messages                                        notice              NULL  user     NULL      notice              notice
+close_cursors_at_commit                                    on                  NULL  user     NULL      on                  on
 copy_from_atomic_enabled                                   on                  NULL  user     NULL      on                  on
 copy_from_retries_enabled                                  on                  NULL  user     NULL      on                  on
 copy_num_retries_per_batch                                 5                   NULL  user     NULL      5                   5
@@ -3140,6 +3142,7 @@ bytea_output                                               NULL    NULL     NULL
 check_function_bodies                                      NULL    NULL     NULL     NULL        NULL
 client_encoding                                            NULL    NULL     NULL     NULL        NULL
 client_min_messages                                        NULL    NULL     NULL     NULL        NULL
+close_cursors_at_commit                                    NULL    NULL     NULL     NULL        NULL
 copy_fast_path_enabled                                     NULL    NULL     NULL     NULL        NULL
 copy_from_atomic_enabled                                   NULL    NULL     NULL     NULL        NULL
 copy_from_retries_enabled                                  NULL    NULL     NULL     NULL        NULL
