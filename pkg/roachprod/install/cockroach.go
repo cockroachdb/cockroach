@@ -416,15 +416,13 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		if startOpts.KVCluster != nil {
 			storageCluster = startOpts.KVCluster
 		}
-		if startOpts.Target == StartDefault {
+		if startOpts.Target == StartDefault && startOpts.ScheduleBackups && shouldInit && config.CockroachDevLicense != "" {
 			if err := storageCluster.waitForDefaultTargetCluster(ctx, l, startOpts); err != nil {
 				return errors.Wrap(err, "failed to wait for default target cluster")
 			}
 			// Only after a successful cluster initialization should we attempt to schedule backups.
-			if startOpts.ScheduleBackups && shouldInit && config.CockroachDevLicense != "" {
-				if err := c.createFixedBackupSchedule(ctx, l, startOpts.ScheduleBackupArgs); err != nil {
-					return err
-				}
+			if err := c.createFixedBackupSchedule(ctx, l, startOpts.ScheduleBackupArgs); err != nil {
+				return err
 			}
 		}
 		c.createAdminUserForSecureCluster(ctx, l, startOpts)
