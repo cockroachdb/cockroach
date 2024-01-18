@@ -17,7 +17,7 @@ import "util/log/eventpb/events.proto";
 import "util/log/logpb/event.proto";
 
 // Category: Miscellaneous SQL events
-// Channel: DEV
+// Channel: OPS
 //
 // Events in this category report miscellaneous SQL events.
 //
