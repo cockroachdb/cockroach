@@ -163,6 +163,11 @@ func evalExport(
 		maxLockConflicts = uint64(m)
 	}
 
+	var targetLockConflictBytes uint64
+	if m := storage.TargetLockConflictBytesError.Get(&cArgs.EvalCtx.ClusterSettings().SV); m > 0 {
+		targetLockConflictBytes = uint64(m)
+	}
+
 	// Only use resume timestamp if splitting mid key is enabled.
 	resumeKeyTS := hlc.Timestamp{}
 	if args.SplitMidKey {
@@ -181,16 +186,17 @@ func evalExport(
 	for start := args.Key; start != nil; {
 		var destFile bytes.Buffer
 		opts := storage.MVCCExportOptions{
-			StartKey:           storage.MVCCKey{Key: start, Timestamp: resumeKeyTS},
-			EndKey:             args.EndKey,
-			StartTS:            args.StartTime,
-			EndTS:              h.Timestamp,
-			ExportAllRevisions: exportAllRevisions,
-			TargetSize:         targetSize,
-			MaxSize:            maxSize,
-			MaxLockConflicts:   maxLockConflicts,
-			StopMidKey:         args.SplitMidKey,
-			ScanStats:          cArgs.ScanStats,
+			StartKey:                storage.MVCCKey{Key: start, Timestamp: resumeKeyTS},
+			EndKey:                  args.EndKey,
+			StartTS:                 args.StartTime,
+			EndTS:                   h.Timestamp,
+			ExportAllRevisions:      exportAllRevisions,
+			TargetSize:              targetSize,
+			MaxSize:                 maxSize,
+			MaxLockConflicts:        maxLockConflicts,
+			TargetLockConflictBytes: targetLockConflictBytes,
+			StopMidKey:              args.SplitMidKey,
+			ScanStats:               cArgs.ScanStats,
 		}
 		var summary kvpb.BulkOpSummary
 		var resumeInfo storage.ExportRequestResumeInfo

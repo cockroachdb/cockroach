@@ -1830,7 +1830,7 @@ func TestOptimizePuts(t *testing.T) {
 	for i, c := range testCases {
 		if c.exEndKey != nil {
 			require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(ctx, tc.engine, nil,
-				c.exKey, c.exEndKey, hlc.MinTimestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, nil))
+				c.exKey, c.exEndKey, hlc.MinTimestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil))
 		} else if c.exKey != nil {
 			_, err := storage.MVCCPut(ctx, tc.engine, c.exKey,
 				hlc.Timestamp{}, roachpb.MakeValueFromString("foo"), storage.MVCCWriteOptions{})
