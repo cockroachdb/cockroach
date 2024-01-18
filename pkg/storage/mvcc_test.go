@@ -4885,15 +4885,15 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		}
 	}
 	if err := MVCCDeleteRangeUsingTombstone(ctx, engine, ms, roachpb.Key("r"),
-		roachpb.Key("r-del").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, false, 0, nil); err != nil {
+		roachpb.Key("r-del").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := MVCCDeleteRangeUsingTombstone(ctx, engine, ms, roachpb.Key("t"),
-		roachpb.Key("u").Next(), ts2, hlc.ClockTimestamp{}, nil, nil, false, 0, nil); err != nil {
+		roachpb.Key("u").Next(), ts2, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := MVCCDeleteRangeUsingTombstone(ctx, engine, ms, roachpb.Key("t"),
-		roachpb.Key("u").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, false, 0, nil); err != nil {
+		roachpb.Key("u").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if log.V(1) {
@@ -5306,7 +5306,7 @@ func (d rangeTestData) populateEngine(
 			ts = v.point.Key.Timestamp
 		} else {
 			require.NoError(t, MVCCDeleteRangeUsingTombstone(ctx, engine, ms, v.rangeTombstone.StartKey,
-				v.rangeTombstone.EndKey, v.rangeTombstone.Timestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, nil),
+				v.rangeTombstone.EndKey, v.rangeTombstone.Timestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil),
 				"failed to insert range tombstone into engine (%s)", v.rangeTombstone.String())
 			ts = v.rangeTombstone.Timestamp
 		}
@@ -6719,16 +6719,17 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 			require.NoError(t, fillInData(ctx, engine, data))
 			ss := kvpb.ScanStats{}
 			_, _, err := MVCCExportToSST(ctx, st, engine, MVCCExportOptions{
-				StartKey:           MVCCKey{Key: key(10)},
-				EndKey:             key(20000),
-				StartTS:            ts(999),
-				EndTS:              ts(2000),
-				ExportAllRevisions: true,
-				TargetSize:         0,
-				MaxSize:            0,
-				MaxLockConflicts:   uint64(MaxConflictsPerLockConflictError.Default()),
-				StopMidKey:         false,
-				ScanStats:          &ss,
+				StartKey:                   MVCCKey{Key: key(10)},
+				EndKey:                     key(20000),
+				StartTS:                    ts(999),
+				EndTS:                      ts(2000),
+				ExportAllRevisions:         true,
+				TargetSize:                 0,
+				MaxSize:                    0,
+				MaxLockConflicts:           uint64(MaxConflictsPerLockConflictError.Default()),
+				TargetBytesPerLockConflict: uint64(TargetBytesPerLockConflictError.Default()),
+				StopMidKey:                 false,
+				ScanStats:                  &ss,
 			}, &bytes.Buffer{})
 			if len(expectedIntentIndices) == 0 {
 				require.NoError(t, err)
