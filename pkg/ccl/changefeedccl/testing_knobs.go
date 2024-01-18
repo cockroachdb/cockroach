@@ -77,6 +77,10 @@ type TestingKnobs struct {
 
 	// OnDrain returns the channel to select on to detect node drain
 	OnDrain func() <-chan struct{}
+
+	// PreserveDeprecatedPts is used to prevent a changefeed from upgrading
+	// its PTS record from the deprecated style to the new style.
+	PreserveDeprecatedPts func() bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
