@@ -251,7 +251,8 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 			w = rrw
 		} else if openCursor {
 			// The result of the first statement will be used to open a SQL cursor.
-			cursorHelper, err = g.newCursorHelper(plan.(*planComponents))
+			cursorSQL := g.expr.CursorDeclaration.CursorSQL
+			cursorHelper, err = g.newCursorHelper(plan.(*planComponents), cursorSQL)
 			if err != nil {
 				return err
 			}
@@ -450,7 +451,9 @@ func (d *droppingResultWriter) Err() error {
 	return d.err
 }
 
-func (g *routineGenerator) newCursorHelper(plan *planComponents) (*plpgsqlCursorHelper, error) {
+func (g *routineGenerator) newCursorHelper(
+	plan *planComponents, sql string,
+) (*plpgsqlCursorHelper, error) {
 	open := g.expr.CursorDeclaration
 	if open.NameArgIdx < 0 || open.NameArgIdx >= len(g.args) {
 		panic(errors.AssertionFailedf("unexpected name argument index: %d", open.NameArgIdx))
@@ -471,11 +474,20 @@ func (g *routineGenerator) newCursorHelper(plan *planComponents) (*plpgsqlCursor
 		ctx:        context.Background(),
 		cursorName: cursorName,
 		resultCols: make(colinfo.ResultColumns, len(planCols)),
+		cursorSql:  sql,
 	}
 	copy(cursorHelper.resultCols, planCols)
-	cursorHelper.container.Init(
+	mon := g.p.Mon()
+	if !g.p.SessionData().CloseCursorsAtCommit {
+		mon = g.p.sessionMonitor
+		if mon == nil {
+			return nil, errors.AssertionFailedf("cannot open cursor WITH HOLD without an active session")
+		}
+	}
+	cursorHelper.container.InitWithParentMon(
 		cursorHelper.ctx,
 		getTypesFromResultColumns(planCols),
+		mon,
 		g.p.ExtendedEvalContextCopy(),
 		"routine_open_cursor", /* opName */
 	)
@@ -509,6 +521,7 @@ func (h *plpgsqlCursorHelper) createCursor(p *planner, blockState *tree.BlockSta
 		txn:            p.txn,
 		statement:      h.cursorSql,
 		created:        timeutil.Now(),
+		withHold:       !p.SessionData().CloseCursorsAtCommit,
 		eagerExecution: true,
 	}
 	if err := p.checkIfCursorExists(h.cursorName); err != nil {

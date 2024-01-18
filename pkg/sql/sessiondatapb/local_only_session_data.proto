@@ -479,6 +479,9 @@ message LocalOnlySessionData {
   // CopyNumRetriesPerBatch determines the number of times a single batch of
   // rows can be retried for non-atomic COPY.
   int32 copy_num_retries_per_batch = 120;
+  // CloseCursorsAtCommit determines whether cursors remain open after their
+  // parent transaction closes.
+  bool close_cursors_at_commit = 121;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
