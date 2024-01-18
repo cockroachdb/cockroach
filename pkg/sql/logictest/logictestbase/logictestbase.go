@@ -491,8 +491,19 @@ var LogicTestConfigs = []TestClusterConfig{
 		DeclarativeCorpusCollection: true,
 	},
 	{
-		Name:                     "cockroach-go-testserver-upgrade-to-master",
+		// This config runs a cluster with 3 nodes, with a separate process per
+		// node. The nodes initially start on v23.1.
+		Name:                     "cockroach-go-testserver-23.1",
 		UseCockroachGoTestserver: true,
+		BootstrapVersion:         clusterversion.V23_1,
+		NumNodes:                 3,
+	},
+	{
+		// This config runs a cluster with 3 nodes, with a separate process per
+		// node. The nodes initially start on v23.2.
+		Name:                     "cockroach-go-testserver-23.2",
+		UseCockroachGoTestserver: true,
+		BootstrapVersion:         clusterversion.V23_2,
 		NumNodes:                 3,
 	},
 }
