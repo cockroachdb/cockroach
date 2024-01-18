@@ -602,7 +602,6 @@ go_library(
         "@com_github_prometheus_client_model//go",
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@io_opentelemetry_go_otel//attribute",
-        "@org_golang_x_net//trace",
     ],
 )
 
