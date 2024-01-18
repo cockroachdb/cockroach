@@ -62,7 +62,7 @@ func (r *Replica) maybeAcquireProposalQuota(
 
 	// Trace if we're running low on available proposal quota; it might explain
 	// why we're taking so long.
-	if log.HasSpanOrEvent(ctx) {
+	if log.HasSpan(ctx) {
 		if q := quotaPool.ApproximateQuota(); q < quotaPool.Capacity()/10 {
 			log.Eventf(ctx, "quota running low, currently available ~%d", q)
 		}

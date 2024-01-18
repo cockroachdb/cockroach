@@ -121,13 +121,13 @@ type ChannelLogger interface {
 	Shoutf(ctx context.Context, sev Severity, format string, args ...interface{})
 
 	// VEvent either logs a message to the channel (which also outputs to the
-	// active trace or event log) or to the trace/event log alone, depending on
-	// whether the specified verbosity level is active.
+	// active trace) or to the trace alone, depending on whether the specified
+	// verbosity level is active.
 	VEvent(ctx context.Context, level Level, msg string)
 
 	// VEventf either logs a message to the channel (which also outputs to the
-	// active trace or event log) or to the trace/event log alone, depending on
-	// whether the specified verbosity level is active.
+	// active trace) or to the trace alone, depending on whether the specified
+	// verbosity level is active.
 	VEventf(ctx context.Context, level Level, format string, args ...interface{})
 
 	// VEventfDepth performs the same as VEventf but checks the verbosity level
@@ -958,8 +958,8 @@ func (loggerDev) Shoutf(ctx context.Context, sev Severity, format string, args .
 }
 
 // VEvent either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `DEV` channel is used during development to collect log
 // details useful for troubleshooting that fall outside the
 // scope of other channels. It is also the default logging
@@ -976,8 +976,8 @@ func (loggerDev) VEvent(ctx context.Context, level Level, msg string) {
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `DEV` channel is used during development to collect log
 // details useful for troubleshooting that fall outside the
 // scope of other channels. It is also the default logging
@@ -1490,8 +1490,8 @@ func (loggerOps) Shoutf(ctx context.Context, sev Severity, format string, args .
 }
 
 // VEvent either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
@@ -1508,8 +1508,8 @@ func (loggerOps) VEvent(ctx context.Context, level Level, msg string) {
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
@@ -1928,8 +1928,8 @@ func (loggerHealth) Shoutf(ctx context.Context, sev Severity, format string, arg
 }
 
 // VEvent either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
@@ -1943,8 +1943,8 @@ func (loggerHealth) VEvent(ctx context.Context, level Level, msg string) {
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
@@ -2243,8 +2243,8 @@ func (loggerStorage) Shoutf(ctx context.Context, sev Severity, format string, ar
 }
 
 // VEvent either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 func (loggerStorage) VEvent(ctx context.Context, level Level, msg string) {
@@ -2252,8 +2252,8 @@ func (loggerStorage) VEvent(ctx context.Context, level Level, msg string) {
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 func (loggerStorage) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -2692,8 +2692,8 @@ func (loggerSessions) Shoutf(ctx context.Context, sev Severity, format string, a
 }
 
 // VEvent either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `SESSIONS` channel is used to report client network activity when enabled via
 // the `server.auth_log.sql_connections.enabled` and/or
 // `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html):
@@ -2709,8 +2709,8 @@ func (loggerSessions) VEvent(ctx context.Context, level Level, msg string) {
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `SESSIONS` channel is used to report client network activity when enabled via
 // the `server.auth_log.sql_connections.enabled` and/or
 // `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html):
@@ -3222,8 +3222,8 @@ func (loggerSqlSchema) Shoutf(ctx context.Context, sev Severity, format string, 
 }
 
 // VEvent either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
 // (which are reported separately on the `PRIVILEGES` channel) and
@@ -3242,8 +3242,8 @@ func (loggerSqlSchema) VEvent(ctx context.Context, level Level, msg string) {
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
 // (which are reported separately on the `PRIVILEGES` channel) and
@@ -3704,8 +3704,8 @@ func (loggerUserAdmin) Shoutf(ctx context.Context, sev Severity, format string, 
 }
 
 // VEvent either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
@@ -3721,8 +3721,8 @@ func (loggerUserAdmin) VEvent(ctx context.Context, level Level, msg string) {
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
@@ -4139,8 +4139,8 @@ func (loggerPrivileges) Shoutf(ctx context.Context, sev Severity, format string,
 }
 
 // VEvent either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
@@ -4154,8 +4154,8 @@ func (loggerPrivileges) VEvent(ctx context.Context, level Level, msg string) {
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
@@ -4644,8 +4644,8 @@ func (loggerSensitiveAccess) Shoutf(ctx context.Context, sev Severity, format st
 }
 
 // VEvent either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
@@ -4663,8 +4663,8 @@ func (loggerSensitiveAccess) VEvent(ctx context.Context, level Level, msg string
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
@@ -5047,8 +5047,8 @@ func (loggerSqlExec) Shoutf(ctx context.Context, sev Severity, format string, ar
 }
 
 // VEvent either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
@@ -5060,8 +5060,8 @@ func (loggerSqlExec) VEvent(ctx context.Context, level Level, msg string) {
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
@@ -5489,8 +5489,8 @@ func (loggerSqlPerf) Shoutf(ctx context.Context, sev Severity, format string, ar
 }
 
 // VEvent either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `SQL_PERF` channel is used to report SQL executions
 // that are marked as "out of the ordinary"
 // to facilitate performance investigations.
@@ -5505,8 +5505,8 @@ func (loggerSqlPerf) VEvent(ctx context.Context, level Level, msg string) {
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `SQL_PERF` channel is used to report SQL executions
 // that are marked as "out of the ordinary"
 // to facilitate performance investigations.
@@ -5845,8 +5845,8 @@ func (loggerSqlInternalPerf) Shoutf(ctx context.Context, sev Severity, format st
 }
 
 // VEvent either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
 // channel so as to not pollute the `SQL_PERF` logging output with
@@ -5856,8 +5856,8 @@ func (loggerSqlInternalPerf) VEvent(ctx context.Context, level Level, msg string
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
 // channel so as to not pollute the `SQL_PERF` logging output with
@@ -6167,8 +6167,8 @@ func (loggerTelemetry) Shoutf(ctx context.Context, sev Severity, format string, 
 }
 
 // VEvent either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
@@ -6177,8 +6177,8 @@ func (loggerTelemetry) VEvent(ctx context.Context, level Level, msg string) {
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
@@ -6486,8 +6486,8 @@ func (loggerKvDistribution) Shoutf(ctx context.Context, sev Severity, format str
 }
 
 // VEvent either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
 // replicas between stores in the cluster, or adding (removing) replicas to
 // ranges.
@@ -6496,8 +6496,8 @@ func (loggerKvDistribution) VEvent(ctx context.Context, level Level, msg string)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
-// active trace or event log) or to the trace/event log alone, depending on
-// whether the specified verbosity level is active.
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
 // The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
 // replicas between stores in the cluster, or adding (removing) replicas to
 // ranges.
