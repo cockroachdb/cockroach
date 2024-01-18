@@ -30,6 +30,11 @@ func TestValidateMixedVersionElements_add_column_default_seq(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_seq", sctest.SingleNodeMixedCluster)
 }
+func TestValidateMixedVersionElements_add_column_multiple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_multiple", sctest.SingleNodeMixedCluster)
+}
 func TestValidateMixedVersionElements_add_column_no_default(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

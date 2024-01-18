@@ -109,7 +109,13 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 	err := d.db.DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
-		pl := d.job.Payload()
+		// Re-load the job from storage, since informaiton inside the job
+		// will mutate over stages.
+		j, err := d.jobRegistry.LoadJobWithTxn(ctx, d.job.ID(), txn)
+		if err != nil {
+			return err
+		}
+		pl := j.Payload()
 		ed := &execDeps{
 			txnDeps: txnDeps{
 				txn:                txn,
