@@ -117,7 +117,8 @@ func ClearRange(
 	// consider the txn incomplete, uncommitting it and its writes (even those
 	// outside of the cleared range).
 	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
-	locks, err := storage.ScanLocks(ctx, readWriter, from, to, maxLockConflicts, 0,
+	maxLockConflictBytes := storage.MaxBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+	locks, err := storage.ScanLocks(ctx, readWriter, from, to, maxLockConflicts, maxLockConflictBytes,
 		storage.BatchEvalReadCategory)
 	if err != nil {
 		return result.Result{}, err

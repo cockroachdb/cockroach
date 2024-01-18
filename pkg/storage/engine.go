@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -1529,9 +1530,6 @@ func ScanLocks(
 		if maxLocks != 0 && int64(len(locks)) >= maxLocks {
 			break
 		}
-		if targetBytes != 0 && lockBytes >= targetBytes {
-			break
-		}
 		key, err := iter.EngineKey()
 		if err != nil {
 			return nil, err
@@ -1547,8 +1545,11 @@ func ScanLocks(
 		if err = protoutil.Unmarshal(v, &meta); err != nil {
 			return nil, err
 		}
-		locks = append(locks, roachpb.MakeLock(meta.Txn, ltKey.Key, ltKey.Strength))
 		lockBytes += int64(len(ltKey.Key)) + int64(len(v))
+		if targetBytes != 0 && lockBytes > targetBytes {
+			break
+		}
+		locks = append(locks, roachpb.MakeLock(meta.Txn, ltKey.Key, ltKey.Strength))
 	}
 	if err != nil {
 		return nil, err
@@ -2042,6 +2043,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 	start, end roachpb.Key,
 	intents *[]roachpb.Intent,
 	maxLockConflicts int64,
+	maxLockConflictBytes int64,
 ) (needIntentHistory bool, err error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -2078,6 +2080,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 
 	var meta enginepb.MVCCMetadata
 	var ok bool
+	intentSize := int64(0)
 	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
 		if maxLockConflicts != 0 && int64(len(*intents)) >= maxLockConflicts {
 			// Return early if we're done accumulating intents; make no claims about
@@ -2125,7 +2128,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 			needIntentHistory = true
 			continue
 		}
-		if conflictingIntent := meta.Timestamp.ToTimestamp().LessEq(ts); !conflictingIntent {
+		if intentConflicts := meta.Timestamp.ToTimestamp().LessEq(ts); !intentConflicts {
 			continue
 		}
 		key, err := iter.EngineKey()
@@ -2139,7 +2142,14 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		if ltKey.Strength != lock.Intent {
 			return false, errors.AssertionFailedf("unexpected strength for LockTableKey %s", ltKey.Strength)
 		}
-		*intents = append(*intents, roachpb.MakeIntent(meta.Txn, ltKey.Key))
+		conflictingIntent := roachpb.MakeIntent(meta.Txn, ltKey.Key)
+		intentSize += int64(unsafe.Sizeof(conflictingIntent))
+		if maxLockConflicts != 0 && intentSize > maxLockConflictBytes {
+			// Return early if we're exceed intent byte limits; make no claims about
+			// not needing intent history.
+			return true /* needsIntentHistory */, nil
+		}
+		*intents = append(*intents, conflictingIntent)
 	}
 	if err != nil {
 		return false, err

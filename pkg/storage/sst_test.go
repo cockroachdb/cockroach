@@ -40,8 +40,9 @@ func TestCheckSSTConflictsMaxLockConflicts(t *testing.T) {
 	start, end := "a", "z"
 
 	testcases := []struct {
-		maxLockConflicts    int64
-		expectLockConflicts []string
+		maxLockConflicts     int64
+		maxLockConflictBytes int64
+		expectLockConflicts  []string
 	}{
 		{maxLockConflicts: 0, expectLockConflicts: []string{"a", "b", "c", "d", "e"}}, // 0 means no limit
 		{maxLockConflicts: 1, expectLockConflicts: []string{"a"}},
@@ -50,6 +51,9 @@ func TestCheckSSTConflictsMaxLockConflicts(t *testing.T) {
 		{maxLockConflicts: 4, expectLockConflicts: []string{"a", "b", "c", "d"}},
 		{maxLockConflicts: 5, expectLockConflicts: []string{"a", "b", "c", "d", "e"}},
 		{maxLockConflicts: 6, expectLockConflicts: []string{"a", "b", "c", "d", "e"}},
+		// each intent has the size of 50 bytes
+		{maxLockConflicts: 6, maxLockConflictBytes: 200, expectLockConflicts: []string{"a", "b", "c", "d"}},
+		{maxLockConflicts: 6, maxLockConflictBytes: 215, expectLockConflicts: []string{"a", "b", "c", "d"}},
 	}
 
 	// Create SST with keys equal to intents at txn2TS.
@@ -91,7 +95,7 @@ func TestCheckSSTConflictsMaxLockConflicts(t *testing.T) {
 		if i%2 != 0 {
 			str = lock.Exclusive
 		}
-		require.NoError(t, MVCCAcquireLock(ctx, batch, txn1, str, roachpb.Key(key), nil, 0))
+		require.NoError(t, MVCCAcquireLock(ctx, batch, txn1, str, roachpb.Key(key), nil, 0, 0))
 	}
 	require.NoError(t, batch.Commit(true))
 	batch.Close()
@@ -104,7 +108,7 @@ func TestCheckSSTConflictsMaxLockConflicts(t *testing.T) {
 					// Provoke and check LockConflictError.
 					startKey, endKey := MVCCKey{Key: roachpb.Key(start)}, MVCCKey{Key: roachpb.Key(end)}
 					_, err := CheckSSTConflicts(ctx, sstFile.Bytes(), engine, startKey, endKey, startKey.Key, endKey.Key.Next(),
-						false /*disallowShadowing*/, hlc.Timestamp{} /*disallowShadowingBelow*/, hlc.Timestamp{} /* sstReqTS */, tc.maxLockConflicts, usePrefixSeek)
+						false /*disallowShadowing*/, hlc.Timestamp{} /*disallowShadowingBelow*/, hlc.Timestamp{} /* sstReqTS */, tc.maxLockConflicts, tc.maxLockConflictBytes, usePrefixSeek)
 					require.Error(t, err)
 					lcErr := &kvpb.LockConflictError{}
 					require.ErrorAs(t, err, &lcErr)

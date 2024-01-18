@@ -119,7 +119,7 @@ func CheckSSTConflicts(
 	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
 	sstTimestamp hlc.Timestamp,
-	maxLockConflicts int64,
+	maxLockConflicts, maxLockConflictBytes int64,
 	usePrefixSeek bool,
 ) (enginepb.MVCCStats, error) {
 
@@ -170,7 +170,7 @@ func CheckSSTConflicts(
 
 	// Check for any overlapping locks, and return them to be resolved.
 	if locks, err := ScanLocks(
-		ctx, reader, start.Key, end.Key, maxLockConflicts, 0, BatchEvalReadCategory); err != nil {
+		ctx, reader, start.Key, end.Key, maxLockConflicts, maxLockConflictBytes, BatchEvalReadCategory); err != nil {
 		return enginepb.MVCCStats{}, err
 	} else if len(locks) > 0 {
 		return enginepb.MVCCStats{}, &kvpb.LockConflictError{Locks: locks}

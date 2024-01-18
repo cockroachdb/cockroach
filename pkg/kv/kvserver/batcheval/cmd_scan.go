@@ -55,6 +55,7 @@ func Scan(
 		Uncertainty:           cArgs.Uncertainty,
 		MaxKeys:               h.MaxSpanRequestKeys,
 		MaxLockConflicts:      storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		MaxLockConflictBytes:  storage.MaxBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetBytes:           h.TargetBytes,
 		AllowEmpty:            h.AllowEmpty,
 		WholeRowsOfSize:       h.WholeRowsOfSize,

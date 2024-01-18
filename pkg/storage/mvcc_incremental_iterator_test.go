@@ -168,7 +168,7 @@ func assertExpectErrs(
 	if iter.NumCollectedIntents() != len(expectedIntents) {
 		t.Fatalf("Expected %d intents but found %d", len(expectedIntents), iter.NumCollectedIntents())
 	}
-	err = iter.TryGetIntentError()
+	err = iter.TryGetIntentError(0)
 	if lcErr := (*kvpb.LockConflictError)(nil); errors.As(err, &lcErr) {
 		for i := range expectedIntents {
 			if !expectedIntents[i].Key.Equal(lcErr.Locks[i].Key) {
