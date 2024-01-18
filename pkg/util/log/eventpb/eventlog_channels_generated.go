@@ -44,10 +44,10 @@ func (m *Import) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 func (m *Restore) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *SetClusterSetting) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *SetClusterSetting) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *SetTenantClusterSetting) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *SetTenantClusterSetting) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *AdminQuery) LoggingChannel() logpb.Channel { return logpb.Channel_SENSITIVE_ACCESS }
