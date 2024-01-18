@@ -56,6 +56,18 @@ func parseReleases() (map[string]Series, error) {
 	return result, nil
 }
 
+// LatestPatch returns the latest non-withdrawn patch release of
+// the series passed. For example, if the series is "23.1", this
+// will return the latest 23.1 patch release.
+func LatestPatch(seriesStr string) (string, error) {
+	series, ok := releaseData[seriesStr]
+	if !ok {
+		return "", fmt.Errorf("no release information for %q series", seriesStr)
+	}
+	activeReleases := activePatchReleases(series)
+	return activeReleases[len(activeReleases)-1], nil
+}
+
 // LatestPredecessor returns the latest non-withdrawn predecessor of
 // the version passed. For example, if the version is "v19.2.0", this
 // will return the latest 19.1 patch release.
