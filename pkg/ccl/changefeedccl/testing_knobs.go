@@ -81,6 +81,10 @@ type TestingKnobs struct {
 	// SpanPartitionsCallback is called with the span partition
 	// when the changefeed is planned.
 	SpanPartitionsCallback func([]sql.SpanPartition)
+
+	// PreserveDeprecatedPts is used to prevent a changefeed from upgrading
+	// its PTS record from the deprecated style to the new style.
+	PreserveDeprecatedPts func() bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
