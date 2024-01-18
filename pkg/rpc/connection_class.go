@@ -47,9 +47,12 @@ const (
 	NumConnectionClasses int = iota
 )
 
-// classOverrides contains a mapping from ConnectionClass to ConnectionClass.
-var classOverrides = parseClassOverrides(
-	envutil.EnvOrDefaultString("COCKROACH_USE_DEFAULT_CONNECTION_CLASS", ""))
+var (
+	classOverridesEnv = envutil.EnvOrDefaultString("COCKROACH_USE_DEFAULT_CONNECTION_CLASS", "")
+
+	// classOverrides contains a mapping from ConnectionClass to ConnectionClass.
+	classOverrides = parseClassOverrides(classOverridesEnv)
+)
 
 // parseClassOverrides parses the list of connection class overrides. See
 // classOverrides variable comment for syntax.
@@ -74,6 +77,28 @@ func ConnectionClassOverride(c ConnectionClass) ConnectionClass {
 		return override
 	}
 	return c
+}
+
+// ConnectionClassForTag returns the RPC connection class override associated
+// with the given tag, or def if there is no override.
+//
+// This mechanism allows custom reconfigurations that can not be done with
+// ConnectionClassOverride(). Example:
+//
+//   - Changefeed initial scan RPCs use BulkDataClass
+//   - As well as the rangefeed traffic
+//   - ConnectionClassOverride(BulkDataClass) is an override common to both
+//   - ConnectionClassForTag("changefeed") overrides only the changefeed RPCs
+//
+// TODO(pav-kv): Think about cases when there are two overlapping overrides. One
+// needs to take precedence.
+func ConnectionClassForTag(tag string, def ConnectionClass) ConnectionClass {
+	if pos := strings.Index(classOverridesEnv, tag); pos != -1 {
+		// NB: currently we only support overrides to default class. In the future,
+		// we may need to take the override from a map.
+		return DefaultClass
+	}
+	return def
 }
 
 // connectionClassName maps classes to their name.
