@@ -66,7 +66,7 @@ func TestTrace(t *testing.T) {
 				// that a span so configured will actually log them to the external
 				// trace.
 				require.True(t, tr.HasExternalSink())
-				require.True(t, log.HasSpanOrEvent(ctx))
+				require.True(t, log.HasSpan(ctx))
 				require.True(t, log.ExpensiveLogEnabled(ctx, 0 /* level */))
 			},
 		},
