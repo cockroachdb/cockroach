@@ -342,7 +342,7 @@ They are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of these miscellaneous events are
 preserved in each tenant's own system.eventlog table.
 
-Events in this category are logged to the `DEV` channel.
+Events in this category are logged to the `OPS` channel.
 
 
 ### `set_cluster_setting`
