@@ -274,7 +274,7 @@ WHERE stat->>'name' = '__merged__';
         }
     ],
     "histo_col_type": "INT8",
-    "histo_version": 2,
+    "histo_version": 3,
     "name": "__merged__",
     "null_count": 0,
     "row_count": 12
@@ -435,7 +435,7 @@ WHERE stat->>'name' = '__forecast__';
         }
     ],
     "histo_col_type": "INT8",
-    "histo_version": 2,
+    "histo_version": 3,
     "name": "__forecast__",
     "null_count": 0,
     "row_count": 18
@@ -750,7 +750,7 @@ WHERE stat->>'name' = '__merged__';
         }
     ],
     "histo_col_type": "INT8",
-    "histo_version": 2,
+    "histo_version": 3,
     "name": "__merged__",
     "null_count": 0,
     "row_count": 9
@@ -1136,7 +1136,7 @@ WHERE stat->>'name' = '__merged__' ORDER BY stat->>'created_at';
         }
     ],
     "histo_col_type": "INT8",
-    "histo_version": 2,
+    "histo_version": 3,
     "name": "__merged__",
     "null_count": 5,
     "row_count": 61
@@ -1229,7 +1229,7 @@ WHERE stat->>'name' = '__merged__' ORDER BY stat->>'created_at';
         }
     ],
     "histo_col_type": "INT8",
-    "histo_version": 2,
+    "histo_version": 3,
     "name": "__merged__",
     "null_count": 5,
     "row_count": 61
