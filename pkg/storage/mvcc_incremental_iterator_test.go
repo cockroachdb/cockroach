@@ -202,15 +202,16 @@ func assertExportedErrs(
 	const big = 1 << 30
 	st := cluster.MakeTestingClusterSettings()
 	_, _, err := MVCCExportToSST(context.Background(), st, e, MVCCExportOptions{
-		StartKey:           MVCCKey{Key: startKey},
-		EndKey:             endKey,
-		StartTS:            startTime,
-		EndTS:              endTime,
-		ExportAllRevisions: revisions,
-		TargetSize:         big,
-		MaxSize:            big,
-		MaxLockConflicts:   uint64(MaxConflictsPerLockConflictError.Default()),
-		StopMidKey:         false,
+		StartKey:                MVCCKey{Key: startKey},
+		EndKey:                  endKey,
+		StartTS:                 startTime,
+		EndTS:                   endTime,
+		ExportAllRevisions:      revisions,
+		TargetSize:              big,
+		MaxSize:                 big,
+		MaxLockConflicts:        uint64(MaxConflictsPerLockConflictError.Default()),
+		TargetLockConflictBytes: uint64(TargetBytesPerLockConflictError.Default()),
+		StopMidKey:              false,
 	}, &bytes.Buffer{})
 	require.Error(t, err)
 

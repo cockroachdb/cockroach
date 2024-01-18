@@ -86,22 +86,22 @@ var (
 // resolve_intent_range   t=<name> k=<key> end=<key> [status=<txnstatus>] [maxKeys=<int>] [targetBytes=<int>]
 // check_intent           k=<key> [none]
 // add_unreplicated_lock  t=<name> k=<key>
-// check_for_acquire_lock t=<name> k=<key> str=<strength> [maxLockConflicts=<int>]
-// acquire_lock           t=<name> k=<key> str=<strength> [maxLockConflicts=<int>]
+// check_for_acquire_lock t=<name> k=<key> str=<strength> [maxLockConflicts=<int>] [targetLockConflictBytes=<int>]
+// acquire_lock           t=<name> k=<key> str=<strength> [maxLockConflicts=<int>] [targetLockConflictBytes=<int>]
 //
-// cput           [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> v=<string> [raw] [cond=<string>]
-// del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key>
-// del_range      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> end=<key> [max=<max>] [returnKeys]
-// del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [maxLockConflicts=<int>] k=<key> end=<key> [idempotent] [noCoveredStats]
-// del_range_pred [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [maxLockConflicts=<int>] k=<key> end=<key> [startTime=<int>,max=<int>,maxBytes=<int>,rangeThreshold=<int>]
-// increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> [inc=<val>]
+// cput           [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> v=<string> [raw] [cond=<string>]
+// del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key>
+// del_range      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> end=<key> [max=<max>] [returnKeys]
+// del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> end=<key> [idempotent] [noCoveredStats]
+// del_range_pred [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> end=<key> [startTime=<int>,max=<int>,maxBytes=<int>,rangeThreshold=<int>]
+// increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> [inc=<val>]
 // initput        [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> v=<string> [raw] [failOnTombstones]
 // put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> v=<string> [raw]
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key>
 // put_blind_inline	k=<key> v=<string> [prev=<string>]
 // get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [maxKeys=<int>] [targetBytes=<int>] [allowEmpty]
 // scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [wholeRows[=<int>]] [allowEmpty]
-// export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxLockConflicts=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey] [fingerprint]
+// export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey] [fingerprint]
 //
 // iter_new       [k=<key>] [end=<key>] [prefix] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]] [minTimestamp=<int>[,<int>]] [maxTimestamp=<int>[,<int>]]
 // iter_new_incremental [k=<key>] [end=<key>] [startTs=<int>[,<int>]] [endTs=<int>[,<int>]] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]] [intents=error|aggregate|emit]
@@ -1168,7 +1168,8 @@ func cmdCheckForAcquireLock(e *evalCtx) error {
 		key := e.getKey()
 		str := e.getStrength()
 		maxLockConflicts := e.getMaxLockConflicts()
-		return storage.MVCCCheckForAcquireLock(e.ctx, r, txn, str, key, maxLockConflicts)
+		targetLockConflictBytes := e.getTargetLockConflictBytes()
+		return storage.MVCCCheckForAcquireLock(e.ctx, r, txn, str, key, maxLockConflicts, targetLockConflictBytes)
 	})
 }
 
@@ -1178,7 +1179,8 @@ func cmdAcquireLock(e *evalCtx) error {
 		key := e.getKey()
 		str := e.getStrength()
 		maxLockConflicts := e.getMaxLockConflicts()
-		return storage.MVCCAcquireLock(e.ctx, rw, txn, str, key, e.ms, maxLockConflicts)
+		targetLockConflictBytes := e.getTargetLockConflictBytes()
+		return storage.MVCCAcquireLock(e.ctx, rw, txn, str, key, e.ms, maxLockConflicts, targetLockConflictBytes)
 	})
 }
 
@@ -1418,6 +1420,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 	idempotent := e.hasArg("idempotent")
 	maxLockConflicts := e.getMaxLockConflicts()
+	targetLockConflictBytes := e.getTargetLockConflictBytes()
 
 	var msCovered *enginepb.MVCCStats
 	if cmdDeleteRangeTombstoneKnownStats && !e.hasArg("noCoveredStats") {
@@ -1436,7 +1439,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	return e.withWriter("del_range_ts", func(rw storage.ReadWriter) error {
 		rw, leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(rw, key, endKey)
 		return storage.MVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, localTs,
-			leftPeekBound, rightPeekBound, idempotent, maxLockConflicts, msCovered)
+			leftPeekBound, rightPeekBound, idempotent, maxLockConflicts, targetLockConflictBytes, msCovered)
 	})
 }
 
@@ -1462,10 +1465,11 @@ func cmdDeleteRangePredicate(e *evalCtx) error {
 		e.scanArg("rangeThreshold", &rangeThreshold)
 	}
 	maxLockConflicts := e.getMaxLockConflicts()
+	targetLockConflictBytes := e.getTargetLockConflictBytes()
 	return e.withWriter("del_range_pred", func(rw storage.ReadWriter) error {
 		rw, leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(rw, key, endKey)
 		resumeSpan, err := storage.MVCCPredicateDeleteRange(e.ctx, rw, e.ms, key, endKey, ts, localTs,
-			leftPeekBound, rightPeekBound, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), maxLockConflicts)
+			leftPeekBound, rightPeekBound, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), maxLockConflicts, targetLockConflictBytes)
 
 		if resumeSpan != nil {
 			e.results.buf.Printf("del_range_pred: resume span [%s,%s)\n", resumeSpan.Key,
@@ -1667,6 +1671,9 @@ func cmdExport(e *evalCtx) error {
 	}
 	if e.hasArg("maxLockConflicts") {
 		e.scanArg("maxLockConflicts", &opts.MaxLockConflicts)
+	}
+	if e.hasArg("targetLockConflictBytes") {
+		e.scanArg("targetLockConflictBytes", &opts.TargetLockConflictBytes)
 	}
 	if e.hasArg("targetSize") {
 		e.scanArg("targetSize", &opts.TargetSize)
@@ -2006,6 +2013,10 @@ func cmdIterNewIncremental(e *evalCtx) error {
 
 	if e.hasArg("maxLockConflicts") {
 		e.scanArg("maxLockConflicts", &opts.MaxLockConflicts)
+	}
+
+	if e.hasArg("targetLockConflictBytes") {
+		e.scanArg("targetLockConflictBytes", &opts.TargetLockConflictBytes)
 	}
 
 	r := e.newReader()
@@ -2718,6 +2729,15 @@ func (e *evalCtx) getMaxLockConflicts() int64 {
 		e.scanArg("maxLockConflicts", &maxLockConflicts)
 	}
 	return maxLockConflicts
+}
+
+func (e *evalCtx) getTargetLockConflictBytes() int64 {
+	e.t.Helper()
+	var targetLockConflictBytes int64
+	if e.hasArg("targetLockConflictBytes") {
+		e.scanArg("targetLockConflictBytes", &targetLockConflictBytes)
+	}
+	return targetLockConflictBytes
 }
 
 func (e *evalCtx) getTenantCodec() keys.SQLCodec {
