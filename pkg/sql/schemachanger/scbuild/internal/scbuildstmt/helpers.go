@@ -448,6 +448,15 @@ func hasIndexIDAttrFilter(
 	}
 }
 
+func hasSourceIndexIDAttrFilter(
+	indexID catid.IndexID,
+) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
+		idI, _ := screl.Schema.GetAttribute(screl.SourceIndexID, e)
+		return idI != nil && idI.(catid.IndexID) == indexID
+	}
+}
+
 func hasColumnIDAttrFilter(
 	columnID catid.ColumnID,
 ) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
