@@ -15,51 +15,32 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcpb"
 )
 
 // ConnectionClass is the identifier of a group of RPC client sessions that are
-// allowed to share an underlying TCP connections; RPC sessions with different
+// allowed to share an underlying TCP connection; RPC sessions with different
 // connection classes are guaranteed to use separate gRPC client connections.
 //
-// RPC sessions that share a connection class are arbitrated using the gRPC flow
-// control logic, see google.golang.org/grpc/internal/transport. The lack of
-// support of prioritization in the current gRPC implementation is the reason
-// why we are separating different priority flows across separate TCP
-// connections. Future gRPC improvements may enable further simplification
-// here. See https://github.com/grpc/grpc-go/issues/1448 for progress on gRPC's
-// adoption of HTTP2 priorities.
-type ConnectionClass int8
+// See rpcpb.ConnectionClass comment for more details.
+//
+// TODO(pav-kv): remove the aliases, they are only used for code compatibility.
+// While doing so, audit all sources of RPC traffic and sum them up.
+type ConnectionClass = rpcpb.ConnectionClass
 
 const (
-	// DefaultClass is the default ConnectionClass and should be used for most
-	// client traffic.
-	DefaultClass ConnectionClass = iota
+	// DefaultClass is the default ConnectionClass used for most client traffic.
+	DefaultClass = rpcpb.ConnectionClass_DEFAULT
 	// SystemClass is the ConnectionClass used for system traffic.
-	SystemClass
+	SystemClass = rpcpb.ConnectionClass_SYSTEM
 	// RangefeedClass is the ConnectionClass used for rangefeeds.
-	RangefeedClass
+	RangefeedClass = rpcpb.ConnectionClass_RANGEFEED
 	// RaftClass is the ConnectionClass used for raft traffic.
-	RaftClass
+	RaftClass = rpcpb.ConnectionClass_RAFT
 
 	// NumConnectionClasses is the number of valid ConnectionClass values.
-	NumConnectionClasses int = iota
+	NumConnectionClasses = int(RaftClass + 1)
 )
-
-// connectionClassName maps classes to their name.
-var connectionClassName = map[ConnectionClass]string{
-	DefaultClass:   "default",
-	SystemClass:    "system",
-	RangefeedClass: "rangefeed",
-	RaftClass:      "raft",
-}
-
-// String implements the fmt.Stringer interface.
-func (c ConnectionClass) String() string {
-	return connectionClassName[c]
-}
-
-// SafeValue implements the redact.SafeValue interface.
-func (ConnectionClass) SafeValue() {}
 
 var systemClassKeyPrefixes = []roachpb.RKey{
 	roachpb.RKey(keys.Meta1Prefix),

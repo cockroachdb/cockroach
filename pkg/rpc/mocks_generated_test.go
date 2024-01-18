@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	rpcpb "github.com/cockroachdb/cockroach/pkg/rpc/rpcpb"
 	gomock "github.com/golang/mock/gomock"
 	grpc "google.golang.org/grpc"
 )
@@ -37,7 +38,7 @@ func (m *MockDialbacker) EXPECT() *MockDialbackerMockRecorder {
 }
 
 // GRPCDialNode mocks base method.
-func (m *MockDialbacker) GRPCDialNode(arg0 string, arg1 roachpb.NodeID, arg2 ConnectionClass) *Connection {
+func (m *MockDialbacker) GRPCDialNode(arg0 string, arg1 roachpb.NodeID, arg2 rpcpb.ConnectionClass) *Connection {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GRPCDialNode", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*Connection)
@@ -65,7 +66,7 @@ func (mr *MockDialbackerMockRecorder) GRPCUnvalidatedDial(arg0 interface{}) *gom
 }
 
 // grpcDialRaw mocks base method.
-func (m *MockDialbacker) grpcDialRaw(arg0 context.Context, arg1 string, arg2 ConnectionClass, arg3 ...grpc.DialOption) (*grpc.ClientConn, error) {
+func (m *MockDialbacker) grpcDialRaw(arg0 context.Context, arg1 string, arg2 rpcpb.ConnectionClass, arg3 ...grpc.DialOption) (*grpc.ClientConn, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -85,7 +86,7 @@ func (mr *MockDialbackerMockRecorder) grpcDialRaw(arg0, arg1, arg2 interface{}, 
 }
 
 // wrapCtx mocks base method.
-func (m *MockDialbacker) wrapCtx(arg0 context.Context, arg1 string, arg2 roachpb.NodeID, arg3 ConnectionClass) context.Context {
+func (m *MockDialbacker) wrapCtx(arg0 context.Context, arg1 string, arg2 roachpb.NodeID, arg3 rpcpb.ConnectionClass) context.Context {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "wrapCtx", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(context.Context)
