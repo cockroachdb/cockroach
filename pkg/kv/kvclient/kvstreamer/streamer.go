@@ -1795,14 +1795,10 @@ func buildResumeSingleRangeBatch(
 	// original requests because the KV doesn't allow mutability (and all
 	// requests are modified by txnSeqNumAllocator, even if they are not
 	// evaluated due to TargetBytes limit).
-	gets := make([]struct {
-		req   kvpb.GetRequest
-		union kvpb.RequestUnion_Get
-	}, fp.numIncompleteGets)
-	scans := make([]struct {
-		req   kvpb.ScanRequest
-		union kvpb.RequestUnion_Scan
-	}, fp.numIncompleteScans)
+	//
+	// We can, however, reuse RequestUnion objects from the original batch.
+	gets := make([]kvpb.GetRequest, fp.numIncompleteGets)
+	scans := make([]kvpb.ScanRequest, fp.numIncompleteScans)
 	var resumeReqIdx int
 	for i, resp := range br.Responses {
 		position := req.positions[i]
@@ -1817,11 +1813,12 @@ func buildResumeSingleRangeBatch(
 			// ResumeSpan and include it into the batch.
 			newGet := gets[0]
 			gets = gets[1:]
-			newGet.req.SetSpan(*get.ResumeSpan)
-			newGet.req.KeyLockingStrength = s.lockStrength
-			newGet.req.KeyLockingDurability = s.lockDurability
-			newGet.union.Get = &newGet.req
-			resumeReq.reqs[resumeReqIdx].Value = &newGet.union
+			newGet.SetSpan(*get.ResumeSpan)
+			newGet.KeyLockingStrength = s.lockStrength
+			newGet.KeyLockingDurability = s.lockDurability
+			unionGet := req.reqs[i]
+			unionGet.Value.(*kvpb.RequestUnion_Get).Get = &newGet
+			resumeReq.reqs[resumeReqIdx] = unionGet
 			resumeReq.positions = append(resumeReq.positions, position)
 			if req.subRequestIdx != nil {
 				resumeReq.subRequestIdx = append(resumeReq.subRequestIdx, req.subRequestIdx[i])
@@ -1845,12 +1842,13 @@ func buildResumeSingleRangeBatch(
 			// the ResumeSpan and include it into the batch.
 			newScan := scans[0]
 			scans = scans[1:]
-			newScan.req.SetSpan(*scan.ResumeSpan)
-			newScan.req.ScanFormat = kvpb.BATCH_RESPONSE
-			newScan.req.KeyLockingStrength = s.lockStrength
-			newScan.req.KeyLockingDurability = s.lockDurability
-			newScan.union.Scan = &newScan.req
-			resumeReq.reqs[resumeReqIdx].Value = &newScan.union
+			newScan.SetSpan(*scan.ResumeSpan)
+			newScan.ScanFormat = kvpb.BATCH_RESPONSE
+			newScan.KeyLockingStrength = s.lockStrength
+			newScan.KeyLockingDurability = s.lockDurability
+			unionScan := req.reqs[i]
+			unionScan.Value.(*kvpb.RequestUnion_Scan).Scan = &newScan
+			resumeReq.reqs[resumeReqIdx] = unionScan
 			resumeReq.positions = append(resumeReq.positions, position)
 			if req.subRequestIdx != nil {
 				resumeReq.subRequestIdx = append(resumeReq.subRequestIdx, req.subRequestIdx[i])
