@@ -282,19 +282,20 @@ func (m mvccInitPutOp) run(ctx context.Context) string {
 }
 
 type mvccCheckForAcquireLockOp struct {
-	m                *metaTestRunner
-	writer           readWriterID
-	key              roachpb.Key
-	txn              txnID
-	strength         lock.Strength
-	maxLockConflicts int
+	m                       *metaTestRunner
+	writer                  readWriterID
+	key                     roachpb.Key
+	txn                     txnID
+	strength                lock.Strength
+	maxLockConflicts        int
+	targetLockConflictBytes int64
 }
 
 func (m mvccCheckForAcquireLockOp) run(ctx context.Context) string {
 	txn := m.m.getTxn(m.txn)
 	writer := m.m.getReadWriter(m.writer)
 
-	err := storage.MVCCCheckForAcquireLock(ctx, writer, txn, m.strength, m.key, int64(m.maxLockConflicts))
+	err := storage.MVCCCheckForAcquireLock(ctx, writer, txn, m.strength, m.key, int64(m.maxLockConflicts), m.targetLockConflictBytes)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -303,19 +304,20 @@ func (m mvccCheckForAcquireLockOp) run(ctx context.Context) string {
 }
 
 type mvccAcquireLockOp struct {
-	m                *metaTestRunner
-	writer           readWriterID
-	key              roachpb.Key
-	txn              txnID
-	strength         lock.Strength
-	maxLockConflicts int
+	m                       *metaTestRunner
+	writer                  readWriterID
+	key                     roachpb.Key
+	txn                     txnID
+	strength                lock.Strength
+	maxLockConflicts        int
+	targetLockConflictBytes int64
 }
 
 func (m mvccAcquireLockOp) run(ctx context.Context) string {
 	txn := m.m.getTxn(m.txn)
 	writer := m.m.getReadWriter(m.writer)
 
-	err := storage.MVCCAcquireLock(ctx, writer, txn, m.strength, m.key, nil, int64(m.maxLockConflicts))
+	err := storage.MVCCAcquireLock(ctx, writer, txn, m.strength, m.key, nil, int64(m.maxLockConflicts), m.targetLockConflictBytes)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -379,9 +381,8 @@ func (m mvccDeleteRangeUsingRangeTombstoneOp) run(ctx context.Context) string {
 		return "no-op due to no non-conflicting key range"
 	}
 
-	err := storage.MVCCDeleteRangeUsingTombstone(ctx, writer, nil, m.key, m.endKey, m.ts,
-		hlc.ClockTimestamp{}, m.key, m.endKey, false /* idempotent */, math.MaxInt64, /* maxLockConflicts */
-		nil /* msCovered */)
+	err := storage.MVCCDeleteRangeUsingTombstone(ctx, writer, nil, m.key, m.endKey, m.ts, hlc.ClockTimestamp{}, m.key,
+		m.endKey, false /* idempotent */, math.MaxInt64 /* maxLockConflicts */, 0 /* targetLockConflictBytes */, nil /* msCovered */)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}

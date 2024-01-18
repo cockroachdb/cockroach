@@ -287,6 +287,7 @@
 --   storage.max_sync_duration = 1m0s  (maximum duration for disk operations; any operations that take longer than this setting trigger a warning log entry or process crash)
 --   storage.max_sync_duration.fatal.enabled = true  (if true, fatal the process when a disk operation exceeds storage.max_sync_duration)
 --   storage.mvcc.max_intents_per_error = 5000  (maximum number of intents returned in error during export of scan requests)
+--   storage.mvcc.target_intent_bytes_per_error = 8388608  (target intents sizes returned in error during export of scan requests)
 --   storage.transaction.separated_intents.enabled = true  (if enabled, intents will be written to a separate lock table, instead of being interleaved with MVCC values)
 --   tenant_cost_model.kv_read_cost_per_megabyte = 10  (cost of a read in Request Units per MB)
 --   tenant_cost_model.kv_read_request_cost = 0.7  (base cost of a read request in Request Units)
