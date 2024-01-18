@@ -1166,7 +1166,8 @@ func cmdCheckForAcquireLock(e *evalCtx) error {
 		key := e.getKey()
 		str := e.getStrength()
 		maxLockConflicts := e.getMaxLockConflicts()
-		return storage.MVCCCheckForAcquireLock(e.ctx, r, txn, str, key, maxLockConflicts)
+		targetBytesPerLockConflict := e.getTargetBytesPerLockConflict()
+		return storage.MVCCCheckForAcquireLock(e.ctx, r, txn, str, key, maxLockConflicts, targetBytesPerLockConflict)
 	})
 }
 
@@ -1176,7 +1177,8 @@ func cmdAcquireLock(e *evalCtx) error {
 		key := e.getKey()
 		str := e.getStrength()
 		maxLockConflicts := e.getMaxLockConflicts()
-		return storage.MVCCAcquireLock(e.ctx, rw, txn, str, key, e.ms, maxLockConflicts)
+		targetBytesPerLockConflict := e.getTargetBytesPerLockConflict()
+		return storage.MVCCAcquireLock(e.ctx, rw, txn, str, key, e.ms, maxLockConflicts, targetBytesPerLockConflict)
 	})
 }
 
@@ -1416,6 +1418,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 	idempotent := e.hasArg("idempotent")
 	maxLockConflicts := e.getMaxLockConflicts()
+	targetBytesPerLockConflict := e.getTargetBytesPerLockConflict()
 
 	var msCovered *enginepb.MVCCStats
 	if cmdDeleteRangeTombstoneKnownStats && !e.hasArg("noCoveredStats") {
@@ -1434,7 +1437,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	return e.withWriter("del_range_ts", func(rw storage.ReadWriter) error {
 		rw, leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(rw, key, endKey)
 		return storage.MVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, localTs,
-			leftPeekBound, rightPeekBound, idempotent, maxLockConflicts, msCovered)
+			leftPeekBound, rightPeekBound, idempotent, maxLockConflicts, targetBytesPerLockConflict, msCovered)
 	})
 }
 
@@ -1460,10 +1463,11 @@ func cmdDeleteRangePredicate(e *evalCtx) error {
 		e.scanArg("rangeThreshold", &rangeThreshold)
 	}
 	maxLockConflicts := e.getMaxLockConflicts()
+	targetBytesPerLockConflict := e.getTargetBytesPerLockConflict()
 	return e.withWriter("del_range_pred", func(rw storage.ReadWriter) error {
 		rw, leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(rw, key, endKey)
 		resumeSpan, err := storage.MVCCPredicateDeleteRange(e.ctx, rw, e.ms, key, endKey, ts, localTs,
-			leftPeekBound, rightPeekBound, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), maxLockConflicts)
+			leftPeekBound, rightPeekBound, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), maxLockConflicts, targetBytesPerLockConflict)
 
 		if resumeSpan != nil {
 			e.results.buf.Printf("del_range_pred: resume span [%s,%s)\n", resumeSpan.Key,
@@ -2712,6 +2716,15 @@ func (e *evalCtx) getMaxLockConflicts() int64 {
 	return maxLockConflicts
 }
 
+func (e *evalCtx) getTargetBytesPerLockConflict() int64 {
+	e.t.Helper()
+	var targetBytesPerLockConflict int64
+	if e.hasArg("targetBytesPerLockConflict") {
+		e.scanArg("targetBytesPerLockConflict", &targetBytesPerLockConflict)
+	}
+	return targetBytesPerLockConflict
+}
+
 func (e *evalCtx) getTenantCodec() keys.SQLCodec {
 	if e.hasArg("tenant-prefix") {
 		var tenantID int
@@ -2897,7 +2910,7 @@ type mvccIncrementalIteratorI interface {
 	RangeKeyChangedIgnoringTime() bool
 	NextIgnoringTime()
 	NextKeyIgnoringTime()
-	TryGetIntentError() error
+	TryGetIntentError(_ uint64) error
 }
 
 var _ mvccIncrementalIteratorI = (*storage.MVCCIncrementalIterator)(nil)
@@ -2923,7 +2936,7 @@ func (e *evalCtx) iterErr() error {
 		return err
 	}
 	if mvccIncrementalIter := e.tryMVCCIncrementalIter(); mvccIncrementalIter != nil {
-		if err := mvccIncrementalIter.TryGetIntentError(); err != nil {
+		if err := mvccIncrementalIter.TryGetIntentError(0); err != nil {
 			return err
 		}
 	}
