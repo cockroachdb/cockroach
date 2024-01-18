@@ -1151,7 +1151,7 @@ func TestEvalAddSSTable(t *testing.T) {
 								kv.RangeKey.Timestamp.WallTime *= 1e9
 								v.MVCCValueHeader.LocalTimestamp.WallTime *= 1e9
 								require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(
-									ctx, b, nil, kv.RangeKey.StartKey, kv.RangeKey.EndKey, kv.RangeKey.Timestamp, v.MVCCValueHeader.LocalTimestamp, nil, nil, false, 0, nil))
+									ctx, b, nil, kv.RangeKey.StartKey, kv.RangeKey.EndKey, kv.RangeKey.Timestamp, v.MVCCValueHeader.LocalTimestamp, nil, nil, false, 0, 0,nil))
 							default:
 								t.Fatalf("unknown KV type %T", kv)
 							}

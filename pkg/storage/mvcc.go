@@ -66,6 +66,11 @@ const (
 	// LockConflictError is set to half of the maximum lock table size. This value
 	// is subject to tuning in real environment as we have more data available.
 	MaxConflictsPerLockConflictErrorDefault = 5000
+	// MaxBytesPerLockConflictErrorDefault is the default value for maximum
+	// size of locks reported by ExportToSST and Scan operations in
+	// LockConflictError. This value
+	// is subject to tuning in real environment as we have more data available.
+	MaxBytesPerLockConflictErrorDefault = 8388608
 )
 
 var minWALSyncInterval = settings.RegisterDurationSetting(
@@ -84,6 +89,17 @@ var MaxConflictsPerLockConflictError = settings.RegisterIntSetting(
 	"maximum number of locks returned in errors during evaluation",
 	MaxConflictsPerLockConflictErrorDefault,
 	settings.WithName("storage.mvcc.max_conflicts_per_lock_conflict_error"),
+)
+
+// MaxBytesPerLockConflictError sets maximum number of locks under this
+// byte threshold returned in LockConflictError in operations that return multiple
+// locks per error.
+var MaxBytesPerLockConflictError = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.mvcc.max_total_intent_size_per_error",
+	"maximum total lock size returned in errors during evaluation",
+	MaxBytesPerLockConflictErrorDefault,
+	settings.WithName("storage.mvcc.target_intent_bytes_per_error"),
 )
 
 // getMaxConcurrentCompactions wraps the maxConcurrentCompactions env var in a
@@ -1909,7 +1925,7 @@ func MVCCPut(
 		inlinePut := timestamp.IsEmpty()
 		if !inlinePut {
 			ltScanner, err = newLockTableKeyScanner(
-				ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.Category)
+				ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.MaxLockConflictBytes, opts.Category)
 			if err != nil {
 				return roachpb.LockAcquisition{}, err
 			}
@@ -1973,7 +1989,7 @@ func MVCCDelete(
 	var ltScanner *lockTableKeyScanner
 	if !inlineDelete {
 		ltScanner, err = newLockTableKeyScanner(
-			ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.Category)
+			ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.MaxLockConflictBytes, opts.Category)
 		if err != nil {
 			return false, roachpb.LockAcquisition{}, err
 		}
@@ -2786,7 +2802,7 @@ func MVCCIncrement(
 	var ltScanner *lockTableKeyScanner
 	if !inlineIncrement {
 		ltScanner, err = newLockTableKeyScanner(
-			ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.Category)
+			ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.MaxLockConflictBytes, opts.Category)
 		if err != nil {
 			return 0, roachpb.LockAcquisition{}, err
 		}
@@ -2879,7 +2895,7 @@ func MVCCConditionalPut(
 	var ltScanner *lockTableKeyScanner
 	if !inlinePut {
 		ltScanner, err = newLockTableKeyScanner(
-			ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.Category)
+			ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.MaxLockConflictBytes, opts.Category)
 		if err != nil {
 			return roachpb.LockAcquisition{}, err
 		}
@@ -2976,7 +2992,7 @@ func MVCCInitPut(
 	var ltScanner *lockTableKeyScanner
 	if !inlinePut {
 		ltScanner, err = newLockTableKeyScanner(
-			ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.Category)
+			ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.MaxLockConflictBytes, opts.Category)
 		if err != nil {
 			return roachpb.LockAcquisition{}, err
 		}
@@ -3608,11 +3624,12 @@ func MVCCDeleteRange(
 		scanTxn = prevSeqTxn
 	}
 	res, err := MVCCScan(ctx, rw, key, endKey, scanTs, MVCCScanOptions{
-		FailOnMoreRecent: failOnMoreRecent,
-		Txn:              scanTxn,
-		MaxKeys:          max,
-		MaxLockConflicts: opts.MaxLockConflicts,
-		ReadCategory:     opts.Category,
+		FailOnMoreRecent:     failOnMoreRecent,
+		Txn:                  scanTxn,
+		MaxKeys:              max,
+		MaxLockConflicts:     opts.MaxLockConflicts,
+		MaxLockConflictBytes: opts.MaxLockConflictBytes,
+		ReadCategory:         opts.Category,
 	})
 	if err != nil {
 		return nil, nil, 0, nil, err
@@ -3635,7 +3652,7 @@ func MVCCDeleteRange(
 	var ltScanner *lockTableKeyScanner
 	if !inlineDelete {
 		ltScanner, err = newLockTableKeyScanner(
-			ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.Category)
+			ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.MaxLockConflictBytes, opts.Category)
 		if err != nil {
 			return nil, nil, 0, nil, err
 		}
@@ -3711,6 +3728,7 @@ func MVCCPredicateDeleteRange(
 	maxBatchSize, maxBatchByteSize int64,
 	rangeTombstoneThreshold int64,
 	maxLockConflicts int64,
+	maxLockConflictBytes int64,
 ) (*roachpb.Span, error) {
 
 	if maxBatchSize == 0 {
@@ -3746,7 +3764,7 @@ func MVCCPredicateDeleteRange(
 
 	// Check for any overlapping locks, and return them to be resolved.
 	if locks, err := ScanLocks(
-		ctx, rw, startKey, endKey, maxLockConflicts, 0, BatchEvalReadCategory); err != nil {
+		ctx, rw, startKey, endKey, maxLockConflicts, maxLockConflictBytes, BatchEvalReadCategory); err != nil {
 		return nil, err
 	} else if len(locks) > 0 {
 		return nil, &kvpb.LockConflictError{Locks: locks}
@@ -3830,7 +3848,7 @@ func MVCCPredicateDeleteRange(
 	var ltScanner *lockTableKeyScanner
 	if !inlineDelete {
 		ltScanner, err = newLockTableKeyScanner(
-			ctx, rw, nil /* txn */, lock.Intent, maxLockConflicts, BatchEvalReadCategory)
+			ctx, rw, nil /* txn */, lock.Intent, maxLockConflicts, maxLockConflictBytes, BatchEvalReadCategory)
 		if err != nil {
 			return nil, err
 		}
@@ -3851,7 +3869,7 @@ func MVCCPredicateDeleteRange(
 			batchByteSize+runByteSize >= maxBatchByteSize {
 			if err := MVCCDeleteRangeUsingTombstone(ctx, rw, ms,
 				runStart, runEnd.Next(), endTime, localTimestamp, leftPeekBound, rightPeekBound,
-				false /* idempotent */, maxLockConflicts, nil); err != nil {
+				false /* idempotent */, maxLockConflicts, maxLockConflictBytes, nil); err != nil {
 				return err
 			}
 			batchByteSize += int64(MVCCRangeKey{StartKey: runStart, EndKey: runEnd, Timestamp: endTime}.EncodedSize())
@@ -4038,6 +4056,7 @@ func MVCCDeleteRangeUsingTombstone(
 	leftPeekBound, rightPeekBound roachpb.Key,
 	idempotent bool,
 	maxLockConflicts int64,
+	maxLockConflictBytes int64,
 	msCovered *enginepb.MVCCStats,
 ) error {
 	// Validate the range key. We must do this first, to catch e.g. any bound violations.
@@ -4071,7 +4090,7 @@ func MVCCDeleteRangeUsingTombstone(
 
 	// Check for any overlapping locks, and return them to be resolved.
 	if locks, err := ScanLocks(
-		ctx, rw, startKey, endKey, maxLockConflicts, 0, BatchEvalReadCategory); err != nil {
+		ctx, rw, startKey, endKey, maxLockConflicts, maxLockConflictBytes, BatchEvalReadCategory); err != nil {
 		return err
 	} else if len(locks) > 0 {
 		return &kvpb.LockConflictError{Locks: locks}
@@ -4553,6 +4572,12 @@ type MVCCWriteOptions struct {
 	//
 	// The zero value indicates no limit.
 	MaxLockConflicts int64
+	// MaxLockConflictBytes is a maximum number of bytes the conflicting locks can occupy
+	// before returning LockConflictError. Intents varies in sizes this constraint prevents
+	// excessive memory allocation on returned intents.
+	//
+	// The zero value indicates no limit.
+	MaxLockConflictBytes int64
 	// Category is used for writes that need to do a read.
 	Category ReadCategory
 }
@@ -4609,6 +4634,12 @@ type MVCCScanOptions struct {
 	// Not used in inconsistent scans.
 	// The zero value indicates no limit.
 	MaxLockConflicts int64
+	// MaxLockConflicts is a maximum total bytes of locks (intents) that can be
+	// collected by scanner in consistent mode before returning LockConflictError.
+	//
+	// Not used in inconsistent scans.
+	// The zero value indicates no limit.
+	MaxLockConflictBytes int64
 	// MemoryAccount is used for tracking memory allocations.
 	MemoryAccount *mon.BoundAccount
 	// LockTable is used to determine whether keys are locked in the in-memory
@@ -5830,12 +5861,13 @@ func MVCCCheckForAcquireLock(
 	str lock.Strength,
 	key roachpb.Key,
 	maxLockConflicts int64,
+	maxLockConflictBytes int64,
 ) error {
 	if err := validateLockAcquisition(txn, str); err != nil {
 		return err
 	}
 	ltScanner, err := newLockTableKeyScanner(
-		ctx, reader, txn, str, maxLockConflicts, BatchEvalReadCategory)
+		ctx, reader, txn, str, maxLockConflicts, maxLockConflictBytes, BatchEvalReadCategory)
 	if err != nil {
 		return err
 	}
@@ -5856,12 +5888,13 @@ func MVCCAcquireLock(
 	key roachpb.Key,
 	ms *enginepb.MVCCStats,
 	maxLockConflicts int64,
+	maxLockConflictBytes int64,
 ) error {
 	if err := validateLockAcquisition(txn, str); err != nil {
 		return err
 	}
 	ltScanner, err := newLockTableKeyScanner(
-		ctx, rw, txn, str, maxLockConflicts, BatchEvalReadCategory)
+		ctx, rw, txn, str, maxLockConflicts, maxLockConflictBytes, BatchEvalReadCategory)
 	if err != nil {
 		return err
 	}
@@ -7891,7 +7924,6 @@ func mvccExportToWriter(
 	// to collect all matching intents before returning them in an error to the caller.
 	if iter.NumCollectedIntents() > 0 {
 		for uint64(iter.NumCollectedIntents()) < opts.MaxLockConflicts {
-			iter.NextKey()
 			// If we encounter other errors during intent collection, we return our original write intent failure.
 			// We would find this new error again upon retry.
 			ok, _ := iter.Valid()
@@ -7899,7 +7931,7 @@ func mvccExportToWriter(
 				break
 			}
 		}
-		err := iter.TryGetIntentError()
+		err := iter.TryGetIntentError(opts.MaxLockConflictBytes)
 		return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
 	}
 
@@ -7970,6 +8002,9 @@ type MVCCExportOptions struct {
 	// reduces the overall number of scans. 0 disables batching and returns the
 	// first intent, pass math.MaxUint64 to collect all.
 	MaxLockConflicts uint64
+	// MaxLockConflicts specifies the size limit of locks can be collected in
+	// a LockConflictError. This excessive allocation of memory from large intents.
+	MaxLockConflictBytes uint64
 	// If StopMidKey is false, once function reaches targetSize it would continue
 	// adding all versions until it reaches next key or end of range. If true, it
 	// would stop immediately when targetSize is reached and return the next versions
@@ -8193,7 +8228,7 @@ func ReplacePointTombstonesWithRangeTombstones(
 		// Write the range tombstone, with proper stats.
 		if err := MVCCDeleteRangeUsingTombstone(ctx, rw, ms,
 			clearedKey.Key, clearedKey.Key.Next(), clearedKey.Timestamp, hlc.ClockTimestamp{},
-			start.Prevish(roachpb.PrevishKeyLength), end.Next(), false, 0, nil); err != nil {
+			start.Prevish(roachpb.PrevishKeyLength), end.Next(), false, 0, 0, nil); err != nil {
 			return err
 		}
 
