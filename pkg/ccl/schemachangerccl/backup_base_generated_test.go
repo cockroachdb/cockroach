@@ -28,6 +28,11 @@ func TestBackup_base_add_column_default_seq(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_seq", newCluster)
 }
+func TestBackup_base_add_column_multiple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_multiple", newCluster)
+}
 func TestBackup_base_add_column_no_default(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

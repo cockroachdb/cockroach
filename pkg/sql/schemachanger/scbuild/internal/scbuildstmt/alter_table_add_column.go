@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -362,6 +363,7 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 
 		// Otherwise, create a new primary index target and swap it with the existing
 		// primary index.
+
 		out := makeIndexSpec(b, existing.TableID, existing.IndexID)
 		inColumns := make([]indexColumnSpec, len(out.columns)+1)
 		for i, ic := range out.columns {
@@ -371,8 +373,52 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 			columnID: spec.col.ColumnID,
 			kind:     scpb.IndexColumn_STORED,
 		}
+
+		// Detect secondary indexes that will need to be updated if we create a
+		// new primary index. This will only consist of new secondary indexes with
+		// a new column.
+		getNewSecondaryIndexesToUpdate := func(primaryIndexID catid.IndexID) []*scpb.SecondaryIndex {
+			secondaryIndexesToUpdate := make([]*scpb.SecondaryIndex, 0)
+			tableElts := b.QueryByID(tableID).Filter(notAbsentTargetFilter)
+			idxElts := tableElts.Filter(hasIndexIDAttrFilter(primaryIndexID))
+			newColumns := catalog.TableColSet{}
+			scpb.ForEachIndexColumn(idxElts, func(status scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
+				if status != scpb.Status_PUBLIC {
+					// We found a column that is being added
+					newColumns.Add(ic.ColumnID)
+				}
+			})
+			if newColumns.Empty() {
+				return nil
+			}
+			// Find anything that uses the old source index ID
+			oldPrimaryIndexRefs := tableElts.Filter(hasSourceIndexIDAttrFilter(primaryIndexID))
+
+			scpb.ForEachSecondaryIndex(oldPrimaryIndexRefs, func(status scpb.Status, target scpb.TargetStatus, e *scpb.SecondaryIndex) {
+				// Already public so skip.
+				if status == scpb.Status_PUBLIC {
+					return
+				}
+				// Check if it refers to dead columns.
+				secondaryIdxElts := tableElts.Filter(hasIndexIDAttrFilter(e.IndexID))
+				needsSourceUpdate := false
+				scpb.ForEachIndexColumn(secondaryIdxElts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn) {
+					if newColumns.Contains(e.ColumnID) {
+						needsSourceUpdate = true
+					}
+				})
+				if needsSourceUpdate {
+					secondaryIndexesToUpdate = append(secondaryIndexesToUpdate, e)
+				}
+			})
+			return secondaryIndexesToUpdate
+		}
+		secondaryIndexesToUpdate := getNewSecondaryIndexesToUpdate(existing.IndexID)
 		out.apply(b.Drop)
 		in, temp := makeSwapIndexSpec(b, out, out.primary.IndexID, inColumns)
+		for _, secondaryIdx := range secondaryIndexesToUpdate {
+			secondaryIdx.SourceIndexID = in.primary.IndexID
+		}
 		in.apply(b.Add)
 		temp.apply(b.AddTransient)
 		return in.primary
