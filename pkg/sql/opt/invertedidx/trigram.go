@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -95,13 +94,14 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		// Can only accelerate with a single constant value.
 		return inverted.NonInvertedColExpression{}, expr, nil
 	}
-	d := memo.ExtractConstDatum(constantVal)
-	if d.ResolvedType() != types.String {
+	d := tree.UnwrapDOidWrapper(memo.ExtractConstDatum(constantVal))
+	ds, ok := d.(*tree.DString)
+	if !ok {
 		panic(errors.AssertionFailedf(
 			"trying to apply inverted index to unsupported type %s", d.ResolvedType().SQLStringForError(),
 		))
 	}
-	s := string(*d.(*tree.DString))
+	s := string(*ds)
 	var err error
 	invertedExpr, err = rowenc.EncodeTrigramSpans(s, allMustMatch)
 	if err != nil {
