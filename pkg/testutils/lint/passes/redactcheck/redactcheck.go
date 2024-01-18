@@ -147,7 +147,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"TenantID":          {},
 						"TransactionStatus": {},
 					},
-					"github.com/cockroachdb/cockroach/pkg/rpc": {
+					"github.com/cockroachdb/cockroach/pkg/rpc/rpcpb": {
 						"ConnectionClass": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb": {
