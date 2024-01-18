@@ -177,6 +177,7 @@ func acquireLockOnKey(
 	settings *cluster.Settings,
 ) (roachpb.LockAcquisition, error) {
 	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&settings.SV)
+	targetBytesPerLockConflict := storage.TargetBytesPerLockConflictError.Get(&settings.SV)
 	switch dur {
 	case lock.Unreplicated:
 		// Evaluation up until this point has only scanned for (and not found any)
@@ -184,7 +185,7 @@ func acquireLockOnKey(
 		// unreplicated locks and contended replicated locks. We haven't considered
 		// conflicts with un-contended replicated locks -- we need to do so before
 		// we can acquire our own unreplicated lock; do so now.
-		err := storage.MVCCCheckForAcquireLock(ctx, readWriter, txn, str, key, maxLockConflicts)
+		err := storage.MVCCCheckForAcquireLock(ctx, readWriter, txn, str, key, maxLockConflicts, targetBytesPerLockConflict)
 		if err != nil {
 			return roachpb.LockAcquisition{}, err
 		}
@@ -195,7 +196,7 @@ func acquireLockOnKey(
 		// conflicts with un-contended replicated locks -- we need to do so before
 		// we can acquire our own replicated lock; do that now, and also acquire
 		// the replicated lock if no conflicts are found.
-		if err := storage.MVCCAcquireLock(ctx, readWriter, txn, str, key, ms, maxLockConflicts); err != nil {
+		if err := storage.MVCCAcquireLock(ctx, readWriter, txn, str, key, ms, maxLockConflicts, targetBytesPerLockConflict); err != nil {
 			return roachpb.LockAcquisition{}, err
 		}
 	default:

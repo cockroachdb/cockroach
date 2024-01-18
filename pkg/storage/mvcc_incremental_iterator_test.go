@@ -168,7 +168,7 @@ func assertExpectErrs(
 	if iter.NumCollectedIntents() != len(expectedIntents) {
 		t.Fatalf("Expected %d intents but found %d", len(expectedIntents), iter.NumCollectedIntents())
 	}
-	err = iter.TryGetIntentError()
+	err = iter.TryGetIntentError(0)
 	if lcErr := (*kvpb.LockConflictError)(nil); errors.As(err, &lcErr) {
 		for i := range expectedIntents {
 			if !expectedIntents[i].Key.Equal(lcErr.Locks[i].Key) {
@@ -1534,6 +1534,47 @@ func collectMatchingWithMVCCIterator(
 		t.Fatalf("source of truth had no expected KVs; likely a bug in the test itself")
 	}
 	return expectedKVs
+}
+
+func TestTryGetIntentError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	e := NewDefaultInMemForTesting()
+	iter, _ := NewMVCCIncrementalIterator(context.Background(), e, MVCCIncrementalIterOptions{
+		EndKey:       roachpb.Key{'a'},
+		StartTime:    hlc.Timestamp{WallTime: 10, Logical: 1},
+		EndTime:      hlc.Timestamp{WallTime: 20, Logical: 20},
+		IntentPolicy: MVCCIncrementalIterIntentPolicyAggregate,
+	})
+
+	testCases := []struct {
+		targetBytes     uint64
+		expectedIntents int
+	}{
+		{0, 10},
+		{150, 2},
+		{300, 3},
+	}
+	for _, tc := range testCases {
+		txnMeta := enginepb.TxnMeta{
+			ID:             uuid.MakeV4(),
+			WriteTimestamp: hlc.Timestamp{WallTime: 10},
+		}
+		// dummy intents are 128 bytes each
+		for i := 0; i < 10; i++ {
+			dummyIntent := roachpb.MakeIntent(&txnMeta, roachpb.Key("p"))
+			iter.intents = append(iter.intents, dummyIntent)
+		}
+		err := iter.TryGetIntentError(tc.targetBytes)
+		require.NotNil(t, err)
+		var lockConflictErr *kvpb.LockConflictError
+		ok := errors.As(err, &lockConflictErr)
+		require.True(t, ok)
+		require.Equal(t, len(lockConflictErr.Locks), tc.expectedIntents)
+	}
+	iter.Close()
+	e.Close()
 }
 
 func runIncrementalBenchmark(b *testing.B, ts hlc.Timestamp, opts mvccBenchData) {

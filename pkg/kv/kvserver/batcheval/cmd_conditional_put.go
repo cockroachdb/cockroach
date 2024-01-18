@@ -66,6 +66,7 @@ func ConditionalPut(
 		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
 		OmitInRangefeeds:               cArgs.OmitInRangefeeds,
 		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		TargetBytesPerLockConflict:     storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		Category:                       storage.BatchEvalReadCategory,
 	}
 

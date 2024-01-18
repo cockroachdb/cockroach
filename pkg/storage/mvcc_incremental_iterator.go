@@ -13,6 +13,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -783,11 +784,28 @@ func (i *MVCCIncrementalIterator) NumCollectedIntents() int {
 // TryGetIntentError returns kvpb.LockConflictError if intents were encountered
 // during iteration and intent aggregation is enabled. Otherwise function
 // returns nil. kvpb.LockConflictError will contain all encountered intents.
-// TODO(nvanbenschoten): rename to TryGetLockConflictError.
-func (i *MVCCIncrementalIterator) TryGetIntentError() error {
+// When target sizes are exceeded we will only return the partial slices of
+// the intents that had size just equal or slightly exceed the target.
+func (i *MVCCIncrementalIterator) TryGetIntentError(targetIntentSize uint64) error {
 	if len(i.intents) == 0 {
 		return nil
 	}
+
+	if targetIntentSize > 0 {
+		totalSize := uint64(0)
+		idx := 0
+		for idx = range i.intents {
+			intentSize := uint64(unsafe.Sizeof(i.intents[idx]))
+			if totalSize > targetIntentSize {
+				break
+			}
+			totalSize += intentSize
+		}
+		return &kvpb.LockConflictError{
+			Locks: roachpb.AsLocks(i.intents[:idx]),
+		}
+	}
+
 	return &kvpb.LockConflictError{
 		Locks: roachpb.AsLocks(i.intents),
 	}

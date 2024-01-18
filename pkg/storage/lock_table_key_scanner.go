@@ -13,6 +13,7 @@ package storage
 import (
 	"context"
 	"sync"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -88,11 +89,16 @@ type lockTableKeyScanner struct {
 	// Stop adding conflicting locks and abort scan once the maxConflicts limit
 	// is reached. Ignored if zero.
 	maxConflicts int64
+	// Stop adding conflicting locks and abort scan once the targetBytesPerConflict
+	// limit is reached via collected intent size. Ignored if zero.
+	targetBytesPerConflict int64
 
 	// Stores any error returned. If non-nil, iteration short circuits.
 	err error
 	// Stores any locks that conflict with the transaction and locking strength.
 	conflicts []roachpb.Lock
+	// Stores the total byte size of conflicts.
+	conflictBytes int64
 	// Stores any locks that the transaction has already acquired.
 	ownLocks [len(replicatedLockStrengths)]*enginepb.MVCCMetadata
 
@@ -126,6 +132,7 @@ func newLockTableKeyScanner(
 	txn *roachpb.Transaction,
 	str lock.Strength,
 	maxConflicts int64,
+	targetBytesPerConflict int64,
 	readCategory ReadCategory,
 ) (*lockTableKeyScanner, error) {
 	var txnID uuid.UUID
@@ -149,6 +156,7 @@ func newLockTableKeyScanner(
 	s.iter = iter
 	s.txnID = txnID
 	s.maxConflicts = maxConflicts
+	s.targetBytesPerConflict = targetBytesPerConflict
 	return s, nil
 }
 
@@ -172,6 +180,7 @@ func (s *lockTableKeyScanner) scan(key roachpb.Key) error {
 func (s *lockTableKeyScanner) resetScanState() {
 	s.err = nil
 	s.conflicts = nil
+	s.conflictBytes = 0
 	for i := range s.ownLocks {
 		s.ownLocks[i] = nil
 	}
@@ -300,8 +309,13 @@ func (s *lockTableKeyScanner) consumeConflictingLock(
 	ltKey LockTableKey, ltValue *enginepb.MVCCMetadata,
 ) bool {
 	conflict := roachpb.MakeLock(ltValue.Txn, ltKey.Key.Clone(), ltKey.Strength)
+	conflictSize := int64(unsafe.Sizeof(conflict))
+	s.conflictBytes += conflictSize
 	s.conflicts = append(s.conflicts, conflict)
 	if s.maxConflicts != 0 && s.maxConflicts == int64(len(s.conflicts)) {
+		return false
+	}
+	if s.targetBytesPerConflict != 0 && s.conflictBytes > s.targetBytesPerConflict {
 		return false
 	}
 	return true
