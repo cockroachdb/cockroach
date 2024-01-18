@@ -327,7 +327,7 @@ message SampledExecStats {
   int64 cpu_sql_nanos = 6 [(gogoproto.customname) = "CPUSQLNanos", (gogoproto.jsontag) = "CPUSQLNanos,includeempty"];
 
   // Internal storage iteration statistics.
-  MVCCIteratorStats mvcc_iterator_stats = 7 [(gogoproto.customname) = "MVCCIteratorStats", (gogoproto.jsontag) = ",omitempty"];
+  MVCCIteratorStats mvcc_iterator_stats = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "MVCCIteratorStats"];
 }
 
 // Internal storage iteration statistics for a single execution.
