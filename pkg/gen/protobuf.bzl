@@ -52,6 +52,7 @@ PROTOBUF_SRCS = [
     "//pkg/obsservice/obspb:obspb_go_proto",
     "//pkg/repstream/streampb:streampb_go_proto",
     "//pkg/roachpb:roachpb_go_proto",
+    "//pkg/rpc/rpcpb:rpcpb_go_proto",
     "//pkg/rpc:rpc_go_proto",
     "//pkg/server/autoconfig/autoconfigpb:autoconfigpb_go_proto",
     "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_go_proto",
