@@ -1,2 +1,0 @@
-call_stmt ::=
-	'CALL' func_application

@@ -1,0 +1,4 @@
+alter_proc_stmt ::=
+	( 'ALTER' 'PROCEDURE' ( proc_name ( '(' ( ( routine_param ) ( ( ',' routine_param ) )* ) ')' | '(' ')' ) | proc_name ) 'RENAME' 'TO' proc_new_name )
+	| ( 'ALTER' 'PROCEDURE' ( proc_name ( '(' ( ( routine_param ) ( ( ',' routine_param ) )* ) ')' | '(' ')' ) | proc_name ) 'OWNER' 'TO' role_spec )
+	| ( 'ALTER' 'PROCEDURE' ( proc_name ( '(' ( ( routine_param ) ( ( ',' routine_param ) )* ) ')' | '(' ')' ) | proc_name ) 'SET' 'SCHEMA' schema_name )

@@ -1,0 +1,2 @@
+create_proc_stmt ::=
+	'CREATE' ( 'OR' 'REPLACE' |  ) 'PROCEDURE' routine_create_name '(' ( ( ( ( routine_param | routine_param   | routine_param   ) ) ( ( ',' ( routine_param | routine_param   | routine_param   ) ) )* ) |  ) ')' ( ( ( ( 'AS' routine_body_str  | 'LANGUAGE' ( 'SQL' | 'PLPGSQL' ) |  ) ) ( ( ( 'AS' routine_body_str  | 'LANGUAGE' ( 'SQL' | 'PLPGSQL' ) |  ) ) )* ) |  ) 
