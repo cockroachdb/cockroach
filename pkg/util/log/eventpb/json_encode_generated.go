@@ -4335,16 +4335,14 @@ func (m *SampledExecStats) AppendJSONFields(printComma bool, b redact.Redactable
 	b = append(b, "\"CPUSQLNanos\":"...)
 	b = strconv.AppendInt(b, int64(m.CPUSQLNanos), 10)
 
-	if m.MVCCIteratorStats != nil {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"MVCCIteratorStats\":"...)
-		b = append(b, '{')
-		printComma, b = m.MVCCIteratorStats.AppendJSONFields(false, b)
-		b = append(b, '}')
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"MVCCIteratorStats\":"...)
+	b = append(b, '{')
+	printComma, b = m.MVCCIteratorStats.AppendJSONFields(false, b)
+	b = append(b, '}')
 
 	return printComma, b
 }
