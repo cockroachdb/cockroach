@@ -205,6 +205,7 @@ func acquireLockOnKey(
 	settings *cluster.Settings,
 ) (roachpb.LockAcquisition, error) {
 	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&settings.SV)
+	targetLockConflictBytes := storage.TargetLockConflictBytesError.Get(&settings.SV)
 	if txn == nil {
 		// Non-transactional requests are not allowed to acquire locks that outlive
 		// the request's lifespan. However, they may conflict with locks held by
@@ -217,7 +218,7 @@ func acquireLockOnKey(
 		// NB: The supplied durability is insignificant for non-transactional
 		// requests.
 		return roachpb.LockAcquisition{},
-			storage.MVCCCheckForAcquireLock(ctx, readWriter, txn, str, key, maxLockConflicts)
+			storage.MVCCCheckForAcquireLock(ctx, readWriter, txn, str, key, maxLockConflicts, targetLockConflictBytes)
 	}
 	switch dur {
 	case lock.Unreplicated:
@@ -226,7 +227,7 @@ func acquireLockOnKey(
 		// unreplicated locks and contended replicated locks. We haven't considered
 		// conflicts with un-contended replicated locks -- we need to do so before
 		// we can acquire our own unreplicated lock; do so now.
-		err := storage.MVCCCheckForAcquireLock(ctx, readWriter, txn, str, key, maxLockConflicts)
+		err := storage.MVCCCheckForAcquireLock(ctx, readWriter, txn, str, key, maxLockConflicts, targetLockConflictBytes)
 		if err != nil {
 			return roachpb.LockAcquisition{}, err
 		}
@@ -237,7 +238,7 @@ func acquireLockOnKey(
 		// conflicts with un-contended replicated locks -- we need to do so before
 		// we can acquire our own replicated lock; do that now, and also acquire
 		// the replicated lock if no conflicts are found.
-		if err := storage.MVCCAcquireLock(ctx, readWriter, txn, str, key, ms, maxLockConflicts); err != nil {
+		if err := storage.MVCCAcquireLock(ctx, readWriter, txn, str, key, ms, maxLockConflicts, targetLockConflictBytes); err != nil {
 			return roachpb.LockAcquisition{}, err
 		}
 	default:
@@ -364,7 +365,8 @@ func (ltv *txnBoundReplicatedLockTableView) IsKeyLockedByConflictingTxn(
 	}
 	// TODO(arul): We could conflict with multiple (shared) locks here but we're
 	// only returning the first one. We could return all of them instead.
-	err := storage.MVCCCheckForAcquireLock(ctx, ltv.reader, ltv.txn, str, key, 1 /* maxConflicts */)
+	err := storage.MVCCCheckForAcquireLock(ctx, ltv.reader, ltv.txn, str, key, 1, /* maxConflicts */
+		0 /* targetLockConflictBytes */)
 	if err != nil {
 		if lcErr := (*kvpb.LockConflictError)(nil); errors.As(err, &lcErr) {
 			return true, &lcErr.Locks[0].Txn, nil

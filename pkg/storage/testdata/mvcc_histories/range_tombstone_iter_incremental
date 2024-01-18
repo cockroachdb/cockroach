@@ -1031,6 +1031,23 @@ iter_scan: "o"/7.000000000,0=/BYTES/o7 !
 iter_scan: .
 error: (*kvpb.LockConflictError:) conflicting locks on "a", "j", "l", "o"
 
+# Each intent here has the size of 3 bytes.
+run error
+iter_new_incremental types=pointsAndRanges k=a end=z intents=aggregate targetLockConflictBytes=6
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {a-b}/[1.000000000,0=/<empty>] !
+iter_scan: {a-b}/[1.000000000,0=/<empty>] !
+iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
+iter_scan: err=conflicting locks on "a", "d"
+error: (*kvpb.LockConflictError:) conflicting locks on "a", "d"
+
 run ok
 iter_new_incremental types=pointsAndRanges k=a end=z endTs=6 intents=aggregate
 iter_seek_ge k=a

@@ -308,7 +308,7 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 
 		if len(endKey) > 0 {
 			require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(
-				ctx, eng, nil, key, endKey, ts, localTS, nil, nil, false, 0, nil))
+				ctx, eng, nil, key, endKey, ts, localTS, nil, nil, false, 0, 0, nil))
 		} else {
 			_, err = storage.MVCCPut(ctx, eng, key, ts, value, storage.MVCCWriteOptions{LocalTimestamp: localTS})
 			require.NoError(t, err)
@@ -333,7 +333,7 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 	for i, l := range locks {
 		txnID := uuid.FromUint128(uint128.FromInts(0, uint64(l.txnID)))
 		txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: txnID}}
-		require.NoError(t, storage.MVCCAcquireLock(ctx, eng, txn, l.str, roachpb.Key(l.key), nil, 0))
+		require.NoError(t, storage.MVCCAcquireLock(ctx, eng, txn, l.str, roachpb.Key(l.key), nil, 0, 0))
 
 		rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim, nil /* settings */)
 		require.NoError(t, err)

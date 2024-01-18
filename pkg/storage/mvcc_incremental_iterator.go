@@ -13,7 +13,6 @@ package storage
 import (
 	"context"
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"sync/atomic"
 )
 
 // mvccIncrementalIteratorMetamorphicTBI will randomly enable TBIs.
@@ -132,6 +132,20 @@ type MVCCIncrementalIterator struct {
 	//
 	// The zero value indicates no limit.
 	maxLockConflicts uint64
+
+	// targetLockConflictBytes sets target bytes for collected intents with
+	// LockConflictError. This setting will stop collecting intents when total intent
+	// size exceeding the target threshold. This setting only work under
+	// MVCCIncrementalIterIntentPolicyAggregate. Caller must call TryGetIntentError
+	// even when the total collected intents size is less than the threshold.
+	//
+	// The zero value indicates no limit.
+	targetLockConflictBytes uint64
+
+	// collectedIntentBytes tracks the collected intents' memory usage, intent
+	// collection could stop early if targetLockConflictBytes is reached. This
+	// setting is only relevant under MVCCIncrementalIterIntentPolicyAggregate.
+	collectedIntentBytes atomic.Uint64
 }
 
 var _ SimpleMVCCIterator = &MVCCIncrementalIterator{}
@@ -199,6 +213,15 @@ type MVCCIncrementalIterOptions struct {
 	//
 	// The zero value indicates no limit.
 	MaxLockConflicts uint64
+
+	// TargetLockConflictBytesError sets target bytes for collected intents with
+	// LockConflictError. This setting will stop collecting intents when total intent
+	// size exceeding the target threshold. This setting only work under
+	// MVCCIncrementalIterIntentPolicyAggregate. Caller must call TryGetIntentError
+	// even when the total collected intents size is less than the threshold.
+	//
+	// The zero value indicates no limit.
+	TargetLockConflictBytes uint64
 }
 
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
@@ -280,12 +303,13 @@ func NewMVCCIncrementalIterator(
 	}
 
 	return &MVCCIncrementalIterator{
-		iter:             iter,
-		startTime:        opts.StartTime,
-		endTime:          opts.EndTime,
-		timeBoundIter:    timeBoundIter,
-		intentPolicy:     opts.IntentPolicy,
-		maxLockConflicts: opts.MaxLockConflicts,
+		iter:                    iter,
+		startTime:               opts.StartTime,
+		endTime:                 opts.EndTime,
+		timeBoundIter:           timeBoundIter,
+		intentPolicy:            opts.IntentPolicy,
+		maxLockConflicts:        opts.MaxLockConflicts,
+		targetLockConflictBytes: opts.TargetLockConflictBytes,
 	}, nil
 }
 
@@ -496,7 +520,14 @@ func (i *MVCCIncrementalIterator) updateMeta() error {
 		case MVCCIncrementalIterIntentPolicyAggregate:
 			// We are collecting intents, so we need to save it and advance to its proposed value. Caller could then use a
 			// value key to update proposed row counters for the sake of bookkeeping and advance more.
-			i.intents = append(i.intents, roachpb.MakeIntent(i.meta.Txn, i.iter.UnsafeKey().Key.Clone()))
+			intent := roachpb.MakeIntent(i.meta.Txn, i.iter.UnsafeKey().Key.Clone())
+			i.intents = append(i.intents, intent)
+			i.collectedIntentBytes.Add(uint64(intent.Size()))
+			if i.targetLockConflictBytes > 0 && i.collectedIntentBytes.Load() >= i.targetLockConflictBytes {
+				i.valid = false
+				i.err = i.TryGetIntentError()
+				return i.err
+			}
 			if i.maxLockConflicts > 0 && uint64(len(i.intents)) >= i.maxLockConflicts {
 				i.valid = false
 				i.err = i.TryGetIntentError()
@@ -820,7 +851,8 @@ func (i *MVCCIncrementalIterator) IgnoringTime() bool {
 
 // TryGetIntentError returns kvpb.LockConflictError if intents were encountered
 // during iteration and intent aggregation is enabled. Otherwise function
-// returns nil. kvpb.LockConflictError will contain all encountered intents.
+// returns nil. kvpb.LockConflictError will contain encountered intents, the
+// collected intents are bounded by maxLockConflict or targetBytes constraint.
 // TODO(nvanbenschoten): rename to TryGetLockConflictError.
 func (i *MVCCIncrementalIterator) TryGetIntentError() error {
 	if len(i.intents) == 0 {

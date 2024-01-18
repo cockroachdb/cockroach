@@ -1530,9 +1530,9 @@ func TestGetIntent(t *testing.T) {
 	// Key "b" has an intent, an exclusive lock, and a shared lock from txn1.
 	// NOTE: acquire in increasing strength order so that acquisition is never
 	// skipped.
-	err = MVCCAcquireLock(ctx, eng, txn1, lock.Shared, keyB, nil, 0)
+	err = MVCCAcquireLock(ctx, eng, txn1, lock.Shared, keyB, nil, 0, 0)
 	require.NoError(t, err)
-	err = MVCCAcquireLock(ctx, eng, txn1, lock.Exclusive, keyB, nil, 0)
+	err = MVCCAcquireLock(ctx, eng, txn1, lock.Exclusive, keyB, nil, 0, 0)
 	require.NoError(t, err)
 	_, err = MVCCPut(ctx, eng, keyB, txn1.ReadTimestamp, val, MVCCWriteOptions{Txn: txn1})
 	require.NoError(t, err)
@@ -1542,15 +1542,15 @@ func TestGetIntent(t *testing.T) {
 	require.NoError(t, err)
 
 	// Key "d" has an exclusive lock and a shared lock from txn2.
-	err = MVCCAcquireLock(ctx, eng, txn2, lock.Shared, keyD, nil, 0)
+	err = MVCCAcquireLock(ctx, eng, txn2, lock.Shared, keyD, nil, 0, 0)
 	require.NoError(t, err)
-	err = MVCCAcquireLock(ctx, eng, txn2, lock.Exclusive, keyD, nil, 0)
+	err = MVCCAcquireLock(ctx, eng, txn2, lock.Exclusive, keyD, nil, 0, 0)
 	require.NoError(t, err)
 
 	// Key "e" has a shared lock from each txn.
-	err = MVCCAcquireLock(ctx, eng, txn1, lock.Shared, keyE, nil, 0)
+	err = MVCCAcquireLock(ctx, eng, txn1, lock.Shared, keyE, nil, 0, 0)
 	require.NoError(t, err)
-	err = MVCCAcquireLock(ctx, eng, txn2, lock.Shared, keyE, nil, 0)
+	err = MVCCAcquireLock(ctx, eng, txn2, lock.Shared, keyE, nil, 0, 0)
 	require.NoError(t, err)
 
 	// Key "f" has no intent/locks.
@@ -1638,7 +1638,7 @@ func TestScanLocks(t *testing.T) {
 		if str == lock.Intent {
 			_, err = MVCCPut(ctx, eng, roachpb.Key(k), txn1.ReadTimestamp, roachpb.Value{RawBytes: roachpb.Key(k)}, MVCCWriteOptions{Txn: txn1})
 		} else {
-			err = MVCCAcquireLock(ctx, eng, txn1, str, roachpb.Key(k), nil, 0)
+			err = MVCCAcquireLock(ctx, eng, txn1, str, roachpb.Key(k), nil, 0, 0)
 		}
 		require.NoError(t, err)
 	}
@@ -2226,11 +2226,11 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 			setup: func(t *testing.T, rw ReadWriter, _ *roachpb.Transaction) {
 				txnA := newTxn(belowTxnTS)
 				txnB := newTxn(belowTxnTS)
-				err := MVCCAcquireLock(ctx, rw, txnA, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				err := MVCCAcquireLock(ctx, rw, txnA, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/, 0 /*maxConflictBytes*/)
 				require.NoError(t, err)
-				err = MVCCAcquireLock(ctx, rw, txnB, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				err = MVCCAcquireLock(ctx, rw, txnB, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/, 0 /*maxConflictBytes*/)
 				require.NoError(t, err)
-				err = MVCCAcquireLock(ctx, rw, txnA, lock.Exclusive, keyB, nil /*ms*/, 0 /*maxConflicts*/)
+				err = MVCCAcquireLock(ctx, rw, txnA, lock.Exclusive, keyB, nil /*ms*/, 0 /*maxConflicts*/, 0 /*maxConflictBytes*/)
 				require.NoError(t, err)
 			},
 			start:                 keyA,
@@ -2244,9 +2244,9 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 			name: "shared and exclusive locks should be ignored no end key",
 			setup: func(t *testing.T, rw ReadWriter, _ *roachpb.Transaction) {
 				txnA := newTxn(belowTxnTS)
-				err := MVCCAcquireLock(ctx, rw, txnA, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				err := MVCCAcquireLock(ctx, rw, txnA, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/, 0 /*maxConflictBytes*/)
 				require.NoError(t, err)
-				err = MVCCAcquireLock(ctx, rw, txnA, lock.Exclusive, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				err = MVCCAcquireLock(ctx, rw, txnA, lock.Exclusive, keyA, nil /*ms*/, 0 /*maxConflicts*/, 0 /*maxConflictBytes*/)
 				require.NoError(t, err)
 			},
 			start:                 keyA,
@@ -2259,11 +2259,11 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 			setup: func(t *testing.T, rw ReadWriter, _ *roachpb.Transaction) {
 				txnA := newTxn(belowTxnTS)
 				txnB := newTxn(belowTxnTS)
-				err := MVCCAcquireLock(ctx, rw, txnA, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				err := MVCCAcquireLock(ctx, rw, txnA, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/, 0 /*maxConflictBytes*/)
 				require.NoError(t, err)
-				err = MVCCAcquireLock(ctx, rw, txnB, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				err = MVCCAcquireLock(ctx, rw, txnB, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/, 0 /*maxConflictBytes*/)
 				require.NoError(t, err)
-				err = MVCCAcquireLock(ctx, rw, txnA, lock.Exclusive, keyB, nil /*ms*/, 0 /*maxConflicts*/)
+				err = MVCCAcquireLock(ctx, rw, txnA, lock.Exclusive, keyB, nil /*ms*/, 0 /*maxConflicts*/, 0 /*maxConflictBytes*/)
 				require.NoError(t, err)
 				require.NoError(t, err)
 				_, err = MVCCPut(ctx, rw, keyC, txnA.WriteTimestamp, val, MVCCWriteOptions{Txn: txnA})
@@ -2279,11 +2279,11 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 			setup: func(t *testing.T, rw ReadWriter, txn *roachpb.Transaction) {
 				txnA := newTxn(belowTxnTS)
 				txnB := newTxn(belowTxnTS)
-				err := MVCCAcquireLock(ctx, rw, txnA, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				err := MVCCAcquireLock(ctx, rw, txnA, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/, 0 /*maxConflictBytes*/)
 				require.NoError(t, err)
-				err = MVCCAcquireLock(ctx, rw, txnB, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				err = MVCCAcquireLock(ctx, rw, txnB, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/, 0 /*maxConflictBytes*/)
 				require.NoError(t, err)
-				err = MVCCAcquireLock(ctx, rw, txnA, lock.Exclusive, keyB, nil /*ms*/, 0 /*maxConflicts*/)
+				err = MVCCAcquireLock(ctx, rw, txnA, lock.Exclusive, keyB, nil /*ms*/, 0 /*maxConflicts*/, 0 /*maxConflictBytes*/)
 				require.NoError(t, err)
 				_, err = MVCCPut(ctx, rw, keyC, txn.WriteTimestamp, val, MVCCWriteOptions{Txn: txn})
 				require.NoError(t, err)
@@ -2314,6 +2314,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 				tc.end,
 				&intents,
 				0, /* maxLockConflicts */
+				0, /* targetLockConflictBytes */
 			)
 			if tc.expErr != "" {
 				require.Error(t, err)
@@ -2536,6 +2537,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites(t *testi
 				nil,
 				&intents,
 				0, /* maxLockConflicts */
+				0, /* targetLockConflictBytes */
 			)
 			require.NoError(t, err)
 			if alwaysFallbackToIntentInterleavingIteratorForReadYourOwnWrites {
