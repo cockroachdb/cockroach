@@ -12,6 +12,7 @@ package kvnemesis
 
 import (
 	"math/rand"
+	"sort"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -104,6 +105,8 @@ type ClientOperationConfig struct {
 	DeleteExisting int
 	// DeleteRange is an operation that Deletes a key range that may contain values.
 	DeleteRange int
+	// Barrier is an operation that waits for in-flight writes to complete.
+	Barrier int
 }
 
 // BatchOperationConfig configures the relative probability of generating a
@@ -183,6 +186,7 @@ func newAllOperationsConfig() GeneratorConfig {
 		DeleteMissing:        1,
 		DeleteExisting:       1,
 		DeleteRange:          1,
+		Barrier:              1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -247,6 +251,12 @@ func NewDefaultConfig() GeneratorConfig {
 	// TODO(dan): Remove when #45586 is addressed.
 	config.Ops.ClosureTxn.CommitBatchOps.GetExisting = 0
 	config.Ops.ClosureTxn.CommitBatchOps.GetMissing = 0
+	// Barrier cannot be used in batches, and we omit it in txns too because it
+	// can result in spurious RangeKeyMismatchErrors that fail the txn operation.
+	config.Ops.Batch.Ops.Barrier = 0
+	config.Ops.ClosureTxn.CommitBatchOps.Barrier = 0
+	config.Ops.ClosureTxn.TxnClientOps.Barrier = 0
+	config.Ops.ClosureTxn.TxnBatchOps.Ops.Barrier = 0
 	return config
 }
 
@@ -433,6 +443,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 	addOpGen(allowed, randReverseScan, c.ReverseScan)
 	addOpGen(allowed, randReverseScanForUpdate, c.ReverseScanForUpdate)
 	addOpGen(allowed, randDelRange, c.DeleteRange)
+	addOpGen(allowed, randBarrier, c.Barrier)
 }
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
@@ -472,6 +483,21 @@ func randPutExisting(g *generator, rng *rand.Rand) Operation {
 	value := g.getNextValue()
 	key := randMapKey(rng, g.keys)
 	return put(key, value)
+}
+
+func randBarrier(g *generator, rng *rand.Rand) Operation {
+	withLAI := rng.Float64() < 0.5
+	var key, endKey string
+	if withLAI {
+		// Barriers requesting LAIs can't span multiple ranges, so we try to fit
+		// them within an existing range. This may race with a concurrent split, in
+		// which case the Barrier will fail, but that's ok -- most should still
+		// succeed. These errors are ignored by the validator.
+		key, endKey = randRangeSpan(rng, g.currentSplits)
+	} else {
+		key, endKey = randSpan(rng)
+	}
+	return barrier(key, endKey, withLAI)
 }
 
 func randScan(g *generator, rng *rand.Rand) Operation {
@@ -656,6 +682,33 @@ func randKey(rng *rand.Rand) string {
 	return string(key)
 }
 
+// Interprets the provided map as the split points of the key space and returns
+// the boundaries of a random range.
+func randRangeSpan(rng *rand.Rand, curOrHistSplits map[string]struct{}) (string, string) {
+	genSpan := GeneratorDataSpan()
+	keys := make([]string, 0, len(curOrHistSplits))
+	for key := range curOrHistSplits {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	if len(keys) == 0 {
+		// No splits.
+		return string(genSpan.Key), string(genSpan.EndKey)
+	}
+	idx := rng.Intn(len(keys) + 1)
+	if idx == len(keys) {
+		// Last range.
+		return keys[idx-1], string(genSpan.EndKey)
+	}
+	if idx == 0 {
+		// First range. We avoid having splits at 0 so this will be a well-formed
+		// range. (If it isn't, we'll likely catch an error because we'll send an
+		// ill-formed request and kvserver will error it out).
+		return string(genSpan.Key), keys[0]
+	}
+	return keys[idx-1], keys[idx]
+}
+
 func randMapKey(rng *rand.Rand, m map[string]struct{}) string {
 	keys := make([]string, 0, len(m))
 	for key := range m {
@@ -755,4 +808,12 @@ func transferLease(key string, target roachpb.StoreID) Operation {
 
 func changeZone(changeType ChangeZoneType) Operation {
 	return Operation{ChangeZone: &ChangeZoneOperation{Type: changeType}}
+}
+
+func barrier(key, endKey string, withLAI bool) Operation {
+	return Operation{Barrier: &BarrierOperation{
+		Key:                   []byte(key),
+		EndKey:                []byte(endKey),
+		WithLeaseAppliedIndex: withLAI,
+	}}
 }
