@@ -494,7 +494,7 @@ func registerTPCC(r registry.Registry) {
 			t.L().Printf("computed headroom warehouses of %d\n", headroomWarehouses)
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   headroomWarehouses,
-				ExtraRunArgs: "--isolation-level=read_committed",
+				ExtraRunArgs: "--isolation-level=read_committed --txn-retries=false",
 				Duration:     120 * time.Minute,
 				SetupType:    usingImport,
 			})
@@ -572,7 +572,7 @@ func registerTPCC(r registry.Registry) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:      1,
 				Duration:        10 * time.Minute,
-				ExtraRunArgs:    "--wait=false --isolation-level=read_committed",
+				ExtraRunArgs:    "--wait=false --isolation-level=read_committed --txn-retries=false",
 				SetupType:       usingImport,
 				ExpensiveChecks: true,
 			})
