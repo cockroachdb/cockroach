@@ -134,7 +134,7 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 		results, err := c.RunWithDetailsSingleNode(
 			ctx,
 			t.L(),
-			c.Node(nodeToDrain),
+			option.WithNodes(c.Node(nodeToDrain)),
 			// --drain-wait is set to a low value so that we can confirm that it
 			// gets automatically upgraded to use a higher value larger than the sum
 			// of server.shutdown.initial_wait, server.shutdown.connections.timeout,
@@ -349,7 +349,7 @@ func runClusterNotAtQuorum(ctx context.Context, t test.Test, c cluster.Cluster) 
 	results, _ := c.RunWithDetailsSingleNode(
 		ctx,
 		t.L(),
-		c.Node(3), fmt.Sprintf("./cockroach node drain --self --insecure --drain-wait=10s --url=%s", pgurl))
+		option.WithNodes(c.Node(3)), fmt.Sprintf("./cockroach node drain --self --insecure --drain-wait=10s --url=%s", pgurl))
 	t.L().Printf("drain output:\n%s\n%s\n", results.Stdout, results.Stderr)
 	require.Regexp(t, "(cluster settings require a value of at least|could not check drain related cluster settings)", results.Stderr)
 }

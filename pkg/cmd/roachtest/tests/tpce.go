@@ -97,7 +97,7 @@ func (ts *tpceSpec) run(
 	ctx context.Context, t test.Test, c cluster.Cluster, o tpceCmdOptions,
 ) (install.RunResultDetails, error) {
 	cmd := fmt.Sprintf("%s %s", ts.newCmd(o), strings.Join(ts.roachNodeIPFlags, " "))
-	return c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(ts.loadNode), cmd)
+	return c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(ts.loadNode)), cmd)
 }
 
 type tpceOptions struct {

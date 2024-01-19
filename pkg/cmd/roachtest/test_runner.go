@@ -874,7 +874,7 @@ elif [[ -e "${ARTIFACTS_DIR}" ]]; then
 else
     echo false
 fi'`
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), "bash", "-c", testCmd)
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(node)), "bash", "-c", testCmd)
 		if err != nil {
 			return errors.Wrapf(err, "failed to check for artifacts in %q", srcDirOnNode)
 		}

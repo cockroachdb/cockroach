@@ -95,7 +95,7 @@ func validateCorpusFile(
 ) {
 	details, err := c.RunWithDetailsSingleNode(ctx,
 		t.L(),
-		c.Node(1),
+		option.WithNodes(c.Node(1)),
 		fmt.Sprintf("%s debug declarative-corpus-validate %s",
 			binaryName,
 			corpusPath))

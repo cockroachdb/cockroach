@@ -133,7 +133,7 @@ func registerAsyncpg(r registry.Registry) {
 
 		t.Status("Running asyncpg tests ")
 		result, err := c.RunWithDetailsSingleNode(
-			ctx, t.L(), node, asyncpgRunTestCmd)
+			ctx, t.L(), option.WithNodes(node), asyncpgRunTestCmd)
 		if err != nil {
 			t.L().Printf("error during asyncpg run (may be ok): %v\n", err)
 		}

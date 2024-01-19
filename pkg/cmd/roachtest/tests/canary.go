@@ -145,7 +145,7 @@ func repeatRunWithDetailsSingleNode(
 		}
 		attempt++
 		t.L().Printf("attempt %d - %s", attempt, operation)
-		lastResult, lastError = c.RunWithDetailsSingleNode(ctx, t.L(), node, args...)
+		lastResult, lastError = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node), args...)
 		if lastError != nil {
 			t.L().Printf("error - retrying: %s", lastError)
 			continue

@@ -130,7 +130,7 @@ func registerRustPostgres(r registry.Registry) {
 		result, err := c.RunWithDetailsSingleNode(
 			ctx,
 			t.L(),
-			node,
+			option.WithNodes(node),
 			`cd /mnt/data1/rust-postgres && /home/ubuntu/.cargo/bin/cargo test 2>&1 > rustpostgres.stdout --no-fail-fast`)
 		if err != nil {
 			t.L().Printf("error during rust postgres run (may be ok): %v\n", err)
@@ -138,7 +138,7 @@ func registerRustPostgres(r registry.Registry) {
 
 		t.L().Printf("Test stdout for rust-postgres")
 		result, err = c.RunWithDetailsSingleNode(
-			ctx, t.L(), node, "cd /mnt/data1/rust-postgres && cat rustpostgres.stdout",
+			ctx, t.L(), option.WithNodes(node), "cd /mnt/data1/rust-postgres && cat rustpostgres.stdout",
 		)
 		if err != nil {
 			t.Fatal(err)

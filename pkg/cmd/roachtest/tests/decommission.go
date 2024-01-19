@@ -1485,7 +1485,7 @@ func execCLI(
 		t.Fatal(err)
 	}
 	args = append(args, fmt.Sprintf("--url=%s", pgurl))
-	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(runNode), args...)
+	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(runNode)), args...)
 	t.L().Printf("%s\n", result.Stdout)
 	return result.Stdout, err
 }

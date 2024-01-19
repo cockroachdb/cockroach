@@ -257,7 +257,7 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 			if err != nil {
 				q.Fatal(err)
 			}
-			result, err := q.c.RunWithDetailsSingleNode(ctx, q.t.L(), q.c.Node(i),
+			result, err := q.c.RunWithDetailsSingleNode(ctx, q.t.L(), option.WithNodes(q.c.Node(i)),
 				"curl", "-s", fmt.Sprintf("http://%s/_status/ranges/local",
 					adminAddrs[0]))
 			if err != nil {
@@ -389,7 +389,7 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID),
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(nodeID)),
 			"./cockroach", "node", "drain", "--insecure", "--logtostderr=INFO",
 			fmt.Sprintf("--url=%s", pgurl),
 		)
@@ -436,7 +436,7 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(otherNodeID),
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(otherNodeID)),
 			"./cockroach", "node", "drain", "--insecure", "--logtostderr=INFO",
 			fmt.Sprintf("--url=%s", pgurl),
 			fmt.Sprintf("%d", nodeID),

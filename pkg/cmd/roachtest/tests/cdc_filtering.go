@@ -243,7 +243,7 @@ func checkCDCEvents[S any](
 
 	// Collect the events from the file-based sink on n1.
 	cmd := fmt.Sprintf("find {store-dir}/extern/%s -name '*.ndjson' | xargs cat", nodeLocalSinkDir)
-	d, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), cmd)
+	d, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(1)), cmd)
 	require.NoError(t, err)
 
 	var events []changefeedSinkEvent[S]

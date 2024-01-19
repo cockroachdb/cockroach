@@ -186,7 +186,7 @@ func registerDjango(r registry.Registry) {
 		var fullTestResults []byte
 		for _, testName := range enabledDjangoTests {
 			t.Status("Running django test app ", testName)
-			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node, fmt.Sprintf(djangoRunTestCmd, testName))
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node), fmt.Sprintf(djangoRunTestCmd, testName))
 
 			// Fatal for a roachprod or SSH error. A roachprod error is when result.Err==nil.
 			// Proceed for any other (command) errors

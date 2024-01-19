@@ -129,7 +129,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 
 		t.Status("running workload")
 		cmd := opts.cmd(true /* haproxy */) + " run"
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), loadNode, cmd)
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(loadNode), cmd)
 
 		// Sysbench occasionally segfaults. When that happens, don't fail the
 		// test.
