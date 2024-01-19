@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: ${{ fromJSON(input.targets) }}
+        target: ${{ fromJSON(inputs.targets) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
