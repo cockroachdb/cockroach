@@ -3,7 +3,7 @@
 # Regression test for incorrectly using the key-encoding for collated strings
 # as upper bounds of histogram buckets (#98400).
 statement ok
-CREATE TABLE t98400 (k INT PRIMARY KEY, s STRING COLLATE en_US_u_ks_level2);
+CREATE TABLE t98400 (k INT PRIMARY KEY, s STRING COLLATE en_US_u_ks_level2, FAMILY (k, s));
 INSERT INTO t98400 SELECT i, 'hello' FROM generate_series(1, 10) g(i);
 INSERT INTO t98400 SELECT i, 'world' FROM generate_series(11, 12) g(i);
 INSERT INTO t98400 SELECT 13, 'foo';
