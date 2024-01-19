@@ -12,6 +12,7 @@ package spanconfigkvsubscriber
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -439,6 +440,24 @@ func (s *KVSubscriber) setLastUpdatedLocked(ts hlc.Timestamp) {
 func (s *KVSubscriber) handlePartialUpdate(
 	ctx context.Context, ts hlc.Timestamp, events []rangefeedbuffer.Event,
 ) {
+	// The events we've received from the rangefeed buffer are sorted in
+	// increasing timestamp order. However, any updates with the same timestamp
+	// may be ordered arbitrarily. That's okay if they don't overlap. However, if
+	// they do overlap, the assumption is that an overlapping delete should be
+	// ordered before an addition it overlaps with -- not doing would cause the
+	// addition to get clobbered by the deletion, which will result in the store
+	// having missing span configurations. As such, we re-sort the list of events
+	// before applying it to our store, using Deletion() as a tie-breaker when
+	// timestamps are equal.
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].Timestamp().Less(events[j].Timestamp()) {
+			return true
+		} else if events[j].Timestamp().Less(events[i].Timestamp()) {
+			return false
+		}
+		// Equal timestamp. Deletions sort before additions.
+		return events[i].(*BufferEvent).Deletion() // no need to worry about the sort being stable
+	})
 	handlers := func() []handler {
 		s.mu.Lock()
 		defer s.mu.Unlock()
