@@ -74,6 +74,9 @@ type aggregateFuncHolder struct {
 	arguments tree.Datums
 	// isDistinct indicates whether only distinct values are aggregated.
 	isDistinct bool
+	// distsqlBlocklist is set when this function cannot be evaluated in
+	// distributed fashion.
+	distsqlBlocklist bool
 }
 
 // newAggregateFuncHolder creates an aggregateFuncHolder.
@@ -84,14 +87,19 @@ type aggregateFuncHolder struct {
 // If the aggregation function takes no arguments (e.g. COUNT_ROWS),
 // argRenderIdx is noRenderIdx.
 func newAggregateFuncHolder(
-	funcName string, argRenderIdxs []int, arguments tree.Datums, isDistinct bool,
+	funcName string,
+	argRenderIdxs []int,
+	arguments tree.Datums,
+	isDistinct bool,
+	distsqlBlocklist bool,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
-		funcName:        funcName,
-		argRenderIdxs:   argRenderIdxs,
-		filterRenderIdx: tree.NoColumnIdx,
-		arguments:       arguments,
-		isDistinct:      isDistinct,
+		funcName:         funcName,
+		argRenderIdxs:    argRenderIdxs,
+		filterRenderIdx:  tree.NoColumnIdx,
+		arguments:        arguments,
+		isDistinct:       isDistinct,
+		distsqlBlocklist: distsqlBlocklist,
 	}
 	return res
 }
