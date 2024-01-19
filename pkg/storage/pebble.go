@@ -827,7 +827,7 @@ func (l pebbleLogger) Eventf(ctx context.Context, format string, args ...interfa
 }
 
 func (l pebbleLogger) IsTracingEnabled(ctx context.Context) bool {
-	return log.HasSpanOrEvent(ctx)
+	return log.HasSpan(ctx)
 }
 
 func (l pebbleLogger) Errorf(format string, args ...interface{}) {
