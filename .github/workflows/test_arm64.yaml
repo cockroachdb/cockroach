@@ -7,4 +7,3 @@ jobs:
     with:
       runs-on: actuated-arm64-8cpu-8gb
       targets: "['linux-arm64-unit-test-4-cpu-race']"
-
