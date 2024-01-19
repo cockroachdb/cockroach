@@ -300,10 +300,8 @@ func TestMVCCHistories(t *testing.T) {
 				return err
 			} else if rdIter != nil {
 				defer func() { _ = rdIter.Close() }()
-				for s := rdIter.SeekGE(nil); s != nil; s = rdIter.Next() {
-					if err := rdIter.Error(); err != nil {
-						return err
-					}
+				s, err := rdIter.First()
+				for ; s != nil; s, err = rdIter.Next() {
 					start, err := storage.DecodeMVCCKey(s.Start)
 					if err != nil {
 						return err
@@ -317,6 +315,9 @@ func TestMVCCHistories(t *testing.T) {
 							roachpb.Span{Key: start.Key, EndKey: end.Key})
 					}
 				}
+				if err != nil {
+					return err
+				}
 			}
 
 			// Dump range keys.
@@ -324,10 +325,8 @@ func TestMVCCHistories(t *testing.T) {
 				return err
 			} else if rkIter != nil {
 				defer func() { _ = rkIter.Close() }()
-				for s := rkIter.SeekGE(nil); s != nil; s = rkIter.Next() {
-					if err := rkIter.Error(); err != nil {
-						return err
-					}
+				s, err := rkIter.First()
+				for ; s != nil; s, err = rkIter.Next() {
 					start, err := storage.DecodeMVCCKey(s.Start)
 					if err != nil {
 						return err
@@ -355,6 +354,9 @@ func TestMVCCHistories(t *testing.T) {
 						}
 						buf.Printf("\n")
 					}
+				}
+				if err != nil {
+					return err
 				}
 			}
 			return nil
