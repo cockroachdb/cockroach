@@ -2302,11 +2302,7 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 	if len(args) == 0 {
 		return errors.New("No command passed")
 	}
-	nodes := option.NodeListOption{}
-	for _, n := range options.Nodes {
-		nodes = append(nodes, int(n))
-	}
-
+	nodes := option.FromInstallNodes(options.Nodes)
 	l, logFile, err := c.loggerForCmd(nodes, args...)
 	if err != nil {
 		return err
@@ -2344,12 +2340,7 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 func (c *clusterImpl) RunWithDetailsSingleNode(
 	ctx context.Context, testLogger *logger.Logger, options install.RunOptions, args ...string,
 ) (install.RunResultDetails, error) {
-
-	nodes := option.NodeListOption{}
-	for _, n := range options.Nodes {
-		nodes = append(nodes, int(n))
-	}
-
+	nodes := option.FromInstallNodes(options.Nodes)
 	if len(nodes) != 1 {
 		return install.RunResultDetails{}, errors.Newf("RunWithDetailsSingleNode received %d nodes. Use RunWithDetails if you need to run on multiple nodes.", len(nodes))
 	}
@@ -2369,10 +2360,7 @@ func (c *clusterImpl) RunWithDetails(
 	if len(args) == 0 {
 		return nil, errors.New("No command passed")
 	}
-	nodes := option.NodeListOption{}
-	for _, n := range options.Nodes {
-		nodes = append(nodes, int(n))
-	}
+	nodes := option.FromInstallNodes(options.Nodes)
 	l, logFile, err := c.loggerForCmd(nodes, args...)
 	if err != nil {
 		return nil, err
