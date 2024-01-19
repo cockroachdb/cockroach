@@ -660,11 +660,11 @@ func runBackupProcessor(
 								// to store the metadata we need, but there's no actual File
 								// on-disk anywhere yet.
 								metadata: backuppb.BackupManifest_File{
-									Span:            file.Span,
-									Path:            file.Path,
-									EntryCounts:     entryCounts,
-									LocalityKV:      destLocalityKV,
-									BackingFileSize: uint64(len(file.SST)),
+									Span:                    file.Span,
+									Path:                    file.Path,
+									EntryCounts:             entryCounts,
+									LocalityKV:              destLocalityKV,
+									ApproximatePhysicalSize: uint64(len(file.SST)),
 								},
 								dataSST:       file.SST,
 								revStart:      resp.StartTime,
