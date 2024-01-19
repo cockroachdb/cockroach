@@ -3006,6 +3006,11 @@ func (t *T) Delimiter() string {
 	switch t.Family() {
 	case Geometry.Family(), Geography.Family():
 		return ":"
+	case ArrayFamily:
+		if t.Oid() == oidext.T__geometry || t.Oid() == oidext.T__geography {
+			return ":"
+		}
+		return ","
 	default:
 		return ","
 	}
