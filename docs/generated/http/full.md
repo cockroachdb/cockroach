@@ -2120,6 +2120,7 @@ Session represents one SQL session.
 | txn_fingerprint_ids | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) | repeated | List of transaction fingerprint IDs in this session. | [reserved](#support-status) |
 | total_active_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | The session's total active time. | [reserved](#support-status) |
 | pg_backend_pid | [uint32](#cockroach.server.serverpb.ListSessionsResponse-uint32) |  | The numerical ID attached to the session which is used to mimic a Postgres backend PID for compatibility with the query cancellation protocol. Unlike in Postgres, this value does not correspond to a real process ID. | [reserved](#support-status) |
+| trace_id | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | The ID the session's trace. | [reserved](#support-status) |
 
 
 
@@ -2267,6 +2268,7 @@ Session represents one SQL session.
 | txn_fingerprint_ids | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) | repeated | List of transaction fingerprint IDs in this session. | [reserved](#support-status) |
 | total_active_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | The session's total active time. | [reserved](#support-status) |
 | pg_backend_pid | [uint32](#cockroach.server.serverpb.ListSessionsResponse-uint32) |  | The numerical ID attached to the session which is used to mimic a Postgres backend PID for compatibility with the query cancellation protocol. Unlike in Postgres, this value does not correspond to a real process ID. | [reserved](#support-status) |
+| trace_id | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | The ID the session's trace. | [reserved](#support-status) |
 
 
 
