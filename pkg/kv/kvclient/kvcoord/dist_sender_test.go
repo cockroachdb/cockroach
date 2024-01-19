@@ -13,10 +13,12 @@ package kvcoord
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"reflect"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"sync"
@@ -6207,4 +6209,204 @@ func (m *mockTenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
 
 func (m *mockTenantSideCostController) Metrics() metric.Struct {
 	return nil
+}
+
+// benchNodeStore mocks out the looking up for node descriptors. On a real
+// system this is done through gossip, but we don't want to include the time to
+// look these up in the test.
+type benchNodeStore struct {
+	nodes []*roachpb.NodeDescriptor
+}
+
+func (b benchNodeStore) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	return b.nodes[id], nil
+}
+
+func (b benchNodeStore) GetNodeDescriptorCount() int {
+	panic("implement me")
+}
+
+func (b benchNodeStore) GetStoreDescriptor(id roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
+	panic("implement me")
+}
+
+var _ NodeDescStore = &benchNodeStore{}
+
+func toKey(i roachpb.RangeID) roachpb.Key {
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, uint32(i))
+	return buf
+}
+func fromKey(key roachpb.Key) roachpb.RangeID {
+	return roachpb.RangeID(binary.BigEndian.Uint32(key))
+}
+
+// benchDistSender runs one iteration of a normal dist sender request. The test
+// first creates the numRanges and the nodes and replicas for the given rf. It
+// then loops through all the ranges and issues a Get to each one. DistSender
+// should add minimal overhead per request, so requests run in 1-5 microseconds
+// per request.
+func benchDistSender(b *testing.B, rf int, numRange int, conc bool) {
+	ctx := context.Background()
+	clock := hlc.NewClockForTesting(nil)
+	stopper := stop.NewStopper()
+	st := cluster.MakeTestingClusterSettings()
+	defer stopper.Stop(ctx)
+
+	var replicas []roachpb.ReplicaDescriptor
+	for i := 1; i <= rf; i++ {
+		replicas = append(replicas, roachpb.ReplicaDescriptor{
+			NodeID:    roachpb.NodeID(i),
+			StoreID:   roachpb.StoreID(i),
+			ReplicaID: roachpb.ReplicaID(i),
+		})
+	}
+	var nodes []*roachpb.NodeDescriptor
+	// Append the unused 0 node so the node offset matches its index.
+	// The client runs from the rf+1 node to force sorting of replicas.
+	for i := 0; i <= rf+1; i++ {
+		nodes = append(nodes, &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)})
+	}
+
+	rng := rand.New(rand.NewSource(1))
+	var sortedReplicas [][]roachpb.ReplicaDescriptor
+	var descs []*roachpb.RangeDescriptor
+	for i := 0; i < numRange; i++ {
+		r := make([]roachpb.ReplicaDescriptor, len(replicas))
+		copy(r, replicas)
+		rng.Shuffle(len(r), func(i, j int) { r[i], r[j] = r[j], r[i] })
+		sortedReplicas = append(sortedReplicas, r)
+		rangeID := roachpb.RangeID(i)
+		key := roachpb.RKey(toKey(rangeID))
+		var desc = roachpb.RangeDescriptor{
+			RangeID:          rangeID,
+			Generation:       1,
+			StartKey:         key,
+			EndKey:           key.Next(),
+			InternalReplicas: sortedReplicas[rangeID],
+		}
+		descs = append(descs, &desc)
+	}
+
+	// Create a single range for each key.
+	rddb := MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
+		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
+	) {
+		rangeID := fromKey(key.AsRawKey())
+		return []roachpb.RangeDescriptor{*descs[rangeID]}, nil, nil
+	})
+	// The transport factory will "pin" each lease to a different node.
+	transportFactory := adaptSimpleTransport(
+		func(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+			rangeID := args.RangeID
+			nodeID := args.Replica.NodeID
+			// Pick a random, but stable, node as the leaseholder.
+			leaseholderNodeID := roachpb.NodeID(int(rangeID)%rf + 1)
+
+			reply := args.CreateReply()
+			if leaseholderNodeID != nodeID {
+				key := toKey(rangeID)
+				rangeDesc, _, _ := rddb.RangeLookup(ctx, roachpb.RKey(key), kvpb.CONSISTENT, false)
+
+				var replicaDesc roachpb.ReplicaDescriptor
+				for _, r := range rangeDesc[0].InternalReplicas {
+					if r.NodeID == leaseholderNodeID {
+						replicaDesc = r
+					}
+				}
+				lease := &roachpb.Lease{
+					Sequence: 1,
+					Replica:  replicaDesc,
+				}
+
+				nlhe := kvpb.NotLeaseHolderError{
+					RangeID:   rangeID,
+					RangeDesc: rangeDesc[0],
+					Lease:     lease,
+				}
+				reply.Error = kvpb.NewError(&nlhe)
+			}
+			return reply, nil
+		})
+
+	// TODO(baptist): To make this more realistic the test could use a real
+	// liveness.Cache, RemoteClockMonitor and Locality. This requires injecting
+	// more setup framework.
+	cfg := DistSenderConfig{
+		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:             clock,
+		NodeDescs:         &benchNodeStore{nodes: nodes},
+		NodeIDGetter:      func() roachpb.NodeID { return roachpb.NodeID(rf + 1) },
+		Stopper:           stopper,
+		TransportFactory:  transportFactory,
+		RangeDescriptorDB: rddb,
+		HealthFunc: func(id roachpb.NodeID) bool {
+			return true
+		},
+		LatencyFunc: func(id roachpb.NodeID) (time.Duration, bool) {
+			// Return a different latency for each node. The ranges are each
+			// sorted differently above so this will still require sorting.
+			return time.Duration(id), true
+		},
+		Settings: st,
+	}
+	ds := NewDistSender(cfg)
+
+	// Run through all the ranges once to pre-populate the cache. This allows the
+	// runs to be stable fairly quickly.
+	for i := 1; i < numRange; i++ {
+		rangeID := roachpb.RangeID(i % numRange)
+		get := kvpb.NewGet(toKey(rangeID))
+		if _, pErr := kv.SendWrapped(ctx, ds, get); pErr != nil {
+			b.Fatal(pErr)
+		}
+	}
+
+	numProcs := 1
+	if conc {
+		numProcs = runtime.GOMAXPROCS(0)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(numProcs)
+
+	b.ResetTimer()
+	// This loop will cycle through all the ranges and request a key from each
+	// of them. It optionally runs multiple goroutines concurrently to test any
+	// locking contention.
+	for i := 0; i < numProcs; i++ {
+		go func() {
+			defer wg.Done()
+			// Divide iterations by the number of threads to get accurate time
+			// per operation.
+			for i := 0; i < b.N/numProcs; i++ {
+				rangeID := roachpb.RangeID(i % numRange)
+				get := kvpb.NewGet(toKey(rangeID))
+				// NB: Calling require.Nil is measurably slower since it
+				// synchronizes across threads.
+				if _, pErr := kv.SendWrapped(ctx, ds, get); pErr != nil {
+					b.Error(pErr)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// BenchmarkDistSenderSunnyDay runs various combinations of number of ranges and
+// RF. The larger range count puts more pressure on the range cache lookup while
+// the large RF puts more pressure on the sorting.
+func BenchmarkDistSenderSunnyDay(b *testing.B) {
+	for _, rf := range []int{3, 5, 11} {
+		for _, numRange := range []int{1, 1000, 100000} {
+			// Run the test both with and without concurrent usage.
+			b.Run(fmt.Sprintf("rf-%d/count-%d-conc", rf, numRange), func(b *testing.B) {
+				benchDistSender(b, rf, numRange, true)
+			})
+			b.Run(fmt.Sprintf("rf-%d/count-%d", rf, numRange), func(b *testing.B) {
+				benchDistSender(b, rf, numRange, false)
+			})
+		}
+	}
 }
