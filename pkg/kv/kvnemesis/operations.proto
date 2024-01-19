@@ -69,6 +69,13 @@ message DeleteRangeOperation {
   Result result = 3 [(gogoproto.nullable) = false];
 }
 
+message BarrierOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  bool with_lease_applied_index = 3;
+  Result result = 4 [(gogoproto.nullable) = false];
+}
+
 message SplitOperation {
   bytes key = 1;
   Result result = 2 [(gogoproto.nullable) = false];
@@ -122,6 +129,7 @@ message Operation {
   ChangeReplicasOperation change_replicas = 14;
   TransferLeaseOperation transfer_lease = 15;
   ChangeZoneOperation change_zone = 16;
+  BarrierOperation barrier = 22;
 }
 
 enum ResultType {

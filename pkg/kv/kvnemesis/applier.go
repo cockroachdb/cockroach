@@ -102,6 +102,14 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	case *ChangeZoneOperation:
 		err := updateZoneConfigInEnv(ctx, env, o.Type)
 		o.Result = resultError(ctx, err)
+	case *BarrierOperation:
+		var err error
+		if o.WithLeaseAppliedIndex {
+			_, _, err = db.BarrierWithLAI(ctx, o.Key, o.EndKey)
+		} else {
+			_, err = db.Barrier(ctx, o.Key, o.EndKey)
+		}
+		o.Result = resultError(ctx, err)
 	case *ClosureTxnOperation:
 		// Use a backoff loop to avoid thrashing on txn aborts. Don't wait between
 		// epochs of the same transaction to avoid waiting while holding locks.
@@ -232,6 +240,17 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 				o.Result.Keys[i] = deletedKey
 			}
 		}
+	case *BarrierOperation:
+		b := &kv.Batch{}
+		b.AddRawRequest(&roachpb.BarrierRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    o.Key,
+				EndKey: o.EndKey,
+			},
+			WithLeaseAppliedIndex: o.WithLeaseAppliedIndex,
+		})
+		err := db.Run(ctx, b)
+		o.Result = resultError(ctx, err)
 	case *BatchOperation:
 		b := &kv.Batch{}
 		applyBatchOp(ctx, b, db.Run, o, inTxn)
@@ -274,6 +293,8 @@ func applyBatchOp(
 				panic(errors.AssertionFailedf(`non-transactional batch DelRange operations currently unsupported`))
 			}
 			b.DelRange(subO.Key, subO.EndKey, true /* returnKeys */)
+		case *BarrierOperation:
+			panic(errors.AssertionFailedf(`Barrier cannot be used in batches`))
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}

@@ -60,6 +60,14 @@ func TestOperationsFormat(t *testing.T) {
 			})
 			`,
 		},
+		{
+			step:     step(barrier(`a`, `b`, false /* withLAI */)),
+			expected: `db0.Barrier(ctx, "a", "b")`,
+		},
+		{
+			step:     step(barrier(`c`, `d`, true /* withLAI */)),
+			expected: `db0.BarrierWithLAI(ctx, "c", "d")`,
+		},
 	}
 
 	for _, test := range tests {
