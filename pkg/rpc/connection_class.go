@@ -74,5 +74,21 @@ func ConnectionClassForKey(key roachpb.RKey, def ConnectionClass) ConnectionClas
 	if isSystemKey(key) {
 		return SystemClass
 	}
-	return def
+	return ConnectionClassOrDefault(def)
+}
+
+// ConnectionClassOrDefault returns the passed-in connection class if it is
+// known/supported by this server. Otherwise, it returns DefaultClass.
+//
+// This helper should be used when a ConnectionClass is not "trusted", such as
+// when it was received over RPC from another node. In a mixed-version state, it
+// is possible that one node supports a connection class, and another does not.
+//
+// If the simple behaviour of falling back to DefaultClass is not acceptable, a
+// version gate must be used to transition between versions correctly.
+func ConnectionClassOrDefault(c ConnectionClass) ConnectionClass {
+	if int(c) < NumConnectionClasses {
+		return c
+	}
+	return DefaultClass
 }
