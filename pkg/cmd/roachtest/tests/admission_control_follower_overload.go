@@ -32,7 +32,7 @@ func registerFollowerOverload(r registry.Registry) {
 			Name:             "admission/follower-overload/" + subtest,
 			Owner:            registry.OwnerAdmissionControl,
 			Timeout:          3 * time.Hour,
-			CompatibleClouds: registry.AllExceptAWS,
+			CompatibleClouds: registry.AllClouds,
 			Suites:           registry.ManualOnly,
 			// TODO(aaditya): Revisit this as part of #111614.
 			//Suites:           registry.Suites(registry.Weekly),
@@ -170,13 +170,13 @@ func runAdmissionControlFollowerOverload(
 	for _, row := range runner.QueryStr(
 		t, `SELECT target FROM [ SHOW ZONE CONFIGURATIONS ]`,
 	) {
-		q := `ALTER ` + row[0] + ` CONFIGURE ZONE USING lease_preferences = '[[-node3]]'`
+		q := `ALTER ` + row[0] + ` CONFIGURE ZONE USING lease_preferences = '[[-node3]]', constraints = '[-node3]'`
 		t.L().Printf("%s", q)
 		_, err := db.Exec(q)
 		require.NoError(t, err)
 	}
 	if cfg.kv50N3 {
-		q := `ALTER DATABASE kvn3 CONFIGURE ZONE USING lease_preferences = '[[+node3]]', constraints = COPY FROM PARENT`
+		q := `ALTER DATABASE kvn3 CONFIGURE ZONE USING lease_preferences = '[[+node3]]', constraints = '[+node3]'`
 		t.L().Printf("%s", q)
 		runner.Exec(t, q)
 	}
@@ -185,8 +185,8 @@ func runAdmissionControlFollowerOverload(
 		var attempts int
 		for ctx.Err() == nil {
 			attempts++
-			m1 := runner.QueryStr(t, `SELECT range_id FROM crdb_internal.ranges WHERE lease_holder=3 AND database_name != 'kvn3'`)
-			m2 := runner.QueryStr(t, `SELECT range_id FROM crdb_internal.ranges WHERE lease_holder!=3 AND database_name = 'kvn3'`)
+			m1 := runner.QueryStr(t, `SELECT DISTINCT range_id FROM [SHOW CLUSTER RANGES WITH TABLES, DETAILS] WHERE lease_holder=3 AND database_name != 'kvn3'`)
+			m2 := runner.QueryStr(t, `SELECT DISTINCT range_id FROM [SHOW CLUSTER RANGES WITH TABLES, DETAILS] WHERE lease_holder!=3 AND database_name = 'kvn3'`)
 			if len(m1)+len(m2) == 0 {
 				t.L().Printf("done waiting for lease movement")
 				break
