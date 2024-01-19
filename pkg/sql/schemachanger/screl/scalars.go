@@ -32,15 +32,6 @@ func GetDescID(e scpb.Element) catid.DescID {
 	return id.(catid.DescID)
 }
 
-// GetIndexID retrieves the index ID from the element if it has one.
-func GetIndexID(e scpb.Element) (catid.IndexID, bool) {
-	v, err := Schema.GetAttribute(IndexID, e)
-	if err != nil {
-		return 0, false
-	}
-	return v.(catid.IndexID), true
-}
-
 // AllTargetStateDescIDs applies AllTargetDescIDs to the whole target state.
 func AllTargetStateDescIDs(s scpb.TargetState) (ids catalog.DescriptorIDSet) {
 	for i := range s.Targets {

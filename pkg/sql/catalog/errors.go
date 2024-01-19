@@ -177,11 +177,6 @@ func AsFunctionDescriptor(desc Descriptor) (FunctionDescriptor, error) {
 	return typ, nil
 }
 
-// WrapDescRefErr wraps an error pertaining to a descriptor id.
-func WrapDescRefErr(id descpb.ID, err error) error {
-	return errors.Wrapf(err, "referenced descriptor ID %d", errors.Safe(id))
-}
-
 // WrapDatabaseDescRefErr wraps an error pertaining to a database descriptor id.
 func WrapDatabaseDescRefErr(id descpb.ID, err error) error {
 	return errors.Wrapf(err, "referenced database ID %d", errors.Safe(id))
