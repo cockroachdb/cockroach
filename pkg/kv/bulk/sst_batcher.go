@@ -767,6 +767,9 @@ func (b *SSTBatcher) addSSTable(
 	updatesLastRange bool,
 	ingestionPerformanceStats *bulkpb.IngestionPerformanceStats,
 ) error {
+	ctx, sp := tracing.ChildSpan(ctx, "*SSTBatcher.addSSTable")
+	defer sp.Finish()
+
 	sendStart := timeutil.Now()
 	if ingestionPerformanceStats == nil {
 		return errors.AssertionFailedf("ingestionPerformanceStats should not be nil")
@@ -844,7 +847,11 @@ func (b *SSTBatcher) addSSTable(
 				}
 				ba.Add(req)
 				beforeSend := timeutil.Now()
-				br, pErr := b.db.NonTransactionalSender().Send(ctx, ba)
+
+				sendCtx, sendSp := tracing.ChildSpan(ctx, "*SSTBatcher.addSSTable/Send")
+				br, pErr := b.db.NonTransactionalSender().Send(sendCtx, ba)
+				sendSp.Finish()
+
 				sendTime := timeutil.Since(beforeSend)
 
 				ingestionPerformanceStats.SendWait += sendTime
