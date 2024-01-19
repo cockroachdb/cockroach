@@ -344,7 +344,7 @@ export function makeStatementsColumns(
     },
   ];
 
-  if (activateDiagnosticsRef && !isTenant && !hasViewActivityRedactedRole) {
+  if (activateDiagnosticsRef && !hasViewActivityRedactedRole) {
     const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
       name: "diagnostics",
       title: statisticsTableTitles.diagnostics(statType),

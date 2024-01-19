@@ -24,24 +24,7 @@ import {
   getTxnInsightsContentionDetailsApi,
 } from "./contentionApi";
 import moment from "moment-timezone";
-
-function mockSqlResponse<T>(rows: T[]): SqlExecutionResponse<T> {
-  return {
-    execution: {
-      retries: 0,
-      txn_results: [
-        {
-          tag: "",
-          start: "",
-          end: "",
-          rows_affected: 0,
-          statement: 1,
-          rows: [...rows],
-        },
-      ],
-    },
-  };
-}
+import { MockSqlResponse } from "../util/testing";
 
 type TxnContentionDetailsTests = {
   name: string;
@@ -78,16 +61,16 @@ describe("test txn insights api functions", () => {
   test.each([
     {
       name: "all api responses empty",
-      contentionResp: mockSqlResponse([]),
-      txnFingerprintsResp: mockSqlResponse([]),
-      stmtsFingerprintsResp: mockSqlResponse([]),
+      contentionResp: MockSqlResponse([]),
+      txnFingerprintsResp: MockSqlResponse([]),
+      stmtsFingerprintsResp: MockSqlResponse([]),
       expected: null,
     },
     {
       name: "no fingerprints available",
-      contentionResp: mockSqlResponse([contentionDetailsMock]),
-      txnFingerprintsResp: mockSqlResponse([]),
-      stmtsFingerprintsResp: mockSqlResponse([]),
+      contentionResp: MockSqlResponse([contentionDetailsMock]),
+      txnFingerprintsResp: MockSqlResponse([]),
+      stmtsFingerprintsResp: MockSqlResponse([]),
       expected: {
         transactionExecutionID: contentionDetailsMock.waiting_txn_id,
         application: undefined,
@@ -121,8 +104,8 @@ describe("test txn insights api functions", () => {
     },
     {
       name: "no stmt fingerprints available",
-      contentionResp: mockSqlResponse([contentionDetailsMock]),
-      txnFingerprintsResp: mockSqlResponse<TxnStmtFingerprintsResponseColumns>([
+      contentionResp: MockSqlResponse([contentionDetailsMock]),
+      txnFingerprintsResp: MockSqlResponse<TxnStmtFingerprintsResponseColumns>([
         {
           transaction_fingerprint_id:
             contentionDetailsMock.blocking_txn_fingerprint_id,
@@ -130,7 +113,7 @@ describe("test txn insights api functions", () => {
           app_name: undefined,
         },
       ]),
-      stmtsFingerprintsResp: mockSqlResponse([]),
+      stmtsFingerprintsResp: MockSqlResponse([]),
       expected: {
         transactionExecutionID: contentionDetailsMock.waiting_txn_id,
         application: undefined,
@@ -168,8 +151,8 @@ describe("test txn insights api functions", () => {
     },
     {
       name: "all info available",
-      contentionResp: mockSqlResponse([contentionDetailsMock]),
-      txnFingerprintsResp: mockSqlResponse<TxnStmtFingerprintsResponseColumns>([
+      contentionResp: MockSqlResponse([contentionDetailsMock]),
+      txnFingerprintsResp: MockSqlResponse<TxnStmtFingerprintsResponseColumns>([
         {
           transaction_fingerprint_id:
             contentionDetailsMock.blocking_txn_fingerprint_id,
@@ -177,7 +160,7 @@ describe("test txn insights api functions", () => {
           app_name: undefined,
         },
       ]),
-      stmtsFingerprintsResp: mockSqlResponse<FingerprintStmtsResponseColumns>([
+      stmtsFingerprintsResp: MockSqlResponse<FingerprintStmtsResponseColumns>([
         {
           statement_fingerprint_id: "a",
           query: "select 1",

@@ -38,7 +38,6 @@ import { SortSetting } from "../sortedtable";
 const cx = classNames.bind(styles);
 
 export type ActiveStatementDetailsStateProps = {
-  isTenant?: boolean;
   contentionDetails?: ExecutionContentionDetails;
   statement: ActiveStatement;
   match: match;
@@ -64,7 +63,6 @@ export type ActiveStatementDetailsProps = ActiveStatementDetailsStateProps &
   ActiveStatementDetailsDispatchProps;
 
 export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
-  isTenant,
   contentionDetails,
   statement,
   match,
@@ -93,7 +91,6 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
 
   const onTabClick = (key: TabKeysEnum) => {
     if (
-      !isTenant &&
       key === TabKeysEnum.EXPLAIN &&
       statement?.planGist &&
       !explainPlanState.loaded
@@ -161,42 +158,40 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
             contentionDetails={contentionDetails}
           />
         </Tabs.TabPane>
-        {!isTenant && (
-          <Tabs.TabPane tab="Explain Plan" key={TabKeysEnum.EXPLAIN}>
-            <Row gutter={24} className={cx("margin-right")}>
-              <Col className="gutter-row" span={24}>
-                <Loading
-                  loading={
-                    !explainPlanState.loaded && statement?.planGist?.length > 0
-                  }
-                  page={"stmt_insight_details"}
-                  error={explainPlanState.error}
-                  renderError={() =>
-                    LoadingError({
-                      statsType: "explain plan",
-                      error: explainPlanState.error,
-                    })
-                  }
-                >
-                  <SqlBox
-                    value={explainPlanState.explainPlan || "Not available."}
-                    size={SqlBoxSize.custom}
+        <Tabs.TabPane tab="Explain Plan" key={TabKeysEnum.EXPLAIN}>
+          <Row gutter={24} className={cx("margin-right")}>
+            <Col className="gutter-row" span={24}>
+              <Loading
+                loading={
+                  !explainPlanState.loaded && statement?.planGist?.length > 0
+                }
+                page={"stmt_insight_details"}
+                error={explainPlanState.error}
+                renderError={() =>
+                  LoadingError({
+                    statsType: "explain plan",
+                    error: explainPlanState.error,
+                  })
+                }
+              >
+                <SqlBox
+                  value={explainPlanState.explainPlan || "Not available."}
+                  size={SqlBoxSize.custom}
+                />
+                {hasInsights && (
+                  <Insights
+                    idxRecommendations={indexRecommendations}
+                    query={statement.stmtNoConstants}
+                    database={statement.database}
+                    sortSetting={insightsSortSetting}
+                    onChangeSortSetting={setInsightsSortSetting}
+                    hasAdminRole={hasAdminRole}
                   />
-                  {hasInsights && (
-                    <Insights
-                      idxRecommendations={indexRecommendations}
-                      query={statement.stmtNoConstants}
-                      database={statement.database}
-                      sortSetting={insightsSortSetting}
-                      onChangeSortSetting={setInsightsSortSetting}
-                      hasAdminRole={hasAdminRole}
-                    />
-                  )}
-                </Loading>
-              </Col>
-            </Row>
-          </Tabs.TabPane>
-        )}
+                )}
+              </Loading>
+            </Col>
+          </Row>
+        </Tabs.TabPane>
       </Tabs>
     </div>
   );
