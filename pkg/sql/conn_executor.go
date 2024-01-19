@@ -89,6 +89,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+	"github.com/petermattis/goid"
 )
 
 var maxNumNonAdminConnections = settings.RegisterIntSetting(
@@ -1080,7 +1081,7 @@ func (s *Server) newConnExecutor(
 
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
-		ctxHolder:                 ctxHolder{connCtx: ctx},
+		ctxHolder:                 ctxHolder{connCtx: ctx, goroutineID: goid.Get()},
 		phaseTimes:                sessionphase.NewTimes(),
 		rng:                       rand.New(rand.NewSource(timeutil.Now().UnixNano())),
 		executorType:              executorTypeExec,
@@ -1701,6 +1702,7 @@ type connExecutor struct {
 type ctxHolder struct {
 	connCtx           context.Context
 	sessionTracingCtx context.Context
+	goroutineID       int64
 }
 
 // timeout wraps a Timer returned by time.AfterFunc. This interface
@@ -4174,6 +4176,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		TotalActiveTime:            sessionActiveTime,
 		PGBackendPID:               ex.planner.extendedEvalCtx.QueryCancelKey.GetPGBackendPID(),
 		TraceID:                    uint64(ex.planner.extendedEvalCtx.Tracing.connSpan.TraceID()),
+		GoroutineID:                ex.ctxHolder.goroutineID,
 	}
 }
 

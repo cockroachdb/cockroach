@@ -596,6 +596,7 @@ go_library(
         "@com_github_gogo_protobuf//types",
         "@com_github_lib_pq//:pq",
         "@com_github_lib_pq//oid",
+        "@com_github_petermattis_goid//:goid",
         "@com_github_prometheus_client_model//go",
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@io_opentelemetry_go_otel//attribute",
