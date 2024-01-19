@@ -1,0 +1,19 @@
+# LogicTest: cockroach-go-testserver-23.1
+
+query T
+select crdb_internal.active_version()
+----
+{"internal": 0, "major": 23, "minor": 1, "patch": 0}
+
+upgrade all
+
+# We have seen that upgrades can take a long time in CI. Give some extra time
+# for the upgrade to complete.
+sleep 30s
+
+# Verify that the cluster is upgrading to 24.1. When 24.1 is minted, this
+# assertion should change to check for "24.1".
+query B retry
+SELECT crdb_internal.is_at_least_version('23.2-2')
+----
+true
