@@ -84,9 +84,9 @@ var envVars = []string{
 	// NB: This is crucial for chaos tests as we expect changefeeds to see
 	// many retries.
 	"COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true",
-
 	// Enable "strict mode" for span frontier.
 	"COCKROACH_SPAN_FRONTIER_STRICT_MODE_ENABLED=true",
+	"COCKROACH_CHANGEFEED_TESTING_REBALANCING_CHECKS=true",
 }
 
 type cdcTester struct {
@@ -2761,6 +2761,9 @@ func (cfc *changefeedCreator) applySettings() error {
 	rangeDistribution, rangeDistributionEnabled := cfc.flags.DistributionStrategy.enabled(cfc.rng,
 		chooseDistributionStrategy)
 	if rangeDistributionEnabled == featureEnabled {
+		if _, err := cfc.db.Exec("SET CLUSTER SETTING changefeed.range_distribution_threshold = 10"); err != nil {
+			return err
+		}
 		cfc.logger.Printf("Setting changefeed.default_range_distribution_strategy to %s", rangeDistribution)
 		if _, err := cfc.db.Exec(fmt.Sprintf(
 			"SET CLUSTER SETTING changefeed.default_range_distribution_strategy = '%s'", rangeDistribution)); err != nil {
