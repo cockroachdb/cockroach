@@ -9,7 +9,7 @@ on:
       targets:
         required: false
         type: string
-        default: "['linux-unit-test-1-cpu', 'linux-unit-test-4-cpu']"
+        default: "[]"
 permissions: read-all
 
 jobs:
@@ -27,6 +27,7 @@ jobs:
       - env: 
           TARGET: ${{ matrix.target }}
         run: |
+          go clean -testcache
           case "${TARGET}" in
             linux-amd64-unit-4-cpu-race)
               GOARCH=amd64 PASSES='unit' RACE='true' CPU='4' ./scripts/test.sh -p=2
@@ -34,7 +35,7 @@ jobs:
             linux-386-unit-1-cpu)
               GOARCH=386 PASSES='unit' RACE='false' CPU='1' ./scripts/test.sh -p=4
               ;;
-            linux-arm64-unit-test-4-cpu-race)
+            linux-arm64-unit-4-cpu-race)
               GOARCH=arm64 PASSES='unit' RACE='true' CPU='4' ./scripts/test.sh -p=2
               ;;
             *)
