@@ -648,20 +648,22 @@ func addSSTablePreApply(
 ) bool {
 	if sst.RemoteFilePath != "" {
 		log.Infof(ctx,
-			"EXPERIMENTAL AddSSTABLE EXTERNAL %s (size %d, span %s) from %s",
+			"EXPERIMENTAL AddSSTABLE EXTERNAL %s (size %d, span %s) from %s (size %d)",
 			sst.RemoteFilePath,
-			sst.BackingFileSize,
+			sst.ApproximatePhysicalSize,
 			sst.Span,
 			sst.RemoteFileLoc,
+			sst.BackingFileSize,
 		)
 		start := storage.EngineKey{Key: sst.Span.Key}
 		end := storage.EngineKey{Key: sst.Span.EndKey}
 		externalFile := pebble.ExternalFile{
 			Locator:         remote.Locator(sst.RemoteFileLoc),
 			ObjName:         sst.RemoteFilePath,
-			Size:            sst.BackingFileSize,
+			Size:            sst.ApproximatePhysicalSize,
 			SmallestUserKey: start.Encode(),
 			LargestUserKey:  end.Encode(),
+			// TODO(dt): pass pebble the backing file size to avoid a stat call.
 
 			// TODO(msbutler): I guess we need to figure out if the backing external
 			// file has point or range keys in the target span.
