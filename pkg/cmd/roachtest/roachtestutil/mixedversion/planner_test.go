@@ -323,6 +323,13 @@ func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *T
 			n, err := strconv.Atoi(arg.Vals[0])
 			require.NoError(t, err)
 			opts = append(opts, NumUpgrades(n))
+
+		case "minimum_supported_version":
+			v := arg.Vals[0]
+			opts = append(opts, MinimumSupportedVersion(v))
+
+		default:
+			t.Errorf("unknown mixed-version-test option: %s", arg.Key)
 		}
 	}
 

@@ -49,6 +49,8 @@ const (
 	// kafkaBufferMessageSize is the number of messages from kafka
 	// we allow to be buffered in memory before validating them.
 	kafkaBufferMessageSize = 8192
+
+	v222CV = "22.2"
 )
 
 var (

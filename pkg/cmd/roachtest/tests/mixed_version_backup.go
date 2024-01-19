@@ -96,13 +96,6 @@ var (
 	}
 
 	v231CV = "23.1"
-	v222CV = "22.2"
-
-	// minActivelySupportedVersion is the minimum cluster version that
-	// should be active for this test to perform any backups or
-	// restores. We are only interested in releases where we are still
-	// actively fixing bugs in patch releases.
-	minActivelySupportedVersion = v222CV
 
 	// systemTablesInFullClusterBackup includes all system tables that
 	// are included as part of a full cluster backup. It should include
@@ -1464,30 +1457,6 @@ func (u *CommonTestUtils) setClusterSettings(
 	return nil
 }
 
-// skipBackups returns `true` when the cluster is running at a version
-// older than the minimum actively supported version. In this case, we
-// don't want to verify the correctness of backups or restores since
-// the releases are already past their non-security support
-// window. Crucially, this also stops this test from hitting bugs
-// already fixed in later releases.
-func (mvb *mixedVersionBackup) skipBackups(
-	l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
-) (bool, error) {
-	supported, err := h.ClusterVersionAtLeast(rng, minActivelySupportedVersion)
-	if err != nil {
-		return false, err
-	}
-
-	if !supported {
-		l.Printf(
-			"skipping step because cluster version is behind minimum actively supported version %s",
-			minActivelySupportedVersion,
-		)
-	}
-
-	return !supported, nil
-}
-
 func (mvb *mixedVersionBackup) setShortJobIntervals(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
@@ -1548,15 +1517,6 @@ func (mvb *mixedVersionBackup) maybeTakePreviousVersionBackup(
 
 	if err := mvb.initBackupRestoreTestDriver(ctx, l, rng); err != nil {
 		return err
-	}
-
-	shouldSkip, err := mvb.skipBackups(l, rng, h)
-	if err != nil {
-		return fmt.Errorf("error checking if we should skip backups: %w", err)
-	}
-
-	if shouldSkip {
-		return nil
 	}
 
 	previousVersion := h.Context.FromVersion
@@ -2086,27 +2046,6 @@ func (u *CommonTestUtils) enableJobAdoption(
 func (mvb *mixedVersionBackup) planAndRunBackups(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
-	shouldSkip, err := mvb.skipBackups(l, rng, h)
-	if err != nil {
-		return fmt.Errorf("error checking if we should skip backups: %w", err)
-	}
-
-	if shouldSkip {
-		// If this function is called while an unsupported version is
-		// running, we sleep for a few minutes to let the workloads run in
-		// this older version.
-		possibleWaitMinutes := []int{0, 10, 30}
-		waitDur := time.Duration(possibleWaitMinutes[rng.Intn(len(possibleWaitMinutes))]) * time.Minute
-
-		l.Printf("doing nothing for %s to let workloads run in this version", waitDur)
-		select {
-		case <-time.After(waitDur):
-		case <-ctx.Done():
-		}
-
-		return nil
-	}
-
 	onPrevious := labeledNodes{
 		Nodes: h.Context.NodesInPreviousVersion(), Version: sanitizeVersionForBackup(h.Context.FromVersion),
 	}
