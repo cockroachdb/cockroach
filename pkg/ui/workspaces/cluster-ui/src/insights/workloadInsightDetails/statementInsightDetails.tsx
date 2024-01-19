@@ -40,7 +40,6 @@ enum TabKeysEnum {
 export interface StatementInsightDetailsStateProps {
   insightEventDetails: StmtInsightEvent;
   insightError: Error | null;
-  isTenant?: boolean;
   timeScale?: TimeScale;
   hasAdminRole: boolean;
   useObsService: boolean;
@@ -74,7 +73,6 @@ export const StatementInsightDetails: React.FC<
   insightEventDetails,
   insightError,
   match,
-  isTenant,
   timeScale,
   hasAdminRole,
   refreshUserSQLRoles,
@@ -99,7 +97,6 @@ export const StatementInsightDetails: React.FC<
 
   const onTabClick = (key: TabKeysEnum) => {
     if (
-      !isTenant &&
       key === TabKeysEnum.EXPLAIN &&
       details?.planGist &&
       !explainPlanState.loaded
@@ -193,34 +190,30 @@ export const StatementInsightDetails: React.FC<
                 hasAdminRole={hasAdminRole}
               />
             </Tabs.TabPane>
-            {!isTenant && (
-              <Tabs.TabPane tab="Explain Plan" key={TabKeysEnum.EXPLAIN}>
-                <section className={cx("section")}>
-                  <Row gutter={24}>
-                    <Col span={24}>
-                      <Loading
-                        loading={
-                          !explainPlanState.loaded &&
-                          details?.planGist?.length > 0
-                        }
-                        page={"stmt_insight_details"}
-                        error={explainPlanState.error}
-                        renderError={() =>
-                          InsightsError(explainPlanState.error?.message)
-                        }
-                      >
-                        <SqlBox
-                          value={
-                            explainPlanState.explainPlan || "Not available."
-                          }
-                          size={SqlBoxSize.custom}
-                        />
-                      </Loading>
-                    </Col>
-                  </Row>
-                </section>
-              </Tabs.TabPane>
-            )}
+            <Tabs.TabPane tab="Explain Plan" key={TabKeysEnum.EXPLAIN}>
+              <section className={cx("section")}>
+                <Row gutter={24}>
+                  <Col span={24}>
+                    <Loading
+                      loading={
+                        !explainPlanState.loaded &&
+                        details?.planGist?.length > 0
+                      }
+                      page={"stmt_insight_details"}
+                      error={explainPlanState.error}
+                      renderError={() =>
+                        InsightsError(explainPlanState.error?.message)
+                      }
+                    >
+                      <SqlBox
+                        value={explainPlanState.explainPlan || "Not available."}
+                        size={SqlBoxSize.custom}
+                      />
+                    </Loading>
+                  </Col>
+                </Row>
+              </section>
+            </Tabs.TabPane>
           </Tabs>
         </Loading>
       </div>
