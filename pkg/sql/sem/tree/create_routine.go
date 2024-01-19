@@ -396,6 +396,10 @@ const (
 	RoutineParamVariadic
 )
 
+func (node *RoutineParam) IsOutParam() bool {
+	return node.Class == RoutineParamOut || node.Class == RoutineParamInOut
+}
+
 // RoutineReturnType represent the return type of UDF.
 type RoutineReturnType struct {
 	Type  ResolvableTypeReference
