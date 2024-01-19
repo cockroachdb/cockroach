@@ -1,0 +1,97 @@
+# LogicTest: !local-mixed-23.1
+
+subtest types
+
+statement error pgcode 42P13 pq: function result type must be int because of OUT parameters
+CREATE FUNCTION f(OUT param INT) RETURNS FLOAT AS $$ BEGIN SELECT 1; END $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P13 pq: function result type must be record because of OUT parameters
+CREATE FUNCTION f(OUT param1 INT, OUT param2 INT) RETURNS INT AS $$ BEGIN SELECT 1, 2; END $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P13 pq: function result type must be int because of OUT parameters
+CREATE FUNCTION f(OUT param INT) RETURNS VOID AS $$ BEGIN SELECT 1; END $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P13 pq: function result type must be int because of OUT parameters
+CREATE FUNCTION f(OUT param INT) RETURNS RECORD AS $$ BEGIN SELECT 1; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION f(OUT param INT) RETURNS INT AS $$ BEGIN SELECT 1; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f(INOUT param1 INT, OUT param2 INT) RETURNS RECORD AS $$ BEGIN SELECT 1, 2; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP FUNCTION f;
+
+# TODO(#100405) Executing this function results in 42601: query has no destination for result data
+statement ok
+CREATE FUNCTION f(INOUT param1 INT, OUT param2 INT) AS $$ BEGIN SELECT 1, 2, 3; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP FUNCTION f;
+
+# TODO(#100405) Executing this function results in 42601: query has no destination for result data
+statement ok
+CREATE FUNCTION f(INOUT param INT) AS $$ BEGIN SELECT 'hello'; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP FUNCTION f;
+
+subtest end
+
+subtest show_create
+
+statement ok
+CREATE FUNCTION f_param_types(IN p1 INT, INOUT p2 INT, IN OUT p3 INT, OUT p4 INT) AS $$
+BEGIN
+  SELECT p2, p3, p1;
+END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_param_types];
+----
+CREATE FUNCTION public.f_param_types(IN p1 INT8, INOUT p2 INT8, INOUT p3 INT8, OUT p4 INT8)
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  AS $$
+  BEGIN
+  SELECT p2, p3, p1;
+  END;
+$$
+
+statement ok
+DROP FUNCTION f_param_types;
+
+statement ok
+CREATE FUNCTION f_param_types(OUT param INT) AS $$
+BEGIN
+  SELECT 1;
+END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_param_types];
+----
+CREATE FUNCTION public.f_param_types(OUT param INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  AS $$
+  BEGIN
+  SELECT 1;
+  END;
+$$
+
+statement ok
+DROP FUNCTION f_param_types;
+
+subtest end
