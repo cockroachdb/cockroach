@@ -6,17 +6,4 @@ jobs:
     uses: ./.github/workflows/test_template.yaml
     with:
       runs-on: actuated-arm64-8cpu-8gb
-      targets: "['linux-arm64-unit-test-4-cpu-race']"
-
-  coverage:
-    needs:
-      - test-linux-arm64-cpu-race
-    runs-on: actuated-arm64-8cpu-8gb
-    steps:
-      - uses: actions/checkout@v4
-      - id: goversion
-        run: echo "goversion=$(cat .go-version)" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.21.6"
-      - run: make test
+      targets: "['linux-arm64-unit-4-cpu-race']"
