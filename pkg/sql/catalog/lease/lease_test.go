@@ -1829,6 +1829,8 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	defer log.Scope(testingT).Close(testingT)
 
+	skip.UnderRemoteExecutionWithIssue(testingT, 117929, "prone to stalling for some reason")
+
 	ctx := context.Background()
 
 	var mu syncutil.Mutex

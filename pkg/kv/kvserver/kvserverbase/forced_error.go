@@ -133,7 +133,8 @@ func CheckForcedErr(
 		if replicaState.Lease.Sequence == requestedLease.Sequence {
 			// It is only possible for this to fail when expiration-based
 			// lease extensions are proposed concurrently.
-			leaseMismatch = !replicaState.Lease.Equivalent(requestedLease)
+			expToEpochEquiv := raftCmd.ReplicatedEvalResult.IsLeaseRequestWithExpirationToEpochEquivalent
+			leaseMismatch = !replicaState.Lease.Equivalent(requestedLease, expToEpochEquiv)
 		}
 
 		// This is a check to see if the lease we proposed this lease request

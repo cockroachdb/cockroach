@@ -1138,18 +1138,21 @@ func (tc *TestCluster) MaybeWaitForLeaseUpgrade(
 // is upgraded to an epoch-based one.
 func (tc *TestCluster) WaitForLeaseUpgrade(
 	ctx context.Context, t serverutils.TestFataler, desc roachpb.RangeDescriptor,
-) {
+) roachpb.Lease {
 	require.False(t, kvserver.ExpirationLeasesOnly.Get(&tc.Server(0).ClusterSettings().SV),
 		"cluster configured to only use expiration leases")
+	var l roachpb.Lease
 	testutils.SucceedsSoon(t, func() error {
 		li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
 		require.NoError(t, err)
-		if li.Current().Type() != roachpb.LeaseEpoch {
+		l = li.Current()
+		if l.Type() != roachpb.LeaseEpoch {
 			return errors.Errorf("lease still an expiration based lease")
 		}
-		require.Equal(t, int64(1), li.Current().Epoch)
+		require.Equal(t, int64(1), l.Epoch)
 		return nil
 	})
+	return l
 }
 
 // RemoveLeaseHolderOrFatal is a convenience version of TransferRangeLease and RemoveVoter
