@@ -754,6 +754,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",
+        "//pkg/ccl",
         "//pkg/ccl/changefeedccl/schemafeed/schematestutils",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/clusterversion",

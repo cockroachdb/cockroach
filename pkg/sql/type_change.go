@@ -34,7 +34,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -623,6 +626,63 @@ func doesArrayContainEnumValues(s string, member *descpb.TypeDescriptor_EnumMemb
 	return false
 }
 
+func visitExprToCheckEnumValueUsage(
+	expr tree.Expr, typeID descpb.ID, member *descpb.TypeDescriptor_EnumMember,
+) (foundUsage bool, recurse bool, newExpr tree.Expr, err error) {
+	foundUsage = false
+	switch t := expr.(type) {
+	// Case for types being used regularly, which are serialized like '\x80':::@100053.
+	case *tree.AnnotateTypeExpr:
+		// Check if this expr's type is the one we're dropping the enum value from.
+		typeOid, ok := t.Type.(*tree.OIDTypeReference)
+		if !ok {
+			return foundUsage, true, expr, nil
+		}
+		id := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
+		if id != typeID {
+			return foundUsage, true, expr, nil
+		}
+
+		// Check if this expr uses the enum value we're dropping.
+		strVal, ok := t.Expr.(*tree.StrVal)
+		if !ok {
+			return foundUsage, true, expr, nil
+		}
+		physicalRep := []byte(strVal.RawString())
+		if bytes.Equal(physicalRep, member.PhysicalRepresentation) {
+			foundUsage = true
+		}
+		return foundUsage, false, expr, nil
+
+	// Case for types used in string arrays, serialized like '{a, b, c}':::STRING::@100053.
+	case *tree.CastExpr:
+		typeOid, ok := t.Type.(*tree.OIDTypeReference)
+		if !ok {
+			return foundUsage, true, expr, nil
+		}
+		id := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
+		// -1 since the type of this CastExpr is the array type.
+		id = id - 1
+		if id != typeID {
+			return foundUsage, true, expr, nil
+		}
+
+		// Extract the array and check if it contains the enum member.
+		annotateType, ok := t.Expr.(*tree.AnnotateTypeExpr)
+		if !ok {
+			return foundUsage, true, expr, nil
+		}
+		strVal, ok := annotateType.Expr.(*tree.StrVal)
+		if !ok {
+			return foundUsage, true, expr, nil
+		}
+		foundUsage = doesArrayContainEnumValues(strVal.RawString(), member)
+		return foundUsage, false, expr, nil
+	default:
+		return foundUsage, true, expr, nil
+	}
+}
+
 // findUsagesOfEnumValue takes an expr, type ID and a enum member of that type,
 // and checks if the expr uses that enum member.
 func findUsagesOfEnumValue(
@@ -632,60 +692,13 @@ func findUsagesOfEnumValue(
 	if err != nil {
 		return false, err
 	}
-	var foundUsage bool
+	var foundUsage, foundUsageInCurrentWalk bool
 
 	visitFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		switch t := expr.(type) {
-		// Case for types being used regularly, which are serialized like '\x80':::@100053.
-		case *tree.AnnotateTypeExpr:
-			// Check if this expr's type is the one we're dropping the enum value from.
-			typeOid, ok := t.Type.(*tree.OIDTypeReference)
-			if !ok {
-				return true, expr, nil
-			}
-			id := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
-			if id != typeID {
-				return true, expr, nil
-			}
-
-			// Check if this expr uses the enum value we're dropping.
-			strVal, ok := t.Expr.(*tree.StrVal)
-			if !ok {
-				return true, expr, nil
-			}
-			physicalRep := []byte(strVal.RawString())
-			if bytes.Equal(physicalRep, member.PhysicalRepresentation) {
-				foundUsage = true
-			}
-			return false, expr, nil
-
-		// Case for types used in string arrays, serialized like '{a, b, c}':::STRING::@100053.
-		case *tree.CastExpr:
-			typeOid, ok := t.Type.(*tree.OIDTypeReference)
-			if !ok {
-				return true, expr, nil
-			}
-			id := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
-			// -1 since the type of this CastExpr is the array type.
-			id = id - 1
-			if id != typeID {
-				return true, expr, nil
-			}
-
-			// Extract the array and check if it contains the enum member.
-			annotateType, ok := t.Expr.(*tree.AnnotateTypeExpr)
-			if !ok {
-				return true, expr, nil
-			}
-			strVal, ok := annotateType.Expr.(*tree.StrVal)
-			if !ok {
-				return true, expr, nil
-			}
-			foundUsage = doesArrayContainEnumValues(strVal.RawString(), member)
-			return false, expr, nil
-		default:
-			return true, expr, nil
-		}
+		foundUsageInCurrentWalk, recurse, newExpr, err = visitExprToCheckEnumValueUsage(expr, typeID, member)
+		// Set foundUsage to true if enum usage is detected in any expression in the AST walk.
+		foundUsage = foundUsage || foundUsageInCurrentWalk
+		return recurse, newExpr, err
 	}
 
 	_, err = tree.SimpleVisit(expr, visitFunc)
@@ -700,35 +713,12 @@ func findUsagesOfEnumValue(
 func findUsagesOfEnumValueInViewQuery(
 	viewQuery string, member *descpb.TypeDescriptor_EnumMember, typeID descpb.ID,
 ) (bool, error) {
-	var foundUsage bool
+	var foundUsage, foundUsageInCurrentWalk bool
 	visitFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		annotateType, ok := expr.(*tree.AnnotateTypeExpr)
-		if !ok {
-			return true, expr, nil
-		}
-
-		// Check if this expr's type is the one we're dropping the enum value from.
-		typeOid, ok := annotateType.Type.(*tree.OIDTypeReference)
-		if !ok {
-			return true, expr, nil
-		}
-		id := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
-		if id != typeID {
-			return true, expr, nil
-		}
-
-		// Check if this expr uses the enum value we're dropping.
-		strVal, ok := annotateType.Expr.(*tree.StrVal)
-		if !ok {
-			return true, expr, nil
-		}
-		physicalRep := []byte(strVal.RawString())
-		if bytes.Equal(physicalRep, member.PhysicalRepresentation) {
-			foundUsage = true
-			return false, expr, nil
-		}
-
-		return false, expr, nil
+		foundUsageInCurrentWalk, recurse, newExpr, err = visitExprToCheckEnumValueUsage(expr, typeID, member)
+		// Set foundUsage to true if enum usage is detected in any expression in the AST walk.
+		foundUsage = foundUsage || foundUsageInCurrentWalk
+		return recurse, newExpr, err
 	}
 
 	stmt, err := parser.ParseOne(viewQuery)
@@ -742,8 +732,260 @@ func findUsagesOfEnumValueInViewQuery(
 	return foundUsage, nil
 }
 
+// canRemoveEnumValueFromUDF checks if the enum value is being used
+// within the function body. As of today, CockroachDB does not support
+// default values for input arguments. However, when we add that support,
+// we should augment this method to also check if the enum value is being
+// used within the function input arguments.
+func (t *typeSchemaChanger) canRemoveEnumValueFromUDF(
+	typeDesc *typedesc.Mutable,
+	member *descpb.TypeDescriptor_EnumMember,
+	udfDesc catalog.FunctionDescriptor,
+) error {
+	var foundUsage, foundUsageInCurrentWalk bool
+	visitFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		foundUsageInCurrentWalk, recurse, newExpr, err = visitExprToCheckEnumValueUsage(expr, typeDesc.ID, member)
+		// Set foundUsage to true if enum usage is detected in any expression in the AST walk.
+		foundUsage = foundUsage || foundUsageInCurrentWalk
+		return recurse, newExpr, err
+	}
+	switch udfDesc.GetLanguage() {
+	case catpb.Function_SQL:
+		parsedStmts, err := parser.Parse(udfDesc.GetFunctionBody())
+		if err != nil {
+			return err
+		}
+		for _, stmt := range parsedStmts {
+			_, err = tree.SimpleStmtVisit(stmt.AST, visitFunc)
+			if err != nil {
+				return errors.Wrapf(err, "failed to parse UDF %s", udfDesc.GetName())
+			}
+			if foundUsage {
+				return pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"could not remove enum value %q as it is being used in a UDF %q",
+					member.LogicalRepresentation, udfDesc.GetName())
+			}
+		}
+	case catpb.Function_PLPGSQL:
+		stmt, err := plpgsql.Parse(udfDesc.GetFunctionBody())
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse UDF %s", udfDesc.GetName())
+		}
+		v := utils.SQLStmtVisitor{Fn: visitFunc}
+		plpgsqltree.Walk(&v, stmt.AST)
+		if v.Err != nil {
+			return errors.Wrapf(v.Err, "failed to parse UDF %s", udfDesc.GetName())
+		}
+		if foundUsage {
+			return pgerror.Newf(pgcode.DependentObjectsStillExist,
+				"could not remove enum value %q as it is being used in a UDF %q",
+				member.LogicalRepresentation, udfDesc.GetName())
+		}
+	}
+	return nil
+}
+
+func (t *typeSchemaChanger) canRemoveEnumValueFromTable(
+	ctx context.Context,
+	typeDesc *typedesc.Mutable,
+	txn isql.Txn,
+	member *descpb.TypeDescriptor_EnumMember,
+	descsCol *descs.Collection,
+	desc catalog.TableDescriptor,
+	ID descpb.ID,
+) error {
+	if desc.IsView() {
+		foundUsage, err := findUsagesOfEnumValueInViewQuery(desc.GetViewQuery(), member, typeDesc.ID)
+		if err != nil {
+			return err
+		}
+		if foundUsage {
+			return pgerror.Newf(pgcode.DependentObjectsStillExist,
+				"could not remove enum value %q as it is being used in view %q",
+				member.LogicalRepresentation, desc.GetName())
+		}
+	}
+
+	var query strings.Builder
+	colSelectors := tabledesc.ColumnsSelectors(desc.PublicColumns())
+	columns := tree.AsStringWithFlags(&colSelectors, tree.FmtSerializable)
+	query.WriteString(fmt.Sprintf("SELECT %s FROM [%d as t] WHERE", columns, ID))
+	firstClause := true
+	validationQueryConstructed := false
+
+	// Note that we examine all indexes as opposed to non-drop indexes so we
+	// do not remove a partitioning value which is in use on an index which
+	// is in the process of being dropped but gets re-added due to a failure
+	// in that schema change.
+	for _, idx := range desc.AllIndexes() {
+		if pred := idx.GetPredicate(); pred != "" {
+			foundUsage, err := findUsagesOfEnumValue(pred, member, typeDesc.ID)
+			if err != nil {
+				return err
+			}
+			if foundUsage {
+				return pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"could not remove enum value %q as it is being used in a predicate of index %s",
+					member.LogicalRepresentation, &tree.TableIndexName{
+						Table: tree.MakeUnqualifiedTableName(tree.Name(desc.GetName())),
+						Index: tree.UnrestrictedName(idx.GetName()),
+					})
+			}
+		}
+		keyColumns := make([]catalog.Column, 0, idx.NumKeyColumns())
+		for i := 0; i < idx.NumKeyColumns(); i++ {
+			col, err := catalog.MustFindColumnByID(desc, idx.GetKeyColumnID(i))
+			if err != nil {
+				return errors.WithAssertionFailure(err)
+			}
+			keyColumns = append(keyColumns, col)
+		}
+		foundUsage, err := findUsagesOfEnumValueInPartitioning(
+			idx.GetPartitioning(), t.execCfg.Codec, keyColumns, desc, idx, member, nil, typeDesc,
+		)
+		if err != nil {
+			return err
+		}
+		if foundUsage {
+			return pgerror.Newf(pgcode.DependentObjectsStillExist,
+				"could not remove enum value %q as it is being used in the partitioning of index %s",
+				member.LogicalRepresentation, &tree.TableIndexName{
+					Table: tree.MakeUnqualifiedTableName(tree.Name(desc.GetName())),
+					Index: tree.UnrestrictedName(idx.GetName()),
+				})
+		}
+	}
+
+	// Examine all check constraints.
+	for _, chk := range desc.CheckConstraints() {
+		foundUsage, err := findUsagesOfEnumValue(chk.GetExpr(), member, typeDesc.ID)
+		if err != nil {
+			return err
+		}
+		if foundUsage {
+			return pgerror.Newf(pgcode.DependentObjectsStillExist,
+				"could not remove enum value %q as it is being used in a check constraint of %q",
+				member.LogicalRepresentation, desc.GetName())
+		}
+	}
+
+	for _, col := range desc.PublicColumns() {
+		// If this column has a default expression, check if it uses the enum member being dropped.
+		if col.HasDefault() {
+			foundUsage, err := findUsagesOfEnumValue(col.GetDefaultExpr(), member, typeDesc.ID)
+			if err != nil {
+				return err
+			}
+			if foundUsage {
+				return pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"could not remove enum value %q as it is being used in a default expresion of %q",
+					member.LogicalRepresentation, desc.GetName())
+			}
+		}
+
+		// If this column is computed, check if it uses the enum member being dropped.
+		if col.IsComputed() {
+			foundUsage, err := findUsagesOfEnumValue(col.GetComputeExpr(), member, typeDesc.ID)
+			if err != nil {
+				return err
+			}
+			if foundUsage {
+				return pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"could not remove enum value %q as it is being used in a computed column of %q",
+					member.LogicalRepresentation, desc.GetName())
+			}
+		}
+
+		// If this column has an ON UPDATE expression, check if it uses the enum
+		// member being dropped.
+		if col.HasOnUpdate() {
+			foundUsage, err := findUsagesOfEnumValue(col.GetOnUpdateExpr(), member, typeDesc.ID)
+			if err != nil {
+				return err
+			}
+			if foundUsage {
+				return pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"could not remove enum value %q as it is being used in an ON UPDATE expression"+
+						" of %q",
+					member.LogicalRepresentation, desc.GetName())
+			}
+		}
+
+		if col.GetType().UserDefined() {
+			tid := typedesc.GetUserDefinedTypeDescID(col.GetType())
+			if typeDesc.ID == tid {
+				if !firstClause {
+					query.WriteString(" OR")
+				}
+				sqlPhysRep, err := convertToSQLStringRepresentation(member.PhysicalRepresentation)
+				if err != nil {
+					return err
+				}
+				colName := col.ColName()
+				query.WriteString(fmt.Sprintf(
+					" t.%s = %s",
+					colName.String(),
+					sqlPhysRep,
+				))
+				firstClause = false
+				validationQueryConstructed = true
+			}
+		}
+	}
+	query.WriteString(" LIMIT 1")
+
+	// NB: A type descriptor reference does not imply at-least one column in the
+	// table is of the type whose value is being removed. The notable exception
+	// being REGIONAL BY TABLE multi-region tables. In this case, no valid query
+	// is constructed and there's nothing to execute. Instead, their validation
+	// is handled as a special case below.
+	if validationQueryConstructed {
+		// We need to override the internal executor's current database (which would
+		// be unset by default) when executing the query constructed above. This is
+		// because the enum value may be used in a view expression, which is
+		// name resolved in the context of the type's database.
+		dbDesc, err := descsCol.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, typeDesc.ParentID)
+		const validationErr = "could not validate removal of enum value %q"
+		if err != nil {
+			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
+		}
+		override := sessiondata.InternalExecutorOverride{
+			User:     username.RootUserName(),
+			Database: dbDesc.GetName(),
+		}
+		rows, err := txn.QueryRowEx(ctx, "count-value-usage", txn.KV(), override, query.String())
+		if err != nil {
+			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
+		}
+		// Check if the above query returned a result. If it did, then the
+		// enum value is being used by some place.
+		if len(rows) > 0 {
+			return pgerror.Newf(pgcode.DependentObjectsStillExist,
+				"could not remove enum value %q as it is being used by %q in row: %s",
+				member.LogicalRepresentation, desc.GetName(), labeledRowValues(desc.PublicColumns(), rows))
+		}
+	}
+
+	// If the type descriptor is a multi-region enum and the table descriptor
+	// belongs to a regional (by table) table, we disallow dropping the region
+	// if it is being used as the homed region for that table.
+	if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM && desc.IsLocalityRegionalByTable() {
+		homedRegion, err := desc.GetRegionalByTableRegion()
+		if err != nil {
+			return err
+		}
+		if catpb.RegionName(member.LogicalRepresentation) == homedRegion {
+			return errors.Newf("could not remove enum value %q as it is the home region for table %q",
+				member.LogicalRepresentation, desc.GetName())
+		}
+	}
+	return nil
+}
+
 // canRemoveEnumValue returns an error if the enum value is in use and therefore
-// can't be removed.
+// can't be removed. An enum value can be referenced in a UDF and a relation. This method
+// should be updated if any other data element is added/updated to reference an enum
+// value.
 func (t *typeSchemaChanger) canRemoveEnumValue(
 	ctx context.Context,
 	typeDesc *typedesc.Mutable,
@@ -751,196 +993,33 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	member *descpb.TypeDescriptor_EnumMember,
 	descsCol *descs.Collection,
 ) error {
-	for _, ID := range typeDesc.ReferencingDescriptorIDs {
-		desc, err := descsCol.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, ID)
+	descGetter := descsCol.ByID(txn.KV()).WithoutNonPublic().Get()
+	for _, id := range typeDesc.ReferencingDescriptorIDs {
+		desc, err := descGetter.Desc(ctx, id)
 		if err != nil {
 			return errors.Wrapf(err,
 				"could not validate enum value removal for %q", member.LogicalRepresentation)
 		}
-		if desc.IsView() {
-			foundUsage, err := findUsagesOfEnumValueInViewQuery(desc.GetViewQuery(), member, typeDesc.ID)
+
+		// An enum value can be used within a table and a UDF.
+		switch desc := desc.(type) {
+		case catalog.TableDescriptor:
+			err = t.canRemoveEnumValueFromTable(ctx, typeDesc, txn, member, descsCol, desc, id)
 			if err != nil {
 				return err
 			}
-			if foundUsage {
-				return pgerror.Newf(pgcode.DependentObjectsStillExist,
-					"could not remove enum value %q as it is being used in view %q",
-					member.LogicalRepresentation, desc.GetName())
-			}
-		}
-
-		var query strings.Builder
-		colSelectors := tabledesc.ColumnsSelectors(desc.PublicColumns())
-		columns := tree.AsStringWithFlags(&colSelectors, tree.FmtSerializable)
-		query.WriteString(fmt.Sprintf("SELECT %s FROM [%d as t] WHERE", columns, ID))
-		firstClause := true
-		validationQueryConstructed := false
-
-		// Note that we examine all indexes as opposed to non-drop indexes so we
-		// do not remove a partitioning value which is in use on an index which
-		// is in the process of being dropped but gets re-added due to a failure
-		// in that schema change.
-		for _, idx := range desc.AllIndexes() {
-			if pred := idx.GetPredicate(); pred != "" {
-				foundUsage, err := findUsagesOfEnumValue(pred, member, typeDesc.ID)
-				if err != nil {
-					return err
-				}
-				if foundUsage {
-					return pgerror.Newf(pgcode.DependentObjectsStillExist,
-						"could not remove enum value %q as it is being used in a predicate of index %s",
-						member.LogicalRepresentation, &tree.TableIndexName{
-							Table: tree.MakeUnqualifiedTableName(tree.Name(desc.GetName())),
-							Index: tree.UnrestrictedName(idx.GetName()),
-						})
-				}
-			}
-			keyColumns := make([]catalog.Column, 0, idx.NumKeyColumns())
-			for i := 0; i < idx.NumKeyColumns(); i++ {
-				col, err := catalog.MustFindColumnByID(desc, idx.GetKeyColumnID(i))
-				if err != nil {
-					return errors.WithAssertionFailure(err)
-				}
-				keyColumns = append(keyColumns, col)
-			}
-			foundUsage, err := findUsagesOfEnumValueInPartitioning(
-				idx.GetPartitioning(), t.execCfg.Codec, keyColumns, desc, idx, member, nil, typeDesc,
-			)
+		case catalog.FunctionDescriptor:
+			err = t.canRemoveEnumValueFromUDF(typeDesc, member, desc)
 			if err != nil {
 				return err
 			}
-			if foundUsage {
-				return pgerror.Newf(pgcode.DependentObjectsStillExist,
-					"could not remove enum value %q as it is being used in the partitioning of index %s",
-					member.LogicalRepresentation, &tree.TableIndexName{
-						Table: tree.MakeUnqualifiedTableName(tree.Name(desc.GetName())),
-						Index: tree.UnrestrictedName(idx.GetName()),
-					})
-			}
-		}
-
-		// Examine all check constraints.
-		for _, chk := range desc.CheckConstraints() {
-			foundUsage, err := findUsagesOfEnumValue(chk.GetExpr(), member, typeDesc.ID)
-			if err != nil {
-				return err
-			}
-			if foundUsage {
-				return pgerror.Newf(pgcode.DependentObjectsStillExist,
-					"could not remove enum value %q as it is being used in a check constraint of %q",
-					member.LogicalRepresentation, desc.GetName())
-			}
-		}
-
-		for _, col := range desc.PublicColumns() {
-			// If this column has a default expression, check if it uses the enum member being dropped.
-			if col.HasDefault() {
-				foundUsage, err := findUsagesOfEnumValue(col.GetDefaultExpr(), member, typeDesc.ID)
-				if err != nil {
-					return err
-				}
-				if foundUsage {
-					return pgerror.Newf(pgcode.DependentObjectsStillExist,
-						"could not remove enum value %q as it is being used in a default expresion of %q",
-						member.LogicalRepresentation, desc.GetName())
-				}
-			}
-
-			// If this column is computed, check if it uses the enum member being dropped.
-			if col.IsComputed() {
-				foundUsage, err := findUsagesOfEnumValue(col.GetComputeExpr(), member, typeDesc.ID)
-				if err != nil {
-					return err
-				}
-				if foundUsage {
-					return pgerror.Newf(pgcode.DependentObjectsStillExist,
-						"could not remove enum value %q as it is being used in a computed column of %q",
-						member.LogicalRepresentation, desc.GetName())
-				}
-			}
-
-			// If this column has an ON UPDATE expression, check if it uses the enum
-			// member being dropped.
-			if col.HasOnUpdate() {
-				foundUsage, err := findUsagesOfEnumValue(col.GetOnUpdateExpr(), member, typeDesc.ID)
-				if err != nil {
-					return err
-				}
-				if foundUsage {
-					return pgerror.Newf(pgcode.DependentObjectsStillExist,
-						"could not remove enum value %q as it is being used in an ON UPDATE expression"+
-							" of %q",
-						member.LogicalRepresentation, desc.GetName())
-				}
-			}
-
-			if col.GetType().UserDefined() {
-				tid := typedesc.GetUserDefinedTypeDescID(col.GetType())
-				if typeDesc.ID == tid {
-					if !firstClause {
-						query.WriteString(" OR")
-					}
-					sqlPhysRep, err := convertToSQLStringRepresentation(member.PhysicalRepresentation)
-					if err != nil {
-						return err
-					}
-					colName := col.ColName()
-					query.WriteString(fmt.Sprintf(
-						" t.%s = %s",
-						colName.String(),
-						sqlPhysRep,
-					))
-					firstClause = false
-					validationQueryConstructed = true
-				}
-			}
-		}
-		query.WriteString(" LIMIT 1")
-
-		// NB: A type descriptor reference does not imply at-least one column in the
-		// table is of the type whose value is being removed. The notable exception
-		// being REGIONAL BY TABLE multi-region tables. In this case, no valid query
-		// is constructed and there's nothing to execute. Instead, their validation
-		// is handled as a special case below.
-		if validationQueryConstructed {
-			// We need to override the internal executor's current database (which would
-			// be unset by default) when executing the query constructed above. This is
-			// because the enum value may be used in a view expression, which is
-			// name resolved in the context of the type's database.
-			dbDesc, err := descsCol.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, typeDesc.ParentID)
-			const validationErr = "could not validate removal of enum value %q"
-			if err != nil {
-				return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
-			}
-			override := sessiondata.InternalExecutorOverride{
-				User:     username.RootUserName(),
-				Database: dbDesc.GetName(),
-			}
-			rows, err := txn.QueryRowEx(ctx, "count-value-usage", txn.KV(), override, query.String())
-			if err != nil {
-				return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
-			}
-			// Check if the above query returned a result. If it did, then the
-			// enum value is being used by some place.
-			if len(rows) > 0 {
-				return pgerror.Newf(pgcode.DependentObjectsStillExist,
-					"could not remove enum value %q as it is being used by %q in row: %s",
-					member.LogicalRepresentation, desc.GetName(), labeledRowValues(desc.PublicColumns(), rows))
-			}
-		}
-
-		// If the type descriptor is a multi-region enum and the table descriptor
-		// belongs to a regional (by table) table, we disallow dropping the region
-		// if it is being used as the homed region for that table.
-		if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM && desc.IsLocalityRegionalByTable() {
-			homedRegion, err := desc.GetRegionalByTableRegion()
-			if err != nil {
-				return err
-			}
-			if catpb.RegionName(member.LogicalRepresentation) == homedRegion {
-				return errors.Newf("could not remove enum value %q as it is the home region for table %q",
-					member.LogicalRepresentation, desc.GetName())
-			}
+		default:
+			// Enum value is being referenced by some other type of descriptor, return error.
+			// This should never happen.
+			return errors.Newf(
+				"enum value being referenced by descriptor type %s, name %s, unable to delete",
+				desc.DescriptorType(),
+				desc.GetName())
 		}
 	}
 
@@ -1079,9 +1158,17 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 	const validationErr = "could not validate removal of enum value %q"
 	for i := 0; i < arrayTypeDesc.NumReferencingDescriptors(); i++ {
 		id := arrayTypeDesc.GetReferencingDescriptorID(i)
-		desc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, id)
+		desc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Desc(ctx, id)
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
+		}
+		// We install a backreference to both the type descriptor and
+		// its array alias even when referenced within a UDF. We only need to
+		// execute the following code when its referenced with a relation. So check for descriptor
+		// type and skip if it is not a relation.
+		tblDesc, isTable := desc.(catalog.TableDescriptor)
+		if !isTable {
+			continue
 		}
 		var unionUnnests strings.Builder
 		var query strings.Builder
@@ -1094,7 +1181,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		// 		...
 		//	) WHERE unnest = 'enum_value'
 		firstClause := true
-		for _, col := range desc.PublicColumns() {
+		for _, col := range tblDesc.PublicColumns() {
 			if !col.GetType().UserDefined() {
 				continue
 			}
