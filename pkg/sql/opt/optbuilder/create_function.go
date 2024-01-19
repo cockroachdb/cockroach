@@ -156,11 +156,23 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	// be resolved.
 	bodyScope := b.allocScope()
 	var paramTypes tree.ParamTypes
+	var outParamType *types.T
 	for i := range cf.Params {
 		param := &cf.Params[i]
 		typ, err := tree.ResolveType(b.ctx, param.Type, b.semaCtx.TypeResolver)
 		if err != nil {
 			panic(err)
+		}
+		if param.IsOutParam() {
+			if outParamType == nil {
+				outParamType = typ
+			} else {
+				if !types.IsRecordType(outParamType) {
+					outParamType = types.MakeTuple([]*types.T{outParamType, typ})
+				} else {
+					outParamType.InternalType.TupleContents = append(outParamType.InternalType.TupleContents, typ)
+				}
+			}
 		}
 		// The parameter type must be supported by the current cluster version.
 		checkUnsupportedType(b.ctx, b.semaCtx, typ)
@@ -196,9 +208,35 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	}
 
 	// Collect the user defined type dependency of the return type.
-	funcReturnType, err := tree.ResolveType(b.ctx, cf.ReturnType.Type, b.semaCtx.TypeResolver)
-	if err != nil {
-		panic(err)
+	var funcReturnType *types.T
+	var err error
+	if cf.ReturnType != nil {
+		funcReturnType, err = tree.ResolveType(b.ctx, cf.ReturnType.Type, b.semaCtx.TypeResolver)
+		if err != nil {
+			panic(err)
+		}
+	}
+	if outParamType != nil {
+		if funcReturnType != nil && !funcReturnType.Equivalent(outParamType) {
+			panic(pgerror.Newf(pgcode.InvalidFunctionDefinition, "function result type must be %s because of OUT parameters", outParamType.Name()))
+		}
+		// Override the return types so that we do return type validation and SHOW
+		// CREATE correctly.
+		funcReturnType = outParamType
+		cf.ReturnType = &tree.RoutineReturnType{
+			Type: outParamType,
+		}
+	} else if funcReturnType == nil {
+		if cf.IsProcedure {
+			// A procedure doesn't need a return type. Use a VOID return type to avoid
+			// errors in shared logic later.
+			funcReturnType = types.Void
+			cf.ReturnType = &tree.RoutineReturnType{
+				Type: types.Void,
+			}
+		} else {
+			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "function result type must be specified"))
+		}
 	}
 	// We disallow creating functions that return UNKNOWN, for consistency with postgres.
 	if funcReturnType.Family() == types.UnknownFamily {
@@ -356,8 +394,9 @@ func validateReturnType(
 		)
 	}
 
-	// If return type is RECORD, any column types are valid.
-	if types.IsRecordType(expected) {
+	// If return type is RECORD and the tuple content types unspecified by OUT
+	// parameters, any column types are valid.
+	if types.IsRecordType(expected) && types.IsWildcardTupleType(expected) {
 		return nil
 	}
 

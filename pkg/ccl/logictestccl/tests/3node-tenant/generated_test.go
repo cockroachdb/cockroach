@@ -2270,6 +2270,13 @@ func TestTenantLogic_udf_options(
 	runLogicTest(t, "udf_options")
 }
 
+func TestTenantLogic_udf_params(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_params")
+}
+
 func TestTenantLogic_udf_prepare(
 	t *testing.T,
 ) {
@@ -2688,6 +2695,13 @@ func TestTenantLogicCCL_tenant_unsupported(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "tenant_unsupported")
+}
+
+func TestTenantLogicCCL_udf_params(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "udf_params")
 }
 
 func TestTenantLogicCCL_udf_plpgsql(
