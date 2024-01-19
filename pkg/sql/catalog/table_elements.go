@@ -970,11 +970,6 @@ func ColumnIDToOrdinalMap(columns []Column) TableColMap {
 	return m
 }
 
-// ColumnTypes returns the types of the given columns
-func ColumnTypes(columns []Column) []*types.T {
-	return ColumnTypesWithInvertedCol(columns, nil /* invertedCol */)
-}
-
 // ColumnTypesWithInvertedCol returns the types of all given columns,
 // If invertedCol is non-nil, substitutes the type of the inverted
 // column instead of the column with the same ID.

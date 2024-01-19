@@ -112,15 +112,3 @@ func ResolveNamesUsingVisitor(
 func (v *NameResolutionVisitor) Err() error {
 	return v.err
 }
-
-// MakeNameResolutionVisitor returns initialized name resolution visitor.
-func MakeNameResolutionVisitor(
-	source *colinfo.DataSourceInfo, ivarHelper tree.IndexedVarHelper,
-) NameResolutionVisitor {
-	return NameResolutionVisitor{
-		iVarHelper: ivarHelper,
-		resolver: colinfo.ColumnResolver{
-			Source: source,
-		},
-	}
-}
