@@ -95,6 +95,13 @@ message AddSSTableOperation {
   Result result = 6 [(gogoproto.nullable) = false];
 }
 
+message BarrierOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  bool with_lease_applied_index = 3;
+  Result result = 4 [(gogoproto.nullable) = false];
+}
+
 message SplitOperation {
   bytes key = 1;
   Result result = 2 [(gogoproto.nullable) = false];
@@ -168,6 +175,7 @@ message Operation {
   SavepointCreateOperation savepoint_create = 19;
   SavepointReleaseOperation savepoint_release = 20;
   SavepointRollbackOperation savepoint_rollback = 21;
+  BarrierOperation barrier = 22;
 }
 
 enum ResultType {

@@ -151,6 +151,14 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	case *ChangeZoneOperation:
 		err := updateZoneConfigInEnv(ctx, env, o.Type)
 		o.Result = resultInit(ctx, err)
+	case *BarrierOperation:
+		var err error
+		if o.WithLeaseAppliedIndex {
+			_, _, err = db.BarrierWithLAI(ctx, o.Key, o.EndKey)
+		} else {
+			_, err = db.Barrier(ctx, o.Key, o.EndKey)
+		}
+		o.Result = resultInit(ctx, err)
 	case *ClosureTxnOperation:
 		// Use a backoff loop to avoid thrashing on txn aborts. Don't wait between
 		// epochs of the same transaction to avoid waiting while holding locks.
@@ -446,6 +454,17 @@ func applyClientOp(
 			return
 		}
 		o.Result.OptionalTimestamp = ts
+	case *BarrierOperation:
+		_, _, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
+			b.AddRawRequest(&kvpb.BarrierRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    o.Key,
+					EndKey: o.EndKey,
+				},
+				WithLeaseAppliedIndex: o.WithLeaseAppliedIndex,
+			})
+		})
+		o.Result = resultInit(ctx, err)
 	case *BatchOperation:
 		b := &kv.Batch{}
 		applyBatchOp(ctx, b, db.Run, o)
@@ -564,6 +583,8 @@ func applyBatchOp(
 			setLastReqSeq(b, subO.Seq)
 		case *AddSSTableOperation:
 			panic(errors.AssertionFailedf(`AddSSTable cannot be used in batches`))
+		case *BarrierOperation:
+			panic(errors.AssertionFailedf(`Barrier cannot be used in batches`))
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}

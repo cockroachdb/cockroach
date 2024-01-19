@@ -96,6 +96,8 @@ func TestOperationsFormat(t *testing.T) {
 					createSavepoint(4), del(k9, 1), rollbackSavepoint(4),
 				)),
 		},
+		{step: step(barrier(k1, k2, false /* withLAI */))},
+		{step: step(barrier(k3, k4, true /* withLAI */))},
 	}
 
 	w := echotest.NewWalker(t, datapathutils.TestDataPath(t, t.Name()))
