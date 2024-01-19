@@ -220,6 +220,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"session_end",
 			"crdb_internal.hide_sql_constants(active_queries) as active_queries",
 			"crdb_internal.hide_sql_constants(last_active_query) as last_active_query",
+			"trace_id",
 		},
 	},
 	"crdb_internal.cluster_settings": {
@@ -793,6 +794,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"session_end",
 			"crdb_internal.hide_sql_constants(active_queries) as active_queries",
 			"crdb_internal.hide_sql_constants(last_active_query) as last_active_query",
+			"trace_id",
 		},
 	},
 	"crdb_internal.node_statement_statistics": {

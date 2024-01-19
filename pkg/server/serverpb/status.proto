@@ -1053,6 +1053,9 @@ message Session {
   // backend PID for compatibility with the query cancellation protocol. Unlike
   // in Postgres, this value does not correspond to a real process ID.
   uint32 pg_backend_pid = 19 [ (gogoproto.customname) = "PGBackendPID" ];
+
+  // The ID the session's trace.
+  uint64 trace_id = 20 [(gogoproto.customname) = "TraceID"];
 }
 
 // An error wrapper object for ListSessionsResponse.
