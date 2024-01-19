@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -254,7 +255,7 @@ SELECT $1::INT = ALL (
 		})
 
 		t.L().Printf("blocking networking on node 1...")
-		const netConfigCmd = `
+		netConfigCmd := fmt.Sprintf(`
 # ensure any failure fails the entire script.
 set -e;
 
@@ -263,23 +264,25 @@ sudo iptables -P INPUT ACCEPT;
 sudo iptables -P OUTPUT ACCEPT;
 
 # Drop any node-to-node crdb traffic.
-sudo iptables -A INPUT -p tcp --dport 26257 -j DROP;
-sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP;
+sudo iptables -A INPUT -p tcp --dport {pgport%s} -j DROP;
+sudo iptables -A OUTPUT -p tcp --dport {pgport%s} -j DROP;
 
 sudo iptables-save
-`
+`,
+			c.Node(expectedLeaseholder), c.Node(expectedLeaseholder))
 		t.L().Printf("partitioning using iptables; config cmd:\n%s", netConfigCmd)
 		require.NoError(t, c.RunE(ctx, option.WithNodes(c.Node(expectedLeaseholder)), netConfigCmd))
 
 		// (attempt to) restore iptables when test end, so that cluster
 		// can be investigated afterwards.
 		defer func() {
-			const restoreNet = `
+			restoreNet := fmt.Sprintf(`
 set -e;
-sudo iptables -D INPUT -p tcp --dport 26257 -j DROP;
-sudo iptables -D OUTPUT -p tcp --dport 26257 -j DROP;
+sudo iptables -D INPUT -p tcp --dport {pgport%s} -j DROP;
+sudo iptables -D OUTPUT -p tcp --dport {pgport%s} -j DROP;
 sudo iptables-save
-`
+`,
+				c.Node(expectedLeaseholder), c.Node(expectedLeaseholder))
 			t.L().Printf("restoring iptables; config cmd:\n%s", restoreNet)
 			require.NoError(t, c.RunE(ctx, option.WithNodes(c.Node(expectedLeaseholder)), restoreNet))
 		}()
@@ -317,11 +320,14 @@ func runClientNetworkConnectionTimeout(ctx context.Context, t test.Test, c clust
 	// long transaction (i.e. just the sleep builtin).
 	var runOutput install.RunResultDetails
 	grp.GoCtx(func(ctx context.Context) error {
-		ips, err := c.ExternalIP(ctx, t.L(), c.Node(1))
+		urls, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(1)), certsDir, roachprod.PGURLOptions{
+			External: true,
+			Secure:   true,
+		})
 		if err != nil {
 			return err
 		}
-		commandThatWillDisconnect := fmt.Sprintf(`./cockroach sql --certs-dir %s --url "postgres://root@%s:26257" -e "SELECT pg_sleep(600)"`, certsDir, ips[0])
+		commandThatWillDisconnect := fmt.Sprintf(`./cockroach sql --certs-dir %s --url %s -e "SELECT pg_sleep(600)"`, certsDir, urls[0])
 		t.L().Printf("Executing long running query: %s", commandThatWillDisconnect)
 		output, err := c.RunWithDetails(ctx, t.L(), option.WithNodes(clientNode), commandThatWillDisconnect)
 		runOutput = output[0]
@@ -341,7 +347,7 @@ func runClientNetworkConnectionTimeout(ctx context.Context, t test.Test, c clust
 		return nil
 	})
 
-	const netConfigCmd = `
+	netConfigCmd := fmt.Sprintf(`
 # ensure any failure fails the entire script.
 set -e;
 
@@ -350,9 +356,10 @@ sudo iptables -P INPUT ACCEPT;
 sudo iptables -P OUTPUT ACCEPT;
 
 # Drop any client traffic to CRDB.
-sudo iptables -A INPUT -p tcp --sport 26257 -j DROP;
-sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP;
-`
+sudo iptables -A INPUT -p tcp --sport {pgport%s} -j DROP;
+sudo iptables -A OUTPUT -p tcp --dport {pgport%s} -j DROP;
+`,
+		c.Node(1), c.Node(1))
 	t.L().Printf("blocking networking on client; config cmd:\n%s", netConfigCmd)
 	blockStartTime := timeutil.Now()
 	require.NoError(t, c.RunE(ctx, option.WithNodes(clientNode), netConfigCmd))
