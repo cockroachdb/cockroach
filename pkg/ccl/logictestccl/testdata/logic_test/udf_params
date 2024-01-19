@@ -51,6 +51,33 @@ $$ LANGUAGE PLpgSQL;
 statement ok
 DROP FUNCTION f;
 
+# Stored Procedures
+statement ok
+CREATE PROCEDURE p(OUT param INT) AS $$ BEGIN SELECT 1; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP PROCEDURE p;
+
+statement ok
+CREATE PROCEDURE p(IN param1 INT, INOUT param2 INT, OUT param3 INT) AS $$ BEGIN SELECT 1, 2; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP PROCEDURE p;
+
+# TODO(#100405) Executing this procedure results in 42601: query has no destination for result data
+statement ok
+CREATE PROCEDURE p(INOUT param1 INT, OUT param2 INT) AS $$ BEGIN SELECT 1, 2, 3; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP PROCEDURE p;
+
+# TODO(#100405) Executing this procedure results in 42601: query has no destination for result data
+statement ok
+CREATE PROCEDURE p(INOUT param INT) AS $$ BEGIN SELECT 'hello'; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP PROCEDURE p;
+
 subtest end
 
 subtest show_create
