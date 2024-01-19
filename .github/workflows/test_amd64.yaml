@@ -10,3 +10,17 @@ jobs:
     uses: ./.github/workflows/test_template.yaml
     with:
       targets: "['linux-386-unit-1-cpu']"
+
+  coverage:
+    needs:
+      - test-linux-amd64
+      - test-linux-386
+    runs-on: ubuntu-latest-8-cores
+    steps:
+      - uses: actions/checkout@v4
+      - id: goversion
+        run: echo "goversion=$(cat .go-version)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.goversion.outputs.goversion }}
+      - run: make test

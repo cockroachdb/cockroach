@@ -2,8 +2,21 @@ name: Test ARM64
 permissions: read-all
 on: [push, pull_request]
 jobs:
-  run:
+  test-linux-arm64-cpu-race:
     uses: ./.github/workflows/test_template.yaml
     with:
       runs-on: actuated-arm64-8cpu-8gb
       targets: "['linux-arm64-unit-test-4-cpu-race']"
+
+  coverage:
+    needs:
+      - test-linux-arm64-cpu-race
+    runs-on: actuated-arm64-8cpu-8gb
+    steps:
+      - uses: actions/checkout@v4
+      - id: goversion
+        run: echo "goversion=$(cat .go-version)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.goversion.outputs.goversion }}
+      - run: make test
