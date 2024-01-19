@@ -2287,8 +2287,13 @@ func (ds *DistSender) sendToReplicas(
 		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
 	}
 
+	// Convert unknown connection classes to DEFAULT, to handle mixed-version
+	// states gracefully.
+	rpcClass := rpc.ConnectionClassOrDefault(ba.ConnectionClass)
+	// Upgrade the connection class to SYSTEM, for critical ranges.
+	rpcClass = rpc.ConnectionClassForKey(desc.RSpan().Key, rpcClass)
 	opts := SendOptions{
-		class:                  rpc.ConnectionClassForKey(desc.RSpan().Key, ba.ConnectionClass),
+		class:                  rpcClass,
 		metrics:                &ds.metrics,
 		dontConsiderConnHealth: ds.dontConsiderConnHealth,
 	}
