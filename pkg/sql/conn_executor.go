@@ -90,7 +90,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"golang.org/x/net/trace"
 )
 
 var maxNumNonAdminConnections = settings.RegisterIntSetting(
@@ -1287,11 +1286,6 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		}
 	}
 
-	if ex.eventLog != nil {
-		ex.eventLog.Finish()
-		ex.eventLog = nil
-	}
-
 	// Stop idle timer if the connExecutor is closed to ensure cancel session
 	// is not called.
 	ex.mu.IdleInSessionTimeout.Stop()
@@ -1369,10 +1363,6 @@ type connExecutor struct {
 	state          txnState
 	transitionCtx  transitionCtx
 	sessionTracing SessionTracing
-
-	// eventLog for SQL statements and other important session events. Will be set
-	// if traceSessionEventLogEnabled; it is used by ex.sessionEventf()
-	eventLog trace.EventLog
 
 	// extraTxnState groups fields scoped to a SQL txn that are not handled by
 	// ex.state, above. The rule of thumb is that, if the state influences state
@@ -2074,16 +2064,6 @@ func (ex *connExecutor) activate(
 	ex.sessionMon.StartNoReserved(ctx, ex.mon)
 	ex.sessionPreparedMon.StartNoReserved(ctx, ex.sessionMon)
 
-	// Enable the trace if configured.
-	if traceSessionEventLogEnabled.Get(&ex.server.cfg.Settings.SV) {
-		remoteStr := "<admin>"
-		if ex.sessionData().RemoteAddr != nil {
-			remoteStr = ex.sessionData().RemoteAddr.String()
-		}
-		ex.eventLog = trace.NewEventLog(
-			fmt.Sprintf("sql session [%s]", ex.sessionData().User()), remoteStr)
-	}
-
 	ex.activated = true
 }
 
@@ -2185,7 +2165,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		return err // err could be io.EOF
 	}
 
-	if log.ExpensiveLogEnabled(ctx, 2) || ex.eventLog != nil {
+	if log.ExpensiveLogEnabled(ctx, 2) {
 		ex.sessionEventf(ctx, "[%s pos:%d] executing %s",
 			ex.machine.CurState(), pos, cmd)
 	}
@@ -4205,9 +4185,6 @@ func (ex *connExecutor) getCreatedSequencesAccessor() createdSequences {
 func (ex *connExecutor) sessionEventf(ctx context.Context, format string, args ...interface{}) {
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventfDepth(ctx, 1 /* depth */, 2 /* level */, format, args...)
-	}
-	if ex.eventLog != nil {
-		ex.eventLog.Printf(format, args...)
 	}
 }
 
