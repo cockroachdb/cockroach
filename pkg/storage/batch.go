@@ -11,11 +11,11 @@
 package storage
 
 import (
-	"encoding/binary"
 	"math"
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/batchrepr"
 	"github.com/cockroachdb/pebble/rangekey"
 )
 
@@ -26,29 +26,20 @@ import (
 // RocksDB key kind.
 const _ = uint(pebble.InternalKeyKindDeleteSized - pebble.InternalKeyKindMax)
 
-const (
-	// The batch header is composed of an 8-byte sequence number (all zeroes) and
-	// 4-byte count of the number of entries in the batch.
-	headerSize int = 12
-	countPos   int = 8
-)
-
-// decodeBatchHeader decodes the header of Pebble batch represenation, returning
-// both the count of the entries in the batch and the suffix of data remaining
-// in the batch.
-func decodeBatchHeader(repr []byte) (count int, orepr pebble.BatchReader, err error) {
-	if len(repr) < headerSize {
-		return 0, nil, errors.Errorf("batch repr too small: %d < %d", len(repr), headerSize)
+// decodeBatchHeader decodes the header of Pebble batch representation,
+// returning the parsed header and a batchrepr.Reader into the contents of the
+// batch.
+func decodeBatchHeader(repr []byte) (h batchrepr.Header, r batchrepr.Reader, err error) {
+	h, ok := batchrepr.ReadHeader(repr)
+	switch {
+	case !ok:
+		return batchrepr.Header{}, nil, errors.Errorf("batch invalid: too small: %d bytes", len(repr))
+	case h.SeqNum != 0:
+		return batchrepr.Header{}, nil, errors.Errorf("batch invalid: bad sequence: expected 0, but found %d", h.SeqNum)
+	case h.Count > math.MaxInt32:
+		return batchrepr.Header{}, nil, errors.Errorf("batch invalid: count %d would overflow 32-bit signed int", h.Count)
 	}
-	seq := binary.LittleEndian.Uint64(repr[:countPos])
-	if seq != 0 {
-		return 0, nil, errors.Errorf("bad sequence: expected 0, but found %d", seq)
-	}
-	r, c := pebble.ReadBatch(repr)
-	if c > math.MaxInt32 {
-		return 0, nil, errors.Errorf("count %d would overflow max int", c)
-	}
-	return int(c), r, nil
+	return h, batchrepr.Read(repr), nil
 }
 
 // BatchReader is used to iterate the entries in a Pebble batch
@@ -79,13 +70,11 @@ func decodeBatchHeader(repr []byte) (count int, orepr pebble.BatchReader, err er
 //	  return err
 //	}
 type BatchReader struct {
-	batchReader pebble.BatchReader
+	header batchrepr.Header
+	reader batchrepr.Reader
 
 	// The error encountered during iterator, if any
 	err error
-
-	// The total number of entries, decoded from the batch header
-	count int
 
 	// The following all represent the current entry and are updated by Next.
 	// `value` is not applicable for all key kinds. For RangeDelete, value
@@ -98,16 +87,16 @@ type BatchReader struct {
 // NewBatchReader creates a BatchReader from the given batch repr and
 // verifies the header.
 func NewBatchReader(repr []byte) (*BatchReader, error) {
-	count, batchReader, err := decodeBatchHeader(repr)
+	h, r, err := decodeBatchHeader(repr)
 	if err != nil {
 		return nil, err
 	}
-	return &BatchReader{batchReader: batchReader, count: count}, nil
+	return &BatchReader{header: h, reader: r}, nil
 }
 
 // Count returns the declared number of entries in the batch.
 func (r *BatchReader) Count() int {
-	return r.count
+	return int(r.header.Count)
 }
 
 // Error returns the error, if any, which the iterator encountered.
@@ -228,15 +217,16 @@ func (r *BatchReader) rangeKeys() (rangekey.Span, error) {
 // is empty.
 func (r *BatchReader) Next() bool {
 	var ok bool
-	r.kind, r.key, r.value, ok, r.err = r.batchReader.Next()
+	r.kind, r.key, r.value, ok, r.err = r.reader.Next()
 	return ok
 }
 
 // BatchCount provides an efficient way to get the count of mutations in a batch
 // representation.
 func BatchCount(repr []byte) (int, error) {
-	if len(repr) < headerSize {
-		return 0, errors.Errorf("batch repr too small: %d < %d", len(repr), headerSize)
+	h, ok := batchrepr.ReadHeader(repr)
+	if !ok {
+		return 0, errors.Errorf("invalid batch: batch repr too small: %d bytes", len(repr))
 	}
-	return int(binary.LittleEndian.Uint32(repr[countPos:headerSize])), nil
+	return int(h.Count), nil
 }
