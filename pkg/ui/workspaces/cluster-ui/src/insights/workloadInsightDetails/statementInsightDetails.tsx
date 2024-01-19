@@ -23,7 +23,7 @@ import { StmtInsightEvent } from "../types";
 import { getExplainPlanFromGist } from "src/api/decodePlanGistApi";
 import { StatementInsightDetailsOverviewTab } from "./statementInsightDetailsOverviewTab";
 import { TimeScale, toDateRange } from "../../timeScaleDropdown";
-import { getStmtInsightsApi } from "src/api";
+import { getStmtInsightsApi } from "src/api/stmtInsightsApi";
 import { InsightsError } from "../insightsErrorComponent";
 
 // Styles

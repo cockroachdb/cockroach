@@ -32,8 +32,8 @@ import {
   InsightExecEnum,
   InsightRecommendation,
   InsightType,
-  insightType,
-} from "../insights";
+} from "../insights/types";
+import { insightType } from "../insights/utils";
 
 const cx = classNames.bind(styles);
 
