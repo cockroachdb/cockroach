@@ -849,7 +849,7 @@ func (sc *systemTableContents) loadShowResults(
 		String()
 
 	node := sc.cluster.Node(sc.roachNode)
-	result, err := sc.cluster.RunWithDetailsSingleNode(ctx, l, node, showCmd)
+	result, err := sc.cluster.RunWithDetailsSingleNode(ctx, l, option.WithNodes(node), showCmd)
 	if err != nil {
 		return fmt.Errorf("error running command (%s): %w", showCmd, err)
 	}
@@ -1951,7 +1951,7 @@ func (u *CommonTestUtils) sentinelFilePath(
 	ctx context.Context, l *logger.Logger, node int,
 ) (string, error) {
 	result, err := u.cluster.RunWithDetailsSingleNode(
-		ctx, l, u.cluster.Node(node), "echo -n {store-dir}",
+		ctx, l, option.WithNodes(u.cluster.Node(node)), "echo -n {store-dir}",
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to retrieve store directory from node %d: %w", node, err)

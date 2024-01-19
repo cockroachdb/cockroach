@@ -103,7 +103,7 @@ func registerLibPQ(r registry.Registry) {
 		testListRegex := "^(Test|Example)"
 		result, err := c.RunWithDetailsSingleNode(
 			ctx, t.L(),
-			node,
+			option.WithNodes(node),
 			fmt.Sprintf(`cd %s && PGPORT={pgport:1} PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -list "%s"`, libPQPath, testListRegex),
 		)
 		require.NoError(t, err)

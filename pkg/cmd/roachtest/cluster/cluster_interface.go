@@ -94,11 +94,13 @@ type Cluster interface {
 
 	// Running commands on nodes.
 
-	// RunWithDetails runs a command on the specified nodes and returns results details and an error.
-	// The returned error is only for a major failure in roachprod run command so the caller needs
-	// to check for individual node errors in `[]install.RunResultDetails`.
+	// RunWithDetails runs a command on the specified nodes (option.WithNodes) and
+	// returns results details and an error. The returned error is only for a
+	// major failure in roachprod run command so the caller needs to check for
+	// individual node errors in `[]install.RunResultDetails`.
 	// Use it when you need output details such as stdout or stderr, or remote exit status.
-	RunWithDetails(ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string) ([]install.RunResultDetails, error)
+	// See install.RunOptions for more details on available options.
+	RunWithDetails(ctx context.Context, testLogger *logger.Logger, options install.RunOptions, args ...string) ([]install.RunResultDetails, error)
 
 	// Run is just like RunE, except it is fatal on errors.
 	// Use it when an error means the test should fail.
@@ -119,7 +121,7 @@ type Cluster interface {
 	// on a single node AND 2) an error from roachprod itself would be treated the same way
 	// you treat an error from the command. This makes error checking easier / friendlier
 	// and helps us avoid code replication.
-	RunWithDetailsSingleNode(ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string) (install.RunResultDetails, error)
+	RunWithDetailsSingleNode(ctx context.Context, testLogger *logger.Logger, options install.RunOptions, args ...string) (install.RunResultDetails, error)
 
 	// Metadata about the provisioned nodes.
 

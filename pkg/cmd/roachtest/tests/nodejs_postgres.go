@@ -145,7 +145,7 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 		require.NoError(t, err)
 
 		t.Status("running node-postgres tests")
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
 			fmt.Sprintf(
 				`cd /mnt/data1/node-postgres/ && sudo \
 PGPORT={pgport:1} PGUSER=%s PGSSLMODE=require PGDATABASE=postgres_node_test \

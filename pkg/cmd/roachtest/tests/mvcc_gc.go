@@ -646,7 +646,7 @@ func sendBatchRequest(
 		Flag("host", fmt.Sprintf("localhost:{pgport:%d}", node)).
 		String()
 	res, err := c.RunWithDetailsSingleNode(
-		ctx, t.L(), c.Node(node), debugEnv+cmd)
+		ctx, t.L(), option.WithNodes(c.Node(node)), debugEnv+cmd)
 	if err != nil {
 		return kvpb.BatchResponse{}, err
 	}

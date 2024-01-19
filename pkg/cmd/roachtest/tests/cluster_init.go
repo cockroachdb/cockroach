@@ -162,7 +162,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 			args = append(args, extraArgs...)
 			args = append(args, "--insecure")
 			args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
-			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(runNode), args...)
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(runNode)), args...)
 			combinedOutput := result.Stdout + result.Stderr
 			t.L().Printf("%s\n", combinedOutput)
 			return combinedOutput, err

@@ -157,7 +157,7 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster, j jepsenCon
 
 	// Install Jepsen's prereqs on the controller.
 	if result, err := c.RunWithDetailsSingleNode(
-		ctx, t.L(), controller, "sh", "-c",
+		ctx, t.L(), option.WithNodes(controller), "sh", "-c",
 		`"sudo DEBIAN_FRONTEND=noninteractive apt-get -qqy install openjdk-8-jre openjdk-8-jre-headless libjna-java gnuplot > /dev/null 2>&1"`,
 	); err != nil {
 		if result.RemoteExitStatus == 100 {
@@ -412,7 +412,7 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
 		}
 
 		if result, err := c.RunWithDetailsSingleNode(
-			ctx, t.L(), controller,
+			ctx, t.L(), option.WithNodes(controller),
 			// -h causes tar to follow symlinks; needed by the "latest" symlink.
 			// -f- sends the output to stdout, we read it and save it to a local file.
 			"tar -chj --ignore-failed-read -C /mnt/data1/jepsen/cockroachdb -f- store/latest invoke.log",
