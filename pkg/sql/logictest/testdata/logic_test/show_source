@@ -440,6 +440,12 @@ true
 statement ok
 SET tracing=off
 
+query B colnames
+SELECT goroutine_id > 0 AS has_goroutine_id FROM [SHOW SESSIONS] WHERE active_queries != ''
+----
+has_goroutine_id
+true
+
 query ITT colnames
 SELECT node_id, user_name, query FROM [SHOW QUERIES]
 ----

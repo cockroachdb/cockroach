@@ -22,7 +22,7 @@ func (d *delegator) delegateShowSessions(n *tree.ShowSessions) (tree.Statement, 
 	columns := `node_id, session_id, status, user_name, client_address, application_name, active_queries, 
        last_active_query, session_start, active_query_start, num_txns_executed`
 	if d.evalCtx.Settings.Version.IsActive(d.ctx, clusterversion.V24_1Start) {
-		columns = fmt.Sprintf("%s, trace_id", columns)
+		columns = fmt.Sprintf("%s, trace_id, goroutine_id", columns)
 	}
 
 	query := fmt.Sprintf(`SELECT %s FROM crdb_internal.`, columns)
