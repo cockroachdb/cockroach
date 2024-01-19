@@ -132,3 +132,12 @@ func (n NodeListOption) InstallNodes() install.Nodes {
 	}
 	return installNodes
 }
+
+// FromInstallNodes converts install.Nodes to NodeListOption
+func FromInstallNodes(installNodes install.Nodes) NodeListOption {
+	nodes := NodeListOption{}
+	for _, n := range installNodes {
+		nodes = append(nodes, int(n))
+	}
+	return nodes
+}
