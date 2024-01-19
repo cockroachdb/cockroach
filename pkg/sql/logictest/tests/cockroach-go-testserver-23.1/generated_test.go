@@ -133,3 +133,10 @@ func TestLogic_pg_lsn_mixed(
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "pg_lsn_mixed")
 }
+
+func TestLogic_upgrade_skip_version(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "upgrade_skip_version")
+}

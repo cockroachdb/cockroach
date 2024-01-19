@@ -2023,6 +2023,11 @@ func TestSchemaChangeComparator_update_from(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/update_from"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_upgrade_skip_version(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/upgrade_skip_version"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_upsert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/upsert"
