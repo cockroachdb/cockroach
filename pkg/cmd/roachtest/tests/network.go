@@ -12,10 +12,11 @@ package tests
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -25,8 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq" // register postgres driver
 	"github.com/stretchr/testify/require"
 )
@@ -139,7 +142,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 					Flag("port", "{pgport:1}").
 					String()
 				t.L().Printf("SQL: %s", dumpRangesCmd)
-				err = c.RunE(ctx, c.Node(1), dumpRangesCmd)
+				err := c.RunE(ctx, c.Node(1), dumpRangesCmd)
 				require.NoError(t, err)
 			}
 
@@ -271,15 +274,26 @@ sudo iptables-save
 		t.L().Printf("partitioning using iptables; config cmd:\n%s", netConfigCmd)
 		require.NoError(t, c.RunE(ctx, c.Node(expectedLeaseholder), netConfigCmd))
 
-		// (attempt to) restore iptables when test end, so that cluster
-		// can be investigated afterwards.
 		defer func() {
-			const restoreNet = `
+			// Check that iptable DROP actually blocked traffic.
+			t.L().Printf("verify that traffic to node %d is blocked", expectedLeaseholder)
+			packetsDropped, err := iptablesPacketsDropped(ctx, t.L(), c, c.Node(expectedLeaseholder))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if packetsDropped == 0 {
+				t.Fatalf("Expected node %d to be partitioned but reported no packets dropped.", expectedLeaseholder)
+			}
+
+			// (attempt to) restore iptables when test end, so that cluster
+			// can be investigated afterwards.
+			restoreNet := fmt.Sprintf(`
 set -e;
-sudo iptables -D INPUT -p tcp --dport 26257 -j DROP;
-sudo iptables -D OUTPUT -p tcp --dport 26257 -j DROP;
+sudo iptables -D INPUT -p tcp --dport {pgport%s} -j DROP;
+sudo iptables -D OUTPUT -p tcp --dport {pgport%s} -j DROP;
 sudo iptables-save
-`
+`,
+				c.Node(expectedLeaseholder), c.Node(expectedLeaseholder))
 			t.L().Printf("restoring iptables; config cmd:\n%s", restoreNet)
 			require.NoError(t, c.RunE(ctx, c.Node(expectedLeaseholder), restoreNet))
 		}()
@@ -311,4 +325,23 @@ func registerNetwork(r registry.Registry) {
 			runNetworkAuthentication(ctx, t, c)
 		},
 	})
+}
+
+// iptablesPacketsDropped returns the number of packets dropped to a given node due to an iptables rule.
+func iptablesPacketsDropped(
+	ctx context.Context, l *logger.Logger, c cluster.Cluster, node option.NodeListOption,
+) (int, error) {
+	res, err := c.RunWithDetailsSingleNode(ctx, l, node, "sudo iptables -L -v -n")
+	if err != nil {
+		return 0, err
+	}
+	rows := strings.Split(res.Stdout, "\n")
+	// iptables -L outputs rows in the order of: chain, fields, and then values.
+	// We care about the values so only look at row 2.
+	values := strings.Fields(rows[2])
+	if len(values) == 0 {
+		return 0, errors.Errorf("no configured iptables rules found:\n%s", res.Stdout)
+	}
+	packetsDropped, err := strconv.Atoi(values[0])
+	return packetsDropped, errors.Wrapf(err, "could not find number of packets dropped, rules found:\n%s", res.Stdout)
 }
