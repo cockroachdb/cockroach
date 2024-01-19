@@ -3724,7 +3724,7 @@ value if you rely on the HLC for accuracy.`,
 			Volatility:        volatility.Immutable,
 			CalledOnNullInput: true,
 		}
-	})),
+	}, false /* supportsArrayInput */)),
 
 	"array_prepend": setProps(arrayProps(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
@@ -3744,7 +3744,7 @@ value if you rely on the HLC for accuracy.`,
 			Volatility:        volatility.Immutable,
 			CalledOnNullInput: true,
 		}
-	})),
+	}, false /* supportsArrayInput */)),
 
 	"array_cat": setProps(arrayProps(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
@@ -3769,7 +3769,7 @@ value if you rely on the HLC for accuracy.`,
 			Volatility:        volatility.Immutable,
 			CalledOnNullInput: true,
 		}
-	})),
+	}, false /* supportsArrayInput */)),
 
 	"array_remove": setProps(arrayProps(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
@@ -3797,7 +3797,7 @@ value if you rely on the HLC for accuracy.`,
 			Volatility:        volatility.Immutable,
 			CalledOnNullInput: true,
 		}
-	})),
+	}, false /* supportsArrayInput */)),
 
 	"array_replace": setProps(arrayProps(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
@@ -3829,7 +3829,7 @@ value if you rely on the HLC for accuracy.`,
 			Volatility:        volatility.Immutable,
 			CalledOnNullInput: true,
 		}
-	})),
+	}, false /* supportsArrayInput */)),
 
 	"array_position": setProps(arrayProps(), arrayVariadicBuiltin(func(typ *types.T) []tree.Overload {
 		return []tree.Overload{
@@ -3916,7 +3916,7 @@ value if you rely on the HLC for accuracy.`,
 			Volatility:        volatility.Immutable,
 			CalledOnNullInput: true,
 		}
-	})),
+	}, false /* supportsArrayInput */)),
 
 	// Full text search functions.
 	"ts_match_qv":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
@@ -9772,17 +9772,32 @@ func similarOverloads(calledOnNullInput bool) []tree.Overload {
 	}
 }
 
-func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
+// arrayBuiltin defines builtin overloads for all scalar types, enums, and
+// tuples as their inputs. If supportsArrayInput is true, then it also includes
+// overloads for all of these types used as array elements.
+func arrayBuiltin(impl func(*types.T) tree.Overload, supportsArrayInput bool) builtinDefinition {
 	overloads := make([]tree.Overload, 0, len(types.Scalar)+2)
-	for _, typ := range append(types.Scalar, types.AnyEnum) {
+	for _, typ := range append(types.Scalar, []*types.T{types.AnyEnum, types.AnyTuple}...) {
 		if ok, _ := types.IsValidArrayElementType(typ); ok {
-			overloads = append(overloads, impl(typ))
+			overload := impl(typ)
+			if typ.Family() == types.TupleFamily {
+				// Prevent usage in DistSQL because it cannot handle arrays of
+				// untyped tuples.
+				// TODO(yuzefovich): this restriction might be unnecessary (at
+				// least for aggregate builtins), re-evaluate it.
+				overload.DistsqlBlocklist = true
+			}
+			overloads = append(overloads, overload)
+			if supportsArrayInput {
+				arrayTyp := types.MakeArray(typ)
+				overload := impl(arrayTyp)
+				// We currently don't have value encoding for nested arrays, so
+				// we have to disable distributed evaluation for such overloads.
+				overload.DistsqlBlocklist = true
+				overloads = append(overloads, overload)
+			}
 		}
 	}
-	// Prevent usage in DistSQL because it cannot handle arrays of untyped tuples.
-	tupleOverload := impl(types.AnyTuple)
-	tupleOverload.DistsqlBlocklist = true
-	overloads = append(overloads, tupleOverload)
 	return makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryArray},
 		overloads...,

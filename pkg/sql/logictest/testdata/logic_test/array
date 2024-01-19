@@ -118,7 +118,16 @@ SELECT ARRAY(VALUES (1),(2),(1))
 ----
 {1,2,1}
 
-statement error arrays cannot have arrays as element type
+# This query works in local config but fails in distributed config since the
+# support for nested arrays is incomplete.
+onlyif config local 32552
+query T
+SELECT ARRAY(VALUES (ARRAY[1]))
+----
+{"{1}"}
+
+onlyif config fakedist 32552
+query error unimplemented: nested arrays are not fully supported.*\nHINT.*\n.*32552
 SELECT ARRAY(VALUES (ARRAY[1]))
 
 query T
@@ -126,12 +135,10 @@ SELECT ARRAY(VALUES ('a'),('b'),('c'))
 ----
 {a,b,c}
 
-
-# TODO(justin): uncomment when #32715 is fixed.
-# query T
-# SELECT ARRAY(SELECT (1,2))
-# ----
-# {"(1,2)"}
+query T
+SELECT ARRAY(SELECT (1,2))
+----
+{"(1,2)"}
 
 query error subquery must return only one column, found 2
 SELECT ARRAY(SELECT 1, 2)
@@ -443,9 +450,16 @@ DROP TABLE boundedtable
 statement error .*unimplemented.*\nHINT.*\n.*32552
 CREATE TABLE badtable (b INT[][])
 
-# Nested arrays should be disallowed
+# This query works in local config but fails in distributed config since the
+# support for nested arrays is incomplete.
+onlyif config local 32552
+query T
+SELECT ARRAY[ARRAY[1,2,3]]
+----
+{"{1,2,3}"}
 
-query error unimplemented: arrays cannot have arrays as element type.*\nHINT.*\n.*32552
+onlyif config fakedist 32552
+query error unimplemented: nested arrays are not fully supported.*\nHINT.*\n.*32552
 SELECT ARRAY[ARRAY[1,2,3]]
 
 # The postgres-compat aliases should be disallowed.

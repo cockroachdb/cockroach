@@ -1587,7 +1587,7 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 			agg = aggDistinct.Input
 		}
 
-		name, _ := memo.FindAggregateOverload(agg)
+		name, overload := memo.FindAggregateOverload(agg)
 
 		// Accumulate variable arguments in argCols and constant arguments in
 		// constArgs. Constant arguments must follow variable arguments.
@@ -1613,12 +1613,13 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 		}
 
 		aggInfos[i] = exec.AggInfo{
-			FuncName:   name,
-			Distinct:   distinct,
-			ResultType: item.Agg.DataType(),
-			ArgCols:    argCols,
-			ConstArgs:  constArgs,
-			Filter:     filterOrd,
+			FuncName:         name,
+			Distinct:         distinct,
+			ResultType:       item.Agg.DataType(),
+			ArgCols:          argCols,
+			ConstArgs:        constArgs,
+			Filter:           filterOrd,
+			DistsqlBlocklist: overload.DistsqlBlocklist,
 		}
 		ep.outputCols.Set(int(item.Col), len(groupingColIdx)+i)
 	}

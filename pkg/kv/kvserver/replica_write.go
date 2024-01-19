@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -87,6 +88,18 @@ func (r *Replica) executeWriteBatch(
 	pErr *kvpb.Error,
 ) {
 	startTime := timeutil.Now()
+
+	spanName := "executeWriteBatch"
+	// Customize the span name for requests for which the aggregate timing of many
+	// spans is often examined so that they'll roll-up separately from the spans
+	// for other request types. This is a switch to select one of n constants,
+	// rather than sprintf, to avoid allocating a new string for every request.
+	if ba.IsSingleAddSSTableRequest() {
+		spanName = "executeWriteBatchAddSSTable"
+	}
+	var sp *tracing.Span
+	ctx, sp = tracing.ChildSpan(ctx, spanName)
+	defer sp.Finish()
 
 	// Even though we're not a read-only operation by definition, we have to
 	// take out a read lock on readOnlyCmdMu while performing any reads during

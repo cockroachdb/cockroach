@@ -85,6 +85,9 @@ type serverController struct {
 	draining syncutil.AtomicBool
 	drainCh  chan struct{}
 
+	// disableSQLServer disables starting the SQL service.
+	disableSQLServer bool
+
 	// orchestrator is the orchestration method to use.
 	orchestrator serverOrchestrator
 
@@ -124,6 +127,7 @@ func newServerController(
 	systemTenantNameContainer *roachpb.TenantNameContainer,
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName),
 	watcher *tenantcapabilitieswatcher.Watcher,
+	disableSQLServer bool,
 ) *serverController {
 	c := &serverController{
 		AmbientContext:      ambientCtx,
@@ -136,6 +140,7 @@ func newServerController(
 		watcher:             watcher,
 		tenantWaiter:        singleflight.NewGroup("tenant server poller", "poll"),
 		drainCh:             make(chan struct{}),
+		disableSQLServer:    disableSQLServer,
 	}
 	c.orchestrator = newServerOrchestrator(parentStopper, c)
 	c.mu.servers = map[roachpb.TenantName]serverState{

@@ -43,7 +43,7 @@ func (s *topLevelServer) RunInitialSQL(
 	}
 
 	newCluster := s.InitialStart() && s.NodeID() == kvstorage.FirstNodeID
-	if !newCluster {
+	if !newCluster || s.cfg.DisableSQLServer {
 		// The initial SQL code only runs the first time the cluster is initialized.
 		return nil
 	}

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -506,7 +507,7 @@ func (m *Manager) insertDescriptorVersions(id descpb.ID, versions []historicalDe
 		existingVersion := t.mu.active.findVersion(versions[i].desc.GetVersion())
 		if existingVersion == nil {
 			t.mu.active.insert(
-				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, nil, false))
+				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, nil, nil, false))
 		}
 	}
 }
@@ -575,10 +576,25 @@ func acquireNodeLease(
 			}
 			newest := m.findNewest(id)
 			var minExpiration hlc.Timestamp
+			var lastLease *storedLease
 			if newest != nil {
 				minExpiration = newest.getExpiration()
+				lastLease = newest.getStoredLease()
 			}
-			desc, expiration, regionPrefix, err := m.storage.acquire(ctx, minExpiration, id)
+			// A session will be populated within the leasing infrastructure only when
+			// session based leasing is enabled. This session will be stored both inside
+			// the leases table and descriptor version states in memory, and can be
+			// consulted for the expiry depending on the mode
+			// (see SessionBasedLeasingMode).
+			var session sqlliveness.Session
+			if m.sessionBasedLeasingModeAtLeast(SessionBasedDualWrite) {
+				var err error
+				session, err = m.livenessProvider.Session(ctx)
+				if err != nil {
+					return false, errors.Wrapf(err, "lease acquisition was unable to resolve liveness session")
+				}
+			}
+			desc, expiration, regionPrefix, err := m.storage.acquire(ctx, minExpiration, session, id, lastLease)
 			if err != nil {
 				return nil, err
 			}
@@ -590,7 +606,7 @@ func acquireNodeLease(
 			t.mu.takenOffline = false
 			defer t.mu.Unlock()
 			var newDescVersionState *descriptorVersionState
-			newDescVersionState, toRelease, err = t.upsertLeaseLocked(ctx, desc, expiration, regionPrefix)
+			newDescVersionState, toRelease, err = t.upsertLeaseLocked(ctx, desc, expiration, session, regionPrefix)
 			if err != nil {
 				return nil, err
 			}
@@ -615,7 +631,14 @@ func acquireNodeLease(
 
 // releaseLease deletes an entry from system.lease.
 func releaseLease(ctx context.Context, lease *storedLease, m *Manager) {
-	if m.IsDraining() {
+	// Force the release to happen synchronously, if we are draining or, when we
+	// force removals for unit tests. This didn't matter with expiration based leases
+	// since each renewal would have a different expiry (but the same version in
+	// synthetic scenarios). In the session based model renewals will come in with
+	// the same session ID, and potentially we can end up racing with inserts and
+	// deletes on the storage side. For real world scenario, this never happens
+	// because we release only if a new version exists.
+	if m.IsDraining() || m.removeOnceDereferenced() {
 		// Release synchronously to guarantee release before exiting.
 		m.storage.release(ctx, m.stopper, lease)
 		return
@@ -735,6 +758,7 @@ type Manager struct {
 	rangeFeedFactory *rangefeed.Factory
 	storage          storage
 	settings         *cluster.Settings
+	livenessProvider sqlliveness.Provider
 	mu               struct {
 		syncutil.Mutex
 		// TODO(james): Track size of leased descriptors in memory.
@@ -773,6 +797,7 @@ func NewLeaseManager(
 	clock *hlc.Clock,
 	settings *cluster.Settings,
 	settingsWatcher *settingswatcher.SettingsWatcher,
+	livenessProvider sqlliveness.Provider,
 	codec keys.SQLCodec,
 	testingKnobs ManagerTestingKnobs,
 	stopper *stop.Stopper,
@@ -796,6 +821,7 @@ func NewLeaseManager(
 			}),
 		},
 		settings:         settings,
+		livenessProvider: livenessProvider,
 		rangeFeedFactory: rangeFeedFactory,
 		testingKnobs:     testingKnobs,
 		names:            makeNameCache(),
@@ -1404,11 +1430,17 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 		// This could have been implemented using DELETE WHERE, but DELETE WHERE
 		// doesn't implement AS OF SYSTEM TIME.
 
-		// Read orphaned leases.
+		// Read orphaned leases, and join against the internal session
+		// table in case we have dual written leases.
 		query := `
-SELECT "descID", version, expiration, crdb_region FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
+SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.version), l.expiration, s."session_id", l.crdb_region, s.crdb_region FROM 
+	 system.public.lease as l FULL OUTER JOIN "".crdb_internal.kv_session_based_leases as s ON l."nodeID"=s."sql_instance_id" AND
+	  l."descID"=s."desc_id" AND l.version=s.version
+	  AS OF SYSTEM TIME %d 
+		WHERE COALESCE(l."nodeID", s."sql_instance_id") =%d
 `
 		sqlQuery := fmt.Sprintf(query, timeThreshold, instanceID)
+
 		var rows []tree.Datums
 		retryOptions := base.DefaultRetryOptions()
 		retryOptions.Closer = m.stopper.ShouldQuiesce()
@@ -1431,14 +1463,23 @@ SELECT "descID", version, expiration, crdb_region FROM system.public.lease AS OF
 			row := rows[i]
 			wg.Add(1)
 			lease := storedLease{
-				id:         descpb.ID(tree.MustBeDInt(row[0])),
-				version:    int(tree.MustBeDInt(row[1])),
-				expiration: tree.MustBeDTimestamp(row[2]),
+				id:      descpb.ID(tree.MustBeDInt(row[0])),
+				version: int(tree.MustBeDInt(row[1])),
 			}
-			if len(row) == 4 {
-				if ed, ok := row[3].(*tree.DEnum); ok {
-					lease.prefix = ed.PhysicalRep
-				} else if bd, ok := row[3].(*tree.DBytes); ok {
+			// Session based leases will not have a timestamp.
+			if row[2] != tree.DNull {
+				lease.expiration = tree.MustBeDTimestamp(row[2])
+			}
+			if row[3] != tree.DNull {
+				lease.sessionID = []byte(tree.MustBeDBytes(row[3]))
+			}
+			if ed, ok := row[4].(*tree.DEnum); ok {
+				lease.prefix = ed.PhysicalRep
+			} else if bd, ok := row[4].(*tree.DBytes); ok {
+				lease.prefix = []byte((*bd))
+			}
+			if len(row) >= 6 && lease.prefix == nil {
+				if bd, ok := row[5].(*tree.DBytes); ok {
 					lease.prefix = []byte((*bd))
 				}
 			}

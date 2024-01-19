@@ -154,6 +154,10 @@ type AggInfo struct {
 	// Filter is the index of the column, if any, which should be used as the
 	// FILTER condition for the aggregate. If there is no filter, Filter is -1.
 	Filter NodeColumnOrdinal
+
+	// DistsqlBlocklist is set to true when this aggregate function cannot be
+	// evaluated in distributed fashion.
+	DistsqlBlocklist bool
 }
 
 // WindowInfo represents the information about a window function that must be
