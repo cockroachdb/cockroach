@@ -37,17 +37,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// WaitForNoRunningSchemaChanges schema changes waits for no schema changes
-// to exist.
-func WaitForNoRunningSchemaChanges(t *testing.T, tdb *sqlutils.SQLRunner) {
-	tdb.CheckQueryResultsRetry(t, `
-SELECT count(*) 
-FROM [SHOW JOBS] 
-WHERE job_type = 'SCHEMA CHANGE' 
-  AND status NOT IN ('succeeded', 'failed', 'aborted')`,
-		[][]string{{"0"}})
-}
-
 // ReadDescriptorsFromDB reads the set of descriptors from tdb.
 func ReadDescriptorsFromDB(
 	ctx context.Context, t *testing.T, tdb *sqlutils.SQLRunner,

@@ -26,6 +26,9 @@ type DemoCluster interface {
 	// Listing is printed to 'w'. Errors/warnings are printed to 'ew'.
 	ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 
+	// ExpandShortDemoURLs expands `demo://` in a string URLs to `postgres://...`.
+	ExpandShortDemoURLs(string) string
+
 	// AddNode creates a new node with the given locality string.
 	AddNode(ctx context.Context, localityString string) (newNodeID int32, err error)
 
