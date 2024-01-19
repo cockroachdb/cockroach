@@ -18,5 +18,5 @@ jobs:
         run: echo "goversion=$(cat .go-version)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ steps.goversion.outputs.goversion }}
+          go-version: "1.21.6"
       - run: make test
