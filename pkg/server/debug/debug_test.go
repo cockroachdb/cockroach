@@ -108,8 +108,8 @@ func TestAdminDebugPprof(t *testing.T) {
 	}
 }
 
-// TestAdminDebugTrace verifies that the net/trace endpoints are available
-// via /debug/{requests,events}.
+// TestAdminDebugTrace verifies that the net/trace endpoints are available via
+// /debug/requests.
 func TestAdminDebugTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -126,7 +126,6 @@ func TestAdminDebugTrace(t *testing.T) {
 		segment, search string
 	}{
 		{"requests", "<title>/debug/requests</title>"},
-		{"events", "<title>events</title>"},
 	}
 
 	for _, c := range tc {

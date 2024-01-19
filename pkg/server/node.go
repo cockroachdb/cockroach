@@ -1353,7 +1353,7 @@ func (n *Node) batchInternal(
 		}
 		reqSp.finish(br, redact)
 	}()
-	if log.HasSpanOrEvent(ctx) {
+	if log.HasSpan(ctx) {
 		log.Eventf(ctx, "node received request: %s", args.Summary())
 		defer log.Event(ctx, "node sending response")
 	}

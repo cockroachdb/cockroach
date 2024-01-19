@@ -105,7 +105,6 @@ func setupProcessWideRoutes(
 	// Cribbed straight from trace's `init()` method. See:
 	// https://github.com/golang/net/blob/master/trace/trace.go
 	mux.HandleFunc("/debug/requests", authzFunc(trace.Traces))
-	mux.HandleFunc("/debug/events", authzFunc(trace.Events))
 
 	// This registers a superset of the variables exposed through the
 	// /debug/vars endpoint onto the /debug/metrics endpoint. It includes all

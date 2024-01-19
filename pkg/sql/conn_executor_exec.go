@@ -107,7 +107,7 @@ func (ex *connExecutor) execStmt(
 ) (fsm.Event, fsm.EventPayload, error) {
 	ast := parserStmt.AST
 	if log.V(2) || logStatementsExecuteEnabled.Get(&ex.server.cfg.Settings.SV) ||
-		log.HasSpanOrEvent(ctx) {
+		log.HasSpan(ctx) {
 		log.VEventf(ctx, 2, "executing: %s in state: %s", ast, ex.machine.CurState())
 	}
 
