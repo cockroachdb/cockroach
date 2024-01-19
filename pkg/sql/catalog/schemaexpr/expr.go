@@ -34,40 +34,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// DequalifyAndTypeCheckExpr type checks the given expression and returns the
-// type-checked expression disregarding volatility. The typed expression, which contains dummyColumns,
-// does not support evaluation.
-func DequalifyAndTypeCheckExpr(
-	ctx context.Context,
-	desc catalog.TableDescriptor,
-	expr tree.Expr,
-	semaCtx *tree.SemaContext,
-	tn *tree.TableName,
-) (tree.TypedExpr, error) {
-	nonDropColumns := desc.NonDropColumns()
-	sourceInfo := colinfo.NewSourceInfoForSingleTable(
-		*tn, colinfo.ResultColumnsFromColumns(desc.GetID(), nonDropColumns),
-	)
-	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Replace the column variables with dummyColumns so that they can be
-	// type-checked.
-	replacedExpr, _, err := replaceColumnVars(desc, expr)
-	if err != nil {
-		return nil, err
-	}
-
-	typedExpr, err := tree.TypeCheck(ctx, replacedExpr, semaCtx, types.Any)
-	if err != nil {
-		return nil, err
-	}
-
-	return typedExpr, nil
-}
-
 // DequalifyAndValidateExprImpl validates that an expression has the given type and
 // contains no functions with a volatility greater than maxVolatility. The
 // type-checked and constant-folded expression, the type of the expression, and
@@ -77,6 +43,7 @@ func DequalifyAndTypeCheckExpr(
 // tree.TypedExpr would be dangerous. It contains dummyColumns which do not
 // support evaluation and are not useful outside the context of type-checking
 // the expression.
+// TODO(mgartner): Rename this function without "Impl".
 func DequalifyAndValidateExprImpl(
 	ctx context.Context,
 	expr tree.Expr,
