@@ -16,7 +16,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcpb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
+
+// useDefaultConnectionClass defines whether all the traffic that does not
+// qualify for SYSTEM connection class, should be sent via the DEFAULT class.
+//
+// This overrides the default behaviour in which some types of traffic have a
+// dedicated connection class, such as RAFT.
+//
+// This option reverts the behaviour to pre-v24.1 state, and is an escape hatch
+// in case something breaks with the separate connection classes (could be
+// anything, e.g. an environment has limits on concurrent TCP connections).
+var useDefaultConnectionClass = envutil.EnvOrDefaultBool(
+	"COCKROACH_RPC_USE_DEFAULT_CONNECTION_CLASS", false)
 
 // ConnectionClass is the identifier of a group of RPC client sessions that are
 // allowed to share an underlying TCP connection; RPC sessions with different
@@ -70,6 +83,9 @@ func isSystemKey(key roachpb.RKey) bool {
 // traffic addressed to the range starting at the given key. Returns SystemClass
 // for system ranges, or the given "default" class otherwise. Typically, the
 // default depends on the type of traffic, such as RangefeedClass or RaftClass.
+//
+// This also takes the `COCKROACH_RPC_USE_DEFAULT_CONNECTION_CLASS` env variable
+// into account, and returns DefaultClass instead of `def` if it is set.
 func ConnectionClassForKey(key roachpb.RKey, def ConnectionClass) ConnectionClass {
 	if isSystemKey(key) {
 		return SystemClass
@@ -80,6 +96,9 @@ func ConnectionClassForKey(key roachpb.RKey, def ConnectionClass) ConnectionClas
 // ConnectionClassOrDefault returns the passed-in connection class if it is
 // known/supported by this server. Otherwise, it returns DefaultClass.
 //
+// This also takes the `COCKROACH_RPC_USE_DEFAULT_CONNECTION_CLASS` env variable
+// into account, and returns DefaultClass instead of `c` if it is set.
+//
 // This helper should be used when a ConnectionClass is not "trusted", such as
 // when it was received over RPC from another node. In a mixed-version state, it
 // is possible that one node supports a connection class, and another does not.
@@ -87,8 +106,10 @@ func ConnectionClassForKey(key roachpb.RKey, def ConnectionClass) ConnectionClas
 // If the simple behaviour of falling back to DefaultClass is not acceptable, a
 // version gate must be used to transition between versions correctly.
 func ConnectionClassOrDefault(c ConnectionClass) ConnectionClass {
-	if int(c) < NumConnectionClasses {
+	if c == SystemClass {
 		return c
+	} else if useDefaultConnectionClass || int(c) >= NumConnectionClasses {
+		return DefaultClass
 	}
-	return DefaultClass
+	return c
 }
