@@ -98,6 +98,16 @@ func (og *operationGenerator) schemaExists(
 	)`, schemaName)
 }
 
+func (og *operationGenerator) fnExists(
+	ctx context.Context, tx pgx.Tx, fnName string, argTypes string,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `SELECT EXISTS (
+	SELECT proname
+		FROM pg_proc 
+   WHERE proname = $1 AND pg_get_function_identity_arguments(oid) ILIKE $2
+	)`, fnName, argTypes)
+}
+
 func (og *operationGenerator) tableHasDependencies(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
 ) (bool, error) {
