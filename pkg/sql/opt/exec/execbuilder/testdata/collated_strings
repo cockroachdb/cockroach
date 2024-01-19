@@ -4,12 +4,128 @@
 # as upper bounds of histogram buckets (#98400).
 statement ok
 CREATE TABLE t98400 (k INT PRIMARY KEY, s STRING COLLATE en_US_u_ks_level2, FAMILY (k, s));
-INSERT INTO t98400 SELECT i, 'hello' FROM generate_series(1, 10) g(i);
-INSERT INTO t98400 SELECT i, 'world' FROM generate_series(11, 12) g(i);
-INSERT INTO t98400 SELECT 13, 'foo';
 
 statement ok
-ANALYZE t98400;
+ALTER TABLE t98400 INJECT STATISTICS '[
+    {
+        "avg_size": 1,
+        "columns": [
+            "k"
+        ],
+        "created_at": "2024-01-19 01:29:41.830253",
+        "distinct_count": 13,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "3"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "4"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "5"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "6"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "7"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "8"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "9"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "10"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "11"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "12"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "13"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "null_count": 0,
+        "row_count": 13
+    },
+    {
+        "avg_size": 7,
+        "columns": [
+            "s"
+        ],
+        "created_at": "2024-01-19 01:29:41.830253",
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "''foo'' COLLATE en_US_u_ks_level2"
+            },
+            {
+                "distinct_range": 1,
+                "num_eq": 2,
+                "num_range": 10,
+                "upper_bound": "''world'' COLLATE en_US_u_ks_level2"
+            }
+        ],
+        "histo_col_type": "STRING COLLATE en_US_u_ks_level2",
+        "histo_version": 3,
+        "null_count": 0,
+        "row_count": 13
+    }
+]'
 
 # We expect that the filter is estimated to match 10 rows.
 query T
