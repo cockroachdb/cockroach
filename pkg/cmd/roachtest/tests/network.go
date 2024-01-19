@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -37,6 +40,9 @@ import (
 // of system.users, and then validates that the time required to create
 // new connections to the cluster afterwards remains under a reasonable limit.
 func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluster) {
+	if c.IsLocal() {
+		t.Fatal("cannot be run in local mode: usage of sudo iptables in local environment discouraged")
+	}
 	n := c.Spec().NodeCount
 	serverNodes, clientNode := c.Range(1, n-1), c.Node(n)
 
@@ -273,9 +279,19 @@ sudo iptables-save
 		t.L().Printf("partitioning using iptables; config cmd:\n%s", netConfigCmd)
 		require.NoError(t, c.RunE(ctx, option.WithNodes(c.Node(expectedLeaseholder)), netConfigCmd))
 
-		// (attempt to) restore iptables when test end, so that cluster
-		// can be investigated afterwards.
 		defer func() {
+			// Check that iptable DROP actually blocked traffic.
+			t.L().Printf("verify that traffic to node %d is blocked", expectedLeaseholder)
+			packetsDropped, err := iptablesPacketsDropped(ctx, t.L(), c, c.Node(expectedLeaseholder))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if packetsDropped == 0 {
+				t.Fatalf("Expected node %d to be partitioned but reported no packets dropped.", expectedLeaseholder)
+			}
+
+			// (attempt to) restore iptables when test end, so that cluster
+			// can be investigated afterwards.
 			restoreNet := fmt.Sprintf(`
 set -e;
 sudo iptables -D INPUT -p tcp --dport {pgport%s} -j DROP;
@@ -305,6 +321,9 @@ sudo iptables-save
 // server loose connectivity with a connection that is idle. The purpose of this
 // test is to confirm that the keep alive settings are enforced.
 func runClientNetworkConnectionTimeout(ctx context.Context, t test.Test, c cluster.Cluster) {
+	if c.IsLocal() {
+		t.Fatal("cannot be run in local mode: usage of sudo iptables in local environment discouraged")
+	}
 	n := c.Spec().NodeCount
 	serverNodes, clientNode := c.Range(1, n-1), c.Nodes(n)
 	settings := install.MakeClusterSettings(install.SecureOption(true))
@@ -423,4 +442,23 @@ func registerNetwork(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		Run:              runClientNetworkConnectionTimeout,
 	})
+}
+
+// iptablesPacketsDropped returns the number of packets dropped to a given node due to an iptables rule.
+func iptablesPacketsDropped(
+	ctx context.Context, l *logger.Logger, c cluster.Cluster, node option.NodeListOption,
+) (int, error) {
+	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(node), "sudo iptables -L -v -n")
+	if err != nil {
+		return 0, err
+	}
+	rows := strings.Split(res.Stdout, "\n")
+	// iptables -L outputs rows in the order of: chain, fields, and then values.
+	// We care about the values so only look at row 2.
+	values := strings.Fields(rows[2])
+	if len(values) == 0 {
+		return 0, errors.Errorf("no configured iptables rules found:\n%s", res.Stdout)
+	}
+	packetsDropped, err := strconv.Atoi(values[0])
+	return packetsDropped, errors.Wrapf(err, "could not find number of packets dropped:\n%s", res.Stdout)
 }
