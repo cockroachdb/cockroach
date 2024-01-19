@@ -2539,6 +2539,10 @@ var builtinOidsArray = []string{
 	2571: `bit_count(val: bytes) -> int`,
 	2572: `bit_count(val: varbit) -> int`,
 	2573: `metaphone(source: string, max_output_length: int) -> string`,
+	2574: `st_geometricmedian(geometry: geometry, tolerance: float, max_iter: int, fail_if_not_converged: bool) -> geometry`,
+	2575: `st_geometricmedian(geometry: geometry, tolerance: float, max_iter: int) -> geometry`,
+	2576: `st_geometricmedian(geometry: geometry, tolerance: float) -> geometry`,
+	2577: `st_geometricmedian(geometry: geometry) -> geometry`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
