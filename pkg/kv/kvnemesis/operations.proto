@@ -87,6 +87,13 @@ message AddSSTableOperation {
   Result result = 6 [(gogoproto.nullable) = false];
 }
 
+message BarrierOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  bool with_lease_applied_index = 3;
+  Result result = 4 [(gogoproto.nullable) = false];
+}
+
 message SplitOperation {
   bytes key = 1;
   Result result = 2 [(gogoproto.nullable) = false];
@@ -142,6 +149,7 @@ message Operation {
   TransferLeaseOperation transfer_lease = 16;
   ChangeZoneOperation change_zone = 17;
   AddSSTableOperation add_sstable = 18 [(gogoproto.customname) = "AddSSTable"];
+  BarrierOperation barrier = 22;
 }
 
 enum ResultType {
