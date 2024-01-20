@@ -638,6 +638,7 @@ go_test(
         "crdb_internal_test.go",
         "create_as_test.go",
         "create_function_test.go",
+        "create_role_test.go",
         "create_stats_test.go",
         "create_test.go",
         "database_test.go",
