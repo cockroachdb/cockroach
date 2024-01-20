@@ -263,6 +263,8 @@ type ClientOperationConfig struct {
 	DeleteRangeUsingTombstone int
 	// AddSSTable is an operations that ingests an SSTable with random KV pairs.
 	AddSSTable int
+	// Barrier is an operation that waits for in-flight writes to complete.
+	Barrier int
 }
 
 // BatchOperationConfig configures the relative probability of generating a
@@ -395,6 +397,7 @@ func newAllOperationsConfig() GeneratorConfig {
 		DeleteRange:                                        1,
 		DeleteRangeUsingTombstone:                          1,
 		AddSSTable:                                         1,
+		Barrier:                                            1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -521,6 +524,12 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.ClosureTxn.CommitBatchOps.AddSSTable = 0
 	config.Ops.ClosureTxn.TxnClientOps.AddSSTable = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.AddSSTable = 0
+	// Barrier cannot be used in batches, and we omit it in txns too because it
+	// can result in spurious RangeKeyMismatchErrors that fail the txn operation.
+	config.Ops.Batch.Ops.Barrier = 0
+	config.Ops.ClosureTxn.CommitBatchOps.Barrier = 0
+	config.Ops.ClosureTxn.TxnClientOps.Barrier = 0
+	config.Ops.ClosureTxn.TxnBatchOps.Ops.Barrier = 0
 	return config
 }
 
@@ -816,6 +825,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 	addOpGen(allowed, randDelRange, c.DeleteRange)
 	addOpGen(allowed, randDelRangeUsingTombstone, c.DeleteRangeUsingTombstone)
 	addOpGen(allowed, randAddSSTable, c.AddSSTable)
+	addOpGen(allowed, randBarrier, c.Barrier)
 }
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
@@ -1104,6 +1114,21 @@ func randAddSSTable(g *generator, rng *rand.Rand) Operation {
 	}
 
 	return addSSTable(f.Data(), sstSpan, sstTimestamp, seq, asWrites)
+}
+
+func randBarrier(g *generator, rng *rand.Rand) Operation {
+	withLAI := rng.Float64() < 0.5
+	var key, endKey string
+	if withLAI {
+		// Barriers requesting LAIs can't span multiple ranges, so we try to fit
+		// them within an existing range. This may race with a concurrent split, in
+		// which case the Barrier will fail, but that's ok -- most should still
+		// succeed. These errors are ignored by the validator.
+		key, endKey = randRangeSpan(rng, g.currentSplits)
+	} else {
+		key, endKey = randSpan(rng)
+	}
+	return barrier(key, endKey, withLAI)
 }
 
 func randScan(g *generator, rng *rand.Rand) Operation {
@@ -1921,6 +1946,14 @@ func addSSTable(
 		SSTTimestamp: sstTimestamp,
 		Seq:          seq,
 		AsWrites:     asWrites,
+	}}
+}
+
+func barrier(key, endKey string, withLAI bool) Operation {
+	return Operation{Barrier: &BarrierOperation{
+		Key:                   []byte(key),
+		EndKey:                []byte(endKey),
+		WithLeaseAppliedIndex: withLAI,
 	}}
 }
 

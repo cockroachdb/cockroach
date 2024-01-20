@@ -41,6 +41,8 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *AddSSTableOperation:
 		return &o.Result
+	case *BarrierOperation:
+		return &o.Result
 	case *SplitOperation:
 		return &o.Result
 	case *MergeOperation:
@@ -136,6 +138,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *DeleteRangeUsingTombstoneOperation:
 		o.format(w, fctx)
 	case *AddSSTableOperation:
+		o.format(w, fctx)
+	case *BarrierOperation:
 		o.format(w, fctx)
 	case *SplitOperation:
 		o.format(w, fctx)
@@ -349,6 +353,16 @@ func (op AddSSTableOperation) format(w *strings.Builder, fctx formatCtx) {
 		fmt.Fprintf(w, "\n%s// ^-- %s -> sv(%s): %s -> %s", fctx.indent,
 			fmtKey(key.Key), seq, key, mvccValue.Value.PrettyPrint())
 	}
+}
+
+func (op BarrierOperation) format(w *strings.Builder, fctx formatCtx) {
+	if op.WithLeaseAppliedIndex {
+		fmt.Fprintf(w, `%s.BarrierWithLAI(ctx, %s, %s)`,
+			fctx.receiver, fmtKey(op.Key), fmtKey(op.EndKey))
+	} else {
+		fmt.Fprintf(w, `%s.Barrier(ctx, %s, %s)`, fctx.receiver, fmtKey(op.Key), fmtKey(op.EndKey))
+	}
+	op.Result.format(w)
 }
 
 func (op SplitOperation) format(w *strings.Builder, fctx formatCtx) {
