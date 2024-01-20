@@ -62,11 +62,3 @@ pkg/testutils/serverutils/*_generated.go
 
 # Temporary directories during gomock generate
 **/gomock_reflect_*
-.idea/workspace.xml
-.idea/vcs.xml
-.idea/sqldialects.xml
-.idea/jsLinters/jshint.xml
-.idea/inspectionProfiles/Project_Default.xml
-.idea/dataSources.xml
-.idea/dataSources.local.xml
-.idea/cockroach.iml
