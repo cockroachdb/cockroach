@@ -191,20 +191,23 @@ func (h *processorTestHelper) syncEventAndRegistrationsSpan(span roachpb.Span) {
 	h.sendSpanSync(&span)
 }
 
-func (h *processorTestHelper) triggerTxnPushUntilPushed(
-	t *testing.T, ackC chan struct{}, timeout time.Duration,
-) {
-	deadline := time.After(timeout)
+// triggerTxnPushUntilPushed will schedule PushTxnQueued events until pushedC
+// indicates that a transaction push attempt has started by posting an event.
+// If a push does not happen in 10 seconds, the attempt fails.
+func (h *processorTestHelper) triggerTxnPushUntilPushed(t *testing.T, pushedC <-chan struct{}) {
+	timeoutC := time.After(10 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 	for {
 		h.scheduler.Enqueue(PushTxnQueued)
 		select {
-		case <-deadline:
-			t.Fatal("failed to get txn push notification")
-		case ackC <- struct{}{}:
+		case <-pushedC:
 			return
-		case <-time.After(100 * time.Millisecond):
+		case <-ticker.C:
 			// We keep sending events to avoid the situation where event arrives
 			// but flag indicating that push is still running is not reset.
+		case <-timeoutC:
+			t.Fatal("failed to get txn push notification")
 		}
 	}
 }
@@ -995,7 +998,9 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 
 	// Create a TxnPusher that performs assertions during the first 3 uses.
 	var tp testTxnPusher
-	tp.mockPushTxns(func(txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]*roachpb.Transaction, error) {
+	tp.mockPushTxns(func(
+		ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
+	) ([]*roachpb.Transaction, error) {
 		// The txns are not in a sorted order. Enforce one.
 		sort.Slice(txns, func(i, j int) bool {
 			return bytes.Compare(txns[i].Key, txns[j].Key) < 0
@@ -1048,7 +1053,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 			return nil
 		}
 
-		<-pausePushAttemptsC
+		pausePushAttemptsC <- struct{}{}
 		<-resumePushAttemptsC
 		return nil
 	})
@@ -1069,7 +1074,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 9}, h.rts.Get())
 
 	// Wait for the first txn push attempt to complete.
-	h.triggerTxnPushUntilPushed(t, pausePushAttemptsC, 30*time.Second)
+	h.triggerTxnPushUntilPushed(t, pausePushAttemptsC)
 
 	// The resolved timestamp hasn't moved.
 	h.syncEventC()
@@ -1083,7 +1088,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 
 	// Unblock the second txn push attempt and wait for it to complete.
 	resumePushAttemptsC <- struct{}{}
-	h.triggerTxnPushUntilPushed(t, pausePushAttemptsC, 30*time.Second)
+	h.triggerTxnPushUntilPushed(t, pausePushAttemptsC)
 
 	// The resolved timestamp should have moved forwards to the closed
 	// timestamp.
@@ -1107,7 +1112,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 
 	// Unblock the third txn push attempt and wait for it to complete.
 	resumePushAttemptsC <- struct{}{}
-	h.triggerTxnPushUntilPushed(t, pausePushAttemptsC, 30*time.Second)
+	h.triggerTxnPushUntilPushed(t, pausePushAttemptsC)
 
 	// The resolved timestamp should have moved forwards to the closed
 	// timestamp.
@@ -1636,4 +1641,62 @@ func TestProcessorBackpressure(t *testing.T) {
 			ResolvedTS: hlc.Timestamp{WallTime: numEvents},
 		},
 	}, events[len(events)-1])
+}
+
+// TestProcessorContextCancellation tests that the processor cancels the
+// contexts of async tasks when stopped. It does not, however, cancel the
+// process() context -- it probably should, but this should arguably also be
+// handled by the scheduler.
+func TestProcessorContextCancellation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Try stopping both via the stopper and via Processor.Stop().
+	testutils.RunTrueAndFalse(t, "stopper", func(t *testing.T, useStopper bool) {
+
+		// Set up a transaction to push.
+		txnTS := hlc.Timestamp{WallTime: 10} // after resolved timestamp
+		txnMeta := enginepb.TxnMeta{
+			ID: uuid.MakeV4(), Key: keyA, WriteTimestamp: txnTS, MinTimestamp: txnTS}
+
+		// Set up a transaction pusher that will block until the context cancels.
+		pushReadyC := make(chan struct{})
+		pushDoneC := make(chan struct{})
+
+		var pusher testTxnPusher
+		pusher.mockPushTxns(func(
+			ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
+		) ([]*roachpb.Transaction, error) {
+			pushReadyC <- struct{}{}
+			<-ctx.Done()
+			close(pushDoneC)
+			return nil, ctx.Err()
+		})
+		pusher.mockResolveIntentsFn(func(ctx context.Context, intents []roachpb.LockUpdate) error {
+			return nil
+		})
+
+		// Start a test processor.
+		p, h, stopper := newTestProcessor(t, withPusher(&pusher))
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
+
+		// Add an intent and move the closed timestamp past it. This should trigger a
+		// txn push attempt, wait for that to happen.
+		p.ConsumeLogicalOps(ctx, writeIntentOpFromMeta(txnMeta))
+		p.ForwardClosedTS(ctx, txnTS.Add(1, 0))
+		h.syncEventC()
+		h.triggerTxnPushUntilPushed(t, pushReadyC)
+
+		// Now, stop the processor, and wait for the txn pusher to exit.
+		if useStopper {
+			stopper.Stop(ctx)
+		} else {
+			p.Stop()
+		}
+		select {
+		case <-pushDoneC:
+		case <-time.After(3 * time.Second):
+			t.Fatal("txn pusher did not exit")
+		}
+	})
 }
