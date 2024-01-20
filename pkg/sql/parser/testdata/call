@@ -14,6 +14,14 @@ CALL p((1), ('foo'), (1.234), (true), (NULL)) -- fully parenthesized
 CALL p(_, '_', _, _, _) -- literals removed
 CALL _(1, 'foo', 1.234, true, NULL) -- identifiers removed
 
+parse
+CALL p(1, 'foo') AS OF SYSTEM TIME follower_read_timestamp();
+----
+CALL p(1, 'foo') AS OF SYSTEM TIME follower_read_timestamp() -- normalized!
+CALL p((1), ('foo')) AS OF SYSTEM TIME (follower_read_timestamp()) -- fully parenthesized
+CALL p(_, '_') AS OF SYSTEM TIME follower_read_timestamp() -- literals removed
+CALL _(1, 'foo') AS OF SYSTEM TIME _() -- identifiers removed
+
 error
 CALL p
 ----

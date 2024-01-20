@@ -1,2 +1,2 @@
 call_stmt ::=
-	'CALL' proc_name '(' param_values ')'
+	'CALL' proc_name '(' param_values ')' opt_as_of_clause
