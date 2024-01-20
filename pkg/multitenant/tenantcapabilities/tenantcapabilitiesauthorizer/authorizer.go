@@ -12,6 +12,7 @@ package tenantcapabilitiesauthorizer
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
@@ -70,6 +71,8 @@ type Authorizer struct {
 	// have started accepting requests.
 	syncutil.Mutex
 	capabilitiesReader tenantcapabilities.Reader
+
+	logEvery log.EveryN
 }
 
 var _ tenantcapabilities.Authorizer = &Authorizer{}
@@ -83,6 +86,12 @@ func New(settings *cluster.Settings, knobs *tenantcapabilities.TestingKnobs) *Au
 	a := &Authorizer{
 		settings: settings,
 		knobs:    testingKnobs,
+		// We don't want to spam the log but since this is
+		// used to report authorization decisions that
+		// possibly don't respect the actual tenant
+		// capabilities, we also want to make sure the user
+		// sees the problem if it is persistent.
+		logEvery: log.Every(10 * time.Second),
 		// capabilitiesReader is set post construction, using BindReader.
 	}
 	return a
@@ -364,7 +373,9 @@ func (a *Authorizer) getMode(
 		if reader == nil {
 			// The server has started but the reader hasn't started/bound
 			// yet. Block requests that would need specific capabilities.
-			log.Warningf(ctx, "capability check for tenant %s before capability reader exists, assuming capability is unavailable", tid)
+			if a.logEvery.ShouldLog() {
+				log.Warningf(ctx, "capability check for tenant %s before capability reader exists, assuming capability is unavailable", tid)
+			}
 			selectedMode = authorizerModeV222
 		} else {
 			// We have a reader. Did we get data from the rangefeed yet?
