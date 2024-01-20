@@ -2085,6 +2085,7 @@ copy_options ::=
 	| 'HEADER'
 	| 'QUOTE' 'SCONST'
 	| 'ESCAPE' 'SCONST'
+	| 'ENCODING' 'SCONST'
 
 copy_generic_options ::=
 	'DESTINATION' string_or_placeholder
@@ -2099,6 +2100,7 @@ copy_generic_options ::=
 	| 'HEADER' 'FALSE'
 	| 'QUOTE' 'SCONST'
 	| 'ESCAPE' 'SCONST'
+	| 'ENCODING' 'SCONST'
 
 db_object_name_component ::=
 	name
