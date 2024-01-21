@@ -44,6 +44,7 @@ go_test(
     srcs = [
         "kv_buf_test.go",
         "main_test.go",
+        "split_sst_test.go",
         "sst_batcher_test.go",
     ],
     embed = [":bulk"],
@@ -64,6 +65,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/storage",
+        "//pkg/storage/enginepb",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/storageutils",
         "//pkg/testutils/testcluster",
@@ -74,6 +76,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/randutil",
+        "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_stretchr_testify//require",
     ],

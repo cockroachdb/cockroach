@@ -787,6 +787,8 @@ func (b *SSTBatcher) addSSTable(
 
 	if (stats == enginepb.MVCCStats{}) {
 		iter.SeekGE(storage.MVCCKey{Key: start})
+		// NB: even though this ComputeStatsForIter call exhausts the iterator, we
+		// can reuse/re-seek on the iterator, as part of the MVCCIterator contract.
 		stats, err = storage.ComputeStatsForIter(iter, sendStart.UnixNano())
 		if err != nil {
 			return errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
@@ -903,25 +905,9 @@ func (b *SSTBatcher) addSSTable(
 					if err != nil {
 						return err
 					}
-
-					// Needs a new iterator with new bounds.
-					statsIter, err := storage.NewMemSSTIterator(sstBytes, true, storage.IterOptions{
-						KeyTypes:   storage.IterKeyTypePointsOnly,
-						LowerBound: right.start,
-						UpperBound: right.end,
-					})
-					if err != nil {
+					if err := addStatsToSplitTables(left, right, item, sendStart); err != nil {
 						return err
 					}
-					statsIter.SeekGE(storage.MVCCKey{Key: right.start})
-					right.stats, err = storage.ComputeStatsForIter(statsIter, sendStart.Unix())
-					statsIter.Close()
-					if err != nil {
-						return err
-					}
-					left.stats = item.stats
-					left.stats.Subtract(right.stats)
-
 					// Add more work.
 					work = append([]*sstSpan{left, right}, work...)
 					return nil
@@ -950,6 +936,9 @@ func createSplitSSTable(
 	settings *cluster.Settings,
 ) (*sstSpan, *sstSpan, error) {
 	sstFile := &storage.MemObject{}
+	if start.Compare(splitKey) >= 0 {
+		return nil, nil, errors.Newf("start key %s of original sst must be greater than than split key %s", start, splitKey)
+	}
 	w := storage.MakeIngestionSSTWriter(ctx, settings, sstFile)
 	defer w.Close()
 
@@ -1001,6 +990,33 @@ func createSplitSSTable(
 	if err != nil {
 		return nil, nil, err
 	}
+	if !split {
+		return nil, nil, errors.Newf("split key %s after last key %s", splitKey, last.Next())
+	}
 	right = &sstSpan{start: first, end: last.Next(), sstBytes: sstFile.Data()}
 	return left, right, nil
+}
+
+// addStatsToSplitTables computes the stats of the new lhs and rhs SSTs by
+// computing the rhs sst stats, then computing the lhs stats as
+// originalStats-rhsStats.
+func addStatsToSplitTables(left, right, original *sstSpan, sendStartTimestamp time.Time) error {
+	// Needs a new iterator with new bounds.
+	statsIter, err := storage.NewMemSSTIterator(original.sstBytes, true, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsOnly,
+		LowerBound: right.start,
+		UpperBound: right.end,
+	})
+	if err != nil {
+		return err
+	}
+	statsIter.SeekGE(storage.MVCCKey{Key: right.start})
+	right.stats, err = storage.ComputeStatsForIter(statsIter, sendStartTimestamp.Unix())
+	statsIter.Close()
+	if err != nil {
+		return err
+	}
+	left.stats = original.stats
+	left.stats.Subtract(right.stats)
+	return nil
 }
