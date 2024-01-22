@@ -157,7 +157,7 @@ func TestDataDriven(t *testing.T) {
 			case "start-replicated-tenant":
 				testingKnobs := replicationtestutils.DefaultAppTenantTestingKnobs()
 				cleanupTenant := ds.replicationClusters.StartDestTenant(ctx, &testingKnobs, 0)
-				ds.cleanupFns = append(ds.cleanupFns, cleanupTenant)
+				ds.cleanupFns = append(ds.cleanupFns, func() error { cleanupTenant(); return nil })
 			case "let":
 				if len(d.CmdArgs) == 0 {
 					t.Fatalf("Must specify at least one variable name.")

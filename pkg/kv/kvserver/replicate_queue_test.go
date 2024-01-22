@@ -221,6 +221,11 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 	for _, testCase := range testCases {
 
 		t.Run(testCase.name, func(t *testing.T) {
+			if testCase.storesPerNode > 1 {
+				// 8 stores with active rebalancing can lead to failed heartbeats due
+				// to overload. Skip under stress when running the multi-store variant.
+				skip.UnderStress(t)
+			}
 			// Set up a test cluster with multiple stores per node if needed.
 			args := base.TestClusterArgs{
 				ReplicationMode:   base.ReplicationAuto,
