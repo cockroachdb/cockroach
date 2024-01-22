@@ -663,7 +663,7 @@ func (ih *instrumentationHelper) Finish(
 			}
 			bundle = buildStatementBundle(
 				bundleCtx, ih.explainFlags, cfg.DB, ie.(*InternalExecutor),
-				stmtRawSQL, &p.curPlan, planString, trace, placeholders, res.Err(),
+				stmtRawSQL, &p.curPlan, planString, trace, placeholders, res.ErrAllowReleased(),
 				payloadErr, retErr, &p.extendedEvalCtx.Settings.SV, ih.inFlightTraceCollector,
 			)
 			// Include all non-critical errors as warnings. Note that these
