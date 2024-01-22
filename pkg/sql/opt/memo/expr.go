@@ -1311,8 +1311,7 @@ type FKCascades []FKCascade
 // FKCascade stores metadata necessary for building a cascading query.
 // Cascading queries are built as needed, after the original query is executed.
 type FKCascade struct {
-	// FKName is the name of the FK constraint.
-	FKName string
+	FKConstraint cat.ForeignKeyConstraint
 
 	// Builder is an object that can be used as the "optbuilder" for the cascading
 	// query.

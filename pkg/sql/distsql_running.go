@@ -2064,7 +2064,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 			}
 		}
 
-		log.VEventf(ctx, 2, "executing cascade for constraint %s", plan.cascades[i].FKName)
+		log.VEventf(ctx, 2, "executing cascade for constraint %s", plan.cascades[i].FKConstraint.Name())
 
 		// We place a sequence point before every cascade, so that each subsequent
 		// cascade can observe the writes by the previous step. However, The
@@ -2079,6 +2079,13 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		execFactory := newExecFactory(ctx, planner)
 		// The cascading query is allowed to autocommit only if it is the last
 		// cascade and there are no check queries to run.
+		//
+		// Note that even if it's the last cascade, we still might not be able
+		// to autocommit in case there are more checks to run during or after
+		// this cascade. Such scenario is handled in the execbuilder where we
+		// need to explicitly enable autocommit on each mutation planNode. In
+		// other words, allowAutoCommit = true here means that the plan _might_
+		// autocommit but doesn't guarantee that.
 		allowAutoCommit := planner.autoCommit
 		if len(plan.checkPlans) > 0 || i < len(plan.cascades)-1 {
 			allowAutoCommit = false

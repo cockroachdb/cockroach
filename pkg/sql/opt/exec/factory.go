@@ -215,8 +215,7 @@ type ApplyJoinPlanRightSideFn func(ctx context.Context, ef Factory, leftRow tree
 // ConstructBuffer as an input; it should only be triggered if this buffer is
 // not empty.
 type Cascade struct {
-	// FKName is the name of the foreign key constraint.
-	FKName string
+	FKConstraint cat.ForeignKeyConstraint
 
 	// Buffer is the Node returned by ConstructBuffer which stores the input to
 	// the mutation. It is nil if the cascade does not require a buffer.
@@ -247,6 +246,13 @@ type Cascade struct {
 		numBufferedRows int,
 		allowAutoCommit bool,
 	) (Plan, error)
+
+	// GetExplainPlan returns the explain plan for the cascade query. It will
+	// always return a cached plan if there is one, and the boolean argument
+	// controls whether this function can create a new plan (which will be
+	// cached going forward). If createPlanIfMissing is false and there is no
+	// cached plan, then nil, nil is returned.
+	GetExplainPlan func(_ context.Context, createPlanIfMissing bool) (Plan, error)
 }
 
 // InsertFastPathCheck contains information about a foreign key or

@@ -12,6 +12,7 @@ package explain
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -32,7 +33,20 @@ import (
 
 // Emit produces the EXPLAIN output against the given OutputBuilder. The
 // OutputBuilder flags are taken into account.
-func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
+func Emit(ctx context.Context, plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
+	return emitInternal(ctx, plan, ob, spanFormatFn, nil /* visitedFKsByCascades */)
+}
+
+// - visitedFKsByCascades is updated on recursive calls for each cascade plan.
+// Can be nil if the plan doesn't have any cascades. In this map the key is the
+// "id" of the FK constraint that we construct as OriginTableID || Name.
+func emitInternal(
+	ctx context.Context,
+	plan *Plan,
+	ob *OutputBuilder,
+	spanFormatFn SpanFormatFn,
+	visitedFKsByCascades map[string]struct{},
+) error {
 	e := makeEmitter(ob, spanFormatFn)
 	var walk func(n *Node) error
 	walk = func(n *Node) error {
@@ -106,11 +120,34 @@ func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
 		ob.LeaveNode()
 	}
 
-	for i := range plan.Cascades {
+	for _, cascade := range plan.Cascades {
 		ob.EnterMetaNode("fk-cascade")
-		ob.Attr("fk", plan.Cascades[i].FKName)
-		if buffer := plan.Cascades[i].Buffer; buffer != nil {
-			ob.Attr("input", buffer.(*Node).args.(*bufferArgs).Label)
+		ob.Attr("fk", cascade.FKConstraint.Name())
+		// Here we do want to allow creation of the plans for the cascades to be
+		// able to include them into the EXPLAIN output.
+		const createPlanIfMissing = true
+		if cascadePlan, err := cascade.GetExplainPlan(ctx, createPlanIfMissing); err != nil {
+			return err
+		} else {
+			if visitedFKsByCascades == nil {
+				visitedFKsByCascades = make(map[string]struct{})
+			}
+			fk := cascade.FKConstraint
+			// Come up with a custom "id" for this FK.
+			fkID := fmt.Sprintf("%d%s", fk.OriginTableID(), fk.Name())
+			if _, visited := visitedFKsByCascades[fkID]; visited {
+				// If we have already visited this particular FK cascade, we
+				// don't recurse into it again to prevent infinite recursion.
+				if buffer := cascade.Buffer; buffer != nil {
+					ob.Attr("input", buffer.(*Node).args.(*bufferArgs).Label)
+				}
+			} else {
+				visitedFKsByCascades[fkID] = struct{}{}
+				defer delete(visitedFKsByCascades, fkID)
+				if err = emitInternal(ctx, cascadePlan.(*Plan), ob, spanFormatFn, visitedFKsByCascades); err != nil {
+					return err
+				}
+			}
 		}
 		ob.LeaveNode()
 	}
