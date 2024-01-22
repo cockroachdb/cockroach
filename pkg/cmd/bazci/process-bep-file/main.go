@@ -20,6 +20,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"flag"
 	"fmt"
@@ -38,9 +39,9 @@ import (
 var (
 	branch          = flag.String("branch", "", "currently checked out git branch")
 	eventStreamFile = flag.String("eventsfile", "", "eventstream file produced by bazel build --build_event_binary_file")
+	jsonOutFile     = flag.String("jsonoutfile", "", "if given, file path where to write the JSON test report")
 
-	invocationId  = flag.String("invocation", "", "UUID of the invocation")
-	serverUrl     = flag.String("serverurl", "https://tanzanite.cluster.engflow.com/", "URL of the EngFlow cluster")
+	serverName    = flag.String("servername", "tanzanite", "URL of the EngFlow cluster")
 	tlsClientCert = flag.String("cert", "", "TLS client certificate for accessing EngFlow, probably a .crt file")
 	tlsClientKey  = flag.String("key", "", "TLS client key for accessing EngFlow")
 
@@ -58,7 +59,7 @@ func getSha() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func postOptions(res *engflow.TestResultWithXml, sha string) *issues.Options {
+func postOptions(res *engflow.TestResultWithXml, sha string, invocationId string) *issues.Options {
 	return &issues.Options{
 		Token:  githubApiToken,
 		Org:    "cockroachdb",
@@ -67,11 +68,11 @@ func postOptions(res *engflow.TestResultWithXml, sha string) *issues.Options {
 		Branch: *branch,
 		EngFlowOptions: &issues.EngFlowOptions{
 			Attempt:      int(res.Attempt),
-			InvocationID: *invocationId,
+			InvocationID: invocationId,
 			Label:        res.Label,
 			Run:          int(res.Run),
 			Shard:        int(res.Shard),
-			ServerURL:    *serverUrl,
+			ServerURL:    fmt.Sprintf("https://%s.cluster.engflow.com/", *serverName),
 		},
 		GetBinaryVersion: build.BinaryVersion,
 	}
@@ -126,6 +127,23 @@ func process() error {
 		return err
 	}
 
+	if *jsonOutFile != "" {
+		jsonReport, errs := engflow.ConstructJSONReport(invocation, *serverName)
+		for _, err := range errs {
+			fmt.Printf("error loading JSON test report: %+v", err)
+		}
+		jsonOut, err := json.Marshal(jsonReport)
+		if err != nil {
+			return err
+		}
+		err = os.WriteFile(*jsonOutFile, jsonOut, 0644)
+		if err != nil {
+			return err
+		}
+	} else {
+		fmt.Printf("no -jsonoutfile; skipping constructing JSON test report")
+	}
+
 	if githubApiToken == "" {
 		fmt.Printf("no GITHUB_API_TOKEN; skipping reporting to GitHub")
 		return nil
@@ -169,7 +187,7 @@ func process() error {
 			}
 			if seenNew {
 				if err := githubpost.PostFromTestXMLWithFailurePoster(
-					ctx, failurePoster(res, sha), testXml); err != nil {
+					ctx, failurePoster(res, sha, invocation.InvocationId), testXml); err != nil {
 					fmt.Printf("could not post to GitHub: got error %+v", err)
 				}
 			}
@@ -189,12 +207,8 @@ func main() {
 		fmt.Println("must provide -eventsfile")
 		os.Exit(1)
 	}
-	if *invocationId == "" {
-		fmt.Println("must provide -invocation")
-		os.Exit(1)
-	}
-	if *serverUrl == "" {
-		fmt.Println("must provide -serverurl")
+	if *serverName == "" {
+		fmt.Println("must provide -servername")
 		os.Exit(1)
 	}
 	if *tlsClientCert == "" {
