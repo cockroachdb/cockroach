@@ -90,8 +90,11 @@ func ParseTenantInfo(
 // capability key and sets it on top of the default tenant capabilities.
 func ParseTenantCapabilityUpsert(
 	t *testing.T, d *datadriven.TestData,
-) (roachpb.TenantID, *tenantcapabilitiespb.TenantCapabilities, error) {
-	tID := GetTenantID(t, d)
+) (tenantcapabilities.Entry, error) {
+	entry := tenantcapabilities.Entry{
+		TenantID:    GetTenantID(t, d),
+		ServiceMode: GetServiceState(t, d),
+	}
 	caps := tenantcapabilitiespb.TenantCapabilities{}
 	for _, arg := range d.CmdArgs {
 		capability, ok := tenantcapabilities.FromName(arg.Key)
@@ -102,18 +105,18 @@ func ParseTenantCapabilityUpsert(
 		case tenantcapabilities.BoolCapability:
 			b, err := strconv.ParseBool(arg.Vals[0])
 			if err != nil {
-				return roachpb.TenantID{}, nil, err
+				return entry, err
 			}
 			c.Value(&caps).Set(b)
 
 		case tenantcapabilities.SpanConfigBoundsCapability:
 			jsonD, err := json.ParseJSON(arg.Vals[0])
 			if err != nil {
-				return roachpb.TenantID{}, nil, err
+				return entry, err
 			}
 			var v tenantcapabilitiespb.SpanConfigBounds
 			if _, err := protoreflect.JSONBMarshalToMessage(jsonD, &v); err != nil {
-				return roachpb.TenantID{}, nil, err
+				return entry, err
 			}
 			c.Value(&caps).Set(spanconfigbounds.New(&v))
 
@@ -121,7 +124,8 @@ func ParseTenantCapabilityUpsert(
 			t.Fatalf("unknown capability type %T for capability %s", c, arg.Key)
 		}
 	}
-	return tID, &caps, nil
+	entry.TenantCapabilities = &caps
+	return entry, nil
 }
 
 func ParseTenantCapabilityDelete(t *testing.T, d *datadriven.TestData) *tenantcapabilities.Update {
@@ -146,6 +150,19 @@ func GetTenantID(t *testing.T, d *datadriven.TestData) roachpb.TenantID {
 	tID, err := roachpb.TenantIDFromString(tenantID)
 	require.NoError(t, err)
 	return tID
+}
+
+func GetServiceState(t *testing.T, d *datadriven.TestData) mtinfopb.TenantServiceMode {
+	if d.HasArg("service") {
+		var state string
+		d.ScanArgs(t, "service", &state)
+		serviceState, ok := mtinfopb.TenantServiceModeValues[state]
+		if !ok {
+			t.Fatalf("invalid service state: %s", state)
+		}
+		return serviceState
+	}
+	return mtinfopb.ServiceModeShared
 }
 
 // AlteredCapabilitiesString pretty-prints all altered capability

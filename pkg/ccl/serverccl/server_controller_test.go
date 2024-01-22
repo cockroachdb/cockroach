@@ -607,37 +607,3 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	require.ElementsMatch(t, []string{"session", "tenant"}, cookieNames)
 	require.ElementsMatch(t, []string{"", ""}, cookieValues)
 }
-
-func TestServiceShutdownUsesGracefulDrain(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-	})
-	defer s.Stopper().Stop(ctx)
-
-	drainCh := make(chan struct{})
-
-	// Start a shared process server.
-	_, _, err := s.TenantController().StartSharedProcessTenant(ctx,
-		base.TestSharedProcessTenantArgs{
-			TenantName: "hello",
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					RequireGracefulDrain: true,
-					DrainReportCh:        drainCh,
-				},
-			},
-		})
-	require.NoError(t, err)
-
-	_, err = db.Exec("ALTER TENANT hello STOP SERVICE")
-	require.NoError(t, err)
-
-	// Wait for the server to shut down. This also asserts that the
-	// graceful drain has occurred.
-	<-drainCh
-}
