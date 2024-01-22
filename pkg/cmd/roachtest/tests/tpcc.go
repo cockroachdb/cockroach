@@ -65,10 +65,12 @@ func rampDuration(isLocal bool) time.Duration {
 }
 
 type tpccOptions struct {
+	DB                 string // database name
 	Warehouses         int
 	ExtraRunArgs       string
 	ExtraSetupArgs     string
-	Chaos              func() Chaos                // for late binding of stopper
+	Chaos              func() Chaos // for late binding of stopper
+	ExpectedDeaths     int
 	During             func(context.Context) error // for running a function during the test
 	Duration           time.Duration               // if zero, TPCC is not invoked
 	SetupType          tpccSetupType
@@ -100,6 +102,12 @@ type tpccOptions struct {
 	// ExpensiveChecks, if set, runs expensive post TPC-C run checks.
 	ExpensiveChecks               bool
 	DisableDefaultScheduledBackup bool
+	// DisableIsolationLevels will cause the workload to not attempt to
+	// enable the corresponding cluster settings for the different
+	// isolation levels in the database. Useful if we are not testing
+	// these isolation levels and we are bootstrapping the cluster in an
+	// older version, where they are not supported.
+	DisableIsolationLevels bool
 }
 
 type workloadInstance struct {
@@ -122,15 +130,18 @@ const workloadPProfStartPort = 33333
 // specify pgurl to ensure that it is run on a node with a running cockroach
 // instance to ensure that the workload version matches the gateway version in a
 // mixed version cluster.
-func tpccImportCmd(warehouses int, extraArgs ...string) string {
-	return tpccImportCmdWithCockroachBinary("./cockroach", warehouses, extraArgs...)
+func tpccImportCmd(db string, warehouses int, extraArgs ...string) string {
+	return tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, db, warehouses, extraArgs...)
 }
 
 func tpccImportCmdWithCockroachBinary(
-	crdbBinary string, warehouses int, extraArgs ...string,
+	crdbBinary string, db string, warehouses int, extraArgs ...string,
 ) string {
-	return fmt.Sprintf("./%s workload fixtures import tpcc --warehouses=%d %s",
-		crdbBinary, warehouses, strings.Join(extraArgs, " "))
+	return roachtestutil.NewCommand("%s workload fixtures import tpcc", crdbBinary).
+		MaybeFlag(db != "", "db", db).
+		Flag("warehouses", warehouses).
+		Arg(strings.Join(extraArgs, " ")).
+		String()
 }
 
 func setupTPCC(
@@ -166,7 +177,10 @@ func setupTPCC(
 			return
 		}
 
-		require.NoError(t, enableIsolationLevels(ctx, t, db))
+		if !opts.DisableIsolationLevels {
+			require.NoError(t, enableIsolationLevels(ctx, t, db))
+		}
+
 		require.NoError(t, WaitFor3XReplication(ctx, t, db))
 
 		estimatedSetupTimeStr := ""
@@ -183,18 +197,20 @@ func setupTPCC(
 			if err != nil {
 				t.Fatal(err)
 			}
-			c.Run(ctx, option.WithNodes(crdbNodes[:1]), tpccImportCmd(opts.Warehouses, opts.ExtraSetupArgs, pgurl))
+			c.Run(ctx,
+				option.WithNodes(crdbNodes[:1]),
+				tpccImportCmd(opts.DB, opts.Warehouses, opts.ExtraSetupArgs, pgurl),
+			)
 		case usingInit:
 			t.Status("initializing tables" + estimatedSetupTimeStr)
 			extraArgs := opts.ExtraSetupArgs
-			if !t.BuildVersion().AtLeast(version.MustParse("v20.2.0")) {
-				extraArgs += " --deprecated-fk-indexes"
-			}
-			cmd := fmt.Sprintf(
-				"./cockroach workload init tpcc --warehouses=%d %s {pgurl:1}",
-				opts.Warehouses, extraArgs,
-			)
-			c.Run(ctx, option.WithNodes(workloadNode), cmd)
+			cmd := roachtestutil.NewCommand("%s workload init tpcc", test.DefaultCockroachPath).
+				MaybeFlag(opts.DB != "", "db", opts.DB).
+				Flag("warehouses", opts.Warehouses).
+				Arg(extraArgs).
+				Arg("{pgurl:1}")
+
+			c.Run(ctx, option.WithNodes(workloadNode), cmd.String())
 		default:
 			t.Fatal("unknown tpcc setup type")
 		}
@@ -253,6 +269,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	}
 	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts)
 	m := c.NewMonitor(ctx, crdbNodes)
+	m.ExpectDeaths(int32(opts.ExpectedDeaths))
 	rampDur := rampDuration(c.IsLocal())
 	for i := range workloadInstances {
 		// Make a copy of i for the goroutine.
@@ -266,19 +283,30 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 			}
 			t.WorkerStatus(fmt.Sprintf("running tpcc worker=%d warehouses=%d ramp=%s duration=%s on %s (<%s)",
 				i, opts.Warehouses, rampDur, opts.Duration, pgURLs[i], time.Minute))
-			cmd := fmt.Sprintf(
-				"./cockroach workload run tpcc --warehouses=%d --histograms="+t.PerfArtifactsDir()+"/%sstats.json "+
-					opts.ExtraRunArgs+" --ramp=%s --duration=%s --prometheus-port=%d --pprofport=%d %s %s",
-				opts.Warehouses,
-				statsPrefix,
-				rampDur,
-				opts.Duration,
-				workloadInstances[i].prometheusPort,
-				workloadPProfStartPort+i,
-				workloadInstances[i].extraRunArgs,
-				pgURLs[i],
-			)
-			return c.RunE(ctx, option.WithNodes(workloadNode), cmd)
+
+			histogramsPath := fmt.Sprintf("%s/%sstats.json", t.PerfArtifactsDir(), statsPrefix)
+			cmd := roachtestutil.NewCommand("%s workload run tpcc", test.DefaultCockroachPath).
+				MaybeFlag(opts.DB != "", "db", opts.DB).
+				Flag("warehouses", opts.Warehouses).
+				Flag("histograms", histogramsPath).
+				Flag("ramp", rampDur).
+				Flag("duration", opts.Duration).
+				Flag("prometheus-port", workloadInstances[i].prometheusPort).
+				Flag("pprofport", workloadPProfStartPort+i).
+				Arg(opts.ExtraRunArgs).
+				Arg(workloadInstances[i].extraRunArgs).
+				Arg(pgURLs[i])
+
+			err := c.RunE(ctx, option.WithNodes(workloadNode), cmd.String())
+			// Don't fail the test if we are running the workload throughout
+			// the entire test. Canceling the context just means that the
+			// test already failed, or that the test finished (and therefore
+			// this function should not return an error).
+			if ctx.Err() != nil && opts.Duration == 0 {
+				return nil
+			}
+
+			return err
 		})
 	}
 	if opts.Chaos != nil {
@@ -291,9 +319,13 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	m.Wait()
 
 	if !opts.SkipPostRunCheck {
-		c.Run(ctx, option.WithNodes(workloadNode), fmt.Sprintf(
-			"./cockroach workload check tpcc --warehouses=%d --expensive-checks=%t {pgurl:1}",
-			opts.Warehouses, opts.ExpensiveChecks))
+		cmd := roachtestutil.NewCommand("%s workload check tpcc", test.DefaultCockroachPath).
+			MaybeFlag(opts.DB != "", "db", opts.DB).
+			MaybeOption(opts.ExpensiveChecks, "expensive-checks").
+			Flag("warehouses", opts.Warehouses).
+			Arg("{pgurl:1}")
+
+		c.Run(ctx, option.WithNodes(workloadNode), cmd.String())
 	}
 
 	// Check no errors from metrics.
@@ -386,7 +418,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	importTPCC := func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 		randomNode := c.Node(h.RandomNode(rng, crdbNodes))
-		cmd := tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, headroomWarehouses, fmt.Sprintf("{pgurl%s}", randomNode))
+		cmd := tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, "", headroomWarehouses, fmt.Sprintf("{pgurl%s}", randomNode))
 		return c.RunE(ctx, option.WithNodes(randomNode), cmd)
 	}
 
@@ -1317,7 +1349,7 @@ func loadTPCCBench(
 			t.Fatal(err)
 		}
 	}
-	cmd := tpccImportCmd(loadWarehouses, loadArgs, pgurl)
+	cmd := tpccImportCmd("", loadWarehouses, loadArgs, pgurl)
 	if err = c.RunE(ctx, option.WithNodes(roachNodes[:1]), cmd); err != nil {
 		return err
 	}
