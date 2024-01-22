@@ -4067,11 +4067,11 @@ opt_with_options:
 // %Text: CALL <name> ( [ <expr> [, ...] ] )
 // %SeeAlso: CREATE PROCEDURE
 call_stmt:
-  CALL func_application
+  CALL func_application opt_as_of_clause
   {
     p := $2.expr().(*tree.FuncExpr)
     p.InCall = true
-    $$.val = &tree.Call{Proc: p}
+    $$.val = &tree.Call{Proc: p, AsOf: $3.asOfClause()}
   }
 
 // The COPY grammar in postgres has 3 different versions, all of which are supported by postgres:

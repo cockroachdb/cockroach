@@ -65,7 +65,7 @@ analyze_stmt ::=
 	| 'ANALYSE' analyze_target
 
 call_stmt ::=
-	'CALL' func_application
+	'CALL' func_application opt_as_of_clause
 
 copy_stmt ::=
 	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_copy_options opt_where_clause
@@ -328,6 +328,10 @@ func_application ::=
 	| func_application_name '(' 'DISTINCT' expr_list ')'
 	| func_application_name '(' '*' ')'
 
+opt_as_of_clause ::=
+	as_of_clause
+	| 
+
 table_name ::=
 	db_object_name
 
@@ -546,10 +550,6 @@ sconst_or_placeholder ::=
 string_or_placeholder_opt_list ::=
 	string_or_placeholder
 	| '(' string_or_placeholder_list ')'
-
-opt_as_of_clause ::=
-	as_of_clause
-	| 
 
 opt_with_backup_options ::=
 	'WITH' backup_options_list
@@ -1004,6 +1004,9 @@ expr_list ::=
 opt_sort_clause_no_index ::=
 	sort_clause_no_index
 	| 
+
+as_of_clause ::=
+	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
 
 db_object_name ::=
 	simple_db_object_name
@@ -1731,9 +1734,6 @@ set_or_reset_clause ::=
 	'SET' set_rest
 	| 'RESET_ALL' 'ALL'
 	| 'RESET' session_var
-
-as_of_clause ::=
-	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
 
 backup_options_list ::=
 	( backup_options ) ( ( ',' backup_options ) )*

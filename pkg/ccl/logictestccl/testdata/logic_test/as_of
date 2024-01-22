@@ -19,6 +19,20 @@ statement ok
 INSERT INTO t VALUES (2);
 INSERT INTO t2 VALUES (2);
 
+statement ok
+CREATE PROCEDURE p_read() LANGUAGE PLPGSQL AS $$
+  DECLARE foo INT;
+  BEGIN SELECT i INTO foo FROM t ORDER BY i DESC; RAISE NOTICE '%', foo; END
+$$;
+
+statement ok
+CREATE PROCEDURE p_write(v INT) LANGUAGE PLPGSQL AS $$
+  BEGIN INSERT INTO t VALUES (v); END
+$$;
+
+statement ok
+SELECT pg_sleep(0.1);
+
 statement error pgcode 3D000 pq: database "test" does not exist
 SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp()
 
@@ -39,6 +53,14 @@ ROLLBACK
 
 statement error pgcode 0A000 inconsistent AS OF SYSTEM TIME timestamp
 SELECT * from t AS OF SYSTEM TIME '-1μs'; SELECT * from t AS OF SYSTEM TIME '-2μs'
+
+statement error pgcode 42883 pq: procedure p_read does not exist
+CALL p_read() AS OF SYSTEM TIME follower_read_timestamp();
+
+statement error pgcode 42883 pq: procedure p_write does not exist
+CALL p_write(100) AS OF SYSTEM TIME follower_read_timestamp();
+
+subtest default_follower_reads
 
 statement ok
 SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO TRUE
@@ -66,6 +88,12 @@ BEGIN; CREATE DATABASE IF NOT EXISTS d2
 statement ok
 ROLLBACK
 
+statement error pgcode 42883 pq: procedure p_read does not exist
+CALL p_read();
+
+statement error pgcode 42883 pq: procedure p_write does not exist
+CALL p_write(100);
+
 statement ok
 SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE
 
@@ -83,6 +111,8 @@ BEGIN READ WRITE; COMMIT
 
 statement ok
 BEGIN; CREATE DATABASE IF NOT EXISTS d2; COMMIT
+
+subtest default_txn_as_of
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION AS OF SYSTEM TIME follower_read_timestamp()
@@ -113,6 +143,8 @@ ROLLBACK
 statement ok
 SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE
 
+subtest as_of_funcs
+
 query B
 SELECT with_min_timestamp(statement_timestamp()) = statement_timestamp()
 ----
@@ -137,6 +169,7 @@ SELECT with_max_staleness(-'1s')
 #
 # Tests for optimizer bounded staleness checks.
 #
+subtest optimizer_checks
 
 statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms')
@@ -279,6 +312,7 @@ SELECT (
 #
 # Tests for nearest_only argument.
 #
+subtest nearest_only
 
 statement error with_max_staleness: expected bool argument for nearest_only
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', 5)
@@ -301,6 +335,7 @@ SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1m
 #
 # Tests for running bounded staleness queries in an explicit transaction.
 #
+subtest explicit_txn_bounded_staleness
 
 statement error AS OF SYSTEM TIME: only constant expressions or follower_read_timestamp are allowed
 BEGIN AS OF SYSTEM TIME with_max_staleness('1ms')
@@ -314,6 +349,7 @@ ROLLBACK
 #
 # Tests for bounded staleness with prepared statements.
 #
+subtest prepared_bounded_staleness
 
 statement ok
 PREPARE with_min_timestamp_prep AS SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '10s'::interval) WHERE i = 2
@@ -347,3 +383,125 @@ PREPARE placeholder_bounded_staleness_stmt AS SELECT * FROM t AS OF SYSTEM TIME 
 
 statement error expected float argument for to_timestamp
 PREPARE placeholder_with_min_timestamp_to_timestamp_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(to_timestamp($1))
+
+subtest implicit_read_write_proc
+
+statement ok
+SELECT pg_sleep(1);
+
+statement ok
+CALL p_write(1001);
+
+statement ok
+SELECT pg_sleep(1);
+
+query T noticetrace
+CALL p_read();
+----
+NOTICE: 1001
+
+query T noticetrace
+CALL p_read() AS OF SYSTEM TIME '-10ms';
+----
+NOTICE: 1001
+
+query T noticetrace
+CALL p_read() AS OF SYSTEM TIME '-1.5s';
+----
+NOTICE: 2
+
+statement error pgcode 42883 pq: procedure p_read does not exist
+CALL p_read() AS OF SYSTEM TIME '-5s';
+
+statement error pq: cannot execute INSERT in a read-only transaction
+CALL p_write(1002) AS OF SYSTEM TIME '-10ms';
+
+# The supplied timestamp must match the transaction's timestamp if in a
+# multi-statement implicit transaction. The transaction's timestamp is
+# determined by the first statement that executes.
+statement error pgcode 0A000 inconsistent AS OF SYSTEM TIME timestamp
+CALL p_read();
+CALL p_read() AS OF SYSTEM TIME '-10ms';
+
+statement error pgcode 0A000 inconsistent AS OF SYSTEM TIME timestamp
+CALL p_read() AS OF SYSTEM TIME '-10ms';
+CALL p_read() AS OF SYSTEM TIME '-1.5ms';
+
+statement ok
+CALL p_read() AS OF SYSTEM TIME '-10ms';
+CALL p_read() AS OF SYSTEM TIME '-10ms';
+
+statement ok
+CALL p_read() AS OF SYSTEM TIME '-10ms';
+CALL p_read();
+
+subtest explicit_read_write_proc
+
+statement ok
+BEGIN TRANSACTION AS OF SYSTEM TIME '-10ms';
+
+query T noticetrace
+CALL p_read();
+----
+NOTICE: 1001
+
+statement error pq: cannot execute INSERT in a read-only transaction
+CALL p_write(1002);
+
+statement ok
+ABORT;
+
+statement ok
+BEGIN TRANSACTION AS OF SYSTEM TIME '-1.5s';
+
+query T noticetrace
+CALL p_read();
+----
+NOTICE: 2
+
+statement error pq: cannot execute INSERT in a read-only transaction
+CALL p_write(1002);
+
+statement ok
+ABORT;
+
+statement ok
+BEGIN TRANSACTION AS OF SYSTEM TIME '-5s';
+
+statement error pgcode 42883 pq: procedure p_read does not exist
+CALL p_read();
+
+statement ok
+ABORT;
+
+# The supplied timestamp must match the transaction's timestamp in an
+# explicit transaction.
+statement ok
+BEGIN;
+
+statement ok
+CALL p_read();
+
+statement error pgcode 0A000 inconsistent AS OF SYSTEM TIME timestamp
+CALL p_read() AS OF SYSTEM TIME '-10ms';
+
+statement ok
+ABORT;
+
+statement ok
+BEGIN TRANSACTION AS OF SYSTEM TIME '-10ms';
+
+# If no AOST is specified, the transaction's timestamp is used.
+statement ok
+CALL p_read();
+
+# If an AOST is specified, it must match the transaction.
+# NOTE: this case fails because the AOST timestamp is calculated using the
+# statement timestamp.
+statement error pgcode 0A000 inconsistent AS OF SYSTEM TIME timestamp
+CALL p_read() AS OF SYSTEM TIME '-10ms';
+
+statement ok
+ABORT;
+
+subtest end

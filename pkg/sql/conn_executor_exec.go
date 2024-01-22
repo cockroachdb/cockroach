@@ -1242,6 +1242,13 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 		return nil
 	}
 
+	// AOST means the transaction must be read-only.
+	p.extendedEvalCtx.TxnReadOnly = true
+	err = ex.state.setReadOnlyMode(tree.ReadOnly)
+	if err != nil {
+		return err
+	}
+
 	// Implicit transactions can have multiple statements, so we need to check
 	// if one has already been executed.
 	if ex.implicitTxn() && !ex.extraTxnState.firstStmtExecuted {
