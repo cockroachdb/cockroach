@@ -1556,6 +1556,7 @@ GO_TARGETS = [
     "//pkg/roachprod:roachprod",
     "//pkg/rpc/nodedialer:nodedialer",
     "//pkg/rpc/nodedialer:nodedialer_test",
+    "//pkg/rpc/rpcpb:rpcpb",
     "//pkg/rpc:rpc",
     "//pkg/rpc:rpc_test",
     "//pkg/scheduledjobs/schedulebase:schedulebase",
