@@ -6410,6 +6410,10 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
+	params.ServerArgs.Knobs.ProtectedTS = &protectedts.TestingKnobs{
+		// The meta table is used to track limits.
+		UseMetaTable: true,
+	}
 	tc := testcluster.StartTestCluster(t, 1, params)
 	defer tc.Stopper().Stop(ctx)
 	db := tc.ServerConn(0)
@@ -6428,7 +6432,10 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 		params := base.TestClusterArgs{}
 		params.ServerArgs.ExternalIODir = dir
 		params.ServerArgs.Knobs.ProtectedTS = &protectedts.TestingKnobs{
-			DisableProtectedTimestampForMultiTenant: true}
+			DisableProtectedTimestampForMultiTenant: true,
+			// The meta table is used to track limits.
+			UseMetaTable: true,
+		}
 		// Test fails within a tenant. Tracked with #76378.
 		params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
 		tc := testcluster.StartTestCluster(t, 1, params)

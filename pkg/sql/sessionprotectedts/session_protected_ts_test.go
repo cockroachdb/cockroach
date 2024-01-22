@@ -92,7 +92,7 @@ func TestSessionProtectedTimestampReconciler(t *testing.T) {
 
 	state, err := pts.GetState(ctx)
 	require.NoError(t, err)
-	require.Equal(t, uint64(2), state.NumRecords)
+	require.Equal(t, 2, len(state.Records))
 
 	t.Run("reconcile", func(t *testing.T) {
 		ptreconcile.ReconcileInterval.Override(ctx, &settings.SV, time.Millisecond)
