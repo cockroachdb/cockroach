@@ -428,6 +428,14 @@ func TestCopyFromRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Ensure that the COPY batch size isn't too large (this test becomes too
+	// slow when metamorphic sql.CopyBatchRowSize is set to a relatively large
+	// number).
+	const maxCopyBatchRowSize = 1000
+	if sql.CopyBatchRowSize > maxCopyBatchRowSize {
+		sql.SetCopyFromBatchSize(maxCopyBatchRowSize)
+	}
+
 	// sql.CopyBatchRowSize can change depending on the metamorphic
 	// randomization, so we derive all rows counts from it.
 	var numRows = sql.CopyBatchRowSize * 5
