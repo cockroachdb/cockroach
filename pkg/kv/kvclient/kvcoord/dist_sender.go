@@ -2491,7 +2491,7 @@ func (ds *DistSender) sendToReplicas(
 			// talk to a replica that tells us who the leaseholder is.
 			if ctx.Err() == nil {
 				if lh := routing.Leaseholder(); lh != nil && lh.IsSame(curReplica) {
-					routing.EvictLease(ctx)
+					routing.EvictLease(ctx, lh)
 				}
 			}
 		} else {

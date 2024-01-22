@@ -1553,8 +1553,7 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 
 	// EvictAndReplace() with a speculative descriptor. Should update decriptor,
 	// remove lease, and retain closed timestamp policy.
-	tok.speculativeDesc = &desc3
-	tok.EvictAndReplace(ctx)
+	tok.EvictAndReplace(ctx, roachpb.RangeInfo{Desc: desc3})
 	tok, err = cache.LookupWithEvictionToken(ctx, startKey, tok, false /* useReverseScan */)
 	require.NoError(t, err)
 	require.Equal(t, desc3, *tok.Desc())
@@ -1678,7 +1677,7 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				// Ensure evicting the lease doesn't remove the closed timestamp
 				// policy/desc.
 				oldTok = tok
-				tok.EvictLease(ctx)
+				tok.EvictLease(ctx, tok.Leaseholder())
 				require.Equal(t, oldTok.Desc(), tok.Desc())
 				require.Nil(t, tok.Leaseholder())
 				require.Equal(t, oldTok.ClosedTimestampPolicy(lag), tok.ClosedTimestampPolicy(lag))
@@ -1716,7 +1715,7 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				require.NotNil(t, tok)
 				require.Equal(t, &desc2, tok.Desc())
 				require.Equal(t, &rep2, tok.Leaseholder())
-				require.Equal(t, tok.lease.Replica, rep2)
+				require.Equal(t, tok.Lease().Replica, rep2)
 				require.Equal(t, lead, tok.ClosedTimestampPolicy(lag))
 			},
 		},
@@ -1751,7 +1750,7 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				require.NotNil(t, tok)
 				require.Equal(t, &desc3, tok.Desc())
 				require.Equal(t, &rep2, tok.Leaseholder())
-				require.Equal(t, tok.lease.Replica, rep2)
+				require.Equal(t, tok.Lease().Replica, rep2)
 				require.Equal(t, lead, tok.ClosedTimestampPolicy(lag))
 			},
 		},
@@ -1780,7 +1779,7 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				require.NotNil(t, tok)
 				require.Equal(t, &desc2, tok.Desc())
 				require.Equal(t, &rep3, tok.Leaseholder())
-				require.Equal(t, tok.lease.Replica, rep3)
+				require.Equal(t, tok.Lease().Replica, rep3)
 				require.Equal(t, lead, tok.ClosedTimestampPolicy(lag))
 			},
 		},
@@ -1809,7 +1808,7 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				require.NotNil(t, tok)
 				require.Equal(t, &desc2, tok.Desc())
 				require.Equal(t, &rep3, tok.Leaseholder())
-				require.Equal(t, tok.lease.Replica, rep3)
+				require.Equal(t, tok.Lease().Replica, rep3)
 				require.Equal(t, lead, tok.ClosedTimestampPolicy(lag))
 			},
 		},
