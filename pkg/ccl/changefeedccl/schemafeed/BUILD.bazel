@@ -33,7 +33,6 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
-        "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
@@ -71,6 +70,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/pgwire",
         "//pkg/testutils",
@@ -89,6 +89,7 @@ go_test(
         "@com_github_gogo_protobuf//proto",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//slices",
     ],
 )
 
