@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -429,7 +428,13 @@ func TestCopyFromRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 117912)
+	// Ensure that the COPY batch size isn't too large (this test becomes too
+	// slow when metamorphic sql.CopyBatchRowSize is set to a relatively large
+	// number).
+	const maxCopyBatchRowSize = 1000
+	if sql.CopyBatchRowSize > maxCopyBatchRowSize {
+		sql.SetCopyFromBatchSize(maxCopyBatchRowSize)
+	}
 
 	// sql.CopyBatchRowSize can change depending on the metamorphic
 	// randomization, so we derive all rows counts from it.
