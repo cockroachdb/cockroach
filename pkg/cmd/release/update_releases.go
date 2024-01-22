@@ -63,6 +63,7 @@ type Release struct {
 	Series    string `yaml:"major_version"`
 	Previous  string `yaml:"previous_release"`
 	Withdrawn bool   `yaml:"withdrawn"`
+	CloudOnly bool   `yaml:"cloud_only"`
 }
 
 // updateReleasesFile downloads the current release data from the docs
@@ -122,6 +123,10 @@ func processReleaseData(data []Release) map[string]release.Series {
 		// interested in beta and rc pre-releases, as we do not support
 		// upgrades from alpha releases.
 		if pre := v.PreRelease(); pre != "" && pre != "rc" && pre != "beta" {
+			continue
+		}
+		// Skip cloud-only releases, because the binaries are not yet publicly available.
+		if r.CloudOnly {
 			continue
 		}
 
