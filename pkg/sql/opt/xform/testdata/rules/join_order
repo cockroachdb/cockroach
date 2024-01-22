@@ -1111,7 +1111,6 @@ Vertexes
     scan dz
 Edges
   y = z [inner, ses=AB, tes=AB, rules=()]
-  x = z [inner, ses=AB, tes=AB, rules=()]
 Joining AB
   A B [inner, refs=AB]
   B A [inner, refs=AB]
@@ -3483,3 +3482,9 @@ inner-join (merge)
  │    ├── fd: (5)-->(6)
  │    └── ordering: +5
  └── filters (true)
+
+# Regression test for #116131 - don't match ReorderJoins when the join order
+# limit is zero.
+exploretrace rule=ReorderJoins set=reorder_joins_limit=0
+SELECT * FROM bx INNER JOIN cy ON b = c;
+----

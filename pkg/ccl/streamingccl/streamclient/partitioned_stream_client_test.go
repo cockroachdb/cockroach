@@ -222,6 +222,8 @@ func TestPartitionedStreamReplicationClient(t *testing.T) {
 	defer cleanup()
 
 	testTenantName := roachpb.TenantName("test-tenant")
+	testTenantHistoryID := fmt.Sprintf("%s:%s", h.SysServer.RPCContext().StorageClusterID, serverutils.TestTenantID())
+
 	tenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID(), testTenantName)
 	defer cleanupTenant()
 
@@ -246,6 +248,30 @@ INSERT INTO d.t2 VALUES (2);
 		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
 			[][]string{{string(status)}})
 	}
+
+	id, from, ts, err := client.PriorReplicationDetails(ctx, testTenantName)
+	require.NoError(t, err)
+
+	require.Equal(t, testTenantHistoryID, id)
+	require.Empty(t, from)
+	require.True(t, ts.IsEmpty())
+
+	// Allow root to directly edit the system.tenant table, which requires node.
+	h.SysSQL.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
+	h.SysSQL.Exec(t, "GRANT node TO root")
+
+	h.SysSQL.Exec(t, `UPDATE system.tenants SET info = crdb_internal.json_to_pb('cockroach.multitenant.ProtoInfo',
+		'{"previousSourceTenant": {
+			"clusterId": "00000000000000000000000000000001",
+			"cutoverTimestamp": {"wallTime": "1"},
+			"tenantId": {"id": "99"}
+		}}'::jsonb) WHERE id = $1`, serverutils.TestTenantID().ToUint64())
+
+	id, from, ts, err = client.PriorReplicationDetails(ctx, testTenantName)
+	require.NoError(t, err)
+	require.Equal(t, testTenantHistoryID, id)
+	require.Equal(t, "00000000-0000-0000-0000-000000000001:99", from)
+	require.True(t, ts.Equal(hlc.Timestamp{WallTime: 1}), ts)
 
 	rps, err := client.Create(ctx, testTenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)
@@ -351,6 +377,7 @@ SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms'
 	require.NoError(t, client.Complete(ctx, streamID, true))
 	h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='100ms'`, testTenantName))
 	jobutils.WaitForJobToSucceed(t, h.SysSQL, jobspb.JobID(streamID))
+
 }
 
 // isQueryCanceledError returns true if the error appears to be a query cancelled error.
