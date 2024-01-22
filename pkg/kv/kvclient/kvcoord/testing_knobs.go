@@ -23,12 +23,6 @@ type ClientTestingKnobs struct {
 	// new one. Otherwise, set DistSenderConfig.TransportFactory directly.
 	TransportFactory func(TransportFactory) TransportFactory
 
-	// DontConsiderConnHealth, if set, makes the GRPCTransport not take into
-	// consideration the connection health when deciding the ordering for
-	// replicas. When not set, replicas on nodes with unhealthy connections are
-	// deprioritized.
-	DontConsiderConnHealth bool
-
 	// The maximum number of times a txn will attempt to refresh its
 	// spans for a single transactional batch.
 	// 0 means use a default. -1 means disable refresh.

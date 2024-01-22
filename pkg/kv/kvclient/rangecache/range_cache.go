@@ -255,6 +255,18 @@ func (rc *RangeCache) stringLocked() string {
 	return buf.String()
 }
 
+// sortedReplicaSets is a cached view of sorted descriptors for this
+// EvictionToken. The computation of the best leaseholder for a range can be
+// expensive, so we lazy compute and cache it. There are two ReplicaSets stored
+// for each EvictionToken, once with a leaseholder first order, and the other
+// using "follower read" sorting.
+type sortedReplicaSets struct {
+	mu          syncutil.RWMutex
+	expiration  time.Time
+	leaseholder roachpb.ReplicaSet
+	follower    roachpb.ReplicaSet
+}
+
 // EvictionToken holds eviction state between calls to Lookup.
 type EvictionToken struct {
 	// rdc is the cache that produced this token - and that will be modified by
@@ -276,6 +288,10 @@ type EvictionToken struct {
 	lease *roachpb.Lease
 
 	closedts roachpb.RangeClosedTimestampPolicy
+	// sorted is an optimization to store the list of sorted RepicaSets for both
+	// leaseholder and follower reads. The sorting of this list shows up in hot
+	// path analysis.
+	sorted *sortedReplicaSets
 
 	// speculativeDesc, if not nil, is the descriptor that should replace desc if
 	// desc proves to be stale - i.e. speculativeDesc is inserted in the cache
@@ -297,6 +313,41 @@ type EvictionToken struct {
 	speculativeDesc *roachpb.RangeDescriptor
 }
 
+// SortedReplicas returns a list of sorted replicas for this token.
+func (et *EvictionToken) SortedReplicas(
+	follower bool,
+	validFor time.Duration,
+	compute func() (roachpb.ReplicaSet, roachpb.ReplicaSet, error),
+) (roachpb.ReplicaSet, error) {
+	now := timeutil.Now()
+
+	et.sorted.mu.Lock()
+	defer et.sorted.mu.Unlock()
+	if now.After(et.sorted.expiration) {
+		// refresh the sorted lists
+		leaseholder, nearest, err := compute()
+		if err != nil {
+			return roachpb.ReplicaSet{}, err
+		}
+		et.sorted.leaseholder, et.sorted.follower = leaseholder, nearest
+		et.sorted.expiration = now.Add(validFor)
+	}
+	if follower {
+		return et.sorted.follower, nil
+	} else {
+		return et.sorted.leaseholder, nil
+	}
+}
+
+// clearSortedReplicas is called any time the EvictionToken changes since the
+// previous cached list can no longer be used. By bumping the expiration time to
+// now, the next request will recreate the cached lists.
+func (et *EvictionToken) clearSortedReplicas() {
+	et.sorted.mu.Lock()
+	defer et.sorted.mu.Unlock()
+	et.sorted.expiration = timeutil.Now()
+}
+
 func (rc *RangeCache) makeEvictionToken(
 	entry *CacheEntry, speculativeDesc *roachpb.RangeDescriptor,
 ) EvictionToken {
@@ -316,6 +367,7 @@ func (rc *RangeCache) makeEvictionToken(
 		lease:           entry.leaseEvenIfSpeculative(),
 		closedts:        entry.closedts,
 		speculativeDesc: speculativeDesc,
+		sorted:          &sortedReplicaSets{},
 	}
 }
 
@@ -417,6 +469,7 @@ func (et *EvictionToken) syncRLocked(
 	}
 	et.desc = cachedEntry.Desc()
 	et.lease = cachedEntry.leaseEvenIfSpeculative()
+	et.clearSortedReplicas()
 	return true, cachedEntry, rawEntry
 }
 
@@ -492,6 +545,7 @@ func (et *EvictionToken) SyncTokenAndMaybeUpdateCache(
 	// range descriptor/lease information available in the RangeCache.
 	et.desc = newEntry.Desc()
 	et.lease = newEntry.leaseEvenIfSpeculative()
+	et.clearSortedReplicas()
 	return updatedLeaseholder
 }
 
@@ -532,6 +586,7 @@ func (et *EvictionToken) EvictLease(ctx context.Context) {
 	et.desc = newEntry.Desc()
 	et.lease = newEntry.leaseEvenIfSpeculative()
 	et.rdc.swapEntryLocked(ctx, rawEntry, newEntry)
+	et.clearSortedReplicas()
 }
 
 func descsCompatible(a, b *roachpb.RangeDescriptor) bool {
@@ -570,7 +625,7 @@ func (et *EvictionToken) evictAndReplaceLocked(ctx context.Context, newDescs ...
 
 	// Evict unless the cache has something newer. Regardless of what the cache
 	// has, we'll still attempt to insert newDescs (if any).
-	evicted := et.rdc.evictDescLocked(ctx, et.Desc())
+	evicted := et.rdc.evictLocked(ctx, et.Desc(), et.Lease())
 
 	if len(newDescs) > 0 {
 		log.Eventf(ctx, "evicting cached range descriptor with %d replacements", len(newDescs))
@@ -1035,22 +1090,34 @@ func (rc *RangeCache) EvictByKey(ctx context.Context, descKey roachpb.RKey) bool
 	return true
 }
 
-// evictDescLocked evicts a cache entry unless it's newer than the provided
-// descriptor.
-func (rc *RangeCache) evictDescLocked(ctx context.Context, desc *roachpb.RangeDescriptor) bool {
+// evictLocked evicts a cache entry unless it is newer than the passed in
+// descriptor and lease.
+func (rc *RangeCache) evictLocked(
+	ctx context.Context, desc *roachpb.RangeDescriptor, lease *roachpb.Lease,
+) bool {
 	cachedEntry, rawEntry := rc.getCachedRLocked(ctx, desc.StartKey, false /* inverted */)
 	if cachedEntry == nil {
 		// Cache is empty; nothing to do.
 		return false
 	}
-	cachedDesc := cachedEntry.Desc()
-	cachedNewer := cachedDesc.Generation > desc.Generation
-	if cachedNewer {
+	// The cache has a descriptor that's newer than the supplied desc (it should be
+	// equal because the desc that the caller supplied also came from the cache
+	// and the cache is not expected to go backwards). Don't evict it.
+	if cachedEntry.desc.Generation > desc.Generation {
 		return false
 	}
-	// The cache has a descriptor that's older or equal to desc (it should be
-	// equal because the desc that the caller supplied also came from the cache
-	// and the cache is not expected to go backwards). Evict it.
+	var etSequence roachpb.LeaseSequence
+	if lease != nil {
+		etSequence = lease.Sequence
+	}
+	// If the cached entry has the same descriptor but the cached lease is newer,
+	// don't evict.
+	if cachedEntry.lease.Sequence > etSequence {
+		return false
+	}
+
+	// Either the descriptor or lease we received is newer, so evict the current
+	// entry.
 	log.VEventf(ctx, 2, "evict cached descriptor: desc=%s", cachedEntry)
 	rc.delEntryLocked(rawEntry)
 	return true
@@ -1551,8 +1618,8 @@ func (e *CacheEntry) maybeUpdate(
 		updatedLease = true
 	}
 
-	// We only want to use the supplied rangeDesc if its generation indicates it's
-	// strictly newer than what the was in the cache entry.
+	// We only want to use the supplied rangeDesc if its generation indicates it
+	// is strictly newer than what the was in the cache entry.
 	if e.desc.Generation < rangeDesc.Generation {
 		newEntry.desc = *rangeDesc
 		updatedDesc = true

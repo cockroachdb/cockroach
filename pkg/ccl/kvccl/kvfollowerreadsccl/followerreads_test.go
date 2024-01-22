@@ -764,13 +764,6 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 					UseDatabase: "t",
 					Knobs: base.TestingKnobs{
 						KVClient: &kvcoord.ClientTestingKnobs{
-							// Inhibit the checking of connection health done by the
-							// GRPCTransport. This test wants to control what replica (which
-							// follower) a request is sent to and, depending on timing, the
-							// connection from n4 to the respective follower might not be
-							// heartbeated by the time the test wants to use it. Without this
-							// knob, that would cause the transport to reorder replicas.
-							DontConsiderConnHealth: true,
 							LatencyFunc: func(id roachpb.NodeID) (time.Duration, bool) {
 								if (id == 2) || (id == 3) {
 									return time.Millisecond, true
@@ -1031,7 +1024,6 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 				if i == gatewayNode {
 					knobs = base.TestingKnobs{
 						KVClient: &kvcoord.ClientTestingKnobs{
-							DontConsiderConnHealth: true,
 							// For the validLatencyFunc=true version of the
 							// test, the client pretends to have a low latency
 							// connection to n2. As a result, we expect n2 to be

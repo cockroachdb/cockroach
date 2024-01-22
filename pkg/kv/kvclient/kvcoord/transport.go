@@ -12,8 +12,6 @@ package kvcoord
 
 import (
 	"context"
-	"fmt"
-	"sort"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -21,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -35,11 +32,6 @@ import (
 type SendOptions struct {
 	class   rpc.ConnectionClass
 	metrics *DistSenderMetrics
-	// dontConsiderConnHealth, if set, makes the transport not take into
-	// consideration the connection health when deciding the ordering for
-	// replicas. When not set, replicas on nodes with unhealthy connections are
-	// deprioritized.
-	dontConsiderConnHealth bool
 }
 
 // TransportFactory encapsulates all interaction with the RPC
@@ -49,7 +41,7 @@ type SendOptions struct {
 //
 // The caller is responsible for ordering the replicas in the slice according to
 // the order in which the should be tried.
-type TransportFactory func(SendOptions, ReplicaSlice) (Transport, error)
+type TransportFactory func(SendOptions, roachpb.ReplicaSet) (Transport, error)
 
 // Transport objects can send RPCs to one or more replicas of a range.
 // All calls to Transport methods are made from a single thread, so
@@ -78,22 +70,9 @@ type Transport interface {
 	// - the replica that NextReplica() would return is skipped.
 	SkipReplica()
 
-	// MoveToFront locates the specified replica and moves it to the
-	// front of the ordering of replicas to try. If the replica has
-	// already been tried, it will be retried. Returns false if the specified
-	// replica can't be found and thus can't be moved to the front of the
-	// transport.
-	MoveToFront(roachpb.ReplicaDescriptor) bool
-
 	// Release releases any resources held by this Transport.
 	Release()
 }
-
-// These constants are used for the replica health map below.
-const (
-	healthUnhealthy = iota
-	healthHealthy
-)
 
 // grpcTransportFactoryImpl is the default TransportFactory, using GRPC.
 // Do not use this directly - use grpcTransportFactory instead.
@@ -101,43 +80,15 @@ const (
 // During race builds, we wrap this to hold on to and read all obtained
 // requests in a tight loop, exposing data races; see transport_race.go.
 func grpcTransportFactoryImpl(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, rs ReplicaSlice,
+	opts SendOptions, nodeDialer *nodedialer.Dialer, rs roachpb.ReplicaSet,
 ) (Transport, error) {
 	transport := grpcTransportPool.Get().(*grpcTransport)
-	// Grab the saved slice memory from grpcTransport.
-	replicas := transport.replicas
-
-	if cap(replicas) < len(rs) {
-		replicas = make([]roachpb.ReplicaDescriptor, len(rs))
-	} else {
-		replicas = replicas[:len(rs)]
-	}
-
-	// We'll map the index of the replica descriptor in its slice to its health.
-	var health util.FastIntMap
-	for i := range rs {
-		r := &rs[i]
-		replicas[i] = r.ReplicaDescriptor
-		healthy := nodeDialer.ConnHealth(r.NodeID, opts.class) == nil
-		if healthy {
-			health.Set(i, healthHealthy)
-		} else {
-			health.Set(i, healthUnhealthy)
-		}
-	}
 
 	*transport = grpcTransport{
-		opts:          opts,
-		nodeDialer:    nodeDialer,
-		class:         opts.class,
-		replicas:      replicas,
-		replicaHealth: health,
-	}
-
-	if !opts.dontConsiderConnHealth {
-		// Put known-healthy replica first, while otherwise respecting the existing
-		// ordering of the replicas.
-		transport.splitHealthy()
+		opts:       opts,
+		nodeDialer: nodeDialer,
+		class:      opts.class,
+		replicas:   rs.Descriptors(),
 	}
 
 	return transport, nil
@@ -149,9 +100,6 @@ type grpcTransport struct {
 	class      rpc.ConnectionClass
 
 	replicas []roachpb.ReplicaDescriptor
-	// replicaHealth maps replica index within the replicas slice to healthHealthy
-	// if healthy, and healthUnhealthy if unhealthy. Used by splitHealthy.
-	replicaHealth util.FastIntMap
 	// nextReplicaIdx represents the index into replicas of the next replica to be
 	// tried.
 	nextReplicaIdx int
@@ -267,59 +215,13 @@ func (gt *grpcTransport) SkipReplica() {
 	gt.nextReplicaIdx++
 }
 
-func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) bool {
-	for i := range gt.replicas {
-		if gt.replicas[i].IsSame(replica) {
-			// If we've already processed the replica, decrement the current
-			// index before we swap.
-			if i < gt.nextReplicaIdx {
-				gt.nextReplicaIdx--
-			}
-			// Swap the client representing this replica to the front.
-			gt.replicas[i], gt.replicas[gt.nextReplicaIdx] = gt.replicas[gt.nextReplicaIdx], gt.replicas[i]
-			return true
-		}
-	}
-	return false
-}
-
-// splitHealthy splits the grpcTransport's replica slice into healthy replica
-// and unhealthy replica, based on their connection state. Healthy replicas will
-// be rearranged first in the replicas slice, and unhealthy replicas will be
-// rearranged last. Within these two groups, the rearrangement will be stable.
-func (gt *grpcTransport) splitHealthy() {
-	sort.Stable((*byHealth)(gt))
-}
-
-// byHealth sorts a slice of replicas by their health with healthy first.
-type byHealth grpcTransport
-
-func (h *byHealth) Len() int { return len(h.replicas) }
-func (h *byHealth) Swap(i, j int) {
-	h.replicas[i], h.replicas[j] = h.replicas[j], h.replicas[i]
-	oldI := h.replicaHealth.GetDefault(i)
-	h.replicaHealth.Set(i, h.replicaHealth.GetDefault(j))
-	h.replicaHealth.Set(j, oldI)
-}
-func (h *byHealth) Less(i, j int) bool {
-	ih, ok := h.replicaHealth.Get(i)
-	if !ok {
-		panic(fmt.Sprintf("missing health info for %s", h.replicas[i]))
-	}
-	jh, ok := h.replicaHealth.Get(j)
-	if !ok {
-		panic(fmt.Sprintf("missing health info for %s", h.replicas[j]))
-	}
-	return ih == healthHealthy && jh != healthHealthy
-}
-
 // SenderTransportFactory wraps a client.Sender for use as a KV
 // Transport. This is useful for tests that want to use DistSender
 // without a full RPC stack.
 func SenderTransportFactory(tracer *tracing.Tracer, sender kv.Sender) TransportFactory {
-	return func(_ SendOptions, replicas ReplicaSlice) (Transport, error) {
+	return func(_ SendOptions, replicas roachpb.ReplicaSet) (Transport, error) {
 		// Always send to the first replica.
-		replica := replicas[0].ReplicaDescriptor
+		replica := replicas.First()
 		return &senderTransport{tracer, sender, replica, false}, nil
 	}
 }
@@ -388,10 +290,6 @@ func (s *senderTransport) NextReplica() roachpb.ReplicaDescriptor {
 func (s *senderTransport) SkipReplica() {
 	// Skipping the (only) replica makes the transport be exhausted.
 	s.called = true
-}
-
-func (s *senderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) bool {
-	return true
 }
 
 func (s *senderTransport) Release() {}

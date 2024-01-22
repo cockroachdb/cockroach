@@ -157,10 +157,6 @@ func (c *countConnectionsTransport) SkipReplica() {
 	c.wrapped.SkipReplica()
 }
 
-func (c *countConnectionsTransport) MoveToFront(descriptor roachpb.ReplicaDescriptor) bool {
-	return c.wrapped.MoveToFront(descriptor)
-}
-
 func (c *countConnectionsTransport) Release() {
 	c.wrapped.Release()
 }
@@ -169,7 +165,7 @@ func makeTransportFactory(
 	rfStreamEnabled bool, counts *internalClientCounts, wrapFn wrapRangeFeedClientFn,
 ) func(kvcoord.TransportFactory) kvcoord.TransportFactory {
 	return func(factory kvcoord.TransportFactory) kvcoord.TransportFactory {
-		return func(options kvcoord.SendOptions, slice kvcoord.ReplicaSlice) (kvcoord.Transport, error) {
+		return func(options kvcoord.SendOptions, slice roachpb.ReplicaSet) (kvcoord.Transport, error) {
 			transport, err := factory(options, slice)
 			if err != nil {
 				return nil, err
