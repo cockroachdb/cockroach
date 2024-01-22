@@ -8,7 +8,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP CON
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 2 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_i-)}
+ │         │    ├── PUBLIC → VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_i-), ReferencedColumnIDs: [1]}
  │         │    └── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_i", ConstraintID: 2 (check_i-)}
  │         └── 2 Mutation operations
  │              ├── MakePublicCheckConstraintValidated {"ConstraintID":2,"TableID":104}
@@ -16,13 +16,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP CON
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 2 elements transitioning toward ABSENT
- │    │    │    ├── VALIDATED → PUBLIC CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_i-)}
+ │    │    │    ├── VALIDATED → PUBLIC CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_i-), ReferencedColumnIDs: [1]}
  │    │    │    └── ABSENT    → PUBLIC ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_i", ConstraintID: 2 (check_i-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 2 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_i-)}
+ │         │    ├── PUBLIC → VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_i-), ReferencedColumnIDs: [1]}
  │         │    └── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_i", ConstraintID: 2 (check_i-)}
  │         └── 4 Mutation operations
  │              ├── MakePublicCheckConstraintValidated {"ConstraintID":2,"TableID":104}
@@ -32,7 +32,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP CON
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward ABSENT
-           │    └── VALIDATED → ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_i-)}
+           │    └── VALIDATED → ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_i-), ReferencedColumnIDs: [1]}
            └── 3 Mutation operations
                 ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
