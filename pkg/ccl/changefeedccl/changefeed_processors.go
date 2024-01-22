@@ -1628,20 +1628,43 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		highWater = cf.highWaterAtStart
 	}
 
-	recordID := progress.ProtectedTimestampRecord
-	if recordID == uuid.Nil {
+	if progress.ProtectedTimestampRecord == uuid.Nil {
 		ptr := createProtectedTimestampRecord(
 			ctx, cf.flowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater,
 		)
 		progress.ProtectedTimestampRecord = ptr.ID.GetUUID()
+		return pts.Protect(ctx, ptr)
+	}
+
+	log.VEventf(ctx, 2, "updating protected timestamp %v at %v", progress.ProtectedTimestampRecord, highWater)
+
+	rec, err := pts.GetRecord(ctx, progress.ProtectedTimestampRecord)
+	if err != nil {
+		return err
+	}
+
+	if rec.Target != nil {
+		return pts.UpdateTimestamp(ctx, progress.ProtectedTimestampRecord, highWater)
+	}
+
+	// If this changefeed was created in 22.1 or earlier, it may be using a deprecated pts record in which
+	// the target field is nil. If so, we "migrate" it to use the new style of pts records and delete the old one.
+	preserveDeprecatedPts := cf.knobs.PreserveDeprecatedPts != nil && cf.knobs.PreserveDeprecatedPts()
+	if !preserveDeprecatedPts {
+		prevRecordId := progress.ProtectedTimestampRecord
+		ptr := createProtectedTimestampRecord(
+			ctx, cf.flowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater,
+		)
 		if err := pts.Protect(ctx, ptr); err != nil {
 			return err
 		}
-	} else {
-		log.VEventf(ctx, 2, "updating protected timestamp %v at %v", recordID, highWater)
-		if err := pts.UpdateTimestamp(ctx, recordID, highWater); err != nil {
+		progress.ProtectedTimestampRecord = ptr.ID.GetUUID()
+		if err := pts.Release(ctx, prevRecordId); err != nil {
 			return err
 		}
+
+		log.Eventf(ctx, "created new pts record %v to replace old pts record %v at %v",
+			progress.ProtectedTimestampRecord, prevRecordId, highWater)
 	}
 
 	return nil

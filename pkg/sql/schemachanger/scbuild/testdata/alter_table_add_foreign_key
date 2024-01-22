@@ -10,7 +10,7 @@ ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i);
   {indexId: 1, tableId: 105}
 - [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 105}
-- [[ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, PUBLIC], ABSENT]
+- [[ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, PUBLIC], ABSENT]
   {columnIds: [1], constraintId: 2, referencedColumnIds: [1], referencedTableId: 104, tableId: 105}
 - [[ConstraintWithoutIndexName:{DescID: 105, Name: t1_i_fkey, ConstraintID: 2}, PUBLIC], ABSENT]
   {constraintId: 2, name: t1_i_fkey, tableId: 105}

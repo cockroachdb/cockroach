@@ -11,7 +11,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CON
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 2 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → WRITE_ONLY ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedDescID: 105 (t2)}
+ │         │    ├── ABSENT → WRITE_ONLY ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedColumnIDs: [1], ReferencedDescID: 105 (t2)}
  │         │    └── ABSENT → PUBLIC     ConstraintWithoutIndexName:{DescID: 104 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey+)}
  │         └── 2 Mutation operations
  │              ├── AddForeignKeyConstraint {"ConstraintID":2,"ReferencedTableID":105,"TableID":104,"Validity":2}
@@ -19,13 +19,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CON
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 2 elements transitioning toward PUBLIC
- │    │    │    ├── WRITE_ONLY → ABSENT ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedDescID: 105 (t2)}
+ │    │    │    ├── WRITE_ONLY → ABSENT ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedColumnIDs: [1], ReferencedDescID: 105 (t2)}
  │    │    │    └── PUBLIC     → ABSENT ConstraintWithoutIndexName:{DescID: 104 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey+)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 2 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → WRITE_ONLY ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedDescID: 105 (t2)}
+ │         │    ├── ABSENT → WRITE_ONLY ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedColumnIDs: [1], ReferencedDescID: 105 (t2)}
  │         │    └── ABSENT → PUBLIC     ConstraintWithoutIndexName:{DescID: 104 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey+)}
  │         └── 5 Mutation operations
  │              ├── AddForeignKeyConstraint {"ConstraintID":2,"ReferencedTableID":105,"TableID":104,"Validity":2}
@@ -36,12 +36,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CON
  └── PostCommitPhase
       ├── Stage 1 of 2 in PostCommitPhase
       │    ├── 1 element transitioning toward PUBLIC
-      │    │    └── WRITE_ONLY → VALIDATED ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedDescID: 105 (t2)}
+      │    │    └── WRITE_ONLY → VALIDATED ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedColumnIDs: [1], ReferencedDescID: 105 (t2)}
       │    └── 1 Validation operation
       │         └── ValidateConstraint {"ConstraintID":2,"TableID":104}
       └── Stage 2 of 2 in PostCommitPhase
            ├── 1 element transitioning toward PUBLIC
-           │    └── VALIDATED → PUBLIC ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedDescID: 105 (t2)}
+           │    └── VALIDATED → PUBLIC ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedColumnIDs: [1], ReferencedDescID: 105 (t2)}
            └── 4 Mutation operations
                 ├── MakeValidatedForeignKeyConstraintPublic {"ConstraintID":2,"ReferencedTableID":105,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
