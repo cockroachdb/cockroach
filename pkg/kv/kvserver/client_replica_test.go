@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
@@ -4075,7 +4076,8 @@ func TestStrictGCEnforcement(t *testing.T) {
 		syncutil.Mutex
 		blockOnTimestampUpdate func()
 	}
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+
+	args := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
@@ -4092,7 +4094,21 @@ func TestStrictGCEnforcement(t *testing.T) {
 				},
 			},
 		},
-	})
+	}
+
+	// TODO(#119243): remove this test in 24.2
+	// One subtest is a regression test for old-style PTS records.
+	// Randomly set an old cluster version to test this functionality.
+	testCache := false
+	if rand.Intn(2) == 0 {
+		testCache = true
+		args.ServerArgs.Knobs.Server = &server.TestingKnobs{
+			DisableAutomaticVersionUpgrade: make(chan struct{}),
+			BinaryVersionOverride:          (clusterversion.V24_1_MigrateOldStylePTSRecords - 1).Version(),
+		}
+	}
+
+	tc := testcluster.StartTestCluster(t, 3, args)
 	defer tc.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
@@ -4309,6 +4325,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 		_, err := txn.Scan(ctx, descriptorTable, descriptorTable.PrefixEnd(), 1)
 		require.NoError(t, err)
 	})
+
 	// This is a regression test for a bug where the implied GCThreshold computed
 	// when evaluating whether a batch request is below the replicas' GCThreshold,
 	// was not taking the `readAt` of the cached PTS state into consideration.
@@ -4318,6 +4335,9 @@ func TestStrictGCEnforcement(t *testing.T) {
 	// erroneously reject requests even though their request time was above the
 	// "correct" GCThreshold.
 	t.Run("implied gcthreshold respects cached readAt", func(t *testing.T) {
+		if !testCache {
+			return
+		}
 		s := tc.Server(0)
 
 		// Block the KVSubscriber rangefeed from progressing.
