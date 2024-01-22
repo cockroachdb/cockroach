@@ -17,7 +17,6 @@ ok
 
 updates
 ----
-Incremental Update
 update: ten=10 name=foo state=add service=shared cap={can_admin_unsplit:true}
 update: ten=11 name=bar state=ready service=none cap={default}
 
@@ -32,7 +31,6 @@ ok
 
 updates
 ----
-Incremental Update
 update: ten=11 name= state=add service=none cap={can_admin_unsplit:true}
 
 get-capabilities ten=11
@@ -45,7 +43,6 @@ ok
 
 updates
 ----
-Incremental Update
 delete: ten=10
 
 get-capabilities ten=10
@@ -72,7 +69,6 @@ ok
 
 updates
 ----
-Incremental Update
 update: ten=15 name=bli state=add service=external cap={can_admin_unsplit:true}
 
 # Ensure only the last update is applied, even when there are multiple updates
@@ -91,7 +87,6 @@ ok
 
 updates
 ----
-Incremental Update
 delete: ten=11
 
 get-capabilities ten=11
@@ -117,7 +112,6 @@ ok
 
 updates
 ----
-Incremental Update
 update: ten=15 name=blax state=ready service=none cap={default}
 
 flush-state

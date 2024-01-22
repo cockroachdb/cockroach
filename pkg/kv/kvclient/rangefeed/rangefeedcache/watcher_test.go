@@ -54,7 +54,8 @@ func TestWatchAuthErr(t *testing.T) {
 		tenant.RangeFeedFactory().(*rangefeed.Factory),
 		1024,
 		[]roachpb.Span{hostScratchSpan},
-		false, /*=withPrevValue*/
+		false, /* withPrevValue */
+		true,  /* withRowTSInInitialScan */
 		func(ctx context.Context, kv *kvpb.RangeFeedValue) rangefeedbuffer.Event {
 			t.Fatalf("rangefeed should fail before producing results")
 			return nil

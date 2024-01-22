@@ -45,12 +45,14 @@ func NewCache(
 	// many rows.
 	const bufferSize = 1 << 20 // infinite?
 	const withPrevValue = false
+	const withRowTSInInitialScan = true
 	c := Cache{}
 	c.w = NewWatcher(
 		name, clock, f,
 		bufferSize,
 		spans,
 		withPrevValue,
+		withRowTSInInitialScan,
 		passThroughTranslation,
 		c.handleUpdate,
 		nil)

@@ -82,6 +82,7 @@ func NewWithAdditionalProvider(
 	// many rows.
 	const bufferSize = 1 << 20 // infinite?
 	const withPrevValue = false
+	const withRowTSInInitialScan = true
 	c := Cache{
 		defaultZoneConfig: defaultZoneConfig,
 	}
@@ -103,6 +104,7 @@ func NewWithAdditionalProvider(
 		bufferSize,
 		spans,
 		withPrevValue,
+		withRowTSInInitialScan,
 		passThroughTranslation,
 		c.handleUpdate,
 		nil)

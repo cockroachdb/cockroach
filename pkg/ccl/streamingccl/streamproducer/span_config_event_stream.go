@@ -97,6 +97,7 @@ func (s *spanConfigEventStream) Start(ctx context.Context, txn *kv.Txn) error {
 		defaultBatchSize,
 		roachpb.Spans{s.spec.Span},
 		true, // withPrevValue
+		true, // withRowTSInInitialScan
 		spanconfigkvsubscriber.NewSpanConfigDecoder().TranslateEvent,
 		s.handleUpdate,
 		rangefeedCacheKnobs,

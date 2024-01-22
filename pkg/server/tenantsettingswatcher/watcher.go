@@ -194,6 +194,7 @@ func (w *Watcher) startRangeFeed(
 		0, /* bufferSize */
 		[]roachpb.Span{tenantSettingsTableSpan},
 		false, /* withPrevValue */
+		true,  /* withRowTSInInitialScan */
 		translateEvent,
 		onUpdate,
 		nil, /* knobs */
