@@ -51,7 +51,8 @@ const templateText = `
 {{- define "runLogicTest" }}
 {{- if .LogicTest -}}
 func runLogicTest(t *testing.T, file string) {
-	skip.UnderDeadlock(t, "times out and/or hangs")
+	{{if and .SkipCclUnderRace .Ccl}}skip.UnderRace(t, "times out and/or hangs")
+	{{end}}skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(logicTestDir, file))
 }
 {{ end }}
