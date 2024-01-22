@@ -49,7 +49,7 @@ func runImportMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster,
 			return err
 		}
 		node := h.RandomNode(r, c.All())
-		cmd := tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, warehouses) + fmt.Sprintf(" {pgurl%s}", c.Node(node))
+		cmd := tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, "", warehouses) + fmt.Sprintf(" {pgurl%s}", c.Node(node))
 		l.Printf("executing %q on node %d", cmd, node)
 		return c.RunE(ctx, option.WithNodes(c.Node(node)), cmd)
 	}
