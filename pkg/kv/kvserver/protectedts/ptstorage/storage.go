@@ -14,6 +14,7 @@ package ptstorage
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -87,16 +88,30 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 	if err != nil { // how can this possibly fail?
 		return errors.Wrap(err, "failed to marshal spans")
 	}
-	it, err := p.txn.QueryIteratorEx(ctx, "protectedts-protect", p.txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		protectQuery,
-		s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
+
+	updateMeta := usePTSMetaTable(ctx, p.settings, p.knobs)
+	query := protectQuery
+	args := []interface{}{s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
 		r.ID, r.Timestamp.AsOfSystemTime(),
 		r.MetaType, meta,
-		len(r.DeprecatedSpans), encodedTarget, encodedTarget)
+		len(r.DeprecatedSpans), encodedTarget, encodedTarget}
+
+	if !updateMeta {
+		query = protectInsertRecordCTE
+		args = []interface{}{
+			r.ID, r.Timestamp.AsOfSystemTime(),
+			r.MetaType, meta,
+			len(r.DeprecatedSpans), encodedTarget, encodedTarget}
+	}
+
+	it, err := p.txn.QueryIteratorEx(ctx, "protectedts-protect", p.txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		query,
+		args...)
 	if err != nil {
 		return errors.Wrapf(err, "failed to write record %v", r.ID)
 	}
+
 	ok, err := it.Next(ctx)
 	if err != nil {
 		return errors.Wrapf(err, "failed to write record %v", r.ID)
@@ -104,10 +119,19 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 	if !ok {
 		return errors.Newf("failed to write record %v", r.ID)
 	}
-	row := it.Cur()
-	if err := it.Close(); err != nil {
-		log.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
+
+	defer func() {
+		if err := it.Close(); err != nil {
+			log.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
+		}
+	}()
+
+	if !updateMeta {
+
+		return nil
 	}
+
+	row := it.Cur()
 	if failed := *row[0].(*tree.DBool); failed {
 		curBytes := int64(*row[1].(*tree.DInt))
 		recordBytes := int64(len(encodedTarget) + len(r.Meta) + len(r.MetaType))
@@ -157,9 +181,13 @@ func (p storage) MarkVerified(ctx context.Context, id uuid.UUID) error {
 }
 
 func (p storage) Release(ctx context.Context, id uuid.UUID) error {
+	query := releaseQueryWithMeta
+	if !usePTSMetaTable(ctx, p.settings, p.knobs) {
+		query = releaseQuery
+	}
 	numRows, err := p.txn.ExecEx(ctx, "protectedts-Release", p.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		releaseQuery, id.GetBytesMut())
+		query, id.GetBytesMut())
 	if err != nil {
 		return errors.Wrapf(err, "failed to release record %v", id)
 	}
@@ -228,9 +256,13 @@ func (p *storage) getRecords(ctx context.Context) ([]ptpb.Record, error) {
 }
 
 func (p storage) UpdateTimestamp(ctx context.Context, id uuid.UUID, timestamp hlc.Timestamp) error {
+	query := updateTimestampQuery
+	if !usePTSMetaTable(ctx, p.settings, p.knobs) {
+		query = updateTimestampUpsertRecordCTE
+	}
 	row, err := p.txn.QueryRowEx(ctx, "protectedts-update", p.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		updateTimestampQuery, id.GetBytesMut(), timestamp.AsOfSystemTime())
+		query, id.GetBytesMut(), timestamp.AsOfSystemTime())
 	if err != nil {
 		return errors.Wrapf(err, "failed to update record %v", id)
 	}
@@ -255,6 +287,12 @@ func useDeprecatedProtectedTSStorage(
 	ctx context.Context, st *cluster.Settings, knobs *protectedts.TestingKnobs,
 ) bool {
 	return knobs.DisableProtectedTimestampForMultiTenant
+}
+
+func usePTSMetaTable(
+	ctx context.Context, st *cluster.Settings, knobs *protectedts.TestingKnobs,
+) bool {
+	return knobs.UseMetaTable || !st.Version.IsActive(ctx, clusterversion.V24_1)
 }
 
 // New creates a new Storage.

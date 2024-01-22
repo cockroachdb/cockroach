@@ -34,7 +34,7 @@ WITH
     current_meta AS (` + currentMetaCTE + `),
     checks AS (` + protectChecksCTE + `),
     updated_meta AS (` + protectUpsertMetaCTE + `),
-    new_record AS (` + protectInsertRecordCTE + `)
+    new_record AS (` + protectInsertRecordCTEWithChecks + `)
 SELECT
     failed,
     total_bytes AS prev_total_bytes,
@@ -105,6 +105,15 @@ RETURNING
 	protectInsertRecordCTE = `
 INSERT
 INTO
+   system.protected_ts_records (id, ts, meta_type, meta, num_spans, spans, target)
+ (SELECT $1, $2, $3, $4, $5, $6, $7)
+RETURNING
+   id;
+`
+
+	protectInsertRecordCTEWithChecks = `
+INSERT
+INTO
     system.protected_ts_records (id, ts, meta_type, meta, num_spans, spans, target)
 (
     SELECT
@@ -170,7 +179,7 @@ RETURNING
     true
 `
 
-	releaseQuery = `
+	releaseQueryWithMeta = `
 WITH
     current_meta AS (` + currentMetaCTE + `),
     record AS (` + releaseSelectRecordCTE + `),
@@ -181,6 +190,14 @@ WHERE
     EXISTS(SELECT NULL FROM record WHERE r.id = record.id)
 RETURNING
     NULL;`
+
+	releaseQuery = `
+DELETE FROM
+    system.protected_ts_records AS r
+WHERE
+    r.id = $1 
+RETURNING
+    r.id;`
 
 	// Collect the number of spans for the record identified by $1.
 	releaseSelectRecordCTE = `
