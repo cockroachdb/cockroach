@@ -2139,6 +2139,21 @@ deprules
     - $dependent-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($column, $column-Target, $column-Node)
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: column public before non-index-backed constraint (including hash-sharded) is created
+  from: column-Node
+  kind: Precedence
+  to: constraint-Node
+  query:
+    - $column[Type] = '*scpb.Column'
+    - $constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.ColumnNotNull', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
+    - $column[ColumnID] = $columnID
+    - $constraint[ReferencedColumnIDs] CONTAINS $columnID
+    - joinOnDescID($column, $constraint, $table-id)
+    - ToPublicOrTransient($column-Target, $constraint-Target)
+    - $column-Node[CurrentStatus] = PUBLIC
+    - $constraint-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
 - name: column type dependents removed right before column type
   from: dependent-Node
   kind: SameStagePrecedence
