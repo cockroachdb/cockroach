@@ -5484,6 +5484,7 @@ client_encoding                                            UTF8
 client_min_messages                                        notice
 copy_from_atomic_enabled                                   on
 copy_from_retries_enabled                                  on
+copy_num_retries_per_batch                                 5
 copy_transaction_quality_of_service                        background
 copy_write_pipelining_enabled                              off
 cost_scans_with_default_col_size                           off

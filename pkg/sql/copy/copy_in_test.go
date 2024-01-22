@@ -428,22 +428,34 @@ func TestCopyFromRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const numRows = sql.CopyBatchRowSizeDefault * 5
+	// Ensure that the COPY batch size isn't too large (this test becomes too
+	// slow when metamorphic sql.CopyBatchRowSize is set to a relatively large
+	// number).
+	const maxCopyBatchRowSize = 1000
+	if sql.CopyBatchRowSize > maxCopyBatchRowSize {
+		sql.SetCopyFromBatchSize(maxCopyBatchRowSize)
+	}
+
+	// sql.CopyBatchRowSize can change depending on the metamorphic
+	// randomization, so we derive all rows counts from it.
+	var numRows = sql.CopyBatchRowSize * 5
 
 	testCases := []struct {
-		desc           string
-		hook           func(attemptNum int) error
-		atomicEnabled  bool
-		retriesEnabled bool
-		inTxn          bool
-		expectedRows   int
-		expectedErr    bool
+		desc               string
+		hookBefore         func(attemptNum int) error
+		hookAfter          func(attemptNum int) error
+		atomicEnabled      bool
+		retriesEnabled     bool
+		autoCommitDisabled bool
+		inTxn              bool
+		expectedRows       int
+		expectedErr        bool
 	}{
 		{
 			desc:           "failure in atomic transaction does not retry",
 			atomicEnabled:  true,
 			retriesEnabled: true,
-			hook: func(attemptNum int) error {
+			hookBefore: func(attemptNum int) error {
 				if attemptNum == 1 {
 					return &kvpb.TransactionRetryWithProtoRefreshError{}
 				}
@@ -455,7 +467,7 @@ func TestCopyFromRetries(t *testing.T) {
 			desc:           "does not attempt to retry if disabled",
 			atomicEnabled:  false,
 			retriesEnabled: false,
-			hook: func(attemptNum int) error {
+			hookBefore: func(attemptNum int) error {
 				if attemptNum == 1 {
 					return &kvpb.TransactionRetryWithProtoRefreshError{}
 				}
@@ -468,7 +480,7 @@ func TestCopyFromRetries(t *testing.T) {
 			atomicEnabled:  true,
 			retriesEnabled: true,
 			inTxn:          true,
-			hook: func(attemptNum int) error {
+			hookBefore: func(attemptNum int) error {
 				if attemptNum == 1 {
 					return &kvpb.TransactionRetryWithProtoRefreshError{}
 				}
@@ -477,10 +489,44 @@ func TestCopyFromRetries(t *testing.T) {
 			expectedErr: true,
 		},
 		{
-			desc:           "retries successfully on every batch",
+			desc:           "retries successfully on every batch (errors before)",
 			atomicEnabled:  false,
 			retriesEnabled: true,
-			hook: func(attemptNum int) error {
+			hookBefore: func(attemptNum int) error {
+				if attemptNum%2 == 1 {
+					return &kvpb.TransactionRetryWithProtoRefreshError{}
+				}
+				return nil
+			},
+			expectedRows: numRows,
+		},
+		{
+			// In this scenario, only the first COPY batch is auto-committed,
+			// after which we inject a retryable error. The txn cannot be rolled
+			// back, so the COPY then returns that error to the client, yet the
+			// first batch of rows is already in the table.
+			desc:           "cannot roll back committed txn (errors after)",
+			atomicEnabled:  false,
+			retriesEnabled: true,
+			hookAfter: func(attemptNum int) error {
+				if attemptNum%2 == 1 {
+					return &kvpb.TransactionRetryWithProtoRefreshError{}
+				}
+				return nil
+			},
+			expectedRows: sql.CopyBatchRowSize,
+			expectedErr:  true,
+		},
+		{
+			// When auto commit is disabled, each COPY batch ends being
+			// processed twice - after the first attempt on each batch we inject
+			// a retryable error, which is then successfully retried on the
+			// second attempt.
+			desc:               "retries successfully on every batch (errors after, no auto commit)",
+			autoCommitDisabled: true,
+			atomicEnabled:      false,
+			retriesEnabled:     true,
+			hookAfter: func(attemptNum int) error {
 				if attemptNum%2 == 1 {
 					return &kvpb.TransactionRetryWithProtoRefreshError{}
 				}
@@ -492,7 +538,7 @@ func TestCopyFromRetries(t *testing.T) {
 			desc:           "eventually dies on too many restarts",
 			atomicEnabled:  false,
 			retriesEnabled: true,
-			hook: func(attemptNum int) error {
+			hookBefore: func(attemptNum int) error {
 				return &kvpb.TransactionRetryWithProtoRefreshError{}
 			},
 			expectedErr: true,
@@ -501,13 +547,17 @@ func TestCopyFromRetries(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			knobs := &sql.ExecutorTestingKnobs{
+				DisableAutoCommitDuringExec: tc.autoCommitDisabled,
+			}
 			var params base.TestServerArgs
-			var attemptNumber int
-			params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-				BeforeCopyFromInsert: func(txn *kv.Txn) error {
+			params.Knobs.SQLExecutor = knobs
+			if tc.hookBefore != nil {
+				var attemptNumber int
+				knobs.CopyFromInsertBeforeBatch = func(txn *kv.Txn) error {
 					if !tc.inTxn {
-						// When we're not in an explicit txn, we expect that all
-						// txns used by the COPY use the background QoS.
+						// When we're not in an explicit txn, we expect that
+						// all txns used by the COPY use the background QoS.
 						if txn.AdmissionHeader().Priority != int32(admissionpb.UserLowPri) {
 							t.Errorf(
 								"unexpected QoS level %d (expected %d)",
@@ -516,8 +566,15 @@ func TestCopyFromRetries(t *testing.T) {
 						}
 					}
 					attemptNumber++
-					return tc.hook(attemptNumber)
-				},
+					return tc.hookBefore(attemptNumber)
+				}
+			}
+			if tc.hookAfter != nil {
+				var attemptNumber int
+				knobs.CopyFromInsertAfterBatch = func() error {
+					attemptNumber++
+					return tc.hookAfter(attemptNumber)
+				}
 			}
 			srv, db, _ := serverutils.StartServer(t, params)
 			defer srv.Stopper().Stop(context.Background())

@@ -1650,10 +1650,16 @@ type ExecutorTestingKnobs struct {
 	// descriptor IDs at the cost of decreased parallelism.
 	UseTransactionalDescIDGenerator bool
 
-	// BeforeCopyFromInsert, if set, will be called during a COPY FROM insert statement.
-	BeforeCopyFromInsert func(txn *kv.Txn) error
+	// CopyFromInsertBeforeBatch, if set, will be called during a COPY FROM
+	// insert statement before each COPY batch.
+	CopyFromInsertBeforeBatch func(txn *kv.Txn) error
 
-	// CopyFromInsertRetry, if set, will be called when a COPY FROM insert statement is retried.
+	// CopyFromInsertAfterBatch, if set, will be called during a COPY FROM
+	// insert statement after each COPY batch.
+	CopyFromInsertAfterBatch func() error
+
+	// CopyFromInsertRetry, if set, will be called when a COPY FROM insert
+	// statement is retried.
 	CopyFromInsertRetry func() error
 
 	// ForceSQLLivenessSession will force the use of a sqlliveness session for
@@ -3405,6 +3411,10 @@ func (m *sessionDataMutator) SetCopyQualityOfService(val sessiondatapb.QoSLevel)
 
 func (m *sessionDataMutator) SetCopyWritePipeliningEnabled(val bool) {
 	m.data.CopyWritePipeliningEnabled = val
+}
+
+func (m *sessionDataMutator) SetCopyNumRetriesPerBatch(val int32) {
+	m.data.CopyNumRetriesPerBatch = val
 }
 
 func (m *sessionDataMutator) SetOptSplitScanLimit(val int32) {
