@@ -19,6 +19,7 @@ import "roachpb/data.proto";
 import "kv/kvpb/errors.proto";
 import "roachpb/metadata.proto";
 import "roachpb/span_config.proto";
+import "rpc/rpcpb/rpc.proto";
 import "settings/encoding.proto";
 import "sql/catalog/fetchpb/index_fetch.proto";
 import "storage/enginepb/mvcc.proto";
@@ -2918,9 +2919,20 @@ message Header {
   // and/or been explicitly committed by a RecoverTxn request. See #103817.
   bool ambiguous_replay_protection = 32;
 
+  // ConnectionClass specifies the preferred RPC connection class to use for
+  // sending or retransmitting this BatchRequest.
+  //
+  // This is only a hint. Senders of this request may override this preference.
+  // For example, requests to some critical system ranges can be "upgraded" to
+  // the SYSTEM class.
+  //
+  // If the enum value is unknown (for instance, may happen when the cluster is
+  // in a mixed-version state after a new value got added), DEFAULT is assumed.
+  cockroach.rpc.ConnectionClass connection_class = 33;
+
   reserved 7, 10, 12, 14, 20;
 
-  // Next ID: 33
+  // Next ID: 34
 }
 
 // BoundedStalenessHeader contains configuration values pertaining to bounded
