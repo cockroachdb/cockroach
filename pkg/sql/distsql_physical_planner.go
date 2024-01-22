@@ -238,6 +238,7 @@ func (dsp *DistSQLPlanner) GetAllInstancesByLocality(
 	if err != nil {
 		return nil, err
 	}
+	log.VEventf(ctx, 2, "resolved sql instances: %v", all)
 	var pos int
 	for _, n := range all {
 		if ok, _ := n.Locality.Matches(filter); ok {
@@ -245,6 +246,8 @@ func (dsp *DistSQLPlanner) GetAllInstancesByLocality(
 			pos++
 		}
 	}
+	log.VEventf(ctx, 2, "found %d instances matching locality filter %s; matching instances: %v",
+		pos, filter, all[:pos])
 	if pos == 0 {
 		return nil, errors.Newf("no instances found matching locality filter %s", filter.String())
 	}
