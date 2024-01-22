@@ -451,6 +451,7 @@ type testCase struct {
 	name                   string
 	ops                    []op
 	runWithDeprecatedSpans bool
+	runWithoutMetaTable    bool
 }
 
 func (test testCase) run(t *testing.T) {
@@ -459,9 +460,12 @@ func (test testCase) run(t *testing.T) {
 	var params base.TestServerArgs
 
 	ptsKnobs := &protectedts.TestingKnobs{}
+	params.Knobs.ProtectedTS = ptsKnobs
 	if test.runWithDeprecatedSpans {
 		ptsKnobs.DisableProtectedTimestampForMultiTenant = true
-		params.Knobs.ProtectedTS = ptsKnobs
+	}
+	if !test.runWithoutMetaTable {
+		ptsKnobs.UseMetaTable = true
 	}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
@@ -643,7 +647,7 @@ func TestCorruptData(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					SpanConfig:  &spanconfig.TestingKnobs{ManagerDisableJobCreation: true},
-					ProtectedTS: &protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true},
+					ProtectedTS: &protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true, UseMetaTable: true},
 				},
 			},
 		})
@@ -664,6 +668,7 @@ func TestCorruptData(t *testing.T) {
 
 		var params base.TestServerArgs
 		params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true}
+		params.Knobs.ProtectedTS = &protectedts.TestingKnobs{UseMetaTable: true}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 		defer tc.Stopper().Stop(ctx)
 
@@ -681,6 +686,7 @@ func TestCorruptData(t *testing.T) {
 
 		var params base.TestServerArgs
 		params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true}
+		params.Knobs.ProtectedTS = &protectedts.TestingKnobs{UseMetaTable: true}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 		defer tc.Stopper().Stop(ctx)
 

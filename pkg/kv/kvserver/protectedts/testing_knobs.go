@@ -21,6 +21,10 @@ type TestingKnobs struct {
 	//
 	// TODO(adityamaru): Delete in 22.2.
 	DisableProtectedTimestampForMultiTenant bool
+
+	// UseMetaTable	forces PTS management to update the meta table whenever
+	// any record is updated.
+	UseMetaTable bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
