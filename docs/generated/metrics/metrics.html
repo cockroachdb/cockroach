@@ -1558,6 +1558,10 @@
 <tr><td>SERVER</td><td>sys.go.allocbytes</td><td>Current bytes of memory allocated by go</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.go.totalbytes</td><td>Total bytes of memory allocated by go, but not released</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.goroutines</td><td>Current number of goroutines</td><td>goroutines</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>SERVER</td><td>sys.heap.allocbytes</td><td>Cumulative bytes allocated for heap objects.</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>SERVER</td><td>sys.heap.heapfragmentbytes</td><td>Total heap fragmentation bytes, derived from bytes in in-use spans subtracts bytes allocated</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>SERVER</td><td>sys.heap.heapreleasedbytes</td><td>Total bytes returned to the OS from heap.</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>SERVER</td><td>sys.heap.heapreservedbytes</td><td>Total bytes reserved by heap, derived from bytes in idle (unused) spans subtracts bytes returned to the OS</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.host.disk.io.time</td><td>Time spent reading from or writing to all disks since this process started (as reported by the OS)</td><td>Time</td><td>GAUGE</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.host.disk.iopsinprogress</td><td>IO operations currently in progress on this host (as reported by the OS)</td><td>Operations</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.host.disk.read.bytes</td><td>Bytes read from all disks since this process started (as reported by the OS)</td><td>Bytes</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
@@ -1577,6 +1581,7 @@
 <tr><td>SERVER</td><td>sys.host.net.send.packets</td><td>Packets sent on all network interfaces since this process started (as reported by the OS)</td><td>Packets</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.rss</td><td>Current process RSS</td><td>RSS</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.runnable.goroutines.per.cpu</td><td>Average number of goroutines that are waiting to run, normalized by number of cores</td><td>goroutines</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>SERVER</td><td>sys.stack.systembytes</td><td>Bytes of stack memory obtained from the OS.</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.totalmem</td><td>Total memory (both free and used)</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.uptime</td><td>Process uptime</td><td>Uptime</td><td>GAUGE</td><td>SECONDS</td><td>AVG</td><td>NONE</td></tr>
 </tbody>

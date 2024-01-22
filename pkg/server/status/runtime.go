@@ -75,6 +75,36 @@ var (
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaMemStackSysBytes = metric.Metadata{
+		Name:        "sys.stack.systembytes",
+		Help:        "Bytes of stack memory obtained from the OS.",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaHeapFragmentBytes = metric.Metadata{
+		Name:        "sys.heap.heapfragmentbytes",
+		Help:        "Total heap fragmentation bytes, derived from bytes in in-use spans subtracts bytes allocated",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaHeapReservedBytes = metric.Metadata{
+		Name:        "sys.heap.heapreservedbytes",
+		Help:        "Total bytes reserved by heap, derived from bytes in idle (unused) spans subtracts bytes returned to the OS",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaHeapReleasedBytes = metric.Metadata{
+		Name:        "sys.heap.heapreleasedbytes",
+		Help:        "Total bytes returned to the OS from heap.",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaTotalAlloc = metric.Metadata{
+		Name:        "sys.heap.allocbytes",
+		Help:        "Cumulative bytes allocated for heap objects.",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
 	metaGCCount = metric.Metadata{
 		Name:        "sys.gc.count",
 		Help:        "Total number of GC runs",
@@ -338,6 +368,11 @@ type RuntimeStatSampler struct {
 	GcCount                  *metric.Gauge
 	GcPauseNS                *metric.Gauge
 	GcPausePercent           *metric.GaugeFloat64
+	MemStackSysBytes         *metric.Gauge
+	HeapFragmentBytes        *metric.Gauge
+	HeapReservedBytes        *metric.Gauge
+	HeapReleasedBytes        *metric.Gauge
+	TotalAlloc               *metric.Gauge
 	// CPU stats for the CRDB process usage.
 	CPUUserNS              *metric.Gauge
 	CPUUserPercent         *metric.GaugeFloat64
@@ -421,6 +456,11 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		GoTotalBytes:             metric.NewGauge(metaGoTotalBytes),
 		CgoAllocBytes:            metric.NewGauge(metaCgoAllocBytes),
 		CgoTotalBytes:            metric.NewGauge(metaCgoTotalBytes),
+		MemStackSysBytes:         metric.NewGauge(metaMemStackSysBytes),
+		HeapFragmentBytes:        metric.NewGauge(metaHeapFragmentBytes),
+		HeapReservedBytes:        metric.NewGauge(metaHeapReservedBytes),
+		HeapReleasedBytes:        metric.NewGauge(metaHeapReleasedBytes),
+		TotalAlloc:               metric.NewGauge(metaTotalAlloc),
 		GcCount:                  metric.NewGauge(metaGCCount),
 		GcPauseNS:                metric.NewGauge(metaGCPauseNS),
 		GcPausePercent:           metric.NewGaugeFloat64(metaGCPausePercent),
@@ -634,6 +674,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
 	goStatsStaleness := float32(timeutil.Since(ms.Collected)) / float32(time.Second)
 	goTotal := ms.Sys - ms.HeapReleased
+	heapFragment := ms.HeapInuse - ms.HeapAlloc
+	heapReserved := ms.HeapIdle - ms.HeapReleased
 
 	stats := &eventpb.RuntimeStats{
 		MemRSSBytes:       mem.Resident,
@@ -642,8 +684,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 		GoAllocBytes:      ms.HeapAlloc,
 		GoTotalBytes:      goTotal,
 		GoStatsStaleness:  goStatsStaleness,
-		HeapFragmentBytes: ms.HeapInuse - ms.HeapAlloc,
-		HeapReservedBytes: ms.HeapIdle - ms.HeapReleased,
+		HeapFragmentBytes: heapFragment,
+		HeapReservedBytes: heapReserved,
 		HeapReleasedBytes: ms.HeapReleased,
 		CGoAllocBytes:     cs.CGoAllocatedBytes,
 		CGoTotalBytes:     cs.CGoTotalBytes,
@@ -668,6 +710,11 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	rsr.RunnableGoroutinesPerCPU.Update(runnableAvg)
 	rsr.CgoAllocBytes.Update(int64(cs.CGoAllocatedBytes))
 	rsr.CgoTotalBytes.Update(int64(cs.CGoTotalBytes))
+	rsr.MemStackSysBytes.Update(int64(ms.StackSys))
+	rsr.HeapFragmentBytes.Update(int64(heapFragment))
+	rsr.HeapReservedBytes.Update(int64(heapReserved))
+	rsr.HeapReleasedBytes.Update(int64(ms.HeapReleased))
+	rsr.TotalAlloc.Update(int64(ms.TotalAlloc))
 	rsr.GcCount.Update(gc.NumGC)
 	rsr.GcPauseNS.Update(int64(gc.PauseTotal))
 	rsr.GcPausePercent.Update(gcPauseRatio)
