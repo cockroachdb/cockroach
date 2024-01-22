@@ -30,6 +30,7 @@ import (
 )
 
 // Cache implements protectedts.Cache.
+// TODO(#119243) delete this in 24.2
 type Cache struct {
 	db       isql.DB
 	storage  protectedts.Manager

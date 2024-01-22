@@ -86,6 +86,7 @@ func TestCacheBasic(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				ProtectedTS: &protectedts.TestingKnobs{
 					DisableProtectedTimestampForMultiTenant: true,
+					UseMetaTable:                            true,
 				},
 			},
 		})
@@ -95,6 +96,7 @@ func TestCacheBasic(t *testing.T) {
 	insqlDB := s.InternalDB().(isql.DB)
 	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
+		UseMetaTable:                            true,
 	})
 	p := withDatabase(m, insqlDB)
 
@@ -157,6 +159,7 @@ func TestRefresh(t *testing.T) {
 	st := &scanTracker{}
 	ptsKnobs := &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
+		UseMetaTable:                            true,
 	}
 	srv := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
@@ -302,6 +305,7 @@ func TestStart(t *testing.T) {
 				Knobs: base.TestingKnobs{
 					ProtectedTS: &protectedts.TestingKnobs{
 						DisableProtectedTimestampForMultiTenant: true,
+						UseMetaTable:                            true,
 					},
 				},
 			})
@@ -351,6 +355,7 @@ func TestQueryRecord(t *testing.T) {
 	db := s.InternalDB().(isql.DB)
 	storage := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
+		UseMetaTable:                            true,
 	})
 	p := withDatabase(storage, db)
 	// Set the poll interval to be very long.
@@ -415,6 +420,7 @@ func TestIterate(t *testing.T) {
 	db := s.InternalDB().(isql.DB)
 	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
+		UseMetaTable:                            true,
 	})
 	p := withDatabase(m, db)
 
@@ -485,6 +491,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				ProtectedTS: &protectedts.TestingKnobs{
 					DisableProtectedTimestampForMultiTenant: true,
+					UseMetaTable:                            true,
 				},
 			},
 		})
@@ -565,6 +572,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			storage := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
 				DisableProtectedTimestampForMultiTenant: true,
+				UseMetaTable:                            true,
 			})
 			p := withDatabase(storage, s.InternalDB().(isql.DB))
 			c := ptcache.New(ptcache.Config{
@@ -595,6 +603,7 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 	db := s.InternalDB().(isql.DB)
 	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
+		UseMetaTable:                            true,
 	})
 
 	// Set the poll interval to be very long.
