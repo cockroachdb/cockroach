@@ -32,7 +32,9 @@ import (
 
 const maxSyncDur = 10 * time.Second
 
-// registerDiskStalledDetection registers the disk stall test.
+// registerDiskStalledDetection registers the disk stall detection tests. These
+// tests assert that a disk stall is detected and the process crashes
+// appropriately.
 func registerDiskStalledDetection(r registry.Registry) {
 	stallers := map[string]func(test.Test, cluster.Cluster) diskStaller{
 		"dmsetup": func(t test.Test, c cluster.Cluster) diskStaller { return &dmsetupDiskStaller{t: t, c: c} },
@@ -50,7 +52,7 @@ func registerDiskStalledDetection(r registry.Registry) {
 	for name, makeStaller := range stallers {
 		name, makeStaller := name, makeStaller
 		r.Add(registry.TestSpec{
-			Name:  fmt.Sprintf("disk-stalled/%s", name),
+			Name:  fmt.Sprintf("disk-stalled/detection/%s", name),
 			Owner: registry.OwnerStorage,
 			// Use PDs in an attempt to work around flakes encountered when using SSDs.
 			// See #97968.
