@@ -81,3 +81,30 @@ client tenant does not have capability to query cluster node metadata
 has-tsdb-query-capability ten=10
 ----
 client tenant does not have capability to query timeseries data
+
+# Set the service state to none and make sure we can't send a batch.
+upsert ten=10 can_admin_scatter=false can_admin_split=false can_view_node_info=false can_view_tsdb_metrics=false service=none
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(Scan)
+----
+operation not allowed when in service mode "none"
+
+# Set the service state to externa and make sure we can send a batch.
+upsert ten=10 can_admin_scatter=false can_admin_split=false can_view_node_info=false can_view_tsdb_metrics=false service=external
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(Scan)
+----
+ok
+
+# Set the service state to externa and make sure we can send a batch.
+upsert ten=10 can_admin_scatter=false can_admin_split=false can_view_node_info=false can_view_tsdb_metrics=false service=shared
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(Scan)
+----
+ok
