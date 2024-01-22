@@ -205,7 +205,7 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 
 		var id jobspb.JobID
 		db.QueryRow(t,
-			`INSERT INTO system.jobs (status, created) VALUES ($1, $2) RETURNING id`, status, created).Scan(&id)
+			`INSERT INTO system.jobs (status, created, job_type) VALUES ($1, $2, 'SCHEMA CHANGE') RETURNING id`, status, created).Scan(&id)
 		db.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, id, GetLegacyPayloadKey(), payload)
 		db.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, id, GetLegacyProgressKey(), progress)
 		return strconv.Itoa(int(id))
@@ -239,9 +239,9 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 			newCanceledJob := writeJob("new_canceled", earlier, earlier.Add(time.Minute),
 				StatusCanceled, mutOptions)
 
-			sqlActivityJob := fmt.Sprintf("%d", SqlActivityUpdaterJobID)
-			db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-				{sqlActivityJob}, {oldRunningJob}, {oldSucceededJob}, {oldFailedJob}, {oldRevertFailedJob}, {oldCanceledJob},
+			selectJobsQuery := `SELECT id FROM system.jobs WHERE job_type = 'SCHEMA CHANGE' ORDER BY id`
+			db.CheckQueryResults(t, selectJobsQuery, [][]string{
+				{oldRunningJob}, {oldSucceededJob}, {oldFailedJob}, {oldRevertFailedJob}, {oldCanceledJob},
 				{newRunningJob}, {newSucceededJob}, {newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
 
 			testutils.SucceedsSoon(t, func() error {
@@ -251,19 +251,19 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 				return nil
 			})
 
-			db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-				{sqlActivityJob}, {oldRunningJob}, {oldRevertFailedJob}, {newRunningJob},
+			db.CheckQueryResults(t, selectJobsQuery, [][]string{
+				{oldRunningJob}, {oldRevertFailedJob}, {newRunningJob},
 				{newSucceededJob}, {newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
 
 			if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(time.Minute*-10)); err != nil {
 				t.Fatal(err)
 			}
-			db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-				{sqlActivityJob}, {oldRunningJob}, {oldRevertFailedJob}, {newRunningJob}, {newRevertFailedJob}})
+			db.CheckQueryResults(t, selectJobsQuery, [][]string{
+				{oldRunningJob}, {oldRevertFailedJob}, {newRunningJob}, {newRevertFailedJob}})
 
 			// Delete the revert failed, and running jobs for the next run of the
 			// test.
-			_, err := sqlDB.Exec(`DELETE FROM system.jobs WHERE id = $1 OR id = $2 OR id = $3 OR id = $4`,
+			_, err := sqlDB.Exec(`DELETE FROM system.jobs WHERE id IN ($1, $2, $3, $4)`,
 				oldRevertFailedJob, newRevertFailedJob, oldRunningJob, newRunningJob)
 			require.NoError(t, err)
 		}
