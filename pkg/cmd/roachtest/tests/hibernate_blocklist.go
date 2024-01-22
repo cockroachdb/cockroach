@@ -25,6 +25,7 @@ var hibernateSpatialIgnoreList = blocklist{
 
 var hibernateIgnoreList = blocklist{
 	"org.hibernate.orm.test.batch.BatchTest.testBatchInsertUpdate":                                       "flaky",
+	"org.hibernate.orm.test.bulkid.OracleInlineMutationStrategyIdTest.testDeleteFromEngineer":            "flaky",
 	"org.hibernate.serialization.SessionFactorySerializationTest.testUnNamedSessionFactorySerialization": "flaky",
 	"org.hibernate.serialization.SessionFactorySerializationTest.testNamedSessionFactorySerialization":   "flaky",
 	"org.hibernate.test.batch.BatchTest.testBatchInsertUpdate":                                           "flaky",
