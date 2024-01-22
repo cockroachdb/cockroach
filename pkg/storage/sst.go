@@ -44,20 +44,15 @@ var (
 // subarray. The outer slice of levels must be sorted in reverse chronological
 // order: a key in a file in a level at a lower index will shadow the same key
 // contained within a file in a level at a higher index.
-//
-// If the iterator is only going to be used for forward iteration, the caller
-// may pass forwardOnly=true for better performance.
-func NewSSTIterator(
-	files [][]sstable.ReadableFile, opts IterOptions, forwardOnly bool,
-) (MVCCIterator, error) {
-	return newPebbleSSTIterator(files, opts, forwardOnly)
+func NewSSTIterator(files [][]sstable.ReadableFile, opts IterOptions) (MVCCIterator, error) {
+	return newPebbleSSTIterator(files, opts)
 }
 
 // NewSSTEngineIterator is like NewSSTIterator, but returns an EngineIterator.
 func NewSSTEngineIterator(
-	files [][]sstable.ReadableFile, opts IterOptions, forwardOnly bool,
+	files [][]sstable.ReadableFile, opts IterOptions,
 ) (EngineIterator, error) {
-	return newPebbleSSTIterator(files, opts, forwardOnly)
+	return newPebbleSSTIterator(files, opts)
 }
 
 // NewMemSSTIterator returns an MVCCIterator for the provided SST data,
@@ -73,7 +68,7 @@ func NewMultiMemSSTIterator(ssts [][]byte, verify bool, opts IterOptions) (MVCCI
 	for _, sst := range ssts {
 		files = append(files, vfs.NewMemFile(sst))
 	}
-	iter, err := NewSSTIterator([][]sstable.ReadableFile{files}, opts, false /* forwardOnly */)
+	iter, err := NewSSTIterator([][]sstable.ReadableFile{files}, opts)
 	if err != nil {
 		return nil, err
 	}

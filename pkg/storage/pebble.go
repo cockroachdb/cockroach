@@ -2598,7 +2598,7 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 			KeyTypes:   IterKeyTypePointsAndRanges,
 			LowerBound: roachpb.KeyMin,
 			UpperBound: roachpb.KeyMax,
-		}, true)
+		})
 	if err != nil {
 		// TODO(sumeer): we don't call closeFiles() since in the error case some
 		// of the files may be closed. See the code in
