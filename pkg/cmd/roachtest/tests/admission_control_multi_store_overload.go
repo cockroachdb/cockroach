@@ -96,7 +96,6 @@ func registerMultiStoreOverload(r registry.Registry) {
 		Benchmark:        true,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Weekly),
-		Tags:             registry.Tags(`weekly`),
 		Cluster:          r.MakeClusterSpec(2, spec.CPU(8), spec.SSD(2)),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

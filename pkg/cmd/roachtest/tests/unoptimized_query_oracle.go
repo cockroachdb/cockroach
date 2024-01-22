@@ -59,7 +59,6 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 				RequiresLicense:  true,
 				CompatibleClouds: registry.AllExceptAWS,
 				Suites:           registry.Suites(registry.Nightly),
-				Tags:             nil,
 				Cluster:          clusterSpec,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runQueryComparison(ctx, t, c, &queryComparisonTest{

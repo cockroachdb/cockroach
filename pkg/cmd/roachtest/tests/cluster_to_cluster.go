@@ -334,8 +334,6 @@ type replicationSpec struct {
 
 	clouds registry.CloudSet
 	suites registry.SuiteSet
-	// tags are used to categorize the test.
-	tags map[string]struct{}
 }
 
 // replicationDriver manages c2c roachtest execution.
@@ -757,7 +755,6 @@ func c2cRegisterWrapper(
 		Skip:             sp.skip,
 		CompatibleClouds: sp.clouds,
 		Suites:           sp.suites,
-		Tags:             sp.tags,
 		RequiresLicense:  true,
 		Run:              run,
 	})
@@ -807,7 +804,7 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            1 * time.Hour,
 			additionalDuration: 10 * time.Minute,
 			clouds:             registry.AllExceptAWS,
-			suites:             registry.Suites("nightly"),
+			suites:             registry.Suites(registry.Nightly),
 			cutover:            5 * time.Minute,
 		},
 		{
@@ -826,7 +823,7 @@ func registerClusterToCluster(r registry.Registry) {
 			additionalDuration: 60 * time.Minute,
 			cutover:            30 * time.Minute,
 			clouds:             registry.AllExceptAWS,
-			suites:             registry.Suites("nightly"),
+			suites:             registry.Suites(registry.Nightly),
 		},
 		{
 			name:               "c2c/kv0",
@@ -839,9 +836,8 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            1 * time.Hour,
 			additionalDuration: 10 * time.Minute,
 			cutover:            5 * time.Minute,
-			tags:               registry.Tags("aws"),
 			clouds:             registry.AllClouds,
-			suites:             registry.Suites("nightly"),
+			suites:             registry.Suites(registry.Nightly),
 		},
 		{
 			name:     "c2c/UnitTest",
@@ -868,7 +864,7 @@ func registerClusterToCluster(r registry.Registry) {
 			additionalDuration: 0,
 			cutover:            5 * time.Minute,
 			clouds:             registry.AllExceptAWS,
-			suites:             registry.Suites("nightly"),
+			suites:             registry.Suites(registry.Nightly),
 			skip:               "flaky",
 		},
 	} {
@@ -1244,7 +1240,7 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		cutover:            2 * time.Minute,
 		maxAcceptedLatency: 12 * time.Minute,
 		clouds:             registry.AllExceptAWS,
-		suites:             registry.Suites("nightly"),
+		suites:             registry.Suites(registry.Nightly),
 	}
 	c2cRegisterWrapper(r, sp, func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		rd := makeReplicationDriver(t, c, sp)

@@ -94,7 +94,6 @@ func registerKVBenchSpec(r registry.Registry, b kvBenchSpec) {
 		// nightly.
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.ManualOnly,
-		Tags:             registry.Tags("manual"),
 		Owner:            registry.OwnerKV,
 		Benchmark:        true,
 		Cluster:          nodes,

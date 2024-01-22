@@ -40,7 +40,6 @@ func registerCostFuzz(r registry.Registry) {
 			Owner:            registry.OwnerSQLQueries,
 			Timeout:          time.Hour * 1,
 			RequiresLicense:  true,
-			Tags:             nil,
 			Cluster:          clusterSpec,
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),

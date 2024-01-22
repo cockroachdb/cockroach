@@ -136,7 +136,6 @@ func registerTPCE(r registry.Registry) {
 		Benchmark:        true,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Weekly),
-		Tags:             registry.Tags("weekly"),
 		Timeout:          36 * time.Hour,
 		Cluster:          r.MakeClusterSpec(largeWeekly.nodes+1, spec.CPU(largeWeekly.cpus), spec.SSD(largeWeekly.ssds)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

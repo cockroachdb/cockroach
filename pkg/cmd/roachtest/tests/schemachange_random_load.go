@@ -109,7 +109,6 @@ func registerRandomLoadBenchSpec(r registry.Registry, b randomLoadBenchSpec) {
 		},
 		CompatibleClouds: b.Clouds,
 		Suites:           b.Suites,
-		Tags:             b.Tags,
 	})
 }
 
