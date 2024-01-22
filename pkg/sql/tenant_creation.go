@@ -46,10 +46,6 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-const (
-	tenantCreationMinSupportedVersionKey = clusterversion.MinSupported
-)
-
 // CreateTenant implements the tree.TenantOperator interface.
 func (p *planner) CreateTenant(
 	ctx context.Context, parameters string,
@@ -161,24 +157,28 @@ func (p *planner) createTenantInternal(
 	var splits []roachpb.RKey
 
 	var bootstrapVersionOverride clusterversion.Key
-	if p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride != 0 {
+	switch {
+	case p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride != 0:
 		// An override was passed using testing knobs. Bootstrap the cluster
 		// using this override.
 		tenantVersion.Version = p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride.Version()
 		bootstrapVersionOverride = p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride
-	} else if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.Latest) {
-		// The cluster is not running the latest version.
-		// Use the previous major version to create the tenant and bootstrap it
-		// just like the previous major version binary would, using hardcoded
-		// initial values.
-		tenantVersion.Version = tenantCreationMinSupportedVersionKey.Version()
-		bootstrapVersionOverride = tenantCreationMinSupportedVersionKey
-	} else {
+	case p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.Latest):
 		// The cluster is running the latest version.
 		// Use this version to create the tenant and bootstrap it using the host
 		// cluster's bootstrapping logic.
 		tenantVersion.Version = clusterversion.Latest.Version()
 		bootstrapVersionOverride = 0
+	case p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.PreviousRelease):
+		// If the previous major version is active, use that version to create the
+		// tenant and bootstrap it just like the previous major version binary
+		// would, using hardcoded initial values.
+		tenantVersion.Version = clusterversion.PreviousRelease.Version()
+		bootstrapVersionOverride = clusterversion.PreviousRelease
+	default:
+		// Otherwise, use the initial values from the min supported version.
+		tenantVersion.Version = clusterversion.MinSupported.Version()
+		bootstrapVersionOverride = clusterversion.MinSupported
 	}
 
 	initialValuesOpts := bootstrap.InitialValuesOpts{

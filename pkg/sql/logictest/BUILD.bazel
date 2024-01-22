@@ -30,15 +30,16 @@ filegroup(
 filegroup(
     name = "cockroach_predecessor_version",
     srcs = select({
-        "//build/toolchains:is_linux_amd64": [target(CONFIG_LINUX_AMD64)],
-        "//build/toolchains:is_linux_arm64": [target(CONFIG_LINUX_ARM64)],
-        "//build/toolchains:is_darwin_amd64": [target(CONFIG_DARWIN_AMD64)],
-        "//build/toolchains:is_darwin_arm64": [target(CONFIG_DARWIN_ARM64)],
+        "//build/toolchains:is_linux_amd64": target(CONFIG_LINUX_AMD64),
+        "//build/toolchains:is_linux_arm64": target(CONFIG_LINUX_ARM64),
+        "//build/toolchains:is_darwin_amd64": target(CONFIG_DARWIN_AMD64),
+        "//build/toolchains:is_darwin_arm64": target(CONFIG_DARWIN_ARM64),
         "//conditions:default": [],
     }),
     visibility = [
-        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-upgrade-to-master:__pkg__",
-        "//pkg/sql/logictest/tests/cockroach-go-testserver-upgrade-to-master:__pkg__",
+        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-23.1:__pkg__",
+        "//pkg/sql/logictest/tests/cockroach-go-testserver-23.1:__pkg__",
+        "//pkg/sql/logictest/tests/cockroach-go-testserver-23.2:__pkg__",
     ],
 )
 
@@ -50,7 +51,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/build",
         "//pkg/build/bazel",
         "//pkg/cloud/externalconn/providers",
         "//pkg/clusterversion",
@@ -91,7 +91,6 @@ go_library(
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
-        "//pkg/util/version",
         "@com_github_cockroachdb_cockroach_go_v2//testserver",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_kr_pretty//:pretty",
