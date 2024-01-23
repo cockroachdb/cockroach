@@ -1788,6 +1788,7 @@ create_sequence_stmt ::=
 
 create_func_stmt ::=
 	'CREATE' opt_or_replace 'FUNCTION' routine_create_name '(' opt_routine_param_with_default_list ')' 'RETURNS' opt_return_set routine_return_type opt_create_routine_opt_list opt_routine_body
+	| 'CREATE' opt_or_replace 'FUNCTION' routine_create_name '(' opt_routine_param_with_default_list ')' opt_create_routine_opt_list opt_routine_body
 
 create_proc_stmt ::=
 	'CREATE' opt_or_replace 'PROCEDURE' routine_create_name '(' opt_routine_param_with_default_list ')' opt_create_routine_opt_list opt_routine_body
@@ -4465,6 +4466,9 @@ window_definition ::=
 
 routine_param_class ::=
 	'IN'
+	| 'OUT'
+	| 'INOUT'
+	| 'IN' 'OUT'
 
 param_name ::=
 	type_function_name

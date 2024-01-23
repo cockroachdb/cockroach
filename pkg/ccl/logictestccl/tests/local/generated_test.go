@@ -274,6 +274,13 @@ func TestCCLLogic_tenant_usage(
 	runCCLLogicTest(t, "tenant_usage")
 }
 
+func TestCCLLogic_udf_params(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "udf_params")
+}
+
 func TestCCLLogic_udf_plpgsql(
 	t *testing.T,
 ) {

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -82,6 +83,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 
 	// Resolve the parameter names and types.
 	paramTypes := make(tree.ParamTypes, len(c.Params))
+	var outParamTypes []*types.T
 	for i := range c.Params {
 		param := &c.Params[i]
 		typ, err := tree.ResolveType(context.Background(), param.Type, tc)
@@ -89,14 +91,49 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 			panic(err)
 		}
 		paramTypes.SetAt(i, string(param.Name), typ)
+		if param.IsOutParam() {
+			outParamTypes = append(outParamTypes, typ)
+		}
 	}
 
+	// Determine OUT parameter based return type.
+	var outParamType *types.T
+	if len(outParamTypes) == 1 {
+		outParamType = outParamTypes[0]
+	} else if len(outParamTypes) > 1 {
+		outParamType = types.MakeTuple(outParamTypes)
+	}
 	// Resolve the return type.
-	retType, err := tree.ResolveType(context.Background(), c.ReturnType.Type, tc)
-	if err != nil {
-		panic(err)
+	var retType *types.T
+	var err error
+	if c.ReturnType != nil {
+		retType, err = tree.ResolveType(context.Background(), c.ReturnType.Type, tc)
+		if err != nil {
+			panic(err)
+		}
 	}
-
+	if outParamType != nil {
+		if retType != nil && !retType.Equivalent(outParamType) {
+			panic(pgerror.Newf(pgcode.InvalidFunctionDefinition, "function result type must be %s because of OUT parameters", outParamType.Name()))
+		}
+		// Override the return types so that we do return type validation and SHOW
+		// CREATE correctly.
+		retType = outParamType
+		c.ReturnType = &tree.RoutineReturnType{
+			Type: outParamType,
+		}
+	} else if retType == nil {
+		if c.IsProcedure {
+			// A procedure doesn't need a return type. Use a VOID return type to avoid
+			// errors in shared logic later.
+			retType = types.Void
+			c.ReturnType = &tree.RoutineReturnType{
+				Type: types.Void,
+			}
+		} else {
+			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "function result type must be specified"))
+		}
+	}
 	// Retrieve the function body, volatility, and calledOnNullInput.
 	body, v, calledOnNullInput, language := collectFuncOptions(c.Options)
 
@@ -119,7 +156,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		Language:          language,
 		Type:              routineType,
 	}
-	if c.ReturnType.SetOf {
+	if c.ReturnType != nil && c.ReturnType.SetOf {
 		overload.Class = tree.GeneratorClass
 	}
 	prefixedOverload := tree.MakeQualifiedOverload("public", overload)

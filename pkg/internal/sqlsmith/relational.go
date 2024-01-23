@@ -1078,7 +1078,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 
 	stmt := &tree.CreateRoutine{
 		Name:       name,
-		ReturnType: rtype,
+		ReturnType: &rtype,
 		Params:     params,
 		Options:    opts,
 	}
