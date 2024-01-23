@@ -173,63 +173,194 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 	}
 }
 
+func TestTxnBoundReplicatedLockTableView(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	engine, err := storage.Open(ctx, storage.InMemory(), st,
+		storage.CacheSize(1<<20 /* 1 MiB */),
+	)
+	require.NoError(t, err)
+	defer engine.Close()
+
+	makeTS := func(nanos int64, logical int32) hlc.Timestamp {
+		return hlc.Timestamp{
+			WallTime: nanos,
+			Logical:  logical,
+		}
+	}
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	keyC := roachpb.Key("c")
+	txn1 := roachpb.MakeTransaction("txn1", keyA, isolation.Serializable, roachpb.NormalUserPriority, makeTS(100, 0), 0, 0, 0, false)
+	txn2 := roachpb.MakeTransaction("txn2", keyA, isolation.Serializable, roachpb.NormalUserPriority, makeTS(100, 0), 0, 0, 0, false)
+
+	// Have txn1 acquire 2 locks with different strengths.
+	err = storage.MVCCAcquireLock(ctx, engine, &txn1, lock.Exclusive, keyA, nil, 0)
+	require.NoError(t, err)
+	err = storage.MVCCAcquireLock(ctx, engine, &txn1, lock.Shared, keyB, nil, 0)
+	require.NoError(t, err)
+
+	reader := engine.NewReadOnly(storage.StandardDurability)
+	defer reader.Close()
+
+	txn1LTView := newTxnBoundReplicatedLockTableView(reader, &txn1)
+	txn2LTView := newTxnBoundReplicatedLockTableView(reader, &txn2)
+
+	// 1. Lock strength Exclusive:
+	// 1a. KeyA:
+	locked, txn, err := txn1LTView.IsKeyLockedByConflictingTxn(ctx, keyA, lock.Exclusive)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Nil(t, txn)
+	locked, txn, err = txn2LTView.IsKeyLockedByConflictingTxn(ctx, keyA, lock.Exclusive)
+	require.NoError(t, err)
+	require.True(t, locked)
+	require.Equal(t, &txn1.TxnMeta, txn)
+	// 1b. KeyB:
+	locked, txn, err = txn1LTView.IsKeyLockedByConflictingTxn(ctx, keyB, lock.Exclusive)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Nil(t, txn)
+	locked, txn, err = txn2LTView.IsKeyLockedByConflictingTxn(ctx, keyB, lock.Exclusive)
+	require.NoError(t, err)
+	require.True(t, locked)
+	require.Equal(t, &txn1.TxnMeta, txn)
+	// 1c. KeyC:
+	locked, txn, err = txn1LTView.IsKeyLockedByConflictingTxn(ctx, keyC, lock.Exclusive)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Nil(t, txn)
+	locked, txn, err = txn2LTView.IsKeyLockedByConflictingTxn(ctx, keyC, lock.Exclusive)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Nil(t, txn)
+
+	// 2. Lock strength Shared:
+	// 2a. KeyA:
+	locked, txn, err = txn1LTView.IsKeyLockedByConflictingTxn(ctx, keyA, lock.Shared)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Nil(t, txn)
+	locked, txn, err = txn2LTView.IsKeyLockedByConflictingTxn(ctx, keyA, lock.Shared)
+	require.NoError(t, err)
+	require.True(t, locked)
+	require.Equal(t, &txn1.TxnMeta, txn)
+	// 2b. KeyB:
+	locked, txn, err = txn1LTView.IsKeyLockedByConflictingTxn(ctx, keyB, lock.Shared)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Nil(t, txn)
+	locked, txn, err = txn2LTView.IsKeyLockedByConflictingTxn(ctx, keyB, lock.Shared)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Nil(t, txn)
+	// 2c. KeyC:
+	locked, txn, err = txn1LTView.IsKeyLockedByConflictingTxn(ctx, keyC, lock.Shared)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Nil(t, txn)
+	locked, txn, err = txn2LTView.IsKeyLockedByConflictingTxn(ctx, keyC, lock.Shared)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Nil(t, txn)
+
+	// 3. Lock strength None:
+	// 3a. KeyA:
+	locked, txn, err = txn1LTView.IsKeyLockedByConflictingTxn(ctx, keyA, lock.None)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Nil(t, txn)
+	locked, txn, err = txn2LTView.IsKeyLockedByConflictingTxn(ctx, keyA, lock.None)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Nil(t, txn)
+	// 3b. KeyB:
+	locked, txn, err = txn1LTView.IsKeyLockedByConflictingTxn(ctx, keyB, lock.None)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Nil(t, txn)
+	locked, txn, err = txn2LTView.IsKeyLockedByConflictingTxn(ctx, keyB, lock.None)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Nil(t, txn)
+	// 3c. KeyC:
+	locked, txn, err = txn1LTView.IsKeyLockedByConflictingTxn(ctx, keyC, lock.None)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Nil(t, txn)
+	locked, txn, err = txn2LTView.IsKeyLockedByConflictingTxn(ctx, keyC, lock.None)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Nil(t, txn)
+}
+
 func TestRequestBoundLockTableView(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	lockHolderTxnID := uuid.MakeV4()
-	keyA := roachpb.Key("a")
-	keyB := roachpb.Key("b")
-	keyC := roachpb.Key("c")
+	testutils.RunTrueAndFalse(t, "replicatedLockConflicts", func(t *testing.T, replicatedLockConflicts bool) {
+		lockHolderTxnID := uuid.MakeV4()
+		keyA := roachpb.Key("a")
+		keyB := roachpb.Key("b")
+		keyC := roachpb.Key("c")
 
-	m := newMockTxnBoundLockTableView(lockHolderTxnID)
-	m.addLock(keyA, lock.Shared)
-	m.addLock(keyB, lock.Exclusive)
+		m := newMockTxnBoundLockTableView(lockHolderTxnID)
+		m.addLock(keyA, lock.Shared)
+		m.addLock(keyB, lock.Exclusive)
+		mockTxnBoundReplicatedLTV := newMockTxnBoundReplicatedLockTableView(replicatedLockConflicts)
 
-	// Non-locking request.
-	ltView := newRequestBoundLockTableView(m, lock.None)
-	locked, _, err := ltView.IsKeyLockedByConflictingTxn(keyA)
-	require.NoError(t, err)
-	require.False(t, locked)
+		ctx := context.Background()
 
-	locked, _, err = ltView.IsKeyLockedByConflictingTxn(keyB)
-	require.NoError(t, err)
-	require.False(t, locked)
+		// Non-locking request.
+		ltView := makeRequestBoundLockTableView(m, mockTxnBoundReplicatedLTV, lock.None)
+		locked, _, err := ltView.IsKeyLockedByConflictingTxn(ctx, keyA)
+		require.NoError(t, err)
+		require.False(t, locked)
 
-	locked, _, err = ltView.IsKeyLockedByConflictingTxn(keyC)
-	require.NoError(t, err)
-	require.False(t, locked)
+		locked, _, err = ltView.IsKeyLockedByConflictingTxn(ctx, keyB)
+		require.NoError(t, err)
+		require.False(t, locked)
 
-	// Shared locking request.
-	ltView = newRequestBoundLockTableView(m, lock.Shared)
-	locked, _, err = ltView.IsKeyLockedByConflictingTxn(keyA)
-	require.NoError(t, err)
-	require.False(t, locked)
+		locked, _, err = ltView.IsKeyLockedByConflictingTxn(ctx, keyC)
+		require.NoError(t, err)
+		require.False(t, locked)
 
-	locked, txn, err := ltView.IsKeyLockedByConflictingTxn(keyB)
-	require.NoError(t, err)
-	require.True(t, locked)
-	require.Equal(t, txn.ID, lockHolderTxnID)
+		// Shared locking request.
+		ltView = makeRequestBoundLockTableView(m, mockTxnBoundReplicatedLTV, lock.Shared)
+		locked, _, err = ltView.IsKeyLockedByConflictingTxn(ctx, keyA)
+		require.NoError(t, err)
+		require.Equal(t, locked, replicatedLockConflicts)
 
-	locked, _, err = ltView.IsKeyLockedByConflictingTxn(keyC)
-	require.NoError(t, err)
-	require.False(t, locked)
+		locked, txn, err := ltView.IsKeyLockedByConflictingTxn(ctx, keyB)
+		require.NoError(t, err)
+		require.True(t, locked)
+		require.Equal(t, txn.ID, lockHolderTxnID)
 
-	// Exclusive locking request.
-	ltView = newRequestBoundLockTableView(m, lock.Exclusive)
-	locked, txn, err = ltView.IsKeyLockedByConflictingTxn(keyA)
-	require.NoError(t, err)
-	require.True(t, locked)
-	require.Equal(t, txn.ID, lockHolderTxnID)
+		locked, _, err = ltView.IsKeyLockedByConflictingTxn(ctx, keyC)
+		require.NoError(t, err)
+		require.Equal(t, locked, replicatedLockConflicts)
 
-	locked, txn, err = ltView.IsKeyLockedByConflictingTxn(keyB)
-	require.NoError(t, err)
-	require.True(t, locked)
-	require.Equal(t, txn.ID, lockHolderTxnID)
+		// Exclusive locking request.
+		ltView = makeRequestBoundLockTableView(m, mockTxnBoundReplicatedLTV, lock.Exclusive)
+		locked, txn, err = ltView.IsKeyLockedByConflictingTxn(ctx, keyA)
+		require.NoError(t, err)
+		require.True(t, locked)
+		require.Equal(t, txn.ID, lockHolderTxnID)
 
-	locked, _, err = ltView.IsKeyLockedByConflictingTxn(keyC)
-	require.NoError(t, err)
-	require.False(t, locked)
+		locked, txn, err = ltView.IsKeyLockedByConflictingTxn(ctx, keyB)
+		require.NoError(t, err)
+		require.True(t, locked)
+		require.Equal(t, txn.ID, lockHolderTxnID)
+
+		locked, _, err = ltView.IsKeyLockedByConflictingTxn(ctx, keyC)
+		require.NoError(t, err)
+		require.Equal(t, locked, replicatedLockConflicts)
+	})
 }
 
 // mockTxnBoundLockTableView is a mocked version of the txnBoundLockTableView
@@ -258,7 +389,7 @@ func (m mockTxnBoundLockTableView) addLock(key roachpb.Key, str lock.Strength) {
 
 // IsKeyLockedByConflictingTxn implements the txnBoundLockTableView interface.
 func (m mockTxnBoundLockTableView) IsKeyLockedByConflictingTxn(
-	key roachpb.Key, str lock.Strength,
+	_ context.Context, key roachpb.Key, str lock.Strength,
 ) (bool, *enginepb.TxnMeta, error) {
 	lockStr, locked := m.locks[key.String()]
 	if !locked {
@@ -280,4 +411,19 @@ func (m mockTxnBoundLockTableView) IsKeyLockedByConflictingTxn(
 		return true, &enginepb.TxnMeta{ID: m.lockHolderTxnID}, nil
 	}
 	return false, nil, nil
+}
+
+type mockTxnBoundReplicatedLockTableView bool
+
+func newMockTxnBoundReplicatedLockTableView(conflicts bool) txnBoundLockTableView {
+	return mockTxnBoundReplicatedLockTableView(conflicts)
+}
+
+func (m mockTxnBoundReplicatedLockTableView) IsKeyLockedByConflictingTxn(
+	_ context.Context, _ roachpb.Key, str lock.Strength,
+) (bool, *enginepb.TxnMeta, error) {
+	if str == lock.None { // non-locking reads don't conflict with replicated locks
+		return false, nil, nil
+	}
+	return bool(m), &enginepb.TxnMeta{ID: uuid.Max}, nil
 }

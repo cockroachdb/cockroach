@@ -27,7 +27,6 @@ go_library(
         "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
-        "//pkg/kv/kvserver/batcheval",
         "//pkg/kv/kvserver/concurrency",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",

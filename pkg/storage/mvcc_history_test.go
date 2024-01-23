@@ -2807,7 +2807,7 @@ type mockLockTableView struct {
 }
 
 func (lt *mockLockTableView) IsKeyLockedByConflictingTxn(
-	k roachpb.Key,
+	_ context.Context, k roachpb.Key,
 ) (bool, *enginepb.TxnMeta, error) {
 	info, ok := lt.unreplLocks[string(k)]
 	if !ok {
@@ -2847,6 +2847,8 @@ func (lt *mockLockTableView) IsKeyLockedByConflictingTxn(
 		panic(fmt.Sprintf("unexpected lock strength %s", lt.str))
 	}
 }
+
+func (lt *mockLockTableView) Close() {}
 
 func (e *evalCtx) visitWrappedIters(fn func(it storage.SimpleMVCCIterator) (done bool)) {
 	iter := e.iter
