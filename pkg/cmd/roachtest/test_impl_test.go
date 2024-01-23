@@ -13,6 +13,7 @@ package main
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -157,10 +158,13 @@ func Test_failuresContainsError(t *testing.T) {
 	}
 }
 
-func Test_failureContainsErrorAndAddFailureCombination(t *testing.T) {
+func Test_failureSpecifyOwnerAndAddFailureCombination(t *testing.T) {
 	ti := testImpl{
 		l: nilLogger(),
 	}
-	ti.addFailure(0, "", errVMPreemption)
-	assert.True(t, failuresContainsError(ti.failures(), errVMPreemption))
+	ti.addFailure(0, "", vmPreemptionError("my_VM"))
+	errWithOwnership := failuresSpecifyOwner(ti.failures())
+
+	require.NotNil(t, errWithOwnership)
+	require.Equal(t, registry.OwnerTestEng, errWithOwnership.Owner)
 }

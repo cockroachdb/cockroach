@@ -4,6 +4,7 @@ go_library(
     name = "registry",
     srcs = [
         "encryption.go",
+        "errors.go",
         "filter.go",
         "owners.go",
         "registry_interface.go",
