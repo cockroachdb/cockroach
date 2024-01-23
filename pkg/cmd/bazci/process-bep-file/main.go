@@ -79,8 +79,10 @@ func postOptions(res *engflow.TestResultWithXml, sha string, invocationId string
 
 }
 
-func failurePoster(res *engflow.TestResultWithXml, sha string) githubpost.FailurePoster {
-	postOpts := postOptions(res, sha)
+func failurePoster(
+	res *engflow.TestResultWithXml, sha string, invocationId string,
+) githubpost.FailurePoster {
+	postOpts := postOptions(res, sha, invocationId)
 	formatter := func(ctx context.Context, failure githubpost.Failure) (issues.IssueFormatter, issues.PostRequest) {
 		fmter, req := githubpost.DefaultFormatter(ctx, failure)
 		// We don't want an artifacts link: there are none on EngFlow.
