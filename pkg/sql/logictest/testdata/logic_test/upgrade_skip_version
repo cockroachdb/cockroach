@@ -9,7 +9,7 @@ upgrade all
 
 # We have seen that upgrades can take a long time in CI. Give some extra time
 # for the upgrade to complete.
-sleep 30s
+retry_duration 10m
 
 # Verify that the cluster is upgrading to 24.1.
 query T retry
