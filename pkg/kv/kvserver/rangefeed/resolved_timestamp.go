@@ -13,11 +13,13 @@ package rangefeed
 import (
 	"bytes"
 	"container/heap"
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -128,15 +130,15 @@ func (rts *resolvedTimestamp) ForwardClosedTS(newClosedTS hlc.Timestamp) bool {
 // operation within its range of tracked keys. This allows the structure to
 // update its internal intent tracking to reflect the change. The method returns
 // whether this caused the resolved timestamp to move forward.
-func (rts *resolvedTimestamp) ConsumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
-	if rts.consumeLogicalOp(op) {
+func (rts *resolvedTimestamp) ConsumeLogicalOp(ctx context.Context, op enginepb.MVCCLogicalOp) bool {
+	if rts.consumeLogicalOp(ctx, op) {
 		return rts.recompute()
 	}
 	rts.assertNoChange()
 	return false
 }
 
-func (rts *resolvedTimestamp) consumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
+func (rts *resolvedTimestamp) consumeLogicalOp(ctx context.Context, op enginepb.MVCCLogicalOp) bool {
 	switch t := op.GetValue().(type) {
 	case *enginepb.MVCCWriteValueOp:
 		rts.assertOpAboveRTS(op, t.Timestamp)
@@ -154,6 +156,12 @@ func (rts *resolvedTimestamp) consumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
 		return rts.intentQ.UpdateTS(t.TxnID, t.Timestamp)
 
 	case *enginepb.MVCCCommitIntentOp:
+		// A known bug will trip this assertion, so don't fatal to avoid disruption.
+		// See: https://github.com/cockroachdb/cockroach/issues/104309
+		if t.Timestamp.LessEq(rts.resolvedTS) {
+			log.Errorf(ctx, "resolved timestamp %s equal to or above timestamp of operation %v",
+				rts.resolvedTS, t)
+		}
 		return rts.intentQ.DecrRef(t.TxnID, t.Timestamp)
 
 	case *enginepb.MVCCAbortIntentOp:
