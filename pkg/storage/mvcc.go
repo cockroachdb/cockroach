@@ -1183,6 +1183,9 @@ type LockTableView interface {
 	// This method is used by requests in conjunction with the SkipLocked wait
 	// policy to determine which keys they should skip over during evaluation.
 	IsKeyLockedByConflictingTxn(context.Context, roachpb.Key) (bool, *enginepb.TxnMeta, error)
+	// Close cleans up the LockTableView; it should not be used after being
+	// closed.
+	Close()
 }
 
 // MVCCGetOptions bundles options for the MVCCGet family of functions.

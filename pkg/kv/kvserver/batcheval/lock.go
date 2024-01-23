@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -243,6 +244,10 @@ type requestBoundLockTableView struct {
 
 var _ storage.LockTableView = &requestBoundLockTableView{}
 
+var requestBoundLockTableViewPool = sync.Pool{
+	New: func() interface{} { return new(requestBoundLockTableView) },
+}
+
 // newRequestBoundLockTableView creates a new requestBoundLockTableView.
 func newRequestBoundLockTableView(
 	reader storage.Reader,
@@ -259,11 +264,11 @@ func newRequestBoundLockTableView(
 func makeRequestBoundLockTableView(
 	inMemLTV txnBoundLockTableView, replLTV txnBoundLockTableView, str lock.Strength,
 ) requestBoundLockTableView {
-	return requestBoundLockTableView{
-		inMemLockTableView: inMemLTV,
-		replLockTableView:  replLTV,
-		str:                str,
-	}
+	rbLTV := requestBoundLockTableViewPool.Get().(*requestBoundLockTableView)
+	rbLTV.inMemLockTableView = inMemLTV
+	rbLTV.replLockTableView = replLTV
+	rbLTV.str = str
+	return *rbLTV
 }
 
 // IsKeyLockedByConflictingTxn implements the storage.LockTableView interface.
@@ -275,6 +280,12 @@ func (ltv *requestBoundLockTableView) IsKeyLockedByConflictingTxn(
 		return conflicts, txn, err
 	}
 	return ltv.replLockTableView.IsKeyLockedByConflictingTxn(ctx, key, ltv.str)
+}
+
+// Close implements the storage.LockTableView interface.
+func (ltv *requestBoundLockTableView) Close() {
+	*ltv = requestBoundLockTableView{} // reset
+	requestBoundLockTableViewPool.Put(ltv)
 }
 
 // txnBoundReplicatedLockTableView provides a transaction bound view into the
