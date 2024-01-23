@@ -306,11 +306,12 @@ import (
 //      - colnames: column names are verified (the expected column names
 //            are the first line in the expected results).
 //      - retry: if the expected results do not match the actual results, the
-//            test will be retried with exponential backoff up to some maximum
-//            duration. If the test succeeds at any time during that period, it
-//            is considered successful. Otherwise, it is a failure. See
-//            testutils.SucceedsSoon for more information. If run with the
-//            -rewrite flag, the query will be run only once after a 2s sleep.
+//            test will be retried with exponential backoff up to the duration
+//            given by retry_duration. If the test succeeds at any time during
+//            that period, it is considered successful. Otherwise, it is a
+//            failure. See testutils.SucceedsSoon for more information. If run
+//            with the -rewrite flag, the query will be run only once after a
+//            2s sleep.
 //      - async: runs the query asynchronously, marking it as a pending
 //            query using the label parameter as a unique name, to be completed
 //            and validated later with "awaitquery". This is intended for use
@@ -417,6 +418,10 @@ import (
 //    (including those which expect errors) will be retried for a fixed
 //    duration until the test passes, or the alloted time has elapsed.
 //    This is similar to the retry option of the query directive.
+//
+//  - retry_duration <duration>
+//    Specifies the amount of time to retry when using the retry directive.
+//    Defaults to testutils.DefaultSucceedsSoonDuration (45 seconds).
 //
 // The overall architecture of TestLogic is as follows:
 //
@@ -1080,6 +1085,10 @@ type logicTest struct {
 	// to false after every successful statement or query test point, including
 	// those which are supposed to error out.
 	retry bool
+
+	// retryDuration is the maximum duration to retry a statement when using
+	// the retry directive.
+	retryDuration time.Duration
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1876,6 +1885,7 @@ func (t *logicTest) setup(
 	tempExternalIODir, tempExternalIODirCleanup := testutils.TempDir(t.rootT)
 	t.sharedIODir = tempExternalIODir
 	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
+	t.retryDuration = testutils.DefaultSucceedsSoonDuration
 
 	if cfg.UseCockroachGoTestserver {
 		skip.UnderRace(t.t(), "test uses a different binary, so the race detector doesn't work")
@@ -2483,6 +2493,21 @@ func (t *logicTest) processSubtest(
 				)
 			}
 			repeat = count
+
+		case "retry_duration":
+			var duration time.Duration
+			var err error
+			if len(fields) != 2 {
+				err = errors.New("invalid line format")
+			} else {
+				duration, err = time.ParseDuration(fields[1])
+			}
+			if err != nil {
+				return errors.Wrapf(err, "%s:%d invalid retry_duration line",
+					path, s.Line+subtest.lineLineIndexIntoFile)
+			}
+			t.retryDuration = duration
+
 		case "skip_on_retry":
 			t.skipOnRetry = true
 
@@ -2567,12 +2592,12 @@ func (t *logicTest) processSubtest(
 					var cont bool
 					var err error
 					if t.retry {
-						err = testutils.SucceedsSoonError(func() error {
+						err = testutils.SucceedsWithinError(func() error {
 							t.purgeZoneConfig()
 							var tempErr error
 							cont, tempErr = t.execStatement(stmt)
 							return tempErr
-						})
+						}, t.retryDuration)
 					} else {
 						cont, err = t.execStatement(stmt)
 					}
@@ -2903,10 +2928,10 @@ func (t *logicTest) processSubtest(
 
 				for i := 0; i < repeat; i++ {
 					if t.retry && !*rewriteResultsInTestfiles {
-						if err := testutils.SucceedsSoonError(func() error {
+						if err := testutils.SucceedsWithinError(func() error {
 							t.purgeZoneConfig()
 							return t.execQuery(query)
-						}); err != nil {
+						}, t.retryDuration); err != nil {
 							t.Error(err)
 						}
 					} else {
