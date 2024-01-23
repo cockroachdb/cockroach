@@ -10,7 +10,7 @@
 
 import React, { ReactElement } from "react";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import { InsightExecEnum } from "src/insights";
+import { InsightExecEnum } from "src/insights/types";
 import { contentModifiers } from "../../../statsTableUtil/statsTableUtil";
 import { Anchor } from "../../../anchor";
 import { contentionTime, readFromDisk, writtenToDisk } from "../../../util";

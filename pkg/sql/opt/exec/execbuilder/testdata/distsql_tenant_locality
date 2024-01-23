@@ -52,7 +52,7 @@ SELECT id, locality FROM system.sql_instances WHERE locality IS NOT NULL ORDER B
 # - TableReader on SQL Instance 2 to scan Span /106/1/1/0
 # - TableReader on SQL Instance 3 to scan Span /106/1/3/0
 # - TableReader on SQL Instance 1 to scan Span /106/1/5/0.
-query T
+query T retry
 EXPLAIN (DISTSQL) SELECT * FROM t WHERE k IN (1, 3, 5)
 ----
 distribution: full
