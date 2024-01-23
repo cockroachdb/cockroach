@@ -161,7 +161,7 @@ user root
 statement ok
 GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
 
-user testuser_g
+user testuser
 
 statement ok
 ALTER ROLE testuser RESET application_name
