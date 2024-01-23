@@ -2766,7 +2766,7 @@ type ParallelResult struct {
 // By default, this will fail fast, unless explicitly specified otherwise in the
 // RunOptions, if a command error occurs on any node, and return a slice
 // containing all results up to that point, along with a boolean indicating that
-// at least one error occurred. If `WithFailSlow(true)` is passed in, then the
+// at least one error occurred. If `WithFailSlow()` is passed in, then the
 // function will wait for all invocations to complete before returning.
 //
 // ParallelE only returns an error for roachprod itself, not any command errors run
@@ -2789,13 +2789,7 @@ func (c *SyncedCluster) ParallelE(
 	options RunOptions,
 	fn func(ctx context.Context, n Node) (*RunResultDetails, error),
 ) ([]*RunResultDetails, bool, error) {
-	// Defaults for RunOptions if not specified.
-	if options.RetryOptions == nil {
-		options.RetryOptions = DefaultRetryOpt
-	}
-	if options.ShouldRetryFn == nil {
-		options.ShouldRetryFn = DefaultShouldRetryFn
-	}
+	// Function specific default for FailOption if not specified.
 	if options.FailOption == FailDefault {
 		options.FailOption = FailFast
 	}

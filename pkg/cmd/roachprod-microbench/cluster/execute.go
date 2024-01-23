@@ -63,7 +63,7 @@ func remoteWorker(
 			start := timeutil.Now()
 			runResult, err := roachprod.RunWithDetails(
 				context.Background(), log, clusterNode, "" /* SSHOptions */, "", /* processTag */
-				false /* secure */, command.Args, install.RunOptions{},
+				false /* secure */, command.Args, install.DefaultRunOptions(),
 			)
 			duration := timeutil.Since(start)
 			var stdout, stderr string
