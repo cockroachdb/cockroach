@@ -176,6 +176,13 @@ func TestCCLLogic_show_create(
 	runCCLLogicTest(t, "show_create")
 }
 
+func TestCCLLogic_udf_params(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "udf_params")
+}
+
 func TestCCLLogic_udf_plpgsql(
 	t *testing.T,
 ) {

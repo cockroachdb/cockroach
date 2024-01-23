@@ -2248,6 +2248,13 @@ func TestLogic_udf_options(
 	runLogicTest(t, "udf_options")
 }
 
+func TestLogic_udf_params(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_params")
+}
+
 func TestLogic_udf_prepare(
 	t *testing.T,
 ) {

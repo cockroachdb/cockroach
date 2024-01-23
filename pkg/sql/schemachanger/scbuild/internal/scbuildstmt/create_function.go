@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
@@ -60,11 +61,23 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 		))
 	}
 
+	// TODO(#100405): n.ReturnType may be nil because the AST was re-parsed and
+	// the new AST may not have the optbuilder's new return type it determined
+	// from out parameters. Before implementing n.ReturnType as a pointer with a
+	// default nil value, it was a default void, so we use that here. However, we
+	// should investigate whether this has any potential problems in the schema
+	// changer.
+	typ := tree.ResolvableTypeReference(types.Void)
+	setof := false
+	if n.ReturnType != nil {
+		typ = n.ReturnType.Type
+		setof = n.ReturnType.SetOf
+	}
 	fnID := b.GenerateUniqueDescID()
 	fn := scpb.Function{
 		FunctionID:  fnID,
-		ReturnSet:   n.ReturnType.SetOf,
-		ReturnType:  b.ResolveTypeRef(n.ReturnType.Type),
+		ReturnSet:   setof,
+		ReturnType:  b.ResolveTypeRef(typ),
 		IsProcedure: n.IsProcedure,
 	}
 	fn.Params = make([]scpb.Function_Parameter, len(n.Params))
