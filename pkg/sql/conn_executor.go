@@ -4160,6 +4160,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		Status:                     status,
 		TotalActiveTime:            sessionActiveTime,
 		PGBackendPID:               ex.planner.extendedEvalCtx.QueryCancelKey.GetPGBackendPID(),
+		TraceID:                    uint64(ex.planner.extendedEvalCtx.Tracing.connSpan.TraceID()),
 	}
 }
 
