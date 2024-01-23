@@ -9465,7 +9465,7 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 
 	// Wait for the GC to complete.
 	jobutils.WaitForJobToSucceed(t, sqlRunner, gcJobID)
-	waitForTableSplit(t, conn, "foo", "test")
+	waitForTableSplit(t, conn, "foo", "test", 1)
 
 	// This backup should succeed since the spans being backed up have a default
 	// GC TTL of 25 hours.
@@ -9741,7 +9741,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	require.NoError(t, err)
 
 	rRand, _ := randutil.NewTestRand()
-	waitForTableSplit(t, conn, "foo", "defaultdb")
+	waitForTableSplit(t, conn, "foo", "defaultdb", 1)
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "defaultdb", func(r *kvserver.Replica) (bool, error) {
 		conf, err := r.LoadSpanConfig(ctx)
 		if err != nil {
@@ -9830,7 +9830,7 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 		"gc.ttlseconds = 1, range_max_bytes = $1, range_min_bytes = 1<<10;", tableRangeMaxBytes)
 
 	// Wait for the span config fields to apply.
-	waitForTableSplit(t, conn, "foo", "test")
+	waitForTableSplit(t, conn, "foo", "test", 1)
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "test", func(r *kvserver.Replica) (bool, error) {
 		conf, err := r.LoadSpanConfig(ctx)
 		if err != nil {
@@ -10883,7 +10883,7 @@ func TestBackupDBWithViewOnAdjacentDBRange(t *testing.T) {
 	`)
 
 	// Wait for splits to be created on the new tables.
-	waitForTableSplit(t, tc.Conns[0], "t2", "da")
+	waitForTableSplit(t, tc.Conns[0], "t2", "da", 1)
 
 	sqlDB.Exec(t, `BACKUP DATABASE db INTO 'userfile:///a' WITH revision_history;`)
 
