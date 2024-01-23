@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "connector.go",
         "connector_factory.go",
-        "rangedesc_iter.go",
         "setting_overrides.go",
         "test_utils.go",
     ],
