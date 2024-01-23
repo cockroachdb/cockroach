@@ -325,6 +325,15 @@ func (ob *OutputBuilder) AddExecutionTime(delta time.Duration) {
 	ob.AddTopLevelField("execution time", string(humanizeutil.Duration(delta)))
 }
 
+// AddClientTime adds a top-level client-level protocol time field. Cannot be
+// called while inside a node.
+func (ob *OutputBuilder) AddClientTime(delta time.Duration) {
+	if ob.flags.Deflake.Has(DeflakeVolatile) {
+		delta = time.Microsecond
+	}
+	ob.AddTopLevelField("client time", string(humanizeutil.Duration(delta)))
+}
+
 // AddKVReadStats adds a top-level field for the bytes/rows/KV pairs read from
 // KV as well as for the number of BatchRequests issued.
 func (ob *OutputBuilder) AddKVReadStats(rows, bytes, kvPairs, batchRequests int64) {
