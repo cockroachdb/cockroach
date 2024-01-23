@@ -86,7 +86,7 @@ func initRoachprod(l *logger.Logger) error {
 func roachprodRun(clusterName string, l *logger.Logger, cmdArray []string) error {
 	return roachprod.Run(
 		context.Background(), l, clusterName, "", "", false,
-		os.Stdout, os.Stderr, cmdArray, install.RunOptions{},
+		os.Stdout, os.Stderr, cmdArray, install.DefaultRunOptions(),
 	)
 }
 
