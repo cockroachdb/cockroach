@@ -418,6 +418,27 @@ SELECT node_id, user_name, application_name, active_queries
 node_id  user_name  application_name  active_queries
 1        root       ·                 SELECT node_id, user_name, application_name, active_queries FROM [SHOW CLUSTER SESSIONS] WHERE active_queries != ''
 
+statement ok
+SET tracing=off
+
+query B colnames
+SELECT trace_id > 0 AS has_trace_id FROM [SHOW SESSIONS] WHERE active_queries != ''
+----
+has_trace_id
+false
+
+statement ok
+SET tracing=on
+
+query B colnames
+SELECT trace_id > 0 AS has_trace_id FROM [SHOW SESSIONS] WHERE active_queries != ''
+----
+has_trace_id
+true
+
+statement ok
+SET tracing=off
+
 query ITT colnames
 SELECT node_id, user_name, query FROM [SHOW QUERIES]
 ----
