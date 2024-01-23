@@ -773,7 +773,7 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *appstatspb.E
 	})
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
-	if err := emitExplain(ctx, ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
+	if _, err := emitExplain(ctx, ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
 		log.Warningf(ctx, "unable to emit explain plan tree: %v", err)
 		return nil
 	}
@@ -842,7 +842,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	}
 	ob.AddTxnInfo(iso, ih.txnPriority, qos)
 
-	if err := emitExplain(ctx, ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
+	if _, err := emitExplain(ctx, ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
 		ob.AddField("error emitting plan", fmt.Sprint(err))
 	}
 	return ob
@@ -1028,7 +1028,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 		// necessary plans must have been created during the actual execution of
 		// the query.
 		const createPlanIfMissing = false
-		if cp, _ := cascade.GetExplainPlan(ctx, createPlanIfMissing); cp != nil {
+		if cp, _, _ := cascade.GetExplainPlan(ctx, createPlanIfMissing); cp != nil {
 			m.annotateExplain(ctx, cp.(*explain.Plan), spans, makeDeterministic, p)
 		}
 	}
@@ -1076,7 +1076,7 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 				}
 			}
 			var err error
-			recommendations, err = opc.makeQueryIndexRecommendation(ctx)
+			recommendations, err = indexrec.MakeQueryIndexRecommendation(ctx, &opc.optimizer, opc.catalog)
 			if err != nil {
 				log.Warningf(ctx, "unable to generate index recommendations: %s", err)
 				return

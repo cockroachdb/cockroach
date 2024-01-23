@@ -184,7 +184,7 @@ func DecodePlanGistToRows(
 	if err != nil {
 		return nil, err
 	}
-	err = Emit(ctx, explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
+	_, err = Emit(ctx, explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
 	if err != nil {
 		return nil, err
 	}

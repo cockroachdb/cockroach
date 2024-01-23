@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/constraint",
         "//pkg/sql/opt/exec",
+        "//pkg/sql/opt/indexrec",
         "//pkg/sql/opt/invertedexpr",  # keep
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

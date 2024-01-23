@@ -18,8 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Type represents the type of index recommendation for Rec.
@@ -478,4 +481,88 @@ func (ir *indexRecommendation) storingColumns() []tree.Name {
 		storingCols = append(storingCols, colName)
 	})
 	return storingCols
+}
+
+// MakeQueryIndexRecommendation builds a statement and walks through it to find
+// potential index candidates. It then optimizes the statement with those
+// indexes hypothetically added to the table. An index recommendation for the
+// query is outputted based on which hypothetical indexes are helpful in the
+// optimal plan.
+func MakeQueryIndexRecommendation(
+	ctx context.Context, o *xform.Optimizer, catalog cat.Catalog,
+) (_ []Rec, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			// This code allows us to propagate internal errors without having to add
+			// error checks everywhere throughout the code. This is only possible
+			// because the code does not update shared state and does not manipulate
+			// locks.
+			if ok, e := errorutil.ShouldCatch(r); ok {
+				err = e
+				log.VEventf(ctx, 1, "%v", err)
+			} else {
+				// Other panic objects can't be considered "safe" and thus are
+				// propagated as crashes that terminate the session.
+				panic(r)
+			}
+		}
+	}()
+
+	// Save the normalized memo created by the optbuilder.
+	savedMemo := o.DetachMemo(ctx)
+
+	// Use the optimizer to fully normalize the memo. We need to do this before
+	// finding index candidates because the *memo.SortExpr from the sort enforcer
+	// is only added to the memo in this step. The sort expression is required to
+	// determine certain index candidates.
+	f := o.Factory()
+	f.FoldingControl().AllowStableFolds()
+	f.CopyAndReplace(
+		savedMemo.RootExpr().(memo.RelExpr),
+		savedMemo.RootProps(),
+		f.CopyWithoutAssigningPlaceholders,
+	)
+	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		return ruleName.IsNormalize()
+	})
+	if _, err = o.Optimize(); err != nil {
+		return nil, err
+	}
+
+	// Walk through the fully normalized memo to determine index candidates and
+	// create hypothetical tables.
+	indexCandidates := FindIndexCandidateSet(f.Memo().RootExpr(), f.Metadata())
+	optTables, hypTables := BuildOptAndHypTableMaps(catalog, indexCandidates)
+
+	// Optimize with the saved memo and hypothetical tables. Walk through the
+	// optimal plan to determine index recommendations.
+	o.Init(ctx, f.EvalContext(), catalog)
+	f.CopyAndReplace(
+		savedMemo.RootExpr().(memo.RelExpr),
+		savedMemo.RootProps(),
+		f.CopyWithoutAssigningPlaceholders,
+	)
+	o.Memo().Metadata().UpdateTableMeta(f.EvalContext(), hypTables)
+	if _, err = o.Optimize(); err != nil {
+		return nil, err
+	}
+
+	var indexRecs []Rec
+	indexRecs, err = FindRecs(ctx, f.Memo().RootExpr(), f.Metadata())
+	if err != nil {
+		return nil, err
+	}
+
+	// Re-initialize the optimizer (which also re-initializes the factory) and
+	// update the saved memo's metadata with the original table information.
+	// Prepare to re-optimize and create an executable plan.
+	o.Init(ctx, f.EvalContext(), catalog)
+	savedMemo.Metadata().UpdateTableMeta(f.EvalContext(), optTables)
+	f.CopyAndReplace(
+		savedMemo.RootExpr().(memo.RelExpr),
+		savedMemo.RootProps(),
+		f.CopyWithoutAssigningPlaceholders,
+	)
+
+	return indexRecs, nil
 }

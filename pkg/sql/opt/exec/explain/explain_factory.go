@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -180,6 +181,7 @@ func (f *Factory) ConstructPlan(
 		// during the execution or when GetExplainPlan is invoked during the
 		// explain output population.
 		var cascadePlan exec.Plan
+		var recs []indexrec.Rec
 		// In order to capture the plan for the cascade, we'll inject some
 		// additional code into the planning function.
 		origPlanFn := wrappedCascades[i].PlanFn
@@ -191,28 +193,28 @@ func (f *Factory) ConstructPlan(
 			bufferRef exec.Node,
 			numBufferedRows int,
 			allowAutoCommit bool,
-		) (exec.Plan, error) {
+		) (exec.Plan, []indexrec.Rec, error) {
 			// Sanity check that the buffer node we captured earlier references
 			// the same wrapped node as the one we're given.
 			if (buffer == nil) != (bufferRef == nil) {
-				return nil, errors.AssertionFailedf("expected both buffer %v and bufferRef %v be either nil or non-nil", buffer, bufferRef)
+				return nil, nil, errors.AssertionFailedf("expected both buffer %v and bufferRef %v be either nil or non-nil", buffer, bufferRef)
 			}
 			if buffer != nil && buffer.(*Node).WrappedNode() != bufferRef {
-				return nil, errors.AssertionFailedf("expected captured buffer %v to wrap the provided bufferRef %v", buffer, bufferRef)
+				return nil, nil, errors.AssertionFailedf("expected captured buffer %v to wrap the provided bufferRef %v", buffer, bufferRef)
 			}
 			explainFactory := NewFactory(execFactory, semaCtx, evalCtx)
 			var err error
-			cascadePlan, err = origPlanFn(ctx, semaCtx, evalCtx, explainFactory, buffer, numBufferedRows, allowAutoCommit)
+			cascadePlan, recs, err = origPlanFn(ctx, semaCtx, evalCtx, explainFactory, buffer, numBufferedRows, allowAutoCommit)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
-			return cascadePlan.(*Plan).WrappedPlan, nil
+			return cascadePlan.(*Plan).WrappedPlan, recs, nil
 		}
-		cascades[i].GetExplainPlan = func(ctx context.Context, createPlanIfMissing bool) (exec.Plan, error) {
+		cascades[i].GetExplainPlan = func(ctx context.Context, createPlanIfMissing bool) (exec.Plan, []indexrec.Rec, error) {
 			if cascadePlan != nil || !createPlanIfMissing {
 				// If we already created the plan, or if we can't create a fresh
 				// plan, then use the cached one (if available).
-				return cascadePlan, nil
+				return cascadePlan, recs, nil
 			}
 			// We're in vanilla EXPLAIN context, so we need to create the
 			// cascade plan ourselves. Note that cascades can create other
@@ -227,8 +229,8 @@ func (f *Factory) ConstructPlan(
 			// actually matter.
 			const allowAutoCommit = false
 			var err error
-			cascadePlan, err = origPlanFn(ctx, f.semaCtx, f.evalCtx, f, buffer, numBufferedRows, allowAutoCommit)
-			return cascadePlan, err
+			cascadePlan, recs, err = origPlanFn(ctx, f.semaCtx, f.evalCtx, f, buffer, numBufferedRows, allowAutoCommit)
+			return cascadePlan, recs, err
 		}
 	}
 	wrappedChecks := make([]exec.Node, len(checks))

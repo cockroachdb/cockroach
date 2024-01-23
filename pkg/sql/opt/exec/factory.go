@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -237,10 +238,6 @@ type Cascade struct {
 	//
 	// If the cascade does not require input buffering (Buffer is nil), then
 	// bufferRef should be nil and numBufferedRows should be 0.
-	//
-	// This method does not mutate any captured state; it is ok to call PlanFn
-	// methods concurrently (provided that they don't use a single non-thread-safe
-	// execFactory).
 	PlanFn func(
 		ctx context.Context,
 		semaCtx *tree.SemaContext,
@@ -249,14 +246,14 @@ type Cascade struct {
 		bufferRef Node,
 		numBufferedRows int,
 		allowAutoCommit bool,
-	) (Plan, error)
+	) (Plan, []indexrec.Rec, error)
 
 	// GetExplainPlan returns the explain plan for the cascade query. It will
 	// always return a cached plan if there is one, and the boolean argument
 	// controls whether this function can create a new plan (which will be
 	// cached going forward). If createPlanIfMissing is false and there is no
 	// cached plan, then nil, nil is returned.
-	GetExplainPlan func(_ context.Context, createPlanIfMissing bool) (Plan, error)
+	GetExplainPlan func(_ context.Context, createPlanIfMissing bool) (Plan, []indexrec.Rec, error)
 }
 
 // InsertFastPathCheck contains information about a foreign key or

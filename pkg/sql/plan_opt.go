@@ -598,7 +598,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	}
 	e, isExplain := opc.p.stmt.AST.(*tree.Explain)
 	if isExplain && explainModeShowsRec(e.Mode) && p.SessionData().IndexRecommendationsEnabled {
-		indexRecs, err := opc.makeQueryIndexRecommendation(ctx)
+		indexRecs, err := indexrec.MakeQueryIndexRecommendation(ctx, &opc.optimizer, opc.catalog)
 		if err != nil {
 			return nil, err
 		}

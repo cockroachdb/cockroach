@@ -53,6 +53,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 	plan := e.plan.WrappedPlan.(*planComponents)
 
 	var rows []string
+	var indexRecs []indexrec.Rec
 	if e.options.Mode == tree.ExplainGist {
 		rows = []string{e.plan.Gist.String()}
 	} else {
@@ -130,7 +131,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			// For the JSON flag, we only want to emit the diagram JSON.
 			rows = []string{diagramJSON}
 		} else {
-			if err := emitExplain(params.ctx, ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan); err != nil {
+			if indexRecs, err = emitExplain(params.ctx, ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan); err != nil {
 				return err
 			}
 			rows = ob.BuildStringRows()
@@ -140,7 +141,8 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		}
 	}
 	// Add index recommendations to output, if they exist.
-	if recs := params.p.instrumentation.explainIndexRecs; recs != nil {
+	recs := append(params.p.instrumentation.explainIndexRecs, indexRecs...)
+	if len(recs) > 0 {
 		// First add empty row.
 		rows = append(rows, "")
 		rows = append(rows, fmt.Sprintf("index recommendations: %d", len(recs)))
@@ -181,7 +183,7 @@ func emitExplain(
 	evalCtx *eval.Context,
 	codec keys.SQLCodec,
 	explainPlan *explain.Plan,
-) (err error) {
+) (_ []indexrec.Rec, err error) {
 	// Guard against bugs in the explain code.
 	defer func() {
 		if r := recover(); r != nil {
@@ -202,7 +204,7 @@ func emitExplain(
 	}()
 
 	if explainPlan == nil {
-		return errors.AssertionFailedf("no plan")
+		return nil, errors.AssertionFailedf("no plan")
 	}
 
 	spanFormatFn := func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string {
@@ -259,7 +261,7 @@ func closeExplainPlan(ctx context.Context, ep *explain.Plan) {
 		// We don't want to create new plans if they haven't been cached - all
 		// necessary plans must have been created already in explain.Emit call.
 		const createPlanIfMissing = false
-		if cp, _ := cascade.GetExplainPlan(ctx, createPlanIfMissing); cp != nil {
+		if cp, _, _ := cascade.GetExplainPlan(ctx, createPlanIfMissing); cp != nil {
 			closeExplainPlan(ctx, cp.(*explain.Plan))
 		}
 	}

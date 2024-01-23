@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -33,7 +34,9 @@ import (
 
 // Emit produces the EXPLAIN output against the given OutputBuilder. The
 // OutputBuilder flags are taken into account.
-func Emit(ctx context.Context, plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
+func Emit(
+	ctx context.Context, plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn,
+) ([]indexrec.Rec, error) {
 	return emitInternal(ctx, plan, ob, spanFormatFn, nil /* visitedFKsByCascades */)
 }
 
@@ -46,7 +49,7 @@ func emitInternal(
 	ob *OutputBuilder,
 	spanFormatFn SpanFormatFn,
 	visitedFKsByCascades map[string]struct{},
-) error {
+) ([]indexrec.Rec, error) {
 	e := makeEmitter(ob, spanFormatFn)
 	var walk func(n *Node) error
 	walk = func(n *Node) error {
@@ -77,11 +80,11 @@ func emitInternal(
 	}
 
 	if len(plan.Subqueries) == 0 && len(plan.Cascades) == 0 && len(plan.Checks) == 0 {
-		return walk(plan.Root)
+		return nil, walk(plan.Root)
 	}
 	ob.EnterNode("root", plan.Root.Columns(), plan.Root.Ordering())
 	if err := walk(plan.Root); err != nil {
-		return err
+		return nil, err
 	}
 	for i, s := range plan.Subqueries {
 		ob.EnterMetaNode("subquery")
@@ -110,25 +113,27 @@ func emitInternal(
 		case exec.SubqueryAllRows:
 			mode = "all rows"
 		default:
-			return errors.Errorf("invalid SubqueryMode %d", s.Mode)
+			return nil, errors.Errorf("invalid SubqueryMode %d", s.Mode)
 		}
 
 		ob.Attr("exec mode", mode)
 		if err := walk(s.Root.(*Node)); err != nil {
-			return err
+			return nil, err
 		}
 		ob.LeaveNode()
 	}
 
+	var indexRecs []indexrec.Rec
 	for _, cascade := range plan.Cascades {
 		ob.EnterMetaNode("fk-cascade")
 		ob.Attr("fk", cascade.FKConstraint.Name())
 		// Here we do want to allow creation of the plans for the cascades to be
 		// able to include them into the EXPLAIN output.
 		const createPlanIfMissing = true
-		if cascadePlan, err := cascade.GetExplainPlan(ctx, createPlanIfMissing); err != nil {
-			return err
+		if cascadePlan, recs, err := cascade.GetExplainPlan(ctx, createPlanIfMissing); err != nil {
+			return nil, err
 		} else {
+			indexRecs = append(indexRecs, recs...)
 			if visitedFKsByCascades == nil {
 				visitedFKsByCascades = make(map[string]struct{})
 			}
@@ -144,8 +149,10 @@ func emitInternal(
 			} else {
 				visitedFKsByCascades[fkID] = struct{}{}
 				defer delete(visitedFKsByCascades, fkID)
-				if err = emitInternal(ctx, cascadePlan.(*Plan), ob, spanFormatFn, visitedFKsByCascades); err != nil {
-					return err
+				if recs, err = emitInternal(ctx, cascadePlan.(*Plan), ob, spanFormatFn, visitedFKsByCascades); err != nil {
+					return nil, err
+				} else {
+					indexRecs = append(indexRecs, recs...)
 				}
 			}
 		}
@@ -154,12 +161,12 @@ func emitInternal(
 	for _, n := range plan.Checks {
 		ob.EnterMetaNode("constraint-check")
 		if err := walk(n); err != nil {
-			return err
+			return nil, err
 		}
 		ob.LeaveNode()
 	}
 	ob.LeaveNode()
-	return nil
+	return indexRecs, nil
 }
 
 // SpanFormatFn is a function used to format spans for EXPLAIN. Only called on

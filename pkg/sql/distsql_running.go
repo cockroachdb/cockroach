@@ -2101,7 +2101,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		if len(plan.checkPlans) > 0 || i < len(plan.cascades)-1 {
 			allowAutoCommit = false
 		}
-		cascadePlan, err := plan.cascades[i].PlanFn(
+		cascadePlan, _, err := plan.cascades[i].PlanFn(
 			ctx, &planner.semaCtx, &evalCtx.Context, execFactory,
 			buf, numBufferedRows, allowAutoCommit,
 		)

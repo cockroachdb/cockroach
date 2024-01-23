@@ -19,9 +19,12 @@ go_library(
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/xform",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util/errorutil",
         "//pkg/util/intsets",
+        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
