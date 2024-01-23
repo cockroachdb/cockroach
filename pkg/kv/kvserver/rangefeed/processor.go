@@ -847,7 +847,7 @@ func (p *LegacyProcessor) consumeLogicalOps(
 
 		// Determine whether the operation caused the resolved timestamp to
 		// move forward. If so, publish a RangeFeedCheckpoint notification.
-		if p.rts.ConsumeLogicalOp(op) {
+		if p.rts.ConsumeLogicalOp(ctx, op) {
 			p.publishCheckpoint(ctx)
 		}
 	}
