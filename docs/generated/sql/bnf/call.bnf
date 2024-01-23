@@ -1,0 +1,2 @@
+call_stmt ::=
+	'CALL' proc_name '(' param_values ')'

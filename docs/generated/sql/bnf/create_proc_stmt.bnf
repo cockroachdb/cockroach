@@ -1,2 +1,0 @@
-create_proc_stmt ::=
-	'CREATE' opt_or_replace 'PROCEDURE' routine_create_name '(' opt_routine_param_with_default_list ')' opt_create_routine_opt_list opt_routine_body
