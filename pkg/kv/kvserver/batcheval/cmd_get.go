@@ -38,6 +38,7 @@ func Get(
 		lockTableForSkipLocked = newRequestBoundLockTableView(
 			readWriter, cArgs.Concurrency, h.Txn, args.KeyLockingStrength,
 		)
+		defer lockTableForSkipLocked.Close()
 	}
 
 	getRes, err := storage.MVCCGet(ctx, readWriter, args.Key, h.Timestamp, storage.MVCCGetOptions{

@@ -40,6 +40,7 @@ func ReverseScan(
 		lockTableForSkipLocked = newRequestBoundLockTableView(
 			readWriter, cArgs.Concurrency, h.Txn, args.KeyLockingStrength,
 		)
+		defer lockTableForSkipLocked.Close()
 	}
 
 	var res result.Result

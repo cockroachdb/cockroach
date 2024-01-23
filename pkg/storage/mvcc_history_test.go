@@ -2848,6 +2848,8 @@ func (lt *mockLockTableView) IsKeyLockedByConflictingTxn(
 	}
 }
 
+func (lt *mockLockTableView) Close() {}
+
 func (e *evalCtx) visitWrappedIters(fn func(it storage.SimpleMVCCIterator) (done bool)) {
 	iter := e.iter
 	if iter == nil {
