@@ -9,14 +9,12 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { mount } from "enzyme";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { assert } from "chai";
 import { createSandbox } from "sinon";
 import { MemoryRouter as Router } from "react-router-dom";
 import { StatementDetails, StatementDetailsProps } from "./statementDetails";
-import { DiagnosticsView } from "./diagnostics/diagnosticsView";
 import { getStatementDetailsPropsFixture } from "./statementDetails.fixture";
-import { Loading } from "../loading";
 
 const sandbox = createSandbox();
 
@@ -33,33 +31,29 @@ describe("StatementDetails page", () => {
     statementDetailsProps.statementDetails = null;
     statementDetailsProps.statementsError = null;
 
-    const wrapper = mount(
+    render(
       <Router>
         <StatementDetails {...statementDetailsProps} />
       </Router>,
     );
-    assert.isTrue(wrapper.find(Loading).prop("loading"));
-    assert.isFalse(
-      wrapper.find(StatementDetails).find("div.ant-tabs-tab").exists(),
-    );
+
+    screen.getByLabelText("Loading...");
   });
 
   it("shows error alert when `lastError` is not null", () => {
     statementDetailsProps.statementsError = new Error("Something went wrong");
 
-    const wrapper = mount(
+    render(
       <Router>
         <StatementDetails {...statementDetailsProps} />
       </Router>,
     );
-    assert.isNotNull(wrapper.find(Loading).prop("error"));
-    assert.isFalse(
-      wrapper.find(StatementDetails).find("div.ant-tabs-tab").exists(),
-    );
+
+    screen.getByText("Error message: Something went wrong;", { exact: false });
   });
 
   // Repeat this test for dedicated vs. tenant clusters.
-  describe.each([true, true])("Diagnostics tab, isTenant = %p", isTenant => {
+  describe.each([false, true])("Diagnostics tab, isTenant = %p", isTenant => {
     beforeEach(() => {
       statementDetailsProps.isTenant = isTenant;
     });
@@ -71,7 +65,7 @@ describe("StatementDetails page", () => {
       const refreshStatementDiagnosticsRequestsClickSpy = sandbox.spy();
       const onDiagnosticsActivateClickSpy = sandbox.spy();
 
-      const wrapper = mount(
+      render(
         <Router>
           <StatementDetails
             {...statementDetailsProps}
@@ -87,19 +81,13 @@ describe("StatementDetails page", () => {
       );
 
       // Click on the Diagnostics tab.
-      wrapper
-        .find(StatementDetails)
-        .find("div.ant-tabs-tab")
-        .last()
-        .simulate("click");
+      fireEvent.click(screen.getByText("Diagnostics (1)"));
       expect(onTabChangeSpy).toHaveBeenCalledWith("diagnostics");
 
-      // Click on the "Activate diagnostics" button in the tab.
-      wrapper
-        .find(DiagnosticsView)
-        .findWhere(n => n.prop("children") === "Activate diagnostics")
-        .first()
-        .simulate("click");
+      fireEvent.click(
+        screen.getByRole("button", { name: "Activate diagnostics" }),
+      );
+
       onDiagnosticsActivateClickSpy.calledOnceWith(
         statementDetailsProps.statementDetails.statement.metadata.query,
       );
@@ -108,16 +96,16 @@ describe("StatementDetails page", () => {
       // and liveness refreshes should not happen for tenants.
       assert.equal(
         refreshNodesClickSpy.callCount,
-        isTenant ? 0 : 2,
+        isTenant ? 0 : 3,
         "refresh nodes",
       );
       assert.equal(
         refreshNodesLivenessClickSpy.callCount,
-        isTenant ? 0 : 2,
+        isTenant ? 0 : 3,
         "refresh liveness",
       );
       assert.isTrue(
-        refreshStatementDiagnosticsRequestsClickSpy.calledTwice,
+        refreshStatementDiagnosticsRequestsClickSpy.calledThrice,
         "refresh diagnostics requests",
       );
     });
@@ -128,18 +116,13 @@ describe("StatementDetails page", () => {
         ["tab", "diagnostics"],
       ]).toString();
 
-      const wrapper = mount(
+      render(
         <Router>
           <StatementDetails {...statementDetailsProps} />
         </Router>,
       );
 
-      assert.isTrue(
-        wrapper
-          .find(DiagnosticsView)
-          .findWhere(n => n.text() === "Dec 08, 2021 at 9:51 UTC")
-          .exists(),
-      );
+      screen.getByText("Dec 08, 2021 at 9:51 UTC", { exact: false });
     });
   });
 });

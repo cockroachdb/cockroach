@@ -76,7 +76,6 @@ export type StatementInsightsViewStateProps = {
   statementsError: Error | null;
   dropDownSelect?: React.ReactElement;
   isLoading?: boolean;
-  isTenant?: boolean;
   maxSizeApiReached?: boolean;
   timeScale?: TimeScale;
 };

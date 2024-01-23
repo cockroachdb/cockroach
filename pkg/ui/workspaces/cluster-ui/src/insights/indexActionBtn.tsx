@@ -16,7 +16,10 @@ import "antd/lib/icon/style";
 import { Modal } from "../modal";
 import { Text, TextTypes } from "../text";
 import { Button } from "../button";
-import { executeIndexRecAction, IndexActionResponse } from "../api";
+import {
+  executeIndexRecAction,
+  IndexActionResponse,
+} from "../api/indexActionsApi";
 import {
   alterIndex,
   createIndex,

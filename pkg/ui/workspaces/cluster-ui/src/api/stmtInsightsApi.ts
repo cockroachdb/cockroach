@@ -20,15 +20,15 @@ import {
 } from "./sqlApi";
 import {
   ContentionDetails,
-  getInsightsFromProblemsAndCauses,
   InsightExecEnum,
   StatementStatus,
   StmtInsightEvent,
-} from "src/insights";
+} from "src/insights/types";
 import moment from "moment-timezone";
 import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
 import { FixFingerprintHexValue } from "../util";
 import { getContentionDetailsApi } from "./contentionApi";
+import { getInsightsFromProblemsAndCauses } from "../insights/utils";
 
 export type StmtInsightsReq = {
   start?: moment.Moment;
