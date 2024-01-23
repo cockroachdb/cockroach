@@ -5819,10 +5819,16 @@ func MVCCResolveWriteIntentRange(
 
 // MVCCCheckForAcquireLock scans the replicated lock table to determine whether
 // a lock acquisition at the specified key and strength by the specified
-// transaction would succeed. If the lock table scan finds one or more existing
-// locks on the key that conflict with the acquisition then a LockConflictError
-// is returned. Otherwise, nil is returned. Unlike MVCCAcquireLock, this method
-// does not actually acquire the lock (i.e. write to the lock table).
+// transaction[1] would succeed. If the lock table scan finds one or more
+// existing locks on the key that conflict with the acquisition then a
+// LockConflictError is returned. Otherwise, nil is returned. Unlike
+// MVCCAcquireLock, this method does not actually acquire the lock (i.e. write
+// to the lock table).
+//
+// [1] Non-transactional requests cannot acquire locks that outlive themselves,
+// but they are still able to specify a locking strength and conflict with other
+// transactions. Therefore, it is valid to supply a nil transaction to this
+// function.
 func MVCCCheckForAcquireLock(
 	ctx context.Context,
 	reader Reader,
@@ -5831,7 +5837,7 @@ func MVCCCheckForAcquireLock(
 	key roachpb.Key,
 	maxLockConflicts int64,
 ) error {
-	if err := validateLockAcquisition(txn, str); err != nil {
+	if err := validateLockAcquisitionStrength(str); err != nil {
 		return err
 	}
 	ltScanner, err := newLockTableKeyScanner(
@@ -5857,7 +5863,13 @@ func MVCCAcquireLock(
 	ms *enginepb.MVCCStats,
 	maxLockConflicts int64,
 ) error {
-	if err := validateLockAcquisition(txn, str); err != nil {
+	if txn == nil {
+		// Non-transactional requests cannot acquire locks that outlive their
+		// lifespan; they can only check for conflicting locks using
+		// MVCCCheckForAcquireLock.
+		return errors.Errorf("txn must be non-nil to acquire a replicated lock")
+	}
+	if err := validateLockAcquisitionStrength(str); err != nil {
 		return err
 	}
 	ltScanner, err := newLockTableKeyScanner(
@@ -5996,10 +6008,7 @@ func MVCCAcquireLock(
 	return nil
 }
 
-func validateLockAcquisition(txn *roachpb.Transaction, str lock.Strength) error {
-	if txn == nil {
-		return errors.Errorf("txn must be non-nil to acquire lock")
-	}
+func validateLockAcquisitionStrength(str lock.Strength) error {
 	if !(str == lock.Shared || str == lock.Exclusive) {
 		return errors.Errorf("invalid lock strength to acquire lock: %s", str.String())
 	}
