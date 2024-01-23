@@ -12,16 +12,25 @@ package rangefeed
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
+
+// TODO(erikgrinaker): remove this once we're confident it won't fire.
+var DisableCommitIntentTimestampAssertion = envutil.EnvOrDefaultBool(
+	"COCKROACH_RANGEFEED_DISABLE_COMMIT_INTENT_TIMESTAMP_ASSERTION", false)
 
 // A rangefeed's "resolved timestamp" is defined as the timestamp at which no
 // future updates will be emitted to the feed at or before. The timestamp is
@@ -81,11 +90,13 @@ type resolvedTimestamp struct {
 	closedTS   hlc.Timestamp
 	resolvedTS hlc.Timestamp
 	intentQ    unresolvedIntentQueue
+	settings   *cluster.Settings
 }
 
-func makeResolvedTimestamp() resolvedTimestamp {
+func makeResolvedTimestamp(st *cluster.Settings) resolvedTimestamp {
 	return resolvedTimestamp{
-		intentQ: makeUnresolvedIntentQueue(),
+		intentQ:  makeUnresolvedIntentQueue(),
+		settings: st,
 	}
 }
 
@@ -129,32 +140,44 @@ func (rts *resolvedTimestamp) ForwardClosedTS(newClosedTS hlc.Timestamp) bool {
 // operation within its range of tracked keys. This allows the structure to
 // update its internal intent tracking to reflect the change. The method returns
 // whether this caused the resolved timestamp to move forward.
-func (rts *resolvedTimestamp) ConsumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
-	if rts.consumeLogicalOp(op) {
+func (rts *resolvedTimestamp) ConsumeLogicalOp(
+	ctx context.Context, op enginepb.MVCCLogicalOp,
+) bool {
+	if rts.consumeLogicalOp(ctx, op) {
 		return rts.recompute()
 	}
 	rts.assertNoChange()
 	return false
 }
 
-func (rts *resolvedTimestamp) consumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
+func (rts *resolvedTimestamp) consumeLogicalOp(
+	ctx context.Context, op enginepb.MVCCLogicalOp,
+) bool {
 	switch t := op.GetValue().(type) {
 	case *enginepb.MVCCWriteValueOp:
-		rts.assertOpAboveRTS(op, t.Timestamp)
+		rts.assertOpAboveRTS(ctx, op, t.Timestamp, true /* fatal */)
 		return false
 
 	case *enginepb.MVCCDeleteRangeOp:
-		rts.assertOpAboveRTS(op, t.Timestamp)
+		rts.assertOpAboveRTS(ctx, op, t.Timestamp, true /* fatal */)
 		return false
 
 	case *enginepb.MVCCWriteIntentOp:
-		rts.assertOpAboveRTS(op, t.Timestamp)
+		rts.assertOpAboveRTS(ctx, op, t.Timestamp, true /* fatal */)
 		return rts.intentQ.IncRef(t.TxnID, t.TxnKey, t.TxnIsoLevel, t.TxnMinTimestamp, t.Timestamp)
 
 	case *enginepb.MVCCUpdateIntentOp:
 		return rts.intentQ.UpdateTS(t.TxnID, t.Timestamp)
 
 	case *enginepb.MVCCCommitIntentOp:
+		// This assertion can be violated in mixed-version clusters, so make it
+		// fatal only in 24.1, gated by an envvar just in case. See:
+		// https://github.com/cockroachdb/cockroach/issues/104309
+		//
+		// TODO(erikgrinaker): make this unconditionally fatal.
+		fatal := rts.settings.Version.IsActive(ctx, clusterversion.V24_1Start) &&
+			!DisableCommitIntentTimestampAssertion
+		rts.assertOpAboveRTS(ctx, op, t.Timestamp, fatal)
 		return rts.intentQ.DecrRef(t.TxnID, t.Timestamp)
 
 	case *enginepb.MVCCAbortIntentOp:
@@ -265,10 +288,19 @@ func (rts *resolvedTimestamp) assertNoChange() {
 // assertOpAboveTimestamp asserts that this operation is at a larger timestamp
 // than the current resolved timestamp. A violation of this assertion would
 // indicate a failure of the closed timestamp mechanism.
-func (rts *resolvedTimestamp) assertOpAboveRTS(op enginepb.MVCCLogicalOp, opTS hlc.Timestamp) {
+func (rts *resolvedTimestamp) assertOpAboveRTS(
+	ctx context.Context, op enginepb.MVCCLogicalOp, opTS hlc.Timestamp, fatal bool,
+) {
 	if opTS.LessEq(rts.resolvedTS) {
-		panic(fmt.Sprintf("resolved timestamp %s equal to or above timestamp of operation %v",
-			rts.resolvedTS, op))
+		err := errors.AssertionFailedf(
+			"resolved timestamp %s equal to or above timestamp of operation %v", rts.resolvedTS, op)
+		if fatal {
+			// TODO(erikgrinaker): use log.Fatalf. Panic for now, since tests expect
+			// it and to minimize code churn for backports.
+			panic(err)
+		} else {
+			log.Errorf(ctx, "%v", err)
+		}
 	}
 }
 
