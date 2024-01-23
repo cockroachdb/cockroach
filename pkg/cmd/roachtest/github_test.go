@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -128,6 +127,8 @@ func TestCreatePostRequest(t *testing.T) {
 		return failure{squashedErr: ref}
 	}
 
+	const testName = "github_test"
+
 	// TODO(radu): these tests should be converted to datadriven tests which
 	// output the full rendering of the github issue message along with the
 	// metadata.
@@ -140,9 +141,12 @@ func TestCreatePostRequest(t *testing.T) {
 		coverageBuild           bool
 		extraLabels             []string
 		arch                    vm.CPUArch
-		failure                 failure
+		failures                []failure
 		expectedPost            bool
 		expectedLabels          []string
+		expectedTeam            string
+		expectedName            string
+		expectedMessagePrefix   string
 		expectedReleaseBlocker  bool
 		expectedSkipTestFailure bool
 		expectedParams          map[string]string
@@ -150,9 +154,11 @@ func TestCreatePostRequest(t *testing.T) {
 		// 1.
 		{
 			nonReleaseBlocker: true,
-			failure:           createFailure(errors.New("other")),
+			failures:          []failure{createFailure(errors.New("other"))},
 			expectedPost:      true,
 			expectedLabels:    []string{"C-test-failure"},
+			expectedTeam:      "@cockroachdb/unowned",
+			expectedName:      testName,
 			expectedParams: prefixAll(map[string]string{
 				"cloud":            "gce",
 				"encrypted":        "false",
@@ -170,9 +176,14 @@ func TestCreatePostRequest(t *testing.T) {
 			localSSD:         true,
 			metamorphicBuild: true,
 			arch:             vm.ArchARM64,
-			failure:          createFailure(errClusterProvisioningFailed),
-			expectedPost:     true,
-			expectedLabels:   []string{"T-testeng", "X-infra-flake"},
+			failures: []failure{
+				createFailure(errClusterProvisioningFailed(errors.New("gcloud error"))),
+			},
+			expectedPost:          true,
+			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
+			expectedTeam:          "@cockroachdb/test-eng",
+			expectedName:          "cluster_creation",
+			expectedMessagePrefix: testName + " failed",
 			expectedParams: prefixAll(map[string]string{
 				"cloud":            "gce",
 				"encrypted":        "false",
@@ -191,9 +202,12 @@ func TestCreatePostRequest(t *testing.T) {
 		// `clusterImpl` are not dereferenced
 		{
 			clusterCreationFailed: true,
-			failure:               createFailure(rperrors.ErrSSH255),
+			failures:              []failure{createFailure(rperrors.ErrSSH255)},
 			expectedPost:          true,
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
+			expectedTeam:          "@cockroachdb/test-eng",
+			expectedName:          "ssh_problem",
+			expectedMessagePrefix: testName + " failed",
 			expectedParams: prefixAll(map[string]string{
 				"cloud":            "gce",
 				"ssd":              "0",
@@ -206,28 +220,27 @@ func TestCreatePostRequest(t *testing.T) {
 		{
 			nonReleaseBlocker: true,
 			loadTeamsFailed:   true,
-			failure:           createFailure(errors.New("other")),
+			failures:          []failure{createFailure(errors.New("other"))},
 			expectedLabels:    []string{"C-test-failure"},
 		},
-		// 5. Error during post test assertions
+		// 5. Error during dns operation.
 		{
-			nonReleaseBlocker: true,
-			failure:           createFailure(errDuringPostAssertions),
-			expectedLabels:    []string{"C-test-failure"},
+			nonReleaseBlocker:     true,
+			failures:              []failure{createFailure(gce.ErrDNSOperation)},
+			expectedPost:          true,
+			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
+			expectedTeam:          "@cockroachdb/test-eng",
+			expectedName:          "dns_problem",
+			expectedMessagePrefix: testName + " failed",
 		},
-		// 6. Error during dns operation.
-		{
-			nonReleaseBlocker: true,
-			failure:           createFailure(gce.ErrDNSOperation),
-			expectedPost:      true,
-			expectedLabels:    []string{"T-testeng", "X-infra-flake"},
-		},
-		// 7. Assert that extra labels in the test spec are added to the issue.
+		// 6. Assert that extra labels in the test spec are added to the issue.
 		{
 			extraLabels:    []string{"foo-label"},
-			failure:        createFailure(errors.New("other")),
+			failures:       []failure{createFailure(errors.New("other"))},
 			expectedPost:   true,
 			expectedLabels: []string{"C-test-failure", "release-blocker", "foo-label"},
+			expectedTeam:   "@cockroachdb/unowned",
+			expectedName:   testName,
 			expectedParams: prefixAll(map[string]string{
 				"cloud":            "gce",
 				"encrypted":        "false",
@@ -240,13 +253,15 @@ func TestCreatePostRequest(t *testing.T) {
 				"coverageBuild":    "false",
 			}),
 		},
-		// 8. Verify that release-blocker label is not applied on metamorphic builds
+		// 7. Verify that release-blocker label is not applied on metamorphic builds
 		// (for now).
 		{
 			metamorphicBuild: true,
-			failure:          createFailure(errors.New("other")),
+			failures:         []failure{createFailure(errors.New("other"))},
 			expectedPost:     true,
 			expectedLabels:   []string{"C-test-failure", "B-metamorphic-enabled"},
+			expectedTeam:     "@cockroachdb/unowned",
+			expectedName:     testName,
 			expectedParams: prefixAll(map[string]string{
 				"cloud":            "gce",
 				"encrypted":        "false",
@@ -259,13 +274,15 @@ func TestCreatePostRequest(t *testing.T) {
 				"coverageBuild":    "false",
 			}),
 		},
-		// 9. Verify that release-blocker label is not applied on coverage builds (for
+		// 8. Verify that release-blocker label is not applied on coverage builds (for
 		// now).
 		{
 			extraLabels:    []string{"foo-label"},
 			coverageBuild:  true,
-			failure:        createFailure(errors.New("other")),
+			failures:       []failure{createFailure(errors.New("other"))},
 			expectedPost:   true,
+			expectedTeam:   "@cockroachdb/unowned",
+			expectedName:   testName,
 			expectedLabels: []string{"C-test-failure", "B-coverage-enabled", "foo-label"},
 			expectedParams: prefixAll(map[string]string{
 				"cloud":            "gce",
@@ -287,7 +304,7 @@ func TestCreatePostRequest(t *testing.T) {
 			clusterSpec := reg.MakeClusterSpec(1, spec.Arch(c.arch))
 
 			testSpec := &registry.TestSpec{
-				Name:              "github_test",
+				Name:              testName,
 				Owner:             OwnerUnitTest,
 				Cluster:           clusterSpec,
 				NonReleaseBlocker: c.nonReleaseBlocker,
@@ -325,54 +342,35 @@ func TestCreatePostRequest(t *testing.T) {
 				teamLoader:   teamLoadFn,
 			}
 
+			req, err := github.createPostRequest(
+				testName, ti.start, ti.end, testSpec, c.failures,
+				"message", c.metamorphicBuild, c.coverageBuild,
+			)
 			if c.loadTeamsFailed {
 				// Assert that if TEAMS.yaml cannot be loaded then function errors.
-				_, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild, c.coverageBuild)
-				assert.Error(t, err, "Expected an error in createPostRequest when loading teams fails, but got nil")
-			} else {
-				req, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild, c.coverageBuild)
-				assert.NoError(t, err, "Expected no error in createPostRequest")
-
-				r := &issues.Renderer{}
-				req.HelpCommand(r)
-				file := fmt.Sprintf("help_command_createpost_%d.txt", idx+1)
-				echotest.Require(t, r.String(), filepath.Join("testdata", file))
-
-				if c.expectedParams != nil {
-					require.Equal(t, c.expectedParams, req.ExtraParams)
-				}
-
-				expLabels := append([]string{"O-roachtest"}, c.expectedLabels...)
-				sort.Strings(expLabels)
-				labels := append([]string{}, req.Labels...)
-				sort.Strings(expLabels)
-				sort.Strings(labels)
-				require.Equal(t, expLabels, labels)
-
-				expectedTeam := "@cockroachdb/unowned"
-				expectedName := "github_test"
-				expectedMessagePrefix := ""
-
-				if errors.Is(c.failure.squashedErr, gce.ErrDNSOperation) {
-					expectedTeam = "@cockroachdb/test-eng"
-					expectedName = "dns_problem"
-					expectedMessagePrefix = "test github_test failed due to "
-				} else if errors.Is(c.failure.squashedErr, errClusterProvisioningFailed) {
-					expectedTeam = "@cockroachdb/test-eng"
-					expectedName = "cluster_creation"
-					expectedMessagePrefix = "test github_test was skipped due to "
-				} else if errors.Is(c.failure.squashedErr, rperrors.ErrSSH255) {
-					expectedTeam = "@cockroachdb/test-eng"
-					expectedName = "ssh_problem"
-					expectedMessagePrefix = "test github_test failed due to "
-				} else if errors.Is(c.failure.squashedErr, errDuringPostAssertions) {
-					expectedMessagePrefix = "test github_test failed during post test assertions (see test-post-assertions.log) due to "
-				}
-
-				require.Contains(t, req.MentionOnCreate, expectedTeam)
-				require.Equal(t, expectedName, req.TestName)
-				require.True(t, strings.HasPrefix(req.Message, expectedMessagePrefix), req.Message)
+				require.Error(t, err)
+				return
 			}
+
+			require.NoError(t, err)
+
+			r := &issues.Renderer{}
+			req.HelpCommand(r)
+			file := fmt.Sprintf("help_command_createpost_%d.txt", idx+1)
+			echotest.Require(t, r.String(), filepath.Join("testdata", file))
+
+			if c.expectedParams != nil {
+				require.Equal(t, c.expectedParams, req.ExtraParams)
+			}
+
+			expLabels := append([]string{"O-roachtest"}, c.expectedLabels...)
+			sort.Strings(expLabels)
+			sort.Strings(req.Labels)
+			require.Equal(t, expLabels, req.Labels)
+
+			require.Contains(t, req.MentionOnCreate, c.expectedTeam)
+			require.Equal(t, c.expectedName, req.TestName)
+			require.Contains(t, req.Message, c.expectedMessagePrefix)
 		})
 	}
 }

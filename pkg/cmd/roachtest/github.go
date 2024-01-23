@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/errors"
 )
 
 type githubIssues struct {
@@ -139,7 +140,7 @@ func (g *githubIssues) createPostRequest(
 	start time.Time,
 	end time.Time,
 	spec *registry.TestSpec,
-	firstFailure failure,
+	failures []failure,
 	message string,
 	metamorphicBuild bool,
 	coverageBuild bool,
@@ -147,31 +148,47 @@ func (g *githubIssues) createPostRequest(
 	var mention []string
 	var projColID int
 
-	issueOwner := spec.Owner
-	issueName := testName
-	issueClusterName := ""
+	var (
+		issueOwner    = spec.Owner
+		issueName     = testName
+		messagePrefix string
+		infraFlake    bool
+	)
 
-	messagePrefix := ""
-	var infraFlake bool
-	// Overrides to shield eng teams from potential flakes
+	// handleErrorWithOwnership updates the local variables in this
+	// function that contain the name of the issue being created,
+	// message prefix, and team that will own it.
+	handleErrorWithOwnership := func(err registry.ErrorWithOwnership) {
+		issueOwner = err.Owner
+		infraFlake = err.InfraFlake
+
+		if err.TitleOverride != "" {
+			issueName = err.TitleOverride
+			messagePrefix = fmt.Sprintf("test %s failed: ", testName)
+		}
+	}
+
+	issueClusterName := ""
+	errWithOwnership := failuresSpecifyOwner(failures)
 	switch {
-	case failureContainsError(firstFailure, errClusterProvisioningFailed):
-		issueOwner = registry.OwnerTestEng
-		issueName = "cluster_creation"
-		messagePrefix = fmt.Sprintf("test %s was skipped due to ", testName)
-		infraFlake = true
-	case failureContainsError(firstFailure, rperrors.ErrSSH255):
-		issueOwner = registry.OwnerTestEng
-		issueName = "ssh_problem"
-		messagePrefix = fmt.Sprintf("test %s failed due to ", testName)
-		infraFlake = true
-	case failureContainsError(firstFailure, gce.ErrDNSOperation):
-		issueOwner = registry.OwnerTestEng
-		issueName = "dns_problem"
-		messagePrefix = fmt.Sprintf("test %s failed due to ", testName)
-		infraFlake = true
-	case failureContainsError(firstFailure, errDuringPostAssertions):
-		messagePrefix = fmt.Sprintf("test %s failed during post test assertions (see test-post-assertions.log) due to ", testName)
+	case errWithOwnership != nil:
+		handleErrorWithOwnership(*errWithOwnership)
+
+	// The following error come from various entrypoints in roachprod,
+	// but we know that they should be handled by TestEng whenever they
+	// happen during a test.
+	case failuresContainsError(failures, rperrors.ErrSSH255):
+		handleErrorWithOwnership(registry.ErrorWithOwner(
+			registry.OwnerTestEng, errors.New("SSH problem"),
+			registry.WithTitleOverride("ssh_problem"),
+			registry.InfraFlake,
+		))
+	case failuresContainsError(failures, gce.ErrDNSOperation):
+		handleErrorWithOwnership(registry.ErrorWithOwner(
+			registry.OwnerTestEng, errors.New("DNS problem"),
+			registry.WithTitleOverride("dns_problem"),
+			registry.InfraFlake,
+		))
 	}
 
 	// Issues posted from roachtest are identifiable as such, and they are also release blockers
@@ -300,7 +317,7 @@ func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) 
 	default:
 		metamorphicBuild = tests.UsingRuntimeAssertions(t)
 	}
-	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.firstFailure(), message, metamorphicBuild, t.goCoverEnabled)
+	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.failures(), message, metamorphicBuild, t.goCoverEnabled)
 	if err != nil {
 		return err
 	}
