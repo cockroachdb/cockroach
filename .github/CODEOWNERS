@@ -251,7 +251,7 @@
 # a new directory is created CODEOWNERS should mandate a new line below. This
 # serves as a lint that ownership is properly considered at creation time.
 /pkg/kv/*.*                             @cockroachdb/kv-prs
-/pkg/kv/bulk/                           @cockroachdb/disaster-recovery
+/pkg/kv/bulk/                           @cockroachdb/kv-prs
 /pkg/kv/kvbase/                         @cockroachdb/kv-prs
 /pkg/kv/kvclient/                       @cockroachdb/kv-prs
 /pkg/kv/kvclient/kvcoord/*rangefeed*    @cockroachdb/repl-prs
