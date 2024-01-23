@@ -15,13 +15,18 @@ import { AdminUIState } from "./state";
 export const tenantsSelector = (state: AdminUIState) =>
   state.cachedData.tenants?.data?.tenants;
 
-// tenantDropdownOptions makes an array of dropdown options from
-// the tenants found in the redux state. It also adds a synthetic
-// all option which aggregates all metrics.
+const ALL_TENANTS_OPTION: DropdownOption = {
+  label: "All",
+  value: "",
+};
+
+// tenantDropdownOptions makes an array of dropdown options from the
+// tenants found in the redux state. It also adds a synthetic "All""
+// option prior to the tenant list which aggregates all metrics.
 export const tenantDropdownOptions = createSelector(
   tenantsSelector,
   tenantsList => {
-    const tenantOptions: DropdownOption[] = [{ label: "All", value: "" }];
+    const tenantOptions: DropdownOption[] = [ALL_TENANTS_OPTION];
     tenantsList?.map(tenant =>
       tenantOptions.push({
         label: tenant.tenant_name,
@@ -36,6 +41,17 @@ export const tenantDropdownOptions = createSelector(
 // system tenant.
 export const isSystemTenant = (tenantName: string): boolean => {
   return tenantName === SYSTEM_TENANT_NAME;
+};
+
+export const containsApplicationTenants = (
+  tenantOptions: DropdownOption[],
+): boolean => {
+  return (
+    tenantOptions.filter(
+      t =>
+        t.label !== SYSTEM_TENANT_NAME && t.label !== ALL_TENANTS_OPTION.label,
+    ).length > 0
+  );
 };
 
 // isSecondaryTenant checkes whether the provided tenant is secondary or not.
