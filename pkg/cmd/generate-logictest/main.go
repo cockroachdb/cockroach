@@ -32,8 +32,7 @@ type testFileTemplateConfig struct {
 	CockroachGoTestserverTest     bool
 	Ccl                           bool
 	ForceProductionValues         bool
-	IsMultiRegion                 bool
-	Is3NodeTenant                 bool
+	SkipCclUnderRace              bool
 	Package, TestRuleName, RelDir string
 	ConfigIdx                     int
 	TestCount                     int
@@ -176,12 +175,13 @@ func (t *testdir) dump() error {
 		tplCfg.RelDir = t.relPathToParent
 		tplCfg.TestCount = testCount
 		tplCfg.CockroachGoTestserverTest = cfg.UseCockroachGoTestserver
-		tplCfg.IsMultiRegion = strings.Contains(cfg.Name, "multiregion")
-		tplCfg.Is3NodeTenant = strings.HasSuffix(cfg.Name, "3node-tenant")
 		// The NumCPU calculation is a guess pulled out of thin air to
 		// allocate the tests which use 3-node clusters 2 vCPUs, and
 		// the ones which use more a bit more.
 		tplCfg.NumCPU = (cfg.NumNodes / 2) + 1
+		if cfg.Name == "3node-tenant" || strings.HasPrefix(cfg.Name, "multiregion-") {
+			tplCfg.SkipCclUnderRace = true
+		}
 		subdir := filepath.Join(t.dir, cfg.Name)
 		f, buildF, cleanup, err := openTestSubdir(subdir)
 		if err != nil {

@@ -342,7 +342,7 @@ func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
 // addExecPlan adds the EXPLAIN (VERBOSE) plan as file plan.txt.
 func (b *stmtBundleBuilder) addExecPlan(plan string) {
 	if plan == "" {
-		plan = "no plan"
+		plan = noPlan
 	}
 	b.z.AddFile("plan.txt", plan)
 }

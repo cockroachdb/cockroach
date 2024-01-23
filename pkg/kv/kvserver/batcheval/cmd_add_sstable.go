@@ -140,7 +140,7 @@ func EvalAddSSTable(
 
 	var span *tracing.Span
 	var err error
-	ctx, span = tracing.ChildSpan(ctx, "AddSSTable")
+	ctx, span = tracing.ChildSpan(ctx, "EvalAddSSTable")
 	defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", start.Key, end.Key)
 
@@ -162,10 +162,11 @@ func EvalAddSSTable(
 		return result.Result{
 			Replicated: kvserverpb.ReplicatedEvalResult{
 				AddSSTable: &kvserverpb.ReplicatedEvalResult_AddSSTable{
-					RemoteFileLoc:   args.RemoteFile.Locator,
-					RemoteFilePath:  path,
-					BackingFileSize: args.RemoteFile.BackingFileSize,
-					Span:            roachpb.Span{Key: start.Key, EndKey: end.Key},
+					RemoteFileLoc:           args.RemoteFile.Locator,
+					RemoteFilePath:          path,
+					ApproximatePhysicalSize: args.RemoteFile.ApproximatePhysicalSize,
+					BackingFileSize:         args.RemoteFile.BackingFileSize,
+					Span:                    roachpb.Span{Key: start.Key, EndKey: end.Key},
 				},
 				// Since the remote SST could contain keys at any timestamp, consider it
 				// a history mutation.

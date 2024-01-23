@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -99,6 +100,10 @@ func init() {
 }
 
 func newLeaseTest(tb testing.TB, params base.TestClusterArgs) *leaseTest {
+	if params.ServerArgs.Settings == nil {
+		params.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
+	}
+	lease.LeaseEnableSessionBasedLeasing.Override(context.Background(), &params.ServerArgs.Settings.SV, int64(lease.SessionBasedDualWrite))
 	c := serverutils.StartCluster(tb, 3, params)
 	s := c.Server(0).ApplicationLayer()
 	lt := &leaseTest{
@@ -123,9 +128,11 @@ func (t *leaseTest) cleanup() {
 
 func (t *leaseTest) getLeases(descID descpb.ID) string {
 	const sql = `
-  SELECT version, "nodeID"
-    FROM system.lease
-   WHERE "descID" = $1 AND "nodeID" > $2
+  SELECT COALESCE(l.version, s.version) as version, COALESCE(l."nodeID", s.sql_instance_id) as "nodeID"
+    FROM system.lease as l
+		FULL OUTER JOIN  "".crdb_internal.kv_session_based_leases as s
+		ON l."descID" = s.desc_id AND l."nodeID" = s.sql_instance_id AND l.version=s.version
+   WHERE COALESCE("descID", s.desc_id) = $1 AND COALESCE("nodeID", s.sql_instance_id) > $2
 ORDER BY version, "nodeID";
 `
 	rows, err := t.db.Query(sql, descID, baseIDForLeaseTest)
@@ -249,6 +256,12 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 		// different node id.
 		cfgCpy := t.server.ExecutorConfig().(sql.ExecutorConfig)
 		cfgCpy.NodeInfo.NodeID = nc
+		// Create a new liveness provider for each node and start it up
+		cfgCpy.SQLLiveness = slprovider.New(
+			cfgCpy.AmbientCtx,
+			t.server.AppStopper(), t.server.Clock(), cfgCpy.DB, t.server.Codec(), cfgCpy.Settings, t.server.SettingsWatcher().(*settingswatcher.SettingsWatcher), nil, nil,
+		)
+		cfgCpy.SQLLiveness.Start(context.Background(), nil)
 		mgr = lease.NewLeaseManager(
 			ambientCtx,
 			nc,
@@ -256,6 +269,7 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 			cfgCpy.Clock,
 			cfgCpy.Settings,
 			t.server.SettingsWatcher().(*settingswatcher.SettingsWatcher),
+			cfgCpy.SQLLiveness,
 			cfgCpy.Codec,
 			t.leaseManagerTestingKnobs,
 			t.server.AppStopper(),
@@ -1230,6 +1244,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		}
 	})
 
+	b.StopTimer()
 }
 
 // This test makes sure leases get renewed automatically in the
@@ -1828,7 +1843,7 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	defer log.Scope(testingT).Close(testingT)
 
-	skip.UnderDeadlockWithIssue(testingT, 115910, "likely to time out")
+	skip.UnderRemoteExecutionWithIssue(testingT, 117929, "prone to stalling for some reason")
 
 	ctx := context.Background()
 
@@ -2102,6 +2117,9 @@ func TestDeleteOrphanedLeases(testingT *testing.T) {
 
 	ctx := context.Background()
 	t := newLeaseTest(testingT, params)
+	// Force dual writing, so that entries exist within both versions of the
+	// leasing table to clean up.
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &t.server.ClusterSettings().SV, int64(lease.SessionBasedDualWrite))
 	defer t.cleanup()
 
 	if _, err := t.db.Exec(`
@@ -3480,13 +3498,19 @@ func TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails(t *tes
 
 // TestSessionLeasingTable validates that we can use an internal table
 // to read new system.leases table format (which will use synthetic
-// descriptors).
+// descriptors). Additionally, basic sanity checking with dual writes,
+// enabled, since rows should appear in both tables
 func TestSessionLeasingTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	st := cluster.MakeClusterSettings()
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &st.SV, int64(lease.SessionBasedDualWrite))
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings:          st,
+		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
+	})
 	defer srv.Stopper().Stop(ctx)
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -3500,6 +3524,42 @@ func TestSessionLeasingTable(t *testing.T) {
 	})
 	require.NoError(t, err)
 	// Validate the new crdb_internal function can read the contents back.
-	res := runner.QueryStr(t, "SELECT * FROM crdb_internal.kv_session_based_leases;")
+	res := runner.QueryStr(t, "SELECT * FROM crdb_internal.kv_session_based_leases WHERE crdb_region='region';")
 	require.Equal(t, [][]string{{"1", "-1", "1", "some session id", "region"}}, res)
+	// Validate that we wrote rows from the leasing mechanism in both tables.
+	res = runner.QueryStr(t, `
+WITH
+	joined_count
+		AS (
+			SELECT
+				count(*) AS common_count
+			FROM
+				crdb_internal.kv_session_based_leases AS s,
+				system.lease AS l
+			WHERE
+				l."descID" = s.desc_id
+				AND l.version = s.version
+				AND l."nodeID" = s.sql_instance_id
+		),
+	system_count_tbl
+		AS (
+			SELECT
+				count(*) AS system_count
+			FROM
+				system.lease
+		),
+	kv_session_count_tbl
+		AS (
+			SELECT
+				count(*) - 1 AS kv_session_count -- subract one row added above
+			FROM
+				crdb_internal.kv_session_based_leases
+		)
+SELECT
+	common_count = kv_session_count,
+	common_count = system_count
+FROM
+	joined_count, system_count_tbl, kv_session_count_tbl;
+`)
+	require.Equal(t, [][]string{{"true", "true"}}, res)
 }

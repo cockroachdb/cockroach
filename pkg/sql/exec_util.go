@@ -109,7 +109,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -270,18 +269,6 @@ var TraceStmtThreshold = settings.RegisterDurationSetting(
 		"this setting applies to individual statements within a transaction and "+
 		"is therefore finer-grained than sql.trace.txn.enable_threshold",
 	0,
-	settings.WithPublic)
-
-// traceSessionEventLogEnabled can be used to enable the event log
-// that is normally kept for every SQL connection. The event log has a
-// non-trivial performance impact and also reveals SQL statements
-// which may be a privacy concern.
-var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.trace.session_eventlog.enabled",
-	"set to true to enable session tracing; "+
-		"note that enabling this may have a negative performance impact",
-	false,
 	settings.WithPublic)
 
 // ReorderJoinsLimitClusterSettingName is the name of the cluster setting for
@@ -1639,10 +1626,16 @@ type ExecutorTestingKnobs struct {
 	// descriptor IDs at the cost of decreased parallelism.
 	UseTransactionalDescIDGenerator bool
 
-	// BeforeCopyFromInsert, if set, will be called during a COPY FROM insert statement.
-	BeforeCopyFromInsert func(txn *kv.Txn) error
+	// CopyFromInsertBeforeBatch, if set, will be called during a COPY FROM
+	// insert statement before each COPY batch.
+	CopyFromInsertBeforeBatch func(txn *kv.Txn) error
 
-	// CopyFromInsertRetry, if set, will be called when a COPY FROM insert statement is retried.
+	// CopyFromInsertAfterBatch, if set, will be called during a COPY FROM
+	// insert statement after each COPY batch.
+	CopyFromInsertAfterBatch func() error
+
+	// CopyFromInsertRetry, if set, will be called when a COPY FROM insert
+	// statement is retried.
 	CopyFromInsertRetry func() error
 
 	// ForceSQLLivenessSession will force the use of a sqlliveness session for
@@ -2018,15 +2011,10 @@ func checkResultType(typ *types.T) error {
 	case types.EnumFamily:
 	case types.VoidFamily:
 	case types.ArrayFamily:
-		if typ.ArrayContents().Family() == types.ArrayFamily {
-			// Technically we could probably return arrays of arrays to a
-			// client (the encoding exists) but we don't want to give
-			// mixed signals -- that nested arrays appear to be supported
-			// in this case, and not in other cases (eg. CREATE). So we
-			// reject them in every case instead.
-			return unimplemented.NewWithIssueDetail(32552,
-				"result", "arrays cannot have arrays as element type")
-		}
+		// Note that we support multidimensional arrays in some cases (e.g.
+		// array_agg with arrays as inputs) but not in others (e.g. CREATE).
+		// Here we allow them in all cases and rely on each unsupported place to
+		// have the check.
 	case types.AnyFamily:
 		// Placeholder case.
 		return errors.Errorf("could not determine data type of %s", typ)
@@ -3401,6 +3389,10 @@ func (m *sessionDataMutator) SetCopyQualityOfService(val sessiondatapb.QoSLevel)
 
 func (m *sessionDataMutator) SetCopyWritePipeliningEnabled(val bool) {
 	m.data.CopyWritePipeliningEnabled = val
+}
+
+func (m *sessionDataMutator) SetCopyNumRetriesPerBatch(val int32) {
+	m.data.CopyNumRetriesPerBatch = val
 }
 
 func (m *sessionDataMutator) SetOptSplitScanLimit(val int32) {

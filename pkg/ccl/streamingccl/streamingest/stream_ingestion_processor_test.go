@@ -159,6 +159,13 @@ func (m *mockStreamClient) Complete(_ context.Context, _ streampb.StreamID, _ bo
 	return nil
 }
 
+// PriorReplicationDetails implements the streamclient.Client interface.
+func (m *mockStreamClient) PriorReplicationDetails(
+	_ context.Context, _ roachpb.TenantName,
+) (string, string, hlc.Timestamp, error) {
+	return "", "", hlc.Timestamp{}, nil
+}
+
 // errorStreamClient always returns an error when consuming a partition.
 type errorStreamClient struct{ mockStreamClient }
 

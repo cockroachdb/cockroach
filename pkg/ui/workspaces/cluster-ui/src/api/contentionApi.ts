@@ -26,7 +26,7 @@ import {
   InsightExecEnum,
   InsightNameEnum,
   TxnContentionInsightDetails,
-} from "src/insights";
+} from "src/insights/types";
 import moment from "moment-timezone";
 import { FixFingerprintHexValue, getLogger } from "../util";
 import { TxnInsightDetailsRequest } from "./txnInsightDetailsApi";

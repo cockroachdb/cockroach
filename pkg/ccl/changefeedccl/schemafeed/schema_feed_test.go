@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 )
 
 func TestTableHistoryIngestionTracking(t *testing.T) {
@@ -336,4 +338,179 @@ func TestSchemaFeedHandlesCascadeDatabaseDrop(t *testing.T) {
 	_, err := sf.fetchDescriptorVersions(ctx, beforeCreate, s.Clock().Now())
 	require.True(t, errors.Is(err, catalog.ErrDescriptorDropped),
 		"expected dropped descriptor error, found: %v", err)
+}
+
+// testLeaseAcquirer is a test implementation of leaseAcquirer.
+// It contains an ordered time map of descriptors for a single ID.
+// TODO(yang): Extend this for multiple IDs.
+type testLeaseAcquirer struct {
+	id    descpb.ID
+	descs []*testLeasedDescriptor
+}
+
+func (t *testLeaseAcquirer) Acquire(
+	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID,
+) (lease.LeasedDescriptor, error) {
+	if id != t.id {
+		return nil, errors.Newf("unknown id: %d", id)
+	}
+
+	i, ok := slices.BinarySearchFunc(t.descs, timestamp, func(desc *testLeasedDescriptor, timestamp hlc.Timestamp) int {
+		return desc.timestamp.Compare(timestamp)
+	})
+	if ok {
+		return t.descs[i], nil
+	}
+	if i == 0 {
+		return nil, errors.Newf("no descriptors for id: %d", id)
+	}
+	return t.descs[i-1], nil
+}
+
+func (t *testLeaseAcquirer) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) error {
+	if id != t.id {
+		return errors.Newf("unknown id: %d", id)
+	}
+	return nil
+}
+
+func (t *testLeaseAcquirer) Codec() keys.SQLCodec {
+	panic("should not be called")
+}
+
+type testLeasedDescriptor struct {
+	lease.LeasedDescriptor
+	timestamp hlc.Timestamp
+	desc      catalog.Descriptor
+}
+
+func newTestLeasedDescriptor(
+	id descpb.ID, version descpb.DescriptorVersion, schemaLocked bool, timestamp hlc.Timestamp,
+) *testLeasedDescriptor {
+	return &testLeasedDescriptor{
+		timestamp: timestamp,
+		desc: &testTableDescriptor{
+			id:           id,
+			version:      version,
+			schemaLocked: schemaLocked,
+		},
+	}
+}
+
+func (ld *testLeasedDescriptor) Release(ctx context.Context) {
+}
+
+func (ld *testLeasedDescriptor) Underlying() catalog.Descriptor {
+	return ld.desc
+}
+
+type testTableDescriptor struct {
+	catalog.TableDescriptor
+	id           descpb.ID
+	version      descpb.DescriptorVersion
+	schemaLocked bool
+}
+
+func (td *testTableDescriptor) GetID() descpb.ID {
+	return td.id
+}
+
+func (td *testTableDescriptor) GetVersion() descpb.DescriptorVersion {
+	return td.version
+}
+
+func (td *testTableDescriptor) IsSchemaLocked() bool {
+	return td.schemaLocked
+}
+
+func TestPauseOrResumePolling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	const tableID = 123
+	const (
+		v1 = 1
+		v2 = 2
+		v3 = 3
+	)
+	const (
+		schemaLocked    = true
+		notSchemaLocked = false
+	)
+	tableDescs := []*testLeasedDescriptor{
+		newTestLeasedDescriptor(tableID, v1, notSchemaLocked, hlc.Timestamp{WallTime: 20}),
+		newTestLeasedDescriptor(tableID, v2, schemaLocked, hlc.Timestamp{WallTime: 40}),
+		newTestLeasedDescriptor(tableID, v3, notSchemaLocked, hlc.Timestamp{WallTime: 60}),
+	}
+
+	sf := schemaFeed{
+		leaseMgr: &testLeaseAcquirer{
+			id:    tableID,
+			descs: tableDescs,
+		},
+		targets: CreateChangefeedTargets(tableID),
+	}
+
+	setHighWater := func(t hlc.Timestamp) {
+		sf.mu.Lock()
+		defer sf.mu.Unlock()
+		sf.mu.highWater = t
+	}
+	setHighWater(hlc.Timestamp{WallTime: 10})
+
+	// Initially, polling should not be paused.
+	require.False(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 10}, sf.highWater())
+
+	// We expect a non-terminal error to be swallowed for time 10.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 10}))
+	require.False(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 10}, sf.highWater())
+
+	// We bump the highwater up to reflect a descriptor being read at time 20.
+	setHighWater(hlc.Timestamp{WallTime: 20})
+	require.False(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 20}, sf.highWater())
+
+	// We expect polling not to be paused for time 30.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 30}))
+	require.False(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 20}, sf.highWater())
+
+	// We expect polling not to be paused for time 40 since the highwater
+	// has not caught up to the schema-locked version.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 40}))
+	require.False(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 20}, sf.highWater())
+
+	// We bump the highwater up to reflect a descriptor being read at time 40.
+	setHighWater(hlc.Timestamp{WallTime: 40})
+	require.False(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 40}, sf.highWater())
+
+	// We expect polling to be paused for time 40 now that the highwater has
+	// caught up to the schema-locked version.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 40}))
+	require.True(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 40}, sf.highWater())
+
+	// We expect polling continue to be paused for time 50 and to see the
+	// highwater bumped up.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 50}))
+	require.True(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 50}, sf.highWater())
+
+	// We expect polling continue to be paused for time 20 and to see the
+	// highwater remain unchanged (fast path).
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 20}))
+	require.True(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 50}, sf.highWater())
+
+	// We expect polling to be resumed for time 60 and to not see the highwater
+	// bumped up.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 60}))
+	require.False(t, sf.pollingPaused())
+	require.Equal(t, hlc.Timestamp{WallTime: 50}, sf.highWater())
 }

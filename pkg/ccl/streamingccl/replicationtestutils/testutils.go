@@ -157,7 +157,7 @@ func (c *TenantStreamingClusters) init(ctx context.Context) {
 	if c.Args.DestInitFunc != nil {
 		c.Args.DestInitFunc(c.T, c.DestSysSQL)
 	}
-	// Enable stream replication on dest by default.
+	c.SrcSysSQL.Exec(c.T, `SET CLUSTER SETTING physical_replication.enabled = true;`)
 	c.DestSysSQL.Exec(c.T, `SET CLUSTER SETTING physical_replication.enabled = true;`)
 }
 
@@ -168,7 +168,7 @@ func (c *TenantStreamingClusters) init(ctx context.Context) {
 // destination tenant starts up via a testServer.StartSharedProcessTenant().
 func (c *TenantStreamingClusters) StartDestTenant(
 	ctx context.Context, withTestingKnobs *base.TestingKnobs, server int,
-) func() error {
+) func() {
 	if withTestingKnobs != nil {
 		var err error
 		_, c.DestTenantConn, err = c.DestCluster.Server(server).TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
@@ -193,8 +193,8 @@ func (c *TenantStreamingClusters) StartDestTenant(
 	require.NoError(c.T, c.DestCluster.Server(server).TenantController().WaitForTenantCapabilities(ctx, c.Args.DestTenantID, map[tenantcapabilities.ID]string{
 		tenantcapabilities.CanUseNodelocalStorage: "true",
 	}, ""))
-	return func() error {
-		return c.DestTenantConn.Close()
+	return func() {
+		require.NoError(c.T, c.DestTenantConn.Close())
 	}
 }
 
@@ -243,6 +243,31 @@ func (c *TenantStreamingClusters) WaitUntilStartTimeReached(ingestionJobID jobsp
 	WaitUntilStartTimeReached(c.T, c.DestSysSQL, ingestionJobID)
 }
 
+// WaitForPostCutoverRetentionJob should be called after cutover completes to
+// verify that there exists a new producer job on the newly cutover to tenant. This should be called after the replication job completes.
+func (c *TenantStreamingClusters) WaitForPostCutoverRetentionJob() {
+	c.DestSysSQL.Exec(c.T, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='10ms'`, c.Args.DestTenantName))
+	var retentionJobID jobspb.JobID
+	retentionJobQuery := fmt.Sprintf(`SELECT job_id FROM [SHOW JOBS] 
+WHERE description = 'History Retention for Physical Replication of %s'
+ORDER BY created DESC LIMIT 1`, c.Args.DestTenantName)
+	c.DestSysSQL.QueryRow(c.T, retentionJobQuery).Scan(&retentionJobID)
+	testutils.SucceedsSoon(c.T, func() error {
+		// Grab the latest producer job on the destination cluster.
+		var status string
+		c.DestSysSQL.QueryRow(c.T, "SELECT status FROM system.jobs WHERE id = $1", retentionJobID).Scan(&status)
+		if jobs.Status(status) == jobs.StatusRunning {
+			return nil
+		}
+		if jobs.Status(status) == jobs.StatusFailed {
+			payload := jobutils.GetJobPayload(c.T, c.DestSysSQL, retentionJobID)
+			require.Contains(c.T, payload.Error, "replication stream")
+			require.Contains(c.T, payload.Error, "timed out")
+		}
+		return errors.Newf("Unexpected status %s", status)
+	})
+}
+
 // Cutover sets the cutover timestamp on the replication job causing the job to
 // stop eventually. If the provided cutover time is the zero value, cutover to
 // the latest replicated time.
@@ -263,6 +288,7 @@ func (c *TenantStreamingClusters) Cutover(
 
 	if !async {
 		jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+		c.WaitForPostCutoverRetentionJob()
 	}
 }
 
@@ -541,7 +567,6 @@ var defaultSrcClusterSetting = map[string]string{
 	`kv.rangefeed.closed_timestamp_refresh_interval`: `'200ms'`,
 	`kv.closed_timestamp.side_transport_interval`:    `'50ms'`,
 	// Large timeout makes test to not fail with unexpected timeout failures.
-	`stream_replication.job_liveness.timeout`:            `'3m'`,
 	`stream_replication.stream_liveness_track_frequency`: `'2s'`,
 	`stream_replication.min_checkpoint_frequency`:        `'1s'`,
 	// Make all AddSSTable operation to trigger AddSSTable events.
@@ -558,6 +583,7 @@ var defaultDestClusterSetting = map[string]string{
 	`bulkio.stream_ingestion.cutover_signal_poll_interval`: `'100ms'`,
 	`jobs.registry.interval.adopt`:                         `'1s'`,
 	`spanconfig.reconciliation_job.checkpoint_interval`:    `'100ms'`,
+	`kv.rangefeed.enabled`:                                 `true`,
 }
 
 func ConfigureClusterSettings(setting map[string]string) []string {

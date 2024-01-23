@@ -38,8 +38,9 @@ func Scan(
 	h := cArgs.Header
 	reply := resp.(*kvpb.ScanResponse)
 
-	if err := maybeDisallowSkipLockedRequest(h, args.KeyLockingStrength); err != nil {
-		return result.Result{}, err
+	var lockTableForSkipLocked storage.LockTableView
+	if h.WaitPolicy == lock.WaitPolicy_SkipLocked {
+		lockTableForSkipLocked = newRequestBoundLockTableView(cArgs.Concurrency, args.KeyLockingStrength)
 	}
 
 	var res result.Result
@@ -61,7 +62,7 @@ func Scan(
 		FailOnMoreRecent:      args.KeyLockingStrength != lock.None,
 		Reverse:               false,
 		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
-		LockTable:             cArgs.Concurrency,
+		LockTable:             lockTableForSkipLocked,
 		DontInterleaveIntents: cArgs.DontInterleaveIntents,
 		ReadCategory:          readCategory,
 	}
@@ -155,22 +156,6 @@ func maybeInterceptDisallowedSkipLockedUsage(h kvpb.Header, err error) error {
 		))
 	}
 	return err
-}
-
-// maybeDisallowSkipLockedRequest returns an error if the skip locked wait
-// policy is used in conjunction with shared locks.
-//
-// TODO(arul): this won't be needed once
-// https://github.com/cockroachdb/cockroach/issues/110743 is addressed. Until
-// then, we return unimplemented errors.
-func maybeDisallowSkipLockedRequest(h kvpb.Header, str lock.Strength) error {
-	if h.WaitPolicy == lock.WaitPolicy_SkipLocked && str == lock.Shared {
-		return MarkSkipLockedUnsupportedError(errors.UnimplementedError(
-			errors.IssueLink{IssueURL: build.MakeIssueURL(110743)},
-			"usage of shared locks in conjunction with skip locked wait policy is currently unsupported",
-		))
-	}
-	return nil
 }
 
 // SkipLockedUnsupportedError is used to mark errors resulting from unsupported

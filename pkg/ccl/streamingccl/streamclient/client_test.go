@@ -111,6 +111,13 @@ func (sc testStreamClient) Complete(_ context.Context, _ streampb.StreamID, _ bo
 	return nil
 }
 
+// PriorReplicationDetails implements the streamclient.Client interface.
+func (sc testStreamClient) PriorReplicationDetails(
+	_ context.Context, _ roachpb.TenantName,
+) (string, string, hlc.Timestamp, error) {
+	return "", "", hlc.Timestamp{}, nil
+}
+
 type testStreamSubscription struct {
 	eventCh chan streamingccl.Event
 }

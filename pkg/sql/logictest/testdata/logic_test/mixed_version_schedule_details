@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-upgrade-to-master
+# LogicTest: cockroach-go-testserver-23.1
 
 # This test verifies the scheduleDetails proto in the scheduled job record can
 # be read and written to in a mixed version state, given the 23.2 version has

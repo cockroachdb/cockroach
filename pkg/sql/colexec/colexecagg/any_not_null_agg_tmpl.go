@@ -60,7 +60,19 @@ const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
 // _TYPE_WIDTH is the template variable.
 const _TYPE_WIDTH = 0
 
+// _ALLOC_CODE is the template variable that is replaced in agg_gen_util.go by
+// the template code for sharing allocator objects.
+const _ALLOC_CODE = 0
+
 // */}}
+
+// {{if eq "_AGGKIND" "Ordered"}}
+
+const anyNotNullNumOverloads = 11
+
+// {{end}}
+
+var _ = _ALLOC_CODE
 
 func newAnyNotNull_AGGKINDAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,

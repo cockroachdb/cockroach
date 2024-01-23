@@ -6051,7 +6051,7 @@ func TestRaftForceCampaignPreVoteCheckQuorum(t *testing.T) {
 
 	repl1, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
 	require.NoError(t, err)
-	repl2, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
+	repl2, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
 	require.NoError(t, err)
 	repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
 	require.NoError(t, err)
@@ -6498,9 +6498,9 @@ func TestRaftLeaderRemovesItself(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Timing-sensitive, so skip under deadlock detector and stressrace.
+	// Timing-sensitive, so skip under deadlock detector and race.
 	skip.UnderDeadlock(t)
-	skip.UnderStressRace(t)
+	skip.UnderRace(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

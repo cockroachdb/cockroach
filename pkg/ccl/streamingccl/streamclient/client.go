@@ -89,6 +89,19 @@ type Client interface {
 
 	// Complete completes a replication stream consumption.
 	Complete(ctx context.Context, streamID streampb.StreamID, successfulIngestion bool) error
+
+	// PriorReplicationDetails returns a given tenant's "historyID" as well as the
+	// historyID, if any, from which that tenant was previously replicated and the
+	// timestamp as of which that replication ended.
+	//
+	// A HistoryID is a globally unique identifier a tenant span on some cluster,
+	// that can be uniquely used to identify it and its MVCC history. It is
+	// composed of a cluster ID on which a tenant's span resides and the tenant's
+	// ID on that cluster, which uniquely identifies that span -- and its mvcc
+	// history -- across all Cockroach clusters.
+	PriorReplicationDetails(
+		ctx context.Context, tenant roachpb.TenantName,
+	) (id string, replicatedFrom string, activated hlc.Timestamp, _ error)
 }
 
 // Topology is a configuration of stream partitions. These are particular to a

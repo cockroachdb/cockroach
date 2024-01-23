@@ -2621,10 +2621,16 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 
 	switch h.joinType {
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		if right.IsZero() {
+			return left
+		}
 		// Anti join cardinality never exceeds left input cardinality, and
 		// allows zero rows.
 		return left.AsLowAs(0)
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
+		if right.IsZero() {
+			return props.ZeroCardinality
+		}
 		// Semi join cardinality never exceeds left input cardinality, and
 		// allows zero rows.
 		semiJoinCard := left.AsLowAs(0)

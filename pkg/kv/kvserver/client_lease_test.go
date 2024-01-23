@@ -1557,12 +1557,17 @@ func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) 
 	})
 
 	// Expect it to be upgraded to an epoch based lease.
-	tc.WaitForLeaseUpgrade(ctx, t, desc)
+	epochL := tc.WaitForLeaseUpgrade(ctx, t, desc)
+	require.Equal(t, roachpb.LeaseEpoch, epochL.Type())
 
 	// Expect it to have been upgraded from an expiration based lease.
 	mu.Lock()
-	defer mu.Unlock()
-	require.Equal(t, roachpb.LeaseExpiration, mu.lease.Type())
+	expirationL := mu.lease
+	mu.Unlock()
+	require.Equal(t, roachpb.LeaseExpiration, expirationL.Type())
+
+	// Expect the two leases to have the same sequence number.
+	require.Equal(t, expirationL.Sequence, epochL.Sequence)
 }
 
 // TestLeaseRequestBumpsEpoch tests that a non-cooperative lease acquisition of

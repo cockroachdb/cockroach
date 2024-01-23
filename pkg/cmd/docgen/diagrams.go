@@ -516,6 +516,13 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
+		name:    "alter_proc",
+		stmt:    "alter_proc_stmt",
+		inline:  []string{"alter_proc_rename_stmt", "alter_proc_owner_stmt", "alter_proc_set_schema_stmt", "function_with_paramtypes", "func_params", "func_params_list"},
+		replace: map[string]string{"db_object_name": "proc_name", "'RENAME' 'TO' name": "'RENAME' 'TO' proc_new_name"},
+		nosplit: true,
+	},
+	{
 		name:   "alter_role_stmt",
 		inline: []string{"role_or_group_or_user", "opt_role_options", "opt_in_database", "set_or_reset_clause", "opt_with", "role_options", "set_rest", "generic_set", "var_list", "to_or_eq"},
 		replace: map[string]string{
@@ -636,6 +643,11 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'START'"),
 		},
+	},
+	{
+		name:    "call",
+		stmt:    "call_stmt",
+		replace: map[string]string{"func_application": "proc_name '(' param_values ')'"},
 	},
 	{
 		name:    "check_column_level",
@@ -811,15 +823,36 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
-		name:   "create_func_stmt",
+		name:   "create_func",
+		stmt:   "create_func_stmt",
 		inline: []string{"opt_or_replace", "opt_routine_param_with_default_list", "opt_return_set", "opt_create_routine_opt_list", "create_routine_opt_list", "common_routine_opt_item", "create_routine_opt_item", "routine_return_stmt", "routine_param_with_default_list", "routine_param_with_default", "routine_as", "opt_link_sym"},
 		unlink: []string{"opt_or_replace", "opt_routine_param_with_default_list", "opt_return_set", "opt_create_routine_opt_list", "create_routine_opt_list", "create_routine_opt_item", "common_routine_opt_item", "routine_return_stmt", "non_reserved_word_or_sconst", "routine_param_with_default_list", "routine_param_with_default", "a_expr", "routine_as"},
 		replace: map[string]string{
-			"func_as":                     "'SCONST'",
-			"non_reserved_word_or_sconst": "'SQL'",
-			"'DEFAULT'":                   "",
-			"'='":                         "",
-			"a_expr":                      ""},
+			"func_as":                          "'SCONST'",
+			"'AS'":                             "'AS' routine_body_str",
+			"non_reserved_word_or_sconst":      "('SQL' | 'PLPGSQL')",
+			"( 'SCONST' ) ( ',' 'SCONST' |  )": "",
+			"'DEFAULT'":                        "",
+			"'='":                              "",
+			"a_expr":                           "",
+			"opt_routine_body":                 ""},
+		nosplit: true,
+	},
+	{
+		name:   "create_proc",
+		stmt:   "create_proc_stmt",
+		inline: []string{"opt_or_replace", "opt_routine_param_with_default_list", "routine_param_with_default_list", "routine_param_with_default", "opt_create_routine_opt_list", "create_routine_opt_list", "create_routine_opt_item", "routine_as", "opt_link_sym", "create_routine_opt_item", "routine_return_stmt"},
+		replace: map[string]string{
+			"'DEFAULT'":                        "",
+			"common_routine_opt_item":          "",
+			"'AS'":                             "'AS' routine_body_str",
+			"opt_routine_body":                 "",
+			"non_reserved_word_or_sconst":      "( 'SQL' | 'PLPGSQL' )",
+			"'RETURN'":                         "",
+			"( 'SCONST' ) ( ',' 'SCONST' |  )": "",
+			"'='":                              "",
+			"a_expr":                           "",
+			"'ATOMIC'":                         ""},
 		nosplit: true,
 	},
 	{
@@ -924,6 +957,13 @@ var specs = []stmtSpec{
 			regList: "",
 		},
 		replace: map[string]string{"standalone_index_name": "index_name"},
+	},
+	{
+		name:    "drop_proc",
+		stmt:    "drop_proc_stmt",
+		inline:  []string{"function_with_paramtypes_list", "function_with_paramtypes", "opt_drop_behavior", "func_params", "func_params_list"},
+		replace: map[string]string{"db_object_name": "proc_name"},
+		nosplit: true,
 	},
 	{
 		name:    "drop_role_stmt",

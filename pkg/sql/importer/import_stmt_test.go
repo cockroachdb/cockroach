@@ -3896,6 +3896,8 @@ func benchUserUpload(b *testing.B, uploadBaseURI string) {
 			`IMPORT INTO t CSV DATA ('%s%s')`,
 			uploadBaseURI, testFileBase,
 		))
+
+	b.StopTimer()
 }
 
 // goos: darwin
@@ -5319,9 +5321,8 @@ func TestImportWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressWithIssue(t, 108547, "flaky test")
-	skip.UnderDeadlockWithIssue(t, 108547, "flaky test")
-	skip.UnderRaceWithIssue(t, 108547, "flaky test")
+	skip.UnderDeadlock(t, "test is flaky under deadlock")
+	skip.UnderStressRace(t, "test is flaky under stressrace")
 
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}

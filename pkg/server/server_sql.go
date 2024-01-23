@@ -679,6 +679,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.clock,
 		cfg.Settings,
 		settingsWatcher,
+		cfg.sqlLivenessProvider,
 		codec,
 		lmKnobs,
 		cfg.stopper,
@@ -1897,12 +1898,13 @@ func startServeSQL(
 	pgPreServer *pgwire.PreServeConnHandler,
 	serveConn func(ctx context.Context, conn net.Conn, preServeStatus pgwire.PreServeStatus) error,
 	pgL net.Listener,
+	st *cluster.Settings,
 	socketFileCfg *string,
 ) error {
 	log.Ops.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
 
-	tcpKeepAlive := makeTCPKeepAliveManager()
+	tcpKeepAlive := makeTCPKeepAliveManager(st)
 
 	// The connManager is responsible for tearing down the net.Conn
 	// objects when the stopper tells us to shut down.

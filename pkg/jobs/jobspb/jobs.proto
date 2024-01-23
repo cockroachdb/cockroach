@@ -96,9 +96,7 @@ message StreamIngestionDetails {
     (gogoproto.nullable) = false,
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
 
-  string destination_tenant_name = 9 [
-    (gogoproto.nullable) = false,
-    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+  reserved 9;
 
   // ID of the protected timestamp record that protects the destination tenant's
   // keyspan from GC while it is being replicated into.
@@ -193,6 +191,10 @@ message StreamIngestionProgress {
   // the source tenant.
   bool initial_split_complete = 9;
 
+  // InitialRevertRequiredd is true if the stream requires an initial revert to
+  // the start time before it can continue (e.g. when reusing a tenant's data).
+  bool initial_revert_required = 10;
+
   // Next Id: 10
 }
 
@@ -209,6 +211,10 @@ message StreamReplicationDetails {
 
   // TenantID is the ID of the source tenant being streamed.
   roachpb.TenantID tenant_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
+
+  // ExpirationWindow specifies the length of time a producer job will stay
+  // alive without a heartbeat from the consumer job.
+  int64 expiration_window = 4 [(gogoproto.casttype) = "time.Duration"];
 }
 
 message StreamReplicationProgress {

@@ -22,7 +22,7 @@ import {
   selecteActiveStatement,
   selectContentionDetailsForStatement,
 } from "src/selectors/activeExecutions.selectors";
-import { selectHasAdminRole, selectIsTenant } from "src/store/uiConfig";
+import { selectHasAdminRole } from "src/store/uiConfig";
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
@@ -34,7 +34,6 @@ const mapStateToProps = (
     contentionDetails: selectContentionDetailsForStatement(state, props),
     statement: selecteActiveStatement(state, props),
     match: props.match,
-    isTenant: selectIsTenant(state),
     hasAdminRole: selectHasAdminRole(state),
   };
 };

@@ -90,7 +90,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"golang.org/x/net/trace"
 )
 
 var maxNumNonAdminConnections = settings.RegisterIntSetting(
@@ -363,7 +362,7 @@ type Server struct {
 	ServerMetrics ServerMetrics
 
 	// TelemetryLoggingMetrics is used to track metrics for logging to the telemetry channel.
-	TelemetryLoggingMetrics *TelemetryLoggingMetrics
+	TelemetryLoggingMetrics *telemetryLoggingMetrics
 
 	idxRecommendationsCache *idxrecommendations.IndexRecCache
 
@@ -464,7 +463,6 @@ func NewServer(
 	}
 
 	telemetryLoggingMetrics := newTelemetryLoggingMetrics(cfg.TelemetryLoggingTestingKnobs, cfg.Settings)
-	telemetryLoggingMetrics.registerOnTelemetrySamplingModeChange(cfg.Settings)
 	s.TelemetryLoggingMetrics = telemetryLoggingMetrics
 
 	sqlStatsInternalExecutorMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
@@ -1288,11 +1286,6 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		}
 	}
 
-	if ex.eventLog != nil {
-		ex.eventLog.Finish()
-		ex.eventLog = nil
-	}
-
 	// Stop idle timer if the connExecutor is closed to ensure cancel session
 	// is not called.
 	ex.mu.IdleInSessionTimeout.Stop()
@@ -1370,10 +1363,6 @@ type connExecutor struct {
 	state          txnState
 	transitionCtx  transitionCtx
 	sessionTracing SessionTracing
-
-	// eventLog for SQL statements and other important session events. Will be set
-	// if traceSessionEventLogEnabled; it is used by ex.sessionEventf()
-	eventLog trace.EventLog
 
 	// extraTxnState groups fields scoped to a SQL txn that are not handled by
 	// ex.state, above. The rule of thumb is that, if the state influences state
@@ -1566,6 +1555,13 @@ type connExecutor struct {
 		// createdSequences keeps track of sequences created in the current transaction.
 		// The map key is the sequence descpb.ID.
 		createdSequences map[descpb.ID]struct{}
+
+		// shouldLogToTelemetry indicates if the current transaction should be
+		// logged to telemetry. It is used in telemetry transaction sampling
+		// mode to emit all statement events for a particular transaction.
+		// Note that the number of statement events emitted per transaction is
+		// capped by the cluster setting telemetryStatementsPerTransactionMax.
+		shouldLogToTelemetry bool
 	}
 
 	// sessionDataStack contains the user-configurable connection variables.
@@ -2014,7 +2010,11 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 		ex.state.mu.Lock()
 		defer ex.state.mu.Unlock()
 		ex.state.mu.stmtCount = 0
+		tracingEnabled := ex.planner.ExtendedEvalContext().Tracing.Enabled()
+		ex.extraTxnState.shouldLogToTelemetry =
+			ex.server.TelemetryLoggingMetrics.shouldEmitTransactionLog(tracingEnabled, ex.executorType == executorTypeInternal)
 	}
+
 	// NOTE: on txnRestart we don't need to muck with the savepoints stack. It's either a
 	// a ROLLBACK TO SAVEPOINT that generated the event, and that statement deals with the
 	// savepoints, or it's a rewind which also deals with them.
@@ -2063,16 +2063,6 @@ func (ex *connExecutor) activate(
 	ex.mon.Start(ctx, parentMon, reserved)
 	ex.sessionMon.StartNoReserved(ctx, ex.mon)
 	ex.sessionPreparedMon.StartNoReserved(ctx, ex.sessionMon)
-
-	// Enable the trace if configured.
-	if traceSessionEventLogEnabled.Get(&ex.server.cfg.Settings.SV) {
-		remoteStr := "<admin>"
-		if ex.sessionData().RemoteAddr != nil {
-			remoteStr = ex.sessionData().RemoteAddr.String()
-		}
-		ex.eventLog = trace.NewEventLog(
-			fmt.Sprintf("sql session [%s]", ex.sessionData().User()), remoteStr)
-	}
 
 	ex.activated = true
 }
@@ -2175,7 +2165,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		return err // err could be io.EOF
 	}
 
-	if log.ExpensiveLogEnabled(ctx, 2) || ex.eventLog != nil {
+	if log.ExpensiveLogEnabled(ctx, 2) {
 		ex.sessionEventf(ctx, "[%s pos:%d] executing %s",
 			ex.machine.CurState(), pos, cmd)
 	}
@@ -2809,7 +2799,7 @@ func (ex *connExecutor) execCopyOut(
 			stmtFingerprintID,
 			&stats,
 			ex.statsCollector,
-		)
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
@@ -3069,7 +3059,8 @@ func (ex *connExecutor) execCopyIn(
 			ex.server.TelemetryLoggingMetrics,
 			stmtFingerprintID,
 			&stats,
-			ex.statsCollector)
+			ex.statsCollector,
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	var copyErr error
@@ -4194,9 +4185,6 @@ func (ex *connExecutor) getCreatedSequencesAccessor() createdSequences {
 func (ex *connExecutor) sessionEventf(ctx context.Context, format string, args ...interface{}) {
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventfDepth(ctx, 1 /* depth */, 2 /* level */, format, args...)
-	}
-	if ex.eventLog != nil {
-		ex.eventLog.Printf(format, args...)
 	}
 }
 

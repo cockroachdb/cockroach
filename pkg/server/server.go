@@ -1227,6 +1227,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		systemTenantNameContainer,
 		pgPreServer.SendRoutingError,
 		tenantCapabilitiesWatcher,
+		cfg.DisableSQLServer,
 	)
 	drain.serverCtl = sc
 
@@ -2239,6 +2240,7 @@ func (s *topLevelServer) AcceptClients(ctx context.Context) error {
 		s.pgPreServer,
 		s.serverController.sqlMux,
 		s.pgL,
+		s.ClusterSettings(),
 		&s.cfg.SocketFile,
 	); err != nil {
 		return err

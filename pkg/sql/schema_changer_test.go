@@ -105,6 +105,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 		execCfg.Clock,
 		execCfg.Settings,
 		s.SettingsWatcher().(*settingswatcher.SettingsWatcher),
+		execCfg.SQLLiveness,
 		execCfg.Codec,
 		lease.ManagerTestingKnobs{},
 		stopper,

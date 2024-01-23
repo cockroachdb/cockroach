@@ -463,6 +463,7 @@ go_test(
         "statements_test.go",
         "status_ext_test.go",
         "sticky_vfs_test.go",
+        "tcp_keepalive_manager_test.go",
         "tenant_delayed_id_set_test.go",
         "tenant_range_lookup_test.go",
         "testserver_test.go",
@@ -579,5 +580,97 @@ go_test(
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//metadata",
         "@org_golang_google_grpc//status",
-    ],
+    ] + select({
+        "@io_bazel_rules_go//go/platform:android_386": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:android_amd64": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:android_arm": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:android_arm64": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin_arm64": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:ios_arm64": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_386": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_amd64": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_arm": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_arm64": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_mips": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_mips64": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_mips64le": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_mipsle": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_ppc64": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_ppc64le": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_riscv64": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_s390x": [
+            "//pkg/util/ctxgroup",
+            "//pkg/util/sysutil",
+            "@com_github_cockroachdb_cmux//:cmux",
+        ],
+        "//conditions:default": [],
+    }),
 )

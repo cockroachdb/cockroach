@@ -32,7 +32,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 
 	wb := &kvserverpb.WriteBatch{}
 	_, err := decodeWriteBatch(wb)
-	require.ErrorContains(t, err, "batch repr too small: 0 < 12")
+	require.ErrorContains(t, err, "batch invalid: too small: 0 bytes")
 
 	batch := pebble.Batch{}
 	require.NoError(t, batch.Set(storage.EncodeMVCCKey(storage.MVCCKey{

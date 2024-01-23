@@ -300,10 +300,8 @@ func TestMVCCHistories(t *testing.T) {
 				return err
 			} else if rdIter != nil {
 				defer func() { _ = rdIter.Close() }()
-				for s := rdIter.SeekGE(nil); s != nil; s = rdIter.Next() {
-					if err := rdIter.Error(); err != nil {
-						return err
-					}
+				s, err := rdIter.First()
+				for ; s != nil; s, err = rdIter.Next() {
 					start, err := storage.DecodeMVCCKey(s.Start)
 					if err != nil {
 						return err
@@ -317,6 +315,9 @@ func TestMVCCHistories(t *testing.T) {
 							roachpb.Span{Key: start.Key, EndKey: end.Key})
 					}
 				}
+				if err != nil {
+					return err
+				}
 			}
 
 			// Dump range keys.
@@ -324,10 +325,8 @@ func TestMVCCHistories(t *testing.T) {
 				return err
 			} else if rkIter != nil {
 				defer func() { _ = rkIter.Close() }()
-				for s := rkIter.SeekGE(nil); s != nil; s = rkIter.Next() {
-					if err := rkIter.Error(); err != nil {
-						return err
-					}
+				s, err := rkIter.First()
+				for ; s != nil; s, err = rkIter.Next() {
 					start, err := storage.DecodeMVCCKey(s.Start)
 					if err != nil {
 						return err
@@ -355,6 +354,9 @@ func TestMVCCHistories(t *testing.T) {
 						}
 						buf.Printf("\n")
 					}
+				}
+				if err != nil {
+					return err
 				}
 			}
 			return nil
@@ -410,9 +412,9 @@ func TestMVCCHistories(t *testing.T) {
 				}
 				sort.Strings(ks)
 				for _, k := range ks {
-					txn := e.unreplLocks[k]
+					info := e.unreplLocks[k]
 					buf.Printf("lock (%s): %v/%s -> %+v\n",
-						lock.Unreplicated, k, lock.Exclusive, txn)
+						lock.Unreplicated, k, info.str, info.txn)
 				}
 			}
 			return nil
@@ -1152,7 +1154,11 @@ func cmdCheckIntent(e *evalCtx) error {
 func cmdAddUnreplicatedLock(e *evalCtx) error {
 	txn := e.getTxn(mandatory)
 	key := e.getKey()
-	e.unreplLocks[string(key)] = &txn.TxnMeta
+	str := lock.Exclusive // assume exclusive locks unless told otherwise
+	if e.hasArg("str") {
+		str = e.getStrength()
+	}
+	e.unreplLocks[string(key)] = unreplicatedLockInfo{txn: &txn.TxnMeta, str: str}
 	return nil
 }
 
@@ -1481,7 +1487,7 @@ func cmdGet(e *evalCtx) error {
 	}
 	if e.hasArg("skipLocked") {
 		opts.SkipLocked = true
-		opts.LockTable = e.newLockTableView(txn, ts)
+		opts.LockTable = e.newLockTableView(txn, ts, e.getStrength())
 	}
 	if e.hasArg("tombstones") {
 		opts.Tombstones = true
@@ -1787,7 +1793,7 @@ func cmdScan(e *evalCtx) error {
 	}
 	if e.hasArg("skipLocked") {
 		opts.SkipLocked = true
-		opts.LockTable = e.newLockTableView(txn, ts)
+		opts.LockTable = e.newLockTableView(txn, ts, e.getStrength())
 	}
 	if e.hasArg("tombstones") {
 		opts.Tombstones = true
@@ -2418,7 +2424,7 @@ type evalCtx struct {
 	td                *datadriven.TestData
 	txns              map[string]*roachpb.Transaction
 	txnCounter        uint32
-	unreplLocks       map[string]*enginepb.TxnMeta
+	unreplLocks       map[string]unreplicatedLockInfo
 	ms                *enginepb.MVCCStats
 	sstWriter         *storage.SSTWriter
 	sstFile           *storage.MemObject
@@ -2434,7 +2440,7 @@ func newEvalCtx(ctx context.Context, engine storage.Engine) *evalCtx {
 		st:          cluster.MakeTestingClusterSettings(),
 		engine:      engine,
 		txns:        make(map[string]*roachpb.Transaction),
-		unreplLocks: make(map[string]*enginepb.TxnMeta),
+		unreplLocks: make(map[string]unreplicatedLockInfo),
 	}
 }
 
@@ -2787,32 +2793,59 @@ func (e *evalCtx) lookupTxn(txnName string) (*roachpb.Transaction, error) {
 }
 
 func (e *evalCtx) newLockTableView(
-	txn *roachpb.Transaction, ts hlc.Timestamp,
+	txn *roachpb.Transaction, ts hlc.Timestamp, str lock.Strength,
 ) storage.LockTableView {
-	return &mockLockTableView{unreplLocks: e.unreplLocks, txn: txn, ts: ts}
+	return &mockLockTableView{unreplLocks: e.unreplLocks, txn: txn, ts: ts, str: str}
 }
 
 // mockLockTableView is a mock implementation of LockTableView.
 type mockLockTableView struct {
-	unreplLocks map[string]*enginepb.TxnMeta
+	unreplLocks map[string]unreplicatedLockInfo
 	txn         *roachpb.Transaction
 	ts          hlc.Timestamp
+	str         lock.Strength
 }
 
 func (lt *mockLockTableView) IsKeyLockedByConflictingTxn(
-	k roachpb.Key, s lock.Strength,
+	k roachpb.Key,
 ) (bool, *enginepb.TxnMeta, error) {
-	holder, ok := lt.unreplLocks[string(k)]
+	info, ok := lt.unreplLocks[string(k)]
 	if !ok {
 		return false, nil, nil
 	}
+	holder := info.txn
+	heldStr := info.str
 	if lt.txn != nil && lt.txn.ID == holder.ID {
 		return false, nil, nil
 	}
-	if s == lock.None && lt.ts.Less(holder.WriteTimestamp) {
-		return false, nil, nil
+
+	switch lt.str {
+	case lock.None:
+		switch heldStr {
+		case lock.Shared:
+			return false, nil, nil
+		case lock.Exclusive:
+			if lt.ts.Less(holder.WriteTimestamp) {
+				return false, nil, nil
+			}
+			return true, holder, nil
+		default:
+			panic(fmt.Sprintf("unexpected held strength %s", heldStr))
+		}
+	case lock.Shared:
+		switch heldStr {
+		case lock.Shared:
+			return false, nil, nil
+		case lock.Exclusive:
+			return true, holder, nil
+		default:
+			panic(fmt.Sprintf("unexpected held strength %s", heldStr))
+		}
+	case lock.Exclusive:
+		return true, holder, nil
+	default:
+		panic(fmt.Sprintf("unexpected lock strength %s", lt.str))
 	}
-	return true, holder, nil
 }
 
 func (e *evalCtx) visitWrappedIters(fn func(it storage.SimpleMVCCIterator) (done bool)) {
@@ -3003,3 +3036,10 @@ type noopCloseReader struct {
 }
 
 func (noopCloseReader) Close() {}
+
+// unreplicatedLockInfo captures information about an unreplicated lock. It
+// represents an unreplicated lock when associated with a key.
+type unreplicatedLockInfo struct {
+	txn *enginepb.TxnMeta
+	str lock.Strength
+}

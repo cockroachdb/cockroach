@@ -153,6 +153,26 @@ is-key-locked-by-conflicting-txn req=reqSkipLocked key=k5 strength=none
 ----
 locked: false
 
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k strength=shared
+----
+locked: true, holder: 00000001-0000-0000-0000-000000000000
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k2 strength=shared
+----
+locked: true, holder: 00000001-0000-0000-0000-000000000000
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k3 strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k4 strength=shared
+----
+locked: true, holder: <nil>
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k5 strength=shared
+----
+locked: false
+
 is-key-locked-by-conflicting-txn req=reqSkipLocked key=k strength=exclusive
 ----
 locked: true, holder: 00000001-0000-0000-0000-000000000000

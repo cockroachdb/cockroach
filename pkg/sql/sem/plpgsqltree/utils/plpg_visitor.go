@@ -100,24 +100,6 @@ func CountPLpgSQLStmt(sql string) (PLpgSQLStmtCounter, error) {
 	return v.StmtCnt, v.Err
 }
 
-// ParseAndCollectTelemetryForPLpgSQLFunc takes a plpgsql function and parses and collects
-// telemetry on the parsable statements.
-func ParseAndCollectTelemetryForPLpgSQLFunc(stmt *tree.CreateRoutine) error {
-	// Assert that the function language is PLPGSQL.
-	var funcBodyStr string
-	for _, option := range stmt.Options {
-		switch opt := option.(type) {
-		case tree.RoutineBodyStr:
-			funcBodyStr = string(opt)
-		}
-	}
-
-	if _, err := CountPLpgSQLStmt(funcBodyStr); err != nil {
-		return errors.Wrap(err, "plpgsql not supported in user-defined functions")
-	}
-	return unimp.New("plpgsql", "plpgsql not supported in user-defined functions")
-}
-
 // SQLStmtVisitor calls Fn for every SQL statement and expression found while
 // walking the PLpgSQL AST. Since PLpgSQL nodes may have statement and
 // expression fields that are nil, Fn should handle the nil case.

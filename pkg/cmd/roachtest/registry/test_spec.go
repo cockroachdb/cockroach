@@ -216,6 +216,9 @@ var OnlyAWS = Clouds(spec.AWS)
 // OnlyGCE contains only the GCE cloud.
 var OnlyGCE = Clouds(spec.GCE)
 
+// OnlyAzure contains only the Azure cloud.
+var OnlyAzure = Clouds(spec.Azure)
+
 // OnlyLocal contains only the GCE cloud.
 var OnlyLocal = Clouds(spec.Local)
 

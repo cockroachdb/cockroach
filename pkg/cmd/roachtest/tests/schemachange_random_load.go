@@ -104,7 +104,7 @@ func runSchemaChangeRandomLoad(
 	}
 	c.Run(ctx, option.WithNodes(loadNode), fmt.Sprintf("./workload init schemachange '%s'", pgurl))
 
-	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), "echo", "-n", "{store-dir}")
+	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(1)), "echo", "-n", "{store-dir}")
 	if err != nil {
 		t.L().Printf("Failed to retrieve store directory from node 1: %v\n", err.Error())
 	}

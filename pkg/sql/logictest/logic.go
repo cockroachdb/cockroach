@@ -39,7 +39,6 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/testserver"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // imported to register ExternalConnection providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -80,7 +79,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
@@ -1889,11 +1887,8 @@ func (t *logicTest) setup(
 			t.Fatal("cockroach-go testserver tests must use 3 nodes")
 		}
 
-		upgradeVersion, err := version.Parse(build.BinaryVersion())
-		if err != nil {
-			t.Fatal(err)
-		}
-		bootstrapVersion, err := release.LatestPredecessor(upgradeVersion)
+		versionStr := clusterversion.RemoveDevOffset(cfg.BootstrapVersion.Version()).String()
+		bootstrapVersion, err := release.LatestPatch(versionStr)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4060,8 +4055,6 @@ func RunLogicTest(
 	// Note: there is special code in teamcity-trigger/main.go to run this package
 	// with less concurrency in the nightly stress runs. If you see problems
 	// please make adjustments there.
-	// As of 6/4/2019, the logic tests never complete under race.
-	skip.UnderStressRace(t, "logic tests and race detector don't mix: #37993")
 
 	// This test relies on repeated sequential storage.EventuallyFileOnlySnapshot
 	// acquisitions. Reduce the max wait time for each acquisition to speed up

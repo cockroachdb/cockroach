@@ -216,19 +216,19 @@ func TestDataDriven(t *testing.T) {
 
 			case "upsert":
 				t.Logf("%v: processing upsert", d.Pos)
-				tenID, caps, err := tenantcapabilitiestestutils.ParseTenantCapabilityUpsert(t, d)
+				entry, err := tenantcapabilitiestestutils.ParseTenantCapabilityUpsert(t, d)
 				require.NoError(t, err)
 				name, dataState, serviceMode, err := tenantcapabilitiestestutils.ParseTenantInfo(t, d)
 				require.NoError(t, err)
 				info := mtinfopb.ProtoInfo{
-					Capabilities: *caps,
+					Capabilities: *entry.TenantCapabilities,
 				}
 				buf, err := protoutil.Marshal(&info)
 				require.NoError(t, err)
 				tdb.Exec(
 					t,
 					fmt.Sprintf("UPSERT INTO %s (id, active, info, name, data_state, service_mode) VALUES ($1, $2, $3, $4, $5, $6)", dummyTableName),
-					tenID.ToUint64(),
+					entry.TenantID.ToUint64(),
 					true, /* active */
 					buf,
 					name, dataState, serviceMode,

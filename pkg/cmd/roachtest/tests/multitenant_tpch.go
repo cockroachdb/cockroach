@@ -61,7 +61,7 @@ func runMultiTenantTPCH(
 			cmd := fmt.Sprintf("./workload run tpch %s --secure "+
 				"--concurrency=1 --db=tpch --max-ops=%d --queries=%d {pgurl:1}",
 				url, numRunsPerQuery, queryNum)
-			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), cmd)
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(1)), cmd)
 			workloadOutput := result.Stdout + result.Stderr
 			t.L().Printf(workloadOutput)
 			if err != nil {

@@ -552,6 +552,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderStress(t, "test is too large to run under stress")
+	skip.UnderDeadlock(t, "test is too large to run under deadlock")
 	skip.UnderRace(t, "test is too large to run under race")
 
 	const numAccounts = 1000

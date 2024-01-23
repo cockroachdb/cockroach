@@ -64,27 +64,14 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 		sysSQL.ExpectErr(t, `pq: neither the source tenant "source" nor the destination tenant "system" \(0\) can be the system tenant`,
 			"CREATE TENANT system FROM REPLICATION OF source ON $1", srcPgURL.String())
 	})
+	t.Run("cannot set expiration window on creat tenant from replication", func(t *testing.T) {
+		sysSQL.ExpectErr(t, `pq: cannot specify EXPIRATION WINDOW option while starting a physical replication stream`,
+			"CREATE TENANT system FROM REPLICATION OF source ON $1 WITH EXPIRATION WINDOW='42s'", srcPgURL.String())
+	})
 	t.Run("destination cannot exist without resume timestamp", func(t *testing.T) {
 		sysSQL.Exec(t, "CREATE TENANT foo")
 		sysSQL.ExpectErr(t, "pq: tenant with name \"foo\" already exists",
 			"CREATE TENANT foo FROM REPLICATION OF source ON $1", srcPgURL.String())
-	})
-	t.Run("destination tenant cannot be online", func(t *testing.T) {
-		sysSQL.Exec(t, "CREATE TENANT bar")
-		sysSQL.Exec(t, "ALTER VIRTUAL CLUSTER bar START SERVICE SHARED")
-		sysSQL.ExpectErr(t, "service mode must be none",
-			"CREATE TENANT bar FROM REPLICATION OF source ON $1 WITH RESUME TIMESTAMP = now()", srcPgURL.String())
-	})
-	t.Run("destination tenant must have known revert timestamp", func(t *testing.T) {
-		sysSQL.Exec(t, "CREATE TENANT baz")
-		sysSQL.ExpectErr(t, "no last revert timestamp found",
-			"CREATE TENANT baz FROM REPLICATION OF source ON $1 WITH RESUME TIMESTAMP = now()", srcPgURL.String())
-	})
-	t.Run("destination tenant revert timestamp must match resume timestamp", func(t *testing.T) {
-		sysSQL.Exec(t, "CREATE TENANT bat")
-		sysSQL.Exec(t, "ALTER VIRTUAL CLUSTER bat RESET DATA TO SYSTEM TIME cluster_logical_timestamp()")
-		sysSQL.ExpectErr(t, "doesn't match last revert timestamp",
-			"CREATE TENANT bat FROM REPLICATION OF source ON $1 WITH RESUME TIMESTAMP = cluster_logical_timestamp()", srcPgURL.String())
 	})
 	t.Run("external connection must be reachable", func(t *testing.T) {
 		badPgURL := srcPgURL
@@ -251,8 +238,7 @@ func TestTenantStreamingFailback(t *testing.T) {
 	sqlA.Exec(t, "ALTER VIRTUAL CLUSTER f STOP SERVICE")
 	waitUntilTenantServerStopped(t, serverA.SystemLayer(), "f")
 	t.Logf("starting replication g->f")
-	sqlA.Exec(t, "ALTER VIRTUAL CLUSTER f RESET DATA TO SYSTEM TIME $1::decimal", ts1)
-	sqlA.Exec(t, fmt.Sprintf("CREATE VIRTUAL CLUSTER f FROM REPLICATION OF g ON $1 WITH RESUME TIMESTAMP = '%s'", ts1), serverBURL.String())
+	sqlA.Exec(t, "ALTER VIRTUAL CLUSTER f START REPLICATION OF g ON $1", serverBURL.String())
 	_, consumerFJobID := replicationtestutils.GetStreamJobIds(t, ctx, sqlA, roachpb.TenantName("f"))
 	t.Logf("waiting for f@%s", ts2)
 	replicationtestutils.WaitUntilReplicatedTime(t,
@@ -278,11 +264,13 @@ func TestTenantStreamingFailback(t *testing.T) {
 	jobutils.WaitForJobToSucceed(t, sqlA, jobspb.JobID(consumerFJobID))
 	sqlA.Exec(t, "ALTER VIRTUAL CLUSTER f START SERVICE SHARED")
 
+	sqlB.ExpectErr(t, "service mode must be none", "ALTER VIRTUAL CLUSTER g START REPLICATION OF f ON $1", serverAURL.String())
+
 	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g STOP SERVICE")
 	waitUntilTenantServerStopped(t, serverB.SystemLayer(), "g")
+	sqlB.ExpectErr(t, "cannot specify EXPIRATION WINDOW option while starting a physical replication stream", "ALTER VIRTUAL CLUSTER g START REPLICATION OF f ON $1 WITH EXPIRATION WINDOW = '1ms'", serverAURL.String())
 	t.Logf("starting replication f->g")
-	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g RESET DATA TO SYSTEM TIME $1::decimal", ts3)
-	sqlB.Exec(t, fmt.Sprintf("CREATE VIRTUAL CLUSTER g FROM REPLICATION OF f ON $1 WITH RESUME TIMESTAMP = '%s'", ts3), serverAURL.String())
+	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g START REPLICATION OF f ON $1", serverAURL.String())
 	_, consumerGJobID = replicationtestutils.GetStreamJobIds(t, ctx, sqlB, roachpb.TenantName("g"))
 	t.Logf("waiting for g@%s", ts3)
 	replicationtestutils.WaitUntilReplicatedTime(t,

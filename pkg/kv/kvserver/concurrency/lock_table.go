@@ -746,7 +746,7 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 			// queuedLockingRequests is sorted in increasing order of sequence number.
 			break
 		}
-		if g.isSameTxn(qqg.guard.txnMeta()) {
+		if qqg.guard.txnMeta() != nil && g.isSameTxn(qqg.guard.txnMeta()) {
 			// A SKIP LOCKED request should not find another waiting request from its
 			// own transaction, at least not in the way that SQL uses KV. The only way
 			// we can end up finding another request in the lock's wait queue from our
@@ -1879,16 +1879,10 @@ func (kl *keyLocks) collectLockStateInfo(
 		return nil
 	}
 
-	// Filter out locks without waiting readers/locking requests unless explicitly
+	// Filter out locks without waiting readers/active locking requests unless explicitly
 	// requested.
-	//
-	// TODO(arul): This should consider the active/inactive status of all queued
-	// locking requests. If all waiting requests are inactive (and there are no
-	// waiting readers either), we should consider the lock to be uncontended.
-	// See https://github.com/cockroachdb/cockroach/issues/103894.
 	if !includeUncontended && kl.waitingReaders.Len() == 0 &&
-		(kl.queuedLockingRequests.Len() == 0 ||
-			(kl.queuedLockingRequests.Len() == 1 && !kl.queuedLockingRequests.Front().Value.active)) {
+		!kl.hasActivelyWaitingLockingRequest() {
 		return nil
 	}
 
@@ -4061,6 +4055,15 @@ func (kl *keyLocks) verify(st *cluster.Settings) error {
 	}
 
 	return nil
+}
+
+func (kl *keyLocks) hasActivelyWaitingLockingRequest() bool {
+	for e := kl.lockWaitQueue.queuedLockingRequests.Front(); e != nil; e = e.Next() {
+		if e.Value.active {
+			return true
+		}
+	}
+	return false
 }
 
 // Delete removes the specified lock from the tree.

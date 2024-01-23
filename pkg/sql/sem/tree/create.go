@@ -2233,10 +2233,10 @@ type CreateTenantFromReplication struct {
 	Like *LikeTenantSpec
 }
 
-// TenantReplicationOptions  options for the CREATE VIRTUAL CLUSTER FROM REPLICATION command.
+// TenantReplicationOptions  options for the CREATE/ALTER VIRTUAL CLUSTER FROM REPLICATION command.
 type TenantReplicationOptions struct {
-	Retention       Expr
-	ResumeTimestamp Expr
+	Retention        Expr
+	ExpirationWindow Expr
 }
 
 var _ NodeFormatter = &TenantReplicationOptions{}
@@ -2250,7 +2250,9 @@ func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 	// NB: we do not anonymize the tenant name because we assume that tenant names
 	// do not contain sensitive information.
 	ctx.FormatNode(node.TenantSpec)
-	ctx.FormatNode(node.Like)
+	if node.Like != nil {
+		ctx.FormatNode(node.Like)
+	}
 
 	if node.ReplicationSourceAddress != nil {
 		ctx.WriteString(" FROM REPLICATION OF ")
@@ -2293,14 +2295,14 @@ func (o *TenantReplicationOptions) Format(ctx *FmtCtx) {
 			ctx.WriteByte(')')
 		}
 	}
-	if o.ResumeTimestamp != nil {
+	if o.ExpirationWindow != nil {
 		maybeAddSep()
-		ctx.WriteString("RESUME TIMESTAMP = ")
-		_, canOmitParentheses := o.ResumeTimestamp.(alreadyDelimitedAsSyntacticDExpr)
+		ctx.WriteString("EXPIRATION WINDOW = ")
+		_, canOmitParentheses := o.ExpirationWindow.(alreadyDelimitedAsSyntacticDExpr)
 		if !canOmitParentheses {
 			ctx.WriteByte('(')
 		}
-		ctx.FormatNode(o.ResumeTimestamp)
+		ctx.FormatNode(o.ExpirationWindow)
 		if !canOmitParentheses {
 			ctx.WriteByte(')')
 		}
@@ -2318,12 +2320,12 @@ func (o *TenantReplicationOptions) CombineWith(other *TenantReplicationOptions) 
 		o.Retention = other.Retention
 	}
 
-	if o.ResumeTimestamp != nil {
-		if other.ResumeTimestamp != nil {
-			return errors.New("RESUME TIMESTAMP option specified multiple times")
+	if o.ExpirationWindow != nil {
+		if other.ExpirationWindow != nil {
+			return errors.New("EXPIRATION WINDOW option specified multiple times")
 		}
 	} else {
-		o.ResumeTimestamp = other.ResumeTimestamp
+		o.ExpirationWindow = other.ExpirationWindow
 	}
 
 	return nil
@@ -2333,7 +2335,12 @@ func (o *TenantReplicationOptions) CombineWith(other *TenantReplicationOptions) 
 func (o TenantReplicationOptions) IsDefault() bool {
 	options := TenantReplicationOptions{}
 	return o.Retention == options.Retention &&
-		o.ResumeTimestamp == options.ResumeTimestamp
+		o.ExpirationWindow == options.ExpirationWindow
+}
+
+func (o TenantReplicationOptions) ExpirationWindowSet() bool {
+	options := TenantReplicationOptions{}
+	return o.ExpirationWindow != options.ExpirationWindow
 }
 
 type SuperRegion struct {

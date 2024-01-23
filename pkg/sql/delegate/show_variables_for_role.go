@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// delegateShowVariablesForRole implements SHOW VARIABLES FOR ROLE <name> which returns all the default session values
+// delegateShowVariablesForRole implements SHOW VARIABLES FOR ROLE <name> which returns all the default session variables for a user.
 // for the given role.
 // Privileges: None.
 func (d *delegator) delegateShowVariablesForRole(

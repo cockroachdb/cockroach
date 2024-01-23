@@ -107,7 +107,7 @@ func (ex *connExecutor) execStmt(
 ) (fsm.Event, fsm.EventPayload, error) {
 	ast := parserStmt.AST
 	if log.V(2) || logStatementsExecuteEnabled.Get(&ex.server.cfg.Settings.SV) ||
-		log.HasSpanOrEvent(ctx) {
+		log.HasSpan(ctx) {
 		log.VEventf(ctx, 2, "executing: %s in state: %s", ast, ex.machine.CurState())
 	}
 
@@ -820,7 +820,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			stmtFingerprintID,
 			&topLevelQueryStats{},
 			ex.statsCollector,
-		)
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	switch s := ast.(type) {
@@ -1797,7 +1797,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 						ppInfo.dispatchToExecutionEngine.stmtFingerprintID,
 						ppInfo.dispatchToExecutionEngine.queryStats,
 						ex.statsCollector,
-					)
+						ex.extraTxnState.shouldLogToTelemetry)
 				},
 			})
 		} else {
@@ -1824,7 +1824,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				stmtFingerprintID,
 				&stats,
 				ex.statsCollector,
-			)
+				ex.extraTxnState.shouldLogToTelemetry)
 		}
 	}()
 
@@ -2065,6 +2065,7 @@ func populateQueryLevelStats(
 				}
 			}
 		}
+		ih.queryLevelStatsWithErr.Stats.ClientTime = topLevelStats.clientTime
 	}
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
 		ih.traceMetadata.annotateExplain(
@@ -2325,6 +2326,10 @@ type topLevelQueryStats struct {
 	// networkEgressEstimate is an estimate for the number of bytes sent to the
 	// client. It is used for estimating the number of RUs consumed by a query.
 	networkEgressEstimate int64
+	// clientTime is the amount of time query execution was blocked on the
+	// client receiving the PGWire protocol messages (as well as construcing
+	// those messages).
+	clientTime time.Duration
 }
 
 func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
@@ -2332,6 +2337,7 @@ func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
 	s.rowsRead += other.rowsRead
 	s.rowsWritten += other.rowsWritten
 	s.networkEgressEstimate += other.networkEgressEstimate
+	s.clientTime += other.clientTime
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
@@ -2356,6 +2362,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		ex.server.cfg.Clock,
 		&ex.sessionTracing,
 	)
+	recv.measureClientTime = planner.instrumentation.ShouldCollectExecStats()
 	recv.progressAtomic = progressAtomic
 	if ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory != nil {
 		recv.testingKnobs.pushCallback = ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory(planner.stmt.SQL)
@@ -2504,7 +2511,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			stmtFingerprintID,
 			&topLevelQueryStats{},
 			ex.statsCollector,
-		)
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	// We're in the NoTxn state, so no statements were executed earlier. Bump the
@@ -3139,11 +3146,9 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 			}
 			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
 		}
+
 		// If we have a commitTimestamp, we should use it.
 		ex.previousTransactionCommitTimestamp.Forward(ev.commitTimestamp)
-		if telemetryLoggingEnabled.Get(&ex.server.cfg.Settings.SV) {
-			ex.server.TelemetryLoggingMetrics.onTxnFinish(ev.txnID.String())
-		}
 	}
 }
 
@@ -3164,6 +3169,7 @@ func (ex *connExecutor) onTxnRestart(ctx context.Context) {
 		if ex.server.cfg.TestingKnobs.BeforeRestart != nil {
 			ex.server.cfg.TestingKnobs.BeforeRestart(ctx, ex.state.mu.autoRetryReason)
 		}
+
 	}
 }
 
@@ -3175,6 +3181,10 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 		TxnID:            txnID,
 		TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 	})
+
+	tracingEnabled := ex.planner.ExtendedEvalContext().Tracing.Enabled()
+	ex.extraTxnState.shouldLogToTelemetry =
+		ex.server.TelemetryLoggingMetrics.shouldEmitTransactionLog(tracingEnabled, ex.executorType == executorTypeInternal)
 
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart

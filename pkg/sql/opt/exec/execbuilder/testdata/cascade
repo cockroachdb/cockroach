@@ -1189,3 +1189,199 @@ SELECT
 ;
 ----
 0 0
+
+statement ok
+CREATE TABLE t3 (
+    id3 INT PRIMARY KEY
+);
+CREATE TABLE t4 (
+    id4 INT PRIMARY KEY,
+    t4_id3_1 INT NOT NULL,
+    t4_id3_2 INT NOT NULL,
+    CONSTRAINT fk1 FOREIGN KEY (t4_id3_1) REFERENCES t3(id3) ON DELETE CASCADE,
+    CONSTRAINT fk2 FOREIGN KEY (t4_id3_2) REFERENCES t3(id3) ON DELETE CASCADE
+);
+CREATE TABLE t5 (
+    id5 INT PRIMARY KEY,
+    t5_id4 INT DEFAULT NULL,
+    t5_id3_1 INT NOT NULL,
+    t5_id3_2 INT NOT NULL,
+    CONSTRAINT fk1 FOREIGN KEY (t5_id3_1) REFERENCES t3(id3) ON DELETE CASCADE,
+    CONSTRAINT fk2 FOREIGN KEY (t5_id3_2) REFERENCES t3(id3) ON DELETE CASCADE,
+    CONSTRAINT fk3 FOREIGN KEY (t5_id4) REFERENCES t4(id4) ON DELETE SET NULL
+);
+
+# Ensure that the plan is provided for each FK cascade, even if they originate
+# from the same table or share names with constraints on other tables.
+query T
+EXPLAIN DELETE FROM t3 WHERE id3 = 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • delete
+│   │ from: t3
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: t3@t3_pkey
+│             spans: [/1 - /1]
+│
+├── • fk-cascade
+│   │ fk: fk1
+│   │
+│   └── • root
+│       │
+│       ├── • delete
+│       │   │ from: t4
+│       │   │
+│       │   └── • buffer
+│       │       │ label: buffer 1
+│       │       │
+│       │       └── • hash join
+│       │           │ equality: (t4_id3_1) = (id3)
+│       │           │ right cols are key
+│       │           │
+│       │           ├── • scan
+│       │           │     missing stats
+│       │           │     table: t4@t4_pkey
+│       │           │     spans: FULL SCAN
+│       │           │
+│       │           └── • distinct
+│       │               │ estimated row count: 10
+│       │               │ distinct on: id3
+│       │               │
+│       │               └── • scan buffer
+│       │                     estimated row count: 100
+│       │                     label: buffer 1000000
+│       │
+│       └── • fk-cascade
+│           │ fk: fk3
+│           │
+│           └── • update
+│               │ table: t5
+│               │ set: t5_id4
+│               │
+│               └── • render
+│                   │
+│                   └── • hash join
+│                       │ equality: (t5_id4) = (id4)
+│                       │ right cols are key
+│                       │
+│                       ├── • scan
+│                       │     missing stats
+│                       │     table: t5@t5_pkey
+│                       │     spans: FULL SCAN
+│                       │
+│                       └── • distinct
+│                           │ estimated row count: 10
+│                           │ distinct on: id4
+│                           │
+│                           └── • scan buffer
+│                                 estimated row count: 100
+│                                 label: buffer 1000000
+│
+├── • fk-cascade
+│   │ fk: fk2
+│   │
+│   └── • root
+│       │
+│       ├── • delete
+│       │   │ from: t4
+│       │   │
+│       │   └── • buffer
+│       │       │ label: buffer 1
+│       │       │
+│       │       └── • hash join
+│       │           │ equality: (t4_id3_2) = (id3)
+│       │           │ right cols are key
+│       │           │
+│       │           ├── • scan
+│       │           │     missing stats
+│       │           │     table: t4@t4_pkey
+│       │           │     spans: FULL SCAN
+│       │           │
+│       │           └── • distinct
+│       │               │ estimated row count: 10
+│       │               │ distinct on: id3
+│       │               │
+│       │               └── • scan buffer
+│       │                     estimated row count: 100
+│       │                     label: buffer 1000000
+│       │
+│       └── • fk-cascade
+│           │ fk: fk3
+│           │
+│           └── • update
+│               │ table: t5
+│               │ set: t5_id4
+│               │
+│               └── • render
+│                   │
+│                   └── • hash join
+│                       │ equality: (t5_id4) = (id4)
+│                       │ right cols are key
+│                       │
+│                       ├── • scan
+│                       │     missing stats
+│                       │     table: t5@t5_pkey
+│                       │     spans: FULL SCAN
+│                       │
+│                       └── • distinct
+│                           │ estimated row count: 10
+│                           │ distinct on: id4
+│                           │
+│                           └── • scan buffer
+│                                 estimated row count: 100
+│                                 label: buffer 1000000
+│
+├── • fk-cascade
+│   │ fk: fk1
+│   │
+│   └── • delete
+│       │ from: t5
+│       │
+│       └── • hash join
+│           │ equality: (t5_id3_1) = (id3)
+│           │ right cols are key
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: t5@t5_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • distinct
+│               │ estimated row count: 10
+│               │ distinct on: id3
+│               │
+│               └── • scan buffer
+│                     estimated row count: 100
+│                     label: buffer 1000000
+│
+└── • fk-cascade
+    │ fk: fk2
+    │
+    └── • delete
+        │ from: t5
+        │
+        └── • hash join
+            │ equality: (t5_id3_2) = (id3)
+            │ right cols are key
+            │
+            ├── • scan
+            │     missing stats
+            │     table: t5@t5_pkey
+            │     spans: FULL SCAN
+            │
+            └── • distinct
+                │ estimated row count: 10
+                │ distinct on: id3
+                │
+                └── • scan buffer
+                      estimated row count: 100
+                      label: buffer 1000000

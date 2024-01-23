@@ -215,6 +215,12 @@ func (ba *BatchRequest) IsSingleRequest() bool {
 	return len(ba.Requests) == 1
 }
 
+// IsSingleBarrierRequest returns true iff the batch contains a single request,
+// and that request is a Barrier.
+func (ba *BatchRequest) IsSingleBarrierRequest() bool {
+	return ba.isSingleRequestWithMethod(Barrier)
+}
+
 // IsSingleSkipsLeaseCheckRequest returns true iff the batch contains a single
 // request, and that request has the skipsLeaseCheck flag set.
 func (ba *BatchRequest) IsSingleSkipsLeaseCheckRequest() bool {
@@ -344,12 +350,18 @@ func (ba *BatchRequest) IsSingleExportRequest() bool {
 	return ba.isSingleRequestWithMethod(Export)
 }
 
+// IsSingleAddSSTableRequest returns true iff the batch contains a single
+// request, and that request is an ExportRequest.
+func (ba *BatchRequest) IsSingleAddSSTableRequest() bool {
+	return ba.isSingleRequestWithMethod(AddSSTable)
+}
+
 // RequiresConsensus returns true iff the batch contains a request that should
 // always force replication and proposal through raft, even if evaluation is
 // a no-op. The Barrier request requires consensus even though its evaluation
 // is a no-op.
 func (ba *BatchRequest) RequiresConsensus() bool {
-	return ba.isSingleRequestWithMethod(Barrier) || ba.isSingleRequestWithMethod(Probe)
+	return ba.IsSingleBarrierRequest() || ba.IsSingleProbeRequest()
 }
 
 // IsCompleteTransaction determines whether a batch contains every write in a

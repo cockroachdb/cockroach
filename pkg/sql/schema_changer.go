@@ -16,12 +16,14 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -50,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -210,6 +213,12 @@ func IsPermanentSchemaChangeError(err error) bool {
 		return false
 	}
 
+	// Any error with a permanent job error wrapper on it should not be
+	// retried.
+	if jobs.IsPermanentJobError(err) {
+		return true
+	}
+
 	if grpcutil.IsClosedConnection(err) {
 		return false
 	}
@@ -299,7 +308,7 @@ const schemaChangerBackfillTxnDebugName = "schemaChangerBackfill"
 
 func (sc *SchemaChanger) backfillQueryIntoTable(
 	ctx context.Context, table catalog.TableDescriptor, query string, ts hlc.Timestamp, desc string,
-) error {
+) (err error) {
 	if fn := sc.testingKnobs.RunBeforeQueryBackfill; fn != nil {
 		if err := fn(); err != nil {
 			return err
@@ -307,7 +316,19 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 	}
 
 	isTxnRetry := false
-	return sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	// Protected timestamp cleaners, which will release any protected timestamp
+	// at the end of the query
+	var ptsCleaners []jobsprotectedts.Cleaner
+	var ptsInstalled sync.Once
+	defer func() {
+		for _, cleaner := range ptsCleaners {
+			cleanerErr := cleaner(ctx)
+			if cleanerErr != nil {
+				err = errors.CombineErrors(err, cleanerErr)
+			}
+		}
+	}()
+	err = sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		defer func() {
 			isTxnRetry = true
 		}()
@@ -365,6 +386,28 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			return err
 		}
 		defer localPlanner.curPlan.close(ctx)
+
+		// Only if a fixed timestamp is used install a protected timestamp.
+		if !ts.IsEmpty() {
+			// We could end up with retry errors, but the PTS only needs to be installed
+			// once, since the timestamp will not change.
+			ptsInstalled.Do(func() {
+				// Add a PTS record any tables accessed by this planner.
+				tbls := localPlanner.curPlan.mem.Metadata().AllTables()
+				for _, table := range tbls {
+					descID := table.Table.ID()
+					tbl, err := localPlanner.descCollection.ByID(localPlanner.Txn()).Get().Table(ctx, catid.DescID(descID))
+					if err != nil {
+						return
+					}
+					ptsCleaners = append(ptsCleaners,
+						sc.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx, sc.job, tbl, ts))
+				}
+			})
+			if err != nil {
+				return err
+			}
+		}
 
 		res := kvpb.BulkOpSummary{}
 		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
@@ -430,6 +473,16 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 
 		return planAndRunErr
 	})
+
+	// BatchTimestampBeforeGCError is retryable for the schema changer, but we
+	// will not ever move the timestamp forward so this will fail forever. Mark
+	// as a permanent error.
+	if errors.HasType(err, (*kvpb.BatchTimestampBeforeGCError)(nil)) {
+		return jobs.MarkAsPermanentJobError(
+			errors.Wrap(err, "unable to retry backfill since fixed timestamp is before the GC timestamp"),
+		)
+	}
+	return err
 }
 
 // maybe backfill a created table by executing the AS query. Return nil if

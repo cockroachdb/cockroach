@@ -229,6 +229,14 @@ num=3
     active: true req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 5
 
+query span=a,d
+----
+num locks: 1, bytes returned: 77, resume reason: RESUME_UNKNOWN, resume span: <nil>
+ locks:
+  range_id=3 key="c" holder=00000000-0000-0000-0000-000000000001 durability=Unreplicated duration=0s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Exclusive wait_duration:0s
+
 # req5 encounters the reservation by req4 at "b" when looking at it for its read access, but ignores
 # it.
 release txn=txn1 span=c

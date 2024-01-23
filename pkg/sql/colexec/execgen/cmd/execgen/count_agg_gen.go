@@ -56,5 +56,8 @@ func genCountAgg(inputFileContents string, wr io.Writer) error {
 }
 
 func init() {
-	registerAggGenerator(genCountAgg, "count_agg.eg.go", countAggTmpl, true /* genWindowVariant */)
+	registerAggGenerator(
+		genCountAgg, "count_agg.eg.go", /* filenameSuffix */
+		countAggTmpl, "count" /* aggName */, true, /* genWindowVariant */
+	)
 }

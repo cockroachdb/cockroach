@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
 const asyncpgRunTestCmd = `
@@ -91,7 +90,10 @@ func registerAsyncpg(r registry.Registry) {
 		}
 
 		if err := repeatRunE(
-			ctx, t, c, node, "update apt-get", `sudo apt-get update`,
+			ctx, t, c, node, "update apt-get",
+			`
+				sudo add-apt-repository ppa:deadsnakes/ppa &&
+				sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -102,7 +104,23 @@ func registerAsyncpg(r registry.Registry) {
 			c,
 			node,
 			"install python and pip",
-			`sudo apt-get -qq install python3.7 python3-pip libpq-dev python-dev python3-virtualenv`,
+			`sudo apt-get -qq install python3.8 python3-pip libpq-dev python3.8-dev python3-virtualenv python3.8-distutils python3-apt python3-setuptools python-setuptools`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx, t, c, node, "set python3.8 as default", `
+    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.5 1
+    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 2
+    		sudo update-alternatives --config python3`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx, t, c, node, "install pip",
+			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.8`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -133,7 +151,7 @@ func registerAsyncpg(r registry.Registry) {
 
 		t.Status("Running asyncpg tests ")
 		result, err := c.RunWithDetailsSingleNode(
-			ctx, t.L(), node, asyncpgRunTestCmd)
+			ctx, t.L(), option.WithNodes(node), asyncpgRunTestCmd)
 		if err != nil {
 			t.L().Printf("error during asyncpg run (may be ok): %v\n", err)
 		}
@@ -155,12 +173,9 @@ func registerAsyncpg(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:  "asyncpg",
-		Owner: registry.OwnerSQLFoundations,
-		// TODO(DarrylWong): This test currently fails on Ubuntu 22.04 so we run it on 20.04.
-		// See https://github.com/cockroachdb/cockroach/issues/112108.
-		// Once this issue is fixed we should remove this Ubuntu Version override.
-		Cluster:          r.MakeClusterSpec(1, spec.CPU(16), spec.UbuntuVersion(vm.FocalFossa)),
+		Name:             "asyncpg",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1, spec.CPU(16)),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly, registry.ORM),
 		Leases:           registry.MetamorphicLeases,

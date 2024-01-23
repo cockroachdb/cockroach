@@ -175,7 +175,7 @@ func TestReleaseSeries(t *testing.T) {
 	expected := Latest.ReleaseSeries()
 	for k := Latest; k >= MinSupported; k-- {
 		if k.IsFinal() {
-			v := removeDevOffset(k.Version())
+			v := RemoveDevOffset(k.Version())
 			expected = roachpb.ReleaseSeries{Major: v.Major, Minor: v.Minor}
 		}
 		require.Equalf(t, expected, k.ReleaseSeries(), "version: %s", k)

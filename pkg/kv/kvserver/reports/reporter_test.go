@@ -125,9 +125,6 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "likely to timeout")
-
 	ctx := context.Background()
 	// 2 regions, 3 dcs per region.
 	tc := serverutils.StartCluster(t, 6, base.TestClusterArgs{
@@ -375,7 +372,7 @@ func checkZoneReplication(db *gosql.DB, zoneID, total, under, over, unavailable 
 			return fmt.Errorf("expected total: %d, got: %d", total, gotTotal)
 		}
 		if under != gotUnder {
-			return fmt.Errorf("expected under: %d, got: %d", total, gotUnder)
+			return fmt.Errorf("expected under: %d, got: %d", under, gotUnder)
 		}
 		if over != gotOver {
 			return fmt.Errorf("expected over: %d, got: %d", over, gotOver)
