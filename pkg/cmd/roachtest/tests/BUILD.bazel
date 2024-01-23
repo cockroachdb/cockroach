@@ -68,7 +68,6 @@ go_library(
         "export_parquet.go",
         "failover.go",
         "fixtures.go",
-        "flowable.go",
         "follower_reads.go",
         "go_helpers.go",
         "gopg.go",
