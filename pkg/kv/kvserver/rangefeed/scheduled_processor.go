@@ -82,7 +82,7 @@ func NewScheduledProcessor(cfg Config) *ScheduledProcessor {
 		Config:     cfg,
 		scheduler:  cfg.Scheduler.NewClientScheduler(),
 		reg:        makeRegistry(cfg.Metrics),
-		rts:        makeResolvedTimestamp(),
+		rts:        makeResolvedTimestamp(cfg.Settings),
 		processCtx: cfg.AmbientContext.AnnotateCtx(context.Background()),
 
 		requestQueue: make(chan request, 20),
@@ -698,7 +698,7 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 
 		// Determine whether the operation caused the resolved timestamp to
 		// move forward. If so, publish a RangeFeedCheckpoint notification.
-		if p.rts.ConsumeLogicalOp(op) {
+		if p.rts.ConsumeLogicalOp(ctx, op) {
 			p.publishCheckpoint(ctx)
 		}
 	}
