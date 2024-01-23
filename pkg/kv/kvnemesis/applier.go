@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -118,10 +117,6 @@ func exceptSharedLockPromotionError(err error) bool { // true if lock promotion 
 
 func exceptSkipLockedReplayError(err error) bool { // true if skip locked replay error
 	return errors.Is(err, &concurrency.SkipLockedReplayError{})
-}
-
-func exceptSkipLockedUnsupportedError(err error) bool { // true if unsupported use of skip locked error
-	return errors.Is(err, &batcheval.SkipLockedUnsupportedError{})
 }
 
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {

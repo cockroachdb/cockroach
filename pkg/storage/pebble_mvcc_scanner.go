@@ -1804,7 +1804,7 @@ func (p *pebbleMVCCScanner) isKeyLockedByConflictingTxn(
 		p.err = err
 		return false, false
 	}
-	ok, txn, err := p.lockTable.IsKeyLockedByConflictingTxn(key)
+	ok, txn, err := p.lockTable.IsKeyLockedByConflictingTxn(ctx, key)
 	if err != nil {
 		p.err = err
 		return false, false

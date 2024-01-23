@@ -88,7 +88,7 @@ func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*lockspanset.LockSpanSet
 	return true
 }
 func (g *mockLockTableGuard) IsKeyLockedByConflictingTxn(
-	roachpb.Key, lock.Strength,
+	context.Context, roachpb.Key, lock.Strength,
 ) (bool, *enginepb.TxnMeta, error) {
 	panic("unimplemented")
 }

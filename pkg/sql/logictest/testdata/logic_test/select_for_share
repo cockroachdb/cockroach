@@ -164,6 +164,64 @@ user testuser2
 statement ok
 COMMIT
 
+# Ensure FOR SHARE SKIP LOCKED works correctly with replicated locks.
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(a INT PRIMARY KEY);
+INSERT INTO t VALUES(1), (2);
+GRANT ALL ON t TO testuser;
+
+user testuser
+
+statement ok
+SET enable_durable_locking_for_serializable = true;
+
+query I
+BEGIN;
+SELECT * FROM t WHERE a = 1 FOR SHARE;
+----
+1
+
+user root
+
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty  lock_strength  durability  isolation_level  granted  contended
+
+# Locks:
+# 1: Shared
+# 2: None
+
+query I
+BEGIN;
+SELECT * FROM t FOR UPDATE SKIP LOCKED
+----
+2
+
+user testuser2
+
+# Locks:
+# 1: Shared
+# 2: Exclusive
+
+query I
+BEGIN;
+SELECT * FROM t FOR SHARE SKIP LOCKED;
+COMMIT;
+----
+1
+
+user root
+
+statement ok
+COMMIT
+
+user testuser
+
+statement ok
+COMMIT
 
 # TODO(arul): Add a test to show that the session setting doesn't apply to read
 # committed transactions. We currently can't issue SELECT FOR SHARE statements

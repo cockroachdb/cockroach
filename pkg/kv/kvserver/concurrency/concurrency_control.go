@@ -801,7 +801,7 @@ type lockTableGuard interface {
 	// for conflicts. This helps prevent a stream of locking SKIP LOCKED requests
 	// from starving out regular locking requests. In such cases, true is
 	// returned, but so is nil.
-	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta, error)
+	IsKeyLockedByConflictingTxn(context.Context, roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta, error)
 }
 
 // lockTableWaiter is concerned with waiting in lock wait-queues for locks held

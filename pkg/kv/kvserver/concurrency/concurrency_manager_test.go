@@ -391,7 +391,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				d.ScanArgs(t, "key", &key)
 				// TODO(nvanbenschoten): replace with scanLockStrength.
 				strength := concurrency.ScanLockStrength(t, d)
-				ok, txn, err := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), strength)
+				ok, txn, err := g.IsKeyLockedByConflictingTxn(context.Background(), roachpb.Key(key), strength)
 				if err != nil {
 					return err.Error()
 				}

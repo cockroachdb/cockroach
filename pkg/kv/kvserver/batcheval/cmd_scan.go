@@ -14,13 +14,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -40,7 +38,10 @@ func Scan(
 
 	var lockTableForSkipLocked storage.LockTableView
 	if h.WaitPolicy == lock.WaitPolicy_SkipLocked {
-		lockTableForSkipLocked = newRequestBoundLockTableView(cArgs.Concurrency, args.KeyLockingStrength)
+		lockTableForSkipLocked = newRequestBoundLockTableView(
+			readWriter, cArgs.Concurrency, h.Txn, args.KeyLockingStrength,
+		)
+		defer lockTableForSkipLocked.Close()
 	}
 
 	var res result.Result
@@ -124,7 +125,7 @@ func Scan(
 			ctx, readWriter, h.Txn, args.KeyLockingStrength, args.KeyLockingDurability,
 			args.ScanFormat, &scanRes, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
 		if err != nil {
-			return result.Result{}, maybeInterceptDisallowedSkipLockedUsage(h, err)
+			return result.Result{}, err
 		}
 		res.Local.AcquiredLocks = acquiredLocks
 	}
@@ -139,38 +140,4 @@ func ScanReadCategory(ah kvpb.AdmissionHeader) storage.ReadCategory {
 		readCategory = storage.ScanBackgroundBatchEvalReadCategory
 	}
 	return readCategory
-}
-
-// maybeInterceptDisallowedSkipLockedUsage checks if read evaluation for a skip
-// locked request encountered a replicated lock by checking the supplier error
-// type. It transforms the error into an unimplemented error if that's the case;
-// otherwise, the error is passed through.
-//
-// TODO(arul): this won't be needed once
-// https://github.com/cockroachdb/cockroach/issues/115057 is addressed.
-func maybeInterceptDisallowedSkipLockedUsage(h kvpb.Header, err error) error {
-	if h.WaitPolicy == lock.WaitPolicy_SkipLocked && errors.HasType(err, (*kvpb.LockConflictError)(nil)) {
-		return MarkSkipLockedUnsupportedError(errors.UnimplementedError(
-			errors.IssueLink{IssueURL: build.MakeIssueURL(115057)},
-			"usage of replicated locks in conjunction with skip locked wait policy is currently unsupported",
-		))
-	}
-	return err
-}
-
-// SkipLockedUnsupportedError is used to mark errors resulting from unsupported
-// (currently unimplemented) uses of the skip locked wait policy.
-type SkipLockedUnsupportedError struct{}
-
-func (e *SkipLockedUnsupportedError) Error() string {
-	return "unsupported skip locked use error"
-}
-
-// MarkSkipLockedUnsupportedError wraps the given error, if not nil, as a skip
-// locked unsupported error.
-func MarkSkipLockedUnsupportedError(cause error) error {
-	if cause == nil {
-		return nil
-	}
-	return errors.Mark(cause, &SkipLockedUnsupportedError{})
 }

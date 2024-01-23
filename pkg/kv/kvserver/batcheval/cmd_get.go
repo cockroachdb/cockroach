@@ -35,7 +35,10 @@ func Get(
 
 	var lockTableForSkipLocked storage.LockTableView
 	if h.WaitPolicy == lock.WaitPolicy_SkipLocked {
-		lockTableForSkipLocked = newRequestBoundLockTableView(cArgs.Concurrency, args.KeyLockingStrength)
+		lockTableForSkipLocked = newRequestBoundLockTableView(
+			readWriter, cArgs.Concurrency, h.Txn, args.KeyLockingStrength,
+		)
+		defer lockTableForSkipLocked.Close()
 	}
 
 	getRes, err := storage.MVCCGet(ctx, readWriter, args.Key, h.Timestamp, storage.MVCCGetOptions{
@@ -93,7 +96,7 @@ func Get(
 		acq, err := acquireLockOnKey(ctx, readWriter, h.Txn, args.KeyLockingStrength,
 			args.KeyLockingDurability, args.Key, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
 		if err != nil {
-			return result.Result{}, maybeInterceptDisallowedSkipLockedUsage(h, err)
+			return result.Result{}, err
 		}
 		res.Local.AcquiredLocks = []roachpb.LockAcquisition{acq}
 	}
