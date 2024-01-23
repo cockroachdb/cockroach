@@ -222,9 +222,11 @@ func preExecutionProcessing(
 			modifyExprsReferencingSequencesWithTrue,
 			modifyAlterPKWithRowIDCol,
 			modifyAlterPKWithSamePKColsButDifferentSharding,
+			modifyLineToSkipValidateConstraint,
 		}
 		declarativeLineModifiers := []sqlLineModifier{
 			modifyExprsReferencingSequencesWithTrue,
+			modifyLineToSkipValidateConstraint,
 		}
 		for _, lm := range legacyLineModifiers {
 			parsedLineForLegacy = lm(ctx, t, parsedLineForLegacy, legacyConn)
@@ -531,6 +533,34 @@ func modifyExprsReferencingSequencesWithTrue(
 		newParsedStmts = append(newParsedStmts, parsedStmt)
 	}
 
+	return newParsedStmts
+}
+
+// modifyLineToSkipValidateConstraint modifies line to skip any `VALIDATE
+// CONSTRAINT` command. Validating a constraint in DSC results in a validated
+// constraint with new constraintID, whereas in LSC it retains the old
+// constraintID. This would subsequently cause the descriptor state identity
+// check to fail so we skip/erase any VALIDATE CONSTRAINT command into the
+// framework.
+func modifyLineToSkipValidateConstraint(
+	ctx context.Context, t *testing.T, parsedStmts statements.Statements, conn *gosql.Conn,
+) (newParsedStmts statements.Statements) {
+	for _, parsedStmt := range parsedStmts {
+		if atCmd, ok := parsedStmt.AST.(*tree.AlterTable); ok {
+			nonValidateConstraintCmds := make([]tree.AlterTableCmd, 0)
+			for _, cmd := range atCmd.Cmds {
+				if _, ok := cmd.(*tree.AlterTableValidateConstraint); !ok {
+					nonValidateConstraintCmds = append(nonValidateConstraintCmds, cmd)
+				}
+			}
+			if len(nonValidateConstraintCmds) != 0 {
+				parsedStmt.AST.(*tree.AlterTable).Cmds = nonValidateConstraintCmds
+				newParsedStmts = append(newParsedStmts, parsedStmt)
+			}
+		} else {
+			newParsedStmts = append(newParsedStmts, parsedStmt)
+		}
+	}
 	return newParsedStmts
 }
 

@@ -859,6 +859,7 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 		stmts: []string{
 			// Statements expected to succeed.
 			"SET sql_safe_updates = false;",
+			"SET experimental_enable_unique_without_index_constraints = true",
 			"CREATE DATABASE testdb1; SET DATABASE = testdb1",
 			"CREATE TABLE testdb1.t1 (i INT PRIMARY KEY); CREATE TABLE testdb1.t2 (i INT PRIMARY KEY REFERENCES testdb1.t1(i));",
 			"DROP DATABASE testdb1 CASCADE  -- current db is dropped; expect no post-execution checks",
@@ -948,6 +949,10 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"ALTER TABLE t10 ALTER PRIMARY KEY USING COLUMNS (i, k) USING HASH;  -- expect to be rewritten to have `DROP COLUMN IF EXISTS old-shard-col` appended to it",
 			"ALTER TABLE t10 ALTER PRIMARY KEY USING COLUMNS (i, k); -- ditto",
 			"ALTER TABLE t10 ALTER PRIMARY KEY USING COLUMNS (j) USING HASH;  -- expect to not be rewritten because old-shard-col is used",
+			"CREATE TABLE t12 (i INT8)",
+			"INSERT INTO t12 VALUES (99), (99);",
+			"ALTER TABLE t12 ADD CONSTRAINT unique_i_1 UNIQUE WITHOUT INDEX (i) NOT VALID, ADD CONSTRAINT unique_i_2 UNIQUE WITHOUT INDEX (i) NOT VALID",
+			"ALTER TABLE t12 VALIDATE CONSTRAINT unique_i_1  -- expect to be skipped",
 		},
 	}
 
