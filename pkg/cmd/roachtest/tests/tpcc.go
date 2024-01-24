@@ -541,6 +541,25 @@ func registerTPCC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
+		Name:              "tpcc-nowait/isolation-level=snapshot/nodes=3/w=1",
+		Owner:             registry.OwnerTestEng,
+		Benchmark:         true,
+		Cluster:           r.MakeClusterSpec(4, spec.CPU(16)),
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
+		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses:      1,
+				Duration:        10 * time.Minute,
+				ExtraRunArgs:    "--wait=false --isolation-level=snapshot",
+				SetupType:       usingImport,
+				ExpensiveChecks: true,
+			})
+		},
+	})
+	r.Add(registry.TestSpec{
 		Name:              "tpcc-nowait/isolation-level=read-committed/nodes=3/w=1",
 		Owner:             registry.OwnerTestEng,
 		Benchmark:         true,
