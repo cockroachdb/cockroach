@@ -19,12 +19,15 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"encoding/xml"
 	"flag"
 	"fmt"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/build/engflow"
+	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 )
 
 var (
@@ -32,7 +35,16 @@ var (
 	serverName      = flag.String("servername", "mesolite", "name of the EngFlow cluster (mesolite, tanzanite)")
 	tlsClientCert   = flag.String("cert", "", "TLS client certificate for accessing EngFlow, probably a .crt file")
 	tlsClientKey    = flag.String("key", "", "TLS client key for accessing EngFlow")
+	jsonOutFile     = flag.String("jsonout", "", "output JSON file")
+
+	summaryFile = os.Getenv("GITHUB_STEP_SUMMARY")
 )
+
+type failedTestResult struct {
+	label, name         string
+	run, shard, attempt int32
+	status              string
+}
 
 func process() error {
 	eventStreamF, err := os.Open(*eventStreamFile)
@@ -47,14 +59,104 @@ func process() error {
 
 	jsonReport, errs := engflow.ConstructJSONReport(invocation, *serverName)
 	for _, err := range errs {
-		fmt.Fprintf(os.Stderr, "ERROR: %+v", err)
+		fmt.Fprintf(os.Stderr, "ERROR: %+v\n", err)
 	}
 
-	jsonOut, err := json.Marshal(jsonReport)
+	if *jsonOutFile != "" {
+		jsonData, err := json.Marshal(jsonReport)
+		if err != nil {
+			return err
+		}
+		err = os.WriteFile(*jsonOutFile, jsonData, 0644)
+		if err != nil {
+			return err
+		}
+	} else {
+		fmt.Fprintln(os.Stderr, "-jsonoutfile not passed, skipping constructing JSON test report")
+	}
+
+	if summaryFile != "" {
+		summaryF, err := os.OpenFile(summaryFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = summaryF.Close() }()
+		err = dumpSummary(summaryF, invocation)
+		if err != nil {
+			return err
+		}
+	} else {
+		fmt.Fprintln(os.Stderr, "GITHUB_STEP_SUMMARY not passed, skipping populating GitHub actions test report")
+	}
+
+	return nil
+}
+
+func dumpSummary(f *os.File, invocation *engflow.InvocationInfo) error {
+	var title string
+	if invocation.ExitCode == 0 {
+		title = "# Build Succeeded"
+	} else {
+		title = fmt.Sprintf("# Build Failed (code: %s)", invocation.ExitCodeName)
+	}
+	_, err := f.WriteString(fmt.Sprintf("%s\n", title))
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%s\n", jsonOut)
+	_, err = f.WriteString(fmt.Sprintf("### [EngFlow link](https://%s.cluster.engflow.com/invocations/default/%s)\n", *serverName, invocation.InvocationId))
+	if err != nil {
+		return err
+	}
+
+	var failedTests []failedTestResult
+	for _, testResults := range invocation.TestResults {
+		for _, testResult := range testResults {
+			if testResult.Err != nil {
+				// We already logged this error.
+				continue
+			}
+			var testXml bazelutil.TestSuites
+			if err := xml.Unmarshal([]byte(testResult.TestXml), &testXml); err != nil {
+				fmt.Fprintf(os.Stderr, "Could not parse test.xml: got error %+v", err)
+				continue
+			}
+			for _, suite := range testXml.Suites {
+				for _, testCase := range suite.TestCases {
+					outResult := failedTestResult{
+						label:   testResult.Label,
+						name:    testCase.Name,
+						run:     testResult.Run,
+						shard:   testResult.Shard,
+						attempt: testResult.Attempt,
+					}
+					if testCase.Error != nil {
+						outResult.status = "ERROR"
+					} else if testCase.Failure != nil {
+						outResult.status = "FAILURE"
+					}
+					if outResult.status != "" {
+						failedTests = append(failedTests, outResult)
+					}
+				}
+			}
+		}
+	}
+
+	if len(failedTests) != 0 {
+		_, err := f.WriteString(`| Label | TestName | Status | Link |
+| --- | --- | --- | --- |
+`)
+		if err != nil {
+			return err
+		}
+		for _, failedTest := range failedTests {
+			base64Target := base64.StdEncoding.EncodeToString([]byte(failedTest.label))
+			_, err := f.WriteString(fmt.Sprintf("| `%s` | `%s` | `%s` | [Link](https://%s.cluster.engflow.com/invocations/default/%s?testReportRun=%d&testReportShard=%d&testReportAttempt=%d#targets-%s) |", failedTest.label, failedTest.name, failedTest.status, *serverName, invocation.InvocationId, failedTest.run, failedTest.shard, failedTest.attempt, base64Target))
+			if err != nil {
+				return err
+			}
+		}
+	}
 
 	return nil
 }
