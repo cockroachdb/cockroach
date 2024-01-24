@@ -491,7 +491,7 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 		setRangeMaxBytes(params.maxSize)
 
 		require.NoError(t,
-			WaitForReplication(ctx, t, db, 3 /* repicationFactor */, exactlyReplicationFactor))
+			WaitForReplication(ctx, t, t.L(), db, 3 /* repicationFactor */, exactlyReplicationFactor))
 
 		// Init the split workload.
 		if err := params.load.init(ctx, t, c); err != nil {
