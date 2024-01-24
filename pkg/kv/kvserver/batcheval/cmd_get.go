@@ -92,13 +92,15 @@ func Get(
 	}
 
 	var res result.Result
-	if args.KeyLockingStrength != lock.None && h.Txn != nil && getRes.Value != nil {
+	if args.KeyLockingStrength != lock.None && getRes.Value != nil {
 		acq, err := acquireLockOnKey(ctx, readWriter, h.Txn, args.KeyLockingStrength,
 			args.KeyLockingDurability, args.Key, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
 		if err != nil {
 			return result.Result{}, err
 		}
-		res.Local.AcquiredLocks = []roachpb.LockAcquisition{acq}
+		if !acq.Empty() {
+			res.Local.AcquiredLocks = []roachpb.LockAcquisition{acq}
+		}
 	}
 	res.Local.EncounteredIntents = intents
 	return res, err
