@@ -879,7 +879,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	// the probability that the producer returns a topology with more than one node in it,
 	// else the node shutdown tests can flake.
 	if rd.rs.srcNodes >= 3 {
-		require.NoError(rd.t, WaitFor3XReplication(ctx, rd.t, rd.setup.src.db))
+		require.NoError(rd.t, WaitFor3XReplication(ctx, rd.t, rd.t.L(), rd.setup.src.db))
 	}
 
 	rd.t.L().Printf("begin workload on src cluster")

@@ -73,7 +73,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 			t.Fatal(err)
 		}
 		scatterTables(t, conn, tpchTables)
-		err := WaitFor3XReplication(ctx, t, conn)
+		err := WaitFor3XReplication(ctx, t, t.L(), conn)
 		require.NoError(t, err)
 
 		// Populate the range cache on each node.
