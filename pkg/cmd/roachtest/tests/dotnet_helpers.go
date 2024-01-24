@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -82,12 +83,18 @@ func extractFailureFromTRX(contents []byte) ([]string, []status, map[string]stri
 
 	// Check each result.
 	for _, testCase := range testRun.Results.UnitTestResults {
+		const npgsqlFlakeError = "Received backend message ReadyForQuery while expecting"
 		testName := idToFullName[testCase.TestID]
 		tests = append(tests, testName)
 		if testCase.Outcome == "Skipped" || testCase.Outcome == "NotExecuted" {
 			testStatuses = append(testStatuses, statusSkip)
 		} else if testCase.Outcome == "Passed" {
 			testStatuses = append(testStatuses, statusPass)
+		} else if strings.Contains(testCase.Output.ErrorInfo.Message, npgsqlFlakeError) {
+			// npgsql tests frequently flake with this error. Until we resolve this
+			// specific error, we will ignore all tests that failed for that reason.
+			// See https://github.com/cockroachdb/cockroach/issues/108414.
+			testStatuses = append(testStatuses, statusSkip)
 		} else {
 			testStatuses = append(testStatuses, statusFail)
 			message := testCase.Output.ErrorInfo.Message
