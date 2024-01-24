@@ -46,6 +46,8 @@ type InvocationInfo struct {
 	InvocationId      string
 	StartedTimeMillis int64
 	FinishTimeMillis  int64
+	ExitCode          int32
+	ExitCodeName      string
 	TestResults       map[string][]*TestResultWithXml
 }
 
@@ -54,6 +56,8 @@ type JsonReport struct {
 	InvocationId   string                      `json:"invocation_id"`
 	StartedAt      string                      `json:"started_at"`
 	FinishedAt     string                      `json:"finished_at"`
+	ExitCode       int32                       `json:"exit_code"`
+	ExitCodeName   string                      `json:"exit_code_name"`
 	ResultsByLabel map[string][]JsonTestResult `json:"results_by_label"`
 }
 
@@ -165,8 +169,10 @@ func LoadTestResults(
 		case *bes.BuildEventId_BuildFinished:
 			finished := event.GetFinished()
 			ret.FinishTimeMillis = finished.FinishTimeMillis
+			exitCode := finished.ExitCode
+			ret.ExitCode = exitCode.Code
+			ret.ExitCodeName = exitCode.Name
 		}
-
 	}
 
 	unread := buf.Unread()
@@ -246,6 +252,8 @@ func ConstructJSONReport(invocation *InvocationInfo, serverName string) (JsonRep
 		InvocationId:   invocation.InvocationId,
 		StartedAt:      timeMillisToString(invocation.StartedTimeMillis),
 		FinishedAt:     timeMillisToString(invocation.FinishTimeMillis),
+		ExitCode:       invocation.ExitCode,
+		ExitCodeName:   invocation.ExitCodeName,
 		ResultsByLabel: make(map[string][]JsonTestResult),
 	}
 	var errs []error
