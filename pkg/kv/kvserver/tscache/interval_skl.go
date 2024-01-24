@@ -20,6 +20,7 @@ import (
 	"unsafe"
 
 	"github.com/andy-kimball/arenaskl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -553,6 +554,41 @@ func (s *intervalSkl) LookupTimestampRange(
 	return val
 }
 
+// Serialize returns a serialized representation of the intervalSkl over the
+// interval spanning from start to end.
+func (s *intervalSkl) Serialize(ctx context.Context, from, to []byte) rspb.Segment {
+	if from == nil && to == nil {
+		panic("from and to keys cannot be nil")
+	}
+
+	// Serialize each page into a separate segment under the rotMutex and then
+	// merge them together outside the rotMutex.
+	var merged rspb.Segment
+	for _, seg := range s.serializePages(ctx, from, to) {
+		merged.Merge(seg)
+	}
+	return merged
+}
+
+// serializePages returns a serialized representation of each of the
+// intervalSkl's pages over the interval spanning from start to end.
+func (s *intervalSkl) serializePages(ctx context.Context, from, to []byte) []rspb.Segment {
+	// Acquire the rotation mutex read lock so that the page will not be rotated
+	// while serialize operations are in progress.
+	s.rotMutex.TracedRLock(ctx)
+	defer s.rotMutex.RUnlock()
+
+	// Iterate over the pages, serializing each and merging as we go.
+	segs := make([]rspb.Segment, 0, s.pages.Len())
+	for e := s.pages.Front(); e != nil; e = e.Next() {
+		p := e.Value
+		seg := p.serialize(from, to)
+		seg.LowWater = s.floorTS
+		segs = append(segs, seg)
+	}
+	return segs
+}
+
 // FloorTS returns the receiver's floor timestamp.
 func (s *intervalSkl) FloorTS() hlc.Timestamp {
 	s.rotMutex.RLock()
@@ -577,15 +613,121 @@ func newSklPage(arena *arenaskl.Arena) *sklPage {
 // the maximum (initialized or uninitialized) value found.
 func (p *sklPage) lookupTimestampRange(from, to []byte, opt rangeOptions) cacheValue {
 	var maxVal cacheValue
-	p.visitRange(from, to, opt, func(val cacheValue) {
+	p.visitRange(from, to, opt, func(_ []byte, val cacheValue, _ nodeOptions) {
 		maxVal, _ = ratchetValue(maxVal, val)
 	})
 	return maxVal
 }
 
+func (p *sklPage) serialize(from, to []byte) rspb.Segment {
+	var seg rspb.Segment
+
+	// Serializing the page requires a scan over the skiplist while stitching read
+	// spans back together. This is necessary because the skiplist stores keys and
+	// gaps separately, but the serialized representation stores them together. To
+	// support this, we construct read spans across consecutive calls to the
+	// visitor function and flush them when we encounter their end key.
+	var lastSpan rspb.ReadSpan
+	var lastOpts nodeOptions
+	flushLastSpan := func(endKey []byte) {
+		lastSpan.EndKey = endKey
+		seg.AddReadSpan(lastSpan)
+		lastSpan = rspb.ReadSpan{}
+		lastOpts = 0
+	}
+	visit := func(key []byte, val cacheValue, opt nodeOptions) {
+		// Maybe flush the previous read span.
+		if lastOpts&hasGap != 0 /* lastOpts == hasGap || lastOpts == (hasKey|hasGap) */ {
+			// Previous read span was a range which ends at this key. Flush it.
+			if bytes.Equal(lastSpan.Key, key) {
+				// If the previous read span has the same start key as this key, we're in
+				// one of two cases:
+				// 1. there's a bug and the skiplist has two nodes with the same key, or
+				// 2. we're in a rare case where the immediately preceding key was a gap
+				//    value with no key value, so we hit the Key.Next() case below. In
+				//    such cases, the gap value can be discarded, because it is filling
+				//    an empty space which cannot be represented in a roachpb.Key.
+				//
+				// An example where case 2 is possible is:
+				// 1. Read(["a", "b"), ts100)
+				// 2. Read(["a", nil), ts200)
+				// 3. Read(["a\x00", nil), ts200)
+				//
+				// In this case, the skiplist will retain a gap value between "a" and
+				// "a\x00", even when such a gap is effectively empty because it cannot
+				// be represented in a roachpb.Key.
+				if lastOpts != hasGap {
+					panic("unexpected same key as previous read span")
+				} else {
+					lastSpan, lastOpts = rspb.ReadSpan{}, 0
+				}
+			} else {
+				flushLastSpan(key /* endKey */)
+			}
+		} else if lastOpts == hasKey {
+			// Determine whether this is the gap portion of a previous read span, or
+			// whether this is a new read span.
+			sameSpan := bytes.Equal(lastSpan.Key, key) && lastSpan.Timestamp == val.ts && lastSpan.TxnID == val.txnID
+			if sameSpan {
+				if opt != hasGap {
+					panic("expected gap value after key value for same read span")
+				}
+				// Combine key with gap into same read span.
+				lastOpts |= opt
+				return
+			} else {
+				// Previous key was a point key, so flush it and start a new read span.
+				flushLastSpan(nil /* endKey */)
+			}
+		} else if lastOpts != 0 {
+			panic("unexpected")
+		}
+
+		// Track val as a new read span, if not empty.
+		if !val.ts.IsEmpty() {
+			if opt&hasKey == 0 {
+				// The value is a gap value with no key value. This means that the value
+				// has an exclusive start key, so we advance the key to the next key.
+				key = append(key, 0) // Key.Next()
+			}
+			lastSpan = rspb.ReadSpan{
+				Key:       key,
+				Timestamp: val.ts,
+				TxnID:     val.txnID,
+			}
+			lastOpts = opt
+		}
+	}
+
+	// Scan over the skiplist. If the visitor is called at all (i.e. if there are
+	// any overlapping read spans), then the visitor will be called first with
+	// either a key value (opt=hasKey) or a key+gap value (opt=(hasKey|hasGap)).
+	//
+	// We use a rangeOptions of excludeTo, meaning an inclusive start key and an
+	// exclusive end key. This is all callers of this function need, and it allows
+	// us to simplify the translation from cacheValues to ReadSpans.
+	p.visitRange(from, to, excludeTo, visit)
+
+	// Flush the last read span. This will be a no-op if the visitor was never
+	// previously called because there were no overlapping read spans.
+	visit(to, cacheValue{}, hasKey)
+
+	return seg
+}
+
+// sklPageVisitor is a visitor function that is called on each key and gap value
+// encountered during a scan of an sklPage. The visitor function is called with
+// a nodeOptions bitset to indicate whether the node is a key value (hasKey), a
+// gap value (hasGap), or both (hasKey|hasGap).
+//
+// If the key range is empty, the visitor function will not be called. Else the
+// visitor function will be called at least once and the first call will always
+// be for either a key value (hasKey) or a key+gap value (hasKey|hasGap).
+type sklPageVisitor func(key []byte, value cacheValue, opt nodeOptions)
+
 // visitRange scans the range of keys between from and to and calls the visitor
 // function for each (initialized or uninitialized) value found.
-func (p *sklPage) visitRange(from, to []byte, opt rangeOptions, visit func(cacheValue)) {
+func (p *sklPage) visitRange(from, to []byte, opt rangeOptions, visit sklPageVisitor) {
 	if to != nil {
 		cmp := 0
 		if from != nil {
@@ -619,7 +761,7 @@ func (p *sklPage) visitRange(from, to []byte, opt rangeOptions, visit func(cache
 
 	if !it.Valid() {
 		// No more nodes. Visit the previous gap value and return.
-		visit(prevGapVal)
+		visit(from, prevGapVal, hasKey|hasGap)
 		return
 	} else if bytes.Equal(it.Key(), from) {
 		// Found a node at from. No need to visit the gap value.
@@ -629,7 +771,7 @@ func (p *sklPage) visitRange(from, to []byte, opt rangeOptions, visit func(cache
 		}
 	} else {
 		// No node at from. Visit the gap value and remove the excludeFrom option.
-		visit(prevGapVal)
+		visit(from, prevGapVal, hasKey|hasGap)
 		opt &^= excludeFrom
 	}
 
@@ -1062,7 +1204,7 @@ func (p *sklPage) incomingGapVal(it *arenaskl.Iterator, key []byte) cacheValue {
 // When finished, the iterator will be positioned the same as if it.Seek(to) had
 // been called.
 func (p *sklPage) scanTo(
-	it *arenaskl.Iterator, to []byte, opt rangeOptions, initGapVal cacheValue, visit func(cacheValue),
+	it *arenaskl.Iterator, to []byte, opt rangeOptions, initGapVal cacheValue, visit sklPageVisitor,
 ) (prevGapVal cacheValue) {
 	prevGapVal = initGapVal
 	first := true
@@ -1074,7 +1216,8 @@ func (p *sklPage) scanTo(
 			return
 		}
 
-		toCmp := bytes.Compare(it.Key(), to)
+		key := it.Key()
+		toCmp := bytes.Compare(key, to)
 		if to == nil {
 			// to == nil means open range, so toCmp will always be -1.
 			toCmp = -1
@@ -1106,7 +1249,7 @@ func (p *sklPage) scanTo(
 		if !(first && (opt&excludeFrom) != 0) && visit != nil {
 			// As long as this isn't the first key and opt says to exclude the
 			// first key, we call the visitor.
-			visit(keyVal)
+			visit(key, keyVal, hasKey)
 		}
 
 		if toCmp == 0 {
@@ -1116,7 +1259,7 @@ func (p *sklPage) scanTo(
 
 		// Call the visitor with the current gapVal.
 		if visit != nil {
-			visit(gapVal)
+			visit(key, gapVal, hasGap)
 		}
 
 		// Haven't yet reached the scan's end key, so keep iterating.
