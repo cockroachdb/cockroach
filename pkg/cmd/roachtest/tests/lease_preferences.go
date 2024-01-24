@@ -219,19 +219,6 @@ func runLeasePreferences(
 	conn := c.Conn(ctx, t.L(), numNodes)
 	defer conn.Close()
 
-	setLeasePreferences := func(ctx context.Context, preferences string) {
-		_, err := conn.ExecContext(ctx, fmt.Sprintf(
-			`ALTER database kv CONFIGURE ZONE USING 
-        num_replicas = %d, 
-        num_voters = %d,
-        voter_constraints='[]',
-        lease_preferences='[%s]'
-      `,
-			spec.replFactor, spec.replFactor, spec.preferences,
-		))
-		require.NoError(t, err)
-	}
-
 	checkLeasePreferenceConformance := func(ctx context.Context) {
 		result, err := waitForLeasePreferences(
 			ctx, t, c, spec.checkNodes, spec.waitForLessPreferred, stableDuration, spec.postEventWaitDuration)
@@ -267,12 +254,15 @@ func runLeasePreferences(
 	// would occasionally fail due to the liveness heartbeat failures, when the
 	// liveness lease is on a stopped node. This is not ideal behavior, #108512.
 	configureZone(t, ctx, conn, "RANGE liveness", zoneConfig{
-		replicas:  spec.replFactor,
-		leaseNode: 5,
+		replicas:        spec.replFactor,
+		leasePreference: "[+node5]",
 	})
 
 	t.L().Printf("setting lease preferences: %s", spec.preferences)
-	setLeasePreferences(ctx, spec.preferences)
+	configureZone(t, ctx, conn, "kv", zoneConfig{
+		replicas:        spec.replFactor,
+		leasePreference: spec.preferences,
+	})
 	t.L().Printf("waiting for initial lease preference conformance")
 	checkLeasePreferenceConformance(ctx)
 
