@@ -5,7 +5,10 @@ go_library(
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/bazci/extract-test-results",
     visibility = ["//visibility:private"],
-    deps = ["//pkg/build/engflow"],
+    deps = [
+        "//pkg/build/engflow",
+        "//pkg/build/util",
+    ],
 )
 
 go_binary(
