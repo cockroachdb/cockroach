@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -121,6 +122,7 @@ type benchQuery struct {
 	name    string
 	query   string
 	args    []interface{}
+	errRE   string
 	cleanup string
 }
 
@@ -330,6 +332,8 @@ var schemas = []string{
 		  }
 		]'
 	`,
+	`CREATE TABLE p (id INT PRIMARY KEY)`,
+	`CREATE TABLE c (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), p_id INT NOT NULL REFERENCES p(id) ON DELETE CASCADE, INDEX (p_id))`,
 }
 
 var queries = [...]benchQuery{
@@ -454,6 +458,12 @@ var queries = [...]benchQuery{
         `,
 		args:    []interface{}{},
 		cleanup: "TRUNCATE TABLE customer",
+	},
+	{
+		name:  "insert-child-fk-failure",
+		query: "INSERT INTO c(p_id) VALUES (-1)",
+		args:  []interface{}{},
+		errRE: "insert on table \"c\" violates foreign key constraint \"c_p_id_fkey\"",
 	},
 	{
 		name: "batch-insert-many",
@@ -1050,7 +1060,11 @@ func BenchmarkEndToEnd(b *testing.B) {
 		b.Run(query.name, func(b *testing.B) {
 			b.Run("Simple", func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
-					sr.Exec(b, query.query, query.args...)
+					if query.errRE != "" {
+						sr.ExpectErr(b, query.errRE, query.query, query.args...)
+					} else {
+						sr.Exec(b, query.query, query.args...)
+					}
 					if query.cleanup != "" {
 						sr.Exec(b, query.cleanup)
 					}
@@ -1063,6 +1077,9 @@ func BenchmarkEndToEnd(b *testing.B) {
 				}
 				for i := 0; i < b.N; i++ {
 					res, err := prepared.Exec(query.args...)
+					if testutils.IsError(err, query.errRE) {
+						continue
+					}
 					if err != nil {
 						b.Fatalf("%v", err)
 					}
