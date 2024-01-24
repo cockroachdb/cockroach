@@ -293,8 +293,11 @@ func (rts *resolvedTimestamp) assertOpAboveRTS(
 	ctx context.Context, op enginepb.MVCCLogicalOp, opTS hlc.Timestamp, fatal bool,
 ) {
 	if opTS.LessEq(rts.resolvedTS) {
+		// NB: MVCCLogicalOp.String() is only implemented for pointer receiver.
+		// We shadow the variable to avoid it escaping to the heap.
+		op := op
 		err := errors.AssertionFailedf(
-			"resolved timestamp %s equal to or above timestamp of operation %v", rts.resolvedTS, op)
+			"resolved timestamp %s equal to or above timestamp of operation %v", rts.resolvedTS, &op)
 		if fatal {
 			log.Fatalf(ctx, "%v", err)
 		} else {
