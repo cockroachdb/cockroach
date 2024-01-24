@@ -623,7 +623,7 @@ func runTPCHVec(
 	}
 	scatterTables(t, conn, tpchTables)
 	t.Status("waiting for full replication")
-	err := WaitFor3XReplication(ctx, t, conn)
+	err := WaitFor3XReplication(ctx, t, t.L(), conn)
 	require.NoError(t, err)
 
 	testRun(ctx, t, c, conn, testCase)

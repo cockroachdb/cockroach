@@ -119,7 +119,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// rebalancing is better than increasing wait time further.
 	setClusterSetting("kv.allocator.load_based_lease_rebalancing.enabled", false)
 
-	if err := WaitFor3XReplication(ctx, t, conn); err != nil {
+	if err := WaitFor3XReplication(ctx, t, t.L(), conn); err != nil {
 		t.Fatalf("failed to up-replicate cluster: %s", err)
 	}
 

@@ -451,7 +451,7 @@ func registerKVQuiescenceDead(r registry.Registry) {
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
-			err := WaitFor3XReplication(ctx, t, db)
+			err := WaitFor3XReplication(ctx, t, t.L(), db)
 			require.NoError(t, err)
 
 			qps := func(f func()) float64 {
@@ -533,7 +533,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			db2 := c.Conn(ctx, t.L(), 2)
 			defer db2.Close()
 
-			err := WaitFor3XReplication(ctx, t, db1)
+			err := WaitFor3XReplication(ctx, t, t.L(), db1)
 			require.NoError(t, err)
 
 			t.Status("initializing workload")
@@ -793,7 +793,7 @@ func registerKVRangeLookups(r registry.Registry) {
 				conns[i].Close()
 			}
 		}()
-		err := WaitFor3XReplication(ctx, t, conns[0])
+		err := WaitFor3XReplication(ctx, t, t.L(), conns[0])
 		require.NoError(t, err)
 
 		m := c.NewMonitor(ctx, c.Range(1, nodes))

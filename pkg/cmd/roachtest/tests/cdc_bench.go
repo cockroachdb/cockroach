@@ -249,7 +249,7 @@ func runCDCBenchScan(
 	}
 
 	// Wait for system ranges to upreplicate.
-	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 
 	// Create and split the workload table. We don't import data here, because it
 	// imports before splitting, which takes a very long time.
@@ -259,7 +259,7 @@ func runCDCBenchScan(
 	t.L().Printf("creating table with %s ranges", humanize.Comma(numRanges))
 	c.Run(ctx, option.WithNodes(nCoord), fmt.Sprintf(
 		`./cockroach workload init kv --splits %d {pgurl:%d}`, numRanges, nData[0]))
-	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 
 	cursor := timeutil.Now() // before data is ingested
 
@@ -391,7 +391,7 @@ func runCDCBenchWorkload(
 	}
 
 	// Wait for system ranges to upreplicate.
-	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 
 	// Create and split the workload table.
 	//
@@ -400,7 +400,7 @@ func runCDCBenchWorkload(
 	t.L().Printf("creating table with %s ranges", humanize.Comma(numRanges))
 	c.Run(ctx, option.WithNodes(nWorkload), fmt.Sprintf(
 		`./cockroach workload init kv --splits %d {pgurl:%d}`, numRanges, nData[0]))
-	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 
 	// For read-only workloads, ingest some data. init --insert-count does not use
 	// the standard key generator that the read workload uses, so we have to write

@@ -1423,7 +1423,7 @@ func (u *CommonTestUtils) setMaxRangeSizeAndDependentSettings(
 	}
 	// Ensure ranges have been properly replicated.
 	_, dbConn := u.RandomDB(rng, u.roachNodes)
-	return WaitFor3XReplication(ctx, t, dbConn)
+	return WaitFor3XReplication(ctx, t, t.L(), dbConn)
 }
 
 // setClusterSettings may set up to numCustomSettings cluster settings

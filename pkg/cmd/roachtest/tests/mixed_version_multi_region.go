@@ -120,13 +120,13 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 			mvt.OnStartup(
 				"setup tpcc",
 				func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-					setupTPCC(ctx, t, c, backgroundTPCCOpts)
+					setupTPCC(ctx, t, l, c, backgroundTPCCOpts)
 					// Update the `SetupType` so that the corresponding
 					// `runTPCC` calls don't attempt to import data again.
 					backgroundTPCCOpts.SetupType = usingExistingData
 					close(backgroundTPCCSetupDone)
 
-					setupTPCC(ctx, t, c, mixedVersionTPCCOpts)
+					setupTPCC(ctx, t, l, c, mixedVersionTPCCOpts)
 					mixedVersionTPCCOpts.SetupType = usingExistingData
 
 					return nil
@@ -139,7 +139,7 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 					l.Printf("waiting for setup to finish")
 					<-backgroundTPCCSetupDone
 
-					runTPCC(ctx, t, c, backgroundTPCCOpts)
+					runTPCC(ctx, t, l, c, backgroundTPCCOpts)
 					return nil
 				},
 			)
@@ -147,7 +147,7 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 			mvt.InMixedVersion(
 				"run tpcc",
 				func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-					runTPCC(ctx, t, c, mixedVersionTPCCOpts)
+					runTPCC(ctx, t, l, c, mixedVersionTPCCOpts)
 					return nil
 				},
 			)
@@ -155,7 +155,7 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 			mvt.AfterUpgradeFinalized(
 				"run tpcc",
 				func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-					runTPCC(ctx, t, c, mixedVersionTPCCOpts)
+					runTPCC(ctx, t, l, c, mixedVersionTPCCOpts)
 					return nil
 				},
 			)

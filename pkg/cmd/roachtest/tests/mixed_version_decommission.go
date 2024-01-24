@@ -143,7 +143,7 @@ func preloadDataStep(target int) versionStep {
 			`./cockroach workload fixtures import tpcc --warehouses=100`, pgurl)
 		db := c.Conn(ctx, t.L(), target)
 		defer db.Close()
-		if err := WaitFor3XReplication(ctx, t, db); err != nil {
+		if err := WaitFor3XReplication(ctx, t, t.L(), db); err != nil {
 			t.Fatal(err)
 		}
 	}
