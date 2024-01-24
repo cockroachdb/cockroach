@@ -168,12 +168,6 @@ func evalNewLease(
 	pd.Replicated.PrevLeaseProposal = prevLease.ProposedTS
 
 	// If we're setting a new prior read summary, store it to disk & in-memory.
-	// We elide this step in mixed-version clusters as old nodes would ignore
-	// the PriorReadSummary field (they don't know about it). It's possible that
-	// in this particular case we could get away with it (as the in-mem field
-	// only ever updates in-mem state) but it's easy to get things wrong (in
-	// which case they could easily take a catastrophic turn) and the benefit is
-	// low.
 	if priorReadSum != nil {
 		if err := readsummary.Set(ctx, readWriter, rec.GetRangeID(), ms, priorReadSum); err != nil {
 			return newFailedLeaseTrigger(isTransfer), err
