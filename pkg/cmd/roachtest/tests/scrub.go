@@ -62,7 +62,7 @@ func makeScrubTPCCTest(
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCC(ctx, t, c, tpccOptions{
+			runTPCC(ctx, t, t.L(), c, tpccOptions{
 				Warehouses:   warehouses,
 				ExtraRunArgs: "--wait=false --tolerate-errors",
 				During: func(ctx context.Context) error {
