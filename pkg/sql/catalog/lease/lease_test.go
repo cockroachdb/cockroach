@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -1259,32 +1258,11 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 
 	var testAcquiredCount int32
 	var testAcquisitionBlockCount int32
+	var minimumDescID descpb.ID
 	var params base.TestClusterArgs
 	params.ServerArgs.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
 		base.TestTenantProbabilistic, 112957,
 	)
-	params.ServerArgs.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &lease.ManagerTestingKnobs{
-			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
-				// We want to track when leases get acquired and when they are renewed.
-				// We also want to know when acquiring blocks to test lease renewal.
-				LeaseAcquiredEvent: func(desc catalog.Descriptor, err error) {
-					if err != nil {
-						return
-					}
-					if _, isTable := desc.(catalog.TableDescriptor); isTable && !catalog.IsSystemDescriptor(desc) {
-						atomic.AddInt32(&testAcquiredCount, 1)
-					}
-				},
-				LeaseAcquireResultBlockEvent: func(typ lease.AcquireType, id descpb.ID) {
-					if uint32(id) < bootstrap.TestingMinUserDescID() || typ == lease.AcquireBackground {
-						return
-					}
-					atomic.AddInt32(&testAcquisitionBlockCount, 1)
-				},
-			},
-		},
-	}
 	params.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
 	// The lease jitter is set to ensure newer leases have higher
 	// expiration timestamps.
@@ -1295,6 +1273,31 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 		lease.LeaseDuration.Get(&params.ServerArgs.Settings.SV))
 
 	t := newLeaseTest(testingT, params)
+	// These knobs will only be used when a lease manager is created by the test,
+	// specifically when the leaseTest.node is invoked. Previously, we would inject
+	// them in the servers lease manager leading to noise because of background
+	// work.
+	t.leaseManagerTestingKnobs = lease.ManagerTestingKnobs{
+		LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
+			// We want to track when leases get acquired and when they are renewed.
+			// We also want to know when acquiring blocks to test lease renewal.
+			LeaseAcquiredEvent: func(desc catalog.Descriptor, err error) {
+				if err != nil {
+					return
+				}
+				if _, isTable := desc.(catalog.TableDescriptor); isTable && !catalog.IsSystemDescriptor(desc) {
+					atomic.AddInt32(&testAcquiredCount, 1)
+				}
+			},
+			LeaseAcquireResultBlockEvent: func(typ lease.AcquireType, id descpb.ID) {
+				// Only track events from descriptors that were created by us below.
+				if id < minimumDescID || typ == lease.AcquireBackground {
+					return
+				}
+				atomic.AddInt32(&testAcquisitionBlockCount, 1)
+			},
+		},
+	}
 	defer t.cleanup()
 
 	if _, err := t.db.Exec(`
@@ -1308,7 +1311,7 @@ CREATE TABLE t.test2 ();
 	test1Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, t.server.Codec(), "t", "test1")
 	test2Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, t.server.Codec(), "t", "test2")
 	dbID := test2Desc.GetParentID()
-
+	minimumDescID = dbID
 	// Acquire a lease on test1 by name.
 	ts1, err := t.node(1).AcquireByName(
 		ctx,

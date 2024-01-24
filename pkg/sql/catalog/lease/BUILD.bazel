@@ -106,7 +106,6 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog",
-        "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/descbuilder",
         "//pkg/sql/catalog/descpb",
