@@ -1968,3 +1968,19 @@ SELECT primes FROM cb WHERE primes && numbers ORDER BY primes
 statement ok
 CREATE TABLE t84569 (name_col NAME NOT NULL, INVERTED INDEX (name_col gin_trgm_ops));
 INSERT INTO t84569 (name_col) VALUES ('X'::NAME)
+
+# Regression test for incorrectly simplifying inverted expressions (#117979).
+statement ok
+CREATE TABLE t117979 (id INT PRIMARY KEY, links text[], INVERTED INDEX idx_links(links));
+INSERT INTO t117979 (id, links) VALUES (1, '{str2,str3}');
+
+query IT
+SELECT *
+FROM t117979@{FORCE_INDEX=idx_links} as t
+WHERE
+    ARRAY['str1'] <@ t.links
+    AND (
+        ARRAY ['str1'] && t.links
+        OR (ARRAY ['str2'] && t.links AND ARRAY ['str3'] && t.links)
+    );
+----

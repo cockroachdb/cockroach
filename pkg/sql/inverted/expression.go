@@ -705,8 +705,8 @@ func unionSpanExpressions(left, right *SpanExpression) *SpanExpression {
 	return expr
 }
 
-// tryPruneChildren takes an expr with two child *SpanExpression and removes the empty
-// children.
+// tryPruneChildren takes an expr with two child *SpanExpression and removes
+// children when safe to do so.
 func tryPruneChildren(expr *SpanExpression, op SetOperator) {
 	isEmptyExpr := func(e *SpanExpression) bool {
 		return len(e.FactoredUnionSpans) == 0 && e.Left == nil && e.Right == nil
@@ -717,41 +717,50 @@ func tryPruneChildren(expr *SpanExpression, op SetOperator) {
 	if isEmptyExpr(expr.Right.(*SpanExpression)) {
 		expr.Right = nil
 	}
-	// Promotes the left and right sub-expressions of child to the parent expr, when
-	// the other child is empty.
-	promoteChild := func(child *SpanExpression) {
-		// For SetUnion, the FactoredUnionSpans for the child is already nil
-		// since it has been unioned into expr. For SetIntersection, the
-		// FactoredUnionSpans for the child may be non-empty, but is being
-		// intersected with the other child that is empty, so can be discarded.
-		// Either way, we don't need to update expr.FactoredUnionSpans.
-		expr.Operator = child.Operator
-		expr.Left = child.Left
-		expr.Right = child.Right
+	if expr.Operator == SetUnion {
+		// Promotes the left and right sub-expressions of child to the parent
+		// expr, when the other child is empty.
+		promoteChild := func(child *SpanExpression) {
+			// For SetUnion, the FactoredUnionSpans for the child is already nil
+			// since it has been unioned into expr. Therefore, we don't need to
+			// update expr.FactoredUnionSpans.
+			expr.Operator = child.Operator
+			expr.Left = child.Left
+			expr.Right = child.Right
 
-		// If child.FactoredUnionSpans is non-empty, we need to recalculate
-		// SpansToRead since it may have contained some spans that were removed by
-		// discarding child.FactoredUnionSpans.
-		if child.FactoredUnionSpans != nil {
-			expr.SpansToRead = expr.FactoredUnionSpans
-			if expr.Left != nil {
-				expr.SpansToRead = unionSpans(expr.SpansToRead, expr.Left.(*SpanExpression).SpansToRead)
-			}
-			if expr.Right != nil {
-				expr.SpansToRead = unionSpans(expr.SpansToRead, expr.Right.(*SpanExpression).SpansToRead)
+			// If child.FactoredUnionSpans is non-empty, we need to recalculate
+			// SpansToRead since it may have contained some spans that were
+			// removed by discarding child.FactoredUnionSpans.
+			if child.FactoredUnionSpans != nil {
+				expr.SpansToRead = expr.FactoredUnionSpans
+				if expr.Left != nil {
+					expr.SpansToRead = unionSpans(expr.SpansToRead, expr.Left.(*SpanExpression).SpansToRead)
+				}
+				if expr.Right != nil {
+					expr.SpansToRead = unionSpans(expr.SpansToRead, expr.Right.(*SpanExpression).SpansToRead)
+				}
 			}
 		}
-	}
-	promoteLeft := expr.Left != nil && expr.Right == nil
-	promoteRight := expr.Left == nil && expr.Right != nil
-	if promoteLeft {
-		promoteChild(expr.Left.(*SpanExpression))
-	}
-	if promoteRight {
-		promoteChild(expr.Right.(*SpanExpression))
+		promoteLeft := expr.Left != nil && expr.Right == nil
+		promoteRight := expr.Left == nil && expr.Right != nil
+		if promoteLeft {
+			promoteChild(expr.Left.(*SpanExpression))
+		}
+		if promoteRight {
+			promoteChild(expr.Right.(*SpanExpression))
+		}
+	} else if expr.Operator == SetIntersection {
+		// The result of intersecting with the empty set is the empty set. In
+		// this case, we can discard the non-empty child.
+		if expr.Left == nil {
+			expr.Right = nil
+		} else if expr.Right == nil {
+			expr.Left = nil
+		}
 	}
 	if expr.Left == nil && expr.Right == nil {
 		expr.Operator = None
+		expr.SpansToRead = expr.FactoredUnionSpans
 	}
 }
 
