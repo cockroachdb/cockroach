@@ -1577,7 +1577,7 @@ func (dsp *DistSQLPlanner) healthySQLInstanceIDForKVNodeHostedInstanceResolver(
 		if _, ok := healthyNodes[sqlInstance]; ok {
 			return sqlInstance, SpanPartitionReason_TARGET_HEALTHY
 		}
-		log.Warningf(ctx, "not planning on node %d", sqlInstance)
+		log.VWarningf(ctx, 1, "not planning on node %d", sqlInstance)
 		return dsp.gatewaySQLInstanceID, SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY
 	}
 }
