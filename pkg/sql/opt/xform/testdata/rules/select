@@ -2827,7 +2827,7 @@ select
  │    └── inverted-filter
  │         ├── columns: k:1!null
  │         ├── inverted expression: /7
- │         │    ├── tight: false, unique: false
+ │         │    ├── tight: false, unique: true
  │         │    ├── union spans: empty
  │         │    └── UNION
  │         │         ├── span expression
@@ -4460,11 +4460,11 @@ project
       │    └── inverted-filter
       │         ├── columns: k:1!null
       │         ├── inverted expression: /7
-      │         │    ├── tight: false, unique: false
+      │         │    ├── tight: false, unique: true
       │         │    ├── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
       │         │    └── UNION
       │         │         ├── span expression
-      │         │         │    ├── tight: false, unique: false
+      │         │         │    ├── tight: false, unique: true
       │         │         │    ├── union spans: empty
       │         │         │    └── INTERSECTION
       │         │         │         ├── span expression
@@ -4855,11 +4855,11 @@ project
       │    └── inverted-filter
       │         ├── columns: k:1!null
       │         ├── inverted expression: /7
-      │         │    ├── tight: false, unique: false
+      │         │    ├── tight: false, unique: true
       │         │    ├── union spans: ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
       │         │    └── UNION
       │         │         ├── span expression
-      │         │         │    ├── tight: false, unique: false
+      │         │         │    ├── tight: false, unique: true
       │         │         │    ├── union spans: empty
       │         │         │    └── INTERSECTION
       │         │         │         ├── span expression
@@ -9703,7 +9703,7 @@ select
  │    └── inverted-filter
  │         ├── columns: k:1!null
  │         ├── inverted expression: /9
- │         │    ├── tight: false, unique: false
+ │         │    ├── tight: false, unique: true
  │         │    ├── union spans: ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
  │         │    └── INTERSECTION
  │         │         ├── span expression
