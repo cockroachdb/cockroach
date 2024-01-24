@@ -857,34 +857,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 
 					repl, priority := bq.pop()
 					if repl != nil {
-						annotatedCtx := repl.AnnotateCtx(ctx)
-						_, err := bq.replicaCanBeProcessed(annotatedCtx, repl, false /*acquireLeaseIfNeeded */)
-						if err != nil {
-							bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
-							log.Infof(ctx, "skipping since replica can't be processed %v", err)
-							// Release semaphore if it can't be processed.
-							<-bq.processSem
-							continue
-						}
-						if stopper.RunAsyncTaskEx(annotatedCtx, stop.TaskOpts{
-							TaskName: bq.processOpName() + " [outer]",
-						},
-							func(ctx context.Context) {
-								// Release semaphore when finished processing.
-								defer func() { <-bq.processSem }()
-
-								start := timeutil.Now()
-								err := bq.processReplica(ctx, repl)
-
-								duration := timeutil.Since(start)
-								bq.recordProcessDuration(ctx, duration)
-
-								bq.finishProcessingReplica(ctx, stopper, repl, err)
-							}) != nil {
-							// Release semaphore on task failure.
-							<-bq.processSem
-							return
-						}
+						bq.processOneAsyncAndReleaseSem(ctx, repl, stopper)
 						bq.impl.postProcessScheduled(ctx, repl, priority)
 					} else {
 						// Release semaphore if no replicas were available.
@@ -907,6 +880,39 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 			}
 		}); err != nil {
 		done()
+	}
+}
+
+// processOneAsyncAndReleaseSem processes a replica if possible and releases the
+// processSem when the processing is complete.
+func (bq *baseQueue) processOneAsyncAndReleaseSem(
+	ctx context.Context, repl replicaInQueue, stopper *stop.Stopper,
+) {
+	ctx = repl.AnnotateCtx(ctx)
+	taskName := bq.processOpName() + " [outer]"
+	// Validate that the replica is still in a state that can be processed. If
+	// it is no longer processable, return immediately.
+	if _, err := bq.replicaCanBeProcessed(ctx, repl, false /*acquireLeaseIfNeeded */); err != nil {
+		bq.finishProcessingReplica(ctx, stopper, repl, err)
+		log.Infof(ctx, "%s: skipping %d since replica can't be processed %v", taskName, repl.ReplicaID(), err)
+		<-bq.processSem
+		return
+	}
+	if err := stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: taskName},
+		func(ctx context.Context) {
+			// Release semaphore when finished processing.
+			defer func() { <-bq.processSem }()
+			start := timeutil.Now()
+			err := bq.processReplica(ctx, repl)
+			bq.recordProcessDuration(ctx, timeutil.Since(start))
+			bq.finishProcessingReplica(ctx, stopper, repl, err)
+		}); err != nil {
+		// Release semaphore if we can't start the task, normally this only
+		// happens during a system shutdown. If the func is started this will
+		// never return an error.
+		bq.finishProcessingReplica(ctx, stopper, repl, err)
+		log.Warningf(ctx, "%s: task did not start %v", taskName, err)
+		<-bq.processSem
 	}
 }
 
