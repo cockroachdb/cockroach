@@ -95,11 +95,13 @@ type tpccOptions struct {
 	// also be doing a rolling-restart into the new binary while the cluster
 	// is running, but that feels like jamming too much into the tpcc setup.
 	Start func(context.Context, test.Test, cluster.Cluster)
+	// If specified, assigned to StartOpts.ExtraArgs when starting cockroach.
+	ExtraStartArgs                []string
+	DisableDefaultScheduledBackup bool
 	// SkipPostRunCheck, if set, skips post TPC-C run checks.
 	SkipPostRunCheck bool
 	// ExpensiveChecks, if set, runs expensive post TPC-C run checks.
-	ExpensiveChecks               bool
-	DisableDefaultScheduledBackup bool
+	ExpensiveChecks bool
 }
 
 type workloadInstance struct {
@@ -152,6 +154,7 @@ func setupTPCC(
 				settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 			}
 			startOpts := option.DefaultStartOpts()
+			startOpts.RoachprodOpts.ExtraArgs = opts.ExtraStartArgs
 			startOpts.RoachprodOpts.ScheduleBackups = !opts.DisableDefaultScheduledBackup
 			c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
 		}
@@ -497,6 +500,10 @@ func registerTPCC(r registry.Registry) {
 				ExtraRunArgs: "--isolation-level=read_committed --txn-retries=false",
 				Duration:     120 * time.Minute,
 				SetupType:    usingImport,
+				// Increase the vmodule level around transaction pushes so that if we do
+				// see a transaction retry error, we can debug it. This may affect perf,
+				// so we should not use this as a performance test.
+				ExtraStartArgs: []string{"--vmodule=cmd_push_txn=2,queue=2"},
 			})
 		},
 	})
@@ -575,6 +582,10 @@ func registerTPCC(r registry.Registry) {
 				ExtraRunArgs:    "--wait=false --isolation-level=read_committed --txn-retries=false",
 				SetupType:       usingImport,
 				ExpensiveChecks: true,
+				// Increase the vmodule level around transaction pushes so that if we do
+				// see a transaction retry error, we can debug it. This may affect perf,
+				// so we should not use this as a performance test.
+				ExtraStartArgs: []string{"--vmodule=cmd_push_txn=2,queue=2"},
 			})
 		},
 	})
