@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -4973,6 +4974,226 @@ func setupDBAndWriteAAndB(t *testing.T) (serverutils.TestServerInterface, *kv.DB
 	require.NoError(t, err)
 	require.NotNil(t, tup.Value)
 	return s, db
+}
+
+// TestNonTransactionalLockingRequestsConflictWithReplicated locks ensures that
+// non-transactional locking requests check for conflicts with replicated locks
+// even though they cannot acquire locks that outlive their request.
+//
+// Regression test for https://github.com/cockroachdb/cockroach/issues/117628.
+func TestNonTransactionalLockingRequestsConflictWithReplicatedLocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db := setupDBAndWriteAAndB(t)
+	defer s.Stopper().Stop(ctx)
+
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	locksHeld := make(chan struct{})
+	canReleaseLocks := make(chan struct{})
+
+	// Set up the test by acquiring a replicated exclusive lock on keyA and a
+	// replicated shared lock on KeyB. We'll hold these locks for the duration of
+	// the test.
+	go func() {
+		defer wg.Done()
+
+		txn1 := db.NewTxn(ctx, "txn1")
+		_, err := txn1.GetForUpdate(ctx, keyA, kvpb.GuaranteedDurability)
+		if err != nil {
+			t.Error(err)
+		}
+		_, err = txn1.GetForShare(ctx, keyB, kvpb.GuaranteedDurability)
+		if err != nil {
+			t.Error(err)
+		}
+
+		close(locksHeld)
+		<-canReleaseLocks // block for all test cases
+
+		err = txn1.Commit(ctx)
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+
+	<-locksHeld
+
+	for i, tc := range []struct {
+		setup    func(*kvpb.BatchRequest, bool)
+		expBlock bool
+	}{
+		// 1. Get requests.
+		// 1a. Exclusive locking.
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := getArgs(keyA)
+				req.KeyLockingStrength = lock.Exclusive
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: true,
+		},
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := getArgs(keyB)
+				req.KeyLockingStrength = lock.Exclusive
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: true,
+		},
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := getArgs(keyC)
+				req.KeyLockingStrength = lock.Exclusive
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: false,
+		},
+		// 1b. Shared locking.
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := getArgs(keyA)
+				req.KeyLockingStrength = lock.Shared
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: true,
+		},
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := getArgs(keyB)
+				req.KeyLockingStrength = lock.Shared
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: false,
+		},
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := getArgs(keyC)
+				req.KeyLockingStrength = lock.Shared
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: false,
+		},
+		// 2. Scan requests.
+		// 2a. Exclusive locking.
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := scanArgs(keyA, keyC)
+				req.KeyLockingStrength = lock.Exclusive
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: true,
+		},
+		// 2b. Shared locking.
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := scanArgs(keyA, keyC)
+				req.KeyLockingStrength = lock.Shared
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: true,
+		},
+		// 3. ReverseScan requests.
+		// 3a. Exclusive locking.
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := revScanArgs(keyA, keyC)
+				req.KeyLockingStrength = lock.Exclusive
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: true,
+		},
+		// 3b. Shared locking.
+		{
+			setup: func(ba *kvpb.BatchRequest, repl bool) {
+				dur := lock.Unreplicated
+				if repl {
+					dur = lock.Replicated
+				}
+				req := revScanArgs(keyA, keyC)
+				req.KeyLockingStrength = lock.Shared
+				req.KeyLockingDurability = dur
+				ba.Add(req)
+			},
+			expBlock: true,
+		},
+	} {
+		testutils.RunTrueAndFalse(t, "replicated", func(t *testing.T, repl bool) {
+			t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+				ba := &kvpb.BatchRequest{}
+				// Having the request return an error instead of blocking on conflict
+				// makes the test easier.
+				ba.WaitPolicy = lock.WaitPolicy_Error
+				tc.setup(ba, repl)
+
+				store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+				require.NoError(t, err)
+				_, pErr := store.TestSender().Send(ctx, ba)
+
+				if tc.expBlock {
+					require.NotNil(t, pErr)
+					lcErr := new(kvpb.WriteIntentError)
+					require.True(t, errors.As(pErr.GoError(), &lcErr))
+					require.Equal(t, kvpb.WriteIntentError_REASON_WAIT_POLICY, lcErr.Reason)
+				} else {
+					require.Nil(t, pErr.GoError())
+				}
+			})
+		})
+	}
+
+	close(canReleaseLocks)
+	wg.Wait()
 }
 
 // TestSharedLocksBasic tests basic shared lock semantics. In particular, it
