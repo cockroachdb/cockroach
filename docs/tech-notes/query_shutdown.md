@@ -339,10 +339,8 @@ been canceled.
 ### Outbox Details
 
 The main goroutine of the outbox is tracked by the wait group of the [flow](https://github.com/cockroachdb/cockroach/blob/daf29fd72896e46c1c40ddc5b62e504a8ee77b68/pkg/sql/flowinfra/outbox.go#L418-L441).
-It first establishes the connection to the target node and, unlike in the
-vectorized case, it [uses `context.TODO`](https://github.com/cockroachdb/cockroach/blob/daf29fd72896e46c1c40ddc5b62e504a8ee77b68/pkg/sql/flowinfra/outbox.go#L237)
-to perform the `FlowStream` RPC. TODO(yuzefovich): investigate whether we can
-use the flow context here too.
+Similar to the vectorized case, it first establishes the connection to the
+target node and performs the `FlowStream` RPC [using the flow context](https://github.com/cockroachdb/cockroach/blob/e976a469d89bc2fdd59dc80bc58a11e9b61714a0/pkg/sql/flowinfra/outbox.go#L253).
 
 Next, a separate "watchdog" goroutine is spun up [using the stopper](https://github.com/cockroachdb/cockroach/blob/daf29fd72896e46c1c40ddc5b62e504a8ee77b68/pkg/sql/flowinfra/outbox.go#L377)
 which is responsible for `Recv`ing from the gRPC stream (mainly to listen for
