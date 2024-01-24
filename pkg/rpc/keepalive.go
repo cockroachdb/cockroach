@@ -87,8 +87,3 @@ var serverEnforcement = keepalive.EnforcementPolicy{
 	MinTime:             time.Nanosecond,
 	PermitWithoutStream: true,
 }
-
-var serverTestingKeepalive = keepalive.ServerParameters{
-	Time:    200 * time.Millisecond,
-	Timeout: 300 * time.Millisecond,
-}
