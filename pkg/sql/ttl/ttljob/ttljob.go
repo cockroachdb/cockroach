@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -50,7 +51,14 @@ type rowLevelTTLResumer struct {
 var _ jobs.Resumer = (*rowLevelTTLResumer)(nil)
 
 // Resume implements the jobs.Resumer interface.
-func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) error {
+func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (retErr error) {
+	defer func() {
+		if joberror.IsPermanentBulkJobError(retErr) {
+			retErr = jobs.MarkAsPermanentJobError(retErr)
+		}
+		retErr = jobs.MarkAsRetryJobError(retErr)
+	}()
+
 	jobExecCtx := execCtx.(sql.JobExecContext)
 	execCfg := jobExecCtx.ExecCfg()
 	db := execCfg.DB
