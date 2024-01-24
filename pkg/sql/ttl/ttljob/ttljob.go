@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -285,7 +286,10 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		return metadataCallbackWriter.Err()
 	}()
 	if err != nil {
-		return err
+		if joberror.IsPermanentBulkJobError(err) {
+			return jobs.MarkAsPermanentJobError(err)
+		}
+		return jobs.MarkAsRetryJobError(err)
 	}
 
 	return group.Wait()
