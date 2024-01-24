@@ -11,7 +11,11 @@
 package stats
 
 import (
+	"math/rand"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
@@ -31,3 +35,11 @@ func MakeSortedColStatKey(cols []descpb.ColumnID) string {
 	})
 	return colSet.String()
 }
+
+// These two are used only by tests and are defined to prevent an import cycle.
+var (
+	// RandType is randgen.RandType.
+	RandType func(rng *rand.Rand) *types.T
+	// RandDatum is randgen.RandDatum.
+	RandDatum func(rng *rand.Rand, typ *types.T, nullOk bool) tree.Datum
+)
