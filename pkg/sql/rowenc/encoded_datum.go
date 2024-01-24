@@ -322,7 +322,12 @@ func (ed *EncDatum) Fingerprint(
 	var err error
 	memUsageBefore := ed.Size()
 	switch typ.Family() {
-	case types.JsonFamily, types.TSVectorFamily:
+	// Both TSQuery and TSVector types don't have key-encoding, so we must use
+	// the value encoding for them. JSON type now (as of 23.2) has key-encoding
+	// available, but for historical reasons we will keep on using the
+	// value-encoding (Fingerprint is used by hash routers, so changing its
+	// behavior can result in incorrect results in mixed version clusters).
+	case types.JsonFamily, types.TSQueryFamily, types.TSVectorFamily:
 		if err = ed.EnsureDecoded(typ, a); err != nil {
 			return nil, err
 		}
