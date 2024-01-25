@@ -136,11 +136,12 @@ const (
 	// the creation of the changeffed. If used in conjunction with a cursor,
 	// an initial scan will be performed at the cursor timestamp.
 	OptInitialScan = `initial_scan`
-	// OptInitialScan enables an initial scan. This is the default when a
+	// OptNoInitialScan disables an initial scan. This is the default when a
 	// cursor is specified. This option is useful to create a changefeed which
 	// subscribes only to new messages.
 	OptNoInitialScan = `no_initial_scan`
-	// Sentinel value to indicate that all resolved timestamp events should be emitted.
+	// OptEmitAllResolvedTimestamps is a sentinel value to indicate that all
+	// resolved timestamp events should be emitted.
 	OptEmitAllResolvedTimestamps = ``
 
 	OptInitialScanOnly = `initial_scan_only`
