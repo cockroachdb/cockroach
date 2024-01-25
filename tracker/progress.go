@@ -106,20 +106,6 @@ func (pr *Progress) ResetState(state StateType) {
 	pr.Inflights.reset()
 }
 
-func max(a, b uint64) uint64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func min(a, b uint64) uint64 {
-	if a > b {
-		return b
-	}
-	return a
-}
-
 // BecomeProbe transitions into StateProbe. Next is reset to Match+1 or,
 // optionally and if larger, the index of the pending snapshot.
 func (pr *Progress) BecomeProbe() {
