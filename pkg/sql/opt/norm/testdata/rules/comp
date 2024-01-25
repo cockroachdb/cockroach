@@ -106,10 +106,12 @@ FROM a
 WHERE
     k+1 = 2 AND
     (f+f)+2 < 5 AND
-    i+2+2 > 10
+    i+2+2 > 10 AND
+    ts+'1 day'::INTERVAL > '2020-03-21 12:00:00'::TIMESTAMP AND
+    tz+'1 day'::INTERVAL > '2020-03-21 12:00:00+00'::TIMESTAMPTZ
 ----
 select
- ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6 ts:7!null tz:8!null intv:9
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── key: ()
@@ -121,7 +123,9 @@ select
  └── filters
       ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
       ├── (f:3 + f:3) < 3.0 [outer=(3), immutable]
-      └── i:2 > 6 [outer=(2), constraints=(/2: [/7 - ]; tight)]
+      ├── i:2 > 6 [outer=(2), constraints=(/2: [/7 - ]; tight)]
+      ├── ts:7 > '2020-03-20 12:00:00' [outer=(7), constraints=(/7: [/'2020-03-20 12:00:00.000001' - ]; tight)]
+      └── tz:8 > '2020-03-20 12:00:00+00' [outer=(8), constraints=(/8: [/'2020-03-20 12:00:00.000001+00' - ]; tight)]
 
 # Try case that should not match pattern because Minus overload is not defined.
 norm expect-not=NormalizeCmpPlusConst
@@ -159,6 +163,22 @@ values
  ├── key: ()
  └── fd: ()-->(1)
 
+# The rule does not currently apply when it would subtract two TIMESTAMPs.
+# TODO(mgartner): Determine if this case is safe to allow.
+norm expect-not=NormalizeCmpPlusConst
+SELECT intv + '2020-01-01 00:00:00'::TIMESTAMP > '2020-03-21 12:00:00'::TIMESTAMP,
+       intv + '2020-01-01 00:00:00+00'::TIMESTAMPTZ > '2020-03-21 12:00:00+00'::TIMESTAMPTZ
+FROM a
+----
+project
+ ├── columns: "?column?":12 "?column?":13
+ ├── stable
+ ├── scan a
+ │    └── columns: intv:9
+ └── projections
+      ├── (intv:9 + '2020-01-01 00:00:00') > '2020-03-21 12:00:00' [as="?column?":12, outer=(9), immutable]
+      └── (intv:9 + '2020-01-01 00:00:00+00') > '2020-03-21 12:00:00+00' [as="?column?":13, outer=(9), stable]
+
 # Regression test for #90053. This rule should not apply when the generated Plus
 # or Minus can overflow or underflow without error.
 norm expect-not=(NormalizeCmpPlusConst,NormalizeCmpMinusConst,NormalizeCmpConstMinus)
@@ -194,10 +214,12 @@ WHERE
     k-1 = 2 AND
     (f+f)-2 < 5 AND
     i-2-2 < 10 AND
-    f+i::float-10.0 >= 100.0
+    f+i::float-10.0 >= 100.0 AND
+    ts-'1 day'::INTERVAL > '2020-03-21 12:00:00'::TIMESTAMP AND
+    tz-'1 day'::INTERVAL > '2020-03-21 12:00:00+00'::TIMESTAMPTZ
 ----
 select
- ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6 ts:7!null tz:8!null intv:9
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── key: ()
@@ -210,7 +232,9 @@ select
       ├── k:1 = 3 [outer=(1), constraints=(/1: [/3 - /3]; tight), fd=()-->(1)]
       ├── (f:3 + f:3) < 7.0 [outer=(3), immutable]
       ├── i:2 < 14 [outer=(2), constraints=(/2: (/NULL - /13]; tight)]
-      └── (f:3 + i:2::FLOAT8) >= 110.0 [outer=(2,3), immutable]
+      ├── (f:3 + i:2::FLOAT8) >= 110.0 [outer=(2,3), immutable]
+      ├── ts:7 > '2020-03-22 12:00:00' [outer=(7), constraints=(/7: [/'2020-03-22 12:00:00.000001' - ]; tight)]
+      └── tz:8 > '2020-03-22 12:00:00+00' [outer=(8), constraints=(/8: [/'2020-03-22 12:00:00.000001+00' - ]; tight)]
 
 # Try case that should not match pattern because Plus overload is not defined.
 norm expect-not=NormalizeCmpMinusConst
@@ -265,10 +289,12 @@ WHERE
     2-(f+f) < 5 AND
     1::decimal-i <= length('foo') AND
     2-(2-i) > 10 AND
-    10.0-(f+i::float) >= 100.0
+    10.0-(f+i::float) >= 100.0 AND
+    '2020-03-21 12:00:00'::TIMESTAMP-ts > '1 day'::INTERVAL AND
+    '2020-03-21 12:00:00+00'::TIMESTAMPTZ-tz > '1 day'::INTERVAL
 ----
 select
- ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6 ts:7!null tz:8!null intv:9
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── key: ()
@@ -281,7 +307,9 @@ select
       ├── (i:2 >= -2) AND (i:2 > 10) [outer=(2), constraints=(/2: [/11 - ]; tight)]
       ├── k:1 = -1 [outer=(1), constraints=(/1: [/-1 - /-1]; tight), fd=()-->(1)]
       ├── (f:3 + f:3) > -3.0 [outer=(3), immutable]
-      └── (f:3 + i:2::FLOAT8) <= -90.0 [outer=(2,3), immutable]
+      ├── (f:3 + i:2::FLOAT8) <= -90.0 [outer=(2,3), immutable]
+      ├── ts:7 < '2020-03-20 12:00:00' [outer=(7), constraints=(/7: (/NULL - /'2020-03-20 11:59:59.999999']; tight)]
+      └── tz:8 < '2020-03-20 12:00:00+00' [outer=(8), constraints=(/8: (/NULL - /'2020-03-20 11:59:59.999999+00']; tight)]
 
 # Try case that should not match pattern because Minus overload is not defined.
 norm expect-not=NormalizeCmpConstMinus
@@ -298,6 +326,22 @@ select
  │    └── fd: (1)-->(2-9)
  └── filters
       └── ('[1, 2]' - i:2) = '[1]' [outer=(2), immutable]
+
+# The rule does not currently apply when it would subtract two TIMESTAMPs.
+# TODO(mgartner): Determine if this case is safe to allow.
+norm expect-not=NormalizeCmpConstMinus
+SELECT '2020-01-01 00:00:00'::TIMESTAMP - intv > '2020-03-21 12:00:00'::TIMESTAMP,
+       '2020-01-01 00:00:00+00'::TIMESTAMPTZ - intv > '2020-03-21 12:00:00'::TIMESTAMPTZ
+FROM a
+----
+project
+ ├── columns: "?column?":12 "?column?":13
+ ├── stable
+ ├── scan a
+ │    └── columns: intv:9
+ └── projections
+      ├── ('2020-01-01 00:00:00' - intv:9) > '2020-03-21 12:00:00' [as="?column?":12, outer=(9), immutable]
+      └── ('2020-01-01 00:00:00+00' - intv:9) > '2020-03-21 12:00:00+00' [as="?column?":13, outer=(9), stable]
 
 # Regression test for #90053. This rule should not apply when the generated Plus
 # or Minus can overflow or underflow without error.
