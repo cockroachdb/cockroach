@@ -52,7 +52,7 @@ func process() error {
 		return err
 	}
 	defer func() { _ = eventStreamF.Close() }()
-	invocation, err := engflow.LoadTestResults(eventStreamF, *tlsClientCert, *tlsClientKey)
+	invocation, err := engflow.LoadInvocationInfo(eventStreamF, *tlsClientCert, *tlsClientKey)
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func dumpSummary(f *os.File, invocation *engflow.InvocationInfo) error {
 			}
 			var testXml bazelutil.TestSuites
 			if err := xml.Unmarshal([]byte(testResult.TestXml), &testXml); err != nil {
-				fmt.Fprintf(os.Stderr, "Could not parse test.xml: got error %+v", err)
+				fmt.Fprintf(os.Stderr, "Could not parse test.xml: got error %+v\n", err)
 				continue
 			}
 			for _, suite := range testXml.Suites {
@@ -154,6 +154,38 @@ func dumpSummary(f *os.File, invocation *engflow.InvocationInfo) error {
 			_, err := f.WriteString(fmt.Sprintf("| `%s` | `%s` | `%s` | [Link](https://%s.cluster.engflow.com/invocations/default/%s?testReportRun=%d&testReportShard=%d&testReportAttempt=%d#targets-%s) |\n", failedTest.label, failedTest.name, failedTest.status, *serverName, invocation.InvocationId, failedTest.run, failedTest.shard, failedTest.attempt, base64Target))
 			if err != nil {
 				return err
+			}
+		}
+	}
+
+	if len(invocation.FailedBuildActions) > 0 {
+		for _, actions := range invocation.FailedBuildActions {
+			for _, action := range actions {
+				_, err := f.WriteString(fmt.Sprintf("### Build of `%s` failed (exit code %d)\n", action.Label, action.ExitCode))
+				if err != nil {
+					return err
+				}
+				if action.FailureDetail != "" {
+					_, err := f.WriteString(fmt.Sprintf("```\n%s\n```\n", action.FailureDetail))
+					if err != nil {
+						return err
+					}
+				}
+				for _, err := range action.Errs {
+					fmt.Fprintf(os.Stderr, "could not download action log: got error %+v\n", err)
+				}
+				if action.Stdout != "" {
+					_, err := f.WriteString(fmt.Sprintf("Stdout:\n```\n%s\n```\n", action.Stdout))
+					if err != nil {
+						return err
+					}
+				}
+				if action.Stderr != "" {
+					_, err := f.WriteString(fmt.Sprintf("Stdout:\n```\n%s\n```\n", action.Stderr))
+					if err != nil {
+						return err
+					}
+				}
 			}
 		}
 	}

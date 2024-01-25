@@ -124,7 +124,7 @@ func process() error {
 		return err
 	}
 	defer func() { _ = eventStreamF.Close() }()
-	invocation, err := engflow.LoadTestResults(eventStreamF, *tlsClientCert, *tlsClientKey)
+	invocation, err := engflow.LoadInvocationInfo(eventStreamF, *tlsClientCert, *tlsClientKey)
 	if err != nil {
 		return err
 	}
