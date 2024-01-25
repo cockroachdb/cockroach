@@ -38,6 +38,12 @@ var (
 	TestBuildVersion *version.Version
 
 	currentBranch = os.Getenv("TC_BUILD_BRANCH")
+
+	// CurrentVersionString is how we represent the binary or cluster
+	// versions associated with the current binary (the one being
+	// tested). Note that, in TeamCity, we use the branch name to make
+	// it even clearer.
+	CurrentVersionString = "<current>"
 )
 
 // Version is a thin wrapper around the `version.Version` struct that
@@ -57,7 +63,7 @@ func (v *Version) String() string {
 			return currentBranch
 		}
 
-		return "<current>"
+		return CurrentVersionString
 	}
 
 	return v.Version.String()

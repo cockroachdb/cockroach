@@ -29,7 +29,7 @@ plan debug=true
 ----
 mixed-version test plan for upgrading from "v21.2.11" to "v22.1.8" to "v22.2.3" to "v23.1.4" to "v23.2.0" to "<current>":
 ├── start cluster at version "v21.2.11" (1) [stage=cluster-setup]
-├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (2) [stage=cluster-setup]
+├── wait for nodes :1-4 to reach cluster version '21.2' (2) [stage=cluster-setup]
 ├── upgrade cluster from "v21.2.11" to "v22.1.8"
 │   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (3) [stage=init]
 │   ├── upgrade nodes :1-4 from "v21.2.11" to "v22.1.8"
@@ -50,7 +50,7 @@ mixed-version test plan for upgrading from "v21.2.11" to "v22.1.8" to "v22.2.3" 
 │   │   ├── restart node 4 with binary version v22.1.8 (16) [stage=last-upgrade]
 │   │   └── restart node 2 with binary version v22.1.8 (17) [stage=last-upgrade]
 │   ├── finalize upgrade by resetting `preserve_downgrade_option` (18) [stage=running-upgrade-migrations]
-│   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (19) [stage=running-upgrade-migrations]
+│   └── wait for nodes :1-4 to reach cluster version '22.1' (19) [stage=running-upgrade-migrations]
 ├── upgrade cluster from "v22.1.8" to "v22.2.3"
 │   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (20) [stage=init]
 │   ├── upgrade nodes :1-4 from "v22.1.8" to "v22.2.3"
@@ -60,7 +60,7 @@ mixed-version test plan for upgrading from "v21.2.11" to "v22.1.8" to "v22.2.3" 
 │   │   ├── restart node 2 with binary version v22.2.3 (24) [stage=last-upgrade]
 │   │   └── restart node 3 with binary version v22.2.3 (25) [stage=last-upgrade]
 │   ├── finalize upgrade by resetting `preserve_downgrade_option` (26) [stage=running-upgrade-migrations]
-│   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (27) [stage=running-upgrade-migrations]
+│   └── wait for nodes :1-4 to reach cluster version '22.2' (27) [stage=running-upgrade-migrations]
 ├── run "initialize bank workload" (28) [stage=on-startup]
 ├── start background hooks concurrently
 │   ├── run "bank workload", after 30s delay (29) [stage=background]
@@ -76,7 +76,7 @@ mixed-version test plan for upgrading from "v21.2.11" to "v22.1.8" to "v22.2.3" 
 │   │   └── run "mixed-version 2" (37) [stage=last-upgrade]
 │   ├── finalize upgrade by resetting `preserve_downgrade_option` (38) [stage=running-upgrade-migrations]
 │   ├── run "mixed-version 1" (39) [stage=running-upgrade-migrations]
-│   ├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (40) [stage=running-upgrade-migrations]
+│   ├── wait for nodes :1-4 to reach cluster version '23.1' (40) [stage=running-upgrade-migrations]
 │   └── run "validate upgrade" (41) [stage=after-upgrade-finished]
 ├── upgrade cluster from "v23.1.4" to "v23.2.0"
 │   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (42) [stage=init]
@@ -102,7 +102,7 @@ mixed-version test plan for upgrading from "v21.2.11" to "v22.1.8" to "v22.2.3" 
 │   │   ├── run "mixed-version 1" (59) [stage=last-upgrade]
 │   │   └── restart node 4 with binary version v23.2.0 (60) [stage=last-upgrade]
 │   ├── finalize upgrade by resetting `preserve_downgrade_option` (61) [stage=running-upgrade-migrations]
-│   ├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (62) [stage=running-upgrade-migrations]
+│   ├── wait for nodes :1-4 to reach cluster version '23.2' (62) [stage=running-upgrade-migrations]
 │   └── run "validate upgrade" (63) [stage=after-upgrade-finished]
 └── upgrade cluster from "v23.2.0" to "<current>"
    ├── prevent auto-upgrades by setting `preserve_downgrade_option` (64) [stage=init]
@@ -129,5 +129,5 @@ mixed-version test plan for upgrading from "v21.2.11" to "v22.1.8" to "v22.2.3" 
    │   └── run "mixed-version 1" (82) [stage=last-upgrade]
    ├── finalize upgrade by resetting `preserve_downgrade_option` (83) [stage=running-upgrade-migrations]
    ├── run "mixed-version 2" (84) [stage=running-upgrade-migrations]
-   ├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (85) [stage=running-upgrade-migrations]
+   ├── wait for nodes :1-4 to reach cluster version <current> (85) [stage=running-upgrade-migrations]
    └── run "validate upgrade" (86) [stage=after-upgrade-finished]
