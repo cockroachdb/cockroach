@@ -505,15 +505,17 @@ func TestLookupByKeyMin(t *testing.T) {
 		EndKey:   keys.RangeMetaKey(roachpb.RKey("a")),
 	}
 	cache.Insert(ctx, roachpb.RangeInfo{Desc: startToMeta2Desc})
-	entMin := cache.GetCached(ctx, roachpb.RKeyMin, false /* inverted */)
-	require.NotNil(t, entMin)
-	require.NotNil(t, entMin.Desc())
-	require.Equal(t, startToMeta2Desc, *entMin.Desc())
+	entMin, err := cache.TestingGetCached(ctx, roachpb.RKeyMin, false /* inverted */)
+	require.NoError(t, err)
+	require.NotNil(t, entMin.Desc)
+	require.Equal(t, startToMeta2Desc, entMin.Desc)
 
-	entNext := cache.GetCached(ctx, roachpb.RKeyMin.Next(), false /* inverted */)
-	require.True(t, entMin == entNext)
-	entNext = cache.GetCached(ctx, roachpb.RKeyMin.Next().Next(), false /* inverted */)
-	require.True(t, entMin == entNext)
+	entNext, err := cache.TestingGetCached(ctx, roachpb.RKeyMin.Next(), false /* inverted */)
+	require.NoError(t, err)
+	require.Equal(t, entMin, entNext)
+	entNext, err = cache.TestingGetCached(ctx, roachpb.RKeyMin.Next().Next(), false /* inverted */)
+	require.NoError(t, err)
+	require.Equal(t, entMin, entNext)
 }
 
 // TestRangeCacheCoalescedRequests verifies that concurrent lookups for
@@ -1015,6 +1017,8 @@ func TestRangeCacheUseIntents(t *testing.T) {
 // TestRangeCacheClearOverlapping verifies that existing, overlapping
 // cached entries are cleared when adding a new entry.
 // Also see TestRangeCacheClearOlderOverlapping().
+// TODO(baptist): This test is sloppy related to calling methods that require a
+// lock, but not acquiring the lock first.
 func TestRangeCacheClearOverlapping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1046,14 +1050,13 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	curGeneration := roachpb.RangeGeneration(1)
 	require.True(t, clearOlderOverlapping(ctx, cache, minToBDesc))
 	cache.addEntryLocked(&CacheEntry{desc: *minToBDesc})
-	if desc := cache.GetCached(ctx, roachpb.RKey("b"), false); desc != nil {
-		t.Errorf("descriptor unexpectedly non-nil: %s", desc)
-	}
+	_, err := cache.TestingGetCached(ctx, roachpb.RKey("b"), false)
+	require.Error(t, err)
 
 	require.True(t, clearOlderOverlapping(ctx, cache, bToMaxDesc))
 	cache.addEntryLocked(&CacheEntry{desc: *bToMaxDesc})
-	ri := cache.GetCached(ctx, roachpb.RKey("b"), false)
-	require.Equal(t, bToMaxDesc, ri.Desc())
+	ce, _ := cache.getCachedRLocked(ctx, roachpb.RKey("b"), false)
+	require.Equal(t, bToMaxDesc, ce.Desc())
 
 	// Add default descriptor back which should remove two split descriptors.
 	defDescCpy := *defDesc
@@ -1062,8 +1065,8 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	require.True(t, clearOlderOverlapping(ctx, cache, &defDescCpy))
 	cache.addEntryLocked(&CacheEntry{desc: defDescCpy})
 	for _, key := range []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("b")} {
-		ri = cache.GetCached(ctx, key, false)
-		require.Equal(t, &defDescCpy, ri.Desc())
+		ce, _ = cache.getCachedRLocked(ctx, key, false)
+		require.Equal(t, &defDescCpy, ce.Desc())
 	}
 
 	// Insert ["b", "c") and then insert ["a", b"). Verify that the former is not evicted by the latter.
@@ -1075,8 +1078,8 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 	require.True(t, clearOlderOverlapping(ctx, cache, bToCDesc))
 	cache.addEntryLocked(&CacheEntry{desc: *bToCDesc})
-	ri = cache.GetCached(ctx, roachpb.RKey("c"), true)
-	require.Equal(t, bToCDesc, ri.Desc())
+	ce, _ = cache.getCachedRLocked(ctx, roachpb.RKey("c"), true)
+	require.Equal(t, bToCDesc, ce.Desc())
 
 	curGeneration++
 	aToBDesc := &roachpb.RangeDescriptor{
@@ -1085,9 +1088,9 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		Generation: curGeneration,
 	}
 	require.True(t, clearOlderOverlapping(ctx, cache, aToBDesc))
-	cache.addEntryLocked(ri)
-	ri = cache.GetCached(ctx, roachpb.RKey("c"), true)
-	require.Equal(t, bToCDesc, ri.Desc())
+	cache.addEntryLocked(ce)
+	ce, _ = cache.getCachedRLocked(ctx, roachpb.RKey("c"), true)
+	require.Equal(t, bToCDesc, ce.Desc())
 }
 
 // Test The ClearOlderOverlapping. There's also the older
@@ -1438,13 +1441,13 @@ func TestRangeCacheGeneration(t *testing.T) {
 			cache.Insert(ctx, roachpb.RangeInfo{Desc: *tc.insertDesc})
 
 			for index, queryKey := range tc.queryKeys {
-				ri := cache.GetCached(ctx, queryKey, false)
+				ri, err := cache.TestingGetCached(ctx, queryKey, false)
 				exp := tc.expectedDesc[index]
 				if exp == nil {
-					require.Nil(t, ri)
+					require.Error(t, err)
 				} else {
-					require.NotNil(t, ri)
-					require.NotNil(t, *exp, ri.Desc())
+					require.NoError(t, err)
+					require.NotNil(t, *exp, ri.Desc)
 				}
 			}
 		})
@@ -1669,11 +1672,11 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				require.Equal(t, oldTok.Desc(), tok.Desc())
 				require.Equal(t, &l.Replica, tok.Leaseholder())
 				require.Equal(t, oldTok.ClosedTimestampPolicy(lag), tok.ClosedTimestampPolicy(lag))
-				ri := cache.GetCached(ctx, startKey, false /* inverted */)
-				require.NotNil(t, ri)
-				require.Equal(t, desc1, *ri.Desc())
-				require.Equal(t, rep1, ri.Lease().Replica)
-				require.Equal(t, lead, ri.ClosedTimestampPolicy())
+				ri, err := cache.TestingGetCached(ctx, startKey, false /* inverted */)
+				require.NoError(t, err)
+				require.Equal(t, desc1, ri.Desc)
+				require.Equal(t, rep1, ri.Lease.Replica)
+				require.Equal(t, lead, ri.ClosedTimestampPolicy)
 
 				// Ensure evicting the lease doesn't remove the closed timestamp
 				// policy/desc.
@@ -1682,11 +1685,11 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				require.Equal(t, oldTok.Desc(), tok.Desc())
 				require.Nil(t, tok.Leaseholder())
 				require.Equal(t, oldTok.ClosedTimestampPolicy(lag), tok.ClosedTimestampPolicy(lag))
-				ri = cache.GetCached(ctx, startKey, false /* inverted */)
-				require.NotNil(t, ri)
-				require.Equal(t, desc1, *ri.Desc())
-				require.True(t, ri.lease.Empty())
-				require.Equal(t, lead, ri.ClosedTimestampPolicy())
+				ri, err = cache.TestingGetCached(ctx, startKey, false /* inverted */)
+				require.NoError(t, err)
+				require.Equal(t, desc1, ri.Desc)
+				require.True(t, ri.Lease.Empty())
+				require.Equal(t, lead, ri.ClosedTimestampPolicy)
 			},
 		},
 		{

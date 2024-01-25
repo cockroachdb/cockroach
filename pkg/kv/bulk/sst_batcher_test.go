@@ -294,7 +294,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			for _, k := range []int{0, split1} {
 				ent, err := ds.RangeDescriptorCache().Lookup(ctx, keys.MustAddr(key(k)))
 				require.NoError(t, err)
-				mockCache.Insert(ctx, roachpb.RangeInfo{Desc: *ent.Desc()})
+				mockCache.Insert(ctx, ent)
 			}
 
 			t.Logf("splitting at %s", key(split2))
