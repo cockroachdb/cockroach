@@ -741,11 +741,11 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 			require.NotNil(t, rng)
 
 			if tc.expLeaseholder != nil {
-				lh := rng.Leaseholder()
+				lh := rng.Lease.Replica
 				require.NotNil(t, lh)
 				require.Equal(t, tc.expLeaseholder, lh)
 				if tc.expLease {
-					l := rng.Lease()
+					l := rng.Lease
 					require.NotNil(t, l)
 					require.Equal(t, *tc.expLeaseholder, l.Replica)
 					// The transport retry will use the replica descriptor from the
@@ -755,7 +755,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 					expRetryReplica.Type = 0
 					require.Equal(t, expRetryReplica, retryReplica)
 				} else {
-					require.Nil(t, rng.Lease())
+					require.Nil(t, rng.Lease)
 				}
 			}
 		})
@@ -1418,9 +1418,9 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 	}
 
 	rng := ds.rangeCache.GetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
-	require.Equal(t, desc, *rng.Desc())
-	require.Equal(t, roachpb.StoreID(2), rng.Lease().Replica.StoreID)
-	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, rng.ClosedTimestampPolicy())
+	require.Equal(t, desc, rng.Desc)
+	require.Equal(t, roachpb.StoreID(2), rng.Lease.Replica.StoreID)
+	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, rng.ClosedTimestampPolicy)
 }
 
 // TestRetryOnDescriptorLookupError verifies that the DistSender retries a descriptor
@@ -1685,7 +1685,7 @@ func TestEvictCacheOnError(t *testing.T) {
 			if tc.shouldClearReplica {
 				require.Nil(t, rng)
 			} else if tc.shouldClearLeaseHolder {
-				require.True(t, rng.Lease().Empty())
+				require.True(t, rng.Lease.Empty())
 			}
 		})
 	}
@@ -2190,15 +2190,7 @@ func TestDistSenderDescriptorUpdatesOnSuccessfulRPCs(t *testing.T) {
 			for _, ri := range tc {
 				rk := ri.Desc.StartKey
 				entry := ds.rangeCache.GetCached(ctx, rk, false /* inverted */)
-				require.NotNil(t, entry)
-				require.Equal(t, &ri.Desc, entry.Desc())
-				if ri.Lease.Empty() {
-					require.Nil(t, entry.Leaseholder())
-					require.Nil(t, entry.Lease())
-				} else {
-					require.Equal(t, &ri.Lease, entry.Lease())
-				}
-				require.Equal(t, ri.ClosedTimestampPolicy, entry.ClosedTimestampPolicy())
+				require.Equal(t, ri, entry)
 			}
 		})
 	}
@@ -2264,7 +2256,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 				// that the response evicts it.
 				rng := ds.rangeCache.GetCached(ctx, descriptor.StartKey, false /* inverse */)
 				ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
-					Desc:  *rng.Desc(),
+					Desc:  rng.Desc,
 					Lease: roachpb.Lease{Replica: ba.Replica},
 				})
 			}
@@ -2299,7 +2291,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 
 	rng := ds.rangeCache.GetCached(ctx, descriptor.StartKey, false /* inverted */)
 	require.NotNil(t, rng)
-	require.Equal(t, leaseholderStoreID, rng.Lease().Replica.StoreID)
+	require.Equal(t, leaseholderStoreID, rng.Lease.Replica.StoreID)
 }
 
 func TestMultiRangeGapReverse(t *testing.T) {
@@ -3974,8 +3966,8 @@ func TestCanSendToFollower(t *testing.T) {
 			// leaseholder.
 			rng := ds.rangeCache.GetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
 			require.NotNil(t, rng)
-			require.NotNil(t, rng.Lease())
-			require.Equal(t, roachpb.StoreID(2), rng.Lease().Replica.StoreID)
+			require.NotNil(t, rng.Lease)
+			require.Equal(t, roachpb.StoreID(2), rng.Lease.Replica.StoreID)
 		})
 	}
 }
@@ -4139,9 +4131,9 @@ func TestEvictMetaRange(t *testing.T) {
 
 		// Verify that there is one meta2 cached range.
 		cachedRange := ds.rangeCache.GetCached(ctx, keys.RangeMetaKey(roachpb.RKey("a")), false)
-		if !cachedRange.Desc().StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc().EndKey.Equal(testMetaEndKey) {
+		if !cachedRange.Desc.StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc.EndKey.Equal(testMetaEndKey) {
 			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
-				keys.Meta2Prefix, testMetaEndKey, cachedRange.Desc().StartKey, cachedRange.Desc().EndKey)
+				keys.Meta2Prefix, testMetaEndKey, cachedRange.Desc.StartKey, cachedRange.Desc.EndKey)
 		}
 
 		// Simulate a split on the meta2 range and mark it as stale.
@@ -4154,14 +4146,14 @@ func TestEvictMetaRange(t *testing.T) {
 
 		// Verify that there are two meta2 cached ranges.
 		cachedRange = ds.rangeCache.GetCached(ctx, keys.RangeMetaKey(roachpb.RKey("a")), false)
-		if !cachedRange.Desc().StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc().EndKey.Equal(splitKey) {
+		if !cachedRange.Desc.StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc.EndKey.Equal(splitKey) {
 			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
-				keys.Meta2Prefix, splitKey, cachedRange.Desc().StartKey, cachedRange.Desc().EndKey)
+				keys.Meta2Prefix, splitKey, cachedRange.Desc.StartKey, cachedRange.Desc.EndKey)
 		}
 		cachedRange = ds.rangeCache.GetCached(ctx, keys.RangeMetaKey(roachpb.RKey("b")), false)
-		if !cachedRange.Desc().StartKey.Equal(splitKey) || !cachedRange.Desc().EndKey.Equal(testMetaEndKey) {
+		if !cachedRange.Desc.StartKey.Equal(splitKey) || !cachedRange.Desc.EndKey.Equal(testMetaEndKey) {
 			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
-				splitKey, testMetaEndKey, cachedRange.Desc().StartKey, cachedRange.Desc().EndKey)
+				splitKey, testMetaEndKey, cachedRange.Desc.StartKey, cachedRange.Desc.EndKey)
 		}
 	})
 }
@@ -5151,9 +5143,8 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 						},
 					},
 				})
-				ent, err := rc.Lookup(ctx, roachpb.RKeyMin)
+				tok, err := rc.LookupWithEvictionToken(ctx, roachpb.RKeyMin, rangecache.EvictionToken{}, false)
 				require.NoError(t, err)
-				tok := rc.MakeEvictionToken(&ent)
 
 				numCalled := 0
 				transportFn := func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
@@ -5211,14 +5202,14 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 				require.Regexp(t, "NotLeaseHolderError", err)
 				cached := rc.GetCached(ctx, tc.initialDesc.StartKey, false /* inverted */)
 				require.NotNil(t, cached)
-				require.Equal(t, tc.updatedDesc, *cached.Desc())
+				require.Equal(t, tc.updatedDesc, cached.Desc)
 				require.Equal(t, tc.expReplicasTried, numCalled)
 				if tc.expLeaseholder == 0 {
 					// Check that the leaseholder is cleared out.
-					require.Nil(t, cached.Leaseholder())
+					require.Nil(t, cached.Lease.Replica)
 				} else {
-					require.NotNil(t, cached.Leaseholder())
-					require.Equal(t, tc.expLeaseholder, cached.Leaseholder().ReplicaID)
+					require.NotNil(t, cached.Lease)
+					require.Equal(t, tc.expLeaseholder, cached.Lease.Replica.ReplicaID)
 				}
 			})
 		})
