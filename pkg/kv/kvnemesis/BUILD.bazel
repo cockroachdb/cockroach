@@ -36,6 +36,7 @@ go_library(
         "//pkg/sql/catalog/bootstrap",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/bufalloc",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
