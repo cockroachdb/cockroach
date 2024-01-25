@@ -603,11 +603,15 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 		return false
 	}
 
-	lastIndex, nextIndex := pr.Next-1, pr.Next
-	lastTerm, errt := r.raftLog.term(lastIndex)
+	prevIndex := pr.Next - 1
+	prevTerm, err := r.raftLog.term(prevIndex)
+	if err != nil {
+		// The log probably got truncated at >= pr.Next, so we can't catch up the
+		// follower log anymore. Send a snapshot instead.
+		return r.maybeSendSnapshot(to, pr)
+	}
 
 	var ents []pb.Entry
-	var erre error
 	// In a throttled StateReplicate only send empty MsgApp, to ensure progress.
 	// Otherwise, if we had a full Inflights and all inflight messages were in
 	// fact dropped, replication to that follower would stall. Instead, an empty
@@ -615,14 +619,13 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 	// leader to send an append), allowing it to be acked or rejected, both of
 	// which will clear out Inflights.
 	if pr.State != tracker.StateReplicate || !pr.Inflights.Full() {
-		ents, erre = r.raftLog.entries(nextIndex, r.maxMsgSize)
+		ents, err = r.raftLog.entries(pr.Next, r.maxMsgSize)
 	}
-
 	if len(ents) == 0 && !sendIfEmpty {
 		return false
 	}
-
-	if errt != nil || erre != nil { // send snapshot if we failed to get term or entries
+	// TODO(pav-kv): move this check up to where err is returned.
+	if err != nil { // send a snapshot if we failed to get the entries
 		return r.maybeSendSnapshot(to, pr)
 	}
 
@@ -630,8 +633,8 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 	r.send(pb.Message{
 		To:      to,
 		Type:    pb.MsgApp,
-		Index:   lastIndex,
-		LogTerm: lastTerm,
+		Index:   prevIndex,
+		LogTerm: prevTerm,
 		Entries: ents,
 		Commit:  r.raftLog.committed,
 	})
