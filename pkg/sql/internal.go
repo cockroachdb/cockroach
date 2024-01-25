@@ -855,14 +855,8 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	}
 	// We always override the injection knob based on the override struct.
 	sd.InjectRetryErrorsEnabled = o.InjectRetryErrorsEnabled
-	if o.ReorderJoinsLimit != 0 {
-		sd.ReorderJoinsLimit = o.ReorderJoinsLimit
-	}
 	if o.OptimizerUseHistograms {
 		sd.OptimizerUseHistograms = true
-	}
-	if o.OptimizerUseMultiColStats {
-		sd.OptimizerUseMultiColStats = true
 	}
 }
 
