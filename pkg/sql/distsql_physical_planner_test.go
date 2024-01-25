@@ -258,8 +258,8 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	for i := range descs {
 		ri := rangeCache.GetCached(ctx, descs[i].StartKey, false /* inclusive */)
 		require.NotNilf(t, ri, "failed to find range for key: %s", descs[i].StartKey)
-		require.Equal(t, &descs[i], ri.Desc())
-		require.NotNil(t, ri.Lease())
+		require.Equal(t, descs[i], ri.Desc)
+		require.NotNil(t, ri.Lease)
 	}
 }
 
