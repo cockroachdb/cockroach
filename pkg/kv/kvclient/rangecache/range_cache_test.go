@@ -457,7 +457,7 @@ func TestRangeCache(t *testing.T) {
 	// Evicts [d,e).
 	require.True(t, evict(ctx, db.cache, deTok.Desc()))
 	// Evicts [meta(min),meta(g)).
-	require.True(t, db.cache.EvictByKey(ctx, keys.RangeMetaKey(roachpb.RKey("da"))))
+	require.True(t, db.cache.evictByKey(ctx, keys.RangeMetaKey(roachpb.RKey("da"))))
 	doLookup(ctx, db.cache, "fa")
 	db.assertLookupCountEq(t, 0, "fa")
 	// Totally uncached range.

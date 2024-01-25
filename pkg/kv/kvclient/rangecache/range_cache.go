@@ -978,10 +978,12 @@ func (rc *RangeCache) Clear() {
 	rc.rangeCache.cache.Clear()
 }
 
-// EvictByKey evicts the descriptor containing the given key, if any.
+// evictByKey evicts the descriptor containing the given key, if any. This
+// evicts everything about the key and is only used in tests. Updates should be
+// done through an EvictionToken.
 //
 // Returns true if a descriptor was evicted.
-func (rc *RangeCache) EvictByKey(ctx context.Context, descKey roachpb.RKey) bool {
+func (rc *RangeCache) evictByKey(ctx context.Context, descKey roachpb.RKey) bool {
 	rc.rangeCache.Lock()
 	defer rc.rangeCache.Unlock()
 
