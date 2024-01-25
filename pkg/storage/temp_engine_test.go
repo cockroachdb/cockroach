@@ -32,7 +32,7 @@ func TestNewPebbleTempEngine(t *testing.T) {
 	db, fs, err := NewPebbleTempEngine(context.Background(), base.TempStorageConfig{
 		Path:     tempDir,
 		Settings: cluster.MakeTestingClusterSettings(),
-	}, base.StoreSpec{Path: tempDir})
+	}, base.StoreSpec{Path: tempDir}, nil)
 	if err != nil {
 		t.Fatalf("error encountered when invoking NewRocksDBTempEngine: %+v", err)
 	}

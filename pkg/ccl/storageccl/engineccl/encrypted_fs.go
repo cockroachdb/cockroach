@@ -112,8 +112,8 @@ type encryptedFS struct {
 }
 
 // Create implements vfs.FS.Create.
-func (fs *encryptedFS) Create(name string) (vfs.File, error) {
-	f, err := fs.FS.Create(name)
+func (fs *encryptedFS) Create(name string, category vfs.DiskWriteCategory) (vfs.File, error) {
+	f, err := fs.FS.Create(name, category)
 	if err != nil {
 		return f, err
 	}
@@ -230,13 +230,15 @@ func (fs *encryptedFS) Rename(oldname, newname string) error {
 // like non-empty WAL files with zero readable entries. There is a todo in env_encryption.cc
 // to change this RocksDB behavior. We need to handle a user switching from Pebble to RocksDB,
 // so cannot generate WAL files that RocksDB will complain about.
-func (fs *encryptedFS) ReuseForWrite(oldname, newname string) (vfs.File, error) {
+func (fs *encryptedFS) ReuseForWrite(
+	oldname, newname string, category vfs.DiskWriteCategory,
+) (vfs.File, error) {
 	// This is slower than simply calling Create(newname) since the Remove() and Create()
 	// will write and sync the file registry file twice. We can optimize this if needed.
 	if err := fs.Remove(oldname); err != nil {
 		return nil, err
 	}
-	return fs.Create(newname)
+	return fs.Create(newname, category)
 }
 
 type encryptionStatsHandler struct {

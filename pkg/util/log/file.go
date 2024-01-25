@@ -92,6 +92,8 @@ type fileSink struct {
 
 	filePermissions fs.FileMode
 
+	logBytesWritten *atomic.Uint64
+
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize output to this file sink..
 	mu struct {
@@ -137,6 +139,7 @@ func newFileSink(
 	fileMaxSize, combinedMaxSize int64,
 	getStartLines func(time.Time) []*buffer,
 	filePermissions fs.FileMode,
+	logBytesWritten *atomic.Uint64,
 ) *fileSink {
 	f := &fileSink{
 		groupName:               fileGroupName,
@@ -147,6 +150,7 @@ func newFileSink(
 		gcNotify:                make(chan struct{}, 1),
 		getStartLines:           getStartLines,
 		filePermissions:         filePermissions,
+		logBytesWritten:         logBytesWritten,
 	}
 	f.mu.logDir = dir
 	f.enabled.Set(dir != "")

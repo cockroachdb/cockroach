@@ -246,6 +246,13 @@ func If(enable bool, opt ConfigOption) ConfigOption {
 	return func(cfg *engineConfig) error { return nil }
 }
 
+func DiskWriteStatsCollector(dsc *vfs.DiskWriteStatsCollector) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.DiskWriteStatsCollector = dsc
+		return nil
+	}
+}
+
 // A Location describes where the storage engine's data will be written. A
 // Location may be in-memory or on the filesystem.
 type Location struct {

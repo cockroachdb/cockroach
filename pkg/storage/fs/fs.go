@@ -19,8 +19,10 @@ import (
 // CreateWithSync creates a file wrapped with logic to periodically sync
 // whenever more than bytesPerSync bytes accumulate. This syncing does not
 // provide any persistency guarantees, but can prevent latency spikes.
-func CreateWithSync(fs vfs.FS, name string, bytesPerSync int) (vfs.File, error) {
-	f, err := fs.Create(name)
+func CreateWithSync(
+	fs vfs.FS, name string, bytesPerSync int, category vfs.DiskWriteCategory,
+) (vfs.File, error) {
+	f, err := fs.Create(name, category)
 	if err != nil {
 		return nil, err
 	}
@@ -28,8 +30,8 @@ func CreateWithSync(fs vfs.FS, name string, bytesPerSync int) (vfs.File, error) 
 }
 
 // WriteFile writes data to a file named by filename.
-func WriteFile(fs vfs.FS, filename string, data []byte) error {
-	f, err := fs.Create(filename)
+func WriteFile(fs vfs.FS, filename string, data []byte, category vfs.DiskWriteCategory) error {
+	f, err := fs.Create(filename, category)
 	if err != nil {
 		return err
 	}

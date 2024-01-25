@@ -813,7 +813,7 @@ type ingestOp struct {
 
 func (i ingestOp) run(ctx context.Context) string {
 	sstPath := filepath.Join(i.m.path, "ingest.sst")
-	f, err := i.m.engineFS.Create(sstPath)
+	f, err := i.m.engineFS.Create(sstPath, storage.UnspecifiedWriteCategory)
 	if err != nil {
 		return fmt.Sprintf("error = %s", err.Error())
 	}

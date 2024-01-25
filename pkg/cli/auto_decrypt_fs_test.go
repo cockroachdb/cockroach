@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/pebble/vfs"
@@ -54,7 +55,7 @@ func TestAutoDecryptFS(t *testing.T) {
 	fs.Init([]string{path1, path2}, resolveFn)
 
 	create := func(pathElems ...string) {
-		file, err := fs.Create(filepath.Join(pathElems...))
+		file, err := fs.Create(filepath.Join(pathElems...), storage.UnspecifiedWriteCategory)
 		require.NoError(t, err)
 		file.Close()
 	}

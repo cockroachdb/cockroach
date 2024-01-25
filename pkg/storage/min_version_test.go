@@ -157,8 +157,8 @@ type fauxEncryptedFS struct {
 	vfs.FS
 }
 
-func (fs fauxEncryptedFS) Create(path string) (vfs.File, error) {
-	f, err := fs.FS.Create(path)
+func (fs fauxEncryptedFS) Create(path string, category vfs.DiskWriteCategory) (vfs.File, error) {
+	f, err := fs.FS.Create(path, category)
 	if err != nil {
 		return nil, err
 	}

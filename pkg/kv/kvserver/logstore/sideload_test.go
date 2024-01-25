@@ -259,7 +259,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		// First add a file that shouldn't be in the sideloaded storage to ensure
 		// sane behavior when directory can't be removed after full truncate.
 		nonRemovableFile := filepath.Join(ss.Dir(), "cantremove.xx")
-		f, err := eng.Create(nonRemovableFile)
+		f, err := eng.Create(nonRemovableFile, storage.UnspecifiedWriteCategory)
 		if err != nil {
 			t.Fatalf("could not create non i*.t* file in sideloaded storage: %+v", err)
 		}
@@ -792,7 +792,7 @@ func TestMkdirAllAndSyncParentsErrors(t *testing.T) {
 		require.NoError(t, mkdirAllAndSyncParents(fs, "/a", os.ModePerm))
 
 		// Write a file, and try to trick mkdir into thinking that it's a directory.
-		f, err := fs.Create("/a/file")
+		f, err := fs.Create("/a/file", storage.UnspecifiedWriteCategory)
 		require.NoError(t, err)
 		require.NoError(t, f.Close())
 

@@ -24,9 +24,12 @@ import (
 // NewTempEngine creates a new engine for DistSQL processors to use when
 // the working set is larger than can be stored in memory.
 func NewTempEngine(
-	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
+	ctx context.Context,
+	tempStorage base.TempStorageConfig,
+	storeSpec base.StoreSpec,
+	statsCollector *vfs.DiskWriteStatsCollector,
 ) (diskmap.Factory, vfs.FS, error) {
-	return NewPebbleTempEngine(ctx, tempStorage, storeSpec)
+	return NewPebbleTempEngine(ctx, tempStorage, storeSpec, statsCollector)
 }
 
 type pebbleTempEngine struct {
@@ -57,13 +60,19 @@ func (r *pebbleTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 // NewPebbleTempEngine creates a new Pebble engine for DistSQL processors to use
 // when the working set is larger than can be stored in memory.
 func NewPebbleTempEngine(
-	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
+	ctx context.Context,
+	tempStorage base.TempStorageConfig,
+	storeSpec base.StoreSpec,
+	statsCollector *vfs.DiskWriteStatsCollector,
 ) (diskmap.Factory, vfs.FS, error) {
-	return newPebbleTempEngine(ctx, tempStorage, storeSpec)
+	return newPebbleTempEngine(ctx, tempStorage, storeSpec, statsCollector)
 }
 
 func newPebbleTempEngine(
-	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
+	ctx context.Context,
+	tempStorage base.TempStorageConfig,
+	storeSpec base.StoreSpec,
+	statsCollector *vfs.DiskWriteStatsCollector,
 ) (*pebbleTempEngine, vfs.FS, error) {
 	var loc Location
 	var cacheSize int64 = 128 << 20 // 128 MiB, arbitrary, but not "too big"
@@ -89,6 +98,8 @@ func newPebbleTempEngine(
 			cfg.Opts.DisableWAL = true
 			cfg.Opts.Experimental.KeyValidationFunc = nil
 			cfg.Opts.BlockPropertyCollectors = nil
+			cfg.Opts.EnableSQLRowSpillMetrics = true
+			cfg.DiskWriteStatsCollector = statsCollector
 			return nil
 		},
 	)

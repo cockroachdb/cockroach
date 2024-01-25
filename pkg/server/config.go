@@ -171,6 +171,9 @@ type BaseConfig struct {
 	// run-time metrics instead of constructing a fresh one.
 	RuntimeStatSampler *status.RuntimeStatSampler
 
+	// DiskWriteStatsCollector will be used to track disk write metrics.
+	DiskWriteStatsCollector *vfs.DiskWriteStatsCollector
+
 	// GoroutineDumpDirName is the directory name for goroutine dumps using
 	// goroutinedumper. Only used if DisableRuntimeStatsMonitor is false.
 	GoroutineDumpDirName string
@@ -325,6 +328,7 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.Config.InitDefaults()
 	cfg.InitTestingKnobs()
 	cfg.EarlyBootExternalStorageAccessor = cloud.NewEarlyBootExternalStorageAccessor(st, cfg.ExternalIODirConfig)
+	cfg.DiskWriteStatsCollector = vfs.NewDiskWriteStatsCollector()
 }
 
 // InitTestingKnobs sets up any testing knobs based on e.g. envvars.
@@ -760,6 +764,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			storage.Attributes(spec.Attributes),
 			storage.EncryptionAtRest(spec.EncryptionOptions),
 			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
+			storage.DiskWriteStatsCollector(cfg.DiskWriteStatsCollector),
 		}
 		if len(storeKnobs.EngineKnobs) > 0 {
 			storageConfigOpts = append(storageConfigOpts, storeKnobs.EngineKnobs...)

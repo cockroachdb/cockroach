@@ -768,7 +768,7 @@ func ingestViaCopy(
 			return errors.Wrapf(err, "while removing existing file during ingestion of %s", ingestPath)
 		}
 	}
-	if err := kvserverbase.WriteFileSyncing(ctx, ingestPath, sst.Data, eng, 0600, st, limiter); err != nil {
+	if err := kvserverbase.WriteFileSyncing(ctx, ingestPath, sst.Data, eng, 0600, st, limiter, storage.PebbleIngestionWriteCategory); err != nil {
 		return errors.Wrapf(err, "while ingesting %s", ingestPath)
 	}
 	if err := eng.IngestLocalFiles(ctx, []string{ingestPath}); err != nil {
