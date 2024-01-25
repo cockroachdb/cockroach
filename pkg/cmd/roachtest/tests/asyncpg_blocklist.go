@@ -61,6 +61,7 @@ var asyncpgBlocklist = blocklist{
 	`test_introspection.TestIntrospection.test_introspection_on_large_db`:                                 "unsupported feature - https://github.com/cockroachdb/cockroach/issues/22456",
 	`test_introspection.TestIntrospection.test_introspection_retries_after_cache_bust`:                    "unsupported feature - https://github.com/cockroachdb/cockroach/issues/27796",
 	`test_introspection.TestIntrospection.test_introspection_sticks_for_ps`:                               "unknown type: pg_catalog.json",
+	`test_listeners.TestListeners.test_dangling_listener_warns`:                                           "LISTEN - https://github.com/cockroachdb/cockroach/issues/41522",
 	`test_listeners.TestListeners.test_listen_01`:                                                         "LISTEN - https://github.com/cockroachdb/cockroach/issues/41522",
 	`test_listeners.TestListeners.test_listen_02`:                                                         "LISTEN - https://github.com/cockroachdb/cockroach/issues/41522",
 	`test_listeners.TestListeners.test_listen_notletters`:                                                 "LISTEN - https://github.com/cockroachdb/cockroach/issues/41522",
