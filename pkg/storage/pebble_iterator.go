@@ -135,18 +135,13 @@ func newPebbleIteratorByCloning(
 
 // newPebbleSSTIterator creates a new Pebble iterator for the given SSTs.
 func newPebbleSSTIterator(
-	files [][]sstable.ReadableFile, opts IterOptions, forwardOnly bool,
+	files [][]sstable.ReadableFile, opts IterOptions,
 ) (*pebbleIterator, error) {
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
 	p.init(context.Background(), nil, opts, StandardDurability, nil)
 
-	var externalIterOpts []pebble.ExternalIterOption
-	if forwardOnly {
-		externalIterOpts = append(externalIterOpts, pebble.ExternalIterForwardOnly{})
-	}
-
-	iter, err := pebble.NewExternalIter(DefaultPebbleOptions(), &p.options, files, externalIterOpts...)
+	iter, err := pebble.NewExternalIter(DefaultPebbleOptions(), &p.options, files)
 	if err != nil {
 		p.Close()
 		return nil, err
