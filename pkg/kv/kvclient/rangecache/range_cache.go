@@ -622,13 +622,13 @@ func (rc *RangeCache) Lookup(ctx context.Context, key roachpb.RKey) (roachpb.Ran
 
 // GetCachedOverlapping returns all the cached entries which overlap a given
 // span [Key, EndKey). The results are sorted ascendingly.
-func (rc *RangeCache) GetCachedOverlapping(ctx context.Context, span roachpb.RSpan) []*cacheEntry {
+func (rc *RangeCache) GetCachedOverlapping(ctx context.Context, span roachpb.RSpan) []roachpb.RangeInfo {
 	rc.rangeCache.RLock()
 	defer rc.rangeCache.RUnlock()
 	rawEntries := rc.getCachedOverlappingRLocked(ctx, span)
-	entries := make([]*cacheEntry, len(rawEntries))
+	entries := make([]roachpb.RangeInfo, len(rawEntries))
 	for i, e := range rawEntries {
-		entries[i] = rc.getValue(e)
+		entries[i] = rc.getValue(e).toRangeInfo()
 	}
 	return entries
 }
