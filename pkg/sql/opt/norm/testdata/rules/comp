@@ -1,5 +1,15 @@
 exec-ddl
-CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON, d DATE)
+CREATE TABLE a (
+  k INT PRIMARY KEY,
+  i INT,
+  f FLOAT,
+  s STRING,
+  j JSON,
+  d DATE,
+  ts TIMESTAMP,
+  tz TIMESTAMPTZ,
+  intv INTERVAL
+)
 ----
 
 exec-ddl
@@ -20,14 +30,14 @@ norm expect=CommuteVarInequality
 SELECT * FROM a WHERE 1+i<k AND k-1<=i AND i*i>k AND k/2>=i
 ----
 select
- ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2-6)
+ ├── fd: (1)-->(2-9)
  ├── scan a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  │    ├── key: (1)
- │    └── fd: (1)-->(2-6)
+ │    └── fd: (1)-->(2-9)
  └── filters
       ├── k:1 > (i:2 + 1) [outer=(1,2), immutable, constraints=(/1: (/NULL - ])]
       ├── i:2 >= (k:1 - 1) [outer=(1,2), immutable, constraints=(/2: (/NULL - ])]
@@ -41,14 +51,14 @@ norm expect=CommuteConstInequality
 SELECT * FROM a WHERE 5+1<i+k AND 5*5/3<=i*2 AND 5>i AND 'foo'>=s
 ----
 select
- ├── columns: k:1!null i:2!null f:3 s:4!null j:5 d:6
+ ├── columns: k:1!null i:2!null f:3 s:4!null j:5 d:6 ts:7 tz:8 intv:9
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2-6)
+ ├── fd: (1)-->(2-9)
  ├── scan a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  │    ├── key: (1)
- │    └── fd: (1)-->(2-6)
+ │    └── fd: (1)-->(2-9)
  └── filters
       ├── (i:2 + k:1) > 6 [outer=(1,2), immutable]
       ├── (i:2 * 2) >= 8.3333333333333333333 [outer=(2), immutable]
@@ -59,14 +69,14 @@ norm expect=CommuteConstInequality
 SELECT * FROM a WHERE length('foo')+1<i+k AND length('bar')<=i*2
 ----
 select
- ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2-6)
+ ├── fd: (1)-->(2-9)
  ├── scan a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  │    ├── key: (1)
- │    └── fd: (1)-->(2-6)
+ │    └── fd: (1)-->(2-9)
  └── filters
       ├── (i:2 + k:1) > 4 [outer=(1,2), immutable]
       └── (i:2 * 2) >= 3 [outer=(2), immutable]
@@ -76,14 +86,14 @@ norm expect-not=CommuteConstInequality
 SELECT * FROM a WHERE random()::int>a.i+a.i
 ----
 select
- ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  ├── volatile
  ├── key: (1)
- ├── fd: (1)-->(2-6)
+ ├── fd: (1)-->(2-9)
  ├── scan a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  │    ├── key: (1)
- │    └── fd: (1)-->(2-6)
+ │    └── fd: (1)-->(2-9)
  └── filters
       └── random()::INT8 > (i:2 + i:2) [outer=(2), volatile]
 
@@ -99,15 +109,15 @@ WHERE
     i+2+2 > 10
 ----
 select
- ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(1-6)
+ ├── fd: ()-->(1-9)
  ├── scan a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  │    ├── key: (1)
- │    └── fd: (1)-->(2-6)
+ │    └── fd: (1)-->(2-9)
  └── filters
       ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
       ├── (f:3 + f:3) < 3.0 [outer=(3), immutable]
@@ -118,14 +128,14 @@ norm expect-not=NormalizeCmpPlusConst
 SELECT * FROM a WHERE s::date + '02:00:00'::time = '2000-01-01T02:00:00'::timestamp
 ----
 select
- ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  ├── stable
  ├── key: (1)
- ├── fd: (1)-->(2-6)
+ ├── fd: (1)-->(2-9)
  ├── scan a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  │    ├── key: (1)
- │    └── fd: (1)-->(2-6)
+ │    └── fd: (1)-->(2-9)
  └── filters
       └── (s:4::DATE + '02:00:00') = '2000-01-01 02:00:00' [outer=(4), stable]
 
@@ -187,15 +197,15 @@ WHERE
     f+i::float-10.0 >= 100.0
 ----
 select
- ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(1-6)
+ ├── fd: ()-->(1-9)
  ├── scan a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  │    ├── key: (1)
- │    └── fd: (1)-->(2-6)
+ │    └── fd: (1)-->(2-9)
  └── filters
       ├── k:1 = 3 [outer=(1), constraints=(/1: [/3 - /3]; tight), fd=()-->(1)]
       ├── (f:3 + f:3) < 7.0 [outer=(3), immutable]
@@ -207,14 +217,14 @@ norm expect-not=NormalizeCmpMinusConst
 SELECT * FROM a WHERE s::json - 1 = '[1]'::json
 ----
 select
- ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2-6)
+ ├── fd: (1)-->(2-9)
  ├── scan a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  │    ├── key: (1)
- │    └── fd: (1)-->(2-6)
+ │    └── fd: (1)-->(2-9)
  └── filters
       └── (s:4::JSONB - 1) = '[1]' [outer=(4), immutable]
 
@@ -258,15 +268,15 @@ WHERE
     10.0-(f+i::float) >= 100.0
 ----
 select
- ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(1-6)
+ ├── fd: ()-->(1-9)
  ├── scan a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  │    ├── key: (1)
- │    └── fd: (1)-->(2-6)
+ │    └── fd: (1)-->(2-9)
  └── filters
       ├── (i:2 >= -2) AND (i:2 > 10) [outer=(2), constraints=(/2: [/11 - ]; tight)]
       ├── k:1 = -1 [outer=(1), constraints=(/1: [/-1 - /-1]; tight), fd=()-->(1)]
@@ -278,14 +288,14 @@ norm expect-not=NormalizeCmpConstMinus
 SELECT * FROM a WHERE '[1, 2]'::json - i = '[1]'
 ----
 select
- ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2-6)
+ ├── fd: (1)-->(2-9)
  ├── scan a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  │    ├── key: (1)
- │    └── fd: (1)-->(2-6)
+ │    └── fd: (1)-->(2-9)
  └── filters
       └── ('[1, 2]' - i:2) = '[1]' [outer=(2), immutable]
 
@@ -295,14 +305,14 @@ norm expect-not=NormalizeCmpConstMinus
 SELECT * FROM a WHERE '2022-01-01'::date - s::time >= '2022-01-01 1:00:00'::timestamp
 ----
 select
- ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  ├── stable
  ├── key: (1)
- ├── fd: (1)-->(2-6)
+ ├── fd: (1)-->(2-9)
  ├── scan a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  │    ├── key: (1)
- │    └── fd: (1)-->(2-6)
+ │    └── fd: (1)-->(2-9)
  └── filters
       └── ('2022-01-01' - s:4::TIME) >= '2022-01-01 01:00:00' [outer=(4), stable]
 
@@ -325,13 +335,13 @@ norm expect=NormalizeTupleEquality
 SELECT * FROM a WHERE (i, f, s) = (1, 3.5, 'foo')
 ----
 select
- ├── columns: k:1!null i:2!null f:3!null s:4!null j:5 d:6
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5 d:6 ts:7 tz:8 intv:9
  ├── key: (1)
- ├── fd: ()-->(2-4), (1)-->(5,6)
+ ├── fd: ()-->(2-4), (1)-->(5-9)
  ├── scan a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  │    ├── key: (1)
- │    └── fd: (1)-->(2-6)
+ │    └── fd: (1)-->(2-9)
  └── filters
       ├── i:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
       ├── f:3 = 3.5 [outer=(3), constraints=(/3: [/3.5 - /3.5]; tight), fd=()-->(3)]
@@ -342,9 +352,9 @@ norm expect=NormalizeTupleEquality
 SELECT * FROM a WHERE () = ()
 ----
 scan a
- ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  ├── key: (1)
- └── fd: (1)-->(2-6)
+ └── fd: (1)-->(2-9)
 
 # --------------------------------------------------
 # NormalizeTupleEquality, NormalizeNestedAnds
@@ -355,14 +365,14 @@ norm expect=(NormalizeTupleEquality,NormalizeNestedAnds)
 SELECT * FROM a WHERE (1, (2, 'foo')) = (k, (i, s))
 ----
 select
- ├── columns: k:1!null i:2!null f:3 s:4!null j:5 d:6
+ ├── columns: k:1!null i:2!null f:3 s:4!null j:5 d:6 ts:7 tz:8 intv:9
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-6)
+ ├── fd: ()-->(1-9)
  ├── scan a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6 ts:7 tz:8 intv:9
  │    ├── key: (1)
- │    └── fd: (1)-->(2-6)
+ │    └── fd: (1)-->(2-9)
  └── filters
       ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
       ├── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
@@ -401,10 +411,10 @@ WHERE
     null::jsonb ?& ARRAY['foo'] OR '{}' ?& null::string[]
 ----
 values
- ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null d:6!null
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null d:6!null ts:7!null tz:8!null intv:9!null
  ├── cardinality: [0 - 0]
  ├── key: ()
- └── fd: ()-->(1-6)
+ └── fd: ()-->(1-9)
 
 # --------------------------------------------------
 # FoldIsNull
@@ -466,31 +476,31 @@ norm expect=FoldNonNullIsNull
 SELECT (i,f) IS NOT DISTINCT FROM NULL FROM a
 ----
 project
- ├── columns: "?column?":9!null
- ├── fd: ()-->(9)
+ ├── columns: "?column?":12!null
+ ├── fd: ()-->(12)
  ├── scan a
  └── projections
-      └── false [as="?column?":9]
+      └── false [as="?column?":12]
 
 norm expect=FoldNonNullIsNull
 SELECT ARRAY[k,i] IS NOT DISTINCT FROM NULL FROM a
 ----
 project
- ├── columns: "?column?":9!null
- ├── fd: ()-->(9)
+ ├── columns: "?column?":12!null
+ ├── fd: ()-->(12)
  ├── scan a
  └── projections
-      └── false [as="?column?":9]
+      └── false [as="?column?":12]
 
 norm expect-not=FoldNonNullIsNull
 SELECT (i,f) IS NULL FROM a
 ----
 project
- ├── columns: "?column?":9!null
+ ├── columns: "?column?":12!null
  ├── scan a
  │    └── columns: i:2 f:3
  └── projections
-      └── (i:2, f:3) IS NULL [as="?column?":9, outer=(2,3)]
+      └── (i:2, f:3) IS NULL [as="?column?":12, outer=(2,3)]
 
 # --------------------------------------------------
 # FoldNullTupleIsTupleNull
@@ -519,12 +529,12 @@ norm expect-not=FoldNullTupleIsTupleNull
 SELECT (k, NULL) IS NULL FROM a
 ----
 project
- ├── columns: "?column?":9!null
+ ├── columns: "?column?":12!null
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (k:1, NULL) IS NULL [as="?column?":9, outer=(1)]
+      └── (k:1, NULL) IS NULL [as="?column?":12, outer=(1)]
 
 # --------------------------------------------------
 # FoldNonNullTupleIsTupleNull
@@ -553,11 +563,11 @@ norm expect=FoldNonNullTupleIsTupleNull
 SELECT (1, k) IS NULL FROM a
 ----
 project
- ├── columns: "?column?":9!null
- ├── fd: ()-->(9)
+ ├── columns: "?column?":12!null
+ ├── fd: ()-->(12)
  ├── scan a
  └── projections
-      └── false [as="?column?":9]
+      └── false [as="?column?":12]
 
 norm expect=FoldNonNullTupleIsTupleNull
 SELECT ((NULL, NULL), NULL) IS NULL AS r
@@ -583,12 +593,12 @@ norm expect-not=FoldNonNullTupleIsTupleNull
 SELECT (k, NULL) IS NULL FROM a
 ----
 project
- ├── columns: "?column?":9!null
+ ├── columns: "?column?":12!null
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (k:1, NULL) IS NULL [as="?column?":9, outer=(1)]
+      └── (k:1, NULL) IS NULL [as="?column?":12, outer=(1)]
 
 # --------------------------------------------------
 # FoldIsNotNull
@@ -613,16 +623,16 @@ norm expect=FoldNonNullIsNotNull
 SELECT 1 IS NOT NULL AS r, k IS NOT NULL AS s, i IS NOT NULL AS t FROM a
 ----
 project
- ├── columns: r:9!null s:10!null t:11!null
- ├── fd: ()-->(9)
+ ├── columns: r:12!null s:13!null t:14!null
+ ├── fd: ()-->(12)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections
-      ├── true [as=r:9]
-      ├── k:1 IS NOT NULL [as=s:10, outer=(1)]
-      └── i:2 IS NOT NULL [as=t:11, outer=(2)]
+      ├── true [as=r:12]
+      ├── k:1 IS NOT NULL [as=s:13, outer=(1)]
+      └── i:2 IS NOT NULL [as=t:14, outer=(2)]
 
 norm expect=FoldNonNullIsNotNull
 SELECT (1, 2, 3) IS DISTINCT FROM NULL AS r
@@ -658,31 +668,31 @@ norm expect=FoldNonNullIsNotNull
 SELECT (i,f) IS DISTINCT FROM NULL FROM a
 ----
 project
- ├── columns: "?column?":9!null
- ├── fd: ()-->(9)
+ ├── columns: "?column?":12!null
+ ├── fd: ()-->(12)
  ├── scan a
  └── projections
-      └── true [as="?column?":9]
+      └── true [as="?column?":12]
 
 norm expect=FoldNonNullIsNotNull
 SELECT ARRAY[k,i] IS DISTINCT FROM NULL FROM a
 ----
 project
- ├── columns: "?column?":9!null
- ├── fd: ()-->(9)
+ ├── columns: "?column?":12!null
+ ├── fd: ()-->(12)
  ├── scan a
  └── projections
-      └── true [as="?column?":9]
+      └── true [as="?column?":12]
 
 norm expect-not=FoldNonNullIsNotNull
 SELECT (i,f) IS NOT NULL FROM a
 ----
 project
- ├── columns: "?column?":9!null
+ ├── columns: "?column?":12!null
  ├── scan a
  │    └── columns: i:2 f:3
  └── projections
-      └── (i:2, f:3) IS NOT NULL [as="?column?":9, outer=(2,3)]
+      └── (i:2, f:3) IS NOT NULL [as="?column?":12, outer=(2,3)]
 
 # --------------------------------------------------
 # FoldNonNullTupleIsTupleNotNull
@@ -731,12 +741,12 @@ norm expect-not=FoldNonNullTupleIsTupleNotNull
 SELECT (1, k) IS NOT NULL FROM a
 ----
 project
- ├── columns: "?column?":9!null
+ ├── columns: "?column?":12!null
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (1, k:1) IS NOT NULL [as="?column?":9, outer=(1)]
+      └── (1, k:1) IS NOT NULL [as="?column?":12, outer=(1)]
 
 # --------------------------------------------------
 # FoldNullTupleIsTupleNotNull
@@ -755,22 +765,22 @@ norm expect=FoldNullTupleIsTupleNotNull
 SELECT (k, NULL) IS NOT NULL FROM a
 ----
 project
- ├── columns: "?column?":9!null
- ├── fd: ()-->(9)
+ ├── columns: "?column?":12!null
+ ├── fd: ()-->(12)
  ├── scan a
  └── projections
-      └── false [as="?column?":9]
+      └── false [as="?column?":12]
 
 norm expect-not=FoldNonNullTupleIsTupleNotNull
 SELECT (1, k) IS NOT NULL FROM a
 ----
 project
- ├── columns: "?column?":9!null
+ ├── columns: "?column?":12!null
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (1, k:1) IS NOT NULL [as="?column?":9, outer=(1)]
+      └── (1, k:1) IS NOT NULL [as="?column?":12, outer=(1)]
 
 # --------------------------------------------------
 # CommuteNullIs
