@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -289,6 +290,55 @@ func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) error {
 	return nil
 }
 
+// ReplacePlaceholdersWithValuesForBundle takes the contents of statement.sql
+// from the bundle and substitutes all placeholders with their values.
+func ReplacePlaceholdersWithValuesForBundle(
+	bundleStmt string,
+) (filledStmt string, numPlaceholders int, _ error) {
+	stmtComponents := strings.Split(bundleStmt, "-- Arguments:")
+	switch len(stmtComponents) {
+	case 1:
+		// There are no placeholders in the statement, so we just use it
+		// directly.
+		filledStmt = stmtComponents[0]
+	case 2:
+		// We have placeholders in the stmt, so we'll replace them with
+		// their values.
+		values := strings.Split(stmtComponents[1], "\n")
+		// Remove empty lines at the beginning and at the end.
+		for values[0] == "" {
+			values = values[1:]
+		}
+		for values[len(values)-1] == "" {
+			values = values[:len(values)-1]
+		}
+		filledStmt = stmtComponents[0]
+		numPlaceholders = len(values)
+		reg := regexp.MustCompile(`.*\$(\d+): (.+)`)
+		// Iterate backwards so that we don't have collisions like $1 and
+		// $10 being replaced by the same value.
+		for i := len(values) - 1; i >= 0; i-- {
+			// Each string is currently of the form
+			//   --  $1: '2024-01-23 20:31:00.739925'
+			// so we want to extract the placeholder index as well as the
+			// placeholder value.
+			value := strings.TrimSpace(values[i])
+			matches := reg.FindStringSubmatch(value)
+			if len(matches) != 3 {
+				return "", 0, errors.Newf("couldn't parse the placeholder value string: %q\n%v", value, matches)
+			}
+			placeholderIdx, err := strconv.Atoi(matches[1])
+			if err != nil {
+				return "", 0, errors.Wrapf(err, "couldn't parse the placeholder value string: %q", value)
+			}
+			filledStmt = strings.ReplaceAll(filledStmt, fmt.Sprintf("$%d", placeholderIdx), matches[2])
+		}
+	default:
+		return "", 0, errors.Newf("unexpected number of parts when splitting statement.sql file: expected 1 or 2, found %d", len(stmtComponents))
+	}
+	return strings.TrimSpace(filledStmt), numPlaceholders, nil
+}
+
 // addStatement adds the pretty-printed statement in b.stmt as file
 // statement.txt.
 func (b *stmtBundleBuilder) addStatement() {
@@ -306,6 +356,29 @@ func (b *stmtBundleBuilder) addStatement() {
 			}
 		}
 		output = buf.String()
+		// Also add a couple of helpful files for ease of reproduction:
+		// - one file with PREPARE and EXECUTE
+		// - another file with placeholders replaced with their values.
+		buf.Reset()
+		buf.WriteString("PREPARE p AS ")
+		buf.WriteString(b.stmt)
+		buf.WriteString(";\n\nEXECUTE p (")
+		for i, v := range b.placeholders.Values {
+			if i > 0 {
+				fmt.Fprintf(&buf, ",")
+			}
+			if b.flags.RedactValues {
+				fmt.Fprintf(&buf, "\n  /* %s */ %s", tree.PlaceholderIdx(i), redact.RedactedMarker())
+			} else {
+				fmt.Fprintf(&buf, "\n  /* %s */ %v", tree.PlaceholderIdx(i), v)
+			}
+		}
+		buf.WriteString("\n);\n")
+		b.z.AddFile("statement-prepared.sql", buf.String())
+		stmtNoPlaceholders, _, err := ReplacePlaceholdersWithValuesForBundle(output)
+		if err == nil {
+			b.z.AddFile("statement-no-placeholders.sql", stmtNoPlaceholders)
+		}
 	}
 
 	b.z.AddFile("statement.sql", output)
