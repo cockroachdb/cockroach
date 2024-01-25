@@ -47,15 +47,10 @@ type InternalExecutorOverride struct {
 	// does **not** propagate further to "nested" executors that are spawned up
 	// by the "top" executor.
 	InjectRetryErrorsEnabled bool
-	// ReorderJoinsLimit indicates the number of joins at which the optimizer
-	// should stop attempting to reorder.
-	ReorderJoinsLimit int64
 	// OptimizerUseHistograms indicates whether we should use histograms for
 	// cardinality estimation in the optimizer.
+	// TODO(#102954): this should be removed when #102954 is fixed.
 	OptimizerUseHistograms bool
-	// OptimizerUseMultiColStats indicates whether we should use multi-column
-	// statistics for cardinality estimation in the optimizer.
-	OptimizerUseMultiColStats bool
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not

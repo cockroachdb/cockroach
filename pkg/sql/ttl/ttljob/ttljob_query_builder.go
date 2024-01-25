@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -125,11 +124,9 @@ func getInternalExecutorOverride(
 	qosLevel sessiondatapb.QoSLevel,
 ) sessiondata.InternalExecutorOverride {
 	return sessiondata.InternalExecutorOverride{
-		User:                      username.RootUserName(),
-		QualityOfService:          &qosLevel,
-		ReorderJoinsLimit:         opt.DefaultJoinOrderLimit,
-		OptimizerUseHistograms:    true,
-		OptimizerUseMultiColStats: true,
+		User:                   username.RootUserName(),
+		QualityOfService:       &qosLevel,
+		OptimizerUseHistograms: true,
 	}
 }
 
