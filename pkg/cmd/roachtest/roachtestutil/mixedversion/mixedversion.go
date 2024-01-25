@@ -753,16 +753,17 @@ func (s startStep) Run(ctx context.Context, l *logger.Logger, c cluster.Cluster,
 // the cluster and equal to the binary version of the first node in
 // the `nodes` field.
 type waitForStableClusterVersionStep struct {
-	nodes   option.NodeListOption
-	timeout time.Duration
+	nodes          option.NodeListOption
+	desiredVersion string
+	timeout        time.Duration
 }
 
 func (s waitForStableClusterVersionStep) Background() shouldStop { return nil }
 
 func (s waitForStableClusterVersionStep) Description() string {
 	return fmt.Sprintf(
-		"wait for nodes %v to all have the same cluster version (same as binary version of node %d)",
-		s.nodes, s.nodes[0],
+		"wait for nodes %v to reach cluster version %s",
+		s.nodes, s.desiredVersion,
 	)
 }
 
