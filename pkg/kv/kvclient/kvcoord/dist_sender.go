@@ -708,7 +708,13 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 				return
 			}
 			log.VEventf(ctx, 1, "gossiped first range descriptor: %+v", desc.Replicas())
-			ds.rangeCache.EvictByKey(ctx, roachpb.RKeyMin)
+			et, err := ds.rangeCache.LookupWithEvictionToken(ctx, roachpb.RKeyMin, rangecache.EvictionToken{}, false)
+			if err != nil {
+				et.EvictAndReplace(ctx, roachpb.RangeInfo{
+					Desc:                  *desc,
+					ClosedTimestampPolicy: rangecache.UnknownClosedTimestampPolicy,
+				})
+			}
 		})
 	}
 
