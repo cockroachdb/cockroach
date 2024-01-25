@@ -627,7 +627,7 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 	}
 
 	// Send the actual MsgApp otherwise, and update the progress accordingly.
-	if err := pr.UpdateOnEntriesSend(len(ents), uint64(payloadsSize(ents)), nextIndex); err != nil {
+	if err := pr.UpdateOnEntriesSend(len(ents), uint64(payloadsSize(ents))); err != nil {
 		r.logger.Panicf("%x: %v", r.id, err)
 	}
 	// NB: pr has been updated, but we make sure to only use its old values below.
