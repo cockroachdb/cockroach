@@ -180,6 +180,7 @@ var (
 				referenced.AttrEqVar(screl.DescID, id),
 			}
 		})
+
 	// JoinOnDescIDUntyped joins on descriptor ID, in an unsafe non-type safe
 	// manner.
 	JoinOnDescIDUntyped = screl.Schema.Def3(
