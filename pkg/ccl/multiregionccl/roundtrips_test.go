@@ -124,14 +124,14 @@ func TestEnsureLocalReadsOnGlobalTables(t *testing.T) {
 			// Check that the cache was indeed populated.
 			cache := tc.Server(i).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
 			entry := cache.GetCached(context.Background(), tablePrefix, false /* inverted */)
-			require.NotNil(t, entry.Lease().Empty())
+			require.NotNil(t, entry.Lease.Empty())
 			require.NotNil(t, entry)
 
-			if expected, got := roachpb.LEAD_FOR_GLOBAL_READS, entry.ClosedTimestampPolicy(); got != expected {
+			if expected, got := roachpb.LEAD_FOR_GLOBAL_READS, entry.ClosedTimestampPolicy; got != expected {
 				return errors.Newf("expected closedts policy %s, got %s", expected, got)
 			}
 
-			isLeaseHolder = entry.Lease().Replica.NodeID == tc.Server(i).NodeID()
+			isLeaseHolder = entry.Lease.Replica.NodeID == tc.Server(i).NodeID()
 			return nil
 		})
 

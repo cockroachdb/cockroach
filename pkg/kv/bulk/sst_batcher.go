@@ -449,7 +449,7 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 			if r, err := b.rc.Lookup(ctx, k); err != nil {
 				log.Warningf(ctx, "failed to lookup range cache entry for key %v: %v", k, err)
 			} else {
-				k := r.Desc().EndKey.AsRawKey()
+				k := r.Desc.EndKey.AsRawKey()
 				b.flushKey = k
 				log.VEventf(ctx, 3, "%s building sstable that will flush before %v", b.name, k)
 			}
