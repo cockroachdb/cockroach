@@ -437,6 +437,10 @@ type queryComparisonHelper struct {
 	colTypes              []string
 }
 
+// stmtReplacer removes interesting white space characters that may be in
+// a column or table name. See nameGenerator.GenerateOne.
+var stmtReplacer = strings.NewReplacer("\n", "", "\r", "", "\f", "", "\v", "")
+
 // runQuery runs the given query and returns the output. If the stmt doesn't
 // result in an error, as a side effect, it also saves the query, the query
 // plan, and the output of running the query so they can be logged in case of
@@ -450,7 +454,7 @@ func (h *queryComparisonHelper) runQuery(stmt string) ([][]string, error) {
 		// Remove all newline symbols to log this stmt as a single line. This
 		// way this auxiliary logging takes up less space (if the stmt executes
 		// successfully, it'll still get logged with the nice formatting).
-		strings.ReplaceAll(stmt, "\n", "")),
+		stmtReplacer.Replace(stmt)),
 	)
 
 	runQueryImpl := func(stmt string) ([][]string, error) {
