@@ -390,6 +390,7 @@ func (h *queryComparisonHelper) makeError(err error, msg string) error {
 	return errors.Wrapf(err, "%s. %d statements run", msg, h.stmtNo)
 }
 
+// joinAndSortRows sorts rows using string comparison.
 func joinAndSortRows(rowMatrix1, rowMatrix2 [][]string, sep string) (rows1, rows2 []string) {
 	for _, row := range rowMatrix1 {
 		rows1 = append(rows1, strings.Join(row[:], sep))
@@ -400,6 +401,38 @@ func joinAndSortRows(rowMatrix1, rowMatrix2 [][]string, sep string) (rows1, rows
 	sort.Strings(rows1)
 	sort.Strings(rows2)
 	return rows1, rows2
+}
+
+// sortRowsWithFloatComp is similar to joinAndSortRows, but it uses float
+// comparison for float columns (and decimal columns when on s390x).
+func sortRowsWithFloatComp(rowMatrix1, rowMatrix2 [][]string, colTypes []string) {
+	floatsLess := func(i, j int, rowMatrix [][]string) bool {
+		for idx := range colTypes {
+			if (runtime.GOARCH == "s390x" && colTypes[idx] == "DECIMAL") ||
+				colTypes[idx] == "FLOAT4" || colTypes[idx] == "FLOAT8" {
+				res, err := floatcmp.FloatsCmp(rowMatrix[i][idx], rowMatrix[j][idx])
+				if err != nil {
+					panic(errors.NewAssertionErrorWithWrappedErrf(err, "error comparing floats %s and %s",
+						rowMatrix[i][idx], rowMatrix[j][idx]))
+				}
+				if res != 0 {
+					return res == -1
+				}
+			} else {
+				if rowMatrix[i][idx] != rowMatrix[j][idx] {
+					return rowMatrix[i][idx] < rowMatrix[j][idx]
+				}
+			}
+		}
+		return false
+	}
+
+	sort.Slice(rowMatrix1, func(i, j int) bool {
+		return floatsLess(i, j, rowMatrix1)
+	})
+	sort.Slice(rowMatrix2, func(i, j int) bool {
+		return floatsLess(i, j, rowMatrix2)
+	})
 }
 
 // unsortedMatricesDiffWithFloatComp sorts and compares the rows in rowMatrix1
@@ -431,15 +464,10 @@ func unsortedMatricesDiffWithFloatComp(
 	if !needApproxMatch {
 		return result, nil
 	}
-	// Use an unlikely string as a separator so that we can make a comparison
-	// using sorted rows. We don't use the rows sorted above because splitting
-	// the rows could be ambiguous.
-	sep := ",unsortedMatricesDiffWithFloatComp separator,"
-	rows1, rows2 = joinAndSortRows(rowMatrix1, rowMatrix2, sep)
-	for i := range rows1 {
-		// Split the sorted rows.
-		row1 := strings.Split(rows1[i], sep)
-		row2 := strings.Split(rows2[i], sep)
+	sortRowsWithFloatComp(rowMatrix1, rowMatrix2, colTypes)
+	for i := range rowMatrix1 {
+		row1 := rowMatrix1[i]
+		row2 := rowMatrix2[i]
 
 		for j := range row1 {
 			if runtime.GOARCH == "s390x" && colTypes[j] == "DECIMAL" {
