@@ -28,12 +28,12 @@ mixed-version test plan for upgrading from "v22.2.8" to "<current>":
 ├── start cluster at version "v22.2.8" (2)
 ├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (3)
 ├── run startup hooks concurrently
-│   ├── run "initialize bank workload", after 0s delay (4)
-│   └── run "initialize rand workload", after 0s delay (5)
+│   ├── run "initialize bank workload", after 100ms delay (4)
+│   └── run "initialize rand workload", after 30s delay (5)
 ├── start background hooks concurrently
-│   ├── run "bank workload", after 500ms delay (6)
-│   ├── run "rand workload", after 50ms delay (7)
-│   └── run "csv server", after 0s delay (8)
+│   ├── run "bank workload", after 0s delay (6)
+│   ├── run "rand workload", after 30s delay (7)
+│   └── run "csv server", after 500ms delay (8)
 └── upgrade cluster from "v22.2.8" to "<current>"
    ├── prevent auto-upgrades by setting `preserve_downgrade_option` (9)
    ├── upgrade nodes :1-4 from "v22.2.8" to "<current>"

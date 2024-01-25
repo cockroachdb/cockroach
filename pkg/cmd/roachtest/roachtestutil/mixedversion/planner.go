@@ -44,6 +44,9 @@ type (
 		// enabledMutators is a list of `mutator` implementations that
 		// were applied when generating this test plan.
 		enabledMutators []mutator
+		// isLocal indicates if this test plan is generated for a `local`
+		// run.
+		isLocal bool
 	}
 
 	// testSetup includes the sequence of steps that run to setup the
@@ -233,6 +236,7 @@ func (p *testPlanner) Plan() *TestPlan {
 		setup:     setup,
 		initSteps: p.testStartSteps(),
 		upgrades:  testUpgrades,
+		isLocal:   p.isLocal,
 	}
 
 	// Probabilistically enable some of of the mutators on the base test
@@ -285,7 +289,7 @@ func (p *testPlanner) clusterSetupSteps() []testStep {
 // the test (as defined by user-provided functions) is ready to start.
 func (p *testPlanner) startupSteps() []testStep {
 	p.currentContext.Stage = OnStartupStage
-	return p.hooks.StartupSteps(p.longRunningContext())
+	return p.hooks.StartupSteps(p.longRunningContext(), p.isLocal)
 }
 
 // testStartSteps are the user-provided steps that should run when the
@@ -294,7 +298,7 @@ func (p *testPlanner) startupSteps() []testStep {
 func (p *testPlanner) testStartSteps() []testStep {
 	return append(
 		p.startupSteps(),
-		p.hooks.BackgroundSteps(p.longRunningContext(), p.bgChans)...,
+		p.hooks.BackgroundSteps(p.longRunningContext(), p.bgChans, p.isLocal)...,
 	)
 }
 
@@ -320,7 +324,7 @@ func (p *testPlanner) afterUpgradeSteps(
 	p.currentContext.Finalizing = false
 	p.currentContext.Stage = AfterUpgradeFinalizedStage
 	if scheduleHooks {
-		return p.hooks.AfterUpgradeFinalizedSteps(p.currentContext)
+		return p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.isLocal)
 	}
 
 	// Currently, we only schedule user-provided hooks after the upgrade
@@ -377,20 +381,15 @@ func (p *testPlanner) changeVersionSteps(
 		))
 		p.currentContext.changeVersion(node, to)
 		if scheduleHooks {
-			steps = append(steps, p.hooks.MixedVersionSteps(p.currentContext)...)
+			steps = append(steps, p.hooks.MixedVersionSteps(p.currentContext, p.isLocal)...)
 		} else if j == waitIndex {
 			// If we are not scheduling user-provided hooks, we wait a short
 			// while in this state to allow some time for background
 			// operations to run.
-			possibleWaitMinutes := []int{1, 5, 10}
-			waitDur := time.Duration(possibleWaitMinutes[p.prng.Intn(len(possibleWaitMinutes))]) * time.Minute
-			if p.isLocal {
-				// Reduce wait duration in local runs, as some tests run as
-				// part of CI and we can't to spend too much time waiting in
-				// that context.
-				waitDur = waitDur / 10
-			}
-			steps = append(steps, p.newSingleStep(waitStep{dur: waitDur}))
+			possibleWaitDurations := []time.Duration{1 * time.Minute, 5 * time.Minute, 10 * time.Minute}
+			steps = append(steps, p.newSingleStep(waitStep{
+				dur: pickRandomDelay(p.prng, p.isLocal, possibleWaitDurations),
+			}))
 		}
 	}
 
@@ -411,7 +410,7 @@ func (p *testPlanner) finalizeUpgradeSteps(
 	)
 	var mixedVersionStepsDuringMigrations []testStep
 	if scheduleHooks {
-		mixedVersionStepsDuringMigrations = p.hooks.MixedVersionSteps(p.currentContext)
+		mixedVersionStepsDuringMigrations = p.hooks.MixedVersionSteps(p.currentContext, p.isLocal)
 	}
 	waitForMigrations := p.newSingleStep(
 		waitForStableClusterVersionStep{nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
@@ -493,7 +492,9 @@ func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
 					if ss == ds.step {
 						newSteps = append(newSteps, delayedStep{delay: ds.delay, step: ss})
 					} else {
-						newSteps = append(newSteps, delayedStep{delay: randomDelay(s.rng), step: ss})
+						newSteps = append(newSteps, delayedStep{
+							delay: randomConcurrencyDelay(s.rng, plan.isLocal), step: ss},
+						)
 					}
 				}
 			}
@@ -773,7 +774,7 @@ func (plan *TestPlan) applyMutations(rng *rand.Rand, mutations []mutation) {
 				// Otherwise, create a new `concurrentRunStep` for the two
 				// steps.
 				return []testStep{
-					newConcurrentRunStep(genericLabel, steps, rng),
+					newConcurrentRunStep(genericLabel, steps, rng, plan.isLocal),
 				}
 			case mutationRemove:
 				return nil

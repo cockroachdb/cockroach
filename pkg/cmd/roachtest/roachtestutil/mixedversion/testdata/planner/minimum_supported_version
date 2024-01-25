@@ -73,8 +73,8 @@ mixed-version test plan for upgrading from "v21.2.11" to "v22.1.8" to "v22.2.3" 
 │   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (35)
 ├── run "initialize bank workload" (36)
 ├── start background hooks concurrently
-│   ├── run "bank workload", after 50ms delay (37)
-│   └── run "csv server", after 200ms delay (38)
+│   ├── run "bank workload", after 0s delay (37)
+│   └── run "csv server", after 5s delay (38)
 ├── upgrade cluster from "v23.1.4" to "v23.2.0"
 │   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (39)
 │   ├── upgrade nodes :1-4 from "v23.1.4" to "v23.2.0"
@@ -102,7 +102,7 @@ mixed-version test plan for upgrading from "v21.2.11" to "v22.1.8" to "v22.2.3" 
    │   ├── restart node 3 with binary version v23.2.0 (58)
    │   ├── run mixed-version hooks concurrently
    │   │   ├── run "mixed-version 1", after 0s delay (59)
-   │   │   └── run "mixed-version 2", after 0s delay (60)
+   │   │   └── run "mixed-version 2", after 500ms delay (60)
    │   └── restart node 1 with binary version v23.2.0 (61)
    ├── upgrade nodes :1-4 from "v23.2.0" to "<current>"
    │   ├── restart node 2 with binary version <current> (62)
