@@ -623,30 +623,7 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 	}
 
 	if errt != nil || erre != nil { // send snapshot if we failed to get term or entries
-		if !pr.RecentActive {
-			r.logger.Debugf("ignore sending snapshot to %x since it is not recently active", to)
-			return false
-		}
-
-		snapshot, err := r.raftLog.snapshot()
-		if err != nil {
-			if err == ErrSnapshotTemporarilyUnavailable {
-				r.logger.Debugf("%x failed to send snapshot to %x because snapshot is temporarily unavailable", r.id, to)
-				return false
-			}
-			panic(err) // TODO(bdarnell)
-		}
-		if IsEmptySnap(snapshot) {
-			panic("need non-empty snapshot")
-		}
-		sindex, sterm := snapshot.Metadata.Index, snapshot.Metadata.Term
-		r.logger.Debugf("%x [firstindex: %d, commit: %d] sent snapshot[index: %d, term: %d] to %x [%s]",
-			r.id, r.raftLog.firstIndex(), r.raftLog.committed, sindex, sterm, to, pr)
-		pr.BecomeSnapshot(sindex)
-		r.logger.Debugf("%x paused sending replication messages to %x [%s]", r.id, to, pr)
-
-		r.send(pb.Message{To: to, Type: pb.MsgSnap, Snapshot: &snapshot})
-		return true
+		return r.maybeSendSnapshot(to, pr)
 	}
 
 	// Send the actual MsgApp otherwise, and update the progress accordingly.
@@ -662,6 +639,35 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 		Entries: ents,
 		Commit:  r.raftLog.committed,
 	})
+	return true
+}
+
+// maybeSendSnapshot fetches a snapshot from Storage, and sends it to the given
+// node. Returns true iff the snapshot message has been emitted successfully.
+func (r *raft) maybeSendSnapshot(to uint64, pr *tracker.Progress) bool {
+	if !pr.RecentActive {
+		r.logger.Debugf("ignore sending snapshot to %x since it is not recently active", to)
+		return false
+	}
+
+	snapshot, err := r.raftLog.snapshot()
+	if err != nil {
+		if err == ErrSnapshotTemporarilyUnavailable {
+			r.logger.Debugf("%x failed to send snapshot to %x because snapshot is temporarily unavailable", r.id, to)
+			return false
+		}
+		panic(err) // TODO(bdarnell)
+	}
+	if IsEmptySnap(snapshot) {
+		panic("need non-empty snapshot")
+	}
+	sindex, sterm := snapshot.Metadata.Index, snapshot.Metadata.Term
+	r.logger.Debugf("%x [firstindex: %d, commit: %d] sent snapshot[index: %d, term: %d] to %x [%s]",
+		r.id, r.raftLog.firstIndex(), r.raftLog.committed, sindex, sterm, to, pr)
+	pr.BecomeSnapshot(sindex)
+	r.logger.Debugf("%x paused sending replication messages to %x [%s]", r.id, to, pr)
+
+	r.send(pb.Message{To: to, Type: pb.MsgSnap, Snapshot: &snapshot})
 	return true
 }
 
