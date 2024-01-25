@@ -139,14 +139,53 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 			}
 		}
 
+		var placeholderInfo string
+		stmtComponents := strings.Split(string(bundle.statement), "-- Arguments:")
+		var stmt string
+		switch len(stmtComponents) {
+		case 1:
+			// There are no placeholders in the statement, so we just use it
+			// directly.
+			stmt = stmtComponents[0]
+		case 2:
+			// We have placeholders in the stmt, so we'll replace them with
+			// their values.
+			values := strings.Split(stmtComponents[1], "\n")
+			// Remove empty lines at the beginning and at the end.
+			for values[0] == "" {
+				values = values[1:]
+			}
+			for values[len(values)-1] == "" {
+				values = values[:len(values)-1]
+			}
+			var plural string
+			if len(values) > 1 {
+				plural = "s"
+			}
+			placeholderInfo = fmt.Sprintf("(had %d placeholder%s) ", len(values), plural)
+			stmt = stmtComponents[0]
+			// Iterate backwards so that we don't have collisions like $1 and
+			// $10 being replaced by the same value.
+			for i := len(values) - 1; i >= 0; i-- {
+				// Each string is currently of the form
+				//   --  $1: '2024-01-23 20:31:00.739925'
+				// so we want to extract the string after the placeholder
+				// symbol.
+				parts := strings.Split(values[i], fmt.Sprintf("$%d: ", i+1))
+				stmt = strings.ReplaceAll(stmt, fmt.Sprintf("$%d", i+1), parts[len(parts)-1])
+			}
+		default:
+			return errors.Newf("unexpected number of parts when splitting statement.sql file: expected 1 or 2, found %d", len(stmtComponents))
+		}
+
 		cliCtx.PrintfUnlessEmbedded(`#
 # Statement bundle %s loaded.
 # Autostats disabled.
 #
-# Statement was:
+# Statement %swas:
 #
 # %s
-`, zipdir, bundle.statement)
+`, zipdir, placeholderInfo, strings.TrimSpace(stmt)+";")
 
 		if placeholderPairs != nil {
 			placeholderToColMap := make(map[int]string)
