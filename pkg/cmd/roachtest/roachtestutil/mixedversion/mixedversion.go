@@ -127,10 +127,15 @@ const (
 )
 
 var (
-	// possibleDelaysMs lists the possible delays to be added to
-	// concurrent steps
-	possibleDelaysMs = []int{
-		0, 50, 100, 200, 500,
+	// possibleDelays lists the possible delays to be added to
+	// concurrent steps.
+	possibleDelays = []time.Duration{
+		0,
+		100 * time.Millisecond,
+		500 * time.Millisecond,
+		5 * time.Second,
+		30 * time.Second,
+		3 * time.Minute,
 	}
 
 	// defaultClusterSettings is the set of cluster settings always
@@ -932,10 +937,14 @@ type concurrentRunStep struct {
 	delayedSteps []testStep
 }
 
-func newConcurrentRunStep(label string, steps []testStep, rng *rand.Rand) concurrentRunStep {
+func newConcurrentRunStep(
+	label string, steps []testStep, rng *rand.Rand, isLocal bool,
+) concurrentRunStep {
 	delayedSteps := make([]testStep, 0, len(steps))
 	for _, step := range steps {
-		delayedSteps = append(delayedSteps, delayedStep{delay: randomDelay(rng), step: step})
+		delayedSteps = append(delayedSteps, delayedStep{
+			delay: randomConcurrencyDelay(rng, isLocal), step: step,
+		})
 	}
 
 	return concurrentRunStep{label: label, delayedSteps: delayedSteps, rng: rng}
@@ -979,7 +988,7 @@ func (h hooks) Filter(testContext Context) hooks {
 // steps that are not meant to be run in the background, or contain
 // one stop channel (`shouldStop`) for each hook.
 func (h hooks) AsSteps(
-	label string, prng *rand.Rand, testContext *Context, stopChans []shouldStop,
+	label string, prng *rand.Rand, testContext *Context, stopChans []shouldStop, isLocal bool,
 ) []testStep {
 	steps := make([]testStep, 0, len(h))
 	stopChanFor := func(j int) shouldStop {
@@ -1002,7 +1011,7 @@ func (h hooks) AsSteps(
 		return steps
 	}
 
-	return []testStep{newConcurrentRunStep(label, steps, prng)}
+	return []testStep{newConcurrentRunStep(label, steps, prng, isLocal)}
 }
 
 func (th *testHooks) AddStartup(hook versionUpgradeHook) {
@@ -1021,28 +1030,41 @@ func (th *testHooks) AddAfterUpgradeFinalized(hook versionUpgradeHook) {
 	th.afterUpgradeFinalized = append(th.afterUpgradeFinalized, hook)
 }
 
-func (th *testHooks) StartupSteps(testContext *Context) []testStep {
-	return th.startup.AsSteps(startupLabel, th.prng, testContext, nil)
+func (th *testHooks) StartupSteps(testContext *Context, isLocal bool) []testStep {
+	return th.startup.AsSteps(startupLabel, th.prng, testContext, nil, isLocal)
 }
 
-func (th *testHooks) BackgroundSteps(testContext *Context, stopChans []shouldStop) []testStep {
+func (th *testHooks) BackgroundSteps(
+	testContext *Context, stopChans []shouldStop, isLocal bool,
+) []testStep {
 	testContext.Stage = BackgroundStage
-	return th.background.AsSteps(backgroundLabel, th.prng, testContext, stopChans)
+	return th.background.AsSteps(backgroundLabel, th.prng, testContext, stopChans, isLocal)
 }
 
-func (th *testHooks) MixedVersionSteps(testContext *Context) []testStep {
+func (th *testHooks) MixedVersionSteps(testContext *Context, isLocal bool) []testStep {
 	return th.mixedVersion.
 		Filter(*testContext).
-		AsSteps(mixedVersionLabel, th.prng, testContext, nil)
+		AsSteps(mixedVersionLabel, th.prng, testContext, nil, isLocal)
 }
 
-func (th *testHooks) AfterUpgradeFinalizedSteps(testContext *Context) []testStep {
-	return th.afterUpgradeFinalized.AsSteps(afterTestLabel, th.prng, testContext, nil)
+func (th *testHooks) AfterUpgradeFinalizedSteps(testContext *Context, isLocal bool) []testStep {
+	return th.afterUpgradeFinalized.AsSteps(afterTestLabel, th.prng, testContext, nil, isLocal)
 }
 
-func randomDelay(rng *rand.Rand) time.Duration {
-	idx := rng.Intn(len(possibleDelaysMs))
-	return time.Duration(possibleDelaysMs[idx]) * time.Millisecond
+// pickRandomDelay chooses a random duration from the list passed,
+// reducing it in local runs, as some tests run as part of CI and we
+// don't want to spend too much time waiting in that context.
+func pickRandomDelay(rng *rand.Rand, isLocal bool, durations []time.Duration) time.Duration {
+	dur := durations[rng.Intn(len(durations))]
+	if isLocal {
+		dur = dur / 10
+	}
+
+	return dur
+}
+
+func randomConcurrencyDelay(rng *rand.Rand, isLocal bool) time.Duration {
+	return pickRandomDelay(rng, isLocal, possibleDelays)
 }
 
 func rngFromRNG(rng *rand.Rand) *rand.Rand {
