@@ -654,12 +654,13 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 	})
 }
 
-// TestStoreLeaseTransferTimestampCacheTxnRecord checks the error returned by
-// attempts to create a txn record after a lease transfer.
+// TestStoreLeaseTransferTimestampCacheTxnRecord checks that no error is
+// returned by an attempt to create a txn record after a lease transfer. An
+// error is avoided by passing a read summary from the old leaseholder to the
+// new leaseholder.
 func TestStoreLeaseTransferTimestampCacheTxnRecord(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 117486)
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
@@ -668,21 +669,32 @@ func TestStoreLeaseTransferTimestampCacheTxnRecord(t *testing.T) {
 	rangeDesc, err := tc.LookupRange(key)
 	require.NoError(t, err)
 
-	// Transfer the lease to Servers[0] so we start in a known state. Otherwise,
+	// Transfer the lease to server 0 so we start in a known state. Otherwise,
 	// there might be already a lease owned by a random node.
 	require.NoError(t, tc.TransferRangeLease(rangeDesc, tc.Target(0)))
 
 	// Start a txn and perform a write, so that a txn record has to be created by
-	// the EndTxn.
-	txn := tc.Servers[0].DB().NewTxn(ctx, "test")
-	require.NoError(t, txn.Put(ctx, "a", "val"))
-	// After starting the transaction, transfer the lease. This will wipe the
-	// timestamp cache, which means that the txn record will not be able to be
-	// created (because someone might have already aborted the txn).
+	// the EndTxn when it eventually commits. Don't commit yet.
+	txn1 := tc.Servers[0].DB().NewTxn(ctx, "test")
+	require.NoError(t, txn1.Put(ctx, "a", "val"))
+
+	// Start another txn and commit. This writes a txn tombstone marker into
+	// server 0's timestamp cache at a higher timestamp than the first txn's
+	// tombstone marker will eventually be. Doing so prevents the test from
+	// fooling itself and passing if only the high water mark of the timestamp
+	// cache is passed in a read summary during the lease transfer.
+	txn2 := tc.Servers[0].DB().NewTxn(ctx, "test 2")
+	require.NoError(t, txn2.Put(ctx, "b", "val"))
+	require.NoError(t, txn2.Commit(ctx))
+
+	// After starting the transaction, transfer the lease. The lease transfer will
+	// carry over a sufficiently high resolution summary of the old leaseholder's
+	// timestamp cache so that the new leaseholder can still create a txn record
+	// for the first txn with certainty that it is not permitting a replay.
 	require.NoError(t, tc.TransferRangeLease(rangeDesc, tc.Target(1)))
 
-	err = txn.Commit(ctx)
-	require.Regexp(t, `TransactionAbortedError\(ABORT_REASON_NEW_LEASE_PREVENTS_TXN\)`, err)
+	// Commit the first txn without error.
+	require.NoError(t, txn1.Commit(ctx))
 }
 
 // This test verifies that when a lease is moved to a node that does not match the

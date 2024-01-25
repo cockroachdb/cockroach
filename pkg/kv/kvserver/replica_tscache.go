@@ -21,11 +21,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+)
+
+var readSummaryLocalBudget = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kv.lease_transfer_read_summary.local_budget",
+	"controls the maximum number of bytes that will be used to summarize the local "+
+		"segment of the timestamp cache during lease transfers and range merges. A smaller "+
+		"budget will result in loss of precision.",
+	4<<20, /* 4 MB */
+)
+
+var readSummaryGlobalBudget = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kv.lease_transfer_read_summary.global_budget",
+	"controls the maximum number of bytes that will be used to summarize the global "+
+		"segment of the timestamp cache during lease transfers and range merges. A smaller "+
+		"budget will result in loss of precision.",
+	0,
 )
 
 // addToTSCacheChecked adds the specified timestamp to the timestamp cache
@@ -583,8 +602,11 @@ func (r *Replica) CanCreateTxnRecord(
 			return false, kvpb.ABORT_REASON_RECORD_ALREADY_WRITTEN_POSSIBLE_REPLAY
 		case uuid.Nil:
 			lease, _ /* nextLease */ := r.GetLease()
-			// Recognize the case where a lease started recently. Lease transfers bump
-			// the ts cache low water mark.
+			// Recognize the case where a lease started recently. Lease transfers can
+			// bump the ts cache low water mark. However, in newer versions of the
+			// code, the lease transfer will also pass a read summary to the new
+			// leaseholder, allowing it to be more selective about what parts of the
+			// ts cache that it bumps and avoiding this case most of the time.
 			if tombstoneTimestamp == lease.Start.ToTimestamp() {
 				return false, kvpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN
 			}
@@ -660,7 +682,9 @@ func transactionPushMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 // GetCurrentReadSummary returns a new ReadSummary reflecting all reads served
 // by the range to this point.
 func (r *Replica) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
-	sum := collectReadSummaryFromTimestampCache(ctx, r.store.tsCache, r.Desc())
+	localBudget := readSummaryLocalBudget.Get(&r.store.ClusterSettings().SV)
+	globalBudget := readSummaryGlobalBudget.Get(&r.store.ClusterSettings().SV)
+	sum := collectReadSummaryFromTimestampCache(ctx, r.store.tsCache, r.Desc(), localBudget, globalBudget)
 	// Forward the read summary by the range's closed timestamp, because any
 	// replica could have served reads below this time. We also return the
 	// closed timestamp separately, in case callers want it split out.
@@ -669,24 +693,42 @@ func (r *Replica) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
 	return sum
 }
 
-// collectReadSummaryFromTimestampCache constucts a read summary for the range
-// with the specified descriptor using the timestamp cache.
+// collectReadSummaryFromTimestampCache constructs a read summary for the range
+// with the specified descriptor using the timestamp cache. The function accepts
+// two size budgets, which are used to limit the size of the local and global
+// segments of the read summary, respectively.
 func collectReadSummaryFromTimestampCache(
-	ctx context.Context, tc tscache.Cache, desc *roachpb.RangeDescriptor,
+	ctx context.Context,
+	tc tscache.Cache,
+	desc *roachpb.RangeDescriptor,
+	localBudget, globalBudget int64,
 ) rspb.ReadSummary {
+	serializeSegment := func(start, end roachpb.Key, budget int64) rspb.Segment {
+		var seg rspb.Segment
+		if budget > 0 {
+			// Serialize the key range and then compress to the budget.
+			seg = tc.Serialize(ctx, start, end)
+			seg.Compress(budget)
+		} else {
+			// If the budget is 0, just return the maximum timestamp in the key range.
+			// This is equivalent to serializing the key range and then compressing
+			// the resulting segment to 0 bytes, but much cheaper.
+			seg.LowWater, _ = tc.GetMax(ctx, start, end)
+		}
+		return seg
+	}
 	var s rspb.ReadSummary
-	s.Local.LowWater, _ = tc.GetMax(
-		ctx,
+	s.Local = serializeSegment(
 		keys.MakeRangeKeyPrefix(desc.StartKey),
 		keys.MakeRangeKeyPrefix(desc.EndKey),
+		localBudget,
 	)
 	userKeys := desc.KeySpan()
-	s.Global.LowWater, _ = tc.GetMax(
-		ctx,
+	s.Global = serializeSegment(
 		userKeys.Key.AsRawKey(),
 		userKeys.EndKey.AsRawKey(),
+		globalBudget,
 	)
-
 	return s
 }
 
@@ -697,19 +739,21 @@ func collectReadSummaryFromTimestampCache(
 func applyReadSummaryToTimestampCache(
 	ctx context.Context, tc tscache.Cache, desc *roachpb.RangeDescriptor, s rspb.ReadSummary,
 ) {
-	tc.Add(
-		ctx,
+	applySegment := func(start, end roachpb.Key, seg rspb.Segment) {
+		tc.Add(ctx, start, end, seg.LowWater, uuid.Nil /* txnID */)
+		for _, rs := range seg.ReadSpans {
+			tc.Add(ctx, rs.Key, rs.EndKey, rs.Timestamp, rs.TxnID)
+		}
+	}
+	applySegment(
 		keys.MakeRangeKeyPrefix(desc.StartKey),
 		keys.MakeRangeKeyPrefix(desc.EndKey),
-		s.Local.LowWater,
-		uuid.Nil, /* txnID */
+		s.Local,
 	)
 	userKeys := desc.KeySpan()
-	tc.Add(
-		ctx,
+	applySegment(
 		userKeys.Key.AsRawKey(),
 		userKeys.EndKey.AsRawKey(),
-		s.Global.LowWater,
-		uuid.Nil, /* txnID */
+		s.Global,
 	)
 }
