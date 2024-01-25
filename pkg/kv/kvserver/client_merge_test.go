@@ -875,8 +875,12 @@ func mergeCheckingTimestampCaches(
 	ba.RangeID = lhsDesc.RangeID
 	ba.Add(hb)
 	var expReason kvpb.TransactionAbortedReason
-	if disjointLeaseholders || throughSnapshot {
-		expReason = kvpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED
+	if throughSnapshot {
+		// TODO(nvanbenschoten): this will result in the wrong reason until we
+		// start compressing the persisted read summary on lease transfers and
+		// range merges.
+		// expReason = kvpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED
+		expReason = kvpb.ABORT_REASON_ABORTED_RECORD_FOUND
 	} else {
 		expReason = kvpb.ABORT_REASON_ABORTED_RECORD_FOUND
 	}

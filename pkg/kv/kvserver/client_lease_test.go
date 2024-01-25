@@ -654,35 +654,73 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 	})
 }
 
-// TestStoreLeaseTransferTimestampCacheTxnRecord checks the error returned by
-// attempts to create a txn record after a lease transfer.
+// TestStoreLeaseTransferTimestampCacheTxnRecord checks whether an error is
+// returned by an attempt to create a txn record after a lease transfer.
+//
+// If the local read summary is given a sufficient size budget then information
+// about individual transaction tombstone markers can be passed from the old
+// leaseholder to the new leaseholder. This allows the new leaseholder to
+// conclusively determine that a transaction tombstone marker did not exist for
+// the transaction, avoiding any error when the transaction creates its record.
+//
+// However, if the local read summary is compressed due to an insufficient size
+// budget then the new leaseholder must assume that a transaction tombstone
+// marker may have existed for the transaction. As a result, an error is thrown
+// when the transaction creates its record.
 func TestStoreLeaseTransferTimestampCacheTxnRecord(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 117486)
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
 
-	key := []byte("a")
-	rangeDesc, err := tc.LookupRange(key)
-	require.NoError(t, err)
+	testutils.RunTrueAndFalse(t, "sufficient-budget", func(t *testing.T, budget bool) {
+		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+		if !budget {
+			kvserver.ReadSummaryLocalBudget.Override(ctx, &st.SV, 0)
+		}
+		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+			},
+		})
+		defer tc.Stopper().Stop(ctx)
 
-	// Transfer the lease to Servers[0] so we start in a known state. Otherwise,
-	// there might be already a lease owned by a random node.
-	require.NoError(t, tc.TransferRangeLease(rangeDesc, tc.Target(0)))
+		key := []byte("a")
+		rangeDesc, err := tc.LookupRange(key)
+		require.NoError(t, err)
 
-	// Start a txn and perform a write, so that a txn record has to be created by
-	// the EndTxn.
-	txn := tc.Servers[0].DB().NewTxn(ctx, "test")
-	require.NoError(t, txn.Put(ctx, "a", "val"))
-	// After starting the transaction, transfer the lease. This will wipe the
-	// timestamp cache, which means that the txn record will not be able to be
-	// created (because someone might have already aborted the txn).
-	require.NoError(t, tc.TransferRangeLease(rangeDesc, tc.Target(1)))
+		// Transfer the lease to server 0, so we start in a known state. Otherwise,
+		// there might be already a lease owned by a random node.
+		require.NoError(t, tc.TransferRangeLease(rangeDesc, tc.Target(0)))
 
-	err = txn.Commit(ctx)
-	require.Regexp(t, `TransactionAbortedError\(ABORT_REASON_NEW_LEASE_PREVENTS_TXN\)`, err)
+		// Start a txn and perform a write, so that a txn record has to be created by
+		// the EndTxn when it eventually commits. Don't commit yet.
+		txn1 := tc.Servers[0].DB().NewTxn(ctx, "test")
+		require.NoError(t, txn1.Put(ctx, "a", "val"))
+
+		// Start another txn and commit. This writes a txn tombstone marker into
+		// server 0's timestamp cache at a higher timestamp than the first txn's
+		// tombstone marker will eventually be. Doing so prevents the test from
+		// fooling itself and passing if only the high water mark of the timestamp
+		// cache is passed in a read summary during the lease transfer.
+		txn2 := tc.Servers[0].DB().NewTxn(ctx, "test 2")
+		require.NoError(t, txn2.Put(ctx, "b", "val"))
+		require.NoError(t, txn2.Commit(ctx))
+
+		// After starting the transaction, transfer the lease. The lease transfer will
+		// carry over a sufficiently high resolution summary of the old leaseholder's
+		// timestamp cache so that the new leaseholder can still create a txn record
+		// for the first txn with certainty that it is not permitting a replay.
+		require.NoError(t, tc.TransferRangeLease(rangeDesc, tc.Target(1)))
+
+		// Try to commit the first txn.
+		err = txn1.Commit(ctx)
+		if budget {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+			require.Regexp(t, `TransactionAbortedError\(ABORT_REASON_TIMESTAMP_CACHE_REJECTED\)`, err)
+		}
+	})
 }
 
 // This test verifies that when a lease is moved to a node that does not match the
