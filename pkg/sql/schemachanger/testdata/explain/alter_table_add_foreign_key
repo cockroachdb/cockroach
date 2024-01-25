@@ -9,18 +9,18 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CON
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 1 element transitioning toward PUBLIC
- │         │    └── ABSENT → WRITE_ONLY ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+ │         │    └── ABSENT → WRITE_ONLY ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 105}
  │         └── 1 Mutation operation
  │              └── AddForeignKeyConstraint {"ConstraintID":2,"ReferencedTableID":105,"TableID":104,"Validity":2}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── WRITE_ONLY → ABSENT ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+ │    │    │    └── WRITE_ONLY → ABSENT ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 105}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 1 element transitioning toward PUBLIC
- │         │    └── ABSENT → WRITE_ONLY ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+ │         │    └── ABSENT → WRITE_ONLY ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 105}
  │         └── 4 Mutation operations
  │              ├── AddForeignKeyConstraint {"ConstraintID":2,"ReferencedTableID":105,"TableID":104,"Validity":2}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
@@ -29,12 +29,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CON
  └── PostCommitPhase
       ├── Stage 1 of 2 in PostCommitPhase
       │    ├── 1 element transitioning toward PUBLIC
-      │    │    └── WRITE_ONLY → VALIDATED ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+      │    │    └── WRITE_ONLY → VALIDATED ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 105}
       │    └── 1 Validation operation
       │         └── ValidateConstraint {"ConstraintID":2,"TableID":104}
       └── Stage 2 of 2 in PostCommitPhase
            ├── 2 elements transitioning toward PUBLIC
-           │    ├── VALIDATED → PUBLIC ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+           │    ├── VALIDATED → PUBLIC ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 105}
            │    └── ABSENT    → PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
            └── 5 Mutation operations
                 ├── SetConstraintName {"ConstraintID":2,"Name":"t1_i_fkey","TableID":104}

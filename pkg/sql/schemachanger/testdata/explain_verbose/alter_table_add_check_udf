@@ -13,10 +13,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
 │       │
 │       ├── • 1 element transitioning toward PUBLIC
 │       │   │
-│       │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [2]}
 │       │       │ ABSENT → WRITE_ONLY
 │       │       │
-│       │       └── • PreviousTransactionPrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │       └── • PreviousTransactionPrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [2]}
 │       │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │
 │       └── • 2 Mutation operations
@@ -41,7 +41,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│   │   │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [2]}
 │   │   │         WRITE_ONLY → ABSENT
 │   │   │
 │   │   └── • 1 Mutation operation
@@ -53,10 +53,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
 │       │
 │       ├── • 1 element transitioning toward PUBLIC
 │       │   │
-│       │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [2]}
 │       │       │ ABSENT → WRITE_ONLY
 │       │       │
-│       │       └── • PreviousTransactionPrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │       └── • PreviousTransactionPrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [2]}
 │       │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │
 │       └── • 5 Mutation operations
@@ -102,10 +102,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
     │   │
     │   ├── • 1 element transitioning toward PUBLIC
     │   │   │
-    │   │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+    │   │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [2]}
     │   │       │ WRITE_ONLY → VALIDATED
     │   │       │
-    │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+    │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [2]}
     │   │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
     │   │
     │   └── • 1 Validation operation
@@ -118,10 +118,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
         │
         ├── • 2 elements transitioning toward PUBLIC
         │   │
-        │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [2]}
         │   │   │ VALIDATED → PUBLIC
         │   │   │
-        │   │   ├── • PreviousTransactionPrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │   │   ├── • PreviousTransactionPrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [2]}
         │   │   │     rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
         │   │   │
         │   │   └── • SameStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}

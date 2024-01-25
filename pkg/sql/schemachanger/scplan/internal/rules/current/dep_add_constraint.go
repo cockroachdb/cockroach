@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
 
 // These rules ensure that constraint-dependent elements, like a constraint's
@@ -44,6 +45,23 @@ func init() {
 				to.TypeFilter(rulesVersionKey, isConstraintDependent),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
+			}
+		},
+	)
+
+	registerDepRule(
+		"column public before non-index-backed constraint (including hash-sharded) is created",
+		scgraph.Precedence,
+		"column", "constraint",
+		func(from, to NodeVars) rel.Clauses {
+			colID := rel.Var("columnID")
+			return rel.Clauses{
+				from.Type((*scpb.Column)(nil)),
+				to.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint),
+				from.El.AttrEqVar(screl.ColumnID, colID),
+				to.ReferencedColumnIDsContains(colID),
+				JoinOnDescID(from, to, "table-id"),
+				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_WRITE_ONLY),
 			}
 		},
 	)
