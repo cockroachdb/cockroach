@@ -152,7 +152,9 @@ func (pr *Progress) BecomeSnapshot(snapshoti uint64) {
 // UpdateOnEntriesSend updates the progress on the given number of consecutive
 // entries being sent in a MsgApp, with the given total bytes size, appended at
 // log indices >= pr.Next.
-func (pr *Progress) UpdateOnEntriesSend(entries int, bytes uint64) error {
+//
+// Must be used with StateProbe or StateReplicate.
+func (pr *Progress) UpdateOnEntriesSend(entries int, bytes uint64) {
 	switch pr.State {
 	case StateReplicate:
 		if entries > 0 {
@@ -170,9 +172,8 @@ func (pr *Progress) UpdateOnEntriesSend(entries int, bytes uint64) error {
 			pr.MsgAppFlowPaused = true
 		}
 	default:
-		return fmt.Errorf("sending append in unhandled state %s", pr.State)
+		panic(fmt.Sprintf("sending append in unhandled state %s", pr.State))
 	}
-	return nil
 }
 
 // MaybeUpdate is called when an MsgAppResp arrives from the follower, with the
