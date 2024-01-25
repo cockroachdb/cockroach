@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -140,8 +139,8 @@ type Config struct {
 
 // RangeCache is a simplified interface to the rngcache.RangeCache.
 type RangeCache interface {
-	// Lookup looks up range information for the range containing key.
-	Lookup(ctx context.Context, key roachpb.RKey) (rangecache.CacheEntry, error)
+	// LookupRangeID looks up range ID for the range containing key.
+	LookupRangeID(ctx context.Context, key roachpb.RKey) (roachpb.RangeID, error)
 }
 
 // IntentResolver manages the process of pushing transactions and
@@ -203,10 +202,10 @@ func setConfigDefaults(c *Config) {
 
 type nopRangeDescriptorCache struct{}
 
-func (nrdc nopRangeDescriptorCache) Lookup(
+func (nrdc nopRangeDescriptorCache) LookupRangeID(
 	ctx context.Context, key roachpb.RKey,
-) (rangecache.CacheEntry, error) {
-	return rangecache.CacheEntry{}, nil
+) (roachpb.RangeID, error) {
+	return 0, nil
 }
 
 // New creates an new IntentResolver.
@@ -913,14 +912,14 @@ func (ir *IntentResolver) lookupRangeID(ctx context.Context, key roachpb.Key) ro
 		}
 		return 0
 	}
-	rInfo, err := ir.rdc.Lookup(ctx, rKey)
+	rangeID, err := ir.rdc.LookupRangeID(ctx, rKey)
 	if err != nil {
 		if ir.every.ShouldLog() {
 			log.Warningf(ctx, "failed to look up range descriptor for key %q: %+v", key, err)
 		}
 		return 0
 	}
-	return rInfo.Desc().RangeID
+	return rangeID
 }
 
 // lockUpdates allows for eager or lazy translation of lock spans to lock updates.

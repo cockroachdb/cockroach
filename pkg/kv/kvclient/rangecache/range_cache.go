@@ -597,16 +597,27 @@ func (rc *RangeCache) LookupWithEvictionToken(
 	return tok, nil
 }
 
-// Lookup presents a simpler interface for looking up a RangeDescriptor for a
-// key without the eviction tokens or scan direction control of
-// LookupWithEvictionToken.
-func (rc *RangeCache) Lookup(ctx context.Context, key roachpb.RKey) (CacheEntry, error) {
+func (rc *RangeCache) LookupRangeID(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.RangeID, error) {
 	tok, err := rc.lookupInternal(
 		ctx, key, EvictionToken{}, false /* useReverseScan */)
 	if err != nil {
-		return CacheEntry{}, err
+		return 0, err
 	}
-	return *tok.entry, nil
+	return tok.entry.Desc().RangeID, nil
+}
+
+// Lookup presents a simpler interface for looking up a RangeDescriptor for a
+// key without the eviction tokens or scan direction control of
+// LookupWithEvictionToken.
+func (rc *RangeCache) Lookup(ctx context.Context, key roachpb.RKey) (roachpb.RangeInfo, error) {
+	tok, err := rc.lookupInternal(
+		ctx, key, EvictionToken{}, false /* useReverseScan */)
+	if err != nil {
+		return roachpb.RangeInfo{}, err
+	}
+	return tok.entry.toRangeInfo(), nil
 }
 
 // GetCachedOverlapping returns all the cached entries which overlap a given
@@ -1015,23 +1026,28 @@ func (rc *RangeCache) evictDescLocked(ctx context.Context, desc *roachpb.RangeDe
 	return true
 }
 
-// GetCached retrieves the descriptor of the range which contains
+// TestingGetCached retrieves the descriptor of the range which contains
 // the given key. It returns nil if the descriptor is not found in the cache.
 //
 // `inverted` determines the behavior at the range boundary: If set to true
 // and `key` is the EndKey and StartKey of two adjacent ranges, the first range
 // is returned instead of the second (which technically contains the given key).
-func (rc *RangeCache) GetCached(ctx context.Context, key roachpb.RKey, inverted bool) *CacheEntry {
+func (rc *RangeCache) TestingGetCached(
+	ctx context.Context, key roachpb.RKey, inverted bool,
+) (roachpb.RangeInfo, error) {
 	rc.rangeCache.RLock()
 	defer rc.rangeCache.RUnlock()
 	entry, _ := rc.getCachedRLocked(ctx, key, inverted)
-	return entry
+	if entry == nil {
+		return roachpb.RangeInfo{}, errors.Newf("no entry found for %s in cache", key)
+	}
+	return entry.toRangeInfo(), nil
 }
 
-// getCachedRLocked is like GetCached, but it assumes that the caller holds a
+// getCachedRLocked is like TestingGetCached, but it assumes that the caller holds a
 // read lock on rdc.rangeCache.
 //
-// In addition to GetCached, it also returns an internal cache Entry that can be
+// In addition to TestingGetCached, it also returns an internal cache Entry that can be
 // used for descriptor eviction.
 func (rc *RangeCache) getCachedRLocked(
 	ctx context.Context, key roachpb.RKey, inverted bool,
@@ -1340,6 +1356,14 @@ func (e *CacheEntry) LeaseSpeculative() bool {
 		panic(fmt.Sprintf("LeaseSpeculative called on entry with empty lease: %s", e))
 	}
 	return e.lease.Speculative()
+}
+
+func (e *CacheEntry) toRangeInfo() roachpb.RangeInfo {
+	return roachpb.RangeInfo{
+		Desc:                  e.desc,
+		Lease:                 e.lease,
+		ClosedTimestampPolicy: e.ClosedTimestampPolicy(),
+	}
 }
 
 // overrides returns true if o should replace e in the cache. It is assumed that
