@@ -104,7 +104,7 @@ func verifyStatsOnServers(
 		// To recompute the metrics, we need an open engine. Open the
 		// Engine again in read-only mode (leaving the rest of the
 		// Server stopped) to compute MVCC stats.
-		env, err := fs.InitEnvFromStoreSpec(ctx, specs[storeIdx], fs.ReadOnly, stickyRegistry)
+		env, err := fs.InitEnvFromStoreSpec(ctx, specs[storeIdx], fs.ReadOnly, stickyRegistry, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

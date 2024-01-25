@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -88,7 +89,7 @@ func refreshRange(
 		StartTime:    refreshFrom, // exclusive
 		EndTime:      refreshTo,   // inclusive
 		IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
-		ReadCategory: storage.BatchEvalReadCategory,
+		ReadCategory: fs.BatchEvalReadCategory,
 	})
 	if err != nil {
 		return err

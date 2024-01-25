@@ -55,7 +55,7 @@ func TestEncryptedFS(t *testing.T) {
 	for i := 0; i < keyIDLength+16; i++ {
 		b = append(b, 'a')
 	}
-	f, err := memFS.Create("keyfile")
+	f, err := memFS.Create("keyfile", fs.UnspecifiedWriteCategory)
 	require.NoError(t, err)
 	bReader := bytes.NewReader(b)
 	_, err = io.Copy(f, bReader)
@@ -128,7 +128,7 @@ func TestEncryptedFS(t *testing.T) {
 		)
 		switch s[0] {
 		case "create":
-			g, err = fs.Create(s[1])
+			g, err = fs.Create(s[1], fs.UnspecifiedWriteCategory)
 		case "link":
 			err = fs.Link(s[1], s[2])
 		case "open":
@@ -140,7 +140,7 @@ func TestEncryptedFS(t *testing.T) {
 		case "rename":
 			err = fs.Rename(s[1], s[2])
 		case "reuseForWrite":
-			g, err = fs.ReuseForWrite(s[1], s[2])
+			g, err = fs.ReuseForWrite(s[1], s[2], fs.UnspecifiedWriteCategory)
 		case "f.write":
 			_, err = f.Write([]byte(s[1]))
 		case "f.read":
@@ -215,7 +215,7 @@ func TestEncryptedFSUnencryptedFiles(t *testing.T) {
 	var filesCreated []string
 	for i := 0; i < 5; i++ {
 		filename := fmt.Sprintf("file%d", i)
-		f, err := fs.Create(filename)
+		f, err := fs.Create(filename, fs.UnspecifiedWriteCategory)
 		require.NoError(t, err)
 		filesCreated = append(filesCreated, filename)
 		require.NoError(t, f.Close())
@@ -263,6 +263,7 @@ func TestPebbleEncryption(t *testing.T) {
 			},
 			fs.ReadWrite,
 			stickyRegistry, /* sticky registry */
+			nil,
 		)
 		require.NoError(t, err)
 		db, err := storage.Open(ctx, env, cluster.MakeTestingClusterSettings())
@@ -311,6 +312,7 @@ func TestPebbleEncryption(t *testing.T) {
 			},
 			fs.ReadWrite,
 			stickyRegistry, /* sticky registry */
+			nil,
 		)
 		require.NoError(t, err)
 		db, err := storage.Open(ctx, env, cluster.MakeTestingClusterSettings())
@@ -399,6 +401,7 @@ func TestPebbleEncryption2(t *testing.T) {
 			},
 			fs.ReadWrite,
 			stickyRegistry, /* sticky registry */
+			nil,
 		)
 		require.NoError(t, err)
 		db, err := storage.Open(ctx, env, cluster.MakeTestingClusterSettings())
@@ -621,7 +624,7 @@ func (op *createOp) run(t *fsTest) {
 	// Create is idempotent, so we simply retry on injected errors.
 	withRetry(t, func() error {
 		var f vfs.File
-		f, err := t.fs.fs().Create(op.name)
+		f, err := t.fs.fs().Create(op.name, fs.UnspecifiedWriteCategory)
 		if err != nil {
 			return err
 		}

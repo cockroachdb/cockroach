@@ -180,7 +180,7 @@ func TestPebbleMap(t *testing.T) {
 	e, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.StoreSpec{})
+	}, base.StoreSpec{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestPebbleMultiMap(t *testing.T) {
 	e, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.StoreSpec{})
+	}, base.StoreSpec{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func TestPebbleMapClose(t *testing.T) {
 	e, _, err := newPebbleTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.StoreSpec{})
+	}, base.StoreSpec{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,7 +325,7 @@ func BenchmarkPebbleMapWrite(b *testing.B) {
 	tempEngine, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.DefaultTestStoreSpec)
+	}, base.DefaultTestStoreSpec, nil)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -366,7 +366,7 @@ func BenchmarkPebbleMapIteration(b *testing.B) {
 	tempEngine, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.DefaultTestStoreSpec)
+	}, base.DefaultTestStoreSpec, nil)
 	if err != nil {
 		b.Fatal(err)
 	}

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -32,8 +33,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func writeToFile(t *testing.T, fs vfs.FS, filename string, b []byte) {
-	f, err := fs.Create(filename)
+func writeToFile(t *testing.T, vfs vfs.FS, filename string, b []byte) {
+	f, err := vfs.Create(filename, fs.UnspecifiedWriteCategory)
 	require.NoError(t, err)
 	breader := bytes.NewReader(b)
 	_, err = io.Copy(f, breader)
@@ -466,9 +467,9 @@ type loggingFS struct {
 	w io.Writer
 }
 
-func (fs loggingFS) Create(name string) (vfs.File, error) {
+func (fs loggingFS) Create(name string, category vfs.DiskWriteCategory) (vfs.File, error) {
 	fmt.Fprintf(fs.w, "create(%q)\n", name)
-	f, err := fs.FS.Create(name)
+	f, err := fs.FS.Create(name, category)
 	if err != nil {
 		return nil, err
 	}
@@ -508,9 +509,11 @@ func (fs loggingFS) Rename(oldname, newname string) error {
 	return fs.FS.Rename(oldname, newname)
 }
 
-func (fs loggingFS) ReuseForWrite(oldname, newname string) (vfs.File, error) {
+func (fs loggingFS) ReuseForWrite(
+	oldname, newname string, category vfs.DiskWriteCategory,
+) (vfs.File, error) {
 	fmt.Fprintf(fs.w, "reuseForWrite(%q, %q)\n", oldname, newname)
-	f, err := fs.FS.ReuseForWrite(oldname, newname)
+	f, err := fs.FS.ReuseForWrite(oldname, newname, category)
 	if err == nil {
 		f = loggingFile{f, newname, fs.w}
 	}

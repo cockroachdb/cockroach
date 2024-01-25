@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -793,7 +794,7 @@ func ingestViaCopy(
 			return errors.Wrapf(err, "while removing existing file during ingestion of %s", ingestPath)
 		}
 	}
-	if err := kvserverbase.WriteFileSyncing(ctx, ingestPath, sst.Data, eng.Env(), 0600, st, limiter); err != nil {
+	if err := kvserverbase.WriteFileSyncing(ctx, ingestPath, sst.Data, eng.Env(), 0600, st, limiter, fs.PebbleIngestionWriteCategory); err != nil {
 		return errors.Wrapf(err, "while ingesting %s", ingestPath)
 	}
 	if err := eng.IngestLocalFiles(ctx, []string{ingestPath}); err != nil {
