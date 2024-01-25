@@ -280,7 +280,9 @@ func (p *testPlanner) clusterSetupSteps() []testStep {
 			settings:  p.clusterSettings(),
 		}),
 		p.newSingleStep(waitForStableClusterVersionStep{
-			nodes: p.crdbNodes, timeout: p.options.upgradeTimeout,
+			nodes:          p.crdbNodes,
+			timeout:        p.options.upgradeTimeout,
+			desiredVersion: versionToClusterVersion(initialVersion),
 		}),
 	)
 }
@@ -412,8 +414,13 @@ func (p *testPlanner) finalizeUpgradeSteps(
 	if scheduleHooks {
 		mixedVersionStepsDuringMigrations = p.hooks.MixedVersionSteps(p.currentContext, p.isLocal)
 	}
+
 	waitForMigrations := p.newSingleStep(
-		waitForStableClusterVersionStep{nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
+		waitForStableClusterVersionStep{
+			nodes:          p.crdbNodes,
+			timeout:        p.options.upgradeTimeout,
+			desiredVersion: versionToClusterVersion(toVersion),
+		},
 	)
 
 	return append(
@@ -990,4 +997,11 @@ func (u UpgradeStage) String() string {
 	default:
 		return fmt.Sprintf("invalid upgrade stage (%d)", u)
 	}
+}
+
+func versionToClusterVersion(v *clusterupgrade.Version) string {
+	if v.IsCurrent() {
+		return clusterupgrade.CurrentVersionString
+	}
+	return fmt.Sprintf("'%d.%d'", v.Major(), v.Minor())
 }
