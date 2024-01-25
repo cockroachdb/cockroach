@@ -102,7 +102,8 @@ func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Sto
 				if !logcrash.DiagnosticsReportingEnabled.Get(&s.st.SV) || !TelemetryHotRangesStatsEnabled.Get(&s.st.SV) {
 					continue
 				}
-				resp, err := s.sServer.HotRangesV2(ctx, &serverpb.HotRangesRequest{PageSize: ReportTopHottestRanges})
+				resp, err := s.sServer.HotRangesV2(ctx,
+					&serverpb.HotRangesRequest{NodeID: "local", PageSize: ReportTopHottestRanges})
 				if err != nil {
 					log.Warningf(ctx, "failed to get hot ranges: %s", err)
 					continue
