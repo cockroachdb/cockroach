@@ -320,10 +320,10 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 				cache := ds.tc.Server(idx).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
 				tablePrefix := keys.MustAddr(keys.SystemSQLCodec.TablePrefix(tableID))
 				entry := cache.GetCached(ctx, tablePrefix, false /* inverted */)
-				if entry == nil {
+				if !entry.Desc.IsInitialized() {
 					return errors.Newf("no entry found for %s in cache", tbName).Error()
 				}
-				return entry.ClosedTimestampPolicy().String()
+				return entry.ClosedTimestampPolicy.String()
 
 			case "wait-for-zone-config-changes":
 				lookupKey, err := getRangeKeyForInput(t, d, ds.tc)
