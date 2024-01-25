@@ -1250,7 +1250,7 @@ func TestEvalAddSSTable(t *testing.T) {
 							require.Nil(t, result.Replicated.AddSSTable)
 						} else {
 							require.NotNil(t, result.Replicated.AddSSTable)
-							require.NoError(t, fs.WriteFile(engine, "sst", result.Replicated.AddSSTable.Data))
+							require.NoError(t, fs.WriteFile(engine, "sst", result.Replicated.AddSSTable.Data, storage.UnspecifiedWriteCategory))
 							require.NoError(t, engine.IngestLocalFiles(ctx, []string{"sst"}))
 						}
 
@@ -1668,7 +1668,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	_, err := batcheval.EvalAddSSTable(ctx, engine, cArgs, &resp)
 	require.NoError(t, err)
 
-	require.NoError(t, fs.WriteFile(engine, "sst", sst))
+	require.NoError(t, fs.WriteFile(engine, "sst", sst, storage.UnspecifiedWriteCategory))
 	require.NoError(t, engine.IngestLocalFiles(ctx, []string{"sst"}))
 
 	statsEvaled := statsBefore

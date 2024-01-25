@@ -1219,6 +1219,7 @@ type Metrics struct {
 	// distinguished in the pebble logs.
 	WriteStallCount    int64
 	WriteStallDuration time.Duration
+	DiskWriteStats     []vfs.DiskWriteStatsAggregate
 }
 
 // AggregatedIteratorStats holds cumulative stats, collected and summed over all
@@ -2214,3 +2215,12 @@ func getCategoryAndQoS(c ReadCategory) sstable.CategoryAndQoS {
 	}
 	return categoryAndQoS
 }
+
+const (
+	UnspecifiedWriteCategory        = vfs.WriteCategoryUnspecified
+	RaftSnapshotWriteCategory       = "raft-snapshot"
+	SQLColumnSpillWriteCategory     = "sql-col-spill"
+	PebbleIngestionWriteCategory    = "pebble-ingestion"
+	CRDBLogWriteCategory            = "crdb-log"
+	EncryptionRegistryWriteCategory = "encryption-registry"
+)

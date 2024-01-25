@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -116,7 +117,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		if err := eng.MkdirAll(dir, os.ModePerm); err != nil {
 			t.Fatal(err)
 		}
-		if err := fs.WriteFile(eng, filepath.Join(dir, "i1000000.t100000"), []byte("foo")); err != nil {
+		if err := fs.WriteFile(eng, filepath.Join(dir, "i1000000.t100000"), []byte("foo"), storage.UnspecifiedWriteCategory); err != nil {
 			t.Fatal(err)
 		}
 

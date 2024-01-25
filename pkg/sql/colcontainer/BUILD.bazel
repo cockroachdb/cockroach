@@ -13,6 +13,7 @@ go_library(
         "//pkg/col/colserde",
         "//pkg/sql/colexecerror",
         "//pkg/sql/types",
+        "//pkg/storage",
         "//pkg/storage/fs",
         "//pkg/util/cancelchecker",
         "//pkg/util/metric",

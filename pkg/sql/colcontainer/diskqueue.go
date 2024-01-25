@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -494,7 +495,7 @@ func (d *diskQueue) Close(ctx context.Context) error {
 // to write to.
 func (d *diskQueue) rotateFile(ctx context.Context) error {
 	fName := filepath.Join(d.cfg.GetPather.GetPath(ctx), d.dirName, strconv.Itoa(d.seqNo))
-	f, err := fs.CreateWithSync(d.cfg.FS, fName, bytesPerSync)
+	f, err := fs.CreateWithSync(d.cfg.FS, fName, bytesPerSync, storage.SQLColumnSpillWriteCategory)
 	if err != nil {
 		return err
 	}

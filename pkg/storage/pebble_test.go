@@ -580,11 +580,11 @@ type errorFS struct {
 	errorCount int32
 }
 
-func (fs *errorFS) Create(name string) (vfs.File, error) {
+func (fs *errorFS) Create(name string, category vfs.DiskWriteCategory) (vfs.File, error) {
 	if filepath.Ext(name) == ".sst" && atomic.AddInt32(&fs.errorCount, -1) >= 0 {
 		return nil, errors.New("background error")
 	}
-	return fs.FS.Create(name)
+	return fs.FS.Create(name, category)
 }
 
 func TestPebbleMVCCTimeIntervalCollector(t *testing.T) {
@@ -1238,7 +1238,7 @@ func TestIncompatibleVersion(t *testing.T) {
 	version := roachpb.Version{Major: 21, Minor: 1}
 	b, err := protoutil.Marshal(&version)
 	require.NoError(t, err)
-	require.NoError(t, fs.SafeWriteToFile(loc.fs, loc.dir, MinVersionFilename, b))
+	require.NoError(t, fs.SafeWriteToFile(loc.fs, loc.dir, MinVersionFilename, b, UnspecifiedWriteCategory))
 
 	_, err = Open(ctx, loc, cluster.MakeTestingClusterSettings())
 	require.Error(t, err)
@@ -1367,7 +1367,7 @@ func TestConvertFilesToBatchAndCommit(t *testing.T) {
 	}
 	// Ingest into [2, 6) with 2 files.
 	fileName1 := "file1"
-	f1, err := mem.Create(fileName1)
+	f1, err := mem.Create(fileName1, UnspecifiedWriteCategory)
 	require.NoError(t, err)
 	w1 := MakeIngestionSSTWriter(ctx, st, objstorageprovider.NewFileWritable(f1))
 	startKey := key(2)
@@ -1384,7 +1384,7 @@ func TestConvertFilesToBatchAndCommit(t *testing.T) {
 	w1.Close()
 
 	fileName2 := "file2"
-	f2, err := mem.Create(fileName2)
+	f2, err := mem.Create(fileName2, UnspecifiedWriteCategory)
 	require.NoError(t, err)
 	w2 := MakeIngestionSSTWriter(ctx, st, objstorageprovider.NewFileWritable(f2))
 	require.NoError(t, w2.ClearRawRange(startKey, endKey, true, true))

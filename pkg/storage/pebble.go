@@ -770,7 +770,9 @@ func shortAttributeExtractorForValues(
 // wrapFilesystemMiddleware wraps the Option's vfs.FS with disk-health checking
 // and ENOSPC detection. Returns the new FS and a Closer that should be invoked
 // when the filesystem will no longer be used.
-func wrapFilesystemMiddleware(opts *pebble.Options) (vfs.FS, io.Closer) {
+func wrapFilesystemMiddleware(
+	opts *pebble.Options, statsCollector *vfs.DiskWriteStatsCollector,
+) (vfs.FS, io.Closer) {
 	// Set disk-health check interval to min(5s, maxSyncDurationDefault). This
 	// is mostly to ease testing; the default of 5s is too infrequent to test
 	// conveniently. See the disk-stalled roachtest for an example of how this
@@ -781,8 +783,8 @@ func wrapFilesystemMiddleware(opts *pebble.Options) (vfs.FS, io.Closer) {
 	}
 	// Instantiate a file system with disk health checking enabled. This FS
 	// wraps the filesystem with a layer that times all write-oriented
-	// operations.
-	fs, closer := vfs.WithDiskHealthChecks(opts.FS, diskHealthCheckInterval,
+	// operations and collects disk write stats.
+	fs, closer := vfs.WithDiskHealthChecks(opts.FS, diskHealthCheckInterval, statsCollector,
 		func(info vfs.DiskSlowInfo) {
 			opts.EventListener.DiskSlow(pebble.DiskSlowInfo{
 				Path:      info.Path,
@@ -843,6 +845,8 @@ type PebbleConfig struct {
 
 	// onClose is a slice of functions to be invoked before the engine is closed.
 	onClose []func(*Pebble)
+
+	DiskWriteStatsCollector *vfs.DiskWriteStatsCollector
 }
 
 // EncryptionStatsHandler provides encryption related stats.
@@ -909,6 +913,7 @@ type Pebble struct {
 		syncutil.Mutex
 		AggregatedBatchCommitStats
 	}
+	diskWriteStatsCollector *vfs.DiskWriteStatsCollector
 	// Relevant options copied over from pebble.Options.
 	unencryptedFS vfs.FS
 	logCtx        context.Context
@@ -1131,7 +1136,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 
 	// Wrap the FS with disk health-checking and ENOSPC-detection.
 	var filesystemCloser io.Closer
-	opts.FS, filesystemCloser = wrapFilesystemMiddleware(opts)
+	opts.FS, filesystemCloser = wrapFilesystemMiddleware(opts, cfg.DiskWriteStatsCollector)
 	defer func() {
 		if err != nil {
 			filesystemCloser.Close()
@@ -1245,27 +1250,28 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	storeProps := computeStoreProperties(ctx, cfg.Dir, opts.ReadOnly, encryptionEnv != nil /* encryptionEnabled */)
 
 	p = &Pebble{
-		FS:                opts.FS,
-		readOnly:          opts.ReadOnly,
-		path:              cfg.Dir,
-		auxDir:            auxDir,
-		ballastPath:       ballastPath,
-		ballastSize:       cfg.BallastSize,
-		maxSize:           cfg.MaxSize,
-		attrs:             cfg.Attrs,
-		properties:        storeProps,
-		settings:          cfg.Settings,
-		encryption:        encryptionEnv,
-		fileLock:          opts.Lock,
-		fileRegistry:      fileRegistry,
-		unencryptedFS:     unencryptedFS,
-		logger:            opts.LoggerAndTracer,
-		logCtx:            logCtx,
-		storeIDPebbleLog:  storeIDContainer,
-		closer:            filesystemCloser,
-		onClose:           cfg.onClose,
-		replayer:          replay.NewWorkloadCollector(cfg.StorageConfig.Dir),
-		singleDelLogEvery: log.Every(5 * time.Minute),
+		FS:                      opts.FS,
+		readOnly:                opts.ReadOnly,
+		path:                    cfg.Dir,
+		auxDir:                  auxDir,
+		ballastPath:             ballastPath,
+		ballastSize:             cfg.BallastSize,
+		maxSize:                 cfg.MaxSize,
+		attrs:                   cfg.Attrs,
+		properties:              storeProps,
+		settings:                cfg.Settings,
+		encryption:              encryptionEnv,
+		fileLock:                opts.Lock,
+		fileRegistry:            fileRegistry,
+		unencryptedFS:           unencryptedFS,
+		logger:                  opts.LoggerAndTracer,
+		logCtx:                  logCtx,
+		storeIDPebbleLog:        storeIDContainer,
+		closer:                  filesystemCloser,
+		onClose:                 cfg.onClose,
+		replayer:                replay.NewWorkloadCollector(cfg.StorageConfig.Dir),
+		singleDelLogEvery:       log.Every(5 * time.Minute),
+		diskWriteStatsCollector: cfg.DiskWriteStatsCollector,
 	}
 	// In test builds, add a layer of VFS middleware that ensures users of an
 	// Engine don't try to use the filesystem after the Engine has been closed.
@@ -1493,7 +1499,7 @@ func (p *Pebble) writePreventStartupFile(ctx context.Context, corruptionError er
   A file preventing this node from restarting was placed at:
   %s`, corruptionError.Error(), path)
 
-	if err := fs.WriteFile(p.unencryptedFS, path, []byte(preventStartupMsg)); err != nil {
+	if err := fs.WriteFile(p.unencryptedFS, path, []byte(preventStartupMsg), UnspecifiedWriteCategory); err != nil {
 		log.Warningf(ctx, "%v", err)
 	}
 }
@@ -2123,6 +2129,7 @@ func (p *Pebble) GetMetrics() Metrics {
 	p.batchCommitStats.Lock()
 	m.BatchCommitStats = p.batchCommitStats.AggregatedBatchCommitStats
 	p.batchCommitStats.Unlock()
+	m.DiskWriteStats = p.diskWriteStatsCollector.GetStats()
 	return m
 }
 
@@ -2451,6 +2458,7 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 		if err := fs.SafeWriteToFile(
 			p.FS, dir, p.FS.PathJoin(dir, "checkpoint.txt"),
 			checkpointSpansNote(spans),
+			UnspecifiedWriteCategory,
 		); err != nil {
 			return err
 		}
@@ -3286,9 +3294,9 @@ func (f *noUseAfterCloseFile) Fd() uintptr { return f.file.Fd() }
 
 var _ vfs.FS = &noUseAfterClose{}
 
-func (fs *noUseAfterClose) Create(name string) (vfs.File, error) {
+func (fs *noUseAfterClose) Create(name string, category vfs.DiskWriteCategory) (vfs.File, error) {
 	fs.ensureStillOpen()
-	return fs.fs.Create(name)
+	return fs.fs.Create(name, category)
 }
 
 func (fs *noUseAfterClose) Link(oldname, newname string) error {
@@ -3306,9 +3314,11 @@ func (fs *noUseAfterClose) Open(name string, opts ...vfs.OpenOption) (vfs.File, 
 	return &noUseAfterCloseFile{fs: fs, file: f}, nil
 }
 
-func (fs *noUseAfterClose) OpenReadWrite(name string, opts ...vfs.OpenOption) (vfs.File, error) {
+func (fs *noUseAfterClose) OpenReadWrite(
+	name string, category vfs.DiskWriteCategory, opts ...vfs.OpenOption,
+) (vfs.File, error) {
 	fs.ensureStillOpen()
-	f, err := fs.fs.OpenReadWrite(name, opts...)
+	f, err := fs.fs.OpenReadWrite(name, category, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -3341,9 +3351,11 @@ func (fs *noUseAfterClose) Rename(oldname, newname string) error {
 	return fs.fs.Rename(oldname, newname)
 }
 
-func (fs *noUseAfterClose) ReuseForWrite(oldname, newname string) (vfs.File, error) {
+func (fs *noUseAfterClose) ReuseForWrite(
+	oldname, newname string, category vfs.DiskWriteCategory,
+) (vfs.File, error) {
 	fs.ensureStillOpen()
-	f, err := fs.fs.ReuseForWrite(oldname, newname)
+	f, err := fs.fs.ReuseForWrite(oldname, newname, category)
 	if err != nil {
 		return nil, err
 	}

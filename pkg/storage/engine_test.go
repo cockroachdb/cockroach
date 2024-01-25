@@ -1286,9 +1286,9 @@ func TestEngineFS(t *testing.T) {
 		)
 		switch s[0] {
 		case "create":
-			g, err = e.Create(s[1])
+			g, err = e.Create(s[1], UnspecifiedWriteCategory)
 		case "create-with-sync":
-			g, err = fs.CreateWithSync(e, s[1], 1)
+			g, err = fs.CreateWithSync(e, s[1], 1, UnspecifiedWriteCategory)
 		case "link":
 			err = e.Link(s[1], s[2])
 		case "open":
@@ -1393,7 +1393,7 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 
 	fname := filepath.Join(dir, "random.file")
 	data := "random data"
-	if f, err := db.Create(fname); err != nil {
+	if f, err := db.Create(fname, UnspecifiedWriteCategory); err != nil {
 		t.Fatalf("unable to open file with filename %s, got err %v", fname, err)
 	} else {
 		// Write data to file so we can read it later.
@@ -1478,13 +1478,13 @@ func TestFS(t *testing.T) {
 			require.NoError(t, err)
 
 			// Create a file at a/b/c/foo.
-			f, err := fs.Create(path("a/b/c/foo"))
+			f, err := fs.Create(path("a/b/c/foo"), UnspecifiedWriteCategory)
 			require.NoError(t, err)
 			require.NoError(t, f.Close())
 			expectLS(path("a/b/c"), []string{"foo"})
 
 			// Create a file at a/b/c/bar.
-			f, err = fs.Create(path("a/b/c/bar"))
+			f, err = fs.Create(path("a/b/c/bar"), UnspecifiedWriteCategory)
 			require.NoError(t, err)
 			require.NoError(t, f.Close())
 			expectLS(path("a/b/c"), []string{"bar", "foo"})

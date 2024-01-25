@@ -15,6 +15,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ func TestSafeWriteToFile(t *testing.T) {
 
 	require.NoError(t, mem.MkdirAll("foo", os.ModePerm))
 	syncDir("")
-	f, err := mem.Create("foo/bar")
+	f, err := mem.Create("foo/bar", storage.UnspecifiedWriteCategory)
 	require.NoError(t, err)
 	_, err = io.WriteString(f, "Hello world")
 	require.NoError(t, err)
@@ -57,7 +58,7 @@ func TestSafeWriteToFile(t *testing.T) {
 
 	// Use SafeWriteToFile to atomically, durably change the contents of the
 	// file.
-	require.NoError(t, SafeWriteToFile(mem, "foo", "foo/bar", []byte("Hello everyone")))
+	require.NoError(t, SafeWriteToFile(mem, "foo", "foo/bar", []byte("Hello everyone"), storage.UnspecifiedWriteCategory))
 
 	// Discard any unsynced writes.
 	mem.ResetToSyncedState()

@@ -211,6 +211,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 			Settings: st,
 		},
 		base.DefaultTestStoreSpec,
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -421,6 +422,7 @@ func TestDiskBackedRowContainerDeDuping(t *testing.T) {
 			Settings: st,
 		},
 		base.DefaultTestStoreSpec,
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -548,6 +550,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			Settings: st,
 		},
 		base.DefaultTestStoreSpec,
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1023,6 +1026,7 @@ func BenchmarkDiskBackedIndexedRowContainer(b *testing.B) {
 			Settings: st,
 		},
 		base.DefaultTestStoreSpec,
+		nil,
 	)
 	if err != nil {
 		b.Fatal(err)
