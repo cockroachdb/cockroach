@@ -195,10 +195,6 @@ func (s *schemaChange) Ops(
 	if err := s.setClusterSettings(ctx, pool); err != nil {
 		return workload.QueryLoad{}, err
 	}
-	seqNum, err := s.initSeqNum(ctx, pool)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
 	stdoutLog := makeAtomicLog(os.Stdout)
 	rng, seed := randutil.NewTestRand()
 	stdoutLog.printLn(fmt.Sprintf("using random seed: %d", seed))
@@ -248,7 +244,16 @@ func (s *schemaChange) Ops(
 		// different seed for each worker so that each one generates different
 		// operations.
 		workerRng := randutil.NewTestRandWithSeed(seed + int64(i))
+
+		// Each worker needs its own sequence number generator so that the names of
+		// generated objects are deterministic across runs.
+		seqNum, err := s.initSeqNum(ctx, pool, i)
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+
 		opGeneratorParams := operationGeneratorParams{
+			workerID:           i,
 			seqNum:             seqNum,
 			errorRate:          s.errorRate,
 			enumPct:            s.enumPct,
@@ -304,11 +309,9 @@ func (s *schemaChange) setClusterSettings(ctx context.Context, pool *workload.Mu
 // It's not obvious how the workloads will behave when accessing the same
 // cluster.
 func (s *schemaChange) initSeqNum(
-	ctx context.Context, pool *workload.MultiConnPool,
-) (*atomic.Int64, error) {
-	var seqNum atomic.Int64
-
-	const q = `
+	ctx context.Context, pool *workload.MultiConnPool, workerID int,
+) (int, error) {
+	var q = fmt.Sprintf(`
 SELECT max(regexp_extract(name, '[0-9]+$')::INT8)
   FROM (
     SELECT name
@@ -318,21 +321,23 @@ SELECT max(regexp_extract(name, '[0-9]+$')::INT8)
 						 (SELECT name FROM [SHOW ENUMS]) UNION
 	           (SELECT schema_name FROM [SHOW SCHEMAS]) UNION
 						 (SELECT column_name FROM information_schema.columns) UNION
-						 (SELECT index_name FROM information_schema.statistics)
+						 (SELECT index_name FROM information_schema.statistics) UNION
+						 (SELECT function_name FROM [SHOW FUNCTIONS])
            ) AS obj (name)
        )
- WHERE name ~ '^(table|view|seq|enum|schema)[0-9]+$'
-    OR name ~ '^(col|index)[0-9]+_[0-9]+$';
-`
-	var max gosql.NullInt64
-	if err := pool.Get().QueryRow(ctx, q).Scan(&max); err != nil {
-		return nil, err
-	}
-	if max.Valid {
-		seqNum.Store(max.Int64 + 1)
+ WHERE name ~ '^(table|view|seq|enum|schema|udf)_w%[1]d_[0-9]+$'
+    OR name ~ '^(col|index)[0-9]+_w%[1]d_[0-9]+$';
+`, workerID)
+	var maxID gosql.NullInt64
+	if err := pool.Get().QueryRow(ctx, q).Scan(&maxID); err != nil {
+		return 0, err
 	}
 
-	return &seqNum, nil
+	var seqNum int
+	if maxID.Valid {
+		seqNum = int(maxID.Int64 + 1)
+	}
+	return seqNum, nil
 }
 
 type schemaChangeWorker struct {

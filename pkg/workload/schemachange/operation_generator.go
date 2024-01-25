@@ -16,9 +16,9 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"regexp"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"text/template"
 	"time"
 
@@ -41,10 +41,11 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-// seqNum may be shared across multiple instances of this, so it should only
-// be change atomically.
+// All of the fields of operationGeneratorParams should only be accessed by
+// one goroutine.
 type operationGeneratorParams struct {
-	seqNum             *atomic.Int64
+	workerID           int
+	seqNum             int
 	errorRate          int
 	enumPct            int
 	rng                *rand.Rand
@@ -672,7 +673,7 @@ func (og *operationGenerator) alterDatabaseAddSuperRegion(
 			return PickAtLeast(og.params.rng, 1, nonSuperRegionRegions)
 		},
 		"UniqueName": func() *tree.Name {
-			name := tree.Name(fmt.Sprintf("super_region_%d", og.newUniqueSeqNum()))
+			name := tree.Name(fmt.Sprintf("super_region_%s", og.newUniqueSeqNumSuffix()))
 			return &name
 		},
 		"RegionsNotPartOfDatabase": func() (Values, error) {
@@ -1191,13 +1192,16 @@ func (og *operationGenerator) createSequence(ctx context.Context, tx pgx.Tx) (*o
 	return stmt, nil
 }
 
+var trailingDigits = regexp.MustCompile(`\d+$`)
+
 func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
 	tableName, err := og.randTable(ctx, tx, og.pctExisting(false), "")
 	if err != nil {
 		return nil, err
 	}
 
-	tableIdx, err := strconv.Atoi(strings.TrimPrefix(tableName.Table(), "table"))
+	tableIdxStr := trailingDigits.FindString(tableName.Table())
+	tableIdx, err := strconv.Atoi(tableIdxStr)
 	if err != nil {
 		return nil, err
 	}
@@ -1214,7 +1218,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	}
 	stmt := randgen.RandCreateTableWithColumnIndexNumberGenerator(
 		og.params.rng, "table", tableIdx, databaseHasMultiRegion,
-		!partiallyVisibleIndexNotSupported, og.newUniqueSeqNum,
+		!partiallyVisibleIndexNotSupported, og.newUniqueSeqNumSuffix,
 	)
 	stmt.Table = *tableName
 	stmt.IfNotExists = og.randIntn(2) == 0
@@ -3247,8 +3251,8 @@ func (og *operationGenerator) randColumn(
 	if og.randIntn(100) >= pctExisting {
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
-		return fmt.Sprintf("col%s_%d",
-			strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNum()), nil
+		return fmt.Sprintf("col%s_%s",
+			strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNumSuffix()), nil
 	}
 	q := fmt.Sprintf(`
   SELECT column_name
@@ -3274,8 +3278,8 @@ func (og *operationGenerator) randColumnWithMeta(
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
 		return column{
-			name: fmt.Sprintf("col%s_%d",
-				strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNum()),
+			name: fmt.Sprintf("col%s_%s",
+				strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNumSuffix()),
 		}, nil
 	}
 	q := fmt.Sprintf(`
@@ -3452,8 +3456,8 @@ func (og *operationGenerator) randIndex(
 	if og.randIntn(100) >= pctExisting {
 		// We make a unique name for all indices by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
-		return fmt.Sprintf("index%s_%d",
-			strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNum()), nil
+		return fmt.Sprintf("index%s_%s",
+			strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNumSuffix()), nil
 	}
 	q := fmt.Sprintf(`
   SELECT index_name
@@ -3479,7 +3483,7 @@ func (og *operationGenerator) randSequence(
 			treeSeqName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 				SchemaName:     tree.Name(desiredSchema),
 				ExplicitSchema: true,
-			}, tree.Name(fmt.Sprintf("seq%d", og.newUniqueSeqNum())))
+			}, tree.Name(fmt.Sprintf("seq_%s", og.newUniqueSeqNumSuffix())))
 			return &treeSeqName, nil
 		}
 		q := fmt.Sprintf(`
@@ -3515,7 +3519,7 @@ func (og *operationGenerator) randSequence(
 		treeSeqName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 			SchemaName:     tree.Name(randSchema),
 			ExplicitSchema: true,
-		}, tree.Name(fmt.Sprintf("seq%d", og.newUniqueSeqNum())))
+		}, tree.Name(fmt.Sprintf("seq_%s", og.newUniqueSeqNumSuffix())))
 		return &treeSeqName, nil
 	}
 
@@ -3552,7 +3556,7 @@ func (og *operationGenerator) randEnum(
 		if err != nil {
 			return nil, false, err
 		}
-		typeName := tree.MakeSchemaQualifiedTypeName(randSchema, fmt.Sprintf("enum%d", og.newUniqueSeqNum()))
+		typeName := tree.MakeSchemaQualifiedTypeName(randSchema, fmt.Sprintf("enum_%s", og.newUniqueSeqNumSuffix()))
 		return &typeName, false, nil
 	}
 	const q = `
@@ -3581,7 +3585,7 @@ func (og *operationGenerator) randTable(
 			treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 				SchemaName:     tree.Name(desiredSchema),
 				ExplicitSchema: true,
-			}, tree.Name(fmt.Sprintf("table%d", og.newUniqueSeqNum())))
+			}, tree.Name(fmt.Sprintf("table_%s", og.newUniqueSeqNumSuffix())))
 			return &treeTableName, nil
 		}
 		q := fmt.Sprintf(`
@@ -3618,7 +3622,7 @@ func (og *operationGenerator) randTable(
 		treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 			SchemaName:     tree.Name(randSchema),
 			ExplicitSchema: true,
-		}, tree.Name(fmt.Sprintf("table%d", og.newUniqueSeqNum())))
+		}, tree.Name(fmt.Sprintf("table_%s", og.newUniqueSeqNumSuffix())))
 		return &treeTableName, nil
 	}
 
@@ -3651,7 +3655,7 @@ func (og *operationGenerator) randView(
 			treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 				SchemaName:     tree.Name(desiredSchema),
 				ExplicitSchema: true,
-			}, tree.Name(fmt.Sprintf("view%d", og.newUniqueSeqNum())))
+			}, tree.Name(fmt.Sprintf("view_%s", og.newUniqueSeqNumSuffix())))
 			return &treeViewName, nil
 		}
 
@@ -3687,7 +3691,7 @@ func (og *operationGenerator) randView(
 		treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 			SchemaName:     tree.Name(randSchema),
 			ExplicitSchema: true,
-		}, tree.Name(fmt.Sprintf("view%d", og.newUniqueSeqNum())))
+		}, tree.Name(fmt.Sprintf("view_%s", og.newUniqueSeqNumSuffix())))
 		return &treeViewName, nil
 	}
 	const q = `
@@ -3801,7 +3805,7 @@ func (og *operationGenerator) randSchema(
 	ctx context.Context, tx pgx.Tx, pctExisting int,
 ) (string, error) {
 	if og.randIntn(100) >= pctExisting {
-		return fmt.Sprintf("schema%d", og.newUniqueSeqNum()), nil
+		return fmt.Sprintf("schema_%s", og.newUniqueSeqNumSuffix()), nil
 	}
 	const q = `
   SELECT schema_name
@@ -3901,7 +3905,7 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 
 	placeholderMap := template.FuncMap{
 		"UniqueName": func() *tree.Name {
-			name := tree.Name(fmt.Sprintf("udf_%d", og.newUniqueSeqNum()))
+			name := tree.Name(fmt.Sprintf("udf_%s", og.newUniqueSeqNumSuffix()))
 			return &name
 		},
 		"DroppingEnum": func() (string, error) {
@@ -4048,7 +4052,7 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 		{pgcode.SuccessfulCompletion, `ALTER FUNCTION { (ExistingFunction).qualified_name } RENAME TO { UniqueName }`},
 	}, template.FuncMap{
 		"UniqueName": func() *tree.Name {
-			name := tree.Name(fmt.Sprintf("udf_%d", og.newUniqueSeqNum()))
+			name := tree.Name(fmt.Sprintf("udf_%s", og.newUniqueSeqNumSuffix()))
 			return &name
 		},
 		"ExistingFunction": func() (map[string]any, error) {
@@ -4275,8 +4279,9 @@ func (og *operationGenerator) randIntn(topBound int) int {
 	return og.params.rng.Intn(topBound)
 }
 
-func (og *operationGenerator) newUniqueSeqNum() int64 {
-	return og.params.seqNum.Add(1)
+func (og *operationGenerator) newUniqueSeqNumSuffix() string {
+	og.params.seqNum++
+	return fmt.Sprintf("w%d_%d", og.params.workerID, og.params.seqNum)
 }
 
 // typeFromTypeName resolves a type string to a types.T struct so that it can be

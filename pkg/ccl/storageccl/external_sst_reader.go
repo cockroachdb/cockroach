@@ -168,10 +168,7 @@ func ExternalSSTReader(
 		}
 		readerLevels = append(readerLevels, []sstable.ReadableFile{reader})
 	}
-	// NB: It's okay to pass forwardOnly=true, because this function returns a
-	// SimpleMVCCIterator which does not provide an interface for reverse
-	// iteration.
-	return storage.NewSSTIterator(readerLevels, iterOpts, true /* forwardOnly */)
+	return storage.NewSSTIterator(readerLevels, iterOpts)
 }
 
 type sstReader struct {

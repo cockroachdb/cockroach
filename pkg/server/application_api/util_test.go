@@ -28,5 +28,5 @@ func generateRandomName() string {
 		rand,
 		"a b%s-c.d",
 	)
-	return ng.GenerateOne(42)
+	return ng.GenerateOne("42")
 }

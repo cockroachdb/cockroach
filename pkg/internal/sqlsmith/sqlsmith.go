@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"net/http/httptest"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -221,7 +222,7 @@ func (s *Smither) name(prefix string) tree.Name {
 		s.nameGens[prefix] = g
 	}
 	g.count++
-	return tree.Name(g.g.GenerateOne(g.count))
+	return tree.Name(g.g.GenerateOne(strconv.Itoa(g.count)))
 }
 
 // SmitherOption is an option for the Smither client.
