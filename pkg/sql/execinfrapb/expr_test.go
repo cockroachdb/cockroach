@@ -60,6 +60,19 @@ func TestProcessExpression(t *testing.T) {
 	if str != expectedStr {
 		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
 	}
+
+	// We can process a new expression with the same tree.IndexedVarHelper.
+	e = Expression{Expr: "@4 - @1"}
+	expr, err = processExpression(context.Background(), e, &evalCtx, &semaCtx, &h)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	str = expr.String()
+	expectedStr = "var3 - var0"
+	if str != expectedStr {
+		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
+	}
 }
 
 // Test that processExpression evaluates constant exprs into datums.

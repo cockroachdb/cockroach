@@ -91,9 +91,7 @@ func registerAsyncpg(r registry.Registry) {
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get",
-			`
-				sudo add-apt-repository ppa:deadsnakes/ppa &&
-				sudo apt-get -qq update`,
+			`sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -104,15 +102,14 @@ func registerAsyncpg(r registry.Registry) {
 			c,
 			node,
 			"install python and pip",
-			`sudo apt-get -qq install python3.8 python3-pip libpq-dev python3.8-dev python3-virtualenv python3.8-distutils python3-apt python3-setuptools python-setuptools`,
+			`sudo apt-get -qq install python3.10 python3-pip libpq-dev python3.10-dev python3-virtualenv python3.10-distutils python3-apt python3-setuptools python-setuptools`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
-			ctx, t, c, node, "set python3.8 as default", `
-    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.5 1
-    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 2
+			ctx, t, c, node, "set python3.10 as default", `
+    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
     		sudo update-alternatives --config python3`,
 		); err != nil {
 			t.Fatal(err)
@@ -120,7 +117,7 @@ func registerAsyncpg(r registry.Registry) {
 
 		if err := repeatRunE(
 			ctx, t, c, node, "install pip",
-			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.8`,
+			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.10`,
 		); err != nil {
 			t.Fatal(err)
 		}

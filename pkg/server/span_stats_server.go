@@ -203,22 +203,6 @@ func (s *systemStatusServer) statsForSpan(
 	ctx, sp := tracing.ChildSpan(ctx, "systemStatusServer.statsForSpan")
 	defer sp.Finish()
 
-	var descriptors []roachpb.RangeDescriptor
-	scanner := rangedesc.NewScanner(s.db)
-	pageSize := int(RangeDescPageSize.Get(&s.st.SV))
-	err := scanner.Scan(ctx, pageSize, func() {
-		// If the underlying txn fails and needs to be retried,
-		// clear the descriptors we've collected so far.
-		descriptors = nil
-	}, span, func(scanned ...roachpb.RangeDescriptor) error {
-		descriptors = append(descriptors, scanned...)
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
 	spanStats := &roachpb.SpanStats{}
 	rSpan, err := keys.SpanAddr(span)
 	if err != nil {
@@ -243,6 +227,22 @@ func (s *systemStatusServer) statsForSpan(
 
 	if skipMVCCStats {
 		return spanStats, nil
+	}
+
+	var descriptors []roachpb.RangeDescriptor
+	scanner := rangedesc.NewScanner(s.db)
+	pageSize := int(RangeDescPageSize.Get(&s.st.SV))
+	err = scanner.Scan(ctx, pageSize, func() {
+		// If the underlying txn fails and needs to be retried,
+		// clear the descriptors we've collected so far.
+		descriptors = nil
+	}, span, func(scanned ...roachpb.RangeDescriptor) error {
+		descriptors = append(descriptors, scanned...)
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
 	var fullyContainedKeysBatch []roachpb.Key
