@@ -1219,7 +1219,7 @@ func TestRangeCacheClearOlderOverlapping(t *testing.T) {
 			if len(all) != 0 {
 				allDescs = make([]roachpb.RangeDescriptor, len(all))
 				for i, e := range all {
-					allDescs[i] = e.desc
+					allDescs[i] = e.Desc
 				}
 			}
 			var newerDesc roachpb.RangeDescriptor
@@ -1877,8 +1877,8 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 					ctx, roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: roachpb.RKeyMax},
 				)
 				require.Equal(t, 1, len(entries))
-				require.Equal(t, incompatibleDescriptor, entries[0].desc)
-				require.Equal(t, l, entries[0].lease)
+				require.Equal(t, incompatibleDescriptor, entries[0].Desc)
+				require.Equal(t, l, entries[0].Lease)
 			},
 		},
 		{
@@ -1911,8 +1911,8 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 					ctx, roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: roachpb.RKeyMax},
 				)
 				require.Equal(t, 1, len(entries))
-				require.Equal(t, desc2, entries[0].desc)
-				require.Equal(t, l, entries[0].lease)
+				require.Equal(t, desc2, entries[0].Desc)
+				require.Equal(t, l, entries[0].Lease)
 			},
 		},
 		{
