@@ -34,6 +34,12 @@ type testResultWithMetadata struct {
 	testResult          *bes.TestResult
 }
 
+type buildActionWithDownloadUris struct {
+	exitCode             int32
+	stdoutUri, stderrUri string
+	failureDetail        string
+}
+
 type TestResultWithXml struct {
 	Label               string
 	Run, Shard, Attempt int32
@@ -42,13 +48,23 @@ type TestResultWithXml struct {
 	Err                 error
 }
 
+type BuildAction struct {
+	Label         string
+	ExitCode      int32
+	Stdout        string
+	Stderr        string
+	Errs          []error
+	FailureDetail string
+}
+
 type InvocationInfo struct {
-	InvocationId      string
-	StartedTimeMillis int64
-	FinishTimeMillis  int64
-	ExitCode          int32
-	ExitCodeName      string
-	TestResults       map[string][]*TestResultWithXml
+	InvocationId       string
+	StartedTimeMillis  int64
+	FinishTimeMillis   int64
+	ExitCode           int32
+	ExitCodeName       string
+	TestResults        map[string][]*TestResultWithXml
+	FailedBuildActions map[string][]*BuildAction
 }
 
 type JsonReport struct {
@@ -84,7 +100,7 @@ func getHttpClient(certFile, keyFile string) (*http.Client, error) {
 	return httpClient, nil
 }
 
-func downloadTestXml(client *http.Client, uri string) (string, error) {
+func downloadFile(client *http.Client, uri string) (string, error) {
 	url := strings.ReplaceAll(uri, "bytestream://", "https://")
 	url = strings.ReplaceAll(url, "/blobs/", "/api/v0/blob/")
 	resp, err := client.Get(url)
@@ -92,43 +108,82 @@ func downloadTestXml(client *http.Client, uri string) (string, error) {
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	xml, err := io.ReadAll(resp.Body)
+	contents, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
-	return string(xml), nil
+	return string(contents), nil
 }
 
-func fetchTestXml(
+func fetchTestXmlForTest(
 	httpClient *http.Client,
 	label string,
-	testResult testResultWithMetadata,
+	testResult *testResultWithMetadata,
 	ch chan *TestResultWithXml,
 	wg *sync.WaitGroup,
 ) {
 	defer wg.Done()
+	out := TestResultWithXml{
+		Label:      label,
+		Run:        testResult.run,
+		Shard:      testResult.shard,
+		Attempt:    testResult.attempt,
+		TestResult: testResult.testResult,
+	}
+	if testResult.testResult == nil {
+		ch <- &out
+		return
+	}
 	for _, output := range testResult.testResult.TestActionOutput {
 		if output.Name == "test.xml" {
-			xml, err := downloadTestXml(httpClient, output.GetUri())
-			ch <- &TestResultWithXml{
-				Label:      label,
-				Run:        testResult.run,
-				Shard:      testResult.shard,
-				Attempt:    testResult.attempt,
-				TestXml:    xml,
-				Err:        err,
-				TestResult: testResult.testResult,
-			}
+			xml, err := downloadFile(httpClient, output.GetUri())
+			out.TestXml = xml
+			out.Err = err
+			ch <- &out
+			break
 		}
 	}
 }
 
-// LoadTestResults parses the test results out of the given event stream file, returning a
-// map of test results keyed by label.
-// Note the TestResultWithXml struct contains an Err field. This is the error
-// (if any) from fetching the test.xml for this test run. This must be checked
-// *in addition to* the err return value from the function.
-func LoadTestResults(
+func fetchStdoutStderrForBuildAction(
+	httpClient *http.Client,
+	label string,
+	action *buildActionWithDownloadUris,
+	ch chan *BuildAction,
+	wg *sync.WaitGroup,
+) {
+	defer wg.Done()
+	var err error
+	var stdout, stderr string
+	errs := make([]error, 0, 2)
+	if action.stdoutUri != "" {
+		stdout, err = downloadFile(httpClient, action.stdoutUri)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if action.stderrUri != "" {
+		stderr, err = downloadFile(httpClient, action.stderrUri)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	ch <- &BuildAction{
+		Label:         label,
+		ExitCode:      action.exitCode,
+		FailureDetail: action.failureDetail,
+		Stdout:        stdout,
+		Stderr:        stderr,
+		Errs:          errs,
+	}
+}
+
+// LoadInvocationInfo parses the relevant information including test results
+// out of the given event stream file, returning an InvocationInfo object.
+// Note the TestResultWithXml sub-struct contains an Err field. This is the
+// error (if any) from fetching the test.xml for this test run. This must be
+// checked *in addition to* the err return value from the function.
+func LoadInvocationInfo(
 	eventStreamFile io.Reader, certFile string, keyFile string,
 ) (*InvocationInfo, error) {
 	httpClient, err := getHttpClient(certFile, keyFile)
@@ -141,10 +196,9 @@ func LoadTestResults(
 		return nil, err
 	}
 	buf := gproto.NewBuffer(content)
-	ret := &InvocationInfo{
-		TestResults: make(map[string][]*TestResultWithXml),
-	}
-	testResults := make(map[string][]testResultWithMetadata)
+	ret := &InvocationInfo{}
+	testResults := make(map[string][]*testResultWithMetadata)
+	failedActions := make(map[string][]*buildActionWithDownloadUris)
 
 	for {
 		var event bes.BuildEvent
@@ -158,6 +212,21 @@ func LoadTestResults(
 			started := event.GetStarted()
 			ret.InvocationId = started.Uuid
 			ret.StartedTimeMillis = started.StartTimeMillis
+		case *bes.BuildEventId_ActionCompleted:
+			action := event.GetAction()
+			outAction := buildActionWithDownloadUris{
+				exitCode: action.ExitCode,
+			}
+			if action.Stdout != nil {
+				outAction.stdoutUri = action.Stdout.GetUri()
+			}
+			if action.Stderr != nil {
+				outAction.stderrUri = action.Stderr.GetUri()
+			}
+			if action.FailureDetail != nil {
+				outAction.failureDetail = action.FailureDetail.Message
+			}
+			failedActions[id.ActionCompleted.Label] = append(failedActions[id.ActionCompleted.Label], &outAction)
 		case *bes.BuildEventId_TestResult:
 			res := testResultWithMetadata{
 				run:        id.TestResult.Run,
@@ -165,7 +234,7 @@ func LoadTestResults(
 				attempt:    id.TestResult.Attempt,
 				testResult: event.GetTestResult(),
 			}
-			testResults[id.TestResult.Label] = append(testResults[id.TestResult.Label], res)
+			testResults[id.TestResult.Label] = append(testResults[id.TestResult.Label], &res)
 		case *bes.BuildEventId_BuildFinished:
 			finished := event.GetFinished()
 			ret.FinishTimeMillis = finished.FinishTimeMillis
@@ -180,24 +249,58 @@ func LoadTestResults(
 		return nil, fmt.Errorf("didn't read entire file: %d bytes remaining", len(unread))
 	}
 
-	// Download test xml's.
-	ch := make(chan *TestResultWithXml)
-	var wg sync.WaitGroup
+	// Download test xml's and build action output.
+	testCh := make(chan *TestResultWithXml)
+	actionCh := make(chan *BuildAction)
+	var testWg, actionWg sync.WaitGroup
 	for label, results := range testResults {
 		for _, result := range results {
-			wg.Add(1)
-			go fetchTestXml(httpClient, label, result, ch, &wg)
+			testWg.Add(1)
+			go fetchTestXmlForTest(httpClient, label, result, testCh, &testWg)
+		}
+	}
+	for label, actions := range failedActions {
+		for _, action := range actions {
+			actionWg.Add(1)
+			go fetchStdoutStderrForBuildAction(httpClient, label, action, actionCh, &actionWg)
 		}
 	}
 	go func(wg *sync.WaitGroup) {
 		wg.Wait()
-		close(ch)
-	}(&wg)
+		close(testCh)
+	}(&testWg)
+	go func(wg *sync.WaitGroup) {
+		wg.Wait()
+		close(actionCh)
+	}(&actionWg)
 
+	var finalWg sync.WaitGroup
+
+	var finalTestResults map[string][]*TestResultWithXml
+	finalWg.Add(1)
 	// Collect test xml's.
-	for result := range ch {
-		ret.TestResults[result.Label] = append(ret.TestResults[result.Label], result)
-	}
+	go func(wg *sync.WaitGroup) {
+		res := make(map[string][]*TestResultWithXml)
+		for result := range testCh {
+			res[result.Label] = append(res[result.Label], result)
+		}
+		finalTestResults = res
+		wg.Done()
+	}(&finalWg)
+	var finalBuildActions map[string][]*BuildAction
+	finalWg.Add(1)
+	go func(wg *sync.WaitGroup) {
+		res := make(map[string][]*BuildAction)
+		for action := range actionCh {
+			res[action.Label] = append(res[action.Label], action)
+		}
+		finalBuildActions = res
+		wg.Done()
+	}(&finalWg)
+
+	finalWg.Wait()
+	ret.TestResults = finalTestResults
+	ret.FailedBuildActions = finalBuildActions
 
 	for _, slice := range ret.TestResults {
 		slices.SortFunc(slice, func(a, b *TestResultWithXml) int {
