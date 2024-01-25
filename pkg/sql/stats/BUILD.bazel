@@ -82,6 +82,7 @@ go_test(
         "row_sampling_test.go",
         "simple_linear_regression_test.go",
         "stats_cache_test.go",
+        "stats_test.go",
     ],
     embed = [":stats"],
     exec_properties = select({
@@ -107,6 +108,7 @@ go_test(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",
@@ -139,6 +141,7 @@ go_test(
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//require",
     ],
 )
