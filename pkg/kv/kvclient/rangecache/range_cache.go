@@ -278,18 +278,6 @@ type EvictionToken struct {
 	entry *cacheEntry
 }
 
-func (rc *RangeCache) makeEvictionToken(entry *cacheEntry) EvictionToken {
-	return EvictionToken{
-		rdc:   rc,
-		entry: entry,
-	}
-}
-
-// MakeEvictionToken is the exported ctor. For tests only.
-func (rc *RangeCache) MakeEvictionToken(entry *cacheEntry) EvictionToken {
-	return rc.makeEvictionToken(entry)
-}
-
 func (et EvictionToken) String() string {
 	if !et.Valid() {
 		return "<empty>"
@@ -623,7 +611,9 @@ func (rc *RangeCache) Lookup(ctx context.Context, key roachpb.RKey) (roachpb.Ran
 
 // GetCachedOverlapping returns all the cached entries which overlap a given
 // span [Key, EndKey). The results are sorted ascendingly.
-func (rc *RangeCache) GetCachedOverlapping(ctx context.Context, span roachpb.RSpan) []roachpb.RangeInfo {
+func (rc *RangeCache) GetCachedOverlapping(
+	ctx context.Context, span roachpb.RSpan,
+) []roachpb.RangeInfo {
 	rc.rangeCache.RLock()
 	defer rc.rangeCache.RUnlock()
 	rawEntries := rc.getCachedOverlappingRLocked(ctx, span)
@@ -712,7 +702,7 @@ func (rc *RangeCache) tryLookup(
 	rc.rangeCache.RLock()
 	if entry, _ := rc.getCachedRLocked(ctx, key, useReverseScan); entry != nil {
 		rc.rangeCache.RUnlock()
-		returnToken := rc.makeEvictionToken(entry)
+		returnToken := EvictionToken{rdc: rc, entry: entry}
 		return returnToken, nil
 	}
 
@@ -968,7 +958,7 @@ func tryLookupImpl(
 		}
 		entry = &newEntry
 	}
-	lookupRes = rc.makeEvictionToken(entry)
+	lookupRes = EvictionToken{rdc: rc, entry: entry}
 	return lookupRes, nil
 }
 
