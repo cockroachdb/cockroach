@@ -377,7 +377,7 @@ func (et *EvictionToken) syncRLocked(
 	ctx context.Context,
 ) (stillValid bool, cachedEntry *cacheEntry, rawEntry *cache.Entry) {
 	cachedEntry, rawEntry = et.rdc.getCachedRLocked(ctx, et.entry.desc.StartKey, false /* inverted */)
-	if cachedEntry == nil || !descsCompatible(cachedEntry.Desc(), et.Desc()) {
+	if cachedEntry == nil || !descsCompatible(&cachedEntry.desc, et.Desc()) {
 		et.clear()
 		return false, nil, nil
 	}
@@ -439,7 +439,7 @@ func (et *EvictionToken) SyncTokenAndMaybeUpdateCache(
 		ri := roachpb.RangeInfo{
 			Desc:                  *rangeDesc,
 			Lease:                 *l,
-			ClosedTimestampPolicy: et.entry.ClosedTimestampPolicy(),
+			ClosedTimestampPolicy: et.entry.closedts,
 		}
 		et.evictAndReplaceLocked(ctx, ri)
 		return false
@@ -606,7 +606,7 @@ func (rc *RangeCache) LookupRangeID(
 	if err != nil {
 		return 0, err
 	}
-	return tok.entry.Desc().RangeID, nil
+	return tok.entry.desc.RangeID, nil
 }
 
 // Lookup presents a simpler interface for looking up a RangeDescriptor for a
@@ -641,7 +641,7 @@ func (rc *RangeCache) getCachedOverlappingRLocked(
 	defer from.release()
 	var res []*cache.Entry
 	rc.rangeCache.cache.DoRangeReverseEntry(func(e *cache.Entry) (exit bool) {
-		desc := rc.getValue(e).Desc()
+		desc := rc.getValue(e).desc
 		if desc.StartKey.Equal(span.EndKey) {
 			// Skip over descriptor starting at the end key, who'd supposed to be exclusive.
 			return false
@@ -1016,7 +1016,7 @@ func (rc *RangeCache) evictDescLocked(ctx context.Context, desc *roachpb.RangeDe
 		// Cache is empty; nothing to do.
 		return false
 	}
-	cachedDesc := cachedEntry.Desc()
+	cachedDesc := cachedEntry.desc
 	cachedNewer := cachedDesc.Generation > desc.Generation
 	if cachedNewer {
 		return false
@@ -1098,7 +1098,7 @@ func (rc *RangeCache) getCachedRLocked(
 	}
 
 	// Return nil if the key does not belong to the range.
-	if !containsFn(entry.Desc(), key) {
+	if !containsFn(&entry.desc, key) {
 		return nil, nil
 	}
 	return entry, rawEntry
@@ -1144,7 +1144,7 @@ func (rc *RangeCache) insertLockedInner(ctx context.Context, rs []*cacheEntry) [
 			_, ok := ent.desc.GetReplicaDescriptorByID(replID)
 			if !ok {
 				log.Fatalf(ctx, "leaseholder replicaID: %d not part of descriptor: %s. lease: %s",
-					replID, ent.Desc(), ent.Lease())
+					replID, ent.desc, ent.lease)
 			}
 		}
 		// Note: we append the end key of each range to meta records
@@ -1197,10 +1197,10 @@ func (rc *RangeCache) clearOlderOverlapping(
 func (rc *RangeCache) clearOlderOverlappingLocked(
 	ctx context.Context, newEntry *cacheEntry,
 ) (ok bool, newerEntry *cacheEntry) {
-	log.VEventf(ctx, 2, "clearing entries overlapping %s", newEntry.Desc())
+	log.VEventf(ctx, 2, "clearing entries overlapping %s", newEntry.desc)
 	newest := true
 	var newerFound *cacheEntry
-	overlapping := rc.getCachedOverlappingRLocked(ctx, newEntry.Desc().RSpan())
+	overlapping := rc.getCachedOverlappingRLocked(ctx, newEntry.desc.RSpan())
 	for _, e := range overlapping {
 		entry := rc.getValue(e)
 		if newEntry.overrides(entry) {
@@ -1210,7 +1210,7 @@ func (rc *RangeCache) clearOlderOverlappingLocked(
 			rc.delEntryLocked(e)
 		} else {
 			newest = false
-			if descsCompatible(entry.Desc(), newEntry.Desc()) {
+			if descsCompatible(&entry.desc, &newEntry.desc) {
 				newerFound = entry
 				// We've found a similar descriptor in the cache; there can't be any
 				// other overlapping ones so let's stop the iteration.
@@ -1232,7 +1232,7 @@ func (rc *RangeCache) swapEntryLocked(
 ) {
 	if newEntry != nil {
 		old := rc.getValue(oldEntry)
-		if !descsCompatible(old.Desc(), newEntry.Desc()) {
+		if !descsCompatible(&old.desc, &newEntry.desc) {
 			log.Fatalf(ctx, "attempting to swap non-compatible descs: %s vs %s",
 				old, newEntry)
 		}
@@ -1246,7 +1246,7 @@ func (rc *RangeCache) swapEntryLocked(
 }
 
 func (rc *RangeCache) addEntryLocked(entry *cacheEntry) {
-	key := newRangeCacheKey(entry.Desc().StartKey)
+	key := newRangeCacheKey(entry.desc.StartKey)
 	rc.rangeCache.cache.Add(key, entry)
 }
 
@@ -1302,45 +1302,6 @@ type cacheEntry struct {
 	closedts roachpb.RangeClosedTimestampPolicy
 }
 
-func (e cacheEntry) String() string {
-	return fmt.Sprintf("desc:%s, lease:%s", e.Desc(), e.lease)
-}
-
-// Desc returns the cached descriptor. Note that, besides being possibly stale,
-// this descriptor also might not represent a descriptor that was ever
-// committed. See DescSpeculative().
-func (e *cacheEntry) Desc() *roachpb.RangeDescriptor {
-	return &e.desc
-}
-
-// Leaseholder returns the cached leaseholder replica, if known. Returns nil if
-// the leaseholder is not known.
-func (e *cacheEntry) Leaseholder() *roachpb.ReplicaDescriptor {
-	if e.lease.Empty() {
-		return nil
-	}
-	return &e.lease.Replica
-}
-
-// Lease returns the cached lease, if known. Returns nil if no lease is known.
-// It's possible for a leaseholder to be known, but not a full lease, in which
-// case Leaseholder() returns non-nil but Lease() returns nil.
-func (e *cacheEntry) Lease() *roachpb.Lease {
-	if e.lease.Empty() {
-		return nil
-	}
-	if e.LeaseSpeculative() {
-		return nil
-	}
-	return &e.lease
-}
-
-// ClosedTimestampPolicy returns the cached understanding of the range's closed
-// timestamp policy. If no policy is known, LAG_BY_CLUSTER_SETTING is returned.
-func (e *cacheEntry) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
-	return e.closedts
-}
-
 // DescSpeculative returns true if the descriptor in the entry is "speculative"
 // - i.e. it doesn't correspond to a committed value. Such descriptors have been
 // inserted in the cache with Generation=0.
@@ -1360,6 +1321,10 @@ func (e *cacheEntry) LeaseSpeculative() bool {
 	return e.lease.Speculative()
 }
 
+func (e cacheEntry) String() string {
+	return fmt.Sprintf("desc:%s, lease:%s", e.desc, e.lease)
+}
+
 func (e *cacheEntry) toRangeInfo() roachpb.RangeInfo {
 	if e == nil {
 		return roachpb.RangeInfo{}
@@ -1367,7 +1332,7 @@ func (e *cacheEntry) toRangeInfo() roachpb.RangeInfo {
 	return roachpb.RangeInfo{
 		Desc:                  e.desc,
 		Lease:                 e.lease,
-		ClosedTimestampPolicy: e.ClosedTimestampPolicy(),
+		ClosedTimestampPolicy: e.closedts,
 	}
 
 }
@@ -1387,8 +1352,8 @@ func (e *cacheEntry) toRangeInfo() roachpb.RangeInfo {
 // "speculative" (sequence=0).
 func (e *cacheEntry) overrides(o *cacheEntry) bool {
 	if util.RaceEnabled {
-		if _, err := e.Desc().RSpan().Intersect(o.Desc().RSpan()); err != nil {
-			panic(fmt.Sprintf("descriptors don't intersect: %s vs %s", e.Desc(), o.Desc()))
+		if _, err := e.desc.RSpan().Intersect(o.desc.RSpan()); err != nil {
+			panic(fmt.Sprintf("descriptors don't intersect: %s vs %s", e.desc, o.desc))
 		}
 	}
 
@@ -1401,9 +1366,9 @@ func (e *cacheEntry) overrides(o *cacheEntry) bool {
 	// If two RangeDescriptors overlap and have the same Generation, they must
 	// be referencing the same range, in which case their lease sequences are
 	// comparable.
-	if e.Desc().RangeID != o.Desc().RangeID {
+	if e.desc.RangeID != o.desc.RangeID {
 		panic(fmt.Sprintf("overlapping descriptors with same gen but different IDs: %s vs %s",
-			e.Desc(), o.Desc()))
+			e.desc, o.desc))
 	}
 
 	if res := compareEntryLeases(o, e); res != 0 {
@@ -1427,8 +1392,8 @@ func (e *cacheEntry) overrides(o *cacheEntry) bool {
 // older; this matches the semantics of b.overrides(a).
 func compareEntryDescs(a, b *cacheEntry) int {
 	if util.RaceEnabled {
-		if _, err := a.Desc().RSpan().Intersect(b.Desc().RSpan()); err != nil {
-			panic(fmt.Sprintf("descriptors don't intersect: %s vs %s", a.Desc(), b.Desc()))
+		if _, err := a.desc.RSpan().Intersect(b.desc.RSpan()); err != nil {
+			panic(fmt.Sprintf("descriptors don't intersect: %s vs %s", a.desc, b.desc))
 		}
 	}
 
@@ -1440,10 +1405,10 @@ func compareEntryDescs(a, b *cacheEntry) int {
 		return -1
 	}
 
-	if a.Desc().Generation < b.Desc().Generation {
+	if a.desc.Generation < b.desc.Generation {
 		return -1
 	}
-	if a.Desc().Generation > b.Desc().Generation {
+	if a.desc.Generation > b.desc.Generation {
 		return 1
 	}
 	return 0
@@ -1473,10 +1438,10 @@ func compareEntryLeases(a, b *cacheEntry) int {
 		return -1
 	}
 
-	if a.Lease().Sequence < b.Lease().Sequence {
+	if a.lease.Sequence < b.lease.Sequence {
 		return -1
 	}
-	if a.Lease().Sequence > b.Lease().Sequence {
+	if a.lease.Sequence > b.lease.Sequence {
 		return 1
 	}
 	return 0
@@ -1508,9 +1473,9 @@ func compareEntryLeases(a, b *cacheEntry) int {
 func (e *cacheEntry) maybeUpdate(
 	ctx context.Context, l *roachpb.Lease, rangeDesc *roachpb.RangeDescriptor,
 ) (updated, updatedLease bool, newEntry *cacheEntry) {
-	if !descsCompatible(e.Desc(), rangeDesc) {
+	if !descsCompatible(&e.desc, rangeDesc) {
 		log.Fatalf(ctx, "attempting to update by comparing non-compatible descs: %s vs %s",
-			e.Desc(), rangeDesc)
+			e.desc, rangeDesc)
 	}
 
 	newEntry = &cacheEntry{
@@ -1568,7 +1533,7 @@ func (e *cacheEntry) maybeUpdate(
 			2,
 			"incompatible leaseholder id: %d/descriptor %v pair; eliding lease update to the cache",
 			newEntry.lease.Replica.ReplicaID,
-			newEntry.Desc(),
+			newEntry.desc,
 		)
 		newEntry.lease = roachpb.Lease{}
 		updatedLease = false
