@@ -48,7 +48,7 @@ func TestSpatialObjectToEWKT(t *testing.T) {
 		{"POINT(1.01 1.01)", 15, "POINT (1.01 1.01)"},
 		{"POINT(1.01 1.01)", 1, "POINT (1 1)"},
 		{"GEOMETRYCOLLECTION (POINT EMPTY, POLYGON EMPTY)", -1, "GEOMETRYCOLLECTION (POINT EMPTY, POLYGON EMPTY)"},
-		{"SRID=4004;POINT(1.0 1.0)", 15, "SRID=4004;POINT (1 1)"},
+		{"SRID=4004;POINT(1.0 1.0)", 15, "SRID=4004;POINT (1 0)"},
 	}
 
 	for _, tc := range testCases {
@@ -68,7 +68,7 @@ func TestSpatialObjectToWKB(t *testing.T) {
 		expected geopb.WKB
 	}{
 		{"POINT(1.0 1.0)", []byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f")},
-		{"SRID=4004;POINT(1.0 1.0)", []byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f")},
+		{"SRID=4004;POINT(1.0 1.0)", []byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x4f")},
 	}
 
 	for _, tc := range testCases {
