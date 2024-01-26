@@ -73,7 +73,8 @@ func (ex *connExecutor) execPrepare(
 		ex.deletePreparedStmt(ctx, "")
 	}
 
-	stmt := makeStatement(parseCmd.Statement, ex.server.cfg.GenerateID())
+	stmt := makeStatement(parseCmd.Statement, ex.server.cfg.GenerateID(),
+		tree.FmtFlags(queryFormattingForFingerprintsMask.Get(ex.server.cfg.SV())))
 	_, err := ex.addPreparedStmt(
 		ctx,
 		parseCmd.Name,
