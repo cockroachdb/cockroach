@@ -230,7 +230,7 @@ func initRunFlagsBinariesAndLibraries(cmd *cobra.Command) error {
 		return fmt.Errorf("'select-probability' must be in [0,1]")
 	}
 	arm64Opt := cmd.Flags().Lookup("metamorphic-arm64-probability")
-	if !arm64Opt.Changed && runtime.GOARCH == "arm64" && roachtestflags.Cloud == spec.Local {
+	if arm64Opt != nil && !arm64Opt.Changed && runtime.GOARCH == "arm64" && roachtestflags.Cloud == spec.Local {
 		fmt.Printf("Detected 'arm64' in 'local mode', setting 'metamorphic-arm64-probability' to 1; use --metamorphic-arm64-probability to run (emulated) with other binaries\n")
 		roachtestflags.ARM64Probability = 1
 	}
@@ -326,4 +326,102 @@ func testRunnerLogger(
 	}
 	shout(ctx, l, os.Stdout, "test runner logs in: %s", runnerLogPath)
 	return l, teeOpt
+}
+
+// runOperations sequentially runs operations matched by the passed-in filter.
+func runOperations(register func(registry.Registry), filter *registry.TestFilter) error {
+	//lint:ignore SA1019 deprecated
+	rand.Seed(roachtestflags.GlobalSeed)
+	r := makeTestRegistry()
+
+	register(&r)
+	cr := newClusterRegistry()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	runner := newTestRunner(cr, stopper)
+	runner.config.skipClusterStopOnAttach = true
+	runner.config.skipClusterWipeOnAttach = true
+
+	clusterType := roachprodCluster
+	bindTo := ""
+
+	if runtime.GOOS == "darwin" {
+		// This will suppress the annoying "Allow incoming network connections" popup from
+		// OSX when running a roachtest
+		bindTo = "localhost"
+	}
+
+	opt := clustersOpt{
+		typ:         clusterType,
+		clusterName: roachtestflags.ClusterNames,
+		// Precedence for resolving the user: cli arg, env.ROACHPROD_USER, current user.
+		user:      getUser(roachtestflags.Username),
+		cpuQuota:  roachtestflags.CPUQuota,
+		clusterID: roachtestflags.ClusterID,
+	}
+	opt.debugMode = DebugKeepAlways
+
+	if err := runner.runHTTPServer(roachtestflags.HTTPPort, os.Stdout, bindTo); err != nil {
+		return err
+	}
+
+	specs, err := opsToRun(r, filter, roachtestflags.RunSkipped, roachtestflags.SelectProbability, true)
+	if err != nil {
+		return err
+	}
+
+	artifactsDir := roachtestflags.ArtifactsDir
+	literalArtifactsDir := roachtestflags.LiteralArtifactsDir
+	if literalArtifactsDir == "" {
+		literalArtifactsDir = artifactsDir
+	}
+
+	setLogConfig(artifactsDir)
+	runnerDir := filepath.Join(artifactsDir, runnerLogsDir)
+	runnerLogPath := filepath.Join(
+		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
+	l, tee := testRunnerLogger(context.Background(), 1 /* parallelism */, runnerLogPath)
+	lopt := loggingOpt{
+		l:                   l,
+		tee:                 tee,
+		stdout:              os.Stdout,
+		stderr:              os.Stderr,
+		artifactsDir:        artifactsDir,
+		literalArtifactsDir: literalArtifactsDir,
+		runnerLogPath:       runnerLogPath,
+	}
+	l.Printf("global random seed: %d", roachtestflags.GlobalSeed)
+	go func() {
+		if err := http.ListenAndServe(
+			fmt.Sprintf(":%d", roachtestflags.PromPort),
+			promhttp.HandlerFor(r.promRegistry, promhttp.HandlerOpts{}),
+		); err != nil {
+			l.Errorf("error serving prometheus: %v", err)
+		}
+	}()
+	// We're going to run all the workers (and thus all the tests) in a context
+	// that gets canceled when the Interrupt signal is received.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	CtrlC(ctx, l, cancel, cr)
+	// Install goroutine leak checker and run it at the end of the entire test
+	// run. If a test is leaking a goroutine, then it will likely be still around.
+	// We could diff goroutine snapshots before/after each executed test, but that
+	// could yield false positives; e.g., user-specified test teardown goroutines
+	// may still be running long after the test has completed.
+	defer leaktest.AfterTest(l)()
+
+	testSpecs := make([]registry.TestSpec, len(specs))
+	for i := range specs {
+		testSpecs[i] = specs[i].TestSpec()
+	}
+	err = runner.Run(
+		ctx, testSpecs, roachtestflags.Count, 1 /* parallelism */, opt,
+		testOpts{
+			versionsBinaryOverride: roachtestflags.VersionsBinaryOverride,
+			skipInit:               true, /* operations always skip init */
+			goCoverEnabled:         roachtestflags.GoCoverEnabled,
+		},
+		lopt)
+	return err
 }

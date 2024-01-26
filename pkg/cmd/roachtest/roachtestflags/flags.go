@@ -65,8 +65,8 @@ var (
 		Usage: `Include tests that are not marked as compatible with the cloud used`,
 	})
 
-	ClusterNames string
-	_            = registerRunFlag(&ClusterNames, FlagInfo{
+	ClusterNames    string
+	clusterFlagInfo = FlagInfo{
 		Name:      "cluster",
 		Shorthand: "c",
 		Usage: `
@@ -74,7 +74,9 @@ var (
 			tests. If fewer than --parallelism names are specified, then the
 			parallelism is capped to the number of clusters specified. When a cluster
 			does not exist yet, it is created according to the spec.`,
-	})
+	}
+	_ = registerRunFlag(&ClusterNames, clusterFlagInfo)
+	_ = registerRunOpsFlag(&ClusterNames, clusterFlagInfo)
 
 	Local bool
 	_     = registerRunFlag(&Local, FlagInfo{
@@ -96,6 +98,24 @@ var (
 	_             = registerRunFlag(&CockroachPath, FlagInfo{
 		Name:  "cockroach",
 		Usage: `Absolute path to cockroach binary to use`,
+	})
+
+	CockroachBinaryPath string
+	_                   = registerRunOpsFlag(&CockroachBinaryPath, FlagInfo{
+		Name:  "cockroach-binary",
+		Usage: `Relative path to cockroach binary to use, on the cluster specified in --cluster`,
+	})
+
+	CertsDir string
+	_        = registerRunOpsFlag(&CertsDir, FlagInfo{
+		Name:  "certs-dir",
+		Usage: `Absolute path to certificates directory, if the cluster specified in --cluster is secure`,
+	})
+
+	VirtualCluster string
+	_              = registerRunOpsFlag(&VirtualCluster, FlagInfo{
+		Name:  "virtual-cluster",
+		Usage: `Specifies virtual cluster to connect to, within the specified --cluster.`,
 	})
 
 	CockroachEAPath string
@@ -242,11 +262,13 @@ var (
 			https://docs.microsoft.com/en-us/azure/virtual-machines/windows/sizes)`,
 	})
 
-	CPUQuota int = 300
-	_            = registerRunFlag(&CPUQuota, FlagInfo{
+	CPUQuota         int = 300
+	cpuQuotaFlagInfo     = FlagInfo{
 		Name:  "cpu-quota",
 		Usage: `The number of cloud CPUs roachtest is allowed to use at any one time.`,
-	})
+	}
+	_ = registerRunFlag(&CPUQuota, cpuQuotaFlagInfo)
+	_ = registerRunOpsFlag(&CPUQuota, cpuQuotaFlagInfo)
 
 	HTTPPort int = 0
 	_            = registerRunFlag(&HTTPPort, FlagInfo{
@@ -405,6 +427,12 @@ func AddRunFlags(cmdFlags *pflag.FlagSet) {
 	globalMan.AddFlagsToCommand(runCmdID, cmdFlags)
 }
 
+// AddRunOpsFlags adds all flags registered for the run-operations command to
+// the given command flag set.
+func AddRunOpsFlags(cmdFlags *pflag.FlagSet) {
+	globalMan.AddFlagsToCommand(runOpsCmdID, cmdFlags)
+}
+
 // Changed returns true if a flag associated with a given value was present.
 //
 // For example: roachtestflags.Changed(&roachtestflags.Cloud) returns true if
@@ -423,5 +451,10 @@ func registerListFlag(valPtr interface{}, info FlagInfo) struct{} {
 
 func registerRunFlag(valPtr interface{}, info FlagInfo) struct{} {
 	globalMan.RegisterFlag(runCmdID, valPtr, info)
+	return struct{}{}
+}
+
+func registerRunOpsFlag(valPtr interface{}, info FlagInfo) struct{} {
+	globalMan.RegisterFlag(runOpsCmdID, valPtr, info)
 	return struct{}{}
 }

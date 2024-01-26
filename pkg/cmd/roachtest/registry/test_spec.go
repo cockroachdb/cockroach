@@ -55,6 +55,12 @@ type TestSpec struct {
 	// Thus, they must be opted into explicitly via this field.
 	Benchmark bool
 
+	// Denotes whether this test is a roachtest Operation. If true, the test is
+	// expected to not do any setup/teardown and is likely already running with a
+	// Cockroach process. Furthermore, a Cockroach/workload binary should *not*
+	// be loaded onto this node.
+	Operation bool
+
 	// CompatibleClouds is the set of clouds this test can run on (e.g. AllClouds,
 	// OnlyGCE, etc). Must be set.
 	CompatibleClouds CloudSet

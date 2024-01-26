@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -155,6 +156,13 @@ func (t *testImpl) Cockroach() string {
 	// as it will slow down performance.
 	if t.spec.Benchmark {
 		t.l.Printf("Benchmark test, running with standard cockroach")
+		return t.StandardCockroach()
+	}
+	if t.spec.Operation {
+		t.l.Printf("Benchmark test, running with passed-in Cockroach")
+		if roachtestflags.CockroachBinaryPath != "" {
+			return roachtestflags.CockroachBinaryPath
+		}
 		return t.StandardCockroach()
 	}
 	t.randomCockroachOnce.Do(func() {

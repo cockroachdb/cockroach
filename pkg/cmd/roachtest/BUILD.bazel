@@ -23,6 +23,7 @@ go_library(
         "//pkg/build",
         "//pkg/cmd/internal/issues",
         "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/operations",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/roachtestflags",
