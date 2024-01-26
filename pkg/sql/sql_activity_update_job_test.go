@@ -11,9 +11,11 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -37,8 +39,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
 
@@ -480,6 +484,9 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	}
 }
 
+// TestSqlActivityJobRunsAfterStatsFlush verifies that the
+// correct data is updated on current and prior hour when new stats are
+// added to either or both of them.
 func TestSqlActivityJobRunsAfterStatsFlush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -735,6 +742,120 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 	require.NotEmpty(t, resp.Statements)
 	require.Greater(t, resp.StmtsTotalRuntimeSecs, float32(0))
 	require.Greater(t, resp.TxnsTotalRuntimeSecs, float32(0))
+}
+
+type timeMutex struct {
+	syncutil.RWMutex
+	stubTime time.Time
+}
+
+func (mu *timeMutex) setStubTime(time time.Time) {
+	mu.Lock()
+	defer mu.Unlock()
+	mu.stubTime = time
+}
+
+func TestFlushToActivityWithDifferentAggTs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	var muStubTime timeMutex
+	muStubTime.setStubTime(timeutil.Now().Truncate(time.Hour))
+
+	sqlStatsKnobs := &sqlstats.TestingKnobs{
+		StubTimeNow: func() time.Time {
+			muStubTime.RLock()
+			defer muStubTime.RUnlock()
+			return muStubTime.stubTime
+		},
+		AOSTClause: "AS OF SYSTEM TIME '-1us'",
+	}
+
+	// Start the cluster.
+	// Disable the job since it is called manually from a new instance to avoid
+	// any race conditions.
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: true,
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: sqlStatsKnobs,
+			UpgradeManager: &upgradebase.TestingKnobs{
+				DontUseJobs:                       true,
+				SkipUpdateSQLActivityJobBootstrap: true,
+			}}})
+	defer srv.Stopper().Stop(context.Background())
+	defer sqlDB.Close()
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Start with empty activity tables.
+	execCfg := srv.ExecutorConfig().(ExecutorConfig)
+	st := cluster.MakeTestingClusterSettings()
+	updater := newSqlActivityUpdater(st, execCfg.InternalDB, sqlStatsKnobs)
+	require.NoError(t, updater.TransferStatsToActivity(ctx))
+	verifyActivityTablesAreEmpty(t, db)
+
+	// Use random name to keep isolated during stress tests.
+	rng, _ := randutil.NewTestRand()
+	appName := fmt.Sprintf("TestFlushToActivityWithDifferentAggTs-%d", rng.Int())
+
+	datadriven.RunTest(t, "testdata/sql_activity_update_job", func(t *testing.T, d *datadriven.TestData) string {
+		var buf bytes.Buffer
+		timeLayout := "2006-01-02 15:04:05"
+		switch d.Cmd {
+		case "update-time":
+			for _, arg := range d.CmdArgs {
+				switch arg.Key {
+				case "time":
+					time, err := time.Parse(timeLayout, arg.Vals[0])
+					require.NoError(t, err)
+					muStubTime.setStubTime(timeutil.FromUnixNanos(time.UnixNano()))
+				}
+			}
+		case "update-app":
+			for _, arg := range d.CmdArgs {
+				switch arg.Key {
+				case "ignore":
+					useIgnoreApp, err := strconv.ParseBool(arg.Vals[0])
+					require.NoError(t, err)
+					if useIgnoreApp {
+						db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
+					} else {
+						db.Exec(t, "SET SESSION application_name=$1", appName)
+					}
+				}
+			}
+		case "run-sql":
+			useAppName := false
+			var rows [][]string
+			var err error
+			for _, arg := range d.CmdArgs {
+				switch arg.Key {
+				case "useApp":
+					useAppName, err = strconv.ParseBool(arg.Vals[0])
+					require.NoError(t, err)
+				}
+			}
+			if useAppName {
+				rows = db.QueryStr(t, d.Input, appName)
+			} else {
+				rows = db.QueryStr(t, d.Input)
+			}
+
+			for _, row := range rows {
+				fmt.Fprintf(&buf, "%s\n", strings.Join(row, ","))
+			}
+		case "flush-stats":
+			srv.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		case "update-top-activity":
+			// Populate the Top Activity. This will use the transfer all scenarios
+			// with there only being a few rows.
+			require.NoError(t, updater.TransferStatsToActivity(ctx))
+		}
+
+		return buf.String()
+	})
 }
 
 // duplicateRowHelper duplicates a single row in each statistics table, but slightly
