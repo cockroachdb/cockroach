@@ -151,7 +151,7 @@ func dumpSummary(f *os.File, invocation *engflow.InvocationInfo) error {
 		}
 		for _, failedTest := range failedTests {
 			base64Target := base64.StdEncoding.EncodeToString([]byte(failedTest.label))
-			_, err := f.WriteString(fmt.Sprintf("| `%s` | `%s` | `%s` | [Link](https://%s.cluster.engflow.com/invocations/default/%s?testReportRun=%d&testReportShard=%d&testReportAttempt=%d#targets-%s) |", failedTest.label, failedTest.name, failedTest.status, *serverName, invocation.InvocationId, failedTest.run, failedTest.shard, failedTest.attempt, base64Target))
+			_, err := f.WriteString(fmt.Sprintf("| `%s` | `%s` | `%s` | [Link](https://%s.cluster.engflow.com/invocations/default/%s?testReportRun=%d&testReportShard=%d&testReportAttempt=%d#targets-%s) |\n", failedTest.label, failedTest.name, failedTest.status, *serverName, invocation.InvocationId, failedTest.run, failedTest.shard, failedTest.attempt, base64Target))
 			if err != nil {
 				return err
 			}
