@@ -2793,6 +2793,7 @@ allow_ordinal_column_references                            off                 N
 allow_role_memberships_to_change_during_transaction        off                 NULL      NULL        NULL        string
 alter_primary_region_super_region_override                 off                 NULL      NULL        NULL        string
 application_name                                           ·                   NULL      NULL        NULL        string
+autocommit_before_ddl                                      off                 NULL      NULL        NULL        string
 avoid_buffering                                            off                 NULL      NULL        NULL        string
 backslash_quote                                            safe_encoding       NULL      NULL        NULL        string
 bytea_output                                               hex                 NULL      NULL        NULL        string
@@ -2967,6 +2968,7 @@ allow_ordinal_column_references                            off                 N
 allow_role_memberships_to_change_during_transaction        off                 NULL  user     NULL      off                 off
 alter_primary_region_super_region_override                 off                 NULL  user     NULL      off                 off
 application_name                                           ·                   NULL  user     NULL      ·                   ·
+autocommit_before_ddl                                      off                 NULL  user     NULL      off                 off
 avoid_buffering                                            off                 NULL  user     NULL      false               false
 backslash_quote                                            safe_encoding       NULL  user     NULL      safe_encoding       safe_encoding
 bytea_output                                               hex                 NULL  user     NULL      hex                 hex
@@ -3134,6 +3136,7 @@ allow_ordinal_column_references                            NULL    NULL     NULL
 allow_role_memberships_to_change_during_transaction        NULL    NULL     NULL     NULL        NULL
 alter_primary_region_super_region_override                 NULL    NULL     NULL     NULL        NULL
 application_name                                           NULL    NULL     NULL     NULL        NULL
+autocommit_before_ddl                                      NULL    NULL     NULL     NULL        NULL
 avoid_buffering                                            NULL    NULL     NULL     NULL        NULL
 backslash_quote                                            NULL    NULL     NULL     NULL        NULL
 bytea_output                                               NULL    NULL     NULL     NULL        NULL
