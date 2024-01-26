@@ -287,9 +287,11 @@ type (
 		// may choose to always use the latest predecessor as well.
 		predecessorFunc predecessorFunc
 
-		// test-only field, allowing tests to simulate cluster
-		// architectures without passing a cluster.Cluster implementation.
-		_arch *vm.CPUArch
+		// the following are test-only fields, allowing tests to simulate
+		// cluster properties without passing a cluster.Cluster
+		// implementation.
+		_arch    *vm.CPUArch
+		_isLocal *bool
 	}
 
 	shouldStop chan struct{}
@@ -580,6 +582,7 @@ func (t *Test) plan() (*TestPlan, error) {
 		currentContext: newInitialContext(initialRelease, t.crdbNodes),
 		options:        t.options,
 		rt:             t.rt,
+		isLocal:        t.isLocal(),
 		crdbNodes:      t.crdbNodes,
 		hooks:          t.hooks,
 		prng:           t.prng,
@@ -595,6 +598,14 @@ func (t *Test) clusterArch() vm.CPUArch {
 	}
 
 	return t.cluster.Architecture()
+}
+
+func (t *Test) isLocal() bool {
+	if t._isLocal != nil {
+		return *t._isLocal
+	}
+
+	return t.cluster.IsLocal()
 }
 
 func (t *Test) runCommandFunc(nodes option.NodeListOption, cmd string) userFunc {
