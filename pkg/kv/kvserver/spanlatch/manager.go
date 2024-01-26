@@ -242,7 +242,7 @@ func (m *Manager) Acquire(
 
 	err := m.wait(ctx, lg, snap)
 	if err != nil {
-		m.Release(lg)
+		m.Release(ctx, lg)
 		return nil, err
 	}
 	return lg, nil
@@ -362,7 +362,7 @@ func (m *Manager) WaitUntilAcquired(ctx context.Context, lg *Guard) (*Guard, err
 	}()
 	err := m.wait(ctx, lg, *lg.snap)
 	if err != nil {
-		m.Release(lg)
+		m.Release(ctx, lg)
 		return nil, err
 	}
 	return lg, nil
@@ -623,7 +623,7 @@ func (m *Manager) Poison(lg *Guard) {
 // Release releases the latches held by the provided Guard. After being called,
 // dependent latch acquisition attempts can complete if not blocked on any other
 // owned latches.
-func (m *Manager) Release(lg *Guard) {
+func (m *Manager) Release(ctx context.Context, lg *Guard) {
 	lg.done.signal()
 	if lg.snap != nil {
 		lg.snap.close()
@@ -635,9 +635,9 @@ func (m *Manager) Release(lg *Guard) {
 	held := timeutil.Now().UnixNano() - lg.acquireTime
 	if lg.acquireTime != 0 && m.settings != nil && held > longLatchHoldDuration.Get(&m.settings.SV).Nanoseconds() {
 		if m.everySecondLogger.ShouldLog() {
-			log.Warningf(context.Background(), LongLatchHeldMsg, lg.baFmt, held)
+			log.Warningf(ctx, LongLatchHeldMsg, lg.baFmt, held)
 		} else {
-			log.VEventf(context.Background(), 2, LongLatchHeldMsg, lg.baFmt, held)
+			log.VEventf(ctx, 2, LongLatchHeldMsg, lg.baFmt, held)
 		}
 	}
 }
