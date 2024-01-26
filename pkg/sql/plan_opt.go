@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -178,7 +179,11 @@ func (p *planner) prepareUsingOptimizer(
 		colMeta := md.ColumnMeta(col.ID)
 		resultCols[i].Name = col.Alias
 		resultCols[i].Typ = colMeta.Type
-		if err := checkResultType(resultCols[i].Typ); err != nil {
+		// At PREPARE time we don't know yet which format the client will
+		// request (this is only known at BIND time), so we optimistically
+		// assume that it'll be TEXT (which is the default).
+		fmtCode := pgwirebase.FormatText
+		if err = checkResultType(resultCols[i].Typ, fmtCode); err != nil {
 			return 0, err
 		}
 		// If the column came from a table, set up the relevant metadata.

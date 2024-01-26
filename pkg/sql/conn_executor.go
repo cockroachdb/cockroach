@@ -3950,8 +3950,12 @@ func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(
 func (ex *connExecutor) initStatementResult(
 	ctx context.Context, res RestrictedCommandResult, ast tree.Statement, cols colinfo.ResultColumns,
 ) error {
-	for _, c := range cols {
-		if err := checkResultType(c.Typ); err != nil {
+	for i, c := range cols {
+		fmtCode, err := res.GetFormatCode(i)
+		if err != nil {
+			return err
+		}
+		if err = checkResultType(c.Typ, fmtCode); err != nil {
 			return err
 		}
 	}

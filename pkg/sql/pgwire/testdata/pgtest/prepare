@@ -105,10 +105,42 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"EXPLAIN"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# "ResultFormatCodes": [1] = binary
+send
+Parse {"Name": "e2", "Query": "EXPLAIN SELECT i, i + 1, i + 2 FROM generate_series(1,10) AS g(i);"}
+Bind {"DestinationPortal": "pe2", "PreparedStatement": "e2", "ResultFormatCodes": [1]}
+Execute {"Portal": "pe2"}
+Sync
+----
+
+until ignore=DataRow
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"EXPLAIN"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 send
 Parse {"Name": "ea", "Query": "EXPLAIN ANALYZE SELECT generate_series(1,10);"}
 Bind {"DestinationPortal": "pea", "PreparedStatement": "ea"}
 Execute {"Portal": "pea"}
+Sync
+----
+
+until ignore=DataRow
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"EXPLAIN"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# "ResultFormatCodes": [1] = binary
+send
+Parse {"Name": "ea2", "Query": "EXPLAIN ANALYZE SELECT i, i + 1, i + 2 FROM generate_series(1,10) AS g(i);"}
+Bind {"DestinationPortal": "pea2", "PreparedStatement": "ea2", "ResultFormatCodes": [1]}
+Execute {"Portal": "pea2"}
 Sync
 ----
 
