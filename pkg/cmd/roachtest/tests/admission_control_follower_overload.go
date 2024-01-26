@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -31,7 +32,7 @@ func registerFollowerOverload(r registry.Registry) {
 		return registry.TestSpec{
 			Name:             "admission/follower-overload/" + subtest,
 			Owner:            registry.OwnerAdmissionControl,
-			Timeout:          3 * time.Hour,
+			Timeout:          6 * time.Hour,
 			CompatibleClouds: registry.AllClouds,
 			Suites:           registry.ManualOnly,
 			// TODO(aaditya): Revisit this as part of #111614.
@@ -43,7 +44,14 @@ func registerFollowerOverload(r registry.Registry) {
 			// NB: use 16vcpu machines to avoid getting anywhere close to EBS
 			// bandwidth limits on AWS, see:
 			// https://github.com/cockroachdb/cockroach/issues/82109#issuecomment-1154049976
-			Cluster: r.MakeClusterSpec(4, spec.CPU(4), spec.ReuseNone()),
+			Cluster: func() spec.ClusterSpec {
+				c := r.MakeClusterSpec(4, spec.CPU(4), spec.ReuseNone(), spec.DisableLocalSSD())
+				c.AWS.MachineType = cfg.cloudConfig.AWSInstanceType
+				c.AWS.Zones = cfg.cloudConfig.AWSRegion
+				c.GCE.MachineType = cfg.cloudConfig.GCEInstanceType
+				c.GCE.Zones = cfg.cloudConfig.GCERegion
+				return c
+			}(),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runAdmissionControlFollowerOverload(ctx, t, c, cfg)
 			},
@@ -95,15 +103,38 @@ func registerFollowerOverload(r registry.Registry) {
 		kv50N3:         true,
 	}))
 
+	// Similar to presplit-no-leases, but using specific instance type and
+	// increased kv0 writes to isolate for bandwidth induced overload.
+	//
+	// NB: As of Jan 2024, this test is specific to AWS only.
+	r.Add(spec("bandwidth", admissionControlFollowerOverloadOpts{
+		kv0N12:           true,
+		kvN12ExtraArgs:   "--splits 100",
+		kv0N12BlockBytes: "10000",
+		kv0N12Rate:       "600",
+		kv50N3:           true,
+		cloudConfig:      followerOverloadTestCloudConfig{AWSInstanceType: "c5.xlarge", AWSRegion: "us-east-1a"},
+	}))
+
 	// TODO(irfansharif,aaditya): Add variants that enable regular traffic flow
 	// control. Run variants without follower pausing too.
 }
 
 type admissionControlFollowerOverloadOpts struct {
-	ioNemesis      bool // limit write throughput on s3 (n3) to 20MiB/s
-	kvN12ExtraArgs string
-	kv0N12         bool // run kv0 on n1 and n2
-	kv50N3         bool // run kv50 on n3
+	ioNemesis        bool // limit write throughput on s3 (n3) to 20MiB/s
+	kvN12ExtraArgs   string
+	kv0N12           bool                            // run kv0 on n1 and n2
+	kv0N12BlockBytes string                          // [optional] block bytes for kv0 on n1 and n2, default=5000
+	kv0N12Rate       string                          // [optional] rate limit for kv0 on n1 and n2, default=400
+	kv50N3           bool                            // run kv50 on n3
+	cloudConfig      followerOverloadTestCloudConfig // optional
+}
+
+type followerOverloadTestCloudConfig struct {
+	AWSInstanceType string
+	AWSRegion       string
+	GCEInstanceType string
+	GCERegion       string
 }
 
 func runAdmissionControlFollowerOverload(
@@ -143,7 +174,7 @@ func runAdmissionControlFollowerOverload(
 		defer cleanupFunc()
 	}
 
-	phaseDuration := time.Hour
+	phaseDuration := 3 * time.Hour
 
 	nodes := c.Range(1, 3)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), nodes)
@@ -226,13 +257,24 @@ func runAdmissionControlFollowerOverload(
 		// to EBS, see:
 		//
 		// https://github.com/cockroachdb/cockroach/issues/82109#issuecomment-1154049976
-		deployWorkload := `
-mkdir -p logs && \
-sudo systemd-run --property=Type=exec \
---property=StandardOutput=file:/home/ubuntu/logs/kv-n12.stdout.log \
---property=StandardError=file:/home/ubuntu/logs/kv-n12.stderr.log \
---remain-after-exit --unit kv-n12 -- ./cockroach workload run kv --read-percent 0 \
---max-rate 400 --concurrency 400 --min-block-bytes 5000 --max-block-bytes 5000 --tolerate-errors {pgurl:1-2}`
+
+		// We override the values, if specified, otherwise we use defaults as explained above.
+		maxRate := cfg.kv0N12Rate
+		if maxRate == "" {
+			maxRate = "400"
+		}
+		maxBytes := cfg.kv0N12BlockBytes
+		if maxBytes == "" {
+			maxBytes = "5000"
+		}
+		deployWorkload := fmt.Sprintf("mkdir -p logs && sudo systemd-run --property=Type=exec "+
+			"--property=StandardOutput=file:/home/ubuntu/logs/kv-n12.stdout.log "+
+			"--property=StandardError=file:/home/ubuntu/logs/kv-n12.stderr.log "+
+			"--remain-after-exit --unit kv-n12 -- ./cockroach workload run kv --read-percent 0 "+
+			"--max-rate %s --concurrency 400 --min-block-bytes %s --max-block-bytes %s --tolerate-errors {pgurl:1-2}",
+			maxRate, maxBytes, maxBytes,
+		)
+
 		c.Run(ctx, option.WithNodes(c.Node(4)), deployWorkload)
 	}
 	if cfg.kv50N3 {
