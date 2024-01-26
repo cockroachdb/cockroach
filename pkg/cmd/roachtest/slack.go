@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/slack-go/slack"
 )
 
@@ -50,13 +51,13 @@ func findChannel(client *slack.Client, name string, nextCursor string) (string, 
 	return "", fmt.Errorf("not found")
 }
 
-func sortTests(tests []*testImpl) {
+func sortTests(tests []test.Test) {
 	sort.Slice(tests, func(i, j int) bool {
 		return tests[i].Name() < tests[j].Name()
 	})
 }
 
-func postSlackReport(pass, fail, skip map[*testImpl]struct{}) {
+func postSlackReport(pass, fail, skip map[test.Test]struct{}) {
 	client := makeSlackClient()
 	if client == nil {
 		return
@@ -104,7 +105,7 @@ func postSlackReport(pass, fail, skip map[*testImpl]struct{}) {
 	}
 
 	data := []struct {
-		tests map[*testImpl]struct{}
+		tests map[test.Test]struct{}
 		title string
 		color string
 	}{
@@ -113,7 +114,7 @@ func postSlackReport(pass, fail, skip map[*testImpl]struct{}) {
 		{skip, "Skipped", "warning"},
 	}
 	for _, d := range data {
-		tests := make([]*testImpl, 0, len(d.tests))
+		tests := make([]test.Test, 0, len(d.tests))
 		for t := range d.tests {
 			tests = append(tests, t)
 		}

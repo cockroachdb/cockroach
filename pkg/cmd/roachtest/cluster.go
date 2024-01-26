@@ -316,11 +316,15 @@ func initBinariesAndLibraries() {
 	cockroachPath := roachtestflags.CockroachPath
 	cockroachEAPath := roachtestflags.CockroachEAPath
 	workloadPath := roachtestflags.WorkloadPath
-	cockroach[defaultArch], _ = resolveBinary("cockroach", cockroachPath, defaultArch, true, false)
-	workload[defaultArch], _ = resolveBinary("workload", workloadPath, defaultArch, true, false)
-	cockroachEA[defaultArch], err = resolveBinary("cockroach-ea", cockroachEAPath, defaultArch, false, true)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-ea", defaultArch, err)
+	// If a remote cockroach binary has been specified, we don't need to resolve
+	// cockroach/workload binaries.
+	if roachtestflags.CockroachBinaryPath == "" {
+		cockroach[defaultArch], _ = resolveBinary("cockroach", cockroachPath, defaultArch, true, false)
+		workload[defaultArch], _ = resolveBinary("workload", workloadPath, defaultArch, true, false)
+		cockroachEA[defaultArch], err = resolveBinary("cockroach-ea", cockroachEAPath, defaultArch, false, true)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-ea", defaultArch, err)
+		}
 	}
 
 	if roachtestflags.ARM64Probability > 0 && defaultArch != vm.ArchARM64 {
@@ -1058,7 +1062,7 @@ func (c *clusterImpl) StopCockroachGracefullyOnNode(
 
 // Save marks the cluster as "saved" so that it doesn't get destroyed.
 func (c *clusterImpl) Save(ctx context.Context, msg string, l *logger.Logger) {
-	l.PrintfCtx(ctx, "saving cluster %s for debugging (--debug specified)", c)
+	l.PrintfCtx(ctx, "saving cluster %s (--debug specified or running operation)", c)
 	c.r.markClusterAsSaved(c, msg)
 	c.destroyState.mu.Lock()
 	c.destroyState.mu.saved = true
@@ -1812,17 +1816,22 @@ func (c *clusterImpl) PutE(
 // nodes in the cluster. By default, we randomly upload a binary with or without
 // runtime assertions enabled. Note that we upload to all nodes even if they
 // don't use the binary, so that the test runner can always fetch logs.
-func (c *clusterImpl) PutCockroach(ctx context.Context, l *logger.Logger, t *testImpl) error {
-	switch t.spec.CockroachBinary {
+func (c *clusterImpl) PutCockroach(ctx context.Context, l *logger.Logger, t test.Test) error {
+	binaryType := registry.StandardCockroach
+	switch tImpl := t.(type) {
+	case *testImpl:
+		binaryType = tImpl.spec.CockroachBinary
+	}
+	switch binaryType {
 	case registry.RandomizedCockroach:
 		if tests.UsingRuntimeAssertions(t) {
-			t.l.Printf("To reproduce the same set of metamorphic constants, run this test with %s=%d", test.EnvAssertionsEnabledSeed, c.cockroachRandomSeed())
+			t.L().Printf("To reproduce the same set of metamorphic constants, run this test with %s=%d", test.EnvAssertionsEnabledSeed, c.cockroachRandomSeed())
 		}
 		return c.PutE(ctx, l, t.Cockroach(), test.DefaultCockroachPath, c.All())
 	case registry.StandardCockroach:
 		return c.PutE(ctx, l, t.StandardCockroach(), test.DefaultCockroachPath, c.All())
 	case registry.RuntimeAssertionsCockroach:
-		t.l.Printf("To reproduce the same set of metamorphic constants, run this test with %s=%d", test.EnvAssertionsEnabledSeed, c.cockroachRandomSeed())
+		t.L().Printf("To reproduce the same set of metamorphic constants, run this test with %s=%d", test.EnvAssertionsEnabledSeed, c.cockroachRandomSeed())
 		return c.PutE(ctx, l, t.RuntimeAssertionsCockroach(), test.DefaultCockroachPath, c.All())
 	default:
 		return errors.Errorf("Specified cockroach binary does not exist.")
@@ -2860,6 +2869,12 @@ func (c *clusterImpl) MaybeExtendCluster(
 	ctx context.Context, l *logger.Logger, testSpec *registry.TestSpec,
 ) error {
 	timeout := testTimeout(testSpec)
+	return c.MaybeExtendClusterForTimeout(ctx, l, timeout)
+}
+
+func (c *clusterImpl) MaybeExtendClusterForTimeout(
+	ctx context.Context, l *logger.Logger, timeout time.Duration,
+) error {
 	minExp := timeutil.Now().Add(timeout + time.Hour)
 	if c.expiration.Before(minExp) {
 		extend := minExp.Sub(c.expiration)
