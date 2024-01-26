@@ -118,10 +118,10 @@ type testRunner struct {
 
 	status struct {
 		syncutil.Mutex
-		running map[*testImpl]struct{}
-		pass    map[*testImpl]struct{}
-		fail    map[*testImpl]struct{}
-		skip    map[*testImpl]struct{}
+		running map[test.Test]struct{}
+		pass    map[test.Test]struct{}
+		fail    map[test.Test]struct{}
+		skip    map[test.Test]struct{}
 	}
 
 	// cr keeps track of all live clusters.
@@ -316,10 +316,10 @@ func (r *testRunner) Run(
 		parallelism = n * count
 	}
 
-	r.status.running = make(map[*testImpl]struct{})
-	r.status.pass = make(map[*testImpl]struct{})
-	r.status.fail = make(map[*testImpl]struct{})
-	r.status.skip = make(map[*testImpl]struct{})
+	r.status.running = make(map[test.Test]struct{})
+	r.status.pass = make(map[test.Test]struct{})
+	r.status.fail = make(map[test.Test]struct{})
+	r.status.skip = make(map[test.Test]struct{})
 
 	r.work = newWorkPool(tests, count)
 	errs := &workerErrors{}
@@ -460,12 +460,21 @@ func (r *testRunner) allocateCluster(
 			skipStop:       r.config.skipClusterStopOnAttach,
 			skipWipe:       r.config.skipClusterWipeOnAttach,
 		}
+		if t.Operation {
+			// Operations don't require the cluster to be registered in the registry,
+			// so errors here are acceptable. Also allows for better cluster reuse
+			// as operations don't destroy() clusters.
+			opt.tolerateRegistrationErrors = true
+		}
 		// TODO(srosenberg): we need to think about validation here. Attaching to an incompatible cluster, e.g.,
 		// using arm64 AMI with amd64 binary, would result in obscure errors. The test runner ensures compatibility
 		// during cluster reuse, whereas attachment via CLI (e.g., via roachprod) does not.
 		lopt.l.PrintfCtx(ctx, "Attaching to existing cluster %s for test %s", existingClusterName, t.Name)
 		c, err := attachToExistingCluster(ctx, existingClusterName, clusterL, t.Cluster, opt, r.cr)
 		if err == nil {
+			if t.Operation {
+				c.localCertsDir = roachtestflags.CertsDir
+			}
 			// Pretend pre-existing's cluster architecture matches the desired one; see the above TODO wrt validation.
 			c.arch = arch
 			return c, nil, nil
@@ -589,8 +598,9 @@ func (r *testRunner) runWorker(
 		if c != nil {
 			// Try to reuse cluster.
 			testToRun = work.selectTestForCluster(ctx, c.spec, r.cr)
-			if !testToRun.noWork {
-				// We found a test to run on this cluster. Wipe the cluster.
+			if !testToRun.noWork && !testToRun.spec.Operation {
+				// We found a test to run on this cluster. Wipe the cluster if it's
+				// not an operation.
 				if err := c.WipeForReuse(ctx, l, testToRun.spec.Cluster); err != nil {
 					// We do not count reuse attempt error toward clusterCreateErr. If
 					// either the Wipe or Extend failed, then destroy the cluster and attempt
@@ -746,6 +756,11 @@ func (r *testRunner) runWorker(
 			debug:                  clustersOpt.debugMode.IsDebug(),
 			goCoverEnabled:         topt.goCoverEnabled,
 		}
+		if testToRun.spec.Operation {
+			// This test is an operation. Default to `cockroach` on the cluster's
+			// nodes.
+			t.cockroach = "cockroach"
+		}
 		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts)
 
 		// handleClusterCreationFailure can be called when the `err` given
@@ -753,6 +768,10 @@ func (r *testRunner) runWorker(
 		// cluster for a test.
 		handleClusterCreationFailure := func(err error) {
 			t.Error(errClusterProvisioningFailed(err))
+			// Don't post issues for operations.
+			if t.spec.Operation {
+				return
+			}
 
 			if _, err := github.MaybePost(t, l, t.failureMsg()); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
@@ -770,11 +789,13 @@ func (r *testRunner) runWorker(
 			c.setTest(t)
 
 			var setupErr error
-			if c.spec.NodeCount > 0 { // skip during tests
-				setupErr = c.PutCockroach(ctx, l, t)
-			}
-			if setupErr == nil {
-				setupErr = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
+			if !t.spec.Operation {
+				if c.spec.NodeCount > 0 { // skip during tests
+					setupErr = c.PutCockroach(ctx, l, t)
+				}
+				if setupErr == nil {
+					setupErr = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
+				}
 			}
 
 			if setupErr != nil {
@@ -1321,7 +1342,7 @@ func (r *testRunner) teardownTest(
 			t.L().Printf("error collecting artifacts: %v", err)
 		}
 
-		if timedOut {
+		if timedOut && !t.spec.Operation {
 			// Shut down the cluster. We only do this on timeout to help the test terminate;
 			// for regular failures, if the --debug flag is used, we want the cluster to stay
 			// around so someone can poke at it.
@@ -1351,7 +1372,7 @@ func (r *testRunner) teardownTest(
 }
 
 func (r *testRunner) collectArtifacts(
-	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool, timeout time.Duration,
+	ctx context.Context, t test.Test, c *clusterImpl, timedOut bool, timeout time.Duration,
 ) error {
 	// Collecting artifacts may hang so we run it in a goroutine which is abandoned
 	// after a timeout.

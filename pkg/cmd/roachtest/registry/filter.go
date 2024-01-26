@@ -123,6 +123,17 @@ func (filter *TestFilter) Matches(t *TestSpec) (matches bool, reason MatchFailRe
 	return reason == MatchFailReason{}, reason
 }
 
+// MatchesOp returns true if the filter matches the operation. If the op doesn't
+// match, return the reasons.
+func (filter *TestFilter) MatchesOp(o *OperationSpec) (matches bool, reason MatchFailReason) {
+	reason.NameMismatch = !filter.Name.MatchString(o.Name)
+	reason.OwnerMismatch = filter.Owner != "" && o.Owner != filter.Owner
+	reason.CloudNotCompatible = filter.Cloud != "" && !o.CompatibleClouds.Contains(filter.Cloud)
+
+	// We have a match if all fields are false.
+	return reason == MatchFailReason{}, reason
+}
+
 // MatchFailReasonString returns a user-friendly string describing the reason(s)
 // a filter failed to match a test (returned by Matches). Returns the empty
 // string if the reason is zero.
@@ -293,6 +304,18 @@ func (filter *TestFilter) FilterWithHint(tests []TestSpec) ([]TestSpec, NoMatche
 	// We failed to produce a useful message. It's an uncommon combination of
 	// criteria that leads to no tests matching.
 	return nil, NoHintAvailable
+}
+
+// FilterOps returns the op specs in the given list that match the filter
+// (in the same order).
+func (filter *TestFilter) FilterOps(ops []OperationSpec) []OperationSpec {
+	var res []OperationSpec
+	for i := range ops {
+		if ok, _ := filter.MatchesOp(&ops[i]); ok {
+			res = append(res, ops[i])
+		}
+	}
+	return res
 }
 
 // NoMatchesHintString returns a user-friendly string describing the hint.
