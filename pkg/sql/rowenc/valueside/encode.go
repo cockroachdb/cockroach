@@ -13,6 +13,7 @@ package valueside
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
@@ -112,6 +113,9 @@ func Encode(appendTo []byte, colID ColumnIDDelta, val tree.Datum, scratch []byte
 	case *tree.DVoid:
 		return encoding.EncodeVoidValue(appendTo, uint32(colID)), nil
 	default:
+		if buildutil.CrdbTestBuild {
+			return nil, errors.AssertionFailedf("unable to encode table value: %T", t)
+		}
 		return nil, errors.Errorf("unable to encode table value: %T", t)
 	}
 }
