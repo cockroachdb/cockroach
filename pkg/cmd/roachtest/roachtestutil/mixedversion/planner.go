@@ -60,6 +60,7 @@ type (
 		currentContext *Context
 		crdbNodes      option.NodeListOption
 		rt             test.Test
+		isLocal        bool
 		options        testOptions
 		hooks          *testHooks
 		prng           *rand.Rand
@@ -305,6 +306,12 @@ func (p *testPlanner) changeVersionSteps(
 			// operations to run.
 			possibleWaitMinutes := []int{1, 5, 10}
 			waitDur := time.Duration(possibleWaitMinutes[p.prng.Intn(len(possibleWaitMinutes))]) * time.Minute
+			if p.isLocal {
+				// Reduce wait duration in local runs, as some tests run as
+				// part of CI and we can't to spend too much time waiting in
+				// that context.
+				waitDur = waitDur / 10
+			}
 			steps = append(steps, p.newSingleStep(waitStep{dur: waitDur}))
 		}
 	}
