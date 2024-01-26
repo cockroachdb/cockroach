@@ -2901,7 +2901,7 @@ func TestRecvMsgUnreachable(t *testing.T) {
 	// set node 2 to state replicate
 	r.trk.Progress[2].Match = 3
 	r.trk.Progress[2].BecomeReplicate()
-	r.trk.Progress[2].OptimisticUpdate(5)
+	r.trk.Progress[2].Next = 6
 
 	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgUnreachable})
 
