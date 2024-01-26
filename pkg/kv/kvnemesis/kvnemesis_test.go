@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -221,9 +222,9 @@ type tBridge struct {
 func newTBridge(t *testing.T) *tBridge {
 	// NB: we're not using t.TempDir() because we want these to survive
 	// on failure.
-	td, err := os.MkdirTemp("", "kvnemesis")
+	td, err := os.MkdirTemp(datapathutils.DebuggableTempDir(), "kvnemesis")
 	if err != nil {
-		td = os.TempDir()
+		td = datapathutils.DebuggableTempDir()
 	}
 	t.Cleanup(func() {
 		if t.Failed() {
