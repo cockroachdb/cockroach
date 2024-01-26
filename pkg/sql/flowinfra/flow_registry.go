@@ -315,6 +315,16 @@ func (fr *FlowRegistry) RegisterFlow(
 			// drain all the processors.
 			numTimedOutReceivers := fr.cancelPendingStreams(id, errNoInboundStreamConnection)
 			if numTimedOutReceivers != 0 {
+				// The whole plan will error out. So far we only pushed the
+				// error to the timed out receivers, and eventually it'll make
+				// its way to the DistSQLReceiver which will transition the plan
+				// into draining state. However, non-timed out streams will only
+				// learn about the error and the draining state the next time
+				// the producer sends something on the stream which might not
+				// happen for a while. To speed up the shutdown of the whole
+				// plan we cancel the flow on this node which will trigger quick
+				// ungraceful shutdown of the whole plan.
+				f.Cancel()
 				// The span in the context might be finished by the time this runs. In
 				// principle, we could ForkSpan() beforehand, but we don't want to
 				// create the extra span every time.

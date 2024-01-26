@@ -14,6 +14,7 @@ import (
 	"context"
 	"math"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -215,7 +216,10 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	// to connect a stream, but it'll be too late.
 	id1 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	f1 := &FlowBase{}
-	f1.mu.ctxCancel = func() {}
+	var canceled atomic.Bool
+	f1.mu.ctxCancel = func() {
+		canceled.Store(true)
+	}
 	streamID1 := execinfrapb.StreamID(1)
 	consumer := &distsqlutils.RowBuffer{}
 	wg := &sync.WaitGroup{}
@@ -238,6 +242,9 @@ func TestStreamConnectionTimeout(t *testing.T) {
 		defer si.mu.Unlock()
 		if !si.mu.canceled {
 			return errors.Errorf("not timed out yet")
+		}
+		if !canceled.Load() {
+			return errors.New("expected ctxCancel to have been called")
 		}
 		return nil
 	})
@@ -739,10 +746,10 @@ func (s *delayedErrorServerStream) Send(*execinfrapb.ConsumerSignal) error {
 //     inbound stream timeout is reached
 //   - that timeout "cancels" the single pending flow; this cancellation results
 //     in the flow being marked as "canceled" and the wait group being
-//     decremented (as well as calling Timeout() on the receiver)
+//     decremented (as well as calling Timeout() on the receiver). It also
+//     results in the flow cancellation.
 //   - after the flow cancellation is performed, the "handshake" RPC results in
-//     an error which results in flow being properly canceled (by calling
-//     FlowBase.ctxCancel).
+//     an error too, which doesn't actually matter at this point.
 //
 // Before #94113 was fixed, the flow would be incorrectly marked as "connected"
 // before the "handshake" RPC was issued, so the inbound stream timeout would
@@ -814,7 +821,9 @@ func TestErrorOnSlowHandshake(t *testing.T) {
 	// Make sure that the wait group is properly decremented (this must have
 	// been done by flowEntry.streamTimer too).
 	wg.Wait()
-	// Since the RPC resulted in an error, we expect that the flow is canceled.
+	// We expect that Flow.Cancel is called twice - once when the inbound stream
+	// timed out, and again when the RPC results in an error.
+	<-cancelCh
 	<-cancelCh
 	err := <-errCh
 	if err == nil {
