@@ -23,12 +23,14 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce/reducesql"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
+	"github.com/google/go-cmp/cmp"
 )
 
 var (
@@ -349,7 +351,7 @@ SELECT '%[1]s';
 					logger.Printf("control and perturbed query results were the same: \n%v\n\n%v\n", string(parts[1]), string(parts[4]))
 				}
 			}
-			return !bytes.Equal(parts[1], parts[4]), logOriginalHint
+			return !unsortedLinesEqual(string(parts[1]), string(parts[4])), logOriginalHint
 		}
 		if unoptimizedOracle {
 			parts := bytes.Split(out, []byte(unoptimizedOracleSep))
@@ -366,7 +368,7 @@ SELECT '%[1]s';
 					logger.Printf("unoptimized and optimized query results were the same: \n%v\n\n%v\n", string(parts[2]), string(parts[4]))
 				}
 			}
-			return !bytes.Equal(parts[2], parts[4]), logOriginalHint
+			return !unsortedLinesEqual(string(parts[2]), string(parts[4])), logOriginalHint
 		}
 		if verbose {
 			logOriginalHint = func() {
@@ -432,4 +434,12 @@ func findPreviousSetStatements(lines []string, lineIdx int) (string, int) {
 	// firstQueryLineIdx right now points at an empty line before the statement.
 	query := strings.Join(lines[firstQueryLineIdx+1:lastQueryLineIdx+1], " ")
 	return query, firstQueryLineIdx
+}
+
+func unsortedLinesEqual(part1, part2 string) bool {
+	lines1 := strings.Split(part1, "\n")
+	lines2 := strings.Split(part2, "\n")
+	sort.Strings(lines1)
+	sort.Strings(lines2)
+	return cmp.Equal(lines1, lines2)
 }
