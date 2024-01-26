@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -77,7 +78,8 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			ih.collectBundle = true
 			ih.savePlanForStats = true
 
-			p.stmt = makeStatement(stmt, clusterunique.ID{})
+			p.stmt = makeStatement(stmt, clusterunique.ID{},
+				tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&execCfg.Settings.SV)))
 			if err := p.makeOptimizerPlan(ctx); err != nil {
 				t.Fatal(err)
 			}

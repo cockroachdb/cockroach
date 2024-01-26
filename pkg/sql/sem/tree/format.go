@@ -349,6 +349,7 @@ func NewFmtCtx(f FmtFlags, opts ...FmtCtxOption) *FmtCtx {
 	if ctx.ann == nil && f&flagsRequiringAnnotations != 0 {
 		panic(errors.AssertionFailedf("no Annotations provided"))
 	}
+
 	return ctx
 }
 

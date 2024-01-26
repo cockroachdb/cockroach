@@ -172,7 +172,8 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 		// We need to re-plan every time, since the plan is closed automatically
 		// by PlanAndRun() below making it unusable across retries.
-		p.stmt = makeStatement(stmt, clusterunique.ID{})
+		p.stmt = makeStatement(stmt, clusterunique.ID{},
+			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&execCfg.Settings.SV)))
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -289,7 +290,8 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			p.ExtendedEvalContext().Tracing,
 		)
 
-		p.stmt = makeStatement(stmt, clusterunique.ID{})
+		p.stmt = makeStatement(stmt, clusterunique.ID{},
+			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&s.ClusterSettings().SV)))
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
 		}
