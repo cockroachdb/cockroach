@@ -86,7 +86,7 @@ database_name = 'rand' AND schema_name = 'public'`)
 		// Note: we do not care how many rows successfully populate
 		// the given table
 		if _, err := randgen.PopulateTableWithRandData(rng, tc.Conns[0], tableName,
-			numInserts); err != nil {
+			numInserts, nil); err != nil {
 			t.Fatal(err)
 		}
 		tableNames = append(tableNames, tableName)

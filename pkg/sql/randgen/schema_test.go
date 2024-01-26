@@ -68,7 +68,7 @@ func TestPopulateTableWithRandData(t *testing.T) {
 	for i := 0; i < numTables; i++ {
 		tableName := string(stmts[i].(*tree.CreateTable).Table.ObjectName)
 		numRows := 30
-		numRowsInserted, err := randgen.PopulateTableWithRandData(rng, dbConn, tableName, numRows)
+		numRowsInserted, err := randgen.PopulateTableWithRandData(rng, dbConn, tableName, numRows, nil)
 		require.NoError(t, err)
 		res := sqlDB.QueryStr(t, fmt.Sprintf("SELECT count(*) FROM %s", tree.NameString(tableName)))
 		require.Equal(t, fmt.Sprint(numRowsInserted), res[0][0])
