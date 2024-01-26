@@ -13,11 +13,11 @@ package stats
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -39,6 +39,7 @@ func TestStatsAnyType(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	st := srv.ApplicationLayer().ClusterSettings()
 	runner := sqlutils.MakeSQLRunner(sqlDB)
+	formatter := tree.NewFmtCtx(tree.FmtParsable)
 
 	for i := 0; i < 10; i++ {
 		var typ *types.T
@@ -53,12 +54,6 @@ func TestStatsAnyType(t *testing.T) {
 				// Casting random integers to REGTYPE might fail.
 				continue loop
 			}
-			if typ.Family() == types.ArrayFamily &&
-				(typ.ArrayContents().Family() == types.FloatFamily || typ.ArrayContents().Family() == types.DecimalFamily) {
-				// Skip arrays of floats and decimals since they might contain
-				// infinities as elements which are a bit annoying to insert below.
-				continue loop
-			}
 			if err := colinfo.ValidateColumnDefType(ctx, st.Version, typ); err == nil {
 				break
 			}
@@ -69,14 +64,9 @@ func TestStatsAnyType(t *testing.T) {
 		runner.Exec(t, fmt.Sprintf("CREATE TABLE %s(c %s)", tableName, typ.SQLString()))
 		for j := 0; j < numRows; j++ {
 			d := RandDatum(rng, typ, false /* nullOk */)
-			dString := d.String()
-			switch typ.Family() {
-			case types.IntFamily, types.FloatFamily, types.DecimalFamily:
-				dString = "'" + dString + "'"
-			case types.TSQueryFamily, types.TSVectorFamily:
-				dString = "'" + strings.ReplaceAll(dString, "'", "''") + "'"
-			}
-			runner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES (%s::%s)", tableName, dString, typ.SQLString()))
+			formatter.Reset()
+			formatter.FormatNode(d)
+			runner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES (%s::%s)", tableName, formatter.String(), typ.SQLString()))
 		}
 		runner.Exec(t, "ANALYZE "+tableName)
 	}
