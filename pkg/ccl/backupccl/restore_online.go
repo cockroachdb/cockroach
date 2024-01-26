@@ -118,49 +118,13 @@ func sendAddRemoteSSTWorker(
 			}
 
 			if len(splitAt) > 0 {
-				expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
-				if err := execCtx.ExecCfg().DB.AdminSplit(ctx, splitAt, expiration); err != nil {
+				if err := sendSplitAt(ctx, execCtx, splitAt); err != nil {
 					log.Warningf(ctx, "failed to split during experimental restore: %v", err)
 				}
 			}
 
 			for _, file := range toAdd {
-				// NB: Since the restored span is a subset of the BackupFileEntrySpan,
-				// these counts may be an overestimate of what actually gets restored.
-				counts := file.BackupFileEntryCounts
-				fileSize := file.ApproximatePhysicalSize
-				// If we don't have physical file size info, just use the mvcc size; it
-				// isn't physical size but is good enough for reflecting that there are
-				// some number of bytes in this sst span for the purposes tracking which
-				// spans have non-zero remote bytes.
-				if fileSize == 0 {
-					fileSize = uint64(counts.DataSize)
-				}
-				// If MVCC stats are _also_ zero just guess. Any non-zero value is fine.
-				if fileSize == 0 {
-					fileSize = 16 << 20
-				}
-
-				loc := kvpb.AddSSTableRequest_RemoteFile{
-					Locator:                 file.Dir.URI,
-					Path:                    file.Path,
-					ApproximatePhysicalSize: fileSize,
-					BackingFileSize:         file.BackingFileSize,
-				}
-				// TODO(dt): see if KV has any better ideas for making these up.
-				fileStats := &enginepb.MVCCStats{
-					ContainsEstimates: 1,
-					KeyBytes:          counts.DataSize / 2,
-					ValBytes:          counts.DataSize / 2,
-					LiveBytes:         counts.DataSize,
-					KeyCount:          counts.Rows + counts.IndexEntries,
-					LiveCount:         counts.Rows + counts.IndexEntries,
-				}
-				var err error
-				_, _, err = execCtx.ExecCfg().DB.AddRemoteSSTable(ctx,
-					file.BackupFileEntrySpan, loc,
-					fileStats)
-				if err != nil {
+				if err := sendRemoteAddSSTable(ctx, execCtx, file); err != nil {
 					return err
 				}
 			}
@@ -171,10 +135,12 @@ func sendAddRemoteSSTWorker(
 
 		for entry := range restoreSpanEntriesCh {
 			firstSplitDone := false
+
+			log.Infof(ctx, "experimental restore: processing restore span entry for %s", entry.Span)
 			for _, file := range entry.Files {
 				restoringSubspan := file.BackupFileEntrySpan.Intersect(entry.Span)
-				log.Infof(ctx, "Experimental restore: sending span %s of file (path: %s, span: %s), with intersecting subspan %s",
-					file.BackupFileEntrySpan, file.Path, file.BackupFileEntrySpan, restoringSubspan)
+				log.Infof(ctx, "experimental restore: sending span %s of file (path: %s, span: %s)",
+					restoringSubspan, file.Path, file.BackupFileEntrySpan)
 
 				if !restoringSubspan.Valid() {
 					log.Warningf(ctx, "backup file does not intersect with the restoring span")
@@ -183,11 +149,10 @@ func sendAddRemoteSSTWorker(
 
 				file.BackupFileEntrySpan = restoringSubspan
 				if !firstSplitDone {
-					expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
-					if err := execCtx.ExecCfg().DB.AdminSplit(ctx, restoringSubspan.Key, expiration); err != nil {
+					if err := sendSplitAt(ctx, execCtx, restoringSubspan.Key); err != nil {
 						log.Warningf(ctx, "failed to split during experimental restore: %v", err)
 					}
-					if _, err := execCtx.ExecCfg().DB.AdminScatter(ctx, restoringSubspan.Key, 4<<20); err != nil {
+					if err := sendAdminScatter(ctx, execCtx, restoringSubspan.Key); err != nil {
 						log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
 					}
 					firstSplitDone = true
@@ -220,6 +185,71 @@ func sendAddRemoteSSTWorker(
 		}
 		return nil
 	}
+}
+
+// TODO(ssd): Perhaps the relevant DB functions should start tracing
+// spans.
+func sendSplitAt(ctx context.Context, execCtx sql.JobExecContext, splitKey roachpb.Key) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupccl.sendSplitAt")
+	defer sp.Finish()
+
+	expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
+	return execCtx.ExecCfg().DB.AdminSplit(ctx, splitKey, expiration)
+}
+
+func sendAdminScatter(
+	ctx context.Context, execCtx sql.JobExecContext, scatterKey roachpb.Key,
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupccl.sendAdminScatter")
+	defer sp.Finish()
+
+	const maxSize = 4 << 20
+	_, err := execCtx.ExecCfg().DB.AdminScatter(ctx, scatterKey, maxSize)
+	return err
+}
+
+func sendRemoteAddSSTable(
+	ctx context.Context, execCtx sql.JobExecContext, file execinfrapb.RestoreFileSpec,
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupccl.sendRemoteAddSSTable")
+	defer sp.Finish()
+
+	// NB: Since the restored span is a subset of the BackupFileEntrySpan,
+	// these counts may be an overestimate of what actually gets restored.
+	counts := file.BackupFileEntryCounts
+	fileSize := file.ApproximatePhysicalSize
+
+	// If we don't have physical file size info, just use the mvcc size; it
+	// isn't physical size but is good enough for reflecting that there are
+	// some number of bytes in this sst span for the purposes tracking which
+	// spans have non-zero remote bytes.
+	if fileSize == 0 {
+		fileSize = uint64(counts.DataSize)
+	}
+
+	// If MVCC stats are _also_ zero just guess. Any non-zero value is fine.
+	if fileSize == 0 {
+		fileSize = 16 << 20
+	}
+
+	loc := kvpb.AddSSTableRequest_RemoteFile{
+		Locator:                 file.Dir.URI,
+		Path:                    file.Path,
+		ApproximatePhysicalSize: fileSize,
+		BackingFileSize:         file.BackingFileSize,
+	}
+	// TODO(dt): see if KV has any better ideas for making these up.
+	fileStats := &enginepb.MVCCStats{
+		ContainsEstimates: 1,
+		KeyBytes:          counts.DataSize / 2,
+		ValBytes:          counts.DataSize / 2,
+		LiveBytes:         counts.DataSize,
+		KeyCount:          counts.Rows + counts.IndexEntries,
+		LiveCount:         counts.Rows + counts.IndexEntries,
+	}
+	_, _, err := execCtx.ExecCfg().DB.AddRemoteSSTable(
+		ctx, file.BackupFileEntrySpan, loc, fileStats)
+	return err
 }
 
 // checkManifestsForOnlineCompat returns an error if the set of
@@ -271,28 +301,24 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 		return total, nil
 	}
 
+	ctx, sp := tracing.ChildSpan(ctx, "backupcc..maybeCalculateDownloadSpans")
+	defer sp.Finish()
+
 	// If this is the first resumption of this job, we need to find out the total
 	// amount we expect to download and persist it so that we can indicate our
 	// progress as that number goes down later.
 	log.Infof(ctx, "calculating total download size (across all stores) to complete restore")
 	if err := r.job.NoTxn().RunningStatus(ctx, "Calculating total download size..."); err != nil {
-		return 0, errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
+		return 0, errors.Wrapf(err, "failed to update running status of job %d", r.job.ID())
 	}
 
 	for _, span := range details.DownloadSpans {
-		resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
-			NodeID:        "0", // Fan out to all nodes.
-			Spans:         []roachpb.Span{span},
-			SkipMvccStats: true,
-		})
+		remainingForSpan, err := getRemainingExternalFileBytes(ctx, execCtx, span)
 		if err != nil {
 			return 0, err
 		}
-		for _, stats := range resp.SpanToStats {
-			total += stats.ExternalFileBytes
-		}
+		total += remainingForSpan
 	}
-
 	if total == 0 {
 		return total, nil
 	}
@@ -303,7 +329,7 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 		ju.UpdateProgress(md.Progress)
 		return nil
 	}); err != nil {
-		return 0, errors.Wrapf(err, "failed to update job %d", errors.Safe(r.job.ID()))
+		return 0, errors.Wrapf(err, "failed to update job %d", r.job.ID())
 	}
 
 	return total, nil
@@ -315,21 +341,30 @@ func (r *restoreResumer) sendDownloadWorker(
 	return func(ctx context.Context) error {
 		ctx, tsp := tracing.ChildSpan(ctx, "backupccl.sendDownloadWorker")
 		defer tsp.Finish()
-		for sp := range downloadSpansCh {
-			log.VInfof(ctx, 1, "sending download request for %d spans", len(sp))
-			var resp *serverpb.DownloadSpanResponse
-			var err error
-			if resp, err = execCtx.ExecCfg().TenantStatusServer.DownloadSpan(ctx, &serverpb.DownloadSpanRequest{
-				Spans: sp,
-			}); err != nil {
+		for spans := range downloadSpansCh {
+			if err := sendDownloadSpan(ctx, execCtx, spans); err != nil {
 				return err
-			}
-			if len(resp.ErrorsByNodeID) > 0 {
-				return errors.Newf("failed to download spans on all nodes: %v", resp.ErrorsByNodeID)
 			}
 		}
 		return nil
 	}
+}
+
+func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roachpb.Spans) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupccl.sendDownloadSpan")
+	defer sp.Finish()
+
+	log.VInfof(ctx, 1, "sending download request for %d spans", len(spans))
+	resp, err := execCtx.ExecCfg().TenantStatusServer.DownloadSpan(ctx, &serverpb.DownloadSpanRequest{
+		Spans: spans,
+	})
+	if err != nil {
+		return err
+	}
+	if len(resp.ErrorsByNodeID) > 0 {
+		return errors.Newf("failed to download spans on all nodes: %v", resp.ErrorsByNodeID)
+	}
+	return nil
 }
 
 // waitForDownloadToComplete waits until there are no more ExternalFileBytes
@@ -339,6 +374,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 ) error {
 	ctx, tsp := tracing.ChildSpan(ctx, "backupccl.waitForDownloadToComplete")
 	defer tsp.Finish()
+
 	total, err := r.maybeCalculateTotalDownloadSpans(ctx, execCtx, details)
 	if err != nil {
 		return errors.Wrap(err, "failed to calculate total number of spans to download")
@@ -359,17 +395,11 @@ func (r *restoreResumer) waitForDownloadToComplete(
 
 		var remaining uint64
 		for _, span := range details.DownloadSpans {
-			resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
-				NodeID:        "0", // Fan out to all nodes.
-				Spans:         []roachpb.Span{span},
-				SkipMvccStats: true,
-			})
+			remainingForSpan, err := getRemainingExternalFileBytes(ctx, execCtx, span)
 			if err != nil {
 				return err
 			}
-			for _, stats := range resp.SpanToStats {
-				remaining += stats.ExternalFileBytes
-			}
+			remaining += remainingForSpan
 		}
 
 		fractionComplete := float32(total-remaining) / float32(total)
@@ -391,6 +421,28 @@ func (r *restoreResumer) waitForDownloadToComplete(
 			lastProgressUpdate = timeutil.Now()
 		}
 	}
+}
+
+func getRemainingExternalFileBytes(
+	ctx context.Context, execCtx sql.JobExecContext, span roachpb.Span,
+) (uint64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupccl.getRemainingExternalFileBytes")
+	defer sp.Finish()
+
+	resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
+		NodeID:        "0", // Fan out to all nodes.
+		Spans:         []roachpb.Span{span},
+		SkipMvccStats: true,
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	var remaining uint64
+	for _, stats := range resp.SpanToStats {
+		remaining += stats.ExternalFileBytes
+	}
+	return remaining, nil
 }
 
 func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExecContext) error {
@@ -416,6 +468,9 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 func (r *restoreResumer) cleanupAfterDownload(
 	ctx context.Context, details jobspb.RestoreDetails,
 ) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupccl.cleanupAfterDownload")
+	defer sp.Finish()
+
 	executor := r.execCfg.InternalDB.Executor()
 
 	// Re-enable automatic stats collection on restored tables.
