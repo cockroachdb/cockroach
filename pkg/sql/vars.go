@@ -1247,6 +1247,23 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	// CockroachDB extension (inspired by MySQL).
+	`autocommit_before_ddl`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().AutoCommitBeforeDDL), nil
+		},
+		GetStringVal: makePostgresBoolGetStringValFn("autocommit_before_ddl"),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("autocommit_before_ddl", s)
+			if err != nil {
+				return err
+			}
+			m.SetAutoCommitBeforeDDL(b)
+			return nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
 	// See https://www.postgresql.org/docs/10/static/ddl-schemas.html#DDL-SCHEMAS-PATH
 	// https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
 	`search_path`: {

@@ -12,6 +12,7 @@ Aborted{WasUpgraded:false}
 		TxnFinishAborted{}
 		TxnRestart{}
 	missing events:
+		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishCommitted{}
 		TxnReleased{}
@@ -30,6 +31,7 @@ Aborted{WasUpgraded:true}
 		TxnFinishAborted{}
 		TxnRestart{}
 	missing events:
+		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishCommitted{}
 		TxnReleased{}
@@ -47,6 +49,7 @@ CommitWait{}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
+		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAborted{}
 		TxnReleased{}
@@ -66,6 +69,7 @@ NoTxn{}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
+		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
@@ -80,6 +84,7 @@ Open{ImplicitTxn:false, WasUpgraded:false}
 		RetriableErr{CanAutoRetry:false, IsCommit:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
@@ -98,6 +103,7 @@ Open{ImplicitTxn:false, WasUpgraded:true}
 		RetriableErr{CanAutoRetry:false, IsCommit:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
@@ -121,6 +127,7 @@ Open{ImplicitTxn:true, WasUpgraded:false}
 		TxnUpgradeToExplicit{}
 	missing events:
 		SavepointRollback{}
+		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnReleased{}
 		TxnRestart{}
@@ -139,6 +146,7 @@ Open{ImplicitTxn:true, WasUpgraded:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
+		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnReleased{}
 		TxnRestart{}
