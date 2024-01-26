@@ -259,7 +259,7 @@ func runLeasePreferences(
 	})
 
 	t.L().Printf("setting lease preferences: %s", spec.preferences)
-	configureZone(t, ctx, conn, "kv", zoneConfig{
+	configureZone(t, ctx, conn, "DATABASE kv", zoneConfig{
 		replicas:        spec.replFactor,
 		leasePreference: spec.preferences,
 	})
