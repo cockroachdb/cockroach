@@ -130,7 +130,7 @@ func registerGORM(r registry.Registry) {
 			ctx,
 			option.WithNodes(node),
 			fmt.Sprintf(`cd %s && rm migrate_test.go &&
-				GORM_DIALECT="postgres" GORM_DSN="user=root password= dbname=gorm host=localhost port={pgport:1} sslmode=disable"
+				GORM_DIALECT="postgres" GORM_DSN="user=test_admin password= dbname=gorm host=localhost port={pgport:1} sslmode=disable"
 				go test -v ./... 2>&1 | %s/bin/go-junit-report > %s`,
 				gormTestPath, goPath, resultsPath),
 		)
