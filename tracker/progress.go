@@ -190,10 +190,6 @@ func (pr *Progress) MaybeUpdate(n uint64) bool {
 	return updated
 }
 
-// OptimisticUpdate signals that appends all the way up to and including index n
-// are in-flight. As a result, Next is increased to n+1.
-func (pr *Progress) OptimisticUpdate(n uint64) { pr.Next = n + 1 }
-
 // MaybeDecrTo adjusts the Progress to the receipt of a MsgApp rejection. The
 // arguments are the index of the append message rejected by the follower, and
 // the hint that we want to decrease to.
