@@ -41,12 +41,12 @@ type Statement struct {
 }
 
 func makeStatement(
-	parserStmt statements.Statement[tree.Statement], queryID clusterunique.ID,
+	parserStmt statements.Statement[tree.Statement], queryID clusterunique.ID, fmtFlags tree.FmtFlags,
 ) Statement {
 	return Statement{
 		Statement:       parserStmt,
-		StmtNoConstants: formatStatementHideConstants(parserStmt.AST),
-		StmtSummary:     formatStatementSummary(parserStmt.AST),
+		StmtNoConstants: formatStatementHideConstants(parserStmt.AST, fmtFlags),
+		StmtSummary:     formatStatementHideConstants(parserStmt.AST, fmtFlags),
 		QueryID:         queryID,
 	}
 }
