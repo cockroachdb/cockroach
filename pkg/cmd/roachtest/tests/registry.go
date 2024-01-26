@@ -57,7 +57,6 @@ func RegisterTests(r registry.Registry) {
 	registerEncryption(r)
 	registerFailover(r)
 	registerFixtures(r)
-	registerFlowable(r)
 	registerFollowerReads(r)
 	registerGORM(r)
 	registerGopg(r)
