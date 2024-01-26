@@ -1004,22 +1004,31 @@ func causeContention(
 			insertValue)
 		require.NoError(t, errTxn)
 		wgTxnStarted.Done()
+		// Wait for the update to show up in cluster_queries.
+		var seen bool
+		for i := 1; i <= 5 && !seen; i++ {
+			time.Sleep(time.Duration(i) * 10 * time.Millisecond)
+			row := tx.QueryRowContext(
+				ctx, "SELECT EXISTS(SELECT * FROM crdb_internal.cluster_queries WHERE query LIKE '%/* shuba */')",
+			)
+			require.NoError(t, row.Scan(&seen))
+		}
+		require.Equal(t, seen, true)
 		_, errTxn = tx.ExecContext(ctx, "select pg_sleep(.5);")
 		require.NoError(t, errTxn)
 		errTxn = tx.Commit()
 		require.NoError(t, errTxn)
 	}()
 
-	start := timeutil.Now()
-
 	// Need to wait for the txn to start to ensure lock contention.
 	wgTxnStarted.Wait()
-	// This will be blocked until the updateRowWithDelay finishes.
+	// This will be blocked until the insert txn finishes.
+	start := timeutil.Now()
 	_, errUpdate := conn.ExecContext(
-		ctx, fmt.Sprintf("UPDATE %s SET s = $1 where id = 'test';", table), updateValue)
+		ctx, fmt.Sprintf("UPDATE %s SET s = $1 where id = 'test' /* shuba */;", table), updateValue)
 	require.NoError(t, errUpdate)
 	end := timeutil.Now()
-	require.GreaterOrEqual(t, end.Sub(start), 499*time.Millisecond)
+	require.GreaterOrEqual(t, end.Sub(start), 500*time.Millisecond)
 
 	wgTxnDone.Wait()
 }
