@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "encryption.go",
         "filter.go",
+        "operation_spec.go",
         "owners.go",
         "registry_interface.go",
         "tag.go",
@@ -14,6 +15,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/operation",
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/test",
         "//pkg/internal/team",

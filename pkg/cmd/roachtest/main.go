@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
@@ -179,9 +180,31 @@ the cluster nodes on start.
 	}
 	roachtestflags.AddRunFlags(benchCmd.Flags())
 
+	var runOperationCmd = &cobra.Command{
+		// Don't display usage when tests fail.
+		SilenceUsage: true,
+		Use:          "run-operation [regex...]",
+		Short:        "run operations on cockroach cluster",
+		Long:         `Run automated operations on existing or ephemeral cockroach clusters.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := initRunFlagsBinariesAndLibraries(cmd); err != nil {
+				return err
+			}
+			filter, err := makeTestFilter(args)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("\nRunning %s.\n\n", filter.String())
+			cmd.SilenceUsage = true
+			return runOperations(operations.RegisterOperations, filter)
+		},
+	}
+	roachtestflags.AddRunOpsFlags(runOperationCmd.Flags())
+
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(benchCmd)
+	rootCmd.AddCommand(runOperationCmd)
 
 	var err error
 	config.OSUser, err = user.Current()
@@ -261,6 +284,94 @@ func testsToRun(
 	}
 
 	return selectSpecs(notSkipped, selectProbability, true, print), nil
+}
+
+func opsToRun(
+	r testRegistryImpl,
+	filter *registry.TestFilter,
+	runSkipped bool,
+	selectProbability float64,
+	print bool,
+) ([]registry.OperationSpec, error) {
+	specs := filter.FilterOps(r.AllOperations())
+	if len(specs) == 0 {
+		return nil, errors.New("no matching operations to run")
+	}
+
+	var notSkipped []registry.OperationSpec
+	for _, s := range specs {
+		if s.Skip == "" || runSkipped {
+			notSkipped = append(notSkipped, s)
+		} else {
+			if print && roachtestflags.TeamCity {
+				fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='%s']\n",
+					s.Name, TeamCityEscape(s.Skip))
+			}
+			if print {
+				fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", s.Skip)
+			}
+		}
+	}
+
+	if print {
+		// We want to show information about all operations which match the
+		// pattern(s) but were excluded for other reasons.
+		relaxedFilter := registry.TestFilter{
+			Name: filter.Name,
+		}
+		for _, s := range relaxedFilter.FilterOps(r.AllOperations()) {
+			if matches, r := filter.MatchesOp(&s); !matches {
+				reason := filter.MatchFailReasonString(r)
+				// This test matches the "relaxed" filter but not the original filter.
+				if roachtestflags.TeamCity {
+					fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='%s']\n", s.Name, reason)
+				}
+				fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", reason)
+			}
+		}
+	}
+
+	return selectOpSpecs(notSkipped, selectProbability, print), nil
+}
+
+func selectOpSpecs(
+	specs []registry.OperationSpec, samplePct float64, print bool,
+) []registry.OperationSpec {
+	if samplePct == 1 || len(specs) == 0 {
+		return specs
+	}
+
+	var sampled []registry.OperationSpec
+	var selectedIdxs []int
+
+	// Selects one random spec from the range [start, end) and appends it to sampled.
+	for i, s := range specs {
+		if rand.Float64() < samplePct {
+			sampled = append(sampled, s)
+			selectedIdxs = append(selectedIdxs, i)
+			continue
+		}
+	}
+
+	p := 0
+	// This loop depends on an ordered list as we are essentially
+	// skipping all values in between the selected indexes.
+	for _, i := range selectedIdxs {
+		for j := p; j < i; j++ {
+			s := specs[j]
+			if print && roachtestflags.TeamCity {
+				fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='excluded via sampling']\n",
+					s.Name)
+			}
+
+			if print {
+				fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\texcluded via sampling\n", s.Name, "0.00s")
+			}
+		}
+		p = i + 1
+	}
+
+	return sampled
 }
 
 // selectSpecs returns a random sample of the given test specs.
