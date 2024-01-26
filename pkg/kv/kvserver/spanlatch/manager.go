@@ -242,7 +242,7 @@ func (m *Manager) Acquire(
 
 	err := m.wait(ctx, lg, snap)
 	if err != nil {
-		m.Release(lg)
+		m.Release(ctx, lg)
 		return nil, err
 	}
 	return lg, nil
@@ -362,7 +362,7 @@ func (m *Manager) WaitUntilAcquired(ctx context.Context, lg *Guard) (*Guard, err
 	}()
 	err := m.wait(ctx, lg, *lg.snap)
 	if err != nil {
-		m.Release(lg)
+		m.Release(ctx, lg)
 		return nil, err
 	}
 	return lg, nil
@@ -623,7 +623,7 @@ func (m *Manager) Poison(lg *Guard) {
 // Release releases the latches held by the provided Guard. After being called,
 // dependent latch acquisition attempts can complete if not blocked on any other
 // owned latches.
-func (m *Manager) Release(lg *Guard) {
+func (m *Manager) Release(ctx context.Context, lg *Guard) {
 	lg.done.signal()
 	if lg.snap != nil {
 		lg.snap.close()
@@ -637,9 +637,9 @@ func (m *Manager) Release(lg *Guard) {
 		const longLatchHeldMsg = "%s has held latch for %d ns. Some possible causes are " +
 			"slow disk reads, slow raft replication, and expensive request processing."
 		if m.everySecondLogger.ShouldLog() {
-			log.Warningf(context.Background(), longLatchHeldMsg, lg.baFmt, held)
+			log.Warningf(ctx, longLatchHeldMsg, lg.baFmt, held)
 		} else {
-			log.VEventf(context.Background(), 2, longLatchHeldMsg, lg.baFmt, held)
+			log.VEventf(ctx, 2, longLatchHeldMsg, lg.baFmt, held)
 		}
 	}
 }
