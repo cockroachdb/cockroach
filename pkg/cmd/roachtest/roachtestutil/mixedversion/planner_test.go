@@ -285,6 +285,7 @@ func newTest(options ...CustomOption) *Test {
 		crdbNodes:       nodes,
 		options:         testOptions,
 		_arch:           archP(vm.ArchAMD64),
+		_isLocal:        boolP(false),
 		prng:            prng,
 		hooks:           &testHooks{prng: prng, crdbNodes: nodes},
 		predecessorFunc: testPredecessorFunc,
@@ -293,6 +294,10 @@ func newTest(options ...CustomOption) *Test {
 
 func archP(a vm.CPUArch) *vm.CPUArch {
 	return &a
+}
+
+func boolP(b bool) *bool {
+	return &b
 }
 
 // Always use the same predecessor version to make this test
@@ -310,6 +315,7 @@ func testPredecessorFunc(
 func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *Test {
 	var opts []CustomOption
 	var predecessors predecessorFunc
+	var isLocal *bool
 
 	for _, arg := range args {
 		switch arg.Key {
@@ -328,12 +334,21 @@ func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *T
 			v := arg.Vals[0]
 			opts = append(opts, MinimumSupportedVersion(v))
 
+		case "is_local":
+			b, err := strconv.ParseBool(arg.Vals[0])
+			require.NoError(t, err)
+			isLocal = boolP(b)
+
 		default:
 			t.Errorf("unknown mixed-version-test option: %s", arg.Key)
 		}
 	}
 
 	mvt := newTest(opts...)
+
+	if isLocal != nil {
+		mvt._isLocal = isLocal
+	}
 	if predecessors != nil {
 		mvt.predecessorFunc = predecessors
 	}
