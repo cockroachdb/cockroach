@@ -1,5 +1,7 @@
 # Test that transaction mode for telemetry logging logs all stmts for a tracked txn.
 
+subtest transaction_mode_events
+
 exec-sql
 SET CLUSTER SETTING sql.telemetry.transaction_sampling.max_event_frequency = 10;
 ----
@@ -45,6 +47,19 @@ BEGIN; TRUNCATE t; COMMIT
 	"StatementFingerprintID": 14457747517729698000,
 	"StmtPosInTxn": 2,
 	"Tag": "COMMIT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 0,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		802230861479752300
+	],
+	"TransactionFingerprintID": 11835923794509859000,
 	"User": "root"
 }
 
@@ -108,6 +123,21 @@ BEGIN; SELECT 1; SELECT 2; SELECT 3; COMMIT
 	"Tag": "COMMIT",
 	"User": "root"
 }
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 3,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		16085855936700856000,
+		16085855936700856000,
+		16085855936700856000
+	],
+	"TransactionFingerprintID": 17099066530943440000,
+	"User": "root"
+}
 
 # Skipped due to not enough time elapsed.
 spy-sql unixSecs=1
@@ -131,6 +161,20 @@ SELECT 1, 2
 	"StatementFingerprintID": 1569305422589581000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 1,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SkippedTransactions": 1,
+	"StatementFingerprintIDs": [
+		1569305422589581000
+	],
+	"TransactionFingerprintID": 13449146770429469000,
 	"User": "root"
 }
 
@@ -160,6 +204,20 @@ SELECT * FROM t LIMIT 2
 	"StatementFingerprintID": 17888549871399373000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 0,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SkippedTransactions": 2,
+	"StatementFingerprintIDs": [
+		17888549871399373000
+	],
+	"TransactionFingerprintID": 6278959165882708000,
 	"User": "root"
 }
 
@@ -210,6 +268,23 @@ BEGIN; SELECT * FROM t LIMIT 4; SELECT * FROM t LIMIT 5; COMMIT
 	"Tag": "COMMIT",
 	"User": "root"
 }
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 0,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SkippedTransactions": 1,
+	"StatementFingerprintIDs": [
+		17888549871399373000,
+		17888549871399373000
+	],
+	"TransactionFingerprintID": 5223910247858315000,
+	"User": "root"
+}
+
+subtest end
 
 subtest txn_retry_is_sampled
 
@@ -239,6 +314,20 @@ SELECT 1, 2, 3
 	"StatementFingerprintID": 16698501115058330000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 1,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SkippedTransactions": 1,
+	"StatementFingerprintIDs": [
+		16698501115058330000
+	],
+	"TransactionFingerprintID": 5250989384299556000,
 	"User": "root"
 }
 
@@ -293,6 +382,67 @@ COMMIT;
 	"StmtPosInTxn": 3,
 	"Tag": "COMMIT",
 	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"LastAutoRetryReason": "crdb_internal.force_retry(): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()",
+	"NumRetries": 1,
+	"NumRows": 2,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SkippedTransactions": 1,
+	"StatementFingerprintIDs": [
+		15578946620736494000,
+		9891387630896048000
+	],
+	"TransactionFingerprintID": 823601646009140400,
+	"User": "root"
+}
+
+subtest end
+
+subtest redacts_sensitive_info
+
+reset-last-sampled
+----
+
+
+# testuser name should be redacted
+spy-sql user=testuser unixSecs=1
+SELECT 1/0
+----
+pq: division by zero
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"ErrorText": "division by zero",
+	"EventType": "sampled_query",
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"SQLSTATE": "22012",
+	"Statement": "SELECT ‹1› / ‹0›",
+	"StatementFingerprintID": 16154612194363576000,
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "‹testuser›"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": false,
+	"ErrorText": "division by zero",
+	"EventType": "sampled_transaction",
+	"NumRows": 0,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SQLSTATE": "22012",
+	"StatementFingerprintIDs": [
+		16154612194363576000
+	],
+	"TransactionFingerprintID": 5715924995226314000,
+	"User": "‹testuser›"
 }
 
 subtest end
