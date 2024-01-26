@@ -318,11 +318,14 @@ func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool
 //   - UNIQUE or CHECK constraint violation. RandDatum is naive to these constraints.
 //   - Out of range error for a computed INT2 or INT4 column.
 //
+// If a non-nil inserts is provided, it will be populated with the successful
+// insert statements.
+//
 // If numRowsInserted == 0, PopulateTableWithRandomData or RandDatum couldn't
 // handle this table's schema. Consider increasing numInserts or filing a bug.
 // TODO(harding): Populate data in partitions.
 func PopulateTableWithRandData(
-	rng *rand.Rand, db *gosql.DB, tableName string, numInserts int,
+	rng *rand.Rand, db *gosql.DB, tableName string, numInserts int, inserts *[]string,
 ) (numRowsInserted int, err error) {
 	var createStmtSQL string
 	res := db.QueryRow(fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s]", tree.NameString(tableName)))
@@ -395,6 +398,9 @@ func PopulateTableWithRandData(
 		_, err := db.Exec(insertStmt)
 		if err == nil {
 			numRowsInserted++
+			if inserts != nil {
+				*inserts = append(*inserts, insertStmt)
+			}
 		}
 	}
 	return numRowsInserted, nil
