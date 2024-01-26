@@ -169,10 +169,13 @@ func evalNewLease(
 
 	// If we're setting a new prior read summary, store it to disk & in-memory.
 	if priorReadSum != nil {
-		if err := readsummary.Set(ctx, readWriter, rec.GetRangeID(), ms, priorReadSum); err != nil {
+		pd.Replicated.PriorReadSummary = priorReadSum
+		// Compress the persisted read summary, as it will likely never be needed.
+		compressedSum := priorReadSum.Clone()
+		compressedSum.Compress(0)
+		if err := readsummary.Set(ctx, readWriter, rec.GetRangeID(), ms, compressedSum); err != nil {
 			return newFailedLeaseTrigger(isTransfer), err
 		}
-		pd.Replicated.PriorReadSummary = priorReadSum
 	}
 
 	pd.Local.Metrics = new(result.Metrics)
