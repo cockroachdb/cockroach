@@ -21,6 +21,7 @@ go_library(
         "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/ipaddr",
