@@ -242,7 +242,7 @@ func (m *managerImpl) SequenceReq(
 	resp, err := m.sequenceReqWithGuard(ctx, g, branch)
 	if resp != nil || err != nil {
 		// Ensure that we release the guard if we return a response or an error.
-		m.FinishReq(g)
+		m.FinishReq(ctx, g)
 		return nil, resp, err
 	}
 	return g, nil, nil
@@ -345,7 +345,7 @@ func (m *managerImpl) sequenceReqWithGuard(
 		// true if ScanOptimistic was called above. Therefore it will also never
 		// be true if latchManager.AcquireOptimistic was called.
 		if g.ltg.ShouldWait() {
-			m.lm.Release(g.moveLatchGuard())
+			m.lm.Release(ctx, g.moveLatchGuard())
 
 			log.Event(ctx, "waiting in lock wait-queues")
 			if err := m.ltw.WaitOn(ctx, g.Req, g.ltg); err != nil {
@@ -429,7 +429,7 @@ func (m *managerImpl) PoisonReq(g *Guard) {
 }
 
 // FinishReq implements the RequestSequencer interface.
-func (m *managerImpl) FinishReq(g *Guard) {
+func (m *managerImpl) FinishReq(ctx context.Context, g *Guard) {
 	// NOTE: we release latches _before_ exiting lock wait-queues deliberately.
 	// Either order would be correct, but the order here avoids non-determinism in
 	// cases where a request A holds both latches and has claimed some keys by
@@ -448,7 +448,7 @@ func (m *managerImpl) FinishReq(g *Guard) {
 	// signaler wakes up (if anyone) will never bump into its mutex immediately
 	// upon resumption.
 	if lg := g.moveLatchGuard(); lg != nil {
-		m.lm.Release(lg)
+		m.lm.Release(ctx, lg)
 	}
 	if ltg := g.moveLockTableGuard(); ltg != nil {
 		m.lt.Dequeue(ltg)
@@ -504,13 +504,13 @@ func (m *managerImpl) HandleLockConflictError(
 	// not releasing lockWaitQueueGuards. We expect the caller of this method to
 	// then re-sequence the Request by calling SequenceReq with the un-latched
 	// Guard. This is analogous to iterating through the loop in SequenceReq.
-	m.lm.Release(g.moveLatchGuard())
+	m.lm.Release(ctx, g.moveLatchGuard())
 
 	// If the discovery process collected a set of intents to resolve before the
 	// next evaluation attempt, do so.
 	if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
 		if err := m.ltw.ResolveDeferredIntents(ctx, g.Req.AdmissionHeader, toResolve); err != nil {
-			m.FinishReq(g)
+			m.FinishReq(ctx, g)
 			return nil, err
 		}
 	}
@@ -529,7 +529,7 @@ func (m *managerImpl) HandleTransactionPushError(
 	// caller of this method to then re-sequence the Request by calling
 	// SequenceReq with the un-latched Guard. This is analogous to iterating
 	// through the loop in SequenceReq.
-	m.lm.Release(g.moveLatchGuard())
+	m.lm.Release(ctx, g.moveLatchGuard())
 	return g
 }
 

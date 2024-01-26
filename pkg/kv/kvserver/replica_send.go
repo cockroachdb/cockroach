@@ -431,7 +431,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 	defer func() {
 		// NB: wrapped to delay g evaluation to its value when returning.
 		if g != nil {
-			r.concMgr.FinishReq(g)
+			r.concMgr.FinishReq(ctx, g)
 		}
 	}()
 	pp := poison.Policy_Error
@@ -531,7 +531,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 				if reuseLatchAndLockSpans {
 					latchSpans, lockSpans = g.TakeSpanSets()
 				}
-				r.concMgr.FinishReq(g)
+				r.concMgr.FinishReq(ctx, g)
 				g = nil
 			}
 		}
@@ -1365,6 +1365,6 @@ func (ec *endCmds) done(
 	// this method is called and the Guard is not set. Consider removing this
 	// check and upgrading the previous observation to an invariant.
 	if ec.g != nil {
-		ec.repl.concMgr.FinishReq(ec.g)
+		ec.repl.concMgr.FinishReq(ctx, ec.g)
 	}
 }
