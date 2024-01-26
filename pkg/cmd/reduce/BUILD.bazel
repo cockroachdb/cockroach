@@ -10,6 +10,7 @@ go_library(
         "//pkg/cmd/reduce/reduce/reducesql",
         "//pkg/util/envutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_go_cmp//cmp",
     ],
 )
 
