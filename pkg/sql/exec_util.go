@@ -3268,6 +3268,10 @@ func (m *sessionDataMutator) SetStrictDDLAtomicity(val bool) {
 	m.data.StrictDDLAtomicity = val
 }
 
+func (m *sessionDataMutator) SetAutoCommitBeforeDDL(val bool) {
+	m.data.AutoCommitBeforeDDL = val
+}
+
 func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 	oldLocation := sessionDataTimeZoneFormat(m.data.Location)
 	m.data.Location = loc

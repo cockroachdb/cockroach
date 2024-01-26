@@ -479,6 +479,12 @@ message LocalOnlySessionData {
   // CopyNumRetriesPerBatch determines the number of times a single batch of
   // rows can be retried for non-atomic COPY.
   int32 copy_num_retries_per_batch = 120;
+  // AutoCommitBeforeDDL will cause any DDL statement received during an
+  // explicit transaction to make the transaction auto-commit before executing
+  // the DDL statement. After the auto-commit, any other statements that are
+  // in the transaction block will instead be executed in their own
+  // implicit transaction.
+  bool autocommit_before_ddl = 121 [(gogoproto.customname) = "AutoCommitBeforeDDL"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
