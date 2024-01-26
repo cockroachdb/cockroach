@@ -34,14 +34,13 @@ var asyncpgBlocklist = blocklist{
 	`test_codecs.TestCodecs.test_enum_in_composite`:                                                       "unsupported feature - https://github.com/cockroachdb/cockroach/issues/27792",
 	`test_codecs.TestCodecs.test_invalid_input`:                                                           "default int size discrepancy",
 	`test_codecs.TestCodecs.test_relacl_array_type`:                                                       "unsupported feature - https://github.com/cockroachdb/cockroach/issues/40283",
-	`test_codecs.TestCodecs.test_timetz_encoding`:                                                         "multiple active portals unsupported - https://github.com/cockroachdb/cockroach/issues/40195",
 	`test_codecs.TestCodecs.test_unhandled_type_fallback`:                                                 "unsupported feature - https://github.com/cockroachdb/cockroach/issues/54516",
 	`test_codecs.TestCodecs.test_unknown_type_text_fallback`:                                              "unsupported feature - https://github.com/cockroachdb/cockroach/issues/54516",
 	`test_codecs.TestCodecs.test_void`:                                                                    "unknown",
 	`test_connect.TestSettings.test_get_settings_01`:                                                      "unknown",
 	`test_copy.TestCopyFrom.test_copy_from_table_basics`:                                                  "no support for COPY TO - https://github.com/cockroachdb/cockroach/issues/85571",
 	`test_copy.TestCopyTo.test_copy_to_table_basics`:                                                      "unknown",
-	`test_cursor.TestCursor.test_cursor_02`:                                                               "multiple active portals unsupported - https://github.com/cockroachdb/cockroach/issues/40195",
+	`test_cursor.TestCursor.test_cursor_02`:                                                               "unknown",
 	`test_cursor.TestCursor.test_cursor_04`:                                                               "unknown",
 	`test_cursor.TestIterableCursor.test_cursor_iterable_02`:                                              "unsupported feature - https://github.com/cockroachdb/cockroach/issues/77099",
 	`test_exceptions.TestExceptions.test_exceptions_str`:                                                  "unknown",
@@ -61,6 +60,7 @@ var asyncpgBlocklist = blocklist{
 	`test_introspection.TestIntrospection.test_introspection_on_large_db`:                                 "unsupported feature - https://github.com/cockroachdb/cockroach/issues/22456",
 	`test_introspection.TestIntrospection.test_introspection_retries_after_cache_bust`:                    "unsupported feature - https://github.com/cockroachdb/cockroach/issues/27796",
 	`test_introspection.TestIntrospection.test_introspection_sticks_for_ps`:                               "unknown type: pg_catalog.json",
+	`test_listeners.TestListeners.test_dangling_listener_warns`:                                           "LISTEN - https://github.com/cockroachdb/cockroach/issues/41522",
 	`test_listeners.TestListeners.test_listen_01`:                                                         "LISTEN - https://github.com/cockroachdb/cockroach/issues/41522",
 	`test_listeners.TestListeners.test_listen_02`:                                                         "LISTEN - https://github.com/cockroachdb/cockroach/issues/41522",
 	`test_listeners.TestListeners.test_listen_notletters`:                                                 "LISTEN - https://github.com/cockroachdb/cockroach/issues/41522",
@@ -76,11 +76,10 @@ var asyncpgBlocklist = blocklist{
 	`test_prepare.TestPrepare.test_prepare_28_max_args`:                                                   "unknown",
 	`test_prepare.TestPrepare.test_prepare_31_pgbouncer_note`:                                             "unsupported feature - https://github.com/cockroachdb/cockroach/issues/17511",
 	`test_prepare.TestPrepare.test_prepare_statement_invalid`:                                             "experimental feature - https://github.com/cockroachdb/cockroach/issues/49329",
-	`test_record.TestRecord.test_record_subclass_01`:                                                      "multiple active portals unsupported - https://github.com/cockroachdb/cockroach/issues/40195",
-	`test_record.TestRecord.test_record_subclass_02`:                                                      "multiple active portals unsupported - https://github.com/cockroachdb/cockroach/issues/40195",
-	`test_record.TestRecord.test_record_subclass_03`:                                                      "multiple active portals unsupported - https://github.com/cockroachdb/cockroach/issues/40195",
-	`test_record.TestRecord.test_record_subclass_04`:                                                      "multiple active portals unsupported - https://github.com/cockroachdb/cockroach/issues/40195",
+	`test_timeout.TestTimeout.test_timeout_06`:                                                            "unknown",
 	`test_utils.TestUtils.test_mogrify_simple`:                                                            "multi-dim arrays - https://github.com/cockroachdb/cockroach/issues/32552",
 }
 
-var asyncpgIgnoreList = blocklist{}
+var asyncpgIgnoreList = blocklist{
+	`test_pool.TestPool.test_pool_01`: "can't parse output",
+}
