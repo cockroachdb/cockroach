@@ -876,11 +876,7 @@ func mergeCheckingTimestampCaches(
 	ba.Add(hb)
 	var expReason kvpb.TransactionAbortedReason
 	if throughSnapshot {
-		// TODO(nvanbenschoten): this will result in the wrong reason until we
-		// start compressing the persisted read summary on lease transfers and
-		// range merges.
-		// expReason = kvpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED
-		expReason = kvpb.ABORT_REASON_ABORTED_RECORD_FOUND
+		expReason = kvpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED
 	} else {
 		expReason = kvpb.ABORT_REASON_ABORTED_RECORD_FOUND
 	}
