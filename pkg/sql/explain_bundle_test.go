@@ -280,21 +280,25 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 	t.Run("foreign keys", func(t *testing.T) {
 		r.Exec(t, "CREATE TABLE parent (pk INT PRIMARY KEY, v INT);")
 		r.Exec(t, "CREATE TABLE child (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
-		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM child")
-		checkBundle(
-			t, fmt.Sprint(rows), "child", func(name, contents string) error {
-				if name == "schema.sql" {
-					reg := regexp.MustCompile("CREATE TABLE defaultdb.public.parent")
-					if reg.FindString(contents) == "" {
+		contentCheck := func(name, contents string) error {
+			if name == "schema.sql" {
+				for _, tableName := range []string{"parent", "child"} {
+					if regexp.MustCompile("CREATE TABLE defaultdb.public."+tableName).FindString(contents) == "" {
 						return errors.Newf(
-							"could not find 'CREATE TABLE defaultdb.public.parent' in schema.sql:\n%s", contents)
+							"could not find 'CREATE TABLE defaultdb.public.%s' in schema.sql:\n%s", tableName, contents)
 					}
 				}
-				return nil
-			}, false, /* expectErrors */
-			base, plans, "stats-defaultdb.public.parent.sql", "stats-defaultdb.public.child.sql",
-			"distsql.html vec.txt vec-v.txt",
-		)
+			}
+			return nil
+		}
+		for _, tableName := range []string{"parent", "child"} {
+			rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM "+tableName)
+			checkBundle(
+				t, fmt.Sprint(rows), "child", contentCheck, false, /* expectErrors */
+				base, plans, "stats-defaultdb.public.parent.sql", "stats-defaultdb.public.child.sql",
+				"distsql.html vec.txt vec-v.txt",
+			)
+		}
 	})
 
 	t.Run("redact", func(t *testing.T) {
