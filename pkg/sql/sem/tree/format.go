@@ -168,6 +168,8 @@ const (
 	// FmtTagDollarQuotes instructs tags to be kept intact in tagged dollar
 	// quotes. It also applies tags when formatting UDFs.
 	FmtTagDollarQuotes
+
+	FmtForFingerprint
 )
 
 // PasswordSubstitution is the string that replaces

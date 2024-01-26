@@ -2796,7 +2796,7 @@ func (ex *connExecutor) execCopyOut(
 
 		// Log the query for sampling.
 		// These fields are not available in COPY, so use the empty value.
-		f := tree.NewFmtCtx(tree.FmtHideConstants)
+		f := tree.NewFmtCtx(tree.FmtHideConstants | tree.FmtForFingerprint)
 		f.FormatNode(cmd.Stmt)
 		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
 			f.CloseAndGetString(),
@@ -3061,7 +3061,7 @@ func (ex *connExecutor) execCopyIn(
 			res.SetRowsAffected(ctx, numInsertedRows)
 		}
 		// These fields are not available in COPY, so use the empty value.
-		f := tree.NewFmtCtx(tree.FmtHideConstants)
+		f := tree.NewFmtCtx(tree.FmtHideConstants | tree.FmtForFingerprint)
 		f.FormatNode(cmd.Stmt)
 		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
 			f.CloseAndGetString(),

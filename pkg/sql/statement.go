@@ -44,8 +44,9 @@ func makeStatement(
 	parserStmt statements.Statement[tree.Statement], queryID clusterunique.ID,
 ) Statement {
 	return Statement{
-		Statement:       parserStmt,
-		StmtNoConstants: formatStatementHideConstants(parserStmt.AST),
+		Statement: parserStmt,
+		// TODO (xinhaoz) rename this StmtFingerprint if all goes well......
+		StmtNoConstants: formatStatementFingerprint(parserStmt.AST),
 		StmtSummary:     formatStatementSummary(parserStmt.AST),
 		QueryID:         queryID,
 	}
@@ -55,9 +56,7 @@ func makeStatementFromPrepared(prepared *PreparedStatement, queryID clusteruniqu
 	return Statement{
 		Statement:       prepared.Statement,
 		Prepared:        prepared,
-		ExpectedTypes:   prepared.Columns,
 		StmtNoConstants: prepared.StatementNoConstants,
-		StmtSummary:     prepared.StatementSummary,
 		QueryID:         queryID,
 	}
 }

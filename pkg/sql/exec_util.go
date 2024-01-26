@@ -3816,6 +3816,20 @@ func formatStatementHideConstants(ast tree.Statement) string {
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 }
 
+// formatStatementFingerprint formats the statement using
+// tree.FmtForFingerprint. It does *not* anonymize the statement, since
+// the result will still contain names and identifiers.
+func formatStatementFingerprint(ast tree.Statement) string {
+	if ast == nil {
+		return ""
+	}
+	// For now also use the FmtHideConstants flag since we have not implemented
+	// FmtForFingerprint.
+	// TODO (xinhaoz) remove FmtHideConstants here as FmtForFingerprint should
+	// collide with FmtHideConstants.
+	return tree.AsStringWithFlags(ast, tree.FmtForFingerprint|tree.FmtHideConstants)
+}
+
 // formatStatementSummary formats the statement using tree.FmtSummary
 // and tree.FmtHideConstants. This returns a summarized version of the
 // query. It does *not* anonymize the statement, since the result will

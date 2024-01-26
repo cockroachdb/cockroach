@@ -796,7 +796,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		if p, ok := retPayload.(payloadWithError); ok {
 			execErr = p.errorCause()
 		}
-		f := tree.NewFmtCtx(tree.FmtHideConstants)
+		f := tree.NewFmtCtx(tree.FmtHideConstants | tree.FmtForFingerprint)
 		f.FormatNode(ast)
 		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
 			f.CloseAndGetString(),
@@ -2506,7 +2506,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			execErr = p.errorCause()
 		}
 
-		f := tree.NewFmtCtx(tree.FmtHideConstants)
+		f := tree.NewFmtCtx(tree.FmtHideConstants | tree.FmtForFingerprint)
 		f.FormatNode(stmt.AST)
 		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
 			f.CloseAndGetString(),
