@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -252,7 +253,10 @@ func DecodeUntaggedDatum(
 	case types.VoidFamily:
 		return a.NewDVoid(), buf, nil
 	default:
-		return nil, buf, errors.Errorf("couldn't decode type %s", t.SQLStringForError())
+		if buildutil.CrdbTestBuild {
+			return nil, buf, errors.AssertionFailedf("unable to decode table value %s", t.SQLStringForError())
+		}
+		return nil, buf, errors.Errorf("unable to decode table value %s", t.SQLStringForError())
 	}
 }
 
