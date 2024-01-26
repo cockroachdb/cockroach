@@ -898,10 +898,10 @@ func (c *conn) bufferRow(ctx context.Context, row tree.Datums, r *commandResult)
 		}
 	}
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		return errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer")
+		return err
 	}
 	if err := c.maybeFlush(r.pos, r.bufferingDisabled); err != nil {
-		return errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer")
+		return err
 	}
 	c.maybeReallocate()
 	return nil
@@ -943,7 +943,7 @@ func (c *conn) bufferBatch(ctx context.Context, batch coldata.Batch, r *commandR
 				}
 			}
 			if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-				panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+				return err
 			}
 			if err := c.maybeFlush(r.pos, r.bufferingDisabled); err != nil {
 				return err
