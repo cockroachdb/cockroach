@@ -176,7 +176,12 @@ func (s *fileSSTSink) open(ctx context.Context) error {
 		s.out = e
 	}
 	// TODO(dt): make ExternalStorage.Writer return objstorage.Writable.
-	s.sst = storage.MakeIngestionSSTWriter(ctx, s.dest.Settings(), storage.NoopFinishAbortWritable(s.out))
+	//
+	// Value blocks are disabled since such SSTs can be huge (e.g. 750MB in the
+	// mixed_version_backup.go roachtest), which can cause OOMs due to value
+	// block buffering.
+	s.sst = storage.MakeIngestionSSTWriterWithValueBlockOverride(
+		ctx, s.dest.Settings(), storage.NoopFinishAbortWritable(s.out), true)
 
 	return nil
 }
