@@ -425,7 +425,7 @@ SELECT count(replicas)
 	t.L().Printf("killing all nodes\n")
 	c.Stop(ctx, t.L(), option.DefaultStopOpts())
 
-	adminPorts, err := c.AdminUIPorts(ctx, t.L(), c.Node(1))
+	adminPorts, err := c.AdminUIPorts(ctx, t.L(), c.Node(1), "" /* tenant */, 0 /* sqlInstance */)
 	if err != nil {
 		t.Fatal(err)
 	}

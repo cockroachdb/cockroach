@@ -149,9 +149,6 @@ func registerOnlineRestore(r registry.Registry) {
 							if _, err := db.Exec("SET CLUSTER SETTING kv.queue.process.guaranteed_time_budget='1h'"); err != nil {
 								return err
 							}
-							if _, err := db.Exec("SET CLUSTER SETTING kv.snapshot_receiver.excise.enabled=true"); err != nil {
-								return err
-							}
 							// TODO(dt): AC appears periodically reduce the workload to 0 QPS
 							// during the download phase (sudden jumps from 0 to 2k qps to 0).
 							// Disable for now until we figure out how to smooth this out.

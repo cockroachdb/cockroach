@@ -2126,19 +2126,19 @@ func doRestorePlan(
 		overrideDBName = newDBName
 	}
 	if err := rewrite.TableDescs(tables, descriptorRewrites, overrideDBName); err != nil {
-		return err
+		return errors.Wrapf(err, "table descriptor rewrite failed")
 	}
 	if err := rewrite.DatabaseDescs(databases, descriptorRewrites, map[descpb.ID]struct{}{}); err != nil {
-		return err
+		return errors.Wrapf(err, "database descriptor rewrite failed")
 	}
 	if err := rewrite.SchemaDescs(schemas, descriptorRewrites); err != nil {
-		return err
+		return errors.Wrapf(err, "schema descriptor rewrite failed")
 	}
 	if err := rewrite.TypeDescs(types, descriptorRewrites); err != nil {
-		return err
+		return errors.Wrapf(err, "type descriptor rewrite failed")
 	}
 	if err := rewrite.FunctionDescs(functions, descriptorRewrites, overrideDBName); err != nil {
-		return err
+		return errors.Wrapf(err, "function descriptor rewrite failed")
 	}
 
 	encodedTables := make([]*descpb.TableDescriptor, len(tables))
