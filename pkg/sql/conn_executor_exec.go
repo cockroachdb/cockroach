@@ -937,6 +937,22 @@ func (ex *connExecutor) execStmtInOpenState(
 	// dispatchToExecutionEngine.
 	shouldLogToExecAndAudit = false
 
+	if tree.CanModifySchema(ast) && !ex.implicitTxn() && ex.sessionData().AutoCommitBeforeDDL {
+		if err := ex.planner.SendClientNotice(
+			ctx,
+			pgnotice.Newf("auto-committing transaction before processing DDL due to autocommit_before_ddl setting"),
+		); err != nil {
+			return nil, nil, err
+		}
+		retEv, retPayload = ex.handleAutoCommit(ctx, ast)
+		if _, committed := retEv.(eventTxnFinishCommitted); committed && retPayload == nil {
+			// Use eventTxnCommittedDueToDDL so that the current statement gets
+			// executed again when the state machine advances.
+			retEv = eventTxnCommittedDueToDDL{}
+		}
+		return
+	}
+
 	// For regular statements (the ones that get to this point), we
 	// don't return any event unless an error happens.
 
