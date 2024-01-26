@@ -1305,6 +1305,8 @@ func mergeTrigger(
 		} else if priorSum != nil {
 			mergedSum.Merge(*priorSum)
 		}
+		// Compress the persisted read summary, as it will likely never be needed.
+		mergedSum.Compress(0)
 		if err := readsummary.Set(ctx, batch, rec.GetRangeID(), ms, mergedSum); err != nil {
 			return result.Result{}, err
 		}
