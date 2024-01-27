@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "timemonitor",
+    srcs = ["timemonitor.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/timemonitor",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/hlc",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "timemonitor_test",
+    srcs = ["timemonitor_test.go"],
+    deps = [
+        ":timemonitor",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
