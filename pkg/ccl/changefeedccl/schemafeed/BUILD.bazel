@@ -14,6 +14,7 @@ go_library(
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/changefeedvalidators",
+        "//pkg/ccl/changefeedccl/schemafeed/timemonitor",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvpb",
@@ -62,6 +63,7 @@ go_test(
         "//pkg/ccl",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/schemafeed/schematestutils",
+        "//pkg/ccl/changefeedccl/schemafeed/timemonitor",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv/kvpb",
