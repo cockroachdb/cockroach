@@ -1048,18 +1048,14 @@ func TestOldMessages(t *testing.T) {
 	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
 	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 	// pretend we're an old leader trying to make progress; this entry is expected to be ignored.
-	tt.send(pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 2, Entries: []pb.Entry{{Index: 3, Term: 2}}})
+	tt.send(pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 2, Entries: index(3).terms(2)})
 	// commit a new entry
 	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
 
+	ents := index(0).terms(0, 1, 2, 3, 3)
+	ents[4].Data = []byte("somedata")
 	ilog := &raftLog{
-		storage: &MemoryStorage{
-			ents: []pb.Entry{
-				{}, {Data: nil, Term: 1, Index: 1},
-				{Data: nil, Term: 2, Index: 2}, {Data: nil, Term: 3, Index: 3},
-				{Data: []byte("somedata"), Term: 3, Index: 4},
-			},
-		},
+		storage:   &MemoryStorage{ents: ents},
 		unstable:  unstable{offset: 5},
 		committed: 4,
 	}
@@ -1183,24 +1179,24 @@ func TestCommit(t *testing.T) {
 		w       uint64
 	}{
 		// single
-		{[]uint64{1}, []pb.Entry{{Index: 1, Term: 1}}, 1, 1},
-		{[]uint64{1}, []pb.Entry{{Index: 1, Term: 1}}, 2, 0},
-		{[]uint64{2}, []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}}, 2, 2},
-		{[]uint64{1}, []pb.Entry{{Index: 1, Term: 2}}, 2, 1},
+		{[]uint64{1}, index(1).terms(1), 1, 1},
+		{[]uint64{1}, index(1).terms(1), 2, 0},
+		{[]uint64{2}, index(1).terms(1, 2), 2, 2},
+		{[]uint64{1}, index(1).terms(2), 2, 1},
 
 		// odd
-		{[]uint64{2, 1, 1}, []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}}, 1, 1},
-		{[]uint64{2, 1, 1}, []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1}}, 2, 0},
-		{[]uint64{2, 1, 2}, []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}}, 2, 2},
-		{[]uint64{2, 1, 2}, []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1}}, 2, 0},
+		{[]uint64{2, 1, 1}, index(1).terms(1, 2), 1, 1},
+		{[]uint64{2, 1, 1}, index(1).terms(1, 1), 2, 0},
+		{[]uint64{2, 1, 2}, index(1).terms(1, 2), 2, 2},
+		{[]uint64{2, 1, 2}, index(1).terms(1, 1), 2, 0},
 
 		// even
-		{[]uint64{2, 1, 1, 1}, []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}}, 1, 1},
-		{[]uint64{2, 1, 1, 1}, []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1}}, 2, 0},
-		{[]uint64{2, 1, 1, 2}, []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}}, 1, 1},
-		{[]uint64{2, 1, 1, 2}, []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1}}, 2, 0},
-		{[]uint64{2, 1, 2, 2}, []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}}, 2, 2},
-		{[]uint64{2, 1, 2, 2}, []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1}}, 2, 0},
+		{[]uint64{2, 1, 1, 1}, index(1).terms(1, 2), 1, 1},
+		{[]uint64{2, 1, 1, 1}, index(1).terms(1, 1), 2, 0},
+		{[]uint64{2, 1, 1, 2}, index(1).terms(1, 2), 1, 1},
+		{[]uint64{2, 1, 1, 2}, index(1).terms(1, 1), 2, 0},
+		{[]uint64{2, 1, 2, 2}, index(1).terms(1, 2), 2, 2},
+		{[]uint64{2, 1, 2, 2}, index(1).terms(1, 1), 2, 0},
 	}
 
 	for i, tt := range tests {
@@ -1307,7 +1303,7 @@ func TestHandleMsgApp(t *testing.T) {
 
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1))
-		storage.Append([]pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}})
+		require.NoError(t, storage.Append(index(1).terms(1, 2)))
 		sm := newTestRaft(1, 10, 1, storage)
 		sm.becomeFollower(2, None)
 
@@ -1341,7 +1337,7 @@ func TestHandleHeartbeat(t *testing.T) {
 
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2))
-		storage.Append([]pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}, {Index: 3, Term: 3}})
+		require.NoError(t, storage.Append(index(1).terms(1, 2, 3)))
 		sm := newTestRaft(1, 5, 1, storage)
 		sm.becomeFollower(2, 2)
 		sm.raftLog.commitTo(commit)
@@ -1362,7 +1358,7 @@ func TestHandleHeartbeat(t *testing.T) {
 // TestHandleHeartbeatResp ensures that we re-send log entries when we get a heartbeat response.
 func TestHandleHeartbeatResp(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
-	storage.Append([]pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}, {Index: 3, Term: 3}})
+	require.NoError(t, storage.Append(index(1).terms(1, 2, 3)))
 	sm := newTestRaft(1, 5, 1, storage)
 	sm.becomeCandidate()
 	sm.becomeLeader()
@@ -1558,13 +1554,6 @@ func testRecvMsgVote(t *testing.T, msgType pb.MessageType) {
 		{StateCandidate, 3, 3, 1, true},
 	}
 
-	max := func(a, b uint64) uint64 {
-		if a > b {
-			return a
-		}
-		return b
-	}
-
 	for i, tt := range tests {
 		sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)))
 		sm.state = tt.state
@@ -1578,7 +1567,7 @@ func testRecvMsgVote(t *testing.T, msgType pb.MessageType) {
 		}
 		sm.Vote = tt.voteFor
 		sm.raftLog = &raftLog{
-			storage:  &MemoryStorage{ents: []pb.Entry{{}, {Index: 1, Term: 2}, {Index: 2, Term: 2}}},
+			storage:  &MemoryStorage{ents: index(0).terms(0, 2, 2)},
 			unstable: unstable{offset: 3},
 		}
 
@@ -2517,7 +2506,7 @@ func TestReadOnlyForNewLeader(t *testing.T) {
 	peers := make([]stateMachine, 0)
 	for _, c := range nodeConfigs {
 		storage := newTestMemoryStorage(withPeers(1, 2, 3))
-		storage.Append([]pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1}})
+		require.NoError(t, storage.Append(index(1).terms(1, 1)))
 		storage.SetHardState(pb.HardState{Term: 1, Commit: c.committed})
 		if c.compactIndex != 0 {
 			storage.Compact(c.compactIndex)
@@ -2618,7 +2607,7 @@ func TestLeaderAppResp(t *testing.T) {
 			// thus the last log term must be 1 to be committed.
 			sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 			sm.raftLog = &raftLog{
-				storage:  &MemoryStorage{ents: []pb.Entry{{}, {Index: 1, Term: 1}, {Index: 2, Term: 1}}},
+				storage:  &MemoryStorage{ents: index(0).terms(0, 1, 1)},
 				unstable: unstable{offset: 3},
 			}
 			sm.becomeCandidate()
@@ -2732,7 +2721,7 @@ func TestRecvMsgBeat(t *testing.T) {
 
 	for i, tt := range tests {
 		sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-		sm.raftLog = &raftLog{storage: &MemoryStorage{ents: []pb.Entry{{}, {Index: 1, Term: 1}, {Index: 2, Term: 1}}}}
+		sm.raftLog = &raftLog{storage: &MemoryStorage{ents: index(0).terms(0, 1, 1)}}
 		sm.Term = 1
 		sm.state = tt.state
 		switch tt.state {
@@ -2758,7 +2747,7 @@ func TestRecvMsgBeat(t *testing.T) {
 }
 
 func TestLeaderIncreaseNext(t *testing.T) {
-	previousEnts := []pb.Entry{{Term: 1, Index: 1}, {Term: 1, Index: 2}, {Term: 1, Index: 3}}
+	previousEnts := index(1).terms(1, 2, 3)
 	tests := []struct {
 		// progress
 		state tracker.StateType
@@ -2891,7 +2880,7 @@ func TestSendAppendForProgressSnapshot(t *testing.T) {
 }
 
 func TestRecvMsgUnreachable(t *testing.T) {
-	previousEnts := []pb.Entry{{Term: 1, Index: 1}, {Term: 1, Index: 2}, {Term: 1, Index: 3}}
+	previousEnts := index(1).terms(1, 2, 3)
 	s := newTestMemoryStorage(withPeers(1, 2))
 	s.Append(previousEnts)
 	r := newTestRaft(1, 10, 1, s)
@@ -3126,7 +3115,7 @@ func TestLearnerReceiveSnapshot(t *testing.T) {
 }
 
 func TestRestoreIgnoreSnapshot(t *testing.T) {
-	previousEnts := []pb.Entry{{Term: 1, Index: 1}, {Term: 1, Index: 2}, {Term: 1, Index: 3}}
+	previousEnts := index(1).terms(1, 1, 1)
 	commit := uint64(1)
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
@@ -4512,28 +4501,8 @@ func TestFastLogRejection(t *testing.T) {
 		// Firstly leader appends (type=MsgApp,index=7,logTerm=4, entries=...);
 		// After rejected leader appends (type=MsgApp,index=3,logTerm=2).
 		{
-			leaderLog: []pb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 2, Index: 2},
-				{Term: 2, Index: 3},
-				{Term: 4, Index: 4},
-				{Term: 4, Index: 5},
-				{Term: 4, Index: 6},
-				{Term: 4, Index: 7},
-			},
-			followerLog: []pb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 2, Index: 2},
-				{Term: 2, Index: 3},
-				{Term: 3, Index: 4},
-				{Term: 3, Index: 5},
-				{Term: 3, Index: 6},
-				{Term: 3, Index: 7},
-				{Term: 3, Index: 8},
-				{Term: 3, Index: 9},
-				{Term: 3, Index: 10},
-				{Term: 3, Index: 11},
-			},
+			leaderLog:       index(1).terms(1, 2, 2, 4, 4, 4, 4),
+			followerLog:     index(1).terms(1, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3),
 			rejectHintTerm:  3,
 			rejectHintIndex: 7,
 			nextAppendTerm:  2,
@@ -4543,29 +4512,8 @@ func TestFastLogRejection(t *testing.T) {
 		// Firstly leader appends (type=MsgApp,index=8,logTerm=5, entries=...);
 		// After rejected leader appends (type=MsgApp,index=4,logTerm=3).
 		{
-			leaderLog: []pb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 2, Index: 2},
-				{Term: 2, Index: 3},
-				{Term: 3, Index: 4},
-				{Term: 4, Index: 5},
-				{Term: 4, Index: 6},
-				{Term: 4, Index: 7},
-				{Term: 5, Index: 8},
-			},
-			followerLog: []pb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 2, Index: 2},
-				{Term: 2, Index: 3},
-				{Term: 3, Index: 4},
-				{Term: 3, Index: 5},
-				{Term: 3, Index: 6},
-				{Term: 3, Index: 7},
-				{Term: 3, Index: 8},
-				{Term: 3, Index: 9},
-				{Term: 3, Index: 10},
-				{Term: 3, Index: 11},
-			},
+			leaderLog:       index(1).terms(1, 2, 2, 3, 4, 4, 4, 5),
+			followerLog:     index(1).terms(1, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3),
 			rejectHintTerm:  3,
 			rejectHintIndex: 8,
 			nextAppendTerm:  3,
@@ -4575,18 +4523,8 @@ func TestFastLogRejection(t *testing.T) {
 		// Firstly leader appends (type=MsgApp,index=4,logTerm=1, entries=...);
 		// After rejected leader appends (type=MsgApp,index=1,logTerm=1).
 		{
-			leaderLog: []pb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 1, Index: 2},
-				{Term: 1, Index: 3},
-				{Term: 1, Index: 4},
-			},
-			followerLog: []pb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 2, Index: 2},
-				{Term: 2, Index: 3},
-				{Term: 4, Index: 4},
-			},
+			leaderLog:       index(1).terms(1, 1, 1, 1),
+			followerLog:     index(1).terms(1, 2, 2, 4),
 			rejectHintTerm:  1,
 			rejectHintIndex: 1,
 			nextAppendTerm:  1,
@@ -4597,20 +4535,8 @@ func TestFastLogRejection(t *testing.T) {
 		// Firstly leader appends (type=MsgApp,index=6,logTerm=1, entries=...);
 		// After rejected leader appends (type=MsgApp,index=1,logTerm=1).
 		{
-			leaderLog: []pb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 1, Index: 2},
-				{Term: 1, Index: 3},
-				{Term: 1, Index: 4},
-				{Term: 1, Index: 5},
-				{Term: 1, Index: 6},
-			},
-			followerLog: []pb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 2, Index: 2},
-				{Term: 2, Index: 3},
-				{Term: 4, Index: 4},
-			},
+			leaderLog:       index(1).terms(1, 1, 1, 1, 1, 1),
+			followerLog:     index(1).terms(1, 2, 2, 4),
 			rejectHintTerm:  1,
 			rejectHintIndex: 1,
 			nextAppendTerm:  1,
@@ -4621,20 +4547,8 @@ func TestFastLogRejection(t *testing.T) {
 		// Firstly leader appends (type=MsgApp,index=4,logTerm=1, entries=...);
 		// After rejected leader appends (type=MsgApp,index=1,logTerm=1).
 		{
-			leaderLog: []pb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 1, Index: 2},
-				{Term: 1, Index: 3},
-				{Term: 1, Index: 4},
-			},
-			followerLog: []pb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 2, Index: 2},
-				{Term: 2, Index: 3},
-				{Term: 4, Index: 4},
-				{Term: 4, Index: 5},
-				{Term: 4, Index: 6},
-			},
+			leaderLog:       index(1).terms(1, 1, 1, 1),
+			followerLog:     index(1).terms(1, 2, 2, 4, 4, 4),
 			rejectHintTerm:  1,
 			rejectHintIndex: 1,
 			nextAppendTerm:  1,
@@ -4644,19 +4558,8 @@ func TestFastLogRejection(t *testing.T) {
 		// Firstly leader appends (type=MsgApp,index=5,logTerm=5, entries=...);
 		// After rejected leader appends (type=MsgApp,index=4,logTerm=4).
 		{
-			leaderLog: []pb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 1, Index: 2},
-				{Term: 1, Index: 3},
-				{Term: 4, Index: 4},
-				{Term: 5, Index: 5},
-			},
-			followerLog: []pb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 1, Index: 2},
-				{Term: 1, Index: 3},
-				{Term: 4, Index: 4},
-			},
+			leaderLog:       index(1).terms(1, 1, 1, 4, 5),
+			followerLog:     index(1).terms(1, 1, 1, 4),
 			rejectHintTerm:  4,
 			rejectHintIndex: 4,
 			nextAppendTerm:  4,
@@ -4664,25 +4567,8 @@ func TestFastLogRejection(t *testing.T) {
 		},
 		// Test case from example comment in stepLeader (on leader).
 		{
-			leaderLog: []pb.Entry{
-				{Term: 2, Index: 1},
-				{Term: 5, Index: 2},
-				{Term: 5, Index: 3},
-				{Term: 5, Index: 4},
-				{Term: 5, Index: 5},
-				{Term: 5, Index: 6},
-				{Term: 5, Index: 7},
-				{Term: 5, Index: 8},
-				{Term: 5, Index: 9},
-			},
-			followerLog: []pb.Entry{
-				{Term: 2, Index: 1},
-				{Term: 4, Index: 2},
-				{Term: 4, Index: 3},
-				{Term: 4, Index: 4},
-				{Term: 4, Index: 5},
-				{Term: 4, Index: 6},
-			},
+			leaderLog:       index(1).terms(2, 5, 5, 5, 5, 5, 5, 5, 5),
+			followerLog:     index(1).terms(2, 4, 4, 4, 4, 4),
 			rejectHintTerm:  4,
 			rejectHintIndex: 6,
 			nextAppendTerm:  2,
@@ -4690,23 +4576,8 @@ func TestFastLogRejection(t *testing.T) {
 		},
 		// Test case from example comment in handleAppendEntries (on follower).
 		{
-			leaderLog: []pb.Entry{
-				{Term: 2, Index: 1},
-				{Term: 2, Index: 2},
-				{Term: 2, Index: 3},
-				{Term: 2, Index: 4},
-				{Term: 2, Index: 5},
-			},
-			followerLog: []pb.Entry{
-				{Term: 2, Index: 1},
-				{Term: 4, Index: 2},
-				{Term: 4, Index: 3},
-				{Term: 4, Index: 4},
-				{Term: 4, Index: 5},
-				{Term: 4, Index: 6},
-				{Term: 4, Index: 7},
-				{Term: 4, Index: 8},
-			},
+			leaderLog:       index(1).terms(2, 2, 2, 2, 2),
+			followerLog:     index(1).terms(2, 4, 4, 4, 4, 4, 4, 4),
 			rejectHintTerm:  2,
 			rejectHintIndex: 1,
 			nextAppendTerm:  2,
@@ -4719,19 +4590,9 @@ func TestFastLogRejection(t *testing.T) {
 		// MsgAppResp rejection will return same index=3, with logTerm=0. The leader
 		// will rollback by one entry, and send MsgApp with index=2,logTerm=1.
 		{
-			leaderLog: []pb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 1, Index: 2},
-				{Term: 3, Index: 3},
-			},
-			followerLog: []pb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 1, Index: 2},
-				{Term: 3, Index: 3},
-				{Term: 3, Index: 4},
-				{Term: 3, Index: 5}, // <- this entry and below are compacted
-			},
-			followerCompact: 5,
+			leaderLog:       index(1).terms(1, 1, 3),
+			followerLog:     index(1).terms(1, 1, 3, 3, 3),
+			followerCompact: 5, // entries <= index 5 are compacted
 			rejectHintTerm:  0,
 			rejectHintIndex: 3,
 			nextAppendTerm:  1,
