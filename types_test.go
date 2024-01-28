@@ -39,3 +39,56 @@ func TestEntryID(t *testing.T) {
 		require.Equal(t, tt.want, pbEntryID(&tt.entry))
 	}
 }
+
+func TestLogSlice(t *testing.T) {
+	id := func(index, term uint64) entryID {
+		return entryID{term: term, index: index}
+	}
+	e := func(index, term uint64) pb.Entry {
+		return pb.Entry{Term: term, Index: index}
+	}
+	for _, tt := range []struct {
+		term    uint64
+		prev    entryID
+		entries []pb.Entry
+
+		notOk bool
+		last  entryID
+	}{
+		// Empty "dummy" slice, starting at (0, 0) origin of the log.
+		{last: id(0, 0)},
+		// Empty slice with a given prev ID. Valid only if term >= prev.term.
+		{prev: id(123, 10), notOk: true},
+		{term: 9, prev: id(123, 10), notOk: true},
+		{term: 10, prev: id(123, 10), last: id(123, 10)},
+		{term: 11, prev: id(123, 10), last: id(123, 10)},
+		// A single entry.
+		{term: 0, entries: []pb.Entry{e(1, 1)}, notOk: true},
+		{term: 1, entries: []pb.Entry{e(1, 1)}, last: id(1, 1)},
+		{term: 2, entries: []pb.Entry{e(1, 1)}, last: id(1, 1)},
+		// Multiple entries.
+		{term: 2, entries: []pb.Entry{e(2, 1), e(3, 1), e(4, 2)}, notOk: true},
+		{term: 1, prev: id(1, 1), entries: []pb.Entry{e(2, 1), e(3, 1), e(4, 2)}, notOk: true},
+		{term: 2, prev: id(1, 1), entries: []pb.Entry{e(2, 1), e(3, 1), e(4, 2)}, last: id(4, 2)},
+		// First entry inconsistent with prev.
+		{term: 10, prev: id(123, 5), entries: []pb.Entry{e(111, 5)}, notOk: true},
+		{term: 10, prev: id(123, 5), entries: []pb.Entry{e(124, 4)}, notOk: true},
+		{term: 10, prev: id(123, 5), entries: []pb.Entry{e(234, 6)}, notOk: true},
+		{term: 10, prev: id(123, 5), entries: []pb.Entry{e(124, 6)}, last: id(124, 6)},
+		// Inconsistent entries.
+		{term: 10, prev: id(12, 2), entries: []pb.Entry{e(13, 2), e(12, 2)}, notOk: true},
+		{term: 10, prev: id(12, 2), entries: []pb.Entry{e(13, 2), e(15, 2)}, notOk: true},
+		{term: 10, prev: id(12, 2), entries: []pb.Entry{e(13, 2), e(14, 1)}, notOk: true},
+		{term: 10, prev: id(12, 2), entries: []pb.Entry{e(13, 2), e(14, 3)}, last: id(14, 3)},
+	} {
+		t.Run("", func(t *testing.T) {
+			s := logSlice{term: tt.term, prev: tt.prev, entries: tt.entries}
+			require.Equal(t, tt.notOk, s.valid() != nil)
+			if !tt.notOk {
+				last := s.lastEntryID()
+				require.Equal(t, tt.last, last)
+				require.Equal(t, last.index, s.lastIndex())
+			}
+		})
+	}
+}
