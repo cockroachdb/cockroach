@@ -157,12 +157,12 @@ func (pr *Progress) BecomeSnapshot(snapshoti uint64) {
 	pr.sentCommit = snapshoti
 }
 
-// UpdateOnEntriesSend updates the progress on the given number of consecutive
-// entries being sent in a MsgApp, with the given total bytes size, appended at
-// log indices >= pr.Next.
+// SentEntries updates the progress on the given number of consecutive entries
+// being sent in a MsgApp, with the given total bytes size, appended at log
+// indices >= pr.Next.
 //
 // Must be used with StateProbe or StateReplicate.
-func (pr *Progress) UpdateOnEntriesSend(entries int, bytes uint64) {
+func (pr *Progress) SentEntries(entries int, bytes uint64) {
 	switch pr.State {
 	case StateReplicate:
 		if entries > 0 {
