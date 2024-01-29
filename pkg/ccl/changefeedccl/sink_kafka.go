@@ -183,6 +183,7 @@ func (j *compressionCodec) UnmarshalText(b []byte) error {
 }
 
 type saramaConfig struct {
+	ClientID string `json:",omitempty"`
 	// These settings mirror ones in sarama config.
 	// We just tag them w/ JSON annotations.
 	// Flush describes settings specific to producer flushing.
@@ -235,7 +236,7 @@ func defaultSaramaConfig() *saramaConfig {
 	// this workaround is the one that's been running in roachtests and I'd want
 	// to test this one more before changing it.
 	config.Flush.MaxMessages = 1000
-
+	config.ClientID = "CockroachDB"
 	return config
 }
 
@@ -822,6 +823,8 @@ func (c *saramaConfig) Apply(kafka *sarama.Config) error {
 	kafka.Producer.Flush.Messages = c.Flush.Messages
 	kafka.Producer.Flush.Frequency = time.Duration(c.Flush.Frequency)
 	kafka.Producer.Flush.MaxMessages = c.Flush.MaxMessages
+	kafka.ClientID = c.ClientID
+
 	if c.Version != "" {
 		parsedVersion, err := sarama.ParseKafkaVersion(c.Version)
 		if err != nil {
@@ -1077,7 +1080,6 @@ func buildKafkaConfig(
 		return nil, err
 	}
 	config := sarama.NewConfig()
-	config.ClientID = `CockroachDB`
 	config.Producer.Return.Successes = true
 	config.Producer.Partitioner = newChangefeedPartitioner
 	// Do not fetch metadata for all topics but just for the necessary ones.
