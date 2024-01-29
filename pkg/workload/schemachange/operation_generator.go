@@ -3332,7 +3332,7 @@ func (og *operationGenerator) randChildColumnForFkRelation(
 	query.WriteString(`
     SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable
       FROM information_schema.columns
-		 WHERE table_name ~ 'table[0-9]+' AND column_name <> 'rowid'
+		 WHERE table_name SIMILAR TO 'table_w[0-9]_+%' AND column_name <> 'rowid'
   `)
 	query.WriteString(fmt.Sprintf(`
 			AND crdb_sql_type = '%s'
@@ -3393,7 +3393,7 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 		        SELECT contype, conkey, conrelid
 		          FROM pg_catalog.pg_constraint
 		       ) AS cons ON cons.conrelid = cols.tableid
-		 WHERE table_name ~ 'table[0-9]+'
+		 WHERE table_name SIMILAR TO 'table_w[0-9]_+%'
   `)
 	if unique {
 		subQuery.WriteString(`
@@ -3617,7 +3617,7 @@ func (og *operationGenerator) randTable(
 		q := fmt.Sprintf(`
 		  SELECT table_name
 		    FROM [SHOW TABLES]
-		   WHERE table_name ~ 'table[0-9]+'
+		   WHERE table_name SIMILAR TO 'table_w[0-9]_+%%'
 				 AND schema_name = '%s'
 		ORDER BY random()
 		   LIMIT 1;
@@ -3655,7 +3655,7 @@ func (og *operationGenerator) randTable(
 	const q = `
   SELECT schema_name, table_name
     FROM [SHOW TABLES]
-   WHERE table_name ~ 'table[0-9]+'
+   WHERE table_name SIMILAR TO 'table_w[0-9]_+%'
 ORDER BY random()
    LIMIT 1;
 `
