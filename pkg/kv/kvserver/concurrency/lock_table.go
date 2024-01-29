@@ -741,10 +741,9 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 
 	for e := l.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 		qqg := e.Value
-		if qqg.guard.seqNum > g.seqNum {
-			// We only need to check for conflicts with requests that came before us
-			// (read: have lower sequence numbers than us). Note that the list of
-			// queuedLockingRequests is sorted in increasing order of sequence number.
+		if l.sortsAfter(qqg.guard, g) {
+			// We only need to check for conflicts with requests that sort before us.
+			// Note that the list of queuedLockingRequests is already sorted.
 			break
 		}
 		if qqg.guard.txnMeta() != nil && g.isSameTxn(qqg.guard.txnMeta()) {
@@ -2750,7 +2749,7 @@ func (kl *keyLocks) insertLockingRequest(
 	var e *list.Element[*queuedGuard]
 	for e = kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 		qqg := e.Value
-		if qqg.guard.seqNum > qg.guard.seqNum {
+		if kl.sortsAfter(qqg.guard, qg.guard) {
 			break
 		}
 		if qg.guard.txn != nil && qqg.guard.isSameTxn(qg.guard.txnMeta()) {
@@ -2771,6 +2770,29 @@ func (kl *keyLocks) insertLockingRequest(
 	added := g.maybeAddToLocksMap(kl, accessStrength)
 	assert(added, "should not have been present before")
 	return qg, nil
+}
+
+// sortsBefore returns true if the g1 should sort before g2 in the lock's wait
+// queue.
+//
+// Comparison is based on sequence numbers, which correspond to a request's
+// arrival time -- requests that arrive earlier sort before requests that arrive
+// later, and vice-versa.
+//
+// TODO(arul): don't forget to add a REQUIRES kl.mu to be locked here when
+// we include things other than sequence numbers to determine sort order.
+func (kl *keyLocks) sortsBefore(g1, g2 *lockTableGuardImpl) bool {
+	return g1.seqNum < g2.seqNum
+}
+
+// sortsAfter returns true if the g1 should sort after g2 in the lock's wait
+// queue.
+//
+// Comparison is based on sequence numbers, which correspond to a request's
+// arrival time -- requests that arrive later sort after requests that arrive
+// earlier, and vice-versa.
+func (kl *keyLocks) sortsAfter(g1, g2 *lockTableGuardImpl) bool {
+	return g2.seqNum < g1.seqNum
 }
 
 // maybeMakeDistinguishedWaiter designates the supplied request as the
@@ -3859,12 +3881,12 @@ func (kl *keyLocks) verify(st *cluster.Settings) error {
 		}
 	}
 
-	// 2. Ensure queued locking requests are stored in sorted sequence number
-	// order.
+	// 2. Ensure queued locking requests are stored in the correct order, as
+	// specified by keyLocks.sortsAfter().
 	for e1 := kl.queuedLockingRequests.Front(); e1 != nil; e1 = e1.Next() {
-		if e1.Prev() != nil && e1.Prev().Value.guard.seqNum >= e1.Value.guard.seqNum {
+		if e1.Prev() != nil && kl.sortsAfter(e1.Prev().Value.guard, e1.Value.guard) {
 			return errors.AssertionFailedf(
-				"queued locking requests should be stored in sequence number order %s", kl,
+				"queued locking requests should be stored in sorted order %s", kl,
 			)
 		}
 	}
@@ -3918,8 +3940,7 @@ func (kl *keyLocks) verify(st *cluster.Settings) error {
 		}
 		// If a locking request is actively waiting at a key, it must either:
 		// 1. Conflict with one of the lock holders.
-		// 2. OR Conflict with one of the queued locking requests in front (read:
-		// lower sequence number) of it.
+		// 2. OR Conflict with one of the queued locking requests in front of it.
 		conflicts := false
 		for e2 := kl.holders.Front(); e2 != nil; e2 = e2.Next() {
 			holder := e2.Value
@@ -3937,7 +3958,7 @@ func (kl *keyLocks) verify(st *cluster.Settings) error {
 			// requests waiting in front of the request.
 			for e2 := kl.queuedLockingRequests.Front(); ; e2 = e2.Next() {
 				req := e2.Value
-				if req.guard.seqNum >= qlr.guard.seqNum {
+				if !kl.sortsBefore(req.guard, qlr.guard) {
 					break
 				}
 				if lock.Conflicts(req.mode, qlr.mode, &st.SV) {
