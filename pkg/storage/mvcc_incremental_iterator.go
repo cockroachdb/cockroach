@@ -124,6 +124,15 @@ type MVCCIncrementalIterator struct {
 
 	// Optional collection of intents created on demand when first intent encountered.
 	intents []roachpb.Intent
+
+	// maxLockConflicts is a maximum number of conflicting locks collected before
+	// returning LockConflictError. This setting only work under
+	// MVCCIncrementalIterIntentPolicyAggregate. Caller must call TryGetIntentError
+	// when the collected intents is less that the Threshold.
+	//
+	// The zero value disables batching and returns the
+	// first intent, pass math.MaxUint64 to collect all.
+	maxLockConflicts uint64
 }
 
 var _ SimpleMVCCIterator = &MVCCIncrementalIterator{}
@@ -142,8 +151,10 @@ const (
 	// first encountered intent, but will proceed further. All
 	// found intents will be aggregated into a single
 	// LockConflictError which would be updated during
-	// iteration. Consumer would be free to decide if it wants to
-	// keep collecting entries and intents or skip entries.
+	// iteration. The LockConflictError's intents size is
+	// constrained by MaxLockConflicts setting. Consumer would
+	// be free to decide if it wants to keep collecting entries
+	// and intents or skip entries.
 	MVCCIncrementalIterIntentPolicyAggregate
 	// MVCCIncrementalIterIntentPolicyEmit will return intents to
 	// the caller if they are inside or outside the time range.
@@ -174,6 +185,15 @@ type MVCCIncrementalIterOptions struct {
 	// ReadCategory is used to map to a user-understandable category string, for
 	// stats aggregation and metrics, and a Pebble-understandable QoS.
 	ReadCategory ReadCategory
+
+	// MaxLockConflicts is a maximum number of conflicting locks collected before
+	// returning LockConflictError. This setting only work under
+	// MVCCIncrementalIterIntentPolicyAggregate. Caller must call TryGetIntentError
+	// when the collected intents is less that the Threshold.
+	//
+	// The zero value disables batching and returns the
+	// first intent, pass math.MaxUint64 to collect all.
+	MaxLockConflicts uint64
 }
 
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
@@ -249,11 +269,12 @@ func NewMVCCIncrementalIterator(
 	}
 
 	return &MVCCIncrementalIterator{
-		iter:          iter,
-		startTime:     opts.StartTime,
-		endTime:       opts.EndTime,
-		timeBoundIter: timeBoundIter,
-		intentPolicy:  opts.IntentPolicy,
+		iter:             iter,
+		startTime:        opts.StartTime,
+		endTime:          opts.EndTime,
+		timeBoundIter:    timeBoundIter,
+		intentPolicy:     opts.IntentPolicy,
+		maxLockConflicts: opts.MaxLockConflicts,
 	}, nil
 }
 
@@ -462,10 +483,14 @@ func (i *MVCCIncrementalIterator) updateMeta() error {
 			i.valid = false
 			return i.err
 		case MVCCIncrementalIterIntentPolicyAggregate:
-			// We are collecting intents, so we need to save it and advance to its proposed value.
-			// Caller could then use a value key to update proposed row counters for the sake of bookkeeping
-			// and advance more.
+			// We are collecting intents, so we need to save it and advance to its proposed value. Caller could then use a
+			// value key to update proposed row counters for the sake of bookkeeping and advance more.
 			i.intents = append(i.intents, roachpb.MakeIntent(i.meta.Txn, i.iter.UnsafeKey().Key.Clone()))
+			if uint64(len(i.intents)) >= i.maxLockConflicts {
+				i.valid = false
+				i.err = i.TryGetIntentError()
+				return i.err
+			}
 			return nil
 		case MVCCIncrementalIterIntentPolicyEmit:
 			// We will emit this intent to the caller.

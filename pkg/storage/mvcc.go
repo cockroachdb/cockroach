@@ -7613,6 +7613,7 @@ func mvccExportToWriter(
 		RangeKeyMaskingBelow: rangeKeyMasking,
 		IntentPolicy:         MVCCIncrementalIterIntentPolicyAggregate,
 		ReadCategory:         BackupReadCategory,
+		MaxLockConflicts:     opts.MaxLockConflicts,
 	})
 	if err != nil {
 		return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
@@ -7901,18 +7902,16 @@ func mvccExportToWriter(
 	// First check if we encountered an intent while iterating the data.
 	// If we do it means this export can't complete and is aborted. We need to loop over remaining data
 	// to collect all matching intents before returning them in an error to the caller.
-	if iter.NumCollectedIntents() > 0 {
-		for uint64(iter.NumCollectedIntents()) < opts.MaxLockConflicts {
+	// TODO: move below logic inside MVCCIncrementalIterator, make the iterator advance for intent collection when an
+	// intent is found.
+	if len(iter.intents) > 0 {
+		// If we encounter an error during intent collection, bail out but return
+		// an intent error. MVCCIncrementalIterator will enforce MaxLockConflicts
+		// and return an error when exceeded.
+		for ok, _ := iter.Valid(); ok; ok, _ = iter.Valid() {
 			iter.NextKey()
-			// If we encounter other errors during intent collection, we return our original write intent failure.
-			// We would find this new error again upon retry.
-			ok, _ := iter.Valid()
-			if !ok {
-				break
-			}
 		}
-		err := iter.TryGetIntentError()
-		return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
+		return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, iter.TryGetIntentError()
 	}
 
 	// Flush any pending buffered range keys, truncated to the resume key (if

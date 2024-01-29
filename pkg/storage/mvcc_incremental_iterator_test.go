@@ -83,7 +83,13 @@ func iterateExpectErr(
 		t.Helper()
 
 		t.Run("aggregate-intents", func(t *testing.T) {
-			assertExpectErrs(t, e, startKey, endKey, startTime, endTime, revisions, intents)
+			assertExpectErrs(t, e, startKey, endKey, startTime, endTime, revisions, intents, MaxConflictsPerLockConflictErrorDefault)
+		})
+		// Test case to check if iterator enforces maxLockConflict.
+		t.Run("aggregate-intents-with-limit", func(t *testing.T) {
+			if len(intents) > 0 {
+				assertExpectErrs(t, e, startKey, endKey, startTime, endTime, revisions, intents[:1], 1)
+			}
 		})
 		t.Run("first-intent", func(t *testing.T) {
 			assertExpectErr(t, e, startKey, endKey, startTime, endTime, revisions, intents[0])
@@ -141,12 +147,14 @@ func assertExpectErrs(
 	startTime, endTime hlc.Timestamp,
 	revisions bool,
 	expectedIntents []roachpb.Intent,
+	maxLockConflicts uint64,
 ) {
 	iter, err := NewMVCCIncrementalIterator(context.Background(), e, MVCCIncrementalIterOptions{
-		EndKey:       endKey,
-		StartTime:    startTime,
-		EndTime:      endTime,
-		IntentPolicy: MVCCIncrementalIterIntentPolicyAggregate,
+		EndKey:           endKey,
+		StartTime:        startTime,
+		EndTime:          endTime,
+		IntentPolicy:     MVCCIncrementalIterIntentPolicyAggregate,
+		MaxLockConflicts: maxLockConflicts,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -372,10 +380,11 @@ func assertIteratedKVs(
 	expected []MVCCKeyValue,
 ) {
 	iter, err := NewMVCCIncrementalIterator(context.Background(), e, MVCCIncrementalIterOptions{
-		EndKey:       endKey,
-		StartTime:    startTime,
-		EndTime:      endTime,
-		IntentPolicy: MVCCIncrementalIterIntentPolicyAggregate,
+		EndKey:           endKey,
+		StartTime:        startTime,
+		EndTime:          endTime,
+		IntentPolicy:     MVCCIncrementalIterIntentPolicyAggregate,
+		MaxLockConflicts: MaxConflictsPerLockConflictErrorDefault,
 	})
 	if err != nil {
 		t.Fatal(err)
