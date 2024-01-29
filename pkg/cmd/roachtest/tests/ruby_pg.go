@@ -22,12 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -38,7 +36,7 @@ var testSummaryRegexp = regexp.MustCompile("^([0-9]+) examples, [0-9]+ failures"
 
 // WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
 // This is used by docs automation to produce a list of supported versions for ORM's.
-var rubyPGVersion = "v1.3.5"
+var rubyPGVersion = "v1.4.6"
 
 // This test runs Ruby PG's full test suite against a single cockroach node.
 func registerRubyPG(r registry.Registry) {
@@ -239,13 +237,10 @@ func registerRubyPG(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "ruby-pg",
-		Timeout: 1 * time.Hour,
-		Owner:   registry.OwnerSQLFoundations,
-		// TODO(DarrylWong): This test currently fails on Ubuntu 22.04 so we run it on 20.04.
-		// See: https://github.com/cockroachdb/cockroach/issues/112109
-		// Once this issue is fixed we should remove this Ubuntu Version override.
-		Cluster:          r.MakeClusterSpec(1, spec.UbuntuVersion(vm.FocalFossa)),
+		Name:             "ruby-pg",
+		Timeout:          1 * time.Hour,
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
 		Leases:           registry.MetamorphicLeases,
 		NativeLibs:       registry.LibGEOS,
 		CompatibleClouds: registry.AllExceptAWS,
