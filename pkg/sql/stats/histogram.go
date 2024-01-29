@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -76,6 +77,29 @@ Please add new entries at the top.
   omitted on Version 0 histograms.
 
 */
+
+// EncodeUpperBound encodes the upper-bound datum of a histogram bucket.
+func EncodeUpperBound(upperBound tree.Datum) ([]byte, error) {
+	if upperBound.ResolvedType().Family() == types.TSQueryFamily {
+		// TSQuery doesn't have key-encoding, so we must use value-encoding.
+		return valueside.Encode(nil /* appendTo */, valueside.NoColumnID, upperBound, nil /* scratch */)
+	}
+	return keyside.Encode(nil /* b */, upperBound, encoding.Ascending)
+}
+
+// decodeUpperBound decodes the upper-bound of a histogram bucket into a datum.
+func decodeUpperBound(typ *types.T, a *tree.DatumAlloc, upperBound []byte) (tree.Datum, error) {
+	var datum tree.Datum
+	var err error
+	if typ.Family() == types.TSQueryFamily {
+		// TSQuery doesn't have key-encoding, so we must have used
+		// value-encoding.
+		datum, _, err = valueside.Decode(a, typ, upperBound)
+	} else {
+		datum, _, err = keyside.Decode(a, typ, upperBound, encoding.Ascending)
+	}
+	return datum, err
+}
 
 // GetDefaultHistogramBuckets gets the default number of histogram buckets to
 // create for the given table.
@@ -641,7 +665,7 @@ func (h histogram) toHistogramData(colType *types.T) (HistogramData, error) {
 	}
 
 	for i := range h.buckets {
-		encoded, err := keyside.Encode(nil, h.buckets[i].UpperBound, encoding.Ascending)
+		encoded, err := EncodeUpperBound(h.buckets[i].UpperBound)
 		if err != nil {
 			return HistogramData{}, err
 		}
