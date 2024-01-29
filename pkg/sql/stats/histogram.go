@@ -98,7 +98,8 @@ const upperBoundsKeyEncodedVersion = HistogramVersion(2)
 
 // EncodeUpperBound encodes the upper-bound datum of a histogram bucket.
 func EncodeUpperBound(version HistogramVersion, upperBound tree.Datum) ([]byte, error) {
-	if version >= upperBoundsValueEncodedVersion {
+	if version >= upperBoundsValueEncodedVersion || upperBound.ResolvedType().Family() == types.TSQueryFamily {
+		// TSQuery doesn't have key-encoding, so we must use value-encoding.
 		return valueside.Encode(nil /* appendTo */, valueside.NoColumnID, upperBound, nil /* scratch */)
 	}
 	return keyside.Encode(nil /* b */, upperBound, encoding.Ascending)
@@ -110,7 +111,9 @@ func DecodeUpperBound(
 ) (tree.Datum, error) {
 	var datum tree.Datum
 	var err error
-	if version >= upperBoundsValueEncodedVersion {
+	if version >= upperBoundsValueEncodedVersion || typ.Family() == types.TSQueryFamily {
+		// TSQuery doesn't have key-encoding, so we must have used
+		// value-encoding, regardless of the histogram version.
 		datum, _, err = valueside.Decode(a, typ, upperBound)
 	} else {
 		datum, _, err = keyside.Decode(a, typ, upperBound, encoding.Ascending)
