@@ -2002,6 +2002,10 @@ func cmdIterNewIncremental(e *evalCtx) error {
 		e.iter.Close()
 	}
 
+	if e.hasArg("maxLockConflicts") {
+		e.scanArg("maxLockConflicts", &opts.MaxLockConflicts)
+	}
+
 	r := e.newReader()
 	mvccIter, err := storage.NewMVCCIncrementalIterator(context.Background(), r, opts)
 	if err != nil {
