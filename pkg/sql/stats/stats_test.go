@@ -54,10 +54,6 @@ func TestStatsAnyType(t *testing.T) {
 				// Casting random integers to REGTYPE might fail.
 				continue loop
 			}
-			if typ.Family() == types.TSQueryFamily {
-				// Skipped until #118436 is fixed.
-				continue loop
-			}
 			if err := colinfo.ValidateColumnDefType(ctx, st.Version, typ); err == nil {
 				break
 			}
