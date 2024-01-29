@@ -7613,6 +7613,7 @@ func mvccExportToWriter(
 		RangeKeyMaskingBelow: rangeKeyMasking,
 		IntentPolicy:         MVCCIncrementalIterIntentPolicyAggregate,
 		ReadCategory:         BackupReadCategory,
+		MaxLockConflicts:     opts.MaxLockConflicts,
 	})
 	if err != nil {
 		return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err

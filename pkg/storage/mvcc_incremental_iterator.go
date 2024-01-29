@@ -124,6 +124,12 @@ type MVCCIncrementalIterator struct {
 
 	// Optional collection of intents created on demand when first intent encountered.
 	intents []roachpb.Intent
+
+	// maxLockConflicts is a maximum number of conflicting locks collected before
+	// returning LockConflictError.
+	//
+	// The zero value indicates no limit.
+	maxLockConflicts uint64
 }
 
 var _ SimpleMVCCIterator = &MVCCIncrementalIterator{}
@@ -174,6 +180,12 @@ type MVCCIncrementalIterOptions struct {
 	// ReadCategory is used to map to a user-understandable category string, for
 	// stats aggregation and metrics, and a Pebble-understandable QoS.
 	ReadCategory ReadCategory
+
+	// MaxLockConflicts is a maximum number of conflicting locks collected before
+	// returning LockConflictError.
+	//
+	// The zero value indicates no limit.
+	MaxLockConflicts uint64
 }
 
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
@@ -249,11 +261,12 @@ func NewMVCCIncrementalIterator(
 	}
 
 	return &MVCCIncrementalIterator{
-		iter:          iter,
-		startTime:     opts.StartTime,
-		endTime:       opts.EndTime,
-		timeBoundIter: timeBoundIter,
-		intentPolicy:  opts.IntentPolicy,
+		iter:             iter,
+		startTime:        opts.StartTime,
+		endTime:          opts.EndTime,
+		timeBoundIter:    timeBoundIter,
+		intentPolicy:     opts.IntentPolicy,
+		maxLockConflicts: opts.MaxLockConflicts,
 	}, nil
 }
 
@@ -462,10 +475,24 @@ func (i *MVCCIncrementalIterator) updateMeta() error {
 			i.valid = false
 			return i.err
 		case MVCCIncrementalIterIntentPolicyAggregate:
-			// We are collecting intents, so we need to save it and advance to its proposed value.
-			// Caller could then use a value key to update proposed row counters for the sake of bookkeeping
-			// and advance more.
-			i.intents = append(i.intents, roachpb.MakeIntent(i.meta.Txn, i.iter.UnsafeKey().Key.Clone()))
+			// We are collecting intents, so we need to save it and advance to its proposed value. Caller could then use a
+			// value key to update proposed row counters for the sake of bookkeeping and advance more.
+
+			// Case with unlimited intents.
+			if i.maxLockConflicts == 0 {
+				i.intents = append(i.intents, roachpb.MakeIntent(i.meta.Txn, i.iter.UnsafeKey().Key.Clone()))
+				return nil
+			}
+			// Case with defined maxLockConflicts, we need to invalidate the iterator when
+			// collected itents exceeds the threshold.
+			if uint64(len(i.intents)) < i.maxLockConflicts {
+				i.intents = append(i.intents, roachpb.MakeIntent(i.meta.Txn, i.iter.UnsafeKey().Key.Clone()))
+			} else {
+				i.valid = false
+				i.err = &kvpb.LockConflictError{
+					Locks: roachpb.AsLocks(i.intents),
+				}
+			}
 			return nil
 		case MVCCIncrementalIterIntentPolicyEmit:
 			// We will emit this intent to the caller.
