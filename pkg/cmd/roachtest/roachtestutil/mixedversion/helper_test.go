@@ -11,7 +11,6 @@
 package mixedversion
 
 import (
-	"math/rand"
 	"sync/atomic"
 	"testing"
 
@@ -20,7 +19,7 @@ import (
 )
 
 func TestClusterVersionAtLeast(t *testing.T) {
-	rng := rand.New(rand.NewSource(seed))
+	rng := newRand()
 
 	testCases := []struct {
 		name           string
