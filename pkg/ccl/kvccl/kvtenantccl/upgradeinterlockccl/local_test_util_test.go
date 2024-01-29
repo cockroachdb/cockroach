@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -114,8 +114,8 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 			ttlOverride *= 10
 		}
 		heartbeatOverride := ttlOverride / 10
-		slinstance.DefaultTTL.Override(ctx, &s.SV, ttlOverride)
-		slinstance.DefaultHeartBeat.Override(ctx, &s.SV, heartbeatOverride)
+		slbase.DefaultTTL.Override(ctx, &s.SV, ttlOverride)
+		slbase.DefaultHeartBeat.Override(ctx, &s.SV, heartbeatOverride)
 	}
 
 	// Initialize the version to the MinSupportedVersion so that we can perform

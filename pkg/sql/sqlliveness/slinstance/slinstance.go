@@ -19,10 +19,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -34,25 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-)
-
-var (
-	// DefaultTTL specifies the time to expiration when a session is created.
-	DefaultTTL = settings.RegisterDurationSetting(
-		settings.ApplicationLevel,
-		"server.sqlliveness.ttl",
-		"default sqlliveness session ttl",
-		40*time.Second,
-		settings.NonNegativeDuration,
-	)
-	// DefaultHeartBeat specifies the period between attempts to extend a session.
-	DefaultHeartBeat = settings.RegisterDurationSetting(
-		settings.ApplicationLevel,
-		"server.sqlliveness.heartbeat",
-		"duration heart beats to push session expiration further out in time",
-		5*time.Second,
-		settings.NonNegativeDuration,
-	)
 )
 
 // Writer provides interactions with the storage of session records.
@@ -413,10 +394,10 @@ func NewSQLInstance(
 		stopper:        stopper,
 		sessionEvents:  sessionEvents,
 		ttl: func() time.Duration {
-			return DefaultTTL.Get(&settings.SV)
+			return slbase.DefaultTTL.Get(&settings.SV)
 		},
 		hb: func() time.Duration {
-			return DefaultHeartBeat.Get(&settings.SV)
+			return slbase.DefaultHeartBeat.Get(&settings.SV)
 		},
 		drain: make(chan struct{}),
 	}

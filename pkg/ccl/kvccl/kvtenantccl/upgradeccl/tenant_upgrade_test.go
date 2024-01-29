@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -448,8 +448,8 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		// Shorten the reclaim loop so that terminated SQL servers don't block
 		// the upgrade from succeeding.
 		instancestorage.ReclaimLoopInterval.Override(ctx, &settings.SV, 250*time.Millisecond)
-		slinstance.DefaultTTL.Override(ctx, &settings.SV, 15*time.Second)
-		slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 500*time.Millisecond)
+		slbase.DefaultTTL.Override(ctx, &settings.SV, 15*time.Second)
+		slbase.DefaultHeartBeat.Override(ctx, &settings.SV, 500*time.Millisecond)
 		tenantStopper := stop.NewStopper()
 		// Initialize the version to the minimum it could be.
 		require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
