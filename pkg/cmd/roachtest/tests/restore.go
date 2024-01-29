@@ -379,8 +379,8 @@ func registerRestore(r registry.Registry) {
 			}),
 			timeout: 30 * time.Hour,
 			suites:  registry.Suites(registry.Weekly),
-			setUpStmts: []string{
-				`SET CLUSTER SETTING backup.restore_span.target_size = '0'`,
+			extraArgs: []string{
+				"--max-disk-temp-storage", "128GiB",
 			},
 			restoreUptoIncremental: 400,
 		},
@@ -395,8 +395,8 @@ func registerRestore(r registry.Registry) {
 			}),
 			timeout: 30 * time.Hour,
 			suites:  registry.Suites(registry.Weekly),
-			setUpStmts: []string{
-				`SET CLUSTER SETTING backup.restore_span.target_size = '0'`,
+			extraArgs: []string{
+				"--max-disk-temp-storage", "128GiB",
 			},
 			restoreUptoIncremental: 400,
 			skip:                   "a recent gcp pricing policy makes this test very expensive. unskip after #111371 is addressed",
@@ -822,6 +822,9 @@ type restoreSpecs struct {
 
 	setUpStmts []string
 
+	// extraArgs are passed to the cockroach binary at startup.
+	extraArgs []string
+
 	// skip, if non-empty, skips the test with the given reason.
 	skip string
 
@@ -885,7 +888,9 @@ func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreD
 }
 
 func (rd *restoreDriver) prepareCluster(ctx context.Context) {
-	rd.c.Start(ctx, rd.t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), rd.sp.hardware.getCRDBNodes())
+	opts := option.DefaultStartOptsNoBackups()
+	opts.RoachprodOpts.ExtraArgs = rd.sp.extraArgs
+	rd.c.Start(ctx, rd.t.L(), opts, install.MakeClusterSettings(), rd.sp.hardware.getCRDBNodes())
 	rd.getAOST(ctx)
 }
 
