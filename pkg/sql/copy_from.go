@@ -91,6 +91,7 @@ type copyOptions struct {
 	delimiter byte
 	format    tree.CopyFormat
 	null      string
+	encoding  string
 }
 
 // TODO(#sql-sessions): copy all pre-condition checks from the PG code
@@ -182,6 +183,17 @@ func processCopyOptions(
 			pgcode.FeatureNotSupported,
 			"DESTINATION can only be specified when table is external storage table",
 		)
+	}
+
+	if opts.Encoding != nil {
+		e, err := exprEval.String(ctx, opts.Encoding)
+		if err != nil {
+			return c, err
+		}
+		if strings.ToUpper(e) != "UTF8" {
+			return c, pgerror.New(pgcode.FeatureNotSupported, "only 'utf8' ENCODING is supported")
+		}
+		c.encoding = "utf8"
 	}
 
 	return c, nil

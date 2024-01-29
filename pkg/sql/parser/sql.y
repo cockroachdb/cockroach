@@ -4217,9 +4217,9 @@ copy_options:
   {
     return unimplementedWithIssueDetail(sqllex, 41608, "force_null")
   }
-| ENCODING SCONST error
+| ENCODING SCONST
   {
-    return unimplementedWithIssueDetail(sqllex, 41608, "encoding")
+    $$.val = &tree.CopyOptions{Encoding: tree.NewStrVal($2)}
   }
 
 copy_generic_options:
@@ -4302,9 +4302,9 @@ copy_generic_options:
   {
     return unimplementedWithIssueDetail(sqllex, 41608, "force_null")
   }
-| ENCODING SCONST error
+| ENCODING SCONST
   {
-    return unimplementedWithIssueDetail(sqllex, 41608, "encoding")
+    $$.val = &tree.CopyOptions{Encoding: tree.NewStrVal($2)}
   }
 
 // %Help: CANCEL
