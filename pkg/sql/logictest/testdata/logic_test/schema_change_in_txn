@@ -1999,3 +1999,26 @@ COMMIT;
 
 statement ok
 DROP TABLE t1, t2 CASCADE
+
+statement ok
+SET autocommit_before_ddl = true
+
+statement ok
+CREATE TABLE t1 (id STRING PRIMARY KEY, other_id STRING NOT NULL);
+
+statement ok
+BEGIN
+
+query T noticetrace
+ALTER TABLE t1 ADD COLUMN c INT DEFAULT 1
+----
+auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+
+query T noticetrace
+COMMIT
+----
+WARNING: there is no transaction in progress
+SQLSTATE: 25P01
+
+statement ok
+DROP TABLE t1
