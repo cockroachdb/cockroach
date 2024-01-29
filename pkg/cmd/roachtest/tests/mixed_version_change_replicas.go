@@ -253,7 +253,12 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 
 	// Set up and run test.
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), mixedversion.ClusterSettingOption(
-		install.EnvOption{"COCKROACH_SCAN_MAX_IDLE_TIME=10ms"})) // speed up queues
+		// Speed up the queues.
+		install.EnvOption{"COCKROACH_SCAN_MAX_IDLE_TIME=10ms"}),
+		// Avoid repeatedly running into #114549 on earlier minor versions.
+		// TODO(kvoli): Remove in 24.2.
+		mixedversion.AlwaysUseLatestPredecessors,
+	)
 
 	mvt.OnStartup("create test table", createTable)
 	mvt.InMixedVersion("move replicas", moveReplicas)
