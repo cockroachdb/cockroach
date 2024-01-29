@@ -7613,6 +7613,7 @@ func mvccExportToWriter(
 		RangeKeyMaskingBelow: rangeKeyMasking,
 		IntentPolicy:         MVCCIncrementalIterIntentPolicyAggregate,
 		ReadCategory:         BackupReadCategory,
+		MaxLockConflicts:     opts.MaxLockConflicts,
 	})
 	if err != nil {
 		return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
@@ -7709,7 +7710,7 @@ func mvccExportToWriter(
 			return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
 		} else if !ok {
 			break
-		} else if iter.NumCollectedIntents() > 0 {
+		} else if iter.TryGetIntentError() != nil {
 			break
 		}
 
@@ -7901,18 +7902,16 @@ func mvccExportToWriter(
 	// First check if we encountered an intent while iterating the data.
 	// If we do it means this export can't complete and is aborted. We need to loop over remaining data
 	// to collect all matching intents before returning them in an error to the caller.
-	if iter.NumCollectedIntents() > 0 {
-		for uint64(iter.NumCollectedIntents()) < opts.MaxLockConflicts {
+	// TODO: move below logic inside MVCCIncrementalIterator, make the iterator advance for intent collection when an
+	// intent is found.
+	if iter.TryGetIntentError() != nil {
+		// If we encounter an error during intent collection, bail out but return
+		// an intent error. MVCCIncrementalIterator will enforce MaxLockConflicts
+		// and return an error when exceeded.
+		for ok, _ := iter.Valid(); ok; ok, _ = iter.Valid() {
 			iter.NextKey()
-			// If we encounter other errors during intent collection, we return our original write intent failure.
-			// We would find this new error again upon retry.
-			ok, _ := iter.Valid()
-			if !ok {
-				break
-			}
 		}
-		err := iter.TryGetIntentError()
-		return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
+		return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, iter.TryGetIntentError()
 	}
 
 	// Flush any pending buffered range keys, truncated to the resume key (if
@@ -7979,8 +7978,9 @@ type MVCCExportOptions struct {
 	// MaxLockConflicts specifies the number of locks (intents) to collect and
 	// return in a LockConflictError. The caller will likely resolve the returned
 	// intents and retry the call, which would be quadratic, so this significantly
-	// reduces the overall number of scans. 0 disables batching and returns the
-	// first intent, pass math.MaxUint64 to collect all.
+	// reduces the overall number of scans.
+	//
+	// The zero value indicates no limit.
 	MaxLockConflicts uint64
 	// If StopMidKey is false, once function reaches targetSize it would continue
 	// adding all versions until it reaches next key or end of range. If true, it
