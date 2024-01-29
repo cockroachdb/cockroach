@@ -2564,6 +2564,17 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		return ex.execShowCommitTimestampInNoTxnState(ctx, s, res)
 	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
 		*tree.RollbackTransaction, *tree.SetTransaction, *tree.Savepoint:
+		if ex.sessionData().AutoCommitBeforeDDL {
+			// If autocommit_before_ddl is set, we allow these statements to be
+			// executed, and send a warning rather than an error.
+			if err := ex.planner.SendClientNotice(
+				ctx,
+				pgerror.WithSeverity(errNoTransactionInProgress, "WARNING"),
+			); err != nil {
+				return ex.makeErrEvent(err, ast)
+			}
+			return nil, nil
+		}
 		return ex.makeErrEvent(errNoTransactionInProgress, ast)
 	default:
 		// NB: Implicit transactions are created with the session's default
