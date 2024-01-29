@@ -1474,6 +1474,121 @@ func propagateDiskLabels(
 	return g.Wait()
 }
 
+type jsonManagedInstanceGroup struct {
+	Name string `json:"name"`
+	Zone string `json:"zone"`
+}
+
+// listManagedInstanceGroups returns a list of managed instance groups for a
+// given group name. Groups may exist in multiple zones with the same name. This
+// function returns a list of all groups with the given name.
+func listManagedInstanceGroups(project, groupName string) ([]jsonManagedInstanceGroup, error) {
+	args := []string{"compute", "instance-groups", "list", "--only-managed",
+		"--project", project, "--format", "json", "--filter", fmt.Sprintf("name=%s", groupName)}
+	var groups []jsonManagedInstanceGroup
+	if err := runJSONCommand(args, &groups); err != nil {
+		return nil, err
+	}
+	return groups, nil
+}
+
+// deleteInstanceTemplate deletes the instance template for the cluster.
+func deleteInstanceTemplate(project string, clusterName string) error {
+	templateName := instanceTemplateName(clusterName)
+	args := []string{"compute", "instance-templates", "delete", "--project", project, "--quiet", templateName}
+	cmd := exec.Command("gcloud", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+	}
+	return nil
+}
+
+// isManaged returns true if the cluster is part of a managed instance group.
+// This function makes the assumption that a cluster is either completely
+// managed or not at all.
+func isManaged(vms vm.List) bool {
+	firstVM := vms[0]
+	for k, v := range firstVM.Labels {
+		if k == ManagedLabel && v == "true" {
+			return true
+		}
+	}
+	return false
+}
+
+// Delete is part of the vm.Provider interface.
+func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
+	switch {
+	case isManaged(vms):
+		return p.deleteManaged(l, vms)
+	default:
+		return p.deleteUnmanaged(l, vms)
+	}
+}
+
+// deleteManaged deletes the managed instance group for the given VMs. It also
+// deletes any instance templates that were used to create the managed instance
+// group.
+func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
+	projectClusterMap := make(map[string]map[string]struct{})
+	for _, v := range vms {
+		if v.Provider != ProviderName {
+			return errors.Errorf("%s received VM instance from %s", ProviderName, v.Provider)
+		}
+		clusterName, err := v.ClusterName()
+		if err != nil {
+			return err
+		}
+		if projectClusterMap[v.Project] == nil {
+			projectClusterMap[v.Project] = make(map[string]struct{})
+		}
+		projectClusterMap[v.Project][clusterName] = struct{}{}
+	}
+
+	var g errgroup.Group
+	for project, clusters := range projectClusterMap {
+		for cluster := range clusters {
+			// Multiple instance groups can exist for a single cluster, one for each zone.
+			projectGroups, err := listManagedInstanceGroups(project, instanceGroupName(cluster))
+			if err != nil {
+				return err
+			}
+			for _, group := range projectGroups {
+				argsWithZone := []string{"compute", "instance-groups", "managed", "delete", "--quiet",
+					"--project", project,
+					"--zone", group.Zone,
+					group.Name}
+				g.Go(func() error {
+					cmd := exec.Command("gcloud", argsWithZone...)
+					output, err := cmd.CombinedOutput()
+					if err != nil {
+						return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithZone, output)
+					}
+					return nil
+				})
+			}
+		}
+	}
+	err := g.Wait()
+	if err != nil {
+		return err
+	}
+
+	// All instance groups have to be deleted before the instance templates can be
+	// deleted.
+	g = errgroup.Group{}
+	for project, clusters := range projectClusterMap {
+		for cluster := range clusters {
+			project, cluster := project, cluster
+			g.Go(func() error {
+				return deleteInstanceTemplate(project, cluster)
+			})
+		}
+	}
+	return g.Wait()
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -1481,8 +1596,8 @@ func min(a, b int) int {
 	return b
 }
 
-// Delete TODO(peter): document
-func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
+// deleteUnmanaged deletes the given VMs that are not part of a managed instance group.
+func (p *Provider) deleteUnmanaged(l *logger.Logger, vms vm.List) error {
 	// Map from project to map of zone to list of machines in that project/zone.
 	projectZoneMap := make(map[string]map[string][]string)
 	for _, v := range vms {
