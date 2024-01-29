@@ -2253,6 +2253,11 @@ func (ex *connExecutor) handleTxnRowsWrittenReadLimits(ctx context.Context) erro
 	return errors.CombineErrors(writtenErr, readErr)
 }
 
+var txnSchemaChangeErr = pgerror.Newf(
+	pgcode.FeatureNotSupported,
+	"to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting",
+)
+
 // maybeUpgradeToSerializable checks if the statement is a schema change, and
 // upgrades the transaction to serializable isolation if it is. If the
 // transaction contains multiple statements, and an upgrade was attempted, an
@@ -2260,9 +2265,7 @@ func (ex *connExecutor) handleTxnRowsWrittenReadLimits(ctx context.Context) erro
 func (ex *connExecutor) maybeUpgradeToSerializable(ctx context.Context, stmt Statement) error {
 	p := &ex.planner
 	if ex.extraTxnState.upgradedToSerializable && ex.extraTxnState.firstStmtExecuted {
-		return pgerror.Newf(
-			pgcode.FeatureNotSupported, "multi-statement transaction involving a schema change needs to be SERIALIZABLE",
-		)
+		return txnSchemaChangeErr
 	}
 	if tree.CanModifySchema(stmt.AST) {
 		if ex.state.mu.txn.IsoLevel().ToleratesWriteSkew() {
@@ -2273,9 +2276,7 @@ func (ex *connExecutor) maybeUpgradeToSerializable(ctx context.Context, stmt Sta
 				ex.extraTxnState.upgradedToSerializable = true
 				p.BufferClientNotice(ctx, pgnotice.Newf("setting transaction isolation level to SERIALIZABLE due to schema change"))
 			} else {
-				return pgerror.Newf(
-					pgcode.FeatureNotSupported, "multi-statement transaction involving a schema change needs to be SERIALIZABLE",
-				)
+				return txnSchemaChangeErr
 			}
 		}
 	}
