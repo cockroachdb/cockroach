@@ -626,7 +626,7 @@ span expression
 or result=a-or-b-and-c left=a right=b-and-c
 ----
 span expression
- ├── tight: true, unique: false
+ ├── tight: true, unique: true
  ├── to read: ["a", "d")
  ├── union spans: ["a", "a"]
  └── INTERSECTION
@@ -642,6 +642,6 @@ span expression
 and result=a-and-a-or-b-and-c left=a right=a-or-b-and-c
 ----
 span expression
- ├── tight: true, unique: false
+ ├── tight: true, unique: true
  ├── to read: ["a", "a"]
  └── union spans: ["a", "a"]
