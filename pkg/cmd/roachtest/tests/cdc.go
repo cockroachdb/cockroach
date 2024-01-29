@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -1258,6 +1259,8 @@ func registerCDC(r registry.Registry) {
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
+			_, err := ct.DB().Exec(`SET CLUSTER SETTING server.child_metrics.enabled = true`)
+			require.NoError(t, err)
 			defer ct.Close()
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "10m"})
