@@ -40,6 +40,14 @@ type Progress struct {
 	// In StateSnapshot, Next == PendingSnapshot + 1.
 	Next uint64
 
+	// sentCommit is the highest commit index in flight to the follower.
+	//
+	// Generally, it is monotonic, but con regress in some cases, e.g. when
+	// converting to `StateProbe` or when receiving a rejection from a follower.
+	//
+	// In StateSnapshot, sentCommit == PendingSnapshot == Next-1.
+	sentCommit uint64
+
 	// State defines how the leader should interact with the follower.
 	//
 	// When in StateProbe, leader sends at most one replication message
@@ -131,6 +139,7 @@ func (pr *Progress) BecomeProbe() {
 		pr.ResetState(StateProbe)
 		pr.Next = pr.Match + 1
 	}
+	pr.sentCommit = min(pr.sentCommit, pr.Next-1)
 }
 
 // BecomeReplicate transitions into StateReplicate, resetting Next to Match+1.
@@ -145,6 +154,7 @@ func (pr *Progress) BecomeSnapshot(snapshoti uint64) {
 	pr.ResetState(StateSnapshot)
 	pr.PendingSnapshot = snapshoti
 	pr.Next = snapshoti + 1
+	pr.sentCommit = snapshoti
 }
 
 // UpdateOnEntriesSend updates the progress on the given number of consecutive
@@ -172,6 +182,21 @@ func (pr *Progress) UpdateOnEntriesSend(entries int, bytes uint64) {
 	default:
 		panic(fmt.Sprintf("sending append in unhandled state %s", pr.State))
 	}
+}
+
+// CanBumpCommit returns true if sending the given commit index can potentially
+// advance the follower's commit index.
+func (pr *Progress) CanBumpCommit(index uint64) bool {
+	// Sending the given commit index may bump the follower's commit index up to
+	// Next-1 in normal operation, or higher in some rare cases. Allow sending a
+	// commit index eagerly only if we haven't already sent one that bumps the
+	// follower's commit all the way to Next-1.
+	return index > pr.sentCommit && pr.sentCommit < pr.Next-1
+}
+
+// SentCommit updates the sentCommit.
+func (pr *Progress) SentCommit(commit uint64) {
+	pr.sentCommit = commit
 }
 
 // MaybeUpdate is called when an MsgAppResp arrives from the follower, with the
@@ -209,6 +234,8 @@ func (pr *Progress) MaybeDecrTo(rejected, matchHint uint64) bool {
 		//
 		// TODO(tbg): why not use matchHint if it's larger?
 		pr.Next = pr.Match + 1
+		// Regress the sentCommit since it unlikely has been applied.
+		pr.sentCommit = min(pr.sentCommit, pr.Next-1)
 		return true
 	}
 
@@ -220,6 +247,8 @@ func (pr *Progress) MaybeDecrTo(rejected, matchHint uint64) bool {
 	}
 
 	pr.Next = max(min(rejected, matchHint+1), pr.Match+1)
+	// Regress the sentCommit since it unlikely has been applied.
+	pr.sentCommit = min(pr.sentCommit, pr.Next-1)
 	pr.MsgAppFlowPaused = false
 	return true
 }
