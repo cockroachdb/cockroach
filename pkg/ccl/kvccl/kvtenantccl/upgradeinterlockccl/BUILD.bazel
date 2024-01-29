@@ -30,7 +30,7 @@ go_test(
         "//pkg/sql/catalog/lease",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlinstance/instancestorage",
-        "//pkg/sql/sqlliveness/slinstance",
+        "//pkg/sql/sqlliveness/slbase",
         "//pkg/sql/stats",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",  # keep

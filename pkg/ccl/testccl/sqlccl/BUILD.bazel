@@ -44,7 +44,7 @@ go_test(
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
         "//pkg/sql/sessiondatapb",
-        "//pkg/sql/sqlliveness/slinstance",
+        "//pkg/sql/sqlliveness/slbase",
         "//pkg/sql/sqltestutils",
         "//pkg/sql/tests",
         "//pkg/testutils",

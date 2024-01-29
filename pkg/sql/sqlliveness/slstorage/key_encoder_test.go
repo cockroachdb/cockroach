@@ -49,9 +49,10 @@ func TestKeyEncoder(t *testing.T) {
 		id, err := MakeSessionID(enum.One, uuid.MakeV4())
 		require.NoError(t, err)
 
-		key, err := codec.encode(id)
+		key, region, err := codec.encode(id)
 		require.NoError(t, err)
 		require.True(t, bytes.HasPrefix(key, codec.indexPrefix()))
+		require.Equal(t, region, string(enum.One))
 
 		decodedID, err := codec.decode(key)
 		require.NoError(t, err)

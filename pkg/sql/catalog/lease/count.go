@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
@@ -31,6 +32,7 @@ import (
 func CountLeases(
 	ctx context.Context,
 	db isql.DB,
+	codec keys.SQLCodec,
 	cachedDatabaseRegions regionliveness.CachedDatabaseRegions,
 	settings *clustersettings.Settings,
 	versions []IDVersion,
@@ -55,7 +57,7 @@ func CountLeases(
 		if err := txn.KV().SetFixedTimestamp(ctx, at); err != nil {
 			return err
 		}
-		prober := regionliveness.NewLivenessProber(db, cachedDatabaseRegions, settings)
+		prober := regionliveness.NewLivenessProber(db.KV(), codec, cachedDatabaseRegions, settings)
 		regionMap, err := prober.QueryLiveness(ctx, txn.KV())
 		if err != nil {
 			return err
