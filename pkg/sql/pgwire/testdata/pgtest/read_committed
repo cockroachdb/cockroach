@@ -52,7 +52,7 @@ ReadyForQuery
 ----
 {"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_exec.go","Line":0,"Routine":"maybeUpgradeToSerializable","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"multi-statement transaction involving a schema change needs to be SERIALIZABLE"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -73,5 +73,5 @@ ReadyForQuery
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"multi-statement transaction involving a schema change needs to be SERIALIZABLE"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
