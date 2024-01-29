@@ -644,7 +644,7 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 		Entries: ents,
 		Commit:  r.raftLog.committed,
 	})
-	pr.UpdateOnEntriesSend(len(ents), uint64(payloadsSize(ents)))
+	pr.SentEntries(len(ents), uint64(payloadsSize(ents)))
 	pr.SentCommit(r.raftLog.committed)
 	return true
 }
