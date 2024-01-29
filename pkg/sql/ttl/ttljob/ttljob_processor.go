@@ -121,7 +121,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			return errors.Wrapf(err, "error fetching table relation name for TTL")
 		}
 
-		relationName = tn.FQString()
+		relationName = tn.FQString() + "@" + lexbase.EscapeSQLIdent(primaryIndexDesc.Name)
 		return nil
 	}); err != nil {
 		return err
