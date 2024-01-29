@@ -425,7 +425,7 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			indexOrd:         jsonOrd,
 			ok:               true,
 			tight:            false,
-			unique:           false,
+			unique:           true,
 			remainingFilters: "j @> '[[1, 2]]' OR j @> '[3, 4]'",
 		},
 		{
@@ -435,7 +435,7 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			indexOrd:         jsonOrd,
 			ok:               true,
 			tight:            false,
-			unique:           false,
+			unique:           true,
 			remainingFilters: "j @> '[1, 2]' OR j @> '[[3, 4]]'",
 		},
 		{
@@ -445,7 +445,7 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			indexOrd: jsonOrd,
 			ok:       true,
 			tight:    true,
-			unique:   false,
+			unique:   true,
 		},
 		{
 			// With AND conditions the remaining filters may be a subset of the
@@ -995,7 +995,7 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			indexOrd:         jsonOrd,
 			ok:               true,
 			tight:            false,
-			unique:           false,
+			unique:           true,
 			remainingFilters: `j->'a' IN ('[1,2,3]', '[1]')`,
 		},
 		{
@@ -1036,7 +1036,7 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			indexOrd:         jsonOrd,
 			ok:               true,
 			tight:            false,
-			unique:           false,
+			unique:           true,
 			remainingFilters: `j->'a'->0 IN ('[1,2,3]', '[1]')`,
 		},
 		{
@@ -1109,7 +1109,7 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			indexOrd:         jsonOrd,
 			ok:               true,
 			tight:            false,
-			unique:           false,
+			unique:           true,
 			remainingFilters: `j = '{"a": "b"}' OR j = '[1, 2, 3]'`,
 		},
 		{
@@ -1156,7 +1156,7 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			indexOrd:         jsonOrd,
 			ok:               true,
 			tight:            false,
-			unique:           false,
+			unique:           true,
 			remainingFilters: `j IN ('[1, 2, 3]', '{"a": "b"}')`,
 		},
 		{

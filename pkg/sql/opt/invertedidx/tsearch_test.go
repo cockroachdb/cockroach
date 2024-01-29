@@ -86,7 +86,7 @@ func TestTryFilterTSVector(t *testing.T) {
 		// Some sanity checks for more than 2 terms, to make sure that the output
 		// de-uniqueifies as we travel up the tree with more than 1 lexeme seen.
 		{filters: "t @@ '(a & !b) | c'", ok: true, tight: false, unique: false},
-		{filters: "t @@ '(a & b) | c'", ok: true, tight: true, unique: false},
+		{filters: "t @@ '(a & b) | c'", ok: true, tight: true, unique: true},
 		{filters: "t @@ '(a & b) <-> !(c | d)'", ok: true, tight: false, unique: true},
 	}
 

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -139,14 +140,27 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 			}
 		}
 
+		stmt, numPlaceholders, err := sql.ReplacePlaceholdersWithValuesForBundle(string(bundle.statement))
+		if err != nil {
+			return errors.Wrap(err, "failed to replace placeholders")
+		}
+		var placeholderInfo string
+		if numPlaceholders > 0 {
+			var plural string
+			if numPlaceholders > 1 {
+				plural = "s"
+			}
+			placeholderInfo = fmt.Sprintf("(had %d placeholder%s) ", numPlaceholders, plural)
+		}
+
 		cliCtx.PrintfUnlessEmbedded(`#
 # Statement bundle %s loaded.
 # Autostats disabled.
 #
-# Statement was:
+# Statement %swas:
 #
 # %s
-`, zipdir, bundle.statement)
+`, zipdir, placeholderInfo, stmt+";")
 
 		if placeholderPairs != nil {
 			placeholderToColMap := make(map[int]string)

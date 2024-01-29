@@ -309,7 +309,7 @@ type SpanExpression struct {
 	// produce duplicate primary keys. Otherwise, Unique is false. Unique may
 	// be true for certain JSON or Array SpanExpressions, and it holds when
 	// unique SpanExpressions are combined with And. It does not hold when
-	// these SpanExpressions are combined with Or.
+	// these non-empty SpanExpressions are combined with Or.
 	//
 	// Once a SpanExpression is built, this field is relevant if the root
 	// SpanExpression has no children (i.e., Operator is None). In this case,
@@ -685,14 +685,17 @@ func intersectSpanExpressions(left, right *SpanExpression) *SpanExpression {
 		left.FactoredUnionSpans = subtractSpans(left.FactoredUnionSpans, expr.FactoredUnionSpans)
 		right.FactoredUnionSpans = subtractSpans(right.FactoredUnionSpans, expr.FactoredUnionSpans)
 	}
-	tryPruneChildren(expr, SetIntersection)
+	tryPruneChildren(expr)
 	return expr
 }
 
 // Unions two SpanExpressions.
 func unionSpanExpressions(left, right *SpanExpression) *SpanExpression {
 	expr := &SpanExpression{
-		Tight:              left.Tight && right.Tight,
+		Tight: left.Tight && right.Tight,
+		// Whenever one side is empty, we keep the Unique property from the
+		// other side.
+		Unique:             (left.Unique && len(right.FactoredUnionSpans) == 0) || (right.Unique && len(left.FactoredUnionSpans) == 0),
 		SpansToRead:        unionSpans(left.SpansToRead, right.SpansToRead),
 		FactoredUnionSpans: unionSpans(left.FactoredUnionSpans, right.FactoredUnionSpans),
 		Operator:           SetUnion,
@@ -701,13 +704,13 @@ func unionSpanExpressions(left, right *SpanExpression) *SpanExpression {
 	}
 	left.FactoredUnionSpans = nil
 	right.FactoredUnionSpans = nil
-	tryPruneChildren(expr, SetUnion)
+	tryPruneChildren(expr)
 	return expr
 }
 
 // tryPruneChildren takes an expr with two child *SpanExpression and removes
 // children when safe to do so.
-func tryPruneChildren(expr *SpanExpression, op SetOperator) {
+func tryPruneChildren(expr *SpanExpression) {
 	isEmptyExpr := func(e *SpanExpression) bool {
 		return len(e.FactoredUnionSpans) == 0 && e.Left == nil && e.Right == nil
 	}

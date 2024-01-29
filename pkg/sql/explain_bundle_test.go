@@ -683,3 +683,50 @@ func TestExplainClientTime(t *testing.T) {
 	require.NoError(t, err)
 	require.LessOrEqual(t, 1.0, clientTime)
 }
+
+func TestReplacePlaceholdersWithValuesForBundle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		statement          string
+		stmtNoPlaceholders string
+		numPlaceholders    int
+	}{
+		{
+			statement:          `SELECT 1;`,
+			stmtNoPlaceholders: `SELECT 1;`,
+			numPlaceholders:    0,
+		},
+		{
+			statement: `
+SELECT * FROM t WHERE k = $1;
+
+-- Arguments:
+--  $1: 1
+`,
+			stmtNoPlaceholders: `SELECT * FROM t WHERE k = 1;`,
+			numPlaceholders:    1,
+		},
+		// This test case abuses the notation a bit (by omitting some of the
+		// placeholder values) and tests that substring collisions like $1 vs
+		// $10 are handled correctly.
+		{
+			statement: `
+SELECT a || $1 FROM t WHERE k = ($2 - $10);
+
+-- Arguments:
+--  $1: 'foo'
+--  $2: 42
+--  $10: 17
+`,
+			stmtNoPlaceholders: `SELECT a || 'foo' FROM t WHERE k = (42 - 17);`,
+			numPlaceholders:    3,
+		},
+	} {
+		s, p, err := ReplacePlaceholdersWithValuesForBundle(tc.statement)
+		require.NoError(t, err)
+		require.Equal(t, tc.stmtNoPlaceholders, s)
+		require.Equal(t, tc.numPlaceholders, p)
+	}
+}

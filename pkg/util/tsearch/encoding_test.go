@@ -112,8 +112,8 @@ func TestEncodeTSQueryInvertedIndexSpans(t *testing.T) {
 		{`a:1 b:2`, `a <-> (!b|!c)`, true, false, true},
 		{`a:1 c:2`, `a <-> (!b|!c)`, true, false, true},
 		{`a:1 d:2`, `a <-> (!b|!c)`, true, false, true},
-		{`a:1 b:2 c:3 d:4`, `a <-> ((b <-> c) | d)`, true, false, false},
-		{`a:1 b:2 c:3 d:4`, `a <-> (b | (c <-> d))`, true, false, false},
+		{`a:1 b:2 c:3 d:4`, `a <-> ((b <-> c) | d)`, true, false, true},
+		{`a:1 b:2 c:3 d:4`, `a <-> (b | (c <-> d))`, true, false, true},
 	}
 
 	// runTest checks that evaluating `left @@ right` using keys from
