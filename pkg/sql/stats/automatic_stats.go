@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -28,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -891,11 +894,18 @@ func (r *Refresher) refreshStats(ctx context.Context, tableID descpb.ID, asOf ti
 		AutomaticStatisticsMaxIdleTime.Get(&r.st.SV),
 		asOf.String(),
 	)
+	// We use the lowest quality of service level here since these statistics jobs
+	// are not time sensitive and should yield to other work.
+	qosLevel := sessiondatapb.SystemLow
 	log.Infof(ctx, "automatically executing %q", stmt)
-	_ /* rows */, err := r.ex.Exec(
+	_ /* rows */, err := r.ex.ExecEx(
 		ctx,
 		"create-stats",
 		nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User:             username.RootUserName(),
+			QualityOfService: &qosLevel,
+		},
 		stmt,
 	)
 	return err
