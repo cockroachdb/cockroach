@@ -370,9 +370,17 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //     Outputs the lowest cost tree for each step in optimization using the
 //     standard unified diff format. Used for debugging the optimizer.
 //
+//   - normsteps [flags]
+//
+//     Similar to optsteps, but only runs normalization rules.
+//
 //   - optstepsweb [flags]
 //
 //     Similar to optsteps, but outputs a URL which displays the results.
+//
+//   - normstepsweb [flags]
+//
+//     Similar to optstepsweb, but only runs normalization rules.
 //
 //   - exploretrace [flags]
 //
@@ -725,14 +733,28 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		return tp.String()
 
 	case "optsteps":
-		result, err := ot.OptSteps()
+		result, err := ot.OptSteps(true /* explore */)
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		return result
+
+	case "normsteps":
+		result, err := ot.OptSteps(false /* explore */)
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
 		return result
 
 	case "optstepsweb":
-		result, err := ot.OptStepsWeb()
+		result, err := ot.OptStepsWeb(true /* explore */)
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		return result
+
+	case "normstepsweb":
+		result, err := ot.OptStepsWeb(false /* explore */)
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
@@ -1492,7 +1514,7 @@ func (ot *OptTester) RuleStats() (string, error) {
 // a better plan has been found, and weaker "----" header delimiters when not.
 // In both cases, the output shows the expressions that were changed or added by
 // the rule, even if the total expression tree cost worsened.
-func (ot *OptTester) OptSteps() (string, error) {
+func (ot *OptTester) OptSteps(explore bool) (string, error) {
 	var prevBest, prev, next string
 	ot.builder.Reset()
 
@@ -1510,6 +1532,14 @@ func (ot *OptTester) OptSteps() (string, error) {
 		// iteration.
 		if os.Done() {
 			break
+		}
+
+		if !explore {
+			rule := os.LastRuleName()
+			if rule.IsExplore() {
+				// Stop at the first exploration rule.
+				break
+			}
 		}
 
 		if prev == "" {
@@ -1543,15 +1573,18 @@ func (ot *OptTester) OptSteps() (string, error) {
 // OptStepsWeb is similar to Optsteps but it uses a special web page for
 // formatting the output. The result will be an URL which contains the encoded
 // data.
-func (ot *OptTester) OptStepsWeb() (string, error) {
+func (ot *OptTester) OptStepsWeb(explore bool) (string, error) {
 	normDiffStr, err := ot.optStepsNormDiff()
 	if err != nil {
 		return "", err
 	}
 
-	exploreDiffStr, err := ot.optStepsExploreDiff()
-	if err != nil {
-		return "", err
+	var exploreDiffStr string
+	if explore {
+		exploreDiffStr, err = ot.optStepsExploreDiff()
+		if err != nil {
+			return "", err
+		}
 	}
 	url, err := ot.encodeOptstepsURL(normDiffStr, exploreDiffStr)
 	if err != nil {

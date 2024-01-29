@@ -177,6 +177,99 @@ Final best expression
    ├── key: (1)
    └── fd: ()-->(2)
 
+normsteps
+SELECT * FROM ab WHERE b=1
+----
+================================================================================
+Initial expression
+  Cost: 1098.77
+================================================================================
+  project
+   ├── columns: a:1(int!null) b:2(int!null)
+   ├── key: (1)
+   ├── fd: ()-->(2)
+   └── select
+        ├── columns: a:1(int!null) b:2(int!null) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+        ├── key: (1)
+        ├── fd: ()-->(2), (1)-->(3,4)
+        ├── scan ab
+        │    ├── columns: a:1(int!null) b:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+        │    ├── key: (1)
+        │    └── fd: (1)-->(2-4)
+        └── filters
+             └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+                  ├── variable: b:2 [type=int]
+                  └── const: 1 [type=int]
+================================================================================
+PruneSelectCols
+  Cost: 1078.57
+================================================================================
+   project
+    ├── columns: a:1(int!null) b:2(int!null)
+    ├── key: (1)
+    ├── fd: ()-->(2)
+    └── select
+  -      ├── columns: a:1(int!null) b:2(int!null) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+  +      ├── columns: a:1(int!null) b:2(int!null)
+         ├── key: (1)
+  -      ├── fd: ()-->(2), (1)-->(3,4)
+  +      ├── fd: ()-->(2)
+         ├── scan ab
+  -      │    ├── columns: a:1(int!null) b:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+  +      │    ├── columns: a:1(int!null) b:2(int)
+         │    ├── key: (1)
+  -      │    └── fd: (1)-->(2-4)
+  +      │    └── fd: (1)-->(2)
+         └── filters
+              └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+                   ├── variable: b:2 [type=int]
+                   └── const: 1 [type=int]
+================================================================================
+EliminateProject
+  Cost: 1078.45
+================================================================================
+  -project
+  +select
+    ├── columns: a:1(int!null) b:2(int!null)
+    ├── key: (1)
+    ├── fd: ()-->(2)
+  - └── select
+  -      ├── columns: a:1(int!null) b:2(int!null)
+  -      ├── key: (1)
+  -      ├── fd: ()-->(2)
+  -      ├── scan ab
+  -      │    ├── columns: a:1(int!null) b:2(int)
+  -      │    ├── key: (1)
+  -      │    └── fd: (1)-->(2)
+  -      └── filters
+  -           └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+  -                ├── variable: b:2 [type=int]
+  -                └── const: 1 [type=int]
+  + ├── scan ab
+  + │    ├── columns: a:1(int!null) b:2(int)
+  + │    ├── key: (1)
+  + │    └── fd: (1)-->(2)
+  + └── filters
+  +      └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+  +           ├── variable: b:2 [type=int]
+  +           └── const: 1 [type=int]
+================================================================================
+Final best expression
+  Cost: 1078.45
+================================================================================
+  select
+   ├── columns: a:1(int!null) b:2(int!null)
+   ├── key: (1)
+   ├── fd: ()-->(2)
+   ├── scan ab@ab_b_idx
+   │    ├── columns: a:1(int!null) b:2(int)
+   │    ├── key: (1)
+   │    └── fd: (1)-->(2)
+   └── filters
+        └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+             ├── variable: b:2 [type=int]
+             └── const: 1 [type=int]
+
 exec-ddl
 CREATE TABLE customers (
     id INT8 NOT NULL,
