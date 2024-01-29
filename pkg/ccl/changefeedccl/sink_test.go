@@ -632,6 +632,22 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 		cfg, err = getSaramaConfig(opts)
 		require.NoError(t, err)
 		require.NoError(t, cfg.Validate())
+
+		saramaCfg := sarama.NewConfig()
+		opts = `{"ClientID": "clientID1"}`
+		cfg, _ = getSaramaConfig(opts)
+		err = cfg.Apply(saramaCfg)
+		require.NoError(t, err)
+		require.NoError(t, cfg.Validate())
+		require.NoError(t, saramaCfg.Validate())
+
+		opts = `{"Flush": {"Messages": 1000, "Frequency": "1s"}, "ClientID": "clientID1"}`
+		cfg, _ = getSaramaConfig(opts)
+		err = cfg.Apply(saramaCfg)
+		require.NoError(t, err)
+		require.NoError(t, cfg.Validate())
+		require.NoError(t, saramaCfg.Validate())
+		require.True(t, cfg.ClientID == "clientID1")
 	})
 	t.Run("validate returns error for bad flush configuration", func(t *testing.T) {
 		opts := changefeedbase.SinkSpecificJSONConfig(`{"Flush": {"Messages": 1000}}`)
@@ -644,6 +660,14 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 		cfg, err = getSaramaConfig(opts)
 		require.NoError(t, err)
 		require.Error(t, cfg.Validate())
+
+		opts = `{"Version": "0.8.2.0", "ClientID": "bad_client_id*"}`
+		saramaCfg := sarama.NewConfig()
+		cfg, _ = getSaramaConfig(opts)
+		err = cfg.Apply(saramaCfg)
+		require.NoError(t, err)
+		require.NoError(t, cfg.Validate())
+		require.Error(t, saramaCfg.Validate())
 	})
 	t.Run("apply parses valid version", func(t *testing.T) {
 		opts := changefeedbase.SinkSpecificJSONConfig(`{"version": "0.8.2.0"}`)
