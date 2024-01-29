@@ -94,15 +94,3 @@ stabilize
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/4
   DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 2 [StateSnapshot match=4 next=5 paused pendingSnap=4]
-> 1 handling Ready
-  Ready MustSync=false:
-  Messages:
-  1->2 MsgApp Term:1 Log:1/4 Commit:4
-> 2 receiving messages
-  1->2 MsgApp Term:1 Log:1/4 Commit:4
-> 2 handling Ready
-  Ready MustSync=false:
-  Messages:
-  2->1 MsgAppResp Term:1 Log:0/4
-> 1 receiving messages
-  2->1 MsgAppResp Term:1 Log:0/4

@@ -193,18 +193,6 @@ stabilize 1 3
 > 1 receiving messages
   3->1 MsgAppResp Term:1 Log:0/5
   DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=5 next=6 paused pendingSnap=5]
-> 1 handling Ready
-  Ready MustSync=false:
-  Messages:
-  1->3 MsgApp Term:1 Log:1/5 Commit:5
-> 3 receiving messages
-  1->3 MsgApp Term:1 Log:1/5 Commit:5
-> 3 handling Ready
-  Ready MustSync=false:
-  Messages:
-  3->1 MsgAppResp Term:1 Log:0/5
-> 1 receiving messages
-  3->1 MsgAppResp Term:1 Log:0/5
 
 # Nothing else happens.
 stabilize
