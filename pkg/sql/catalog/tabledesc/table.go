@@ -149,6 +149,11 @@ func MakeColumnDefDescs(
 		if genSeqOpt := d.GeneratedIdentity.SeqOptions; genSeqOpt != nil {
 			s := tree.Serialize(&d.GeneratedIdentity.SeqOptions)
 			col.GeneratedAsIdentitySequenceOption = &s
+		} else {
+			// Set GeneratedAsIdentitySequenceOption to an empty value when SeqOptions for the identity column are not specified.
+			// This triggers the use of default sequence options.
+			s := ""
+			col.GeneratedAsIdentitySequenceOption = &s
 		}
 	}
 

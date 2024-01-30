@@ -1066,6 +1066,39 @@ func applyColumnMutation(
 				col.GetName(), tableDesc.GetName())
 		}
 
+		if t.Option.SeqOption != nil {
+			newOpts := []tree.SequenceOption{*t.Option.SeqOption}
+
+			if col.NumUsesSequences() != 1 {
+				return errors.Newf("col.NumUsesSequences() is not 1")
+			}
+			seqId := col.GetUsesSequenceID(0)
+
+			seqDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Table(ctx, seqId)
+			if err != nil {
+				return errors.Newf("error resolving sequence dependency %d", seqId)
+			}
+
+			if err := alterSequenceImpl(params, seqDesc, newOpts, t); err != nil {
+				return err
+			}
+
+			// Reference ShowCreateSequence() for SQL representation creation of a sequence
+			opts := seqDesc.GetSequenceOpts()
+			f := tree.NewFmtCtx(tree.FmtSimple)
+			f.Printf(" MINVALUE %d", opts.MinValue)
+			f.Printf(" MAXVALUE %d", opts.MaxValue)
+			f.Printf(" INCREMENT %d", opts.Increment)
+			f.Printf(" START %d", opts.Start)
+			if opts.CacheSize > 1 {
+				f.Printf(" CACHE %d", opts.CacheSize)
+			}
+
+			s := f.CloseAndGetString()
+			col.ColumnDesc().GeneratedAsIdentitySequenceOption = &s
+			return nil
+		}
+
 		switch t.Option.GeneratedAsIdentityType {
 		case tree.GeneratedAlways:
 			if col.IsGeneratedAlwaysAsIdentity() {
