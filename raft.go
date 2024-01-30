@@ -1853,9 +1853,11 @@ func (r *raft) restore(s pb.Snapshot) bool {
 
 	// Now go ahead and actually restore.
 
-	if r.raftLog.matchTerm(s.Metadata.Index, s.Metadata.Term) {
+	id := entryID{term: s.Metadata.Term, index: s.Metadata.Index}
+	if r.raftLog.matchTerm(id) {
+		// TODO(pav-kv): can print %+v of the id, but it will change the format.
 		r.logger.Infof("%x [commit: %d, lastindex: %d, lastterm: %d] fast-forwarded commit to snapshot [index: %d, term: %d]",
-			r.id, r.raftLog.committed, r.raftLog.lastIndex(), r.raftLog.lastTerm(), s.Metadata.Index, s.Metadata.Term)
+			r.id, r.raftLog.committed, r.raftLog.lastIndex(), r.raftLog.lastTerm(), id.index, id.term)
 		r.raftLog.commitTo(s.Metadata.Index)
 		return false
 	}

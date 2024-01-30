@@ -107,7 +107,7 @@ func (l *raftLog) String() string {
 // maybeAppend returns (0, false) if the entries cannot be appended. Otherwise,
 // it returns (last index of new entries, true).
 func (l *raftLog) maybeAppend(prev entryID, committed uint64, ents ...pb.Entry) (lastnewi uint64, ok bool) {
-	if !l.matchTerm(prev.index, prev.term) {
+	if !l.matchTerm(prev) {
 		return 0, false
 	}
 
@@ -150,13 +150,15 @@ func (l *raftLog) append(ents ...pb.Entry) uint64 {
 // a different term.
 // The index of the given entries MUST be continuously increasing.
 func (l *raftLog) findConflict(ents []pb.Entry) uint64 {
-	for _, ne := range ents {
-		if !l.matchTerm(ne.Index, ne.Term) {
-			if ne.Index <= l.lastIndex() {
+	for i := range ents {
+		if id := pbEntryID(&ents[i]); !l.matchTerm(id) {
+			if id.index <= l.lastIndex() {
+				// TODO(pav-kv): can simply print %+v of the id. This will change the
+				// log format though.
 				l.logger.Infof("found conflict at index %d [existing term: %d, conflicting term: %d]",
-					ne.Index, l.zeroTermOnOutOfBounds(l.term(ne.Index)), ne.Term)
+					id.index, l.zeroTermOnOutOfBounds(l.term(id.index)), id.term)
 			}
-			return ne.Index
+			return id.index
 		}
 	}
 	return 0
@@ -436,12 +438,12 @@ func (l *raftLog) isUpToDate(lasti, term uint64) bool {
 	return term > l.lastTerm() || (term == l.lastTerm() && lasti >= l.lastIndex())
 }
 
-func (l *raftLog) matchTerm(i, term uint64) bool {
-	t, err := l.term(i)
+func (l *raftLog) matchTerm(id entryID) bool {
+	t, err := l.term(id.index)
 	if err != nil {
 		return false
 	}
-	return t == term
+	return t == id.term
 }
 
 func (l *raftLog) maybeCommit(maxIndex, term uint64) bool {
