@@ -1782,6 +1782,8 @@ func (node *RangeCond) String() string        { return AsString(node) }
 func (node *StrVal) String() string           { return AsString(node) }
 func (node *Subquery) String() string         { return AsString(node) }
 func (node *RoutineExpr) String() string      { return AsString(node) }
+func (node *DispatchExpr) String() string     { return AsString(node) }
+func (node *DispatcherExpr) String() string   { return AsString(node) }
 func (node *Tuple) String() string            { return AsString(node) }
 func (node *TupleStar) String() string        { return AsString(node) }
 func (node *AnnotateTypeExpr) String() string { return AsString(node) }

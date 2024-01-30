@@ -36,6 +36,8 @@ type ExprEvaluator interface {
 	EvalColumnItem(context.Context, *ColumnItem) (Datum, error)
 	EvalComparisonExpr(context.Context, *ComparisonExpr) (Datum, error)
 	EvalDefaultVal(context.Context, *DefaultVal) (Datum, error)
+	EvalDispatchExpr(context.Context, *DispatchExpr) (Datum, error)
+	EvalDispatcherExpr(context.Context, *DispatcherExpr) (Datum, error)
 	EvalFuncExpr(context.Context, *FuncExpr) (Datum, error)
 	EvalIfErrExpr(context.Context, *IfErrExpr) (Datum, error)
 	EvalIfExpr(context.Context, *IfExpr) (Datum, error)
@@ -274,6 +276,16 @@ func (node *DVoid) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 // Eval is part of the TypedExpr interface.
 func (node *DefaultVal) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return v.EvalDefaultVal(ctx, node)
+}
+
+// Eval is part of the TypedExpr interface.
+func (node *DispatchExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalDispatchExpr(ctx, node)
+}
+
+// Eval is part of the TypedExpr interface.
+func (node *DispatcherExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalDispatcherExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
