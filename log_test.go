@@ -296,6 +296,16 @@ func TestLogMaybeAppend(t *testing.T) {
 	}
 
 	for i, tt := range tests {
+		// TODO(pav-kv): for now, we pick a high enough app.term so that it
+		// represents a valid append message. The maybeAppend currently ignores it,
+		// but it must check that the append does not regress the term.
+		app := logSlice{
+			term:    100,
+			prev:    tt.prev,
+			entries: tt.ents,
+		}
+		require.NoError(t, app.valid())
+
 		raftLog := newLog(NewMemoryStorage(), raftLogger)
 		raftLog.append(previousEnts...)
 		raftLog.committed = commit
@@ -306,7 +316,7 @@ func TestLogMaybeAppend(t *testing.T) {
 					require.True(t, tt.wpanic)
 				}
 			}()
-			glasti, gappend := raftLog.maybeAppend(tt.prev, tt.committed, tt.ents...)
+			glasti, gappend := raftLog.maybeAppend(app, tt.committed)
 			require.Equal(t, tt.wlasti, glasti)
 			require.Equal(t, tt.wappend, gappend)
 			require.Equal(t, tt.wcommit, raftLog.committed)

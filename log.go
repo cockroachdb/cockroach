@@ -106,23 +106,25 @@ func (l *raftLog) String() string {
 
 // maybeAppend returns (0, false) if the entries cannot be appended. Otherwise,
 // it returns (last index of new entries, true).
-func (l *raftLog) maybeAppend(prev entryID, committed uint64, ents ...pb.Entry) (lastnewi uint64, ok bool) {
-	if !l.matchTerm(prev) {
+func (l *raftLog) maybeAppend(a logSlice, committed uint64) (lastnewi uint64, ok bool) {
+	if !l.matchTerm(a.prev) {
 		return 0, false
 	}
+	// TODO(pav-kv): propagate logSlice down the stack. It will be used all the
+	// way down in unstable, for safety checks, and for useful bookkeeping.
 
-	lastnewi = prev.index + uint64(len(ents))
-	ci := l.findConflict(ents)
+	lastnewi = a.prev.index + uint64(len(a.entries))
+	ci := l.findConflict(a.entries)
 	switch {
 	case ci == 0:
 	case ci <= l.committed:
 		l.logger.Panicf("entry %d conflict with committed entry [committed(%d)]", ci, l.committed)
 	default:
-		offset := prev.index + 1
-		if ci-offset > uint64(len(ents)) {
-			l.logger.Panicf("index, %d, is out of range [%d]", ci-offset, len(ents))
+		offset := a.prev.index + 1
+		if ci-offset > uint64(len(a.entries)) {
+			l.logger.Panicf("index, %d, is out of range [%d]", ci-offset, len(a.entries))
 		}
-		l.append(ents[ci-offset:]...)
+		l.append(a.entries[ci-offset:]...)
 	}
 	l.commitTo(min(committed, lastnewi))
 	return lastnewi, true
