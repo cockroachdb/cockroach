@@ -281,7 +281,7 @@ func TestImportAvroLogicalTypes(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	success := false
 	for i := 1; i <= 5; i++ {
-		numRowsInserted, err := randgen.PopulateTableWithRandData(rng, db, origTableName, 30)
+		numRowsInserted, err := randgen.PopulateTableWithRandData(rng, db, origTableName, 30, nil)
 		require.NoError(t, err)
 		if numRowsInserted > 5 {
 			success = true

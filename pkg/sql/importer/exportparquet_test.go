@@ -223,7 +223,7 @@ func TestRandomParquetExports(t *testing.T) {
 
 		for i = 0; i < numTables; i++ {
 			tableName = string(stmts[i].(*tree.CreateTable).Table.ObjectName)
-			numRows, err := randgen.PopulateTableWithRandData(rng, db, tableName, 20)
+			numRows, err := randgen.PopulateTableWithRandData(rng, db, tableName, 20, nil)
 			require.NoError(t, err)
 			if numRows > 5 {
 				// Ensure the table only contains columns supported by EXPORT Parquet. If an
