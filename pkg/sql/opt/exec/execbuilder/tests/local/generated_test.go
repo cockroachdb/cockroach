@@ -174,6 +174,13 @@ func TestExecBuild_enums(
 	runExecBuildLogicTest(t, "enums")
 }
 
+func TestExecBuild_execute_internally_builtin(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "execute_internally_builtin")
+}
+
 func TestExecBuild_explain(
 	t *testing.T,
 ) {
