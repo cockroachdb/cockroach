@@ -192,7 +192,7 @@ type btreeFrontierEntry struct {
 	spanCopy roachpb.Span
 }
 
-//go:generate ../interval/generic/gen.sh *frontierEntry span
+//go:generate ../interval/generic/gen.sh *btreeFrontierEntry span
 
 // AddSpansAt adds the provided spans to the btreeFrontier at the provided timestamp.
 // AddSpansAt deletes any overlapping spans already in the frontier.

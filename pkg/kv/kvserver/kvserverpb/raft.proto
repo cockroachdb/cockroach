@@ -156,39 +156,6 @@ message RaftMessageResponse {
 
 // SnapshotRequest is the request used to send streaming snapshot requests.
 message SnapshotRequest {
-  enum Priority {
-    UNKNOWN = 0;
-    // RECOVERY is used for a Raft-initiated snapshots and for
-    // up-replication snapshots (i.e. when a dead node has been
-    // removed and the range needs to be up-replicated).
-    RECOVERY = 1;
-    // REBALANCE is used for snapshots involved in rebalancing.
-    REBALANCE = 2;
-  }
-
-  enum Strategy {
-    // KV_BATCH snapshots stream batches of KV pairs for all keys in a
-    // range from the sender the the receiver. These KV pairs are then
-    // combined into a large RocksDB WriteBatch that is atomically
-    // applied.
-    KV_BATCH = 0;
-  }
-
-  // Type is used for metrics collection on the receiver side. See
-  // applySnapshot in replica_raftstorage.go.
-  enum Type {
-    // VIA_SNAPSHOT_QUEUE indicates the snapshots sent by the raft snapshot
-    // queue to all types of replicas.
-    VIA_SNAPSHOT_QUEUE = 0;
-    // INITIAL indicates the initial snapshots sent to LEARNER (before they're
-    // promoted to full voters) and NON_VOTER replicas for upreplication.
-    //
-    // As of the time of writing, we only send this snapshot from the
-    // initializeRaftLearners after creating a new LEARNER or NON_VOTER replica.
-    INITIAL = 1;
-    reserved 2;
-  }
-
   // QueueName indicates the source of the snapshot. Snapshots are prioritized
   // within a queue and round-robin selected between queues for both the sending
   // and receiving side.
@@ -212,32 +179,6 @@ message SnapshotRequest {
     // The estimated size of the range, to be used in reservation decisions.
     int64 range_size = 3;
 
-    // The priority of the snapshot.
-    // Deprecated, prefer sender_queue_priority.
-    // TODO(abaptist): Remove this field when v23.1 compatibility is dropped.
-    Priority deprecated_priority = 6;
-
-    // The strategy of the snapshot.
-    // TODO(abaptist): Remove this field when v23.1 compatibility is dropped.
-    Strategy deprecated_strategy = 7;
-
-    // The type of the snapshot.
-    // Deprecated, prefer sender_queue_name.
-    // TODO(abaptist): Remove this field when v23.1 compatibility is dropped.
-    Type deprecated_type = 9;
-
-    // Whether the snapshot uses the unreplicated RaftTruncatedState or not.
-    // This is always true for snapshots generated in v21.1+ clusters. In v20.2
-    // it was possible for ranges to be using the replicated variant. v21.1
-    // therefore had code expecting that possibility (unlike v21.2 code, where
-    // this field is assumed to always be true and thus never read). For
-    // compatibility with v21.1 nodes however, v21.2 has to explicitly set this
-    // field to true. In v22.1 we can remove it entirely seeing as how v21.2
-    // code never reads the field.
-    //
-    // TODO(irfansharif): Remove this in v22.1.
-    bool deprecated_unreplicated_truncated_state = 8;
-
     // The sending queue's name, to be utilized to ensure fairness across
     // different snapshot sending sources. The default queue name, OTHER, is
     // reserved for any uncategorized and unprioritized snapshots, and requests
@@ -255,7 +196,7 @@ message SnapshotRequest {
     // metadata present in the snapshot, but not file contents.
     bool shared_replicate = 12;
 
-    reserved 1, 4;
+    reserved 1, 4, 6, 7, 8, 9;
   }
 
   // SharedTable represents one shared SSTable present in shared storage.
@@ -378,14 +319,6 @@ message DelegateSendSnapshotRequest {
   // The replica selected to act as the snapshot sender.
   roachpb.ReplicaDescriptor delegated_sender = 4 [(gogoproto.nullable) = false];
 
-  // The priority of the snapshot.
-  // TODO(abaptist): Remove this field when v23.1 compatibility is dropped.
-  SnapshotRequest.Priority deprecated_priority = 5;
-
-  // The type of the snapshot.
-  // TODO(abaptist): Remove this field when v23.1 compatibility is dropped.
-  SnapshotRequest.Type deprecated_type = 6;
-
   // The Raft term of the coordinator (in most cases the leaseholder) replica.
   // The term is used during snapshot receiving to reject messages from an older term.
   uint64 term = 7 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftTerm"];
@@ -409,6 +342,8 @@ message DelegateSendSnapshotRequest {
   bytes snap_id = 13 [
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.nullable) = false];
+
+  reserved 5, 6;
 }
 
 message DelegateSnapshotResponse {

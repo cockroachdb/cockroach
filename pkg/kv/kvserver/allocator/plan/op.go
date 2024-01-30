@@ -60,7 +60,6 @@ type AllocationChangeReplicasOp struct {
 	Usage             allocator.RangeUsageInfo
 	lhStore           roachpb.StoreID
 	Chgs              kvpb.ReplicationChanges
-	Priority          kvserverpb.SnapshotRequest_Priority
 	AllocatorPriority float64
 	Reason            kvserverpb.RangeLogEventReason
 	Details           string
