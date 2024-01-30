@@ -4311,6 +4311,7 @@ alter_column_visible ::=
 alter_identity_column_option ::=
 	'SET' 'GENERATED_ALWAYS' 'ALWAYS'
 	| 'SET' 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT'
+	| alter_column_sequence_option_elem
 
 opt_set_data ::=
 	'SET' 'DATA'
@@ -4534,6 +4535,21 @@ interval_second ::=
 
 col_qual_list ::=
 	(  ) ( ( col_qualification ) )*
+
+alter_column_sequence_option_elem ::=
+	'SET' 'NO' 'CYCLE'
+	| 'SET' 'CACHE' signed_iconst64
+	| 'SET' 'INCREMENT' signed_iconst64
+	| 'SET' 'INCREMENT' 'BY' signed_iconst64
+	| 'SET' 'MINVALUE' signed_iconst64
+	| 'SET' 'NO' 'MINVALUE'
+	| 'SET' 'MAXVALUE' signed_iconst64
+	| 'SET' 'NO' 'MAXVALUE'
+	| 'SET' 'START' signed_iconst64
+	| 'SET' 'START' 'WITH' signed_iconst64
+	| 'RESTART'
+	| 'RESTART' signed_iconst64
+	| 'RESTART' 'WITH' signed_iconst64
 
 key_match ::=
 	'MATCH' 'SIMPLE'
