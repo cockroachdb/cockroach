@@ -1252,7 +1252,7 @@ func registerCDC(r registry.Registry) {
 		Name:             "cdc/kafka-quota",
 		Owner:            `cdc`,
 		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Cluster:          r.MakeClusterSpec(3, spec.CPU(16)),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
@@ -1264,12 +1264,31 @@ func registerCDC(r registry.Registry) {
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "10m"})
 
 			feed := ct.newChangefeed(feedArgs{
-				sinkType:              kafkaSink,
-				targets:               allTpccTargets,
-				opts:                  map[string]string{"initial_scan": "'no'"},
+				sinkType: kafkaSink,
+				targets:  allTpccTargets,
+				opts: map[string]string{
+					"metrics_label": "'quota1'",
+					"initial_scan":  "'no'",
+					// '{"Flush": {"MaxMessages": 1, "Frequency": "1s"}, "RequiredAcks": "ONE"}'
+					"kafka_sink_config": `'{"ClientID": "quota1"}'`,
+				},
 				kafkaQuotaBytesPerSec: 1024,
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				steadyLatency: 5 * time.Minute,
+			})
+			feed2 := ct.newChangefeed(feedArgs{
+				sinkType: kafkaSink,
+				targets:  allTpccTargets,
+
+				opts: map[string]string{
+					"metrics_label":     "'quota2'",
+					"initial_scan":      "'no'",
+					"kafka_sink_config": `'{"ClientID": "quota2"}'`,
+				},
+				kafkaQuota: 1024,
+			})
+			ct.runFeedLatencyVerifier(feed2, latencyTargets{
 				steadyLatency: 5 * time.Minute,
 			})
 			ct.waitForWorkload()
@@ -2030,12 +2049,22 @@ type kafkaManager struct {
 
 func (k kafkaManager) setProducerQuota(ctx context.Context, bytesPerSecond int) {
 	k.t.Status("setting producer quota to %d bytes per second for all users", bytesPerSecond)
+	//> bin/kafka-configs.sh  --bootstrap-server localhost:9092 --alter
+	// --add-config 'producer_byte_rate=1024,consumer_byte_rate=2048,request_percentage=200' --entity-type clients --entity-name clientA
+	//Updated config for entity: client-id 'clientA'.
 	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNode), filepath.Join(k.binDir(), "kafka-configs"),
 		"--bootstrap-server", "localhost:9092",
 		"--alter",
 		"--add-config", fmt.Sprintf("producer_byte_rate=%d", bytesPerSecond),
-		"--entity-type", "users",
-		"--entity-default")
+		"--entity-type", "clients",
+		"--entity-name", "quota1")
+
+	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNode), filepath.Join(k.binDir(), "kafka-configs"),
+		"--bootstrap-server", "localhost:9092",
+		"--alter",
+		"--add-config", "producer_byte_rate=10000000",
+		"--entity-type", "clients",
+		"--entity-name", "quota2")
 }
 
 func (k kafkaManager) basePath() string {
