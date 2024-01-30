@@ -24,9 +24,6 @@ import (
 type azureStartupArgs struct {
 	RemoteUser      string // The uname for /data* directories.
 	AttachedDiskLun *int   // Use attached disk, with specified LUN; Use local ssd if nil.
-	// TODO(DarrylWong): In the future, when all tests are run on Ubuntu 22.04, we can remove this check and default true.
-	// See: https://github.com/cockroachdb/cockroach/issues/112112
-	IsUbuntu22 bool // Allow RSA SHA1 to be used and create tcpdump symlink.
 }
 
 const azureStartupTemplate = `#!/bin/bash
@@ -72,10 +69,8 @@ sh -c 'echo "MaxStartups 64:30:128" >> /etc/ssh/sshd_config'
 # https://github.com/cockroachdb/cockroach/issues/36929
 sed -i'' 's/LogLevel.*$/LogLevel DEBUG3/' /etc/ssh/sshd_config
 # N.B. RSA SHA1 is no longer supported in the latest versions of OpenSSH. Existing tooling, e.g.,
-# jepsen still relies on it for authentication. If we are on Ubuntu 22.04 or newer, we need to enable it.
-{{ if .IsUbuntu22 }}
+# jepsen still relies on it for authentication.
 sudo sh -c 'echo "PubkeyAcceptedAlgorithms +ssh-rsa" >> /etc/ssh/sshd_config'
-{{ end }}
 service sshd restart
 # increase the default maximum number of open file descriptors for
 # root and non-root users. Load generators running a lot of concurrent
@@ -94,9 +89,7 @@ EOF
 # N.B. Ubuntu 22.04 changed the location of tcpdump to /usr/bin. Since existing tooling, e.g.,
 # jepsen uses /usr/sbin, we create a symlink.
 # See https://ubuntu.pkgs.org/22.04/ubuntu-main-amd64/tcpdump_4.99.1-3build2_amd64.deb.html
-{{ if .IsUbuntu22 }}
 sudo ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
-{{ end }}
 
 # Enable core dumps
 cat <<EOF > /etc/security/limits.d/core_unlimited.conf

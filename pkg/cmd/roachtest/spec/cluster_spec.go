@@ -93,7 +93,6 @@ type ClusterSpec struct {
 	Lifetime             time.Duration
 	ReusePolicy          clusterReusePolicy
 	TerminateOnMigration bool
-	UbuntuVersion        vm.UbuntuVersion
 	// Use a spot instance or equivalent of a cloud provider.
 	UseSpotVMs bool
 	// FileSystem determines the underlying FileSystem
