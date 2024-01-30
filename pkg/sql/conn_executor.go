@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -3445,6 +3446,7 @@ func (ex *connExecutor) txnIsolationLevelToKV(
 	if level == tree.UnspecifiedIsolation {
 		level = tree.IsolationLevel(ex.sessionData().DefaultTxnIsolationLevel)
 	}
+	upgraded := false
 	allowLevelCustomization := ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.V23_2)
 	ret := isolation.Serializable
 	if allowLevelCustomization {
@@ -3452,6 +3454,7 @@ func (ex *connExecutor) txnIsolationLevelToKV(
 		case tree.ReadUncommittedIsolation:
 			// READ UNCOMMITTED is mapped to READ COMMITTED. PostgreSQL also does
 			// this: https://www.postgresql.org/docs/current/transaction-iso.html.
+			upgraded = true
 			fallthrough
 		case tree.ReadCommittedIsolation:
 			// READ COMMITTED is only allowed if the cluster setting is enabled.
@@ -3460,10 +3463,12 @@ func (ex *connExecutor) txnIsolationLevelToKV(
 			if allowReadCommitted {
 				ret = isolation.ReadCommitted
 			} else {
+				upgraded = true
 				ret = isolation.Serializable
 			}
 		case tree.RepeatableReadIsolation:
 			// REPEATABLE READ is mapped to SNAPSHOT.
+			upgraded = true
 			fallthrough
 		case tree.SnapshotIsolation:
 			// SNAPSHOT is only allowed if the cluster setting is enabled. Otherwise
@@ -3472,6 +3477,7 @@ func (ex *connExecutor) txnIsolationLevelToKV(
 			if allowSnapshot {
 				ret = isolation.Snapshot
 			} else {
+				upgraded = true
 				ret = isolation.Serializable
 			}
 		case tree.SerializableIsolation:
@@ -3479,6 +3485,12 @@ func (ex *connExecutor) txnIsolationLevelToKV(
 		default:
 			log.Fatalf(context.Background(), "unknown isolation level: %s", level)
 		}
+	}
+	if upgraded {
+		telemetry.Inc(sqltelemetry.IsolationLevelUpgradedCounter(ctx, level))
+	}
+	if ret != isolation.Serializable {
+		telemetry.Inc(sqltelemetry.IsolationLevelCounter(ctx, ret))
 	}
 	return ret
 }
