@@ -651,7 +651,7 @@ func (g *lockTableGuardImpl) updateWaitingStateLocked(newState waitingState) {
 func (g *lockTableGuardImpl) canElideWaitingStateUpdate(newState waitingState) bool {
 	// Note that we don't need to check newState.guardStrength as it's
 	// automatically assigned when updating the state.
-	return g.mu.state.kind == newState.kind && g.mu.state.txn == newState.txn &&
+	return g.mu.state.kind == newState.kind && g.mu.state.txn.ID == newState.txn.ID &&
 		g.mu.state.key.Equal(newState.key) && g.mu.state.held == newState.held
 }
 
