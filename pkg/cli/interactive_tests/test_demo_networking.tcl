@@ -5,7 +5,7 @@ source [file join [file dirname $argv0] common.tcl]
 set ::env(COCKROACH_INSECURE) "false"
 
 start_test "Check that default demo has fixed ports, no multitenancy"
-spawn $argv demo --empty --no-line-editor --multitenant=false --nodes 2 --log-dir=logs
+spawn $argv demo --empty --no-line-editor --multitenant=false --nodes 3 --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 send "\\demo ls\r"
@@ -32,7 +32,7 @@ eexpect eof
 end_test
 
 start_test "Check that http port can be randomized, no multitenancy"
-spawn $argv demo --empty --no-line-editor --multitenant=false --nodes 2 --http-port 0 --log-dir=logs
+spawn $argv demo --empty --no-line-editor --multitenant=false --nodes 3 --http-port 0 --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 send "\\demo ls\r"
@@ -57,7 +57,7 @@ eexpect eof
 end_test
 
 start_test "Check that sql port can be randomized, no multitenancy"
-spawn $argv demo --empty --no-line-editor --multitenant=false --nodes 2 --sql-port 0 --log-dir=logs
+spawn $argv demo --empty --no-line-editor --multitenant=false --nodes 3 --sql-port 0 --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 send "\\demo ls\r"
@@ -80,7 +80,7 @@ eexpect eof
 end_test
 
 start_test "Check that sql and http port can be randomized, no multitenancy"
-spawn $argv demo --empty --no-line-editor --multitenant=false --nodes 2 --sql-port 0 --http-port 0 --log-dir=logs
+spawn $argv demo --empty --no-line-editor --multitenant=false --nodes 3 --sql-port 0 --http-port 0 --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 send "\\demo ls\r"
@@ -101,7 +101,7 @@ eexpect eof
 end_test
 
 start_test "Check that default demo has fixed ports, w/ multitenancy"
-spawn $argv demo --empty --no-line-editor --multitenant=true --nodes 2 --log-dir=logs
+spawn $argv demo --empty --no-line-editor --multitenant=true --nodes 3 --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 send "\\demo ls\r"
@@ -140,7 +140,7 @@ eexpect eof
 end_test
 
 start_test "Check that http port can be randomized, w/ multitenancy"
-spawn $argv demo --empty --no-line-editor --multitenant=true --nodes 2 --http-port 0 --log-dir=logs
+spawn $argv demo --empty --no-line-editor --multitenant=true --nodes 3 --http-port 0 --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 send "\\demo ls\r"
@@ -177,7 +177,7 @@ eexpect eof
 end_test
 
 start_test "Check that sql port can be randomized, w/ multitenancy"
-spawn $argv demo --empty --no-line-editor --multitenant=true --nodes 2 --sql-port 0 --log-dir=logs
+spawn $argv demo --empty --no-line-editor --multitenant=true --nodes 3 --sql-port 0 --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 send "\\demo ls\r"
@@ -208,7 +208,7 @@ eexpect eof
 end_test
 
 start_test "Check that sql and http port can be randomized, w/ multitenancy"
-spawn $argv demo --empty --no-line-editor --multitenant=true --nodes 2 --sql-port 0 --http-port 0 --log-dir=logs
+spawn $argv demo --empty --no-line-editor --multitenant=true --nodes 3 --sql-port 0 --http-port 0 --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 send "\\demo ls\r"
