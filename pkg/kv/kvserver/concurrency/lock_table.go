@@ -92,12 +92,13 @@ const (
 type waitingState struct {
 	kind waitKind
 
-	// Fields below are populated for waitFor* and waitElsewhere kinds.
+	// Fields below are only populated for waitFor*, waitElsewhere and
+	// waitQueueMaxLengthExceeded kinds.
 
 	// Represents who the request is waiting for. The conflicting
 	// transaction may be a lock holder of a conflicting lock or a
 	// conflicting request being sequenced through the same lockTable.
-	txn                   *enginepb.TxnMeta // always non-nil in waitFor{,Distinguished,Self} and waitElsewhere
+	txn                   *enginepb.TxnMeta // always non-nil
 	key                   roachpb.Key       // the key of the conflict
 	held                  bool              // is the conflict a held lock?
 	queuedLockingRequests int               // how many locking requests are waiting?
@@ -647,11 +648,19 @@ func (g *lockTableGuardImpl) updateWaitingStateLocked(newState waitingState) {
 // action, such as proceeding with its scan or pushing a different transaction.
 // Notably, observability related updates are considered fair game for elision.
 //
+// The supplied waiting state must imply the request is still waiting.
+//
 // REQUIRES: g.mu to be locked.
 func (g *lockTableGuardImpl) canElideWaitingStateUpdate(newState waitingState) bool {
+	// NB: The txn field on waitingState is expected to be non-nil for all
+	// waitKinds bar doneWaiting. Moreover, we don't expect this function to be
+	// called when a request transitions to doneWaiting. Sanity check both these
+	// invariants hold by asserting them.
+	assert(newState.kind != doneWaiting, "unexpected waiting state kind")
+	assert(newState.txn != nil, "txn cannot be unset if waiting state isn't doneWaiting")
 	// Note that we don't need to check newState.guardStrength as it's
 	// automatically assigned when updating the state.
-	return g.mu.state.kind == newState.kind && g.mu.state.txn == newState.txn &&
+	return g.mu.state.kind == newState.kind && g.mu.state.txn.ID == newState.txn.ID &&
 		g.mu.state.key.Equal(newState.key) && g.mu.state.held == newState.held
 }
 
