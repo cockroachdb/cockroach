@@ -137,14 +137,15 @@ func (pr *Progress) BecomeSnapshot(snapshoti uint64) {
 
 // UpdateOnEntriesSend updates the progress on the given number of consecutive
 // entries being sent in a MsgApp, with the given total bytes size, appended at
-// and after the given log index.
-func (pr *Progress) UpdateOnEntriesSend(entries int, bytes, nextIndex uint64) error {
+// log indices >= pr.Next.
+//
+// Must be used with StateProbe or StateReplicate.
+func (pr *Progress) UpdateOnEntriesSend(entries int, bytes uint64) {
 	switch pr.State {
 	case StateReplicate:
 		if entries > 0 {
-			last := nextIndex + uint64(entries) - 1
-			pr.OptimisticUpdate(last)
-			pr.Inflights.Add(last, bytes)
+			pr.Next += uint64(entries)
+			pr.Inflights.Add(pr.Next-1, bytes)
 		}
 		// If this message overflows the in-flights tracker, or it was already full,
 		// consider this message being a probe, so that the flow is paused.
@@ -157,9 +158,8 @@ func (pr *Progress) UpdateOnEntriesSend(entries int, bytes, nextIndex uint64) er
 			pr.MsgAppFlowPaused = true
 		}
 	default:
-		return fmt.Errorf("sending append in unhandled state %s", pr.State)
+		panic(fmt.Sprintf("sending append in unhandled state %s", pr.State))
 	}
-	return nil
 }
 
 // MaybeUpdate is called when an MsgAppResp arrives from the follower, with the
@@ -175,10 +175,6 @@ func (pr *Progress) MaybeUpdate(n uint64) bool {
 	pr.Next = max(pr.Next, n+1)
 	return updated
 }
-
-// OptimisticUpdate signals that appends all the way up to and including index n
-// are in-flight. As a result, Next is increased to n+1.
-func (pr *Progress) OptimisticUpdate(n uint64) { pr.Next = n + 1 }
 
 // MaybeDecrTo adjusts the Progress to the receipt of a MsgApp rejection. The
 // arguments are the index of the append message rejected by the follower, and
