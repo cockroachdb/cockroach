@@ -866,6 +866,17 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.OptimizerUseHistograms {
 		sd.OptimizerUseHistograms = true
 	}
+
+	if o.MultiOverride != "" {
+		overrides := strings.Split(o.MultiOverride, ",")
+		for _, override := range overrides {
+			parts := strings.Split(override, "=")
+			if len(parts) == 2 {
+				sd.Update(parts[0], parts[1])
+			}
+		}
+	}
+	// Add any new overrides above the MultiOverride.
 }
 
 func (ie *InternalExecutor) maybeRootSessionDataOverride(

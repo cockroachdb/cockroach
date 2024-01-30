@@ -91,6 +91,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -124,6 +125,21 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
+
+func init() {
+	builtins.ExecuteQueryViaJobExecContext = func(
+		evalCtx *eval.Context,
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		override sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) (eval.InternalRows, error) {
+		ie := evalCtx.JobExecContext.(JobExecContext).ExecCfg().InternalDB.Executor()
+		return ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
+	}
+}
 
 // ClusterOrganization is the organization name.
 var ClusterOrganization = settings.RegisterStringSetting(
