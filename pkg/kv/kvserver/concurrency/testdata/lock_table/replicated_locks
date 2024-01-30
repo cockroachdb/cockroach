@@ -890,6 +890,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 20.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
+    active: false req: 41, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 40, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 40
 
@@ -942,5 +943,6 @@ num=1
     req: 46, txn: 00000000-0000-0000-0000-000000000001
     req: 45, txn: 00000000-0000-0000-0000-000000000001
    queued locking requests:
+    active: false req: 41, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 40, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 40
