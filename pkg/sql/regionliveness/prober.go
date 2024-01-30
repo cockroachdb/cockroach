@@ -122,16 +122,21 @@ type livenessProber struct {
 	settings        *clustersettings.Settings
 }
 
-var probeLivenessTimeout = 15 * time.Second
 var testingProbeQueryCallbackFunc func()
+var testingUnavailableAtTTLOverride time.Duration
 
-func TestingSetProbeLivenessTimeout(newTimeout time.Duration, probeCallbackFn func()) func() {
-	oldTimeout := probeLivenessTimeout
-	probeLivenessTimeout = newTimeout
+func TestingSetProbeLivenessTimeout(probeCallbackFn func()) func() {
 	testingProbeQueryCallbackFunc = probeCallbackFn
 	return func() {
-		probeLivenessTimeout = oldTimeout
 		probeCallbackFn = nil
+	}
+}
+
+func TestingSetUnavailableAtTTLOverride(duration time.Duration) func() {
+	oldValue := testingUnavailableAtTTLOverride
+	testingUnavailableAtTTLOverride = duration
+	return func() {
+		testingUnavailableAtTTLOverride = oldValue
 	}
 }
 
@@ -211,6 +216,9 @@ func (l *livenessProber) ProbeLivenessWithPhysicalRegion(
 	// Region has gone down, set the unavailable_at time on it
 	return l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		defaultTTL := slbase.DefaultTTL.Get(&l.settings.SV)
+		if testingUnavailableAtTTLOverride != 0 {
+			defaultTTL = testingUnavailableAtTTLOverride
+		}
 		defaultHeartbeat := slbase.DefaultHeartBeat.Get(&l.settings.SV)
 		// Get the read timestamp and pick a commit deadline.
 		commitDeadline := txn.ReadTimestamp().AddDuration(defaultHeartbeat)
@@ -316,7 +324,8 @@ func (l *livenessProber) GetProbeTimeout() (bool, time.Duration) {
 // when checking for region liveness.
 func IsQueryTimeoutErr(err error) bool {
 	return pgerror.GetPGCode(err) == pgcode.QueryCanceled ||
-		errors.HasType(err, (*timeutil.TimeoutError)(nil))
+		errors.HasType(err, (*timeutil.TimeoutError)(nil)) ||
+		errors.Is(err, context.DeadlineExceeded)
 }
 
 // IsMissingRegionEnumErr determines if a query hit an error because of a missing
