@@ -3408,7 +3408,13 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 	)`, subQuery.String())).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
 	if err != nil {
 		if rbErr := nestedTxn.Rollback(ctx); rbErr != nil {
-			err = errors.CombineErrors(err, errors.WithStack(rbErr))
+			// If the original error was no rows, the rollback
+			// error takes precedence here.
+			if errors.Is(err, pgx.ErrNoRows) {
+				err = rbErr
+			} else {
+				err = errors.CombineErrors(rbErr, err)
+			}
 		}
 		return nil, nil, err
 	}
