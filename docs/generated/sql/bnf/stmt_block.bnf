@@ -305,6 +305,7 @@ show_stmt ::=
 	| show_transactions_stmt
 	| show_transfer_stmt
 	| show_users_stmt
+	| show_default_session_variables_for_role_stmt
 	| show_zone_stmt
 	| show_full_scans_stmt
 	| show_default_privileges_stmt
@@ -962,6 +963,11 @@ show_transfer_stmt ::=
 show_users_stmt ::=
 	'SHOW' 'USERS'
 
+show_default_session_variables_for_role_stmt ::=
+	'SHOW' 'DEFAULT' 'SESSION' 'VARIABLES' 'FOR' role_or_group_or_user role_spec
+	| 'SHOW' 'DEFAULT' 'SESSION' 'VARIABLES' 'FOR' 'ROLE_ALL' 'ALL'
+	| 'SHOW' 'DEFAULT' 'SESSION' 'VARIABLES' 'FOR' 'USER_ALL' 'ALL'
+
 show_zone_stmt ::=
 	'SHOW' 'ZONE' 'CONFIGURATION' from_with_implicit_for_alias 'RANGE' zone_name
 	| 'SHOW' 'ZONE' 'CONFIGURATION' from_with_implicit_for_alias 'DATABASE' database_name
@@ -1479,6 +1485,7 @@ unreserved_keyword ::=
 	| 'VALID'
 	| 'VALIDATE'
 	| 'VALUE'
+	| 'VARIABLES'
 	| 'VARYING'
 	| 'VERIFY_BACKUP_TABLE_DATA'
 	| 'VIEW'
@@ -4127,6 +4134,7 @@ bare_label_keywords ::=
 	| 'VALUES'
 	| 'VARBIT'
 	| 'VARCHAR'
+	| 'VARIABLES'
 	| 'VARIADIC'
 	| 'VERIFY_BACKUP_TABLE_DATA'
 	| 'VIEW'

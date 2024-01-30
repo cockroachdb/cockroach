@@ -296,3 +296,81 @@ query B
 SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->>'version' = $database_role_setttings_version::STRING FROM system.descriptor WHERE id = 'system.public.database_role_settings'::REGCLASS
 ----
 true
+
+# Test permissions for using SHOW DEFAULT SESSION VARIABLES FOR ROLE command
+user testuser
+
+statement error pq: only users with CREATEROLE, MODIFYCLUSTERSETTING or MODIFYSQLCLUSTERSETTING privileges are allowed to SHOW DEFAULT SESSION VARIABLES FOR ROLE
+SHOW DEFAULT SESSION VARIABLES FOR ROLE roach
+
+# Test that show default session variables for role works when role is specified
+user root
+
+statement ok
+ALTER USER testuser MODIFYCLUSTERSETTING
+
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
+statement ok
+ALTER ROLE ALL SET application_name = 'c'
+
+query TTTB
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE roach] ORDER BY 1, 2
+----
+application_name                c                 NULL  true
+statement_timeout               10s               NULL  true
+timezone                        America/New_York  NULL  true
+use_declarative_schema_changer  off               NULL  true
+
+# Test that show default session variables for role works for global default session variables
+statement ok
+CREATE DATABASE test_db
+
+statement ok
+ALTER ROLE ALL IN DATABASE test_db SET application_name = 'd'
+
+query TTT
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL] ORDER BY 1, 2
+----
+application_name   c   NULL
+application_name   d   test_db
+
+# Test that show default session variables for role woks for per-database defaults, as well as variable precedence
+query TTTB
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE roach] ORDER BY 1, 2
+----
+application_name                c                  NULL     true
+application_name                d                  test_db  true
+statement_timeout               10s                NULL     true
+timezone                        America/New_York   NULL     true
+use_declarative_schema_changer  off                NULL     true
+
+statement ok
+ALTER ROLE roach SET application_name = 'e'
+
+query TTTB
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE roach] ORDER BY 1, 2
+----
+application_name                e                  NULL     true
+statement_timeout               10s                NULL     true
+timezone                        America/New_York   NULL     true
+use_declarative_schema_changer  off                NULL     true
+
+statement ok
+ALTER ROLE roach IN DATABASE test_db SET application_name = 'f'
+
+query TTTB
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE roach] ORDER BY 1, 2
+----
+application_name                e                  NULL     true
+application_name                f                  test_db  false
+statement_timeout               10s                NULL     true
+timezone                        America/New_York   NULL     true
+use_declarative_schema_changer  off                NULL     true
+
+# We shouldn't be able to leave the role unspecified
+statement error pq: at or near "]": syntax error
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE]
