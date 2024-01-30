@@ -19,7 +19,7 @@ import (
 	"sync"
 	"testing"
 
-	// Load pkg/rng so that roachpb.Span.String() could be executed correctly.
+	// Load pkg/keys so that roachpb.Span.String() could be executed correctly.
 	_ "github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -59,7 +59,7 @@ func (t *btree) verifyLeafSameDepth(tt *testing.T) {
 }
 
 func (n *node) verifyDepthEqualToHeight(t *testing.T, depth, height int) {
-	if n.leaf {
+	if n.leaf() {
 		require.Equal(t, height, depth, "all leaves should have the same depth as the tree height")
 	}
 	n.recurse(func(child *node, _ int16) {
@@ -83,7 +83,7 @@ func (n *node) verifyCountAllowed(t *testing.T, root bool) {
 			require.Nil(t, item, "latch above count")
 		}
 	}
-	if !n.leaf {
+	if !n.leaf() {
 		for i, child := range n.children {
 			if i <= int(n.count) {
 				require.NotNil(t, child, "node below count")
@@ -105,7 +105,7 @@ func (n *node) isSorted(t *testing.T) {
 	for i := int16(1); i < n.count; i++ {
 		require.LessOrEqual(t, cmp(n.items[i-1], n.items[i]), 0)
 	}
-	if !n.leaf {
+	if !n.leaf() {
 		for i := int16(0); i < n.count; i++ {
 			prev := n.children[i]
 			next := n.children[i+1]
@@ -124,14 +124,14 @@ func (t *btree) isUpperBoundCorrect(tt *testing.T) {
 }
 
 func (n *node) isUpperBoundCorrect(t *testing.T) {
-	require.Equal(t, 0, n.findUpperBound().compare(n.max))
+	require.Equal(t, 0, n.findUpperBound().compare(n.max()))
 	for i := int16(1); i < n.count; i++ {
-		require.LessOrEqual(t, upperBound(n.items[i]).compare(n.max), 0)
+		require.LessOrEqual(t, upperBound(n.items[i]).compare(n.max()), 0)
 	}
-	if !n.leaf {
+	if !n.leaf() {
 		for i := int16(0); i <= n.count; i++ {
 			child := n.children[i]
-			require.LessOrEqual(t, child.max.compare(n.max), 0)
+			require.LessOrEqual(t, child.max().compare(n.max()), 0)
 		}
 	}
 	n.recurse(func(child *node, _ int16) {
@@ -140,7 +140,7 @@ func (n *node) isUpperBoundCorrect(t *testing.T) {
 }
 
 func (n *node) recurse(f func(child *node, pos int16)) {
-	if !n.leaf {
+	if !n.leaf() {
 		for i := int16(0); i <= n.count; i++ {
 			f(n.children[i], i)
 		}
@@ -249,7 +249,7 @@ func TestBTree(t *testing.T) {
 	// that.
 	const count = 768
 
-	// Add rng in sorted order.
+	// Add keys in sorted order.
 	for i := 0; i < count; i++ {
 		tr.Set(newItem(span(i)))
 		tr.Verify(t)
@@ -259,7 +259,7 @@ func TestBTree(t *testing.T) {
 		checkIter(t, tr.MakeIter(), 0, i+1, spanMemo)
 	}
 
-	// Delete rng in sorted order.
+	// Delete keys in sorted order.
 	for i := 0; i < count; i++ {
 		tr.Delete(newItem(span(i)))
 		tr.Verify(t)
@@ -269,7 +269,7 @@ func TestBTree(t *testing.T) {
 		checkIter(t, tr.MakeIter(), i+1, count, spanMemo)
 	}
 
-	// Add rng in reverse sorted order.
+	// Add keys in reverse sorted order.
 	for i := 0; i < count; i++ {
 		tr.Set(newItem(span(count - i)))
 		tr.Verify(t)
@@ -279,7 +279,7 @@ func TestBTree(t *testing.T) {
 		checkIter(t, tr.MakeIter(), count-i, count+1, spanMemo)
 	}
 
-	// Delete rng in reverse sorted order.
+	// Delete keys in reverse sorted order.
 	for i := 0; i < count; i++ {
 		tr.Delete(newItem(span(count - i)))
 		tr.Verify(t)

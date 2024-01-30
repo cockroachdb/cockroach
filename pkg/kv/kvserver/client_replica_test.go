@@ -2653,7 +2653,7 @@ func TestDrainRangeRejection(t *testing.T) {
 	drainingIdx := 1
 	tc.GetFirstStoreFromServer(t, 1).SetDraining(true, nil /* reporter */, false /* verbose */)
 	chgs := kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(drainingIdx))
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 }
@@ -2673,7 +2673,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 
 	oldGeneration := repl.Desc().Generation
 	chgs := kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1))
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assert.EqualValues(t, repl.Desc().Generation, oldGeneration+2)
@@ -2681,7 +2681,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	oldGeneration = repl.Desc().Generation
 	oldDesc := repl.Desc()
 	chgs[0].ChangeType = roachpb.REMOVE_VOTER
-	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs)
+	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, kvserverpb.ReasonRangeOverReplicated, "", chgs)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3760,7 +3760,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	change := func() {
 		<-seenAdd
 		chgs := kvpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, makeReplicationTargets(2)...)
-		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, kvserverpb.SnapshotRequest_REBALANCE, "replicate", "testing", chgs)
+		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, "replicate", "testing", chgs)
 	}
 	relocate := func() {
 		relocateErr = db.AdminRelocateRange(
