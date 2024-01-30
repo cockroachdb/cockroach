@@ -71,7 +71,6 @@ func alterZoneConfigAndClusterSettings(
 
 		// Enable experimental/preview/compatibility features.
 		`SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled = 'true';`,
-		`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = 'true';`,
 		`ALTER ROLE ALL SET multiple_active_portals_enabled = 'true';`,
 		`ALTER ROLE ALL SET serial_normalization = 'sql_sequence_cached'`,
 		`ALTER ROLE ALL SET statement_timeout = '60s'`,
