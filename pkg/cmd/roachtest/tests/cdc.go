@@ -1263,12 +1263,27 @@ func registerCDC(r registry.Registry) {
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "10m"})
 
 			feed := ct.newChangefeed(feedArgs{
-				sinkType:   kafkaSink,
-				targets:    allTpccTargets,
-				opts:       map[string]string{"initial_scan": "'no'"},
+				sinkType: kafkaSink,
+				targets:  allTpccTargets,
+				opts: map[string]string{
+					"metrics_label": "'quota1'",
+					"initial_scan":  "'no'",
+				},
 				kafkaQuota: 1024,
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				steadyLatency: 5 * time.Minute,
+			})
+			feed2 := ct.newChangefeed(feedArgs{
+				sinkType: kafkaSink,
+				targets:  allTpccTargets,
+				opts: map[string]string{
+					"metrics_label": "'quota2'",
+					"initial_scan":  "'no'",
+				},
+				kafkaQuota: 1024,
+			})
+			ct.runFeedLatencyVerifier(feed2, latencyTargets{
 				steadyLatency: 5 * time.Minute,
 			})
 			ct.waitForWorkload()
