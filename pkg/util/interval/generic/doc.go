@@ -24,7 +24,12 @@ Users of the package should follow these steps:
     internal/contract.go.
  3. Include a go generate declaration that invokes the gen.sh script with the
     type name as the first argument and the package name as the second argument.
- 4. Invoke go generate.
+    This is done for documentation purposes and will require a corresponding entry
+    in build/bazelutil/check.sh.
+ 4. Add an entry to their BUILD.bazel to generate the file by using the
+    gen_interval_btree macro in //pkg/util/interval/generic:gen.bzl.
+ 5. Add the generated files to the BUILD.bazel file targets.
+ 6. Run ./dev gen to generate the files.
 
 # Example
 
@@ -52,7 +57,37 @@ Users of the package should follow these steps:
 
 	//go:generate ../../util/interval/generic/gen.sh *latch spanlatch
 
-4. Invoking go generate results in the creation of the following files:
+4. Add the following entry to the BUILD.bazel file:
+
+	load("//pkg/util/interval/generic:gen.bzl", "gen_interval_btree")
+
+	gen_interval_btree(
+	  name = "latch_interval_btree",
+	  package = "spanlatch",
+	  type = "*latch",
+	)
+
+5. Add the generated files to the BUILD.bazel file targets:
+
+	go_library(
+	    # ...
+	    srcs = [
+	        # ...
+	        ":latch_interval_btree.go",  # keep
+	    ],
+	    # ...
+	)
+
+	go_test(
+	    # ...
+	    srcs = [
+	      # ...
+	      ":latch_interval_btree_test.go", # keep
+	    ],
+	    # ...
+	)
+
+6. Run ./dev gen which should result in the following files:
 
   - latch_interval_btree.go
   - latch_interval_btree_test.go
