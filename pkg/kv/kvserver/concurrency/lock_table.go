@@ -741,7 +741,7 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 
 	for e := l.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 		qqg := e.Value
-		qo := makeQueueOrder(g)
+		qo := makeQueueOrder(g, l)
 		if qqg.order.after(qo) {
 			// We only need to check for conflicts with requests that sort before us.
 			// Note that the list of queuedLockingRequests is already sorted.
@@ -1006,13 +1006,21 @@ type queuedGuard struct {
 // queueOrder encapsulates fields that are used to determine the order in which
 // locking requests are stored in a lock's wait queue.
 type queueOrder struct {
-	reqSeqNum uint64
+	reqSeqNum   uint64
+	isPromoting bool
 }
 
 // makeQueueOrder constructs a queueOrder.
-func makeQueueOrder(g *lockTableGuardImpl) queueOrder {
+//
+// REQUIRES: kl.mu to be locked.
+func makeQueueOrder(g *lockTableGuardImpl, kl *keyLocks) queueOrder {
+	isPromoting := false
+	if g.txn != nil && kl.isLockedBy(g.txn.ID) {
+		isPromoting = true
+	}
 	return queueOrder{
-		reqSeqNum: g.seqNum,
+		reqSeqNum:   g.seqNum,
+		isPromoting: isPromoting,
 	}
 }
 
@@ -1021,12 +1029,24 @@ func makeQueueOrder(g *lockTableGuardImpl) queueOrder {
 //
 // Comparison is based on sequence numbers, which correspond to a request's
 // arrival time -- requests that arrive later are ordered after requests that
-// arrive earlier, and vice-versa.
+// arrive earlier, and vice-versa. However, requests that are trying to promote
+// locks already held by their transaction are ordered before ones that are not.
 func (o1 queueOrder) after(o2 queueOrder) bool {
 	if o1.reqSeqNum == o2.reqSeqNum {
 		return false // same request; doesn't sort after
 	}
-	return o1.reqSeqNum > o2.reqSeqNum
+	switch {
+	case (o1.isPromoting && o2.isPromoting) || (!o1.isPromoting && !o2.isPromoting):
+		// If both requests are trying to promote their locks, or neither are, then
+		// use the sequence number dictates the order.
+		return o1.reqSeqNum > o2.reqSeqNum
+	case o2.isPromoting:
+		return true
+	case o1.isPromoting:
+		return false
+	default:
+		panic("unexpected")
+	}
 }
 
 // Information about a lock holder for unreplicated locks.
@@ -2516,20 +2536,10 @@ func (kl *keyLocks) alreadyHoldsLockAndIsAllowedToProceed(
 	// Check if the lock is already held by the guard's transaction with an equal
 	// or higher lock strength. If it is, we're good to go. Otherwise, the request
 	// is trying to promote a lock it previously acquired. In such cases, the
-	// existence of a lock with weaker strength doesn't do much for this request.
-	// It's no different from the case where it's trying to acquire a fresh lock.
-	return str <= heldMode.Strength ||
-		// TODO(arul): We want to allow requests that are writing to keys that they
-		// hold exclusive locks on to "jump ahead" of any potential waiters. This
-		// prevents deadlocks. The logic here is a band-aid until we implement a
-		// solution for the general case of arbitrary lock upgrades (e.g. shared ->
-		// exclusive, etc.). We'll do so by prioritizing requests from transaction's
-		// that hold locks over transactions that don't when storing them in the
-		// list of queuedLockingRequests. Instead of sorting the list of
-		// queuedLockingRequests just based on sequence numbers alone, we'll instead
-		// use (belongsToALockHolderTxn, sequence number) to construct the sort
-		// order.
-		(str == lock.Intent && heldMode.Strength == lock.Exclusive), nil
+	// existence of a lock with weaker strength doesn't do much for this request
+	// apart from its ordering in the wait queue. For the most part, it's no
+	// different from the case where it's trying to acquire a fresh lock.
+	return str <= heldMode.Strength, nil
 }
 
 // maybeDisallowLockPromotion checks if a lock is being promoted from
@@ -2562,8 +2572,8 @@ func (kl *keyLocks) maybeDisallowLockPromotion(
 // before proceeding.
 //
 // REQUIRES: kl.mu is locked.
-// REQUIRES: the transaction, to which the request belongs, should not be a lock
-// holder.
+// REQUIRES: the transaction, to which the request belongs, should not hold the
+// lock with the same or stronger lock strength.
 func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 	if !kl.isLocked() {
 		return false // the lock isn't held; no conflict to speak of
@@ -2599,14 +2609,16 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 	for e := kl.holders.Front(); e != nil; e = e.Next() {
 		tl := e.Value
 		lockHolderTxn := tl.getLockHolderTxn()
-		// We should never get here if the lock is already held by another request
-		// from the same transaction with sufficient strength (read: less than or
-		// equal to what this guy wants); this should already be checked in
-		// alreadyHoldLockAndIsAllowedToProceed.
-		assert(
-			!g.isSameTxn(lockHolderTxn) || g.curStrength() > tl.getLockMode().Strength,
-			"lock already held by the request's transaction with sufficient strength",
-		)
+
+		if g.isSameTxn(lockHolderTxn) {
+			// We should never get here if the lock is already held by another request
+			// from the same transaction with sufficient strength (read: less than or
+			// equal to what this guy wants); this should already be checked in
+			// alreadyHoldLockAndIsAllowedToProceed.
+			assert(g.curStrength() > tl.getLockMode().Strength,
+				"lock already held by the request's transaction with sufficient strength")
+			continue // no conflict with a lock held by our own transaction
+		}
 
 		finalizedTxn, ok := g.lt.txnStatusCache.finalizedTxns.get(lockHolderTxn.ID)
 		if ok {
@@ -2771,7 +2783,7 @@ func (kl *keyLocks) insertLockingRequest(
 		guard:  g,
 		mode:   makeLockMode(accessStrength, g.txnMeta(), g.ts),
 		active: true,
-		order:  makeQueueOrder(g),
+		order:  makeQueueOrder(g, kl),
 	}
 	// The request isn't in the queue. Add it in the correct position, based on
 	// its queueOrder.
@@ -2861,6 +2873,9 @@ func (kl *keyLocks) shouldRequestActivelyWait(g *lockTableGuardImpl) bool {
 			// We found our request while scanning from the front without finding any
 			// conflicting waiters; no need to actively wait here.
 			return false
+		}
+		if g.txn != nil && qqg.guard.isSameTxn(g.txnMeta()) {
+			continue // no need to check for conflicts with requests that belong to our own transaction
 		}
 		if lock.Conflicts(qqg.mode, g.curLockMode(), &g.lt.settings.SV) {
 			return true
@@ -3278,6 +3293,22 @@ func (kl *keyLocks) tryUpdateLockLocked(
 	if up.Status.IsFinalized() {
 		kl.clearLockHeldBy(up.Txn.ID)
 		if !kl.isLocked() {
+			// We've removed the lock holder for the finalized transaction above, but
+			// there may be other requests in the lock's wait queue that belong to the
+			// finalized transaction. This is possible if:
+			// 1. The request is a replay.
+			// 2. The transaction committed using 1PC, which evaluates non-transactionally,
+			// and releases locks by calling into this method. The request that
+			// evaluated using 1PC would have to have sequenced before evaluation, in
+			// which case it may have left behind its claim.
+			//
+			// Clearing the lock holder impacts the sort order of the lock's wait
+			// queue, as requests that belong to a holder's transaction sort before
+			// requests that do not. We could go ahead and re-order the wait queue,
+			// but given the transaction is finalized, there's not much benefit to
+			// doing so. Instead, we could just remove the request from the wait
+			// queue. This works in both the cases described above.
+			kl.releaseLockingRequestsFromTxn(&up.Txn)
 			// The lock transitioned from held to unheld as a result of this lock
 			// update.
 			gc = kl.releaseWaitersOnKeyUnlocked()
