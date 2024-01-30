@@ -2045,12 +2045,22 @@ type kafkaManager struct {
 
 func (k kafkaManager) setProducerQuota(ctx context.Context, bytesPerSecond int) {
 	k.t.Status("setting producer quota to %d bytes per second for all users", bytesPerSecond)
+	//> bin/kafka-configs.sh  --bootstrap-server localhost:9092 --alter
+	// --add-config 'producer_byte_rate=1024,consumer_byte_rate=2048,request_percentage=200' --entity-type clients --entity-name clientA
+	//Updated config for entity: client-id 'clientA'.
 	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNode), filepath.Join(k.binDir(), "kafka-configs"),
 		"--bootstrap-server", "localhost:9092",
 		"--alter",
 		"--add-config", fmt.Sprintf("producer_byte_rate=%d", bytesPerSecond),
-		"--entity-type", "users",
-		"--entity-default")
+		"--entity-type", "clients",
+		"--entity-name", "quota1")
+
+	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNode), filepath.Join(k.binDir(), "kafka-configs"),
+		"--bootstrap-server", "localhost:9092",
+		"--alter",
+		"--add-config", fmt.Sprintf("producer_byte_rate=10000000"),
+		"--entity-type", "clients",
+		"--entity-name", "quota2")
 }
 
 func (k kafkaManager) basePath() string {
