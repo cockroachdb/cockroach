@@ -1185,8 +1185,7 @@ func (r *raft) Step(m pb.Message) error {
 		// ...and we believe the candidate is up to date.
 		lastID := r.raftLog.lastEntryID()
 		candLastID := entryID{term: m.LogTerm, index: m.Index}
-		// TODO(pav-kv): isUpToDate should take entryID.
-		if canVote && r.raftLog.isUpToDate(candLastID.index, candLastID.term) {
+		if canVote && r.raftLog.isUpToDate(candLastID) {
 			// Note: it turns out that that learners must be allowed to cast votes.
 			// This seems counter- intuitive but is necessary in the situation in which
 			// a learner has been promoted (i.e. is now a voter) but has not learned
