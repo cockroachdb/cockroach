@@ -2058,7 +2058,7 @@ func (k kafkaManager) setProducerQuota(ctx context.Context, bytesPerSecond int) 
 	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNode), filepath.Join(k.binDir(), "kafka-configs"),
 		"--bootstrap-server", "localhost:9092",
 		"--alter",
-		"--add-config", fmt.Sprintf("producer_byte_rate=10000000"),
+		"--add-config", "producer_byte_rate=10000000",
 		"--entity-type", "clients",
 		"--entity-name", "quota2")
 }
