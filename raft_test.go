@@ -33,8 +33,7 @@ import (
 func nextEnts(r *raft, s *MemoryStorage) (ents []pb.Entry) {
 	// Append unstable entries.
 	s.Append(r.raftLog.nextUnstableEnts())
-	last := r.raftLog.lastEntryID()
-	r.raftLog.stableTo(last.index, last.term) // TODO(pav-kv): pass lastEntryID directly
+	r.raftLog.stableTo(r.raftLog.lastEntryID())
 
 	// Run post-append steps.
 	r.advanceMessagesAfterAppend()
