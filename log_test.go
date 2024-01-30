@@ -348,7 +348,7 @@ func TestCompactionSideEffects(t *testing.T) {
 	}
 
 	for j := offset; j <= raftLog.lastIndex(); j++ {
-		require.True(t, raftLog.matchTerm(j, j))
+		require.True(t, raftLog.matchTerm(entryID{term: j, index: j}))
 	}
 
 	unstableEnts := raftLog.nextUnstableEnts()
