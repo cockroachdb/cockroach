@@ -195,7 +195,10 @@ func (og *operationGenerator) randOp(
 		og.resetOpState(useDeclarativeSchemaChanger)
 		stmt, err = opFuncs[op](og, ctx, tx)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			// We can only ignore this error, if no other PgErrors
+			// were set in the clean up process.
+			if errors.Is(err, pgx.ErrNoRows) &&
+				!errors.Is(err, &pgconn.PgError{}) {
 				continue
 			}
 			// Table select had a primary key swap, so no statement
@@ -3408,7 +3411,7 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 	)`, subQuery.String())).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
 	if err != nil {
 		if rbErr := nestedTxn.Rollback(ctx); rbErr != nil {
-			err = errors.CombineErrors(err, errors.WithStack(rbErr))
+			err = errors.CombineErrors(rbErr, err)
 		}
 		return nil, nil, err
 	}
