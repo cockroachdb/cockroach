@@ -13,31 +13,43 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 func (p *planner) SetSessionCharacteristics(
 	ctx context.Context, n *tree.SetSessionCharacteristics,
 ) (planNode, error) {
+	originalLevel := n.Modes.Isolation
+	upgradedLevel := false
 	if err := p.sessionDataMutatorIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
 		// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... '.
 		switch n.Modes.Isolation {
 		case tree.UnspecifiedIsolation:
 		// Nothing to do.
-		case tree.ReadUncommittedIsolation, tree.ReadCommittedIsolation:
+		case tree.ReadUncommittedIsolation:
+			upgradedLevel = true
+		case tree.ReadCommittedIsolation:
 			level := tree.SerializableIsolation
 			if allowReadCommittedIsolation.Get(&p.execCfg.Settings.SV) {
 				level = tree.ReadCommittedIsolation
+			} else {
+				upgradedLevel = true
 			}
 			m.SetDefaultTransactionIsolationLevel(level)
-		case tree.RepeatableReadIsolation, tree.SnapshotIsolation:
+		case tree.RepeatableReadIsolation:
+			upgradedLevel = true
+		case tree.SnapshotIsolation:
 			level := tree.SerializableIsolation
 			if allowSnapshotIsolation.Get(&p.execCfg.Settings.SV) {
 				level = tree.SnapshotIsolation
+			} else {
+				upgradedLevel = true
 			}
 			m.SetDefaultTransactionIsolationLevel(level)
 		default:
@@ -92,6 +104,10 @@ func (p *planner) SetSessionCharacteristics(
 	default:
 		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 			"unsupported default deferrable mode: %s", n.Modes.Deferrable)
+	}
+
+	if upgradedLevel {
+		telemetry.Inc(sqltelemetry.IsolationLevelUpgradedCounter(originalLevel))
 	}
 
 	return newZeroNode(nil /* columns */), nil
