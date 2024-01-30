@@ -2,16 +2,12 @@ only crdb
 ----
 
 send
-Query {"String": "SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = 'true'"}
 Query {"String": "SET default_transaction_isolation = 'read committed'"}
 ----
 
 until
 ReadyForQuery
-ReadyForQuery
 ----
-{"Type":"CommandComplete","CommandTag":"SET CLUSTER SETTING"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
