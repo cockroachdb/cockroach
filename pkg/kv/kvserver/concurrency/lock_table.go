@@ -3928,13 +3928,6 @@ func (kl *keyLocks) verify(st *cluster.Settings) error {
 	for e1 := kl.queuedLockingRequests.Front(); e1 != nil; e1 = e1.Next() {
 		qlr := e1.Value
 
-		// Queued locking requests should not belong to a transaction that already
-		// holds a lock.
-		if qlr.guard.txnMeta() != nil {
-			if _, found := kl.heldBy[qlr.guard.txnMeta().ID]; found {
-				return errors.AssertionFailedf("queued locking request belongs to the lock holder txn %s", kl)
-			}
-		}
 		if !qlr.active { // not actively waiting; nothing more to check for inactive waiters
 			continue
 		}
