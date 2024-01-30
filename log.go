@@ -372,12 +372,14 @@ func (l *raftLog) stableSnapTo(i uint64) { l.unstable.stableSnapTo(i) }
 // to Ready().
 func (l *raftLog) acceptUnstable() { l.unstable.acceptInProgress() }
 
-func (l *raftLog) lastTerm() uint64 {
-	t, err := l.term(l.lastIndex())
+// lastEntryID returns the ID of the last entry in the log.
+func (l *raftLog) lastEntryID() entryID {
+	index := l.lastIndex()
+	t, err := l.term(index)
 	if err != nil {
-		l.logger.Panicf("unexpected error when getting the last term (%v)", err)
+		l.logger.Panicf("unexpected error when getting the last term at %d: %v", index, err)
 	}
-	return t
+	return entryID{term: t, index: index}
 }
 
 func (l *raftLog) term(i uint64) (uint64, error) {
@@ -435,7 +437,8 @@ func (l *raftLog) allEntries() []pb.Entry {
 // whichever log has the larger lastIndex is more up-to-date. If the logs are
 // the same, the given log is up-to-date.
 func (l *raftLog) isUpToDate(lasti, term uint64) bool {
-	return term > l.lastTerm() || (term == l.lastTerm() && lasti >= l.lastIndex())
+	last := l.lastEntryID()
+	return term > last.term || term == last.term && lasti >= last.index
 }
 
 func (l *raftLog) matchTerm(id entryID) bool {
