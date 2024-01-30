@@ -57,7 +57,6 @@ go_library(
         "event_log.go",
         "failover.go",
         "fixtures.go",
-        "flowable.go",
         "follower_reads.go",
         "go_helpers.go",
         "gopg.go",
